@@ -36,6 +36,8 @@ module Derivatives
 
     real(rkind), allocatable, dimension(:)   :: k1, k2, k3        ! Wavenumbers for Fourier case
 
+    include 'PadeCoeffs.F90'
+
     public :: InitializeDerivatives
 
 contains
@@ -75,18 +77,64 @@ contains
         if (present(bcz1_)) bcz1 = bcz1_
         if (present(bczn_)) bczn = bczn_
 
+        ! Initialize LU matrices for both 6th and 10th order
+        ierr = InitLU06()
+        if (ierr .NE. 0) return
+        ierr = InitLU10()
+        if (ierr .NE. 0) return
+        
+        ! Initialize FFT stuff
+        ierr = InitFFT()
+        if (ierr .NE. 0) return
+
         select case (methodx)
         case ('CD06')
-            ierr = InitCD06()
+            ierr = InitCD06('x')
             if (ierr .NE. 0) return
         case ('CD10')
-            ierr = InitCD10()
+            ierr = InitCD10('x')
             if (ierr .NE. 0) return
         case ('FOUR')
-            ierr = InitFOUR()
+            ierr = InitFOUR('x')
             if (ierr .NE. 0) return
         case ('CHEB')
-            ierr = InitCHEB()
+            ierr = InitCHEB('x')
+            if (ierr .NE. 0) return
+        case default
+            ierr = 1
+            return
+        end select
+        
+        select case (methody)
+        case ('CD06')
+            ierr = InitCD06('y')
+            if (ierr .NE. 0) return
+        case ('CD10')
+            ierr = InitCD10('y')
+            if (ierr .NE. 0) return
+        case ('FOUR')
+            ierr = InitFOUR('y')
+            if (ierr .NE. 0) return
+        case ('CHEB')
+            ierr = InitCHEB('y')
+            if (ierr .NE. 0) return
+        case default
+            ierr = 1
+            return
+        end select
+        
+        select case (methodz)
+        case ('CD06')
+            ierr = InitCD06('z')
+            if (ierr .NE. 0) return
+        case ('CD10')
+            ierr = InitCD10('z')
+            if (ierr .NE. 0) return
+        case ('FOUR')
+            ierr = InitFOUR('z')
+            if (ierr .NE. 0) return
+        case ('CHEB')
+            ierr = InitCHEB('z')
             if (ierr .NE. 0) return
         case default
             ierr = 1
