@@ -8,11 +8,64 @@ function InitLU10() result(ierr)
 
     ! Based on  Neossi Nguetchue, Abelman (Appl. Math. & Comp. 2008)
 
-    ! Allocate LU matrices.
-    !if(allocated( LU10X1 )) deallocate( LU10X1 ); allocate( LU10X1(nx,9) )
-    !if(allocated( LU10Y1 )) deallocate( LU10Y1 ); allocate( LU10Y1(ny,9) )
-    !if(allocated( LU10Z1 )) deallocate( LU10Z1 ); allocate( LU10Z1(nz,9) )
+    ! Allocate 1st derivative LU matrices.
+    if(allocated( LU10X1 )) deallocate( LU10X1 ); allocate( LU10X1(nx,9) )
+    if(allocated( LU10Y1 )) deallocate( LU10Y1 ); allocate( LU10Y1(ny,9) )
+    if(allocated( LU10Z1 )) deallocate( LU10Z1 ); allocate( LU10Z1(nz,9) )
 
+    ! Compute 1st derivative LU matrices
+    if (nx .GE. 8) then
+        call ComputeLU10(LU10X1,nx,beta10d1,alpha10d1,one,alpha10d1,beta10d1)
+    else if (nx == 1) then
+        LU10X1 = zero
+    else
+        ierr = 2
+        return
+    end if
+
+    if (ny .GE. 8) then
+        call ComputeLU10(LU10Y1,ny,beta10d1,alpha10d1,one,alpha10d1,beta10d1)
+    else if (ny == 1) then
+        LU10Y1 = zero
+    else
+        ierr = 2
+        return
+    end if
+
+    if (nz .GE. 8) then
+        call ComputeLU10(LU10Z1,nz,beta10d1,alpha10d1,one,alpha10d1,beta10d1)
+    else if (nz == 1) then
+        LU10Z1 = zero
+    else
+        ierr = 2
+        return
+    end if
+
+    ! Allocate 2nd derivative LU matrices.
+    if(allocated( LU10X2 )) deallocate( LU10X2 ); allocate( LU10X2(nx,9) )
+    if(allocated( LU10Y2 )) deallocate( LU10Y2 ); allocate( LU10Y2(ny,9) )
+    if(allocated( LU10Z2 )) deallocate( LU10Z2 ); allocate( LU10Z2(nz,9) )
+
+    ! Compute 2nd derivative LU matrices
+    if (nx .GE. 8) then
+        call ComputeLU10(LU10X2,nx,beta10d2,alpha10d2,one,alpha10d2,beta10d2)
+    else if (nx == 1) then
+        LU10X2 = zero
+    end if
+
+    if (ny .GE. 8) then
+        call ComputeLU10(LU10Y2,ny,beta10d2,alpha10d2,one,alpha10d2,beta10d2)
+    else if (ny == 1) then
+        LU10Y2 = zero
+    end if
+
+    if (nz .GE. 8) then
+        call ComputeLU10(LU10Z2,nz,beta10d2,alpha10d2,one,alpha10d2,beta10d2)
+    else if (nz == 1) then
+        LU10Z2 = zero
+    end if
+
+    ! If everything passes
     ierr = 0
 
 end function
