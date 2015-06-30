@@ -193,8 +193,49 @@ subroutine SolveLU10(LU,y,n)
         
 end subroutine
 
-! pure function CD10D1RHS(f) result (RHS)
-! end function
+pure function CD10D1RHS(f,n,periodic) result (RHS)
+
+#ifdef TEST_LU10
+    use kind_parameters, only: rkind
+#include "PadeCoeffs.F90"
+#endif
+
+    integer, intent(in) :: n
+    real(rkind), dimension(n), intent(in) :: f
+    logical, intent(in) :: periodic
+    real(rkind), dimension(n) :: RHS
+    integer :: i
+
+    select case (periodic)
+    case (.TRUE.)
+        RHS(1) = a10d1 * ( f(2)   - f(n)   ) &
+               + b10d1 * ( f(3)   - f(n-1) ) &
+               + c10d1 * ( f(4)   - f(n-2) )
+        RHS(2) = a10d1 * ( f(3)   - f(1)   ) &
+               + b10d1 * ( f(4)   - f(n)   ) &
+               + c10d1 * ( f(5)   - f(n-1) )
+        RHS(3) = a10d1 * ( f(4)   - f(2)   ) &
+               + b10d1 * ( f(5)   - f(1)   ) &
+               + c10d1 * ( f(6)   - f(n)   )
+        do i = 4,n-3
+            RHS(i) = a10d1 * ( f(i+1) - f(i-1) ) &
+                   + b10d1 * ( f(i+2) - f(i-2) ) &
+                   + c10d1 * ( f(i+3) - f(i-3) )
+        end do
+        RHS(n-2) = a10d1 * ( f(n-1) - f(n-3) ) &
+                 + b10d1 * ( f(n)   - f(n-4) ) &
+                 + c10d1 * ( f(1)   - f(n-5) )
+        RHS(n-1) = a10d1 * ( f(n)   - f(n-2) ) &
+                 + b10d1 * ( f(1)   - f(n-3) ) &
+                 + c10d1 * ( f(2)   - f(n-4) )
+        RHS(n)   = a10d1 * ( f(1)   - f(n-1) ) &
+                 + b10d1 * ( f(2)   - f(n-2) ) &
+                 + c10d1 * ( f(3)   - f(n-3) )
+    case (.FALSE.)
+        RHS = zero
+    end select
+
+end function
 
 #ifndef TEST_LU10
 function InitCD10( direction ) result(ierr)

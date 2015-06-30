@@ -113,38 +113,70 @@ subroutine ComputeLU06(LU,n,b,d,a)
 
 end subroutine
 
-subroutine SolveLU06(LU,k,n,nvec)
+subroutine SolveLU06(LU,k,n)
 
 #ifdef TEST_LU06
     use kind_parameters, only: rkind
 #endif
 
-    integer, intent(in) :: n, nvec
+    integer, intent(in) :: n
     real(rkind), dimension(n,5), intent(in)  :: LU
-    real(rkind), dimension(n,nvec), intent(inout) :: k  ! Take in RHS and put solution into it
+    real(rkind), dimension(n), intent(inout) :: k  ! Take in RHS and put solution into it
     integer :: i
 
     associate ( bc=>LU(:,1), h=>LU(:,2), onebyc=>LU(:,3), a=>LU(:,4), v=>LU(:,5) )
         
         ! Step 2
         do i = 2,n-1
-            k(i,:) = k(i,:) - bc(i)*k(i-1,:)
+            k(i) = k(i) - bc(i)*k(i-1)
         end do
-        do i=1,nvec
-            k(n,i) = k(n,i) - SUM( h(1:n-1)*k(1:n-1,i) )
-        end do
+        k(n) = k(n) - SUM( h(1:n-1)*k(1:n-1) )
 
         ! Step 3
-        k(n,:) = k(n,:) * onebyc(n)
-        k(n-1,:) = ( k(n-1,:) - v(n-1)*k(n,:) ) * onebyc(n-1)
+        k(n) = k(n) * onebyc(n)
+        k(n-1) = ( k(n-1) - v(n-1)*k(n) ) * onebyc(n-1)
         do i = n-2,1,-1
-            k(i,:) = ( k(i,:) - a(i)*k(i+1,:) - v(i)*k(n,:) ) * onebyc(i)
+            k(i) = ( k(i) - a(i)*k(i+1) - v(i)*k(n) ) * onebyc(i)
         end do
 
     end associate
 
 
 end subroutine
+
+pure function CD06D1RHS(f,n,periodic) result (RHS)
+
+#ifdef TEST_LU06
+    use kind_parameters, only: rkind
+#include "PadeCoeffs.F90"
+#endif
+
+    integer, intent(in) :: n
+    real(rkind), dimension(n), intent(in) :: f
+    logical, intent(in) :: periodic
+    real(rkind), dimension(n) :: RHS
+    integer :: i
+
+    select case (periodic)
+    case (.TRUE.)
+        RHS(1) = a06d1 * ( f(2)   - f(n)   ) &
+               + b06d1 * ( f(3)   - f(n-1) ) 
+        RHS(2) = a06d1 * ( f(3)   - f(1)   ) &
+               + b06d1 * ( f(4)   - f(n)   ) 
+        do i = 3,n-2
+            RHS(i) = a06d1 * ( f(i+1) - f(i-1) ) &
+                   + b06d1 * ( f(i+2) - f(i-2) ) 
+        end do
+        RHS(n-1) = a06d1 * ( f(n)   - f(n-2) ) &
+                 + b06d1 * ( f(1)   - f(n-3) ) 
+        RHS(n)   = a06d1 * ( f(1)   - f(n-1) ) &
+                 + b06d1 * ( f(2)   - f(n-2) )
+    case (.FALSE.)
+        RHS = zero
+    end select
+
+end function
+
 
 #ifndef TEST_LU06
 function InitCD06( direction ) result(ierr)
