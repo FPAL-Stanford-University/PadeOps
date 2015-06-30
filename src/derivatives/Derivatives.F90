@@ -3,6 +3,7 @@
 module Derivatives
 
     use kind_parameters, only: rkind
+    use ffts, only: InitFFT
     implicit none
 
     private
@@ -31,8 +32,11 @@ module Derivatives
     logical          :: periodicy=.TRUE.
     logical          :: periodicz=.TRUE.
 
-    real(rkind), allocatable, dimension(:,:) :: LUX1, LUY1, LUZ1  ! LU decomp matrices for first derivative
-    real(rkind), allocatable, dimension(:,:) :: LUX2, LUY2, LUZ2  ! LU decomp matrices for second derivative
+    real(rkind), allocatable, dimension(:,:) :: LU06X1, LU06Y1, LU06Z1  ! 6th order LU decomp matrices for first derivative
+    real(rkind), allocatable, dimension(:,:) :: LU06X2, LU06Y2, LU06Z2  ! 6th order LU decomp matrices for second derivative
+    
+    real(rkind), allocatable, dimension(:,:) :: LU10X1, LU10Y1, LU10Z1  ! 10th order LU decomp matrices for first derivative
+    real(rkind), allocatable, dimension(:,:) :: LU10X2, LU10Y2, LU10Z2  ! 10th order LU decomp matrices for second derivative
 
     real(rkind), allocatable, dimension(:)   :: k1, k2, k3        ! Wavenumbers for Fourier case
 
