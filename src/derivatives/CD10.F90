@@ -153,15 +153,15 @@ subroutine ComputeLU10(LU,n,e,a,d,c,f)
 
 end subroutine
 
-subroutine SolveLU10(LU,y,n,nvec)
+subroutine SolveLU10(LU,y,n)
 
 #ifdef TEST_LU10
     use kind_parameters, only: rkind
 #endif
 
-    integer, intent(in) :: n, nvec
+    integer, intent(in) :: n
     real(rkind), dimension(n,9), intent(in)  :: LU
-    real(rkind), dimension(n,nvec), intent(inout) :: y  ! Take in RHS and put solution into it
+    real(rkind), dimension(n), intent(inout) :: y  ! Take in RHS and put solution into it
     integer :: i
 
     associate( b=>LU(:,1), eg=>LU(:,2), k=>LU(:,3),&
@@ -169,31 +169,32 @@ subroutine SolveLU10(LU,y,n,nvec)
                f=>LU(:,7),  v=>LU(:,8), w=>LU(:,9))
 
         ! Step 8 ( update y instead of creating z )
-        y(2,:) = y(2,:) - b(2)*y(1,:)
+        y(2) = y(2) - b(2)*y(1)
 
         ! Step 9
         do i = 3,n-2
-            y(i,:) = y(i,:) - b(i)*y(i-1,:) - eg(i)*y(i-2,:)
+            y(i) = y(i) - b(i)*y(i-1) - eg(i)*y(i-2)
         end do
 
         ! Step 10
-        do i = 1,nvec
-            y(n-1,i) = y(n-1,i) - SUM( k(1:n-2)*y(1:n-2,i) )
-            y(n,i)   = y(n,i)   - SUM( l(1:n-1)*y(1:n-1,i) )
-        end do
+        y(n-1) = y(n-1) - SUM( k(1:n-2)*y(1:n-2) )
+        y(n)   = y(n)   - SUM( l(1:n-1)*y(1:n-1) )
 
         ! Step 11
-        y(n,:) = y(n,:) * onebyg(n)
-        y(n-1,:) = ( y(n-1,:) - w(n-1)*y(n,:) ) * onebyg(n-1)
-        y(n-2,:) = ( y(n-2,:) - v(n-2)*y(n-1,:) - w(n-2)*y(n,:) ) * onebyg(n-2)
-        y(n-3,:) = ( y(n-3,:) - h(n-3)*y(n-2,:) - v(n-3)*y(n-1,:) - w(n-3)*y(n,:) ) * onebyg(n-3)
+        y(n) = y(n) * onebyg(n)
+        y(n-1) = ( y(n-1) - w(n-1)*y(n) ) * onebyg(n-1)
+        y(n-2) = ( y(n-2) - v(n-2)*y(n-1) - w(n-2)*y(n) ) * onebyg(n-2)
+        y(n-3) = ( y(n-3) - h(n-3)*y(n-2) - v(n-3)*y(n-1) - w(n-3)*y(n) ) * onebyg(n-3)
         do i = n-4,1,-1
-            y(i,:) = ( y(i,:) - h(i)*y(i+1,:) - f(i)*y(i+2,:) - v(i)*y(n-1,:) - w(i)*y(n,:) ) * onebyg(i)
+            y(i) = ( y(i) - h(i)*y(i+1) - f(i)*y(i+2) - v(i)*y(n-1) - w(i)*y(n) ) * onebyg(i)
         end do
 
     end associate
         
 end subroutine
+
+! pure function CD10D1RHS(f) result (RHS)
+! end function
 
 #ifndef TEST_LU10
 function InitCD10( direction ) result(ierr)
