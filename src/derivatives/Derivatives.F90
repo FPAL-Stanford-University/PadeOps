@@ -3,7 +3,7 @@
 module Derivatives
 
     use kind_parameters, only: rkind
-    use ffts, only: InitFFT
+    use ffts, only: FFTW
     implicit none
 
     private
@@ -38,7 +38,8 @@ module Derivatives
     real(rkind), allocatable, dimension(:,:) :: LU10X1, LU10Y1, LU10Z1  ! 10th order LU decomp matrices for first derivative
     real(rkind), allocatable, dimension(:,:) :: LU10X2, LU10Y2, LU10Z2  ! 10th order LU decomp matrices for second derivative
 
-    real(rkind), allocatable, dimension(:)   :: k1, k2, k3        ! Wavenumbers for Fourier case
+    type(FFTW) :: xfft, yfft, zfft                                      ! FFT objects for each direction
+    real(rkind), allocatable, dimension(:) :: k1, k2, k3                ! Wavenumbers
 
     include 'PadeCoeffs.F90'
 
@@ -89,6 +90,7 @@ contains
         
         ! Initialize FFT stuff
         ierr = InitFFT()
+
         if (ierr .NE. 0) return
 
         select case (methodx)
