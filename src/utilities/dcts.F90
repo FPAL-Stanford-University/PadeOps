@@ -1,4 +1,4 @@
-module dctStuff
+module dctstuff
 
     use kind_parameters, only: rkind
     use constants, only: zero,one,half,two,pi,imi
@@ -43,7 +43,6 @@ contains
         integer                         :: ierr
 
         real(rkind), dimension(n_) :: arr_in, arr_out
-
 
         this%n = n_
 

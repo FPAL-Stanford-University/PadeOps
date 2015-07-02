@@ -18,31 +18,34 @@ program test_FOUR
     implicit none
 
     type(dcts) :: my1dDCT
-    integer, parameter :: nx=17,ny=1,nz=1
+    integer, parameter :: nx=2049,ny=150,nz=150
     real(rkind), dimension(nx,9) :: LU
     real(rkind), dimension(nx) :: tmp
     real(rkind) :: d=1.0_rkind, a=0.5_rkind, c=0.5_rkind, e=0.05_rkind, ff=0.05_rkind
-    real(rkind), dimension(nx) :: x,f,kx,fp,df, df_CD10
+    real(rkind), dimension(nx,ny,nz) :: x,f,kx,fp,df, df_CD10
     real(rkind) :: onebydx, sigma
 
     integer :: i,j,ierr
-
-    
    
     ! Initialize f as a periodic gaussian
     do i=1,nx
-        x(i) = real((i-1),rkind)
-        f(i) = real(i,rkind) 
+        x(i,:,:) = - cos( real((i-1),rkind) * pi / real((nx-1),rkind) )
+        f(i,:,:) = x(i,:,:) 
     end do
 
-    ! Exact derivative
-    ! fp = 
-
-    ! Initialize fft
+    ! Initialize dct
     ierr = my1dDCT % init(nx)
 
 
-    fp = my1dDCT % dct(f)
-    print*, fp
-    print*, my1dDCT % idct( fp )
+    call tic()
+    do i=1,ny
+      do j=1,nz
+        fp(:,i,j) = my1dDCT % dct(f(:,i,j), .TRUE.)
+        df(:,i,j) = my1dDCT % idct(fp(:,i,j), .TRUE.)
+      end do
+    end do
+    call toc()
+    
+    print*, "Maximum error = ", MAXVAL(ABS(df - f))
+
 end program
