@@ -4,7 +4,7 @@ This README would normally document whatever steps are necessary to get your app
 
 ### What is this repository for? ###
 
-* Quick summary : (Incomplete)
+* Quick summary : Hybrid OpenMP/MPI derivate operators using Compact Difference (6th and 10th Order) and Spectral (Fourier and Chebyshev) Methods to solve PDEs.
 * Version : TBD
 * Tutorials : TBD/Incomplete
 
