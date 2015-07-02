@@ -101,7 +101,7 @@ contains
         fhat(2:this%n - 1) = half*fhat(2:this%n - 1)
 
         call dfftw_execute_r2r( this%plan_bwd, fhat, f )
-    
+   
     end function 
 
     function idct_flipped(this, fhat) result(f)
