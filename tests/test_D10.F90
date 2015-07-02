@@ -13,7 +13,7 @@ program test_LU10
     use test_module
     implicit none
 
-    integer, parameter :: nx=256,ny=100,nz=100
+    integer, parameter :: nx=2048,ny=200,nz=200
     real(rkind), dimension(nx,9) :: LU
     real(rkind), dimension(nx,ny,nz) :: y,yp,dy
     real(rkind), dimension(nx) :: tmp
