@@ -11,13 +11,13 @@ end module
 program test_FOUR
 
     use kind_parameters, only: rkind
-    use ffts, only: FFTW
+    use fftstuff, only: ffts
     use constants, only: one,two,pi,imi,half
     use test_module
     use timer, only: tic, toc
     implicit none
 
-    type(FFTW) :: my1dFFT
+    type(ffts) :: my1dFFT
     integer, parameter :: nx=2048,ny=150,nz=150
     real(rkind), dimension(nx,9) :: LU
     real(rkind), dimension(nx) :: tmp

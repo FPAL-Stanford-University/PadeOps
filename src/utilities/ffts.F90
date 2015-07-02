@@ -1,15 +1,15 @@
-module ffts
+module fftStuff
 
     use kind_parameters, only: rkind
     use constants, only: zero,one,half,two,pi,imi
     implicit none
 
     private
-    public :: FFTW
+    public :: ffts
 
     include "fftw3.F90"
 
-    type FFTW
+    type ffts
         
         private
         
@@ -28,6 +28,8 @@ module ffts
         real(rkind), allocatable, dimension(:,:,:)   :: k2d        ! Wavenumbers for 2D transform
         real(rkind), allocatable, dimension(:,:,:,:) :: k3d        ! Wavenumbers for 3D transform
 
+
+
         integer, allocatable, dimension(:) :: split
 
         contains
@@ -39,34 +41,23 @@ module ffts
 
         procedure, private :: fft1d_half
         procedure, private :: fft1d_full
-        !procedure, private :: fft2d
-        !procedure, private :: fft3d
         generic :: fft => fft1d_half, fft1d_full!,fft2d,fft3d         ! Compute forward transform
         procedure, private :: ifft1d
-        !procedure, private :: ifft2d
-        !procedure, private :: ifft3d
         generic :: ifft => ifft1d!,ifft2d,ifft3d     ! Compute inverse transform
         
         procedure, private :: getk1d
-        !procedure, private :: getk2d
-        !procedure, private :: getk3d
         generic            :: k => getk1d!, getk2d, getk3d    ! Get wave number given indices
         !
-        !procedure :: kArray                         ! Get wave number array
-        !
-        !procedure :: N                              ! Get # of pts
-        !procedure :: ndim                           ! Get FFT dimension
-
-        !procedure :: destroy                        ! Destructor for the type
     
     end type
 
 
 contains
 
+
     function init1d(this, nx, dx) result(ierr)
         
-        class( FFTW ), intent(inout) :: this
+        class( ffts ), intent(inout) :: this
         integer, intent(in) :: nx
         real(rkind), intent(in) :: dx
         integer :: ierr
@@ -110,7 +101,7 @@ contains
     end function
 
     function fft1d_half(this, f, half) result (fhat)
-        class( FFTW ), intent(in) :: this
+        class( ffts ), intent(in) :: this
         real(rkind), dimension(this%npts(1)), intent(in) :: f
         logical, intent(in) :: half
         complex(rkind), dimension(this%split(1)) :: fhat
@@ -122,7 +113,7 @@ contains
     end function
 
     function fft1d_full(this, f) result (fhat)
-        class( FFTW ), intent(in) :: this
+        class( ffts ), intent(in) :: this
         real(rkind), dimension(this%npts(1)), intent(in) :: f
         complex(rkind), dimension(this%npts(1)) :: fhat
 
@@ -137,7 +128,7 @@ contains
     end function
 
     function ifft1d(this, fhat) result (f)
-        class( FFTW ), intent(in) :: this
+        class( ffts ), intent(in) :: this
         complex(rkind), dimension(this%split(1)), intent(in) :: fhat
         real(rkind), dimension(this%npts(1)) :: f
 
@@ -148,7 +139,7 @@ contains
     end function
 
     function getk1d(this) result(karray)
-        class( FFTW ), intent(in) :: this
+        class( ffts ), intent(in) :: this
         real(rkind), dimension(this%npts(1)) :: karray
 
         karray = this%k1d
@@ -156,7 +147,7 @@ contains
     
     function init2d(this, nx, dx, ny, dy) result(ierr)
         
-        class( FFTW ), intent(inout) :: this
+        class( ffts ), intent(inout) :: this
         integer, intent(in) :: nx, ny
         real(rkind), intent(in) :: dx, dy
         integer :: ierr
@@ -207,7 +198,7 @@ contains
 
     function init3d(this, nx, dx, ny, dy, nz, dz) result(ierr)
         
-        class( FFTW ), intent(inout) :: this
+        class( ffts ), intent(inout) :: this
         integer, intent(in) :: nx, ny, nz
         real(rkind), intent(in) :: dx, dy, dz
         integer :: ierr
@@ -301,7 +292,7 @@ contains
 
     function destroy(this) result(ierr)
         
-        class(FFTW), intent(inout) :: this
+        class(ffts), intent(inout) :: this
         integer :: ierr
 
         if ( allocated(this%k1d) ) deallocate( this%k1d )
