@@ -44,13 +44,14 @@ program test_FOUR
     call tic()
     do i=1,ny
       do j=1,nz
-        fp(:,i,j) = my1dDCT % dct(f(:,i,j), .TRUE.)
-        df(:,i,j) = my1dDCT % idct(fp(:,i,j), .TRUE.)
+        fp(:,i,j) = my1dDCT % dct(f(:,i,j))
+        df(:,i,j) = my1dDCT % idct(fp(:,i,j))
       end do
     end do
     call toc()
     print*, "Maximum error = ", MAXVAL(ABS(df - f))
-   
+
+  !  print*, fp(:,1,1)
     call tic() 
     do i=1,ny
       do j=1,nz
