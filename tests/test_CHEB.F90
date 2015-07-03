@@ -5,9 +5,12 @@
 #include "../src/utilities/timer.F90"
 
 module test_module
+use kind_parameters
 contains
 #include "../src/derivatives/CD10.F90"
+
 end module
+
 
 program test_FOUR
 
@@ -21,11 +24,11 @@ program test_FOUR
 
     type(dcts) :: my1dDCT
     type(ffts) :: my1dFFT
-    integer, parameter :: nx=2049,ny=50,nz=50
+    integer, parameter :: nx=17,ny=1,nz=1
     real(rkind), dimension(nx,9) :: LU
     real(rkind), dimension(nx) :: tmp
     real(rkind) :: d=1.0_rkind, a=0.5_rkind, c=0.5_rkind, e=0.05_rkind, ff=0.05_rkind
-    real(rkind), dimension(nx,ny,nz) :: x,f,kx,fp,df, df_CD10
+    real(rkind), dimension(nx,ny,nz) :: x,f,kx,fp,df, df_CD10, df_hat
     complex(rkind), dimension(nx,ny,nz) :: fpp
     real(rkind) :: onebydx, sigma
 
@@ -45,12 +48,16 @@ program test_FOUR
     do i=1,ny
       do j=1,nz
         fp(:,i,j) = my1dDCT % dct(f(:,i,j))
-        df(:,i,j) = my1dDCT % idct(fp(:,i,j))
+        df_hat(:,i,j) = chebder(fp(:,i,j))
+        df(:,i,j) = my1dDCT % idct(df_hat(:,i,j))
       end do
     end do
     call toc()
-    print*, "Maximum error = ", MAXVAL(ABS(df - f))
+    !print*, "Maximum error = ", MAXVAL(ABS(df - f))
 
+    print*, df(:,1,1)
+
+    stop 
   !  print*, fp(:,1,1)
     call tic() 
     do i=1,ny

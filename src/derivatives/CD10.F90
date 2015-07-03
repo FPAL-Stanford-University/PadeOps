@@ -237,6 +237,142 @@ pure function CD10D1RHS(f,n,periodic) result (RHS)
 
 end function
 
+pure function CD10D2RHS(f,n,periodic) result (RHS)
+
+#ifdef TEST_LU10
+    use kind_parameters, only: rkind
+#include "PadeCoeffs.F90"
+#endif
+
+    integer, intent(in) :: n
+    real(rkind), dimension(n), intent(in) :: f
+    logical, intent(in) :: periodic
+    real(rkind), dimension(n) :: RHS
+    integer :: i
+
+    select case (periodic)
+    case (.TRUE.)
+        RHS(1) = a10d1 * ( f(2)   - two*f(1) + f(n)   ) &
+               + b10d1 * ( f(3)   - two*f(1) + f(n-1) ) &
+               + c10d1 * ( f(4)   - two*f(1) + f(n-2) )
+        RHS(2) = a10d1 * ( f(3)   - two*f(2) + f(1)   ) &
+               + b10d1 * ( f(4)   - two*f(2) + f(n)   ) &
+               + c10d1 * ( f(5)   - two*f(2) + f(n-1) )
+        RHS(3) = a10d1 * ( f(4)   - two*f(3) + f(2)   ) &
+               + b10d1 * ( f(5)   - two*f(3) + f(1)   ) &
+               + c10d1 * ( f(6)   - two*f(3) + f(n)   )
+        do i = 4,n-3
+            RHS(i) = a10d1 * ( f(i+1) - two*f(i) + f(i-1) ) &
+                   + b10d1 * ( f(i+2) - two*f(i) + f(i-2) ) &
+                   + c10d1 * ( f(i+3) - two*f(i) + f(i-3) )
+        end do
+        RHS(n-2) = a10d1 * ( f(n-1) - two*f(n-2) + f(n-3) ) &
+                 + b10d1 * ( f(n)   - two*f(n-2) + f(n-4) ) &
+                 + c10d1 * ( f(1)   - two*f(n-2) + f(n-5) )
+        RHS(n-1) = a10d1 * ( f(n)   - two*f(n-1) + f(n-2) ) &
+                 + b10d1 * ( f(1)   - two*f(n-1) + f(n-3) ) &
+                 + c10d1 * ( f(2)   - two*f(n-1) + f(n-4) )
+        RHS(n)   = a10d1 * ( f(1)   - two*f(n)   + f(n-1) ) &
+                 + b10d1 * ( f(2)   - two*f(n)   + f(n-2) ) &
+                 + c10d1 * ( f(3)   - two*f(n)   + f(n-3) )
+    case (.FALSE.)
+        RHS = zero
+    end select
+
+end function
+
+pure function d1xCD10(f) result(df)
+    real(rkind), dimension(nx), intent(in) :: f
+    real(rkind), dimension(nx) :: df
+    real(rkind), dimension(nx) :: tmp
+
+    tmp = CD10D1RHS(f,nx,periodicx)  
+    if (periodicx) then
+        call SolveLU10(LU10X1,tmp,nx)
+        df = tmp*onebydx
+    else
+        df = zero
+    end if 
+
+end function
+
+pure function d1yCD10(f) result(df)
+    real(rkind), dimension(ny), intent(in) :: f
+    real(rkind), dimension(ny) :: df
+    real(rkind), dimension(ny) :: tmp
+
+    tmp = CD10D1RHS(f,ny,periodicy)  
+    if (periodicy) then
+        call SolveLU10(LU10Y1,tmp,ny)
+        df = tmp*onebydy
+    else
+        df = zero
+    end if 
+
+end function
+
+
+pure function d1zCD10(f) result(df)
+    real(rkind), dimension(nz), intent(in) :: f
+    real(rkind), dimension(nz) :: df
+    real(rkind), dimension(nz) :: tmp
+
+    tmp = CD10D1RHS(f,nz,periodicz)  
+    if (periodicz) then
+        call SolveLU10(LU10Z1,tmp,nz)
+        df = tmp*onebydz
+    else
+        df = zero
+    end if 
+
+end function
+
+
+pure function d2xCD10(f) result(df)
+    real(rkind), dimension(nx), intent(in) :: f
+    real(rkind), dimension(nx) :: df
+    real(rkind), dimension(nx) :: tmp
+
+    tmp = CD10D2RHS(f,nx,periodicx)  
+    if (periodicx) then
+        call SolveLU10(LU10X2,tmp,nx)
+        df = tmp*onebydx*onebydx
+    else
+        df = zero
+    end if 
+
+end function
+
+pure function d2yCD10(f) result(df)
+    real(rkind), dimension(ny), intent(in) :: f
+    real(rkind), dimension(ny) :: df
+    real(rkind), dimension(ny) :: tmp
+
+    tmp = CD10D2RHS(f,ny,periodicy)  
+    if (periodicy) then
+        call SolveLU10(LU10Y2,tmp,ny)
+        df = tmp*onebydy*onebydy
+    else
+        df = zero
+    end if 
+
+end function
+
+pure function d2zCD10(f) result(df)
+    real(rkind), dimension(nz), intent(in) :: f
+    real(rkind), dimension(nz) :: df
+    real(rkind), dimension(nz) :: tmp
+
+    tmp = CD10D2RHS(f,nz,periodicz)  
+    if (periodicz) then
+        call SolveLU10(LU10Z2,tmp,nz)
+        df = tmp*onebydz
+    else
+        df = zero
+    end if 
+
+end function
+
 #ifndef TEST_LU10
 function InitCD10( direction ) result(ierr)
 

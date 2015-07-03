@@ -78,7 +78,6 @@ contains
 
         fhat(1) = half*fhat(1)
   
-         
     end function 
 
     function idct(this, fhat) result(f)

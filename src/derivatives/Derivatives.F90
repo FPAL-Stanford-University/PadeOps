@@ -4,6 +4,7 @@ module Derivatives
 
     use kind_parameters, only: rkind
     use fftstuff, only: ffts
+    use dctstuff, only: dcts
     implicit none
 
     private
@@ -16,6 +17,10 @@ module Derivatives
     real(rkind)      :: dx=one
     real(rkind)      :: dy=one
     real(rkind)      :: dz=one
+   
+    real(rkind)      :: onebydx 
+    real(rkind)      :: onebydy 
+    real(rkind)      :: onebydz
     
     integer          :: bcx1=0
     integer          :: bcxn=0
@@ -41,6 +46,8 @@ module Derivatives
     type(ffts) :: xfft, yfft, zfft                                      ! FFT objects for each direction
     real(rkind), allocatable, dimension(:) :: k1, k2, k3                ! Wavenumbers
 
+    type(dcts) :: xdct, ydct, zdct                                      ! DCT objects for each direction
+    
     include 'PadeCoeffs.F90'
 
     public :: InitializeDerivatives
@@ -66,6 +73,10 @@ contains
         if (present(dx_)) dx = dx_
         if (present(dy_)) dy = dy_
         if (present(dz_)) dz = dz_
+       
+        onebydx = one/dx 
+        onebydy = one/dy 
+        onebydz = one/dz 
         
         if (present(periodicx_)) periodicx = periodicx_
         if (present(periodicy_)) periodicy = periodicy_
@@ -90,9 +101,11 @@ contains
         
         ! Initialize FFT stuff
         ierr = InitFFT()
-
         if (ierr .NE. 0) return
 
+        ! Initialize DCT stuff
+        ierr = InitDCT()
+        if (ierr .NE. 0) return
         
         select case (methodx)
         case ('CD06')

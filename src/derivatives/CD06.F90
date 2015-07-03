@@ -177,6 +177,131 @@ pure function CD06D1RHS(f,n,periodic) result (RHS)
 
 end function
 
+pure function CD06D2RHS(f,n,periodic) result (RHS)
+
+#ifdef TEST_LU06
+    use kind_parameters, only: rkind
+#include "PadeCoeffs.F90"
+#endif
+
+    integer, intent(in) :: n
+    real(rkind), dimension(n), intent(in) :: f
+    logical, intent(in) :: periodic
+    real(rkind), dimension(n) :: RHS
+    integer :: i
+
+    select case (periodic)
+    case (.TRUE.)
+        RHS(1) = a06d2 * ( f(2)   - two*f(1) + f(n)   ) &
+               + b06d2 * ( f(3)   - two*f(1) + f(n-1) ) 
+        RHS(2) = a06d2 * ( f(3)   - two*f(2) + f(1)   ) &
+               + b06d2 * ( f(4)   - two*f(2) + f(n)   ) 
+        do i = 3,n-2
+            RHS(i) = a06d2 * ( f(i+1) - two*f(i) + f(i-1) ) &
+                   + b06d2 * ( f(i+2) - two*f(i) + f(i-2) ) 
+        end do
+        RHS(n-1) = a06d2 * ( f(n)   - two*f(n-1) + f(n-2) ) &
+                 + b06d2 * ( f(1)   - two*f(n-1) + f(n-3) ) 
+        RHS(n)   = a06d2 * ( f(1)   - two*f(n)   + f(n-1) ) &
+                 + b06d2 * ( f(2)   - two*f(n)   + f(n-2) )
+    case (.FALSE.)
+        RHS = zero
+    end select
+
+end function
+
+pure function d1xCD06(f) result(df)
+    real(rkind), dimension(nx), intent(in) :: f
+    real(rkind), dimension(nx) :: df
+    real(rkind), dimension(nx) :: tmp
+
+    tmp = CD06D1RHS(f,nx,periodicx)  
+    if (periodicx) then
+        call SolveLU06(LU06X1,tmp,nx)
+        df = tmp*onebydx
+    else
+        df = zero
+    end if 
+
+end function
+
+pure function d1yCD06(f) result(df)
+    real(rkind), dimension(ny), intent(in) :: f
+    real(rkind), dimension(ny) :: df
+    real(rkind), dimension(ny) :: tmp
+
+    tmp = CD06D1RHS(f,ny,periodicy)  
+    if (periodicy) then
+        call SolveLU06(LU06Y1,tmp,ny)
+        df = tmp*onebydy
+    else
+        df = zero
+    end if 
+
+end function
+
+
+pure function d1zCD06(f) result(df)
+    real(rkind), dimension(nz), intent(in) :: f
+    real(rkind), dimension(nz) :: df
+    real(rkind), dimension(nz) :: tmp
+
+    tmp = CD06D1RHS(f,nz,periodicz)  
+    if (periodicz) then
+        call SolveLU06(LU06Z1,tmp,nz)
+        df = tmp*onebydz
+    else
+        df = zero
+    end if 
+
+end function
+
+
+pure function d2xCD06(f) result(df)
+    real(rkind), dimension(nx), intent(in) :: f
+    real(rkind), dimension(nx) :: df
+    real(rkind), dimension(nx) :: tmp
+
+    tmp = CD06D2RHS(f,nx,periodicx)  
+    if (periodicx) then
+        call SolveLU06(LU06X2,tmp,nx)
+        df = tmp*onebydx*onebydx
+    else
+        df = zero
+    end if 
+
+end function
+
+pure function d2yCD06(f) result(df)
+    real(rkind), dimension(ny), intent(in) :: f
+    real(rkind), dimension(ny) :: df
+    real(rkind), dimension(ny) :: tmp
+
+    tmp = CD06D2RHS(f,ny,periodicy)  
+    if (periodicy) then
+        call SolveLU06(LU06Y2,tmp,ny)
+        df = tmp*onebydy*onebydy
+    else
+        df = zero
+    end if 
+
+end function
+
+
+pure function d2zCD06(f) result(df)
+    real(rkind), dimension(nz), intent(in) :: f
+    real(rkind), dimension(nz) :: df
+    real(rkind), dimension(nz) :: tmp
+
+    tmp = CD06D2RHS(f,nz,periodicz)  
+    if (periodicz) then
+        call SolveLU06(LU06Z2,tmp,nz)
+        df = tmp*onebydz
+    else
+        df = zero
+    end if 
+
+end function
 
 #ifndef TEST_LU06
 function InitCD06( direction ) result(ierr)
