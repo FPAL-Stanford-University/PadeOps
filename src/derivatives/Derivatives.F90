@@ -37,6 +37,8 @@ module Derivatives
     logical          :: periodicy=.TRUE.
     logical          :: periodicz=.TRUE.
 
+    integer          :: xoprank=1, yoprank=2, zoprank=3
+
     real(rkind), allocatable, dimension(:,:) :: LU06X1, LU06Y1, LU06Z1  ! 6th order LU decomp matrices for first derivative
     real(rkind), allocatable, dimension(:,:) :: LU06X2, LU06Y2, LU06Z2  ! 6th order LU decomp matrices for second derivative
     
@@ -164,5 +166,23 @@ contains
         ierr = 0
 
     end function
+
+    subroutine SetXoprank(xop)
+        integer, intent(in) :: xop
+
+        xoprank = xop
+    end subroutine
+
+    subroutine SetYoprank(yop)
+        integer, intent(in) :: yop
+
+        yoprank = yop
+    end subroutine
+
+    subroutine SetZoprank(zop)
+        integer, intent(in) :: zop
+
+        zoprank = zop
+    end subroutine
 
 end module
