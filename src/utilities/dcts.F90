@@ -39,9 +39,10 @@ contains
         class( dcts ), intent(in) :: this
         real(rkind), dimension(this%n), intent(in) :: f
         real(rkind), dimension(this%n) :: df
+        real(rkind), dimension(this%n) :: dfhat
 
-        df = chebder_coeffs( this%dct(f) )
-        df = this%idct( df )
+        dfhat = chebder_coeffs( this%dct(f) )
+        df = this%idct( dfhat )
 
     end function
    
@@ -50,9 +51,10 @@ contains
         class( dcts ), intent(in) :: this
         real(rkind), dimension(this%n), intent(in) :: f
         real(rkind), dimension(this%n) :: df
+        real(rkind), dimension(this%n) :: dfhat
 
-        df = chebder_coeffs( chebder_coeffs( this%dct(f) ) )
-        df = this%idct( df )
+        dfhat = chebder_coeffs( chebder_coeffs( this%dct(f) ) )
+        df = this%idct( dfhat )
 
     end function
     
@@ -99,7 +101,7 @@ contains
         end if
 
         fhat(1) = half*fhat(1)
-  
+
     end function 
 
     function idct(this, fhat) result(f)
@@ -117,7 +119,7 @@ contains
         end do 
 
         call dfftw_execute_r2r( this%plan_bwd, fhat, f )
-    
+
     end function 
 
     pure function chebder_coeffs(fhat) result(dfhat)
@@ -132,8 +134,8 @@ contains
             dfhat((i - 1) + 1) = two*i*fhat(i + 1) + dfhat((i+1)+1)
         end do 
     
-        dfhat(1) = fhat(2) + half*fhat(3) 
-    
+        dfhat(1) = fhat(2) + half*dfhat(3) 
+   
     end function 
 
 end module 

@@ -64,7 +64,7 @@ contains
         complex(rkind), dimension(this%npts(1)) :: fout
 
         fout = f
-        if (this%isEven) fout(this%npts(1)/2 + 1) = zero
+        if (this%isEven) fout(this%split(1)) = zero
 
     end function 
 
@@ -73,7 +73,8 @@ contains
         real(rkind), dimension(this%npts(1)), intent(in) :: f
         real(rkind), dimension(this%npts(1)) :: df 
         
-        df = this%ifft( imi * this%k1d * this%nullOddBall( this%fft(f) ) )
+        df = this%ifft( imi * this%k1d * this%nullOddBall( this%fft(f, .TRUE.) ) )
+        !df = this%ifft( imi * this%k1d * this%fft(f) )
     end function 
     
     function fourder2(this, f) result(df)
@@ -142,8 +143,6 @@ contains
         real(rkind), dimension(this%npts(1)), intent(in) :: f
         logical, intent(in) :: half
         complex(rkind), dimension(this%split(1)) :: fhat
-
-        integer :: i
 
         call dfftw_execute_dft(this%plan_fwd, f, fhat)
 
