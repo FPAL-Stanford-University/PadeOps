@@ -72,13 +72,7 @@ module derivativestuff
             procedure   :: d2dz2 
             
             !! Private Procedures
-            ! direction independent procedures
-            !procedure, private :: chebder
-            !procedure, private :: fourder
-            !procedure, private :: cd10der
-            !procedure, private :: cd06der
 
-            ! direction dependent procedures
             ! First order derivatives
             procedure, private :: ddx_cheb
             procedure, private :: ddx_four
@@ -218,15 +212,16 @@ contains
         real(rkind), intent(in), dimension(:,:,:), f
         real(rkind), dimension(size(f,1),size(f,2),size(f,3)) :: df
        
+        call check_dimension(f, "x") 
         select case (this%methodx)
         case ("CD06") 
-            call this%ddx_cd06(f)
+            call this%ddx_cd06(f, df)
         case ("CD10") 
-            call this%ddx_cd10(f)
+            call this%ddx_cd10(f, df)
         case ("FOUR") 
-            call this%ddx_four(f)
+            call this%ddx_four(f, df)
         case ("CHEB") 
-            call this%ddx_cheb(f)
+            call this%ddx_cheb(f, df)
         case default
             call gracefulExit("You intialized the derivative class (X direction) using an &
             incorrect numerical method. Reinitialize using one of the following  &
@@ -239,15 +234,16 @@ contains
         real(rkind), intent(in), dimension(:,:,:), f
         real(rkind), dimension(size(f,1),size(f,2),size(f,3)) :: df
        
+        call check_dimension(f, "y") 
         select case (this%methody)
         case ("CD06") 
-            call this%ddy_cd06(f)
+            call this%ddy_cd06(f, df)
         case ("CD10") 
-            call this%ddy_cd10(f)
+            call this%ddy_cd10(f, df)
         case ("FOUR") 
-            call this%ddy_four(f)
+            call this%ddy_four(f, df)
         case ("CHEB") 
-            call this%ddy_cheb(f)
+            call this%ddy_cheb(f, df)
         case default
             call gracefulExit("You intialized the derivative class (Y direction) using an &
             incorrect numerical method. Reinitialize using one of the following  &
@@ -260,15 +256,16 @@ contains
         real(rkind), intent(in), dimension(:,:,:), f
         real(rkind), dimension(size(f,1),size(f,2),size(f,3)) :: df
        
+        call check_dimension(f, "z") 
         select case (this%methodz)
         case ("CD06") 
-            call this%ddz_cd06(f)
+            call this%ddz_cd06(f, df)
         case ("CD10") 
-            call this%ddz_cd10(f)
+            call this%ddz_cd10(f, df)
         case ("FOUR") 
-            call this%ddz_four(f)
+            call this%ddz_four(f, df)
         case ("CHEB") 
-            call this%ddz_cheb(f)
+            call this%ddz_cheb(f, df)
         case default
             call gracefulExit("You intialized the derivative class (Z direction) using an &
             incorrect numerical method. Reinitialize using one of the following  &
@@ -281,15 +278,16 @@ contains
         real(rkind), intent(in), dimension(:,:,:), f
         real(rkind), dimension(size(f,1),size(f,2),size(f,3)) :: df
        
+        call check_dimension(f, "x") 
         select case (this%methodx)
         case ("CD06") 
-            call this%d2dx2_cd06(f)
+            call this%d2dx2_cd06(f, df)
         case ("CD10") 
-            call this%d2dx2_cd10(f)
+            call this%d2dx2_cd10(f, df)
         case ("FOUR") 
-            call this%d2dx2_four(f)
+            call this%d2dx2_four(f, df)
         case ("CHEB") 
-            call this%d2dx2_cheb(f)
+            call this%d2dx2_cheb(f, df)
         case default
             call gracefulExit("You intialized the derivative class (X direction) using an &
             incorrect numerical method. Reinitialize using one of the following  &
@@ -302,15 +300,16 @@ contains
         real(rkind), intent(in), dimension(:,:,:), f
         real(rkind), dimension(size(f,1),size(f,2),size(f,3)) :: df
        
+        call check_dimension(f, "y") 
         select case (this%methody)
         case ("CD06") 
-            call this%d2dy2_cd06(f)
+            call this%d2dy2_cd06(f, df)
         case ("CD10") 
-            call this%d2dy2_cd10(f)
+            call this%d2dy2_cd10(f, df)
         case ("FOUR") 
-            call this%d2dy2_four(f)
+            call this%d2dy2_four(f, df)
         case ("CHEB") 
-            call this%d2dy2_cheb(f)
+            call this%d2dy2_cheb(f, df)
         case default
             call gracefulExit("You intialized the derivative class (Y direction) using an &
             incorrect numerical method. Reinitialize using one of the following  &
@@ -322,16 +321,17 @@ contains
         class(derivatives), intent(in) :: this
         real(rkind), intent(in), dimension(:,:,:), f
         real(rkind), dimension(size(f,1),size(f,2),size(f,3)) :: df
-       
+      
+        call check_dimension(f, "z") 
         select case (this%methodz)
         case ("CD06") 
-            call this%d2dz2_cd06(f)
+            call this%d2dz2_cd06(f, df)
         case ("CD10") 
-            call this%d2dz2_cd10(f)
+            call this%d2dz2_cd10(f, df)
         case ("FOUR") 
-            call this%d2dz2_four(f)
+            call this%d2dz2_four(f, df)
         case ("CHEB") 
-            call this%d2dz2_cheb(f)
+            call this%d2dz2_cheb(f, df)
         case default
             call gracefulExit("You intialized the derivative class (Z direction) using an &
             incorrect numerical method. Reinitialize using one of the following  &

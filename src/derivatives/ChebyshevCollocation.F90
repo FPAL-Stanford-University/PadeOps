@@ -1,108 +1,367 @@
-! Routines for Chebyshev derivatives
-! Assumes Gauss-Lobatto points
+! Routines specific to Chebyshev Collocation scheme
+! This file is included in the Derivatives module
 
-function InitDCT() result(ierr)
-    integer :: ierr
-    ierr = xdct % init(nx)
-    ierr = ydct % init(ny)
-    ierr = zdct % init(nz)
+subroutine ddx_cheb(this, f, df) 
+    
+    class( derivative ), intent(in) :: this
+    real(rkind), dimension(:,:,:), intent(in) :: f
+    real(rkind), dimension(:,:,:), intent(out) :: df
+    real(rkind), dimension(this%nx) :: wrkArr
+    integer :: i, j, k
 
-    ierr = 0
-end function
+    select case (this%xoprank)
+    case (1)
+        if (.not. chebUseWrkArr1) then
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    df(:, j, k) = this % xdct % chebder1( f(:, j, k) ) 
+                end do 
+            end do 
+        else
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    wrkArr = f(:, j, k)
+                    df(:, j, k) = this % xdct % chebder1( wrkArr ) 
+                end do 
+            end do 
+        end if 
+
+    case (2)
+        if (.not. chebUseWrkArr2) then
+            do k = 1,size(f,3)
+                do i = 1,size(f,1)
+                    df(i, :, k) = this % xdct % chebder1( f(i, :, k) ) 
+                end do 
+            end do 
+        else 
+            do k = 1,size(f,3)
+                do i = 1,size(f,1)
+                    wrkArr = f(i, :, k)
+                    df(i, :, k) = this % xdct % chebder1( wrkArr ) 
+                end do 
+            end do 
+        end if 
+
+    case (3)
+        if (.not. chebUseWrkArr3) then
+            do j = 1,size(f,2)
+                do i = 1,size(f,1)
+                    df(i, j, :) = this % xdct % chebder1( f(i, j, :) ) 
+                end do 
+            end do 
+        else
+            do j = 1,size(f,2)
+                do i = 1,size(f,1)
+                    df(i, j, :) = this % xdct % chebder1( f(i, j, :) ) 
+                end do 
+            end do 
+        end if
+
+    end select 
+
+end subroutine 
+
+subroutine ddy_cheb(this, f, df) 
+    
+    class( derivative ), intent(in) :: this
+    real(rkind), dimension(:,:,:), intent(in) :: f
+    real(rkind), dimension(:,:,:), intent(out) :: df
+    real(rkind), dimension(this%ny) :: wrkArr
+    integer :: i, j, k
+
+    select case (this%yoprank)
+    case (1)
+        if (.not. chebUseWrkArr1) then
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    df(:, j, k) = this % ydct % chebder1( f(:, j, k) ) 
+                end do 
+            end do 
+        else
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    wrkArr = f(:, j, k)
+                    df(:, j, k) = this % ydct % chebder1( wrkArr ) 
+                end do 
+            end do 
+        end if 
+
+    case (2)
+        if (.not. chebUseWrkArr2) then
+            do k = 1,size(f,3)
+                do i = 1,size(f,1)
+                    df(i, :, k) = this % ydct % chebder1( f(i, :, k) ) 
+                end do 
+            end do 
+        else 
+            do k = 1,size(f,3)
+                do i = 1,size(f,1)
+                    wrkArr = f(i, :, k)
+                    df(i, :, k) = this % ydct % chebder1( wrkArr ) 
+                end do 
+            end do 
+        end if 
+
+    case (3)
+        if (.not. chebUseWrkArr3) then
+            do j = 1,size(f,2)
+                do i = 1,size(f,1)
+                    df(i, j, :) = this % ydct % chebder1( f(i, j, :) ) 
+                end do 
+            end do 
+        else
+            do j = 1,size(f,2)
+                do i = 1,size(f,1)
+                    df(i, j, :) = this % ydct % chebder1( f(i, j, :) ) 
+                end do 
+            end do 
+        end if
+
+    end select 
+
+end subroutine 
 
 
-pure function chebder(fhat) result(dfhat)
-    real(rkind), dimension(:), intent(in) :: fhat
-    real(rkind), dimension(size(fhat)) :: dfhat
-    integer :: n, i  
+subroutine ddz_cheb(this, f, df) 
+    
+    class( derivative ), intent(in) :: this
+    real(rkind), dimension(:,:,:), intent(in) :: f
+    real(rkind), dimension(:,:,:), intent(out) :: df
+    real(rkind), dimension(this%nz) :: wrkArr
+    integer :: i, j, k
 
-    n = size(fhat) - 1
-    dfhat(n+1) = zero
-    dfhat((n-1) + 1) = two*n*fhat(n+1)
-    do i = (n - 1),2,-1
-        dfhat((i - 1) + 1) = two*i*fhat(i + 1) + dfhat((i+1)+1)
-    end do 
+    select case (this%zoprank)
+    case (1)
+        if (.not. chebUseWrkArr1) then
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    df(:, j, k) = this % zdct % chebder1( f(:, j, k) ) 
+                end do 
+            end do 
+        else
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    wrkArr = f(:, j, k)
+                    df(:, j, k) = this % zdct % chebder1( wrkArr ) 
+                end do 
+            end do 
+        end if 
 
-    dfhat(1) = fhat(2) + half*fhat(3) 
+    case (2)
+        if (.not. chebUseWrkArr2) then
+            do k = 1,size(f,3)
+                do i = 1,size(f,1)
+                    df(i, :, k) = this % zdct % chebder1( f(i, :, k) ) 
+                end do 
+            end do 
+        else 
+            do k = 1,size(f,3)
+                do i = 1,size(f,1)
+                    wrkArr = f(i, :, k)
+                    df(i, :, k) = this % zdct % chebder1( wrkArr ) 
+                end do 
+            end do 
+        end if 
 
-end function 
+    case (3)
+        if (.not. chebUseWrkArr3) then
+            do j = 1,size(f,2)
+                do i = 1,size(f,1)
+                    df(i, j, :) = this % zdct % chebder1( f(i, j, :) ) 
+                end do 
+            end do 
+        else
+            do j = 1,size(f,2)
+                do i = 1,size(f,1)
+                    df(i, j, :) = this % zdct % chebder1( f(i, j, :) ) 
+                end do 
+            end do 
+        end if
+
+    end select 
+
+end subroutine 
 
 
-function d1xCHEB(f), result(df)
-    real(rkind), dimension(nx,ny,nz), intent(in) :: f
-    real(rkind), dimension(nx,ny,nz) :: df
-    integer :: i, j
+subroutine d2dx2_cheb(this, f, df) 
+    
+    class( derivative ), intent(in) :: this
+    real(rkind), dimension(:,:,:), intent(in) :: f
+    real(rkind), dimension(:,:,:), intent(out) :: df
+    real(rkind), dimension(this%nx) :: wrkArr
+    integer :: i, j, k
 
-     do j = 1,nz
-        do i = 1,ny 
-            df(:,i,j) = xdct % idct( chebder(xdct % dct(f(:,i,j)))
-        end do 
-     end do 
-end function
+    select case (this%xoprank)
+    case (1)
+        if (.not. chebUseWrkArr1) then
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    df(:, j, k) = this % xdct % chebder2( f(:, j, k) ) 
+                end do 
+            end do 
+        else
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    wrkArr = f(:, j, k)
+                    df(:, j, k) = this % xdct % chebder2( wrkArr ) 
+                end do 
+            end do 
+        end if 
 
-function d1yCHEB(f), result(df)
-    real(rkind), dimension(nx,ny,nz), intent(in) :: f
-    real(rkind), dimension(nx,ny,nz) :: df
-    integer :: i, j
+    case (2)
+        if (.not. chebUseWrkArr2) then
+            do k = 1,size(f,3)
+                do i = 1,size(f,1)
+                    df(i, :, k) = this % xdct % chebder2( f(i, :, k) ) 
+                end do 
+            end do 
+        else 
+            do k = 1,size(f,3)
+                do i = 1,size(f,1)
+                    wrkArr = f(i, :, k)
+                    df(i, :, k) = this % xdct % chebder2( wrkArr ) 
+                end do 
+            end do 
+        end if 
 
-     do j = 1,nz
-        do i = 1,nx 
-            df(i,:,j) = ydct % idct( chebder(ydct % dct(f(i,:,j)))
-        end do 
-     end do 
-end function
+    case (3)
+        if (.not. chebUseWrkArr3) then
+            do j = 1,size(f,2)
+                do i = 1,size(f,1)
+                    df(i, j, :) = this % xdct % chebder2( f(i, j, :) ) 
+                end do 
+            end do 
+        else
+            do j = 1,size(f,2)
+                do i = 1,size(f,1)
+                    df(i, j, :) = this % xdct % chebder2( f(i, j, :) ) 
+                end do 
+            end do 
+        end if
 
-function d1zCHEB(f), result(df)
-    real(rkind), dimension(nx,ny,nz), intent(in) :: f
-    real(rkind), dimension(nx,ny,nz) :: df
-    integer :: i, j
+    end select 
 
-     do j = 1,ny
-        do i = 1,nx 
-            df(i,j,:) = zdct % idct( chebder(zdct % dct(f(i,j,:)))
-        end do 
-     end do 
-end function
+end subroutine 
 
-function d2xCHEB(f), result(df)
-    real(rkind), dimension(nx,ny,nz), intent(in) :: f
-    real(rkind), dimension(nx,ny,nz) :: df
-    integer :: i, j
+subroutine d2dy2_cheb(this, f, df) 
+    
+    class( derivative ), intent(in) :: this
+    real(rkind), dimension(:,:,:), intent(in) :: f
+    real(rkind), dimension(:,:,:), intent(out) :: df
+    real(rkind), dimension(this%ny) :: wrkArr
+    integer :: i, j, k
 
-     do j = 1,nz
-        do i = 1,ny 
-            df(:,i,j) = xdct % idct( chebder ( chebder(xdct % dct(f(:,i,j))))
-        end do 
-     end do 
-end function
+    select case (this%yoprank)
+    case (1)
+        if (.not. chebUseWrkArr1) then
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    df(:, j, k) = this % ydct % chebder2( f(:, j, k) ) 
+                end do 
+            end do 
+        else
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    wrkArr = f(:, j, k)
+                    df(:, j, k) = this % ydct % chebder2( wrkArr ) 
+                end do 
+            end do 
+        end if 
 
-function d2yCHEB(f), result(df)
-    real(rkind), dimension(nx,ny,nz), intent(in) :: f
-    real(rkind), dimension(nx,ny,nz) :: df
-    integer :: i, j
+    case (2)
+        if (.not. chebUseWrkArr2) then
+            do k = 1,size(f,3)
+                do i = 1,size(f,1)
+                    df(i, :, k) = this % ydct % chebder2( f(i, :, k) ) 
+                end do 
+            end do 
+        else 
+            do k = 1,size(f,3)
+                do i = 1,size(f,1)
+                    wrkArr = f(i, :, k)
+                    df(i, :, k) = this % ydct % chebder2( wrkArr ) 
+                end do 
+            end do 
+        end if 
 
-     do j = 1,nz
-        do i = 1,nx 
-            df(i,:,j) = ydct % idct( chebder ( chebder(ydct % dct(f(i,:,j))))
-        end do 
-     end do 
-end function
+    case (3)
+        if (.not. chebUseWrkArr3) then
+            do j = 1,size(f,2)
+                do i = 1,size(f,1)
+                    df(i, j, :) = this % ydct % chebder2( f(i, j, :) ) 
+                end do 
+            end do 
+        else
+            do j = 1,size(f,2)
+                do i = 1,size(f,1)
+                    df(i, j, :) = this % ydct % chebder2( f(i, j, :) ) 
+                end do 
+            end do 
+        end if
 
-function d2zCHEB(f), result(df)
-    real(rkind), dimension(nx,ny,nz), intent(in) :: f
-    real(rkind), dimension(nx,ny,nz) :: df
-    integer :: i, j
+    end select 
 
-     do j = 1,ny
-        do i = 1,nx 
-            df(i,j,:) = zdct % idct( chebder ( chebder(zdct % dct(f(i,j,:))))
-        end do 
-     end do 
-end function
+end subroutine 
 
-function InitCHEB(direction) result (ierr)
-    character(len=1), intent(in) :: direction
-    integer :: ierr
 
-    ierr = 0
-end function
+subroutine d2dz2_cheb(this, f, df) 
+    
+    class( derivative ), intent(in) :: this
+    real(rkind), dimension(:,:,:), intent(in) :: f
+    real(rkind), dimension(:,:,:), intent(out) :: df
+    real(rkind), dimension(this%nz) :: wrkArr
+    integer :: i, j, k
+
+    select case (this%zoprank)
+    case (1)
+        if (.not. chebUseWrkArr1) then
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    df(:, j, k) = this % zdct % chebder2( f(:, j, k) ) 
+                end do 
+            end do 
+        else
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    wrkArr = f(:, j, k)
+                    df(:, j, k) = this % zdct % chebder2( wrkArr ) 
+                end do 
+            end do 
+        end if 
+
+    case (2)
+        if (.not. chebUseWrkArr2) then
+            do k = 1,size(f,3)
+                do i = 1,size(f,1)
+                    df(i, :, k) = this % zdct % chebder2( f(i, :, k) ) 
+                end do 
+            end do 
+        else 
+            do k = 1,size(f,3)
+                do i = 1,size(f,1)
+                    wrkArr = f(i, :, k)
+                    df(i, :, k) = this % zdct % chebder2( wrkArr ) 
+                end do 
+            end do 
+        end if 
+
+    case (3)
+        if (.not. chebUseWrkArr3) then
+            do j = 1,size(f,2)
+                do i = 1,size(f,1)
+                    df(i, j, :) = this % zdct % chebder2( f(i, j, :) ) 
+                end do 
+            end do 
+        else
+            do j = 1,size(f,2)
+                do i = 1,size(f,1)
+                    df(i, j, :) = this % zdct % chebder2( f(i, j, :) ) 
+                end do 
+            end do 
+        end if
+
+    end select 
+
+end subroutine 
+
+
