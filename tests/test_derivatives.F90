@@ -8,20 +8,21 @@ program test_derivatives
 
     character(len=4), parameter :: method = "CD10"
     integer, parameter :: nx=512, ny=128, nz=128
-    integer, parameter :: xpadding=16, ypadding=0
+    integer, parameter :: xpadding=8, ypadding=0
 
     type( derivatives ) :: myder
 
-    real(rkind), dimension(nx+xpadding,ny+ypadding,nz), target :: f_data
-    real(rkind), dimension(:,:,:), pointer :: f
+    real(rkind), dimension(nx+xpadding,ny+ypadding,nz) :: f_data
+    !real(rkind), dimension(:,:,:), pointer :: f
 
     real(rkind), dimension(nx,ny,nz) :: x,df,df_exact
     real(rkind) :: dx, dy, dz
 
     integer :: i, ierr
 
-    f => f_data(1:nx,1:ny,1:nz)
+    !f => f_data(1:nx,1:ny,1:nz)
 
+    associate (f => f_data(1:nx,1:ny,1:nz))
     if ( method .NE. "CHEB" ) then
         do i=1,nx
             x(i,:,:) = real(i-1,rkind)*two*pi/real(nx,rkind)
@@ -56,6 +57,8 @@ program test_derivatives
     call toc("Time to get x derivatives")
     print*, "Maximum error = ", MAXVAL( ABS(df - df_exact) )
 
-    nullify(f)
+    end associate
+
+    !nullify(f)
 
 end program
