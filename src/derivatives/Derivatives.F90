@@ -73,10 +73,10 @@ module derivativestuff
             
             !! Private Procedures
             ! direction independent procedures
-            procedure, private :: chebder
-            procedure, private :: fourder
-            procedure, private :: cd10der
-            procedure, private :: cd06der
+            !procedure, private :: chebder
+            !procedure, private :: fourder
+            !procedure, private :: cd10der
+            !procedure, private :: cd06der
 
             ! direction dependent procedures
             ! First order derivatives

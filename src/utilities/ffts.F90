@@ -18,15 +18,16 @@ module fftStuff
         integer(kind=8) :: plan_fwd
         integer(kind=8) :: plan_bwd
         logical         :: initialized=.FALSE.
+        logical         :: isEven=.TRUE.
         
         integer :: nd=1
         integer, dimension(:), allocatable :: npts
         
         real(rkind), dimension(:), allocatable :: dspace
 
-        real(rkind), allocatable, dimension(:)       :: k1d        ! Wavenumbers for 1D transform
-        real(rkind), allocatable, dimension(:,:,:)   :: k2d        ! Wavenumbers for 2D transform
-        real(rkind), allocatable, dimension(:,:,:,:) :: k3d        ! Wavenumbers for 3D transform
+        real(rkind), allocatable, dimension(:)       :: k1d, k1d_sq        ! Wavenumbers for 1D transform
+        real(rkind), allocatable, dimension(:,:,:)   :: k2d                ! Wavenumbers for 2D transform
+        real(rkind), allocatable, dimension(:,:,:,:) :: k3d                ! Wavenumbers for 3D transform
 
 
 
@@ -49,11 +50,39 @@ module fftStuff
         generic            :: k => getk1d!, getk2d, getk3d    ! Get wave number given indices
         !
     
+        procedure, private :: nullOddBall
+        procedure :: fourder1
+        procedure :: fourder2
     end type
 
 
 contains
 
+    function nullOddBall(this,f) result(fout) 
+        class( ffts ), intent(in) :: this
+        complex(rkind), dimension(this%npts(1)), intent(in) :: f
+        complex(rkind), dimension(this%npts(1)) :: fout
+
+        fout = f
+        if (this%isEven) fout(this%npts(1)/2 + 1) = zero
+
+    end function 
+
+    function fourder1(this, f) result(df)
+        class( ffts ), intent(in) :: this
+        real(rkind), dimension(this%npts(1)), intent(in) :: f
+        real(rkind), dimension(this%npts(1)) :: df 
+        
+        df = this%ifft( imi * this%k1d * this%nullOddBall( this%fft(f) ) )
+    end function 
+    
+    function fourder2(this, f) result(df)
+        class( ffts ), intent(in) :: this
+        real(rkind), dimension(this%npts(1)), intent(in) :: f
+        real(rkind), dimension(this%npts(1)) :: df 
+
+        df = this%ifft( -this%k1d_sq * this%nullOddBall( this%fft(f) ) )
+    end function 
 
     function init1d(this, nx, dx) result(ierr)
         
@@ -83,6 +112,8 @@ contains
 
         if ( .not. allocated(this%k1d) ) allocate( this%k1d( this%npts(1) ) )
         this%k1d = GetWaveNums(nx,dx)
+        if ( .not. allocated(this%k1d_sq) ) allocate( this%k1d_sq( this%npts(1) ) )
+        this%k1d_sq = this%k1d*this%k1d 
 
         allocate( arr_in_real(nx) )
         allocate( arr_in(nx) )
@@ -95,6 +126,12 @@ contains
         deallocate( arr_out_real )
         deallocate( arr_out )
 
+        select case (mod(nx,2))
+        case (1)
+            this%isEven = .false.
+        case (0)
+            this%isEven = .true.
+        end select 
 
         this%initialized = .TRUE.
         ierr = 0
