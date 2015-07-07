@@ -8,19 +8,24 @@ program test_derivatives
 
     character(len=4), parameter :: method = "CD10"
     integer, parameter :: nx=512, ny=128, nz=128
-    integer, parameter :: xpadding=16, ypadding=0
+    integer :: xpadding=5, ypadding=0,zpadding = 0
 
     type( derivatives ) :: myder
 
-    real(rkind), dimension(nx+xpadding,ny+ypadding,nz), target :: f_data
-    real(rkind), dimension(:,:,:), pointer :: f
+    !real(rkind), dimension(nx+xpadding,ny+ypadding,nz), target :: f!_data
+    real(rkind), dimension(:,:,:), allocatable :: f
 
-    real(rkind), dimension(nx,ny,nz) :: x,df,df_exact
+    real(rkind), dimension(:,:,:), allocatable :: wrkin, wrkout
+    real(rkind), dimension(:,:,:), allocatable :: x,df,df_exact
     real(rkind) :: dx, dy, dz
 
     integer :: i, ierr
 
-    f => f_data(1:nx,1:ny,1:nz)
+    allocate(f(nx ,ny,nz))
+    allocate(x(nx ,ny,nz))
+    allocate(df(nx ,ny,nz))
+    allocate(df_exact(nx ,ny ,nz))
+    !associate (f => f_data(1:nx,1:ny,1:nz))
 
     if ( method .NE. "CHEB" ) then
         do i=1,nx
@@ -34,21 +39,31 @@ program test_derivatives
     else
         do i=1,nx
             x(i,:,:) = - cos( real((i-1),rkind) * pi / real((nx-1),rkind) )
-            f(i,:,:) = cos( x(i,:,:) )
+            f(i,1:ny,1:nz) = cos( x(i,:,:) )
             df_exact(i,:,:) = -sin( x(i,:,:) )
         end do
     end if
 
     ierr = myder % init( nx, ny, nz, dx, dy, dz, .TRUE., .TRUE., .TRUE., method, method, method )
 
+    xpadding = 5; ypadding = 0; zpadding = 0
+    allocate (wrkin(nx+xpadding,ny+ypadding,nz+zpadding),wrkout(nx+xpadding,ny+ypadding,nz+zpadding))
     call tic()
-    df = myder % ddz(f)
+    wrkin(1:Nx,1:Ny,1:Nz) = f
+    wrkout = myder % ddz(wrkin)
+    df = wrkout(1:Nx,1:Ny,1:Nz)
     call toc("Time to get z derivatives")
+    deallocate (wrkin, wrkout) 
     print*, "Maximum error = ", MAXVAL( ABS(df) )
 
+    xpadding = 0; ypadding = 5; zpadding = 16
+    allocate (wrkin(nx+xpadding,ny+ypadding,nz+zpadding),wrkout(nx+xpadding,ny+ypadding,nz+zpadding))
     call tic()
+    wrkin(1:Nx,1:Ny,1:Nz) = f
     df = myder % ddy(f)
     call toc("Time to get y derivatives")
+    df = wrkout(1:Nx,1:Ny,1:Nz)
+    deallocate (wrkin, wrkout) 
     print*, "Maximum error = ", MAXVAL( ABS(df) )
 
     call tic()
@@ -56,6 +71,6 @@ program test_derivatives
     call toc("Time to get x derivatives")
     print*, "Maximum error = ", MAXVAL( ABS(df - df_exact) )
 
-    nullify(f)
 
+    deallocate(x,f,df,df_exact)
 end program
