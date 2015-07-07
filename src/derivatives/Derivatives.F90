@@ -357,20 +357,20 @@ contains
 
         select case (dir)
         case ("x")
-            if (size(arr,this%xoprank) .ne. this%nx) then
-                call GracefulExit("Dimenion of input vector for direction X is &
-                &inconsistent with initialization", 49)
-            end if 
+            !if (size(arr,this%xoprank) .ne. this%nx) then
+            !    call GracefulExit("Dimenion of input vector for direction X is &
+            !    &inconsistent with initialization", 49)
+            !end if 
         case ("y")
-            if (size(arr,this%yoprank) .ne. this%ny) then
-                call GracefulExit("Dimenion of input vector for direction Y is &
-                &inconsistent with initialization", 49)
-            end if
+            !if (size(arr,this%yoprank) .ne. this%ny) then
+            !    call GracefulExit("Dimenion of input vector for direction Y is &
+            !    &inconsistent with initialization", 49)
+            !end if
         case ("z") 
-            if (size(arr,this%zoprank) .ne. this%nz) then
-                call GracefulExit("Dimenion of input vector for direction Z is &
-                &inconsistent with initialization", 49)
-            end if 
+            !if (size(arr,this%zoprank) .ne. this%nz) then
+            !    call GracefulExit("Dimenion of input vector for direction Z is &
+            !    &inconsistent with initialization", 49)
+            !end if 
         case default 
             call GracefulExit ( "Incorrect String entered for SUBROUTINE: &
                         &check_dimension", 5)

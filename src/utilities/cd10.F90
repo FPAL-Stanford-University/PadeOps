@@ -197,33 +197,27 @@ contains
         real(rkind), dimension(n), intent(inout) :: y  ! Take in RHS and put solution into it
         integer :: i
     
-        associate( b=>LU(:,1), eg=>LU(:,2), k=>LU(:,3),&
-                   l=>LU(:,4), onebyg=>LU(:,5), h=>LU(:,6),&
-                   f=>LU(:,7),  v=>LU(:,8), w=>LU(:,9))
-    
             ! Step 8 ( update y instead of creating z )
-            y(2) = y(2) - b(2)*y(1)
-    
+            y(2) = y(2) - LU(2,1)*y(1) 
+
             ! Step 9
             do i = 3,n-2
-                y(i) = y(i) - b(i)*y(i-1) - eg(i)*y(i-2)
+                y(i) = y(i) - LU(i,1)*y(i-1) - LU(i,2)*y(i-2)
             end do
     
             ! Step 10
-            y(n-1) = y(n-1) - SUM( k(1:n-2)*y(1:n-2) )
-            y(n)   = y(n)   - SUM( l(1:n-1)*y(1:n-1) )
+            y(n-1) = y(n-1) - SUM( LU(1:n-2,3)*y(1:n-2) )
+            y(n)   = y(n)   - SUM( LU(1:n-1,4)*y(1:n-1) )
     
             ! Step 11
-            y(n) = y(n) * onebyg(n)
-            y(n-1) = ( y(n-1) - w(n-1)*y(n) ) * onebyg(n-1)
-            y(n-2) = ( y(n-2) - v(n-2)*y(n-1) - w(n-2)*y(n) ) * onebyg(n-2)
-            y(n-3) = ( y(n-3) - h(n-3)*y(n-2) - v(n-3)*y(n-1) - w(n-3)*y(n) ) * onebyg(n-3)
+            y(n) = y(n) * LU(n,5)
+            y(n-1) = ( y(n-1) - LU(n-1,9)*y(n) ) * LU(n-1,5)
+            y(n-2) = ( y(n-2) - LU(n-2,8)*y(n-1) - LU(n-2,9)*y(n) ) * LU(n-2,5)
+            y(n-3) = ( y(n-3) - LU(n-3,6)*y(n-2) - LU(n-3,8)*y(n-1) - LU(n-3,9)*y(n) ) * LU(n-3,5)
             do i = n-4,1,-1
-                y(i) = ( y(i) - h(i)*y(i+1) - f(i)*y(i+2) - v(i)*y(n-1) - w(i)*y(n) ) * onebyg(i)
+                y(i) = ( y(i) - LU(i,6)*y(i+1) - LU(i,7)*y(i+2) - LU(i,8)*y(n-1) - LU(i,9)*y(n) ) * LU(i,5)
             end do
     
-        end associate
-            
     end subroutine
     
     subroutine SolvePenta(A,b,n)
