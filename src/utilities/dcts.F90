@@ -24,14 +24,37 @@ module dctstuff
 
         procedure           :: init                                     ! Initialize type
        
-        procedure            :: dct                                     ! Compute Forward Transform 
-        
-        procedure            :: idct                                      ! Compute Backward Transform 
-    
+        procedure           :: dct                                      ! Compute Forward Transform 
+        procedure           :: idct                                     ! Compute Backward Transform 
+
+        procedure           :: chebder1
+        procedure           :: chebder2
+
     end type
         
 contains
+
+    function chebder1(this, f) result(df)
+
+        class( dcts ), intent(in) :: this
+        real(rkind), dimension(this%n), intent(in) :: f
+        real(rkind), dimension(this%n) :: df
+
+        df = chebder_coeffs( this%dct(f) )
+        df = this%idct( df )
+
+    end function
    
+    function chebder2(this, f) result(df)
+
+        class( dcts ), intent(in) :: this
+        real(rkind), dimension(this%n), intent(in) :: f
+        real(rkind), dimension(this%n) :: df
+
+        df = chebder_coeffs( chebder_coeffs( this%dct(f) ) )
+        df = this%idct( df )
+
+    end function
     
     function init(this, n_) result(ierr)
    
@@ -60,7 +83,6 @@ contains
         real(rkind), parameter :: minusOne = -one
 
         integer                                     :: i
-        real(rkind)                                 :: dummy
 
 
         call dfftw_execute_r2r( this%plan_fwd, f, fhat )
@@ -87,7 +109,6 @@ contains
         real(rkind), dimension(this%n) :: f
         real(rkind), parameter :: minusOne = -one
         integer :: i
-        real(rkind) :: dummy
 
         fhat(2:this%n - 1) = half*fhat(2:this%n - 1)
 
@@ -96,6 +117,22 @@ contains
         end do 
 
         call dfftw_execute_r2r( this%plan_bwd, fhat, f )
+    
+    end function 
+
+    pure function chebder_coeffs(fhat) result(dfhat)
+        real(rkind), dimension(:), intent(in) :: fhat
+        real(rkind), dimension(size(fhat)) :: dfhat
+        integer :: n, i  
+    
+        n = size(fhat) - 1
+        dfhat(n+1) = zero
+        dfhat((n-1) + 1) = two*n*fhat(n+1)
+        do i = (n - 1),2,-1
+            dfhat((i - 1) + 1) = two*i*fhat(i + 1) + dfhat((i+1)+1)
+        end do 
+    
+        dfhat(1) = fhat(2) + half*fhat(3) 
     
     end function 
 

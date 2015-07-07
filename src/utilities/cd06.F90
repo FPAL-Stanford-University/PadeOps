@@ -27,6 +27,7 @@ module cd06stuff
         integer     :: n
         real(rkind) :: dx
         real(rkind) :: onebydx
+        real(rkind) :: onebydx2
 
         logical     :: periodic = .TRUE.
         integer     :: bc1 = 0                             ! Boundary condition type. 0=Dirichlet, 1=Neumann
@@ -41,11 +42,14 @@ module cd06stuff
 
         procedure :: init
 
-        procedure :: ComputeD1RHS
-        procedure :: ComputeD2RHS
+        procedure, private :: ComputeD1RHS
+        procedure, private :: ComputeD2RHS
 
-        procedure :: SolveD1
-        procedure :: SolveD2
+        procedure, private :: SolveD1
+        procedure, private :: SolveD2
+
+        procedure :: cd06der1
+        procedure :: cd06der2
 
     end type
 
@@ -63,6 +67,7 @@ contains
         this%n = n_
         this%dx = dx_
         this%onebydx = one/dx_
+        this%onebydx2 = this%onebydx/dx_
     
         this%periodic = periodic_
     
@@ -254,5 +259,29 @@ contains
             call SolveTri(this%tri2,rhs,this%n)
         end select
     end subroutine
+
+    function cd06der1(this, f) result(df)
+        
+        class( cd06 ), intent(in) :: this
+        real(rkind), dimension(this%n), intent(in) :: f
+        real(rkind), dimension(this%n) :: df
+
+        df = this%ComputeD1RHS(f)
+        call this%SolveD1(df)
+        df = df * this%onebydx
+
+    end function
+
+    function cd06der2(this, f) result(df)
+        
+        class( cd06 ), intent(in) :: this
+        real(rkind), dimension(this%n), intent(in) :: f
+        real(rkind), dimension(this%n) :: df
+
+        df = this%ComputeD2RHS(f)
+        call this%SolveD2(df)
+        df = df * this%onebydx2
+
+    end function
 
 end module
