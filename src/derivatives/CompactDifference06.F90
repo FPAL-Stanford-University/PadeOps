@@ -3,7 +3,7 @@
 
 subroutine ddx_cd06(this, f, df) 
     
-    class( derivative ), intent(in) :: this
+    class( derivatives ), intent(in) :: this
     real(rkind), dimension(:,:,:), intent(in) :: f
     real(rkind), dimension(:,:,:), intent(out) :: df
     real(rkind), dimension(this%nx) :: wrkArr
@@ -63,7 +63,7 @@ end subroutine
 
 subroutine ddy_cd06(this, f, df) 
     
-    class( derivative ), intent(in) :: this
+    class( derivatives ), intent(in) :: this
     real(rkind), dimension(:,:,:), intent(in) :: f
     real(rkind), dimension(:,:,:), intent(out) :: df
     real(rkind), dimension(this%ny) :: wrkArr
@@ -124,7 +124,7 @@ end subroutine
 
 subroutine ddz_cd06(this, f, df) 
     
-    class( derivative ), intent(in) :: this
+    class( derivatives ), intent(in) :: this
     real(rkind), dimension(:,:,:), intent(in) :: f
     real(rkind), dimension(:,:,:), intent(out) :: df
     real(rkind), dimension(this%nz) :: wrkArr
@@ -185,7 +185,7 @@ end subroutine
 
 subroutine d2dx2_cd06(this, f, df) 
     
-    class( derivative ), intent(in) :: this
+    class( derivatives ), intent(in) :: this
     real(rkind), dimension(:,:,:), intent(in) :: f
     real(rkind), dimension(:,:,:), intent(out) :: df
     real(rkind), dimension(this%nx) :: wrkArr
@@ -245,7 +245,7 @@ end subroutine
 
 subroutine d2dy2_cd06(this, f, df) 
     
-    class( derivative ), intent(in) :: this
+    class( derivatives ), intent(in) :: this
     real(rkind), dimension(:,:,:), intent(in) :: f
     real(rkind), dimension(:,:,:), intent(out) :: df
     real(rkind), dimension(this%ny) :: wrkArr
@@ -306,7 +306,7 @@ end subroutine
 
 subroutine d2dz2_cd06(this, f, df) 
     
-    class( derivative ), intent(in) :: this
+    class( derivatives ), intent(in) :: this
     real(rkind), dimension(:,:,:), intent(in) :: f
     real(rkind), dimension(:,:,:), intent(out) :: df
     real(rkind), dimension(this%nz) :: wrkArr

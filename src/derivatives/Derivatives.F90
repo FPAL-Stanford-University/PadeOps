@@ -3,12 +3,12 @@
 module derivativestuff
 
     use kind_parameters, only: rkind
-    use fftstuff, only: ffts
-    use dctstuff, only: dcts
-    use cd10stuff, only: cd10
-    use cd06stuff, only: cd06
-    use constants, only: one
-    use exits, only: GracefulExit
+    use fftstuff,        only: ffts
+    use dctstuff,        only: dcts
+    use cd10stuff,       only: cd10
+    use cd06stuff,       only: cd06
+    use constants,       only: one
+    use exits,           only: GracefulExit
     implicit none
 
     private
@@ -17,8 +17,14 @@ module derivativestuff
     
     real(rkind), allocatable, dimension(:) :: k1, k2, k3                ! Wavenumbers
     
+    logical, parameter :: cd10UseWrkArr1=.FALSE.,cd10UseWrkArr2=.FALSE.,cd10UseWrkArr3=.FALSE. 
+    logical, parameter :: cd06UseWrkArr1=.FALSE.,cd06UseWrkArr2=.FALSE.,cd06UseWrkArr3=.FALSE. 
+    logical, parameter :: fourUseWrkArr1=.FALSE.,fourUseWrkArr2=.FALSE.,fourUseWrkArr3=.FALSE. 
+    logical, parameter :: chebUseWrkArr1=.FALSE.,chebUseWrkArr2=.FALSE.,chebUseWrkArr3=.FALSE. 
     
     type :: derivatives
+
+        private
 
         integer          :: nx
         integer          :: ny
@@ -38,9 +44,9 @@ module derivativestuff
         integer          :: bcz1=0
         integer          :: bczn=0
         
-        character(len=4) :: methodx           ! Scheme to use in x. 'CD06', 'CD10', 'FOUR', 'CHEB'
-        character(len=4) :: methody           ! Scheme to use in y. 'CD06', 'CD10', 'FOUR', 'CHEB'
-        character(len=4) :: methodz           ! Scheme to use in z. 'CD06', 'CD10', 'FOUR', 'CHEB'
+        character(len=4) :: methodx="CD10"           ! Scheme to use in x. 'CD06', 'CD10', 'FOUR', 'CHEB'
+        character(len=4) :: methody="CD10"           ! Scheme to use in y. 'CD06', 'CD10', 'FOUR', 'CHEB'
+        character(len=4) :: methodz="CD10"           ! Scheme to use in z. 'CD06', 'CD10', 'FOUR', 'CHEB'
         
         logical          :: periodicx=.TRUE.
         logical          :: periodicy=.TRUE.
@@ -99,6 +105,9 @@ module derivativestuff
             procedure, private :: d2dz2_cheb
             procedure, private :: d2dz2_four
             procedure, private :: d2dz2_cd10
+            procedure, private :: d2dz2_cd06
+
+            procedure, private :: check_dimension
     end type 
     
 
@@ -123,7 +132,7 @@ contains
         integer         , intent(in), optional :: bcx1_,bcxn_,bcy1_,bcyn_,bcz1_,bczn_
         character(len=4), intent(in), optional :: methodx_,methody_,methodz_
         logical         , intent(in), optional :: periodicx_,periodicy_,periodicz_
-        integer         , intent(out)          :: ierr
+        integer                                :: ierr
 
         this%nx = nx_; this%ny = ny_; this%nz = nz_
 
@@ -151,35 +160,35 @@ contains
         if (present(bczn_)) this%bczn = bczn_
 
         ! Initialize 10th order CD classes
-        ierr = xcd10%init(nx_, dx_, periodicx_, bcx1_, bcx2_)
+        ierr = this % xcd10%init(this%nx, this%dx, this%periodicx, this%bcx1, this%bcxn)
         if (ierr .NE. 0) return
-        ierr = ycd10%init(ny_, dy_, periodicy_, bcy1_, bcy2_)
+        ierr = this % ycd10%init(this%ny, this%dy, this%periodicy, this%bcy1, this%bcyn)
         if (ierr .NE. 0) return
-        ierr = zcd10%init(nz_, dz_, periodicz_, bcz1_, bcz2_)
-        if (ierr .NE. 0) return
-
-        ! Initialize  6th order CD classes
-        ierr = xcd06%init(nx_, dx_, periodicx_, bcx1_, bcx2_)
-        if (ierr .NE. 0) return
-        ierr = ycd06%init(ny_, dy_, periodicy_, bcy1_, bcy2_)
-        if (ierr .NE. 0) return
-        ierr = zcd06%init(nz_, dz_, periodicz_, bcz1_, bcz2_)
+        ierr = this % zcd10%init(this%nz, this%dz, this%periodicz, this%bcz1, this%bczn)
         if (ierr .NE. 0) return
 
-        ! Initialize FFT classes
-        ierr = xfft % init(nx,dx)
+        ! Initialize 6th order CD classes
+        ierr = this % xcd06%init(this%nx, this%dx, this%periodicx, this%bcx1, this%bcxn)
         if (ierr .NE. 0) return
-        ierr = yfft % init(ny,dy)
+        ierr = this % ycd06%init(this%ny, this%dy, this%periodicy, this%bcy1, this%bcyn)
         if (ierr .NE. 0) return
-        ierr = zfft % init(nz,dz)
+        ierr = this % zcd06%init(this%nz, this%dz, this%periodicz, this%bcz1, this%bczn)
         if (ierr .NE. 0) return
 
         ! Initialize FFT classes
-        ierr = xdct % init(nx)
+        ierr = this % xfft % init(this%nx,this%dx)
         if (ierr .NE. 0) return
-        ierr = ydct % init(ny)
+        ierr = this % yfft % init(this%ny,this%dy)
         if (ierr .NE. 0) return
-        ierr = zdct % init(nz)
+        ierr = this % zfft % init(this%nz,this%dz)
+        if (ierr .NE. 0) return
+
+        ! Initialize DCT classes
+        ierr = this % xdct % init(this%nx)
+        if (ierr .NE. 0) return
+        ierr = this % ydct % init(this%ny)
+        if (ierr .NE. 0) return
+        ierr = this % zdct % init(this%nz)
         if (ierr .NE. 0) return
         
         ierr = 0
@@ -201,6 +210,7 @@ contains
     end subroutine
 
     subroutine SetZoprank(this,zop)
+        class(derivatives), intent(inout) :: this
         integer, intent(in) :: zop
 
         this%zoprank = zop
@@ -209,10 +219,10 @@ contains
 
     function ddx(this,f) result(df)
         class(derivatives), intent(in) :: this
-        real(rkind), intent(in), dimension(:,:,:), f
+        real(rkind), intent(in), dimension(:,:,:) :: f
         real(rkind), dimension(size(f,1),size(f,2),size(f,3)) :: df
        
-        call check_dimension(f, "x") 
+        call this % check_dimension(f, "x") 
         select case (this%methodx)
         case ("CD06") 
             call this%ddx_cd06(f, df)
@@ -223,18 +233,18 @@ contains
         case ("CHEB") 
             call this%ddx_cheb(f, df)
         case default
-            call gracefulExit("You intialized the derivative class (X direction) using an &
-            incorrect numerical method. Reinitialize using one of the following  &
-            methods: 1) CD06, 2) CD10, 3) FOUR, 4) CHEB", 10)
+            call GracefulExit("You intialized the derivative class (X direction) using an &
+           &incorrect numerical method. Reinitialize using one of the following  &
+           &methods: 1) CD06, 2) CD10, 3) FOUR, 4) CHEB", 10)
         end select
     end function
 
     function ddy(this,f) result(df)
         class(derivatives), intent(in) :: this
-        real(rkind), intent(in), dimension(:,:,:), f
+        real(rkind), intent(in), dimension(:,:,:) :: f
         real(rkind), dimension(size(f,1),size(f,2),size(f,3)) :: df
        
-        call check_dimension(f, "y") 
+        call this % check_dimension(f, "y") 
         select case (this%methody)
         case ("CD06") 
             call this%ddy_cd06(f, df)
@@ -245,18 +255,18 @@ contains
         case ("CHEB") 
             call this%ddy_cheb(f, df)
         case default
-            call gracefulExit("You intialized the derivative class (Y direction) using an &
-            incorrect numerical method. Reinitialize using one of the following  &
-            methods: 1) CD06, 2) CD10, 3) FOUR, 4) CHEB", 10)
+            call GracefulExit("You intialized the derivative class (Y direction) using an &
+            &incorrect numerical method. Reinitialize using one of the following  &
+            &methods: 1) CD06, 2) CD10, 3) FOUR, 4) CHEB", 10)
         end select
     end function
 
     function ddz(this,f) result(df)
         class(derivatives), intent(in) :: this
-        real(rkind), intent(in), dimension(:,:,:), f
+        real(rkind), intent(in), dimension(:,:,:) :: f
         real(rkind), dimension(size(f,1),size(f,2),size(f,3)) :: df
        
-        call check_dimension(f, "z") 
+        call this % check_dimension(f, "z") 
         select case (this%methodz)
         case ("CD06") 
             call this%ddz_cd06(f, df)
@@ -267,18 +277,18 @@ contains
         case ("CHEB") 
             call this%ddz_cheb(f, df)
         case default
-            call gracefulExit("You intialized the derivative class (Z direction) using an &
-            incorrect numerical method. Reinitialize using one of the following  &
-            methods: 1) CD06, 2) CD10, 3) FOUR, 4) CHEB", 10)
+            call GracefulExit("You intialized the derivative class (Z direction) using an &
+            &incorrect numerical method. Reinitialize using one of the following  &
+            &methods: 1) CD06, 2) CD10, 3) FOUR, 4) CHEB", 10)
         end select
     end function
 
     function d2dx2(this,f) result(df)
         class(derivatives), intent(in) :: this
-        real(rkind), intent(in), dimension(:,:,:), f
+        real(rkind), intent(in), dimension(:,:,:) :: f
         real(rkind), dimension(size(f,1),size(f,2),size(f,3)) :: df
        
-        call check_dimension(f, "x") 
+        call this % check_dimension(f, "x") 
         select case (this%methodx)
         case ("CD06") 
             call this%d2dx2_cd06(f, df)
@@ -289,18 +299,18 @@ contains
         case ("CHEB") 
             call this%d2dx2_cheb(f, df)
         case default
-            call gracefulExit("You intialized the derivative class (X direction) using an &
-            incorrect numerical method. Reinitialize using one of the following  &
-            methods: 1) CD06, 2) CD10, 3) FOUR, 4) CHEB", 10)
+            call GracefulExit("You intialized the derivative class (X direction) using an &
+            &incorrect numerical method. Reinitialize using one of the following  &
+            &methods: 1) CD06, 2) CD10, 3) FOUR, 4) CHEB", 10)
         end select
     end function
 
     function d2dy2(this,f) result(df)
         class(derivatives), intent(in) :: this
-        real(rkind), intent(in), dimension(:,:,:), f
+        real(rkind), intent(in), dimension(:,:,:) :: f
         real(rkind), dimension(size(f,1),size(f,2),size(f,3)) :: df
        
-        call check_dimension(f, "y") 
+        call this % check_dimension(f, "y") 
         select case (this%methody)
         case ("CD06") 
             call this%d2dy2_cd06(f, df)
@@ -311,18 +321,18 @@ contains
         case ("CHEB") 
             call this%d2dy2_cheb(f, df)
         case default
-            call gracefulExit("You intialized the derivative class (Y direction) using an &
-            incorrect numerical method. Reinitialize using one of the following  &
-            methods: 1) CD06, 2) CD10, 3) FOUR, 4) CHEB", 10)
+            call GracefulExit("You intialized the derivative class (Y direction) using an &
+            &incorrect numerical method. Reinitialize using one of the following  &
+            &methods: 1) CD06, 2) CD10, 3) FOUR, 4) CHEB", 10)
         end select
     end function
 
     function d2dz2(this,f) result(df)
         class(derivatives), intent(in) :: this
-        real(rkind), intent(in), dimension(:,:,:), f
+        real(rkind), intent(in), dimension(:,:,:) :: f
         real(rkind), dimension(size(f,1),size(f,2),size(f,3)) :: df
       
-        call check_dimension(f, "z") 
+        call this % check_dimension(f, "z") 
         select case (this%methodz)
         case ("CD06") 
             call this%d2dz2_cd06(f, df)
@@ -333,16 +343,14 @@ contains
         case ("CHEB") 
             call this%d2dz2_cheb(f, df)
         case default
-            call gracefulExit("You intialized the derivative class (Z direction) using an &
-            incorrect numerical method. Reinitialize using one of the following  &
-            methods: 1) CD06, 2) CD10, 3) FOUR, 4) CHEB", 10)
+            call GracefulExit("You intialized the derivative class (Z direction) using an &
+            &incorrect numerical method. Reinitialize using one of the following  &
+            &methods: 1) CD06, 2) CD10, 3) FOUR, 4) CHEB", 10)
         end select
     end function
 
 
-    subroutine check_dimension(this,arr,dir) result(isCorrect)
-        class(derivatives), intent(in) :: this
-    subroutine check_dimension(this,arr,dir) result(isCorrect)
+    subroutine check_dimension(this,arr,dir)
         class(derivatives), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in) :: arr
         character(len=1), intent(in) :: dir
@@ -350,23 +358,24 @@ contains
         select case (dir)
         case ("x")
             if (size(arr,this%xoprank) .ne. this%nx) then
-                call gracefulExit("Dimenion of input vector for direction X is
-                inconsistent with initialization")
+                call GracefulExit("Dimenion of input vector for direction X is &
+                &inconsistent with initialization", 49)
             end if 
         case ("y")
             if (size(arr,this%yoprank) .ne. this%ny) then
-                call gracefulExit("Dimenion of input vector for direction Y is
-                inconsistent with initialization")
-            end if 
+                call GracefulExit("Dimenion of input vector for direction Y is &
+                &inconsistent with initialization", 49)
+            end if
+        case ("z") 
             if (size(arr,this%zoprank) .ne. this%nz) then
-                call gracefulExit("Dimenion of input vector for direction Z is
-                inconsistent with initialization")
+                call GracefulExit("Dimenion of input vector for direction Z is &
+                &inconsistent with initialization", 49)
             end if 
         case default 
-            call GracefulExit ( "Incorrect String entered for SUBOUTINE: &
-                        check_dimension", 5)
+            call GracefulExit ( "Incorrect String entered for SUBROUTINE: &
+                        &check_dimension", 5)
         end select
 
-    end function 
+    end subroutine 
 
 end module

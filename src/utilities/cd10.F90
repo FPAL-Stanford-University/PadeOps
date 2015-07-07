@@ -67,7 +67,7 @@ contains
         logical, intent(in) :: periodic_
         integer, intent(in) :: bc1_, bcn_
         integer :: ierr
-   
+        
         this%n = n_
         this%dx = dx_
         this%onebydx = one/dx_

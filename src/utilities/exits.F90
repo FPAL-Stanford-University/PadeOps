@@ -10,9 +10,9 @@ contains
 
     subroutine gracefulExit(message, errcode)
         character(len=*), intent(in) :: message
-        integer, intent(in) :: errcode, rank
+        integer, intent(in) :: errcode
 
-        if (parallelRun)
+        if (parallelRun) then
             print*, "Message from task: ", 0! taskid
             print*, message
             print*, "Error Code:", errcode
