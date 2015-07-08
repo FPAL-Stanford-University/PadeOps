@@ -7,7 +7,9 @@ program test_derivatives
     implicit none
 
     character(len=4), parameter :: method = "CD10"
-    integer, parameter :: nx=512, ny=512, nz=512
+    integer, parameter :: nx=256, ny=256, nz=256
+    logical, parameter :: ywrkarr=.FALSE., zwrkarr=.TRUE.
+    
     integer :: xpadding, ypadding,zpadding
 
     type( derivatives ) :: myder
@@ -44,12 +46,16 @@ program test_derivatives
 
     ierr = myder % init( nx, ny, nz, dx, dy, dz, .TRUE., .TRUE., .TRUE., method, method, method )
 
-    xpadding = 13; ypadding = 0; zpadding = 0
+    xpadding = 0; ypadding = 4; zpadding = 0
     allocate (wrkin(nx+xpadding,ny+ypadding,nz+zpadding),wrkout(nx+xpadding,ny+ypadding,nz+zpadding))
     call tic()
-    wrkin(1:Nx,1:Ny,1:Nz) = f
-    wrkout = myder % ddz(wrkin)
-    df = wrkout(1:Nx,1:Ny,1:Nz)
+    if (zwrkarr) then
+        wrkin(1:Nx,1:Ny,1:Nz) = f
+        wrkout = myder % ddz(wrkin)
+        df = wrkout(1:Nx,1:Ny,1:Nz)
+    else
+        df = myder % ddz(f)
+    end if
     call toc("Time to get z derivatives")
     deallocate (wrkin, wrkout) 
     print*, "Maximum error = ", MAXVAL( ABS(df) )
@@ -57,10 +63,14 @@ program test_derivatives
     xpadding = 0; ypadding = 5; zpadding = 16
     allocate (wrkin(nx+xpadding,ny+ypadding,nz+zpadding),wrkout(nx+xpadding,ny+ypadding,nz+zpadding))
     call tic()
-    wrkin(1:Nx,1:Ny,1:Nz) = f
-    df = myder % ddy(f)
+    if (ywrkarr) then
+        wrkin(1:Nx,1:Ny,1:Nz) = f
+        wrkout = myder % ddy(wrkin)
+        df = wrkout(1:nx,1:ny,1:nz)
+    else
+        df = myder % ddy(f)
+    end if
     call toc("Time to get y derivatives")
-    df = wrkout(1:Nx,1:Ny,1:Nz)
     deallocate (wrkin, wrkout) 
     print*, "Maximum error = ", MAXVAL( ABS(df) )
 
