@@ -7,8 +7,8 @@ program test_derivatives
     implicit none
 
     character(len=4), parameter :: method = "CD10"
-    integer, parameter :: nx=512, ny=128, nz=128
-    integer :: xpadding=5, ypadding=0,zpadding = 0
+    integer, parameter :: nx=512, ny=512, nz=512
+    integer :: xpadding, ypadding,zpadding
 
     type( derivatives ) :: myder
 
@@ -44,7 +44,7 @@ program test_derivatives
 
     ierr = myder % init( nx, ny, nz, dx, dy, dz, .TRUE., .TRUE., .TRUE., method, method, method )
 
-    xpadding = 5; ypadding = 0; zpadding = 0
+    xpadding = 13; ypadding = 0; zpadding = 0
     allocate (wrkin(nx+xpadding,ny+ypadding,nz+zpadding),wrkout(nx+xpadding,ny+ypadding,nz+zpadding))
     call tic()
     wrkin(1:Nx,1:Ny,1:Nz) = f

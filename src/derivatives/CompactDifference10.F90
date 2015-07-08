@@ -52,7 +52,8 @@ subroutine ddx_cd10(this, f, df)
         else
             do j = 1,size(f,2)
                 do i = 1,size(f,1)
-                    df(i, j, :) = this % xcd10 % cd10der1( f(i, j, :) ) 
+                    wrkArr = f(i, j, :)
+                    df(i, j, :) = this % xcd10 % cd10der1( wrkArr ) 
                 end do 
             end do 
         end if
@@ -112,7 +113,8 @@ subroutine ddy_cd10(this, f, df)
         else
             do j = 1,size(f,2)
                 do i = 1,size(f,1)
-                    df(i, j, :) = this % ycd10 % cd10der1( f(i, j, :) ) 
+                    wrkArr = f(i, j, :)
+                    df(i, j, :) = this % ycd10 % cd10der1( wrkArr ) 
                 end do 
             end do 
         end if
@@ -173,7 +175,8 @@ subroutine ddz_cd10(this, f, df)
         else
             do j = 1,size(f,2)
                 do i = 1,size(f,1)
-                    df(i, j, :) = this % zcd10 % cd10der1( f(i, j, :) ) 
+                    wrkArr = f(i, j, :)
+                    df(i, j, :) = this % zcd10 % cd10der1( wrkArr ) 
                 end do 
             end do 
         end if
@@ -234,7 +237,8 @@ subroutine d2dx2_cd10(this, f, df)
         else
             do j = 1,size(f,2)
                 do i = 1,size(f,1)
-                    df(i, j, :) = this % xcd10 % cd10der2( f(i, j, :) ) 
+                    wrkArr = f(i, j, :)
+                    df(i, j, :) = this % zcd10 % cd10der2( wrkArr ) 
                 end do 
             end do 
         end if
@@ -294,7 +298,8 @@ subroutine d2dy2_cd10(this, f, df)
         else
             do j = 1,size(f,2)
                 do i = 1,size(f,1)
-                    df(i, j, :) = this % ycd10 % cd10der2( f(i, j, :) ) 
+                    wrkArr = f(i, j, :)
+                    df(i, j, :) = this % ycd10 % cd10der2( wrkArr ) 
                 end do 
             end do 
         end if
@@ -355,7 +360,8 @@ subroutine d2dz2_cd10(this, f, df)
         else
             do j = 1,size(f,2)
                 do i = 1,size(f,1)
-                    df(i, j, :) = this % zcd10 % cd10der2( f(i, j, :) ) 
+                    wrkArr = f(i, j, :)
+                    df(i, j, :) = this % zcd10 % cd10der2( wrkArr ) 
                 end do 
             end do 
         end if
