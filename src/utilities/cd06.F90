@@ -112,7 +112,7 @@ contains
     
         integer, intent(in) :: n
         real(rkind), intent(in) :: d,a,b
-        real(rkind), dimension(n,9), intent(out) :: LU
+        real(rkind), dimension(n,5), intent(out) :: LU
         integer :: i
     
         LU = 0.0_rkind
