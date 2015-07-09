@@ -251,11 +251,14 @@ contains
             RHS(3) = a10d1 * ( f(4)   - f(2)        ) &
                    + b10d1 * ( f(5)   - f(1)        ) &
                    + c10d1 * ( f(6)   - f(this%n)   )
-            do i = 4,this%n-3
-                RHS(i) = a10d1 * ( f(i+1) - f(i-1) ) &
-                       + b10d1 * ( f(i+2) - f(i-2) ) &
-                       + c10d1 * ( f(i+3) - f(i-3) )
-            end do
+            RHS(4:this%n-3) = a10d1 * ( f(5:this%n-2) - f(3:this%n-4) ) &
+                            + b10d1 * ( f(6:this%n-1) - f(2:this%n-5) ) &
+                            + c10d1 * ( f(7:this%n)   - f(1:this%n-6) )
+            ! do i = 4,this%n-3
+            !     RHS(i) = a10d1 * ( f(i+1) - f(i-1) ) &
+            !            + b10d1 * ( f(i+2) - f(i-2) ) &
+            !            + c10d1 * ( f(i+3) - f(i-3) )
+            ! end do
             RHS(this%n-2) = a10d1 * ( f(this%n-1) - f(this%n-3) ) &
                           + b10d1 * ( f(this%n)   - f(this%n-4) ) &
                           + c10d1 * ( f(1)        - f(this%n-5) )
