@@ -39,6 +39,7 @@ module fftStuff
         procedure, private :: init2d
         procedure, private :: init3d
         generic            :: init => init1d,init2d,init3d ! Initialize type
+        procedure          :: destroy 
 
         procedure, private :: fft1d_half
         procedure, private :: fft1d_full
@@ -326,10 +327,9 @@ contains
     end function
 
 
-    function destroy(this) result(ierr)
+    subroutine destroy(this)
         
         class(ffts), intent(inout) :: this
-        integer :: ierr
 
         if ( allocated(this%k1d) ) deallocate( this%k1d )
         if ( allocated(this%k2d) ) deallocate( this%k2d )
@@ -343,8 +343,6 @@ contains
 
         this%initialized = .FALSE.
 
-        ierr = 0
+    end subroutine
 
-    end function 
-
-    end module
+end module

@@ -46,32 +46,15 @@ program test_derivatives
 
     ierr = myder % init( nx, ny, nz, dx, dy, dz, .TRUE., .TRUE., .TRUE., method, method, method )
 
-    xpadding = 0; ypadding = 4; zpadding = 0
-    allocate (wrkin(nx+xpadding,ny+ypadding,nz+zpadding),wrkout(nx+xpadding,ny+ypadding,nz+zpadding))
     call tic()
-    if (zwrkarr) then
-        wrkin(1:Nx,1:Ny,1:Nz) = f
-        wrkout = myder % ddz(wrkin)
-        df = wrkout(1:Nx,1:Ny,1:Nz)
-    else
         df = myder % ddz(f)
     end if
     call toc("Time to get z derivatives")
-    deallocate (wrkin, wrkout) 
     print*, "Maximum error = ", MAXVAL( ABS(df) )
 
-    xpadding = 0; ypadding = 5; zpadding = 16
-    allocate (wrkin(nx+xpadding,ny+ypadding,nz+zpadding),wrkout(nx+xpadding,ny+ypadding,nz+zpadding))
     call tic()
-    if (ywrkarr) then
-        wrkin(1:Nx,1:Ny,1:Nz) = f
-        wrkout = myder % ddy(wrkin)
-        df = wrkout(1:nx,1:ny,1:nz)
-    else
         df = myder % ddy(f)
-    end if
     call toc("Time to get y derivatives")
-    deallocate (wrkin, wrkout) 
     print*, "Maximum error = ", MAXVAL( ABS(df) )
 
     call tic()

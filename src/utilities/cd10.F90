@@ -45,6 +45,7 @@ module cd10stuff
         contains
 
         procedure :: init
+        procedure :: destroy
 
         procedure, private :: ComputeD1RHS
         procedure, private :: ComputeD2RHS
@@ -112,6 +113,24 @@ contains
     
     end function
     
+    subroutine destroy(this)
+
+        class( cd10 ), intent(inout) :: this
+
+        ! Dellocate 1st derivative LU matrix.
+        if(allocated( this%LU1 )) deallocate( this%LU1 )
+    
+        ! Dellocate 2nd derivative LU matrix.
+        if(allocated( this%LU2 )) deallocate( this%LU2 )
+    
+        ! Dellocate 1st derivative penta matrix.
+        if(allocated( this%penta1 )) deallocate( this%penta1 )
+    
+        ! Dellocate 2nd derivative penta matrix.
+        if(allocated( this%penta2 )) deallocate( this%penta2 )
+    
+    end subroutine
+
     subroutine ComputeLU(LU,n,e,a,d,c,f) 
     
         integer, intent(in) :: n

@@ -41,6 +41,7 @@ module cd06stuff
         contains
 
         procedure :: init
+        procedure :: destroy
 
         procedure, private :: ComputeD1RHS
         procedure, private :: ComputeD2RHS
@@ -107,6 +108,24 @@ contains
         ierr = 0
     
     end function
+
+    subroutine destroy(this)
+
+        class( cd06 ), intent(inout) :: this
+
+        ! Dellocate 1st derivative LU matrix.
+        if(allocated( this%LU1 )) deallocate( this%LU1 )
+    
+        ! Dellocate 2nd derivative LU matrix.
+        if(allocated( this%LU2 )) deallocate( this%LU2 )
+
+        ! Dellocate 1st derivative tri matrix.
+        if(allocated( this%tri1 )) deallocate( this%tri1 )
+    
+        ! Dellocate 2nd derivative tri matrix.
+        if(allocated( this%tri2 )) deallocate( this%tri2 )
+
+    end subroutine
     
     subroutine ComputeLU(LU,n,b,d,a)
     

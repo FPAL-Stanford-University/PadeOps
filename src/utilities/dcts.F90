@@ -23,6 +23,7 @@ module dctstuff
         contains
 
         procedure           :: init                                     ! Initialize type
+        procedure           :: destroy                                  ! Destructor
        
         procedure           :: dct                                      ! Compute Forward Transform 
         procedure           :: idct                                     ! Compute Backward Transform 
@@ -75,7 +76,16 @@ contains
 
         ierr = 0
 
-    end function     
+    end function
+
+    subroutine destroy(this)
+
+        class( dcts ), intent(inout) :: this
+
+        call dfftw_destroy_plan ( this%plan_fwd )
+        call dfftw_destroy_plan ( this%plan_bwd )
+
+    end subroutine
    
     function dct(this, f) result(fhat)
    
