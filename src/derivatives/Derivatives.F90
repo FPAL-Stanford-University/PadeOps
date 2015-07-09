@@ -76,7 +76,8 @@ module derivativestuff
             procedure   :: d2dx2 
             procedure   :: d2dy2 
             procedure   :: d2dz2 
-            
+    
+            procedure   :: destroy        
             !! Private Procedures
 
             ! First order derivatives
@@ -376,6 +377,45 @@ contains
                         &check_dimension", 5)
         end select
 
-    end subroutine 
+    end subroutine
+
+    subroutine destroy(this) 
+        class (derivatives), intent(inout) :: this
+
+        this%dx=one
+        this%dy=one
+        this%dz=one
+        this%bcx1=0
+        this%bcxn=0
+        this%bcy1=0
+        this%bcyn=0
+        this%bcz1=0
+        this%bczn=0
+        this%methodx="CD10"      
+        this%methody="CD10"    
+        this%methodz="CD10"  
+        this%periodicx=.TRUE.
+        this%periodicy=.TRUE.
+        this%periodicz=.TRUE.
+
+        this%xoprank=1
+        this%yoprank=2
+        this%zoprank=3
+
+
+        call this%xfft%destroy
+        call this%yfft%destroy
+        call this%zfft%destroy        
+        call this%xdct%destroy 
+        call this%ydct%destroy
+        call this%zdct%destroy
+        call this%xcd10%destroy 
+        call this%ycd10%destroy
+        call this%zcd10%destroy
+        call this%xcd06%destroy
+        call this%ycd06%destroy
+        call this%zcd06%destroy
+
+    end subroutine  
 
 end module
