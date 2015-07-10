@@ -7,19 +7,23 @@ subroutine ddx_cd10(this, f, df)
     real(rkind), dimension(:,:,:), intent(in) :: f
     real(rkind), dimension(:,:,:), intent(out) :: df
     real(rkind), dimension(this%nx) :: wrkArr
-    integer :: i, j, k
+    integer :: i, j, k, n1, n2, n3
+
+    n1 = size(f,1)
+    n2 = size(f,2)
+    n3 = size(f,3)
 
     select case (this%xoprank)
     case (1)
         if (.not. cd10UseWrkArr1) then
-            do k = 1,size(f,3)
-                do j = 1,size(f,2)
+            do k = 1,n3
+                do j = 1,n2
                     df(:, j, k) = this % xcd10 % cd10der1( f(:, j, k) ) 
                 end do 
             end do 
         else
-            do k = 1,size(f,3)
-                do j = 1,size(f,2)
+            do k = 1,n3
+                do j = 1,n2
                     wrkArr = f(:, j, k)
                     df(:, j, k) = this % xcd10 % cd10der1( wrkArr ) 
                 end do 

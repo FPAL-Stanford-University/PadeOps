@@ -17,10 +17,10 @@ module derivativestuff
     
     real(rkind), allocatable, dimension(:) :: k1, k2, k3                ! Wavenumbers
     
-    logical, parameter :: cd10UseWrkArr1=.FALSE.,cd10UseWrkArr2=.TRUE.,cd10UseWrkArr3=.TRUE. 
-    logical, parameter :: cd06UseWrkArr1=.FALSE.,cd06UseWrkArr2=.TRUE.,cd06UseWrkArr3=.TRUE. 
-    logical, parameter :: fourUseWrkArr1=.FALSE.,fourUseWrkArr2=.TRUE.,fourUseWrkArr3=.TRUE. 
-    logical, parameter :: chebUseWrkArr1=.FALSE.,chebUseWrkArr2=.TRUE.,chebUseWrkArr3=.TRUE. 
+    logical, parameter :: cd10UseWrkArr1=.FALSE.,cd10UseWrkArr2=.FALSE.,cd10UseWrkArr3=.FALSE. 
+    logical, parameter :: cd06UseWrkArr1=.FALSE.,cd06UseWrkArr2=.FALSE.,cd06UseWrkArr3=.FALSE. 
+    logical, parameter :: fourUseWrkArr1=.FALSE.,fourUseWrkArr2=.FALSE.,fourUseWrkArr3=.FALSE. 
+    logical, parameter :: chebUseWrkArr1=.FALSE.,chebUseWrkArr2=.FALSE.,chebUseWrkArr3=.FALSE. 
     
     type :: derivatives
 
@@ -64,10 +64,12 @@ module derivativestuff
         contains
 
             !! Public Procedures
-            procedure :: init
-            procedure :: SetXoprank
-            procedure :: SetYoprank
-            procedure :: SetZoprank
+            procedure   :: init
+            procedure   :: finalize       
+            
+            procedure   :: SetXoprank
+            procedure   :: SetYoprank
+            procedure   :: SetZoprank
             
             procedure   :: ddx 
             procedure   :: ddy 
@@ -77,7 +79,6 @@ module derivativestuff
             procedure   :: d2dy2 
             procedure   :: d2dz2 
     
-            procedure   :: destroy        
             !! Private Procedures
 
             ! First order derivatives
@@ -379,7 +380,7 @@ contains
 
     end subroutine
 
-    subroutine destroy(this) 
+    subroutine finalize(this) 
         class (derivatives), intent(inout) :: this
 
         this%dx=one

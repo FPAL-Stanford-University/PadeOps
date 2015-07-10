@@ -7,16 +7,13 @@ program test_derivatives
     implicit none
 
     character(len=4), parameter :: method = "CD10"
-    integer, parameter :: nx=256, ny=256, nz=256
+    integer, parameter :: nx=512, ny=256, nz=128
     logical, parameter :: ywrkarr=.FALSE., zwrkarr=.TRUE.
     
-    integer :: xpadding, ypadding,zpadding
-
     type( derivatives ) :: myder
 
     real(rkind), dimension(:,:,:), allocatable :: f
 
-    real(rkind), dimension(:,:,:), allocatable :: wrkin, wrkout
     real(rkind), dimension(:,:,:), allocatable :: x,df,df_exact
     real(rkind) :: dx, dy, dz
 
@@ -46,17 +43,17 @@ program test_derivatives
 
     ierr = myder % init( nx, ny, nz, dx, dy, dz, .TRUE., .TRUE., .TRUE., method, method, method )
 
-    call tic()
-        df = myder % ddz(f)
-    end if
-    call toc("Time to get z derivatives")
-    print*, "Maximum error = ", MAXVAL( ABS(df) )
+    ! call tic()
+    !     df = myder % ddz(f)
+    ! call toc("Time to get z derivatives")
+    ! print*, "Maximum error = ", MAXVAL( ABS(df) )
 
-    call tic()
-        df = myder % ddy(f)
-    call toc("Time to get y derivatives")
-    print*, "Maximum error = ", MAXVAL( ABS(df) )
+    ! call tic()
+    !     df = myder % ddy(f)
+    ! call toc("Time to get y derivatives")
+    ! print*, "Maximum error = ", MAXVAL( ABS(df) )
 
+    ! X derivatives
     call tic()
     df = myder % ddx(f)
     call toc("Time to get x derivatives")
