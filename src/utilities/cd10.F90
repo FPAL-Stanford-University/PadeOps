@@ -215,16 +215,16 @@ contains
     
     end subroutine
     
-    subroutine SolveLU1(this,y,n2,n3)
+    subroutine SolveLU1(this,y,n2,n3, y1, yn, z1, zn)
     
         class( cd10 ), intent(in) :: this
-        integer, intent(in) :: n2,n3
+        integer, intent(in) :: n2,n3, y1, yn, z1, zn
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  ! Take in RHS and put solution into it
         integer :: i,j,k
         real(rkind) :: sum1, sum2
   
-        do k=1,n3
-            do j=1,n2
+        do k=z1,zn
+            do j=y1,yn
                 ! Step 8 ( update y instead of creating z )
                 y(2,j,k) = y(2,j,k) - this%LU1(2,1)*y(1,j,k) 
                 sum1 = this%LU1(1,3)*y(1,j,k) + this%LU1(2,3)*y(2,j,k)
@@ -303,10 +303,10 @@ contains
 
     end subroutine
 
-    pure subroutine ComputeD1RHS(this, f, RHS, n2, n3) !result (RHS)
+    pure subroutine ComputeD1RHS(this, f, RHS, n2, n3, y1, yn, z1, zn) !result (RHS)
     
         class( cd10 ), intent(in) :: this
-        integer, intent(in) :: n2, n3
+        integer, intent(in) :: n2, n3, y1, yn, z1, zn
         real(rkind), dimension(this%n,n2,n3), intent(in) :: f
         real(rkind), dimension(this%n,n2,n3), intent(out) :: RHS
         real(rkind) :: a10,b10,c10
@@ -323,35 +323,35 @@ contains
     
         select case (this%periodic)
         case (.TRUE.)
-            do k=1,n3
-            do j=1,n2
-            RHS(1,j,k) = a10 * ( f(2,j,k)   - f(this%n  ,j,k) ) &
-                   + b10 * ( f(3,j,k)   - f(this%n-1,j,k) ) &
-                   + c10 * ( f(4,j,k)   - f(this%n-2,j,k) )
-            RHS(2,j,k) = a10 * ( f(3,j,k)   - f(1       ,j,k) ) &
-                   + b10 * ( f(4,j,k)   - f(this%n  ,j,k) ) &
-                   + c10 * ( f(5,j,k)   - f(this%n-1,j,k) )
-            RHS(3,j,k) = a10 * ( f(4,j,k)   - f(2       ,j,k) ) &
-                   + b10 * ( f(5,j,k)   - f(1       ,j,k) ) &
-                   + c10 * ( f(6,j,k)   - f(this%n  ,j,k) )
-            RHS(4:this%n-3,j,k) = a10 * ( f(5:this%n-2,j,k) - f(3:this%n-4,j,k) ) &
-                            + b10 * ( f(6:this%n-1,j,k) - f(2:this%n-5,j,k) ) &
-                            + c10 * ( f(7:this%n  ,j,k) - f(1:this%n-6,j,k) )
-            ! do i = 4,this%n-3
-            !     RHS(i,j,k) = a10 * ( f(i+1,j,k) - f(i-1,j,k) ) &
-            !            + b10 * ( f(i+2,j,k) - f(i-2,j,k) ) &
-            !            + c10 * ( f(i+3,j,k) - f(i-3,j,k) )
-            ! end do
-            RHS(this%n-2,j,k) = a10 * ( f(this%n-1,j,k) - f(this%n-3,j,k) ) &
-                          + b10 * ( f(this%n  ,j,k) - f(this%n-4,j,k) ) &
-                          + c10 * ( f(1       ,j,k) - f(this%n-5,j,k) )
-            RHS(this%n-1,j,k) = a10 * ( f(this%n  ,j,k) - f(this%n-2,j,k) ) &
-                          + b10 * ( f(1       ,j,k) - f(this%n-3,j,k) ) &
-                          + c10 * ( f(2       ,j,k) - f(this%n-4,j,k) )
-            RHS(this%n  ,j,k) = a10 * ( f(1       ,j,k) - f(this%n-1,j,k) ) &
-                          + b10 * ( f(2       ,j,k) - f(this%n-2,j,k) ) &
-                          + c10 * ( f(3       ,j,k) - f(this%n-3,j,k) )
-            end do
+            do k=z1,zn
+                do j=y1,yn
+                    RHS(1,j,k) = a10 * ( f(2,j,k)   - f(this%n  ,j,k) ) &
+                           + b10 * ( f(3,j,k)   - f(this%n-1,j,k) ) &
+                           + c10 * ( f(4,j,k)   - f(this%n-2,j,k) )
+                    RHS(2,j,k) = a10 * ( f(3,j,k)   - f(1       ,j,k) ) &
+                           + b10 * ( f(4,j,k)   - f(this%n  ,j,k) ) &
+                           + c10 * ( f(5,j,k)   - f(this%n-1,j,k) )
+                    RHS(3,j,k) = a10 * ( f(4,j,k)   - f(2       ,j,k) ) &
+                           + b10 * ( f(5,j,k)   - f(1       ,j,k) ) &
+                           + c10 * ( f(6,j,k)   - f(this%n  ,j,k) )
+                    RHS(4:this%n-3,j,k) = a10 * ( f(5:this%n-2,j,k) - f(3:this%n-4,j,k) ) &
+                                    + b10 * ( f(6:this%n-1,j,k) - f(2:this%n-5,j,k) ) &
+                                    + c10 * ( f(7:this%n  ,j,k) - f(1:this%n-6,j,k) )
+                    ! do i = 4,this%n-3
+                    !     RHS(i,j,k) = a10 * ( f(i+1,j,k) - f(i-1,j,k) ) &
+                    !            + b10 * ( f(i+2,j,k) - f(i-2,j,k) ) &
+                    !            + c10 * ( f(i+3,j,k) - f(i-3,j,k) )
+                    ! end do
+                    RHS(this%n-2,j,k) = a10 * ( f(this%n-1,j,k) - f(this%n-3,j,k) ) &
+                                  + b10 * ( f(this%n  ,j,k) - f(this%n-4,j,k) ) &
+                                  + c10 * ( f(1       ,j,k) - f(this%n-5,j,k) )
+                    RHS(this%n-1,j,k) = a10 * ( f(this%n  ,j,k) - f(this%n-2,j,k) ) &
+                                  + b10 * ( f(1       ,j,k) - f(this%n-3,j,k) ) &
+                                  + c10 * ( f(2       ,j,k) - f(this%n-4,j,k) )
+                    RHS(this%n  ,j,k) = a10 * ( f(1       ,j,k) - f(this%n-1,j,k) ) &
+                                  + b10 * ( f(2       ,j,k) - f(this%n-2,j,k) ) &
+                                  + c10 * ( f(3       ,j,k) - f(this%n-3,j,k) )
+                end do
             end do
         case (.FALSE.)
             RHS = zero
@@ -408,12 +408,6 @@ contains
         integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: rhs
 
-        select case (this%periodic)
-        case(.TRUE.)
-            call this%SolveLU1(rhs,n2,n3)
-        case(.FALSE.)
-            call this%SolvePenta1(rhs,n2,n3)
-        end select
 
     end subroutine 
 
@@ -431,22 +425,21 @@ contains
 
     end subroutine
 
-    subroutine cd10der1(this, f, df, n2, n3) !result(df)
+    subroutine cd10der1(this, f, df, n2, n3, y1, yn, z1, zn) !result(df)
 
         class( cd10 ), intent(in) :: this
-        integer, intent(in) :: n2, n3
+        integer, intent(in) :: n2, n3, y1, yn, z1, zn
         real(rkind), dimension(this%n,n2,n3), intent(in) :: f
         real(rkind), dimension(this%n,n2,n3), intent(out) :: df
 
-        integer j,k
-
-        call this%ComputeD1RHS(f, df, n2, n3)
+        call this%ComputeD1RHS(f, df, n2, n3, y1, yn, z1, zn)
         
-        !do k=1,n3
-        !    do j=1,n2
-        call this%SolveD1(df,n2,n3)
-        !    end do
-        !end do
+        select case (this%periodic)
+        case(.TRUE.)
+            call this%SolveLU1(df,n2,n3, y1, yn, z1, zn)
+        case(.FALSE.)
+            call this%SolvePenta1(df,n2,n3)
+        end select
 
     end subroutine
 
