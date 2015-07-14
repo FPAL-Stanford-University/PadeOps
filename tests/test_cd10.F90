@@ -7,14 +7,15 @@ program test_cd10
     implicit none
 
     integer omp_get_num_threads, omp_get_thread_num
+    double precision omp_get_wtime
     integer tid,nt,zblock
 
-    integer:: nx = 512, ny=512, nz=512
+    integer:: nx = 4096, ny=64, nz=512
     logical, parameter :: periodic = .TRUE.
 
     type( cd10 ) :: mycd10
     real(rkind), dimension(:,:,:), allocatable :: x,f,df,df_exact
-    real(rkind) :: dx
+    real(rkind) :: dx,t0,t1
 
     integer :: y1,yn,z1,zn
     integer :: i,j,k,ierr
@@ -34,18 +35,15 @@ program test_cd10
 
     ierr = mycd10%init( nx, dx, periodic, 0, 0)
 
-    !$OMP PARALLEL PRIVATE(tid,nt,zblock,y1,yn,z1,zn)
-    !$OMP MASTER
-    call tic()
-    !$OMP END MASTER
+    !$OMP PARALLEL PRIVATE(t0,t1,tid,nt,zblock,y1,yn,z1,zn) SHARED(f,df,mycd10,nz,ny)
+    t0 = omp_get_wtime()
     nt = omp_get_num_threads()
     zblock = nz/nt
     tid = omp_get_thread_num()
-    y1=1;yn=512; z1=zblock*tid+1; zn=zblock*(tid+1)
+    y1=1;yn=ny; z1=zblock*tid+1; zn=zblock*(tid+1)
     call mycd10 % cd10der1(f,df,ny,nz,y1,yn,z1,zn)
-    !$OMP MASTER
-    call toc("Time to get OpenMP x derivatives")
-    !$OMP END MASTER
+    t1 = omp_get_wtime()
+    print*, "Elapsed time: ",t1-t0
     !$OMP END PARALLEL
     
     !y1=1;yn=512; z1=1; zn=128

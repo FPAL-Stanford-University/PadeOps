@@ -56,7 +56,6 @@ module cd10stuff
         procedure, private :: SolvePenta1
         procedure, private :: SolvePenta2
         
-        procedure, private :: SolveD1
         procedure, private :: SolveD2
 
         procedure :: cd10der1
@@ -222,7 +221,7 @@ contains
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  ! Take in RHS and put solution into it
         integer :: i,j,k
         real(rkind) :: sum1, sum2
-  
+ 
         do k=z1,zn
             do j=y1,yn
                 ! Step 8 ( update y instead of creating z )
@@ -401,15 +400,6 @@ contains
         end select
     
     end function
-
-    subroutine SolveD1(this, rhs, n2, n3)
-
-        class( cd10 ), intent(in) :: this
-        integer, intent(in) :: n2,n3
-        real(rkind), dimension(this%n,n2,n3), intent(inout) :: rhs
-
-
-    end subroutine 
 
     subroutine SolveD2(this, rhs)
 

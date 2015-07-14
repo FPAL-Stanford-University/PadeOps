@@ -1,5 +1,5 @@
 # Compile test_cd10.F90
-ifort -warn all -g -pg -O5 -qopenmp -ipo -mcmodel="medium" -i8 -qopt-report=2 -qopt-report-phase=vec ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/timer.F90 ../src/utilities/cd10.F90 test_cd10.F90 -o test_cd10
+ifort -warn all -O3 -qopenmp -ipo -mcmodel="medium" -i8 -qopt-report=2 -qopt-report-phase=vec ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/timer.F90 ../src/utilities/cd10.F90 test_cd10.F90 -o test_cd10
 
 # Compile test_cd06.F90
 # ifort -warn all ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/cd06.F90 test_cd06.F90 -o test_cd06
