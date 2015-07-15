@@ -2,10 +2,10 @@
 # ifort -warn all -g -pg -O5 -qopenmp -ipo -mcmodel="medium" -i8 -qopt-report=2 -qopt-report-phase=vec ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/timer.F90 ../src/utilities/cd10.F90 test_cd10.F90 -o test_cd10
 
 # Compile Pentasolver.F90
-# ifort ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 penta.f PentaSolver.F90 -o PentaTest
+ifort ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 PentaSolver.F90 -o PentaTest
 
 # Compile test_TridiagSolver.F90
-# ifort ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/timer.F90 penta.f test_Tridiagsolver.F90 -o TriTest
+ifort ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/timer.F90 TriSolver.F90 -o TriTest
 
 # Compile test_cd06.F90
 # ifort -warn all ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/cd06.F90 test_cd06.F90 -o test_cd06

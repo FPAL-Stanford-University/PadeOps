@@ -107,9 +107,9 @@ program testTridiag
     real(rkind), allocatable, dimension(:) :: x, y, dydx, rhs
     real(rkind) :: dx, omega
 
-    n = 64
+    n = 16
     do while (n .le.  65536 )
-       omega = 12._rkind
+       omega = 4._rkind
        dx = two*pi/(n-1)
 
        allocate (x(n), y(n), dydx(n), rhs(n))
@@ -125,8 +125,8 @@ program testTridiag
        call ComputeD1RHS(y,rhs,dx)
        call SolveTridiag(rhs)
        print*, "Max Global Error (n =",n,"):", maxval(abs(rhs - dydx))
-       !print*, "Max Int.   Error (n =",n,"):", maxval(abs(x(8:n-7) - dydx(8:n-7)))
-       print*, " ------------------"
+       print*, "Conservation error: ", SUM(rhs*dx)
+       
        deallocate (x, y, dydx, rhs)
        deallocate (Tridiag)
        
