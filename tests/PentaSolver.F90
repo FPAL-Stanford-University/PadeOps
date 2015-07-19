@@ -1,10 +1,59 @@
 module PentadiagonalSolver
     use kind_parameters, only: rkind
     use constants,      only: one, half, zero, two, four, six
+    use cd10_constants, only: a10d1, b10d1, c10d1, alpha10d1, beta10d1
     implicit none
     
     real(rkind), dimension(:,:), allocatable :: penta
     integer                                  :: n
+
+    ! Set the scheme for the edge nodes (Ref. for notation: Lele - JCP paper)
+    real(rkind), parameter                   :: alpha           =   3._rkind
+    real(rkind), parameter                   :: p               = -17._rkind / 6._rkind
+    real(rkind), parameter                   :: q               =   3._rkind / 2._rkind
+    real(rkind), parameter                   :: r               =   3._rkind / 2._rkind
+    real(rkind), parameter                   :: s               = - 1._rkind / 6._rkind
+    
+   
+    ! Calculate the corressponding weights
+    ! Step 1: Assign the interior scheme
+    real(rkind), parameter                   :: q_hat           = a10d1
+    real(rkind), parameter                   :: r_hat           = b10d1
+    real(rkind), parameter                   :: s_hat           = c10d1
+    real(rkind), parameter                   :: alpha_hat       = alpha10d1
+    real(rkind), parameter                   :: beta_hat        = beta10d1
+     
+    ! Step 2: Assign the scheme at node 2 to be Standard Pade (4th Order)
+    real(rkind), parameter                   :: q_p             = 3._rkind/4._rkind
+    real(rkind), parameter                   :: alpha_p         = 1._rkind/4._rkind
+   
+    ! Step 3: Get the scheme at node 4
+    real(rkind), parameter                   :: alpha_ppp       = (8*r_hat - 175*s_hat)/(18*r_hat - 550*s_hat)
+    real(rkind), parameter                   :: beta_ppp        = (1._rkind/20._rkind)*(-3 + 8*alpha_ppp)
+    real(rkind), parameter                   :: q_ppp           = (1._rkind/12._rkind)*(12 - 7*alpha_ppp) 
+    real(rkind), parameter                   :: r_ppp           = (1._rkind/600._rkind)*(568*alpha_ppp - 183)  
+    real(rkind), parameter                   :: s_ppp           = (1._rkind/300._rkind)*(9*alpha_ppp - 4) 
+
+    ! Step 4: Get the scheme at node 3
+    real(rkind), parameter                   :: alpha_pp        = ((17*(s*(r_hat + 2*s_hat) - q*(q_hat + r_hat &
+                                                                + s_hat)))/(72*(q + s)*(q_hat + r_hat - s_hat*(q_ppp/s_ppp &
+                                                                - 1))) - 8._rkind/9._rkind)/((19*(s*(r_hat + 2*s_hat) - q*(q_hat &
+                                                                + r_hat + s_hat)))/(24*(q + s)*(q_hat + r_hat - s_hat*(q_ppp/s_ppp &
+                                                                - 1))) - 1._rkind/3_rkind)
+
+    
+    real(rkind), parameter                   :: beta_pp         = (1._rkind/12._rkind)*(-1 + 3*alpha_pp)
+    real(rkind), parameter                   :: q_pp            = (2._rkind/18._rkind)*(8 - 3*alpha_pp) 
+    real(rkind), parameter                   :: r_pp            = (1._rkind/72._rkind)*(-17 + 57*alpha_pp)
+    real(rkind), parameter                   :: s_pp            = 0._rkind
+
+    ! Step 5: Get the weights
+    real(rkind), parameter                   :: w1              = (q_hat + 2*r_hat + 3*s_hat)/(q + s)
+    real(rkind), parameter                   :: w2              = (1/q_p)*(r_hat + s_hat*(1 + q_ppp/s_ppp) - r*(q_hat &
+                                                                + 2*r_hat + 3*s_hat)/(q + s) )
+    
+    real(rkind), parameter                   :: w3              = (q_hat + r_hat + s_hat*(1 - q_ppp/s_ppp))/(r_pp) 
+    real(rkind), parameter                   :: w4              = s_hat/s_ppp 
 
     contains
 
@@ -18,58 +67,67 @@ module PentadiagonalSolver
                    f => penta(:,8), g => penta(:,9)                     &
                    )
     
-            at = one/20._rkind * 9._rkind
-            bt = one/20._rkind * 9._rkind
-            a  = one/2._rkind * 9._rkind
-            b  = one/2._rkind * 9._rkind
-            d  = one * 9._rkind
+            at = beta_hat 
+            bt = beta_hat
+            a  = alpha_hat
+            b  = alpha_hat
+            d  = one
 
             select case (bc1) 
             case(0)
-                at(4) = 0.451390625_rkind / 9.38146875_rkind * 9.38146875_rkind
-                bt(4) = 0.451390625_rkind / 9.38146875_rkind * 9.38146875_rkind 
-                a (4) = 4.632718750_rkind / 9.38146875_rkind * 9.38146875_rkind
-                b (4) = 4.632718750_rkind / 9.38146875_rkind * 9.38146875_rkind
-                
-                at(3) = 0.2964375_rkind / 10.67175_rkind * 10.67175_rkind 
-                bt(3) = 0.2964375_rkind / 10.67175_rkind * 10.67175_rkind 
-                a (3) =     4.743_rkind / 10.67175_rkind * 10.67175_rkind 
-                b (3) =     4.743_rkind / 10.67175_rkind * 10.67175_rkind
-                
-                at(2) = zero 
-                bt(2) = zero
-                a (2) = one/4._rkind * 7.783125_rkind
-                b (2) = one/4._rkind * 7.783125_rkind
-                
-                at(1) = zero 
-                bt(1) = zero
-                a (1) = two  * 4.725_rkind
-                b (1) = zero * 4.725_rkind
+                bt(1) = w1*zero
+                b (1) = w1*zero
+                d (1) = w1*one
+                a (1) = w1*alpha
+                at(1) = w1*zero
+
+                bt(2) = w2*zero
+                b (2) = w2*alpha_p
+                d (2) = w2*one
+                a (2) = w2*alpha_p
+                at(2) = w2*zero
+
+                bt(3) = w3*beta_pp
+                b (3) = w3*alpha_pp
+                d (3) = w3*one
+                a (3) = w3*alpha_pp
+                at(3) = w3*beta_pp
+
+                bt(4) = w4*beta_ppp
+                b (4) = w4*alpha_ppp
+                d (4) = w4*one
+                a (4) = w4*alpha_ppp
+                at(4) = w4*beta_ppp
             case(1)
 
             end select
             
             select case (bcn) 
             case(0)
-                at(n-3) = 0.451390625_rkind / 9.38146875_rkind * 9.38146875_rkind
-                bt(n-3) = 0.451390625_rkind / 9.38146875_rkind * 9.38146875_rkind 
-                a (n-3) = 4.632718750_rkind / 9.38146875_rkind * 9.38146875_rkind
-                b (n-3) = 4.632718750_rkind / 9.38146875_rkind * 9.38146875_rkind
+                bt(n  ) = w1*zero
+                b (n  ) = w1*alpha
+                d (n  ) = w1*one
+                a (n  ) = w1*zero
+                at(n  ) = w1*zero
+
+                bt(n-1) = w2*zero
+                b (n-1) = w2*alpha_p
+                d (n-1) = w2*one
+                a (n-1) = w2*alpha_p
+                at(n-1) = w2*zero
                 
-                at(n-2) = 0.2964375_rkind / 10.67175_rkind * 10.67175_rkind 
-                bt(n-2) = 0.2964375_rkind / 10.67175_rkind * 10.67175_rkind
-                a (n-2) =     4.743_rkind / 10.67175_rkind * 10.67175_rkind 
-                b (n-2) =     4.743_rkind / 10.67175_rkind * 10.67175_rkind
-                
-                at(n-1) = zero 
-                bt(n-1) = zero
-                a (n-1) = one/4._rkind * 7.783125_rkind
-                b (n-1) = one/4._rkind * 7.783125_rkind
-                
-                at(n  ) = zero
-                bt(n  ) = zero
-                a (n  ) = zero * 4.725_rkind
-                b (n  ) = two  * 4.725_rkind
+                bt(n-2) = w3*beta_pp
+                b (n-2) = w3*alpha_pp
+                d (n-2) = w3*one
+                a (n-2) = w3*alpha_pp
+                at(n-2) = w3*beta_pp
+
+                bt(n-3) = w4*beta_ppp
+                b (n-3) = w4*alpha_ppp
+                d (n-3) = w4*one
+                a (n-3) = w4*alpha_ppp
+                at(n-3) = w4*beta_ppp
+            
             case(1)
 
             end select
@@ -96,7 +154,7 @@ module PentadiagonalSolver
     end subroutine
     
 
-    subroutine PTRANS_II(y)
+    subroutine SolvePenta(y)
         real(rkind), dimension(n), intent(inout) :: y
         integer :: i
          
@@ -130,67 +188,62 @@ module PentadiagonalSolver
         real(rkind), dimension(n), intent(in)  :: y
         real(rkind),               intent(in)  :: dx
         real(rkind), dimension(n), intent(out) :: rhs
-        real(rkind) :: a, b, c
+        real(rkind) :: a, b, c, d
         
-        a = (17._rkind/12._rkind)/(two*dx)
-        b = (101._rkind/150._rkind)/(four*dx)
-        c = (one/100._rkind) / (six*dx)
+        a = q_hat/dx  
+        b = r_hat/dx 
+        c = s_hat/dx
 
         rhs(5:n-4) = ( a*(y(6:n-3) - y(4:n-5)) &
                    +   b*(y(7:n-2) - y(3:n-6)) &
-                   +   c*(y(8:n-1) - y(2:n-7)) ) * 9._rkind
+                   +   c*(y(8:n-1) - y(2:n-7)) ) 
+       
+        a = w4*q_ppp/dx  
+        b = w4*r_ppp/dx 
+        c = w4*s_ppp/dx
+        rhs(4  ) =   a*(y(5  ) - y(3  )) &
+                 +   b*(y(6  ) - y(2  )) &
+                 +   c*(y(7  ) - y(1  )) 
         
-        
-        a = ( 6.66984375_rkind / 9.38146875_rkind)/(dx)
-        b = (       1.53_rkind / 9.38146875_rkind)/(dx)
-        c = (      0.015_rkind / 9.38146875_rkind)/(dx)
-
-        rhs(4) = ( a*(y(5) - y(3)) &
-               +   b*(y(6) - y(2)) &
-               +   c*(y(7) - y(1)) ) * 9.38146875_rkind
-        
-        rhs(n-3) = ( a*(y(n-2) - y(n-4)) &
+        rhs(n-3) =   a*(y(n-2) - y(n-4)) &
                  +   b*(y(n-1) - y(n-5)) &
-                 +   c*(y(n  ) - y(n-6)) ) * 9.38146875_rkind
+                 +   c*(y(n  ) - y(n-6))  
         
-        a = (     7.905_rkind / 10.67175_rkind)/(dx)
-        b = (1.23515625_rkind / 10.67175_rkind)/(dx)
 
-        rhs(3) = ( a*(y(4) - y(2)) &
-               +   b*(y(5) - y(1)) ) * 10.67175_rkind
+        a = w3*q_pp/dx  
+        b = w3*r_pp/dx 
+        rhs(3  ) = ( a*(y(4) - y(2)) &
+                 +   b*(y(5) - y(1)) )
         
         rhs(n-2) = ( a*(y(n-1) - y(n-3)) &
-                 +   b*(y(n  ) - y(n-4)) ) * 10.67175_rkind
+                 +   b*(y(n  ) - y(n-4)) )
         
-        a = (1.5_rkind)/(two*dx)
-        rhs(2) = a*(y(3) - y(1)) * 7.783125_rkind 
-        
-        rhs(n-1) = a*(y(n) - y(n-2)) * 7.783125_rkind 
+        a = w2*q_p/dx
+        rhs(2) = a*(y(3) - y(1))
+        rhs(n-1) = a*(y(n) - y(n-2))
        
-        rhs(1) = ( (-2.5_rkind * y(1) + two*y(2  ) + half*y(3  ))/dx ) * 4.725_rkind
-        rhs(n) = ( ( 2.5_rkind * y(n) - two*y(n-1) - half*y(n-2))/dx ) * 4.725_rkind
-
+        a = w1*( p/dx)
+        b = w1*( q/dx)
+        c = w1*( r/dx)
+        d = w1*( s/dx)
+        rhs(1  ) =  a*y(1) + b*y(  2) + c*y(  3) + d*y(  4) 
+        rhs(n  ) = -a*y(n) - b*y(n-1) - c*y(n-2) - d*y(n-3)
+        
     end subroutine
-
-subroutine Algorithm3(y)
-    real(rkind), dimension(n), intent(inout) :: y
-
-
-end subroutine 
 
 end module
 
 program testPenta
     use kind_parameters, only: rkind
     use constants, only : pi, one, zero, two
-    use PentadiagonalSolver, only: n, penta,ComputeD1RHS, computePenta, PTRANS_II
+    use PentadiagonalSolver, only: n, penta,ComputeD1RHS, computePenta, SolvePenta
     implicit none
     integer :: i
     real(rkind), allocatable, dimension(:) :: x, y, dydx, rhs
     real(rkind) :: dx, omega
 
-    n = 16
-    do while (n .le. 16 )
+    n = 512
+    !do while (n .le. 16 )
         omega = 1._rkind
         dx = two*pi/(n-1)
 
@@ -205,23 +258,14 @@ program testPenta
 
         call ComputePenta(0,0)
 
-        ! rhs = zero
-        ! rhs(1) = 6._rkind
-        ! rhs(2) = -1._rkind
-
-        ! dydx = one
-
         call ComputeD1RHS(y,rhs,dx)
-        call PTRANS_II(rhs)
+        call SolvePenta(rhs)
 
         print*, "Max Global Error (n =",n,"):", maxval(abs(rhs - dydx)), maxloc(abs(rhs - dydx))
-
-        print*, rhs
-        print*, "Conservative error: ", SUM(rhs*dx)
 
         deallocate (x, y, dydx, rhs)
         deallocate (penta)
         
-        n = n*2
-    end do 
+    !    n = n*2
+    !end do 
 end program

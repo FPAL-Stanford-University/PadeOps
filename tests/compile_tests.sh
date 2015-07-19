@@ -1,14 +1,14 @@
 # Compile test_cd10.F90
-# ifort -warn all -g -pg -O5 -qopenmp -ipo -mcmodel="medium" -i8 -qopt-report=2 -qopt-report-phase=vec ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/timer.F90 ../src/utilities/cd10.F90 test_cd10.F90 -o test_cd10
-
-# Compile Pentasolver.F90
-ifort ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 PentaSolver.F90 -o PentaTest
-
-# Compile test_TridiagSolver.F90
-ifort ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/timer.F90 TriSolver.F90 -o TriTest
+ifort -warn all -O3 -xhost -ipo -mcmodel="medium" -i8 -qopt-report=2 -qopt-report-phase=vec ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/timer.F90 ../src/utilities/cd10.F90 test_cd10.F90 -o test_cd10
 
 # Compile test_cd06.F90
-# ifort -warn all ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/cd06.F90 test_cd06.F90 -o test_cd06
+ifort -warn all -O3 -xhost -ipo -mcmodel="medium" -i8 -qopt-report=2 -qopt-report-phase=vec ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/timer.F90 ../src/utilities/cd06.F90 test_cd06.F90 -o test_cd06
+
+# Compile Pentasolver.F90
+# ifort ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/cd10_constants.F90 PentaSolver.F90 -o PentaTest
+
+# Compile test_TridiagSolver.F90
+# ifort ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/cd06_constants.F90 ../src/utilities/timer.F90 TriSolver.F90 -o TriTest
 
 # Compile test_ffts.F90
 # ifort -warn all -g -pg -O3 -mkl -mcmodel="medium" -i8 -ipo -qopt-report=2 -qopt-report-phase=vec ../src/utilities/kind_parameters.F90 ../src/utilities/constants.F90 ../src/utilities/timer.F90 ../src/utilities/ffts.F90 test_ffts.F90 -o test_ffts

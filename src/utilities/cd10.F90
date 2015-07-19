@@ -5,6 +5,7 @@ module cd10stuff
 
     use kind_parameters, only: rkind
     use constants,       only: zero,one,two
+    
     implicit none
 
     private
@@ -24,6 +25,68 @@ module cd10stuff
     real(rkind), parameter :: b10d2    =(1038.0_rkind / 899.0_rkind) / 4.0_rkind
     real(rkind), parameter :: c10d2    =( 79.0_rkind /1798.0_rkind ) / 9.0_rkind
 
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+    !! NOTE : The following variables are used for non-periodic 1st derivative evaluation !!
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+    
+    ! Set the scheme for the edge nodes (Ref. for notation: Lele - JCP paper)
+    ! 1st derivative 
+    real(rkind), parameter                   :: alpha           =   3._rkind
+    real(rkind), parameter                   :: p               = -17._rkind / 6._rkind
+    real(rkind), parameter                   :: q               =   3._rkind / 2._rkind
+    real(rkind), parameter                   :: r               =   3._rkind / 2._rkind
+    real(rkind), parameter                   :: s               = - 1._rkind / 6._rkind
+
+
+    ! Calculate the corressponding weights
+    ! Step 1: Assign the interior scheme
+    real(rkind), parameter                   :: q_hat           = a10d1
+    real(rkind), parameter                   :: r_hat           = b10d1
+    real(rkind), parameter                   :: s_hat           = c10d1
+    real(rkind), parameter                   :: alpha_hat       = alpha10d1
+    real(rkind), parameter                   :: beta_hat        = beta10d1
+     
+    ! Step 2: Assign the scheme at node 2 to be Standard Pade (4th Order)
+    real(rkind), parameter                   :: q_p             = 3._rkind/4._rkind
+    real(rkind), parameter                   :: alpha_p         = 1._rkind/4._rkind
+   
+    ! Step 3: Get the scheme at node 4
+    real(rkind), parameter                   :: alpha_ppp       = (8*r_hat - 175*s_hat)/(18*r_hat - 550*s_hat)
+    real(rkind), parameter                   :: beta_ppp        = (1._rkind/20._rkind)*(-3 + 8*alpha_ppp)
+    real(rkind), parameter                   :: q_ppp           = (1._rkind/12._rkind)*(12 - 7*alpha_ppp) 
+    real(rkind), parameter                   :: r_ppp           = (1._rkind/600._rkind)*(568*alpha_ppp - 183)  
+    real(rkind), parameter                   :: s_ppp           = (1._rkind/300._rkind)*(9*alpha_ppp - 4) 
+
+    ! Step 4: Get the scheme at node 3
+    real(rkind), parameter                   :: alpha_pp        = ((17*(s*(r_hat + 2*s_hat) - q*(q_hat + r_hat &
+                                                                + s_hat)))/(72*(q + s)*(q_hat + r_hat - s_hat*(q_ppp/s_ppp &
+                                                                - 1))) - 8._rkind/9._rkind)/((19*(s*(r_hat + 2*s_hat) - q*(q_hat &
+                                                                + r_hat + s_hat)))/(24*(q + s)*(q_hat + r_hat - s_hat*(q_ppp/s_ppp &
+                                                                - 1))) - 1._rkind/3_rkind)
+
+    
+    real(rkind), parameter                   :: beta_pp         = (1._rkind/12._rkind)*(-1 + 3*alpha_pp)
+    real(rkind), parameter                   :: q_pp            = (2._rkind/18._rkind)*(8 - 3*alpha_pp) 
+    real(rkind), parameter                   :: r_pp            = (1._rkind/72._rkind)*(-17 + 57*alpha_pp)
+    real(rkind), parameter                   :: s_pp            = 0._rkind
+
+    ! Step 5: Get the weights
+    real(rkind), parameter                   :: w1              = (q_hat + 2*r_hat + 3*s_hat)/(q + s)
+    real(rkind), parameter                   :: w2              = (1/q_p)*(r_hat + s_hat*(1 + q_ppp/s_ppp) - r*(q_hat &
+                                                                + 2*r_hat + 3*s_hat)/(q + s) )
+    
+    real(rkind), parameter                   :: w3              = (q_hat + r_hat + s_hat*(1 - q_ppp/s_ppp))/(r_pp) 
+    real(rkind), parameter                   :: w4              = s_hat/s_ppp 
+   
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+    !! NOTE : The following variables are used for non-periodic 2nd derivative evaluation !!
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+    ! Incomplete
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    
+    
     type cd10
         
         private
@@ -52,16 +115,19 @@ module cd10stuff
 
         procedure, private :: SolveLU1
         procedure, private :: SolveLU2
-        
+       
+        procedure, private :: ComputePenta1
+        procedure, private :: ComputePenta2
+
         procedure, private :: SolvePenta1
         procedure, private :: SolvePenta2
         
-        procedure, private :: SolveD2
-
         procedure :: cd10der1
         procedure :: cd10der2
 
     end type
+
+
 
 contains
 
@@ -84,35 +150,58 @@ contains
         this%bc1 = bc1_
         this%bcn = bcn_
 
-        ! Allocate 1st derivative LU matrix.
-        if(allocated( this%LU1 )) deallocate( this%LU1 ); allocate( this%LU1(n_,9) )
+
+        if (periodic_) then 
+            ! Allocate 1st derivative LU matrix.
+            if(allocated( this%LU1 )) deallocate( this%LU1 ); allocate( this%LU1(n_,9) )
     
-        ! Compute 1st derivative LU matrix
-        if (n_ .GE. 8) then
-            call ComputeLU(this%LU1,n_,beta10d1,alpha10d1,one,alpha10d1,beta10d1)
-        else if (n_ == 1) then
-            this%LU1 = one
-        else
-            ierr = 2
-            return
-        end if
+            ! Compute 1st derivative LU matrix
+            if (n_ .GE. 8) then
+                call ComputeLU(this%LU1,n_,beta10d1,alpha10d1,one,alpha10d1,beta10d1)
+            else if (n_ == 1) then
+                this%LU1 = one
+            else
+                ierr = 2
+                return
+            end if
     
-        ! Allocate 2nd derivative LU matrices.
-        if(allocated( this%LU2 )) deallocate( this%LU2 ); allocate( this%LU2(n_,9) )
+            ! Allocate 2nd derivative LU matrices.
+            if(allocated( this%LU2 )) deallocate( this%LU2 ); allocate( this%LU2(n_,9) )
     
-        ! Compute 2nd derivative LU matrix
-        if (n_ .GE. 8) then
-            call ComputeLU(this%LU2,n_,beta10d2,alpha10d2,one,alpha10d2,beta10d2)
-        else if (n_ == 1) then
-            this%LU2 = one
-        end if
+            ! Compute 2nd derivative LU matrix
+            if (n_ .GE. 8) then
+                call ComputeLU(this%LU2,n_,beta10d2,alpha10d2,one,alpha10d2,beta10d2)
+            else if (n_ == 1) then
+                this%LU2 = one
+            end if
+        else 
+            ! Allocate 1st derivative Penta matrices.
+            if(allocated( this%penta1 )) deallocate( this%penta1 ); allocate( this%penta1(n_,11) )
+  
+            if (n_ .GE. 8) then             
+                call this%ComputePenta1(bc1_,bcn_)
+            else if (n_ .EQ. 1) then
+                this%Penta1 = one
+            else
+                ierr = 2
+                return 
+            end if 
+
+            
+            ! Allocate 2nd derivative Penta matrices.
+            if(allocated( this%penta2 )) deallocate( this%penta2 ); allocate( this%penta2(n_,11) )
         
-        ! Allocate 1st derivative Penta matrices.
-        if(allocated( this%penta1 )) deallocate( this%penta1 ); allocate( this%penta1(n_,5) )
-    
-        ! Allocate 2nd derivative Penta matrices.
-        if(allocated( this%penta2 )) deallocate( this%penta2 ); allocate( this%penta2(n_,5) )
-    
+            if (n_ .GE. 8) then             
+                call this%ComputePenta2(bc1_,bcn_)
+            else if (n_ .EQ. 1) then
+                this%Penta1 = one
+            else
+                ierr = 2
+                return 
+            end if 
+
+        end if 
+
         ! If everything passes
         ierr = 0
     
@@ -213,7 +302,126 @@ contains
         end associate
     
     end subroutine
+
+    subroutine ComputePenta1(this,bc1,bcn)
+        class (cd10), intent(inout) :: this
+        integer, intent(in) :: bc1, bcn
+        integer             :: i
     
+        associate (bt   => this%penta1(:,1), b   => this%penta1(:,2), d => this%penta1(:,3),  &
+                   a    => this%penta1(:,4), at  => this%penta1(:,5),                         &
+                   e    => this%penta1(:,6), obc => this%penta1(:,7),                         &
+                   f    => this%penta1(:,8), g   => this%penta1(:,9),                         &
+                   eobc => this%penta1(:,10)                                                  )
+    
+            at = beta_hat 
+            bt = beta_hat
+            a  = alpha_hat
+            b  = alpha_hat
+            d  = one
+
+            select case (bc1) 
+            case(0)
+                bt(1) = w1*zero
+                b (1) = w1*zero
+                d (1) = w1*one
+                a (1) = w1*alpha
+                at(1) = w1*zero
+
+                bt(2) = w2*zero
+                b (2) = w2*alpha_p
+                d (2) = w2*one
+                a (2) = w2*alpha_p
+                at(2) = w2*zero
+
+                bt(3) = w3*beta_pp
+                b (3) = w3*alpha_pp
+                d (3) = w3*one
+                a (3) = w3*alpha_pp
+                at(3) = w3*beta_pp
+
+                bt(4) = w4*beta_ppp
+                b (4) = w4*alpha_ppp
+                d (4) = w4*one
+                a (4) = w4*alpha_ppp
+                at(4) = w4*beta_ppp
+            case(1)
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+                ! Incomplete
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+            end select
+            
+            select case (bcn) 
+            case(0)
+                bt(this%n  ) = w1*zero
+                b (this%n  ) = w1*alpha
+                d (this%n  ) = w1*one
+                a (this%n  ) = w1*zero
+                at(this%n  ) = w1*zero
+
+                bt(this%n-1) = w2*zero
+                b (this%n-1) = w2*alpha_p
+                d (this%n-1) = w2*one
+                a (this%n-1) = w2*alpha_p
+                at(this%n-1) = w2*zero
+                
+                bt(this%n-2) = w3*beta_pp
+                b (this%n-2) = w3*alpha_pp
+                d (this%n-2) = w3*one
+                a (this%n-2) = w3*alpha_pp
+                at(this%n-2) = w3*beta_pp
+
+                bt(this%n-3) = w4*beta_ppp
+                b (this%n-3) = w4*alpha_ppp
+                d (this%n-3) = w4*one
+                a (this%n-3) = w4*alpha_ppp
+                at(this%n-3) = w4*beta_ppp
+            
+            case(1)
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+                ! Incomplete
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+            end select
+
+            ! Step 1
+            obc(1) = one/d(1)
+
+            ! Step 2
+            obc(2) = one/(d(2) - b(2)*a(1)*obc(1))
+
+            ! Step 3
+            e(1) = a(1)
+            f(2) = b(2)*obc(1)
+            
+            do i = 3,this%n
+                g(i) = bt(i)*obc(i-2)
+                e(i-1) = a(i-1) - f(i-1)*at(i-2)
+                f(i) = (b(i) - g(i)*e(i-2))*obc(i-1)
+                obc(i) = one/(d(i) - f(i)*e(i-1) - g(i)*at(i-2))
+            end do 
+
+            eobc = e*obc
+        end associate  
+           
+    end subroutine
+    
+    subroutine ComputePenta2(this,bc1,bcn)
+        class (cd10), intent(inout) :: this
+        integer, intent(in) :: bc1, bcn
+
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+                ! Incomplete
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        if ((bc1 == 1) .and. (bcn == 1)) then
+            this%penta2 = zero
+        end if 
+
+    end subroutine 
+
+
     subroutine SolveLU1(this,y,n2,n3, y1, yn, z1, zn)
     
         class( cd10 ), intent(in) :: this
@@ -222,6 +430,7 @@ contains
         integer :: i,j,k
         real(rkind) :: sum1, sum2
  
+        
         do k=z1,zn
             do j=y1,yn
                 ! Step 8 ( update y instead of creating z )
@@ -253,8 +462,38 @@ contains
     
     end subroutine
     
-    subroutine SolveLU2(this,y)
     
+    subroutine SolvePenta1(this,y,n2,n3,y1,yn,z1,zn)
+
+        class( cd10 ), intent(in) :: this
+        integer, intent(in) :: n2,n3, y1,yn, z1, zn
+        real(rkind), dimension(this%n,n2,n3), intent(inout) :: y
+        integer :: i, j, k
+
+        do k = z1,zn
+            do j = y1,yn 
+                ! Step 1
+                y(2,j,k) = y(2,j,k) - this%penta1(2,8)*y(1,j,k)
+                do i = 3,this%n
+                    y(i,j,k) = y(i,j,k) - this%penta1(i,9)*y(i-2,j,k) - this%penta1(i,8)*y(i-1,j,k)
+                end do 
+
+                ! Step 2
+                y(this%n,j,k) = y(this%n,j,k)*this%penta1(this%n,7)
+                
+                !y(this%n-1,j,k) = (y(this%n-1,j,k) - this%penta1(this%n-1,6)*y(this%n,j,k))*this%penta1(this%n-1,7)
+                y(this%n-1,j,k) = y(this%n-1,j,k)*this%penta1(this%n-1,7) - this%penta1(this%n-1,10)*y(this%n,j,k)!*this%penta1(this%n-1,7)
+                do i = this%n-2,1,-1
+                    !y(i,j,k) = (y(i,j,k) - this%penta1(i,5)*y(i+2,j,k) - this%penta1(i,6)*y(i+1,j,k))*this%penta1(i,7)
+                    y(i,j,k) = y(i,j,k)*this%penta1(i,7) - y(i+2,j,k)*this%penta1(i,5)*this%penta1(i,7) - y(i+1,j,k)*this%penta1(i,10)
+                end do 
+            end do 
+        end do 
+
+    end subroutine
+
+    subroutine SolveLU2(this,y)
+         
         class( cd10 ), intent(in) :: this
         real(rkind), dimension(this%n), intent(inout) :: y  ! Take in RHS and put solution into it
         integer :: i
@@ -284,22 +523,21 @@ contains
         do i = this%n-4,1,-1
             y(i) = ( y(i) - this%LU2(i,6)*y(i+1) - this%LU2(i,7)*y(i+2) - this%LU2(i,8)*y(this%n-1) - this%LU2(i,9)*y(this%n) ) * this%LU2(i,5)
         end do
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+                ! Incomplete/ Needs Updating 
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     
     end subroutine
     
-    subroutine SolvePenta1(this,b,n2,n3)
-
-        class( cd10 ), intent(in) :: this
-        integer, intent(in) :: n2,n3
-        real(rkind), dimension(this%n,n2,n3), intent(inout) :: b
-
-    end subroutine
-
     subroutine SolvePenta2(this,b)
 
         class( cd10 ), intent(in) :: this
         real(rkind), dimension(this%n), intent(inout) :: b
 
+        b = zero
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+                ! Incomplete
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     end subroutine
 
     pure subroutine ComputeD1RHS(this, f, RHS, n2, n3, y1, yn, z1, zn) !result (RHS)
@@ -309,19 +547,20 @@ contains
         real(rkind), dimension(this%n,n2,n3), intent(in) :: f
         real(rkind), dimension(this%n,n2,n3), intent(out) :: RHS
         real(rkind) :: a10,b10,c10
-        integer :: i,j,k
+        integer :: j,k
+        ! Non-periodic boundary a, b and c
+        real(rkind) :: a_np_4, b_np_4, c_np_4    
+        real(rkind) :: a_np_3, b_np_3   
+        real(rkind) :: a_np_2
+        real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
 
-        if(this%n == 1) then
-            RHS = zero
-            return
-        end if
 
-        a10 = a10d1 * this%onebydx
-        b10 = b10d1 * this%onebydx
-        c10 = c10d1 * this%onebydx
     
         select case (this%periodic)
         case (.TRUE.)
+            a10 = a10d1 * this%onebydx
+            b10 = b10d1 * this%onebydx
+            c10 = c10d1 * this%onebydx
             do k=z1,zn
                 do j=y1,yn
                     RHS(1,j,k) = a10 * ( f(2,j,k)   - f(this%n  ,j,k) ) &
@@ -336,11 +575,6 @@ contains
                     RHS(4:this%n-3,j,k) = a10 * ( f(5:this%n-2,j,k) - f(3:this%n-4,j,k) ) &
                                     + b10 * ( f(6:this%n-1,j,k) - f(2:this%n-5,j,k) ) &
                                     + c10 * ( f(7:this%n  ,j,k) - f(1:this%n-6,j,k) )
-                    ! do i = 4,this%n-3
-                    !     RHS(i,j,k) = a10 * ( f(i+1,j,k) - f(i-1,j,k) ) &
-                    !            + b10 * ( f(i+2,j,k) - f(i-2,j,k) ) &
-                    !            + c10 * ( f(i+3,j,k) - f(i-3,j,k) )
-                    ! end do
                     RHS(this%n-2,j,k) = a10 * ( f(this%n-1,j,k) - f(this%n-3,j,k) ) &
                                   + b10 * ( f(this%n  ,j,k) - f(this%n-4,j,k) ) &
                                   + c10 * ( f(1       ,j,k) - f(this%n-5,j,k) )
@@ -353,7 +587,57 @@ contains
                 end do
             end do
         case (.FALSE.)
-            RHS = zero
+            a10    = q_hat * this%onebydx  
+            b10    = r_hat * this%onebydx 
+            c10    = s_hat * this%onebydx
+
+            a_np_4 = w4*q_ppp * this%onebydx  
+            b_np_4 = w4*r_ppp * this%onebydx 
+            c_np_4 = w4*s_ppp * this%onebydx
+            
+            a_np_3 = w3*q_pp * this%onebydx  
+            b_np_3 = w3*r_pp * this%onebydx 
+
+            a_np_2 = w2*q_p * this%onebydx
+            
+            a_np_1 = w1*( p * this%onebydx)
+            b_np_1 = w1*( q * this%onebydx)
+            c_np_1 = w1*( r * this%onebydx)
+            d_np_1 = w1*( s * this%onebydx)
+
+            do k = z1,zn
+                do j = y1,yn
+                    
+                    RHS(1         ,j,k) =   a_np_1* f(1         ,j,k) +  b_np_1*f(2         ,j,k)   &
+                                        +   c_np_1* f(3         ,j,k) +  d_np_1*f(4         ,j,k) 
+                   
+                    RHS(2         ,j,k) =   a_np_2*(f(3         ,j,k) -         f(1         ,j,k))
+                    
+                    RHS(3         ,j,k) =   a_np_3*(f(4         ,j,k) -         f(2         ,j,k)) &
+                                        +   b_np_3*(f(5         ,j,k) -         f(1         ,j,k)) 
+                    
+                    RHS(4         ,j,k) =   a_np_4*(f(5         ,j,k) -         f(3         ,j,k)) &
+                                        +   b_np_4*(f(6         ,j,k) -         f(2         ,j,k)) &
+                                        +   c_np_4*(f(7         ,j,k) -         f(1         ,j,k)) 
+                    
+                    RHS(5:this%n-4,j,k) =   a10   *(f(6:this%n-3,j,k) -         f(4:this%n-5,j,k)) &
+                                        +   b10   *(f(7:this%n-2,j,k) -         f(3:this%n-6,j,k)) &
+                                        +   c10   *(f(8:this%n-1,j,k) -         f(2:this%n-7,j,k)) 
+                    
+                    RHS(this%n-3  ,j,k) =   a_np_4*(f(this%n-2  ,j,k) -         f(this%n-4  ,j,k)) &
+                                        +   b_np_4*(f(this%n-1  ,j,k) -         f(this%n-5  ,j,k)) &
+                                        +   c_np_4*(f(this%n    ,j,k) -         f(this%n-6  ,j,k))  
+        
+                    RHS(this%n-2  ,j,k) =   a_np_3*(f(this%n-1  ,j,k) -         f(this%n-3  ,j,k)) &
+                                        +   b_np_3*(f(this%n    ,j,k) -         f(this%n-4  ,j,k)) 
+                    
+                    RHS(this%n-1  ,j,k) =   a_np_2*(f(this%n    ,j,k) -         f(this%n-2  ,j,k))
+
+                    RHS(this%n    ,j,k) =  -a_np_1* f(this%n    ,j,k) -  b_np_1*f(this%n-1  ,j,k)   &
+                                        -   c_np_1* f(this%n-2  ,j,k) -  d_np_1*f(this%n-3  ,j,k)
+                
+               end do 
+            end do 
         end select
     
     end subroutine
@@ -364,11 +648,6 @@ contains
         real(rkind), dimension(this%n), intent(in) :: f
         real(rkind), dimension(this%n) :: RHS
         integer :: i
-    
-        if(this%n == 1) then
-            RHS = zero
-            return
-        end if
     
         select case (this%periodic)
         case (.TRUE.)
@@ -395,42 +674,38 @@ contains
             RHS(this%n)   = a10d1 * ( f(1)        - two*f(this%n)   + f(this%n-1) ) &
                           + b10d1 * ( f(2)        - two*f(this%n)   + f(this%n-2) ) &
                           + c10d1 * ( f(3)        - two*f(this%n)   + f(this%n-3) )
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+                ! Incomplete/ Needs to be changed 
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         case (.FALSE.)
             RHS = zero
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+                ! Incomplete
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         end select
     
     end function
 
-    subroutine SolveD2(this, rhs)
-
-        class( cd10 ), intent(in) :: this
-        real(rkind), dimension(this%n), intent(inout) :: rhs
-
-        select case (this%periodic)
-        case(.TRUE.)
-            call this%SolveLU2(rhs)
-        case(.FALSE.)
-            call this%SolvePenta2(rhs)
-        end select
-
-    end subroutine
-
     subroutine cd10der1(this, f, df, n2, n3, y1, yn, z1, zn) !result(df)
-
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: n2, n3, y1, yn, z1, zn
         real(rkind), dimension(this%n,n2,n3), intent(in) :: f
         real(rkind), dimension(this%n,n2,n3), intent(out) :: df
 
-        call this%ComputeD1RHS(f, df, n2, n3, y1, yn, z1, zn)
+        if(this%n == 1) then
+            df = zero
+            return
+        end if
         
+        call this%ComputeD1RHS(f, df, n2, n3, y1, yn, z1, zn)
+
         select case (this%periodic)
         case(.TRUE.)
             call this%SolveLU1(df,n2,n3, y1, yn, z1, zn)
         case(.FALSE.)
-            call this%SolvePenta1(df,n2,n3)
+            call this%SolvePenta1(df,n2,n3,y1,yn,z1,zn)
         end select
-
+    
     end subroutine
 
     function cd10der2(this, f) result(df)
@@ -439,9 +714,13 @@ contains
         real(rkind), dimension(this%n), intent(in) :: f
         real(rkind), dimension(this%n) :: df
 
-        df = this%ComputeD2RHS(f)
-        call this%SolveD2(df)
-        df = df * this%onebydx2
+
+        print*, f(1)
+        df = zero
+
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+                ! Incomplete
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     end function
 
