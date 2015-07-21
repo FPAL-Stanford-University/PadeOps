@@ -1,4 +1,4 @@
-program test_cd10
+program test_cd06
 
     use kind_parameters, only: rkind
     use constants,       only: zero,one,two,pi
