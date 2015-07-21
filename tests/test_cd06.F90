@@ -1,4 +1,4 @@
-program test_cd10
+program test_cd06
 
     use kind_parameters, only: rkind
     use constants,       only: zero,one,two,pi
@@ -6,7 +6,7 @@ program test_cd10
     use cd06stuff,       only: cd06
     implicit none
 
-    integer:: nx = 8192, ny=128, nz=128
+    integer:: nx = 512, ny=128, nz=128
     logical, parameter :: periodic = .TRUE.
 
     type( cd06 ) :: mycd06
