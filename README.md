@@ -4,7 +4,7 @@ This README would normally document whatever steps are necessary to get your app
 
 ### PadeOps ###
 
-* Quick summary : Hybrid OpenMP/MPI derivate operators using Compact Difference (6th and 10th Order) and Spectral (Fourier and Chebyshev) Methods to solve PDEs.
+* Quick summary : Hybrid OpenMP/MPI derivative operators using Compact Difference (6th and 10th Order) and Spectral (Fourier and Chebyshev) Methods to solve PDEs.
 * Version : 0.1
 * Tutorials : TBD/Incomplete
 
