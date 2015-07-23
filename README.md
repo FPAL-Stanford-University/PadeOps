@@ -12,8 +12,8 @@ This README would normally document whatever steps are necessary to get your app
 
 * Summary of set up
 * Configuration :
-  * Set the Fortran compiler (FC) and the FFTW library path (FFTW_PATH) in SetupEnv.sh
-  * Then run:
+    * Set the Fortran compiler (FC) and the FFTW library path (FFTW_PATH) in SetupEnv.sh
+    * Then run:
     * source SetupEnv.sh
     * mkdir build
     * cd build
