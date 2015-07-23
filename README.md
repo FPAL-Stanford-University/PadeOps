@@ -21,8 +21,10 @@ This README would normally document whatever steps are necessary to get your app
            cmake ..
            make
 ~~~
-* Dependencies : [MPI] (https://www.mpich.org/)
-    * `FFTW`, `2DECOMP&FFT`
+* Dependencies :
+    * MPI Library (https://www.mpich.org/)
+    * FFTW (www.fftw.org/)
+    * 2DECOMP&FFT (http://www.2decomp.org/)
 * Database configuration : TBD
 * How to run tests : TBD
 * Deployment instructions : TBD
