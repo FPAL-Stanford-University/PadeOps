@@ -22,7 +22,8 @@ This README would normally document whatever steps are necessary to get your app
            make
 ~~~
 * Dependencies :
-    * [MPI Library] (https://www.mpich.org/) , `FFTW`, `2DECOMP&FFT`
+    * [MPI Library] (https://www.mpich.org/)
+    * `FFTW`, `2DECOMP&FFT`
 * Database configuration : TBD
 * How to run tests : TBD
 * Deployment instructions : TBD
