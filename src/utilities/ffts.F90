@@ -1,5 +1,6 @@
 module fftStuff
 
+    use, intrinsic :: ISO_C_BINDING
     use kind_parameters, only: rkind
     use constants, only: zero,one,half,two,pi,imi
     implicit none
@@ -7,7 +8,8 @@ module fftStuff
     private
     public :: ffts
 
-    include "fftw3.F90"
+    ! include "fftw3.F90"
+    include "fftw3.f03"
 
     type ffts
         

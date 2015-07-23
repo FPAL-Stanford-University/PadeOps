@@ -1,12 +1,18 @@
 module PentadiagonalSolver
     use kind_parameters, only: rkind
     use constants,      only: one, half, zero, two, four, six
-    use cd10_constants, only: a10d1, b10d1, c10d1, alpha10d1, beta10d1
     implicit none
     
     real(rkind), dimension(:,:), allocatable :: penta
     integer                                  :: n
 
+    ! 10th order first derivative coefficients (See Lele (1992) for explanation)
+    real(rkind), parameter :: alpha10d1=  1.0_rkind /  2.0_rkind
+    real(rkind), parameter :: beta10d1 =  1.0_rkind / 20.0_rkind
+    real(rkind), parameter :: a10d1    =( 17.0_rkind / 12.0_rkind) / 2.0_rkind
+    real(rkind), parameter :: b10d1    =(101.0_rkind /150.0_rkind) / 4.0_rkind
+    real(rkind), parameter :: c10d1    =(  1.0_rkind /100.0_rkind) / 6.0_rkind
+    
     ! Set the scheme for the edge nodes (Ref. for notation: Lele - JCP paper)
     real(rkind), parameter                   :: alpha           =   3._rkind
     real(rkind), parameter                   :: p               = -17._rkind / 6._rkind

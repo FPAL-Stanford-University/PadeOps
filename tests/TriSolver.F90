@@ -1,11 +1,15 @@
 module Tridiagsolver
     use kind_parameters, only: rkind
     use constants,      only: one, half, zero, two, three, four, five, six
-    use cd06_constants,     only: alpha06d1,a06d1,b06d1   
     implicit none
     
     real(rkind), dimension(:,:), allocatable :: Tridiag
     integer                                  :: n
+    
+    ! 6th order first derivative coefficients (See Lele (1992) for explanation)
+    real(rkind), parameter :: alpha06d1=  1.0_rkind / 3.0_rkind
+    real(rkind), parameter :: a06d1    = (14.0_rkind / 9.0_rkind) / 2.0_rkind
+    real(rkind), parameter :: b06d1    = ( 1.0_rkind / 9.0_rkind) / 4.0_rkind
     
     ! Set the scheme for the edge nodes (Ref. for notation: Lele - JCP paper)
     real(rkind), parameter                   :: alpha =  3._rkind

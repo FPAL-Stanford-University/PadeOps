@@ -12,7 +12,7 @@ This README would normally document whatever steps are necessary to get your app
 
 * Summary of set up
 * Configuration : TBD
-* Dependencies : FFTW (Intel MKL)
+* Dependencies : MPI, FFTW
 * Database configuration : TBD
 * How to run tests : TBD
 * Deployment instructions : TBD
