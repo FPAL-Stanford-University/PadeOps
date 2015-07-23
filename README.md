@@ -16,7 +16,10 @@ This README would normally document whatever steps are necessary to get your app
     * Then run:
         * `source SetupEnv.sh
            mkdir build`
-        * <code> cd build <\code>
+        * 
+~~~
+cd build
+~~~
         * cmake ..
         * make
 * Dependencies : MPI, FFTW
