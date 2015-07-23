@@ -5,13 +5,20 @@ This README would normally document whatever steps are necessary to get your app
 ### PadeOps ###
 
 * Quick summary : Hybrid OpenMP/MPI derivate operators using Compact Difference (6th and 10th Order) and Spectral (Fourier and Chebyshev) Methods to solve PDEs.
-* Version : TBD
+* Version : 0.1
 * Tutorials : TBD/Incomplete
 
 ### How do I get set up? ###
 
 * Summary of set up
-* Configuration : TBD
+* Configuration :
+Set the Fortran compiler (FC) and the FFTW library path (FFTW_PATH) in SetupEnv.sh
+Then run:
+source SetupEnv.sh
+mkdir build
+cd build
+cmake ..
+make
 * Dependencies : MPI, FFTW
 * Database configuration : TBD
 * How to run tests : TBD
