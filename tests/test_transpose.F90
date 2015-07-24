@@ -20,7 +20,7 @@ program test_transpose
 
     integer :: i, j, k, ierr
 
-    integer :: nx = 2048, ny = 256, nz = 256
+    integer :: nx = 64, ny = 1024, nz = 1024
     integer :: prow = 0, pcol = 0
 
     logical :: periodicx = .TRUE.
@@ -29,12 +29,13 @@ program test_transpose
 
     real(rkind) :: omega = one
     real(rkind) :: dx, dy, dz
-    real(rkind), dimension(:,:,:), allocatable :: x,f,dfdx,dfdx_exact
+    real(rkind), dimension(:,:,:), allocatable :: x,f,dfdx,dfdx_exact, dfdy, dfdz, dummy
+    
     real(rkind), dimension(:,:,:), allocatable :: wkx, dwkx, wkz, dwkz
 
     real(rkind) :: mymaxerr, maxerr
 
-    double precision :: t0, t1, xtime, ytime, ztime
+    double precision :: t0, t1, xtime, ytime, ztime, dummytime
 
     call MPI_Init(ierr)
 
@@ -49,6 +50,9 @@ program test_transpose
     allocate( x         ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     allocate( f         ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     allocate( dfdx      ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
+    allocate( dfdy      ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
+    allocate( dfdz      ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
+    allocate( dummy     ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     allocate( dfdx_exact( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
 
     ! Create Z work arrays
@@ -88,12 +92,12 @@ program test_transpose
     
     t0 = MPI_WTIME()
     !======== Start the Y derivative stuff ========!
-    call ycd10 % dd2( f, dfdx, gp%ysz(1), gp%ysz(3), 1, gp%ysz(1), 1, gp%ysz(3) )
+    call ycd10 % dd2( f, dfdy, gp%ysz(1), gp%ysz(3), 1, gp%ysz(1), 1, gp%ysz(3) )
     !======== End the Y derivative stuff   ========!
     t1 = MPI_WTIME()
     if(nrank == 0) ytime = t1-t0
 
-    mymaxerr = MAXVAL(ABS(dfdx))
+    mymaxerr = MAXVAL(ABS(dfdy))
     call MPI_Reduce(mymaxerr, maxerr, 1, real_type, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
     if (nrank == 0) print*, "Maximum error = ", maxerr
     
@@ -101,21 +105,32 @@ program test_transpose
     !======== Start the Z derivative stuff ========!
     call transpose_y_to_z(f, wkz, gp)
     call zcd10 % dd3( wkz, dwkz, gp%zsz(1), gp%zsz(2), 1, gp%zsz(1), 1, gp%zsz(2) )
-    call transpose_z_to_y(dwkz, dfdx, gp)
+    call transpose_z_to_y(dwkz, dfdz, gp)
     !======== End the Z derivative stuff   ========!
     t1 = MPI_WTIME()
     if(nrank == 0) ztime = t1-t0
-    
-    mymaxerr = MAXVAL(ABS(dfdx))
+   
+
+    mymaxerr = MAXVAL(ABS(dfdz))
     call MPI_Reduce(mymaxerr, maxerr, 1, real_type, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
     if (nrank == 0) print*, "Maximum error = ", maxerr
+    
+    t0 = MPI_WTIME()
+    !======== Perform some dummy operations========!
+    dummy = sin(x)
+    
+    dummy = dummy + dfdx*dfdx*f + dfdy*dfdx*x + dfdz*dfdx*dfdx_exact + f + x
+
+    t1 = MPI_WTIME()
+    if (nrank == 0) dummytime = t1 - t0 
 
     if (nrank == 0) then
         print*, "Time for X derivative: ", xtime
         print*, "Time for Y derivative: ", ytime
         print*, "Time for Z derivative: ", ztime
+    !    print*, "Time for dummy calc  : ", dummytime
         print*, "----------------------------------------------------"
-        print*, "           Total time: ", xtime+ytime+ztime
+        print*, "           Total time: ", xtime+ytime+ztime!+dummytime
     end if
     
     call xcd10%destroy()
