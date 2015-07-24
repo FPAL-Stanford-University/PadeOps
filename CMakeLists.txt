@@ -10,11 +10,15 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")
 endif()
 
-set(FFTW_PATH $ENV{FFTW_PATH})
-
 # Where to look for FFTW
+set(FFTW_PATH $ENV{FFTW_PATH})
 set(FFTW_LIBRARY_PATH "${FFTW_PATH}/lib")
 set(FFTW_INCLUDE_PATH "${FFTW_PATH}/include")
+
+# Where to look for DECOMP&FFT
+set(DECOMP_PATH $ENV{DECOMP_PATH})
+set(DECOMP_LIBRARY_PATH "${DECOMP_PATH}/lib")
+set(DECOMP_INCLUDE_PATH "${DECOMP_PATH}/include")
 
 find_package(MPI REQUIRED)
 
@@ -23,7 +27,7 @@ message(STATUS "Fortran compiler ID is: ${CMAKE_Fortran_COMPILER_ID}" )
 
 if ( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
     if ( CMAKE_BUILD_TYPE MATCHES "Release" )
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -warn all -ipo -xhost -mcmodel=\"medium\" -i8 -qopt-report=2 -qopt-report-phase=vec")
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -warn all -ipo -xhost -mcmodel=\"medium\" -qopt-report=2 -qopt-report-phase=vec")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
         set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -pg -check all -fpe0 -warn -traceback -debug extended")
     endif()
