@@ -20,7 +20,7 @@ program test_transpose
 
     integer :: i, j, k, ierr
 
-    integer :: nx = 64, ny = 1024, nz = 1024
+    integer :: nx = 2048, ny = 128, nz = 128
     integer :: prow = 0, pcol = 0
 
     logical :: periodicx = .TRUE.
@@ -35,7 +35,7 @@ program test_transpose
 
     real(rkind) :: mymaxerr, maxerr
 
-    double precision :: t0, t1, xtime, ytime, ztime, dummytime
+    double precision :: t0, t1, t3, t4, xtime, ytime, ztime, dummytime, time2trans_x, time2compute_x, time2trans_z, time2compute_z
 
     call MPI_Init(ierr)
 
@@ -80,11 +80,15 @@ program test_transpose
     t0 = MPI_WTIME()
     !======== Start the X derivative stuff ========!
     call transpose_y_to_x(f, wkx, gp)
+    t1 = MPI_WTIME()
+    time2trans_x = t1 - t0
     call xcd10 % dd1( wkx, dwkx, gp%xsz(2), gp%xsz(3), 1, gp%xsz(2), 1, gp%xsz(3) )
+    t0 = MPI_WTIME()
+    time2compute_x = t0 - t1
     call transpose_x_to_y(dwkx, dfdx, gp)
     !======== End the X derivative stuff   ========!
     t1 = MPI_WTIME()
-    if(nrank == 0) xtime = t1-t0
+    if(nrank == 0) xtime = t1 - t0 + time2compute_x  + time2trans_x
     
     mymaxerr = MAXVAL(ABS(dfdx - dfdx_exact))
     call MPI_Reduce(mymaxerr, maxerr, 1, real_type, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
@@ -126,11 +130,13 @@ program test_transpose
 
     if (nrank == 0) then
         print*, "Time for X derivative: ", xtime
+        print*, "            transpose: ", time2trans_x 
+        print*, "            compute  : ", time2compute_x 
         print*, "Time for Y derivative: ", ytime
         print*, "Time for Z derivative: ", ztime
-    !    print*, "Time for dummy calc  : ", dummytime
+        print*, "Time for dummy calc  : ", dummytime
         print*, "----------------------------------------------------"
-        print*, "           Total time: ", xtime+ytime+ztime!+dummytime
+        print*, "           Total time: ", xtime+ytime+ztime+dummytime
     end if
     
     call xcd10%destroy()

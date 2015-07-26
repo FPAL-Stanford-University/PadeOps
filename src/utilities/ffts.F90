@@ -1,300 +1,283 @@
-module fftStuff
-
-    ! Legacy Fortran interface to FFTW v3x
+module fftstuff
     use kind_parameters, only: rkind
     use constants, only: zero,one,half,two,pi,imi
-    implicit none
 
+    implicit none
     private
     public :: ffts
 
     include "fftw3.f"
 
+    integer :: fftw_plan = FFTW_MEASURE
+
     type ffts
-        
-        private
-        
-        character(len=4)                         :: fft_lib="FFTW"    ! FFT library to use. "FFTW", "FFTP"
-        
+        private 
+
+        integer :: n
+        real(rkind) :: onebyn
+
+        real(rkind) :: dx
         integer(kind=8) :: plan_fwd
         integer(kind=8) :: plan_bwd
-        logical         :: initialized=.FALSE.
-        logical         :: isEven=.TRUE.
-        
-        integer :: nd=1
-        integer, dimension(:), allocatable :: npts
-        
-        real(rkind), dimension(:), allocatable :: dspace
 
-        real(rkind), allocatable, dimension(:)       :: k1d, k1d_sq        ! Wavenumbers for 1D transform
-        real(rkind), allocatable, dimension(:,:,:)   :: k2d                ! Wavenumbers for 2D transform
-        real(rkind), allocatable, dimension(:,:,:,:) :: k3d                ! Wavenumbers for 3D transform
+        real(rkind), dimension(:,:,:), allocatable :: k1d
 
+        integer :: split
 
+        character(len=1) :: dir = "x"
 
-        integer, allocatable, dimension(:) :: split
+        integer :: n2, n3
+
+        logical :: initialized = .false.
 
         contains
 
-        procedure, private :: init1d
-        procedure, private :: init2d
-        procedure, private :: init3d
-        generic            :: init => init1d,init2d,init3d ! Initialize type
-        procedure          :: destroy 
+            procedure :: init
+            procedure :: destroy
+            procedure :: dd1
+            procedure :: dd2
+            procedure :: dd3
 
-        procedure, private :: fft1d_half
-        procedure, private :: fft1d_full
-        generic :: fft => fft1d_half, fft1d_full!,fft2d,fft3d         ! Compute forward transform
-        procedure, private :: ifft1d
-        generic :: ifft => ifft1d!,ifft2d,ifft3d     ! Compute inverse transform
-        
-        procedure, private :: getk1d
-        generic            :: k => getk1d!, getk2d, getk3d    ! Get wave number given indices
-        !
-    
-        procedure, private :: nullOddBall
-        procedure :: fourder1
-        procedure :: fourder2
+            procedure  :: fftx
+            procedure  :: ifftx
+            procedure  :: ffty
+            procedure  :: iffty
+            procedure  :: fftz
+            procedure  :: ifftz
+
+
     end type
 
 
 contains
 
-    function nullOddBall(this,f) result(fout) 
-        class( ffts ), intent(in) :: this
-        complex(rkind), dimension(this%npts(1)), intent(in) :: f
-        complex(rkind), dimension(this%npts(1)) :: fout
-
-        fout = f
-        if (this%isEven) fout(this%split(1)) = zero
-
-    end function 
-
-    function fourder1(this, f) result(df)
-        class( ffts ), intent(in) :: this
-        real(rkind), dimension(this%npts(1)), intent(in) :: f
-        real(rkind), dimension(this%npts(1)) :: df 
-        
-        df = this%ifft( imi * this%k1d * this%nullOddBall( this%fft(f, .TRUE.) ) )
-        !df = this%ifft( imi * this%k1d * this%fft(f) )
-    end function 
-    
-    function fourder2(this, f) result(df)
-        class( ffts ), intent(in) :: this
-        real(rkind), dimension(this%npts(1)), intent(in) :: f
-        real(rkind), dimension(this%npts(1)) :: df 
-
-        df = this%ifft( -this%k1d_sq * this%nullOddBall( this%fft(f) ) )
-    end function 
-
-    function init1d(this, nx, dx) result(ierr)
-        
-        class( ffts ), intent(inout) :: this
-        integer, intent(in) :: nx
-        real(rkind), intent(in) :: dx
+    function init(this, n_, dir_, n2_, n3_, dx_) result(ierr)
+        class(ffts), intent(inout) :: this
+        integer, intent(in) :: n_, n2_, n3_
+        character(len=1), intent(in) :: dir_
         integer :: ierr
+        real(rkind), intent(in) :: dx_
+        real(rkind), dimension(:,:,:), allocatable :: in_arr
+        complex(rkind), dimension(:,:,:), allocatable :: out_arr
+        real(rkind), dimension(:,:), allocatable :: in_arr_2d
+        complex(rkind), dimension(:,:), allocatable :: out_arr_2d
 
-        complex(rkind), dimension(:), allocatable :: arr_in, arr_out
-        real(rkind), dimension(:), allocatable :: arr_in_real, arr_out_real
-
-        if ( this%initialized ) then
-            ierr = 100
-            return
-        end if
+        real(rkind), dimension(:), allocatable :: k_tmp
+        integer :: i, j, k
         
-        this%nd = 1
 
-        if ( .not. allocated(this%npts) ) allocate( this%npts(this%nd) )
-        this%npts = [nx]
+        this%dir = dir_
+        this%n = n_
+        this%n2 = n2_
+        this%n3 = n3_
+        this%dx = dx_
+        this%onebyn = one/real(this%n,rkind)
 
-        if ( .not. allocated(this%split) ) allocate( this%split(this%nd) )
-        this%split = this%npts/2+1
+        this%split = n_/2 + 1
+        
+        
+        if (allocated(this%k1d)) deallocate(this%k1d)
+        allocate(k_tmp(this%split))
+        k_tmp = GetWaveNums(this%n,this%dx)
+        
+        
+        select case (this%dir)
+        case ("x")
+            allocate (this%k1d(this%split,this%n2,this%n3))
+            do k = 1,this%n3
+                do j = 1,this%n2
+                    this%k1d(:,j,k) = k_tmp
+                end do 
+            end do
+            allocate (in_arr (this%n    , this%n2, this%n3))
+            allocate (out_arr(this%split, this%n2, this%n3))
 
-        if ( .not. allocated(this%dspace) ) allocate( this%dspace(this%nd) )
-        this%dspace = [dx]
+            call dfftw_plan_many_dft_r2c(this%plan_fwd, 1, this%n, &
+                this%n2*this%n3, in_arr, this%n, 1, &
+                this%n, out_arr, this%split, 1, this%split, &
+                fftw_plan)
 
-        if ( .not. allocated(this%k1d) ) allocate( this%k1d( this%npts(1) ) )
-        this%k1d = GetWaveNums(nx,dx)
-        if ( .not. allocated(this%k1d_sq) ) allocate( this%k1d_sq( this%npts(1) ) )
-        this%k1d_sq = this%k1d*this%k1d 
+            call dfftw_plan_many_dft_c2r(this%plan_bwd, 1, this%n, &
+                this%n2*this%n3, out_arr, this%split, 1, &
+                this%split, in_arr, this%n, 1, this%n, &
+                fftw_plan)
 
-        allocate( arr_in_real(nx) )
-        allocate( arr_in(nx) )
-        allocate( arr_out_real(nx) )
-        allocate( arr_out(nx) )
-        call dfftw_plan_dft_r2c_1d( this%plan_fwd, nx, arr_in_real, arr_out, FFTW_FORWARD,  FFTW_EXHAUSTIVE )
-        call dfftw_plan_dft_c2r_1d( this%plan_bwd, nx, arr_in, arr_out_real, FFTW_BACKWARD, FFTW_EXHAUSTIVE )
-        deallocate( arr_in_real )
-        deallocate( arr_in  )
-        deallocate( arr_out_real )
-        deallocate( arr_out )
+             deallocate (in_arr, out_arr)
 
-        select case (mod(nx,2))
-        case (1)
-            this%isEven = .false.
-        case (0)
-            this%isEven = .true.
+        case ("y")
+            allocate (this%k1d(this%n2,this%split,this%n3))
+            do k = 1,this%n3
+                do i = 1,this%n2
+                    this%k1d(i,:,k) = k_tmp
+                end do 
+            end do
+    
+            allocate (in_arr_2d(this%n2, this%n))
+            allocate (out_arr_2d(this%n2, this%split))
+
+            call dfftw_plan_many_dft_r2c(this%plan_fwd, 1, this%n, &
+                this%n2, in_arr_2d, this%n, this%n2, 1, out_arr_2d, this%split, &
+                this%n2, 1, fftw_plan)
+
+            call dfftw_plan_many_dft_c2r(this%plan_bwd, 1, this%n, &
+                this%n2, out_arr_2d, this%split, this%n2, 1, in_arr_2d, this%n, &
+                this%n2, 1, fftw_plan)
+
+            deallocate (in_arr_2d, out_arr_2d) 
+        
+        case ("z")
+            allocate (this%k1d(this%n2,this%n3,this%n))
+            do i = 1,this%n2
+                do j = 1,this%n3
+                    this%k1d(i,j,:) = k_tmp
+                end do 
+            end do
+            allocate (in_arr (this%n2, this%n3, this%n ))
+            allocate (out_arr(this%n2, this%n3, this%split))
+
+            call dfftw_plan_many_dft_r2c(this%plan_fwd, 1, this%n, &
+                this%n2*this%n3, in_arr, this%n, this%n2*this%n3, &
+                1, out_arr, this%split, this%n2*this%n3, 1, &
+                fftw_plan)
+
+            call dfftw_plan_many_dft_c2r(this%plan_bwd, 1, this%n, &
+                this%n2*this%n3, out_arr, this%split, this%n2*this%n3, &
+                1, out_arr, this%n, this%n2*this%n3, 1, &
+                fftw_plan)
+             
+            deallocate (in_arr, out_arr)
+        case default 
+           ierr = 20
+            return  
         end select 
 
-        this%initialized = .TRUE.
+        this%initialized = .true. 
         ierr = 0
-    end function
+    end function 
 
-    function fft1d_half(this, f, half) result (fhat)
-        class( ffts ), intent(in) :: this
-        real(rkind), dimension(this%npts(1)), intent(in) :: f
-        logical, intent(in) :: half
-        complex(rkind), dimension(this%split(1)) :: fhat
+    subroutine dd1(this,f, df)
+        class(ffts), intent(in) :: this
+        real(rkind), dimension(this%n,this%n2, this%n3), intent(in) :: f 
+        real(rkind), dimension(this%n,this%n2, this%n3), intent(out) :: df 
+        complex(rkind), dimension(this%split,this%n2,this%n3) :: f_hat
 
-        call dfftw_execute_dft(this%plan_fwd, f, fhat)
+        if ((this%dir .eq. "x") .and. (this%n > 1)) then
+           call this%fftx(f,f_hat)
 
-    end function
+           f_hat = imi*this%k1d*f_hat
+           f_hat(this%split,:,:) = zero
 
-    function fft1d_full(this, f) result (fhat)
-        class( ffts ), intent(in) :: this
-        real(rkind), dimension(this%npts(1)), intent(in) :: f
-        complex(rkind), dimension(this%npts(1)) :: fhat
+           call this%ifftx(f_hat,df)
+        else 
+            df = zero
+        end if 
+    end subroutine 
 
-        integer :: i
 
-        call dfftw_execute_dft(this%plan_fwd, f, fhat(1:this%split(1)))
+    subroutine dd2(this,f, df)
+        class(ffts), intent(in) :: this
+        real(rkind), dimension(this%n2,this%n, this%n3), intent(in) :: f 
+        real(rkind), dimension(this%n2,this%n, this%n3), intent(out) :: df 
+        complex(rkind), dimension(this%n2,this%split) :: f_hat
+        integer :: k
 
-        do i=0,this%split(1)-2
-            fhat(this%npts(1)-i) = conjg( fhat(2+i) )
-        end do
-
-    end function
-
-    function ifft1d(this, fhat) result (f)
-        class( ffts ), intent(in) :: this
-        complex(rkind), dimension(this%split(1)), intent(in) :: fhat
-        real(rkind), dimension(this%npts(1)) :: f
-
-        call dfftw_execute_dft(this%plan_bwd, fhat, f)
-
-        f = f / real(this%npts(1),rkind)
-
-    end function
-
-    function getk1d(this) result(karray)
-        class( ffts ), intent(in) :: this
-        real(rkind), dimension(this%npts(1)) :: karray
-
-        karray = this%k1d
-    end function
+        if (( this%dir .eq. "y") .and. (this%n > 1)) then
+            do k = 1,this%n3
+                call this%ffty(f(:,:,k),f_hat)
+                f_hat = imi*this%k1d(:,:,k)*f_hat
+                f_hat(:,this%split) = zero
+                call this%iffty(f_hat, df(:,:,k))
+            end do 
+        else
+            df = zero
+        end if 
     
-    function init2d(this, nx, dx, ny, dy) result(ierr)
-        
-        class( ffts ), intent(inout) :: this
-        integer, intent(in) :: nx, ny
-        real(rkind), intent(in) :: dx, dy
-        integer :: ierr
+    end subroutine 
 
-        real(rkind), dimension(nx) :: kx
-        real(rkind), dimension(ny) :: ky
-        complex(rkind), dimension(:,:), allocatable :: arr_in, arr_out
-        real(rkind), dimension(:,:), allocatable :: arr_in_real
+    subroutine dd3(this,f, df)
+        class(ffts), intent(in) :: this
+        real(rkind), dimension(this%n2,this%n3, this%n), intent(in) :: f 
+        real(rkind), dimension(this%n2,this%n3, this%n), intent(out) :: df 
+        complex(rkind), dimension(this%n2,this%n3,this%split) :: f_hat
 
-        integer :: i,j
+        if ((this%dir .eq. "z") .and. (this%n > 1)) then
+           call this%fftz(f,f_hat)
 
-        if ( this%initialized ) then
-            ierr = 100
-            return
-        end if
-        
-        this%nd = 2
-        
-        if ( .not. allocated(this%npts) ) allocate( this%npts(this%nd) )
-        this%npts = [nx, ny]
+           f_hat = imi*this%k1d*f_hat
+           f_hat(:,:,this%split) = zero
 
-        if ( .not. allocated(this%dspace) ) allocate( this%dspace(this%nd) )
-        this%dspace = [dx, dy]
+           call this%ifftz(f_hat,df)
+        else 
+            df = zero
+        end if 
+    end subroutine 
 
-        if ( .not. allocated(this%k2d) ) allocate( this%k2d( this%npts(1),this%npts(2),this%nd ) )
-        kx = GetWaveNums(nx,dx)
-        ky = GetWaveNums(ny,dy)
+    subroutine fftx(this,in_arr, out_arr)
+        class(ffts), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in) :: in_arr
+        complex(rkind), dimension(:,:,:), intent(out) :: out_arr
 
-        do j=1,ny
-            do i=1,nx
-                this%k2d(i,j,1) = kx(i)
-                this%k2d(i,j,2) = ky(j)
-            end do
-        end do
+        call dfftw_execute_dft_r2c(this%plan_fwd,in_arr,out_arr)
 
-        allocate( arr_in_real(nx,ny) )
-        allocate( arr_in (nx,ny) )
-        allocate( arr_out(nx,ny) )
-        call dfftw_plan_dft_2d( this%plan_fwd, nx, ny, arr_in_real, arr_out, FFTW_FORWARD,  FFTW_EXHAUSTIVE )
-        call dfftw_plan_dft_2d( this%plan_bwd, nx, ny, arr_in, arr_out, FFTW_BACKWARD, FFTW_EXHAUSTIVE )
-        deallocate( arr_in  )
-        deallocate( arr_out )
+    end subroutine
+   
+    subroutine ffty(this,in_arr, out_arr)
+        class(ffts), intent(in) :: this
+        real(rkind), dimension(:,:), intent(in) :: in_arr
+        complex(rkind), dimension(:,:), intent(out) :: out_arr
 
+        call dfftw_execute_dft_r2c(this%plan_fwd,in_arr,out_arr)
 
-        this%initialized = .TRUE.
-        ierr = 0
-    end function
+    end subroutine
+    
+    subroutine fftz(this,in_arr, out_arr)
+        class(ffts), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in) :: in_arr
+        complex(rkind), dimension(:,:,:), intent(out) :: out_arr
 
-    function init3d(this, nx, dx, ny, dy, nz, dz) result(ierr)
-        
-        class( ffts ), intent(inout) :: this
-        integer, intent(in) :: nx, ny, nz
-        real(rkind), intent(in) :: dx, dy, dz
-        integer :: ierr
+        call dfftw_execute_dft_r2c(this%plan_fwd,in_arr,out_arr)
 
-        real(rkind), dimension(nx) :: kx
-        real(rkind), dimension(ny) :: ky
-        real(rkind), dimension(nz) :: kz
-        complex(rkind), dimension(:,:,:), allocatable :: arr_in, arr_out
-        real(rkind), dimension(:,:,:), allocatable :: arr_in_real
-
-        integer :: i,j,k
-
-        if ( this%initialized ) then
-            ierr = 100
-            return
-        end if
-        
-        this%nd = 3
-        
-        if ( .not. allocated(this%npts) ) allocate( this%npts(this%nd) )
-        this%npts = [nx, ny, nz]
-
-        if ( .not. allocated(this%dspace) ) allocate( this%dspace(this%nd) )
-        this%dspace = [dx, dy, dz]
-
-        if ( .not. allocated(this%k3d) ) allocate( this%k3d( this%npts(1),this%npts(2),this%npts(3),this%nd ) )
-        kx = GetWaveNums(nx,dx)
-        ky = GetWaveNums(ny,dy)
-        kz = GetWaveNums(nz,dz)
-
-        do k=1,nz
-            do j=1,ny
-                do i=1,nx
-                    this%k3d(i,j,k,1) = kx(i)
-                    this%k3d(i,j,k,2) = ky(j)
-                    this%k3d(i,j,k,3) = kz(k)
-                end do
-            end do
-        end do
-
-        allocate( arr_in_real(nx,ny,nz) )
-        allocate( arr_in (nx,ny,nz) )
-        allocate( arr_out(nx,ny,nz) )
-        call dfftw_plan_dft_3d( this%plan_fwd, nx, ny, nz, arr_in_real, arr_out, FFTW_FORWARD,  FFTW_EXHAUSTIVE )
-        call dfftw_plan_dft_3d( this%plan_bwd, nx, ny, nz, arr_in, arr_out, FFTW_BACKWARD, FFTW_EXHAUSTIVE )
-        deallocate( arr_in  )
-        deallocate( arr_out )
+    end subroutine
 
 
-        this%initialized = .TRUE.
-        ierr = 0
-    end function
+    subroutine ifftx(this,in_arr, out_arr)
+        class(ffts), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(out) :: out_arr
+        complex(rkind), dimension(:,:,:), intent(in) :: in_arr
 
-    pure function GetWaveNums(nx,dx) result(k)
+        call dfftw_execute_dft_c2r(this%plan_bwd,in_arr,out_arr)
+
+        out_arr = out_arr*this%onebyn
+    end subroutine
+
+    subroutine iffty(this,in_arr, out_arr)
+        class(ffts), intent(in) :: this
+        real(rkind), dimension(:,:), intent(out) :: out_arr
+        complex(rkind), dimension(:,:), intent(in) :: in_arr
+
+        call dfftw_execute_dft_c2r(this%plan_bwd,in_arr,out_arr)
+
+        out_arr = out_arr*this%onebyn
+    
+    end subroutine
+    
+    subroutine ifftz(this,in_arr, out_arr)
+        class(ffts), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(out) :: out_arr
+        complex(rkind), dimension(:,:,:), intent(in) :: in_arr
+
+        call dfftw_execute_dft_c2r(this%plan_bwd,in_arr,out_arr)
+
+        out_arr = out_arr*this%onebyn
+    
+    end subroutine
+
+    pure function GetWaveNums(nx,dx) result(k_small)
 
         integer, intent(in) :: nx
         real(rkind), intent(in) :: dx
         real(rkind), dimension(nx) :: k
+        real(rkind), dimension(nx) :: k_small
 
         integer :: i,dummy
 
@@ -306,6 +289,7 @@ contains
 
         k = ifftshift(k)
 
+        k_small = k(1:(nx/2 + 1))
     end function
 
     pure function ifftshift(k) result(kshift)
@@ -327,23 +311,14 @@ contains
 
     end function
 
-
-    subroutine destroy(this)
-        
+    subroutine destroy(this) 
         class(ffts), intent(inout) :: this
 
-        if ( allocated(this%k1d) ) deallocate( this%k1d )
-        if ( allocated(this%k2d) ) deallocate( this%k2d )
-        if ( allocated(this%k3d) ) deallocate( this%k3d )
-        if ( allocated(this%npts) ) deallocate( this%npts )
-        if ( allocated(this%split) ) deallocate( this%split )
-        if ( allocated(this%dspace) ) deallocate( this%dspace )
-
+        if (allocated(this%k1d)) deallocate (this%k1d)
         call dfftw_destroy_plan ( this%plan_fwd )
         call dfftw_destroy_plan ( this%plan_bwd )
 
-        this%initialized = .FALSE.
+        this%initialized = .false.
+    end subroutine 
 
-    end subroutine
-
-end module
+end module 
