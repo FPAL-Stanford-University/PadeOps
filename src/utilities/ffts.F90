@@ -8,7 +8,6 @@ module fftstuff
 
     include "fftw3.f"
 
-    integer :: fftw_plan = FFTW_MEASURE
 
     type ffts
         private 
@@ -29,6 +28,8 @@ module fftstuff
         integer :: n2, n3
 
         logical :: initialized = .false.
+        
+        integer :: fftw_plan = FFTW_MEASURE
 
         contains
 
@@ -51,11 +52,12 @@ module fftstuff
 
 contains
 
-    function init(this, n_, dir_, n2_, n3_, dx_) result(ierr)
+    function init(this, n_, dir_, n2_, n3_, dx_, exhaustive) result(ierr)
         class(ffts), intent(inout) :: this
         integer, intent(in) :: n_, n2_, n3_
         character(len=1), intent(in) :: dir_
         integer :: ierr
+        logical, optional :: exhaustive
         real(rkind), intent(in) :: dx_
         real(rkind), dimension(:,:,:), allocatable :: in_arr
         complex(rkind), dimension(:,:,:), allocatable :: out_arr
@@ -75,7 +77,10 @@ contains
 
         this%split = n_/2 + 1
         
-        
+        if (present(exhaustive)) then
+            if (exhaustive) this%fftw_plan = FFTW_EXHAUSTIVE
+        end if 
+
         if (allocated(this%k1d)) deallocate(this%k1d)
         allocate(k_tmp(this%split))
         k_tmp = GetWaveNums(this%n,this%dx)
@@ -95,12 +100,12 @@ contains
             call dfftw_plan_many_dft_r2c(this%plan_fwd, 1, this%n, &
                 this%n2*this%n3, in_arr, this%n, 1, &
                 this%n, out_arr, this%split, 1, this%split, &
-                fftw_plan)
+                this%fftw_plan)
 
             call dfftw_plan_many_dft_c2r(this%plan_bwd, 1, this%n, &
                 this%n2*this%n3, out_arr, this%split, 1, &
                 this%split, in_arr, this%n, 1, this%n, &
-                fftw_plan)
+                this%fftw_plan)
 
              deallocate (in_arr, out_arr)
 
@@ -117,11 +122,11 @@ contains
 
             call dfftw_plan_many_dft_r2c(this%plan_fwd, 1, this%n, &
                 this%n2, in_arr_2d, this%n, this%n2, 1, out_arr_2d, this%split, &
-                this%n2, 1, fftw_plan)
+                this%n2, 1, this%fftw_plan)
 
             call dfftw_plan_many_dft_c2r(this%plan_bwd, 1, this%n, &
                 this%n2, out_arr_2d, this%split, this%n2, 1, in_arr_2d, this%n, &
-                this%n2, 1, fftw_plan)
+                this%n2, 1, this%fftw_plan)
 
             deallocate (in_arr_2d, out_arr_2d) 
         
@@ -138,12 +143,12 @@ contains
             call dfftw_plan_many_dft_r2c(this%plan_fwd, 1, this%n, &
                 this%n2*this%n3, in_arr, this%n, this%n2*this%n3, &
                 1, out_arr, this%split, this%n2*this%n3, 1, &
-                fftw_plan)
+                this%fftw_plan)
 
             call dfftw_plan_many_dft_c2r(this%plan_bwd, 1, this%n, &
                 this%n2*this%n3, out_arr, this%split, this%n2*this%n3, &
                 1, out_arr, this%n, this%n2*this%n3, 1, &
-                fftw_plan)
+                this%fftw_plan)
              
             deallocate (in_arr, out_arr)
         case default 

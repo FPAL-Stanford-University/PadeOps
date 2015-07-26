@@ -51,8 +51,8 @@ program test_cd10
     print*, "Created initial data"
 
     ierr = xfour%init( nx, "x", ny, nz, dx)
-    ierr = yfour%init( ny, "y", nx, nz, dy)
-    ierr = zfour%init( nz, "z", nx, ny, dz)
+    ierr = yfour%init( ny, "y", nx, nz, dy, .false.)
+    ierr = zfour%init( nz, "z", nx, ny, dz, .true.)
 
     print*, "Initialized"
     call tic() 
