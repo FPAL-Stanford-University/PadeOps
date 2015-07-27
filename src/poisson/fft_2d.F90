@@ -11,7 +11,7 @@ module fft_2d_stuff
     
     type fft_2d
         private
-        type(decomp_info)           :: physical
+        type(decomp_info),public    :: physical
         type(decomp_info),public    :: spectral
         
         character(len=1)  :: base_pencil
@@ -19,6 +19,10 @@ module fft_2d_stuff
 
         complex(rkind), dimension(:,:,:), allocatable :: f_yhat_in_yD
         complex(rkind), dimension(:,:,:), allocatable :: f_xyhat_in_xD
+
+        real(rkind), dimension(:,:),allocatable, public :: k1
+        real(rkind), dimension(:,:),allocatable, public :: k2
+        real(rkind), dimension(:,:),allocatable, public :: kabs_sq
 
         integer(kind=8) :: plan_r2c_y
         integer(kind=8) :: plan_c2c_fwd_x
@@ -39,16 +43,20 @@ module fft_2d_stuff
 
 contains
 
-    function init(this,nx_global,ny_global,nz_global,base_pencil_, exhaustive) result(ierr)
+    function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy, exhaustive) result(ierr)
         class(fft_2d), intent(inout) :: this
         integer, intent(in) :: nx_global, ny_global, nz_global
         character(len=1), intent(in) :: base_pencil_
+        real(rkind), intent(in) :: dx, dy
         logical, optional :: exhaustive
-        integer :: ierr
+        integer :: ierr, i, j, k
         integer, dimension(2) :: dims, dummy_periods, dummy_coords
         real(rkind), dimension(:,:), allocatable :: real_arr_2d
         complex(rkind), dimension(:,:), allocatable :: cmplx_arr_2d
         integer :: n_sizeact, n_sizeinput, n_sizeoutput, n_chunk, n_howmany, n_jump
+        real(rkind), dimension(:,:,:), allocatable :: k1_in_x
+        real(rkind), dimension(:,:,:), allocatable :: k1_in_y
+        real(rkind), dimension(:),     allocatable :: k2_in_y
 
         ! Get the decompotion performed before calling this function
         call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, & 
@@ -119,6 +127,8 @@ contains
         
         deallocate(real_arr_2d, cmplx_arr_2d)
 
+
+
         ! Create plan for fwd transform in x (in place transform)
          call dfftw_plan_many_dft(this%plan_c2c_fwd_x, 1, this%spectral%xsz(1),&  
                 this%spectral%xsz(2)*this%spectral%xsz(3), this%f_xyhat_in_xD, this%spectral%xsz(1), 1, &
@@ -134,6 +144,39 @@ contains
                 
          this%base_pencil = base_pencil_
          this%normfactor = 1._rkind/(real(nx_global*ny_global))
+
+         ! Make wavenumbers
+         allocate (k1_in_x(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
+         allocate (k1_in_y(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
+         allocate (k2_in_y(ny_global))
+
+         allocate(this%k1(this%spectral%ysz(1),this%spectral%ysz(2)))
+         allocate(this%k2(this%spectral%ysz(1),this%spectral%ysz(2)))
+         allocate(this%kabs_sq(this%spectral%ysz(1),this%spectral%ysz(2)))
+         
+         ! Generate full k2 
+         k2_in_y = GetWaveNums(ny_global,dy)
+
+
+         do i = 1,this%spectral%ysz(1)
+            this%k2(i,:) = k2_in_y(1:this%spectral%ysz(2))
+         end do 
+
+         deallocate(k2_in_y)
+
+         do k = 1,this%spectral%xsz(3)
+            do j = 1,this%spectral%xsz(2)
+                k1_in_x(:,j,k) = GetWaveNums(nx_global,dx)
+            end do 
+         end do
+         
+         ! Now transpose it from x -> y
+         call transpose_x_to_y(k1_in_x,k1_in_y,this%spectral)
+         this%k1 = k1_in_y(:,:,1)
+         deallocate(k1_in_y, k1_in_x)
+
+         this%kabs_sq = this%k1*this%k1 + this%k2*this%k2
+
          this%initialized = .true.
 
          ierr = 0
@@ -201,6 +244,9 @@ contains
         ! Now transform this output from x -> y
         call transpose_x_to_y(this%f_xyhat_in_xD,tmp_arr, this%spectral)
 
+        ! Set the oddball to zero
+        tmp_arr(:,this%spectral%ysz(2),:) = 0._rkind
+
         ! Now take c2r transform along y 
         do k = 1,this%physical%ysz(3)
             call dfftw_execute_dft_c2r(this%plan_c2r_y, tmp_arr(:,:,k), output(:,:,k))
@@ -225,5 +271,42 @@ contains
         end if 
 
     end subroutine
+    
+    pure function GetWaveNums(nx,dx) result(k)
+        use constants, only: pi, two
+        integer, intent(in) :: nx
+        real(rkind), intent(in) :: dx
+        real(rkind), dimension(nx) :: k
+
+        integer :: i,dummy
+
+        dummy = nx - MOD(nx,2)
+
+        do i = 1,nx
+            k(i) = ( -pi + (i-1)*two*pi/real(dummy,rkind) ) / dx
+        end do
+
+        k = ifftshift(k)
+
+    end function
+
+    pure function ifftshift(k) result(kshift)
+
+        real(rkind), dimension(:), intent(in) :: k
+        real(rkind), dimension(SIZE(k)) :: kshift
+        integer :: n
+
+        n = SIZE(k)
+
+        select case ( MOD(n,2) )
+        case (0)
+            kshift(1:n/2) = k(n/2+1:n)
+            kshift(n/2+1:n) = k(1:n/2)
+        case (1)
+            kshift(1:(n+1)/2) = k((n+1)/2:n)
+            kshift((n+1)/2+1:n) = k(1:(n-1)/2)
+        end select
+
+    end function
 
 end module 
