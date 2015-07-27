@@ -33,7 +33,7 @@ module fft_2d_stuff
             procedure :: fft2
             procedure :: ifft2
             procedure :: destroy 
-
+            procedure :: alloc_output
     end type 
 
 
@@ -67,9 +67,8 @@ contains
         end if 
         
         if (((dims(1) == 1) .or. (dims(2) == 1)).and. (nproc > 1)) then
-            !call decomp_2d_abort(303,"Only 2d decompositions supported. If the &
-            !auto-tuner gives an effectively 1d decomposition, overwrite it to &
-            !the next best 2d decomposition")
+            call decomp_2d_abort(303,"Only 2d decompositions supported. Check if the &
+            auto-tuner gave an effectively 1d decomposition")
         end if 
 
         if (present(exhaustive)) then
@@ -79,7 +78,7 @@ contains
         ! Generate the physical space decomposition
         call decomp_info_init(nx_global, ny_global, nz_global, this%physical)
         
-        ! Generate the spectral space decompisition
+        ! Generate the spectral space decomposition
         if (allocated(this%f_yhat_in_yD)) deallocate(this%f_yhat_in_yD)
         if (allocated(this%f_xyhat_in_xD)) deallocate(this%f_xyhat_in_xD)
       
@@ -134,7 +133,7 @@ contains
         
                 
          this%base_pencil = base_pencil_
-         this%normfactor = 1._rkind
+         this%normfactor = 1._rkind/(real(nx_global*ny_global))
          this%initialized = .true.
 
          ierr = 0
@@ -213,5 +212,18 @@ contains
         ! Done 
      end subroutine
 
+    subroutine alloc_output(this,arr_out) 
+        class(fft_2d), intent(in) :: this
+        complex(rkind), dimension(:,:,:),allocatable, intent(inout) :: arr_out
+
+        if (this%initialized) then
+            if (allocated(arr_out)) deallocate(arr_out)
+            allocate(arr_out(this%spectral%ysz(1), this%spectral%ysz(2), this%spectral%ysz(3)))
+            arr_out = 0._rkind
+        else
+            call decomp_2d_abort(305,"The fft_2d type has not been initialized")
+        end if 
+
+    end subroutine
 
 end module 
