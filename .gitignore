@@ -1,3 +1,4 @@
 # Files to be ignored by git
 build
 *.mod
+*.F90.swp

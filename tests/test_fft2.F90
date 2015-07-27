@@ -10,11 +10,11 @@ program test_fft2d
     complex(rkind), dimension(:,:,:), allocatable :: fhat
 
     integer :: nx = 512, ny = 512, nz = 512
-    integer :: prow = 4, pcol = 4
+    integer :: prow = 0, pcol = 0
     integer :: ierr, i, j, k
     real(rkind) :: maxerr, mymaxerr
     
-    logical :: get_exhaustive_plan = .false.
+    logical :: get_exhaustive_plan = .true.
     logical, parameter :: verbose = .false. 
 
     double precision :: t0, t1
@@ -50,7 +50,7 @@ program test_fft2d
 
     f = x + y 
    
-
+    call MPI_BARRIER(mpi_comm_world,ierr)
     t0 = MPI_WTIME()
     ! Forward transform 
     call myfft2d%fft2(f,fhat)

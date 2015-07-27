@@ -123,13 +123,13 @@ contains
          call dfftw_plan_many_dft(this%plan_c2c_fwd_x, 1, this%spectral%xsz(1),&  
                 this%spectral%xsz(2)*this%spectral%xsz(3), this%f_xyhat_in_xD, this%spectral%xsz(1), 1, &
                 this%spectral%xsz(1), this%f_xyhat_in_xD, this%spectral%xsz(1), 1, this%spectral%xsz(1), &   
-                FFTW_FORWARD, this%fft_plan)   
+                FFTW_FORWARD, FFTW_MEASURE)!this%fft_plan)   
                
         ! Create plan for bwd transform in x (in place transform)        
          call dfftw_plan_many_dft(this%plan_c2c_bwd_x, 1, this%spectral%xsz(1),&  
                 this%spectral%xsz(2)*this%spectral%xsz(3), this%f_xyhat_in_xD, this%spectral%xsz(1), 1, &
                 this%spectral%xsz(1), this%f_xyhat_in_xD, this%spectral%xsz(1), 1, this%spectral%xsz(1), &   
-                FFTW_BACKWARD, this%fft_plan)   
+                FFTW_BACKWARD, FFTW_MEASURE)!, this%fft_plan)   
         
                 
          this%base_pencil = base_pencil_
