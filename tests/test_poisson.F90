@@ -5,12 +5,12 @@ program test_poisson
     use constants, only: pi, two
     use poisson_eq, only: poisson
 
-    real(rkind), dimension(:,:,:), allocatable :: x, y, z, f,d2fdx2, d2fdy2, rhs, fold
+    real(rkind), dimension(:,:,:), allocatable :: x, y, z, f,d2fdx2, d2fdy2, d2fdz2, rhs, fold
     type(poisson) :: myPoisson
     type(decomp_info) :: gp
 
-    integer :: nx = 1024, ny = 512, nz = 256
-    integer :: prow = 0, pcol = 0
+    integer :: nx = 256, ny = 256, nz = 256
+    integer :: prow = 2, pcol = 2
     integer :: ierr, i, j, k
     real(rkind) :: maxerr, mymaxerr
     
@@ -31,13 +31,14 @@ program test_poisson
     allocate( f         ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     allocate( d2fdx2    ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     allocate( d2fdy2    ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
+    allocate( d2fdz2    ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     allocate( rhs       ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     allocate( fold      ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     
    
     dx = two*pi/nx
     dy = two*pi/ny
-    dz = two*pi/nz
+    dz = two*pi/(nz-1)
 
     ! Initialize Poisson Solver 
     ierr = myPoisson%init(nx, ny, nz,dx, dy, dz,"four", "cd08", 0)   
@@ -55,14 +56,14 @@ program test_poisson
         end do 
     end do 
 
-    f = sin(x)*sin(y)
-    !dfdx = cos(x)*sin(y)
-    d2fdx2 = -sin(x)*sin(y)
-    d2fdy2 = -sin(x)*sin(y)
+    f = sin(x)*sin(y)*cos(z)
+    d2fdx2 = -sin(x)*sin(y)*cos(z)
+    d2fdy2 = -sin(x)*sin(y)*cos(z)
+    d2fdz2 = -sin(x)*sin(y)*cos(z)
 
     ! Generate manufactured RHS
-    rhs = d2fdx2 + d2fdy2
-  
+    rhs = d2fdx2 + d2fdy2 + d2fdz2
+ 
     call mpi_barrier(mpi_comm_world, ierr) 
     t0 = MPI_WTIME()
     call myPoisson%solve(rhs,fold)
