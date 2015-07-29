@@ -22,4 +22,5 @@ module constants
     
     complex(rkind), parameter :: imi=(zero,one)
 
+    real(rkind), parameter :: r_eps = real(1.d-15,rkind)
 end module

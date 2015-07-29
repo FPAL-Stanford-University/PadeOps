@@ -1,5 +1,6 @@
 # Files to be ignored by git
 build
 *.mod
+*.F90.swp
 dependencies/2decomp_fft
 dependencies/fftw-3.3.4
