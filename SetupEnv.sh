@@ -1,1 +1,1 @@
-setup/SetupEnv_BlueWaters_Intel.sh
+setup/SetupEnv_LLNL_Intel.sh
