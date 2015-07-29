@@ -4,4 +4,4 @@ build
 *.mod
 *.F90.swp
 dependencies/2decomp_fft
-dependencies/fftw-3.3.4
+dependencies/fftw-*[^tar.gz]
