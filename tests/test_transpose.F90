@@ -20,7 +20,7 @@ program test_transpose
 
     integer :: i, j, k, ierr
 
-    integer :: nx = 2048, ny = 256, nz = 256
+    integer :: nx = 512, ny = 512, nz = 512
     integer :: prow = 0, pcol = 0
 
     logical :: periodicx = .TRUE.
