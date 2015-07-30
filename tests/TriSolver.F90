@@ -163,7 +163,7 @@ end module
 
 program testTridiag
     use kind_parameters, only: rkind
-    use constants, only : pi, one, zero, two
+    use constants, only : pi, two
     use TridiagSolver, only: n, tridiag,ComputeD1RHS, computeTridiag, solveTridiag
     use timer,           only: tic, toc
     implicit none

@@ -4,7 +4,7 @@ module exits
     
     implicit none
     private
-    public :: GracefulExit, parallelRun
+    public :: GracefulExit
      
 contains
 

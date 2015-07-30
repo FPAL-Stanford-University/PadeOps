@@ -27,6 +27,12 @@ if ( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
         set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -pg -check all -fpe0 -warn -traceback -debug extended")
     endif()
+elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+    if ( CMAKE_BUILD_TYPE MATCHES "Release" )
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -Wall -Wconversion -Wextra -ffree-form -ffree-line-length-none -ffast-math -march=native -funroll-loops -fno-protect-parens")
+    elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
+        set(CMAKE_Fortran_FLAGS "-Og -g -pg -ffree-form -ffree-line-length-none -fbounds-check -ffpe-trap=zero,overflow,underflow -Wall -Wconversion -Wextra -Wsurprising -fbacktrace")
+    endif()
 endif()
 
 # Add source file directories

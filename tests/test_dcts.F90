@@ -1,12 +1,11 @@
 program test_dcts
 
     use kind_parameters, only: rkind
-    use constants,       only: zero,one,two,pi
+    use constants,       only: pi
     use dctstuff,        only: dcts
     implicit none
 
     integer, parameter :: nx = 2049
-    logical, parameter :: periodic = .TRUE.
 
     type( dcts ) :: mydcts
     real(rkind), dimension(nx) :: x,f,df,df_exact

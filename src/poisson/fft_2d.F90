@@ -65,18 +65,18 @@ contains
 
         if (base_pencil_ .ne. "y") then
             call decomp_2d_abort(300,"Currently only Y - baseline pencils are &
-            supported for 2D ffts. FFT is always taken in XY plane for each Z &
-            location. Input array must be provided in Y decomposition setting.")
+          & supported for 2D ffts. FFT is always taken in XY plane for each Z &
+          & location. Input array must be provided in Y decomposition setting.")
         end if
 
         if ( mod(ny_global,2) .ne. 0) then
             call decomp_2d_abort(301,"Only even number of data are supported &
-            in Y direction. NY_GLOBAL must be an even number.") 
+          & in Y direction. NY_GLOBAL must be an even number.") 
         end if 
         
         if (((dims(1) == 1) .or. (dims(2) == 1)).and. (nproc > 1)) then
             call decomp_2d_abort(303,"Only 2d decompositions supported. Check if the &
-            auto-tuner gave an effectively 1d decomposition")
+          & auto-tuner gave an effectively 1d decomposition")
         end if 
 
         if (present(exhaustive)) then

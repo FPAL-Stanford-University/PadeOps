@@ -1,7 +1,7 @@
 program test_cd06
 
     use kind_parameters, only: rkind
-    use constants,       only: zero,one,two,pi
+    use constants,       only: two,pi
     use timer,           only: tic,toc
     use cd06stuff,       only: cd06
     implicit none

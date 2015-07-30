@@ -1,7 +1,7 @@
 #!/bin/bash
 
 CWD=`pwd`
-export COMPILER_ID=Intel
+export COMPILER_ID=GNU
 export FC=mpif90
 export CC=mpicc
 export CXX=mpicxx
