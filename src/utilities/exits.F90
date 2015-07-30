@@ -16,5 +16,8 @@ contains
         call decomp_2d_abort(errcode, message)
     
     end subroutine
+
+    subroutine message_char()
+    end subroutine
     
 end module 
