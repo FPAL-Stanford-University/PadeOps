@@ -6,9 +6,11 @@ module kind_parameters
     implicit none
     
     private
-    public :: rkind
+    public :: rkind, clen, stdin, stdout, stderr
 
     integer, parameter :: rkind=real64
+
+    integer, parameter :: clen = 100
 
     integer, parameter :: stdin  = 5
     integer, parameter :: stdout = 6

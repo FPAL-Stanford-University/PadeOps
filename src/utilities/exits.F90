@@ -1,10 +1,15 @@
 module exits
 
-    use decomp_2d, only: decomp_2d_abort
+    use kind_parameters, only: stdout
+    use decomp_2d, only: nrank, decomp_2d_abort
     
     implicit none
     private
-    public :: GracefulExit
+    public :: GracefulExit, message
+        
+    interface message
+        module procedure message_char
+    end interface
      
 contains
 
@@ -17,7 +22,11 @@ contains
     
     end subroutine
 
-    subroutine message_char()
+    subroutine message_char(mess)
+        character(len=*) :: mess
+
+        if (nrank == 0) write(stdout,*) mess
+
     end subroutine
     
 end module 

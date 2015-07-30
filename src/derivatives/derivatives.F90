@@ -1,5 +1,5 @@
-module derivatives
-    use kind_parameters, only: rkind
+module derivativeStuff
+    use kind_parameters, only: rkind, clen
     use cd10stuff, only: cd10
     use cd06stuff, only: cd06
     use fftstuff, only: ffts
@@ -12,7 +12,7 @@ module derivatives
 
     type derivatives
         private
-        character(len=*) :: xmethod, ymethod, zmethod
+        character(len=clen) :: xmethod, ymethod, zmethod
         type(cd10) :: xcd10, ycd10, zcd10
         type(cd06) :: xcd06, ycd06, zcd06
         type(ffts) :: xfour, yfour, zfour
@@ -26,13 +26,13 @@ module derivatives
         logical    :: initialized = .false. 
         contains
             procedure :: init
-            procedure :: destroy
-            procedure :: ddx
-            procedure :: ddy
-            procedure :: ddz
-            procedure :: d2dx2
-            procedure :: d2dy2
-            procedure :: d2dz2
+            ! procedure :: destroy
+            ! procedure :: ddx
+            ! procedure :: ddy
+            ! procedure :: ddz
+            ! procedure :: d2dx2
+            ! procedure :: d2dy2
+            ! procedure :: d2dz2
     end type
 
 
@@ -69,22 +69,22 @@ contains
         if (present(method_x)) then
             select case (method_x)
             case ("cd10")
-                ierr = xcd10%init( nx, dx, periodic_x, 0, 0)
+                ierr = this % xcd10%init( nx, dx, periodic_x, 0, 0)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing cd10 failed in X ",11)
                 end if 
             case ("cd06")
-                ierr = xcd06%init( nx, dx, periodic_x, 0, 0)
+                ierr = this % xcd06%init( nx, dx, periodic_x, 0, 0)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing cd06 failed in X ",12)
                 end if 
             case ("four")
-                ierr = xfour%init( nx, "x", ny, nz, dx)
+                ierr = this % xfour%init( nx, "x", ny, nz, dx)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing Fourier Collocation (FOUR) failed in X ",13)
                 end if 
             case ("cheb")
-                ierr = xcheb%init( nx )
+                ierr = this % xcheb%init( nx )
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in X ",14)
                 end if 
@@ -92,33 +92,32 @@ contains
                 call GracefulExit("Invalid method selected in x direction ",01)
             end select
         else
-            ierr = xcd10%init( nx, dx, periodic_x, 0, 0)
+            ierr = this % xcd10%init( nx, dx, periodic_x, 0, 0)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing cd10 (default) failed in X ",11)
             end if 
         end if 
        
         ! Y direction
-
         if (present(method_y)) then
             select case (method_y)
             case ("cd10")
-                ierr = ycd10%init( ny, dy, periodic_y, 0, 0)
+                ierr = this % ycd10%init( ny, dy, periodic_y, 0, 0)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing cd10 failed in Y ",11)
                 end if 
             case ("cd06")
-                ierr = ycd06%init( ny, dy, periodic_y, 0, 0)
+                ierr = this % ycd06%init( ny, dy, periodic_y, 0, 0)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing cd06 failed in Y",12)
                 end if 
             case ("four")
-                ierr = yfour%init( ny, "y", nx, nz, dy)
+                ierr = this % yfour%init( ny, "y", nx, nz, dy)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing Fourier Collocation (FOUR) failed in Y ",13)
                 end if 
             case ("cheb")
-                ierr = ycheb%init( ny )
+                ierr = this % ycheb%init( ny )
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in Y",14)
                 end if 
@@ -126,7 +125,7 @@ contains
                 call GracefulExit("Invalid method selected in y direction",01)
             end select
         else
-            ierr = ycd10%init( ny, dy, periodic_y, 0, 0)
+            ierr = this % ycd10%init( ny, dy, periodic_y, 0, 0)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing cd10 (default) failed in Y ",11)
             end if 
@@ -134,26 +133,25 @@ contains
 
 
         ! Z direction
-
         if (present(method_z)) then
             select case (method_z)
             case ("cd10")
-                ierr = zcd10%init( nz, dz, periodic_z, 0, 0)
+                ierr = this % zcd10%init( nz, dz, periodic_z, 0, 0)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing cd10 failed in Z ",11)
                 end if 
             case ("cd06")
-                ierr = zcd06%init( nz, dz, periodic_z, 0, 0)
+                ierr = this % zcd06%init( nz, dz, periodic_z, 0, 0)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing cd06 failed in Z",12)
                 end if 
             case ("four")
-                ierr = zfour%init( nz, "z", nx, ny, dz)
+                ierr = this % zfour%init( nz, "z", nx, ny, dz)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing Fourier Collocation (FOUR) failed in Z ",13)
                 end if 
             case ("cheb")
-                ierr = zcheb%init( nz )
+                ierr = this % zcheb%init( nz )
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in Z",14)
                 end if 
@@ -161,13 +159,13 @@ contains
                 call GracefulExit("Invalid method selected in z direction",01)
             end select
         else
-            ierr = zcd10%init( nz, dz, periodic_z, 0, 0)
+            ierr = this % zcd10%init( nz, dz, periodic_z, 0, 0)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing cd10 (default) failed in Z ",11)
+            end if
         end if 
 
         ! Metrics
-
         if (present(xMetric)) then
             if (xMetric) then
                 call GracefulExit("Code INCOMPLETE! Metric terms are not &
@@ -196,13 +194,11 @@ contains
             end if
         end if 
 
-        this%xmethod = x_method 
-        this%ymethod = y_method 
-        this%zmethod = z_method 
+        this%xmethod = method_x 
+        this%ymethod = method_y 
+        this%zmethod = method_z 
 
     end subroutine
 
     
-    
-    
-end module derivatives
+end module
