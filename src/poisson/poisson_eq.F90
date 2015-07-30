@@ -20,7 +20,7 @@ module poisson_eq
 
 
         real(rkind) :: dx, dy, dz       ! Grid resolution
-        real(rkind) :: nx_g, ny_g, nz_g ! Global dimensions for problem 
+        integer     :: nx_g, ny_g, nz_g ! Global dimensions for problem 
         
         real(rkind), dimension(:,:), allocatable :: k1, k2, kabs_sq ! Exact or modified wavenumbers
 
@@ -104,7 +104,7 @@ contains
             this%k2 = tmp_in_z(:,:,1,2)
             this%kabs_sq = this%k1*this%k1 + this%k2*this%k2
             
-            if (this%kabs_sq(1,1) == 0._rkind) then
+            if (abs(this%kabs_sq(1,1)) .LT. real(0.0D-20,rkind)) then
                 this%have_zero_wavenumber = .true.
             else
                 this%have_zero_wavenumber = .false.  
@@ -216,7 +216,7 @@ contains
             if (this%have_zero_wavenumber) then
                 do j = 1,this%fft_xy%spectral%zsz(2)
                     do i = 1,this%fft_xy%spectral%zsz(1)
-                        if (this%kabs_sq(i,j) == 0._rkind) then
+                        if (abs(this%kabs_sq(i,j)) .LE. real(0.D-20,rkind)) then
                             a (i,j,1) = 0._rkind
                             b (i,j,1) = 0._rkind
                             at(i,j,1) = 0._rkind
@@ -327,7 +327,6 @@ contains
         call this%fft_xy%ifft2(this%rhs_xy_hat_in_y,fsol)
 
         ! Done 
-20 format(1x,16D10.3)
     end subroutine
 
 

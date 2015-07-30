@@ -1,29 +1,23 @@
 module exits
 
-    ! use mpi_module, only : taskid
+    use decomp_2d, only: decomp_2d_abort
+    
     implicit none
     private
-    public :: GracefulExit, parallelRun
-    logical :: parallelRun = .false. 
+    public :: GracefulExit
      
 contains
 
-    subroutine gracefulExit(message, errcode)
+    subroutine GracefulExit(message, errcode)
+        
         character(len=*), intent(in) :: message
         integer, intent(in) :: errcode
 
-        if (parallelRun) then
-            print*, "Message from task: ", 0! taskid
-            print*, message
-            print*, "Error Code:", errcode
-            stop
-            !call mpi_abort(?,?)
-        else
-            print*, "Message from task: ", 0
-            print*, message
-            print*, "Error Code:", errcode
-            stop
-        end if 
+        call decomp_2d_abort(errcode, message)
+    
+    end subroutine
+
+    subroutine message_char()
     end subroutine
     
 end module 

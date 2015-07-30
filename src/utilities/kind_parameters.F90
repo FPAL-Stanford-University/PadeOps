@@ -10,4 +10,8 @@ module kind_parameters
 
     integer, parameter :: rkind=real64
 
+    integer, parameter :: stdin  = 5
+    integer, parameter :: stdout = 6
+    integer, parameter :: stderr = 0
+
 end module

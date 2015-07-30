@@ -241,7 +241,7 @@ end module
 
 program testPenta
     use kind_parameters, only: rkind
-    use constants, only : pi, one, zero, two
+    use constants, only : pi, two
     use PentadiagonalSolver, only: n, penta,ComputeD1RHS, computePenta, SolvePenta
     implicit none
     integer :: i

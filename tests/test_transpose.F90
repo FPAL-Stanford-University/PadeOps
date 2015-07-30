@@ -8,7 +8,7 @@ program test_transpose
                                nrank, real_type
 
     use kind_parameters, only: rkind
-    use constants,       only: zero,one,two,pi
+    use constants,       only: one,two,pi
     use timer,           only: tic, toc
 
     use cd10stuff,       only: cd10
@@ -35,7 +35,7 @@ program test_transpose
 
     real(rkind) :: mymaxerr, maxerr
 
-    double precision :: t0, t1, t3, t4, xtime, ytime, ztime, dummytime, time2trans_x, time2compute_x, time2trans_z, time2compute_z
+    double precision :: t0, t1, xtime, ytime, ztime, dummytime, time2trans_x, time2compute_x
 
     call MPI_Init(ierr)
 

@@ -1,7 +1,7 @@
 program test_cd10
 
     use kind_parameters, only: rkind
-    use constants,       only: zero,one,two,pi
+    use constants,       only: two,pi
     use timer,           only: tic,toc
     use fftstuff,            only: ffts
     implicit none
