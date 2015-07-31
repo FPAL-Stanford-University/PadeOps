@@ -23,8 +23,8 @@ module fftstuff
 
         integer :: split
 
-        character(len=1) :: dir = "x"
-
+       ! character(len=1) :: dir = "x"
+        integer :: dir = 1
         integer :: n2, n3
 
         logical :: initialized = .false.
@@ -34,6 +34,7 @@ module fftstuff
         contains
 
             procedure :: init
+            procedure :: GetSize
             procedure :: destroy
             procedure :: dd1
             procedure :: dd2
@@ -52,6 +53,13 @@ module fftstuff
 
 contains
 
+    pure function GetSize(this) result(val)
+        class(ffts), intent(in) :: this
+        integer :: val 
+
+        val = this%n
+    end function
+    
     function init(this, n_, dir_, n2_, n3_, dx_, exhaustive) result(ierr)
         class(ffts), intent(inout) :: this
         integer, intent(in) :: n_, n2_, n3_
@@ -67,8 +75,14 @@ contains
         real(rkind), dimension(:), allocatable :: k_tmp
         integer :: i, j, k
         
-
-        this%dir = dir_
+        select case (dir_)
+        case ("x")
+            this%dir = 1
+        case ("y")
+            this%dir = 2
+        case ("z")
+            this%dir = 3
+        end select
         this%n = n_
         this%n2 = n2_
         this%n3 = n3_
@@ -87,7 +101,7 @@ contains
         
         
         select case (this%dir)
-        case ("x")
+        case (1)
             allocate (this%k1d(this%split,this%n2,this%n3))
             do k = 1,this%n3
                 do j = 1,this%n2
@@ -109,7 +123,7 @@ contains
 
              deallocate (in_arr, out_arr)
 
-        case ("y")
+        case (2)
             allocate (this%k1d(this%n2,this%split,this%n3))
             do k = 1,this%n3
                 do i = 1,this%n2
@@ -130,7 +144,7 @@ contains
 
             deallocate (in_arr_2d, out_arr_2d) 
         
-        case ("z")
+        case (3)
             allocate (this%k1d(this%n2,this%n3,this%n))
             do i = 1,this%n2
                 do j = 1,this%n3
@@ -166,16 +180,16 @@ contains
         real(rkind), dimension(this%n,this%n2, this%n3), intent(out) :: df 
         complex(rkind), dimension(this%split,this%n2,this%n3) :: f_hat
 
-        if ((this%dir .eq. "x") .and. (this%n > 1)) then
+        !if ((this%dir .eq. 1) .and. (this%n > 1)) then
            call this%fftx(f,f_hat)
 
            f_hat = imi*this%k1d*f_hat
            f_hat(this%split,:,:) = zero
 
            call this%ifftx(f_hat,df)
-        else 
-            df = zero
-        end if 
+        !else 
+        !    df = zero
+        !end if 
     end subroutine 
 
 
@@ -186,16 +200,16 @@ contains
         complex(rkind), dimension(this%n2,this%split) :: f_hat
         integer :: k
 
-        if (( this%dir .eq. "y") .and. (this%n > 1)) then
+        !if (( this%dir .eq. 2) .and. (this%n > 1)) then
             do k = 1,this%n3
                 call this%ffty(f(:,:,k),f_hat)
                 f_hat = imi*this%k1d(:,:,k)*f_hat
                 f_hat(:,this%split) = zero
                 call this%iffty(f_hat, df(:,:,k))
             end do 
-        else
-            df = zero
-        end if 
+        !else
+        !    df = zero
+        !end if 
     
     end subroutine 
 
@@ -205,16 +219,16 @@ contains
         real(rkind), dimension(this%n2,this%n3, this%n), intent(out) :: df 
         complex(rkind), dimension(this%n2,this%n3,this%split) :: f_hat
 
-        if ((this%dir .eq. "z") .and. (this%n > 1)) then
+        !if ((this%dir .eq. 3) .and. (this%n > 1)) then
            call this%fftz(f,f_hat)
 
            f_hat = imi*this%k1d*f_hat
            f_hat(:,:,this%split) = zero
 
            call this%ifftz(f_hat,df)
-        else 
-            df = zero
-        end if 
+        !else 
+        !    df = zero
+        !end if 
     end subroutine 
 
     subroutine fftx(this,in_arr, out_arr)

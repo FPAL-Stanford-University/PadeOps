@@ -109,7 +109,7 @@ module cd10stuff
 
         procedure :: init
         procedure :: destroy
-
+        procedure :: GetSize
         procedure, private :: ComputeXD1RHS
         procedure, private :: ComputeYD1RHS
         procedure, private :: ComputeZD1RHS
@@ -142,6 +142,12 @@ module cd10stuff
 
 
 contains
+    
+    pure function GetSize(this) result(val)
+        class(cd10), intent(in) :: this
+        integer  :: val 
+        val = this%n
+    end function
 
     function init(this, n_, dx_, periodic_, bc1_, bcn_) result(ierr)
    

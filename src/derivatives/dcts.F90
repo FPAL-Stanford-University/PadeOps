@@ -24,7 +24,8 @@ module dctstuff
 
         procedure           :: init                                     ! Initialize type
         procedure           :: destroy                                  ! Destructor
-       
+        procedure           :: GetSize
+
         procedure           :: dct                                      ! Compute Forward Transform 
         procedure           :: idct                                     ! Compute Backward Transform 
 
@@ -35,6 +36,12 @@ module dctstuff
         
 contains
 
+    pure function GetSize(this) result(val)
+        class(dcts), intent(in) :: this
+        integer :: val 
+        val = this%n
+    end function
+    
     function chebder1(this, f) result(df)
 
         class( dcts ), intent(in) :: this

@@ -5,6 +5,7 @@ module derivativeStuff
     use fftstuff, only: ffts
     use dctstuff, only: dcts
     use exits,    only: gracefulExit, message
+    use decomp_2d, only: decomp_info, nrank
 
     implicit none
     private 
@@ -12,24 +13,38 @@ module derivativeStuff
 
     type derivatives
         private
-        character(len=clen) :: xmethod, ymethod, zmethod
-        type(cd10) :: xcd10, ycd10, zcd10
-        type(cd06) :: xcd06, ycd06, zcd06
-        type(ffts) :: xfour, yfour, zfour
-        type(dcts) :: xcheb, ycheb, zcheb 
+       
         
-        logical    :: curvilinear = .false. 
-        logical    :: xmetric = .false.
-        logical    :: ymetric = .false.
-        logical    :: zmetric = .false.
+        ! Available Methods: Specific to each direction
+        ! 1: "CD10", 2: "CD06", 3: "FOUR", 4: "CHEB"
+        integer                :: xmethod, ymethod, zmethod 
 
-        logical    :: initialized = .false. 
+        type(cd10), allocatable :: xcd10, ycd10, zcd10 
+        type(cd06), allocatable :: xcd06, ycd06, zcd06 
+        type(ffts), allocatable :: xfour, yfour, zfour
+        type(dcts), allocatable :: xcheb, ycheb, zcheb 
+       
+    
+        type(decomp_info), allocatable :: gp      
+        logical                        :: curvilinear = .false. 
+        logical                        :: xmetric = .false.
+        logical                        :: ymetric = .false.
+        logical                        :: zmetric = .false.
+
+        integer                        :: nxg, nyg, nzg ! Global sizes
+        integer, dimension(3)          :: xsz, ysz, zsz ! Local decomposition sizes
+        
+        logical                        :: initialized = .false. 
         contains
-            procedure :: init
-            ! procedure :: destroy
-            ! procedure :: ddx
-            ! procedure :: ddy
-            ! procedure :: ddz
+            procedure, private :: init_parallel
+            procedure, private :: init_serial
+            procedure, private :: init_procedures
+            procedure, private :: init_curvilinear
+            generic :: init => init_parallel, init_serial
+            procedure :: destroy
+            procedure :: ddx
+            procedure :: ddy
+            procedure :: ddz
             ! procedure :: d2dx2
             ! procedure :: d2dy2
             ! procedure :: d2dz2
@@ -38,7 +53,7 @@ module derivativeStuff
 
 contains
 
-    subroutine init(this,       nx,         ny,         nz, &
+    subroutine init_serial(this,nx,         ny,         nz, &
                                 dx,         dy,         dz, &
                         periodic_x, periodic_y, periodic_z, &
                           method_x,   method_y,   method_z, &
@@ -46,7 +61,7 @@ contains
                        curvilinear)
         
         class(derivatives), intent(inout)          :: this
-        integer           , intent(in)             :: nx, ny, nz  
+        integer, intent(in)                        :: nx, ny, nz
         real(rkind)       , intent(in)             :: dx, dy, dz
         logical           , intent(in)             :: periodic_x, periodic_y, periodic_z
         character(len=*)  , intent(in),   optional :: method_x
@@ -57,42 +72,180 @@ contains
         logical           , intent(in),   optional :: zmetric
         logical           , intent(in),   optional :: curvilinear
         
-        integer :: ierr
+
 
        
         if (this%initialized) then
             call message("WARNING: Reinitializing the DERIVATIVE class!")
+            call this%destroy
         end if  
+       
+        this%nxg = nx
+        this%nyg = ny
+        this%nzg = nz
+        this%xsz = [nx, ny, nz]
+        this%ysz = this%xsz
+        this%zsz = this%xsz
+
+        call this%init_procedures (dx, dy, dz, periodic_x, periodic_y, periodic_z,&
+                                            method_x,method_y,method_z)
+
+        if (present(xmetric)) then
+            if (present(ymetric)) then
+                if (present(zmetric)) then
+                    if (present(curvilinear)) then
+                        call this%init_curvilinear(xMetric, yMetric, zMetric, curvilinear)
+                    else
+                        call this%init_curvilinear(xMetric, yMetric, zMetric)
+                    end if 
+                else
+                    call this%init_curvilinear(xMetric, yMetric)
+                end if 
+            else
+                call this%init_curvilinear(xMetric)
+            end if
+        end if 
+
+    end subroutine
+
+    subroutine init_parallel(this,                      gp, &
+                                dx,         dy,         dz, &
+                        periodic_x, periodic_y, periodic_z, &
+                          method_x,   method_y,   method_z, &
+                           xmetric,    ymetric,    zmetric, &
+                       curvilinear)
         
-        ! X direction
+        class(derivatives), intent(inout)          :: this
+        class(decomp_info), intent(in)             :: gp 
+        real(rkind)       , intent(in)             :: dx, dy, dz
+        logical           , intent(in)             :: periodic_x, periodic_y, periodic_z
+        character(len=*)  , intent(in),   optional :: method_x
+        character(len=*)  , intent(in),   optional :: method_y
+        character(len=*)  , intent(in),   optional :: method_z
+        logical           , intent(in),   optional :: xmetric
+        logical           , intent(in),   optional :: ymetric
+        logical           , intent(in),   optional :: zmetric
+        logical           , intent(in),   optional :: curvilinear
+        
+
+       
+        if (this%initialized) then
+            call message("WARNING: Reinitializing the DERIVATIVE class!")
+            call this%destroy
+        end if  
+       
+        this%nxg = gp%xsz(1)
+        this%nyg = gp%ysz(2)
+        this%nzg = gp%zsz(3)
+        this%xsz = gp%xsz
+        this%ysz = gp%ysz
+        this%zsz = gp%zsz
+
+        call this%init_procedures (dx, dy, dz, periodic_x, periodic_y, periodic_z,&
+                                            method_x,method_y,method_z)
+
+        if (present(xmetric)) then
+            if (present(ymetric)) then
+                if (present(zmetric)) then
+                    if (present(curvilinear)) then
+                        call this%init_curvilinear(xMetric, yMetric, zMetric, curvilinear)
+                    else
+                        call this%init_curvilinear(xMetric, yMetric, zMetric)
+                    end if 
+                else
+                    call this%init_curvilinear(xMetric, yMetric)
+                end if 
+            else
+                call this%init_curvilinear(xMetric)
+            end if
+        end if 
+
+    end subroutine
+
+
+    subroutine init_curvilinear(this, xMetric, yMetric, zMetric, Curvilinear)
+        class(derivatives), intent(inout)        :: this
+        logical           , intent(in)           :: xmetric
+        logical           , intent(in), optional :: ymetric
+        logical           , intent(in), optional :: zmetric
+        logical           , intent(in), optional :: curvilinear
+        
+
+        ! Metrics
+            if (xMetric) then
+                call GracefulExit("Code INCOMPLETE! Metric terms are not &
+                 &   supported in x direction!",04)
+                 this%xMetric = .true. 
+            end if
+
+            if (yMetric) then
+                call GracefulExit("Code INCOMPLETE! Metric terms are not &
+                 &   supported in y direction!",05)
+                 this%yMetric = .true. 
+            end if
+        
+            if (zMetric) then
+                call GracefulExit("Code INCOMPLETE! Metric terms are not &
+                 &   supported in z direction!",06)
+                 this%zMetric = .true. 
+            end if
+        
+            if (Curvilinear) then
+                call GracefulExit("Code INCOMPLETE! Curvilinear Formulation is &
+                & not supported!",06)
+                this%Curvilinear = .true. 
+            end if
+
+    end subroutine
+
+    subroutine init_procedures(this,dx, dy, dz, periodic_x, periodic_y, periodic_z,&
+                                    method_x,method_y,method_z)
+                                    
+        class(derivatives), intent(inout)          :: this
+        real(rkind)       , intent(in)             :: dx, dy, dz
+        logical           , intent(in)             :: periodic_x, periodic_y, periodic_z
+        character(len=*)  , intent(in),   optional :: method_x
+        character(len=*)  , intent(in),   optional :: method_y
+        character(len=*)  , intent(in),   optional :: method_z
+        integer :: ierr
+
 
         if (present(method_x)) then
             select case (method_x)
             case ("cd10")
-                ierr = this % xcd10%init( nx, dx, periodic_x, 0, 0)
+                allocate(this%xcd10)
+                ierr = this % xcd10%init( this%xsz(1), dx, periodic_x, 0, 0)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing cd10 failed in X ",11)
-                end if 
+                end if
+                this%xmethod = 1 
             case ("cd06")
-                ierr = this % xcd06%init( nx, dx, periodic_x, 0, 0)
+                allocate(this%xcd06)
+                ierr = this % xcd06%init( this%xsz(1), dx, periodic_x, 0, 0)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing cd06 failed in X ",12)
                 end if 
+                this%xmethod = 2 
             case ("four")
-                ierr = this % xfour%init( nx, "x", ny, nz, dx)
+                allocate(this%xfour)
+                ierr = this % xfour%init( this%xsz(1), "x", this%xsz(2), this%xsz(3), dx)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing Fourier Collocation (FOUR) failed in X ",13)
                 end if 
+                this%xmethod = 3 
             case ("cheb")
-                ierr = this % xcheb%init( nx )
+                allocate(this%xcheb)
+                ierr = this % xcheb%init( this%xsz(1) )
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in X ",14)
                 end if 
+                this%xmethod = 4 
             case default 
                 call GracefulExit("Invalid method selected in x direction ",01)
             end select
         else
-            ierr = this % xcd10%init( nx, dx, periodic_x, 0, 0)
+            allocate(this%xcd10)
+            ierr = this % xcd10%init( this%xsz(1), dx, periodic_x, 0, 0)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing cd10 (default) failed in X ",11)
             end if 
@@ -102,30 +255,39 @@ contains
         if (present(method_y)) then
             select case (method_y)
             case ("cd10")
-                ierr = this % ycd10%init( ny, dy, periodic_y, 0, 0)
+                allocate(this%ycd10)
+                ierr = this % ycd10%init( this%ysz(2), dy, periodic_y, 0, 0)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing cd10 failed in Y ",11)
                 end if 
+                this%ymethod = 1 
             case ("cd06")
-                ierr = this % ycd06%init( ny, dy, periodic_y, 0, 0)
+                allocate(this%ycd06)
+                ierr = this % ycd06%init( this%ysz(2), dy, periodic_y, 0, 0)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing cd06 failed in Y",12)
                 end if 
+                this%ymethod = 2 
             case ("four")
-                ierr = this % yfour%init( ny, "y", nx, nz, dy)
+                allocate(this%yfour)
+                ierr = this % yfour%init( this%ysz(2), "y", this%ysz(1), this%ysz(3), dy)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing Fourier Collocation (FOUR) failed in Y ",13)
                 end if 
+                this%ymethod = 3 
             case ("cheb")
-                ierr = this % ycheb%init( ny )
+                allocate(this%ycheb)
+                ierr = this % ycheb%init( this%ysz(2) )
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in Y",14)
                 end if 
+                this%ymethod = 4 
             case default 
                 call GracefulExit("Invalid method selected in y direction",01)
             end select
         else
-            ierr = this % ycd10%init( ny, dy, periodic_y, 0, 0)
+            allocate(this%ycd10)
+            ierr = this % ycd10%init( this%ysz(2), dy, periodic_y, 0, 0)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing cd10 (default) failed in Y ",11)
             end if 
@@ -136,69 +298,153 @@ contains
         if (present(method_z)) then
             select case (method_z)
             case ("cd10")
-                ierr = this % zcd10%init( nz, dz, periodic_z, 0, 0)
+                allocate(this%zcd10)
+                ierr = this % zcd10%init( this%zsz(3), dz, periodic_z, 0, 0)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing cd10 failed in Z ",11)
                 end if 
+                this%zmethod = 1 
             case ("cd06")
-                ierr = this % zcd06%init( nz, dz, periodic_z, 0, 0)
+                allocate(this%zcd06)
+                ierr = this % zcd06%init( this%zsz(3), dz, periodic_z, 0, 0)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing cd06 failed in Z",12)
                 end if 
+                this%zmethod = 2 
             case ("four")
-                ierr = this % zfour%init( nz, "z", nx, ny, dz)
+                allocate(this%zfour)
+                ierr = this % zfour%init( this%zsz(3), "z", this%zsz(1), this%zsz(2), dz)
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing Fourier Collocation (FOUR) failed in Z ",13)
                 end if 
+                this%zmethod = 3 
             case ("cheb")
-                ierr = this % zcheb%init( nz )
+                allocate(this%zcheb)
+                ierr = this % zcheb%init( this%zsz(3) )
                 if (ierr .ne. 0) then
                     call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in Z",14)
                 end if 
+                this%zmethod = 4 
             case default 
                 call GracefulExit("Invalid method selected in z direction",01)
             end select
         else
-            ierr = this % zcd10%init( nz, dz, periodic_z, 0, 0)
+            allocate(this%zcd10)
+            ierr = this % zcd10%init( this%zsz(3), dz, periodic_z, 0, 0)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing cd10 (default) failed in Z ",11)
             end if
         end if 
 
-        ! Metrics
-        if (present(xMetric)) then
-            if (xMetric) then
-                call GracefulExit("Code INCOMPLETE! Metric terms are not &
-                 &   supported in x direction!",04)
-            end if
-        end if 
+    end subroutine
 
-        if (present(yMetric)) then
-            if (yMetric) then
-                call GracefulExit("Code INCOMPLETE! Metric terms are not &
-                 &   supported in y direction!",05)
-            end if
-        end if 
-        
-        if (present(zMetric)) then
-            if (zMetric) then
-                call GracefulExit("Code INCOMPLETE! Metric terms are not &
-                 &   supported in z direction!",06)
-            end if
-        end if 
-        
-        if (present(Curvilinear)) then
-            if (Curvilinear) then
-                call GracefulExit("Code INCOMPLETE! Curvilinear Formulation is &
-                & not supported!",06)
-            end if
-        end if 
 
-        this%xmethod = method_x 
-        this%ymethod = method_y 
-        this%zmethod = method_z 
+    subroutine destroy(this)
+        class(derivatives), intent(inout) :: this
+
+        select case (this%xmethod) 
+        case (1)
+            call this%xcd10%destroy
+            deallocate(this%xcd10)
+        case (2)
+            call this%xcd06%destroy
+            deallocate(this%xcd06)
+        case (3)
+            call this%xfour%destroy
+            deallocate(this%xfour)
+        case (4)
+            call this%xcheb%destroy
+            deallocate(this%xcheb)
+        end select 
+        
+        select case (this%ymethod) 
+        case (1)
+            call this%ycd10%destroy
+            deallocate(this%ycd10)
+        case (2)
+            call this%ycd06%destroy
+            deallocate(this%ycd06)
+        case (3)
+            call this%yfour%destroy
+            deallocate(this%yfour)
+        case (4)
+            call this%ycheb%destroy
+            deallocate(this%ycheb)
+        end select 
+
+        select case (this%zmethod) 
+        case (1)
+            call this%zcd10%destroy
+            deallocate(this%zcd10)
+        case (2)
+            call this%zcd06%destroy
+            deallocate(this%zcd06)
+        case (3)
+            call this%zfour%destroy
+            deallocate(this%zfour)
+        case (4)
+            call this%zcheb%destroy
+            deallocate(this%zcheb)
+        end select
+
+        this%xmetric = .false. 
+        this%ymetric = .false. 
+        this%zmetric = .false. 
+        this%curvilinear = .false. 
 
     end subroutine
 
+    subroutine ddx(this,f,dfdx)
+        class(derivatives), intent(in) :: this
+        real(rkind), intent(in), dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: f
+        real(rkind), intent(out),dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: dfdx
+
+        select case (this%xmethod)
+        case (1)
+            call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3),1,this%xsz(2),1,this%xsz(3))
+        case (2)
+            call this%xcd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3),1,this%xsz(2),1,this%xsz(3))
+        case (3)
+            call this%xfour % dd1(f,dfdx)
+        case (4)
+            call GracefulExit("Chebychev is incomplete right now",21)
+        end select 
+
+    end subroutine 
+
+    subroutine ddy(this,f,dfdx)
+        class(derivatives), intent(in) :: this
+        real(rkind), intent(in), dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: f
+        real(rkind), intent(out),dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: dfdx
+
+        select case (this%ymethod)
+        case (1)
+            call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3),1,this%ysz(1),1,this%ysz(3))
+        case (2)
+            call this%ycd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3),1,this%ysz(1),1,this%ysz(3))
+        case (3)
+            call this%yfour % dd2(f,dfdx)
+        case (4)
+            call GracefulExit("Chebychev is incomplete right now",21)
+        end select 
+
+    end subroutine 
     
+    subroutine ddz(this,f,dfdx)
+        class(derivatives), intent(in) :: this
+        real(rkind), intent(in), dimension(this%zsz(1),this%zsz(2),this%zsz(3)) :: f
+        real(rkind), intent(out),dimension(this%zsz(1),this%zsz(2),this%zsz(3)) :: dfdx
+
+        select case (this%zmethod)
+        case (1)
+            call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2),1,this%zsz(1),1,this%zsz(2))
+        case (2)
+            call this%zcd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2),1,this%zsz(1),1,this%zsz(2))
+        case (3)
+            call this%zfour % dd3(f,dfdx)
+        case (4)
+            call GracefulExit("Chebychev is incomplete right now",21)
+        end select 
+    end subroutine 
+
 end module

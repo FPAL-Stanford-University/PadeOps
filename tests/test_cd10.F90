@@ -6,7 +6,7 @@ program test_cd10
     use cd10stuff,       only: cd10
     implicit none
 
-    integer :: nx = 128, ny=128, nz=128
+    integer :: nx = 256, ny=256, nz=256
 
     logical, parameter :: periodic = .TRUE.
 

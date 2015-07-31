@@ -1,4 +1,4 @@
-program test_cd10
+program test_ffts
 
     use kind_parameters, only: rkind
     use constants,       only: two,pi
@@ -6,7 +6,7 @@ program test_cd10
     use fftstuff,            only: ffts
     implicit none
 
-    integer :: nx = 128, ny=128, nz=128
+    integer :: nx = 256, ny=256, nz=256
 
     logical, parameter :: periodic = .TRUE.
 
@@ -52,7 +52,7 @@ program test_cd10
 
     ierr = xfour%init( nx, "x", ny, nz, dx)
     ierr = yfour%init( ny, "y", nx, nz, dy, .false.)
-    ierr = zfour%init( nz, "z", nx, ny, dz, .true.)
+    ierr = zfour%init( nz, "z", nx, ny, dz, .false.)
 
     print*, "Initialized"
     call tic() 
