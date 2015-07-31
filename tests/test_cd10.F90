@@ -60,6 +60,10 @@ program test_cd10
     call toc ("Time to get the z derivative:")
     print*, "Maximum error = ", MAXVAL( ABS(df))
 
+    call xcd10%destroy()
+    call ycd10%destroy()
+    call zcd10%destroy()
+
     deallocate( x )
     deallocate( f )
     deallocate( df )

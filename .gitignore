@@ -1,6 +1,6 @@
 # Files to be ignored by git
 SetupEnv.sh
-build
+build*
 *.mod
 *.F90.swp
 dependencies/2decomp_fft
