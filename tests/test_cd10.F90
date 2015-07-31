@@ -6,7 +6,7 @@ program test_cd10
     use cd10stuff,       only: cd10
     implicit none
 
-    integer :: nx = 128, ny=128, nz=128
+    integer :: nx = 1024, ny=128, nz=128
 
     logical, parameter :: periodic = .TRUE.
 
@@ -59,6 +59,10 @@ program test_cd10
     call zcd10 % dd3(f,df,nx,ny,x1,xn,y1,yn)
     call toc ("Time to get the z derivative:")
     print*, "Maximum error = ", MAXVAL( ABS(df))
+
+    call xcd10%destroy()
+    call ycd10%destroy()
+    call zcd10%destroy()
 
     deallocate( x )
     deallocate( f )

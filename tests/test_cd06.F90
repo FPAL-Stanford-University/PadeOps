@@ -6,7 +6,7 @@ program test_cd06
     use cd06stuff,       only: cd06
     implicit none
 
-    integer:: nx = 512, ny=128, nz=128
+    integer:: nx = 16, ny=16, nz=16
     logical, parameter :: periodic = .TRUE.
 
     type( cd06 ) :: xcd06, ycd06, zcd06
