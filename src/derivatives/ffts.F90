@@ -180,16 +180,18 @@ contains
         real(rkind), dimension(this%n,this%n2, this%n3), intent(out) :: df 
         complex(rkind), dimension(this%split,this%n2,this%n3) :: f_hat
 
-        !if ((this%dir .eq. 1) .and. (this%n > 1)) then
-           call this%fftx(f,f_hat)
+        if (this%n == 1) then
+            df = 0
+            return
+        end if 
+        
+        call this%fftx(f,f_hat)
 
-           f_hat = imi*this%k1d*f_hat
-           f_hat(this%split,:,:) = zero
+        f_hat = imi*this%k1d*f_hat
+        f_hat(this%split,:,:) = zero
 
-           call this%ifftx(f_hat,df)
-        !else 
-        !    df = zero
-        !end if 
+        call this%ifftx(f_hat,df)
+    
     end subroutine 
 
 
@@ -200,16 +202,17 @@ contains
         complex(rkind), dimension(this%n2,this%split) :: f_hat
         integer :: k
 
-        !if (( this%dir .eq. 2) .and. (this%n > 1)) then
-            do k = 1,this%n3
-                call this%ffty(f(:,:,k),f_hat)
-                f_hat = imi*this%k1d(:,:,k)*f_hat
-                f_hat(:,this%split) = zero
-                call this%iffty(f_hat, df(:,:,k))
-            end do 
-        !else
-        !    df = zero
-        !end if 
+        if (this%n == 1) then
+            df = 0
+            return
+        end if 
+
+        do k = 1,this%n3
+            call this%ffty(f(:,:,k),f_hat)
+            f_hat = imi*this%k1d(:,:,k)*f_hat
+            f_hat(:,this%split) = zero
+            call this%iffty(f_hat, df(:,:,k))
+        end do 
     
     end subroutine 
 
@@ -219,16 +222,18 @@ contains
         real(rkind), dimension(this%n2,this%n3, this%n), intent(out) :: df 
         complex(rkind), dimension(this%n2,this%n3,this%split) :: f_hat
 
-        !if ((this%dir .eq. 3) .and. (this%n > 1)) then
-           call this%fftz(f,f_hat)
+        if (this%n == 1) then
+            df = 0
+            return
+        end if 
+        
+        call this%fftz(f,f_hat)
 
-           f_hat = imi*this%k1d*f_hat
-           f_hat(:,:,this%split) = zero
+        f_hat = imi*this%k1d*f_hat
+        f_hat(:,:,this%split) = zero
 
-           call this%ifftz(f_hat,df)
-        !else 
-        !    df = zero
-        !end if 
+        call this%ifftz(f_hat,df)
+    
     end subroutine 
 
     subroutine fftx(this,in_arr, out_arr)

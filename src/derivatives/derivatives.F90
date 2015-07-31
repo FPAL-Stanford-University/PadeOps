@@ -1,4 +1,4 @@
-module derivativeStuff
+module derivativesWrapper
     use kind_parameters, only: rkind, clen
     use cd10stuff, only: cd10
     use cd06stuff, only: cd06
@@ -25,7 +25,6 @@ module derivativeStuff
         type(dcts), allocatable :: xcheb, ycheb, zcheb 
        
     
-        type(decomp_info), allocatable :: gp      
         logical                        :: curvilinear = .false. 
         logical                        :: xmetric = .false.
         logical                        :: ymetric = .false.
@@ -64,9 +63,9 @@ contains
         integer, intent(in)                        :: nx, ny, nz
         real(rkind)       , intent(in)             :: dx, dy, dz
         logical           , intent(in)             :: periodic_x, periodic_y, periodic_z
-        character(len=*)  , intent(in),   optional :: method_x
-        character(len=*)  , intent(in),   optional :: method_y
-        character(len=*)  , intent(in),   optional :: method_z
+        character(len=*)  , intent(in)             :: method_x
+        character(len=*)  , intent(in)             :: method_y
+        character(len=*)  , intent(in)             :: method_z
         logical           , intent(in),   optional :: xmetric
         logical           , intent(in),   optional :: ymetric
         logical           , intent(in),   optional :: zmetric
@@ -119,9 +118,9 @@ contains
         class(decomp_info), intent(in)             :: gp 
         real(rkind)       , intent(in)             :: dx, dy, dz
         logical           , intent(in)             :: periodic_x, periodic_y, periodic_z
-        character(len=*)  , intent(in),   optional :: method_x
-        character(len=*)  , intent(in),   optional :: method_y
-        character(len=*)  , intent(in),   optional :: method_z
+        character(len=*)  , intent(in)             :: method_x
+        character(len=*)  , intent(in)             :: method_y
+        character(len=*)  , intent(in)             :: method_z
         logical           , intent(in),   optional :: xmetric
         logical           , intent(in),   optional :: ymetric
         logical           , intent(in),   optional :: zmetric
@@ -204,137 +203,113 @@ contains
         class(derivatives), intent(inout)          :: this
         real(rkind)       , intent(in)             :: dx, dy, dz
         logical           , intent(in)             :: periodic_x, periodic_y, periodic_z
-        character(len=*)  , intent(in),   optional :: method_x
-        character(len=*)  , intent(in),   optional :: method_y
-        character(len=*)  , intent(in),   optional :: method_z
+        character(len=*)  , intent(in)             :: method_x
+        character(len=*)  , intent(in)             :: method_y
+        character(len=*)  , intent(in)             :: method_z
         integer :: ierr
 
 
-        if (present(method_x)) then
-            select case (method_x)
-            case ("cd10")
-                allocate(this%xcd10)
-                ierr = this % xcd10%init( this%xsz(1), dx, periodic_x, 0, 0)
-                if (ierr .ne. 0) then
-                    call GracefulExit("Initializing cd10 failed in X ",11)
-                end if
-                this%xmethod = 1 
-            case ("cd06")
-                allocate(this%xcd06)
-                ierr = this % xcd06%init( this%xsz(1), dx, periodic_x, 0, 0)
-                if (ierr .ne. 0) then
-                    call GracefulExit("Initializing cd06 failed in X ",12)
-                end if 
-                this%xmethod = 2 
-            case ("four")
-                allocate(this%xfour)
-                ierr = this % xfour%init( this%xsz(1), "x", this%xsz(2), this%xsz(3), dx)
-                if (ierr .ne. 0) then
-                    call GracefulExit("Initializing Fourier Collocation (FOUR) failed in X ",13)
-                end if 
-                this%xmethod = 3 
-            case ("cheb")
-                allocate(this%xcheb)
-                ierr = this % xcheb%init( this%xsz(1) )
-                if (ierr .ne. 0) then
-                    call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in X ",14)
-                end if 
-                this%xmethod = 4 
-            case default 
-                call GracefulExit("Invalid method selected in x direction ",01)
-            end select
-        else
+        select case (method_x)
+        case ("cd10")
             allocate(this%xcd10)
             ierr = this % xcd10%init( this%xsz(1), dx, periodic_x, 0, 0)
             if (ierr .ne. 0) then
-                call GracefulExit("Initializing cd10 (default) failed in X ",11)
+                call GracefulExit("Initializing cd10 failed in X ",11)
+            end if
+            this%xmethod = 1 
+        case ("cd06")
+            allocate(this%xcd06)
+            ierr = this % xcd06%init( this%xsz(1), dx, periodic_x, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing cd06 failed in X ",12)
             end if 
-        end if 
+            this%xmethod = 2 
+        case ("four")
+            allocate(this%xfour)
+            ierr = this % xfour%init( this%xsz(1), "x", this%xsz(2), this%xsz(3), dx)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing Fourier Collocation (FOUR) failed in X ",13)
+            end if 
+            this%xmethod = 3 
+        case ("cheb")
+            allocate(this%xcheb)
+            ierr = this % xcheb%init( this%xsz(1) )
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in X ",14)
+            end if 
+            this%xmethod = 4 
+        case default 
+            call GracefulExit("Invalid method selected in x direction ",01)
+        end select
        
         ! Y direction
-        if (present(method_y)) then
-            select case (method_y)
-            case ("cd10")
-                allocate(this%ycd10)
-                ierr = this % ycd10%init( this%ysz(2), dy, periodic_y, 0, 0)
-                if (ierr .ne. 0) then
-                    call GracefulExit("Initializing cd10 failed in Y ",11)
-                end if 
-                this%ymethod = 1 
-            case ("cd06")
-                allocate(this%ycd06)
-                ierr = this % ycd06%init( this%ysz(2), dy, periodic_y, 0, 0)
-                if (ierr .ne. 0) then
-                    call GracefulExit("Initializing cd06 failed in Y",12)
-                end if 
-                this%ymethod = 2 
-            case ("four")
-                allocate(this%yfour)
-                ierr = this % yfour%init( this%ysz(2), "y", this%ysz(1), this%ysz(3), dy)
-                if (ierr .ne. 0) then
-                    call GracefulExit("Initializing Fourier Collocation (FOUR) failed in Y ",13)
-                end if 
-                this%ymethod = 3 
-            case ("cheb")
-                allocate(this%ycheb)
-                ierr = this % ycheb%init( this%ysz(2) )
-                if (ierr .ne. 0) then
-                    call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in Y",14)
-                end if 
-                this%ymethod = 4 
-            case default 
-                call GracefulExit("Invalid method selected in y direction",01)
-            end select
-        else
+        select case (method_y)
+        case ("cd10")
             allocate(this%ycd10)
             ierr = this % ycd10%init( this%ysz(2), dy, periodic_y, 0, 0)
             if (ierr .ne. 0) then
-                call GracefulExit("Initializing cd10 (default) failed in Y ",11)
+                call GracefulExit("Initializing cd10 failed in Y ",11)
             end if 
-        end if 
+            this%ymethod = 1 
+        case ("cd06")
+            allocate(this%ycd06)
+            ierr = this % ycd06%init( this%ysz(2), dy, periodic_y, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing cd06 failed in Y",12)
+            end if 
+            this%ymethod = 2 
+        case ("four")
+            allocate(this%yfour)
+            ierr = this % yfour%init( this%ysz(2), "y", this%ysz(1), this%ysz(3), dy)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing Fourier Collocation (FOUR) failed in Y ",13)
+            end if 
+            this%ymethod = 3 
+        case ("cheb")
+            allocate(this%ycheb)
+            ierr = this % ycheb%init( this%ysz(2) )
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in Y",14)
+            end if 
+            this%ymethod = 4 
+        case default 
+            call GracefulExit("Invalid method selected in y direction",01)
+        end select
 
 
         ! Z direction
-        if (present(method_z)) then
-            select case (method_z)
-            case ("cd10")
-                allocate(this%zcd10)
-                ierr = this % zcd10%init( this%zsz(3), dz, periodic_z, 0, 0)
-                if (ierr .ne. 0) then
-                    call GracefulExit("Initializing cd10 failed in Z ",11)
-                end if 
-                this%zmethod = 1 
-            case ("cd06")
-                allocate(this%zcd06)
-                ierr = this % zcd06%init( this%zsz(3), dz, periodic_z, 0, 0)
-                if (ierr .ne. 0) then
-                    call GracefulExit("Initializing cd06 failed in Z",12)
-                end if 
-                this%zmethod = 2 
-            case ("four")
-                allocate(this%zfour)
-                ierr = this % zfour%init( this%zsz(3), "z", this%zsz(1), this%zsz(2), dz)
-                if (ierr .ne. 0) then
-                    call GracefulExit("Initializing Fourier Collocation (FOUR) failed in Z ",13)
-                end if 
-                this%zmethod = 3 
-            case ("cheb")
-                allocate(this%zcheb)
-                ierr = this % zcheb%init( this%zsz(3) )
-                if (ierr .ne. 0) then
-                    call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in Z",14)
-                end if 
-                this%zmethod = 4 
-            case default 
-                call GracefulExit("Invalid method selected in z direction",01)
-            end select
-        else
+        select case (method_z)
+        case ("cd10")
             allocate(this%zcd10)
             ierr = this % zcd10%init( this%zsz(3), dz, periodic_z, 0, 0)
             if (ierr .ne. 0) then
-                call GracefulExit("Initializing cd10 (default) failed in Z ",11)
-            end if
-        end if 
+                call GracefulExit("Initializing cd10 failed in Z ",11)
+            end if 
+            this%zmethod = 1 
+        case ("cd06")
+            allocate(this%zcd06)
+            ierr = this % zcd06%init( this%zsz(3), dz, periodic_z, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing cd06 failed in Z",12)
+            end if 
+            this%zmethod = 2 
+        case ("four")
+            allocate(this%zfour)
+            ierr = this % zfour%init( this%zsz(3), "z", this%zsz(1), this%zsz(2), dz)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing Fourier Collocation (FOUR) failed in Z ",13)
+            end if 
+            this%zmethod = 3 
+        case ("cheb")
+            allocate(this%zcheb)
+            ierr = this % zcheb%init( this%zsz(3) )
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in Z",14)
+            end if 
+            this%zmethod = 4 
+        case default 
+            call GracefulExit("Invalid method selected in z direction",01)
+        end select
 
     end subroutine
 

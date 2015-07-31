@@ -3,7 +3,7 @@ program test_derivatives_parallel
     use kind_parameters, only : rkind
     use decomp_2d
     use constants, only: pi, two
-    use derivativeStuff, only: derivatives
+    use derivativesWrapper, only: derivatives
 
     implicit none
 

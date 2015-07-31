@@ -3,7 +3,7 @@ program test_derivatives
     use kind_parameters, only: rkind
     use constants,       only: two,pi
     use timer,           only: tic,toc
-    use derivativeStuff, only: derivatives
+    use derivativesWrapper, only: derivatives
     implicit none
 
     integer :: nx = 256, ny=256, nz=256
