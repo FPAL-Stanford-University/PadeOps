@@ -82,7 +82,7 @@ program test_transpose
     call transpose_y_to_x(f, wkx, gp)
     t1 = MPI_WTIME()
     time2trans_x = t1 - t0
-    call xcd10 % dd1( wkx, dwkx, gp%xsz(2), gp%xsz(3), 1, gp%xsz(2), 1, gp%xsz(3) )
+    call xcd10 % dd1( wkx, dwkx, gp%xsz(2), gp%xsz(3) )
     t0 = MPI_WTIME()
     time2compute_x = t0 - t1
     call transpose_x_to_y(dwkx, dfdx, gp)
@@ -96,7 +96,7 @@ program test_transpose
     
     t0 = MPI_WTIME()
     !======== Start the Y derivative stuff ========!
-    call ycd10 % dd2( f, dfdy, gp%ysz(1), gp%ysz(3), 1, gp%ysz(1), 1, gp%ysz(3) )
+    call ycd10 % dd2( f, dfdy, gp%ysz(1), gp%ysz(3) )
     !======== End the Y derivative stuff   ========!
     t1 = MPI_WTIME()
     if(nrank == 0) ytime = t1-t0
@@ -108,7 +108,7 @@ program test_transpose
     t0 = MPI_WTIME()
     !======== Start the Z derivative stuff ========!
     call transpose_y_to_z(f, wkz, gp)
-    call zcd10 % dd3( wkz, dwkz, gp%zsz(1), gp%zsz(2), 1, gp%zsz(1), 1, gp%zsz(2) )
+    call zcd10 % dd3( wkz, dwkz, gp%zsz(1), gp%zsz(2) )
     call transpose_z_to_y(dwkz, dfdz, gp)
     !======== End the Z derivative stuff   ========!
     t1 = MPI_WTIME()

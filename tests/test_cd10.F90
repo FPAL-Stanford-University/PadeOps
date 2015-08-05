@@ -15,7 +15,6 @@ program test_cd10
     real(rkind) :: dx, dy, dz
     real(rkind), parameter :: omega = 1._rkind
 
-    integer :: x1,xn,y1,yn,z1,zn
     integer :: i,ierr, j, k
 
     allocate( x(nx,ny,nz) )
@@ -55,8 +54,7 @@ program test_cd10
     ierr = zcd10%init( nz, dz, periodic, 0, 0)
 
     call tic() 
-    y1 = 1;yn = ny; z1 = 1; zn = nz
-    call xcd10 % dd1(f,df,ny,nz,y1,yn,z1,zn)
+    call xcd10 % dd1(f,df,ny,nz)
     call xcd10 % d2d1(f,d2f,ny,nz)
     call toc ("Time to get the x derivative:")
     df_exact = omega* cos(omega * x) 
@@ -65,8 +63,7 @@ program test_cd10
     print*, "Maximum error (second der) = ", MAXVAL( ABS(d2f - d2f_exact))
 
     call tic() 
-    x1 = 1;xn = nx; z1 = 1; zn = nz
-    call ycd10 % dd2(f,df,nx,nz,x1,xn,z1,zn)
+    call ycd10 % dd2(f,df,nx,nz)
     call ycd10 % d2d2(f,d2f,nx,nz)
     call toc ("Time to get the y derivative:")
     df_exact = omega* cos(omega * y) 
@@ -75,8 +72,7 @@ program test_cd10
     print*, "Maximum error (second der) = ", MAXVAL( ABS(d2f - d2f_exact))
 
     call tic() 
-    x1 = 1;xn = nx; y1 = 1; yn = ny
-    call zcd10 % dd3(f,df,nx,ny,x1,xn,y1,yn)
+    call zcd10 % dd3(f,df,nx,ny)
     call zcd10 % d2d3(f,d2f,nx,ny)
     df_exact = omega* cos(omega * z) 
     df_exact = -omega* omega* sin(omega * z) 

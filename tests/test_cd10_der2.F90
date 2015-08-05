@@ -20,14 +20,14 @@ program test_Cd10_Der2
     f = cos(x)
     d2f_exact = -cos(x)
 
-    ierr =  xcd10%init ( nx, dx , .true., 0, 0) 
+    ierr =  xcd10%init ( nx, dx , .false., 0, 0) 
 
-    
     call xcd10%d2d1(f,d2f,ny,nz)
+
 
     print*, maxval(abs(d2f - d2f_Exact))
 
-    call xcd10%dd1(f,d2f,ny,nz,1,ny,1,nz)
+    call xcd10%dd1(f,d2f,ny,nz)
     d2f_exact = -sin(x)
     print*, maxval(abs(d2f - d2f_Exact))
 

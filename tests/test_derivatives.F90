@@ -12,7 +12,7 @@ program test_derivatives
     type( derivatives ) :: method1, method2, method3
     real(rkind), dimension(:,:,:), allocatable :: x,y,z,f,df,dfdx_exact,dfdy_exact,dfdz_exact,d2fdx2_exact,d2fdy2_exact,d2fdz2_exact
     real(rkind) :: dx, dy, dz
-    real(rkind), parameter :: omega = 1._rkind
+    real(rkind), parameter :: omega = 10._rkind
 
     integer :: i,j,k
 
@@ -172,23 +172,23 @@ program test_derivatives
     !print*, "Maximum error = ", MAXVAL( ABS(df - d2fdz2_exact))
 
 
-    !print*, "==========================================="
-    !print*, "Now trying METHOD 1: FOUR"
-    !print*, "==========================================="
-    !call tic() 
-    !call method3 % d2dx2(f,df)
-    !call toc ("Time to get the x derivative:")
-    !print*, "Maximum error = ", MAXVAL( ABS(df - d2fdx2_exact))
+    print*, "==========================================="
+    print*, "Now trying METHOD 3: FOUR"
+    print*, "==========================================="
+    call tic() 
+    call method3 % d2dx2(f,df)
+    call toc ("Time to get the x derivative:")
+    print*, "Maximum error = ", MAXVAL( ABS(df - d2fdx2_exact))
 
-    !call tic() 
-    !call method3 % d2dy2(f,df)
-    !call toc ("Time to get the y derivative:")
-    !print*, "Maximum error = ", MAXVAL( ABS(df - d2fdy2_exact))
+    call tic() 
+    call method3 % d2dy2(f,df)
+    call toc ("Time to get the y derivative:")
+    print*, "Maximum error = ", MAXVAL( ABS(df - d2fdy2_exact))
 
-    !call tic() 
-    !call method3 % d2dz2(f,df)
-    !call toc ("Time to get the z derivative:")
-    !print*, "Maximum error = ", MAXVAL( ABS(df - d2fdz2_exact))
+    call tic() 
+    call method3 % d2dz2(f,df)
+    call toc ("Time to get the z derivative:")
+    print*, "Maximum error = ", MAXVAL( ABS(df - d2fdz2_exact))
     
     
     print*, "=========================================="

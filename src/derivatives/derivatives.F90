@@ -380,9 +380,9 @@ contains
 
         select case (this%xmethod)
         case (1)
-            call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3),1,this%xsz(2),1,this%xsz(3))
+            call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
         case (2)
-            call this%xcd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3),1,this%xsz(2),1,this%xsz(3))
+            call this%xcd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
         case (3)
             call this%xfour % dd1(f,dfdx)
         case (4)
@@ -398,9 +398,9 @@ contains
 
         select case (this%ymethod)
         case (1)
-            call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3),1,this%ysz(1),1,this%ysz(3))
+            call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
         case (2)
-            call this%ycd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3),1,this%ysz(1),1,this%ysz(3))
+            call this%ycd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
         case (3)
             call this%yfour % dd2(f,dfdx)
         case (4)
@@ -416,9 +416,9 @@ contains
 
         select case (this%zmethod)
         case (1)
-            call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2),1,this%zsz(1),1,this%zsz(2))
+            call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
         case (2)
-            call this%zcd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2),1,this%zsz(1),1,this%zsz(2))
+            call this%zcd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
         case (3)
             call this%zfour % dd3(f,dfdx)
         case (4)
@@ -437,7 +437,7 @@ contains
         case (2)
             call GracefulExit("CD06 is incomplete right now",21)
         case (3)
-            call GracefulExit("Fourier Coll. is incomplete right now",21)
+            call this%xfour % d2d1(f,d2fdx2)
         case (4)
             call GracefulExit("Chebychev is incomplete right now",21)
         end select 
@@ -455,7 +455,7 @@ contains
         case (2)
             call GracefulExit("CD06 is incomplete right now",21)
         case (3)
-            call GracefulExit("Fourier Coll. is incomplete right now",21)
+            call this%yfour % d2d2(f,d2fdx2)
         case (4)
             call GracefulExit("Chebychev is incomplete right now",21)
         end select 
@@ -473,7 +473,7 @@ contains
         case (2)
             call GracefulExit("CD06 is incomplete right now",21)
         case (3)
-            call GracefulExit("Fourier Coll. is incomplete right now",21)
+            call this%zfour % d2d3(f,d2fdx2)
         case (4)
             call GracefulExit("Chebychev is incomplete right now",21)
         end select 
