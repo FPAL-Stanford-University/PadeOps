@@ -44,6 +44,10 @@ module derivativesWrapper
             procedure :: ddx
             procedure :: ddy
             procedure :: ddz
+            procedure :: d2dx2
+            procedure :: d2dy2
+            procedure :: d2dz2
+            ! procedure :: d2dx2
             ! procedure :: d2dx2
             ! procedure :: d2dy2
             ! procedure :: d2dz2
@@ -421,5 +425,59 @@ contains
             call GracefulExit("Chebychev is incomplete right now",21)
         end select 
     end subroutine 
+
+    subroutine d2dx2(this,f,d2fdx2)
+        class(derivatives), intent(in) :: this
+        real(rkind), intent(in), dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: f
+        real(rkind), intent(out),dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: d2fdx2
+
+        select case (this%xmethod)
+        case (1)
+            call this%xcd10 % d2d1(f,d2fdx2,this%xsz(2),this%xsz(3))
+        case (2)
+            call GracefulExit("CD06 is incomplete right now",21)
+        case (3)
+            call GracefulExit("Fourier Coll. is incomplete right now",21)
+        case (4)
+            call GracefulExit("Chebychev is incomplete right now",21)
+        end select 
+
+    end subroutine 
+    
+    subroutine d2dy2(this,f,d2fdx2)
+        class(derivatives), intent(in) :: this
+        real(rkind), intent(in), dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: f
+        real(rkind), intent(out),dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: d2fdx2
+
+        select case (this%ymethod)
+        case (1)
+            call this%ycd10 % d2d2(f,d2fdx2,this%ysz(1),this%ysz(3))
+        case (2)
+            call GracefulExit("CD06 is incomplete right now",21)
+        case (3)
+            call GracefulExit("Fourier Coll. is incomplete right now",21)
+        case (4)
+            call GracefulExit("Chebychev is incomplete right now",21)
+        end select 
+
+    end subroutine
+
+    subroutine d2dz2(this,f,d2fdx2)
+        class(derivatives), intent(in) :: this
+        real(rkind), intent(in), dimension(this%zsz(1),this%zsz(2),this%zsz(3)) :: f
+        real(rkind), intent(out),dimension(this%zsz(1),this%zsz(2),this%zsz(3)) :: d2fdx2
+
+        select case (this%zmethod)
+        case (1)
+            call this%zcd10 % d2d3(f,d2fdx2,this%zsz(1),this%zsz(2))
+        case (2)
+            call GracefulExit("CD06 is incomplete right now",21)
+        case (3)
+            call GracefulExit("Fourier Coll. is incomplete right now",21)
+        case (4)
+            call GracefulExit("Chebychev is incomplete right now",21)
+        end select 
+    end subroutine 
+
 
 end module

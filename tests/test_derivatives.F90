@@ -6,11 +6,11 @@ program test_derivatives
     use derivativesWrapper, only: derivatives
     implicit none
 
-    integer :: nx = 256, ny=256, nz=256
+    integer :: nx = 64, ny=64, nz=64
 
 
     type( derivatives ) :: method1, method2, method3
-    real(rkind), dimension(:,:,:), allocatable :: x,y,z,f,df,dfdx_exact,dfdy_exact,dfdz_exact
+    real(rkind), dimension(:,:,:), allocatable :: x,y,z,f,df,dfdx_exact,dfdy_exact,dfdz_exact,d2fdx2_exact,d2fdy2_exact,d2fdz2_exact
     real(rkind) :: dx, dy, dz
     real(rkind), parameter :: omega = 1._rkind
 
@@ -24,6 +24,9 @@ program test_derivatives
     allocate( dfdx_exact(nx,ny,nz) )
     allocate( dfdy_exact(nx,ny,nz) )
     allocate( dfdz_exact(nx,ny,nz) )
+    allocate( d2fdx2_exact(nx,ny,nz) )
+    allocate( d2fdy2_exact(nx,ny,nz) )
+    allocate( d2fdz2_exact(nx,ny,nz) )
 
     dx = two*pi/real(nx,rkind)
     dy = two*pi/real(ny,rkind)
@@ -39,6 +42,9 @@ program test_derivatives
         dfdx_exact(i,j,k) = omega * cos( omega * x(i,j,k))
         dfdy_exact(i,j,k) = omega * cos( omega * y(i,j,k)) 
         dfdz_exact(i,j,k) = omega * cos( omega * z(i,j,k)) 
+        d2fdx2_exact(i,j,k) = -omega * omega*sin( omega * x(i,j,k))
+        d2fdy2_exact(i,j,k) = -omega * omega*sin( omega * y(i,j,k)) 
+        d2fdz2_exact(i,j,k) = -omega * omega*sin( omega * z(i,j,k)) 
     end do
     end do 
     end do 
@@ -61,7 +67,8 @@ program test_derivatives
                             "four", "four", "four" )
 
     print*, "Initialized all methods"
-   
+  
+    print*, "FIRST DERIVATIVE TESTS" 
    
     print*, "==========================================="
     print*, "Now trying METHOD 1: CD10"
@@ -102,7 +109,7 @@ program test_derivatives
 
 
     print*, "==========================================="
-    print*, "Now trying METHOD 1: FOUR"
+    print*, "Now trying METHOD 3: FOUR"
     print*, "==========================================="
     call tic() 
     call method3 % ddx(f,df)
@@ -119,18 +126,89 @@ program test_derivatives
     call toc ("Time to get the z derivative:")
     print*, "Maximum error = ", MAXVAL( ABS(df - dfdz_exact))
 
+
+
+    print*, "---------------------------------------------"
+
+
+    print*, "SECOND DERIVATIVE TESTS" 
+    
+    print*, "==========================================="
+    print*, "Now trying METHOD 1: CD10"
+    print*, "==========================================="
+    call tic() 
+    call method1 % d2dx2(f,df)
+    call toc ("Time to get the x derivative:")
+    print*, "Maximum error = ", MAXVAL( ABS(df - d2fdx2_exact))
+   
+
+    call tic() 
+    call method1 % d2dy2(f,df)
+    call toc ("Time to get the y derivative:")
+    print*, "Maximum error = ", MAXVAL( ABS(df - d2fdy2_exact))
+
+    call tic() 
+    call method1 % d2dz2(f,df)
+    call toc ("Time to get the z derivative:")
+    print*, "Maximum error = ", MAXVAL( ABS(df - d2fdz2_exact))
+
+
+    !print*, "==========================================="
+    !print*, "Now trying METHOD 2: CD06"
+    !print*, "==========================================="
+    !call tic() 
+    !call method2 % d2dx2(f,df)
+    !call toc ("Time to get the x derivative:")
+    !print*, "Maximum error = ", MAXVAL( ABS(df - d2fdx2_exact))
+
+    !call tic() 
+    !call method2 % d2dy2(f,df)
+    !call toc ("Time to get the y derivative:")
+    !print*, "Maximum error = ", MAXVAL( ABS(df - d2fdy2_exact))
+
+    !call tic() 
+    !call method2 % d2dz2(f,df)
+    !call toc ("Time to get the z derivative:")
+    !print*, "Maximum error = ", MAXVAL( ABS(df - d2fdz2_exact))
+
+
+    !print*, "==========================================="
+    !print*, "Now trying METHOD 1: FOUR"
+    !print*, "==========================================="
+    !call tic() 
+    !call method3 % d2dx2(f,df)
+    !call toc ("Time to get the x derivative:")
+    !print*, "Maximum error = ", MAXVAL( ABS(df - d2fdx2_exact))
+
+    !call tic() 
+    !call method3 % d2dy2(f,df)
+    !call toc ("Time to get the y derivative:")
+    !print*, "Maximum error = ", MAXVAL( ABS(df - d2fdy2_exact))
+
+    !call tic() 
+    !call method3 % d2dz2(f,df)
+    !call toc ("Time to get the z derivative:")
+    !print*, "Maximum error = ", MAXVAL( ABS(df - d2fdz2_exact))
+    
+    
     print*, "=========================================="
     print*, " Destroying everything"
     print*, "=========================================="
 
-    call method1%destroy
-    call method2%destroy
-    call method3%destroy
     deallocate( x )
+    deallocate( y )
+    deallocate( z )
     deallocate( f )
     deallocate( df )
     deallocate( dfdx_exact )
     deallocate( dfdy_exact )
+    deallocate( dfdz_exact )
+    deallocate( d2fdx2_exact )
+    deallocate( d2fdy2_exact )
+    deallocate( d2fdz2_exact )
+    call method1%destroy
+    call method2%destroy
+    call method3%destroy
     
 
 end program
