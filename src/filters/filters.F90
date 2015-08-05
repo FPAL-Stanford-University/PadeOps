@@ -1,8 +1,10 @@
-module filtersWrapper
+module FiltersMod
     use kind_parameters, only: rkind
-    use cf90stuff, only: cf90
-    use exits,    only: gracefulExit, message
-    use decomp_2d, only: decomp_info, nrank
+    use cf90stuff,       only: cf90
+    use gaussianstuff,   only: gaussian
+    use lstsqstuff,      only: lstsq
+    use exits,           only: gracefulExit, message
+    use decomp_2d,       only: decomp_info, nrank
 
     implicit none
     private
@@ -13,7 +15,9 @@ module filtersWrapper
         
         integer :: xmethod, ymethod, zmethod
         
-        type(cf90), allocatable :: xcf90, ycf90, zcf90
+        type(cf90)    , allocatable :: xcf90, ycf90, zcf90
+        type(gaussian), allocatable :: xgauf, ygauf, zgauf
+        type(lstsq)   , allocatable :: xlsqf, ylsqf, zlsqf
 
         integer, dimension(3)          :: xsz, ysz, zsz ! Local decomposition sizes
         
@@ -45,18 +49,38 @@ contains
         integer :: ierr
 
         select case (methodx)
+        
         case ("cf90")
             allocate (this%xcf90)
             ierr = this%xcf90%init( nx, periodicx)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing cf90 failed in X ",51)
             end if
-            this%xmethod = 1 
+            this%xmethod = 1
+        
+        case("gaussian") 
+            allocate (this%xgauf)
+            ierr = this%xgauf%init( nx, periodicx)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing gaussian filter failed in X ",51)
+            end if
+            this%xmethod = 2
+        
+        case("lstsq") 
+            allocate (this%xlsqf)
+            ierr = this%xlsqf%init( nx, periodicx)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing least squares filter failed in X ",51)
+            end if
+            this%xmethod = 3
+        
         case default
             call GracefulExit("Incorrect method select in direction X", 52)
         end select 
         
+        
         select case (methody)
+        
         case ("cf90")
             allocate (this%ycf90)
             ierr = this%ycf90%init( ny, periodicy)
@@ -64,11 +88,29 @@ contains
                 call GracefulExit("Initializing cf90 failed in Y ",51)
             end if
             this%ymethod = 1 
+        
+        case("gaussian") 
+            allocate (this%ygauf)
+            ierr = this%ygauf%init( ny, periodicy)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing gaussian filter failed in Y ",51)
+            end if
+            this%xmethod = 2
+        
+        case("lstsq") 
+            allocate (this%ylsqf)
+            ierr = this%ylsqf%init( ny, periodicy)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing least squares filter failed in Y ",51)
+            end if
+            this%xmethod = 3
+        
         case default
             call GracefulExit("Incorrect method select in direction Y", 52)
         end select 
 
         select case (methodz)
+
         case ("cf90")
             allocate (this%zcf90)
             ierr = this%zcf90%init( nz, periodicz)
@@ -76,6 +118,23 @@ contains
                 call GracefulExit("Initializing cf90 failed in Z ",51)
             end if
             this%zmethod = 1 
+        
+        case("gaussian") 
+            allocate (this%zgauf)
+            ierr = this%zgauf%init( nz, periodicz)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing gaussian filter failed in Z ",51)
+            end if
+            this%xmethod = 2
+        
+        case("lstsq") 
+            allocate (this%zlsqf)
+            ierr = this%zlsqf%init( nz, periodicz)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing least squares filter failed in Z ",51)
+            end if
+            this%xmethod = 3
+        
         case default
             call GracefulExit("Incorrect method select in direction Z", 52)
         end select 
@@ -88,16 +147,28 @@ contains
         select case (this%xmethod)  
         case (1)
             call this%xcf90%destroy
+        case (2)
+            call this%xgauf%destroy
+        case (3)
+            call this%xlsqf%destroy
         end select
 
         select case (this%ymethod)  
         case (1)
             call this%ycf90%destroy
+        case (2)
+            call this%ygauf%destroy
+        case (3)
+            call this%ylsqf%destroy
         end select
         
         select case (this%zmethod)  
         case (1)
             call this%zcf90%destroy
+        case (2)
+            call this%zgauf%destroy
+        case (3)
+            call this%zlsqf%destroy
         end select
 
         this%initialized = .false. 
@@ -112,6 +183,10 @@ contains
         select case (this%xmethod)
         case (1)
             call this%xcf90%filter1( f, ff, this%xsz(2), this%xsz(3))
+        case (2)
+            call this%xgauf%filter1( f, ff, this%xsz(2), this%xsz(3))
+        case (3)
+            call this%xlsqf%filter1( f, ff, this%xsz(2), this%xsz(3))
         end select
 
     end subroutine
@@ -124,6 +199,10 @@ contains
         select case (this%ymethod)
         case (1)
             call this%ycf90%filter2( f, ff, this%ysz(1), this%ysz(3))
+        case (2)
+            call this%ygauf%filter2( f, ff, this%ysz(1), this%ysz(3))
+        case (3)
+            call this%ylsqf%filter2( f, ff, this%ysz(1), this%ysz(3))
         end select
 
     end subroutine
@@ -136,11 +215,16 @@ contains
         select case (this%zmethod)
         case (1)
             call this%zcf90%filter3( f, ff, this%zsz(1), this%zsz(2))
+        case (2)
+            call this%zgauf%filter3( f, ff, this%zsz(1), this%zsz(2))
+        case (3)
+            call this%zlsqf%filter3( f, ff, this%zsz(1), this%zsz(2))
         end select
 
     end subroutine
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!! INTERNAL SUBROUTINES !!!!!!!!!!!!!!!!!!!!!!!!
+    ! Don't change things below this point
     
     subroutine init_parallel(this,                              gp  , &
                                      methodx  , methody  , methodz  , &
@@ -168,8 +252,8 @@ contains
     end subroutine
 
     subroutine init_serial(this,          nx  ,      ny  ,       nz , &
-                                     methodx  , methody  , methodz  , &
-                                     periodicx, periodicy, periodicz  )
+                                     periodicx, periodicy, periodicz, &
+                                     methodx  , methody  , methodz  )
 
         class( filters ) , intent(inout) :: this
         integer          , intent(in)    :: nx, ny, nz
