@@ -8,14 +8,14 @@ program burgers
     
     implicit none
 
-    integer :: nx = 64, ny = 1, nz = 1
+    integer :: nx = 32, ny = 1, nz = 1
 
     type( derivatives ) :: der
     type( filters     ) :: fil
 
     real(rkind), dimension(:,:,:), allocatable :: x,u,u0
 
-    real(rkind) :: nu = 0.01_rkind
+    real(rkind) :: nu = 0.04_rkind
     real(rkind) :: dx,dt,t,tend
 
     character(len=*), parameter :: dermethod = "cd10"    ! Use 10th order Pade
@@ -45,8 +45,9 @@ program burgers
                      filmethod, "cf90", "cf90"  )
 
     t = zero
-    dt = 0.001_rkind
-    tend = 0.25_rkind
+    dt = 0.001_rkind / (two*pi)
+    tend = 5.0_rkind / (two*pi)
+    nu = nu / (two*pi)
     do while ( t .LT. tend )
         call RK45(u,dt,nu,der)
         t = t + dt
@@ -57,7 +58,7 @@ program burgers
         t = t + dt
     end if
 
-    OPEN(UNIT=iounit, FILE="burgets.txt", FORM='FORMATTED')
+    OPEN(UNIT=iounit, FILE="burgers.txt", FORM='FORMATTED')
     WRITE(iounit,'(ES24.16)') t
     do i=1,nx
         WRITE(iounit,'(3ES24.16)') x(i,1,1), u0(i,1,1), u(i,1,1)
@@ -76,7 +77,7 @@ contains
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(out) :: adv
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: flux
 
-        flux = u*u
+        flux = u*u/two
         call der%ddx(flux,adv)
 
     end subroutine
@@ -86,9 +87,16 @@ contains
         real(rkind), dimension(:,:,:), intent(in) :: u
         class( derivatives ),          intent(in) :: der
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(out) :: visc
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: tmp
         real(rkind)                               :: nu
+        logical, parameter                        :: conservative = .FALSE.
 
-        call der%d2dx2(u,visc)
+        if ( .NOT. conservative ) then
+            call der%d2dx2(u,visc)
+        else
+            call der%ddx(u,tmp)
+            call der%ddx(tmp,visc)
+        end if
         visc = nu*visc
        
     end subroutine
