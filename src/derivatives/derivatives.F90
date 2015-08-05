@@ -1,4 +1,4 @@
-module derivativesWrapper
+module DerivativesMod
     use kind_parameters, only: rkind, clen
     use cd10stuff, only: cd10
     use cd06stuff, only: cd06

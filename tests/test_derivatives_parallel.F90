@@ -3,7 +3,7 @@ program test_derivatives_parallel
     use kind_parameters, only : rkind
     use decomp_2d
     use constants, only: pi, two
-    use derivativesWrapper, only: derivatives
+    use DerivativesMod, only: derivatives
 
     implicit none
 
@@ -17,7 +17,6 @@ program test_derivatives_parallel
     integer :: ierr, i, j, k
     real(rkind) :: maxerr, mymaxerr
     
-    logical, parameter :: verbose = .false. 
     real(rkind) :: dx, dy, dz
 
     double precision :: t0, t1
@@ -213,5 +212,4 @@ program test_derivatives_parallel
     call decomp_2d_finalize
     call MPI_Finalize(ierr)
 
-20 format(1x,16D10.3)
 end program 
