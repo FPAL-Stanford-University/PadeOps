@@ -148,11 +148,11 @@ contains
                 this%n2, out_arr_2d, this%split, this%n2, 1, in_arr_2d, this%n, &
                 this%n2, 1, this%fftw_plan)
 
-            deallocate (in_arr_2d, out_arr_2d) 
+            deallocate (in_arr_2d, out_arr_2d)
         
         case (3)
-            allocate (this%k1d(this%n2,this%n3,this%n))
-            allocate (this%mk1dsq(this%n2,this%n3,this%n))
+            allocate (this%k1d(this%n2,this%n3,this%split))
+            allocate (this%mk1dsq(this%n2,this%n3,this%split))
             do i = 1,this%n2
                 do j = 1,this%n3
                     this%k1d(i,j,:) = k_tmp
@@ -243,7 +243,6 @@ contains
         call this%ifftz(f_hat,df)
     
     end subroutine 
-
 
 
 
@@ -375,7 +374,7 @@ contains
         integer, intent(in) :: nx
         real(rkind), intent(in) :: dx
         real(rkind), dimension(nx) :: k
-        real(rkind), dimension(nx) :: k_small
+        real(rkind), dimension(nx/2 + 1) :: k_small
 
         integer :: i,dummy
 
