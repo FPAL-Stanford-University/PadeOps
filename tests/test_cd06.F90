@@ -14,7 +14,6 @@ program test_cd06
     real(rkind) :: dx, dy, dz
     real(rkind), parameter :: omega = 1._rkind
 
-    integer :: x1,xn,y1,yn,z1,zn
     integer :: i,ierr
 
     allocate( x(nx,ny,nz) )
@@ -36,22 +35,19 @@ program test_cd06
     ierr = zcd06%init( nz, dz, periodic, 0, 0)
 
     call tic() 
-    y1 = 1;yn = ny; z1 = 1; zn = nz
-    call xcd06 % dd1(f,df,ny,nz,y1,yn,z1,zn)
+    call xcd06 % dd1(f,df,ny,nz)
     call toc ("Time to get the x derivative:")
     print*, "Maximum error = ", MAXVAL( ABS(df - df_exact))
 
     df = 0._rkind
     call tic() 
-    x1 = 1;xn = nx; z1 = 1; zn = nz
-    call ycd06 % dd2(f,df,nx,nz,x1,xn,z1,zn)
+    call ycd06 % dd2(f,df,nx,nz)
     call toc ("Time to get the y derivative:")
     print*, "Maximum error = ", MAXVAL( ABS(df ))
     
     df = 0._rkind
     call tic() 
-    x1 = 1;xn = nx; y1 = 1; yn = ny
-    call zcd06 % dd3(f,df,nx,ny,x1,xn,y1,yn)
+    call zcd06 % dd3(f,df,nx,ny)
     call toc ("Time to get the z derivative:")
     print*, "Maximum error = ", MAXVAL( ABS(df ))
     

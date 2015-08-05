@@ -20,6 +20,7 @@ module fftstuff
         integer(kind=8) :: plan_bwd
 
         real(rkind), dimension(:,:,:), allocatable :: k1d
+        real(rkind), dimension(:,:,:), allocatable :: mk1dsq
 
         integer :: split
 
@@ -39,13 +40,16 @@ module fftstuff
             procedure :: dd1
             procedure :: dd2
             procedure :: dd3
+            procedure :: d2d1
+            procedure :: d2d2
+            procedure :: d2d3
 
-            procedure  :: fftx
-            procedure  :: ifftx
-            procedure  :: ffty
-            procedure  :: iffty
-            procedure  :: fftz
-            procedure  :: ifftz
+            procedure,private  :: fftx
+            procedure,private  :: ifftx
+            procedure,private  :: ffty
+            procedure,private  :: iffty
+            procedure,private  :: fftz
+            procedure,private  :: ifftz
 
 
     end type
@@ -103,6 +107,7 @@ contains
         select case (this%dir)
         case (1)
             allocate (this%k1d(this%split,this%n2,this%n3))
+            allocate (this%mk1dsq(this%split,this%n2,this%n3))
             do k = 1,this%n3
                 do j = 1,this%n2
                     this%k1d(:,j,k) = k_tmp
@@ -125,6 +130,7 @@ contains
 
         case (2)
             allocate (this%k1d(this%n2,this%split,this%n3))
+            allocate (this%mk1dsq(this%n2,this%split,this%n3))
             do k = 1,this%n3
                 do i = 1,this%n2
                     this%k1d(i,:,k) = k_tmp
@@ -146,6 +152,7 @@ contains
         
         case (3)
             allocate (this%k1d(this%n2,this%n3,this%n))
+            allocate (this%mk1dsq(this%n2,this%n3,this%n))
             do i = 1,this%n2
                 do j = 1,this%n3
                     this%k1d(i,j,:) = k_tmp
@@ -170,6 +177,7 @@ contains
             return  
         end select 
 
+        this%mk1dsq = -this%k1d*this%k1d
         this%initialized = .true. 
         ierr = 0
     end function 
@@ -230,6 +238,72 @@ contains
         call this%fftz(f,f_hat)
 
         f_hat = imi*this%k1d*f_hat
+        f_hat(:,:,this%split) = zero
+
+        call this%ifftz(f_hat,df)
+    
+    end subroutine 
+
+
+
+
+
+    subroutine d2d1(this,f, df)
+        class(ffts), intent(in) :: this
+        real(rkind), dimension(this%n,this%n2, this%n3), intent(in) :: f 
+        real(rkind), dimension(this%n,this%n2, this%n3), intent(out) :: df 
+        complex(rkind), dimension(this%split,this%n2,this%n3) :: f_hat
+
+        if (this%n == 1) then
+            df = 0
+            return
+        end if 
+        
+        call this%fftx(f,f_hat)
+
+        f_hat = this%mk1dsq*f_hat
+        f_hat(this%split,:,:) = zero
+
+        call this%ifftx(f_hat,df)
+    
+    end subroutine 
+
+
+    subroutine d2d2(this,f, df)
+        class(ffts), intent(in) :: this
+        real(rkind), dimension(this%n2,this%n, this%n3), intent(in) :: f 
+        real(rkind), dimension(this%n2,this%n, this%n3), intent(out) :: df 
+        complex(rkind), dimension(this%n2,this%split) :: f_hat
+        integer :: k
+
+        if (this%n == 1) then
+            df = 0
+            return
+        end if 
+
+        do k = 1,this%n3
+            call this%ffty(f(:,:,k),f_hat)
+            f_hat = this%mk1dsq(:,:,k)*f_hat
+            f_hat(:,this%split) = zero
+            call this%iffty(f_hat, df(:,:,k))
+        end do 
+    
+    end subroutine 
+
+    subroutine d2d3(this,f, df)
+        class(ffts), intent(in) :: this
+        real(rkind), dimension(this%n2,this%n3, this%n), intent(in) :: f 
+        real(rkind), dimension(this%n2,this%n3, this%n), intent(out) :: df 
+        complex(rkind), dimension(this%n2,this%n3,this%split) :: f_hat
+
+        if (this%n == 1) then
+            df = 0
+            return
+        end if 
+        
+        call this%fftz(f,f_hat)
+
+        f_hat = this%mk1dsq*f_hat
         f_hat(:,:,this%split) = zero
 
         call this%ifftz(f_hat,df)
@@ -339,6 +413,7 @@ contains
         class(ffts), intent(inout) :: this
 
         if (allocated(this%k1d)) deallocate (this%k1d)
+        if (allocated(this%mk1dsq)) deallocate (this%mk1dsq)
         call dfftw_destroy_plan ( this%plan_fwd )
         call dfftw_destroy_plan ( this%plan_bwd )
 

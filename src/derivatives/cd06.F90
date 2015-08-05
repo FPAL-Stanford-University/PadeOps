@@ -342,16 +342,16 @@ contains
         end if 
     end subroutine 
     
-    subroutine SolveXLU1(this,y,n2,n3, y1, yn, z1, zn)
+    subroutine SolveXLU1(this,y,n2,n3)
         
         class (cd06), intent(in) :: this
-        integer, intent(in) :: n2,n3,y1,yn,z1,zn
+        integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  ! Take in RHS and put solution into it
         integer :: i, j, k
         real(rkind) :: sum1 
 
-        do k = z1,zn
-            do j = y1,yn 
+        do k = 1,n3
+            do j = 1,n2
                 ! Step 2
                 sum1 = this%LU1(1,2)*y(1,j,k)
                 do i = 2,this%n-1
@@ -373,71 +373,71 @@ contains
     end subroutine
 
     
-    subroutine SolveYLU1(this,y,n1,n3, x1, xn, z1, zn)
+    subroutine SolveYLU1(this,y,n1,n3)
         
         class (cd06), intent(in) :: this
-        integer, intent(in) :: n1,n3,x1,xn,z1,zn
+        integer, intent(in) :: n1,n3
         real(rkind), dimension(n1,this%n,n3), intent(inout) :: y  ! Take in RHS and put solution into it
         integer ::  j, k
-        real(rkind), dimension(x1:xn) :: sum1 
+        real(rkind), dimension(n1) :: sum1 
 
-        do k = z1,zn
+        do k = 1,n3
                 ! Step 2
-                sum1 = this%LU1(1,2)*y(x1:xn,1,k)
+                sum1 = this%LU1(1,2)*y(:,1,k)
                 do j = 2,this%n-1
-                    y(x1:xn,j,k) = y(x1:xn,j,k) - this%LU1(j,1)*y(x1:xn,j-1,k)
-                    sum1 = sum1 + this%LU1(j,2)*y(x1:xn,j,k)
+                    y(:,j,k) = y(:,j,k) - this%LU1(j,1)*y(:,j-1,k)
+                    sum1 = sum1 + this%LU1(j,2)*y(:,j,k)
                 end do
-                y(x1:xn,this%n,k) = y(x1:xn,this%n,k) - sum1
+                y(:,this%n,k) = y(:,this%n,k) - sum1
     
                 ! Step 3
-                y(x1:xn,this%n,k)   = y(x1:xn,this%n,k) * this%LU1(this%n,3)
+                y(:,this%n,k)   = y(:,this%n,k) * this%LU1(this%n,3)
 
-                y(x1:xn,this%n-1,k) =  y(x1:xn,this%n-1,k) * this%LU1(this%n-1,3) - y(x1:xn,this%n,k) * this%LU1(this%n-1,5) 
+                y(:,this%n-1,k) =  y(:,this%n-1,k) * this%LU1(this%n-1,3) - y(:,this%n,k) * this%LU1(this%n-1,5) 
                 do j = this%n-2,1,-1
-                    y(x1:xn,j,k) =  y(x1:xn,j,k) * this%LU1(j,3)- y(x1:xn,j+1,k) * this%LU1(j,4)- y(x1:xn,this%n,k) * this%LU1(j,5)
+                    y(:,j,k) =  y(:,j,k) * this%LU1(j,3)- y(:,j+1,k) * this%LU1(j,4)- y(:,this%n,k) * this%LU1(j,5)
                 end do
         end do 
     
     end subroutine
 
     
-    subroutine SolveZLU1(this,y,n1,n2, x1, xn, y1, yn)
+    subroutine SolveZLU1(this,y,n1,n2)
         
         class (cd06), intent(in) :: this
-        integer, intent(in) :: n1,n2,x1,xn,y1,yn
+        integer, intent(in) :: n1,n2
         real(rkind), dimension(n1,n2,this%n), intent(inout) :: y  ! Take in RHS and put solution into it
         integer ::  k
-        real(rkind), dimension(x1:xn,y1:yn) :: sum1 
+        real(rkind), dimension(n1,n2) :: sum1 
 
         ! Step 2
-        sum1 = this%LU1(1,2)*y(x1:xn,y1:yn,1)
+        sum1 = this%LU1(1,2)*y(:,:,1)
         do k = 2,this%n-1
-            y(x1:xn,y1:yn,k) = y(x1:xn,y1:yn,k) - this%LU1(k,1)*y(x1:xn,y1:yn,k-1)
-            sum1 = sum1 + this%LU1(k,2)*y(x1:xn,y1:yn,k)
+            y(:,:,k) = y(:,:,k) - this%LU1(k,1)*y(:,:,k-1)
+            sum1 = sum1 + this%LU1(k,2)*y(:,:,k)
         end do
-        y(x1:xn,y1:yn,this%n) = y(x1:xn,y1:yn,this%n) - sum1
+        y(:,:,this%n) = y(:,:,this%n) - sum1
     
         ! Step 3
-        y(x1:xn,y1:yn,this%n)   = y(x1:xn,y1:yn,this%n) * this%LU1(this%n,3)
+        y(:,:,this%n)   = y(:,:,this%n) * this%LU1(this%n,3)
 
-        y(x1:xn,y1:yn,this%n-1) =  y(x1:xn,y1:yn,this%n-1) * this%LU1(this%n-1,3) - y(x1:xn,y1:yn,this%n) * this%LU1(this%n-1,5) 
+        y(:,:,this%n-1) =  y(:,:,this%n-1) * this%LU1(this%n-1,3) - y(:,:,this%n) * this%LU1(this%n-1,5) 
         do k = this%n-2,1,-1
-            y(x1:xn,y1:yn,k) =  y(x1:xn,y1:yn,k) * this%LU1(k,3)- y(x1:xn,y1:yn,k+1) * this%LU1(k,4)- y(x1:xn,y1:yn,this%n) * this%LU1(k,5)
+            y(:,:,k) =  y(:,:,k) * this%LU1(k,3)- y(:,:,k+1) * this%LU1(k,4)- y(:,:,this%n) * this%LU1(k,5)
         end do
     
     end subroutine
 
     
-    subroutine SolveXTri1(this,y,n2,n3,y1,yn,z1,zn)
+    subroutine SolveXTri1(this,y,n2,n3)
     
         class (cd06), intent(in) :: this
-        integer, intent(in) :: n2,n3,y1,yn,z1,zn
+        integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  
         integer :: i, j, k
   
-        do k = z1,zn 
-            do j = y1,yn
+        do k = 1,n3
+            do j = 1,n2
                 y(1,j,k) = y(1,j,k)*this%Tri1(1,2)
                 do i = 2,this%n
                     y(i,j,k) = y(i,j,k)*this%Tri1(i,2) - y(i-1,j,k)*this%Tri1(i,1)
@@ -451,57 +451,51 @@ contains
         
     end subroutine
    
-    subroutine SolveYTri1(this,y,n1,n3,x1,xn,z1,zn)
+    subroutine SolveYTri1(this,y,n1,n3)
     
         class (cd06), intent(in) :: this
-        integer, intent(in) :: n1,n3,x1,xn,z1,zn
+        integer, intent(in) :: n1,n3
         real(rkind), dimension(n1,this%n,n3), intent(inout) :: y  
         integer :: j, k
   
-        do k = z1,zn 
-            !do i = y1,yn
-                y(x1:xn,1,k) = y(x1:xn,1,k)*this%Tri1(1,2)
+        do k = 1,n3 
+                y(:,1,k) = y(:,1,k)*this%Tri1(1,2)
                 do j = 2,this%n
-                    y(x1:xn,j,k) = y(x1:xn,j,k)*this%Tri1(j,2) - y(x1:xn,j-1,k)*this%Tri1(j,1)
+                    y(:,j,k) = y(:,j,k)*this%Tri1(j,2) - y(:,j-1,k)*this%Tri1(j,1)
                 end do
                 
                 do j = this%n-1,1,-1
-                    y(x1:xn,j,k) = y(x1:xn,j,k) - this%Tri1(j,3)*y(x1:xn,j+1,k)
+                    y(:,j,k) = y(:,j,k) - this%Tri1(j,3)*y(:,j+1,k)
                 end do 
-            !end do 
         end do 
         
     end subroutine
     
-    subroutine SolveZTri1(this,y,n1,n2,x1,xn,y1,yn)
+    subroutine SolveZTri1(this,y,n1,n2)
     
         class (cd06), intent(in) :: this
-        integer, intent(in) :: n1,n2,y1,yn,x1,xn
+        integer, intent(in) :: n1,n2
         real(rkind), dimension(n1,n2,this%n), intent(inout) :: y  
         integer :: k
   
-        !do k = z1,zn 
-        !    do j = y1,yn
-                y(x1:xn,y1:yn,1) = y(x1:xn,y1:yn,1)*this%Tri1(1,2)
+                y(:,:,1) = y(:,:,1)*this%Tri1(1,2)
                 do k = 2,this%n
-                    y(x1:xn,y1:yn,k) = y(x1:xn,y1:yn,k)*this%Tri1(k,2) - y(x1:xn,y1:yn,k-1)*this%Tri1(k,1)
+                    y(:,:,k) = y(:,:,k)*this%Tri1(k,2) - y(:,:,k-1)*this%Tri1(k,1)
                 end do
                 
                 do k = this%n-1,1,-1
-                    y(x1:xn,y1:yn,k) = y(x1:xn,y1:yn,k) - this%Tri1(k,3)*y(x1:xn,y1:yn,k+1)
+                    y(:,:,k) = y(:,:,k) - this%Tri1(k,3)*y(:,:,k+1)
                 end do 
-        !    end do 
-        !end do 
         
     end subroutine
 
-    subroutine SolveLU2(this,y,n2,n3, y1, yn, z1, zn)
+    subroutine SolveLU2(this,y,n2,n3)
         
         class (cd06), intent(in) :: this
-        integer, intent(in) :: n2,n3,y1,yn,z1,zn
+        integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  ! Take in RHS and put solution into it
 
-        print*, n2,n3,y1,yn,z1,zn
+        
         y = zero
                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
                 ! Incomplete
@@ -509,20 +503,19 @@ contains
 
     end subroutine 
      
-    subroutine SolveTri2(this,y,n2,n3,y1,yn,z1,zn)
+    subroutine SolveTri2(this,y,n2,n3)
     
         class (cd06), intent(in) :: this
-        integer, intent(in) :: n2,n3,y1,yn,z1,zn
+        integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  
   
-        print*, n2,n3,y1,yn,z1,zn 
         y = zero 
     end subroutine
     
-    subroutine ComputeXD1RHS(this,f, RHS, n2, n3, y1, yn, z1, zn) 
+    subroutine ComputeXD1RHS(this,f, RHS, n2, n3) 
          
         class( cd06 ), intent(in) :: this
-        integer, intent(in) :: n2, n3, y1, yn, z1, zn
+        integer, intent(in) :: n2, n3
         real(rkind), dimension(this%n,n2,n3), intent(in) :: f
         real(rkind), dimension(this%n,n2,n3), intent(out) :: RHS
         integer ::  j, k
@@ -537,8 +530,8 @@ contains
             a06 = a06d1 * this%onebydx
             b06 = b06d1 * this%onebydx
            
-            do k = z1,zn
-                do j = y1,yn 
+            do k = 1,n3
+                do j = 1,n2
                     RHS(1         ,j,k) = a06 * ( f(2,j,k)          - f(this%n  ,j,k) ) &
                                         + b06 * ( f(3,j,k)          - f(this%n-1,j,k) ) 
                     
@@ -569,8 +562,8 @@ contains
             c_np_1 = w1*(  r * this%onebydx)
             d_np_1 = w1*(  s * this%onebydx)
        
-            do k = z1,zn
-                do j = y1,yn
+            do k = 1,n3
+                do j =1,n2
                     RHS(1         ,j,k) =   a_np_1* f(1         ,j,k) +  b_np_1*f(2         ,j,k)   &
                                         +   c_np_1* f(3         ,j,k) +  d_np_1*f(4         ,j,k) 
                    
@@ -600,10 +593,10 @@ contains
    
 
 
-    subroutine ComputeYD1RHS(this,f, RHS, n1, n3, x1, xn, z1, zn) 
+    subroutine ComputeYD1RHS(this,f, RHS, n1, n3) 
          
         class( cd06 ), intent(in) :: this
-        integer, intent(in) :: n1, n3, x1, xn, z1, zn
+        integer, intent(in) :: n1, n3
         real(rkind), dimension(n1,this%n,n3), intent(in) :: f
         real(rkind), dimension(n1,this%n,n3), intent(out) :: RHS
         integer ::  k
@@ -618,22 +611,21 @@ contains
             a06 = a06d1 * this%onebydx
             b06 = b06d1 * this%onebydx
            
-            do k = z1,zn
-                !do j = y1,yn 
-                    RHS(x1:xn,1         ,k) = a06 * ( f(x1:xn,2,k)          - f(x1:xn,this%n  ,k) ) &
-                                        + b06 * ( f(x1:xn,3,k)          - f(x1:xn,this%n-1,k) ) 
+            do k = 1,n3
+                    RHS(:,1         ,k) = a06 * ( f(:,2,k)          - f(:,this%n  ,k) ) &
+                                        + b06 * ( f(:,3,k)          - f(:,this%n-1,k) ) 
                     
-                    RHS(x1:xn,2         ,k) = a06 * ( f(x1:xn,3,k)          - f(x1:xn,1       ,k) ) &
-                                        + b06 * ( f(x1:xn,4,k)          - f(x1:xn,this%n  ,k) )
+                    RHS(:,2         ,k) = a06 * ( f(:,3,k)          - f(:,1       ,k) ) &
+                                        + b06 * ( f(:,4,k)          - f(:,this%n  ,k) )
 
-                    RHS(x1:xn,3:this%n-2,k) = a06 * ( f(x1:xn,4:this%n-1,k) - f(x1:xn,2:this%n-3,k) ) &
-                                        + b06 * ( f(x1:xn,5:this%n  ,k) - f(x1:xn,1:this%n-4,k) ) 
+                    RHS(:,3:this%n-2,k) = a06 * ( f(:,4:this%n-1,k) - f(:,2:this%n-3,k) ) &
+                                        + b06 * ( f(:,5:this%n  ,k) - f(:,1:this%n-4,k) ) 
                     
-                    RHS(x1:xn,this%n-1  ,k) = a06 * ( f(x1:xn,this%n,k)         - f(x1:xn,this%n-2,k) ) &
-                                        + b06 * ( f(x1:xn,1,k)          - f(x1:xn,this%n-3,k) ) 
+                    RHS(:,this%n-1  ,k) = a06 * ( f(:,this%n,k)         - f(:,this%n-2,k) ) &
+                                        + b06 * ( f(:,1,k)          - f(:,this%n-3,k) ) 
                     
-                    RHS(x1:xn,this%n    ,k) = a06 * ( f(x1:xn,1,k)          - f(x1:xn,this%n-1,k) ) &
-                                        + b06 * ( f(x1:xn,2,k)          - f(x1:xn,this%n-2,k) )
+                    RHS(:,this%n    ,k) = a06 * ( f(:,1,k)          - f(:,this%n-1,k) ) &
+                                        + b06 * ( f(:,2,k)          - f(:,this%n-2,k) )
                 !end do 
             end do 
         case (.FALSE.)
@@ -650,27 +642,26 @@ contains
             c_np_1 = w1*(  r * this%onebydx)
             d_np_1 = w1*(  s * this%onebydx)
        
-            do k = z1,zn
-                !do j = y1,yn
-                    RHS(x1:xn,1         ,k) =   a_np_1* f(x1:xn,1         ,k) +  b_np_1*f(x1:xn,2         ,k)   &
-                                        +   c_np_1* f(x1:xn,3         ,k) +  d_np_1*f(x1:xn,4         ,k) 
+            do k = 1,n3
+                    RHS(:,1         ,k) =   a_np_1* f(:,1         ,k) +  b_np_1*f(:,2         ,k)   &
+                                        +   c_np_1* f(:,3         ,k) +  d_np_1*f(:,4         ,k) 
                    
-                    RHS(x1:xn,2         ,k) =   a_np_2*(f(x1:xn,3         ,k) -         f(x1:xn,1         ,k))
+                    RHS(:,2         ,k) =   a_np_2*(f(:,3         ,k) -         f(:,1         ,k))
                     
-                    RHS(x1:xn,3         ,k) =   a_np_3*(f(x1:xn,4         ,k) -         f(x1:xn,2         ,k)) &
-                                        +   b_np_3*(f(x1:xn,5         ,k) -         f(x1:xn,1         ,k)) 
+                    RHS(:,3         ,k) =   a_np_3*(f(:,4         ,k) -         f(:,2         ,k)) &
+                                        +   b_np_3*(f(:,5         ,k) -         f(:,1         ,k)) 
 
-                    RHS(x1:xn,4:this%n-3,k) =   b06   *(f(x1:xn,6:this%n-1,k) -         f(x1:xn,2:this%n-5,k)) &
-                                        +   a06   *(f(x1:xn,5:this%n-2,k) -         f(x1:xn,3:this%n-4,k)) 
+                    RHS(:,4:this%n-3,k) =   b06   *(f(:,6:this%n-1,k) -         f(:,2:this%n-5,k)) &
+                                        +   a06   *(f(:,5:this%n-2,k) -         f(:,3:this%n-4,k)) 
                                           
 
-                    RHS(x1:xn,this%n-2  ,k) =   a_np_3*(f(x1:xn,this%n-1  ,k) -         f(x1:xn,this%n-3  ,k)) &
-                                        +   b_np_3*(f(x1:xn,this%n    ,k) -         f(x1:xn,this%n-4  ,k)) 
+                    RHS(:,this%n-2  ,k) =   a_np_3*(f(:,this%n-1  ,k) -         f(:,this%n-3  ,k)) &
+                                        +   b_np_3*(f(:,this%n    ,k) -         f(:,this%n-4  ,k)) 
                     
-                    RHS(x1:xn,this%n-1  ,k) =   a_np_2*(f(x1:xn,this%n    ,k) -         f(x1:xn,this%n-2  ,k))
+                    RHS(:,this%n-1  ,k) =   a_np_2*(f(:,this%n    ,k) -         f(:,this%n-2  ,k))
 
-                    RHS(x1:xn,this%n    ,k) =  -a_np_1* f(x1:xn,this%n    ,k) -  b_np_1*f(x1:xn,this%n-1  ,k)   &
-                                        -   c_np_1* f(x1:xn,this%n-2  ,k) -  d_np_1*f(x1:xn,this%n-3  ,k)
+                    RHS(:,this%n    ,k) =  -a_np_1* f(:,this%n    ,k) -  b_np_1*f(:,this%n-1  ,k)   &
+                                        -   c_np_1* f(:,this%n-2  ,k) -  d_np_1*f(:,this%n-3  ,k)
 
                 !end do 
             end do  
@@ -680,10 +671,10 @@ contains
     end subroutine
 
 
-    subroutine ComputeZD1RHS(this,f, RHS, n1, n2, x1, xn, y1, yn) 
+    subroutine ComputeZD1RHS(this,f, RHS, n1, n2) 
          
         class( cd06 ), intent(in) :: this
-        integer, intent(in) :: n1, n2, y1, yn, x1, xn
+        integer, intent(in) :: n1, n2
         real(rkind), dimension(n1,n2,this%n), intent(in) :: f
         real(rkind), dimension(n1,n2,this%n), intent(out) :: RHS
         real(rkind) :: a06, b06
@@ -697,20 +688,20 @@ contains
             a06 = a06d1 * this%onebydx
             b06 = b06d1 * this%onebydx
            
-            RHS(x1:xn,y1:yn,1         ) = a06 * ( f(x1:xn,y1:yn,2)          - f(x1:xn,y1:yn,this%n  ) ) &
-                                + b06 * ( f(x1:xn,y1:yn,3)          - f(x1:xn,y1:yn,this%n-1) ) 
+            RHS(:,:,1         ) = a06 * ( f(:,:,2)          - f(:,:,this%n  ) ) &
+                                + b06 * ( f(:,:,3)          - f(:,:,this%n-1) ) 
             
-            RHS(x1:xn,y1:yn,2         ) = a06 * ( f(x1:xn,y1:yn,3)          - f(x1:xn,y1:yn,1       ) ) &
-                               + b06 * ( f(x1:xn,y1:yn,4)          - f(x1:xn,y1:yn,this%n  ) )
+            RHS(:,:,2         ) = a06 * ( f(:,:,3)          - f(:,:,1       ) ) &
+                               + b06 * ( f(:,:,4)          - f(:,:,this%n  ) )
 
-            RHS(x1:xn,y1:yn,3:this%n-2) = a06 * ( f(x1:xn,y1:yn,4:this%n-1) - f(x1:xn,y1:yn,2:this%n-3) ) &
-                               + b06 * ( f(x1:xn,y1:yn,5:this%n  ) - f(x1:xn,y1:yn,1:this%n-4) ) 
+            RHS(:,:,3:this%n-2) = a06 * ( f(:,:,4:this%n-1) - f(:,:,2:this%n-3) ) &
+                               + b06 * ( f(:,:,5:this%n  ) - f(:,:,1:this%n-4) ) 
             
-            RHS(x1:xn,y1:yn,this%n-1  ) = a06 * ( f(x1:xn,y1:yn,this%n)         - f(x1:xn,y1:yn,this%n-2) ) &
-                               + b06 * ( f(x1:xn,y1:yn,1)          - f(x1:xn,y1:yn,this%n-3) ) 
+            RHS(:,:,this%n-1  ) = a06 * ( f(:,:,this%n)         - f(:,:,this%n-2) ) &
+                               + b06 * ( f(:,:,1)          - f(:,:,this%n-3) ) 
             
-            RHS(x1:xn,y1:yn,this%n    ) = a06 * ( f(x1:xn,y1:yn,1)          - f(x1:xn,y1:yn,this%n-1) ) &
-                                + b06 * ( f(x1:xn,y1:yn,2)          - f(x1:xn,y1:yn,this%n-2) )
+            RHS(:,:,this%n    ) = a06 * ( f(:,:,1)          - f(:,:,this%n-1) ) &
+                                + b06 * ( f(:,:,2)          - f(:,:,this%n-2) )
         case (.FALSE.)
             a06 = a06d1 * this%onebydx
             b06 = b06d1 * this%onebydx
@@ -725,25 +716,25 @@ contains
             c_np_1 = w1*(  r * this%onebydx)
             d_np_1 = w1*(  s * this%onebydx)
        
-            RHS(x1:xn,y1:yn,1         ) =   a_np_1* f(x1:xn,y1:yn,1         ) +  b_np_1*f(x1:xn,y1:yn,2         )   &
-                                +   c_np_1* f(x1:xn,y1:yn,3         ) +  d_np_1*f(x1:xn,y1:yn,4         ) 
+            RHS(:,:,1         ) =   a_np_1* f(:,:,1         ) +  b_np_1*f(:,:,2         )   &
+                                +   c_np_1* f(:,:,3         ) +  d_np_1*f(:,:,4         ) 
             
-            RHS(x1:xn,y1:yn,2         ) =   a_np_2*(f(x1:xn,y1:yn,3         ) -         f(x1:xn,y1:yn,1         ))
+            RHS(:,:,2         ) =   a_np_2*(f(:,:,3         ) -         f(:,:,1         ))
             
-            RHS(x1:xn,y1:yn,3         ) =   a_np_3*(f(x1:xn,y1:yn,4         ) -         f(x1:xn,y1:yn,2         )) &
-                                +   b_np_3*(f(x1:xn,y1:yn,5         ) -         f(x1:xn,y1:yn,1         )) 
+            RHS(:,:,3         ) =   a_np_3*(f(:,:,4         ) -         f(:,:,2         )) &
+                                +   b_np_3*(f(:,:,5         ) -         f(:,:,1         )) 
 
-            RHS(x1:xn,y1:yn,4:this%n-3) =   b06   *(f(x1:xn,y1:yn,6:this%n-1) -         f(x1:xn,y1:yn,2:this%n-5)) &
-                                +   a06   *(f(x1:xn,y1:yn,5:this%n-2) -         f(x1:xn,y1:yn,3:this%n-4)) 
+            RHS(:,:,4:this%n-3) =   b06   *(f(:,:,6:this%n-1) -         f(:,:,2:this%n-5)) &
+                                +   a06   *(f(:,:,5:this%n-2) -         f(:,:,3:this%n-4)) 
                                   
 
-            RHS(x1:xn,y1:yn,this%n-2  ) =   a_np_3*(f(x1:xn,y1:yn,this%n-1  ) -         f(x1:xn,y1:yn,this%n-3  )) &
-                                +   b_np_3*(f(x1:xn,y1:yn,this%n    ) -         f(x1:xn,y1:yn,this%n-4  )) 
+            RHS(:,:,this%n-2  ) =   a_np_3*(f(:,:,this%n-1  ) -         f(:,:,this%n-3  )) &
+                                +   b_np_3*(f(:,:,this%n    ) -         f(:,:,this%n-4  )) 
             
-            RHS(x1:xn,y1:yn,this%n-1  ) =   a_np_2*(f(x1:xn,y1:yn,this%n    ) -         f(x1:xn,y1:yn,this%n-2  ))
+            RHS(:,:,this%n-1  ) =   a_np_2*(f(:,:,this%n    ) -         f(:,:,this%n-2  ))
 
-            RHS(x1:xn,y1:yn,this%n    ) =  -a_np_1* f(x1:xn,y1:yn,this%n    ) -  b_np_1*f(x1:xn,y1:yn,this%n-1  )   &
-                                -   c_np_1* f(x1:xn,y1:yn,this%n-2  ) -  d_np_1*f(x1:xn,y1:yn,this%n-3  )
+            RHS(:,:,this%n    ) =  -a_np_1* f(:,:,this%n    ) -  b_np_1*f(:,:,this%n-1  )   &
+                                -   c_np_1* f(:,:,this%n-2  ) -  d_np_1*f(:,:,this%n-3  )
 
         
         end select
@@ -781,9 +772,9 @@ contains
     
     end function
 
-    subroutine dd1(this, f, df, na, nb, a1, an, b1, bn)
+    subroutine dd1(this, f, df, na, nb)
         class( cd06 ), intent(in) :: this
-        integer, intent(in) :: na, nb, a1, an, b1, bn
+        integer, intent(in) :: na, nb
         real(rkind), dimension(this%n,na,nb), intent(in)  :: f
         real(rkind), dimension(this%n,na,nb), intent(out) :: df
 
@@ -792,20 +783,20 @@ contains
             return
         end if
 
-        call this%ComputeXD1RHS(f, df, na, nb, a1, an, b1, bn)
+        call this%ComputeXD1RHS(f, df, na, nb)
         select case (this%periodic) 
         case (.TRUE.)
-           call this%SolveXLU1(df,na,nb,a1,an,b1,bn)
+           call this%SolveXLU1(df,na,nb)
         case (.FALSE.) 
-           call this%SolveXTri1(df,na,nb, a1, an, b1, bn)
+           call this%SolveXTri1(df,na,nb)
         end select
 
 
     end subroutine
 
-    subroutine dd2(this, f, df, na, nb, a1, an, b1, bn)
+    subroutine dd2(this, f, df, na, nb)
         class( cd06 ), intent(in) :: this
-        integer, intent(in) :: na, nb, a1, an, b1, bn
+        integer, intent(in) :: na, nb
         real(rkind), dimension(na,this%n,nb), intent(in)  :: f
         real(rkind), dimension(na,this%n,nb), intent(out) :: df
 
@@ -814,20 +805,20 @@ contains
             return
         end if
 
-        call this%ComputeYD1RHS(f, df, na, nb, a1, an, b1, bn)
+        call this%ComputeYD1RHS(f, df, na, nb)
         select case (this%periodic) 
         case (.TRUE.)
-           call this%SolveYLU1(df,na,nb,a1,an,b1,bn)
+           call this%SolveYLU1(df,na,nb)
         case (.FALSE.) 
-           call this%SolveYTri1(df,na,nb, a1, an, b1, bn)
+           call this%SolveYTri1(df,na,nb)
         end select
 
 
     end subroutine
     
-    subroutine dd3(this, f, df, na, nb, a1, an, b1, bn)
+    subroutine dd3(this, f, df, na, nb)
         class( cd06 ), intent(in) :: this
-        integer, intent(in) :: na, nb, a1, an, b1, bn
+        integer, intent(in) :: na, nb
         real(rkind), dimension(na,nb,this%n), intent(in)  :: f
         real(rkind), dimension(na,nb,this%n), intent(out) :: df
 
@@ -836,12 +827,12 @@ contains
             return
         end if
 
-        call this%ComputeZD1RHS(f, df, na, nb, a1, an, b1, bn)
+        call this%ComputeZD1RHS(f, df, na, nb)
         select case (this%periodic) 
         case (.TRUE.)
-           call this%SolveZLU1(df,na,nb,a1,an,b1,bn)
+           call this%SolveZLU1(df,na,nb)
         case (.FALSE.) 
-           call this%SolveZTri1(df,na,nb, a1, an, b1, bn)
+           call this%SolveZTri1(df,na,nb)
         end select
 
 
