@@ -1,23 +1,24 @@
-program test_fft2d
+program test_fft3d
     use mpi
     use kind_parameters, only : rkind
     use decomp_2d
-    use fft_2d_stuff, only: fft_2d 
+    use fft_3d_stuff, only: fft_3d 
     use constants, only: pi, two
 
-    real(rkind), dimension(:,:,:), allocatable :: x, y, z, f,d2fdx2, d2fdy2, fold
-    type(fft_2d) :: myfft2d
+    implicit none
+    real(rkind), dimension(:,:,:), allocatable :: x, y, z, f,d2fdx2, d2fdy2, d2fdz2,fold
+    type(fft_3d) :: myfft3d
     type(decomp_info) :: gp
     complex(rkind), dimension(:,:,:), allocatable :: fhat
 
-    integer :: nx = 64, ny = 64, nz = 64
+    integer :: nx = 64, ny = 64, nz =64
     integer :: prow = 2, pcol = 2
     integer :: ierr, i, j, k
     real(rkind) :: maxerr, mymaxerr
     
     logical :: get_exhaustive_plan = .true.
     logical, parameter :: verbose = .false. 
-    real(rkind) :: dx, dy
+    real(rkind) :: dx, dy, dz
 
     double precision :: t0, t1
 
@@ -33,15 +34,17 @@ program test_fft2d
     allocate( f         ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     allocate( d2fdx2    ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     allocate( d2fdy2    ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
+    allocate( d2fdz2    ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     allocate( fold      ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     
    
     dx = two*pi/nx
     dy = two*pi/ny
+    dz = two*pi/nz
 
     ! Initialize fft_2d type  
-    ierr = myfft2d%init(nx,ny,nz,"y",dx, dy, get_exhaustive_plan)
-    call myfft2d%alloc_output(fhat) 
+    ierr = myfft3d%init(nx,ny,nz,"y",dx, dy,dz, get_exhaustive_plan)
+    call myfft3d%alloc_output(fhat) 
 
     if (nrank == 0) print*, "Initialization complete"
     ! Generate input data
@@ -51,31 +54,30 @@ program test_fft2d
             do i = 1,gp%ysz(1)
                 x(i,j,k) = real(gp%yst(1) - 1 + i - 1, rkind)*dx
                 y(i,j,k) = real(gp%yst(2) - 1 + j - 1, rkind)*dy 
+                z(i,j,k) = real(gp%yst(3) - 1 + k - 1, rkind)*dz
             end do 
         end do 
     end do 
 
-    f = sin(x)*sin(y)
-    !dfdx = cos(x)*sin(y)
-    d2fdx2 = -sin(x)*sin(y)
-    d2fdy2 = -sin(x)*sin(y)
-
+    f = sin(x)*sin(y)*sin(z)
+    d2fdx2 = -sin(x)*sin(y)*sin(z)
+    d2fdy2 = -sin(x)*sin(y)*sin(z)
+    d2fdz2 = -sin(x)*sin(y)*sin(z)
    
     call MPI_BARRIER(mpi_comm_world,ierr)
     t0 = MPI_WTIME()
     ! Forward transform 
-    call myfft2d%fft2(f,fhat)
+    call myfft3d%fft3(f,fhat)
     t1 = MPI_WTIME()
     
     if (nrank == 0) print*, "Forward transform time:", t1 - t0
 
-    do k = 1,gp%ysz(3)
-        fhat(:,:,k) = -myfft2d%k2 * myfft2d%k2 * fhat(:,:,k)
-    end do 
+    ! Compute the laplacian as a check 
+    fhat = -fhat * myfft3d%kabs_sq
 
     t0 = MPI_WTIME()
     ! Backward transform 
-    call myfft2d%ifft2(fhat,fold)
+    call myfft3d%ifft3(fhat,fold)
     t1 = MPI_WTIME()
 
     if (nrank == 0) print*, "Backward transform time:", t1 - t0
@@ -89,7 +91,7 @@ program test_fft2d
         print*, "z edges:", gp%yst(3), gp%yen(3), gp%ysz(3)
         print*, "-------------------------------------" 
             do i = 1,gp%ysz(1)
-                write(*,20) (d2fdy2(i,j,4), j = 1,gp%ysz(2))
+                write(*,20) (f(i,j,4), j = 1,gp%ysz(2))
             end do 
         print*, "------------------------------------" 
         print*, "Recalcuted:"
@@ -100,14 +102,13 @@ program test_fft2d
         
     end if 
    
-    
-    mymaxerr = MAXVAL(ABS(d2fdy2 - fold))
+    mymaxerr = MAXVAL(ABS(3*d2fdx2 - fold))
     call MPI_Reduce(mymaxerr, maxerr, 1, real_type, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
     if (nrank == 0) print*, "Maximum error = ", maxerr
     
     
     
-    call myfft2d%destroy
+    call myfft3d%destroy
 
 
     deallocate(x, y, z, f, fold, fhat, d2fdx2,d2fdy2)
@@ -115,4 +116,4 @@ program test_fft2d
     call MPI_Finalize(ierr)
     
 20 format(1x,16D10.3)
-end program 
+end program
