@@ -2,7 +2,7 @@
 program burgers
 
     use kind_parameters, only: rkind
-    use constants,       only: one,two,pi
+    use constants,       only: zero,one,two,pi
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
     
@@ -13,13 +13,15 @@ program burgers
     type( derivatives ) :: der
     type( filters     ) :: fil
 
-    real(rkind), dimension(:,:,:), allocatable :: x,u
+    real(rkind), dimension(:,:,:), allocatable :: x,u,u0
 
     real(rkind) :: nu = 0.01_rkind
     real(rkind) :: dx,dt,t,tend
 
-    character(len=*) :: dermethod = "cd10"    ! Use 10th order Pade
-    character(len=*) :: filmethod = "cf90"    ! Use 8th order filter
+    character(len=*), parameter :: dermethod = "cd10"    ! Use 10th order Pade
+    character(len=*), parameter :: filmethod = "cf90"    ! Use 8th order filter
+
+    integer :: i, iounit=17
 
     allocate( x(nx,ny,nz) )
     allocate( u(nx,ny,nz) )
@@ -28,8 +30,10 @@ program burgers
 
     do i=1,nx
         x(i,1,1) = real(i-1,rkind)*dx
-        u(i,1,1) = one !sin( two*pi*x(i,1,1) )
+        u(i,1,1) = sin( two*pi*x(i,1,1) )
     end do
+
+    u0 = u
 
     call der%init(          nx,     ny,     nz, &
                             dx,    one,    one, &
@@ -38,22 +42,27 @@ program burgers
 
     call fil%init(          nx,     ny,     nz, &
                         .TRUE., .TRUE., .TRUE., &
-                     filmethod, "cd10", "cd10"  )
+                     filmethod, "cf90", "cf90"  )
 
     t = zero
     dt = 0.001_rkind
-    tend = 0.5_rkind
+    tend = 0.25_rkind
     do while ( t .LT. tend )
-        call RK45(u,dt,der)
+        call RK45(u,dt,nu,der)
         t = t + dt
     end do
     if ( t .LT. tend ) then
         dt = tend - t
-        call RK45(u,dt,der)
+        call RK45(u,dt,nu,der)
         t = t + dt
     end if
 
-    print*, u(1), one/(one-t)
+    OPEN(UNIT=iounit, FILE="burgets.txt", FORM='FORMATTED')
+    WRITE(iounit,'(ES24.16)') t
+    do i=1,nx
+        WRITE(iounit,'(3ES24.16)') x(i,1,1), u0(i,1,1), u(i,1,1)
+    end do
+    CLOSE(iounit)
 
     deallocate( x )
     deallocate( u )
@@ -77,17 +86,33 @@ contains
         real(rkind), dimension(:,:,:), intent(in) :: u
         class( derivatives ),          intent(in) :: der
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(out) :: visc
+        real(rkind)                               :: nu
 
         call der%d2dx2(u,visc)
         visc = nu*visc
        
     end subroutine
 
-    subroutine RK45(u,dt,der)
+    subroutine calcRHS(u,nu,RHS,der)
+        real(rkind), dimension(:,:,:), intent(in)    :: u
+        class( derivatives ),          intent(in)    :: der
+        real(rkind),                   intent(in)    :: nu
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(out) :: RHS
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3))              :: tmp
+
+        call GetAdvection(u,tmp,der)
+        call GetViscous(u,nu,RHS,der)
+
+        RHS = RHS - tmp ! viscous term - advection term
+
+    end subroutine
+
+    subroutine RK45(u,dt,nu,der)
 
         real(rkind), dimension(:,:,:), intent(inout) :: u
         class( derivatives ),          intent(in)    :: der
-        real(rkind)                                  :: dt
+        real(rkind),                   intent(in)    :: dt
+        real(rkind),                   intent(in)    :: nu
         real(rkind), dimension(5) ::  A, B
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: RHS, Q
         integer :: step
@@ -109,9 +134,7 @@ contains
         Q = zero
 
         do step = 1,5
-            ! call calcRHS(u,nu,RHS,der)
-
-            RHS = u*u
+            call calcRHS(u,nu,RHS,der)
 
             Q = dt*RHS + A(step)*Q;
             u = u + B(step)*Q
