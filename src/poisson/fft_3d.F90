@@ -38,8 +38,8 @@ module fft_3d_stuff
         integer :: fft_plan = FFTW_MEASURE
         contains
             procedure :: init
-            procedure :: fft2
-            procedure :: ifft2
+            procedure :: fft3
+            procedure :: ifft3
             procedure :: destroy 
             procedure :: alloc_output
     end type 
@@ -78,10 +78,10 @@ contains
           & in Y direction. NY_GLOBAL must be an even number.") 
         end if 
         
-        if (((dims(1) == 1) .or. (dims(2) == 1)).and. (nproc > 1)) then
-            call decomp_2d_abort(303,"Only 2d decompositions supported. Check if the &
-          & auto-tuner gave an effectively 1d decomposition")
-        end if 
+        !if (((dims(1) == 1) .or. (dims(2) == 1)).and. (nproc > 1)) then
+        !    call decomp_2d_abort(303,"Only 2d decompositions supported. Check if the &
+        !  & auto-tuner gave an effectively 1d decomposition")
+        !end if 
 
         if (present(exhaustive)) then
             if (exhaustive) this%fft_plan = FFTW_EXHAUSTIVE
@@ -224,11 +224,23 @@ contains
         if (this%initialized) then
             if (allocated(this%f_yhat_in_yD)) deallocate(this%f_yhat_in_yD)
             if (allocated(this%f_xyhat_in_xD)) deallocate(this%f_xyhat_in_xD)
+            if (allocated(this%f_xyzhat_in_zD)) deallocate(this%f_xyzhat_in_zD)
+
+            if (allocated(this%k1       )) deallocate( this%k1     )       
+            if (allocated(this%k2       )) deallocate( this%k2     ) 
+            if (allocated(this%k3       )) deallocate( this%k3     ) 
+            if (allocated(this%kabs_sq  )) deallocate( this%kabs_sq) 
         
+            call dfftw_destroy_plan (this%plan_r2c_y    ) 
+            call dfftw_destroy_plan (this%plan_c2c_fwd_x)
+            call dfftw_destroy_plan (this%plan_c2c_bwd_x)
+            call dfftw_destroy_plan (this%plan_c2c_fwd_z)
+            call dfftw_destroy_plan (this%plan_c2c_bwd_z)
+            call dfftw_destroy_plan (this%plan_c2r_y    )
 
-        call decomp_info_finalize(this%spectral)
-        call decomp_info_finalize(this%physical)
 
+            call decomp_info_finalize(this%spectral)
+            call decomp_info_finalize(this%physical)
 
             this%initialized = .false.
         end if 
@@ -236,11 +248,10 @@ contains
     end subroutine
 
 
-    subroutine fft2(this,input, output)
+    subroutine fft3(this,input, output)
         class(fft_3d), intent(inout) :: this
         real   (rkind), intent(in ), dimension(this%physical%ysz(1),this%physical%ysz(2),this%physical%ysz(3)) :: input
         complex(rkind), intent(out), dimension(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)) :: output
-        
         integer :: k
 
         ! First take transform in y  
@@ -256,23 +267,42 @@ contains
       
        ! Now tranform back from x -> y
         call transpose_x_to_y(this%f_xyhat_in_xD,output,this%spectral)
-    
-       ! Done      
+   
+       ! Now transpose from y -> z
+        call transpose_y_to_z(output,this%f_xyzhat_in_zD,this%spectral)
+
+        ! Now take in place transform along z (complex transform)
+        call dfftw_execute(this%plan_c2c_fwd_z,this%f_xyzhat_in_zD,this%f_xyzhat_in_zD)
+      
+        ! Now transpose the result back to y
+        call transpose_z_to_y(this%f_xyzhat_in_zD,output,this%spectral)
+
     end subroutine 
 
 
 
-    subroutine ifft2(this,input,output)
+    subroutine ifft3(this,input,output)
         class(fft_3d), intent(inout) :: this
         complex(rkind), intent(in ), dimension(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)) :: input
         real   (rkind), intent(out), dimension(this%physical%ysz(1),this%physical%ysz(2),this%physical%ysz(3)) :: output
         complex(rkind), dimension(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)) :: tmp_arr
         integer :: k 
-        
-        ! First transform input from y -> x
-        call transpose_y_to_x(input, this%f_xyhat_in_xD, this%spectral)
+  
+        ! First transpose input y -> z
+        call transpose_y_to_z(input,this%f_xyzhat_in_zD,this%spectral)
 
-        ! Now take in place transform along x (complex transform)
+        ! Then take in place transform in z
+        ! Set oddball to zero
+        this%f_xyzhat_in_zD(:,:,this%spectral%zsz(3)/2 + 1) = 0._rkind
+        call dfftw_execute(this%plan_c2c_bwd_z,this%f_xyzhat_in_zD,this%f_xyzhat_in_zD)
+
+        ! Now double-transform z -> x
+        call transpose_z_to_y(this%f_xyzhat_in_zD,tmp_arr,this%spectral)
+        call transpose_y_to_x(tmp_arr, this%f_xyhat_in_xD, this%spectral)
+
+        ! Then take in place transform along x (complex transform)
+        ! Set oddbal to zero
+        this%f_xyhat_in_xD(this%spectral%xsz(1)/2 + 1,:,:) = 0._rkind
         call dfftw_execute_dft(this%plan_c2c_bwd_x, this%f_xyhat_in_xD, this%f_xyhat_in_xD)  
 
         ! Now transform this output from x -> y
