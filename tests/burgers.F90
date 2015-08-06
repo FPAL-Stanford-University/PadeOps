@@ -61,7 +61,7 @@ program burgers
     OPEN(UNIT=iounit, FILE="burgers.txt", FORM='FORMATTED')
     WRITE(iounit,'(ES24.16)') t
     do i=1,nx
-        WRITE(iounit,'(3ES24.16)') x(i,1,1), u0(i,1,1), u(i,1,1)
+        WRITE(iounit,'(3F24.16)') x(i,1,1), u0(i,1,1), u(i,1,1)
     end do
     CLOSE(iounit)
 
