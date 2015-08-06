@@ -11,13 +11,13 @@ program test_fft3d
     type(decomp_info) :: gp
     complex(rkind), dimension(:,:,:), allocatable :: fhat
 
-    integer :: nx = 8, ny = 8, nz =8
+    integer :: nx = 128, ny = 128, nz =128
     integer :: prow = 0, pcol = 0
     integer :: ierr, i, j, k
     real(rkind) :: maxerr, mymaxerr
     
     logical :: get_exhaustive_plan = .false.
-    logical, parameter :: verbose = .true. 
+    logical, parameter :: verbose = .false. 
     real(rkind) :: dx, dy, dz
     character(len=1), parameter :: base_dec = "x"
 
@@ -83,8 +83,8 @@ program test_fft3d
         end do 
     end select 
 
-    !f = sin(x)*sin(y)*sin(z)
-    f = x*y*z
+    f = sin(x)*sin(y)*sin(z)
+    !f = x*y*z
     d2fdx2 = -sin(x)*sin(y)*sin(z)
     d2fdy2 = -sin(x)*sin(y)*sin(z)
     d2fdz2 = -sin(x)*sin(y)*sin(z)
@@ -101,10 +101,10 @@ program test_fft3d
     t1 = MPI_WTIME()
     
     if (nrank == 0) print*, "Forward transform time:", t1 - t0
-    print*, maxval(abs(fhat) )
 
     ! Compute the laplacian as a check 
-    !fhat = -fhat * myfft3d%kabs_sq
+    fhat = -fhat * myfft3d%kabs_sq
+   
     t0 = MPI_WTIME()
     ! Backward transform 
     select case (base_dec)
@@ -137,8 +137,8 @@ program test_fft3d
         
     end if 
    
-    !mymaxerr = MAXVAL(ABS(3._rkind*d2fdx2 - fold))
-    mymaxerr = MAXVAL(ABS(f - fold))
+    mymaxerr = MAXVAL(ABS(3._rkind*d2fdx2 - fold))
+    !mymaxerr = MAXVAL(ABS(f - fold))
     call MPI_Reduce(mymaxerr, maxerr, 1, real_type, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
     if (nrank == 0) print*, "Maximum error = ", maxerr
     
