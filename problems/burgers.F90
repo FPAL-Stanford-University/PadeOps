@@ -15,7 +15,7 @@ program burgers
 
     real(rkind), dimension(:,:,:), allocatable :: x,u,u0
 
-    real(rkind) :: nu = 0.04_rkind
+    real(rkind) :: nu = 0.00_rkind
     real(rkind) :: dx,dt,t,tend
 
     character(len=*), parameter :: dermethod = "cd10"    ! Use 10th order Pade
@@ -25,6 +25,7 @@ program burgers
 
     allocate( x(nx,ny,nz) )
     allocate( u(nx,ny,nz) )
+    allocate(u0(nx,ny,nz) )
    
     dx = one / real(nx,rkind)
 
@@ -49,12 +50,12 @@ program burgers
     tend = 5.0_rkind / (two*pi)
     nu = nu / (two*pi)
     do while ( t .LT. tend )
-        call RK45(u,dt,nu,der)
+        call RK45(u,dt,nu,der,fil)
         t = t + dt
     end do
     if ( t .LT. tend ) then
         dt = tend - t
-        call RK45(u,dt,nu,der)
+        call RK45(u,dt,nu,der,fil)
         t = t + dt
     end if
 
@@ -67,6 +68,7 @@ program burgers
 
     deallocate( x )
     deallocate( u )
+    deallocate(u0 )
 
 contains
 
@@ -115,15 +117,17 @@ contains
 
     end subroutine
 
-    subroutine RK45(u,dt,nu,der)
+    subroutine RK45(u,dt,nu,der,fil)
 
         real(rkind), dimension(:,:,:), intent(inout) :: u
         class( derivatives ),          intent(in)    :: der
+        class( filters     ),          intent(in)    :: fil
         real(rkind),                   intent(in)    :: dt
         real(rkind),                   intent(in)    :: nu
         real(rkind), dimension(5) ::  A, B
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: RHS, Q
         integer :: step
+        logical, parameter :: filteron = .TRUE.
 
 
         A(1) = 0.0_rkind;
@@ -146,6 +150,13 @@ contains
 
             Q = dt*RHS + A(step)*Q;
             u = u + B(step)*Q
+
+            ! Filter the solution for partial de-aliasing
+            if (filteron) then
+                call fil%filterx(u,RHS)
+                u = RHS
+            end if
+
         end do
 
     end subroutine
