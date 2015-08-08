@@ -191,15 +191,15 @@ contains
             allocate(cmplx_arr_2d(this%spectral%ysz(1),this%spectral%ysz(2)),STAT=ierr)
 
             ! fwd transform in y (in place transform)
-             call dfftw_plan_many_dft(this%plan_c2c_fwd_y, 1, this%spectral%ysz(1),&  
+             call dfftw_plan_many_dft(this%plan_c2c_fwd_y, 1, this%spectral%ysz(2),&  
                     this%spectral%ysz(1), cmplx_arr_2d, this%spectral%ysz(2),this%spectral%ysz(1), &
-                    1, cmplx_arr_2d, this%spectral%ysz(1), this%spectral%ysz(1),1, &   
+                    1, cmplx_arr_2d, this%spectral%ysz(2), this%spectral%ysz(1),1, &   
                     FFTW_FORWARD, this%fft_plan)
 
             ! bwd transform in y (in place transform)
-             call dfftw_plan_many_dft(this%plan_c2c_bwd_y, 1, this%spectral%ysz(1),&  
+             call dfftw_plan_many_dft(this%plan_c2c_bwd_y, 1, this%spectral%ysz(2),&  
                     this%spectral%ysz(1), cmplx_arr_2d, this%spectral%ysz(2),this%spectral%ysz(1), &
-                    1, cmplx_arr_2d, this%spectral%ysz(1), this%spectral%ysz(1),1, &   
+                    1, cmplx_arr_2d, this%spectral%ysz(2), this%spectral%ysz(1),1, &   
                     FFTW_BACKWARD, this%fft_plan)
 
             deallocate (cmplx_arr_2d)
@@ -279,14 +279,14 @@ contains
 
             allocate(temp(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
             
-            this%k3 = k3_in_z(1:this%spectral%zsz(1),1:this%spectral%zsz(2),1:this%spectral%zsz(3))
+            this%k3 = k3_in_z
 
             ! Get k1 from x -> y -> z
             call transpose_x_to_y(k1_in_x(1:this%spectral%xsz(1),1:this%spectral%xsz(2),1:this%spectral%xsz(3)),temp,this%spectral)
             call transpose_y_to_z(temp,this%k1,this%spectral)
 
             ! Get k2 from y -> z
-            call transpose_y_to_z(k2_in_y(1:this%spectral%ysz(1),1:this%spectral%ysz(2),1:this%spectral%ysz(3)),this%k2,this%spectral)
+            call transpose_y_to_z(k2_in_y,this%k2,this%spectral)
 
             deallocate (temp)
          end select 
@@ -313,15 +313,24 @@ contains
             if (allocated(this%k2       )) deallocate( this%k2     ) 
             if (allocated(this%k3       )) deallocate( this%k3     ) 
             if (allocated(this%kabs_sq  )) deallocate( this%kabs_sq) 
-        
-            call dfftw_destroy_plan (this%plan_r2c_y    ) 
-            call dfftw_destroy_plan (this%plan_c2c_fwd_x)
-            call dfftw_destroy_plan (this%plan_c2c_bwd_x)
-            call dfftw_destroy_plan (this%plan_c2c_fwd_z)
-            call dfftw_destroy_plan (this%plan_c2c_bwd_z)
-            call dfftw_destroy_plan (this%plan_c2r_y    )
-
-
+       
+            select case (this%base_pencil)
+            case ("y") 
+                call dfftw_destroy_plan (this%plan_r2c_y    ) 
+                call dfftw_destroy_plan (this%plan_c2c_fwd_x)
+                call dfftw_destroy_plan (this%plan_c2c_bwd_x)
+                call dfftw_destroy_plan (this%plan_c2c_fwd_z)
+                call dfftw_destroy_plan (this%plan_c2c_bwd_z)
+                call dfftw_destroy_plan (this%plan_c2r_y    )
+            case ("x")
+                call dfftw_destroy_plan (this%plan_c2c_fwd_y) 
+                call dfftw_destroy_plan (this%plan_c2c_bwd_y) 
+                call dfftw_destroy_plan (this%plan_c2c_fwd_z) 
+                call dfftw_destroy_plan (this%plan_c2c_bwd_z) 
+                call dfftw_destroy_plan (this%plan_r2c_x) 
+                call dfftw_destroy_plan (this%plan_c2r_x) 
+            end select
+ 
             call decomp_info_finalize(this%spectral)
             call decomp_info_finalize(this%physical)
 
@@ -406,8 +415,7 @@ contains
         integer :: k
 
         ! First get the x tranform (r2c)
-        call dfftw_execute_dft(this%plan_r2c_x, input, this%f_xhat_in_xD)  
-
+        call dfftw_execute_dft_r2c(this%plan_r2c_x, input, this%f_xhat_in_xD)  
 
         ! Now transpose from x-> y
         call transpose_x_to_y(this%f_xhat_in_xD,this%f_xyhat_in_yD,this%spectral)
@@ -448,7 +456,7 @@ contains
         call transpose_y_to_x(this%f_xyhat_in_yD,this%f_xhat_in_xD,this%spectral)
 
         ! Then transform in x (c2r transform)
-        call dfftw_execute_dft(this%plan_c2r_x, this%f_xhat_in_xD, output)
+        call dfftw_execute_dft_c2r(this%plan_c2r_x, this%f_xhat_in_xD, output)
 
         ! Normalize the tranform 
         output = output*this%normfactor
