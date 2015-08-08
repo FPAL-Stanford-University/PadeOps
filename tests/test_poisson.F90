@@ -9,7 +9,7 @@ program test_poisson
     type(poisson) :: myPoisson
     type(decomp_info) :: gp
 
-    integer :: nx = 256, ny = 256, nz = 256
+    integer :: nx = 32, ny = 32, nz = 32
     integer :: prow = 2, pcol = 2
     integer :: ierr, i, j, k
     real(rkind) :: maxerr, mymaxerr
