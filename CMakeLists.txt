@@ -37,4 +37,5 @@ endif()
 
 # Add source file directories
 add_subdirectory(src)
+add_subdirectory(problems)
 add_subdirectory(tests)
