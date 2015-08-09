@@ -255,8 +255,9 @@ contains
         real(rkind), intent(in), dimension(:,:) :: kabs
         real(rkind), intent(out), dimension(:,:,:,:) :: Tri
 
-        Tri = 0._rkind
-    
+        ! Incomplete - so this is utter garbage
+        Tri = 0._rkind * kabs(1,1)  + this%dx  
+        Tri = 0._rkind 
     end subroutine
 
     pure subroutine get_rhs_cd08(this,in_rhs,out_rhs)

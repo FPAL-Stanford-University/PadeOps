@@ -25,8 +25,10 @@ contains
             call GracefulExit("Input file:" // trim(inputFile)// "is missing",1001)
         end if 
 
-        open(fileinput,file=trim(inputFile),form="formatted") 
-#include "inputReadOrder.F90"
+        open(fileinput,file=trim(inputFile),form="formatted")
+        
+        include "hitModules/inputReadOrder.F90"
+        
         close(fileinput)
       
         ! Fix all the string inputs  
