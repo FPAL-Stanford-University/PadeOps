@@ -2,14 +2,15 @@
 
 module kind_parameters
 
-    use ISO_FORTRAN_ENV, only: real32, real64
+    use mpi
     implicit none
     
     private
-    public :: rkind, clen, stdin, stdout, stderr
+    public :: rkind,mpirkind, clen, stdin, stdout, stderr
 
-    integer, parameter :: rkind=real64
-
+    integer, parameter :: rkind=kind(0.d0)
+    integer, parameter :: mpirkind = MPI_DOUBLE_PRECISION
+   
     integer, parameter :: clen = 100
 
     integer, parameter :: stdin  = 5

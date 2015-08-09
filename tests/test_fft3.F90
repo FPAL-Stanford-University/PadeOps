@@ -137,7 +137,7 @@ program test_fft3d
         
     end if 
    
-    mymaxerr = MAXVAL(ABS(3._rkind*d2fdx2 - fold))
+    mymaxerr = MAXVAL(ABS(3*d2fdx2 - fold))
     !mymaxerr = MAXVAL(ABS(f - fold))
     call MPI_Reduce(mymaxerr, maxerr, 1, real_type, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
     if (nrank == 0) print*, "Maximum error = ", maxerr
