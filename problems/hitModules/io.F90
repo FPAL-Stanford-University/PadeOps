@@ -26,7 +26,7 @@ contains
         end if 
 
         open(fileinput,file=trim(inputFile),form="formatted") 
-#include "hitModules/inputReadOrder.F90"
+#include "inputReadOrder.F90"
         close(fileinput)
       
         ! Fix all the string inputs  
@@ -45,7 +45,7 @@ contains
     end subroutine 
 
     subroutine write_matlab_header
-        integer :: fid = 1234
+        use mpi 
         character(len=256) :: fname
         character(len=32) :: tempname
         character(len=32) :: command
@@ -53,8 +53,7 @@ contains
         logical :: isThere
         integer :: idx 
 
-        inquire(DIRECTORY=trim(OutputDir), exist=isThere)
-        
+        inquire(FILE=trim(OutputDir), exist=isThere)
         if (nrank == 0) then
             if (.not. isThere) then
                 print*, "============================================="
@@ -78,6 +77,7 @@ contains
             write(headerfid,*)"Dumps made at:"
         end if
         numDumps = 0 
+        call mpi_barrier(mpi_comm_world,ierr)
     end subroutine
 
     subroutine dumpData4Matlab(tid) 
@@ -88,19 +88,19 @@ contains
 
         write(tempname,"(A3,I2.2,A2,I4.4,A2,I5.5,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_uVEL",".out"
         fname = OutputDir(:len_trim(OutputDir))//trim(tempname)
-        open(fid,file=trim(fname),form='unformatted')
+        open(fid,file=trim(fname),form='unformatted',status='replace')
         write(fid) fieldsPhys(:,:,:,1)
         close(fid)
 
         write(tempname,"(A3,I2.2,A2,I4.4,A2,I5.5,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_vVEL",".out"
         fname = OutputDir(:len_trim(OutputDir))//trim(tempname)
-        open(fid,file=trim(fname),form='unformatted')
+        open(fid,file=trim(fname),form='unformatted',status='replace')
         write(fid) fieldsPhys(:,:,:,2)
         close(fid)
 
         write(tempname,"(A3,I2.2,A2,I4.4,A2,I5.5,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_wVEL",".out"
         fname = OutputDir(:len_trim(OutputDir))//trim(tempname)
-        open(fid,file=trim(fname),form='unformatted')
+        open(fid,file=trim(fname),form='unformatted',status='replace')
         write(fid) fieldsPhys(:,:,:,3)
         close(fid)
         

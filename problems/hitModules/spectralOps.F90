@@ -59,7 +59,7 @@ contains
     end subroutine 
 
     subroutine pressureProjection
-        use variables, only: Buff_cmplx, FT, fieldsSpec, rhs, oneByksq
+        use variables, only: Buff_cmplx, FT, fieldsSpec, oneByksq
         
         Buff_cmplx = FT%k1*fieldsSpec(:,:,:,1)
         Buff_cmplx = Buff_cmplx + FT%k2*fieldsSpec(:,:,:,2)

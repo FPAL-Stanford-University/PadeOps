@@ -22,7 +22,7 @@ contains
     subroutine initialize(tidx)
         integer, intent(out) :: tidx 
         character(len=64) :: tmp
-        integer :: dims(2),dummy_periods(2), dummy_coords(2)
+        !integer :: dims(2),dummy_periods(2), dummy_coords(2)
         real(rkind) :: kmax_sq
         logical, parameter :: fixOddball = .true. 
         integer :: i, j, k 
@@ -89,17 +89,17 @@ contains
             end do 
          end do 
 
-        call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, &
-               dims, dummy_periods, dummy_coords, ierr) 
+        !call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, dummy_periods, dummy_coords, ierr) 
 
-        if ((dims(1) == 1) .or. (dims(2) == 1)) then
-            if (nrank == 0) then
-                print*, "============================================================================="
-                print*, "WARNING: Effectively 1D decomposition is being used. &
-                & The code hasn't been optimized for 1D decomposition."
-                print*, "============================================================================="
-            end if 
-        end if 
+        !if ((dims(1) == 1) .or. (dims(2) == 1)) then
+        !    if (nrank == 0) then
+        !        print*, "============================================================================="
+        !        print*, "WARNING: Effectively 1D decomposition is being used. &
+        !        & The code hasn't been optimized for 1D decomposition."
+        !        print*, "============================================================================="
+        !    end if 
+        !end if 
+        
         if (.not. RESTART) then  
             if (useHit3dinit) then
                 call getHit3d_uvw(HIT3dinitDir) 
@@ -113,7 +113,7 @@ contains
                 print*, "---------------"
                 write(*,"(A40,3I4)"), "(Nx, Ny, Nz) GLOBAL:", Nx, Ny, Nz
                 write(*,"(A40,I4)"), "Total Processors:",     nproc
-                write(*,"(A40,I4,A4,I4)"), "Processor Decomposition:", dims(1),"x", dims(2)
+                !write(*,"(A40,I4,A4,I4)"), "Processor Decomposition:", dims(1),"x", dims(2)
                 if (dealias == 2) then
                     write(*,"(A40,A32)") "Dealiasing method:", "Boxed dealiasing (2/3rd rule)"
                     write(*,"(A40,3F10.4)"), "Dealiasing Wavenumbers (kx,ky,kz)_max:", kdealias_x,kdealias_y,kdealias_z
