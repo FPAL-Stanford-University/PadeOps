@@ -167,7 +167,8 @@ contains
                     this%spectral%xsz(2)*this%spectral%xsz(3), this%f_xyhat_in_xD, this%spectral%xsz(1), 1, &
                     this%spectral%xsz(1), this%f_xyhat_in_xD, this%spectral%xsz(1), 1, this%spectral%xsz(1), &   
                     FFTW_FORWARD, FFTW_MEASURE)!this%fft_plan)   
-                   
+                  
+ 
             ! Create plan for bwd transform in x (in place transform)        
              call dfftw_plan_many_dft(this%plan_c2c_bwd_x, 1, this%spectral%xsz(1),&  
                     this%spectral%xsz(2)*this%spectral%xsz(3), this%f_xyhat_in_xD, this%spectral%xsz(1), 1, &
@@ -247,32 +248,21 @@ contains
 
 
         case ("z")
-            if (allocated(this%f_zhat_in_zD)) deallocate(this%f_zhat_in_zD)
-            if (allocated(this%f_zyhat_in_yD)) deallocate(this%f_zyhat_in_yD)
-            if (allocated(this%f_xyzhat_in_xD)) deallocate(this%f_xyzhat_in_xD)
-
             call decomp_info_init(nx_global, ny_global, nz_global/2 + 1, this%spectral)
-            allocate(this%f_zhat_in_zD(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)))
+            allocate(this%f_xyzhat_in_xD(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))   
             allocate(this%f_zyhat_in_yD(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
-            allocate(this%f_xyzhat_in_xD(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)),STAT=ierr) 
+            call dfftw_plan_many_dft(this%plan_c2c_fwd_x, 1, this%spectral%xsz(1), &
+                this%spectral%xsz(2)*this%spectral%xsz(3), this%f_xyzhat_in_xD, this%spectral%xsz(1), 1, &
+                this%spectral%xsz(1), this%f_xyzhat_in_xD, this%spectral%xsz(1), 1, this%spectral%xsz(1), &
+                FFTW_FORWARD, this%fft_plan)
 
-            ! Define real -> complex transform in z
-            allocate (temp(this%physical%zsz(1),this%physical%zsz(2),this%physical%zsz(3)))
-            
-            call dfftw_plan_many_dft_r2c(this%plan_r2c_z, 1, this%physical%zsz(3), &
-                    this%physical%zsz(1)*this%physical%zsz(2), temp, &
-                    this%physical%zsz(3), this%physical%zsz(1)*this%physical%zsz(2), &
-                    1, this%f_zhat_in_zD, this%spectral%zsz(3), this%spectral%zsz(1)*this%spectral%zsz(2), 1, &
-                    this%fft_plan)
-            
-            call dfftw_plan_many_dft_r2c(this%plan_c2r_z, 1, this%physical%zsz(3), &
-                    this%spectral%zsz(1)*this%spectral%zsz(2), this%f_zhat_in_zD, &
-                    this%spectral%zsz(3), this%spectral%zsz(1)*this%spectral%zsz(2), &
-                    1, temp, this%physical%zsz(3), this%physical%zsz(1)*this%physical%zsz(2), 1, &
-                    this%fft_plan)
-            
-            deallocate (temp)
-        
+            allocate (dummy_in_x(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
+            call dfftw_plan_many_dft(this%plan_c2c_bwd_x, 1, this%spectral%xsz(1), &
+                this%spectral%xsz(2)*this%spectral%xsz(3), this%f_xyzhat_in_xD, this%spectral%xsz(1), 1, &
+                this%spectral%xsz(1), dummy_in_x, this%spectral%xsz(1), 1, this%spectral%xsz(1), &
+                FFTW_BACKWARD, this%fft_plan)
+            deallocate(dummy_in_x)
+
             ! Define complex -> complex transforms in y
             allocate(cmplx_arr_2d(this%spectral%ysz(1),this%spectral%ysz(2)),STAT=ierr)
 
@@ -290,20 +280,20 @@ contains
 
             deallocate (cmplx_arr_2d)
 
-            allocate(dummy_in_x(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))        
-            ! Create plan for bwd transform in x (out-of-place transform)
-            call dfftw_plan_many_dft(this%plan_c2c_bwd_x, 1, this%spectral%xsz(1),&  
-                this%spectral%xsz(1)*this%spectral%xsz(2),dummy_in_x, this%spectral%xsz(1), &
-                1, this%spectral%xsz(2)*this%spectral%xsz(3), this%f_xyzhat_in_xD, this%spectral%xsz(1), &
-                this%spectral%xsz(2)*this%spectral%xsz(3), 1, FFTW_BACKWARD, this%fft_plan)!this%fft_plan)   
-            deallocate(dummy_in_x)
+    
+            allocate (this%f_zhat_in_zD(this%physical%zsz(1),this%physical%zsz(2),this%physical%zsz(3)))
+            allocate (temp(this%physical%zsz(1),this%physical%zsz(2),this%physical%zsz(3)))
+            call dfftw_plan_many_dft_r2c(this%plan_r2c_z, 1, this%physical%zsz(3), &
+                 this%physical%zsz(1)*this%physical%zsz(2), temp, this%physical%zsz(3), &
+                 this%physical%zsz(1)*this%physical%zsz(2), 1, this%f_zhat_in_zD, this%spectral%zsz(3), &
+                 this%spectral%zsz(1)*this%spectral%zsz(2), 1, this%fft_plan)
 
-            ! Create plan for fwd transform in x (in place)
-            call dfftw_plan_many_dft(this%plan_c2c_fwd_x, 1, this%spectral%xsz(1),&  
-                this%spectral%xsz(1)*this%spectral%xsz(2),this%f_xyzhat_in_xD, this%spectral%xsz(1), &
-                1, this%spectral%xsz(2)*this%spectral%xsz(3), this%f_xyzhat_in_xD, this%spectral%xsz(1), &
-                this%spectral%xsz(2)*this%spectral%xsz(3), 1, FFTW_FORWARD, this%fft_plan)!this%fft_plan)   
-
+            call dfftw_plan_many_dft_c2r(this%plan_c2r_z, 1, this%physical%zsz(3), &
+                 this%physical%zsz(1)*this%physical%zsz(2), this%f_zhat_in_zD, this%spectral%zsz(3), &
+                 this%spectral%zsz(1)*this%spectral%zsz(2), 1, temp, this%physical%zsz(3), &
+                 this%physical%zsz(1)*this%physical%zsz(2), 1, this%fft_plan)
+            deallocate(temp)
+ 
         end select 
 
                 
@@ -389,11 +379,11 @@ contains
             this%k1 = k1_in_x
 
             ! Get k3 from z -> y -> x
-            call transpose_x_to_y(k3_in_z(1:this%spectral%zsz(1),1:this%spectral%zsz(2),1:this%spectral%zsz(3)),temp,this%spectral)
-            call transpose_y_to_z(temp,this%k3,this%spectral)
+            call transpose_z_to_y(k3_in_z,temp,this%spectral)
+            call transpose_y_to_x(temp,this%k3,this%spectral)
 
-            ! Get k2 from y -> z
-            call transpose_y_to_z(k2_in_y,this%k2,this%spectral)
+            ! Get k2 from y -> x
+            call transpose_y_to_x(k2_in_y,this%k2,this%spectral)
 
             deallocate (temp)
             
@@ -592,13 +582,15 @@ contains
     end subroutine
     
     subroutine fft3_z2x(this,input,output)
+        use mpi 
         class(fft_3d), intent(inout) :: this
         real(rkind), dimension(this%physical%zsz(1),this%physical%zsz(2),this%physical%zsz(3)), intent(in) :: input
         complex(rkind), dimension(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)), intent(out) :: output
-        integer :: k 
+        integer :: k, ierr  
 
         ! Take the z derivative
-        call dfftw_execute_dft_r2c(this%plan_r2c_x, input, this%f_zhat_in_zD)  
+
+        call dfftw_execute_dft_r2c(this%plan_r2c_z, input, this%f_zhat_in_zD)  
         
         call transpose_z_to_y(this%f_zhat_in_zD,this%f_zyhat_in_yD,this%spectral)
         
@@ -608,7 +600,8 @@ contains
         end do 
 
         call transpose_y_to_x(this%f_zyhat_in_yD,output,this%spectral)
-        call dfftw_execute_dft(this%plan_c2c_fwd_y, output, output)  
+        
+        call dfftw_execute_dft(this%plan_c2c_fwd_x, output, output)  
         
         if (this%fixOddball) then
             output(this%spectral%xsz(1)/2+1,:,:) = zero
@@ -634,7 +627,7 @@ contains
         end if 
         ! The take fwd transform in y (c2c, inplace)
         do k = 1,this%spectral%ysz(3)
-            call dfftw_execute_dft(this%plan_c2c_fwd_y, this%f_zyhat_in_yD(:,:,k), this%f_zyhat_in_yD(:,:,k))  
+            call dfftw_execute_dft(this%plan_c2c_bwd_y, this%f_zyhat_in_yD(:,:,k), this%f_zyhat_in_yD(:,:,k))  
         end do 
         
         call transpose_y_to_z(this%f_zyhat_in_yD,this%f_zhat_in_zD,this%spectral)
@@ -644,7 +637,10 @@ contains
         if (this%fixOddball) then
             this%f_zhat_in_zD(:,:,this%spectral%zsz(1)) = zero
         end if 
-        call dfftw_execute_dft_c2r(this%plan_c2r_x, this%f_zhat_in_zD, output)
+        call dfftw_execute_dft_c2r(this%plan_c2r_z, this%f_zhat_in_zD, output)
+
+        ! Normalize the tranform 
+        output = output*this%normfactor
 
     end subroutine 
 

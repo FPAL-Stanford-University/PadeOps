@@ -3,7 +3,7 @@ program test_fft3d
     use kind_parameters, only : rkind
     use decomp_2d
     use fft_3d_stuff, only: fft_3d 
-    use constants, only: pi, two
+    use constants, only: pi, two,one,zero, imi
 
     implicit none
     real(rkind), dimension(:,:,:), allocatable :: x, y, z, f,d2fdx2, d2fdy2, d2fdz2,fold
@@ -11,13 +11,13 @@ program test_fft3d
     type(decomp_info) :: gp
     complex(rkind), dimension(:,:,:), allocatable :: fhat
 
-    integer :: nx = 8, ny = 8, nz =8
+    integer :: nx =128, ny = 128, nz =128
     integer :: prow = 0, pcol = 0
     integer :: ierr, i, j, k
     real(rkind) :: maxerr, mymaxerr
     
     logical :: get_exhaustive_plan = .false.
-    logical, parameter :: verbose = .true. 
+    logical, parameter :: verbose = .false. 
     real(rkind) :: dx, dy, dz
     character(len=1) :: base_dec = "z"
 
@@ -51,14 +51,14 @@ program test_fft3d
         allocate( fold      ( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
     case ("z")
         ! Initialize input data (y decomposition) 
-        allocate( x         ( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
-        allocate( y         ( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
-        allocate( z         ( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
-        allocate( f         ( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
-        allocate( d2fdx2    ( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
-        allocate( d2fdy2    ( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
-        allocate( d2fdz2    ( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
-        allocate( fold      ( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
+        allocate( x         ( gp%zsz(1), gp%zsz(2), gp%zsz(3) ) )
+        allocate( y         ( gp%zsz(1), gp%zsz(2), gp%zsz(3) ) )
+        allocate( z         ( gp%zsz(1), gp%zsz(2), gp%zsz(3) ) )
+        allocate( f         ( gp%zsz(1), gp%zsz(2), gp%zsz(3) ) )
+        allocate( d2fdx2    ( gp%zsz(1), gp%zsz(2), gp%zsz(3) ) )
+        allocate( d2fdy2    ( gp%zsz(1), gp%zsz(2), gp%zsz(3) ) )
+        allocate( d2fdz2    ( gp%zsz(1), gp%zsz(2), gp%zsz(3) ) )
+        allocate( fold      ( gp%zsz(1), gp%zsz(2), gp%zsz(3) ) )
     end select 
 
     dx = two*pi/nx
@@ -93,9 +93,9 @@ program test_fft3d
         end do 
     case ("z")
     ! Initialize fft_2d type  
-        do k = 1,gp%xsz(3)
-            do j = 1,gp%xsz(2)
-                do i = 1,gp%xsz(1)
+        do k = 1,gp%zsz(3)
+            do j = 1,gp%zsz(2)
+                do i = 1,gp%zsz(1)
                     x(i,j,k) = real(gp%zst(1) - 1 + i - 1, rkind)*dx
                     y(i,j,k) = real(gp%zst(2) - 1 + j - 1, rkind)*dy 
                     z(i,j,k) = real(gp%zst(3) - 1 + k - 1, rkind)*dz
@@ -104,8 +104,8 @@ program test_fft3d
         end do 
     end select 
 
-    !f = sin(x)*sin(y)*sin(z)
-    f = x*y*z
+    f = sin(x)*sin(y)*sin(z)
+    !f = x*y*z
     d2fdx2 = -sin(x)*sin(y)*sin(z)
     d2fdy2 = -sin(x)*sin(y)*sin(z)
     d2fdz2 = -sin(x)*sin(y)*sin(z)
@@ -126,8 +126,11 @@ program test_fft3d
     if (nrank == 0) print*, "Forward transform time:", t1 - t0
 
     ! Compute the laplacian as a check 
-    !fhat = -fhat * myfft3d%kabs_sq
+    fhat = -fhat * myfft3d%kabs_sq
+         
+    !fhat = imi*myfft3d%k3*fhat 
    
+
     t0 = MPI_WTIME()
     ! Backward transform 
     select case (base_dec)
@@ -161,9 +164,10 @@ program test_fft3d
             end do 
         
     end if 
-   
-    !mymaxerr = MAXVAL(ABS(3*d2fdx2 - fold))
-    mymaxerr = MAXVAL(ABS(f - fold))
+  
+    !print*, cos(z)/(fold + 1d-18)
+    mymaxerr = MAXVAL(ABS(3*d2fdx2 - fold))
+    !mymaxerr = MAXVAL(ABS(f - fold))
     call MPI_Reduce(mymaxerr, maxerr, 1, real_type, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
     if (nrank == 0) print*, "Maximum error = ", maxerr
     
