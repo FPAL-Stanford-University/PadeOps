@@ -1,6 +1,6 @@
 module exits
 
-    use kind_parameters, only: stdout
+    use kind_parameters, only: rkind,stdout
     use decomp_2d, only: nrank, decomp_2d_abort
     
     implicit none
@@ -8,7 +8,7 @@ module exits
     public :: GracefulExit, message
         
     interface message
-        module procedure message_char
+        module procedure message_char, message_char_double
     end interface
      
 contains
@@ -23,10 +23,14 @@ contains
     end subroutine
 
     subroutine message_char(mess)
-        character(len=*) :: mess
-
+        character(len=*), intent(in) :: mess
         if (nrank == 0) write(stdout,*) mess
-
+    end subroutine
+    
+    subroutine message_char_double(mess,val)
+        character(len=*), intent(in) :: mess
+        real(rkind), intent(in) :: val
+        if (nrank == 0) write(stdout,*) mess, " = ", val
     end subroutine
     
 end module 

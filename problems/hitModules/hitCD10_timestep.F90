@@ -99,4 +99,38 @@ contains
     
     end subroutine
 
+    subroutine get_divergence_x(ux,vx,wx,vy,wy,wz,xder,yder,zder,gp,divz)
+        real(rkind), dimension(:,:,:),   intent(in)    :: ux,vx,wx
+        real(rkind), dimension(:,:,:),   intent(inout) :: vy,wy
+        real(rkind), dimension(:,:,:),   intent(inout) :: wz
+        class( decomp_info ),            intent(in)    :: gp
+        class( derivatives ),            intent(in)    :: xder,yder,zder
+        real(rkind), dimension( gp%zsz(1), gp%zsz(2), gp%zsz(3) ), intent(inout) :: divz
+        
+        real(rkind), dimension( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) :: divx
+        real(rkind), dimension( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) :: divy,ywrk
+        real(rkind), dimension( gp%zsz(1), gp%zsz(2), gp%zsz(3) ) :: zwrk
+        
+        ! Get X derivatives 
+        call xder%ddx(ux,divx)
+   
+        ! Transpose data to Y decomp
+        call transpose_x_to_y(vx,vy,gp)
+        call transpose_x_to_y(wx,wy,gp)
+        call transpose_x_to_y(divx,divy,gp)
+   
+        ! Get Y derivatives 
+        call yder%ddy(vy,ywrk)
+        divy = divy + ywrk
+    
+        ! Transpose data to Z decomp
+        call transpose_y_to_z(wy,wz,gp)
+        call transpose_y_to_z(divy,divz,gp)
+    
+        ! Get Z derivatives 
+        call zder%ddz(wz,zwrk)
+        divz = divz + zwrk
+        
+    end subroutine
+
 end module

@@ -1,14 +1,18 @@
 #include "hitModules/hitCD10_RHS.F90"
 #include "hitModules/hitCD10_timestep.F90"
+#include "hitModules/hitCD10_IO.F90"
 
 program hitCD10
 
-    use kind_parameters,  only: rkind
-    use constants,        only: zero,two,pi
+    use kind_parameters,  only: rkind,clen
+    use constants,        only: two,pi
+    use exits,            only: message
+    use reductions,       only: P_MAXVAL
     use decomp_2d,        only: decomp_2d_init, decomp_2d_finalize, get_decomp_info, decomp_info
     use DerivativesMod,   only: derivatives
     use FiltersMod,       only: filters
-    use hitCD10_timestep, only: timestep_x_to_z, timestep_z_to_x
+    use hitCD10_timestep, only: timestep_x_to_z, timestep_z_to_x, get_divergence_x
+    use hitCD10_IO,       only: GetHit3d_uvw
 
     implicit none
 
@@ -28,6 +32,10 @@ program hitCD10
 
     real(rkind) :: Re = 50._rkind
 
+    character(len=*), parameter :: dtype = "cd06"
+    character(len=*), parameter :: ftype = "cf90"
+    character(len=clen) :: dir = "/afs/ir/users/a/k/akshays/hit3d_data/"
+
     ! Initialize MPI and 2DECOMP
     call MPI_INIT(ierr)
     call decomp_2d_init(nx,ny,nz,prow,pcol)
@@ -38,29 +46,29 @@ program hitCD10
     dz = two*pi/real(nz,rkind)
 
     ! Initialize the derivatives objects
-    call xder%init(  gp%xsz(1), gp%xsz(2), gp%xsz(3), &
+    call xder%init(         gp,                       &
                             dx,        dy,        dz, &
                         .TRUE.,    .TRUE.,    .TRUE., &
-                        "cd10",    "cd10",    "cd10"  )
-    call yder%init(  gp%ysz(1), gp%ysz(2), gp%ysz(3), &
+                         dtype,     dtype,     dtype  )
+    call yder%init(         gp,                       &
                             dx,        dy,        dz, &
                         .TRUE.,    .TRUE.,    .TRUE., &
-                        "cd10",    "cd10",    "cd10"  )
-    call zder%init(  gp%zsz(1), gp%xsz(2), gp%xsz(3), &
+                         dtype,     dtype,     dtype  )
+    call zder%init(         gp,                       &
                             dx,        dy,        dz, &
                         .TRUE.,    .TRUE.,    .TRUE., &
-                        "cd10",    "cd10",    "cd10"  )
+                         dtype,     dtype,     dtype  )
 
     ! Initialize the filters objects
     call xfil%init(   gp%xsz(1), gp%xsz(2), gp%xsz(3), &
                          .TRUE.,    .TRUE.,    .TRUE., &
-                         "cf90",    "cf90",    "cf90"  )
+                          ftype,     ftype,     ftype  )
     call yfil%init(   gp%ysz(1), gp%ysz(2), gp%ysz(3), &
                          .TRUE.,    .TRUE.,    .TRUE., &
-                         "cf90",    "cf90",    "cf90"  )
+                          ftype,     ftype,     ftype  )
     call zfil%init(   gp%zsz(1), gp%zsz(2), gp%zsz(3), &
                          .TRUE.,    .TRUE.,    .TRUE., &
-                         "cf90",    "cf90",    "cf90"  )
+                          ftype,     ftype,     ftype  )
 
     ! Allocate arrays
     allocate(  xfields( gp%xsz(1), gp%xsz(2), gp%xsz(3), 3 ) )
@@ -76,11 +84,13 @@ program hitCD10
     uy => yfields(:,:,:,1); vy => yfields(:,:,:,2); wy => yfields(:,:,:,3)
     uz => zfields(:,:,:,1); vz => zfields(:,:,:,2); wz => zfields(:,:,:,3)
 
-    xfields = zero
-    ux = two
+    ! Initialize the fields in the X decomposition
+    call getHit3d_uvw(nx,ny,nz,xfields,gp,dir)
+    
+    ! Check if initial condition is divergence free
+    call get_divergence_x(ux,vx,wx,vy,wy,wz,xder,yder,zder,gp,uz)
 
-    ! Initialize the fields
-    ! call initialize()
+    call message("Maximum absolute divergence",P_MAXVAL(ABS(uz)))
   
     call timestep_x_to_z(ux,vx,wx,uy,vy,wy,uz,vz,wz,xRHS,yRHS,zRHS,Re,xder,yder,zder,gp)
     call timestep_z_to_x(ux,vx,wx,uy,vy,wy,uz,vz,wz,xRHS,yRHS,zRHS,Re,xder,yder,zder,gp)
