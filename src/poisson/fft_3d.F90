@@ -23,6 +23,10 @@ module fft_3d_stuff
 
         complex(rkind), dimension(:,:,:), allocatable :: f_xhat_in_xD
         complex(rkind), dimension(:,:,:), allocatable :: f_xyhat_in_yD
+        complex(rkind), dimension(:,:,:), allocatable :: f_zyhat_in_yD
+
+        complex(rkind), dimension(:,:,:), allocatable :: f_zhat_in_zD
+        complex(rkind), dimension(:,:,:), allocatable :: f_xyzhat_in_xD
 
         real(rkind), dimension(:,:,:),allocatable, public :: k1
         real(rkind), dimension(:,:,:),allocatable, public :: k2
@@ -39,6 +43,9 @@ module fft_3d_stuff
         integer(kind=8) :: plan_c2r_x
         integer(kind=8) :: plan_c2r_y
         integer(kind=8) :: plan_r2c_y
+        integer(kind=8) :: plan_c2r_z
+        integer(kind=8) :: plan_r2c_z
+        
 
         logical :: fixOddball = .false. 
         logical :: initialized = .false.
@@ -50,6 +57,8 @@ module fft_3d_stuff
             procedure :: ifft3_y2y
             procedure :: fft3_x2z
             procedure :: ifft3_z2x
+            procedure :: fft3_z2x
+            procedure :: ifft3_x2z
             procedure :: destroy
             procedure, private :: alloc_3d_real
             procedure, private :: alloc_3d_cmplx
@@ -78,27 +87,18 @@ contains
         real(rkind), dimension(:,:,:), allocatable :: k2_in_y
         real(rkind), dimension(:,:,:), allocatable :: temp
         complex(rkind), dimension(:,:,:), allocatable :: dummy_in_z
+        complex(rkind), dimension(:,:,:), allocatable :: dummy_in_x
 
         ! Get the decompotion performed before calling this function
         call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, & 
                 dims, dummy_periods, dummy_coords, ierr) 
 
 
-        if ((base_pencil_ .ne. "y") .and. (base_pencil_ .ne. "x")) then
-            call decomp_2d_abort(300,"Currently only X and Y - baseline pencils are &
-          & supported for 3D ffts.")
-        end if
-
-        if ( (mod(ny_global,2) .ne. 0) .or. (mod(nx_global,2) .ne. 0)) then
+        if ( (mod(ny_global,2) .ne. 0) .or. (mod(nx_global,2) .ne. 0) .or. (mod(nz_global,2) .ne. 0) ) then
             call decomp_2d_abort(301,"Only even number of data are supported &
-          & in X and Y direction. NY_GLOBAL and NX_GLOBAL must be an even number.") 
+          & in X, Y and Z direction. NY_GLOBAL, NX_GLOBAL and NZ_GLOBAL must be an even number.") 
         end if 
         
-        !if (((dims(1) == 1) .or. (dims(2) == 1)).and. (nproc > 1)) then
-        !    call decomp_2d_abort(303,"Only 2d decompositions supported. Check if the &
-        !  & auto-tuner gave an effectively 1d decomposition")
-        !end if 
-
         if (present(exhaustive)) then
             if (exhaustive) then 
                 this%fft_plan = FFTW_EXHAUSTIVE
@@ -133,7 +133,7 @@ contains
             allocate(cmplx_arr_2d(this%spectral%ysz(1),this%spectral%ysz(2)),STAT=ierr)
 
             if (ierr .ne. 0) then
-                call decomp_2d_abort(304,"Could not allocate memory for fft_2")
+                call decomp_2d_abort(304,"Could not allocate memory for fft_3")
             end if 
 
             ! Create plan for fwd transform in y
@@ -180,6 +180,12 @@ contains
                     this%spectral%zsz(2)*this%spectral%zsz(1), this%f_xyzhat_in_zD, this%spectral%zsz(3), &
                     this%spectral%zsz(1)*this%spectral%zsz(2), 1, this%f_xyzhat_in_zD, this%spectral%zsz(3), &
                     this%spectral%zsz(1)*this%spectral%zsz(2), 1, FFTW_BACKWARD, this%fft_plan)!this%fft_plan)   
+            
+            ! Create plan for fwd transform in z (in place transform)
+            call dfftw_plan_many_dft(this%plan_c2c_fwd_z, 1, this%spectral%zsz(3),&  
+                this%spectral%zsz(2)*this%spectral%zsz(1), this%f_xyzhat_in_zD, this%spectral%zsz(3), &
+                this%spectral%zsz(1)*this%spectral%zsz(2), 1, this%f_xyzhat_in_zD, this%spectral%zsz(3), &
+                this%spectral%zsz(1)*this%spectral%zsz(2), 1, FFTW_FORWARD, this%fft_plan)!this%fft_plan)   
                 
         case ("x")
             if (allocated(this%f_xhat_in_xD)) deallocate(this%f_xhat_in_xD)
@@ -232,17 +238,74 @@ contains
                 this%spectral%zsz(1)*this%spectral%zsz(2), 1, FFTW_BACKWARD, this%fft_plan)!this%fft_plan)   
 
             deallocate(dummy_in_z)
-        end select 
-
-        ! Create plan for fwd transform in z (in place transform)
-         call dfftw_plan_many_dft(this%plan_c2c_fwd_z, 1, this%spectral%zsz(3),&  
+        
+            ! Create plan for fwd transform in z (in place transform)
+            call dfftw_plan_many_dft(this%plan_c2c_fwd_z, 1, this%spectral%zsz(3),&  
                 this%spectral%zsz(2)*this%spectral%zsz(1), this%f_xyzhat_in_zD, this%spectral%zsz(3), &
                 this%spectral%zsz(1)*this%spectral%zsz(2), 1, this%f_xyzhat_in_zD, this%spectral%zsz(3), &
                 this%spectral%zsz(1)*this%spectral%zsz(2), 1, FFTW_FORWARD, this%fft_plan)!this%fft_plan)   
-               
 
+
+        case ("z")
+            if (allocated(this%f_zhat_in_zD)) deallocate(this%f_zhat_in_zD)
+            if (allocated(this%f_zyhat_in_yD)) deallocate(this%f_zyhat_in_yD)
+            if (allocated(this%f_xyzhat_in_xD)) deallocate(this%f_xyzhat_in_xD)
+
+            call decomp_info_init(nx_global, ny_global, nz_global/2 + 1, this%spectral)
+            allocate(this%f_zhat_in_zD(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)))
+            allocate(this%f_zyhat_in_yD(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
+            allocate(this%f_xyzhat_in_xD(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)),STAT=ierr) 
+
+            ! Define real -> complex transform in z
+            allocate (temp(this%physical%zsz(1),this%physical%zsz(2),this%physical%zsz(3)))
+            
+            call dfftw_plan_many_dft_r2c(this%plan_r2c_z, 1, this%physical%zsz(3), &
+                    this%physical%zsz(1)*this%physical%zsz(2), temp, &
+                    this%physical%zsz(3), this%physical%zsz(1)*this%physical%zsz(2), &
+                    1, this%f_zhat_in_zD, this%spectral%zsz(3), this%spectral%zsz(1)*this%spectral%zsz(2), 1, &
+                    this%fft_plan)
+            
+            call dfftw_plan_many_dft_r2c(this%plan_c2r_z, 1, this%physical%zsz(3), &
+                    this%spectral%zsz(1)*this%spectral%zsz(2), this%f_zhat_in_zD, &
+                    this%spectral%zsz(3), this%spectral%zsz(1)*this%spectral%zsz(2), &
+                    1, temp, this%physical%zsz(3), this%physical%zsz(1)*this%physical%zsz(2), 1, &
+                    this%fft_plan)
+            
+            deallocate (temp)
         
-        
+            ! Define complex -> complex transforms in y
+            allocate(cmplx_arr_2d(this%spectral%ysz(1),this%spectral%ysz(2)),STAT=ierr)
+
+            ! fwd transform in y (in place transform)
+             call dfftw_plan_many_dft(this%plan_c2c_fwd_y, 1, this%spectral%ysz(2),&  
+                    this%spectral%ysz(1), cmplx_arr_2d, this%spectral%ysz(2),this%spectral%ysz(1), &
+                    1, cmplx_arr_2d, this%spectral%ysz(2), this%spectral%ysz(1),1, &   
+                    FFTW_FORWARD, this%fft_plan)
+
+            ! bwd transform in y (in place transform)
+             call dfftw_plan_many_dft(this%plan_c2c_bwd_y, 1, this%spectral%ysz(2),&  
+                    this%spectral%ysz(1), cmplx_arr_2d, this%spectral%ysz(2),this%spectral%ysz(1), &
+                    1, cmplx_arr_2d, this%spectral%ysz(2), this%spectral%ysz(1),1, &   
+                    FFTW_BACKWARD, this%fft_plan)
+
+            deallocate (cmplx_arr_2d)
+
+            allocate(dummy_in_x(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))        
+            ! Create plan for bwd transform in x (out-of-place transform)
+            call dfftw_plan_many_dft(this%plan_c2c_bwd_x, 1, this%spectral%xsz(1),&  
+                this%spectral%xsz(1)*this%spectral%xsz(2),dummy_in_x, this%spectral%xsz(1), &
+                1, this%spectral%xsz(2)*this%spectral%xsz(3), this%f_xyzhat_in_xD, this%spectral%xsz(1), &
+                this%spectral%xsz(2)*this%spectral%xsz(3), 1, FFTW_BACKWARD, this%fft_plan)!this%fft_plan)   
+            deallocate(dummy_in_x)
+
+            ! Create plan for fwd transform in x (in place)
+            call dfftw_plan_many_dft(this%plan_c2c_fwd_x, 1, this%spectral%xsz(1),&  
+                this%spectral%xsz(1)*this%spectral%xsz(2),this%f_xyzhat_in_xD, this%spectral%xsz(1), &
+                1, this%spectral%xsz(2)*this%spectral%xsz(3), this%f_xyzhat_in_xD, this%spectral%xsz(1), &
+                this%spectral%xsz(2)*this%spectral%xsz(3), 1, FFTW_FORWARD, this%fft_plan)!this%fft_plan)   
+
+        end select 
+
                 
          this%base_pencil = base_pencil_
          this%normfactor = 1._rkind/(real(nx_global*ny_global*nz_global))
@@ -312,13 +375,30 @@ contains
             ! Get k2 from y -> z
             call transpose_y_to_z(k2_in_y,this%k2,this%spectral)
 
-            !if (nrank == 0) then
-            !    print*, "x oddballs:", k1_in_x(this%spectral%xsz(1),1,1), k1_in_x(this%spectral%xsz(1),2,1), k1_in_x(this%spectral%xsz(1),1,2)
-            !    print*, "y oddballs:", k2_in_y(1,this%spectral%ysz(2)/2+1,1), k2_in_y(2,this%spectral%ysz(2)/2+1,1), k2_in_y(1,this%spectral%ysz(2)/2+1,2) 
-            !    print*, "z oddballs:", k3_in_z(1,1,this%spectral%zsz(3)/2+1), k3_in_z(2,1,this%spectral%zsz(3)/2+1), k3_in_z(1,2,this%spectral%zsz(3)/2+1)
-            !end if 
             deallocate (temp)
+
+         case ("z")
+            ! All wavenumbers are stored in z-decomp
+            allocate(this%k1(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
+            allocate(this%k2(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
+            allocate(this%k3(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
+            allocate(this%kabs_sq(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
+
+            allocate(temp(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
+            
+            this%k1 = k1_in_x
+
+            ! Get k3 from z -> y -> x
+            call transpose_x_to_y(k3_in_z(1:this%spectral%zsz(1),1:this%spectral%zsz(2),1:this%spectral%zsz(3)),temp,this%spectral)
+            call transpose_y_to_z(temp,this%k3,this%spectral)
+
+            ! Get k2 from y -> z
+            call transpose_y_to_z(k2_in_y,this%k2,this%spectral)
+
+            deallocate (temp)
+            
          end select 
+
          deallocate (k1_in_x, k2_in_y, k3_in_z)
 
          this%kabs_sq = this%k1*this%k1 + this%k2*this%k2 + this%k3*this%k3
@@ -335,8 +415,12 @@ contains
 
         if (this%initialized) then
             if (allocated(this%f_yhat_in_yD)) deallocate(this%f_yhat_in_yD)
-            if (allocated(this%f_xyhat_in_xD)) deallocate(this%f_xyhat_in_xD)
+            if (allocated(this%f_xhat_in_xD)) deallocate(this%f_xhat_in_xD)
+            if (allocated(this%f_zhat_in_zD)) deallocate(this%f_zhat_in_zD)
+            if (allocated(this%f_xyhat_in_yD)) deallocate(this%f_xyhat_in_yD)
+            if (allocated(this%f_zyhat_in_yD)) deallocate(this%f_zyhat_in_yD)
             if (allocated(this%f_xyzhat_in_zD)) deallocate(this%f_xyzhat_in_zD)
+            if (allocated(this%f_xyzhat_in_xD)) deallocate(this%f_xyzhat_in_xD)
 
             if (allocated(this%k1       )) deallocate( this%k1     )       
             if (allocated(this%k2       )) deallocate( this%k2     ) 
@@ -358,6 +442,13 @@ contains
                 call dfftw_destroy_plan (this%plan_c2c_bwd_z) 
                 call dfftw_destroy_plan (this%plan_r2c_x) 
                 call dfftw_destroy_plan (this%plan_c2r_x) 
+            case ("z")
+                call dfftw_destroy_plan (this%plan_c2c_fwd_y) 
+                call dfftw_destroy_plan (this%plan_c2c_bwd_y) 
+                call dfftw_destroy_plan (this%plan_c2c_fwd_x) 
+                call dfftw_destroy_plan (this%plan_c2c_bwd_x) 
+                call dfftw_destroy_plan (this%plan_r2c_z) 
+                call dfftw_destroy_plan (this%plan_c2r_z) 
             end select
  
             call decomp_info_finalize(this%spectral)
@@ -500,7 +591,63 @@ contains
 
     end subroutine
     
-    
+    subroutine fft3_z2x(this,input,output)
+        class(fft_3d), intent(inout) :: this
+        real(rkind), dimension(this%physical%zsz(1),this%physical%zsz(2),this%physical%zsz(3)), intent(in) :: input
+        complex(rkind), dimension(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)), intent(out) :: output
+        integer :: k 
+
+        ! Take the z derivative
+        call dfftw_execute_dft_r2c(this%plan_r2c_x, input, this%f_zhat_in_zD)  
+        
+        call transpose_z_to_y(this%f_zhat_in_zD,this%f_zyhat_in_yD,this%spectral)
+        
+        ! The take fwd transform in y (c2c, inplace)
+        do k = 1,this%spectral%ysz(3)
+            call dfftw_execute_dft(this%plan_c2c_fwd_y, this%f_zyhat_in_yD(:,:,k), this%f_zyhat_in_yD(:,:,k))  
+        end do 
+
+        call transpose_y_to_x(this%f_zyhat_in_yD,output,this%spectral)
+        call dfftw_execute_dft(this%plan_c2c_fwd_y, output, output)  
+        
+        if (this%fixOddball) then
+            output(this%spectral%xsz(1)/2+1,:,:) = zero
+        end if 
+
+    end subroutine
+
+
+    subroutine ifft3_x2z(this,input,output)
+        class(fft_3d), intent(inout) :: this
+        complex(rkind), dimension(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)), intent(out) :: input
+        real(rkind), dimension(this%physical%zsz(1),this%physical%zsz(2),this%physical%zsz(3)), intent(out) :: output
+        integer :: k 
+
+        call dfftw_execute_dft(this%plan_c2c_bwd_x, input, this%f_xyzhat_in_xD)  
+
+        call transpose_x_to_y(this%f_xyzhat_in_xD,this%f_zyhat_in_yD,this%spectral)
+        
+
+        ! Then transform in y (c2c, inplace)
+        if (this%fixOddball) then
+            this%f_xyhat_in_yD(:,this%spectral%ysz(2)/2+1,:) = zero
+        end if 
+        ! The take fwd transform in y (c2c, inplace)
+        do k = 1,this%spectral%ysz(3)
+            call dfftw_execute_dft(this%plan_c2c_fwd_y, this%f_zyhat_in_yD(:,:,k), this%f_zyhat_in_yD(:,:,k))  
+        end do 
+        
+        call transpose_y_to_z(this%f_zyhat_in_yD,this%f_zhat_in_zD,this%spectral)
+
+        
+        ! Then transform in x (c2r transform)
+        if (this%fixOddball) then
+            this%f_zhat_in_zD(:,:,this%spectral%zsz(1)) = zero
+        end if 
+        call dfftw_execute_dft_c2r(this%plan_c2r_x, this%f_zhat_in_zD, output)
+
+    end subroutine 
+
     subroutine alloc_3d_Real(this,arr_out) 
         class(fft_3d), intent(in) :: this
         real(rkind), dimension(:,:,:),allocatable, intent(inout) :: arr_out
@@ -512,6 +659,8 @@ contains
                 allocate(arr_out(this%spectral%ysz(1), this%spectral%ysz(2), this%spectral%ysz(3)))
             case ("x")
                 allocate(arr_out(this%spectral%zsz(1), this%spectral%zsz(2), this%spectral%zsz(3)))
+            case ("z")
+                allocate(arr_out(this%spectral%xsz(1), this%spectral%xsz(2), this%spectral%xsz(3)))
             end select 
             arr_out = 0._rkind
         else
@@ -531,6 +680,8 @@ contains
                 allocate(arr_out(this%spectral%ysz(1), this%spectral%ysz(2), this%spectral%ysz(3)))
             case ("x")
                 allocate(arr_out(this%spectral%zsz(1), this%spectral%zsz(2), this%spectral%zsz(3)))
+            case ("z")
+                allocate(arr_out(this%spectral%xsz(1), this%spectral%xsz(2), this%spectral%xsz(3)))
             end select 
             arr_out = 0._rkind
         else
@@ -551,6 +702,8 @@ contains
                 allocate(arr_out(this%spectral%ysz(1), this%spectral%ysz(2), this%spectral%ysz(3),dim4))
             case ("x")
                 allocate(arr_out(this%spectral%zsz(1), this%spectral%zsz(2), this%spectral%zsz(3),dim4))
+            case ("z")
+                allocate(arr_out(this%spectral%xsz(1), this%spectral%xsz(2), this%spectral%xsz(3),dim4))
             end select 
             arr_out = 0._rkind
         else
