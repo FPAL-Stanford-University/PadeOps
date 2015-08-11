@@ -13,6 +13,7 @@ program hitCD10
     use FiltersMod,       only: filters
     use hitCD10_timestep, only: timestep_x_to_z, timestep_z_to_x, get_divergence_x
     use hitCD10_IO,       only: GetHit3d_uvw
+    use fft_3d_Stuff, only: fft_3d 
 
     implicit none
 
@@ -31,10 +32,11 @@ program hitCD10
     real(rkind) :: dx,dy,dz
 
     real(rkind) :: Re = 50._rkind
-
+    type(fft_3d) :: FT
+    complex(rkind), allocatable, dimension(:,:,:) :: uhat
     character(len=*), parameter :: dtype = "cd06"
     character(len=*), parameter :: ftype = "cf90"
-    character(len=clen) :: dir = "/afs/ir/users/a/k/akshays/hit3d_data/"
+    character(len=clen) :: dir = "/afs/ir/users/a/d/aditya90/padeops/data/hitInputData/"
 
     ! Initialize MPI and 2DECOMP
     call MPI_INIT(ierr)
@@ -87,7 +89,28 @@ program hitCD10
     ! Initialize the fields in the X decomposition
     call getHit3d_uvw(nx,ny,nz,xfields,gp,dir)
     
-    ! Check if initial condition is divergence free
+    ierr = FT%init(Nx,Ny,Nz,"x", dx, dy,dz,.false.)
+   
+    call FT%alloc_output(uhat)
+
+    call FT%fft3_x2z(xfields(:,:,:,1),uhat)
+    where (FT%kabs_sq .gt. 64./3.) 
+        uhat = 0._rkind
+    end where
+    call FT%ifft3_z2x(uhat,xFields(:,:,:,1))
+
+    call FT%fft3_x2z(xfields(:,:,:,2),uhat)
+    where (FT%kabs_sq .gt. 64./3.) 
+        uhat = 0._rkind
+    end where
+    call FT%ifft3_z2x(uhat,xFields(:,:,:,2))
+ 
+    call FT%fft3_x2z(xfields(:,:,:,3),uhat)
+    where (FT%kabs_sq .gt. 64./3.) 
+        uhat = 0._rkind
+    end where
+    call FT%ifft3_z2x(uhat,xFields(:,:,:,3))
+! Check if initial condition is divergence free
     call get_divergence_x(ux,vx,wx,vy,wy,wz,xder,yder,zder,gp,uz)
 
     call message("Maximum absolute divergence",P_MAXVAL(ABS(uz)))
