@@ -582,11 +582,10 @@ contains
     end subroutine
     
     subroutine fft3_z2x(this,input,output)
-        use mpi 
         class(fft_3d), intent(inout) :: this
         real(rkind), dimension(this%physical%zsz(1),this%physical%zsz(2),this%physical%zsz(3)), intent(in) :: input
         complex(rkind), dimension(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)), intent(out) :: output
-        integer :: k, ierr  
+        integer :: k 
 
         ! Take the z derivative
 

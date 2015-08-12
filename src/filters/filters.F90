@@ -1,5 +1,5 @@
 module FiltersMod
-    use kind_parameters, only: rkind
+    use kind_parameters, only: rkind, clen
     use cf90stuff,       only: cf90
     use gaussianstuff,   only: gaussian
     use lstsqstuff,      only: lstsq
@@ -42,7 +42,7 @@ contains
 
     function getMethodx(this) result(m)
         class(filters), intent(in) :: this
-        character(len=*), intent(out) :: m 
+        character(len=clen) :: m 
         select case (this%xmethod)
         case (1)
             m = "cf90"
@@ -55,7 +55,7 @@ contains
 
     function getMethody(this) result(m)
         class(filters), intent(in) :: this
-        character(len=*), intent(out) :: m 
+        character(len=clen) :: m 
         select case (this%ymethod)
         case (1)
             m = "cf90"
@@ -68,7 +68,7 @@ contains
         
     function getMethodz(this) result(m)
         class(filters), intent(in) :: this
-        character(len=*), intent(out) :: m 
+        character(len=clen) :: m 
         select case (this%zmethod)
         case (1)
             m = "cf90"

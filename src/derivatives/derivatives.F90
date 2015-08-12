@@ -57,7 +57,7 @@ contains
 
     function getMethodx(this) result(m)
         class(derivatives), intent(in) :: this
-        character(len=*), intent(out) :: m 
+        character(len=clen) :: m 
         select case (this%xmethod)
         case (1)
             m = "cd10"
@@ -73,7 +73,7 @@ contains
 
     function getMethody(this) result(m)
         class(derivatives), intent(in) :: this
-        character(len=*), intent(out) :: m 
+        character(len=clen) :: m 
         select case (this%ymethod)
         case (1)
             m = "cd10"
@@ -89,7 +89,7 @@ contains
 
     function getMethodz(this) result(m)
         class(derivatives), intent(in) :: this
-        character(len=*), intent(out) :: m 
+        character(len=clen) :: m 
         select case (this%zmethod)
         case (1)
             m = "cd10"
