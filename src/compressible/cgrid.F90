@@ -1,9 +1,9 @@
 module CompressibleGrid
     use kind_parameters, only: clen
+    use constants, only: zero,one,two
     use GridMod, only: grid
     use hooks, only: meshgen, initfields
-    use decomp_2d, only: decomp_info 
-    use constants, only: one
+    use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize
     implicit none
 
     integer :: rho_index    = 1 
@@ -57,47 +57,11 @@ contains
         this%ny = ny
         this%nz = nz
 
-        this%outputdir = outputdir 
-        this%periodicx = periodicx
-        this%periodicy = periodicy
-        this%periodicz = periodicz
-
-        this%derivative_x = derivative_x    
-        this%derivative_y = derivative_y    
-        this%derivative_z = derivative_z  
-
-        this%filter_x = filter_x    
-        this%filter_y = filter_y    
-        this%filter_z = filter_z  
-
-        ! Initialize decomp
-        call decomp_2d_init(nx, ny, nz, prow, pcol)
-        call get_decomp_info(this%decomp)
-   
-        ! Initialize derivatives 
-        call this%der%init(                                    gp, &
-                                dx,            dy,             dz, &
-                         periodicx,     periodicy,      periodicz, &
-                      derivative_x,  derivative_y,   derivative_z, &
-                           .false.,       .false.,        .false., &
-                           .false.)      
-
-        ! Initialize filters
-        call this%fil%init(                                    gp, &
-                         periodicx,     periodicy,      periodicz, &
-                          filter_x,      filter_y,       filter_z  )      
-
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         allocate(this%mesh(this%decomp%ysz(1),this%decomp%ysz(1),this%decomp%ysz(1),3))
 
-        ! Allocate fields
-        if ( allocated(this%fields) ) deallocate(this%fields) 
-        allocate(this%fields(this%decomp%ysz(1),this%decomp%ysz(1),this%decomp%ysz(1),10))
-
-
         ! Generate default mesh: X \in [-1, 1), Y \in [-1, 1), Z \in [-1, 1)
-
         this%dx = two/nx
         this%dy = two/ny
         this%dz = two/nz
@@ -116,6 +80,40 @@ contains
         ! Go to hooks if a different mesh is desired 
         call meshgen(nx, ny, nz, this%decomp%yst, this%decomp%yen, this%decomp%ysz, &
                     this%dx, this%dy, this%dz, this%mesh) 
+        
+        this%outputdir = outputdir 
+        this%periodicx = periodicx
+        this%periodicy = periodicy
+        this%periodicz = periodicz
+
+        this%derivative_x = derivative_x    
+        this%derivative_y = derivative_y    
+        this%derivative_z = derivative_z  
+
+        this%filter_x = filter_x    
+        this%filter_y = filter_y    
+        this%filter_z = filter_z  
+
+        ! Initialize decomp
+        call decomp_2d_init(nx, ny, nz, prow, pcol)
+        call get_decomp_info(this%decomp)
+   
+        ! Initialize derivatives 
+        call this%der%init(                           this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                      derivative_x,  derivative_y,   derivative_z, &
+                           .false.,       .false.,        .false., &
+                           .false.)      
+
+        ! Initialize filters
+        call this%fil%init(                           this%decomp, &
+                         periodicx,     periodicy,      periodicz, &
+                          filter_x,      filter_y,       filter_z  )      
+
+        ! Allocate fields
+        if ( allocated(this%fields) ) deallocate(this%fields) 
+        allocate(this%fields(this%decomp%ysz(1),this%decomp%ysz(1),this%decomp%ysz(1),10))
        
         ! Initialize everything to a constant Zero
         this%fields = zero  

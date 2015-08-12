@@ -231,7 +231,7 @@ end module
 
 
 
-program shocktube
+program ShuOsher
 
     use kind_parameters, only: rkind
     use constants,       only: zero,half,one
