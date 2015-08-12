@@ -11,11 +11,14 @@ module ShocktubeMod
     real(rkind) :: Rgas = one           ! Gas constant non-dimensionalized to one
     real(rkind) :: gam = 1.4_rkind      ! Ratio of specific heats for the gas
     
-    real(rkind) :: rhoL = one           ! Left density
-    real(rkind) :: rhoR = one/eight     ! Right density
+    real(rkind) :: rhoL = 3.857143_rkind! Left density
+    real(rkind) :: rhoR                 ! Right density
 
-    real(rkind) :: pL = one             ! Left pressure
-    real(rkind) :: pR = 0.1_rkind       ! Right pressure
+    real(rkind) :: uL = 2.629369_rkind  ! Left velocity
+    real(rkind) :: uR = zero            ! Right velocity
+
+    real(rkind) :: pL = 10.33333_rkind  ! Left pressure
+    real(rkind) :: pR = one             ! Right pressure
 
     real(rkind) :: tstop = 0.2_rkind    ! Stop time for simulation
     real(rkind) :: dt    = 0.0001_rkind ! Time step to use for the simulation
@@ -243,7 +246,7 @@ program shocktube
     type( derivatives ) :: der
     type( filters     ) :: fil
 
-    real(rkind), dimension(:,:,:), allocatable :: x, dum
+    real(rkind), dimension(:,:,:), allocatable :: x, dum, tmp
     real(rkind), dimension(:,:,:,:), allocatable :: u
 
     real(rkind) :: EL   ! Left total energy
@@ -255,13 +258,14 @@ program shocktube
 
     allocate(   x(nx,ny,nz)   )
     allocate( dum(nx,ny,nz)   )
+    allocate( tmp(nx,ny,nz)   )
     allocate(   u(nx,ny,nz,3) )
    
-    dx = one / real(nx-1,rkind) 
+    dx = 10._rkind / real(nx-1,rkind) 
 
     ! Create the solution grid on [-0.5,0.5] domain
     do i=1,nx
-        x(i,1,1) = real(i-1,rkind)*dx - half
+        x(i,1,1) = real(i-1,rkind)*dx - 5._rkind
     end do
     
     ! Calculate total energy states from pressures
@@ -270,8 +274,11 @@ program shocktube
 
     dum = half * ( one+tanh( x/(dx)) )
 
+    tmp = one + 0.2_rkind*sin(5._rkind*x)   ! Right density
+    rhoR = tmp(nx,1,1)
+
     ! Initialize conserved variables
-    u(:,:,:,1) = (one-dum)*rhoL + dum*rhoR  ! rho
+    u(:,:,:,1) = (one-dum)*rhoL + dum*tmp  ! rho
     u(:,:,:,2) = zero                       ! rho*u
     u(:,:,:,3) = (one-dum)*EL + dum*ER      ! E
 
@@ -310,7 +317,7 @@ program shocktube
     end if
 
     call GetPressure(u,dum)  ! Put pressure in dum for output
-    OPEN(UNIT=iounit, FILE="shocktube.dat", FORM='FORMATTED')
+    OPEN(UNIT=iounit, FILE="ShuOsher.dat", FORM='FORMATTED')
     WRITE(iounit,'(A, ES24.16)') "Final time = ", t
     WRITE(iounit,'(4A24)') "X", "Density", "Velocity", "Pressure"
     do i=1,nx
@@ -320,6 +327,7 @@ program shocktube
 
     deallocate( x )
     deallocate( dum )
+    deallocate( tmp )
     deallocate( u )
 
 end program
