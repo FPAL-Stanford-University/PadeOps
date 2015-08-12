@@ -7,8 +7,6 @@ module GridMod
 
     type, abstract :: grid
 
-        private
-
         integer                                              :: nx                ! Number of points in X
         integer                                              :: ny                ! Number of points in Y
         integer                                              :: nz                ! Number of points in Z

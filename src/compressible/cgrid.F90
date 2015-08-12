@@ -1,8 +1,10 @@
 module CompressibleGrid
+    use kind_parameters, only: clen
     use GridMod, only: grid
     use hooks, only: meshgen, initfields
     use decomp_2d, only: decomp_info 
     use constants, only: one
+    implicit none
 
     integer :: rho_index    = 1 
     integer :: u_index      = 2
@@ -41,9 +43,9 @@ contains
         integer :: i, j, k 
         integer :: ioUnit
 
-        namelist /CINPUT/ nx, ny, nz, outputdir,periodicx, periodicy, periodicz,
-                                     derivative_x, derivative_y, derivative_z, 
-                                     filter_x, filter_y, filter_z, prow, pcol
+        namelist /CINPUT/ nx, ny, nz, outputdir,periodicx, periodicy, periodicz, &
+                                     derivative_x, derivative_y, derivative_z,   &
+                                     filter_x, filter_y, filter_z, prow, pcol    
 
 
         ioUnit = 11
@@ -83,8 +85,7 @@ contains
         ! Initialize filters
         call this%fil%init(                                    gp, &
                          periodicx,     periodicy,      periodicz, &
-                          filter_x,      filter_y,       filter_z, &
-                          )      
+                          filter_x,      filter_y,       filter_z  )      
 
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
@@ -102,9 +103,9 @@ contains
         this%dz = two/nz
 
         ! Generate default mesh 
-        do k = 1,this%ysz(3)
-            do j = 1,this%ysz(2)
-                do i = 1,this%ysz(1)
+        do k = 1,this%decomp%ysz(3)
+            do j = 1,this%decomp%ysz(2)
+                do i = 1,this%decomp%ysz(1)
                     this%mesh(i,j,k,1) = -one + (i - 1)*this%dx           
                     this%mesh(i,j,k,2) = -one + (j - 1)*this%dy           
                     this%mesh(i,j,k,3) = -one + (k - 1)*this%dz           
