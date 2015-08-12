@@ -4,18 +4,18 @@ module CompressibleGrid
     use decomp_2d, only: decomp_info 
     use constants, only: one
 
-    type, extends(grid) :: cgrid 
-        integer :: rho_index    = 1 
-        integer :: u_index      = 2
-        integer :: v_index      = 3
-        integer :: w_index      = 4
-        integer :: p_index      = 5
-        integer :: T_index      = 6
-        integer :: e_index      = 7
-        integer :: mu_index     = 8
-        integer :: bulk_index   = 9
-        integer :: kap_index    = 10
+    integer :: rho_index    = 1 
+    integer :: u_index      = 2
+    integer :: v_index      = 3
+    integer :: w_index      = 4
+    integer :: p_index      = 5
+    integer :: T_index      = 6
+    integer :: e_index      = 7
+    integer :: mu_index     = 8
+    integer :: bulk_index   = 9
+    integer :: kap_index    = 10
 
+    type, extends(grid) :: cgrid 
         contains
         procedure :: init
         procedure :: destroy
@@ -113,13 +113,15 @@ contains
         end do  
 
         ! Go to hooks if a different mesh is desired 
-        call meshgen(this) 
+        call meshgen(nx, ny, nz, this%decomp%yst, this%decomp%yen, this%decomp%ysz, &
+                    this%dx, this%dy, this%dz, this%mesh) 
        
         ! Initialize everything to a constant Zero
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired 
-        call initfields(this)
+        call initfields(nx, ny, nz, this%decomp%yst, this%decomp%yen, this%decomp%ysz, &
+                    this%dx, this%dy, this%dz, size(this%fields,4), this%mesh, this%fields) 
 
     end subroutine
 
