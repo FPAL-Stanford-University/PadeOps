@@ -36,10 +36,13 @@ module GridMod
         real(rkind), dimension(:,:,:,:), allocatable         :: mesh
         real(rkind), dimension(:,:,:,:), allocatable         :: fields
 
+        integer                                              :: nx_proc, ny_proc, nz_proc
     contains
 
         procedure(init_interface),    deferred :: init
         procedure(destroy_interface), deferred :: destroy
+        procedure(laplacian_interface), deferred :: laplacian
+        procedure(gradient_interface), deferred :: gradient
 
     end type
 
@@ -57,6 +60,25 @@ module GridMod
             class(grid), intent(inout) :: this
         end subroutine
     
+        subroutine laplacian_interface(this, f, lapf)
+            import :: grid
+            import :: rkind
+            class(grid), intent(in) :: this
+            real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(in):: f   
+            real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(out):: lapf
+        end subroutine
+
+        subroutine gradient_interface(this, f, dfdx, dfdy, dfdz)
+            import :: grid
+            import :: rkind
+            class(grid), intent(in) :: this
+            real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(in):: f   
+            real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(out):: dfdx
+            real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(out):: dfdy
+            real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(out):: dfdz
+
+        end subroutine
+
     end interface
 
 end module
