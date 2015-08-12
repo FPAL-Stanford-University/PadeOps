@@ -47,8 +47,7 @@ contains
                                      filter_x, filter_y, filter_z, prow, pcol
 
 
-        ioUnit = 4324
-        
+        ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
         read(unit=ioUnit, NML=CINPUT)
         close(ioUnit)
@@ -57,6 +56,7 @@ contains
         this%ny = ny
         this%nz = nz
 
+        this%outputdir = outputdir 
         this%periodicx = periodicx
         this%periodicy = periodicy
         this%periodicz = periodicz
