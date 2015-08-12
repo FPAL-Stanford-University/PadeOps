@@ -17,13 +17,12 @@ module CompressibleGrid
         integer :: kap_index    = 10
 
         contains
-        procedure :: initialize 
+        procedure :: init
         procedure :: destroy
-        procedure :: meshgen
     end type
 
 contains
-    subroutine initialize(this, inputfile )
+    subroutine init(this, inputfile )
         class(cgrid), intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
 
@@ -124,5 +123,15 @@ contains
 
     end subroutine
 
+
+    subroutine destroy(this)
+        class(cgrid), intent(inout) :: this
+
+        if (allocated(this%mesh)) deallocate(this%mesh) 
+        if (allocated(this%fields)) deallocate(this%fields) 
+        call this%der%destroy()
+        call this%fil%destroy()
+        call decomp_2d_finalize
+    end subroutine 
 
 end module 
