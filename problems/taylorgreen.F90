@@ -1,58 +1,60 @@
-module hooks
 
-    use kind_parameters, only: rkind
-    use constants,       only: two,pi
+subroutine meshgen(nx,ny,nz,proc_st,proc_en,proc_sz,dx,dy,dz,mesh)
+    use kind_parameters,  only: rkind
+    use constants,        only: two,pi
     implicit none
 
-contains
+    integer,                                                    intent(in)    :: nx,ny,nz
+    integer, dimension(3),                                      intent(in)    :: proc_st,proc_en,proc_sz
+    real(rkind),                                                intent(inout) :: dx,dy,dz
+    real(rkind), dimension(proc_sz(1),proc_sz(2),proc_sz(3),3), intent(inout) :: mesh
 
-    subroutine meshgen(nx,ny,nz,dx,dy,dz,mesh,ist,ien,isz)
-        use kind_parameters,  only: rkind
-        use constants,        only: two,pi
-        implicit none
+    integer :: i,j,k
 
-        class(cgrid), intent(inout) :: cgp
-        integer :: i,j,k
+    ! Create mesh from [0,2*pi)x[0,2*pi)x[0,2*pi) using nx, ny, nz points in x, y and z respectively
+    ! Need to set x, y and z as well as  dx, dy and dz
 
-        associate( nx => cgp%nx, ny => cgp%ny, nz => cgp%nz, &
-                   dx => cgp%dx, dy => cgp%dy, dz => cgp%dz, &
-                   x => cgp%mesh(:,:,:,1), y => cgp%mesh(:,:,:,2), z => cgp%mesh(:,:,:,3), &
-                   proc_i1 => cgp%decomp%yst(1), proc_in => cgp%decomp%yen(1), proc_ni => cgp%decomp%ysz(1), & 
-                   proc_j1 => cgp%decomp%yst(2), proc_jn => cgp%decomp%yen(2), proc_nj => cgp%decomp%ysz(2), & 
-                   proc_k1 => cgp%decomp%yst(3), proc_kn => cgp%decomp%yen(3), proc_nk => cgp%decomp%ysz(3) )
+    associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-            ! Create mesh from [0,2*pi)x[0,2*pi)x[0,2*pi) using nx, ny, nz points in x, y and z respectively
-            ! Need to set x, y and z as well as  dx, dy and dz
+        dx = two*pi/real(nx,rkind)
+        dy = two*pi/real(ny,rkind)
+        dz = two*pi/real(nz,rkind)
 
-            dx = two*pi/real(nx,rkind)
-            dy = two*pi/real(ny,rkind)
-            dz = two*pi/real(nz,rkind)
-
-            do k=1,proc_nk
-                do j=1,proc_nj
-                    do i=1,proc_ni
-                        x(i,j,k) = real( proc_i1 + i - 1, rkind ) * dx
-                        y(i,j,k) = real( proc_j1 + j - 1, rkind ) * dy
-                        z(i,j,k) = real( proc_k1 + k - 1, rkind ) * dz
-                    end do
+        do k=1,proc_sz(3)
+            do j=1,proc_sz(2)
+                do i=1,proc_sz(1)
+                    x(i,j,k) = real( proc_st(1) + i - 1, rkind ) * dx
+                    y(i,j,k) = real( proc_st(2) + j - 1, rkind ) * dy
+                    z(i,j,k) = real( proc_st(3) + k - 1, rkind ) * dz
                 end do
             end do
+        end do
 
-        end associate
+    end associate
 
-    end subroutine
+end subroutine
 
-    subroutine initfields(cgp)
-    use kind_parameters, only: rkind
-    use constants,       only: two,pi
+subroutine initfields(nx,ny,nz,proc_st,proc_en,proc_sz,dx,dy,dz,nvars,mesh,fields)
+    use kind_parameters,  only: rkind
+    use constants,        only: two,pi
+    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
     implicit none
 
-        class(cgrid), intent(inout) :: cgp
-        integer :: i,j,k
+    integer,                                                        intent(in)    :: nx,ny,nz,nvars
+    integer, dimension(3),                                          intent(in)    :: proc_st,proc_en,proc_sz
+    real(rkind),                                                    intent(in)    :: dx,dy,dz
+    real(rkind), dimension(proc_sz(1),proc_sz(2),proc_sz(3),3),     intent(in)    :: mesh
+    real(rkind), dimension(proc_sz(1),proc_sz(2),proc_sz(3),nvars), intent(inout) :: fields
 
-    end subroutine
+    associate( rho => fields(:,:,:,rho_index), u => fields(:,:,:,u_index), &
+                 v => fields(:,:,:,  v_index), w => fields(:,:,:,w_index), &
+                 p => fields(:,:,:,  p_index), T => fields(:,:,:,T_index), &
+                 e => fields(:,:,:,  e_index)                              )
 
-end module
+    end associate
+
+end subroutine
+
 
 program taylorgreen
 
