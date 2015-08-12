@@ -1,5 +1,5 @@
 module CompressibleGrid
-    use kind_parameters, only: clen
+    use kind_parameters, only: rkind, clen
     use constants, only: zero,one,two
     use GridMod, only: grid
     use hooks, only: meshgen, initfields
@@ -21,6 +21,8 @@ module CompressibleGrid
         contains
         procedure :: init
         procedure :: destroy
+        procedure :: laplacian
+        procedure :: gradient 
     end type
 
 contains
@@ -57,6 +59,10 @@ contains
         this%ny = ny
         this%nz = nz
 
+        ! Initialize decomp
+        call decomp_2d_init(nx, ny, nz, prow, pcol)
+        call get_decomp_info(this%decomp)
+        
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         allocate(this%mesh(this%decomp%ysz(1),this%decomp%ysz(1),this%decomp%ysz(1),3))
@@ -81,7 +87,22 @@ contains
         call meshgen(nx, ny, nz, this%decomp%yst, this%decomp%yen, this%decomp%ysz, &
                     this%dx, this%dy, this%dz, this%mesh) 
         
+
+   
+        ! Allocate fields
+        if ( allocated(this%fields) ) deallocate(this%fields) 
+        allocate(this%fields(this%decomp%ysz(1),this%decomp%ysz(1),this%decomp%ysz(1),10))
+       
+        ! Initialize everything to a constant Zero
+        this%fields = zero  
+
+        ! Go to hooks if a different initialization is derired 
+        call initfields(nx, ny, nz, this%decomp%yst, this%decomp%yen, this%decomp%ysz, &
+                    this%dx, this%dy, this%dz, size(this%fields,4), this%mesh, this%fields) 
+
+        ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
+        
         this%periodicx = periodicx
         this%periodicy = periodicy
         this%periodicz = periodicz
@@ -93,11 +114,7 @@ contains
         this%filter_x = filter_x    
         this%filter_y = filter_y    
         this%filter_z = filter_z  
-
-        ! Initialize decomp
-        call decomp_2d_init(nx, ny, nz, prow, pcol)
-        call get_decomp_info(this%decomp)
-   
+        
         ! Initialize derivatives 
         call this%der%init(                           this%decomp, &
                            this%dx,       this%dy,        this%dz, &
@@ -111,16 +128,10 @@ contains
                          periodicx,     periodicy,      periodicz, &
                           filter_x,      filter_y,       filter_z  )      
 
-        ! Allocate fields
-        if ( allocated(this%fields) ) deallocate(this%fields) 
-        allocate(this%fields(this%decomp%ysz(1),this%decomp%ysz(1),this%decomp%ysz(1),10))
-       
-        ! Initialize everything to a constant Zero
-        this%fields = zero  
-
-        ! Go to hooks if a different initialization is derired 
-        call initfields(nx, ny, nz, this%decomp%yst, this%decomp%yen, this%decomp%ysz, &
-                    this%dx, this%dy, this%dz, size(this%fields,4), this%mesh, this%fields) 
+        ! Finally, set the local array dimensions
+        this%nx_proc = this%decomp%ysz(1)
+        this%ny_proc = this%decomp%ysz(2)
+        this%nz_proc = this%decomp%ysz(3)
 
     end subroutine
 
@@ -133,6 +144,28 @@ contains
         call this%der%destroy()
         call this%fil%destroy()
         call decomp_2d_finalize
+    end subroutine
+
+    subroutine gradient(this, f, dfdx, dfdy, dfdz)
+        class(cgrid), intent(in) :: this
+        real(rkind), intent(in), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
+        real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdx
+        real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdy
+        real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdz
+
+        ! Set some shit to avoid warnings
+        dfdx = f - f
+        dfdy = f - f
+        dfdz = f - f
     end subroutine 
 
+    subroutine laplacian(this, f, lapf)
+        class(cgrid), intent(in) :: this
+        real(rkind), intent(in), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
+        real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: lapf
+
+        ! Set some shit to avoid warnings
+        lapf = f - f
+
+    end subroutine 
 end module 
