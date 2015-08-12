@@ -1,4 +1,6 @@
 file(GLOB problems_source_files *.F90)
+file(GLOB cproblems_source_files compressible/*.F90)
+file(GLOB iproblems_source_files incompressible/*.F90)
 
 # Include directories
 include_directories( ${FFTW_INCLUDE_PATH} ${DECOMP_INCLUDE_PATH} ${PadeOps_BINARY_DIR}/src  )
@@ -13,14 +15,13 @@ foreach ( problemfile ${problems_source_files} )
   
     add_executable( ${problemexec} ${problemfile} )
     
-    target_link_libraries( ${problemexec} PadeOps fftw3 2decomp_fft )
+    target_link_libraries( ${problemexec} PadeOps )
 
     if (MPI_Fortran_COMPILER_FLAGS)
         set_target_properties(${problemexec} PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")
     endif()
     
-    # if (MPI_LINK_FLAGS)
-    #     set_target_properties(${problemexec} PROPERTIES LINK_FLAGS "${MPI_LINK_FLAGS}")
-    # endif()
-
 endforeach()
+
+add_subdirectory(compressible)
+add_subdirectory(incompressible)

@@ -16,9 +16,25 @@ include_directories(${MPI_INCLUDE_PATH} ${FFTW_INCLUDE_PATH} ${DECOMP_INCLUDE_PA
 link_directories(${FFTW_LIBRARY_PATH} ${DECOMP_LIBRARY_PATH})
 
 # Create a library called PadeOps
-add_library(PadeOps SHARED ${utilities_source_files} ${derivatives_source_files} ${filters_source_files} ${poisson_source_files} ${grid_source_files} ${compressible_source_files})
-target_link_libraries(PadeOps ${MPI_LIBRARIES})
+add_library(PadeOps STATIC ${utilities_source_files} ${derivatives_source_files} ${filters_source_files} ${poisson_source_files})
+target_link_libraries(PadeOps fftw3 2decomp_fft ${MPI_LIBRARIES})
 
 if (MPI_Fortran_COMPILER_FLAGS)
     set_target_properties(PadeOps PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")
+endif()
+
+# Create a library called CompressibleOps
+add_library(CompressibleOps STATIC ${grid_source_files} ${compressible_source_files})
+target_link_libraries(CompressibleOps PadeOps ${MPI_LIBRARIES})
+
+if (MPI_Fortran_COMPILER_FLAGS)
+    set_target_properties(CompressibleOps PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")
+endif()
+
+# Create a library called IncompressibleOps
+add_library(IncompressibleOps STATIC ${grid_source_files} ${incompressible_source_files})
+target_link_libraries(IncompressibleOps PadeOps ${MPI_LIBRARIES})
+
+if (MPI_Fortran_COMPILER_FLAGS)
+    set_target_properties(IncompressibleOps PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")
 endif()
