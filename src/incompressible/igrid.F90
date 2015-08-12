@@ -1,4 +1,4 @@
-module CompressibleGrid
+module IncompressibleGrid
     use kind_parameters, only: clen
     use constants, only: zero,one,two
     use GridMod, only: grid
@@ -6,16 +6,9 @@ module CompressibleGrid
     use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize
     implicit none
 
-    integer :: rho_index    = 1 
-    integer :: u_index      = 2
-    integer :: v_index      = 3
-    integer :: w_index      = 4
-    integer :: p_index      = 5
-    integer :: T_index      = 6
-    integer :: e_index      = 7
-    integer :: mu_index     = 8
-    integer :: bulk_index   = 9
-    integer :: kap_index    = 10
+    integer :: u_index      = 1
+    integer :: v_index      = 2
+    integer :: w_index      = 3
 
     type, extends(grid) :: cgrid 
         contains
@@ -36,9 +29,9 @@ contains
         character(len=clen) :: derivative_x = "cd10"  
         character(len=clen) :: derivative_y = "cd10" 
         character(len=clen) :: derivative_z = "cd10"
-        character(len=clen) :: filter_x = "cf90"  
-        character(len=clen) :: filter_y = "cf90" 
-        character(len=clen) :: filter_z = "cf90"
+        character(len=clen) :: filter_x = "cf10"  
+        character(len=clen) :: filter_y = "cf10" 
+        character(len=clen) :: filter_z = "cf10"
         integer :: prow = 0, pcol = 0 
         integer :: i, j, k 
         integer :: ioUnit
