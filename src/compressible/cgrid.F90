@@ -65,7 +65,7 @@ contains
         
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
-        allocate(this%mesh(this%decomp%ysz(1),this%decomp%ysz(1),this%decomp%ysz(1),3))
+        allocate(this%mesh(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),3))
 
         ! Generate default mesh: X \in [-1, 1), Y \in [-1, 1), Z \in [-1, 1)
         this%dx = two/nx
@@ -91,7 +91,7 @@ contains
    
         ! Allocate fields
         if ( allocated(this%fields) ) deallocate(this%fields) 
-        allocate(this%fields(this%decomp%ysz(1),this%decomp%ysz(1),this%decomp%ysz(1),10))
+        allocate(this%fields(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),10))
        
         ! Initialize everything to a constant Zero
         this%fields = zero  
