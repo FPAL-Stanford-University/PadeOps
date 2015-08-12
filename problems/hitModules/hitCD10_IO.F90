@@ -2,7 +2,7 @@ module hitCD10_IO
 
     use kind_parameters, only: rkind
     use decomp_2d,       only: decomp_info,nrank,nproc
-    use exits,           only: GracefulExit
+    use exits,           only: GracefulExit, message
     implicit none
 
     integer, dimension(:,:), allocatable        :: xst,xen,xsz
@@ -10,7 +10,7 @@ module hitCD10_IO
 contains
 
     subroutine getHit3d_uvw(Nx,Ny,Nz,fieldsPhys,gp,dir)
-        use kind_parameters, only: mpirkind 
+        use kind_parameters, only: mpirkind
         use mpi
         class( decomp_info ), intent(in)                  :: gp
         integer, intent(in)                               :: Nx,Ny,Nz
@@ -24,6 +24,8 @@ contains
         integer :: fid = 1234, i, j, k
         integer :: tag, idx, status(MPI_STATUS_SIZE), ierr
         integer :: sizes(3), chunksize
+
+        call message("Reading in Hit3D U, V, W data from directory: "//trim(dir))
 
         ! Create data sharing info
         if (nrank == 0) then
@@ -69,7 +71,7 @@ contains
         ! Read the u data  
         if (nrank == 0) then
             ! U data 
-            fname = dir(:len_trim(dir))//uFile
+            fname = dir(:len_trim(dir))//'/'//uFile
             open(fid,file=fname,form='unformatted', access='stream')  
             read(fid) sizes(1:3)
             if ((sizes(1) == Nx) .and. (sizes(2) == Ny) .and. (sizes(3) == Nz)) then
@@ -89,7 +91,7 @@ contains
             end do
 
             ! V data 
-            fname = dir(:len_trim(dir))//vFile
+            fname = dir(:len_trim(dir))//'/'//vFile
             open(fid,file=fname,form='unformatted', access='stream')  
             read(fid) sizes(1:3)
             if ((sizes(1) == Nx) .and. (sizes(2) == Ny) .and. (sizes(3) == Nz)) then
@@ -109,7 +111,7 @@ contains
             end do
 
             ! W data 
-            fname = dir(:len_trim(dir))//wFile
+            fname = dir(:len_trim(dir))//'/'//wFile
             open(fid,file=fname,form='unformatted', access='stream')  
             read(fid) sizes(1:3)
             if ((sizes(1) == Nx) .and. (sizes(2) == Ny) .and. (sizes(3) == Nz)) then

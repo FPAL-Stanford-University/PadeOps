@@ -227,8 +227,8 @@ contains
     ! Don't change things below this point
     
     subroutine init_parallel(this,                              gp  , &
-                                     methodx  , methody  , methodz  , &
-                                     periodicx, periodicy, periodicz  ) 
+                                     periodicx, periodicy, periodicz, & 
+                                     methodx  , methody  , methodz    )
         class( filters )   , intent(inout) :: this
         class( decomp_info), intent(in)  :: gp 
         character(len=*)   , intent(in)    :: methodx, methody, methodz 
