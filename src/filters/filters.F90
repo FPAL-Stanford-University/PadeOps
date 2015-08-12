@@ -32,11 +32,53 @@ module FiltersMod
             procedure :: filterx
             procedure :: filtery
             procedure :: filterz 
+            procedure :: getMethodx
+            procedure :: getMethody
+            procedure :: getMethodz
 
     end type  
 
 contains 
 
+    function getMethodx(this) result(m)
+        class(filters), intent(in) :: this
+        character(len=*), intent(out) :: m 
+        select case (this%xmethod)
+        case (1)
+            m = "cf90"
+        case (2)
+            m = "gaussian"
+        case (3)
+            m = "lstsq"
+        end select 
+    end function
+
+    function getMethody(this) result(m)
+        class(filters), intent(in) :: this
+        character(len=*), intent(out) :: m 
+        select case (this%ymethod)
+        case (1)
+            m = "cf90"
+        case (2)
+            m = "gaussian"
+        case (3)
+            m = "lstsq"
+        end select
+    end function 
+        
+    function getMethodz(this) result(m)
+        class(filters), intent(in) :: this
+        character(len=*), intent(out) :: m 
+        select case (this%zmethod)
+        case (1)
+            m = "cf90"
+        case (2)
+            m = "gaussian"
+        case (3)
+            m = "lstsq"
+        end select
+    end function 
+        
     subroutine init_procedures(this, nx, ny, nz, &
                                      methodx, methody, methodz, &
                                      periodicx, periodicy, periodicz) 

@@ -47,14 +47,62 @@ module DerivativesMod
             procedure :: d2dx2
             procedure :: d2dy2
             procedure :: d2dz2
-            ! procedure :: d2dx2
-            ! procedure :: d2dx2
-            ! procedure :: d2dy2
-            ! procedure :: d2dz2
+            procedure :: getMethodx
+            procedure :: getMethody
+            procedure :: getMethodz
     end type
 
 
 contains
+
+    function getMethodx(this) result(m)
+        class(derivatives), intent(in) :: this
+        character(len=*), intent(out) :: m 
+        select case (this%xmethod)
+        case (1)
+            m = "cd10"
+        case (2)
+            m = "cd06"
+        case (3)
+            m = "four"
+        case (4)
+            m = "cheb"
+        end select 
+
+    end function
+
+    function getMethody(this) result(m)
+        class(derivatives), intent(in) :: this
+        character(len=*), intent(out) :: m 
+        select case (this%ymethod)
+        case (1)
+            m = "cd10"
+        case (2)
+            m = "cd06"
+        case (3)
+            m = "four"
+        case (4)
+            m = "cheb"
+        end select 
+
+    end function
+
+    function getMethodz(this) result(m)
+        class(derivatives), intent(in) :: this
+        character(len=*), intent(out) :: m 
+        select case (this%zmethod)
+        case (1)
+            m = "cd10"
+        case (2)
+            m = "cd06"
+        case (3)
+            m = "four"
+        case (4)
+            m = "cheb"
+        end select 
+
+    end function
+
 
     subroutine init_serial(this,nx,         ny,         nz, &
                                 dx,         dy,         dz, &
