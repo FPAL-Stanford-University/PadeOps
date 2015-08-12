@@ -35,8 +35,8 @@ module GridMod
 
         type( decomp_info )                                  :: decomp
 
-        real(rkind), dimension(:,:,:,:), allocatable, target :: mesh
-        real(rkind), dimension(:,:,:,:), allocatable, target :: fields
+        real(rkind), dimension(:,:,:,:), allocatable         :: mesh
+        real(rkind), dimension(:,:,:,:), allocatable         :: fields
 
     contains
 
@@ -47,12 +47,15 @@ module GridMod
 
     abstract interface
 
-        subroutine initialize(this, inputfile)
+        subroutine init_interface(this, inputfile)
+            import :: grid
+            import :: clen
             class(grid), intent(inout) :: this
             character(len=clen), intent(in) :: inputfile
         end subroutine
 
-        subroutine destroy(this)
+        subroutine destroy_interface(this)
+            import :: grid
             class(grid), intent(inout) :: this
         end subroutine
     

@@ -6,7 +6,11 @@ module hooks
 
 contains
 
-    subroutine meshgen(cgp)
+    subroutine meshgen(nx,ny,nz,dx,dy,dz,mesh,ist,ien,isz)
+        use kind_parameters,  only: rkind
+        use constants,        only: two,pi
+        implicit none
+
         class(cgrid), intent(inout) :: cgp
         integer :: i,j,k
 
@@ -39,6 +43,10 @@ contains
     end subroutine
 
     subroutine initfields(cgp)
+    use kind_parameters, only: rkind
+    use constants,       only: two,pi
+    implicit none
+
         class(cgrid), intent(inout) :: cgp
         integer :: i,j,k
 
