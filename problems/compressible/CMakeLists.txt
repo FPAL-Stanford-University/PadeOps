@@ -18,5 +18,8 @@ foreach ( cproblemfile ${cproblems_source_files} )
     if (MPI_Fortran_COMPILER_FLAGS)
         set_target_properties(${cproblemexec} PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")
     endif()
+
+    file(MAKE_DIRECTORY ${PadeOps_BINARY_DIR}/problems/compressible/${cproblemexec}_files)
+    file(COPY ${cproblemexec}/input.dat DESTINATION ${PadeOps_BINARY_DIR}/problems/compressible/${cproblemexec}_files/input.dat)
     
 endforeach()
