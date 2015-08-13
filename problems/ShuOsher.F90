@@ -28,7 +28,7 @@ module ShocktubeMod
     real(rkind) :: tstop = 1.8_rkind    ! Stop time for simulation
     real(rkind) :: dt    = 0.0001_rkind ! Time step to use for the simulation
     
-    integer :: nx = 201, ny = 1, nz = 1 ! Number of points to use for the simulation (ny and nz have to be 1)
+    integer :: nx = 1600, ny = 1, nz = 1 ! Number of points to use for the simulation (ny and nz have to be 1)
     real(rkind) :: dx
 
     character(len=*), parameter :: dermethod = "cd10"    ! Use 10th order Pade for derivatives
@@ -308,6 +308,8 @@ program ShuOsher
     real(rkind) :: t
     integer :: step
 
+    logical :: FilterInit = .FALSE.
+
     integer :: i, iounit=17
 
     allocate(   x(nx,ny,nz)   )
@@ -358,12 +360,14 @@ program ShuOsher
                         .FALSE., .FALSE., .FALSE., &
                      "gaussian",   "cf90",  "cf90"  )
 
-    call fil%filterx(u(:,:,:,1),dum)
-    u(:,:,:,1) = dum
-    call fil%filterx(u(:,:,:,2),dum)
-    u(:,:,:,2) = dum
-    call fil%filterx(u(:,:,:,3),dum)
-    u(:,:,:,3) = dum
+    if (FilterInit) then
+        call fil%filterx(u(:,:,:,1),dum)
+        u(:,:,:,1) = dum
+        call fil%filterx(u(:,:,:,2),dum)
+        u(:,:,:,2) = dum
+        call fil%filterx(u(:,:,:,3),dum)
+        u(:,:,:,3) = dum
+    end if
 
     ! Integrate in time
     step = 0
