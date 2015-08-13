@@ -7,3 +7,4 @@ dependencies/2decomp_fft
 dependencies/fftw-*[^tar.gz]
 dependencies/Lib_VTK_IO
 data/*
+tags
