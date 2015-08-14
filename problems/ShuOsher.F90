@@ -25,16 +25,18 @@ module ShocktubeMod
     real(rkind) :: EL                   ! Left total energy
     real(rkind) :: ER                   ! Right total energy
 
-    real(rkind) :: tstop = 1.8_rkind    ! Stop time for simulation
+    real(rkind) :: tstop = 1.8_rkind/10._rkind    ! Stop time for simulation
     real(rkind) :: dt    = 0.0001_rkind ! Time step to use for the simulation
     
-    integer :: nx = 1600, ny = 1, nz = 1 ! Number of points to use for the simulation (ny and nz have to be 1)
+    integer :: nx = 1601, ny = 1, nz = 1 ! Number of points to use for the simulation (ny and nz have to be 1)
     real(rkind) :: dx
 
     character(len=*), parameter :: dermethod = "cd10"    ! Use 10th order Pade for derivatives
     character(len=*), parameter :: filmethod = "cf90"    ! Use 8th order 90% filter
     
-    type( filters ) :: gfil
+    type( derivatives ) :: der
+    type( filters     ) :: fil
+    type( filters     ) :: gfil
 
 contains
 
@@ -113,9 +115,9 @@ contains
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: T
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: cs
         real(rkind) :: Cmu = 0.002_rkind
-        real(rkind) :: Cbeta = 1.00_rkind
+        real(rkind) :: Cbeta = 1.75_rkind
         real(rkind) :: Ckap = 0.01_rkind
-        logical, parameter :: UseExpl4thDer = .TRUE.
+        logical, parameter :: UseExpl4thDer = .FALSE.
 
         ! Get the derivatives
         tmp = u(:,:,:,2)/u(:,:,:,1)
@@ -131,6 +133,7 @@ contains
         
         ! Get artificial shear viscosity
         if (.NOT. UseExpl4thDer) then
+            !call fil%filterx(abs(dudx),mu)
             call der%d2dx2(abs(dudx),tmp)
             call der%d2dx2(tmp,mu)
         else
@@ -138,19 +141,29 @@ contains
         end if
         tmp = Cmu*u(:,:,:,1)*abs(mu*dx**6)
         call gfil%filterx(tmp,mu)
+        if (.NOT. UseExpl4thDer) then
+            call gfil%filterx(mu,tmp)
+            mu = tmp
+        end if
 
         ! Get artificial bulk viscosity
         if (.NOT. UseExpl4thDer) then
+            !call fil%filterx(dudx,bulk)
             call der%d2dx2(dudx,tmp)
-            call der%d2dx2(tmp,bulk)        
+            call der%d2dx2(tmp,bulk)
         else
             call expl4_d4dx4(dudx,bulk,dx)
         end if
         tmp = Cbeta*u(:,:,:,1)*abs(bulk*dx**6) * (MIN(dudx,zero)/(dudx+1.0D-30))
         call gfil%filterx(tmp,bulk)
+        if (.NOT. UseExpl4thDer) then
+            call gfil%filterx(bulk,tmp)
+            bulk = tmp
+        end if
 
         ! Get artificial conductivity
         if (.NOT. UseExpl4thDer) then
+            !call fil%filterx(e,kap)
             call der%d2dx2(e,tmp)
             call der%d2dx2(tmp,kap)        
         else
@@ -158,6 +171,10 @@ contains
         end if
         tmp = Ckap * (u(:,:,:,1)*cs/T) * abs(kap*dx**5)
         call gfil%filterx(tmp,kap)
+        if (.NOT. UseExpl4thDer) then
+            call gfil%filterx(kap,tmp)
+            kap = tmp
+        end if
 
     end subroutine
 
@@ -293,14 +310,11 @@ program ShuOsher
     use constants,       only: zero,half,one
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
-    use ShocktubeMod,    only: nx,ny,nz,dx,tstop,dt,xshk,rhoL,rhoR,uL,uR,pL,pR,EL,ER,gam,gfil,dermethod,filmethod, &
+    use ShocktubeMod,    only: nx,ny,nz,dx,tstop,dt,xshk,rhoL,rhoR,uL,uR,pL,pR,EL,ER,gam,der,fil,gfil,dermethod,filmethod, &
                                RK45,GetPressure,GetInternalEnergy,GetSGS
 
     implicit none
 
-
-    type( derivatives ) :: der
-    type( filters     ) :: fil
 
     real(rkind), dimension(:,:,:), allocatable :: x, dum, tmp, mu, bulk, kap, dudx, dTdx
     real(rkind), dimension(:,:,:,:), allocatable :: u
