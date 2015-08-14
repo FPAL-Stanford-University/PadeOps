@@ -13,9 +13,7 @@ This README would normally document whatever steps are necessary to get your app
 * Summary of set up
 * Configuration :
     * The Fortran compiler (FC) (preferably even the CC and CXX variables) need to be set to the desired MPI fortran compiler. Also the FFTW library path (FFTW_PATH) and 2DECOMP&FFT library path (DECOMP_PATH) need to be set.
-    * Examples of this are in the setup folder. For your system, either use one of the SetupEnv_<Machine>_<CompilerID>.sh files or copy the closest one to your own SetupEnv_<Machine>_<CompilerID>.sh. Then, from the main directory (PadeOps), run
-           source setup/SetupEnv_<Machine>_<CompilerID>.sh
-      to set the correct environment variables.
+    * Examples of this are in the setup folder. For your system, either use one of the SetupEnv_<Machine>\_<CompilerID>.sh files or copy the closest one to your own SetupEnv_<Machine>\_<CompilerID>.sh. Then, from the main directory (PadeOps), run `source setup/SetupEnv_<Machine>_<CompilerID>.sh` to set the correct environment variables.
 
     * To build the code, run the following commands:
 ~~~
@@ -25,6 +23,7 @@ This README would normally document whatever steps are necessary to get your app
            make
 ~~~
 * Dependencies :
+    * CMake 2.8 or above
     * MPI Library (https://www.mpich.org/)
     * FFTW (www.fftw.org/)
     * 2DECOMP&FFT (http://www.2decomp.org/)
