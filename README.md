@@ -17,7 +17,7 @@ This README would normally document whatever steps are necessary to get your app
 ~~~
            source setup/SetupEnv_<Machine>_<CompilerID>.sh
 ~~~
-          to set the correct environment variables.
+          * to set the correct environment variables.
     * To build the code, run the following commands:
 ~~~
            mkdir build
