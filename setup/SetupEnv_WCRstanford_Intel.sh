@@ -2,6 +2,9 @@
 
 CWD=`pwd`
 
-export FC=ifort
-export FFTW_PATH=`dirname ${CWD}`/fftw-3.3.4
-export DECOMP_PATH=`dirname ${CWD}`/2decomp_fft
+export COMPILER_ID=Intel
+export CC=mpicc
+export CXX=mpicxx
+export FC=mpif90
+export FFTW_PATH=${CWD}/dependencies/fftw-3.3.4
+export DECOMP_PATH=${CWD}/dependencies/2decomp_fft
