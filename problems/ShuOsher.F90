@@ -25,7 +25,7 @@ module ShocktubeMod
     real(rkind) :: EL                   ! Left total energy
     real(rkind) :: ER                   ! Right total energy
 
-    real(rkind) :: tstop = 1.8_rkind/10._rkind    ! Stop time for simulation
+    real(rkind) :: tstop = 1.8_rkind    ! Stop time for simulation
     real(rkind) :: dt    = 0.0001_rkind ! Time step to use for the simulation
     
     integer :: nx = 1601, ny = 1, nz = 1 ! Number of points to use for the simulation (ny and nz have to be 1)
@@ -37,6 +37,12 @@ module ShocktubeMod
     type( derivatives ) :: der
     type( filters     ) :: fil
     type( filters     ) :: gfil
+    
+    real(rkind) :: Cmu = 0.002_rkind                 ! Coefficient for artificial shear viscosity
+    real(rkind) :: Cbeta = 1.75_rkind                ! Coefficient for artificial bulk viscosity
+    real(rkind) :: Ckap = 0.01_rkind                 ! Coefficient for artificial heat conductivity
+    logical, parameter :: UseExpl4thDer = .FALSE.    ! Use explicit 4th order derivatives for art. props?
+    logical, parameter :: conservative = .FALSE.     ! Use conservative formulation for the viscous terms?
 
 contains
 
@@ -114,10 +120,6 @@ contains
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: e
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: T
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: cs
-        real(rkind) :: Cmu = 0.002_rkind
-        real(rkind) :: Cbeta = 1.75_rkind
-        real(rkind) :: Ckap = 0.01_rkind
-        logical, parameter :: UseExpl4thDer = .FALSE.
 
         ! Get the derivatives
         tmp = u(:,:,:,2)/u(:,:,:,1)
@@ -190,7 +192,6 @@ contains
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: mu
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: bulk
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: kap
-        logical, parameter :: conservative = .FALSE.
 
         ! Get SGS properties
         call GetSGS(u,dudx,dTdx,mu,bulk,kap,der)
