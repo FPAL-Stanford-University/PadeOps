@@ -64,7 +64,7 @@ module GridMod
         subroutine laplacian_interface(this, f, lapf)
             import :: grid
             import :: rkind
-            class(grid), intent(in) :: this
+            class(grid), intent(inout) :: this
             real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(in):: f   
             real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(out):: lapf
         end subroutine
@@ -72,7 +72,7 @@ module GridMod
         subroutine gradient_interface(this, f, dfdx, dfdy, dfdz)
             import :: grid
             import :: rkind
-            class(grid), intent(in) :: this
+            class(grid), target, intent(inout) :: this
             real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(in):: f   
             real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(out):: dfdx
             real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(out):: dfdy

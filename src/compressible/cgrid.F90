@@ -5,6 +5,8 @@ module CompressibleGrid
     use hooks, only: meshgen, initfields
     use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                     transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
+    use DerivativesMod,  only: derivatives
+   
     implicit none
 
     integer :: rho_index    = 1 
@@ -153,16 +155,16 @@ contains
         if (allocated(this%fields)) deallocate(this%fields) 
         call this%der%destroy()
         call this%fil%destroy()
-        call destroy_buffs(this%rbuffx)
-        call destroy_buffs(this%rbuffy)
-        call destroy_buffs(this%rbuffz)
+        call destroy_buffs(this%xbuf)
+        call destroy_buffs(this%ybuf)
+        call destroy_buffs(this%zbuf)
         
         call decomp_2d_finalize
 
     end subroutine
 
     subroutine gradient(this, f, dfdx, dfdy, dfdz)
-        class(cgrid), intent(in) :: this
+        class(cgrid),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdx
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdy
@@ -195,27 +197,27 @@ contains
     end subroutine 
 
     subroutine laplacian(this, f, lapf)
-        class(cgrid), intent(in) :: this
+        class(cgrid), intent(inout) :: this
         real(rkind), intent(in), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: lapf
         
-        call this%der%d2y2(f,lapf)
+        call this%der%d2dy2(f,lapf)
         
-        call transpose_y_to_x(f,xbuf(:,:,:,1),this%decomp) 
+        call transpose_y_to_x(f,this%xbuf(:,:,:,1),this%decomp) 
 
-        call this%der%d2x2(xbuf(:,:,:,1),xbuf(:,:,:,2))
+        call this%der%d2dx2(this%xbuf(:,:,:,1),this%xbuf(:,:,:,2))
 
-        call transpose_x_to_y(xbuf(:,:,:,2),ybuf(:,:,:,1),this%decomp)
+        call transpose_x_to_y(this%xbuf(:,:,:,2),this%ybuf(:,:,:,1),this%decomp)
         
-        lapf = lapf + ybuf(:,:,:,1)
+        lapf = lapf + this%ybuf(:,:,:,1)
 
-        call transpose_y_to_z(f,zbuf(:,:,:,1),this%decomp)
+        call transpose_y_to_z(f,this%zbuf(:,:,:,1),this%decomp)
 
-        call this%der%d2z2(zbuf(:,:,:,1),zbuf(:,:,:,2))
+        call this%der%d2dz2(this%zbuf(:,:,:,1),this%zbuf(:,:,:,2))
 
-        call transpose_z_to_y(zbuf(:,:,:,2),ybuf(:,:,:,1),this%decomp)
+        call transpose_z_to_y(this%zbuf(:,:,:,2),this%ybuf(:,:,:,1),this%decomp)
 
-        lapf = lapf + ybuf(:,:,:,1)
+        lapf = lapf + this%ybuf(:,:,:,1)
 
     end subroutine 
 end module 
