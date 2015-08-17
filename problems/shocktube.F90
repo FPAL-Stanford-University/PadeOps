@@ -30,6 +30,30 @@ module ShocktubeMod
 
 contains
 
+    subroutine expl4_d4dx4(f,df,dx)
+        real(rkind), dimension(:,:,:), intent(in) :: f
+        real(rkind), dimension(size(f,1),size(f,2),size(f,3)), intent(out)  :: df
+        real(rkind), intent(in) :: dx
+        integer :: nx
+
+        real(rkind), parameter :: a = 28._rkind/3._rkind
+        real(rkind), parameter :: b =-13._rkind/2._rkind
+        real(rkind), parameter :: c =  2._rkind/1._rkind
+        real(rkind), parameter :: d = -1._rkind/6._rkind
+
+        nx = size(f,1)
+
+        df(    1:3,:,:) = zero
+        df( 4:nx-3,:,:) = a * ( f(4:nx-3,:,:)                 ) &
+                        + b * ( f(5:nx-2,:,:) + f(3:nx-4,:,:) ) &
+                        + c * ( f(6:nx-1,:,:) + f(2:nx-5,:,:) ) &
+                        + d * ( f(7:nx-0,:,:) + f(1:nx-6,:,:) )
+        df(nx-2:nx,:,:) = zero
+
+        df = df / dx**4
+
+    end subroutine
+
     pure subroutine GetPressure(u,p)
 
         real(rkind), dimension(:,:,:,:), intent(in) :: u
@@ -81,8 +105,9 @@ contains
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: T
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: cs
         real(rkind) :: Cmu = 0.002_rkind
-        real(rkind) :: Cbeta = 1.75_rkind
+        real(rkind) :: Cbeta = 0.50_rkind
         real(rkind) :: Ckap = 0.01_rkind
+        logical, parameter :: UseExpl4thDer = .FALSE.
 
         ! Get the derivatives
         tmp = u(:,:,:,2)/u(:,:,:,1)
@@ -97,20 +122,32 @@ contains
         call der%ddx(T, dTdx)
         
         ! Get artificial shear viscosity
-        call der%d2dx2(abs(dudx),tmp)
-        call der%d2dx2(tmp,mu)        
+        if (.NOT. UseExpl4thDer) then
+            call der%d2dx2(abs(dudx),tmp)
+            call der%d2dx2(tmp,mu)
+        else
+            call expl4_d4dx4(abs(dudx),mu,dx) 
+        end if
         tmp = Cmu*u(:,:,:,1)*abs(mu*dx**6)
         call gfil%filterx(tmp,mu)
 
         ! Get artificial bulk viscosity
-        call der%d2dx2(dudx,tmp)
-        call der%d2dx2(tmp,bulk)        
+        if (.NOT. UseExpl4thDer) then
+            call der%d2dx2(dudx,tmp)
+            call der%d2dx2(tmp,bulk)        
+        else
+            call expl4_d4dx4(dudx,bulk,dx) 
+        end if
         tmp = Cbeta*u(:,:,:,1)*abs(bulk*dx**6) * (MIN(dudx,zero)/(dudx+1.0D-30))
         call gfil%filterx(tmp,bulk)
 
         ! Get artificial conductivity
-        call der%d2dx2(e,tmp)
-        call der%d2dx2(tmp,kap)        
+        if (.NOT. UseExpl4thDer) then
+            call der%d2dx2(e,tmp)
+            call der%d2dx2(tmp,kap)        
+        else
+            call expl4_d4dx4(e,kap,dx) 
+        end if
         tmp = Ckap * (u(:,:,:,1)*cs/T) * abs(kap*dx**5)
         call gfil%filterx(tmp,kap)
 
@@ -235,7 +272,7 @@ program shocktube
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
     use ShocktubeMod,    only: nx,ny,nz,dx,tstop,dt,rhoL,rhoR,pL,pR,gam,gfil,dermethod,filmethod, &
-                               RK45,GetPressure
+                               RK45,GetPressure,GetInternalEnergy,GetSGS
 
     implicit none
 
@@ -243,19 +280,25 @@ program shocktube
     type( derivatives ) :: der
     type( filters     ) :: fil
 
-    real(rkind), dimension(:,:,:), allocatable :: x, dum
+    real(rkind), dimension(:,:,:), allocatable :: x, dum, mu, bulk, kap, dudx, dTdx
     real(rkind), dimension(:,:,:,:), allocatable :: u
 
     real(rkind) :: EL   ! Left total energy
     real(rkind) :: ER   ! Right total energy
 
     real(rkind) :: t
+    integer :: step
 
     integer :: i, iounit=17
 
-    allocate(   x(nx,ny,nz)   )
-    allocate( dum(nx,ny,nz)   )
-    allocate(   u(nx,ny,nz,3) )
+    allocate(    x(nx,ny,nz)   )
+    allocate(  dum(nx,ny,nz)   )
+    allocate(   mu(nx,ny,nz)   )
+    allocate( bulk(nx,ny,nz)   )
+    allocate(  kap(nx,ny,nz)   )
+    allocate( dudx(nx,ny,nz)   )
+    allocate( dTdx(nx,ny,nz)   )
+    allocate(    u(nx,ny,nz,3) )
    
     dx = one / real(nx-1,rkind) 
 
@@ -263,7 +306,7 @@ program shocktube
     do i=1,nx
         x(i,1,1) = real(i-1,rkind)*dx - half
     end do
-    
+
     ! Calculate total energy states from pressures
     EL = pL/(gam-one)
     ER = pR/(gam-one)
@@ -297,29 +340,48 @@ program shocktube
     u(:,:,:,3) = dum
 
     ! Integrate in time
+    step = 0
     t = zero
+    print '(A6,4(A2,A13))', 'step', '|', 'time', '|', 'min density', '|', 'max velocity', '|', 'max energy'
     do while ( t .LT. (tstop - dt) )
         call RK45(u,dt,der,fil)
         t = t + dt
+        step = step + 1
+        call GetInternalEnergy(u,dum)
+        print '(I6,4(A2,ES13.5))', step, '|', t, '|', MINVAL(u(:,:,:,1)), '|', MAXVAL(ABS(u(:,:,:,2)/u(:,:,:,1))), '|', MAXVAL(dum)
     end do
     ! Special case for the last time step
     if ( t .LT. tstop ) then
         dt = tstop - t
         call RK45(u,dt,der,fil)
         t = t + dt
+        step = step + 1
+        call GetInternalEnergy(u,dum)
+        print '(I6,4(A2,ES13.5))', step, '|', t, '|', MINVAL(u(:,:,:,1)), '|', MAXVAL(ABS(u(:,:,:,2)/u(:,:,:,1))), '|', MAXVAL(dum)
     end if
+    
+    print*, "Done."
+    print*, "Writing out visualization file 'shocktube.dat'"
+
+    ! Get the SGS terms for output    
+    call GetSGS(u,dudx,dTdx,mu,bulk,kap,der)
 
     call GetPressure(u,dum)  ! Put pressure in dum for output
     OPEN(UNIT=iounit, FILE="shocktube.dat", FORM='FORMATTED')
     WRITE(iounit,'(A, ES24.16)') "Final time = ", t
-    WRITE(iounit,'(4A24)') "X", "Density", "Velocity", "Pressure"
+    WRITE(iounit,'(7A24)') "X", "Density", "Velocity", "Pressure", "Shear Visc.", "Bulk Visc.", "Conductivity"
     do i=1,nx
-        WRITE(iounit,'(4ES24.16)') x(i,1,1), u(i,1,1,1), u(i,1,1,2)/u(i,1,1,1), dum(i,1,1) ! x, density, velocity, pressure
+        WRITE(iounit,'(7ES24.16)') x(i,1,1), u(i,1,1,1), u(i,1,1,2)/u(i,1,1,1), dum(i,1,1), mu(i,1,1), bulk(i,1,1), kap(i,1,1) ! x, density, velocity, pressure, shear visc., bulk visc., conductivity
     end do
     CLOSE(iounit)
 
     deallocate( x )
     deallocate( dum )
+    deallocate(   mu )
+    deallocate( bulk )
+    deallocate(  kap )
+    deallocate( dudx )
+    deallocate( dTdx )
     deallocate( u )
 
 end program
