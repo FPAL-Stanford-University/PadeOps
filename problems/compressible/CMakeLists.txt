@@ -20,5 +20,5 @@ foreach ( cproblemfile ${cproblems_source_files} )
     endif()
 
     file(MAKE_DIRECTORY ${PadeOps_BINARY_DIR}/problems/compressible/${cproblemexec}_files)
-    file(COPY ${cproblemexec}_files/input.dat DESTINATION ${PadeOps_BINARY_DIR}/problems/compressible/${cproblemexec}_files/input.dat) 
+    file(COPY ${cproblemexec}_files/input.dat DESTINATION ${PadeOps_BINARY_DIR}/problems/compressible/${cproblemexec}_files) 
 endforeach()
