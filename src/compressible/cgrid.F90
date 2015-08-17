@@ -3,7 +3,8 @@ module CompressibleGrid
     use constants, only: zero,one,two
     use GridMod, only: grid, alloc_buffs, destroy_buffs
     use hooks, only: meshgen, initfields
-    use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize
+    use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
+                    transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     implicit none
 
     integer :: rho_index    = 1 
@@ -177,10 +178,24 @@ contains
         class(cgrid), intent(in) :: this
         real(rkind), intent(in), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: lapf
-
-        ! Set some shit to avoid warnings
-        lapf = f - f
         
+        call this%der%d2y2(f,lapf)
+        
+        call transpose_y_to_x(f,xbuf(:,:,:,1),this%decomp) 
+
+        call this%der%d2x2(xbuf(:,:,:,1),xbuf(:,:,:,2))
+
+        call transpose_x_to_y(xbuf(:,:,:,2),ybuf(:,:,:,1),this%decomp)
+        
+        lapf = lapf + ybuf(:,:,:,1)
+
+        call transpose_y_to_z(f,zbuf(:,:,:,1),this%decomp)
+
+        call this%der%d2z2(zbuf(:,:,:,1),zbuf(:,:,:,2))
+
+        call transpose_z_to_y(zbuf(:,:,:,2),ybuf(:,:,:,1),this%decomp)
+
+        lapf = lapf + ybuf(:,:,:,1)
 
     end subroutine 
 end module 
