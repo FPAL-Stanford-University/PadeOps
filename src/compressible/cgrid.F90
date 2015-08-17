@@ -19,7 +19,7 @@ module CompressibleGrid
 
     type, extends(grid) :: cgrid
         
-        real(rkind), dimension(:,:,:,:), allocatable :: rbuffx, rbuffy, rbuffz 
+        real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf 
          
         contains
             procedure :: init
@@ -138,9 +138,9 @@ contains
 
 
         ! Allocate 2 buffers for each of the three decompositions
-        call alloc_buffs(this%rbuffx,2,"x",this%decomp)
-        call alloc_buffs(this%rbuffy,2,"y",this%decomp)
-        call alloc_buffs(this%rbuffz,2,"z",this%decomp)
+        call alloc_buffs(this%xbuf,2,"x",this%decomp)
+        call alloc_buffs(this%ybuf,1,"y",this%decomp)
+        call alloc_buffs(this%zbuf,2,"z",this%decomp)
 
     end subroutine
 
@@ -167,10 +167,30 @@ contains
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdy
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdz
 
-        ! Set some shit to avoid warnings
-        dfdx = f - f
-        dfdy = f - f
-        dfdz = f - f
+        type(derivatives), pointer :: der
+        type(decomp_info), pointer :: decomp
+        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum
+        
+        der => this%der
+        decomp => this%decomp
+        xtmp => this%xbuf(:,:,:,1)
+        xdum => this%xbuf(:,:,:,2)
+        ztmp => this%zbuf(:,:,:,1)
+        zdum => this%zbuf(:,:,:,2)
+
+        ! Get Y derivatives
+        call der%ddy(f,dfdy)
+
+        ! Get X derivatives
+        call transpose_y_to_x(f,xtmp,decomp)
+        call der%ddx(xtmp,xdum)
+        call transpose_x_to_y(xdum,dfdx)
+
+        ! Get Z derivatives
+        call transpose_y_to_z(f,ztmp,decomp)
+        call der%ddz(ztmp,zdum)
+        call transpose_z_to_y(zdum,dfdz)
+
     end subroutine 
 
     subroutine laplacian(this, f, lapf)
