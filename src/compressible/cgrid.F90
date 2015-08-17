@@ -1,7 +1,7 @@
 module CompressibleGrid
     use kind_parameters, only: rkind, clen
     use constants, only: zero,one,two
-    use GridMod, only: grid
+    use GridMod, only: grid, alloc_buffs, destroy_buffs
     use hooks, only: meshgen, initfields
     use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize
     implicit none
@@ -17,12 +17,15 @@ module CompressibleGrid
     integer :: bulk_index   = 9
     integer :: kap_index    = 10
 
-    type, extends(grid) :: cgrid 
+    type, extends(grid) :: cgrid
+        
+        real(rkind), dimension(:,:,:,:), allocatable :: rbuffx, rbuffy, rbuffz 
+         
         contains
-        procedure :: init
-        procedure :: destroy
-        procedure :: laplacian
-        procedure :: gradient 
+            procedure :: init
+            procedure :: destroy
+            procedure :: laplacian
+            procedure :: gradient 
     end type
 
 contains
@@ -133,6 +136,12 @@ contains
         this%ny_proc = this%decomp%ysz(2)
         this%nz_proc = this%decomp%ysz(3)
 
+
+        ! Allocate 2 buffers for each of the three decompositions
+        call alloc_buffs(this%rbuffx,2,"x",this%decomp)
+        call alloc_buffs(this%rbuffy,2,"y",this%decomp)
+        call alloc_buffs(this%rbuffz,2,"z",this%decomp)
+
     end subroutine
 
 
@@ -143,7 +152,12 @@ contains
         if (allocated(this%fields)) deallocate(this%fields) 
         call this%der%destroy()
         call this%fil%destroy()
+        call destroy_buffs(this%rbuffx)
+        call destroy_buffs(this%rbuffy)
+        call destroy_buffs(this%rbuffz)
+        
         call decomp_2d_finalize
+
     end subroutine
 
     subroutine gradient(this, f, dfdx, dfdy, dfdz)
@@ -166,6 +180,7 @@ contains
 
         ! Set some shit to avoid warnings
         lapf = f - f
+        
 
     end subroutine 
 end module 
