@@ -27,7 +27,7 @@ contains
 
         open(fileinput,file=trim(inputFile),form="formatted")
         
-        include "hitModules/inputReadOrder.F90"
+        include "hitSpectral_files/inputReadOrder.F90"
         
         close(fileinput)
       

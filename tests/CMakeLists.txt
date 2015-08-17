@@ -15,7 +15,7 @@ foreach ( testfile ${tests_source_files} )
   
     add_executable( ${testexec} ${testfile} )
     
-    target_link_libraries( ${testexec} PadeOps fftw3 2decomp_fft )
+    target_link_libraries( ${testexec} IncompressibleOps CompressibleOps PadeOps fftw3 2decomp_fft )
 
     if (MPI_Fortran_COMPILER_FLAGS)
         set_target_properties(${testexec} PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")

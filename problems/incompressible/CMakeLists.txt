@@ -19,4 +19,6 @@ foreach ( iproblemfile ${iproblems_source_files} )
         set_target_properties(${iproblemexec} PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")
     endif()
     
+    file(MAKE_DIRECTORY ${PadeOps_BINARY_DIR}/problems/incompressible/${iproblemexec}_files)
+    file(COPY ${iproblemexec}_files/input.dat DESTINATION ${PadeOps_BINARY_DIR}/problems/incompressible/${iproblemexec}_files) 
 endforeach()

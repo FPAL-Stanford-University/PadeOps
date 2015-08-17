@@ -1,8 +1,8 @@
-#include "hitModules/variables.F90"
-#include "hitModules/io.F90"
-#include "hitModules/spectralOps.F90"
-#include "hitModules/initialization.F90"
-#include "hitModules/timestep.F90"
+#include "hitSpectral_files/variables.F90"
+#include "hitSpectral_files/io.F90"
+#include "hitSpectral_files/spectralOps.F90"
+#include "hitSpectral_files/initialization.F90"
+#include "hitSpectral_files/timestep.F90"
 
 program hitSpectral
     use kind_parameters, only: rkind
