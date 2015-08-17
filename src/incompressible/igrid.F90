@@ -18,14 +18,14 @@ module IncompressibleGrid
         real(rkind),    dimension(:,:,:),   allocatable :: rbuff_x, rbuff_y, rbuff_z
         complex(rkind), dimension(:,:,:),   allocatable :: cbuff_z
         type(fft_3d),                       allocatable :: FT
-        type(poisson),                      allocatable :: Poiss 
+        !type(poisson),                      allocatable :: Poiss 
 
         contains
         procedure :: init
         procedure :: destroy
         procedure :: laplacian
         procedure :: gradient
-        procedure :: poisson  
+        !procedure :: poisson  
     end type
 
 contains
