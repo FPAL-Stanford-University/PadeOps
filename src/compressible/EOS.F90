@@ -20,34 +20,39 @@ module EOSMod
 
     abstract interface
 
-        pure elemental subroutine get_primitive(rho,rhou,rhov,rhow,TE,u,v,w,e)
+        pure subroutine get_primitive_interface(this,rho,rhou,rhov,rhow,TE,u,v,w,e,p,T)
             import :: eos
-            real(rkind), intent(in)  :: rho,rhou,rhov,rhow,TE
-            real(rkind), intent(out) :: u,v,w,e
+            class(eos),                    intent(in)  :: this 
+            real(rkind), dimension(:,:,:), intent(in)  :: rho,rhou,rhov,rhow,TE
+            real(rkind), dimension(:,:,:), intent(out) :: u,v,w,e,p,T
         end subroutine
 
-        pure elemental subroutine get_conserved(rho,u,v,w,e,rhou,rhov,rhow,TE)
+        pure subroutine get_conserved_interface(this,rho,u,v,w,p,rhou,rhov,rhow,TE)
             import :: eos
-            real(rkind), intent(in)   :: rho,u,v,w,e
-            real(rkind), intent(out)  :: rhou,rhov,rhow,TE
+            class(eos),                    intent(in)  :: this 
+            real(rkind), dimension(:,:,:), intent(in)  :: rho,u,v,w,p
+            real(rkind), dimension(:,:,:), intent(out) :: rhou,rhov,rhow,TE
         end subroutine
 
-        pure elemental subroutine get_p(rho,u,v,w,e,p)
+        pure subroutine get_p_interface(this,rho,u,v,w,e,p)
             import :: eos
-            real(rkind), intent(in)  :: rho,u,v,w,e
-            real(rkind), intent(out) :: p
+            class(eos),                    intent(in)  :: this 
+            real(rkind), dimension(:,:,:), intent(in)  :: rho,u,v,w,e
+            real(rkind), dimension(:,:,:), intent(out) :: p
         end subroutine
 
-        pure elemental subroutine get_T(rho,u,v,w,e,T)
+        pure subroutine get_T_interface(this,rho,u,v,w,e,T)
             import :: eos
-            real(rkind), intent(in)  :: rho,u,v,w,e
-            real(rkind), intent(out) :: T
+            class(eos),                    intent(in)  :: this
+            real(rkind), dimension(:,:,:), intent(in)  :: rho,u,v,w,e
+            real(rkind), dimension(:,:,:), intent(out) :: T
         end subroutine
 
-        pure elemental subroutine get_e_from_p(rho,u,v,w,p,e)
+        pure subroutine get_e_from_p_interface(this,rho,p,e)
             import :: eos
-            real(rkind), intent(in)  :: rho,u,v,w,p
-            real(rkind), intent(out) :: e
+            class(eos),                    intent(in)  :: this
+            real(rkind), dimension(:,:,:), intent(in)  :: rho,p
+            real(rkind), dimension(:,:,:), intent(out) :: e
         end subroutine
 
     end interface
