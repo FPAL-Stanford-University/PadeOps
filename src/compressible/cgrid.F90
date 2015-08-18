@@ -204,17 +204,13 @@ contains
         call this%der%d2dy2(f,lapf)
         
         call transpose_y_to_x(f,this%xbuf(:,:,:,1),this%decomp) 
-
         call this%der%d2dx2(this%xbuf(:,:,:,1),this%xbuf(:,:,:,2))
-
         call transpose_x_to_y(this%xbuf(:,:,:,2),this%ybuf(:,:,:,1),this%decomp)
         
         lapf = lapf + this%ybuf(:,:,:,1)
 
         call transpose_y_to_z(f,this%zbuf(:,:,:,1),this%decomp)
-
         call this%der%d2dz2(this%zbuf(:,:,:,1),this%zbuf(:,:,:,2))
-
         call transpose_z_to_y(this%zbuf(:,:,:,2),this%ybuf(:,:,:,1),this%decomp)
 
         lapf = lapf + this%ybuf(:,:,:,1)

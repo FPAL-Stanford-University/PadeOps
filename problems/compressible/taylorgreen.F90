@@ -36,7 +36,7 @@ end subroutine
 
 subroutine initfields(nx,ny,nz,proc_st,proc_en,proc_sz,dx,dy,dz,nvars,mesh,fields)
     use kind_parameters,  only: rkind
-    use constants,        only: two,pi
+    use constants,        only: zero,one,two,pi
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
     implicit none
 
@@ -49,8 +49,15 @@ subroutine initfields(nx,ny,nz,proc_st,proc_en,proc_sz,dx,dy,dz,nvars,mesh,field
     associate( rho => fields(:,:,:,rho_index), u => fields(:,:,:,u_index), &
                  v => fields(:,:,:,  v_index), w => fields(:,:,:,w_index), &
                  p => fields(:,:,:,  p_index), T => fields(:,:,:,T_index), &
-                 e => fields(:,:,:,  e_index)                              )
-
+                 e => fields(:,:,:,  e_index),                             &
+                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+        
+        rho = one
+        u   =  sin(x)*cos(y)*cos(z)
+        v   = -cos(x)*sin(y)*cos(z)
+        w   = zero
+        p   = 100._rkind + ( (cos(two*z) + two)*(cos(two*x) + cos(two*y)) - two ) / 16._rkind
+        
     end associate
 
 end subroutine
@@ -58,13 +65,18 @@ end subroutine
 
 program taylorgreen
 
-    use kind_parameters,  only: clen,stdout
-    use CompressibleGrid, only: cgrid
+    use kind_parameters,  only: rkind,clen,stdout
+    use CompressibleGrid, only: cgrid,u_index
+    use GridMod,          only: alloc_buffs, destroy_buffs
+    use reductions,       only: P_MAXVAL
+    use exits,            only: message
     implicit none
 
     type(cgrid) :: cgp
     character(len=clen) :: inputfile
     integer :: ierr
+
+    real(rkind), dimension(:,:,:,:), allocatable :: grad_u
 
     ! Start MPI
     call MPI_Init(ierr)
@@ -74,11 +86,21 @@ program taylorgreen
     ! Initialize the grid object
     call cgp%init(inputfile)
 
-    associate( x => cgp%mesh(:,:,:,1) )
-        write(stdout,*) x(:,1,1)
+    call alloc_buffs(grad_u, 3, 'y', cgp%decomp)
+    
+    associate( x => cgp%mesh(:,:,:,1), &
+               y => cgp%mesh(:,:,:,2), &
+               z => cgp%mesh(:,:,:,3), &
+               u => cgp%fields(:,:,:,u_index)  )
+        
+        call cgp%gradient(u,grad_u(:,:,:,1),grad_u(:,:,:,2),grad_u(:,:,:,3))
+        call message("Max error in dudx",P_MAXVAL(grad_u(:,:,:,1)-cos(x)*cos(y)*cos(z)))
+
+        ! write(stdout,*) x(:,1,1)
     end associate
 
     ! Destroy everythin before ending
+    call destroy_buffs(grad_u)
     call cgp%destroy()
 
     ! End the run
