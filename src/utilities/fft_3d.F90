@@ -60,6 +60,7 @@ module fft_3d_stuff
             procedure :: fft3_z2x
             procedure :: ifft3_x2z
             procedure :: destroy
+            procedure :: alloc_input
             procedure, private :: alloc_3d_real
             procedure, private :: alloc_3d_cmplx
             procedure, private :: alloc_4d 
@@ -684,6 +685,26 @@ contains
         end if 
 
     end subroutine
+   
+    subroutine alloc_input(this,arr_out)
+        class(fft_3d), intent(in) :: this
+        real(rkind), dimension(:,:,:), allocatable, intent(inout) :: arr_out
+
+        if (this%initialized) then
+            if (allocated(arr_out)) deallocate(arr_out)
+            select case (this%base_pencil)
+            case ("y")
+                allocate(arr_out(this%spectral%ysz(1), this%spectral%ysz(2), this%spectral%ysz(3)))
+            case ("x")
+                allocate(arr_out(this%spectral%xsz(1), this%spectral%xsz(2), this%spectral%xsz(3)))
+            case ("z")
+                allocate(arr_out(this%spectral%zsz(1), this%spectral%zsz(2), this%spectral%zsz(3)))
+            end select 
+        else
+            call decomp_2d_abort(305,"The fft_3d type has not been initialized")
+        end if 
+
+    end subroutine  
     
     subroutine alloc_4d(this,arr_out,dim4) 
         class(fft_3d), intent(in) :: this
