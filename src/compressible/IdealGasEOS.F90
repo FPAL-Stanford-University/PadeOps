@@ -29,7 +29,7 @@ module IdealGasEOS
 contains
 
     subroutine init(this,gam_,Rgas_)
-        class(idealgas), intent(in) :: this
+        class(idealgas), intent(inout) :: this
         real(rkind) :: gam_
         real(rkind) :: Rgas_
 
@@ -53,8 +53,8 @@ contains
         w = rhow * onebyrho
         e = (TE*onebyrho) - half*( u*u + v*v + w*w )
         
-        call this%get_p(rho,u,v,w,e,p)
-        call this%get_T(rho,u,v,w,e,T)
+        call this%get_p(rho,e,p)
+        call this%get_T(e,T)
 
     end subroutine
 
@@ -70,9 +70,9 @@ contains
 
     end subroutine
 
-    pure subroutine get_p(this,rho,u,v,w,e,p)
+    pure subroutine get_p(this,rho,e,p)
         class(idealgas), intent(in) :: this
-        real(rkind), dimension(:,:,:), intent(in)  :: rho,u,v,w,e
+        real(rkind), dimension(:,:,:), intent(in)  :: rho,e
         real(rkind), dimension(:,:,:), intent(out) :: p
 
         p = (this%gam-one)*rho*e
@@ -88,9 +88,9 @@ contains
 
     end subroutine
 
-    pure subroutine get_T(this,rho,u,v,w,e,T)
+    pure subroutine get_T(this,e,T)
         class(idealgas), intent(in) :: this
-        real(rkind), dimension(:,:,:), intent(in)  :: rho,u,v,w,e
+        real(rkind), dimension(:,:,:), intent(in)  :: e
         real(rkind), dimension(:,:,:), intent(out) :: T
 
         T = (this%gam-one)*e*this%onebyRgas

@@ -158,7 +158,7 @@ contains
         call destroy_buffs(this%xbuf)
         call destroy_buffs(this%ybuf)
         call destroy_buffs(this%zbuf)
-        
+        if (allocated(this%gas)) deallocate(this%gas) 
         call decomp_2d_finalize
 
     end subroutine

@@ -34,16 +34,18 @@ subroutine meshgen(nx,ny,nz,proc_st,proc_en,proc_sz,dx,dy,dz,mesh)
 
 end subroutine
 
-subroutine initfields(nx,ny,nz,proc_st,proc_en,proc_sz,dx,dy,dz,nvars,mesh,fields)
+subroutine initfields(nx,ny,nz,proc_st,proc_en,proc_sz,dx,dy,dz,nvars,mesh,gas,fields)
     use kind_parameters,  only: rkind
     use constants,        only: zero,one,two,pi
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
+    use IdealGasEOS,      only: idealgas
     implicit none
 
     integer,                                                        intent(in)    :: nx,ny,nz,nvars
     integer, dimension(3),                                          intent(in)    :: proc_st,proc_en,proc_sz
     real(rkind),                                                    intent(in)    :: dx,dy,dz
     real(rkind), dimension(proc_sz(1),proc_sz(2),proc_sz(3),3),     intent(in)    :: mesh
+    class(idealgas),                                                intent(in)    :: gas
     real(rkind), dimension(proc_sz(1),proc_sz(2),proc_sz(3),nvars), intent(inout) :: fields
 
     associate( rho => fields(:,:,:,rho_index), u => fields(:,:,:,u_index), &
@@ -57,7 +59,7 @@ subroutine initfields(nx,ny,nz,proc_st,proc_en,proc_sz,dx,dy,dz,nvars,mesh,field
         v   = -cos(x)*sin(y)*cos(z)
         w   = zero
         p   = 100._rkind + ( (cos(two*z) + two)*(cos(two*x) + cos(two*y)) - two ) / 16._rkind
-        
+           
     end associate
 
 end subroutine

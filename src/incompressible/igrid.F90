@@ -174,7 +174,7 @@ contains
     end subroutine 
 
     subroutine laplacian(this, f, lapf)
-        class(igrid), intent(inout) :: this
+        class(igrid), target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: lapf
 
