@@ -70,37 +70,26 @@ program taylorgreen
     use GridMod,          only: alloc_buffs, destroy_buffs
     use reductions,       only: P_MAXVAL
     use exits,            only: message
+    use timer,            only: tic, toc
     implicit none
 
     type(cgrid) :: cgp
-    character(len=clen) :: inputfile
-    integer :: ierr
+    character(len=clen) :: inputfile, iters
+    integer :: ierr, niters, idx 
 
     real(rkind), dimension(:,:,:,:), allocatable :: grad_u
 
     ! Start MPI
     call MPI_Init(ierr)
 
+    ! Get file location 
     call GETARG(1,inputfile)
-
+    
     ! Initialize the grid object
     call cgp%init(inputfile)
 
-    call alloc_buffs(grad_u, 3, 'y', cgp%decomp)
     
-    associate( x => cgp%mesh(:,:,:,1), &
-               y => cgp%mesh(:,:,:,2), &
-               z => cgp%mesh(:,:,:,3), &
-               u => cgp%fields(:,:,:,u_index)  )
-        
-        call cgp%gradient(u,grad_u(:,:,:,1),grad_u(:,:,:,2),grad_u(:,:,:,3))
-        call message("Max error in dudx",P_MAXVAL(grad_u(:,:,:,1)-cos(x)*cos(y)*cos(z)))
-
-        ! write(stdout,*) x(:,1,1)
-    end associate
-
     ! Destroy everythin before ending
-    call destroy_buffs(grad_u)
     call cgp%destroy()
 
     ! End the run

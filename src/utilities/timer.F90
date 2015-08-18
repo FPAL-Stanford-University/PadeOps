@@ -1,7 +1,9 @@
 module timer
+        use decomp_2d, only: nrank 
+        use mpi,       only: MPI_WTIME  
         implicit none
-        real(kind=4) :: start, finish
-        real(kind=4) :: TARRAY(2), TOE
+        
+        double precision :: start, finish
 
         interface toc
             module procedure toc1,toc2
@@ -9,21 +11,22 @@ module timer
 
 contains 
         subroutine tic 
-                CALL ETIME(TARRAY, TOE)
-                start = TARRAY(1)
+            start = MPI_WTIME()
         end subroutine tic
 
         subroutine toc1 
-                CALL ETIME(TARRAY, TOE)
-                finish = TARRAY(1)
+            finish = MPI_WTIME()
+            if (nrank == 0) then    
                 print*, "Elapsed time is ",finish - start, " seconds"
+            end if 
         end subroutine toc1
 
         subroutine toc2(message) 
-                character(len=*), intent(in) :: message
-                CALL ETIME(TARRAY, TOE)
-                finish = TARRAY(1)
+            character(len=*), intent(in) :: message
+            finish = MPI_WTIME()
+            if (nrank == 0) then    
                 print*, message, finish - start, " seconds"
+            end if 
         end subroutine toc2
 
 end module timer

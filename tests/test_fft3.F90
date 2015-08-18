@@ -3,7 +3,7 @@ program test_fft3d
     use kind_parameters, only : rkind
     use decomp_2d
     use fft_3d_stuff, only: fft_3d 
-    use constants, only: pi, two,one,zero, imi
+    use constants, only: pi, two
 
     implicit none
     real(rkind), dimension(:,:,:), allocatable :: x, y, z, f,d2fdx2, d2fdy2, d2fdz2,fold

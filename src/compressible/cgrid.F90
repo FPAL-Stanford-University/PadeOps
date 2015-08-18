@@ -197,23 +197,37 @@ contains
     end subroutine 
 
     subroutine laplacian(this, f, lapf)
-        class(cgrid), intent(inout) :: this
+        use timer
+        class(cgrid),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: lapf
         
-        call this%der%d2dy2(f,lapf)
+        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum, ytmp
+        type(derivatives), pointer :: der
+        type(decomp_info), pointer :: decomp
         
-        call transpose_y_to_x(f,this%xbuf(:,:,:,1),this%decomp) 
-        call this%der%d2dx2(this%xbuf(:,:,:,1),this%xbuf(:,:,:,2))
-        call transpose_x_to_y(this%xbuf(:,:,:,2),this%ybuf(:,:,:,1),this%decomp)
+
+        der => this%der
+        decomp => this%decomp
+        xtmp => this%xbuf(:,:,:,1)
+        xdum => this%xbuf(:,:,:,2)
+        ztmp => this%zbuf(:,:,:,1)
+        zdum => this%zbuf(:,:,:,2)
+        ytmp => this%ybuf(:,:,:,1)
+
+        call der%d2dy2(f,lapf)
         
-        lapf = lapf + this%ybuf(:,:,:,1)
+        call transpose_y_to_x(f,xtmp,this%decomp) 
+        call this%der%d2dx2(xtmp,xdum)
+        call transpose_x_to_y(xdum,ytmp,this%decomp)
 
-        call transpose_y_to_z(f,this%zbuf(:,:,:,1),this%decomp)
-        call this%der%d2dz2(this%zbuf(:,:,:,1),this%zbuf(:,:,:,2))
-        call transpose_z_to_y(this%zbuf(:,:,:,2),this%ybuf(:,:,:,1),this%decomp)
+        lapf = lapf + ytmp
 
-        lapf = lapf + this%ybuf(:,:,:,1)
+        call transpose_y_to_z(f,ztmp,this%decomp)
+        call this%der%d2dz2(ztmp,zdum)
+        call transpose_z_to_y(zdum,ytmp,this%decomp)
+        
+        lapf = lapf + ytmp
 
     end subroutine 
 end module 
