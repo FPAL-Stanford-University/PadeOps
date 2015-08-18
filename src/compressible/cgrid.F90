@@ -41,6 +41,7 @@ contains
 
         integer :: nx, ny, nz
         character(len=clen) :: outputdir
+        character(len=clen) :: inputdir
         logical :: periodicx = .true. 
         logical :: periodicy = .true. 
         logical :: periodicz = .true.
@@ -126,8 +127,7 @@ contains
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired 
-        call initfields(nx, ny, nz, this%decomp%yst, this%decomp%yen, this%decomp%ysz, &
-                    this%dx, this%dy, this%dz, size(this%fields,4), this%mesh, this%fields) 
+        call initfields(this%decomp, this%dx, this%dy, this%dz, inputdir, this%mesh, this%fields)
 
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 

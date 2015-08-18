@@ -42,7 +42,7 @@ contains
         integer :: prow = 0, pcol = 0 
         integer :: nsteps = -1
         real(rkind) :: dt = 1d-3, tstop = one, CFL = -one
-        integer :: i, j, k, ierr  
+        integer :: i, j, k
         integer :: ioUnit
         real(rkind) :: nu = zero 
 
@@ -111,7 +111,7 @@ contains
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired 
-        call initfields(this%decomp, this%dx, this%dy, this%dz, size(this%fields,4), this%mesh, this%fields) 
+        call initfields(this%decomp, this%dx, this%dy, this%dz, inputdir, this%mesh, this%fields) 
 
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
@@ -145,18 +145,6 @@ contains
         this%nx_proc = this%decomp%ysz(1)
         this%ny_proc = this%decomp%ysz(2)
         this%nz_proc = this%decomp%ysz(3)
-
-        !! POISSON SOLVER RELATED INITIALIZATIONS
-
-        ! Case 1: All three directions are periodic  
-        if ((periodicx) .and. (periodicy) .and. (periodicz)) then
-            allocate(this%FT)
-            ierr = this%FT%init(nx,ny,nz,"x",this%dx,this%dy,this%dz,.false.,.true.)
-            if (ierr .ne. 0) then
-                call GracefulExit("FFT_3d derived could not be initialized", 01)
-            end if
-
-        end if 
 
         if ((dt <0) .and. (CFL <0)) then
             call GracefulExit("Neither CFL nor DT were specified. &

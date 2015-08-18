@@ -1,4 +1,5 @@
 #include "hitCD_files/meshgen.F90"
+#include "hitCD_files/hitCD_IO.F90"
 #include "hitCD_files/initfields.F90"
 #include "hitCD_files/poisson.F90"
 

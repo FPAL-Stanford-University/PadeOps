@@ -18,16 +18,14 @@ module hooks
     end interface
 
     interface initfields
-        subroutine initfields(decomp, dx, dy, dz, nvars, mesh, fields)
+        subroutine initfields(decomp, dx, dy, dz, inpDirectory, mesh, fields)
             import :: rkind
             import :: decomp_info
             type(decomp_info), intent(in) :: decomp
-            integer, intent(in) :: nx, ny, nz
             real(rkind), intent(inout) :: dx, dy, dz
-            integer, dimension(3), intent(in) :: proc_st, proc_en, proc_sz
-            integer, intent(in) :: nvars 
-            real(rkind), dimension(proc_sz(1),proc_sz(2),proc_sz(3),3), intent(in) :: mesh
-            real(rkind), dimension(proc_sz(1),proc_sz(2),proc_sz(3),nvars), intent(inout) :: fields
+            character(len=*), intent(in) :: inpDirectory
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
         end subroutine 
     end interface

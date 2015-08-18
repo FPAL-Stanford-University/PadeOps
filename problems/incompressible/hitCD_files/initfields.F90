@@ -1,5 +1,5 @@
 subroutine initfields(decomp,dx,dy,dz,inpDirectory,mesh,fields)
-    use kind_parameters,    only: rkind, ckind
+    use kind_parameters,    only: rkind
     use constants,          only: two,pi
     use IncompressibleGrid, only: u_index,v_index,w_index
     use hitCD_IO 
