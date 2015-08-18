@@ -114,7 +114,7 @@ contains
 
         ! Go to hooks if a different initialization is derired 
         call initfields(nx, ny, nz, this%decomp%yst, this%decomp%yen, this%decomp%ysz, &
-                    this%dx, this%dy, this%dz, size(this%fields,4), this%mesh, gas, this%fields) 
+                    this%dx, this%dy, this%dz, size(this%fields,4), this%mesh, this%fields) 
 
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
