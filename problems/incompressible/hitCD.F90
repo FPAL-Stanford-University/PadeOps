@@ -14,6 +14,7 @@ program hitcd
     type(igrid), target :: igp
     character(len=clen) :: inputfile
     integer :: ierr
+    logical :: isBoxFilter = .FALSE.
     type(poisson) :: POIS
     real(rkind), dimension(:,:,:), pointer :: u,v,w
 
@@ -26,14 +27,10 @@ program hitcd
 
     ! Initialize the grid object
     call igp%init(inputfile)
-    call POIS%init( igp%decomp, "x", igp%dx, igp%dy, igp%dz, "cd10",.false.) 
+    call POIS%init( igp%decomp, igp%dx, igp%dy, igp%dz, "cd10", isBoxFilter) 
 
     ! Associate the pointers for ease of use
     u => igp%fields(:,:,:,1); v => igp%fields(:,:,:,2); w => igp%fields(:,:,:,3)
-
-    call sleep(nrank)
-    print*, nrank
-    print*, u(1:5,1,1)
 
     ! Destroy everything before ending
     call POIS%destroy()

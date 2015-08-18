@@ -1,4 +1,4 @@
-module CompressibleGrid
+module IncompressibleGrid
     use kind_parameters, only: rkind, clen
     use constants, only: zero,one,two
     use GridMod, only: grid, alloc_buffs, destroy_buffs
@@ -6,25 +6,16 @@ module CompressibleGrid
     use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                     transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
-    use IdealGasEOS,     only: idealgas
    
     implicit none
 
-    integer :: rho_index    = 1 
-    integer :: u_index      = 2
-    integer :: v_index      = 3
-    integer :: w_index      = 4
-    integer :: p_index      = 5
-    integer :: T_index      = 6
-    integer :: e_index      = 7
-    integer :: mu_index     = 8
-    integer :: bulk_index   = 9
-    integer :: kap_index    = 10
+    integer :: u_index      = 1
+    integer :: v_index      = 2
+    integer :: w_index      = 3
+    integer :: nu_index     = 4
 
-    type, extends(grid) :: cgrid
+    type, extends(grid) :: igrid
        
-        type(idealgas), allocatable :: gas
-
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf 
          
         contains
@@ -54,12 +45,11 @@ contains
         integer :: prow = 0, pcol = 0 
         integer :: i, j, k 
         integer :: ioUnit
-        real(rkind) :: gam = 1.4_rkind
-        real(rkind) :: Rgas = one
         integer :: nsteps = -1
         real(rkind) :: dt = -one
         real(rkind) :: tstop = one
         real(rkind) :: CFL = -one
+        real(rkind) :: nu = 0.02_rkind
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
@@ -67,13 +57,13 @@ contains
                          derivative_x, derivative_y, derivative_z, &
                                      filter_x, filter_y, filter_z, &
                                                        prow, pcol
-        namelist /CINPUT/  gam, Rgas
+        namelist /IINPUT/  nu
 
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
         read(unit=ioUnit, NML=INPUT)
-        read(unit=ioUnit, NML=CINPUT)
+        read(unit=ioUnit, NML=IINPUT)
         close(ioUnit)
 
         this%nx = nx
@@ -110,16 +100,12 @@ contains
             end do 
         end do  
 
-        allocate(this%gas)
-        call this%gas%init(gam,Rgas)
-
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
-
    
         ! Allocate fields
         if ( allocated(this%fields) ) deallocate(this%fields) 
-        call alloc_buffs(this%fields,10,'y',this%decomp)
+        call alloc_buffs(this%fields,4,'y',this%decomp)
        
         ! Initialize everything to a constant Zero
         this%fields = zero  
@@ -179,14 +165,13 @@ contains
         call destroy_buffs(this%xbuf)
         call destroy_buffs(this%ybuf)
         call destroy_buffs(this%zbuf)
-        if (allocated(this%gas)) deallocate(this%gas) 
         call decomp_2d_finalize
 
     end subroutine
 
     subroutine gradient(this, f, dfdx, dfdy, dfdz)
         class(cgrid),target, intent(inout) :: this
-        real(rkind), intent(in), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
+        real(rkind), intent(in),  dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdx
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdy
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdz
@@ -220,7 +205,7 @@ contains
     subroutine laplacian(this, f, lapf)
         use timer
         class(cgrid),target, intent(inout) :: this
-        real(rkind), intent(in), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
+        real(rkind), intent(in),  dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: lapf
         
         real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum, ytmp
