@@ -8,16 +8,17 @@ module poissonMod
 
     type :: poisson
         private
+        type(decomp_info), allocatable :: myGP
         real(rkind), dimension(:,:,:,:), allocatable :: k_tensor 
         type(fft_3d), allocatable :: FT
         real(rkind), dimension(:,:,:), allocatable :: Gfilt
         complex(rkind), dimension(:,:,:,:), allocatable :: ustar_hat
         complex(rkind), dimension(:,:,:,:), allocatable :: u_hat
+        real(rkind), dimension(:,:,:,:), allocatable :: u_in_x
 
         integer :: nx_p_out, ny_p_out, nz_p_out
         integer :: nx_p_in, ny_p_in, nz_p_in
 
-        logical :: isProjfromZ
         contains
             procedure :: init
             procedure :: destroy
@@ -65,11 +66,10 @@ contains
     end function
 
 
-    subroutine init(this, gp, base_dec, dx, dy, dz, method,isBoxFilt)
+    subroutine init(this, gp, dx, dy, dz, method,isBoxFilt)
         class(poisson), target, intent(inout) :: this
         class(decomp_info), intent(in) :: gp
         real(rkind), intent(in) :: dx, dy, dz
-        character(len=1), intent(in) :: base_dec
         integer :: ierr
         logical, intent(in) :: isBoxFilt
         character(len=4), intent(in) :: method
@@ -83,7 +83,7 @@ contains
         nz = gp%zsz(3)
 
         allocate(this%FT)
-        ierr = this%FT%init(nx,ny,nz,base_dec,dx, dy,dz, .false.)
+        ierr = this%FT%init(nx,ny,nz,"x",dx, dy,dz, .false.)
        
 
         call this%FT%alloc_output(mk1)
@@ -146,26 +146,19 @@ contains
         
         deallocate (mk1, mk2, mk3, mkabs_sq, G1, G2, G3)
 
-        call this%FT%alloc_input(dummy)
-        this%nx_p_in = size(dummy,1) 
-        this%ny_p_in = size(dummy,2) 
-        this%nz_p_in = size(dummy,3) 
-        deallocate(dummy)
+        allocate(this%myGP,source=gp)
 
-
-        if (base_dec == "z") then
-            this%isProjfromZ = .true. 
-        else
-            this%isProjfromZ = .false. 
-        end if 
+        allocate(this%u_in_x(this%myGP%xsz(1),this%myGP%xsz(2),this%myGP%xsz(3),3))
     end subroutine 
 
     subroutine destroy(this)
         class(poisson), intent(inout) :: this
 
+        if (allocated(this%myGP)) deallocate(this%myGP)
         if (allocated(this%k_tensor)) deallocate(this%k_tensor)
         if (allocated(this%Gfilt)) deallocate(this%Gfilt)
         if (allocated(this%ustar_hat)) deallocate(this%ustar_hat)
+        if (allocated(this%u_in_x)) deallocate(this%u_in_x)
         if (allocated(this%FT)) then
             call this%FT%destroy
             deallocate(this%k_tensor)
@@ -175,8 +168,8 @@ contains
 
     subroutine pressureProjection(this,ustar,u)
         class(poisson), target, intent(inout) :: this
-        real(rkind), dimension(this%nx_p_in,this%nx_p_in,this%nx_p_in,3), intent(in) :: ustar
-        real(rkind), dimension(this%nx_p_in,this%nx_p_in,this%nx_p_in,3), intent(out) :: u
+        real(rkind), dimension(this%myGP%ysz(1),this%myGP%ysz(2),this%myGP%ysz(3),3), intent(in) :: ustar
+        real(rkind), dimension(this%myGP%ysz(1),this%myGP%ysz(2),this%myGP%ysz(3),3), intent(out) :: u
 
         real(rkind), dimension(:,:,:), pointer :: k1k1, k1k2, k1k3, k2k2, k2k3, k3k3
 
@@ -188,44 +181,37 @@ contains
         k2k2 => this%k_tensor(:,:,:,4)
         k2k3 => this%k_tensor(:,:,:,5)
         k3k3 => this%k_tensor(:,:,:,6)
+       
+
+
+        ! First move us, vs, ws from y -> x
+        call transpose_y_to_x(ustar(:,:,:,1),this%u_in_y(:,:,:,1),this%myGP)
+        call transpose_y_to_x(ustar(:,:,:,2),this%u_in_y(:,:,:,2),this%myGP)
+        call transpose_y_to_x(ustar(:,:,:,3),this%u_in_y(:,:,:,3),this%myGP)
+
+
+
+        call this%FT%fft3_x2z(u_in_x(:,:,:,1),this%ustar_hat(:,:,:,1)) 
+        call this%FT%fft3_x2z(u_in_x(:,:,:,2),this%ustar_hat(:,:,:,2)) 
+        call this%FT%fft3_x2z(u_in_x(:,:,:,3),this%ustar_hat(:,:,:,3)) 
         
-        if (this%isProjfromZ) then
-            call this%FT%fft3_z2x(ustar(:,:,:,1),this%ustar_hat(:,:,:,1)) 
-            call this%FT%fft3_z2x(ustar(:,:,:,2),this%ustar_hat(:,:,:,2)) 
-            call this%FT%fft3_z2x(ustar(:,:,:,3),this%ustar_hat(:,:,:,3)) 
-            
-            this%u_hat(:,:,:,1) = k1k1*this%ustar_hat(:,:,:,1) + k1k2*this%ustar_hat(:,:,:,2) &
-                                        +  k1k3*this%ustar_hat(:,:,:,3)
-            
-            this%u_hat(:,:,:,2) = k1k2*this%ustar_hat(:,:,:,1) + k2k2*this%ustar_hat(:,:,:,2) &
-                                        +  k2k3*this%ustar_hat(:,:,:,3)
+        this%u_hat(:,:,:,1) = k1k1*this%ustar_hat(:,:,:,1) + k1k2*this%ustar_hat(:,:,:,2) &
+                                    +  k1k3*this%ustar_hat(:,:,:,3)
+        
+        this%u_hat(:,:,:,2) = k1k2*this%ustar_hat(:,:,:,1) + k2k2*this%ustar_hat(:,:,:,2) &
+                                    +  k2k3*this%ustar_hat(:,:,:,3)
 
-            this%u_hat(:,:,:,3) = k1k3*this%ustar_hat(:,:,:,1) + k2k3*this%ustar_hat(:,:,:,2) &
-                                        +  k3k3*this%ustar_hat(:,:,:,3)
+        this%u_hat(:,:,:,3) = k1k3*this%ustar_hat(:,:,:,1) + k2k3*this%ustar_hat(:,:,:,2) &
+                                    +  k3k3*this%ustar_hat(:,:,:,3)
 
-            call this%FT%ifft3_x2z(this%u_hat(:,:,:,1),u(:,:,:,1))
-            call this%FT%ifft3_x2z(this%u_hat(:,:,:,2),u(:,:,:,2))
-            call this%FT%ifft3_x2z(this%u_hat(:,:,:,3),u(:,:,:,3))
+        call this%FT%ifft3_z2x(this%u_hat(:,:,:,1),u_in_x(:,:,:,1))
+        call this%FT%ifft3_z2x(this%u_hat(:,:,:,2),u_in_x(:,:,:,2))
+        call this%FT%ifft3_z2x(this%u_hat(:,:,:,3),u_in_x(:,:,:,3))
 
-        else
-            call this%FT%fft3_x2z(ustar(:,:,:,1),this%ustar_hat(:,:,:,1)) 
-            call this%FT%fft3_x2z(ustar(:,:,:,2),this%ustar_hat(:,:,:,2)) 
-            call this%FT%fft3_x2z(ustar(:,:,:,3),this%ustar_hat(:,:,:,3)) 
-            
-            this%u_hat(:,:,:,1) = k1k1*this%ustar_hat(:,:,:,1) + k1k2*this%ustar_hat(:,:,:,2) &
-                                        +  k1k3*this%ustar_hat(:,:,:,3)
-            
-            this%u_hat(:,:,:,2) = k1k2*this%ustar_hat(:,:,:,1) + k2k2*this%ustar_hat(:,:,:,2) &
-                                        +  k2k3*this%ustar_hat(:,:,:,3)
-
-            this%u_hat(:,:,:,3) = k1k3*this%ustar_hat(:,:,:,1) + k2k3*this%ustar_hat(:,:,:,2) &
-                                        +  k3k3*this%ustar_hat(:,:,:,3)
-
-            call this%FT%ifft3_z2x(this%u_hat(:,:,:,1),u(:,:,:,1))
-            call this%FT%ifft3_z2x(this%u_hat(:,:,:,2),u(:,:,:,2))
-            call this%FT%ifft3_z2x(this%u_hat(:,:,:,3),u(:,:,:,3))
-
-        end if 
+        ! Now transpose back from x -> y
+        call transpose_x_to_y(u_in_x(:,:,:,1),u(:,:,:,1),this%myGP)
+        call transpose_x_to_y(u_in_x(:,:,:,2),u(:,:,:,2),this%myGP)
+        call transpose_x_to_y(u_in_x(:,:,:,3),u(:,:,:,3),this%myGP)
 
     end subroutine
 
