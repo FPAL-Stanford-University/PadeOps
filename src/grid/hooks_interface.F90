@@ -1,5 +1,6 @@
 module hooks
-    use kind_parameters, only: rkind 
+    use kind_parameters, only: rkind
+    use decomp_2d, only: decomp_info 
     implicit none
 
     interface meshgen
@@ -17,11 +18,10 @@ module hooks
     end interface
 
     interface initfields
-        subroutine initfields(nx     , ny     , nz     , &
-                              proc_st, proc_en, proc_sz, &
-                              dx     , dy     , dz     , &
-                              nvars, mesh, fields)
+        subroutine initfields(decomp, dx, dy, dz, nvars, mesh, fields)
             import :: rkind
+            import :: decomp_info
+            type(decomp_info), intent(in) :: decomp
             integer, intent(in) :: nx, ny, nz
             real(rkind), intent(inout) :: dx, dy, dz
             integer, dimension(3), intent(in) :: proc_st, proc_en, proc_sz

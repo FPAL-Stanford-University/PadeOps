@@ -1,11 +1,16 @@
 module poissonMod
     use kind_parameters, only: rkind
     use decomp_2d, only: decomp_info
+    use fft_3d_stuff, only: fft_3d
+    use constants, only: one, zero 
+    use exits, only: GracefulExit 
+    implicit none 
+
     type :: poisson
         private
         real(rkind), dimension(:,:,:,:), allocatable :: k_tensor 
         type(fft_3d), allocatable :: FT
-        real(rkind), dimension(:,:,:,:), allocatable :: Gfilt
+        real(rkind), dimension(:,:,:), allocatable :: Gfilt
         complex(rkind), dimension(:,:,:,:), allocatable :: ustar_hat
         complex(rkind), dimension(:,:,:,:), allocatable :: u_hat
 
@@ -17,17 +22,15 @@ module poissonMod
             procedure :: init
             procedure :: destroy
 
-            procedure :: pressureProjectionX
-            procedure :: pressureProjectionZ
+            procedure :: pressureProjection
     end type
 
 contains
-#include "hitCD_files/meshgen.F90"
-#include "hitCD_files/initfields.F90"
 
+#include "hitCD_files/transfer_funcs.F90"
 
     subroutine init(this, gp, base_dec, dx, dy, dz, method,isBoxFilt)
-        class(poisson), intent(inout) :: this
+        class(poisson), target, intent(inout) :: this
         class(decomp_info), intent(in) :: gp
         real(rkind), intent(in) :: dx, dy, dz
         character(len=1), intent(in) :: base_dec
@@ -54,17 +57,17 @@ contains
         call this%FT%alloc_output(this%ustar_hat,3)
         call this%FT%alloc_output(this%u_hat,3)
 
-        allocate(k_tensor(size(mk1,1),size(mk1,2),size(mk1,3),6))
+        allocate(this%k_tensor(size(mk1,1),size(mk1,2),size(mk1,3),6))
        
         select case (method)
         case ("cd10")
-            mk1 = GetCD10ModWaveNum(this%k1,dx)
-            mk2 = GetCD10ModWaveNum(this%k2,dy)
-            mk3 = GetCD10ModWaveNum(this%k3,dz)
+            mk1 = GetCD10ModWaveNum(this%FT%k1,dx)
+            mk2 = GetCD10ModWaveNum(this%FT%k2,dy)
+            mk3 = GetCD10ModWaveNum(this%FT%k3,dz)
         case ("cd06")
-            mk1 = GetCD06ModWaveNum(this%k1,dx)
-            mk2 = GetCD06ModWaveNum(this%k2,dy)
-            mk3 = GetCD06ModWaveNum(this%k3,dz)
+            mk1 = GetCD06ModWaveNum(this%FT%k1,dx)
+            mk2 = GetCD06ModWaveNum(this%FT%k2,dy)
+            mk3 = GetCD06ModWaveNum(this%FT%k3,dz)
         case default 
             call GracefulExit("Incorrect method selected in poisson init",1031)
         end select 
@@ -86,16 +89,16 @@ contains
             call this%FT%alloc_output(G1)
             call this%FT%alloc_output(G2)
             call this%FT%alloc_output(G3)
-            G1 = GetFilterTransferFunction(this%k1, dx)
-            G2 = GetFilterTransferFunction(this%k2, dy)
-            G3 = GetFilterTransferFunction(this%k3, dz)
+            G1 = GetFilterTransferFunction(this%FT%k1, dx)
+            G2 = GetFilterTransferFunction(this%FT%k2, dy)
+            G3 = GetFilterTransferFunction(this%FT%k3, dz)
             this%Gfilt = G1*G2*G3
         else
-            this%Gfilt = GetFilterTransferFunction(sqrt(this%kabs_sq), dx)
+            this%Gfilt = GetFilterTransferFunction(sqrt(this%FT%kabs_sq), dx)
         end if 
-        this%nx_p_out = size(this%mk1,1) 
-        this%ny_p_out = size(this%mk1,2) 
-        this%nz_p_out = size(this%mk1,3)
+        this%nx_p_out = size(mk1,1) 
+        this%ny_p_out = size(mk1,2) 
+        this%nz_p_out = size(mk1,3)
 
         k1k1 = this%Gfilt*(one  - mk1*mk1/mkabs_sq) 
         k1k2 = this%Gfilt*(zero - mk1*mk2/mkabs_sq)
@@ -135,9 +138,9 @@ contains
     end subroutine 
 
     subroutine pressureProjection(this,ustar,u)
-        class(poisson), intent(inout) :: this
-        real(rkind), dimension(this%nx_p_in,this%nx_p_in,this%nx_p_in), intent(in) :: ustar
-        real(rkind), dimension(this%nx_p_in,this%nx_p_in,this%nx_p_in), intent(out) :: u
+        class(poisson), target, intent(inout) :: this
+        real(rkind), dimension(this%nx_p_in,this%nx_p_in,this%nx_p_in,3), intent(in) :: ustar
+        real(rkind), dimension(this%nx_p_in,this%nx_p_in,this%nx_p_in,3), intent(out) :: u
 
         real(rkind), dimension(:,:,:), pointer :: k1k1, k1k2, k1k3, k2k2, k2k3, k3k3
 
@@ -155,14 +158,14 @@ contains
             call this%FT%fft3_z2x(ustar(:,:,:,2),this%ustar_hat(:,:,:,2)) 
             call this%FT%fft3_z2x(ustar(:,:,:,3),this%ustar_hat(:,:,:,3)) 
             
-            this%u_hat(:,:,:,1) = k1k1*ustar_hat(:,:,:,1) + k1k2*ustar_hat(:,:,:,2) &
-                                        +  k1k3*ustar_hat(:,:,:,3)
+            this%u_hat(:,:,:,1) = k1k1*this%ustar_hat(:,:,:,1) + k1k2*this%ustar_hat(:,:,:,2) &
+                                        +  k1k3*this%ustar_hat(:,:,:,3)
             
-            this%u_hat(:,:,:,2) = k1k2*ustar_hat(:,:,:,1) + k2k2*ustar_hat(:,:,:,2) &
-                                        +  k2k3*ustar_hat(:,:,:,3)
+            this%u_hat(:,:,:,2) = k1k2*this%ustar_hat(:,:,:,1) + k2k2*this%ustar_hat(:,:,:,2) &
+                                        +  k2k3*this%ustar_hat(:,:,:,3)
 
-            this%u_hat(:,:,:,3) = k1k3*ustar_hat(:,:,:,1) + k2k3*ustar_hat(:,:,:,2) &
-                                        +  k3k3*ustar_hat(:,:,:,3)
+            this%u_hat(:,:,:,3) = k1k3*this%ustar_hat(:,:,:,1) + k2k3*this%ustar_hat(:,:,:,2) &
+                                        +  k3k3*this%ustar_hat(:,:,:,3)
 
             call this%FT%ifft3_x2z(this%u_hat(:,:,:,1),u(:,:,:,1))
             call this%FT%ifft3_x2z(this%u_hat(:,:,:,2),u(:,:,:,2))
@@ -173,14 +176,14 @@ contains
             call this%FT%fft3_x2z(ustar(:,:,:,2),this%ustar_hat(:,:,:,2)) 
             call this%FT%fft3_x2z(ustar(:,:,:,3),this%ustar_hat(:,:,:,3)) 
             
-            this%u_hat(:,:,:,1) = k1k1*ustar_hat(:,:,:,1) + k1k2*ustar_hat(:,:,:,2) &
-                                        +  k1k3*ustar_hat(:,:,:,3)
+            this%u_hat(:,:,:,1) = k1k1*this%ustar_hat(:,:,:,1) + k1k2*this%ustar_hat(:,:,:,2) &
+                                        +  k1k3*this%ustar_hat(:,:,:,3)
             
-            this%u_hat(:,:,:,2) = k1k2*ustar_hat(:,:,:,1) + k2k2*ustar_hat(:,:,:,2) &
-                                        +  k2k3*ustar_hat(:,:,:,3)
+            this%u_hat(:,:,:,2) = k1k2*this%ustar_hat(:,:,:,1) + k2k2*this%ustar_hat(:,:,:,2) &
+                                        +  k2k3*this%ustar_hat(:,:,:,3)
 
-            this%u_hat(:,:,:,3) = k1k3*ustar_hat(:,:,:,1) + k2k3*ustar_hat(:,:,:,2) &
-                                        +  k3k3*ustar_hat(:,:,:,3)
+            this%u_hat(:,:,:,3) = k1k3*this%ustar_hat(:,:,:,1) + k2k3*this%ustar_hat(:,:,:,2) &
+                                        +  k3k3*this%ustar_hat(:,:,:,3)
 
             call this%FT%ifft3_z2x(this%u_hat(:,:,:,1),u(:,:,:,1))
             call this%FT%ifft3_z2x(this%u_hat(:,:,:,2),u(:,:,:,2))
@@ -189,6 +192,5 @@ contains
         end if 
 
     end subroutine
-
 
 end module 

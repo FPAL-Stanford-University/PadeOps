@@ -37,6 +37,8 @@ module GridMod
         real(rkind), dimension(:,:,:,:), allocatable         :: mesh
         real(rkind), dimension(:,:,:,:), allocatable         :: fields
 
+        real(rkind)                                          :: tstop, dt, tsim
+        integer                                              :: step, nsteps
         integer                                              :: nx_proc, ny_proc, nz_proc
     contains
 

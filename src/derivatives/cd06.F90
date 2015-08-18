@@ -8,7 +8,7 @@ module cd06stuff
     implicit none
 
     private
-    public :: cd06
+    public :: cd06, alpha06d1, a06d1, b06d1
     
     ! 6th order first derivative coefficients (See Lele (1992) for explanation)
     real(rkind), parameter :: alpha06d1=  1.0_rkind / 3.0_rkind

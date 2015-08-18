@@ -14,18 +14,13 @@ module IncompressibleGrid
     integer :: w_index      = 3
 
     type, extends(grid) :: igrid 
-
-        real(rkind),    dimension(:,:,:),   allocatable :: rbuff_x, rbuff_y, rbuff_z
-        complex(rkind), dimension(:,:,:),   allocatable :: cbuff_z
-        type(fft_3d),                       allocatable :: FT
-        !type(poisson),                      allocatable :: Poiss 
+        real(rkind) :: nu ! Viscosity
 
         contains
         procedure :: init
         procedure :: destroy
         procedure :: laplacian
         procedure :: gradient
-        !procedure :: poisson  
     end type
 
 contains
@@ -34,7 +29,7 @@ contains
         character(len=clen), intent(in) :: inputfile  
 
         integer :: nx, ny, nz
-        character(len=clen) :: outputdir
+        character(len=clen) :: outputdir, inputdir
         logical :: periodicx = .true. 
         logical :: periodicy = .true. 
         logical :: periodicz = .true.
@@ -45,22 +40,39 @@ contains
         character(len=clen) :: filter_y = "cf90" 
         character(len=clen) :: filter_z = "cf90"
         integer :: prow = 0, pcol = 0 
+        integer :: nsteps = -1
+        real(rkind) :: dt = 1d-3, tstop = one, CFL = -one
         integer :: i, j, k, ierr  
         integer :: ioUnit
+        real(rkind) :: nu = zero 
 
-        namelist /IINPUT/ nx, ny, nz, outputdir,periodicx, periodicy, periodicz, &
-                                     derivative_x, derivative_y, derivative_z,   &
-                                     filter_x, filter_y, filter_z, prow, pcol    
-
+        namelist /INPUT/  nx, ny, nz, tstop, dt, nsteps, CFL, &
+                                    inputdir, outputdir,      &
+                        periodicx, periodicy, periodicz,      &
+               derivative_x, derivative_y, derivative_z,      &
+                           filter_x, filter_y, filter_z,      &
+                                             prow, pcol
+        
+        namelist /IINPUT/nu 
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+        read(unit=ioUnit, NML=INPUT)
         read(unit=ioUnit, NML=IINPUT)
         close(ioUnit)
 
+        if (CFL>0) then
+            dt = -one
+        end if 
         this%nx = nx
         this%ny = ny
         this%nz = nz
+        
+        this%tstop = tstop
+        this%dt = dt
+        this%nsteps = nsteps
+
+        this%nu = nu 
 
         ! Initialize decomp
         call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -99,8 +111,7 @@ contains
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired 
-        call initfields(nx, ny, nz, this%decomp%yst, this%decomp%yen, this%decomp%ysz, &
-                    this%dx, this%dy, this%dz, size(this%fields,4), this%mesh, this%fields) 
+        call initfields(this%decomp, this%dx, this%dy, this%dz, size(this%fields,4), this%mesh, this%fields) 
 
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
@@ -147,6 +158,10 @@ contains
 
         end if 
 
+        if ((dt <0) .and. (CFL <0)) then
+            call GracefulExit("Neither CFL nor DT were specified. &
+            Read the initial conditions and now I have nothing to do", 133)
+        end if 
     end subroutine
 
 
