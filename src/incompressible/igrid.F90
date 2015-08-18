@@ -146,7 +146,7 @@ contains
 
         if ((dt <0) .and. (CFL <0)) then
             call GracefulExit("Neither CFL nor DT were specified. &
-            Read the initial conditions and now I have nothing to do", 133)
+          & Read the initial conditions and now I have nothing to do", 133)
         end if 
     end subroutine
 
