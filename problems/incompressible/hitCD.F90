@@ -5,28 +5,32 @@
 
 program hitcd
 
-    use kind_parameters,  only: clen,stdout
+    use kind_parameters,  only: rkind,clen,stdout,stderr
     use IncompressibleGrid, only: igrid
     use poissonMod, only: poisson
+    use decomp_2d, only: nrank
     implicit none
 
-    type(igrid) :: igp
+    type(igrid), target :: igp
     character(len=clen) :: inputfile
     integer :: ierr
+    logical :: isBoxFilter = .FALSE.
     type(poisson) :: POIS
+    real(rkind), dimension(:,:,:), pointer :: u,v,w
 
     ! Start MPI
     call MPI_Init(ierr)
 
     call GETARG(1,inputfile)
 
+    print*, inputfile
+
     ! Initialize the grid object
     call igp%init(inputfile)
-    call POIS%init( igp%decomp, "x", igp%dx, igp%dy, igp%dz, "cd10",.false.) 
+    call POIS%init( igp%decomp, igp%dx, igp%dy, igp%dz, "cd10", isBoxFilter) 
 
-    associate( x => igp%mesh(:,:,:,1) )
-        write(stdout,*) x(:,1,1)
-    end associate
+    ! Associate the pointers for ease of use
+    u => igp%fields(:,:,:,1); v => igp%fields(:,:,:,2); w => igp%fields(:,:,:,3)
 
     ! Destroy everything before ending
     call POIS%destroy()

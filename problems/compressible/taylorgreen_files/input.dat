@@ -1,15 +1,15 @@
 &INPUT
 
-inputdir  = "/home"       ! Directory for input files
-outputdir = "/home"       ! Directory for output files
+inputdir  =  "/home/akshays/Codes/PadeOps/data/hit/input"       ! Directory for input files
+outputdir  = "/home/akshays/Codes/PadeOps/data/hit/output"      ! Directory for output files
 
 nx = 128                  ! Number of points in X
 ny = 128                  ! Number of points in Y
 nz = 128                  ! Number of points in Z
 
-dt = 1.0D-3_rkind         ! Fixed time step value (Set to negative to disable)
-tstop = 1._rkind          ! Physical time to stop the simulation
-CFL = -1._rkind           ! CFL criterion for calculating the time step (Set to negative to disable)
+dt = 1.0D-3               ! Fixed time step value (Set to negative to disable)
+tstop = 1.D0              ! Physical time to stop the simulation
+CFL = -1.D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
 periodicx = .TRUE.        ! Periodic in X?
@@ -30,10 +30,10 @@ pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 
 /
 
 &CINPUT
-gam  = 1.4_rkind          ! Ratio of specific heats
-Rgas = 1._rkind           ! Ratio of specific heats
+gam  = 1.4D0              ! Ratio of specific heats
+Rgas = 1.D0               ! Ratio of specific heats
 /
 
 &IINPUT
-nu = 0.02_rkind           ! Kinematic viscosity
+nu = 0.02D0               ! Kinematic viscosity
 /

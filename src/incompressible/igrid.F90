@@ -1,35 +1,38 @@
 module IncompressibleGrid
     use kind_parameters, only: rkind, clen
     use constants, only: zero,one,two
-    use GridMod, only: grid
+    use GridMod, only: grid, alloc_buffs, destroy_buffs
     use hooks, only: meshgen, initfields
-    use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize
-    use fft_3d_Stuff, only: fft_3d 
-    use exits, only: GracefulExit 
-
+    use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
+                    transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
+    use DerivativesMod,  only: derivatives
+   
     implicit none
 
     integer :: u_index      = 1
     integer :: v_index      = 2
     integer :: w_index      = 3
+    integer :: nu_index     = 4
 
-    type, extends(grid) :: igrid 
-        real(rkind) :: nu ! Viscosity
-
+    type, extends(grid) :: igrid
+       
+        real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf 
+         
         contains
-        procedure :: init
-        procedure :: destroy
-        procedure :: laplacian
-        procedure :: gradient
+            procedure :: init
+            procedure :: destroy
+            procedure :: laplacian
+            procedure :: gradient 
     end type
 
 contains
     subroutine init(this, inputfile )
-        class(igrid), intent(inout) :: this
+        class(cgrid), intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
 
         integer :: nx, ny, nz
-        character(len=clen) :: outputdir, inputdir
+        character(len=clen) :: outputdir
+        character(len=clen) :: inputdir
         logical :: periodicx = .true. 
         logical :: periodicy = .true. 
         logical :: periodicz = .true.
@@ -40,20 +43,22 @@ contains
         character(len=clen) :: filter_y = "cf90" 
         character(len=clen) :: filter_z = "cf90"
         integer :: prow = 0, pcol = 0 
-        integer :: nsteps = -1
-        real(rkind) :: dt = 1d-3, tstop = one, CFL = -one
-        integer :: i, j, k
+        integer :: i, j, k 
         integer :: ioUnit
-        real(rkind) :: nu = zero 
+        integer :: nsteps = -1
+        real(rkind) :: dt = -one
+        real(rkind) :: tstop = one
+        real(rkind) :: CFL = -one
+        real(rkind) :: nu = 0.02_rkind
 
-        namelist /INPUT/  nx, ny, nz, tstop, dt, nsteps, CFL, &
-                                    inputdir, outputdir,      &
-                        periodicx, periodicy, periodicz,      &
-               derivative_x, derivative_y, derivative_z,      &
-                           filter_x, filter_y, filter_z,      &
-                                             prow, pcol
-        
-        namelist /IINPUT/nu 
+        namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
+                                              inputdir, outputdir, &
+                                  periodicx, periodicy, periodicz, &
+                         derivative_x, derivative_y, derivative_z, &
+                                     filter_x, filter_y, filter_z, &
+                                                       prow, pcol
+        namelist /IINPUT/  nu
+
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -61,18 +66,15 @@ contains
         read(unit=ioUnit, NML=IINPUT)
         close(ioUnit)
 
-        if (CFL>0) then
-            dt = -one
-        end if 
         this%nx = nx
         this%ny = ny
         this%nz = nz
-        
-        this%tstop = tstop
-        this%dt = dt
-        this%nsteps = nsteps
 
-        this%nu = nu 
+        this%tsim = zero
+        this%tstop = tstop
+
+        this%step = 0
+        this%nsteps = nsteps
 
         ! Initialize decomp
         call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -80,7 +82,7 @@ contains
         
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
-        allocate(this%mesh(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),3))
+        call alloc_buffs(this%mesh,3,'y',this%decomp)
 
         ! Generate default mesh: X \in [-1, 1), Y \in [-1, 1), Z \in [-1, 1)
         this%dx = two/nx
@@ -88,28 +90,28 @@ contains
         this%dz = two/nz
 
         ! Generate default mesh 
-        do k = 1,this%decomp%ysz(3)
-            do j = 1,this%decomp%ysz(2)
-                do i = 1,this%decomp%ysz(1)
-                    this%mesh(i,j,k,1) = -one + (i - 1)*this%dx           
-                    this%mesh(i,j,k,2) = -one + (j - 1)*this%dy           
-                    this%mesh(i,j,k,3) = -one + (k - 1)*this%dz           
+        do k = 1,size(this%mesh,3)
+            do j = 1,size(this%mesh,2)
+                do i = 1,size(this%mesh,1)
+                    this%mesh(i,j,k,1) = -one + (this%decomp%yst(1) - 1 + i - 1)*this%dx           
+                    this%mesh(i,j,k,2) = -one + (this%decomp%yst(2) - 1 + j - 1)*this%dy           
+                    this%mesh(i,j,k,3) = -one + (this%decomp%yst(3) - 1 + k - 1)*this%dz           
                 end do 
             end do 
         end do  
 
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
-
+   
         ! Allocate fields
         if ( allocated(this%fields) ) deallocate(this%fields) 
-        allocate(this%fields(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),10))
+        call alloc_buffs(this%fields,4,'y',this%decomp)
        
         ! Initialize everything to a constant Zero
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired 
-        call initfields(this%decomp, this%dx, this%dy, this%dz, inputdir, this%mesh, this%fields) 
+        call initfields(this%decomp, this%dx, this%dy, this%dz, inputdir, this%mesh, this%fields)
 
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
@@ -139,49 +141,99 @@ contains
                          periodicx,     periodicy,      periodicz, &
                           filter_x,      filter_y,       filter_z  )      
 
-        ! Set the local array dimensions
+        ! Finally, set the local array dimensions
         this%nx_proc = this%decomp%ysz(1)
         this%ny_proc = this%decomp%ysz(2)
         this%nz_proc = this%decomp%ysz(3)
 
-        if ((dt <0) .and. (CFL <0)) then
-            call GracefulExit("Neither CFL nor DT were specified. &
-            Read the initial conditions and now I have nothing to do", 133)
-        end if 
+
+        ! Allocate 2 buffers for each of the three decompositions
+        call alloc_buffs(this%xbuf,2,"x",this%decomp)
+        call alloc_buffs(this%ybuf,1,"y",this%decomp)
+        call alloc_buffs(this%zbuf,2,"z",this%decomp)
+
     end subroutine
 
 
     subroutine destroy(this)
-        class(igrid), intent(inout) :: this
+        class(cgrid), intent(inout) :: this
 
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
         call this%der%destroy()
         call this%fil%destroy()
+        call destroy_buffs(this%xbuf)
+        call destroy_buffs(this%ybuf)
+        call destroy_buffs(this%zbuf)
         call decomp_2d_finalize
+
     end subroutine
 
     subroutine gradient(this, f, dfdx, dfdy, dfdz)
-        class(igrid), target, intent(inout) :: this
-        real(rkind), intent(in), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
+        class(cgrid),target, intent(inout) :: this
+        real(rkind), intent(in),  dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdx
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdy
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdz
 
-        ! Set some shit to avoid warnings
-        dfdx = f - f
-        dfdy = f - f
-        dfdz = f - f
+        type(derivatives), pointer :: der
+        type(decomp_info), pointer :: decomp
+        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum
+        
+        der => this%der
+        decomp => this%decomp
+        xtmp => this%xbuf(:,:,:,1)
+        xdum => this%xbuf(:,:,:,2)
+        ztmp => this%zbuf(:,:,:,1)
+        zdum => this%zbuf(:,:,:,2)
+
+        ! Get Y derivatives
+        call der%ddy(f,dfdy)
+
+        ! Get X derivatives
+        call transpose_y_to_x(f,xtmp,decomp)
+        call der%ddx(xtmp,xdum)
+        call transpose_x_to_y(xdum,dfdx)
+
+        ! Get Z derivatives
+        call transpose_y_to_z(f,ztmp,decomp)
+        call der%ddz(ztmp,zdum)
+        call transpose_z_to_y(zdum,dfdz)
+
     end subroutine 
 
     subroutine laplacian(this, f, lapf)
-        class(igrid), target, intent(inout) :: this
-        real(rkind), intent(in), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
+        use timer
+        class(cgrid),target, intent(inout) :: this
+        real(rkind), intent(in),  dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: lapf
+        
+        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum, ytmp
+        type(derivatives), pointer :: der
+        type(decomp_info), pointer :: decomp
+        
 
-        ! Set some shit to avoid warnings
-        lapf = f - f
+        der => this%der
+        decomp => this%decomp
+        xtmp => this%xbuf(:,:,:,1)
+        xdum => this%xbuf(:,:,:,2)
+        ztmp => this%zbuf(:,:,:,1)
+        zdum => this%zbuf(:,:,:,2)
+        ytmp => this%ybuf(:,:,:,1)
 
-    end subroutine
+        call der%d2dy2(f,lapf)
+        
+        call transpose_y_to_x(f,xtmp,this%decomp) 
+        call this%der%d2dx2(xtmp,xdum)
+        call transpose_x_to_y(xdum,ytmp,this%decomp)
 
+        lapf = lapf + ytmp
+
+        call transpose_y_to_z(f,ztmp,this%decomp)
+        call this%der%d2dz2(ztmp,zdum)
+        call transpose_z_to_y(zdum,ytmp,this%decomp)
+        
+        lapf = lapf + ytmp
+
+    end subroutine 
 end module 
