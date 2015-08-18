@@ -55,10 +55,17 @@ contains
         integer :: ioUnit
         real(rkind) :: gam = 1.4_rkind
         real(rkind) :: Rgas = one
+        integer :: nsteps = -1
+        real(rkind) :: dt = -one
+        real(rkind) :: tstop = one
+        real(rkind) :: CFL = -one
 
-        namelist /INPUT/  nx, ny, nz, outputdir,periodicx, periodicy, periodicz, &
-                                     derivative_x, derivative_y, derivative_z,   &
-                                     filter_x, filter_y, filter_z, prow, pcol    
+        namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
+                                              inputdir, outputdir, &
+                                  periodicx, periodicy, periodicz, &
+                         derivative_x, derivative_y, derivative_z, &
+                                     filter_x, filter_y, filter_z, &
+                                                       prow, pcol
         namelist /CINPUT/  gam, Rgas
 
 
@@ -71,6 +78,12 @@ contains
         this%nx = nx
         this%ny = ny
         this%nz = nz
+
+        this%tsim = zero
+        this%tstop = tstop
+
+        this%step = 0
+        this%nsteps = nsteps
 
         ! Initialize decomp
         call decomp_2d_init(nx, ny, nz, prow, pcol)
