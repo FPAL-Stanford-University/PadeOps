@@ -92,7 +92,7 @@ contains
         
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
-        allocate(this%mesh(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),3))
+        call alloc_buffs(this%mesh,3,'y',this%decomp)
 
         ! Generate default mesh: X \in [-1, 1), Y \in [-1, 1), Z \in [-1, 1)
         this%dx = two/nx
@@ -100,12 +100,12 @@ contains
         this%dz = two/nz
 
         ! Generate default mesh 
-        do k = 1,this%decomp%ysz(3)
-            do j = 1,this%decomp%ysz(2)
-                do i = 1,this%decomp%ysz(1)
-                    this%mesh(i,j,k,1) = -one + (i - 1)*this%dx           
-                    this%mesh(i,j,k,2) = -one + (j - 1)*this%dy           
-                    this%mesh(i,j,k,3) = -one + (k - 1)*this%dz           
+        do k = 1,size(this%mesh,3)
+            do j = 1,size(this%mesh,2)
+                do i = 1,size(this%mesh,1)
+                    this%mesh(i,j,k,1) = -one + (this%decomp%yst(1) - 1 + i - 1)*this%dx           
+                    this%mesh(i,j,k,2) = -one + (this%decomp%yst(2) - 1 + j - 1)*this%dy           
+                    this%mesh(i,j,k,3) = -one + (this%decomp%yst(3) - 1 + k - 1)*this%dz           
                 end do 
             end do 
         end do  
@@ -119,7 +119,7 @@ contains
    
         ! Allocate fields
         if ( allocated(this%fields) ) deallocate(this%fields) 
-        allocate(this%fields(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),10))
+        call alloc_buffs(this%fields,10,'y',this%decomp)
        
         ! Initialize everything to a constant Zero
         this%fields = zero  

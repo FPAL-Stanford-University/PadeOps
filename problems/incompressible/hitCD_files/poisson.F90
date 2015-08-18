@@ -129,6 +129,7 @@ contains
             G2 = GetFilterTransferFunction(this%FT%k2, dy)
             G3 = GetFilterTransferFunction(this%FT%k3, dz)
             this%Gfilt = G1*G2*G3
+            deallocate(G1, G2, G3)
         else
             this%Gfilt = GetFilterTransferFunction(sqrt(this%FT%kabs_sq), dx)
         end if 
@@ -144,7 +145,7 @@ contains
         k3k3 = this%Gfilt*(one  - mk3*mk3/mkabs_sq)
         
         
-        deallocate (mk1, mk2, mk3, mkabs_sq, G1, G2, G3)
+        deallocate (mk1, mk2, mk3, mkabs_sq)
 
         call this%FT%alloc_input(dummy)
         this%nx_p_in = size(dummy,1) 
@@ -168,7 +169,7 @@ contains
         if (allocated(this%ustar_hat)) deallocate(this%ustar_hat)
         if (allocated(this%FT)) then
             call this%FT%destroy
-            deallocate(this%k_tensor)
+            deallocate(this%FT)
         end if 
 
     end subroutine 

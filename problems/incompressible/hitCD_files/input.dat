@@ -1,10 +1,16 @@
-&IINPUT
+&INPUT
 
-outputdir = "/home"       ! Directory for output files
+inputdir  =  "/home/akshays/Codes/PadeOps/data/hit/input"       ! Directory for input files
+outputdir  = "/home/akshays/Codes/PadeOps/data/hit/output"      ! Directory for output files
 
 nx = 128                  ! Number of points in X
 ny = 128                  ! Number of points in Y
 nz = 128                  ! Number of points in Z
+
+dt = 1.0D-3               ! Fixed time step value (Set to negative to disable)
+tstop = 1.D0              ! Physical time to stop the simulation
+CFL = -1.D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
 periodicx = .TRUE.        ! Periodic in X?
 periodicy = .TRUE.        ! Periodic in Y?
@@ -21,4 +27,13 @@ filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq"
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 
+/
+
+&CINPUT
+gam  = 1.4D0              ! Ratio of specific heats
+Rgas = 1.D0               ! Ratio of specific heats
+/
+
+&IINPUT
+nu = 0.02D0               ! Kinematic viscosity
 /
