@@ -1,4 +1,4 @@
-&CINPUT
+&INPUT
 
 outputdir = "/home"       ! Directory for output files
 
@@ -21,4 +21,9 @@ filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq"
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 
+/
+
+&CINPUT
+gam  = 1.4_rkind          ! Ratio of specific heats
+Rgas = 1._rkind           ! Ratio of specific heats
 /

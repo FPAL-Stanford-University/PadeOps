@@ -9,11 +9,11 @@ module IdealGasEOS
     type, extends(eos) :: idealgas
 
         private
-        real(rkind) :: gam            ! Ratio of specific heats
-        real(rkind) :: onebygam_m1    ! Ratio of specific heats
+        real(rkind) :: gam = 1.4_rkind                     ! Ratio of specific heats
+        real(rkind) :: onebygam_m1 = one/(1.4_rkind-one)   ! 1/(gamma-1)
         
-        real(rkind) :: Rgas           ! Gas constant
-        real(rkind) :: onebyRgas      ! Gas constant
+        real(rkind) :: Rgas = one           ! Gas constant
+        real(rkind) :: onebyRgas = one      ! 1/Rgas
 
     contains
 

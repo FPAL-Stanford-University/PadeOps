@@ -6,6 +6,7 @@ module CompressibleGrid
     use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                     transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
+    use IdealGasEOS,     only: idealgas
    
     implicit none
 
@@ -21,7 +22,9 @@ module CompressibleGrid
     integer :: kap_index    = 10
 
     type, extends(grid) :: cgrid
-        
+       
+        type(idealgas), allocatable :: gas
+
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf 
          
         contains
@@ -50,14 +53,18 @@ contains
         integer :: prow = 0, pcol = 0 
         integer :: i, j, k 
         integer :: ioUnit
+        real(rkind) :: gam = 1.4_rkind
+        real(rkind) :: Rgas = one
 
-        namelist /CINPUT/ nx, ny, nz, outputdir,periodicx, periodicy, periodicz, &
+        namelist /INPUT/  nx, ny, nz, outputdir,periodicx, periodicy, periodicz, &
                                      derivative_x, derivative_y, derivative_z,   &
                                      filter_x, filter_y, filter_z, prow, pcol    
+        namelist /CINPUT/  gam, Rgas
 
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+        read(unit=ioUnit, NML=INPUT)
         read(unit=ioUnit, NML=CINPUT)
         close(ioUnit)
 
@@ -89,6 +96,9 @@ contains
             end do 
         end do  
 
+        allocate(this%gas)
+        call this%gas%init(gam,Rgas)
+
         ! Go to hooks if a different mesh is desired 
         call meshgen(nx, ny, nz, this%decomp%yst, this%decomp%yen, this%decomp%ysz, &
                     this%dx, this%dy, this%dz, this%mesh) 
@@ -104,7 +114,7 @@ contains
 
         ! Go to hooks if a different initialization is derired 
         call initfields(nx, ny, nz, this%decomp%yst, this%decomp%yen, this%decomp%ysz, &
-                    this%dx, this%dy, this%dz, size(this%fields,4), this%mesh, this%fields) 
+                    this%dx, this%dy, this%dz, size(this%fields,4), this%mesh, gas, this%fields) 
 
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
