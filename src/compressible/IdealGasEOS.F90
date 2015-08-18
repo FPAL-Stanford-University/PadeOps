@@ -1,46 +1,99 @@
 module IdealGasEOS
 
     use kind_parameters, only: rkind
-    use constants,       only: one
+    use constants,       only: half,one
     use EOSMod,          only: eos
+
+    implicit none
 
     type, extends(eos) :: idealgas
 
-        real(rkind) :: gam    ! Ratio of specific heats
-        real(rkind) :: Rgas   ! Gas constant
+        private
+        real(rkind) :: gam            ! Ratio of specific heats
+        real(rkind) :: onebygam_m1    ! Ratio of specific heats
+        
+        real(rkind) :: Rgas           ! Gas constant
+        real(rkind) :: onebyRgas      ! Gas constant
 
     contains
 
         procedure :: init
+        procedure :: get_primitive
+        procedure :: get_conserved
         procedure :: get_p
-        procedure :: get_e
-        procedure :: get_T
         procedure :: get_e_from_p
+        procedure :: get_T
 
     end type
 
 contains
 
-    pure elemental subroutine get_primitive(rho,rhou,rhov,rhow,TE,u,v,w,e)
-        import :: eos
-        real(rkind), intent(in)  :: rho,rhou,rhov,rhow,TE
-        real(rkind), intent(out) :: u,v,w,e
-        real(rkind) :: onebyrho
+    subroutine init(this,gam_,Rgas_)
+        class(idealgas), intent(in) :: this
+        real(rkind) :: gam_
+        real(rkind) :: Rgas_
+
+        this%gam = gam_
+        this%onebygam_m1 = one/(this%gam-one)
+
+        this%Rgas = Rgas_
+        this%onebyRgas = one/this%Rgas
+
+    end subroutine
+
+    pure subroutine get_primitive(this,rho,rhou,rhov,rhow,TE,u,v,w,e,p,T)
+        class(idealgas), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in)  :: rho,rhou,rhov,rhow,TE
+        real(rkind), dimension(:,:,:), intent(out) :: u,v,w,e,p,T
+        real(rkind), dimension(size(rho,1),size(rho,2),size(rho,3)) :: onebyrho
 
         onebyrho = one/rho
         u = rhou * onebyrho
         v = rhov * onebyrho
         w = rhow * onebyrho
-        e = (TE*onebyrho) - ( u*u + v*v + w*w )
+        e = (TE*onebyrho) - half*( u*u + v*v + w*w )
+        
+        call this%get_p(rho,u,v,w,e,p)
+        call this%get_T(rho,u,v,w,e,T)
 
     end subroutine
 
-    pure elemental subroutine get_p(rho,u,v,w,e,p)
+    pure subroutine get_conserved(this,rho,u,v,w,p,rhou,rhov,rhow,TE)
         class(idealgas), intent(in) :: this
-        real(rkind), intent(in)  :: rho,u,v,w,e
-        real(rkind), intent(out) :: p
+        real(rkind), dimension(:,:,:), intent(in)  :: rho,u,v,w,p
+        real(rkind), dimension(:,:,:), intent(out) :: rhou,rhov,rhow,TE
+
+        rhou = rho * u
+        rhov = rho * v
+        rhow = rho * w
+        TE = ( p*(this%onebygam_m1) + rho*half*( u*u + v*v + w*w ) )
+
+    end subroutine
+
+    pure subroutine get_p(this,rho,u,v,w,e,p)
+        class(idealgas), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in)  :: rho,u,v,w,e
+        real(rkind), dimension(:,:,:), intent(out) :: p
 
         p = (this%gam-one)*rho*e
+
+    end subroutine
+
+    pure subroutine get_e_from_p(this,rho,p,e)
+        class(idealgas), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in)  :: rho,p
+        real(rkind), dimension(:,:,:), intent(out) :: e
+
+        e = p * this%onebygam_m1 / rho
+
+    end subroutine
+
+    pure subroutine get_T(this,rho,u,v,w,e,T)
+        class(idealgas), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in)  :: rho,u,v,w,e
+        real(rkind), dimension(:,:,:), intent(out) :: T
+
+        T = (this%gam-one)*e*this%onebyRgas
 
     end subroutine
 
