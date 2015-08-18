@@ -4,15 +4,11 @@ module hooks
     implicit none
 
     interface meshgen
-        subroutine meshgen(nx     , ny     , nz     , &
-                           proc_st, proc_en, proc_sz, &
-                           dx     , dy     , dz     , &
-                           mesh)
+        subroutine meshgen(decomp, dx, dy, dz, mesh)
             import :: rkind
-            integer, intent(in) :: nx, ny, nz
+            type(decomp_info), intent(in) :: decomp
             real(rkind), intent(inout) :: dx, dy, dz
-            integer, dimension(3), intent(in) :: proc_st, proc_en, proc_sz
-            real(rkind), dimension(proc_sz(1),proc_sz(2),proc_sz(3),3), intent(in) :: mesh
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
 
         end subroutine 
     end interface

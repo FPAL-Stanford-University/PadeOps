@@ -114,9 +114,7 @@ contains
         call this%gas%init(gam,Rgas)
 
         ! Go to hooks if a different mesh is desired 
-        call meshgen(nx, ny, nz, this%decomp%yst, this%decomp%yen, this%decomp%ysz, &
-                    this%dx, this%dy, this%dz, this%mesh) 
-        
+        call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
 
    
         ! Allocate fields
