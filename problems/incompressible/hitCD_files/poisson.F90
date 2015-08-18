@@ -1,6 +1,6 @@
 module poissonMod
     use kind_parameters, only: rkind
-    use decomp_2d, only: decomp_info
+    use decomp_2d, only: decomp_info, decomp_info_init, transpose_x_to_y, transpose_y_to_x
     use fft_3d_stuff, only: fft_3d
     use constants, only: one, zero 
     use exits, only: GracefulExit 
@@ -76,7 +76,6 @@ contains
         real(rkind), dimension(:,:,:), allocatable :: G1,G2,G3,mk1, mk2, mk3, mkabs_sq
         real(rkind), dimension(:,:,:), pointer :: k1k1, k1k2, k1k3, k2k2, k2k3, k3k3
         integer :: nx, ny, nz
-        real(rkind), dimension(:,:,:), allocatable :: dummy
 
         nx = gp%xsz(1)
         ny = gp%ysz(2)
@@ -147,7 +146,9 @@ contains
         
         deallocate (mk1, mk2, mk3, mkabs_sq)
 
-        allocate(this%myGP,source=gp)
+        ! allocate(this%myGP,source=gp)
+        allocate(this%myGP)
+        call decomp_info_init(gp%xsz(1),gp%ysz(2),gp%zsz(3),this%myGP)
 
         allocate(this%u_in_x(this%myGP%xsz(1),this%myGP%xsz(2),this%myGP%xsz(3),3))
     end subroutine 
@@ -167,10 +168,9 @@ contains
 
     end subroutine 
 
-    subroutine pressureProjection(this,ustar,u)
+    subroutine pressureProjection(this,u)
         class(poisson), target, intent(inout) :: this
-        real(rkind), dimension(this%myGP%ysz(1),this%myGP%ysz(2),this%myGP%ysz(3),3), intent(in) :: ustar
-        real(rkind), dimension(this%myGP%ysz(1),this%myGP%ysz(2),this%myGP%ysz(3),3), intent(out) :: u
+        real(rkind), dimension(this%myGP%ysz(1),this%myGP%ysz(2),this%myGP%ysz(3),3), intent(inout) :: u
 
         real(rkind), dimension(:,:,:), pointer :: k1k1, k1k2, k1k3, k2k2, k2k3, k3k3
 
@@ -186,15 +186,14 @@ contains
 
 
         ! First move us, vs, ws from y -> x
-        call transpose_y_to_x(ustar(:,:,:,1),this%u_in_y(:,:,:,1),this%myGP)
-        call transpose_y_to_x(ustar(:,:,:,2),this%u_in_y(:,:,:,2),this%myGP)
-        call transpose_y_to_x(ustar(:,:,:,3),this%u_in_y(:,:,:,3),this%myGP)
+        call transpose_y_to_x(u(:,:,:,1),this%u_in_x(:,:,:,1),this%myGP)
+        call transpose_y_to_x(u(:,:,:,2),this%u_in_x(:,:,:,2),this%myGP)
+        call transpose_y_to_x(u(:,:,:,3),this%u_in_x(:,:,:,3),this%myGP)
 
 
-
-        call this%FT%fft3_x2z(u_in_x(:,:,:,1),this%ustar_hat(:,:,:,1)) 
-        call this%FT%fft3_x2z(u_in_x(:,:,:,2),this%ustar_hat(:,:,:,2)) 
-        call this%FT%fft3_x2z(u_in_x(:,:,:,3),this%ustar_hat(:,:,:,3)) 
+        call this%FT%fft3_x2z(this%u_in_x(:,:,:,1),this%ustar_hat(:,:,:,1)) 
+        call this%FT%fft3_x2z(this%u_in_x(:,:,:,2),this%ustar_hat(:,:,:,2)) 
+        call this%FT%fft3_x2z(this%u_in_x(:,:,:,3),this%ustar_hat(:,:,:,3)) 
         
         this%u_hat(:,:,:,1) = k1k1*this%ustar_hat(:,:,:,1) + k1k2*this%ustar_hat(:,:,:,2) &
                                     +  k1k3*this%ustar_hat(:,:,:,3)
@@ -205,14 +204,14 @@ contains
         this%u_hat(:,:,:,3) = k1k3*this%ustar_hat(:,:,:,1) + k2k3*this%ustar_hat(:,:,:,2) &
                                     +  k3k3*this%ustar_hat(:,:,:,3)
 
-        call this%FT%ifft3_z2x(this%u_hat(:,:,:,1),u_in_x(:,:,:,1))
-        call this%FT%ifft3_z2x(this%u_hat(:,:,:,2),u_in_x(:,:,:,2))
-        call this%FT%ifft3_z2x(this%u_hat(:,:,:,3),u_in_x(:,:,:,3))
+        call this%FT%ifft3_z2x(this%u_hat(:,:,:,1),this%u_in_x(:,:,:,1))
+        call this%FT%ifft3_z2x(this%u_hat(:,:,:,2),this%u_in_x(:,:,:,2))
+        call this%FT%ifft3_z2x(this%u_hat(:,:,:,3),this%u_in_x(:,:,:,3))
 
         ! Now transpose back from x -> y
-        call transpose_x_to_y(u_in_x(:,:,:,1),u(:,:,:,1),this%myGP)
-        call transpose_x_to_y(u_in_x(:,:,:,2),u(:,:,:,2),this%myGP)
-        call transpose_x_to_y(u_in_x(:,:,:,3),u(:,:,:,3),this%myGP)
+        call transpose_x_to_y(this%u_in_x(:,:,:,1),u(:,:,:,1),this%myGP)
+        call transpose_x_to_y(this%u_in_x(:,:,:,2),u(:,:,:,2),this%myGP)
+        call transpose_x_to_y(this%u_in_x(:,:,:,3),u(:,:,:,3),this%myGP)
 
     end subroutine
 

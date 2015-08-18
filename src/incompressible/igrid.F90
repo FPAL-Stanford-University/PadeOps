@@ -27,7 +27,7 @@ module IncompressibleGrid
 
 contains
     subroutine init(this, inputfile )
-        class(cgrid), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
 
         integer :: nx, ny, nz
@@ -156,7 +156,7 @@ contains
 
 
     subroutine destroy(this)
-        class(cgrid), intent(inout) :: this
+        class(igrid), intent(inout) :: this
 
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
@@ -170,7 +170,7 @@ contains
     end subroutine
 
     subroutine gradient(this, f, dfdx, dfdy, dfdz)
-        class(cgrid),target, intent(inout) :: this
+        class(igrid),target, intent(inout) :: this
         real(rkind), intent(in),  dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdx
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdy
@@ -204,7 +204,7 @@ contains
 
     subroutine laplacian(this, f, lapf)
         use timer
-        class(cgrid),target, intent(inout) :: this
+        class(igrid),target, intent(inout) :: this
         real(rkind), intent(in),  dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
         real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: lapf
         
