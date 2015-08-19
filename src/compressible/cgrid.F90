@@ -22,6 +22,10 @@ module CompressibleGrid
     integer :: bulk_index   = 9
     integer :: kap_index    = 10
 
+    integer, parameter :: nbufsx = 2
+    integer, parameter :: nbufsy = 6
+    integer, parameter :: nbufsz = 2
+
     type, extends(grid) :: cgrid
        
         type(filters) :: gfil
@@ -186,9 +190,9 @@ contains
 
 
         ! Allocate 2 buffers for each of the three decompositions
-        call alloc_buffs(this%xbuf,2,"x",this%decomp)
-        call alloc_buffs(this%ybuf,1,"y",this%decomp)
-        call alloc_buffs(this%zbuf,2,"z",this%decomp)
+        call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
+        call alloc_buffs(this%ybuf,nbufsy,"y",this%decomp)
+        call alloc_buffs(this%zbuf,nbufsz,"z",this%decomp)
 
         ! Associate pointers for ease of use
         x    => this%mesh  (:,:,:, 1) 
@@ -307,18 +311,71 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: Qtmp ! Temporary variable for RK45
         integer :: isub
 
+        call get_dt()
+
         Qtmp = zero
 
         do isub = 1,RK45_steps
-            call this%get_conservative()
+            call this%get_conserved()
 
             call this%getRHS(rhs)
             Qtmp = this%dt*rhs + A(isub)*Qtmp
             W = W + B(isub)*Qtmp
 
-            call this%filter()
+            ! Filter the conserved variables
+            do i = 1,5
+                call this%filter(W(:,:,:,1), this%fil, 1)
+            end do
+            
             call this%get_primitive()
         end do
+
+    end subroutine
+
+    subroutine get_dt(this)
+        class(cgrid), target, intent(inout) :: this
+
+        if (this%CFL .LE. zero) then
+            return
+        end if
+
+        this%dt = 1.0D-3_rkind
+
+    end subroutine
+
+    pure subroutine get_primitive(this)
+        class(idealgas), intent(inout) :: this
+        real(rkind), dimension(:,:,:), pointer :: onebyrho
+        real(rkind), dimension(:,:,:), pointer :: rhou,rhov,rhow,TE
+
+        onebyrho => this%ybuf(:,:,:,1)
+
+        this%rho  =  this%W(:,:,:,1)
+        
+        rhou => this%W(:,:,:,2)
+        rhov => this%W(:,:,:,3)
+        rhow => this%W(:,:,:,4)
+        TE   => this%W(:,:,:,5)
+
+        onebyrho = one/this%rho
+        this%u = rhou * onebyrho
+        this%v = rhov * onebyrho
+        this%w = rhow * onebyrho
+        this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
+        
+        call this%gas%get_p(this%rho,this%e,this%p)
+        call this%gas%get_T(this%e,this%T)
+
+    end subroutine
+
+    pure subroutine get_conserved(this)
+        class(idealgas), intent(inout) :: this
+
+        this%W(:,:,:,1) = this%rho
+        this%W(:,:,:,2) = this%rho * this%u
+        this%W(:,:,:,3) = this%rho * this%v
+        this%W(:,:,:,4) = this%rho * this%w
+        this%W(:,:,:,5) = ( this%p*(this%gas%onebygam_m1) + this%rho*half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
 
     end subroutine
 
@@ -327,6 +384,7 @@ contains
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,5), intent(out) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9) :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
@@ -336,12 +394,138 @@ contains
         call this%gradient(v,dvdx,dvdy,dvdz)
         call this%gradient(w,dwdx,dwdy,dwdz)
 
+        call this%getPhysicalProperties()
+
         call this%getSGS(dudx,dudy,dudz,&
                          dvdx,dvdy,dvdz,&
                          dwdx,dwdy,dwdz )
 
-        call GetInviscidRHS(rhs)
-        call GetViscousFluxes(rhs)
+        ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
+        call this%get_tau( duidxj )
+        call this%get_q  ( duidxj )
+
+        ! Now, associate the pointers to understand what's going on better
+        tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
+                                         tauyy => duidxj(:,:,:,tauyyidx); tauyz => duidxj(:,:,:,tauyzidx);
+                                                                          tauzz => duidxj(:,:,:,tauzzidx);
+        
+        qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
+
+        rhs = zero
+        call this%getRHS_x(              rhs,&
+                           tauxx,tauxy,tauxz,&
+                                 tauyy,tauyz,&
+                                       tauzz,&
+                               qx,  qy,   qz )
+
+        call this%getRHS_y(              rhs,&
+                           tauxx,tauxy,tauxz,&
+                                 tauyy,tauyz,&
+                                       tauzz,&
+                               qx,  qy,   qz )
+
+        call this%getRHS_z(              rhs,&
+                           tauxx,tauxy,tauxz,&
+                                 tauyy,tauyz,&
+                                       tauzz,&
+                               qx,  qy,   qz )
+
+    end subroutine
+
+    subroutine getRHS_x(       this,  rhs,&
+                        tauxx,tauxy,tauxz,&
+                            qx )
+        class(cgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp, 5), intent(inout) :: rhs
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
+
+        real(rkind), dimension(:,:,:,:), pointer :: flux
+        real(rkind), dimension(:,:,:) :: xtmp1,xtmp2
+        integer :: i
+
+        flux => this%ybuf(:,:,:,1:5)
+        xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
+
+        flux(:,:,:,1) = this%W(:,:,:,2)   ! rho*u
+        flux(:,:,:,2) = this%W(:,:,:,2)*this%u + this%p - tauxx
+        flux(:,:,:,3) = this%W(:,:,:,2)*this%v          - tauxy
+        flux(:,:,:,4) = this%W(:,:,:,2)*this%w          - tauxz
+        flux(:,:,:,5) = (this%W(:,:,:,5) + p - tauxx)*this%u - this%v*tauxy - this%w*tauxz - qx
+
+        ! Now, get the x-derivative of the fluxes
+        do i=1,5
+            call transpose_y_to_x(flux(:,:,:,i),xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2)
+            call transpose_x_to_y(xtmp2,flux(:,:,:,i),this%decomp)
+        end do
+
+        ! Add to rhs
+        rhs = rhs + flux
+
+    end subroutine
+
+    subroutine getRHS_y(       this,  rhs,&
+                        tauxy,tauyy,tauyz,&
+                            qy )
+        class(cgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp, 5), intent(inout) :: rhs
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxy,tauyy,tauyz
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qy
+
+        real(rkind), dimension(:,:,:,:), pointer :: flux
+        real(rkind), dimension(:,:,:) :: ytmp1
+        integer :: i
+
+        flux => this%ybuf(:,:,:,1:5)
+        ytmp1 => this%ybuf(:,:,:,6)
+
+        flux(:,:,:,1) = this%W(:,:,:,3)   ! rho*v
+        flux(:,:,:,2) = this%W(:,:,:,3)*this%u          - tauxy
+        flux(:,:,:,3) = this%W(:,:,:,3)*this%v + this%p - tauyy
+        flux(:,:,:,4) = this%W(:,:,:,3)*this%w          - tauyz
+        flux(:,:,:,5) = (this%W(:,:,:,5) + p - tauyy)*this%v - this%u*tauxy - this%w*tauyz - qy
+
+        ! Now, get the x-derivative of the fluxes
+        do i=1,5
+            call this%der%ddy(flux(:,:,:,i),ytmp1)
+
+            ! Add to rhs
+            rhs(:,:,:,i) = rhs(:,:,:,i) + ytmp1
+        end do
+
+    end subroutine
+
+    subroutine getRHS_z(       this,  rhs,&
+                        tauxz,tauyz,tauzz,&
+                            qz )
+        class(cgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp, 5), intent(inout) :: rhs
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxz,tauyz,tauzz
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qz
+
+        real(rkind), dimension(:,:,:,:), pointer :: flux
+        real(rkind), dimension(:,:,:) :: ztmp1,ztmp2
+        integer :: i
+
+        flux => this%ybuf(:,:,:,1:5)
+        ztmp1 => this%zbuf(:,:,:,1); ztmp2 => this%zbuf(:,:,:,2)
+
+        flux(:,:,:,1) = this%W(:,:,:,4)   ! rho*w
+        flux(:,:,:,2) = this%W(:,:,:,4)*this%u          - tauxz
+        flux(:,:,:,3) = this%W(:,:,:,4)*this%v          - tauyz
+        flux(:,:,:,4) = this%W(:,:,:,4)*this%w + this%p - tauzz
+        flux(:,:,:,5) = (this%W(:,:,:,5) + p - tauzz)*this%w - this%u*tauxz - this%v*tauyz - qz
+
+        ! Now, get the x-derivative of the fluxes
+        do i=1,5
+            call transpose_y_to_z(flux(:,:,:,i),ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2)
+            call transpose_z_to_y(ztmp2,flux(:,:,:,i),this%decomp)
+        end do
+
+        ! Add to rhs
+        rhs = rhs + flux
 
     end subroutine
 
@@ -353,9 +537,19 @@ contains
         
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: mustar,bulkstar,kapstar,func
         
-        real(rkind), dimension(:,:,:) :: xtmp1,xtmp2,xtmp3
+        real(rkind), dimension(:,:,:) :: xtmp1,xtmp2
         real(rkind), dimension(:,:,:) :: ytmp1,ytmp2,ytmp3,ytmp4,grho1,grho2,grho3
-        real(rkind), dimension(:,:,:) :: ztmp1,ztmp2,ztmp3
+    subroutine getSGS(this,dudx,dudy,dudz,&
+                           dvdx,dvdy,dvdz,&
+                           dwdx,dwdy,dwdz )
+        class(cgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: mustar,bulkstar,kapstar,func
+        
+        real(rkind), dimension(:,:,:) :: xtmp1,xtmp2
+        real(rkind), dimension(:,:,:) :: ytmp1,ytmp2,ytmp3,ytmp4,grho1,grho2,grho3
+        real(rkind), dimension(:,:,:) :: ztmp1,ztmp2
 
         xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
         
@@ -396,15 +590,14 @@ contains
         mustar = Cmu*rho*abs(mustar)
 
         ! Filter mustar
-        call this%gfilter(mustar,ytmp1)
-        call this%gfilter(ytmp1,mustar)
+        call this%gfilter(mustar, this%gfil, 2)
 
         ! -------- Artificial Bulk Viscosity --------
         
         func = dudx + dvdy + dwdz      ! dilatation
         
         ! Step 1: Get components of grad(rho) squared individually
-        call this%gradient(rho,ytmp1,ytmp2,ytmp3)
+        call this%gradient(rho,ytmp1,ytmp2,ytmp3) ! Does not use any Y buffers
         ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
@@ -445,12 +638,50 @@ contains
         bulkstar = Cbeta*rho*ytmp1*abs(bulkstar)
 
         ! Filter bulkstar
-        call this%gfilter(bulkstar,ytmp2)
-        call this%gfilter(ytmp2,bulkstar)
+        call this%gfilter(bulkstar, this%gfil, 2)
 
         ! -------- Artificial Conductivity --------
 
-        func = e
+        ! Step 1: Get components of grad(e) squared individually
+        call this%gradient(e,ytmp1,ytmp2,ytmp3) ! Does not use any Y buffers
+        ytmp1 = ytmp1*ytmp1
+        ytmp2 = ytmp2*ytmp2
+        ytmp3 = ytmp3*ytmp3
+
+        ! Step 2: Get 4th derivative in X
+        call transpose_y_to_x(e,xtmp1,this%decomp)
+        call this%der%d2dx2(xtmp1,xtmp2)
+        call this%der%d2dx2(xtmp2,xtmp1)
+        xtmp2 = xtmp1*this%dx**6
+        call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+        kapstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3)
+
+        ! Step 3: Get 4th derivative in Z
+        call transpose_y_to_z(e,ztmp1,this%decomp)
+        call this%der%d2dz2(ztmp1,ztmp2)
+        call this%der%d2dz2(ztmp2,ztmp1)
+        ztmp2 = ztmp1*this%dz**6
+        call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
+        kapstar = kapstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3)
+
+        ! Step 4: Get 4th derivative in Y
+        call this%der%d2dy2(e,ytmp4)
+        call this%der%d2dy2(ytmp4,ytmp5)
+        ytmp4 = ytmp5*this%dy**6
+        kapstar = kapstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3)
+
+        ! Now, all ytmps are free to use
+        call this%gas%get_sos(rho,p,ytmp1)  ! Speed of sound
+
+        kapstar = Ckap*rho*ytmp1*abs(kapstar)/T
+
+        ! Filter kapstar
+        call this%filter(kapstar, this%gfil, 2)
+
+        ! Now, add to physical fluid properties
+        this%mu   = this%mu   + mustar
+        this%bulk = this%bulk + bulkstar
+        this%kap  = this%kap  + kapstar
 
     end subroutine
 

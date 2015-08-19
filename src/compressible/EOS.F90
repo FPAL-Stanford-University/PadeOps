@@ -10,31 +10,14 @@ module EOSMod
 
     contains
 
-        procedure(get_primitive_interface), deferred :: get_primitive
-        procedure(get_conserved_interface), deferred :: get_conserved
         procedure(get_p_interface),         deferred :: get_p
         procedure(get_T_interface),         deferred :: get_T
         procedure(get_e_from_p_interface),  deferred :: get_e_from_p
+        procedure(get_sos_interface),       deferred :: get_sos
 
     end type
 
     abstract interface
-
-        pure subroutine get_primitive_interface(this,rho,rhou,rhov,rhow,TE,u,v,w,e,p,T)
-            import :: eos
-            import :: rkind
-            class(eos),                    intent(in)  :: this 
-            real(rkind), dimension(:,:,:), intent(in)  :: rho,rhou,rhov,rhow,TE
-            real(rkind), dimension(:,:,:), intent(out) :: u,v,w,e,p,T
-        end subroutine
-
-        pure subroutine get_conserved_interface(this,rho,u,v,w,p,rhou,rhov,rhow,TE)
-            import :: eos
-            import :: rkind
-            class(eos),                    intent(in)  :: this 
-            real(rkind), dimension(:,:,:), intent(in)  :: rho,u,v,w,p
-            real(rkind), dimension(:,:,:), intent(out) :: rhou,rhov,rhow,TE
-        end subroutine
 
         pure subroutine get_p_interface(this,rho,e,p)
             import :: eos
@@ -58,6 +41,14 @@ module EOSMod
             class(eos),                    intent(in)  :: this
             real(rkind), dimension(:,:,:), intent(in)  :: rho,p
             real(rkind), dimension(:,:,:), intent(out) :: e
+        end subroutine
+
+        pure subroutine get_sos_interface(this,rho,p,sos)
+            import :: eos
+            import :: rkind
+            class(eos),                    intent(in)  :: this
+            real(rkind), dimension(:,:,:), intent(in)  :: rho,p
+            real(rkind), dimension(:,:,:), intent(out) :: sos
         end subroutine
 
     end interface

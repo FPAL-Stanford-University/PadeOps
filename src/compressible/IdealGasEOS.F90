@@ -18,11 +18,10 @@ module IdealGasEOS
     contains
 
         procedure :: init
-        procedure :: get_primitive
-        procedure :: get_conserved
         procedure :: get_p
         procedure :: get_e_from_p
         procedure :: get_T
+        procedure :: get_sos
 
     end type
 
@@ -38,35 +37,6 @@ contains
 
         this%Rgas = Rgas_
         this%onebyRgas = one/this%Rgas
-
-    end subroutine
-
-    pure subroutine get_primitive(this,rho,rhou,rhov,rhow,TE,u,v,w,e,p,T)
-        class(idealgas), intent(in) :: this
-        real(rkind), dimension(:,:,:), intent(in)  :: rho,rhou,rhov,rhow,TE
-        real(rkind), dimension(:,:,:), intent(out) :: u,v,w,e,p,T
-        real(rkind), dimension(size(rho,1),size(rho,2),size(rho,3)) :: onebyrho
-
-        onebyrho = one/rho
-        u = rhou * onebyrho
-        v = rhov * onebyrho
-        w = rhow * onebyrho
-        e = (TE*onebyrho) - half*( u*u + v*v + w*w )
-        
-        call this%get_p(rho,e,p)
-        call this%get_T(e,T)
-
-    end subroutine
-
-    pure subroutine get_conserved(this,rho,u,v,w,p,rhou,rhov,rhow,TE)
-        class(idealgas), intent(in) :: this
-        real(rkind), dimension(:,:,:), intent(in)  :: rho,u,v,w,p
-        real(rkind), dimension(:,:,:), intent(out) :: rhou,rhov,rhow,TE
-
-        rhou = rho * u
-        rhov = rho * v
-        rhow = rho * w
-        TE = ( p*(this%onebygam_m1) + rho*half*( u*u + v*v + w*w ) )
 
     end subroutine
 
@@ -94,6 +64,15 @@ contains
         real(rkind), dimension(:,:,:), intent(out) :: T
 
         T = (this%gam-one)*e*this%onebyRgas
+
+    end subroutine
+
+    pure subroutine get_sos(this,rho,p,sos)
+        class(idealgas), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in)  :: rho,p
+        real(rkind), dimension(:,:,:), intent(out) :: sos
+
+        sos = this%gam*p/rho
 
     end subroutine
 
