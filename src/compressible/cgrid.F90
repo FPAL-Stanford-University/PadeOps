@@ -22,6 +22,7 @@ module CompressibleGrid
     integer, parameter :: bulk_index   = 9
     integer, parameter :: kap_index    = 10
 
+    ! These indices are for data management, do not change if you're not sure of what you're doing
     integer, parameter :: tauxyidz = 2
     integer, parameter :: tauxzidx = 3
     integer, parameter :: tauyzidx = 6
@@ -34,7 +35,7 @@ module CompressibleGrid
     integer, parameter :: qzidx = 9
 
 
-
+    ! Number of buffers to create
     integer, parameter :: nbufsx = 2
     integer, parameter :: nbufsy = 6
     integer, parameter :: nbufsz = 2
@@ -63,12 +64,21 @@ module CompressibleGrid
         real(rkind), dimension(:,:,:), pointer :: kap
          
         contains
-            procedure :: init
-            procedure :: destroy
-            procedure :: laplacian
-            procedure :: gradient 
+            procedure          :: init
+            procedure          :: destroy
+            procedure          :: laplacian
+            procedure          :: gradient 
+            procedure          :: advance_RK45
+            procedure, private :: get_dt
+            procedure, private :: get_primitive
+            procedure, private :: get_conserved
+            procedure, private :: getRHS
+            procedure, private :: getRHS_x
+            procedure, private :: getRHS_y
+            procedure, private :: getRHS_z
+            procedure          :: getSGS
             procedure, private :: filter
-            procedure, private :: getPhysicalProperties
+            procedure          :: getPhysicalProperties
             procedure, private :: get_tau
             procedure, private :: get_q
     end type
@@ -555,17 +565,7 @@ contains
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: mustar,bulkstar,kapstar,func
         
         real(rkind), dimension(:,:,:) :: xtmp1,xtmp2
-        real(rkind), dimension(:,:,:) :: ytmp1,ytmp2,ytmp3,ytmp4,grho1,grho2,grho3
-    subroutine getSGS(this,dudx,dudy,dudz,&
-                           dvdx,dvdy,dvdz,&
-                           dwdx,dwdy,dwdz )
-        class(cgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
-        
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: mustar,bulkstar,kapstar,func
-        
-        real(rkind), dimension(:,:,:) :: xtmp1,xtmp2
-        real(rkind), dimension(:,:,:) :: ytmp1,ytmp2,ytmp3,ytmp4,grho1,grho2,grho3
+        real(rkind), dimension(:,:,:) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5
         real(rkind), dimension(:,:,:) :: ztmp1,ztmp2
 
         xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
@@ -699,13 +699,6 @@ contains
         this%mu   = this%mu   + mustar
         this%bulk = this%bulk + bulkstar
         this%kap  = this%kap  + kapstar
-
-    end subroutine
-
-    subroutine GetInviscidRHS(this,rhs)
-        class(cgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp,5), intent(inout) :: rhs
-
 
     end subroutine
 
