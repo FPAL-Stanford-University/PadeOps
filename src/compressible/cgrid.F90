@@ -450,6 +450,8 @@ contains
 
         ! -------- Artificial Conductivity --------
 
+        func = e
+
     end subroutine
 
     subroutine GetInviscidRHS(this,rhs)
