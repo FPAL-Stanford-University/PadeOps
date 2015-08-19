@@ -37,9 +37,11 @@ module GridMod
         real(rkind), dimension(:,:,:,:), allocatable         :: mesh
         real(rkind), dimension(:,:,:,:), allocatable         :: fields
 
-        real(rkind)                                          :: tstop, dt, tsim
+        real(rkind)                                          :: tstop, dt, tsim, CFL
         integer                                              :: step, nsteps
-        integer                                              :: nx_proc, ny_proc, nz_proc
+        integer                                              :: nxp, nyp, nzp
+        
+        logical                                              :: SkewSymm 
     contains
 
         procedure(init_interface),    deferred :: init
@@ -54,7 +56,7 @@ module GridMod
         subroutine init_interface(this, inputfile)
             import :: grid
             import :: clen
-            class(grid), intent(inout) :: this
+            class(grid),target, intent(inout) :: this
             character(len=clen), intent(in) :: inputfile
         end subroutine
 
@@ -67,18 +69,18 @@ module GridMod
             import :: grid
             import :: rkind
             class(grid), target, intent(inout) :: this
-            real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(in):: f   
-            real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(out):: lapf
+            real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in):: f   
+            real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: lapf
         end subroutine
 
         subroutine gradient_interface(this, f, dfdx, dfdy, dfdz)
             import :: grid
             import :: rkind
             class(grid), target, intent(inout) :: this
-            real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(in):: f   
-            real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(out):: dfdx
-            real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(out):: dfdy
-            real(rkind), dimension(this%nx_proc, this%ny_proc, this%nz_proc), intent(out):: dfdz
+            real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in):: f   
+            real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: dfdx
+            real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: dfdy
+            real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: dfdz
 
         end subroutine
 

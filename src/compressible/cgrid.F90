@@ -54,7 +54,7 @@ module CompressibleGrid
 
 contains
     subroutine init(this, inputfile )
-        class(cgrid), intent(inout) :: this
+        class(cgrid),target, intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
 
         integer :: nx, ny, nz
@@ -230,7 +230,7 @@ contains
 
     subroutine gradient(this, f, dfdx, dfdy, dfdz)
         class(cgrid),target, intent(inout) :: this
-        real(rkind), intent(in),  dimension(this%nxp, this%nyp, this%nzp) :: f
+        real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdx
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdy
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdz
@@ -264,7 +264,7 @@ contains
     subroutine laplacian(this, f, lapf)
         use timer
         class(cgrid),target, intent(inout) :: this
-        real(rkind), intent(in),  dimension(this%nxp, this%nyp, this%nzp) :: f
+        real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
         
         real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum, ytmp

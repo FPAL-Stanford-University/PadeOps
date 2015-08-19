@@ -168,9 +168,9 @@ contains
 
     end subroutine 
 
-    subroutine pressureProjection(this,u)
+    subroutine pressureProjection(this,u,v,w)
         class(poisson), target, intent(inout) :: this
-        real(rkind), dimension(this%myGP%ysz(1),this%myGP%ysz(2),this%myGP%ysz(3),3), intent(inout) :: u
+        real(rkind), dimension(this%myGP%ysz(1),this%myGP%ysz(2),this%myGP%ysz(3)), intent(inout) :: u, v, w
 
         real(rkind), dimension(:,:,:), pointer :: k1k1, k1k2, k1k3, k2k2, k2k3, k3k3
 
@@ -186,9 +186,9 @@ contains
 
 
         ! First move us, vs, ws from y -> x
-        call transpose_y_to_x(u(:,:,:,1),this%u_in_x(:,:,:,1),this%myGP)
-        call transpose_y_to_x(u(:,:,:,2),this%u_in_x(:,:,:,2),this%myGP)
-        call transpose_y_to_x(u(:,:,:,3),this%u_in_x(:,:,:,3),this%myGP)
+        call transpose_y_to_x(u,this%u_in_x(:,:,:,1),this%myGP)
+        call transpose_y_to_x(v,this%u_in_x(:,:,:,2),this%myGP)
+        call transpose_y_to_x(w,this%u_in_x(:,:,:,3),this%myGP)
 
 
         call this%FT%fft3_x2z(this%u_in_x(:,:,:,1),this%ustar_hat(:,:,:,1)) 
@@ -209,9 +209,9 @@ contains
         call this%FT%ifft3_z2x(this%u_hat(:,:,:,3),this%u_in_x(:,:,:,3))
 
         ! Now transpose back from x -> y
-        call transpose_x_to_y(this%u_in_x(:,:,:,1),u(:,:,:,1),this%myGP)
-        call transpose_x_to_y(this%u_in_x(:,:,:,2),u(:,:,:,2),this%myGP)
-        call transpose_x_to_y(this%u_in_x(:,:,:,3),u(:,:,:,3),this%myGP)
+        call transpose_x_to_y(this%u_in_x(:,:,:,1),u,this%myGP)
+        call transpose_x_to_y(this%u_in_x(:,:,:,2),v,this%myGP)
+        call transpose_x_to_y(this%u_in_x(:,:,:,3),w,this%myGP)
 
     end subroutine
 
