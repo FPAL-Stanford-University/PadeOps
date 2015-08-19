@@ -11,16 +11,29 @@ module CompressibleGrid
    
     implicit none
 
-    integer :: rho_index    = 1 
-    integer :: u_index      = 2
-    integer :: v_index      = 3
-    integer :: w_index      = 4
-    integer :: p_index      = 5
-    integer :: T_index      = 6
-    integer :: e_index      = 7
-    integer :: mu_index     = 8
-    integer :: bulk_index   = 9
-    integer :: kap_index    = 10
+    integer, parameter :: rho_index    = 1 
+    integer, parameter :: u_index      = 2
+    integer, parameter :: v_index      = 3
+    integer, parameter :: w_index      = 4
+    integer, parameter :: p_index      = 5
+    integer, parameter :: T_index      = 6
+    integer, parameter :: e_index      = 7
+    integer, parameter :: mu_index     = 8
+    integer, parameter :: bulk_index   = 9
+    integer, parameter :: kap_index    = 10
+
+    integer, parameter :: tauxyidz = 2
+    integer, parameter :: tauxzidx = 3
+    integer, parameter :: tauyzidx = 6
+    integer, parameter :: tauxxidx = 4
+    integer, parameter :: tauyyidx = 7
+    integer, parameter :: tauzzidx = 8
+
+    integer, parameter :: qxidx = 1
+    integer, parameter :: qyidx = 5
+    integer, parameter :: qzidx = 9
+
+
 
     integer, parameter :: nbufsx = 2
     integer, parameter :: nbufsy = 6
@@ -54,6 +67,10 @@ module CompressibleGrid
             procedure :: destroy
             procedure :: laplacian
             procedure :: gradient 
+            procedure, private :: filter
+            procedure, private :: getPhysicalProperties
+            procedure, private :: get_tau
+            procedure, private :: get_q
     end type
 
 contains
@@ -692,36 +709,174 @@ contains
 
     end subroutine
 
-    subroutine filter(this)
+    subroutine filter(this,arr,myfil,numtimes)
         class(cgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp
-        integer :: i
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
+        type(filters), optional, intent(in) :: myfil
+        integer, optional, intent(in) :: numtimes
+        
+        type(filters), pointer :: fil2use
+        integer :: times2fil
+        real(rkind), dimension(:,:,:), pointer :: tmp_in_y, tmp1_in_x, tmp1_in_z, tmp2_in_x, tmp2_in_z
+        integer :: lastx, lasty, lastz, idx
 
-        do i=1,5
-            call this%fil%filterx(W(:,:,:,i),tmp)
-            W(:,:,:,i) = tmp
-            call this%fil%filtery(W(:,:,:,i),tmp)
-            W(:,:,:,i) = tmp
-            call this%fil%filterz(W(:,:,:,i),tmp)
-            W(:,:,:,i) = tmp
-        end do
 
+        if (present(myfil)) then
+            fil2use => myfil
+        else
+            fil2use => this%fil
+        end if 
+
+        if (present(numtimes)) then
+            times2fil = numtimes
+        else
+            times2fil = 1
+        end if
+
+        ! Allocate pointers for the needed buffers 
+        ! Atleast 2 buffers in x and z are assumed
+        ! Last two buffers are occupied
+
+        lastx = size(this%xbuf,4)
+        lasty = size(this%ybuf,4)
+        lastz = size(this%zbuf,4)
+
+        tmp1_in_x => this%xbuf(:,:,:,lastx)
+        tmp2_in_x => this%xbuf(:,:,:,lastx-1)
+        tmp_in_y => this%ybuf(:,:,:,lasty)
+        tmp1_in_z => this%zbuf(:,:,:,lastz)
+        tmp2_in_z => this%zbuf(:,:,:,lastz-1)
+        
+        ! First filter in y
+        call fil2use%filtery(arr,tmp_in_y)
+        ! Subsequent refilters 
+        do idx = 1,times2fil-1
+            arr = tmp_in_y
+            call fil2use%filtery(arr,tmp_in_y)
+        end do 
+
+        ! Then transpose to x
+        call transpose_y_to_x(tmp_in_y,tmp1_in_x,this%decomp)
+
+        ! First filter in x
+        call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+        ! Subsequent refilters
+        do idx = 1,times2fil-1
+            tmp1_in_x = tmp2_in_x
+            call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+        end do 
+
+        ! Now transpose back to y
+        call transpose_x_to_y(tmp2_in_x,tmp_in_y,this%decomp)
+
+        ! Now transpose to z
+        call transpose_y_to_z(tmp_in_y,tmp1_in_z,this%decomp)
+
+        !First filter in z
+        call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+        ! Subsequent refilters
+        do idx = 1,times2fil-1
+            tmp1_in_z = tmp2_in_z
+            call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+        end do 
+
+        ! Now transpose back to y
+        call transpose_z_to_y(tmp2_in_z,arr,this%decomp)
+
+        ! Finished
     end subroutine
+   
+    subroutine getPhysicalProperties(this)
+        class(cgrid), intent(inout) :: this
+
+        ! If inviscid set everything to zero (otherwise use a model)
+        this%mu = zero
+        this%bulk = zero
+        this%kappa = zero
+
+    end subroutine  
+
+    subroutine get_tau(this,duidxj)
+        class(cgrid), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: duidxj
+
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dzdz,dwdz,dwdy,dwdz
+        real(rkind), dimension(:,:,:), pointer :: lambda, bambda
+
+        lambda => this%ybuf(:,:,:,1)
+        bambda => this%ybuf(:,:,:,2)
+
+        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+       
+        ! Compute the multiplying factors (thermo-shit)
+        bambda = (four/three)*this%mu + this%beta
+        lambda = this%beta - (two/three)*this%mu
+
+        ! Step 1: Get tau_12  (dudy is destroyed)
+        dudy =  dudy + dvdx
+        dudy = this%mu*dudy
+        !tauxyidz = 2
     
-    subroutine gfilter(this)
+        ! Step 2: Get tau_13 (dudz is destroyed)
+        dudz = dudz + dwdx
+        dudz = this%mu*dudz
+        !tauxzidx = 3
+
+        ! Step 3: Get tau_23 (dvdz is destroyed)
+        dvdz = dvdz + dwdy
+        dvdz = this*mu*dvdz
+        !tauyzidx = 6
+
+        ! Step 4: Get tau_11 (dvdx is destroyed)
+        dvdx = bambda*dudx + lambda*(dvdy + dwdz)
+        !tauxxidx = 4
+
+        ! Step 5: Get tau_22 (dwdx is destroyed)
+        dwdx = bambda*dvdy + lambda*(dudx + dwdz)
+        !tauyyidx = 7
+
+        ! Step 6: Get tau_33 (dwdy is destroyed)
+        dwdy = bambda*dwdz + lambda*(dudx + dvdy)
+        !tauzzidx = 8
+
+        ! Done 
+    end subroutine 
+
+    subroutine get_q(this,duidxj)
         class(cgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp
-        integer :: i
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: duidxj
 
-        do i=1,5
-            call this%fil%filterx(W(:,:,:,i),tmp)
-            W(:,:,:,i) = tmp
-            call this%fil%filtery(W(:,:,:,i),tmp)
-            W(:,:,:,i) = tmp
-            call this%fil%filterz(W(:,:,:,i),tmp)
-            W(:,:,:,i) = tmp
-        end do
+        real(rkind), dimension(:,:,:), pointer :: tmp1_in_x, tmp2_in_x, tmp1_in_y, tmp1_in_z, tmp2_in_z
+        type(derivatives), pointer :: der
 
-    end subroutine
+        der => this%der
+        
+        tmp1_in_x => this%xbuf(:,:,:,1)
+        tmp2_in_x => this%xbuf(:,:,:,2)
 
+        tmp1_in_z => this%zbuf(:,:,:,1)
+        tmp2_in_z => this%zbuf(:,:,:,2)
+
+        tmp1_in_y => this%ybuf(:,:,:,1)
+        
+        ! Step 1: Get qy (dvdy is destroyed)
+        call der%ddy(this%T,tmp1_in_y)
+        duidxj(:,:,:,qyidx) = -this%kap*tmp1_in_y
+
+        ! Step 2: Get qx (dudx is destroyed)
+        call transpose_y_to_x(this%T,tmp1_in_x,this%decomp)
+        call der%ddx(tmp1_in_x,tmp2_in_y)
+        call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
+        duidxj(:,:,:,qxidx) = -this%kap*tmp1_in_y
+
+        ! Step 3: Get qz (dwdz is destroyed)
+        call transpose_y_to_z(this%T,tmp1_in_z,this%decomp)
+        call der%ddz(tmp1_in_z,tmp2_in_z)
+        call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
+        duidxj(:,:,:,qzidx) = -this%kap*tmp1_in_y
+
+        ! Done
+    end subroutine 
 end module 

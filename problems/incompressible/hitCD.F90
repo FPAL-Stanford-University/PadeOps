@@ -36,15 +36,15 @@ program hitcd
     call POIS%pressureProjection(igp%u,igp%v,igp%w)
     call igp%printDivergence()
 
+    call tic()
     do while (igp%tsim < igp%tstop) 
-        call tic()
         call igp%AdamsBashforth()
         call POIS%pressureProjection(igp%u,igp%v,igp%w)
         igp%tsim = igp%tsim + igp%dt
         igp%step = igp%step + 1
         call message("Kinetic Energy:",p_sum(igp%u*igp%u + igp%v*igp%v + igp%w*igp%w)*igp%dx*igp%dy*igp%dz)
-        call toc()
     end do 
+    call toc()
 
     call igp%printDivergence()
     
