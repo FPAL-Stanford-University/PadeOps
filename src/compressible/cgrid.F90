@@ -50,6 +50,7 @@ module CompressibleGrid
             procedure :: destroy
             procedure :: laplacian
             procedure :: gradient 
+            procedure, private :: filter
     end type
 
 contains
@@ -461,36 +462,82 @@ contains
 
     end subroutine
 
-    subroutine filter(this)
+    subroutine filter(this,arr,myfil,numtimes)
         class(cgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp
-        integer :: i
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
+        type(filters), optional, intent(in) :: myfil
+        integer, optional, intent(in) :: numtimes
+        
+        type(filters), pointer :: fil2use
+        integer :: times2fil
+        real(rkind), dimension(:,:,:), pointer :: tmp_in_y, tmp1_in_x, tmp1_in_z, tmp2_in_x, tmp2_in_z
+        integer :: lastx, lasty, lastz, idx
 
-        do i=1,5
-            call this%fil%filterx(W(:,:,:,i),tmp)
-            W(:,:,:,i) = tmp
-            call this%fil%filtery(W(:,:,:,i),tmp)
-            W(:,:,:,i) = tmp
-            call this%fil%filterz(W(:,:,:,i),tmp)
-            W(:,:,:,i) = tmp
-        end do
 
+        if (present(myfil)) then
+            fil2use => myfil
+        else
+            fil2use => this%fil
+        end if 
+
+        if (present(numtimes)) then
+            times2fil = numtimes
+        else
+            times2fil = 1
+        end if
+
+        ! Allocate pointers for the needed buffers 
+        ! Atleast 2 buffers in x and z are assumed
+        ! Last two buffers are occupied
+
+        lastx = size(this%xbuf,4)
+        lasty = size(this%ybuf,4)
+        lastz = size(this%zbuf,4)
+
+        tmp1_in_x => this%xbuf(:,:,:,lastx)
+        tmp2_in_x => this%xbuf(:,:,:,lastx-1)
+        tmp_in_y => this%ybuf(:,:,:,lasty)
+        tmp1_in_z => this%zbuf(:,:,:,lastz)
+        tmp2_in_z => this%zbuf(:,:,:,lastz-1)
+        
+        ! First filter in y
+        call fil2use%filtery(arr,tmp_in_y)
+        ! Subsequent refilters 
+        do idx = 1,times2fil-1
+            arr = tmp_in_y
+            call fil2use%filtery(arr,tmp_in_y)
+        end do 
+
+        ! Then transpose to x
+        call transpose_y_to_x(tmp_in_y,tmp1_in_x,this%decomp)
+
+        ! First filter in x
+        call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+        ! Subsequent refilters
+        do idx = 1,times2fil-1
+            tmp1_in_x = tmp2_in_x
+            call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+        end do 
+
+        ! Now transpose back to y
+        call transpose_x_to_y(tmp2_in_x,tmp_in_y,this%decomp)
+
+        ! Now transpose to z
+        call transpose_y_to_z(tmp_in_y,tmp1_in_z,this%decomp)
+
+        !First filter in z
+        call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+        ! Subsequent refilters
+        do idx = 1,times2fil-1
+            tmp1_in_z = tmp2_in_z
+            call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+        end do 
+
+        ! Now transpose back to y
+        call transpose_z_to_y(tmp2_in_z,arr,this%decomp)
+
+        ! Finished
     end subroutine
     
-    subroutine gfilter(this)
-        class(cgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp
-        integer :: i
-
-        do i=1,5
-            call this%fil%filterx(W(:,:,:,i),tmp)
-            W(:,:,:,i) = tmp
-            call this%fil%filtery(W(:,:,:,i),tmp)
-            W(:,:,:,i) = tmp
-            call this%fil%filterz(W(:,:,:,i),tmp)
-            W(:,:,:,i) = tmp
-        end do
-
-    end subroutine
 
 end module 
