@@ -1,7 +1,7 @@
 &INPUT
 
-inputdir  =  "/home/akshays/Codes/PadeOps/data/hit/input"       ! Directory for input files
-outputdir  = "/home/akshays/Codes/PadeOps/data/hit/output"      ! Directory for output files
+inputdir  =  "/home/aditya90/Codes/PadeOps/data/hit/input"       ! Directory for input files
+outputdir  = "/home/aditya90/Codes/PadeOps/data/hit/output"      ! Directory for output files
 
 nx = 128                  ! Number of points in X
 ny = 128                  ! Number of points in Y

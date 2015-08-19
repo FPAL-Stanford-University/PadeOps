@@ -36,7 +36,7 @@ module CompressibleGrid
 
 contains
     subroutine init(this, inputfile )
-        class(cgrid), intent(inout) :: this
+        class(cgrid),target, intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
 
         integer :: nx, ny, nz
@@ -156,9 +156,9 @@ contains
                           filter_x,      filter_y,       filter_z  )      
 
         ! Finally, set the local array dimensions
-        this%nx_proc = this%decomp%ysz(1)
-        this%ny_proc = this%decomp%ysz(2)
-        this%nz_proc = this%decomp%ysz(3)
+        this%nxp = this%decomp%ysz(1)
+        this%nyp = this%decomp%ysz(2)
+        this%nzp = this%decomp%ysz(3)
 
 
         ! Allocate 2 buffers for each of the three decompositions
@@ -186,10 +186,10 @@ contains
 
     subroutine gradient(this, f, dfdx, dfdy, dfdz)
         class(cgrid),target, intent(inout) :: this
-        real(rkind), intent(in), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
-        real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdx
-        real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdy
-        real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: dfdz
+        real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdx
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdy
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdz
 
         type(derivatives), pointer :: der
         type(decomp_info), pointer :: decomp
@@ -220,8 +220,8 @@ contains
     subroutine laplacian(this, f, lapf)
         use timer
         class(cgrid),target, intent(inout) :: this
-        real(rkind), intent(in), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: f
-        real(rkind), intent(out), dimension(this%nx_proc, this%ny_proc, this%nz_proc) :: lapf
+        real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
         
         real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum, ytmp
         type(derivatives), pointer :: der
