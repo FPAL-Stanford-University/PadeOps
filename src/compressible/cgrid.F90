@@ -1,6 +1,6 @@
 module CompressibleGrid
     use kind_parameters, only: rkind, clen
-    use constants, only: zero,one,two
+    use constants, only: zero,half,one,two,three,four
     use FiltersMod, only: filters
     use GridMod, only: grid, alloc_buffs, destroy_buffs
     use hooks, only: meshgen, initfields
@@ -23,7 +23,7 @@ module CompressibleGrid
     integer, parameter :: kap_index    = 10
 
     ! These indices are for data management, do not change if you're not sure of what you're doing
-    integer, parameter :: tauxyidz = 2
+    integer, parameter :: tauxyidx = 2
     integer, parameter :: tauxzidx = 3
     integer, parameter :: tauyzidx = 6
     integer, parameter :: tauxxidx = 4
@@ -45,9 +45,11 @@ module CompressibleGrid
         type(filters) :: gfil
         type(idealgas), allocatable :: gas
 
-        real(rkind), dimension(:,:,:,:) :: W                               ! Conserved variables
+        real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
-        
+       
+        real(rkind) :: Cmu, Cbeta, Ckap
+
         real(rkind), dimension(:,:,:), pointer :: x 
         real(rkind), dimension(:,:,:), pointer :: y 
         real(rkind), dimension(:,:,:), pointer :: z 
@@ -110,6 +112,9 @@ contains
         real(rkind) :: tstop = one
         real(rkind) :: CFL = -one
         logical :: SkewSymm = .FALSE.
+        real(rkind) :: Cmu = 0.002_rkind
+        real(rkind) :: Cbeta = 1.75_rkind
+        real(rkind) :: Ckap = 0.01_rkind
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
@@ -117,8 +122,8 @@ contains
                          derivative_x, derivative_y, derivative_z, &
                                      filter_x, filter_y, filter_z, &
                                                        prow, pcol, &
-                                                         SkewSymm  &
-        namelist /CINPUT/  gam, Rgas
+                                                         SkewSymm  
+        namelist /CINPUT/  gam, Rgas, Cmu, Cbeta, Ckap
 
 
         ioUnit = 11
@@ -136,6 +141,10 @@ contains
 
         this%step = 0
         this%nsteps = nsteps
+
+        this%Cmu = Cmu
+        this%Cbeta = Cbeta
+        this%Ckap = Ckap
 
         ! Initialize decomp
         call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -171,7 +180,7 @@ contains
         ! Allocate fields
         if ( allocated(this%fields) ) deallocate(this%fields) 
         call alloc_buffs(this%fields,10,'y',this%decomp)
-        call alloc_buffs(this%W,5,'y',this%decomp)
+        call alloc_buffs(this%Wcnsrv,5,'y',this%decomp)
        
         ! Initialize everything to a constant Zero
         this%fields = zero  
@@ -222,20 +231,20 @@ contains
         call alloc_buffs(this%zbuf,nbufsz,"z",this%decomp)
 
         ! Associate pointers for ease of use
-        x    => this%mesh  (:,:,:, 1) 
-        y    => this%mesh  (:,:,:, 2) 
-        z    => this%mesh  (:,:,:, 3)
+        this%x    => this%mesh  (:,:,:, 1) 
+        this%y    => this%mesh  (:,:,:, 2) 
+        this%z    => this%mesh  (:,:,:, 3)
 
-        rho  => this%fields(:,:,:, 1) 
-        u    => this%fields(:,:,:, 2) 
-        v    => this%fields(:,:,:, 3) 
-        w    => this%fields(:,:,:, 4)  
-        p    => this%fields(:,:,:, 5)  
-        T    => this%fields(:,:,:, 6)  
-        e    => this%fields(:,:,:, 7)  
-        mu   => this%fields(:,:,:, 8)  
-        bulk => this%fields(:,:,:, 9)  
-        kap  => this%fields(:,:,:,10)   
+        this%rho  => this%fields(:,:,:, 1) 
+        this%u    => this%fields(:,:,:, 2) 
+        this%v    => this%fields(:,:,:, 3) 
+        this%w    => this%fields(:,:,:, 4)  
+        this%p    => this%fields(:,:,:, 5)  
+        this%T    => this%fields(:,:,:, 6)  
+        this%e    => this%fields(:,:,:, 7)  
+        this%mu   => this%fields(:,:,:, 8)  
+        this%bulk => this%fields(:,:,:, 9)  
+        this%kap  => this%fields(:,:,:,10)   
 
         this%SkewSymm = SkewSymm
 
@@ -254,7 +263,7 @@ contains
         call destroy_buffs(this%ybuf)
         call destroy_buffs(this%zbuf)
         if (allocated(this%gas)) deallocate(this%gas) 
-        if (allocated(this%W)) deallocate(this%W) 
+        if (allocated(this%Wcnsrv)) deallocate(this%Wcnsrv) 
         call decomp_2d_finalize
 
     end subroutine
@@ -336,9 +345,14 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: rhs  ! RHS for conserved variables
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: Qtmp ! Temporary variable for RK45
-        integer :: isub
+        integer :: isub,i
 
-        call get_dt()
+        call this%get_dt()
+
+        if (this%step == 0) then
+            call this%gas%get_e_from_p(this%rho,this%p,this%e)
+            call this%gas%get_T(this%e,this%T)
+        end if
 
         Qtmp = zero
 
@@ -346,12 +360,12 @@ contains
             call this%get_conserved()
 
             call this%getRHS(rhs)
-            Qtmp = this%dt*rhs + A(isub)*Qtmp
-            W = W + B(isub)*Qtmp
+            Qtmp = this%dt*rhs + RK45_A(isub)*Qtmp
+            this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
             ! Filter the conserved variables
             do i = 1,5
-                call this%filter(W(:,:,:,1), this%fil, 1)
+                call this%filter(this%Wcnsrv(:,:,:,1), this%fil, 1)
             end do
             
             call this%get_primitive()
@@ -366,23 +380,23 @@ contains
             return
         end if
 
-        this%dt = 1.0D-3_rkind
+        this%dt = real(1.0D-3,rkind)
 
     end subroutine
 
     pure subroutine get_primitive(this)
-        class(idealgas), intent(inout) :: this
+        class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(:,:,:), pointer :: onebyrho
         real(rkind), dimension(:,:,:), pointer :: rhou,rhov,rhow,TE
 
         onebyrho => this%ybuf(:,:,:,1)
 
-        this%rho  =  this%W(:,:,:,1)
+        this%rho  =  this%Wcnsrv(:,:,:,1)
         
-        rhou => this%W(:,:,:,2)
-        rhov => this%W(:,:,:,3)
-        rhow => this%W(:,:,:,4)
-        TE   => this%W(:,:,:,5)
+        rhou => this%Wcnsrv(:,:,:,2)
+        rhov => this%Wcnsrv(:,:,:,3)
+        rhow => this%Wcnsrv(:,:,:,4)
+        TE   => this%Wcnsrv(:,:,:,5)
 
         onebyrho = one/this%rho
         this%u = rhou * onebyrho
@@ -396,30 +410,31 @@ contains
     end subroutine
 
     pure subroutine get_conserved(this)
-        class(idealgas), intent(inout) :: this
+        class(cgrid), intent(inout) :: this
 
-        this%W(:,:,:,1) = this%rho
-        this%W(:,:,:,2) = this%rho * this%u
-        this%W(:,:,:,3) = this%rho * this%v
-        this%W(:,:,:,4) = this%rho * this%w
-        this%W(:,:,:,5) = ( this%p*(this%gas%onebygam_m1) + this%rho*half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
+        this%Wcnsrv(:,:,:,1) = this%rho
+        this%Wcnsrv(:,:,:,2) = this%rho * this%u
+        this%Wcnsrv(:,:,:,3) = this%rho * this%v
+        this%Wcnsrv(:,:,:,4) = this%rho * this%w
+        this%Wcnsrv(:,:,:,5) = ( this%p*(this%gas%onebygam_m1) + this%rho*half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
 
     end subroutine
 
     subroutine getRHS(this, rhs)
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,5), intent(out) :: rhs
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9) :: duidxj
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
+        real(rkind), dimension(:,:,:), pointer :: qx,qy,qz
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
         
-        call this%gradient(u,dudx,dudy,dudz)
-        call this%gradient(v,dvdx,dvdy,dvdz)
-        call this%gradient(w,dwdx,dwdy,dwdz)
+        call this%gradient(this%u,dudx,dudy,dudz)
+        call this%gradient(this%v,dvdx,dvdy,dvdz)
+        call this%gradient(this%w,dwdx,dwdy,dwdz)
 
         call this%getPhysicalProperties()
 
@@ -441,21 +456,15 @@ contains
         rhs = zero
         call this%getRHS_x(              rhs,&
                            tauxx,tauxy,tauxz,&
-                                 tauyy,tauyz,&
-                                       tauzz,&
-                               qx,  qy,   qz )
+                               qx )
 
         call this%getRHS_y(              rhs,&
-                           tauxx,tauxy,tauxz,&
-                                 tauyy,tauyz,&
-                                       tauzz,&
-                               qx,  qy,   qz )
+                           tauxy,tauyy,tauyz,&
+                               qy )
 
         call this%getRHS_z(              rhs,&
-                           tauxx,tauxy,tauxz,&
-                                 tauyy,tauyz,&
-                                       tauzz,&
-                               qx,  qy,   qz )
+                           tauxz,tauyz,tauzz,&
+                               qz )
 
     end subroutine
 
@@ -468,17 +477,17 @@ contains
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
 
         real(rkind), dimension(:,:,:,:), pointer :: flux
-        real(rkind), dimension(:,:,:) :: xtmp1,xtmp2
+        real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
         integer :: i
 
         flux => this%ybuf(:,:,:,1:5)
         xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
 
-        flux(:,:,:,1) = this%W(:,:,:,2)   ! rho*u
-        flux(:,:,:,2) = this%W(:,:,:,2)*this%u + this%p - tauxx
-        flux(:,:,:,3) = this%W(:,:,:,2)*this%v          - tauxy
-        flux(:,:,:,4) = this%W(:,:,:,2)*this%w          - tauxz
-        flux(:,:,:,5) = (this%W(:,:,:,5) + p - tauxx)*this%u - this%v*tauxy - this%w*tauxz - qx
+        flux(:,:,:,1) = this%Wcnsrv(:,:,:,2)   ! rho*u
+        flux(:,:,:,2) = this%Wcnsrv(:,:,:,2)*this%u + this%p - tauxx
+        flux(:,:,:,3) = this%Wcnsrv(:,:,:,2)*this%v          - tauxy
+        flux(:,:,:,4) = this%Wcnsrv(:,:,:,2)*this%w          - tauxz
+        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz - qx
 
         ! Now, get the x-derivative of the fluxes
         do i=1,5
@@ -501,17 +510,17 @@ contains
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qy
 
         real(rkind), dimension(:,:,:,:), pointer :: flux
-        real(rkind), dimension(:,:,:) :: ytmp1
+        real(rkind), dimension(:,:,:), pointer :: ytmp1
         integer :: i
 
         flux => this%ybuf(:,:,:,1:5)
         ytmp1 => this%ybuf(:,:,:,6)
 
-        flux(:,:,:,1) = this%W(:,:,:,3)   ! rho*v
-        flux(:,:,:,2) = this%W(:,:,:,3)*this%u          - tauxy
-        flux(:,:,:,3) = this%W(:,:,:,3)*this%v + this%p - tauyy
-        flux(:,:,:,4) = this%W(:,:,:,3)*this%w          - tauyz
-        flux(:,:,:,5) = (this%W(:,:,:,5) + p - tauyy)*this%v - this%u*tauxy - this%w*tauyz - qy
+        flux(:,:,:,1) = this%Wcnsrv(:,:,:,3)   ! rho*v
+        flux(:,:,:,2) = this%Wcnsrv(:,:,:,3)*this%u          - tauxy
+        flux(:,:,:,3) = this%Wcnsrv(:,:,:,3)*this%v + this%p - tauyy
+        flux(:,:,:,4) = this%Wcnsrv(:,:,:,3)*this%w          - tauyz
+        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauyy)*this%v - this%u*tauxy - this%w*tauyz - qy
 
         ! Now, get the x-derivative of the fluxes
         do i=1,5
@@ -532,17 +541,17 @@ contains
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qz
 
         real(rkind), dimension(:,:,:,:), pointer :: flux
-        real(rkind), dimension(:,:,:) :: ztmp1,ztmp2
+        real(rkind), dimension(:,:,:), pointer :: ztmp1,ztmp2
         integer :: i
 
         flux => this%ybuf(:,:,:,1:5)
         ztmp1 => this%zbuf(:,:,:,1); ztmp2 => this%zbuf(:,:,:,2)
 
-        flux(:,:,:,1) = this%W(:,:,:,4)   ! rho*w
-        flux(:,:,:,2) = this%W(:,:,:,4)*this%u          - tauxz
-        flux(:,:,:,3) = this%W(:,:,:,4)*this%v          - tauyz
-        flux(:,:,:,4) = this%W(:,:,:,4)*this%w + this%p - tauzz
-        flux(:,:,:,5) = (this%W(:,:,:,5) + p - tauzz)*this%w - this%u*tauxz - this%v*tauyz - qz
+        flux(:,:,:,1) = this%Wcnsrv(:,:,:,4)   ! rho*w
+        flux(:,:,:,2) = this%Wcnsrv(:,:,:,4)*this%u          - tauxz
+        flux(:,:,:,3) = this%Wcnsrv(:,:,:,4)*this%v          - tauyz
+        flux(:,:,:,4) = this%Wcnsrv(:,:,:,4)*this%w + this%p - tauzz
+        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauzz)*this%w - this%u*tauxz - this%v*tauyz - qz
 
         ! Now, get the x-derivative of the fluxes
         do i=1,5
@@ -564,9 +573,9 @@ contains
         
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: mustar,bulkstar,kapstar,func
         
-        real(rkind), dimension(:,:,:) :: xtmp1,xtmp2
-        real(rkind), dimension(:,:,:) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5
-        real(rkind), dimension(:,:,:) :: ztmp1,ztmp2
+        real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
+        real(rkind), dimension(:,:,:), pointer :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5
+        real(rkind), dimension(:,:,:), pointer :: ztmp1,ztmp2
 
         xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
         
@@ -604,17 +613,17 @@ contains
         ytmp1 = ytmp2*this%dy**6
         mustar = mustar + ytmp1
 
-        mustar = Cmu*rho*abs(mustar)
+        mustar = this%Cmu*this%rho*abs(mustar)
 
         ! Filter mustar
-        call this%gfilter(mustar, this%gfil, 2)
+        call this%filter(mustar, this%gfil, 2)
 
         ! -------- Artificial Bulk Viscosity --------
         
         func = dudx + dvdy + dwdz      ! dilatation
         
         ! Step 1: Get components of grad(rho) squared individually
-        call this%gradient(rho,ytmp1,ytmp2,ytmp3) ! Does not use any Y buffers
+        call this%gradient(this%rho,ytmp1,ytmp2,ytmp3) ! Does not use any Y buffers
         ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
@@ -647,26 +656,26 @@ contains
         ytmp2 = func*func
 
         ! Calculate the switching function
-        ytmp1 = ytmp2 / (ytmp2 + ytmp4 + 1.0D-32_rkind) ! Switching function f_sw
+        ytmp1 = ytmp2 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
         where (func .GE. zero)
             ytmp1 = zero
         end where
 
-        bulkstar = Cbeta*rho*ytmp1*abs(bulkstar)
+        bulkstar = this%Cbeta*this%rho*ytmp1*abs(bulkstar)
 
         ! Filter bulkstar
-        call this%gfilter(bulkstar, this%gfil, 2)
+        call this%filter(bulkstar, this%gfil, 2)
 
         ! -------- Artificial Conductivity --------
 
         ! Step 1: Get components of grad(e) squared individually
-        call this%gradient(e,ytmp1,ytmp2,ytmp3) ! Does not use any Y buffers
+        call this%gradient(this%e,ytmp1,ytmp2,ytmp3) ! Does not use any Y buffers
         ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
 
         ! Step 2: Get 4th derivative in X
-        call transpose_y_to_x(e,xtmp1,this%decomp)
+        call transpose_y_to_x(this%e,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2)
         call this%der%d2dx2(xtmp2,xtmp1)
         xtmp2 = xtmp1*this%dx**6
@@ -674,7 +683,7 @@ contains
         kapstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3)
 
         ! Step 3: Get 4th derivative in Z
-        call transpose_y_to_z(e,ztmp1,this%decomp)
+        call transpose_y_to_z(this%e,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2)
         call this%der%d2dz2(ztmp2,ztmp1)
         ztmp2 = ztmp1*this%dz**6
@@ -682,15 +691,15 @@ contains
         kapstar = kapstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3)
 
         ! Step 4: Get 4th derivative in Y
-        call this%der%d2dy2(e,ytmp4)
+        call this%der%d2dy2(this%e,ytmp4)
         call this%der%d2dy2(ytmp4,ytmp5)
         ytmp4 = ytmp5*this%dy**6
         kapstar = kapstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3)
 
         ! Now, all ytmps are free to use
-        call this%gas%get_sos(rho,p,ytmp1)  ! Speed of sound
+        call this%gas%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound
 
-        kapstar = Ckap*rho*ytmp1*abs(kapstar)/T
+        kapstar = this%Ckap*this%rho*ytmp1*abs(kapstar)/this%T
 
         ! Filter kapstar
         call this%filter(kapstar, this%gfil, 2)
@@ -705,7 +714,7 @@ contains
     subroutine filter(this,arr,myfil,numtimes)
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
-        type(filters), optional, intent(in) :: myfil
+        type(filters), target, optional, intent(in) :: myfil
         integer, optional, intent(in) :: numtimes
         
         type(filters), pointer :: fil2use
@@ -785,15 +794,15 @@ contains
         ! If inviscid set everything to zero (otherwise use a model)
         this%mu = zero
         this%bulk = zero
-        this%kappa = zero
+        this%kap = zero
 
     end subroutine  
 
     subroutine get_tau(this,duidxj)
-        class(cgrid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: duidxj
+        class(cgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), target, intent(inout) :: duidxj
 
-        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dzdz,dwdz,dwdy,dwdz
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: lambda, bambda
 
         lambda => this%ybuf(:,:,:,1)
@@ -804,8 +813,8 @@ contains
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
        
         ! Compute the multiplying factors (thermo-shit)
-        bambda = (four/three)*this%mu + this%beta
-        lambda = this%beta - (two/three)*this%mu
+        bambda = (four/three)*this%mu + this%bulk
+        lambda = this%bulk - (two/three)*this%mu
 
         ! Step 1: Get tau_12  (dudy is destroyed)
         dudy =  dudy + dvdx
@@ -819,7 +828,7 @@ contains
 
         ! Step 3: Get tau_23 (dvdz is destroyed)
         dvdz = dvdz + dwdy
-        dvdz = this*mu*dvdz
+        dvdz = this%mu*dvdz
         !tauyzidx = 6
 
         ! Step 4: Get tau_11 (dvdx is destroyed)
@@ -860,7 +869,7 @@ contains
 
         ! Step 2: Get qx (dudx is destroyed)
         call transpose_y_to_x(this%T,tmp1_in_x,this%decomp)
-        call der%ddx(tmp1_in_x,tmp2_in_y)
+        call der%ddx(tmp1_in_x,tmp2_in_x)
         call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
         duidxj(:,:,:,qxidx) = -this%kap*tmp1_in_y
 

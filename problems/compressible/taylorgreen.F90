@@ -6,7 +6,7 @@ program taylorgreen
     use kind_parameters,  only: rkind,clen,stdout
     use CompressibleGrid, only: cgrid,u_index
     use GridMod,          only: alloc_buffs, destroy_buffs
-    use reductions,       only: P_MAXVAL
+    use reductions,       only: P_MAXVAL,P_MINVAL
     use exits,            only: message
     use timer,            only: tic, toc
     implicit none
@@ -30,6 +30,10 @@ program taylorgreen
         call cgp%advance_RK45()
         cgp%tsim = cgp%tsim + cgp%dt
         cgp%step = cgp%step + 1
+
+        call message(0,"Time",cgp%tsim)
+        call message(1,"Minimum density",P_MINVAL(cgp%rho))
+        call message(1,"Maximum u velocity",P_MAXVAL(cgp%u))
     end do 
         
     ! Destroy everythin before ending

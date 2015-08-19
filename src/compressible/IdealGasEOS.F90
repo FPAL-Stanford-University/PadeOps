@@ -8,7 +8,6 @@ module IdealGasEOS
 
     type, extends(eos) :: idealgas
 
-        private
         real(rkind) :: gam = 1.4_rkind                     ! Ratio of specific heats
         real(rkind) :: onebygam_m1 = one/(1.4_rkind-one)   ! 1/(gamma-1)
         
@@ -72,7 +71,7 @@ contains
         real(rkind), dimension(:,:,:), intent(in)  :: rho,p
         real(rkind), dimension(:,:,:), intent(out) :: sos
 
-        sos = this%gam*p/rho
+        sos = sqrt(this%gam*p/rho)
 
     end subroutine
 
