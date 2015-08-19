@@ -11,10 +11,14 @@ module IncompressibleGrid
 
     implicit none
 
-    integer :: u_index      = 1
-    integer :: v_index      = 2
-    integer :: w_index      = 3
-    integer :: nu_index     = 4
+    integer, parameter :: u_index      = 1
+    integer, parameter :: v_index      = 2
+    integer, parameter :: w_index      = 3
+    integer, parameter :: nu_index     = 4
+
+    integer, parameter :: nbufsx = 5 
+    integer, parameter :: nbufsy = 2
+    integer, parameter :: nbufsz = 5
 
     type, extends(grid) :: igrid
        
@@ -186,9 +190,9 @@ contains
 
 
         ! Allocate 2 buffers for each of the three decompositions
-        call alloc_buffs(this%xbuf,5,"x",this%decomp)
-        call alloc_buffs(this%ybuf,2,"y",this%decomp)
-        call alloc_buffs(this%zbuf,5,"z",this%decomp)
+        call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
+        call alloc_buffs(this%ybuf,nbufsy,"y",this%decomp)
+        call alloc_buffs(this%zbuf,nbufsz,"z",this%decomp)
 
         ! Link Pointers
         this%u => this%fields(:,:,:,u_index)
