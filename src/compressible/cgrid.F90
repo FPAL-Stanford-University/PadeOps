@@ -374,19 +374,21 @@ contains
             end do
             
             call this%get_primitive()
-            
-            call message(1,"Sub step",real(isub,rkind))
-            call message(2,"Minimum density",P_MINVAL(this%rho))
-            call message(2,"Maximum u velocity",P_MAXVAL(this%u))
-            call message(2,"Maximum shear viscosity",P_MAXVAL(this%mu))
-            call message(2,"Maximum bulk viscosity",P_MAXVAL(this%bulk))
-            call message(2,"Maximum conductivity",P_MAXVAL(this%kap))
         end do
+
+        this%tsim = this%tsim + this%dt
+        this%step = this%step + 1
+            
+        call message(1,"Time",this%tsim)
+        call message(2,"Minimum density",P_MINVAL(this%rho))
+        call message(2,"Maximum u velocity",P_MAXVAL(this%u))
+        call message(2,"Maximum shear viscosity",P_MAXVAL(this%mu))
+        call message(2,"Maximum bulk viscosity",P_MAXVAL(this%bulk))
+        call message(2,"Maximum conductivity",P_MAXVAL(this%kap))
 
     end subroutine
 
     subroutine get_dt(this)
-        use exits, only: message
         class(cgrid), target, intent(inout) :: this
 
         ! Use fixed time step if CFL <= 0
@@ -584,7 +586,6 @@ contains
     subroutine getSGS(this,dudx,dudy,dudz,&
                            dvdx,dvdy,dvdz,&
                            dwdx,dwdy,dwdz )
-        use exits, only: message
         use reductions, only: P_MAXVAL
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
@@ -610,18 +611,12 @@ contains
                             +             dvdy**2 + half*(dwdy+dvdz)**2 &
                                                   +             dwdz**2 )
         
-        call message("Max strain rate mag.",P_MAXVAL(func))
-        
-        call message("Max mustar",P_MAXVAL(mustar))
-
         ! Get 4th derivative in X
         call transpose_y_to_x(func,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2)
         call this%der%d2dx2(xtmp2,xtmp1)
         xtmp2 = xtmp1*this%dx**6
         call transpose_x_to_y(xtmp2,mustar,this%decomp)
-        
-        call message("Max mustar",P_MAXVAL(mustar))
         
         ! Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
@@ -631,8 +626,6 @@ contains
         call transpose_z_to_y(ztmp2,ytmp1,this%decomp)
         mustar = mustar + ytmp1
         
-        call message("Max mustar",P_MAXVAL(mustar))
-        
         ! Get 4th derivative in Y
         call this%der%d2dy2(func,ytmp1)
         call this%der%d2dy2(ytmp1,ytmp2)
@@ -641,13 +634,9 @@ contains
 
         mustar = this%Cmu*this%rho*abs(mustar)
         
-        call message("Max mustar",P_MAXVAL(mustar))
-
         ! Filter mustar
         call this%filter(mustar, this%gfil, 2)
         
-        call message("Max mustar",P_MAXVAL(mustar))
-
         ! -------- Artificial Bulk Viscosity --------
         
         func = dudx + dvdy + dwdz      ! dilatation
@@ -664,7 +653,7 @@ contains
         call this%der%d2dx2(xtmp2,xtmp1)
         xtmp2 = xtmp1*this%dx**6
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        bulkstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3)
+        bulkstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
@@ -672,13 +661,13 @@ contains
         call this%der%d2dz2(ztmp2,ztmp1)
         ztmp2 = ztmp1*this%dz**6
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        bulkstar = bulkstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3)
+        bulkstar = bulkstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(func,ytmp4)
         call this%der%d2dy2(ytmp4,ytmp5)
         ytmp4 = ytmp5*this%dy**6
-        bulkstar = bulkstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3)
+        bulkstar = bulkstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
 
         ! Now, all ytmps are free to use
         ytmp1 = dwdy-dvdz; ytmp2 = dudz-dwdx; ytmp3 = dvdx-dudy
@@ -742,9 +731,6 @@ contains
     end subroutine
 
     subroutine filter(this,arr,myfil,numtimes)
-        use exits, only: message
-        use reductions, only: P_MAXVAL
-        use decomp_2d, only: nrank
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
         type(filters), target, optional, intent(in) :: myfil
@@ -776,10 +762,6 @@ contains
         lasty = size(this%ybuf,4)
         lastz = size(this%zbuf,4)
 
-        if(nrank == 0) print*, "lastx = ", lastx
-        if(nrank == 0) print*, "lasty = ", lasty
-        if(nrank == 0) print*, "lastz = ", lastz
-
         tmp1_in_x => this%xbuf(:,:,:,lastx)
         tmp2_in_x => this%xbuf(:,:,:,lastx-1)
         tmp_in_y => this%ybuf(:,:,:,lasty)
@@ -788,42 +770,40 @@ contains
        
         
         ! First filter in y
-        call message("Max arr",P_MAXVAL(arr))
         call fil2use%filtery(arr,tmp_in_y)
-        call message("Max arr",P_MAXVAL(tmp_in_y))
         ! Subsequent refilters 
         do idx = 1,times2fil-1
             arr = tmp_in_y
             call fil2use%filtery(arr,tmp_in_y)
         end do
         
-        ! ! Then transpose to x
-        ! call transpose_y_to_x(tmp_in_y,tmp1_in_x,this%decomp)
+        ! Then transpose to x
+        call transpose_y_to_x(tmp_in_y,tmp1_in_x,this%decomp)
 
-        ! ! First filter in x
-        ! call fil2use%filterx(tmp1_in_x,tmp2_in_x)
-        ! ! Subsequent refilters
-        ! do idx = 1,times2fil-1
-        !     tmp1_in_x = tmp2_in_x
-        !     call fil2use%filterx(tmp1_in_x,tmp2_in_x)
-        ! end do 
+        ! First filter in x
+        call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+        ! Subsequent refilters
+        do idx = 1,times2fil-1
+            tmp1_in_x = tmp2_in_x
+            call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+        end do 
 
-        ! ! Now transpose back to y
-        ! call transpose_x_to_y(tmp2_in_x,tmp_in_y,this%decomp)
+        ! Now transpose back to y
+        call transpose_x_to_y(tmp2_in_x,tmp_in_y,this%decomp)
 
-        ! ! Now transpose to z
-        ! call transpose_y_to_z(tmp_in_y,tmp1_in_z,this%decomp)
+        ! Now transpose to z
+        call transpose_y_to_z(tmp_in_y,tmp1_in_z,this%decomp)
 
-        ! !First filter in z
-        ! call fil2use%filterz(tmp1_in_z,tmp2_in_z)
-        ! ! Subsequent refilters
-        ! do idx = 1,times2fil-1
-        !     tmp1_in_z = tmp2_in_z
-        !     call fil2use%filterz(tmp1_in_z,tmp2_in_z)
-        ! end do 
+        !First filter in z
+        call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+        ! Subsequent refilters
+        do idx = 1,times2fil-1
+            tmp1_in_z = tmp2_in_z
+            call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+        end do 
 
-        ! ! Now transpose back to y
-        ! call transpose_z_to_y(tmp2_in_z,arr,this%decomp)
+        ! Now transpose back to y
+        call transpose_z_to_y(tmp2_in_z,arr,this%decomp)
 
         ! Finished
     end subroutine

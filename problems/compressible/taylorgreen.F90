@@ -38,12 +38,10 @@ program taylorgreen
     ! Time advance  
     do while (cgp%tsim < cgp%tstop) 
         call cgp%advance_RK45()
-        cgp%tsim = cgp%tsim + cgp%dt
-        cgp%step = cgp%step + 1
 
-        call message(0,"Time",cgp%tsim)
-        call message(1,"Minimum density",P_MINVAL(cgp%rho))
-        call message(1,"Maximum u velocity",P_MAXVAL(cgp%u))
+        ! call message(0,"Time",cgp%tsim)
+        ! call message(1,"Minimum density",P_MINVAL(cgp%rho))
+        ! call message(1,"Maximum u velocity",P_MAXVAL(cgp%u))
     end do 
         
     ! Destroy everythin before ending
