@@ -79,7 +79,7 @@ module CompressibleGrid
             procedure, private :: getRHS_y
             procedure, private :: getRHS_z
             procedure          :: getSGS
-            procedure, private :: filter
+            procedure          :: filter
             procedure          :: getPhysicalProperties
             procedure, private :: get_tau
             procedure, private :: get_q
@@ -138,6 +138,7 @@ contains
 
         this%tsim = zero
         this%tstop = tstop
+        this%dt = dt
 
         this%step = 0
         this%nsteps = nsteps
@@ -153,6 +154,11 @@ contains
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         call alloc_buffs(this%mesh,3,'y',this%decomp)
+        
+        ! Associate pointers for ease of use
+        this%x    => this%mesh  (:,:,:, 1) 
+        this%y    => this%mesh  (:,:,:, 2) 
+        this%z    => this%mesh  (:,:,:, 3)
 
         ! Generate default mesh: X \in [-1, 1), Y \in [-1, 1), Z \in [-1, 1)
         this%dx = two/nx
@@ -176,17 +182,30 @@ contains
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
 
-   
         ! Allocate fields
         if ( allocated(this%fields) ) deallocate(this%fields) 
         call alloc_buffs(this%fields,10,'y',this%decomp)
         call alloc_buffs(this%Wcnsrv,5,'y',this%decomp)
+        
+        ! Associate pointers for ease of use
+        this%rho  => this%fields(:,:,:, 1) 
+        this%u    => this%fields(:,:,:, 2) 
+        this%v    => this%fields(:,:,:, 3) 
+        this%w    => this%fields(:,:,:, 4)  
+        this%p    => this%fields(:,:,:, 5)  
+        this%T    => this%fields(:,:,:, 6)  
+        this%e    => this%fields(:,:,:, 7)  
+        this%mu   => this%fields(:,:,:, 8)  
+        this%bulk => this%fields(:,:,:, 9)  
+        this%kap  => this%fields(:,:,:,10)   
        
         ! Initialize everything to a constant Zero
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired 
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputdir, this%mesh, this%fields)
+        call this%gas%get_e_from_p(this%rho,this%p,this%e)
+        call this%gas%get_T(this%e,this%T)
 
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
@@ -229,22 +248,6 @@ contains
         call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
         call alloc_buffs(this%ybuf,nbufsy,"y",this%decomp)
         call alloc_buffs(this%zbuf,nbufsz,"z",this%decomp)
-
-        ! Associate pointers for ease of use
-        this%x    => this%mesh  (:,:,:, 1) 
-        this%y    => this%mesh  (:,:,:, 2) 
-        this%z    => this%mesh  (:,:,:, 3)
-
-        this%rho  => this%fields(:,:,:, 1) 
-        this%u    => this%fields(:,:,:, 2) 
-        this%v    => this%fields(:,:,:, 3) 
-        this%w    => this%fields(:,:,:, 4)  
-        this%p    => this%fields(:,:,:, 5)  
-        this%T    => this%fields(:,:,:, 6)  
-        this%e    => this%fields(:,:,:, 7)  
-        this%mu   => this%fields(:,:,:, 8)  
-        this%bulk => this%fields(:,:,:, 9)  
-        this%kap  => this%fields(:,:,:,10)   
 
         this%SkewSymm = SkewSymm
 
@@ -340,7 +343,9 @@ contains
     end subroutine
 
     subroutine advance_RK45(this)
-        use RKCoeffs, only: RK45_steps,RK45_A,RK45_B
+        use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B
+        use exits,      only: message
+        use reductions, only: P_MAXVAL, P_MINVAL
         class(cgrid), target, intent(inout) :: this
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: rhs  ! RHS for conserved variables
@@ -365,21 +370,32 @@ contains
 
             ! Filter the conserved variables
             do i = 1,5
-                call this%filter(this%Wcnsrv(:,:,:,1), this%fil, 1)
+                call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1)
             end do
             
             call this%get_primitive()
+            
+            call message(1,"Sub step",real(isub,rkind))
+            call message(2,"Minimum density",P_MINVAL(this%rho))
+            call message(2,"Maximum u velocity",P_MAXVAL(this%u))
+            call message(2,"Maximum shear viscosity",P_MAXVAL(this%mu))
+            call message(2,"Maximum bulk viscosity",P_MAXVAL(this%bulk))
+            call message(2,"Maximum conductivity",P_MAXVAL(this%kap))
         end do
 
     end subroutine
 
     subroutine get_dt(this)
+        use exits, only: message
         class(cgrid), target, intent(inout) :: this
 
+        ! Use fixed time step if CFL <= 0
         if (this%CFL .LE. zero) then
+            this%dt = real(1.0D-3,rkind)
             return
         end if
 
+        ! Else, use CFL condition (Not implemented yet)
         this%dt = real(1.0D-3,rkind)
 
     end subroutine
@@ -568,6 +584,8 @@ contains
     subroutine getSGS(this,dudx,dudy,dudz,&
                            dvdx,dvdy,dvdz,&
                            dwdx,dwdy,dwdz )
+        use exits, only: message
+        use reductions, only: P_MAXVAL
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         
@@ -592,12 +610,18 @@ contains
                             +             dvdy**2 + half*(dwdy+dvdz)**2 &
                                                   +             dwdz**2 )
         
+        call message("Max strain rate mag.",P_MAXVAL(func))
+        
+        call message("Max mustar",P_MAXVAL(mustar))
+
         ! Get 4th derivative in X
         call transpose_y_to_x(func,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2)
         call this%der%d2dx2(xtmp2,xtmp1)
         xtmp2 = xtmp1*this%dx**6
         call transpose_x_to_y(xtmp2,mustar,this%decomp)
+        
+        call message("Max mustar",P_MAXVAL(mustar))
         
         ! Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
@@ -607,6 +631,8 @@ contains
         call transpose_z_to_y(ztmp2,ytmp1,this%decomp)
         mustar = mustar + ytmp1
         
+        call message("Max mustar",P_MAXVAL(mustar))
+        
         ! Get 4th derivative in Y
         call this%der%d2dy2(func,ytmp1)
         call this%der%d2dy2(ytmp1,ytmp2)
@@ -614,9 +640,13 @@ contains
         mustar = mustar + ytmp1
 
         mustar = this%Cmu*this%rho*abs(mustar)
+        
+        call message("Max mustar",P_MAXVAL(mustar))
 
         ! Filter mustar
         call this%filter(mustar, this%gfil, 2)
+        
+        call message("Max mustar",P_MAXVAL(mustar))
 
         ! -------- Artificial Bulk Viscosity --------
         
@@ -712,6 +742,9 @@ contains
     end subroutine
 
     subroutine filter(this,arr,myfil,numtimes)
+        use exits, only: message
+        use reductions, only: P_MAXVAL
+        use decomp_2d, only: nrank
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
         type(filters), target, optional, intent(in) :: myfil
@@ -743,47 +776,54 @@ contains
         lasty = size(this%ybuf,4)
         lastz = size(this%zbuf,4)
 
+        if(nrank == 0) print*, "lastx = ", lastx
+        if(nrank == 0) print*, "lasty = ", lasty
+        if(nrank == 0) print*, "lastz = ", lastz
+
         tmp1_in_x => this%xbuf(:,:,:,lastx)
         tmp2_in_x => this%xbuf(:,:,:,lastx-1)
         tmp_in_y => this%ybuf(:,:,:,lasty)
         tmp1_in_z => this%zbuf(:,:,:,lastz)
         tmp2_in_z => this%zbuf(:,:,:,lastz-1)
+       
         
         ! First filter in y
+        call message("Max arr",P_MAXVAL(arr))
         call fil2use%filtery(arr,tmp_in_y)
+        call message("Max arr",P_MAXVAL(tmp_in_y))
         ! Subsequent refilters 
         do idx = 1,times2fil-1
             arr = tmp_in_y
             call fil2use%filtery(arr,tmp_in_y)
-        end do 
+        end do
+        
+        ! ! Then transpose to x
+        ! call transpose_y_to_x(tmp_in_y,tmp1_in_x,this%decomp)
 
-        ! Then transpose to x
-        call transpose_y_to_x(tmp_in_y,tmp1_in_x,this%decomp)
+        ! ! First filter in x
+        ! call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+        ! ! Subsequent refilters
+        ! do idx = 1,times2fil-1
+        !     tmp1_in_x = tmp2_in_x
+        !     call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+        ! end do 
 
-        ! First filter in x
-        call fil2use%filterx(tmp1_in_x,tmp2_in_x)
-        ! Subsequent refilters
-        do idx = 1,times2fil-1
-            tmp1_in_x = tmp2_in_x
-            call fil2use%filterx(tmp1_in_x,tmp2_in_x)
-        end do 
+        ! ! Now transpose back to y
+        ! call transpose_x_to_y(tmp2_in_x,tmp_in_y,this%decomp)
 
-        ! Now transpose back to y
-        call transpose_x_to_y(tmp2_in_x,tmp_in_y,this%decomp)
+        ! ! Now transpose to z
+        ! call transpose_y_to_z(tmp_in_y,tmp1_in_z,this%decomp)
 
-        ! Now transpose to z
-        call transpose_y_to_z(tmp_in_y,tmp1_in_z,this%decomp)
+        ! !First filter in z
+        ! call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+        ! ! Subsequent refilters
+        ! do idx = 1,times2fil-1
+        !     tmp1_in_z = tmp2_in_z
+        !     call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+        ! end do 
 
-        !First filter in z
-        call fil2use%filterz(tmp1_in_z,tmp2_in_z)
-        ! Subsequent refilters
-        do idx = 1,times2fil-1
-            tmp1_in_z = tmp2_in_z
-            call fil2use%filterz(tmp1_in_z,tmp2_in_z)
-        end do 
-
-        ! Now transpose back to y
-        call transpose_z_to_y(tmp2_in_z,arr,this%decomp)
+        ! ! Now transpose back to y
+        ! call transpose_z_to_y(tmp2_in_z,arr,this%decomp)
 
         ! Finished
     end subroutine

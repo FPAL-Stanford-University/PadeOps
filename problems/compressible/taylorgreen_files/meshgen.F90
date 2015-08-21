@@ -29,9 +29,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 + i - 1, rkind ) * dx
-                    y(i,j,k) = real( iy1 + j - 1, rkind ) * dy
-                    z(i,j,k) = real( iz1 + k - 1, rkind ) * dz
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx
+                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
+                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
         end do

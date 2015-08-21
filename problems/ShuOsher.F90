@@ -323,6 +323,8 @@ program ShuOsher
     real(rkind) :: t
     integer :: step
 
+    double precision :: t0,t1
+
     logical :: FilterInit = .FALSE.
 
     integer :: i, iounit=17
@@ -387,22 +389,26 @@ program ShuOsher
     ! Integrate in time
     step = 0
     t = zero
-    print '(A6,4(A2,A13))', 'step', '|', 'time', '|', 'min density', '|', 'max velocity', '|', 'max energy'
+    print '(A6,5(A2,A13))', 'step', '|', 'time', '|', 'min density', '|', 'max velocity', '|', 'max energy', '|', 'CPU time'
     do while ( t .LT. (tstop - dt) )
+        call CPU_TIME(t0)
         call RK45(u,dt,der,fil)
+        call CPU_TIME(t1)
         t = t + dt
         step = step + 1
         call GetInternalEnergy(u,dum)
-        print '(I6,4(A2,ES13.5))', step, '|', t, '|', MINVAL(u(:,:,:,1)), '|', MAXVAL(ABS(u(:,:,:,2)/u(:,:,:,1))), '|', MAXVAL(dum)
+        print '(I6,5(A2,ES13.5))', step, '|', t, '|', MINVAL(u(:,:,:,1)), '|', MAXVAL(ABS(u(:,:,:,2)/u(:,:,:,1))), '|', MAXVAL(dum), '|', t1-t0
     end do
     ! Special case for the last time step
     if ( t .LT. tstop ) then
         dt = tstop - t
+        call CPU_TIME(t0)
         call RK45(u,dt,der,fil)
+        call CPU_TIME(t1)
         t = t + dt
         step = step + 1
         call GetInternalEnergy(u,dum)
-        print '(I6,4(A2,ES13.5))', step, '|', t, '|', MINVAL(u(:,:,:,1)), '|', MAXVAL(ABS(u(:,:,:,2)/u(:,:,:,1))), '|', MAXVAL(dum)
+        print '(I6,5(A2,ES13.5))', step, '|', t, '|', MINVAL(u(:,:,:,1)), '|', MAXVAL(ABS(u(:,:,:,2)/u(:,:,:,1))), '|', MAXVAL(dum), '|', t1-t0
     end if
 
     print*, "Done."

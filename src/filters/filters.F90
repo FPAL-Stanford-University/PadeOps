@@ -137,7 +137,7 @@ contains
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing gaussian filter failed in Y ",51)
             end if
-            this%xmethod = 2
+            this%ymethod = 2
         
         case("lstsq") 
             allocate (this%ylsqf)
@@ -145,7 +145,7 @@ contains
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing least squares filter failed in Y ",51)
             end if
-            this%xmethod = 3
+            this%ymethod = 3
         
         case default
             call GracefulExit("Incorrect method select in direction Y", 52)
@@ -167,7 +167,7 @@ contains
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing gaussian filter failed in Z ",51)
             end if
-            this%xmethod = 2
+            this%zmethod = 2
         
         case("lstsq") 
             allocate (this%zlsqf)
@@ -175,7 +175,7 @@ contains
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing least squares filter failed in Z ",51)
             end if
-            this%xmethod = 3
+            this%zmethod = 3
         
         case default
             call GracefulExit("Incorrect method select in direction Z", 52)
