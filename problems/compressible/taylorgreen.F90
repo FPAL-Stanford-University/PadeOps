@@ -3,10 +3,8 @@
 
 program taylorgreen
 
-    use kind_parameters,  only: rkind,clen,stdout
-    use constants,        only: one
-    use decomp_2d,        only: nrank
-    use CompressibleGrid, only: cgrid,u_index
+    use kind_parameters,  only: rkind,clen
+    use CompressibleGrid, only: cgrid
     use GridMod,          only: alloc_buffs, destroy_buffs
     use reductions,       only: P_MAXVAL,P_MINVAL
     use exits,            only: message,GracefulExit
@@ -16,6 +14,8 @@ program taylorgreen
     type(cgrid) :: cgp
     character(len=clen) :: inputfile
     integer :: ierr 
+
+    real(rkind) :: tke0,tke
 
 
     ! Start MPI
@@ -27,21 +27,15 @@ program taylorgreen
     ! Initialize the grid object
     call cgp%init(inputfile)
 
-    ! call message(1,"Maximum u velocity",P_MAXVAL(cgp%u))
-    ! call cgp%filter(cgp%u,cgp%gfil,2)
-    ! call message(1,"Maximum u velocity",P_MAXVAL(cgp%u))
-
-    call message(0,"Time",cgp%tsim)
-    call message(1,"Minimum density",P_MINVAL(cgp%rho))
-    call message(1,"Maximum u velocity",P_MAXVAL(cgp%u))
+    tke0 = P_MAXVAL( cgp%rho * (cgp%u*cgp%u + cgp%v*cgp%v + cgp%w*cgp%w) )
 
     ! Time advance  
     do while (cgp%tsim < cgp%tstop) 
         call cgp%advance_RK45()
+        
+        tke = P_MAXVAL( cgp%rho * (cgp%u*cgp%u + cgp%v*cgp%v + cgp%w*cgp%w) )
 
-        ! call message(0,"Time",cgp%tsim)
-        ! call message(1,"Minimum density",P_MINVAL(cgp%rho))
-        ! call message(1,"Maximum u velocity",P_MAXVAL(cgp%u))
+        call message(2,"TKE",tke/tke0)
     end do 
         
     ! Destroy everythin before ending
