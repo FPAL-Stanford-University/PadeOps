@@ -40,6 +40,7 @@ module GridMod
         real(rkind)                                          :: tstop, dt, tsim, CFL
         integer                                              :: step, nsteps
         integer                                              :: nxp, nyp, nzp
+
         
         logical                                              :: SkewSymm 
     contains

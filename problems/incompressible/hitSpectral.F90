@@ -7,8 +7,8 @@
 program hitSpectral
     use kind_parameters, only: rkind
     use initialization,  only: initialize, finalize  
-    use variables,       only: maxDivergence, NT, fieldsSpec, RESTART, dt, rhs,time,&
-                                    TSTEP_DUMP, TSTEP_RESTART, rhsOld, DealiasMat
+    use variables,       only: maxDivergence, NT, FT, fieldsSpec, fieldsPhys, RESTART, dt, rhs,time,&
+                                    BUFF_REAL, TSTEP_DUMP, TSTEP_RESTART, rhsOld, DealiasMat
 
     use decomp_2d,       only: nrank  
     use timeStep,        only: getDT, WrapUpTstep 
@@ -25,6 +25,7 @@ program hitSpectral
     ! Get time step from CFL (or use DT) 
     ! NOTE: spectral -> physical transform occurs in this step
     call getDT
+
     
     ! First time step after initialization/restart 
     call getrhs
@@ -46,10 +47,10 @@ program hitSpectral
     time = time + dt
     call WrapUpTstep(tidx_start)! Convert u from Spec-> Phys 
     tidx_start = tidx_start + 1
-
+    
+    
     ! Update time step
     call getDT
-
     ! Regular time stepping using Adams Bashforth
     do tidx = tidx_start,NT
         ! Do the actual time advancement

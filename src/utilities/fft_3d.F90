@@ -33,6 +33,7 @@ module fft_3d_stuff
         real(rkind), dimension(:,:,:),allocatable, public :: k3
         real(rkind), dimension(:,:,:),allocatable, public :: kabs_sq
 
+        logical :: allocK = .true. 
         integer(kind=8) :: plan_c2c_fwd_x
         integer(kind=8) :: plan_c2c_bwd_x
         integer(kind=8) :: plan_c2c_fwd_z
@@ -47,7 +48,7 @@ module fft_3d_stuff
         integer(kind=8) :: plan_r2c_z
         
 
-        logical :: fixOddball = .false. 
+        logical :: fixOddball = .true. 
         logical :: initialized = .false.
 
         integer :: fft_plan = FFTW_MEASURE
@@ -70,13 +71,14 @@ module fft_3d_stuff
 
 contains
 
-    function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, exhaustive, fixOddball_) result(ierr)
+    function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, exhaustive, fixOddball_, allocK) result(ierr)
         class(fft_3d), intent(inout) :: this
         integer, intent(in) :: nx_global, ny_global, nz_global
         character(len=1), intent(in) :: base_pencil_
         real(rkind), intent(in) :: dx, dy,dz
         logical, optional :: exhaustive
         logical, optional :: fixOddball_
+        logical, optional :: allocK
         integer :: ierr, i, j, k
         integer, dimension(2) :: dims, dummy_periods, dummy_coords
         real(rkind), dimension(:,:), allocatable :: real_arr_2d
@@ -113,6 +115,10 @@ contains
             this%fixOddball = fixOddball_
         end if 
 
+        if (present(allocK)) then
+            this%allocK = allocK
+        end if 
+        
         ! Generate the physical space decomposition
         call decomp_info_init(nx_global, ny_global, nz_global, this%physical)
        
@@ -282,7 +288,7 @@ contains
             deallocate (cmplx_arr_2d)
 
     
-            allocate (this%f_zhat_in_zD(this%physical%zsz(1),this%physical%zsz(2),this%physical%zsz(3)))
+            allocate (this%f_zhat_in_zD(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)))
             allocate (temp(this%physical%zsz(1),this%physical%zsz(2),this%physical%zsz(3)))
             call dfftw_plan_many_dft_r2c(this%plan_r2c_z, 1, this%physical%zsz(3), &
                  this%physical%zsz(1)*this%physical%zsz(2), temp, this%physical%zsz(3), &
@@ -301,99 +307,104 @@ contains
          this%base_pencil = base_pencil_
          this%normfactor = 1._rkind/(real(nx_global*ny_global*nz_global))
 
-        
-         ! Make wavenumbers
-         allocate (k1_in_x(nx_global           ,this%spectral%xsz(2),this%spectral%xsz(3)))
-         allocate (k2_in_y(this%spectral%ysz(1),ny_global           ,this%spectral%ysz(3)))
-         allocate (k3_in_z(this%spectral%zsz(1),this%spectral%zsz(2),nz_global           ))
+       
+         if (this%allocK) then 
+            ! Make wavenumbers
+            allocate (k1_in_x(nx_global           ,this%spectral%xsz(2),this%spectral%xsz(3)))
+            allocate (k2_in_y(this%spectral%ysz(1),ny_global           ,this%spectral%ysz(3)))
+            allocate (k3_in_z(this%spectral%zsz(1),this%spectral%zsz(2),nz_global           ))
 
-
-         ! Generate full k1
-         do k = 1,this%spectral%xsz(3)
-            do j = 1,this%spectral%xsz(2)
-                k1_in_x(:,j,k) = GetWaveNums(nx_global,dx)
-            end do 
-         end do
-            
-            
-         ! Generate full k2
-         do k = 1,this%spectral%ysz(3)
-            do i = 1,this%spectral%ysz(1)
-                k2_in_y(i,:,k) = GetWaveNums(ny_global,dy)
-            end do 
-         end do
-            
-         ! Generate full k3
-         do j = 1,this%spectral%zsz(2)
-            do i = 1,this%spectral%zsz(1)
-                k3_in_z(i,j,:) = GetWaveNums(nz_global,dz)
+            ! Generate full k1
+            do k = 1,this%spectral%xsz(3)
+               do j = 1,this%spectral%xsz(2)
+                   k1_in_x(:,j,k) = GetWaveNums(nx_global,dx)
+               end do 
             end do
-         end do
             
-            
-         select case (base_pencil_)   
-         case ("y") 
-            ! All wavenumbers are stored in y-decomp
-            allocate(this%k1(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
-            allocate(this%k2(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
-            allocate(this%k3(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
-            allocate(this%kabs_sq(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
-            
-            this%k2 = k2_in_y(1:this%spectral%ysz(1),1:this%spectral%ysz(2),1:this%spectral%ysz(3))
+            ! Generate full k2
+            do k = 1,this%spectral%ysz(3)
+               do i = 1,this%spectral%ysz(1)
+                   k2_in_y(i,:,k) = GetWaveNums(ny_global,dy)
+               end do 
+            end do
+               
+            ! Generate full k3
+            do j = 1,this%spectral%zsz(2)
+               do i = 1,this%spectral%zsz(1)
+                   k3_in_z(i,j,:) = GetWaveNums(nz_global,dz)
+               end do
+            end do
+               
+            if (this%fixOddball) then
+               k1_in_x(nx_global/2+1,:,:) = zero 
+               k2_in_y(:,ny_global/2+1,:) = zero
+               k3_in_z(:,:,nz_global/2+1) = zero
+            end if 
+              
+            select case (base_pencil_)   
+            case ("y") 
+               ! All wavenumbers are stored in y-decomp
+               allocate(this%k1(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
+               allocate(this%k2(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
+               allocate(this%k3(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
+               allocate(this%kabs_sq(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
+               
+               this%k2 = k2_in_y(1:this%spectral%ysz(1),1:this%spectral%ysz(2),1:this%spectral%ysz(3))
 
-            ! Get k1 from x -> y
-            call transpose_x_to_y(k1_in_x,this%k1,this%spectral)
+               ! Get k1 from x -> y
+               call transpose_x_to_y(k1_in_x,this%k1,this%spectral)
 
 
-            ! Get k3 from z -> y
-            call transpose_z_to_y(k3_in_z,this%k3,this%spectral)
+               ! Get k3 from z -> y
+               call transpose_z_to_y(k3_in_z,this%k3,this%spectral)
 
-         case ("x")
-            ! All wavenumbers are stored in z-decomp
-            allocate(this%k1(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)))
-            allocate(this%k2(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)))
-            allocate(this%k3(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)))
-            allocate(this%kabs_sq(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)))
+            case ("x")
+               ! All wavenumbers are stored in z-decomp
+               allocate(this%k1(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)))
+               allocate(this%k2(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)))
+               allocate(this%k3(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)))
+               allocate(this%kabs_sq(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)))
 
-            allocate(temp(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
-            
-            this%k3 = k3_in_z
+               allocate(temp(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
+               
+               this%k3 = k3_in_z
 
-            ! Get k1 from x -> y -> z
-            call transpose_x_to_y(k1_in_x(1:this%spectral%xsz(1),1:this%spectral%xsz(2),1:this%spectral%xsz(3)),temp,this%spectral)
-            call transpose_y_to_z(temp,this%k1,this%spectral)
+               ! Get k1 from x -> y -> z
+               call transpose_x_to_y(k1_in_x(1:this%spectral%xsz(1),1:this%spectral%xsz(2),1:this%spectral%xsz(3)),temp,this%spectral)
+               call transpose_y_to_z(temp,this%k1,this%spectral)
 
-            ! Get k2 from y -> z
-            call transpose_y_to_z(k2_in_y,this%k2,this%spectral)
+               ! Get k2 from y -> z
+               call transpose_y_to_z(k2_in_y,this%k2,this%spectral)
 
-            deallocate (temp)
+               deallocate (temp)
 
-         case ("z")
-            ! All wavenumbers are stored in z-decomp
-            allocate(this%k1(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
-            allocate(this%k2(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
-            allocate(this%k3(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
-            allocate(this%kabs_sq(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
+            case ("z")
+               ! All wavenumbers are stored in z-decomp
+               allocate(this%k1(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
+               allocate(this%k2(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
+               allocate(this%k3(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
+               allocate(this%kabs_sq(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
 
-            allocate(temp(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
-            
-            this%k1 = k1_in_x
+               allocate(temp(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
+               
+               this%k1 = k1_in_x
 
-            ! Get k3 from z -> y -> x
-            call transpose_z_to_y(k3_in_z,temp,this%spectral)
-            call transpose_y_to_x(temp,this%k3,this%spectral)
+               ! Get k3 from z -> y -> x
+               call transpose_z_to_y(k3_in_z,temp,this%spectral)
+               call transpose_y_to_x(temp,this%k3,this%spectral)
 
-            ! Get k2 from y -> x
-            call transpose_y_to_x(k2_in_y,this%k2,this%spectral)
+               ! Get k2 from y -> x
+               call transpose_y_to_x(k2_in_y,this%k2,this%spectral)
 
-            deallocate (temp)
-            
-         end select 
+               deallocate (temp)
+               
+            end select 
 
-         deallocate (k1_in_x, k2_in_y, k3_in_z)
+            deallocate (k1_in_x, k2_in_y, k3_in_z)
 
-         this%kabs_sq = this%k1*this%k1 + this%k2*this%k2 + this%k3*this%k3
+            this%kabs_sq = this%k1*this%k1 + this%k2*this%k2 + this%k3*this%k3
 
+         end if 
          this%initialized = .true.
 
          ierr = 0
@@ -542,9 +553,6 @@ contains
         ! Now take fwd transform in z (c2c, inplace)
         call dfftw_execute_dft(this%plan_c2c_fwd_z, output, output)  
 
-        if (this%fixOddball) then
-            output(:,:,this%spectral%zsz(3)/2+1) = zero
-        end if 
         ! Done 
     end subroutine
     
@@ -561,9 +569,6 @@ contains
         call transpose_z_to_y(this%f_xyzhat_in_zD,this%f_xyhat_in_yD,this%spectral)
 
         ! Then transform in y (c2c, inplace)
-        if (this%fixOddball) then
-            this%f_xyhat_in_yD(:,this%spectral%ysz(2)/2+1,:) = zero
-        end if 
         do k = 1,this%spectral%ysz(3)
             call dfftw_execute_dft(this%plan_c2c_bwd_y, this%f_xyhat_in_yD(:,:,k), this%f_xyhat_in_yD(:,:,k))  
         end do 
@@ -572,9 +577,6 @@ contains
         call transpose_y_to_x(this%f_xyhat_in_yD,this%f_xhat_in_xD,this%spectral)
 
         ! Then transform in x (c2r transform)
-        if (this%fixOddball) then
-            this%f_xhat_in_xD(this%spectral%xsz(1),:,:) = zero
-        end if 
         call dfftw_execute_dft_c2r(this%plan_c2r_x, this%f_xhat_in_xD, output)
 
         ! Normalize the tranform 
@@ -603,10 +605,6 @@ contains
         
         call dfftw_execute_dft(this%plan_c2c_fwd_x, output, output)  
         
-        if (this%fixOddball) then
-            output(this%spectral%xsz(1)/2+1,:,:) = zero
-        end if 
-
     end subroutine
 
 
@@ -620,11 +618,6 @@ contains
 
         call transpose_x_to_y(this%f_xyzhat_in_xD,this%f_zyhat_in_yD,this%spectral)
         
-
-        ! Then transform in y (c2c, inplace)
-        if (this%fixOddball) then
-            this%f_xyhat_in_yD(:,this%spectral%ysz(2)/2+1,:) = zero
-        end if 
         ! The take fwd transform in y (c2c, inplace)
         do k = 1,this%spectral%ysz(3)
             call dfftw_execute_dft(this%plan_c2c_bwd_y, this%f_zyhat_in_yD(:,:,k), this%f_zyhat_in_yD(:,:,k))  
@@ -634,9 +627,6 @@ contains
 
         
         ! Then transform in x (c2r transform)
-        if (this%fixOddball) then
-            this%f_zhat_in_zD(:,:,this%spectral%zsz(1)) = zero
-        end if 
         call dfftw_execute_dft_c2r(this%plan_c2r_z, this%f_zhat_in_zD, output)
 
         ! Normalize the tranform 

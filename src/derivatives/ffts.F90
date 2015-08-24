@@ -197,7 +197,6 @@ contains
 
         f_hat = imi*this%k1d*f_hat
         f_hat(this%split,:,:) = zero
-
         call this%ifftx(f_hat,df)
     
     end subroutine 
@@ -220,8 +219,7 @@ contains
             f_hat = imi*this%k1d(:,:,k)*f_hat
             f_hat(:,this%split) = zero
             call this%iffty(f_hat, df(:,:,k))
-        end do 
-    
+        end do
     end subroutine 
 
     subroutine dd3(this,f, df)

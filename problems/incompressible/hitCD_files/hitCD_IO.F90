@@ -1,13 +1,98 @@
 module hitCD_IO
 
-    use kind_parameters, only: rkind
+    use kind_parameters, only: rkind, clen
     use decomp_2d,       only: decomp_info,nrank,nproc
     use exits,           only: GracefulExit, message
     implicit none
 
     integer, dimension(:,:), allocatable        :: xst,xen,xsz
+    integer :: headerfid = 101
+    integer :: NumDumps 
 
+    integer :: RunIDX = 2
 contains
+
+    subroutine write_matlab_header(OutputDir)
+        use mpi 
+        character(len=clen) :: fname
+        character(len=clen) :: tempname
+        character(len=clen) :: command
+        character(len=*), intent(in) :: OutputDir
+        integer :: ierr, system 
+        logical :: isThere
+        integer :: idx 
+
+        inquire(FILE=trim(OutputDir), exist=isThere)
+        if (nrank == 0) then
+            if (.not. isThere) then
+                print*, "============================================="
+                print*, "WARNING: Output directory not found. Creating a new one."
+                print*, "============================================="
+                command = "mkdir "//trim(OutputDir)
+                ierr = system(trim(command))
+            end if 
+            write(tempname,"(A3,I2.2,A6,A4)") "Run", RunIDX, "HEADER",".txt"
+            fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+
+            open (headerfid, file=trim(fname), FORM='formatted', STATUS='replace',ACTION='write')
+            write(headerfid,*)"========================================================================="
+            write(headerfid,*)"---------------------  Header file for MATLAB ---------------------------"
+            write(headerfid,"(A9,A10,A10,A10,A10,A10,A10)") "PROC", "xst", "xen", "yst", "yen","zst","zen"
+            write(headerfid,*)"-------------------------------------------------------------------------"
+            do idx = 0,nproc-1
+                write(headerfid,"(I8,6I10)") idx, xst(idx,1), xen(idx,1), xst(idx,2), xen(idx,2), xst(idx,3), xen(idx,3)
+            end do 
+            write(headerfid,*)"-------------------------------------------------------------------------"
+            write(headerfid,*)"Dumps made at:"
+        end if
+        numDumps = 0 
+        call mpi_barrier(mpi_comm_world,ierr)
+    end subroutine
+
+    subroutine dumpData4Matlab(tid, outputdir,fieldsinY,decomp) 
+        use GridMod,            only: alloc_buffs
+        use decomp_2d,        only: transpose_y_to_x
+        integer, intent(in) :: tid
+        type(decomp_info), intent(in) :: decomp
+        character(len=clen) :: fname
+        character(len=clen) :: tempname
+        real(rkind), dimension(:,:,:,:), intent(in) :: fieldsinY
+        character(len=*), intent(in) :: OutputDir
+        real(rkind), dimension(:,:,:,:), allocatable :: fieldsPhys
+        integer :: fid = 1234
+
+
+        call alloc_buffs(fieldsPhys,3,'x',decomp)
+        ! transpose from y to x
+        call transpose_y_to_x(fieldsinY(:,:,:,1),fieldsPhys(:,:,:,1),decomp)
+        call transpose_y_to_x(fieldsinY(:,:,:,2),fieldsPhys(:,:,:,2),decomp)
+        call transpose_y_to_x(fieldsinY(:,:,:,3),fieldsPhys(:,:,:,3),decomp)
+
+        write(tempname,"(A3,I2.2,A2,I4.4,A2,I5.5,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_uVEL",".out"
+        fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+        open(fid,file=trim(fname),form='unformatted',status='replace')
+        write(fid) fieldsPhys(:,:,:,1)
+        close(fid)
+
+        write(tempname,"(A3,I2.2,A2,I4.4,A2,I5.5,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_vVEL",".out"
+        fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+        open(fid,file=trim(fname),form='unformatted',status='replace')
+        write(fid) fieldsPhys(:,:,:,2)
+        close(fid)
+
+        write(tempname,"(A3,I2.2,A2,I4.4,A2,I5.5,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_wVEL",".out"
+        fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+        open(fid,file=trim(fname),form='unformatted',status='replace')
+        write(fid) fieldsPhys(:,:,:,3)
+        close(fid)
+        
+        if (nrank == 0) then
+            write(headerfid,"(I8)") tid
+        end if  
+        NumDumps = NumDumps + 1
+
+        deallocate(fieldsPhys)
+    end subroutine 
 
     subroutine getHit3d_uvw(Nx,Ny,Nz,fieldsPhys,gp,dir)
         use kind_parameters, only: mpirkind
@@ -147,7 +232,13 @@ contains
         if (nrank == 0) then
             deallocate(full_Field)
         end if
-
     end subroutine 
 
+    subroutine closeMatlabFile
+        if (nrank == 0) then
+            write(headerfid,*) "--------------------------------------------------------------"
+            write(headerfid,*) "------------------ END OF HEADER FILE ------------------------"
+            close(headerfid)
+        end if 
+    end subroutine 
 end module 

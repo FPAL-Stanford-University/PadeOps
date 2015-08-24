@@ -2,7 +2,7 @@ module poissonMod
     use kind_parameters, only: rkind
     use decomp_2d, only: decomp_info, decomp_info_init, transpose_x_to_y, transpose_y_to_x
     use fft_3d_stuff, only: fft_3d
-    use constants, only: one, zero 
+    use constants, only: one, three, zero 
     use exits, only: GracefulExit 
     implicit none 
 
@@ -76,6 +76,8 @@ contains
         real(rkind), dimension(:,:,:), allocatable :: G1,G2,G3,mk1, mk2, mk3, mkabs_sq
         real(rkind), dimension(:,:,:), pointer :: k1k1, k1k2, k1k3, k2k2, k2k3, k3k3
         integer :: nx, ny, nz
+        real(rkind) :: kmax_sq, kdealias_x, kdealias_y, kdealias_z
+        integer :: i, j, k 
 
         nx = gp%xsz(1)
         ny = gp%ysz(2)
@@ -95,6 +97,10 @@ contains
         allocate(this%k_tensor(size(mk1,1),size(mk1,2),size(mk1,3),6))
        
         select case (method)
+        case ("four")
+            mk1 = this%FT%k1
+            mk2 = this%FT%k2
+            mk3 = this%FT%k3
         case ("cd10")
             mk1 = GetCD10ModWaveNum(this%FT%k1,dx)
             mk2 = GetCD10ModWaveNum(this%FT%k2,dy)
@@ -131,17 +137,38 @@ contains
             deallocate(G1, G2, G3)
         else
             this%Gfilt = GetFilterTransferFunction(sqrt(this%FT%kabs_sq), dx)
-        end if 
+        end if
+
+        
+        !this%Gfilt = 1._rkind
+         
+        kdealias_x = real(floor(Nx/three),rkind) 
+        kdealias_y = real(floor(Ny/three),rkind)
+        kdealias_z = real(floor(Nz/three),rkind)
+      
+        kmax_sq = (min(kdealias_x,kdealias_y,kdealias_z))**2 
+        do k = 1,size(this%Gfilt,3)
+            do j = 1,size(this%Gfilt,2)
+                do i = 1,size(this%Gfilt,1)
+                    if (this%FT%kabs_sq(i,j,k) .gt. kmax_sq) then
+                        this%Gfilt(i,j,k) = zero
+                    else
+                        this%Gfilt(i,j,k) = one
+                    end if 
+                end do 
+            end do
+        end do  
+        
         this%nx_p_out = size(mk1,1) 
         this%ny_p_out = size(mk1,2) 
         this%nz_p_out = size(mk1,3)
 
-        k1k1 = this%Gfilt*(one  - mk1*mk1/mkabs_sq) 
-        k1k2 = this%Gfilt*(zero - mk1*mk2/mkabs_sq)
-        k1k3 = this%Gfilt*(zero - mk1*mk3/mkabs_sq)
-        k2k2 = this%Gfilt*(one  - mk2*mk2/mkabs_sq)
-        k2k3 = this%Gfilt*(zero - mk2*mk3/mkabs_sq)
-        k3k3 = this%Gfilt*(one  - mk3*mk3/mkabs_sq)
+        k1k1 = (this%Gfilt)*(one  - mk1*mk1/mkabs_sq) 
+        k1k2 = (this%Gfilt)*(zero - mk1*mk2/mkabs_sq)
+        k1k3 = (this%Gfilt)*(zero - mk1*mk3/mkabs_sq)
+        k2k2 = (this%Gfilt)*(one  - mk2*mk2/mkabs_sq)
+        k2k3 = (this%Gfilt)*(zero - mk2*mk3/mkabs_sq)
+        k3k3 = (this%Gfilt)*(one  - mk3*mk3/mkabs_sq)
         
         
         deallocate (mk1, mk2, mk3, mkabs_sq)

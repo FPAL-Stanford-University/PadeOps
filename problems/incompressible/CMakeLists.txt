@@ -13,7 +13,7 @@ foreach ( iproblemfile ${iproblems_source_files} )
   
     add_executable( ${iproblemexec} ${iproblemfile} )
     
-    target_link_libraries( ${iproblemexec} IncompressibleOps )
+    target_link_libraries( ${iproblemexec} IncompressibleOps 2decomp_fft fftw3)
 
     if (MPI_Fortran_COMPILER_FLAGS)
         set_target_properties(${iproblemexec} PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")
