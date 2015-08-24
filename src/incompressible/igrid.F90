@@ -457,7 +457,7 @@ contains
     subroutine getRHS(this)
         class(igrid), target, intent(inout) :: this
       
-        !call this%get_duidxj() 
+        call this%get_duidxj() 
         
         call this%CnsrvFrm()
         
@@ -487,8 +487,31 @@ contains
         dvdx => this%duidxj(:,:,:,4); dvdy => this%duidxj(:,:,:,5); dvdz => this%duidxj(:,:,:,6)
         dwdx => this%duidxj(:,:,:,7); dwdy => this%duidxj(:,:,:,8); dwdz => this%duidxj(:,:,:,9)
 
-        ! INCOMPLETE - Do nothing  
 
+        ! STEP 1: Halve the existing RHS
+        this%rhs = half*this%rhs
+
+        ! Step 2: Add the contribution to u equation
+        tmp1 = this%u*dudx
+        tmp1 = tmp1 + this%v*dudy
+        tmp1 = tmp1 + this%w*dudz
+        call spec%fft(tmp1,ctmp1)
+        this%rhs(:,:,:,1) = this%rhs(:,:,:,1) + half*ctmp1
+
+
+        ! Step 3: Add the contribution to v equation
+        tmp1 = this%u*dvdx
+        tmp1 = tmp1 + this%v*dvdy
+        tmp1 = tmp1 + this%w*dvdz
+        call spec%fft(tmp1,ctmp1)
+        this%rhs(:,:,:,2) = this%rhs(:,:,:,2) + half*ctmp1
+
+        ! Step 3: Add the contribution to w equation
+        tmp1 = this%u*dwdx
+        tmp1 = tmp1 + this%v*dwdy
+        tmp1 = tmp1 + this%w*dwdz
+        call spec%fft(tmp1,ctmp1)
+        this%rhs(:,:,:,3) = this%rhs(:,:,:,3) + half*ctmp1
 
         nullify(spec, ctmp1, tmp1)
         nullify( dudx, dudy, dudz, dvdx, dvdy,&
