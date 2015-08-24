@@ -297,7 +297,7 @@ program compare_ffts
     integer ::  ierr, idx   
     real(Rkind) :: dx, dy, dz
     integer :: nrow = 0, ncols = 0
-    integer :: ntimer = 200
+    integer :: ntimer = 1
     real(rkind) :: ttime
 
     directory = "../../data/hit/input"
@@ -333,7 +333,7 @@ program compare_ffts
                             "four", "four", "four" )
     
     ! 2nd kind - use the spectral module
-    call SPECT%init(fft_dir, nx, ny, nz, dx, dy, dz, "four", "2/3rd",3, .true., .true.)
+    call SPECT%init(fft_dir, nx, ny, nz, dx, dy, dz, "four", "2/3rd",3, .true., .true., .true.)
     call SPECT%alloc_r2c_out(buff1_c) 
     call SPECT%alloc_r2c_out(buff2_c) 
     
@@ -352,8 +352,8 @@ program compare_ffts
         call der_ddz(buff1_R,buff2_R,gp)
     end do 
     call toc("DERIVATIVES Mod:",ttime)
-    !call sleep(nrank)
-    !print*, buff2_R(1:2,1,1)
+    call sleep(nrank)
+    print*, buff2_R(1:2,1,1)
     call mpi_barrier(mpi_comm_world,ierr)
 
     ! 3rd kind
@@ -362,8 +362,8 @@ program compare_ffts
         call get_ddz(buff1_R,buff2_R)
     end do 
     call toc("FFT_3d Mod:",ttime)
-    !call sleep(nrank)
-    !print*, buff2_R(1:2,1,1)
+    call sleep(nrank)
+    print*, buff2_R(1:2,1,1)
     call mpi_barrier(mpi_comm_world,ierr)
     
     ! 2nd kind 
@@ -376,8 +376,8 @@ program compare_ffts
         call SPECT%ifft(buff2_C,buff2_R)
     end do 
     call toc("SPECTRAL Mod:",ttime)
-    !call sleep(nrank)
-    !print*, buff2_R(1:2,1,1)
+    call sleep(nrank)
+    print*, buff2_R(1:2,1,1)
     call mpi_barrier(mpi_comm_world,ierr)
    
     

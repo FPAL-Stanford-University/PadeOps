@@ -63,7 +63,7 @@ contains
 
         ! Allocate 3d FFT 
         allocate(FT)
-        ierr = FT%init(Nx,Ny,Nz,"x", dx, dy,dz,FFT_PLAN_EXHAUSTIVE)
+        ierr = FT%init(Nx,Ny,Nz,"x", dx, dy,dz,FFT_PLAN_EXHAUSTIVE,.true.,.true.)
         if (ierr .ne. 0) then
             call GracefulExit("FFT_3d derived could not be initialized", 01)
         end if

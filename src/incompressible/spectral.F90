@@ -178,12 +178,6 @@ contains
         k2_1d = GetWaveNums(ny_g,dy) 
         k3_1d = GetWaveNums(nz_g,dz) 
        
-        if (this%fixOddball) then
-            k1_1d(nx_g/2+1) = zero
-            k2_1d(ny_g/2+1) = zero
-            k3_1d(nz_g/2+1) = zero
-        end if 
-
        
         ! STEP 4: Create temporary array for k1 and transpose it to the appropriate dimension
         allocate(tmp1(spectdecomp%xsz(1),spectdecomp%xsz(2),spectdecomp%xsz(3)))
@@ -316,6 +310,47 @@ contains
         end select
         deallocate(spectdecomp)
 
+        ! STEP 11: Fix Oddball wavenumbers
+        if (this%fixOddball) then 
+            allocate(spectdecomp)
+            select case (rPencil) 
+            case (1) 
+                call decomp_info_init(nx_g/2+1, ny_g, nz_g, spectdecomp) 
+                this%k3(:,:,nz_g/2+1) = zero
+                allocate (tmp1(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
+                allocate (tmp2(spectdecomp%xsz(1),spectdecomp%xsz(2),spectdecomp%xsz(3)))
+                
+                call transpose_z_to_y(this%k2,tmp1,spectdecomp)
+                tmp1(:,ny_g/2+1,:) = zero
+                call transpose_y_to_z(tmp1,this%k2,spectdecomp)
+                
+                call transpose_z_to_y(this%k1,tmp1,spectdecomp)
+                call transpose_y_to_x(tmp1,tmp2,spectdecomp)
+                tmp2(nx_g/2+1,:,:) = zero
+                call transpose_x_to_y(tmp2,tmp1,spectdecomp)
+                call transpose_y_to_z(tmp1,this%k1,spectdecomp)
+            
+            case (3)
+                call decomp_info_init(nx_g, ny_g, nz_g/2+1, spectdecomp) 
+                this%k1(nx_g/2+1,:,:) = zero
+                allocate (tmp1(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
+                allocate (tmp2(spectdecomp%zsz(1),spectdecomp%zsz(2),spectdecomp%zsz(3)))
+                
+                call transpose_x_to_y(this%k2,tmp1,spectdecomp)
+                tmp1(:,ny_g/2+1,:) = zero
+                call transpose_y_to_x(tmp1,this%k2,spectdecomp)
+
+                call transpose_x_to_y(this%k3,tmp1,spectdecomp)
+                call transpose_y_to_z(tmp1,tmp2,spectdecomp)
+                tmp2(:,:,nz_g/2+1) = zero
+                call transpose_z_to_y(tmp2,tmp1,spectdecomp)
+                call transpose_y_to_x(tmp1,this%k3,spectdecomp)
+            end select
+            deallocate (tmp1, tmp2)
+            deallocate(spectdecomp)
+        end if
+
+        ! STEP 12: Print completion message 
         call message("SPECTRAL - Derived Type for the problem generated successfully.")
         call message("===============================================================")
         ! Finished !
@@ -422,7 +457,7 @@ contains
         integer, intent(in) :: Nx, Ny, Nz
         real(rkind), dimension(size(kin,1),size(kin,2),size(kin,3)) :: Tf
 
-        real(rkind) :: kd1, kd2, kd3, kdealias, kdealias_sq
+        real(rkind) :: kd1, kd2, kd3, kdealias
         
         kd1 = real(floor(real(Nx)/three))
         kd2 = real(floor(real(Ny)/three))

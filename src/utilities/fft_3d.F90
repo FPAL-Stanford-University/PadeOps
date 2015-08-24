@@ -48,7 +48,7 @@ module fft_3d_stuff
         integer(kind=8) :: plan_r2c_z
         
 
-        logical :: fixOddball = .true. 
+        logical :: fixOddball = .false. 
         logical :: initialized = .false.
 
         integer :: fft_plan = FFTW_MEASURE

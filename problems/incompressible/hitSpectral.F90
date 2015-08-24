@@ -7,8 +7,8 @@
 program hitSpectral
     use kind_parameters, only: rkind
     use initialization,  only: initialize, finalize  
-    use variables,       only: maxDivergence, NT, FT, fieldsSpec, fieldsPhys, RESTART, dt, rhs,time,&
-                                    BUFF_REAL, TSTEP_DUMP, TSTEP_RESTART, rhsOld, DealiasMat
+    use variables,       only: maxDivergence, NT, fieldsSpec, RESTART, dt, rhs,time,&
+                                     TSTEP_DUMP, TSTEP_RESTART, rhsOld, DealiasMat
 
     use decomp_2d,       only: nrank  
     use timeStep,        only: getDT, WrapUpTstep 
