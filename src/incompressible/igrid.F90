@@ -18,13 +18,15 @@ module IncompressibleGrid
     integer, parameter :: u_index      = 1
     integer, parameter :: v_index      = 2
     integer, parameter :: w_index      = 3
-    integer, parameter :: nut_index     = 4
+    integer, parameter :: nut_index    = 4
 
     integer :: numRealBuffs = 2
     integer :: numCmplxBuffs = 2
     character(len=1) :: base_pencil = "x" ! Physical space pencil
     integer :: numFields = 4              ! Number of physical fields to store
     integer :: numT_RHS = 2               ! Number of RHS to store (time steps)
+
+    logical :: fixOddball = .TRUE. 
 
     type, extends(grid) :: igrid
         ! Spectral realization of the fields 
@@ -73,6 +75,10 @@ module IncompressibleGrid
         
         complex(rkind), dimension(:,:,:,:), pointer :: rhs, rhs_old
 
+        integer :: runID 
+
+
+        logical :: use2DecompFFT
         contains
             procedure :: init
             procedure :: destroy
@@ -115,15 +121,20 @@ contains
         real(rkind) :: tstop = one
         real(rkind) :: CFL = -one
         real(rkind) :: nu = 0.02_rkind
-
+        integer :: runID = 0
+        integer :: t_dataDump = 99999
+        integer :: t_restartDump = 99999
+        logical :: ViscConsrv = .TRUE. 
+        logical :: use2DecompFFT = .TRUE. 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
                                   periodicx, periodicy, periodicz, &
                          derivative_x, derivative_y, derivative_z, &
                                      filter_x, filter_y, filter_z, &
                                                        prow, pcol, &
-                                                         SkewSymm
-        namelist /IINPUT/  nu, useSGS
+                                             ViscConsrv, SkewSymm, &
+                                        t_restartDump, t_dataDump
+        namelist /IINPUT/  nu, useSGS, runID , use2DecompFFT
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -137,6 +148,8 @@ contains
         this%nz = nz
 
         this%SkewSymm = SkewSymm 
+        this%ViscConsrv = ViscConsrv
+        this%use2DecompFFT = use2DecompFFT
         this%tsim = zero
         this%tstop = tstop
         this%CFL = CFL
@@ -145,6 +158,8 @@ contains
         this%useSGS = useSGS
         this%step = 0
         this%nsteps = nsteps
+        this%t_dataDump = t_dataDump
+        this%t_restartDump = t_restartDump
 
         this%derivative_x = derivative_x
         this%derivative_y = derivative_y
@@ -164,6 +179,8 @@ contains
         this%filter_y = filter_y    
         this%filter_z = filter_z  
 
+        this%runID = runID
+
         if (.not. periodicx) then
             call GracefulExit("Currently only Periodic BC is supported in x direction",102)
         end if 
@@ -175,7 +192,8 @@ contains
         this%isZperiodic = periodicz
 
 
-        ! STEP 2: INITIALIZE MAIN (PHYSICAL SPACE) DECOMPOSITION 
+        ! STEP 2: INITIALIZE MAIN (PHYSICAL SPACE) DECOMPOSITION
+        allocate (this%decomp) 
         call decomp_2d_init(nx, ny, nz, prow, pcol)
         call get_decomp_info(this%decomp)
        
@@ -192,7 +210,7 @@ contains
         if (this%isZperiodic) then 
             allocate(this%spect)
             call this%spect%init(base_pencil, nx, ny, nz, this%dx, this%dy, this%dz, &
-                    this%derivative_x, this%filter_x)
+                    this%derivative_x, this%filter_x, 3, fixOddball,this%use2DecompFFT, this%ViscConsrv)
         else
             call GracefulExit("CODE INCOMPLETE: Code for non-periodic Z is not &
             & yet complete",102)
@@ -243,6 +261,7 @@ contains
 
 
         ! STEP 8: INITIALIZE DERIVATIVE DERIVED TYPE (USED FOR POST-PROCESSING) 
+        allocate (this%der)
         call this%der%init(                           this%decomp, &
                            this%dx,       this%dy,        this%dz, &
                          periodicx,     periodicy,      periodicz, &
@@ -294,20 +313,35 @@ contains
 
     subroutine destroy(this)
         class(igrid), intent(inout) :: this
-        integer :: ierr 
-        if (allocated(this%mesh)) deallocate(this%mesh) 
-        if (allocated(this%fields)) deallocate(this%fields) 
         call this%der%destroy()
         call this%spect%destroy()
         call this%poiss%destroy() 
         deallocate (this%poiss)
         deallocate (this%spect)
-        call decomp_2d_finalize
-
-        call mpi_barrier(mpi_comm_world,ierr) 
-        if (nrank == 0) then
-            print*, "Only decomp left"
-        end if 
+        nullify( this%x )    
+        nullify( this%y )
+        nullify( this%z )
+        nullify( this%u )
+        nullify( this%v )
+        nullify( this%w )
+        nullify( this%nut )
+        nullify( this%uhat )
+        nullify( this%vhat )
+        nullify( this%what )
+        nullify( this%Rtmp1)
+        nullify( this%Rtmp2)
+        nullify( this%Ctmp1)
+        nullify( this%Ctmp2)
+        if (allocated(this%mesh))   deallocate(this%mesh) 
+        if (allocated(this%fields)) deallocate(this%fields) 
+        deallocate(this%der)
+        deallocate(this%decomp)
+        if (allocated(this%xbuf_r)) deallocate(this%xbuf_r)
+        if (allocated(this%ybuf_r)) deallocate(this%ybuf_r)
+        if (allocated(this%zbuf_r)) deallocate(this%zbuf_r)
+        if (allocated(this%xbuf_c)) deallocate(this%xbuf_c)
+        if (allocated(this%ybuf_c)) deallocate(this%ybuf_c)
+        if (allocated(this%zbuf_c)) deallocate(this%zbuf_c)
     end subroutine
 
     subroutine gradient(this, f, dfdx, dfdy, dfdz)
@@ -456,9 +490,11 @@ contains
 
     subroutine getRHS(this)
         class(igrid), target, intent(inout) :: this
-      
-        call this%get_duidxj() 
-        
+
+        if ((this%useSGS) .or. (this%SkewSymm)) then 
+            call this%get_duidxj() 
+        end if 
+
         call this%CnsrvFrm()
         
         if (this%SkewSymm) then
@@ -581,7 +617,7 @@ contains
         spec => this%spect
 
         ! STEP 1: Compute the laplacian multiplier
-        ctmp1 =  this%nu0 * spec%k_der2
+        ctmp1 =  this%nu0 * ( spec%k1_der2 + spec%k2_der2  + spec%k3_der2 )
 
         ! STEP 2: Update the u equation
         ctmp2 = ctmp1*this%uhat 

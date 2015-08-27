@@ -9,19 +9,26 @@ module hitCD_IO
     integer :: headerfid = 101
     integer :: NumDumps 
 
-    integer :: RunIDX = 2
 contains
 
-    subroutine write_matlab_header(OutputDir)
+    subroutine start_io(gp)
+        use IncompressibleGrid, only: igrid
         use mpi 
+        
+        class(igrid), target, intent(in) :: gp 
         character(len=clen) :: fname
         character(len=clen) :: tempname
         character(len=clen) :: command
-        character(len=*), intent(in) :: OutputDir
+        character(len=clen) :: OutputDir
         integer :: ierr, system 
+        integer :: runIDX 
         logical :: isThere
         integer :: idx 
 
+
+        OutputDir = gp%outputdir
+        runIDX = gp%runID
+        
         inquire(FILE=trim(OutputDir), exist=isThere)
         if (nrank == 0) then
             if (.not. isThere) then
@@ -31,7 +38,7 @@ contains
                 command = "mkdir "//trim(OutputDir)
                 ierr = system(trim(command))
             end if 
-            write(tempname,"(A3,I2.2,A6,A4)") "Run", RunIDX, "HEADER",".txt"
+            write(tempname,"(A3,I2.2,A6,A4)") "Run", runIDX, "HEADER",".txt"
             fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
 
             open (headerfid, file=trim(fname), FORM='formatted', STATUS='replace',ACTION='write')
@@ -47,26 +54,28 @@ contains
         end if
         numDumps = 0 
         call mpi_barrier(mpi_comm_world,ierr)
+
+        ! Now perform the initializing data dump
+        call dumpData4Matlab(gp)
     end subroutine
 
-    subroutine dumpData4Matlab(tid, outputdir,fieldsinY,decomp) 
+    subroutine dumpData4Matlab(gp)
+        use IncompressibleGrid, only: igrid
         use GridMod,            only: alloc_buffs
         use decomp_2d,        only: transpose_y_to_x
-        integer, intent(in) :: tid
-        type(decomp_info), intent(in) :: decomp
+        
+        class(igrid), target, intent(in) :: gp 
+        integer :: tid, runIDX
         character(len=clen) :: fname
         character(len=clen) :: tempname
-        real(rkind), dimension(:,:,:,:), intent(in) :: fieldsinY
-        character(len=*), intent(in) :: OutputDir
-        real(rkind), dimension(:,:,:,:), allocatable :: fieldsPhys
+        character(len=clen) :: OutputDir
+        real(rkind), dimension(:,:,:,:), pointer :: fieldsPhys
         integer :: fid = 1234
 
-
-        call alloc_buffs(fieldsPhys,3,'x',decomp)
-        ! transpose from y to x
-        call transpose_y_to_x(fieldsinY(:,:,:,1),fieldsPhys(:,:,:,1),decomp)
-        call transpose_y_to_x(fieldsinY(:,:,:,2),fieldsPhys(:,:,:,2),decomp)
-        call transpose_y_to_x(fieldsinY(:,:,:,3),fieldsPhys(:,:,:,3),decomp)
+        OutputDir = gp%outputdir
+        fieldsPhys => gp%fields
+        runIDX = gp%runID
+        tid = gp%step 
 
         write(tempname,"(A3,I2.2,A2,I4.4,A2,I5.5,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_uVEL",".out"
         fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
@@ -91,12 +100,13 @@ contains
         end if  
         NumDumps = NumDumps + 1
 
-        deallocate(fieldsPhys)
+        nullify(fieldsPhys)
     end subroutine 
 
     subroutine getHit3d_uvw(Nx,Ny,Nz,fieldsPhys,gp,dir)
         use kind_parameters, only: mpirkind
         use mpi
+        
         class( decomp_info ), intent(in)                  :: gp
         integer, intent(in)                               :: Nx,Ny,Nz
         real(rkind), dimension(:,:,:,:), intent(inout)    :: fieldsPhys
@@ -234,7 +244,7 @@ contains
         end if
     end subroutine 
 
-    subroutine closeMatlabFile
+    subroutine finalize_io
         if (nrank == 0) then
             write(headerfid,*) "--------------------------------------------------------------"
             write(headerfid,*) "------------------ END OF HEADER FILE ------------------------"

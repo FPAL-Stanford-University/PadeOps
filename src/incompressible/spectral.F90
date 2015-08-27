@@ -15,7 +15,7 @@ module spectralMod
 
     type :: spectral
         private
-        real(rkind), dimension(:,:,:), allocatable, public :: k1, k2, k3, kabs_sq, k_der2, one_by_kabs_sq
+        real(rkind), dimension(:,:,:), allocatable, public :: k1, k2, k3, kabs_sq, k1_der2, k2_der2, k3_der2, one_by_kabs_sq
         integer, dimension(3) :: fft_start, fft_end, fft_size
         real(rkind), dimension(:,:,:), allocatable, public :: Gdealias
         integer :: rPencil ! Pencil dimension for the real input
@@ -165,8 +165,12 @@ contains
         allocate (this%k3(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
         if (allocated(this%kabs_sq)) deallocate(this%kabs_sq)
         allocate (this%kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-        if (allocated(this%k_der2)) deallocate(this%k_der2)
-        allocate (this%k_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+        if (allocated(this%k1_der2)) deallocate(this%k1_der2)
+        allocate (this%k1_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+        if (allocated(this%k2_der2)) deallocate(this%k2_der2)
+        allocate (this%k2_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+        if (allocated(this%k3_der2)) deallocate(this%k3_der2)
+        allocate (this%k3_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
         if (allocated(this%one_by_kabs_sq)) deallocate(this%one_by_kabs_sq)
         allocate(this%one_by_kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
         if (allocated(this%Gdealias)) deallocate(this%Gdealias)
@@ -248,6 +252,8 @@ contains
             tmp1 = GetCF90TransferFunction(this%k3,dz)
             this%Gdealias = this%Gdealias*tmp1
             deallocate(tmp1)
+        case ("none")
+            this%Gdealias = one 
         case default
             call GracefulExit("The dealiasing filter specified is incorrect.",104)
         end select
@@ -289,9 +295,13 @@ contains
         end do 
         
         if (this%useConsrvD2) then
-            this%k_der2 = this%kabs_sq
+            this%k1_der2 = this%k1**2
+            this%k2_der2 = this%k2**2
+            this%k3_der2 = this%k3**2
         else
-            call GracefulExit("CODE INCOMPLETE: Non-conservative second derivative is not available right now",123)
+            this%k1_der2 = GetCD10D2ModWaveNum(this%k1,dx)
+            this%k2_der2 = GetCD10D2ModWaveNum(this%k2,dy)
+            this%k3_der2 = GetCD10D2ModWaveNum(this%k3,dz)
         end if  
         
         ! STEP 10: Determine the sizes of the fft and ifft input arrays
@@ -388,7 +398,7 @@ contains
             deallocate(this%FT)
         end if 
         deallocate(this%Gdealias)
-        deallocate( this%k1, this%k2, this%k3, this%kabs_sq, this%k_der2, this%one_by_kabs_sq)
+        deallocate( this%k1, this%k2, this%k3, this%kabs_sq, this%k1_der2, this%k2_der2, this%k3_der2, this%one_by_kabs_sq)
         this%isInitialized = .false. 
     end subroutine 
 
@@ -463,7 +473,7 @@ contains
         kd2 = real(floor(real(Ny)/three))
         kd3 = real(floor(real(Nz)/three))
         kdealias = min(kd1,kd2,kd3)
-        where (kin .gt. kdealias**2) 
+        where (kin .ge. kdealias**2) 
             Tf = zero
         elsewhere
             Tf = one
@@ -496,7 +506,30 @@ contains
         kp = kp/dx 
 
     end function
-    
+   
+    pure elemental function GetCD10D2ModWaveNum(kin,dx) result(wpp)
+        use constants, only: two
+        use cd10stuff, only: alpha10d2, beta10d2, a10d2, b10d2, c10d2
+        real(rkind), intent(in) :: kin,dx
+        real(rkind) :: w
+        real(rkind) :: wpp
+        real(rkind) :: a, b, c, alpha, beta
+
+        alpha = alpha10d2
+        beta = beta10d2
+        a = a10d2*1._rkind
+        b = b10d2*4._rkind
+        c = c10d2*9._rkind
+
+        w = kin*dx
+        wpp = (2._rkind*a*(1._rkind-cos(w)) + (b/2._rkind)*(1._rkind - cos(2._rkind*w)) &
+        + (2*c/9)*(1._rkind - cos(3._rkind*w)))/(1._rkind + 2._rkind*alpha*cos(w) + 2*beta*cos(2*w))
+  
+        wpp = wpp/dx
+
+    end function
+
+
     pure elemental function GetCD06ModWaveNum(kin,dx) result(kp)
         use constants, only: two
         use cd06stuff, only: alpha06d1, a06d1, b06d1
@@ -511,20 +544,20 @@ contains
     end function
     
     pure function GetWaveNums(nx,dx) result(k)
-            use constants, only: pi, two
-            integer, intent(in) :: nx
-            real(rkind), intent(in) :: dx
-            real(rkind), dimension(nx) :: k
+        use constants, only: pi, two
+        integer, intent(in) :: nx
+        real(rkind), intent(in) :: dx
+        real(rkind), dimension(nx) :: k
 
-            integer :: i,dummy
+        integer :: i,dummy
 
-            dummy = nx - MOD(nx,2)
+        dummy = nx - MOD(nx,2)
 
-            do i = 1,nx
-                k(i) = ( -pi + (i-1)*two*pi/real(dummy,rkind) ) / dx
-            end do
+        do i = 1,nx
+            k(i) = ( -pi + (i-1)*two*pi/real(dummy,rkind) ) / dx
+        end do
 
-            k = ifftshift(k)
+        k = ifftshift(k)
 
     end function
     

@@ -20,19 +20,19 @@ module GridMod
         logical                                              :: periodicy         ! Periodic in Y?
         logical                                              :: periodicz         ! Periodic in Z?
 
-        type( derivatives )                                  :: der               ! Derivative object
+        type( derivatives ), allocatable                     :: der               ! Derivative object
         character(len=clen)                                  :: derivative_x      ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
         character(len=clen)                                  :: derivative_y      ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
         character(len=clen)                                  :: derivative_z      ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
 
-        type( filters )                                      :: fil
+        type( filters )    , allocatable                     :: fil
         character(len=clen)                                  :: filter_x          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
         character(len=clen)                                  :: filter_y          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
         character(len=clen)                                  :: filter_z          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
 
         character(len=clen)                                  :: outputdir         ! Directory for output files
 
-        type( decomp_info )                                  :: decomp
+        type( decomp_info ), allocatable                     :: decomp
 
         real(rkind), dimension(:,:,:,:), allocatable         :: mesh
         real(rkind), dimension(:,:,:,:), allocatable         :: fields
@@ -41,8 +41,10 @@ module GridMod
         integer                                              :: step, nsteps
         integer                                              :: nxp, nyp, nzp
 
+        integer                                              :: t_dataDump, t_restartDump
         
         logical                                              :: SkewSymm 
+        logical                                              :: ViscConsrv         ! Is the viscous term being computed using the conservative formulation?  
     contains
 
         procedure(init_interface),    deferred :: init

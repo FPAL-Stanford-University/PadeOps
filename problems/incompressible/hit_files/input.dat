@@ -1,7 +1,7 @@
 &INPUT
 
-inputdir  =  "/home/aditya90/Codes/PadeOps/data/hit/input"       ! Directory for input files
-outputdir  = "/home/aditya90/Codes/PadeOps/data/hit/output"      ! Directory for output files
+inputdir  =  "/home/aditya90/Codes/PadeOps/data/hit/input/128"       ! Directory for input files
+outputdir  = "/home/aditya90/Codes/PadeOps/data/hit/output/128"      ! Directory for output files
 
 nx = 128                  ! Number of points in X
 ny = 128                  ! Number of points in Y
@@ -20,13 +20,14 @@ derivative_x = "four"     ! What derivative to use in X: "cd10", "cd06", "four",
 derivative_y = "four"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
 derivative_z = "four"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
 
-filter_x = "2/3rd"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "2/3rd"
-filter_y = "2/3rd"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "2/3rd"
-filter_z = "2/3rd"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "2/3rd"
+filter_x = "2/3rd"         ! What dealiasing filter to use in X: "cf90", "gaussian", "lstsq", "2/3rd"
+filter_y = "2/3rd"         ! What dealiasing filter to use in X: "cf90", "gaussian", "lstsq", "2/3rd"
+filter_z = "2/3rd"         ! What dealiasing filter to use in X: "cf90", "gaussian", "lstsq", "2/3rd"
 
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-
+t_restartDump = 999999    ! Number of timesteps before restart file is written 
+t_dataDump    = 100       ! Number of timesteps before data dump is performed 
 /
 
 &CINPUT
@@ -35,5 +36,7 @@ Rgas = 1.D0               ! Ratio of specific heats
 /
 
 &IINPUT
-nu = 0.02D0               ! Kinematic viscosity
+nu = 0.005D0               ! Kinematic viscosity
+runID = 1                 ! Run ID (for output file name)
+useSGS = .FALSE.          ! LES mode or DNS mode? 
 /
