@@ -42,7 +42,7 @@ module CompressibleGrid
 
     type, extends(grid) :: cgrid
        
-        type(filters) :: gfil
+        type(filters),  allocatable :: gfil
         type(idealgas), allocatable :: gas
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
@@ -147,6 +147,10 @@ contains
         this%Cbeta = Cbeta
         this%Ckap = Ckap
 
+        ! Allocate decomp
+        if ( allocated(this%decomp) ) deallocate(this%decomp)
+        allocate(this%decomp)
+        
         ! Initialize decomp
         call decomp_2d_init(nx, ny, nz, prow, pcol)
         call get_decomp_info(this%decomp)
@@ -176,6 +180,8 @@ contains
             end do 
         end do  
 
+        ! Allocate gas
+        if ( allocated(this%gas) ) deallocate(this%gas)
         allocate(this%gas)
         call this%gas%init(gam,Rgas)
 
@@ -222,6 +228,10 @@ contains
         this%filter_y = filter_y    
         this%filter_z = filter_z  
         
+        ! Allocate der
+        if ( allocated(this%der) ) deallocate(this%der)
+        allocate(this%der)
+
         ! Initialize derivatives 
         call this%der%init(                           this%decomp, &
                            this%dx,       this%dy,        this%dz, &
@@ -230,6 +240,12 @@ contains
                            .false.,       .false.,        .false., &
                            .false.)      
 
+        ! Allocate fil and gfil
+        if ( allocated(this%fil) ) deallocate(this%fil)
+        allocate(this%fil)
+        if ( allocated(this%gfil) ) deallocate(this%gfil)
+        allocate(this%gfil)
+        
         ! Initialize filters
         call this%fil%init(                           this%decomp, &
                          periodicx,     periodicy,      periodicz, &
@@ -259,15 +275,26 @@ contains
 
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
+        
         call this%der%destroy()
+        if (allocated(this%der)) deallocate(this%der) 
+        
         call this%fil%destroy()
+        if (allocated(this%fil)) deallocate(this%fil) 
+        
         call this%gfil%destroy()
+        if (allocated(this%gfil)) deallocate(this%gfil) 
+        
         call destroy_buffs(this%xbuf)
         call destroy_buffs(this%ybuf)
         call destroy_buffs(this%zbuf)
+
         if (allocated(this%gas)) deallocate(this%gas) 
+        
         if (allocated(this%Wcnsrv)) deallocate(this%Wcnsrv) 
+        
         call decomp_2d_finalize
+        if (allocated(this%decomp)) deallocate(this%decomp) 
 
     end subroutine
 

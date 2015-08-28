@@ -20,6 +20,11 @@ set(DECOMP_PATH $ENV{DECOMP_PATH})
 set(DECOMP_LIBRARY_PATH "${DECOMP_PATH}/lib")
 set(DECOMP_INCLUDE_PATH "${DECOMP_PATH}/include")
 
+# Where to look for Lib_VTK_IO
+set(VTK_IO_PATH $ENV{VTK_IO_PATH})
+set(VTK_IO_LIBRARY_PATH "${VTK_IO_PATH}/lib")
+set(VTK_IO_INCLUDE_PATH "${VTK_IO_PATH}/modules")
+
 set(CMAKE_Fortran_COMPILER_ID $ENV{COMPILER_ID})
 
 # Intel compiler suite
