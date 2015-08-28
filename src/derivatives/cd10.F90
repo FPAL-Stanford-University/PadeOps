@@ -9,8 +9,8 @@ module cd10stuff
     implicit none
 
     private
-    public :: cd10, alpha10d1, beta10d1, a10d1, b10d1, c10d1
-    
+    public :: cd10, alpha10d1, beta10d1, a10d1, b10d1, c10d1, &
+                    & alpha10d2, beta10d2, a10d2, b10d2, c10d2
     ! 10th order first derivative coefficients (See Lele (1992) for explanation)
     real(rkind), parameter :: alpha10d1=  1.0_rkind /  2.0_rkind
     real(rkind), parameter :: beta10d1 =  1.0_rkind / 20.0_rkind

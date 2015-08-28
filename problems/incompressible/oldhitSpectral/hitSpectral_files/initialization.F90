@@ -5,7 +5,7 @@ module initialization
     use variables
     use decomp_2d
     use io, only: get_input, getHit3d_uvw, write_matlab_header,closeMatlabFile,dumpData4Matlab 
-    use constants, only: zero, one, two, three, pi 
+    use constants, only: zero, one, two, three, four,pi, imi 
     use spectralOps, only: divergence 
     
     implicit none
@@ -24,7 +24,7 @@ contains
         character(len=64) :: tmp
         !integer :: dims(2),dummy_periods(2), dummy_coords(2)
         real(rkind) :: kmax_sq
-        logical, parameter :: fixOddball = .true. 
+        logical, parameter :: fixOddball = .false. 
         integer :: i, j, k 
 
         ! Begin MPI 
@@ -44,10 +44,10 @@ contains
         dy = two*pi/Ny
         dz = two*pi/Nz
 
-        kdealias_x = Nx/three
-        kdealias_y = Ny/three
-        kdealias_z = Nz/three
-      
+        kdealias_x = real(floor(Nx/three),rkind) 
+        kdealias_y = real(floor(Ny/three),rkind)
+        kdealias_z = real(floor(Nz/three),rkind)
+
         nu = one/REY
 
         kmax_sq = (min(kdealias_x,kdealias_y,kdealias_z))**2 
@@ -63,7 +63,7 @@ contains
 
         ! Allocate 3d FFT 
         allocate(FT)
-        ierr = FT%init(Nx,Ny,Nz,"x", dx, dy,dz,FFT_PLAN_EXHAUSTIVE , fixOddball)
+        ierr = FT%init(Nx,Ny,Nz,"x", dx, dy,dz,FFT_PLAN_EXHAUSTIVE,.true.,.true.)
         if (ierr .ne. 0) then
             call GracefulExit("FFT_3d derived could not be initialized", 01)
         end if
@@ -188,9 +188,7 @@ contains
        call FT%ifft3_z2x(fieldsSpec(:,:,:,1),fieldsPhys(:,:,:,1))
        call FT%ifft3_z2x(fieldsSpec(:,:,:,2),fieldsPhys(:,:,:,2))
        call FT%ifft3_z2x(fieldsSpec(:,:,:,3),fieldsPhys(:,:,:,3))
- 
-      
-
+       
        if (nrank == 0) then
             write(*,"(A40,E13.4)"), "Maximum divergence of the initial field:", MaxDivergence
             write(*,"(A40,E13.4)"), "Time step:", dt
@@ -199,6 +197,8 @@ contains
         call write_matlab_header
         ! Create first dump for restart/initialization
         call dumpData4Matlab(tidx)
+
+
     end subroutine 
 
     subroutine finalize

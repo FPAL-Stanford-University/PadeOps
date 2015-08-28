@@ -13,6 +13,7 @@ contains
     subroutine getRHS
         use variables, only: nu, rhs, fieldsPhys,fieldsSpec, Buff_real, Buff_cmplx
 
+        rhs = 0._rkind
         ! Step 1: Compute the 6 Advection terms and add to RHS
         ! a) uu
         Buff_real = fieldsPhys(:,:,:,1)*fieldsPhys(:,:,:,1)
@@ -35,7 +36,7 @@ contains
         Buff_real = fieldsPhys(:,:,:,2)*fieldsPhys(:,:,:,2)
         call FT%fft3_x2z(Buff_real,Buff_cmplx)
         rhs(:,:,:,2) = rhs(:,:,:,2) + FT%k2*Buff_cmplx(:,:,:)
-      
+        
         ! e) vw
         Buff_real = fieldsPhys(:,:,:,2)*fieldsPhys(:,:,:,3)
         call FT%fft3_x2z(Buff_real,Buff_cmplx)

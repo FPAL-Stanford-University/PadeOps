@@ -1,0 +1,42 @@
+&INPUT
+
+inputdir  =  "/home/aditya90/Codes/PadeOps/data/hit/input/128"       ! Directory for input files
+outputdir  = "/home/aditya90/Codes/PadeOps/data/hit/output/128"      ! Directory for output files
+
+nx = 128                  ! Number of points in X
+ny = 128                  ! Number of points in Y
+nz = 128                  ! Number of points in Z
+
+dt = 1.0D-3               ! Fixed time step value (Set to negative to disable)
+tstop = 1.D0              ! Physical time to stop the simulation
+CFL = -1.D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
+
+periodicx = .TRUE.        ! Periodic in X?
+periodicy = .TRUE.        ! Periodic in Y?
+periodicz = .TRUE.        ! Periodic in Z?
+
+derivative_x = "four"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "four"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "four"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
+
+filter_x = "2/3rd"         ! What dealiasing filter to use in X: "cf90", "gaussian", "lstsq", "2/3rd"
+filter_y = "2/3rd"         ! What dealiasing filter to use in X: "cf90", "gaussian", "lstsq", "2/3rd"
+filter_z = "2/3rd"         ! What dealiasing filter to use in X: "cf90", "gaussian", "lstsq", "2/3rd"
+
+prow = 4                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol = 2                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+t_restartDump = 999999    ! Number of timesteps before restart file is written 
+t_dataDump    = 100       ! Number of timesteps before data dump is performed 
+/
+
+&CINPUT
+gam  = 1.4D0              ! Ratio of specific heats
+Rgas = 1.D0               ! Ratio of specific heats
+/
+
+&IINPUT
+nu = 0.005D0               ! Kinematic viscosity
+runID = 1                 ! Run ID (for output file name)
+useSGS = .FALSE.          ! LES mode or DNS mode? 
+/

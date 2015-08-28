@@ -375,6 +375,9 @@ program shocktube
     end do
     CLOSE(iounit)
 
+    call der%destroy()
+    call fil%destroy()
+    call gfil%destroy()
     deallocate( x )
     deallocate( dum )
     deallocate(   mu )

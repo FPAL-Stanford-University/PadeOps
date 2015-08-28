@@ -10,9 +10,9 @@ FALSE                             | RESTART               | Restart run from the
 -------------------------------------------------------------------------------------
 TRUE                              | useHit3dinit          | Use HIT3d initial conditions
 -------------------------------------------------------------------------------------
-../../data/hitInputData/          | HIT3dinitDir          | Input directory for HIT3d generated data 
+../../../data/hit/input/          | HIT3dinitDir          | Input directory for HIT3d generated data 
 -------------------------------------------------------------------------------------
-../../data/hitOutputData/         | RESTARTDir            | Restart File I/O Directory 
+../../../data/hit/output/          | RESTARTDir            | Restart File I/O Directory 
 -------------------------------------------------------------------------------------
 500                                | NT                    | Number of time steps 
 -------------------------------------------------------------------------------------
@@ -27,8 +27,8 @@ FALSE                             | useCFL                | Logical for variable
 1                                 | Dealias               | 0==None, 1==Spherical(2/3rd), 2==Box(2/3rd)
 -------------------------------------------------------------------------------------
 100                               | TSTEP_DUMP            | # timesteps between each data dump
--------------------------------------------------------------------------------------
-../../data/hitOutputData/         | OutputDIR             | Output directory for Data dumps
+------------------------------------------------------------------------------------
+../../../data/hit/output/          | OutputDIR             | Output directory for Data dumps
 -------------------------------------------------------------------------------------
 200                               | TSTEP_RESTART         | # timesteps between writing a restart file
 -------------------------------------------------------------------------------------
