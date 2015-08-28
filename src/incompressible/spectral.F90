@@ -5,7 +5,7 @@ module spectralMod
                     transpose_y_to_z, transpose_z_to_y 
     use decomp_2d_fft, only: decomp_2d_fft_init, decomp_2d_fft_finalize, decomp_2d_fft_get_size
     use exits, only: GracefulExit, message 
-    use constants, only: one, zero 
+    use constants, only: one, zero, two, three 
     use fft_3d_stuff, only: fft_3d 
     implicit none
     private
@@ -40,7 +40,9 @@ module spectralMod
             procedure           :: ifft
             procedure, private  :: initializeAllPeriodic
             procedure, private  :: initializeTwoPeriodic
-    
+            !procedure, private  :: upsample_Fhat
+            !procedure, private  :: downsample_Fhat
+
     end type
 
 contains
@@ -104,7 +106,8 @@ contains
         type(decomp_info), allocatable :: spectdecomp
         real(rkind), dimension(:,:,:), allocatable :: tmp1, tmp2
         integer :: i, j, k, rPencil, ierr  
-       
+        real(rkind), dimension(:,:,:), allocatable :: k1four, k2four, k3four
+
         ! STEP 0: Figure out what the input decomposition is going to be  
         select case (pencil)
         case("x")
@@ -176,6 +179,9 @@ contains
         if (allocated(this%Gdealias)) deallocate(this%Gdealias)
         allocate (this%Gdealias(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
         
+        allocate(k1four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
+        allocate(k2four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
+        allocate(k3four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
 
         ! STEP 3: Generate 1d wavenumbers 
         k1_1d = GetWaveNums(nx_g,dx) 
@@ -238,6 +244,9 @@ contains
         deallocate(tmp1)
         deallocate (spectdecomp) 
         this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
+        k1four = this%k1
+        k2four = this%k2
+        k3four = this%k3
 
         ! STEP 7: Create the dealiasing filter transfer function 
         select case (filt)
@@ -262,18 +271,18 @@ contains
         allocate(tmp1(size(this%k1,1),size(this%k1,2),size(this%k1,3)))
         select case (trim(scheme))
         case ("cd10")
-            tmp1 = GetCD10ModWaveNum(this%k1,dx)
+            tmp1 = GetCD10ModWaveNum(k1four,dx)
             this%k1 = tmp1 
-            tmp1 = GetCD10ModWaveNum(this%k2,dy)
+            tmp1 = GetCD10ModWaveNum(k2four,dy)
             this%k2 = tmp1 
-            tmp1 = GetCD10ModWaveNum(this%k3,dz)
+            tmp1 = GetCD10ModWaveNum(k3four,dz)
             this%k3 = tmp1 
         case ("cd08")
-            tmp1 = GetCD06ModWaveNum(this%k1,dx)
+            tmp1 = GetCD06ModWaveNum(k1four,dx)
             this%k1 = tmp1 
-            tmp1 = GetCD06ModWaveNum(this%k2,dy)
+            tmp1 = GetCD06ModWaveNum(k2four,dy)
             this%k2 = tmp1 
-            tmp1 = GetCD06ModWaveNum(this%k3,dz)
+            tmp1 = GetCD06ModWaveNum(k3four,dz)
             this%k3 = tmp1 
         case ("four")
             ! Do nothing !
@@ -293,17 +302,25 @@ contains
                 end do 
             end do 
         end do 
-        
-        if (this%useConsrvD2) then
+      
+        select case (trim(scheme))
+        case ("cd10")
+            if (this%useConsrvD2) then
+                this%k1_der2 = this%k1**2
+                this%k2_der2 = this%k2**2
+                this%k3_der2 = this%k3**2
+            else
+                this%k1_der2 = GetCD10D2ModWaveNum(k1four,dx)
+                this%k2_der2 = GetCD10D2ModWaveNum(k2four,dy)
+                this%k3_der2 = GetCD10D2ModWaveNum(k3four,dz)
+            end if  
+        case("four")    
             this%k1_der2 = this%k1**2
             this%k2_der2 = this%k2**2
             this%k3_der2 = this%k3**2
-        else
-            this%k1_der2 = GetCD10D2ModWaveNum(this%k1,dx)
-            this%k2_der2 = GetCD10D2ModWaveNum(this%k2,dy)
-            this%k3_der2 = GetCD10D2ModWaveNum(this%k3,dz)
-        end if  
-        
+        end select  
+       
+        deallocate(k1four, k2four, k3four) 
         ! STEP 10: Determine the sizes of the fft and ifft input arrays
         this%nx_c = this%fft_size(1); this%ny_c = this%fft_size(2); this%nz_c = this%fft_size(3)
         allocate(spectdecomp)
@@ -400,6 +417,7 @@ contains
         deallocate(this%Gdealias)
         deallocate( this%k1, this%k2, this%k3, this%kabs_sq, this%k1_der2, this%k2_der2, this%k3_der2, this%one_by_kabs_sq)
         this%isInitialized = .false. 
+    
     end subroutine 
 
     subroutine fft(this,arr_in,arr_out)
@@ -481,6 +499,7 @@ contains
 
     end function
 
+    
 
     pure elemental function GetCF90TransferFunction(kin,dx) result(T)
         use constants, only: two

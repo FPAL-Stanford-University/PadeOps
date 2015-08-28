@@ -20,5 +20,7 @@ foreach ( iproblemfile ${iproblems_source_files} )
     endif()
     
     file(MAKE_DIRECTORY ${PadeOps_BINARY_DIR}/problems/incompressible/${iproblemexec}_files)
-    file(COPY ${iproblemexec}_files/input.dat DESTINATION ${PadeOps_BINARY_DIR}/problems/incompressible/${iproblemexec}_files) 
+    #    file(COPY ${iproblemexec}_files/*.dat DESTINATION ${PadeOps_BINARY_DIR}/problems/incompressible/${iproblemexec}_files) 
+    file(GLOB iproblems_input_files ${iproblemexec}_files/*.dat)
+    file(COPY ${iproblems_input_files} DESTINATION ${PadeOps_BINARY_DIR}/problems/incompressible/${iproblemexec}_files) 
 endforeach()

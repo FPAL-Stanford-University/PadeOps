@@ -684,11 +684,11 @@ contains
             if (allocated(arr_out)) deallocate(arr_out)
             select case (this%base_pencil)
             case ("y")
-                allocate(arr_out(this%spectral%ysz(1), this%spectral%ysz(2), this%spectral%ysz(3)))
+                allocate(arr_out(this%physical%ysz(1), this%physical%ysz(2), this%physical%ysz(3)))
             case ("x")
-                allocate(arr_out(this%spectral%xsz(1), this%spectral%xsz(2), this%spectral%xsz(3)))
+                allocate(arr_out(this%physical%xsz(1), this%physical%xsz(2), this%physical%xsz(3)))
             case ("z")
-                allocate(arr_out(this%spectral%zsz(1), this%spectral%zsz(2), this%spectral%zsz(3)))
+                allocate(arr_out(this%physical%zsz(1), this%physical%zsz(2), this%physical%zsz(3)))
             end select 
         else
             call decomp_2d_abort(305,"The fft_3d type has not been initialized")

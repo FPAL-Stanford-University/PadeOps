@@ -78,6 +78,7 @@ module IncompressibleGrid
         integer :: runID 
 
 
+        character(len=clen) :: inputdir 
         logical :: use2DecompFFT
         contains
             procedure :: init
@@ -166,6 +167,7 @@ contains
         this%derivative_z = derivative_z
 
         this%outputdir = outputdir 
+        this%inputdir = inputdir 
         
         this%periodicx = periodicx
         this%periodicy = periodicy
