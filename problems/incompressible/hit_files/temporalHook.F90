@@ -25,7 +25,7 @@ contains
             call dumpData4Matlab(gp) 
         end if 
 
-        if (mod(gp%step,gp%t_restartDump)) then
+        if (mod(gp%step,gp%t_restartDump) == 0) then
             ! Incomplete 
         end if 
 

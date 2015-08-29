@@ -13,7 +13,8 @@ module constants
     real(rkind), parameter :: seven = 7._rkind
     real(rkind), parameter :: eight = 8._rkind
     real(rkind), parameter :: nine = 9._rkind
-    
+    real(rkind), parameter :: ten = 10._rkind
+
     real(rkind), parameter :: half = 1._rkind/2._rkind
     real(rkind), parameter :: third = 1._rkind/3._rkind
     real(rkind), parameter :: twothird = 2._rkind/3._rkind
