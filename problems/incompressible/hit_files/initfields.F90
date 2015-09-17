@@ -1,7 +1,7 @@
 subroutine initfields(decomp,dx,dy,dz,inpDirectory,mesh,fields)
     use kind_parameters,    only: rkind
     use constants,          only: two,pi
-    use GridMod,            only: alloc_buffs
+    use gridtools,          only: alloc_buffs
     use IncompressibleGrid, only: u_index,v_index,w_index
     use hitCD_IO 
     use decomp_2d,          only: decomp_info, transpose_x_to_y

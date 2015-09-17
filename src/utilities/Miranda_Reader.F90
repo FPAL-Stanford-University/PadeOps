@@ -5,7 +5,7 @@ module miranda_tools
                                transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y, &
                                nrank, nproc
     use exits,           only: GracefulExit, message
-    use GridMod,         only: alloc_buffs
+    use gridtools,       only: alloc_buffs
     implicit none
 
     private
@@ -135,11 +135,11 @@ contains
         this%mirprocs = this%px * this%py * this%pz
 
         ! Allocate processor rank to cartesian processor coordinate mapping
-        if ( allocated(this%procmap) ) deallocate(procmap)
+        if ( allocated(this%procmap) ) deallocate(this%procmap)
         allocate( this%procmap(this%mirprocs,4) )
         
         ! Allocate inverse cartesian processor coordinate to processor rank mapping
-        if ( allocated(this%invprocmap) ) deallocate(invprocmap)
+        if ( allocated(this%invprocmap) ) deallocate(this%invprocmap)
         allocate( this%invprocmap(this%px,this%py,this%pz) )
         
         DO i=1,this%mirprocs
@@ -171,9 +171,9 @@ contains
         DO i=1,2; READ(ioUnit,*); END DO                        ! Skip next 2 lines
         READ(ioUnit,*) dumchar,dx_,dy_,dz_                      ! Grid spacing
         READ(ioUnit,*) dumchar, this%nvars                      ! # of variables
-        DO i=1,nvars; READ(ioUnit,*); END DO                    ! Skip variable lines
+        DO i=1,this%nvars; READ(ioUnit,*); END DO               ! Skip variable lines
         READ(ioUnit,*) dumchar, this%ns                         ! # of species
-        DO i=1,ns; READ(ioUnit,*); END DO                       ! Skip material lines
+        DO i=1,this%ns; READ(ioUnit,*); END DO                  ! Skip material lines
         READ(ioUnit,*) dumchar, this%nsteps                     ! # of timesteps
 
         this%nvars = this%nvars + 2 ! Since one of the vars is velocity
@@ -214,13 +214,13 @@ contains
     end subroutine
 
     subroutine read_grid(this)
-        class(miranda_reader), intent(inout) :: this
+        class(miranda_reader), target, intent(inout) :: this
         
         integer :: xp,yp,zp,proc
         integer :: xp1,xpn,yp1,ypn,zp1,zpn
         real(kind=4), dimension(:,:,:), allocatable :: procgrid
         character(len=clen) :: procfile
-        integer :: idx, tag, status(MPI_STATUS_SIZE), pUnit = 27
+        integer :: pUnit = 27
 
         allocate( procgrid(this%ax,this%ay,this%az) )
         
@@ -251,15 +251,15 @@ contains
 
                     ! Read x coordinate
                     READ(pUnit) procgrid
-                    this%mesh( (xp-xp1)*ax+1:(xp-xp1)*ax+ax, (yp-yp1)*ay+1:(yp-yp1)*ay+ay, (zp-zp1)*az+1:(zp-zp1)*az+az, 1) = real(procgrid,rkind)
+                    this%mesh( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, 1) = real(procgrid,rkind)
 
                     ! Read y coordinate
                     READ(pUnit) procgrid
-                    this%mesh( (xp-xp1)*ax+1:(xp-xp1)*ax+ax, (yp-yp1)*ay+1:(yp-yp1)*ay+ay, (zp-zp1)*az+1:(zp-zp1)*az+az, 2) = real(procgrid,rkind)
+                    this%mesh( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, 2) = real(procgrid,rkind)
                     
                     ! Read z coordinate
                     READ(pUnit) procgrid
-                    this%mesh( (xp-xp1)*ax+1:(xp-xp1)*ax+ax, (yp-yp1)*ay+1:(yp-yp1)*ay+ay, (zp-zp1)*az+1:(zp-zp1)*az+az, 3) = real(procgrid,rkind)
+                    this%mesh( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, 3) = real(procgrid,rkind)
 
                     CLOSE(pUnit)
                 
@@ -277,7 +277,7 @@ contains
     end subroutine
 
     subroutine read_data(this, step)
-        class(miranda_reader), intent(in) :: this
+        class(miranda_reader), target, intent(inout) :: this
         integer, intent(in) :: step
 
         integer :: xp,yp,zp,proc
@@ -285,7 +285,7 @@ contains
         real(kind=4), dimension(:,:,:), allocatable :: procdata
         character(len=clen) :: vizdir
         character(len=clen) :: procfile
-        integer :: idx, tag, status(MPI_STATUS_SIZE), pUnit = 27
+        integer :: idx, pUnit = 27
 
         allocate( procdata(this%ax,this%ay,this%az) )
         
@@ -334,7 +334,9 @@ contains
 
                     do idx = 1,this%nvars+this%ns
                         READ(pUnit) procdata
-                        this%fields( (xp-xp1)*ax+1:(xp-xp1)*ax+ax, (yp-yp1)*ay+1:(yp-yp1)*ay+ay, (zp-zp1)*az+1:(zp-zp1)*az+az, 1) = real(procdata,rkind)
+                        this%fields( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, &
+                                     (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, &
+                                     (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, idx ) = real(procdata,rkind)
                     end do
 
                     CLOSE(pUnit)

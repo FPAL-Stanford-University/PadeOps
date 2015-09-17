@@ -5,7 +5,7 @@ program taylorgreen
 
     use kind_parameters,  only: rkind,clen
     use CompressibleGrid, only: cgrid
-    use GridMod,          only: alloc_buffs, destroy_buffs
+    use gridtools,        only: alloc_buffs, destroy_buffs
     use reductions,       only: P_MAXVAL,P_MINVAL
     use exits,            only: message,GracefulExit
     use timer,            only: tic, toc

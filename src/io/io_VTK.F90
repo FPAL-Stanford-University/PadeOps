@@ -1,13 +1,14 @@
 module io_VTK_stuff
 
     use mpi
-    use kind_parameters, only : rkind
+    use kind_parameters, only : rkind,clen
     use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                     transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y,&
                     update_halo, nrank, nproc
     use Lib_VTK_IO
     use IR_Precision
     use exits, only: GracefulExit
+    use io_stuff, only: io
     implicit none
 
     type, extends(io) :: io_VTK
@@ -37,7 +38,7 @@ contains
 
         this%file_prefix = ''
         if (trim(file_prefix_) .NE. '') then
-            this%file_prefix = file_prefix_ // '_'
+            this%file_prefix = trim(file_prefix_) // '_'
         end if
         
         this%nprimary = nprimary_
@@ -77,7 +78,8 @@ contains
         real(rkind), dimension(:,:,:), allocatable :: tmp1,tmp2,tmp3
         integer :: nx1,nx2,ny1,ny2,nz1,nz2,nn
         integer :: nx,ny,nz
-        integer :: i,E_IO
+        integer, dimension(MPI_STATUS_SIZE) :: mpistatus
+        integer :: i,ierr,E_IO
 
         if (present(secondary)) then
             if (.not. present(secondary_names)) then
@@ -154,7 +156,7 @@ contains
         if (nrank == 0) then
             ! First process saves also the composite .pvts file
             print*, "Now writing encapsulating pvts file"
-            E_IO = PVTK_INI_XML(filename = this%file_prefix//trim(strz(4,step))//'.pvts', mesh_topology = 'PStructuredGrid',&
+            E_IO = PVTK_INI_XML(filename = this%file_prefix//trim(strz(4,this%vizcount))//'.pvts', mesh_topology = 'PStructuredGrid',&
                                 nx1=1, nx2=nx, ny1=1, ny2=ny, nz1=1, nz2=nz, tp='Float64')
             do i=0,nproc-1
                 if (i .NE. 0) then
@@ -166,7 +168,7 @@ contains
                     call MPI_RECV(nz2,1,MPI_INTEGER,i,i+5*nproc,MPI_COMM_WORLD,mpistatus,ierr)
                 end if
                 E_IO = PVTK_GEO_XML(nx1=nx1,nx2=nx2,ny1=ny1,ny2=ny2,nz1=nz1,nz2=nz2,&
-                                    source=this%file_prefix//trim(strz(6,i))//'_'//trim(strz(4,vizcount))//'.vts')
+                                    source=this%file_prefix//trim(strz(6,i))//'_'//trim(strz(4,this%vizcount))//'.vts')
             end do
 
             E_IO = PVTK_DAT_XML(var_location='node',var_block_action='open')
