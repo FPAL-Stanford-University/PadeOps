@@ -26,10 +26,10 @@ contains
 
     subroutine init(this, vizdir_, file_prefix_, nprimary_, primary_names_)
         class(io_VTK),                             intent(inout) :: this
-        character(len=clen),                       intent(in)    :: vizdir_
-        character(len=clen),                       intent(in)    :: file_prefix_
+        character(len=*),                          intent(in)    :: vizdir_
+        character(len=*),                          intent(in)    :: file_prefix_
         integer,                                   intent(in)    :: nprimary_
-        character(len=clen), dimension(nprimary_), intent(in)    :: primary_names_
+        character(len=*), dimension(nprimary_), intent(in)    :: primary_names_
 
         integer :: i
 
@@ -73,7 +73,7 @@ contains
         real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),3), intent(in) :: mesh
         real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),this%nprimary), intent(in) :: primary
         real(rkind), dimension(:,:,:,:), intent(in), optional :: secondary
-        character(len=clen), dimension(:), intent(in), optional :: secondary_names
+        character(len=*), dimension(:), intent(in), optional :: secondary_names
 
         real(rkind), dimension(:,:,:), allocatable :: tmp1,tmp2,tmp3
         integer :: nx1,nx2,ny1,ny2,nz1,nz2,nn
@@ -110,7 +110,7 @@ contains
 
         nn = (nx2-nx1+1)*(ny2-ny1+1)*(nz2-nz1+1)
     
-        E_IO = VTK_INI_XML_WRITE(fformat='binary', filename=this%file_prefix//trim(strz(6,nrank))//'_'//trim(strz(4,this%vizcount))//'.vts', &
+        E_IO = VTK_INI_XML_WRITE(fformat='binary', filename=trim(this%file_prefix)//trim(strz(6,nrank))//'_'//trim(strz(4,this%vizcount))//'.vts', &
                            mesh_topology='StructuredGrid', nx1=nx1, nx2=nx2, ny1=ny1, ny2=ny2, nz1=nz1, nz2=nz2)
         
         ! Halo update for x, y and z
@@ -156,7 +156,7 @@ contains
         if (nrank == 0) then
             ! First process saves also the composite .pvts file
             print*, "Now writing encapsulating pvts file"
-            E_IO = PVTK_INI_XML(filename = this%file_prefix//trim(strz(4,this%vizcount))//'.pvts', mesh_topology = 'PStructuredGrid',&
+            E_IO = PVTK_INI_XML(filename = trim(this%file_prefix)//trim(strz(4,this%vizcount))//'.pvts', mesh_topology = 'PStructuredGrid',&
                                 nx1=1, nx2=nx, ny1=1, ny2=ny, nz1=1, nz2=nz, tp='Float64')
             do i=0,nproc-1
                 if (i .NE. 0) then
@@ -168,7 +168,7 @@ contains
                     call MPI_RECV(nz2,1,MPI_INTEGER,i,i+5*nproc,MPI_COMM_WORLD,mpistatus,ierr)
                 end if
                 E_IO = PVTK_GEO_XML(nx1=nx1,nx2=nx2,ny1=ny1,ny2=ny2,nz1=nz1,nz2=nz2,&
-                                    source=this%file_prefix//trim(strz(6,i))//'_'//trim(strz(4,this%vizcount))//'.vts')
+                                    source=trim(this%file_prefix)//trim(strz(6,i))//'_'//trim(strz(4,this%vizcount))//'.vts')
             end do
 
             E_IO = PVTK_DAT_XML(var_location='node',var_block_action='open')

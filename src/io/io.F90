@@ -26,10 +26,10 @@ module io_stuff
             import :: io
             import :: clen
             class(io), intent(inout) :: this
-            character(len=clen), intent(in) :: vizdir_
-            character(len=clen), intent(in) :: file_prefix_
+            character(len=*),    intent(in) :: vizdir_
+            character(len=*),    intent(in) :: file_prefix_
             integer,             intent(in) :: nprimary_
-            character(len=clen), dimension(nprimary_), intent(in) :: primary_names_
+            character(len=*), dimension(nprimary_), intent(in) :: primary_names_
         end subroutine
 
         subroutine destroy_interface(this)
@@ -47,7 +47,7 @@ module io_stuff
             real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),3), intent(in) :: mesh
             real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),this%nprimary), intent(in) :: primary
             real(rkind), dimension(:,:,:,:), intent(in), optional :: secondary
-            character(len=clen), dimension(:), intent(in), optional :: secondary_names
+            character(len=*), dimension(:), intent(in), optional :: secondary_names
         end subroutine
 
     end interface
