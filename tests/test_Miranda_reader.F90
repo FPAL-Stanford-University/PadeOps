@@ -3,13 +3,14 @@ program test_Miranda_reader
     use kind_parameters, only : clen
     use miranda_tools, only: miranda_reader
     use io_VTK_stuff, only: io_VTK
+    use exits, only: message, GracefulExit
 
     implicit none
 
     type(miranda_reader) :: mir
     type(io_VTK)         :: viz
 
-    character(len=clen) :: jobdir = '/home/akshays/Data/miranda/BW/IRM_30MODES_128_CORRECTED'
+    character(len=clen) :: jobdir
     integer :: prow = 8, pcol = 1
 
     character(len=clen), dimension(:), allocatable :: varnames
@@ -18,6 +19,13 @@ program test_Miranda_reader
     integer :: ierr, step
 
     call MPI_Init(ierr)
+
+    if( iargc() .LT. 1 ) then
+        call GracefulExit("Usage: "//NEW_LINE('A')//"    mpiexec -n 8 ./test_Miranda_reader <jobdir>", 1729)
+    end if
+
+    call GETARG(1,jobdir)
+    call message("Jobdir is "//jobdir)
     
     ! Initialize miranda_reader object
     call mir%init(jobdir, prow, pcol)
