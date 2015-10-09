@@ -50,23 +50,23 @@ module miranda_tools
 
         character(len=clen) :: jobdir
 
-        real(rkind), dimension(:,:,:), pointer :: x 
-        real(rkind), dimension(:,:,:), pointer :: y 
-        real(rkind), dimension(:,:,:), pointer :: z 
+        real(rkind), dimension(:,:,:),   pointer :: x 
+        real(rkind), dimension(:,:,:),   pointer :: y 
+        real(rkind), dimension(:,:,:),   pointer :: z 
         
-        real(rkind), dimension(:,:,:), pointer :: u                                 ! x-velocity Index
-        real(rkind), dimension(:,:,:), pointer :: v                                 ! y-velocity Index
-        real(rkind), dimension(:,:,:), pointer :: w                                 ! z-velocity Index
-        real(rkind), dimension(:,:,:), pointer :: rho                               ! Density Index
-        real(rkind), dimension(:,:,:), pointer :: e                                 ! Energy Index
-        real(rkind), dimension(:,:,:), pointer :: p                                 ! Pressure Index
-        real(rkind), dimension(:,:,:), pointer :: T                                 ! Temp Index
-        real(rkind), dimension(:,:,:), pointer :: c                                 ! Speed of sound Index
-        real(rkind), dimension(:,:,:), pointer :: mu                                ! Shear visc Index
-        real(rkind), dimension(:,:,:), pointer :: bulk                              ! Bulk visc Index
-        real(rkind), dimension(:,:,:), pointer :: ktc                               ! Thermal cond Index
-        real(rkind), dimension(:,:,:), pointer :: Diff                              ! Species diffusion Index
-        real(rkind), dimension(:,:,:), pointer :: Ys                                ! Species mass-fraction Index
+        real(rkind), dimension(:,:,:),   pointer :: u                                 ! x-velocity Index
+        real(rkind), dimension(:,:,:),   pointer :: v                                 ! y-velocity Index
+        real(rkind), dimension(:,:,:),   pointer :: w                                 ! z-velocity Index
+        real(rkind), dimension(:,:,:),   pointer :: rho                               ! Density Index
+        real(rkind), dimension(:,:,:),   pointer :: e                                 ! Energy Index
+        real(rkind), dimension(:,:,:),   pointer :: p                                 ! Pressure Index
+        real(rkind), dimension(:,:,:),   pointer :: T                                 ! Temp Index
+        real(rkind), dimension(:,:,:),   pointer :: c                                 ! Speed of sound Index
+        real(rkind), dimension(:,:,:),   pointer :: mu                                ! Shear visc Index
+        real(rkind), dimension(:,:,:),   pointer :: bulk                              ! Bulk visc Index
+        real(rkind), dimension(:,:,:),   pointer :: ktc                               ! Thermal cond Index
+        real(rkind), dimension(:,:,:),   pointer :: Diff                              ! Species diffusion Index
+        real(rkind), dimension(:,:,:,:), pointer :: Ys                                ! Species mass-fraction Index
         
         contains
 
@@ -88,7 +88,7 @@ contains
         character(len=*), intent(in) :: jobdir_
         integer, intent(in) :: prow_, pcol_
 
-        this%jobdir = jobdir_
+        this%jobdir = trim(jobdir_)
         this%prow = prow_
         this%pcol = pcol_
 
@@ -123,7 +123,7 @@ contains
         integer :: ioUnit = 17
 
         ! Read the processor map
-        WRITE(procmapfile,*) TRIM(this%jobdir),'/procmap'
+        WRITE(procmapfile,'(2A)') TRIM(this%jobdir),'/procmap'
         OPEN(UNIT=ioUnit, FILE=TRIM(procmapfile), FORM='FORMATTED')
         
         ! Read in number of processors per direction in Miranda run
@@ -162,7 +162,7 @@ contains
         character(len=clen) :: plotmir, dumchar
 
         ! Read plot.mir file to get # of variables and materials
-        WRITE(plotmir,*) TRIM(this%jobdir),'/plot.mir'
+        WRITE(plotmir,'(2A)') TRIM(this%jobdir),'/plot.mir'
         OPEN(UNIT=ioUnit, FILE=TRIM(plotmir), FORM='FORMATTED')
 
         ! Read metadata
@@ -329,7 +329,7 @@ contains
                     proc = this%invprocmap(xp,yp,zp)
 
                     ! Read in the grid
-                    WRITE(procfile,'(2A,I6.6)') TRIM(this%jobdir),'/p',proc
+                    WRITE(procfile,'(2A,I6.6)') TRIM(vizdir),'/p',proc
                     OPEN(UNIT=pUnit,FILE=TRIM(procfile),FORM='UNFORMATTED',STATUS='OLD')
 
                     do idx = 1,this%nvars+this%ns
@@ -360,7 +360,7 @@ contains
         this%bulk  => this%fields(:,:,:,bulk_index)
         this%ktc   => this%fields(:,:,:, ktc_index)
         this%Diff  => this%fields(:,:,:,Diff_index)
-        this%Ys    => this%fields(:,:,:,  Ys_index)
+        this%Ys    => this%fields(:,:,:,  Ys_index:Ys_index+this%ns-1)
 
     end subroutine
 

@@ -73,6 +73,7 @@ program test_io_VTK
     end do
   
     deallocate(mesh, primary, secondary)
+    call viz%destroy()
     call decomp_2d_finalize
     call MPI_Finalize(ierr)
 
