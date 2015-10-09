@@ -7,7 +7,7 @@ module io_VTK_stuff
                     update_halo, nrank, nproc
     use Lib_VTK_IO
     use IR_Precision
-    use exits, only: GracefulExit
+    use exits, only: GracefulExit, message
     use io_stuff, only: io
     implicit none
 
@@ -81,6 +81,11 @@ contains
         integer, dimension(MPI_STATUS_SIZE) :: mpistatus
         integer :: i,ierr,E_IO
 
+        character(len=clen) :: dummy
+
+        write(dummy,'(I4)') this%vizcount
+        call message("Writing viz dump "//trim(dummy)//" to " //trim(this%vizdir)//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'.pvts')
+
         if (present(secondary)) then
             if (.not. present(secondary_names)) then
                 call GracefulExit("Cannot specify secondary array without secondary variable names in VTK IO",982)
@@ -110,15 +115,14 @@ contains
 
         nn = (nx2-nx1+1)*(ny2-ny1+1)*(nz2-nz1+1)
     
-        E_IO = VTK_INI_XML_WRITE(fformat='binary', filename=trim(this%file_prefix)//trim(strz(6,nrank))//'_'//trim(strz(4,this%vizcount))//'.vts', &
+        E_IO = VTK_INI_XML_WRITE(fformat='binary', &
+                           filename=trim(this%vizdir)//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'_'//trim(strz(6,nrank))//'.vts', &
                            mesh_topology='StructuredGrid', nx1=nx1, nx2=nx2, ny1=ny1, ny2=ny2, nz1=nz1, nz2=nz2)
         
         ! Halo update for x, y and z
         call update_halo(mesh(:,:,:,1),tmp1,1,gp,.FALSE.)
         call update_halo(mesh(:,:,:,2),tmp2,1,gp,.FALSE.)
         call update_halo(mesh(:,:,:,3),tmp3,1,gp,.FALSE.)
-
-        if (nrank == 0) print*, "Finished halo comm."
 
         E_IO = VTK_GEO_XML_WRITE(nx1=nx1,nx2=nx2,ny1=ny1,ny2=ny2,nz1=nz1,nz2=nz2,NN=nn,&
                                  X=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1),          &
@@ -151,12 +155,10 @@ contains
         E_IO = VTK_END_XML()
 
         call MPI_BARRIER(MPI_COMM_WORLD, ierr)
-        if (nrank == 0) print*, "Finished writing individual data files."
 
         if (nrank == 0) then
             ! First process saves also the composite .pvts file
-            print*, "Now writing encapsulating pvts file"
-            E_IO = PVTK_INI_XML(filename = trim(this%file_prefix)//trim(strz(4,this%vizcount))//'.pvts', mesh_topology = 'PStructuredGrid',&
+            E_IO = PVTK_INI_XML(filename = trim(this%vizdir)//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'.pvts', mesh_topology = 'PStructuredGrid',&
                                 nx1=1, nx2=nx, ny1=1, ny2=ny, nz1=1, nz2=nz, tp='Float64')
             do i=0,nproc-1
                 if (i .NE. 0) then
@@ -168,7 +170,7 @@ contains
                     call MPI_RECV(nz2,1,MPI_INTEGER,i,i+5*nproc,MPI_COMM_WORLD,mpistatus,ierr)
                 end if
                 E_IO = PVTK_GEO_XML(nx1=nx1,nx2=nx2,ny1=ny1,ny2=ny2,nz1=nz1,nz2=nz2,&
-                                    source=trim(this%file_prefix)//trim(strz(6,i))//'_'//trim(strz(4,this%vizcount))//'.vts')
+                                    source=trim(this%file_prefix)//trim(strz(4,this%vizcount))//'_'//trim(strz(6,i))//'.vts')
             end do
 
             E_IO = PVTK_DAT_XML(var_location='node',var_block_action='open')
