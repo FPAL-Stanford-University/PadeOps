@@ -17,6 +17,7 @@ module io_stuff
         procedure(init_interface),              deferred :: init
         procedure(destroy_interface),           deferred :: destroy
         procedure(WriteViz_interface),          deferred :: WriteViz
+        procedure(SetVizcount_interface),       deferred :: SetVizcount
 
     end type
 
@@ -48,6 +49,12 @@ module io_stuff
             real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),this%nprimary), intent(in) :: primary
             real(rkind), dimension(:,:,:,:), intent(in), optional :: secondary
             character(len=*), dimension(:), intent(in), optional :: secondary_names
+        end subroutine
+
+        subroutine SetVizcount_interface(this,step)
+            import :: io
+            class(io), intent(inout) :: this
+            integer, intent(in) :: step
         end subroutine
 
     end interface

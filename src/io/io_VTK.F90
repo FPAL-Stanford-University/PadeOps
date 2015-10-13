@@ -19,6 +19,7 @@ module io_VTK_stuff
         procedure :: destroy
 
         procedure :: WriteViz
+        procedure :: SetVizcount
     
     end type
 
@@ -35,6 +36,9 @@ contains
 
         this%vizcount = 0
         this%vizdir = vizdir_
+
+        ! Create vizdir if it does not exist
+        call execute_command_line('mkdir -p ' // adjustl(trim(this%vizdir)))
 
         this%file_prefix = ''
         if (trim(file_prefix_) .NE. '') then
@@ -199,6 +203,14 @@ contains
 
         ! Update vizcount
         this%vizcount = this%vizcount + 1
+
+    end subroutine
+
+    subroutine SetVizcount(this,step)
+        class(io_VTK), intent(inout) :: this
+        integer, intent(in) :: step
+
+        this%vizcount = step
 
     end subroutine
 

@@ -1,12 +1,13 @@
 module reductions
-    use kind_parameters, only: rkind,mpirkind
-    use decomp_2d, only: nrank, nproc
     use mpi
+    use kind_parameters, only: rkind,mpirkind
+    use decomp_2d, only: decomp_info, nrank, nproc
+    use exits, only: GracefulExit
     
     implicit none
 
     private
-    public :: P_MAXVAL, P_MINVAL, P_SUM, P_MEAN
+    public :: P_MAXVAL, P_MINVAL, P_SUM, P_MEAN, P_AVGZ
 
     interface P_MAXVAL
         module procedure P_MAXVAL_arr3, P_MAXVAL_sca
@@ -90,5 +91,33 @@ contains
         call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
 
     end function
+
+    subroutine P_AVGZ(gp, f, avg)
+        type(decomp_info), intent(in) :: gp
+        real(rkind), dimension(:,:,:), intent(in) :: f
+        real(rkind), dimension(size(f,1), size(f,2)), intent(out) :: avg
+        real(rkind), dimension(size(f,1), size(f,2))              :: p_avg
+        integer :: YZ_COMM, Z_COMM
+        integer :: ierr
+        
+        if(size(f,1) == gp%xsz(1)) then        ! X-pencil
+            call MPI_COMM_SPLIT(MPI_COMM_WORLD, gp%xst(1), nrank, YZ_COMM, ierr)
+            call MPI_COMM_SPLIT( YZ_COMM,       gp%xst(2), nrank,  Z_COMM, ierr)
+        else if (size(f,2) == gp%ysz(2)) then  ! Y-pencil
+            call MPI_COMM_SPLIT(MPI_COMM_WORLD, gp%yst(1), nrank, YZ_COMM, ierr)
+            call MPI_COMM_SPLIT( YZ_COMM,       gp%yst(2), nrank,  Z_COMM, ierr)
+        else if (size(f,3) == gp%zsz(3)) then  ! Z-pencil
+            avg = SUM(f,3) / real(gp%zsz(3),rkind)
+            return
+        else
+            call GracefulExit("In P_AVGZ: Input array does not belong to any decomposition",256)
+        end if
+
+        p_avg = SUM(f,3)
+        call MPI_ALLREDUCE(p_avg, avg, size(f,1)*size(f,2), mpirkind, MPI_SUM, Z_COMM, ierr)
+        avg = avg / real(gp%zsz(3),rkind)
+
+    end subroutine
+
 
 end module

@@ -1,0 +1,19 @@
+&INPUT
+
+inputdir  = "/home/akshays/Data/miranda/BW/IRM_30MODES_128_CORRECTED"                ! Directory for input files
+outputdir = "/home/akshays/Data/miranda/BW/IRM_30MODES_128_CORRECTED/vorticity"      ! Directory for output files
+
+writeviz = .TRUE.         ! Write out post-processed visualization files?
+
+periodicx = .FALSE.       ! Periodic in X?
+periodicy = .FALSE.       ! Periodic in Y?
+periodicz = .TRUE.        ! Periodic in Z?
+
+derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
+
+prow = 8                  ! Number of X processors (has to be an exact factor of Miranda run)
+pcol = 1                  ! Number of Z processors (has to be an exact factor of Miranda run)
+
+/

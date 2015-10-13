@@ -40,6 +40,10 @@ module miranda_tools
         integer :: prow, pcol
         integer :: ppx, ppz
 
+        logical :: periodicx = .FALSE.
+        logical :: periodicy = .FALSE.
+        logical :: periodicz = .FALSE.
+
         real(rkind) :: dx, dy, dz
 
         integer, dimension(:,:),   allocatable :: procmap
@@ -83,14 +87,19 @@ module miranda_tools
 
 contains
 
-    subroutine init(this, jobdir_, prow_, pcol_)
+    subroutine init(this, jobdir_, prow_, pcol_, periodicx_, periodicy_, periodicz_)
         class(miranda_reader), intent(inout) :: this
         character(len=*), intent(in) :: jobdir_
         integer, intent(in) :: prow_, pcol_
+        logical, optional, intent(in) :: periodicx_, periodicy_, periodicz_
 
         this%jobdir = trim(jobdir_)
         this%prow = prow_
         this%pcol = pcol_
+
+        if (present(periodicx_)) this%periodicx = periodicx_
+        if (present(periodicy_)) this%periodicy = periodicy_
+        if (present(periodicz_)) this%periodicz = periodicz_
 
         ! Get processor to grid mapping
         call this%get_procmap()
@@ -208,7 +217,7 @@ contains
         CLOSE(ioUnit) 
         
         ! Initialize decomp
-        call decomp_2d_init(this%nx, this%ny, this%nz, this%prow, this%pcol)
+        call decomp_2d_init(this%nx, this%ny, this%nz, this%prow, this%pcol, [this%periodicx, this%periodicy, this%periodicz])
         call get_decomp_info(this%gp)
 
     end subroutine
