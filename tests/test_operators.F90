@@ -9,7 +9,7 @@ program test_transpose
     use kind_parameters, only: rkind
     use constants,       only: zero,two,pi
     use DerivativesMod,  only: derivatives
-    use operators,       only: curl
+    use operators,       only: curl, divergence
     use reductions,      only: P_MAXVAL, P_AVGZ
     use exits,           only: message
     
@@ -102,9 +102,8 @@ program test_transpose
         end do
     end do
 
+    ! Get average of v. Should be (pi-dx/2)
     call P_AVGZ(gp,v,avg)
-
-    call message("Z average error",P_MAXVAL(MAXVAL(ABS(avg - (pi - dx/two)))))
 
     ! Get the vorticity
     call curl( gp, der, u, v, w, vort)
@@ -137,6 +136,25 @@ program test_transpose
     call message("    X vorticity error",P_MAXVAL(ABS(vort(:,:,:,1))))
     call message("    Y vorticity error",P_MAXVAL(ABS(vort(:,:,:,2))))
     call message("    Z vorticity error",P_MAXVAL(ABS(vort(:,:,:,3))))
+
+    do k=1,gp%ysz(3)
+        do j=1,gp%ysz(2)
+            do i=1,gp%ysz(1)
+                u(i,j,k) = x(i,j,k)**2
+                v(i,j,k) = y(i,j,k)**2
+                w(i,j,k) = z(i,j,k)**2
+
+                vort_exact(i,j,k,1) = two*x(i,j,k) + two*y(i,j,k) + two*z(i,j,k)
+            end do
+        end do
+    end do
+
+    call divergence( gp, der, u, v, w, vort(:,:,:,1) )
+    call message("Divergence:")
+    call message("    Divergence  error",P_MAXVAL(ABS(vort(:,:,:,1)-vort_exact(:,:,:,1))))
+
+    call message("Z Average:")
+    call message("    Z averaging error",P_MAXVAL(MAXVAL(ABS(avg - (pi - dx/two)))))
 
     call der%destroy()
     

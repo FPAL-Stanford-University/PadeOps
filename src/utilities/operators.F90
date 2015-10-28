@@ -99,4 +99,38 @@ contains
 
     end subroutine 
 
+    subroutine divergence(decomp, der, u, v, w, div)
+        type(decomp_info), intent(in) :: decomp
+        type(derivatives) :: der
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(in)  :: u, v, w
+        real(rkind), dimension(size(u,1), size(u,2), size(u,3)),             intent(out) :: div
+
+        real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) :: xtmp,xdum
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: ytmp
+        real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) :: ztmp,zdum
+        
+        if ( (size(u,1) .NE. decomp%ysz(1)) .AND. (size(u,2) .NE. decomp%ysz(2)) .AND. (size(u,3) .NE. decomp%ysz(3)) ) then
+            call GracefulExit("Either size of input array to divergence operator is inconsistent with decomp or not in Y decomp. Other&
+                             & decomps have yet to be implemented",234)
+        end if
+
+        ! Get Y derivatives
+        call der%ddy(v,div)
+
+        ! Get X derivatives
+        call transpose_y_to_x(u,xtmp,decomp)
+        call der%ddx(xtmp,xdum)
+        call transpose_x_to_y(xdum,ytmp)
+
+        div = div + ytmp
+
+        ! Get Z derivatives
+        call transpose_y_to_z(w,ztmp,decomp)
+        call der%ddz(ztmp,zdum)
+        call transpose_z_to_y(zdum,ytmp)
+
+        div = div + ytmp
+
+    end subroutine 
+
 end module
