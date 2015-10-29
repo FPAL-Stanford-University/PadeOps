@@ -38,7 +38,8 @@ contains
         this%vizdir = vizdir_
 
         ! Create vizdir if it does not exist
-        call execute_command_line('mkdir -p ' // adjustl(trim(this%vizdir)))
+        ! call execute_command_line('mkdir -p ' // adjustl(trim(this%vizdir)))
+        call system('mkdir -p ' // adjustl(trim(this%vizdir)))
 
         this%file_prefix = ''
         if (trim(file_prefix_) .NE. '') then
