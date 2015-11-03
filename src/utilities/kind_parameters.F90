@@ -12,7 +12,7 @@ module kind_parameters
     integer, parameter :: mpirkind = MPI_DOUBLE_PRECISION
     integer, parameter :: mpickind = MPI_DOUBLE_COMPLEX
    
-    integer, parameter :: clen = 100
+    integer, parameter :: clen = 120
 
     integer, parameter :: stdin  = 5
     integer, parameter :: stdout = 6

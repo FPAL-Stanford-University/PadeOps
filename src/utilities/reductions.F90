@@ -10,15 +10,15 @@ module reductions
     public :: P_MAXVAL, P_MINVAL, P_SUM, P_MEAN, P_AVGZ
 
     interface P_MAXVAL
-        module procedure P_MAXVAL_arr3, P_MAXVAL_sca
+        module procedure P_MAXVAL_arr3, P_MAXVAL_arr2, P_MAXVAL_sca
     end interface
 
     interface P_MINVAL
-        module procedure P_MINVAL_double
+        module procedure P_MINVAL_arr3, P_MINVAL_arr2, P_MINVAL_sca
     end interface
 
     interface P_SUM
-        module procedure P_SUM_double
+        module procedure P_SUM_arr3, P_SUM_arr2, P_SUM_sca
     end interface
 
     interface P_MEAN
@@ -32,7 +32,7 @@ contains
         real(rkind) :: summation
         integer :: ierr
 
-        call MPI_Allreduce(x, summation, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
+        call MPI_Allreduce(x, summation, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
         mean = summation/real(nproc,rkind)
 
     end function
@@ -45,13 +45,24 @@ contains
         integer :: ierr
 
         mysum = sum(x)
-        call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
-        mean = summation/real(nproc,rkind)
+        call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+        mean = summation/( real(size(x,1)*size(x,2)*size(x,3)*nproc,rkind))
 
     end function
 
     function P_MAXVAL_arr3(x) result(maximum)
         real(rkind), dimension(:,:,:), intent(in) :: x
+        real(rkind) :: maximum
+        real(rkind) :: mymax
+        integer :: ierr
+
+        mymax = MAXVAL(x)
+        call MPI_Allreduce(mymax, maximum, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
+
+    end function
+
+    function P_MAXVAL_arr2(x) result(maximum)
+        real(rkind), dimension(:,:), intent(in) :: x
         real(rkind) :: maximum
         real(rkind) :: mymax
         integer :: ierr
@@ -70,25 +81,65 @@ contains
 
     end function
     
-    function P_MINVAL_double(x) result(minimum)
+    function P_MINVAL_arr3(x) result(minimum)
         real(rkind), dimension(:,:,:), intent(in) :: x
         real(rkind) :: minimum
         real(rkind) :: mymin
         integer :: ierr
 
         mymin = MINVAL(x)
-        call MPI_Allreduce(mymin, minimum, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
+        call MPI_Allreduce(mymin, minimum, 1, mpirkind, MPI_MIN, MPI_COMM_WORLD, ierr)
 
     end function
 
-    function P_SUM_double(x) result(summation)
+    function P_MINVAL_arr2(x) result(minimum)
+        real(rkind), dimension(:,:), intent(in) :: x
+        real(rkind) :: minimum
+        real(rkind) :: mymin
+        integer :: ierr
+
+        mymin = MINVAL(x)
+        call MPI_Allreduce(mymin, minimum, 1, mpirkind, MPI_MIN, MPI_COMM_WORLD, ierr)
+
+    end function
+
+    function P_MINVAL_sca(x) result(minimum)
+        real(rkind), intent(in) :: x
+        real(rkind) :: minimum
+        integer :: ierr
+
+        call MPI_Allreduce(x, minimum, 1, mpirkind, MPI_MIN, MPI_COMM_WORLD, ierr)
+
+    end function
+
+    function P_SUM_arr3(x) result(summation)
         real(rkind), dimension(:,:,:), intent(in) :: x
         real(rkind) :: summation
         real(rkind) :: mysum
         integer :: ierr
 
         mysum = SUM(x)
-        call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
+        call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+    end function
+
+    function P_SUM_arr2(x) result(summation)
+        real(rkind), dimension(:,:), intent(in) :: x
+        real(rkind) :: summation
+        real(rkind) :: mysum
+        integer :: ierr
+
+        mysum = SUM(x)
+        call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+    end function
+
+    function P_SUM_sca(x) result(summation)
+        real(rkind), intent(in) :: x
+        real(rkind) :: summation
+        integer :: ierr
+
+        call MPI_Allreduce(x, summation, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
 
     end function
 

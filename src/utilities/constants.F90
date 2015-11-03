@@ -23,5 +23,5 @@ module constants
     
     complex(rkind), parameter :: imi=(zero,one)
 
-    real(rkind), parameter :: r_eps = real(1.d-15,rkind)
+    real(rkind), parameter :: eps = epsilon(real(1.0,rkind))
 end module

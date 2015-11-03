@@ -8,7 +8,7 @@ module exits
     public :: GracefulExit, message, warning, newline
         
     interface message
-        module procedure message_char, message_char_double, message_level_char, message_level_char_double
+        module procedure message_char, message_char_double, message_level_char, message_level_char_double, message_level_char_int
     end interface
 
     interface warning
@@ -66,6 +66,22 @@ contains
         integer, intent(in) :: level
         character(len=*), intent(in) :: mess
         real(rkind), intent(in) :: val
+        character(:), allocatable :: full_message
+        integer :: i
+        
+        full_message = ""
+        do i=1,level
+            full_message = full_message // "    "
+        end do
+
+        full_message = full_message // "> " // mess
+        if (nrank == 0) write(stdout,*) full_message, " = ", val
+    end subroutine
+    
+    subroutine message_level_char_int(level,mess,val)
+        integer, intent(in) :: level
+        character(len=*), intent(in) :: mess
+        integer, intent(in) :: val
         character(:), allocatable :: full_message
         integer :: i
         
