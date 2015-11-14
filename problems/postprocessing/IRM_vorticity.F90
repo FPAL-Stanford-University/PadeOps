@@ -479,6 +479,7 @@ program IRM_vorticity
         Y_CO2_x = SUM(TKE_avg, 2)/real(mir%ny,rkind)   ! Average along the Y direction
         
         mwidth = P_SUM( Y_air_x*Y_CO2_x ) * mir%dx     ! Integrate in X (\int <Y_air><Y_CO2> dx)
+        mwidth = mwidth / real(pcol,rkind)      ! Divide by the number of Z processors due to multiple counting
 
         ! Get vorticity
         call curl( mir%gp, der, mir%u, mir%v, mir%w, vort)
