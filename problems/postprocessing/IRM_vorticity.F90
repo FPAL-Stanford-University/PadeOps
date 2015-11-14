@@ -54,10 +54,10 @@ contains
         close(iounit)
     end subroutine
 
-    subroutine write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg)
+    subroutine write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation)
         integer, intent(in) :: step
         real(rkind), dimension(:,:,:), intent(in) :: vort_avgz
-        real(rkind), dimension(:,:),   intent(in) :: TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg
+        real(rkind), dimension(:,:),   intent(in) :: TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation
 
         character(len=clen) :: post2d_file
         integer :: i, ierr, iounit2d=91
@@ -84,6 +84,7 @@ contains
                     write(iounit2d) chi_avg
                     write(iounit2d) MMF_avg
                     write(iounit2d) CO2_avg
+                    write(iounit2d) density_self_correlation
                     close(iounit2d)
                 end if
             end if
@@ -297,17 +298,21 @@ program IRM_vorticity
 
     real(rkind), dimension(:,:,:,:), allocatable, target :: buffer
     real(rkind), dimension(:,:,:,:), pointer :: vort, Diff, Xs
-    real(rkind), dimension(:,:,:), pointer :: uprime, vprime, wprime, TKE, div, region, chi, mu, ktc
+    real(rkind), dimension(:,:,:), pointer :: upp, vpp, wpp, TKE, div, region, chi, mu, ktc
 
     real(rkind), dimension(:,:,:), allocatable, target :: buffer2d
     real(rkind), dimension(:,:,:), pointer :: vort_avgz
-    real(rkind), dimension(:,:), pointer :: rho_avg, u_avg, v_avg, w_avg, CO2_avg, TKE_avg, div_avg, chi_avg, MMF_avg
+    real(rkind), dimension(:,:), pointer :: rho_avg, u_avg, v_avg, w_avg, CO2_avg, TKE_avg, div_avg, chi_avg, MMF_avg, density_self_correlation
+
+    real(rkind), dimension(:), allocatable :: Y_air_x, Y_CO2_x
 
     complex(rkind), dimension(:), allocatable :: TKEfft
 
-    real(rkind) :: MMF_int, chi_int, vortz_int, TKE_int
+    real(rkind) :: MMF_int, chi_int, vortz_int, vortz_pos, vortz_neg, TKE_int, mwidth
 
     logical :: fftw_exhaustive = .FALSE.
+
+    character(len=clen) :: time_message
 
     character(len=clen) :: outputfile
     integer :: iounit = 93
@@ -356,9 +361,9 @@ program IRM_vorticity
     ! Allocate 3D buffer and associate pointers for convenience
     call alloc_buffs(buffer, 13+2*mir%ns-1, 'y', mir%gp)
     vort => buffer(:,:,:,1:3)
-    uprime => buffer(:,:,:,4)
-    vprime => buffer(:,:,:,5)
-    wprime => buffer(:,:,:,6)
+    upp => buffer(:,:,:,4)
+    vpp => buffer(:,:,:,5)
+    wpp => buffer(:,:,:,6)
     TKE => buffer(:,:,:,7)
     div => buffer(:,:,:,8)
     region => buffer(:,:,:,9)
@@ -369,7 +374,7 @@ program IRM_vorticity
     Xs => buffer(:,:,:,13+mir%ns:13+2*mir%ns-1)
 
     ! Allocate 2D buffer and associate pointers for convenience
-    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 12 ) )
+    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 13 ) )
     vort_avgz => buffer2d(:,:,1:3)
     rho_avg => buffer2d(:,:,4)
     u_avg => buffer2d(:,:,5)
@@ -380,8 +385,12 @@ program IRM_vorticity
     div_avg => buffer2d(:,:,10)
     chi_avg => buffer2d(:,:,11)
     MMF_avg => buffer2d(:,:,12)
+    density_self_correlation => buffer2d(:,:,13)
 
     allocate( TKEfft(mir%nz/2+1) )
+
+    allocate( Y_air_x( mir%gp%ysz(1) ) )
+    allocate( Y_CO2_x( mir%gp%ysz(1) ) )
 
     ! Initialize visualization stuff
     if ( writeviz ) then
@@ -390,9 +399,9 @@ program IRM_vorticity
         varnames( 1) = 'X-vorticity'
         varnames( 2) = 'Y-vorticity'
         varnames( 3) = 'Z-vorticity'
-        varnames( 4) = 'uprime'
-        varnames( 5) = 'vprime'
-        varnames( 6) = 'wprime'
+        varnames( 4) = 'upp'
+        varnames( 5) = 'vpp'
+        varnames( 6) = 'wpp'
         varnames( 7) = 'TKE'
         varnames( 8) = 'divergence'
         varnames( 9) = 'region'
@@ -405,14 +414,14 @@ program IRM_vorticity
     write(outputfile,'(2A)') trim(outputdir), "/post_scalar.dat"
     if(nrank == 0) then
         open(unit=iounit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-        write(iounit,'(A,A25,4A26)') "#", "Time", "Z vorticity", "TKE", "Scalar dissipation", "MMF"
+        write(iounit,'(A,A25,7A26)') "#", "Time", "Mixed width", "Z vorticity", "+ve Z vorticity", "-ve Z vorticity", "TKE", "Scalar dissipation", "MMF"
     end if
 
     call toc("Time to initialize everything: ")
 
     ! Loop through viz dumps
     do step = 0,mir%nsteps-1
-        call tic()
+        call tic()  ! Start timer
 
         call message(0,"Reading in data for step",step)
 
@@ -462,6 +471,15 @@ program IRM_vorticity
             MMF_avg = MMF_avg / ( div_avg*TKE_avg ) ! MMF = <X_air X_CO2>/( <X_air> <X_CO2> )
         end where
 
+        ! Get mixing width
+        call P_AVGZ( mir%gp, mir%Ys(:,:,:,1), div_avg) ! Temporarily store in div_avg
+        Y_air_x = SUM(div_avg, 2)/real(mir%ny,rkind)   ! Average along the Y direction
+
+        call P_AVGZ( mir%gp, mir%Ys(:,:,:,2), TKE_avg) ! Temporarily store in TKE_avg
+        Y_CO2_x = SUM(TKE_avg, 2)/real(mir%ny,rkind)   ! Average along the Y direction
+        
+        mwidth = P_SUM( Y_air_x*Y_CO2_x ) * mir%dx     ! Integrate in X (\int <Y_air><Y_CO2> dx)
+
         ! Get vorticity
         call curl( mir%gp, der, mir%u, mir%v, mir%w, vort)
         do i = 1,3
@@ -471,12 +489,26 @@ program IRM_vorticity
         ! Get integrated Z vorticity (integrated inside region)
         vortz_int = P_SUM(vort(:,:,:,3))*mir%dx*mir%dy*mir%dz
         call message(1,"vortz_int",vortz_int)
+        chi = vort(:,:,:,3)
+        where ( chi .LT. zero )
+            chi = zero
+        end where
+        vortz_pos = P_SUM(chi)*mir%dx*mir%dy*mir%dz
+        chi = vort(:,:,:,3)
+        where ( chi .GT. zero )
+            chi = zero
+        end where
+        vortz_neg = P_SUM(chi)*mir%dx*mir%dy*mir%dz
 
         ! Get rho average
         call P_AVGZ( mir%gp, mir%rho, rho_avg )
 
-        ! Get scalar dissipation rate for CO2 (use uprime, vprime, wprime to temporarily store grad{Y_CO2})
-        associate( dY_x => uprime, dY_y => vprime, dY_z => wprime )
+        ! Get density self correlation
+        call P_AVGZ( mir%gp, one/mir%rho, density_self_correlation)
+        density_self_correlation = rho_avg*density_self_correlation - one
+
+        ! Get scalar dissipation rate for CO2 (use upp, vpp, wpp to temporarily store grad{Y_CO2})
+        associate( dY_x => upp, dY_y => vpp, dY_z => wpp )
             call gradient(mir%gp, der, mir%Ys(:,:,:,2), dY_x, dY_y, dY_z)
 
             chi = dY_x*dY_x + dY_y*dY_y + dY_z*dY_z ! grad(Y_CO2).grad(Y_CO2)
@@ -495,25 +527,25 @@ program IRM_vorticity
         call message(1,"chi_int",chi_int)
 
         ! Get Favre averaged velocities
-        uprime = mir%rho * mir%u
-        vprime = mir%rho * mir%v
-        wprime = mir%rho * mir%w
-        call P_AVGZ( mir%gp, uprime, u_avg )
-        call P_AVGZ( mir%gp, vprime, v_avg )
-        call P_AVGZ( mir%gp, wprime, w_avg )
+        upp = mir%rho * mir%u
+        vpp = mir%rho * mir%v
+        wpp = mir%rho * mir%w
+        call P_AVGZ( mir%gp, upp, u_avg )
+        call P_AVGZ( mir%gp, vpp, v_avg )
+        call P_AVGZ( mir%gp, wpp, w_avg )
         u_avg = u_avg / rho_avg         ! <rho*u> / <rho>
         v_avg = v_avg / rho_avg         ! <rho*v> / <rho>
         w_avg = w_avg / rho_avg         ! <rho*w> / <rho>
 
         ! Get velocity fluctuations
         do i = 1,mir%gp%ysz(3)
-            uprime(:,:,i) = mir%u(:,:,i) - u_avg
-            vprime(:,:,i) = mir%v(:,:,i) - v_avg
-            wprime(:,:,i) = mir%w(:,:,i) - w_avg
+            upp(:,:,i) = mir%u(:,:,i) - u_avg
+            vpp(:,:,i) = mir%v(:,:,i) - v_avg
+            wpp(:,:,i) = mir%w(:,:,i) - w_avg
         end do
 
         ! Get TKE = rho*u_i*u_i/2
-        TKE = half * mir%rho * ( uprime*uprime + vprime*vprime + wprime*wprime )
+        TKE = half * mir%rho * ( upp*upp + vpp*vpp + wpp*wpp )
         
         ! Get integrated TKE (integrated inside region)
         TKE_int = P_SUM(TKE)*mir%dx*mir%dy*mir%dz
@@ -536,7 +568,7 @@ program IRM_vorticity
         call P_AVGZ( mir%gp, div, div_avg )
 
         if(nrank == 0) then
-            write(iounit,'(5ES26.16)') real(step*1.0d-4,rkind), vortz_int, TKE_int, chi_int, MMF_int
+            write(iounit,'(8ES26.16)') real(step*1.0d-4,rkind), mwidth, vortz_int, vortz_pos, vortz_neg, TKE_int, chi_int, MMF_int
         end if
 
         ! Write out visualization files
@@ -547,9 +579,10 @@ program IRM_vorticity
         end if
 
         ! Write out 2D postprocessing file
-        call write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg)
+        call write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation)
 
-        call toc()
+        write(time_message,'(A,I,A)') "Time to postprocess step ", step, " :"
+        call toc(trim(time_message))
     end do
 
     ! Close file for scalar inputs
@@ -559,6 +592,8 @@ program IRM_vorticity
     if (allocated(buffer  )) deallocate( buffer   )
     if (allocated(buffer2d)) deallocate( buffer2d )
     if (allocated( TKEfft )) deallocate( TKEfft   )
+    if (allocated( Y_air_x)) deallocate( Y_air_x  )
+    if (allocated( Y_CO2_x)) deallocate( Y_CO2_x  )
     call der%destroy()
     call mir%destroy()
     if ( writeviz ) then

@@ -18,7 +18,7 @@ module reductions
     end interface
 
     interface P_SUM
-        module procedure P_SUM_arr3, P_SUM_arr2, P_SUM_sca
+        module procedure P_SUM_arr3, P_SUM_arr2, P_SUM_arr1, P_SUM_sca
     end interface
 
     interface P_MEAN
@@ -125,6 +125,17 @@ contains
 
     function P_SUM_arr2(x) result(summation)
         real(rkind), dimension(:,:), intent(in) :: x
+        real(rkind) :: summation
+        real(rkind) :: mysum
+        integer :: ierr
+
+        mysum = SUM(x)
+        call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+    end function
+
+    function P_SUM_arr1(x) result(summation)
+        real(rkind), dimension(:), intent(in) :: x
         real(rkind) :: summation
         real(rkind) :: mysum
         integer :: ierr
