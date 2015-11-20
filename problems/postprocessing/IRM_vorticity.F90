@@ -1,12 +1,13 @@
 module IRM_vorticity_mod
     use mpi
     use kind_parameters, only: rkind, clen, mpirkind, mpickind
-    use constants,       only: zero, one
+    use constants,       only: zero, eps, half, one
     use fftstuff,        only: ffts
     use miranda_tools,   only: miranda_reader
     use io_VTK_stuff,    only: io_VTK
     use DerivativesMod,  only: derivatives
-    use decomp_2d,       only: nrank, nproc, transpose_y_to_z
+    use FiltersMod,      only: filters
+    use decomp_2d,       only: nrank, nproc, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use exits,           only: message, GracefulExit
 
     implicit none
@@ -14,6 +15,7 @@ module IRM_vorticity_mod
     type(miranda_reader) :: mir
     type(io_VTK)         :: viz
     type(derivatives)    :: der
+    type(filters)        :: gfil
     type(ffts)           :: fftz
 
     character(len=clen)  :: inputdir, outputdir                                                 ! Input and output dirs
@@ -38,6 +40,9 @@ module IRM_vorticity_mod
 
     real(rkind), PARAMETER :: Runiv  = 8.314472D+7              ! Gas constant              [g*cm^2/(s^2*mol*K)]=[erg/K/mol]
 
+    real(rkind), PARAMETER :: Cd = real(3.0D-2,rkind)
+    real(rkind), PARAMETER :: CY = real(1.0D2 ,rkind)
+
 contains
 
     subroutine read_inputs(inputfile)
@@ -54,10 +59,12 @@ contains
         close(iounit)
     end subroutine
 
-    subroutine write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation)
+    subroutine write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
+                            R11, R12, R13, R22, R23, R33, a_x, a_y, a_z)
         integer, intent(in) :: step
         real(rkind), dimension(:,:,:), intent(in) :: vort_avgz
         real(rkind), dimension(:,:),   intent(in) :: TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation
+        real(rkind), dimension(:,:),   intent(in) :: R11, R12, R13, R22, R23, R33, a_x, a_y, a_z
 
         character(len=clen) :: post2d_file
         integer :: i, ierr, iounit2d=91
@@ -85,6 +92,15 @@ contains
                     write(iounit2d) MMF_avg
                     write(iounit2d) CO2_avg
                     write(iounit2d) density_self_correlation
+                    write(iounit2d) R11
+                    write(iounit2d) R12
+                    write(iounit2d) R13
+                    write(iounit2d) R22
+                    write(iounit2d) R23
+                    write(iounit2d) R33
+                    write(iounit2d) a_x
+                    write(iounit2d) a_y
+                    write(iounit2d) a_z
                     close(iounit2d)
                 end if
             end if
@@ -139,7 +155,7 @@ contains
 
         n = size(fft)
 
-        write(filename,'(4A,I4.4,A)') trim(outputdir), "/", trim(varname), "_", step, ".dat"
+        write(filename,'(4A,I4.4,A)') trim(outputdir), "/spectrum_", trim(varname), "_", step, ".dat"
         call message(1,"Writing " // trim(varname) // " spectrum to " // trim(filename))
         if (nrank == 0) then
             open(unit=iounit, file=trim(filename), form='FORMATTED', status="REPLACE")
@@ -148,6 +164,79 @@ contains
             write(iounit,'(A9,2A26)') "# wav no.", "Real part", "Imag part"
             do i=1,n
                 write(iounit,'(I9,2ES26.16)') (i-1), real(fft(i)), aimag(fft(i))
+            end do
+
+            close(iounit)
+        end if
+
+    end subroutine
+
+    subroutine get_pdf(input,nbins,bins,min_input,max_input,pdf,mask)
+        use reductions, only: P_MAXVAL, P_MINVAL, P_SUM
+
+        real(rkind), dimension(:,:,:), intent(in) :: input
+        integer, intent(in) :: nbins
+        real(rkind), intent(in) :: max_input, min_input
+        real(rkind), dimension(:,:,:), intent(in) :: mask  ! This should only have zeros and ones
+        real(rkind), dimension(nbins+1), intent(out) :: bins
+        real(rkind), dimension(nbins), intent(out) :: pdf
+
+        real(rkind), dimension(nbins) :: proc_count
+        real(rkind) ::binsize
+
+        integer :: i, j, k, nb, ierr
+
+        ! Create equispaced bins between maximum and minimum
+        binsize = (max_input - min_input)/real(nbins,rkind)
+        bins(1) = min_input
+        do nb = 2,nbins+1
+            bins(nb) = bins(nb-1) + binsize
+        end do
+
+        proc_count = zero
+        ! Get the counts per bin for this proc
+        do k=1,mir%gp%ysz(3)
+            do j=1,mir%gp%ysz(2)
+                do i=1,mir%gp%ysz(1)
+                    if ( mask(i,j,k) .LT. half ) cycle ! No need to go to the bin loop if mask is zero
+                    do nb=1,nbins
+                        if ( ( input(i,j,k) .GE. bins(nb) ) .AND. ( input(i,j,k) .LE. bins(nb+1) ) ) then
+                            proc_count(nb) = proc_count(nb) + one
+                            exit ! No need to go over the other bins
+                        end if
+                    end do
+                end do
+            end do
+        end do
+
+        call MPI_ALLREDUCE(proc_count, pdf, nbins, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr) ! Now all procs will have the total counts per bin
+
+        ! Now normalize the pdf to make sum of probabilities equal to unity
+        pdf = pdf / (binsize*sum(pdf))
+
+    end subroutine
+
+    subroutine write_pdf(step, varname, bins, pdf)
+        integer, intent(in) :: step
+        character(len=*), intent(in) :: varname
+        real(rkind), dimension(:), intent(in) :: bins, pdf
+
+        character(len=clen) :: filename
+        integer :: i,n,iounit=51
+
+        ! Assume all processors have same pdf array, so only master proc can
+        ! write out the file
+        n = size(pdf)
+
+        write(filename,'(4A,I4.4,A)') trim(outputdir), "/pdf_", trim(varname), "_", step, ".dat"
+        call message(1,"Writing " // trim(varname) // " pdf to " // trim(filename))
+        if (nrank == 0) then
+            open(unit=iounit, file=trim(filename), form='FORMATTED', status="REPLACE")
+
+            write(iounit,'(2A)') "# pdf for ", trim(varname)
+            write(iounit,'(2A26)') "# bin", "PDF"
+            do i=1,n
+                write(iounit,'(2ES26.16)') half*(bins(i)+bins(i+1)), pdf(i)
             end do
 
             close(iounit)
@@ -270,16 +359,73 @@ contains
    
     END SUBROUTINE prob_properties
 
+    SUBROUTINE sgs_diffusivity(Y,Diff)
+     real(rkind), DIMENSION(:,:,:), INTENT(IN) :: Y
+     real(rkind), DIMENSION(:,:,:), INTENT(OUT) :: Diff
+     real(rkind), DIMENSION(SIZE(Y,1),SIZE(Y,2),SIZE(Y,3)) :: Lart,Lden,art,tmp,dum,Dsgs,Ysgs
+
+     real(rkind), dimension(mir%gp%xsz(1),mir%gp%xsz(2),mir%gp%xsz(3)) :: xbuf1, xbuf2
+     real(rkind), dimension(mir%gp%zsz(1),mir%gp%zsz(2),mir%gp%zsz(3)) :: zbuf1, zbuf2
+
+     Diff = zero
+   ! Oscillation control (Dsgs)========================================================================
+        Lart = SQRT(mir%dx**2 + mir%dy**2 + mir%dz**2) ! grid scale
+   ! Kawai's formula ----------------------------------
+          dum = one
+          call transpose_y_to_x( Y, xbuf1, mir%gp )
+          CALL der%d2dx2(xbuf1,xbuf2)
+          CALL der%d2dx2(xbuf2,xbuf1)
+          call transpose_x_to_y( xbuf1, tmp, mir%gp )
+          Dsgs = dum**4 * tmp * mir%dx**5
+          Lart = ABS(tmp)*mir%dx     ! Numerator for Y weighted grid length
+          Lden = tmp**2              ! Denominator for Y weighted grid length
+   
+          dum = one
+          CALL der%d2dy2(Y,art)
+          CALL der%d2dy2(art,tmp)
+          Dsgs = Dsgs + dum**4 * tmp * mir%dy**5
+          Lart = Lart + ABS(tmp)*mir%dy
+          Lden = Lden + tmp**2
+   
+          dum = one
+          call transpose_y_to_z( Y, zbuf1, mir%gp )
+          CALL der%d2dz2(zbuf1,zbuf2)
+          CALL der%d2dz2(zbuf2,zbuf1)
+          call transpose_z_to_y( zbuf1, tmp, mir%gp )
+          Dsgs = Dsgs + dum**4 * tmp * mir%dz**5
+          Lart = Lart + ABS(tmp)*mir%dz
+          Lden = Lden + tmp**2
+   
+          Dsgs = Cd*mir%c*Dsgs
+          Lart = Lart/( SQRT(Lden) + eps)
+   ! Kawai's formula ----------------------------------
+   
+   ! Bounds control (Ysgs)=============================================================================
+          Ysgs = CY*mir%c*0.5*(ABS(Y)  -one+ABS(one-Y  ))*Lart   !    0<=Y<=1
+   ! ceiling + filter==================================================================================
+        art = MAX(Dsgs,Ysgs)
+        tmp = art
+        ! CALL filter(gfilter,tmp,art) 
+        call transpose_y_to_x( tmp, xbuf1, mir%gp )
+        call gfil%filterx(xbuf1,xbuf2)
+        call transpose_x_to_y( xbuf2, art, mir%gp )
+        call gfil%filtery( art, tmp )
+        call transpose_y_to_z( tmp, zbuf1, mir%gp )
+        call gfil%filterz(zbuf1,zbuf2)
+        call transpose_z_to_y( zbuf2, art, mir%gp )
+        Diff = MAX(Diff,art)                   ! cm^2/s
+    END SUBROUTINE sgs_diffusivity
 
 end module
 
 program IRM_vorticity
     use mpi
     use kind_parameters, only: rkind, clen
-    use constants,       only: zero, half, one, eps
+    use constants,       only: zero, half, one, three, four, eps
     use miranda_tools,   only: miranda_reader
     use io_VTK_stuff,    only: io_VTK
     use DerivativesMod,  only: derivatives
+    use FiltersMod,      only: filters
     use gridtools,       only: alloc_buffs
     use operators,       only: curl, gradient, divergence
     use reductions,      only: P_AVGZ, P_MAXVAL, P_MINVAL, P_SUM
@@ -294,21 +440,26 @@ program IRM_vorticity
 
     character(len=clen), dimension(:), allocatable :: varnames
 
-    real(rkind) :: Ymin = 0.01_rkind  ! Cutoff for interface region
+    real(rkind) :: cutoff = 0.5_rkind  ! Cutoff for interface region
 
     real(rkind), dimension(:,:,:,:), allocatable, target :: buffer
     real(rkind), dimension(:,:,:,:), pointer :: vort, Diff, Xs
-    real(rkind), dimension(:,:,:), pointer :: upp, vpp, wpp, TKE, div, region, chi, mu, ktc
+    real(rkind), dimension(:,:,:), pointer :: upp, vpp, wpp, TKE, div, region, chi, mu, ktc, Rij
 
     real(rkind), dimension(:,:,:), allocatable, target :: buffer2d
     real(rkind), dimension(:,:,:), pointer :: vort_avgz
     real(rkind), dimension(:,:), pointer :: rho_avg, u_avg, v_avg, w_avg, CO2_avg, TKE_avg, div_avg, chi_avg, MMF_avg, density_self_correlation
+    real(rkind), dimension(:,:), pointer :: R11, R12, R13, R22, R23, R33
+    real(rkind), dimension(:,:), pointer :: a_x, a_y, a_z
 
     real(rkind), dimension(:), allocatable :: Y_air_x, Y_CO2_x
 
+    integer :: nbins = 64
+    real(rkind), dimension(:), allocatable :: bins, pdf
+
     complex(rkind), dimension(:), allocatable :: TKEfft
 
-    real(rkind) :: MMF_int, chi_int, vortz_int, vortz_pos, vortz_neg, TKE_int, mwidth
+    real(rkind) :: MMF_int, chi_int, chi_art, vortz_int, vortz_pos, vortz_neg, TKE_int, mwidth
 
     logical :: fftw_exhaustive = .FALSE.
 
@@ -318,7 +469,7 @@ program IRM_vorticity
     integer :: iounit = 93
 
     integer :: nVTKvars
-    integer :: ierr, step, i
+    integer :: ierr, step, i, j
 
     !======================================================================================================!
     ! Note about usage: All 3D arrays are in Y decomposition.
@@ -353,44 +504,62 @@ program IRM_vorticity
                    mir%periodicx, mir%periodicy, mir%periodicz, &
                     derivative_x,  derivative_y,  derivative_z  )
 
+    call message("Initializing the gaussian filter object" )
+    call gfil%init(                                     mir%gp, &
+                   mir%periodicx, mir%periodicy, mir%periodicz, &
+                      'gaussian',    'gaussian',    'gaussian'  )
     
     ! Initialize the FFT object (in the Z decomposition since that is where FFT will be performed)
     call message("Initializing the FFT object" )
     ierr = fftz%init( mir%nz, 'z', mir%gp%zsz(1), mir%gp%zsz(2), mir%dz, fftw_exhaustive )
 
     ! Allocate 3D buffer and associate pointers for convenience
-    call alloc_buffs(buffer, 13+2*mir%ns-1, 'y', mir%gp)
-    vort => buffer(:,:,:,1:3)
-    upp => buffer(:,:,:,4)
-    vpp => buffer(:,:,:,5)
-    wpp => buffer(:,:,:,6)
-    TKE => buffer(:,:,:,7)
-    div => buffer(:,:,:,8)
-    region => buffer(:,:,:,9)
-    chi => buffer(:,:,:,10)
-    mu => buffer(:,:,:,11)
-    ktc => buffer(:,:,:,12)
-    Diff => buffer(:,:,:,13:13+mir%ns-1)
-    Xs => buffer(:,:,:,13+mir%ns:13+2*mir%ns-1)
+    call alloc_buffs(buffer, 13+2*mir%ns, 'y', mir%gp)
+    i = 1
+    vort   => buffer(:,:,:,i:i+2);        i = i+3
+    upp    => buffer(:,:,:,i);            i = i+1
+    vpp    => buffer(:,:,:,i);            i = i+1
+    wpp    => buffer(:,:,:,i);            i = i+1
+    TKE    => buffer(:,:,:,i);            i = i+1
+    div    => buffer(:,:,:,i);            i = i+1
+    region => buffer(:,:,:,i);            i = i+1
+    chi    => buffer(:,:,:,i);            i = i+1
+    mu     => buffer(:,:,:,i);            i = i+1
+    ktc    => buffer(:,:,:,i);            i = i+1
+    Diff   => buffer(:,:,:,i:i+mir%ns-1); i = i+mir%ns
+    Xs     => buffer(:,:,:,i:i+mir%ns-1); i = i+mir%ns
+    Rij    => buffer(:,:,:,i)
 
     ! Allocate 2D buffer and associate pointers for convenience
-    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 13 ) )
-    vort_avgz => buffer2d(:,:,1:3)
-    rho_avg => buffer2d(:,:,4)
-    u_avg => buffer2d(:,:,5)
-    v_avg => buffer2d(:,:,6)
-    w_avg => buffer2d(:,:,7)
-    CO2_avg => buffer2d(:,:,8)
-    TKE_avg => buffer2d(:,:,9)
-    div_avg => buffer2d(:,:,10)
-    chi_avg => buffer2d(:,:,11)
-    MMF_avg => buffer2d(:,:,12)
+    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 22 ) )
+    vort_avgz                => buffer2d(:,:,1:3)
+    rho_avg                  => buffer2d(:,:,4)
+    u_avg                    => buffer2d(:,:,5)
+    v_avg                    => buffer2d(:,:,6)
+    w_avg                    => buffer2d(:,:,7)
+    CO2_avg                  => buffer2d(:,:,8)
+    TKE_avg                  => buffer2d(:,:,9)
+    div_avg                  => buffer2d(:,:,10)
+    chi_avg                  => buffer2d(:,:,11)
+    MMF_avg                  => buffer2d(:,:,12)
     density_self_correlation => buffer2d(:,:,13)
+    R11                      => buffer2d(:,:,14)
+    R12                      => buffer2d(:,:,15)
+    R13                      => buffer2d(:,:,16)
+    R22                      => buffer2d(:,:,17)
+    R23                      => buffer2d(:,:,18)
+    R33                      => buffer2d(:,:,19)
+    a_x                      => buffer2d(:,:,20)
+    a_y                      => buffer2d(:,:,21)
+    a_z                      => buffer2d(:,:,22)
 
     allocate( TKEfft(mir%nz/2+1) )
 
     allocate( Y_air_x( mir%gp%ysz(1) ) )
     allocate( Y_CO2_x( mir%gp%ysz(1) ) )
+
+    allocate( bins(nbins+1) )
+    allocate( pdf (nbins  ) )
 
     ! Initialize visualization stuff
     if ( writeviz ) then
@@ -414,7 +583,7 @@ program IRM_vorticity
     write(outputfile,'(2A)') trim(outputdir), "/post_scalar.dat"
     if(nrank == 0) then
         open(unit=iounit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-        write(iounit,'(A,A25,7A26)') "#", "Time", "Mixed width", "Z vorticity", "+ve Z vorticity", "-ve Z vorticity", "TKE", "Scalar dissipation", "MMF"
+        write(iounit,'(A,A25,8A26)') "#", "Time", "Mixed width", "Z vorticity", "+ve Z vorticity", "-ve Z vorticity", "TKE", "Scalar dissipation", "Art sca dissipation", "MMF"
     end if
 
     call toc("Time to initialize everything: ")
@@ -434,20 +603,30 @@ program IRM_vorticity
         ! Get volume fractions
         call get_volumefractions(mir%Ys,Xs)
         
+        ! Get Y_CO2 average
+        call P_AVGZ( mir%gp, mir%Ys(:,:,:,2), CO2_avg )
+
         ! Get the interface region
         region = zero
-        where( (mir%Ys(:,:,:,1) .GT. Ymin) .AND. (mir%Ys(:,:,:,1) .LT. (one-Ymin)) )
-            region = one
-        end where
-        call P_AVGZ( mir%gp, region, div_avg ) ! Put avg of region in div avg for now
-        where ( div_avg .GT. one/(real(2*mir%nz,rkind)) )
-            div_avg = one
-        elsewhere
-            div_avg = zero
-        end where
-        do i = 1,mir%gp%ysz(3)
-            region(:,:,i) = div_avg
+        do j=1,mir%gp%ysz(2)
+            do i=1,mir%gp%ysz(1)
+                if ( four * (one-CO2_avg(i,j)) * CO2_avg(i,j) .GT. cutoff ) then
+                    region(i,j,:) = one
+                end if
+            end do
         end do
+        ! where( (mir%Ys(:,:,:,1) .GT. Ymin) .AND. (mir%Ys(:,:,:,1) .LT. (one-Ymin)) )
+        !     region = one
+        ! end where
+        ! call P_AVGZ( mir%gp, region, div_avg ) ! Put avg of region in div avg for now
+        ! where ( div_avg .GT. one/(real(2*mir%nz,rkind)) )
+        !     div_avg = one
+        ! elsewhere
+        !     div_avg = zero
+        ! end where
+        ! do i = 1,mir%gp%ysz(3)
+        !     region(:,:,i) = div_avg
+        ! end do
 
         ! Clip volume fractions above and below bounds
         where ( Xs .GT. one )
@@ -487,7 +666,7 @@ program IRM_vorticity
             call P_AVGZ( mir%gp, vort(:,:,:,i), vort_avgz(:,:,i) )
         end do
         
-        ! Get integrated Z vorticity (integrated inside region)
+        ! Get integrated Z vorticity
         vortz_int = P_SUM(vort(:,:,:,3))*mir%dx*mir%dy*mir%dz
         call message(1,"vortz_int",vortz_int)
         chi = vort(:,:,:,3)
@@ -519,14 +698,20 @@ program IRM_vorticity
             call get_zfft(chi,TKEfft,region)
             call write_spectrum(step, "scalar_dissipation", TKEfft)
 
-            ! Get Scalar dissipation average
+            ! Get integrated chi
+            chi_int = P_SUM(chi)*mir%dx*mir%dy*mir%dz
+            call message(1,"chi_int",chi_int)
+            
+            call sgs_diffusivity( mir%Ys(:,:,:,2), Diff(:,:,:,2) )
+            chi = Diff(:,:,:,2)*( dY_x*dY_x + dY_y*dY_y + dY_z*dY_z ) ! Artificial scalar dissipation
+            
+            ! Get integrated artificial chi
+            chi_art = P_SUM(chi)*mir%dx*mir%dy*mir%dz
+            
+            ! Get artificial scalar dissipation average
             call P_AVGZ( mir%gp, chi, chi_avg )
         end associate
         
-        ! Get integrated chi (integrated inside region)
-        chi_int = P_SUM(chi)*mir%dx*mir%dy*mir%dz
-        call message(1,"chi_int",chi_int)
-
         ! Get Favre averaged velocities
         upp = mir%rho * mir%u
         vpp = mir%rho * mir%v
@@ -545,10 +730,42 @@ program IRM_vorticity
             wpp(:,:,i) = mir%w(:,:,i) - w_avg
         end do
 
+        ! Get Reynolds stress R11
+        Rij = mir%rho*upp*upp
+        call P_AVGZ( mir%gp, Rij, R11 )
+
+        ! Get Reynolds stress R12
+        Rij = mir%rho*upp*vpp
+        call P_AVGZ( mir%gp, Rij, R12 )
+
+        ! Get Reynolds stress R13
+        Rij = mir%rho*upp*wpp
+        call P_AVGZ( mir%gp, Rij, R13 )
+
+        ! Get Reynolds stress R22
+        Rij = mir%rho*vpp*vpp
+        call P_AVGZ( mir%gp, Rij, R22 )
+
+        ! Get Reynolds stress R23
+        Rij = mir%rho*vpp*wpp
+        call P_AVGZ( mir%gp, Rij, R23 )
+
+        ! Get Reynolds stress R33
+        Rij = mir%rho*wpp*wpp
+        call P_AVGZ( mir%gp, Rij, R33 )
+
+        ! Get turbulent mass flux
+        call P_AVGZ( mir%gp, upp, a_x )
+        a_x = -a_x ! a_x = -<upp>
+        call P_AVGZ( mir%gp, vpp, a_y )
+        a_y = -a_y ! a_y = -<vpp>
+        call P_AVGZ( mir%gp, wpp, a_z )
+        a_z = -a_z ! a_z = -<wpp>
+
         ! Get TKE = rho*u_i*u_i/2
         TKE = half * mir%rho * ( upp*upp + vpp*vpp + wpp*wpp )
         
-        ! Get integrated TKE (integrated inside region)
+        ! Get integrated TKE
         TKE_int = P_SUM(TKE)*mir%dx*mir%dy*mir%dz
         call message(1,"TKE_int",TKE_int)
 
@@ -559,17 +776,19 @@ program IRM_vorticity
         ! Get TKE average
         call P_AVGZ( mir%gp, TKE, TKE_avg )
 
-        ! Get Y_CO2 average
-        call P_AVGZ( mir%gp, mir%Ys(:,:,:,2), CO2_avg )
-
         ! Get Divergence
         call divergence( mir%gp, der, mir%u, mir%v, mir%w, div )
 
         ! Get Divergence average
         call P_AVGZ( mir%gp, div, div_avg )
+    
+        Rij = one
+        ! Get Y_CO2 PDF
+        call get_pdf(mir%Ys(:,:,:,2),nbins,bins,0.1_rkind,0.9_rkind,pdf,Rij)
+        call write_pdf(step, "CO2", bins, pdf)
 
         if(nrank == 0) then
-            write(iounit,'(8ES26.16)') real(step*1.0d-4,rkind), mwidth, vortz_int, vortz_pos, vortz_neg, TKE_int, chi_int, MMF_int
+            write(iounit,'(9ES26.16)') real(step*1.0d-4,rkind), mwidth, vortz_int, vortz_pos, vortz_neg, TKE_int, chi_int, chi_art, MMF_int
         end if
 
         ! Write out visualization files
@@ -580,7 +799,8 @@ program IRM_vorticity
         end if
 
         ! Write out 2D postprocessing file
-        call write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation)
+        call write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
+                          R11, R12, R13, R22, R23, R33, a_x, a_y, a_z)
 
         write(time_message,'(A,I,A)') "Time to postprocess step ", step, " :"
         call toc(trim(time_message))
@@ -595,7 +815,10 @@ program IRM_vorticity
     if (allocated( TKEfft )) deallocate( TKEfft   )
     if (allocated( Y_air_x)) deallocate( Y_air_x  )
     if (allocated( Y_CO2_x)) deallocate( Y_CO2_x  )
+    if (allocated( bins   )) deallocate( bins     )
+    if (allocated( pdf    )) deallocate( pdf      )
     call der%destroy()
+    call gfil%destroy()
     call mir%destroy()
     if ( writeviz ) then
         deallocate( varnames )
