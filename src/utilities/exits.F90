@@ -1,11 +1,12 @@
 module exits
 
     use kind_parameters, only: rkind,clen,stdout,stderr
+    use constants, only: one
     use decomp_2d, only: nrank, decomp_2d_abort
     
     implicit none
     private
-    public :: GracefulExit, message, warning, newline
+    public :: GracefulExit, message, warning, newline, nancheck
         
     interface message
         module procedure message_char, message_char_double, message_level_char, message_level_char_double, message_level_char_int
@@ -93,5 +94,25 @@ contains
         full_message = full_message // "> " // mess
         if (nrank == 0) write(stdout,*) full_message, " = ", val
     end subroutine
+
+    logical function nancheck(f)
+        real(rkind), dimension(:,:,:,:), intent(in) :: f
+        integer :: i,j,k,l
+        
+        nancheck = .FALSE.
+        do l = 1,size(f,4)
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    do i = 1,size(f,1)
+                        if ( isnan(f(i,j,k,l)) .OR. ( f(i,j,k,l) + one == f(i,j,k,l) ) ) then
+                            nancheck = .TRUE.
+                            exit
+                        end if
+                    end do
+                end do
+            end do
+        end do
+
+    end function
     
 end module 

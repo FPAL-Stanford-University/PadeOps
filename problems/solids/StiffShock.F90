@@ -5,6 +5,7 @@ module StiffShockMod
     use constants,       only: zero,eps,half,one,two,three,eight,pi
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
+    use exits,           only: GracefulExit,nancheck
 
     implicit none
 
@@ -14,7 +15,7 @@ module StiffShockMod
     real(rkind) :: pInf                 ! P_infty for the stiffened gas
     
     ! Problem parameters
-    real(rkind) :: pRatio = 1000._rkind   ! Pressure ratio P2/P1
+    real(rkind) :: pRatio = 100._rkind   ! Pressure ratio P2/P1
     real(rkind) :: pInfbyP1 = 10._rkind ! P_infty/P1 ratio for the stiffened gas
     
     real(rkind) :: rho1 = one           ! Right density
@@ -29,13 +30,13 @@ module StiffShockMod
     real(rkind) :: E1                   ! Right total energy
     real(rkind) :: E2                   ! Left total energy
 
-    real(rkind) :: tstop = 5.0_rkind    ! Stop time for simulation
+    real(rkind) :: tstop = 0.2_rkind    ! Stop time for simulation
     real(rkind) :: dt    = 0.0001_rkind ! Time step to use for the simulation
     real(rkind) :: dt_fixed = real(1.0D-6, rkind) ! Time step to use for the simulation
     real(rkind) :: CFL   = half         ! CFL number to use for the simulation
     real(rkind) :: t     = zero         ! Simulation time
     
-    integer :: nx = 201, ny = 1, nz = 1 ! Number of points to use for the simulation (ny and nz have to be 1)
+    integer :: nx = 101, ny = 1, nz = 1 ! Number of points to use for the simulation (ny and nz have to be 1)
     real(rkind) :: dx                   ! Grid spacing
 
     character(len=*), parameter :: dermethod = "cd10"    ! Use 10th order Pade for derivatives
@@ -47,7 +48,7 @@ module StiffShockMod
     logical, parameter :: UseExpl4thDer = .TRUE.
     logical, parameter :: conservative = .FALSE. 
     real(rkind) :: Cmu = 0.002_rkind
-    real(rkind) :: Cbeta = 10._rkind
+    real(rkind) :: Cbeta = 0.5_rkind
     real(rkind) :: Ckap = 0.01_rkind
 
 contains
@@ -346,6 +347,10 @@ contains
             call setBC(u)
         end do
 
+        if ( nancheck(u) ) then
+            call GracefulExit("Oh the devil! NaN encountered. Exiting...",666)
+        end if
+
     end subroutine
 
 end module
@@ -443,10 +448,13 @@ program StiffShock
     ! call fil%filterx(u(:,:,:,3),dum)
     ! u(:,:,:,3) = dum
 
+    call GetPressure(u,dum)  ! dum houses pressure now
+    dum = sqrt( gam*(dum + pInf)/u(:,:,:,1) )  ! Speed of sound = sqrt( gamma*(p+pInf)/rho )
+    tstop = tstop / minval(dum)
+
     ! Integrate in time
     step = 0
     t = zero
-    ! tstop = real(5.0D-4, rkind)
     print '(A6,6(A2,A13))', 'step', '|', 'time', '|', 'timestep', '|', 'stability', '|', 'min density', '|', 'max velocity', '|', 'max energy'
     do while ( t .LT. (tstop - dt) )
         call RK45(u,dt,stability,der,fil)
@@ -474,9 +482,11 @@ program StiffShock
     call GetPressure(u,dum)  ! Put pressure in dum for output
     OPEN(UNIT=iounit, FILE="StiffShock.dat", FORM='FORMATTED')
     WRITE(iounit,'(A, ES24.16)') "Final time = ", t
-    WRITE(iounit,'(7A24)') "X", "Density", "Velocity", "Pressure", "Shear Visc.", "Bulk Visc.", "Conductivity"
+    WRITE(iounit,'(8A24)') "X", "Density", "Velocity", "Pressure", "Energy", "Shear Visc.", "Bulk Visc.", "Conductivity"
     do i=1,nx
-        WRITE(iounit,'(7ES24.16)') x(i,1,1), u(i,1,1,1), u(i,1,1,2)/u(i,1,1,1), dum(i,1,1), mu(i,1,1), bulk(i,1,1), kap(i,1,1) ! x, density, velocity, pressure, shear visc., bulk visc., conductivity
+        WRITE(iounit,'(8ES24.16)') x(i,1,1), u(i,1,1,1), u(i,1,1,2)/u(i,1,1,1), dum(i,1,1), &
+                                  ( u(i,1,1,3) - half*u(i,1,1,2)*u(i,1,1,2)/u(i,1,1,1) )/u(i,1,1,1), &
+                                   mu(i,1,1), bulk(i,1,1), kap(i,1,1) ! x, density, velocity, pressure, shear visc., bulk visc., conductivity
     end do
     CLOSE(iounit)
 
