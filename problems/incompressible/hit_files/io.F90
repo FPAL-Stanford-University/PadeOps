@@ -61,7 +61,7 @@ contains
 
     subroutine dumpData4Matlab(gp)
         use IncompressibleGrid, only: igrid
-        use GridMod,            only: alloc_buffs
+        use gridtools,          only: alloc_buffs
         use decomp_2d,        only: transpose_y_to_x
         
         class(igrid), target, intent(in) :: gp 

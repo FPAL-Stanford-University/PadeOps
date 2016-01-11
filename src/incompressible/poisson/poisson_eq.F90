@@ -3,7 +3,7 @@ module poisson_eq
     use kind_parameters, only : rkind
     use fft_2d_stuff, only: fft_2d
     use decomp_2d
-    use constants, only: r_eps, one
+    use constants, only: eps, one
 
     implicit none 
     private

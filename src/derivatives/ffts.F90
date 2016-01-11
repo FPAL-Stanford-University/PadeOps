@@ -10,7 +10,7 @@ module fftstuff
 
 
     type ffts
-        private 
+        private
 
         integer :: n
         real(rkind) :: onebyn
@@ -19,8 +19,8 @@ module fftstuff
         integer(kind=8) :: plan_fwd
         integer(kind=8) :: plan_bwd
 
-        real(rkind), dimension(:,:,:), allocatable :: k1d
-        real(rkind), dimension(:,:,:), allocatable :: mk1dsq
+        real(rkind), dimension(:,:,:), allocatable, public :: k1d
+        real(rkind), dimension(:,:,:), allocatable         :: mk1dsq
 
         integer :: split
 
@@ -44,12 +44,12 @@ module fftstuff
             procedure :: d2d2
             procedure :: d2d3
 
-            procedure,private  :: fftx
-            procedure,private  :: ifftx
-            procedure,private  :: ffty
-            procedure,private  :: iffty
-            procedure,private  :: fftz
-            procedure,private  :: ifftz
+            procedure :: fftx
+            procedure :: ifftx
+            procedure :: ffty
+            procedure :: iffty
+            procedure :: fftz
+            procedure :: ifftz
 
 
     end type

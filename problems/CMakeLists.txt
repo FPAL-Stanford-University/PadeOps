@@ -25,4 +25,5 @@ endforeach()
 
 add_subdirectory(compressible)
 add_subdirectory(incompressible)
+add_subdirectory(postprocessing)
 add_subdirectory(solids)

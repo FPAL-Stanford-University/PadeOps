@@ -6,12 +6,13 @@ module kind_parameters
     implicit none
     
     private
-    public :: rkind,mpirkind, clen, stdin, stdout, stderr
+    public :: rkind, mpirkind, mpickind, clen, stdin, stdout, stderr
 
     integer, parameter :: rkind=kind(0.d0)
     integer, parameter :: mpirkind = MPI_DOUBLE_PRECISION
+    integer, parameter :: mpickind = MPI_DOUBLE_COMPLEX
    
-    integer, parameter :: clen = 100
+    integer, parameter :: clen = 120
 
     integer, parameter :: stdin  = 5
     integer, parameter :: stdout = 6

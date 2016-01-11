@@ -2,7 +2,7 @@ module debugMod
     use IncompressibleGrid, only: igrid
     use kind_parameters, only: rkind
     use decomp_2d, only: transpose_y_to_x
-    use GridMod,            only: alloc_buffs
+    use gridtools,            only: alloc_buffs
 
     implicit none 
 contains

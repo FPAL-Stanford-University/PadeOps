@@ -2,10 +2,10 @@
 ! Grid - igrid
 ! Problem - HIT
 
-#include "hit_files/meshgen.F90"         !<-- Meshgen File (USER SPECIFIED)
-#include "hit_files/io.F90"              !<-- I/O Procedures (USER SPECIFIED)
-#include "hit_files/initfields.F90"      !<-- Initializing Fields FIle (USER SPECIFIED)
-#include "hit_files/temporalHook.F90"    !<-- Temporal Hook file - procedures called per time step (USER SPECIFIED)
+#include "hit_files/meshgen.F90"       
+#include "hit_files/io.F90"            
+#include "hit_files/initfields.F90"    
+#include "hit_files/temporalHook.F90"  
 
 program hitcd
     use mpi
