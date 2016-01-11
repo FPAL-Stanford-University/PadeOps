@@ -413,7 +413,9 @@ contains
         call this%getRHS()
 
         ! STEP 2b: Add the forcing function
-        call this%force%addForcing(this%Sfields,this%rhs)
+        if (this%forcedTurbulence) then
+            call this%force%addForcing(this%Sfields,this%rhs)
+        end if 
 
         ! STEP 3: Check if 1st time step - if yes, do Euler time step, if no, do Adams-Bash
         if (this%step == 0) then
