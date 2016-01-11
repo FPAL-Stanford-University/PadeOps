@@ -31,6 +31,8 @@ program hitcd
     
     call start_io(igp)                !<-- Start I/O by creating a header file (see io.F90)
 
+
+    call igp%printDivergence()
     do while (igp%tsim < igp%tstop) 
         
         call igp%AdamsBashforth()     !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)

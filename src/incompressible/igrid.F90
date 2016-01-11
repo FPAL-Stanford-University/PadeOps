@@ -654,7 +654,7 @@ contains
         ytmp2 => this%ybuf_r(:,:,:,2) 
         ztmp1 => this%zbuf_r(:,:,:,1) 
         ztmp2 => this%zbuf_r(:,:,:,2) 
-       
+     
         ! STEP 1: Get x derivative 
         call der%ddx(this%u,xtmp1) 
         xtmp2 = xtmp1
