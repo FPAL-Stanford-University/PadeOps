@@ -1,0 +1,34 @@
+#!/bin/bash
+
+#PBS -N hit128_forced
+#PBS -e stderr
+#PBS -o stdout
+#PBS -m be
+#PBS -M aditya90@stanford.edu
+#PBS -l nodes=8:ppn=8
+#PBS -l walltime=24:00:00
+
+PBS_O_WORKDIR='/home/aditya90/padeops/build/problems/incompressible/'
+LOG_DIR='/home/aditya90/padeops/data'
+export PBS_O_WORKDIR
+export LOG_DIR
+
+PROG="./hit"
+ARGS="/home/aditya90/padeops/build/problems/incompressible/hit_files/input_cd10.dat"
+
+### ---------------------------------------
+### BEGINNING OF EXECUTION
+### ---------------------------------------
+
+echo The master node of this job is `hostname`
+echo The working directory is `echo $PBS_O_WORKDIR`
+echo This job runs on the following nodes:
+echo `cat $PBS_NODEFILE`
+
+# Define number of processors
+#NPROCS=`wc -l < $PBS_NODEFILE`
+
+cd $PBS_O_WORKDIR
+cmd="mpiexec $PROG $ARGS"
+echo "Running: $cmd in directory: "`pwd`
+$cmd >& $LOG_DIR/log.$PBS_JOBID

@@ -322,7 +322,7 @@ contains
             this%forcedTurbulence = .true.
             this%KFmax = kfmax
             allocate(this%force)
-            call this%force%init(this%spect,kfmax)
+            call this%force%init(this%spect,kfmax,nx, ny, nz, nu)
         end if 
 
     end subroutine
@@ -414,7 +414,7 @@ contains
 
         ! STEP 2b: Add the forcing function
         if (this%forcedTurbulence) then
-            call this%force%addForcing(this%Sfields,this%rhs)
+            call this%force%addForcing(this%Sfields,this%duidxj,this%rhs)
         end if 
 
         ! STEP 3: Check if 1st time step - if yes, do Euler time step, if no, do Adams-Bash
