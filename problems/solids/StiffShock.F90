@@ -30,7 +30,7 @@ module StiffShockMod
     real(rkind) :: E1                   ! Right total energy
     real(rkind) :: E2                   ! Left total energy
 
-    real(rkind) :: tstop = 0.2_rkind    ! Stop time for simulation
+    real(rkind) :: tstop = 20._rkind    ! Stop time for simulation
     real(rkind) :: dt    = 0.0001_rkind ! Time step to use for the simulation
     real(rkind) :: dt_fixed = real(1.0D-6, rkind) ! Time step to use for the simulation
     real(rkind) :: CFL   = half         ! CFL number to use for the simulation
