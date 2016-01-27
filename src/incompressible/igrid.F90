@@ -11,7 +11,7 @@ module IncompressibleGrid
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
     use PoissonMod, only: poisson
-
+    use ForcingMod, only: Forcing
     use mpi 
 
     implicit none
@@ -78,6 +78,9 @@ module IncompressibleGrid
 
         integer :: runID 
 
+        logical :: forcedTurbulence = .FALSE.
+        real(rkind) :: kfmax  
+        type(forcing), allocatable :: force
 
         character(len=clen) :: inputdir 
         logical :: use2DecompFFT
@@ -127,7 +130,9 @@ contains
         integer :: t_dataDump = 99999
         integer :: t_restartDump = 99999
         logical :: ViscConsrv = .TRUE. 
-        logical :: use2DecompFFT = .TRUE. 
+        logical :: use2DecompFFT = .TRUE.
+        logical :: useForcing = .FALSE.
+        real(rkind) :: KFmax = 2._rkind  
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
                                   periodicx, periodicy, periodicz, &
@@ -136,7 +141,7 @@ contains
                                                        prow, pcol, &
                                              ViscConsrv, SkewSymm, &
                                         t_restartDump, t_dataDump
-        namelist /IINPUT/  nu, useSGS, runID , use2DecompFFT
+        namelist /IINPUT/  nu, useSGS, runID , useForcing, KFmax, use2DecompFFT
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -310,7 +315,16 @@ contains
         ! STEP 12: FINAL CHECK - DID USER SPECIFY EITHER DT OR CFL?
         if ((this%CFL < 0) .and. (this%dt < 0)) then
             call GracefulExit("Neither CFL not dt were specified in the input file", 123)
+        end if
+
+        ! STEP 13: generate forcing for isotropic turbulence if required
+        if (useForcing) then
+            this%forcedTurbulence = .true.
+            this%KFmax = kfmax
+            allocate(this%force)
+            call this%force%init(this%spect,kfmax,nx, ny, nz, nu)
         end if 
+
     end subroutine
 
 
@@ -345,6 +359,7 @@ contains
         if (allocated(this%xbuf_c)) deallocate(this%xbuf_c)
         if (allocated(this%ybuf_c)) deallocate(this%ybuf_c)
         if (allocated(this%zbuf_c)) deallocate(this%zbuf_c)
+        if (allocated(this%force))  deallocate(this%force)
     end subroutine
 
     subroutine gradient(this, f, dfdx, dfdy, dfdz)
@@ -394,8 +409,13 @@ contains
         call this%getDT()
         dtby2 = this%dt/two
 
-        ! STEP 2: Get the RHS (in spectral space)
+        ! STEP 2a: Get the RHS (in spectral space)
         call this%getRHS()
+
+        ! STEP 2b: Add the forcing function
+        if (this%forcedTurbulence) then
+            call this%force%addForcing(this%Sfields,this%duidxj,this%rhs)
+        end if 
 
         ! STEP 3: Check if 1st time step - if yes, do Euler time step, if no, do Adams-Bash
         if (this%step == 0) then
@@ -655,7 +675,7 @@ contains
         ytmp2 => this%ybuf_r(:,:,:,2) 
         ztmp1 => this%zbuf_r(:,:,:,1) 
         ztmp2 => this%zbuf_r(:,:,:,2) 
-       
+     
         ! STEP 1: Get x derivative 
         call der%ddx(this%u,xtmp1) 
         xtmp2 = xtmp1
