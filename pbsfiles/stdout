@@ -1,5 +1,0 @@
-The master node of this job is compute-6-33.local
-The working directory is /home/aditya90/padeops/build/problems/incompressible/
-This job runs on the following nodes:
-compute-6-33 compute-6-33 compute-6-33 compute-6-33 compute-6-33 compute-6-33 compute-6-33 compute-6-33 compute-6-25 compute-6-25 compute-6-25 compute-6-25 compute-6-25 compute-6-25 compute-6-25 compute-6-25 compute-6-23 compute-6-23 compute-6-23 compute-6-23 compute-6-23 compute-6-23 compute-6-23 compute-6-23 compute-6-21 compute-6-21 compute-6-21 compute-6-21 compute-6-21 compute-6-21 compute-6-21 compute-6-21 compute-6-19 compute-6-19 compute-6-19 compute-6-19 compute-6-19 compute-6-19 compute-6-19 compute-6-19 compute-6-18 compute-6-18 compute-6-18 compute-6-18 compute-6-18 compute-6-18 compute-6-18 compute-6-18 compute-6-17 compute-6-17 compute-6-17 compute-6-17 compute-6-17 compute-6-17 compute-6-17 compute-6-17 compute-6-9 compute-6-9 compute-6-9 compute-6-9 compute-6-9 compute-6-9 compute-6-9 compute-6-9
-Running: mpiexec ./hit /home/aditya90/padeops/build/problems/incompressible/hit_files/input_cd10.dat in directory: /home/aditya90/padeops/build/problems/incompressible
