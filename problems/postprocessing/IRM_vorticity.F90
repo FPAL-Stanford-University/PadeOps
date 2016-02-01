@@ -9,6 +9,7 @@ module IRM_vorticity_mod
     use FiltersMod,      only: filters
     use decomp_2d,       only: nrank, nproc, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use exits,           only: message, GracefulExit
+    use reductions,      only: P_AVGZ
 
     implicit none
 
@@ -416,12 +417,34 @@ contains
         Diff = MAX(Diff,art)                   ! cm^2/s
     END SUBROUTINE sgs_diffusivity
 
+    subroutine favre(f,ff,rho_avg)
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)), intent(in)  :: f
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)), intent(out) :: ff
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)), intent(in), optional  :: rho_avg
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)) :: tmp
+
+        call P_AVGZ( mir%gp, mir%rho*f, ff )
+        if ( present(rho_avg) ) then
+            ff = ff / rho_avg
+        else
+            call P_AVGZ( mir%gp, mir%rho, tmp )
+            ff = ff / tmp
+        end if
+    end subroutine
+
+    subroutine trace(b,tr)
+        real(rkind), dimension(:,:,:,:,:), intent(in) :: b
+        real(rkind), dimension(size(b,1), size(b,2), size(b,3)), intent(out) :: tr
+
+        tr = b(:,:,:,1,1) + b(:,:,:,2,2) + b(:,:,:,3,3)
+    end subroutine
+
 end module
 
 program IRM_vorticity
     use mpi
     use kind_parameters, only: rkind, clen
-    use constants,       only: zero, half, one, three, four, eps
+    use constants,       only: zero, half, one, four, eps
     use miranda_tools,   only: miranda_reader
     use io_VTK_stuff,    only: io_VTK
     use DerivativesMod,  only: derivatives
@@ -802,7 +825,7 @@ program IRM_vorticity
         call write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
                           R11, R12, R13, R22, R23, R33, a_x, a_y, a_z)
 
-        write(time_message,'(A,I,A)') "Time to postprocess step ", step, " :"
+        write(time_message,'(A,I4,A)') "Time to postprocess step ", step, " :"
         call toc(trim(time_message))
     end do
 
