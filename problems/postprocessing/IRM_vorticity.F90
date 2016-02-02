@@ -60,11 +60,11 @@ contains
     end subroutine
 
     subroutine write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
-                            R11, R12, R13, R22, R23, R33, a_x, a_y, a_z)
+                            R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq)
         integer, intent(in) :: step
         real(rkind), dimension(:,:,:), intent(in) :: vort_avgz
         real(rkind), dimension(:,:),   intent(in) :: TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation
-        real(rkind), dimension(:,:),   intent(in) :: R11, R12, R13, R22, R23, R33, a_x, a_y, a_z
+        real(rkind), dimension(:,:),   intent(in) :: R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq
 
         character(len=clen) :: post2d_file
         integer :: i, ierr, iounit2d=91
@@ -101,6 +101,7 @@ contains
                     write(iounit2d) a_x
                     write(iounit2d) a_y
                     write(iounit2d) a_z
+                    write(iounit2d) rhop_sq
                     close(iounit2d)
                 end if
             end if
@@ -450,7 +451,7 @@ program IRM_vorticity
     real(rkind), dimension(:,:,:), pointer :: vort_avgz
     real(rkind), dimension(:,:), pointer :: rho_avg, u_avg, v_avg, w_avg, CO2_avg, TKE_avg, div_avg, chi_avg, MMF_avg, density_self_correlation
     real(rkind), dimension(:,:), pointer :: R11, R12, R13, R22, R23, R33
-    real(rkind), dimension(:,:), pointer :: a_x, a_y, a_z
+    real(rkind), dimension(:,:), pointer :: a_x, a_y, a_z, rhop_sq
 
     real(rkind), dimension(:), allocatable :: Y_air_x, Y_CO2_x
 
@@ -459,7 +460,7 @@ program IRM_vorticity
 
     complex(rkind), dimension(:), allocatable :: TKEfft
 
-    real(rkind) :: MMF_int, chi_int, chi_art, vortz_int, vortz_pos, vortz_neg, TKE_int, mwidth
+    real(rkind) :: MMF_int, chi_int, chi_art, vortz_int, vortz_pos, vortz_neg, TKE_int, mwidth, rhop_sq_int
 
     logical :: fftw_exhaustive = .FALSE.
 
@@ -531,7 +532,7 @@ program IRM_vorticity
     Rij    => buffer(:,:,:,i)
 
     ! Allocate 2D buffer and associate pointers for convenience
-    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 22 ) )
+    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 23 ) )
     vort_avgz                => buffer2d(:,:,1:3)
     rho_avg                  => buffer2d(:,:,4)
     u_avg                    => buffer2d(:,:,5)
@@ -552,6 +553,7 @@ program IRM_vorticity
     a_x                      => buffer2d(:,:,20)
     a_y                      => buffer2d(:,:,21)
     a_z                      => buffer2d(:,:,22)
+    rhop_sq                  => buffer2d(:,:,23)
 
     allocate( TKEfft(mir%nz/2+1) )
 
@@ -583,7 +585,7 @@ program IRM_vorticity
     write(outputfile,'(2A)') trim(outputdir), "/post_scalar.dat"
     if(nrank == 0) then
         open(unit=iounit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-        write(iounit,'(A,A25,8A26)') "#", "Time", "Mixed width", "Z vorticity", "+ve Z vorticity", "-ve Z vorticity", "TKE", "Scalar dissipation", "Art sca dissipation", "MMF"
+        write(iounit,'(A,A25,9A26)') "#", "Time", "Mixed width", "Z vorticity", "+ve Z vorticity", "-ve Z vorticity", "TKE", "Scalar dissipation", "Art sca dissipation", "MMF", "< rho' rho' >"
     end if
 
     call toc("Time to initialize everything: ")
@@ -682,6 +684,13 @@ program IRM_vorticity
 
         ! Get rho average
         call P_AVGZ( mir%gp, mir%rho, rho_avg )
+
+        ! Get < rho' rho' >
+        do i = 1,mir%gp%ysz(3)
+            chi(:,:,i) = ( mir%rho(:,:,i) - rho_avg )**2 ! Put (rho' rho') in chi temporarily
+        end do
+        call P_AVGZ( mir%gp, chi, rhop_sq )
+        rhop_sq_int = P_SUM(chi*region)/P_SUM(region)
 
         ! Get density self correlation
         call P_AVGZ( mir%gp, one/mir%rho, density_self_correlation)
@@ -788,7 +797,7 @@ program IRM_vorticity
         call write_pdf(step, "CO2", bins, pdf)
 
         if(nrank == 0) then
-            write(iounit,'(9ES26.16)') real(step*1.0d-4,rkind), mwidth, vortz_int, vortz_pos, vortz_neg, TKE_int, chi_int, chi_art, MMF_int
+            write(iounit,'(10ES26.16)') real(step*1.0d-4,rkind), mwidth, vortz_int, vortz_pos, vortz_neg, TKE_int, chi_int, chi_art, MMF_int, rhop_sq_int
         end if
 
         ! Write out visualization files
@@ -800,7 +809,7 @@ program IRM_vorticity
 
         ! Write out 2D postprocessing file
         call write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
-                          R11, R12, R13, R22, R23, R33, a_x, a_y, a_z)
+                          R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq)
 
         write(time_message,'(A,I,A)') "Time to postprocess step ", step, " :"
         call toc(trim(time_message))
