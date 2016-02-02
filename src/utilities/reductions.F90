@@ -18,7 +18,7 @@ module reductions
     end interface
 
     interface P_SUM
-        module procedure P_SUM_arr3, P_SUM_arr2, P_SUM_arr1, P_SUM_sca
+        module procedure P_SUM_arr3, P_SUM_arr2, P_SUM_arr1, P_SUM_sca, P_SUM_sca_INT
     end interface
 
     interface P_MEAN
@@ -154,6 +154,15 @@ contains
 
     end function
 
+    function P_SUM_sca_INT(x) result(summation)
+        integer, intent(in) :: x
+        integer :: summation
+        integer :: ierr
+
+        call MPI_Allreduce(x, summation, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+    end function
+    
     subroutine P_AVGZ(gp, f, avg)
         type(decomp_info), intent(in) :: gp
         real(rkind), dimension(:,:,:), intent(in) :: f

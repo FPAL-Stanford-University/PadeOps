@@ -5,7 +5,7 @@ module temporalHook
     use exits,              only: message
     use hitCD_IO,           only: dumpData4Matlab 
     use constants,          only: half 
-    integer :: nt_print2screen = 10
+    integer :: nt_print2screen = 20
     integer :: nt_getMaxKE = 20
 contains
 

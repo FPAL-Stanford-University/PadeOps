@@ -2,9 +2,10 @@
 module StiffShockMod
     
     use kind_parameters, only: rkind
-    use constants,       only: zero,half,one,two,eight,pi
+    use constants,       only: zero,eps,half,one,two,three,eight,pi
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
+    use exits,           only: GracefulExit,nancheck
 
     implicit none
 
@@ -14,7 +15,7 @@ module StiffShockMod
     real(rkind) :: pInf                 ! P_infty for the stiffened gas
     
     ! Problem parameters
-    real(rkind) :: pRatio = 1.5_rkind   ! Pressure ratio P2/P1
+    real(rkind) :: pRatio = 100._rkind   ! Pressure ratio P2/P1
     real(rkind) :: pInfbyP1 = 10._rkind ! P_infty/P1 ratio for the stiffened gas
     
     real(rkind) :: rho1 = one           ! Right density
@@ -29,10 +30,13 @@ module StiffShockMod
     real(rkind) :: E1                   ! Right total energy
     real(rkind) :: E2                   ! Left total energy
 
-    real(rkind) :: tstop = 5.0_rkind    ! Stop time for simulation
+    real(rkind) :: tstop = 20._rkind    ! Stop time for simulation
     real(rkind) :: dt    = 0.0001_rkind ! Time step to use for the simulation
+    real(rkind) :: dt_fixed = real(1.0D-6, rkind) ! Time step to use for the simulation
+    real(rkind) :: CFL   = half         ! CFL number to use for the simulation
+    real(rkind) :: t     = zero         ! Simulation time
     
-    integer :: nx = 201, ny = 1, nz = 1 ! Number of points to use for the simulation (ny and nz have to be 1)
+    integer :: nx = 101, ny = 1, nz = 1 ! Number of points to use for the simulation (ny and nz have to be 1)
     real(rkind) :: dx                   ! Grid spacing
 
     character(len=*), parameter :: dermethod = "cd10"    ! Use 10th order Pade for derivatives
@@ -41,10 +45,10 @@ module StiffShockMod
     type( filters ) :: gfil
    
     ! Parameters to control LAD method
-    logical, parameter :: UseExpl4thDer = .FALSE.
+    logical, parameter :: UseExpl4thDer = .TRUE.
     logical, parameter :: conservative = .FALSE. 
     real(rkind) :: Cmu = 0.002_rkind
-    real(rkind) :: Cbeta = 0.1_rkind
+    real(rkind) :: Cbeta = 0.5_rkind
     real(rkind) :: Ckap = 0.01_rkind
 
 contains
@@ -129,9 +133,9 @@ contains
         call der%ddx(tmp, dudx)
         
         call GetInternalEnergy(u,e)
-
+        T = e / (Rgas / (gam-one))   ! T = e / Cv
+        
         call GetPressure(u,cs)  ! cs houses pressure now
-        T = cs/( u(:,:,:,1) * Rgas )   ! T = p/(rho*R)
         cs = sqrt( gam*(cs + pInf)/u(:,:,:,1) )  ! Speed of sound = sqrt( gamma*(p+pInf)/rho )
 
         call der%ddx(T, dTdx)
@@ -168,18 +172,18 @@ contains
 
     end subroutine
 
-    subroutine GetViscous(u,visc,der)
+    subroutine GetViscous(u,visc,mu,bulk,kap,der)
         
         real(rkind), dimension(:,:,:,:), intent(in) :: u
-        class( derivatives ),          intent(in) :: der
+        class( derivatives ),            intent(in) :: der
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3),SIZE(u,4)), intent(out) :: visc
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: tmp
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: dudx
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: d2udx2
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: dTdx
-        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: mu
-        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: bulk
-        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: kap
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(out) :: mu
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(out) :: bulk
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(out) :: kap
 
         ! Get SGS properties
         call GetSGS(u,dudx,dTdx,mu,bulk,kap,der)
@@ -212,16 +216,19 @@ contains
        
     end subroutine
 
-    subroutine calcRHS(u,RHS,der)
+    subroutine calcRHS(u,RHS,mu,bulk,kap,der)
         real(rkind), dimension(:,:,:,:), intent(in)    :: u
         class( derivatives ),          intent(in)    :: der
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3),SIZE(u,4)), intent(out) :: RHS
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3),SIZE(u,4))              :: tmp
         logical, parameter :: viscous = .TRUE.
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(out) :: mu 
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(out) :: bulk
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(out) :: kap
 
         call GetAdvection(u,RHS,der)
         if (viscous) then
-            call GetViscous(u,tmp,der)
+            call GetViscous(u,tmp,mu,bulk,kap,der)
         else
             tmp = zero
         end if
@@ -239,32 +246,60 @@ contains
 
     end subroutine
 
-    ! function get_dt(u,dx) result(dt)
-    !     real(rkind), dimension(:,:,:,:), intent(in) :: u
-    !     real(rkind),                     intent(in) :: dx
-    !     real(rkind)                                 :: dt
+    subroutine get_dt(u,mu,bulk,kap,dx,dt,stability)
+        real(rkind), dimension(:,:,:,:), intent(in)  :: u
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(in) :: mu
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(in) :: bulk
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(in) :: kap
+        real(rkind),                     intent(in)  :: dx
+        real(rkind),                     intent(out) :: dt
+        character(len=*),                intent(out) :: stability
 
-    !     real(rkind), dimension(nx,1,1)              :: cs
-    !     real(rkind) :: dtCFL, dtmu, dtbulk, dtkap
+        real(rkind), dimension(nx,1,1)               :: cs, T
+        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap
 
-    !     call GetPressure(u,cs)  ! cs houses pressure now
-    !     cs = sqrt(gam*(cs + pInf)/u(:,:,:,1))  ! Speed of sound = sqrt( gamma*(p+pInf)/rho )
-    !     
-    !     dtCFL  = dx/(MAXVAL( ABS(u(:,:,:,2)/u(:,:,:,1)) + ABS(cs) ))
-    !     dtmu   = dx/(mu/u(:,:,:,1))
-    !     dtbulk = dx/(bulk/u(:,:,:,1))
-    !     dtkap  = dx/(kap/u(:,:,:,1))
+        call GetInternalEnergy(u,cs) ! cs houses e now
+        T = cs / (Rgas / (gam-one))   ! T = e / Cv
+        call GetPressure(u,cs)  ! cs houses pressure now
+        cs = sqrt(gam*(cs + pInf)/u(:,:,:,1))  ! Speed of sound = sqrt( gamma*(p+pInf)/rho )
+        
+        dtCFL  = CFL * dx / (MAXVAL( ABS(u(:,:,:,2)/u(:,:,:,1)) + ABS(cs) ))
+        dtmu   = 0.2_rkind * dx**2 / (MAXVAL( mu/u(:,:,:,1) ) + eps)
+        dtbulk = 0.2_rkind * dx**2 / (MAXVAL( bulk/u(:,:,:,1) ) + eps)
+        dtkap  = 0.2_rkind * one / (MAXVAL( kap*T/(u(:,:,:,1)* (cs**2) * (dx**2)) ) + eps)
 
-    ! end function
+        if ( CFL .LE. zero ) then
+            dt = dt_fixed
+            stability = 'fixed'
+        else
+            stability = 'convective'
+            dt = dtCFL
+            if ( dt > dtmu ) then
+                dt = dtmu
+                stability = 'shear'
+            else if ( dt > dtbulk ) then
+                dt = dtbulk
+                stability = 'bulk'
+            else if ( dt > dtkap ) then
+                dt = dtkap
+                stability = 'conductive'
+            end if
+        end if
 
-    subroutine RK45(u,dt,der,fil)
+    end subroutine
+
+    subroutine RK45(u,dt,stability,der,fil)
 
         real(rkind), dimension(:,:,:,:), intent(inout) :: u
         class( derivatives ),            intent(in)    :: der
         class( filters     ),            intent(in)    :: fil
-        real(rkind),                     intent(in)    :: dt
+        real(rkind),                     intent(inout) :: dt
+        character(len=*),                intent(out)   :: stability
         real(rkind), dimension(5) ::  A, B
         real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3),SIZE(u,4)) :: RHS, Q
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: mu
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: bulk
+        real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)) :: kap
         integer :: step
         logical, parameter :: filteron = .TRUE.
 
@@ -286,7 +321,15 @@ contains
 
         do step = 1,5
             ! Get the RHS
-            call calcRHS(u,RHS,der)
+            call calcRHS(u,RHS,mu,bulk,kap,der)
+    
+            if (step == 1) then
+                call get_dt(u,mu,bulk,kap,dx,dt,stability)
+                if ( (t .LE. tstop) .AND. ( t .GE. (tstop - dt) ) ) then
+                    dt = tstop - t
+                    stability = 'final'
+                end if
+            end if
 
             ! Update the solution
             Q = dt*RHS + A(step)*Q;
@@ -304,6 +347,10 @@ contains
             call setBC(u)
         end do
 
+        if ( nancheck(u) ) then
+            call GracefulExit("Oh the devil! NaN encountered. Exiting...",666)
+        end if
+
     end subroutine
 
 end module
@@ -312,11 +359,11 @@ end module
 
 program StiffShock
 
-    use kind_parameters, only: rkind
+    use kind_parameters, only: rkind,clen
     use constants,       only: zero,half,one,two
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
-    use StiffShockMod,   only: nx,ny,nz,dx,tstop,dt,rho1,rho2,p1,p2,u1,u2,E1,E2,gam,pInf,pInfbyP1,pRatio,gfil,dermethod,filmethod, &
+    use StiffShockMod,   only: nx,ny,nz,dx,tstop,dt,t,rho1,rho2,p1,p2,u1,u2,E1,E2,gam,pInf,pInfbyP1,pRatio,gfil,dermethod,filmethod, &
                                RK45,GetPressure,GetInternalEnergy,GetSGS
 
     implicit none
@@ -329,10 +376,10 @@ program StiffShock
     real(rkind), dimension(:,:,:,:), allocatable :: u
 
     real(rkind) :: rho2rho1, rhoe1, rhoe2
-    real(rkind) :: small = real(1.0d-3,rkind)
+    real(rkind) :: small
     
-    real(rkind) :: t
     integer :: step
+    character(len=clen) :: stability
 
     integer :: i, iounit=17
 
@@ -372,6 +419,7 @@ program StiffShock
     E1 = rhoe1 + half * rho1 * u1 * u1 ! E = rho*e + 0.5*rho*u*u
     E2 = rhoe2 + half * rho2 * u2 * u2 ! E = rho*e + 0.5*rho*u*u
 
+    small = one
     dum = half * ( one+tanh( x/(small*dx)) )
 
     ! Initialize conserved variables
@@ -393,32 +441,36 @@ program StiffShock
                         .FALSE., .FALSE., .FALSE., &
                      "gaussian",   "cf90",  "cf90"  )
 
-    call fil%filterx(u(:,:,:,1),dum)
-    u(:,:,:,1) = dum
-    call fil%filterx(u(:,:,:,2),dum)
-    u(:,:,:,2) = dum
-    call fil%filterx(u(:,:,:,3),dum)
-    u(:,:,:,3) = dum
+    ! call fil%filterx(u(:,:,:,1),dum)
+    ! u(:,:,:,1) = dum
+    ! call fil%filterx(u(:,:,:,2),dum)
+    ! u(:,:,:,2) = dum
+    ! call fil%filterx(u(:,:,:,3),dum)
+    ! u(:,:,:,3) = dum
+
+    call GetPressure(u,dum)  ! dum houses pressure now
+    dum = sqrt( gam*(dum + pInf)/u(:,:,:,1) )  ! Speed of sound = sqrt( gamma*(p+pInf)/rho )
+    tstop = tstop / minval(dum)
 
     ! Integrate in time
     step = 0
     t = zero
-    print '(A6,4(A2,A13))', 'step', '|', 'time', '|', 'min density', '|', 'max velocity', '|', 'max energy'
+    print '(A6,6(A2,A13))', 'step', '|', 'time', '|', 'timestep', '|', 'stability', '|', 'min density', '|', 'max velocity', '|', 'max energy'
     do while ( t .LT. (tstop - dt) )
-        call RK45(u,dt,der,fil)
+        call RK45(u,dt,stability,der,fil)
         t = t + dt
         step = step + 1
         call GetInternalEnergy(u,dum)
-        print '(I6,4(A2,ES13.5))', step, '|', t, '|', MINVAL(u(:,:,:,1)), '|', MAXVAL(ABS(u(:,:,:,2)/u(:,:,:,1))), '|', MAXVAL(dum)
+        print '(I6,2(A2,ES13.5),1(A2,A13),3(A2,ES13.5))', step, '|', t, '|', dt, '|', trim(stability), '|', MINVAL(u(:,:,:,1)), '|', MAXVAL(ABS(u(:,:,:,2)/u(:,:,:,1))), '|', MAXVAL(dum)
     end do
     ! Special case for the last time step
     if ( t .LT. tstop ) then
         dt = tstop - t
-        call RK45(u,dt,der,fil)
+        call RK45(u,dt,stability,der,fil)
         t = t + dt
         step = step + 1
         call GetInternalEnergy(u,dum)
-        print '(I6,4(A2,ES13.5))', step, '|', t, '|', MINVAL(u(:,:,:,1)), '|', MAXVAL(ABS(u(:,:,:,2)/u(:,:,:,1))), '|', MAXVAL(dum)
+        print '(I6,2(A2,ES13.5),1(A2,A13),3(A2,ES13.5))', step, '|', t, '|', dt, '|', trim(stability), '|', MINVAL(u(:,:,:,1)), '|', MAXVAL(ABS(u(:,:,:,2)/u(:,:,:,1))), '|', MAXVAL(dum)
     end if
     
     print*, "Done."
@@ -430,9 +482,11 @@ program StiffShock
     call GetPressure(u,dum)  ! Put pressure in dum for output
     OPEN(UNIT=iounit, FILE="StiffShock.dat", FORM='FORMATTED')
     WRITE(iounit,'(A, ES24.16)') "Final time = ", t
-    WRITE(iounit,'(7A24)') "X", "Density", "Velocity", "Pressure", "Shear Visc.", "Bulk Visc.", "Conductivity"
+    WRITE(iounit,'(8A24)') "X", "Density", "Velocity", "Pressure", "Energy", "Shear Visc.", "Bulk Visc.", "Conductivity"
     do i=1,nx
-        WRITE(iounit,'(7ES24.16)') x(i,1,1), u(i,1,1,1), u(i,1,1,2)/u(i,1,1,1), dum(i,1,1), mu(i,1,1), bulk(i,1,1), kap(i,1,1) ! x, density, velocity, pressure, shear visc., bulk visc., conductivity
+        WRITE(iounit,'(8ES24.16)') x(i,1,1), u(i,1,1,1), u(i,1,1,2)/u(i,1,1,1), dum(i,1,1), &
+                                  ( u(i,1,1,3) - half*u(i,1,1,2)*u(i,1,1,2)/u(i,1,1,1) )/u(i,1,1,1), &
+                                   mu(i,1,1), bulk(i,1,1), kap(i,1,1) ! x, density, velocity, pressure, shear visc., bulk visc., conductivity
     end do
     CLOSE(iounit)
 

@@ -277,7 +277,7 @@ contains
             this%k2 = tmp1 
             tmp1 = GetCD10ModWaveNum(k3four,dz)
             this%k3 = tmp1 
-        case ("cd08")
+        case ("cd06")
             tmp1 = GetCD06ModWaveNum(k1four,dx)
             this%k1 = tmp1 
             tmp1 = GetCD06ModWaveNum(k2four,dy)
@@ -314,6 +314,10 @@ contains
                 this%k2_der2 = GetCD10D2ModWaveNum(k2four,dy)
                 this%k3_der2 = GetCD10D2ModWaveNum(k3four,dz)
             end if  
+        case ("cd06")
+            this%k1_der2 = this%k1**2
+            this%k2_der2 = this%k2**2
+            this%k3_der2 = this%k3**2
         case("four")    
             this%k1_der2 = this%k1**2
             this%k2_der2 = this%k2**2
@@ -525,6 +529,8 @@ contains
         kp = kp/dx 
 
     end function
+
+
    
     pure elemental function GetCD10D2ModWaveNum(kin,dx) result(wpp)
         use constants, only: two
@@ -550,14 +556,27 @@ contains
 
 
     pure elemental function GetCD06ModWaveNum(kin,dx) result(kp)
-        use constants, only: two
+        use constants
         use cd06stuff, only: alpha06d1, a06d1, b06d1
         real(rkind), intent(in) :: kin,dx
         real(rkind) :: k
         real(rkind) :: kp
-    
+        real(rkind) :: alpha, beta, a, b, c, d
+        real(rkind) :: num, den 
+
+        alpha = one/three
+        beta = zero
+        a = (two/nine)*(eight - three*alpha)
+        b = (one/18._rkind)*(-17._rkind + 57._rkind*alpha)
+        c = zero
+        d = zero
+
         k = kin*dx
-        kp = ( two*a06d1*sin(k) + two*b06d1*sin(two*k) ) / (1._rkind + two*alpha06d1*cos(k))
+
+        den = 1 + 2*alpha*cos(k) + 2*beta*cos(2*k)
+        num = a*sin(k) + (b/two)*sin(two*k) + (c/three)*sin(three*k) + (d/four)*sin(four*k)
+        kp = num/den 
+        
         kp = kp/dx 
     
     end function
