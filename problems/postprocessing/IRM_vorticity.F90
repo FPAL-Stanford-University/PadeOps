@@ -1,7 +1,7 @@
 module IRM_vorticity_mod
     use mpi
     use kind_parameters, only: rkind, clen, mpirkind, mpickind
-    use constants,       only: zero, eps, half, one
+    use constants,       only: zero, eps, half, one, three
     use fftstuff,        only: ffts
     use miranda_tools,   only: miranda_reader
     use io_VTK_stuff,    only: io_VTK
@@ -9,7 +9,7 @@ module IRM_vorticity_mod
     use FiltersMod,      only: filters
     use decomp_2d,       only: nrank, nproc, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use exits,           only: message, GracefulExit
-    use reductions,      only: P_AVGZ
+    use reductions,      only: P_MAXVAL, P_AVGZ
 
     implicit none
 
@@ -61,11 +61,11 @@ contains
     end subroutine
 
     subroutine write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
-                            R11, R12, R13, R22, R23, R33, a_x, a_y, a_z)
+                            R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, eta, xi)
         integer, intent(in) :: step
         real(rkind), dimension(:,:,:), intent(in) :: vort_avgz
         real(rkind), dimension(:,:),   intent(in) :: TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation
-        real(rkind), dimension(:,:),   intent(in) :: R11, R12, R13, R22, R23, R33, a_x, a_y, a_z
+        real(rkind), dimension(:,:),   intent(in) :: R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, eta, xi
 
         character(len=clen) :: post2d_file
         integer :: i, ierr, iounit2d=91
@@ -102,6 +102,8 @@ contains
                     write(iounit2d) a_x
                     write(iounit2d) a_y
                     write(iounit2d) a_z
+                    write(iounit2d) eta
+                    write(iounit2d) xi
                     close(iounit2d)
                 end if
             end if
@@ -432,11 +434,54 @@ contains
         end if
     end subroutine
 
-    subroutine trace(b,tr)
-        real(rkind), dimension(:,:,:,:,:), intent(in) :: b
-        real(rkind), dimension(size(b,1), size(b,2), size(b,3)), intent(out) :: tr
+    subroutine invariants(R11,R12,R13,R22,R23,R33,eta,xi)
+        ! Get the invariants of the Reynolds Stress anisotropy tensor
+        use constants, only: six
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)), intent(in)  :: R11,R12,R13,R22,R23,R33
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)), intent(out) :: eta, xi
 
-        tr = b(:,:,:,1,1) + b(:,:,:,2,2) + b(:,:,:,3,3)
+        real(rkind), dimension(3,3) :: b, b2, b3
+        real(rkind) :: rtmp,rmax
+        integer :: i,j
+
+        real(rkind), parameter :: inv_cutoff = real(1.e-2,rkind)
+
+        ! Find global max of R11, R22 and R33
+        rmax = P_MAXVAL(R11)
+        rtmp = P_MAXVAL(R22)
+        if ( rtmp .GT. rmax ) rmax = rtmp
+        rtmp = P_MAXVAL(R33)
+        if ( rtmp .GT. rmax ) rmax = rtmp
+
+        do j = 1,mir%gp%ysz(2)
+            do i = 1,mir%gp%ysz(1)
+                rtmp = R11(i,j) + R22(i,j) + R33(i,j)
+                
+                if ( rtmp/rmax .GE. inv_cutoff ) then
+                    ! Anisotropy tensor
+                    b(1,1) = R11(i,j)/rtmp - one/three
+                    b(1,2) = R12(i,j)/rtmp
+                    b(1,3) = R13(i,j)/rtmp
+                    b(2,1) = b(1,2)
+                    b(2,2) = R22(i,j)/rtmp - one/three
+                    b(2,3) = R23(i,j)/rtmp
+                    b(3,1) = b(1,3)
+                    b(3,2) = b(3,2)
+                    b(3,3) = R33(i,j)/rtmp - one/three
+                else
+                    ! If below the noise threshold, set equal to isotropic state
+                    b = zero
+                end if
+
+                b2 = matmul(b,b)
+                b3 = matmul(b,b2)
+
+                eta(i,j) = sqrt( ( b2(1,1) + b2(2,2) + b2(3,3) )/six ) ! sqrt( tr(b^2)/6 )
+                xi (i,j) = ( ( b3(1,1) + b3(2,2) + b3(3,3) )/six )**(one/three) ! cbrt( tr(b^3)/6 )
+
+            end do
+        end do
+
     end subroutine
 
 end module
@@ -473,7 +518,7 @@ program IRM_vorticity
     real(rkind), dimension(:,:,:), pointer :: vort_avgz
     real(rkind), dimension(:,:), pointer :: rho_avg, u_avg, v_avg, w_avg, CO2_avg, TKE_avg, div_avg, chi_avg, MMF_avg, density_self_correlation
     real(rkind), dimension(:,:), pointer :: R11, R12, R13, R22, R23, R33
-    real(rkind), dimension(:,:), pointer :: a_x, a_y, a_z
+    real(rkind), dimension(:,:), pointer :: a_x, a_y, a_z, eta, xi
 
     real(rkind), dimension(:), allocatable :: Y_air_x, Y_CO2_x
 
@@ -554,7 +599,7 @@ program IRM_vorticity
     Rij    => buffer(:,:,:,i)
 
     ! Allocate 2D buffer and associate pointers for convenience
-    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 22 ) )
+    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 24 ) )
     vort_avgz                => buffer2d(:,:,1:3)
     rho_avg                  => buffer2d(:,:,4)
     u_avg                    => buffer2d(:,:,5)
@@ -575,7 +620,9 @@ program IRM_vorticity
     a_x                      => buffer2d(:,:,20)
     a_y                      => buffer2d(:,:,21)
     a_z                      => buffer2d(:,:,22)
-
+    eta                      => buffer2d(:,:,23)
+    xi                       => buffer2d(:,:,24)
+    
     allocate( TKEfft(mir%nz/2+1) )
 
     allocate( Y_air_x( mir%gp%ysz(1) ) )
@@ -777,6 +824,9 @@ program IRM_vorticity
         Rij = mir%rho*wpp*wpp
         call P_AVGZ( mir%gp, Rij, R33 )
 
+        ! Get Reynolds stress anisotropy invariants
+        call  invariants(R11,R12,R13,R22,R23,R33,eta,xi)
+
         ! Get turbulent mass flux
         call P_AVGZ( mir%gp, upp, a_x )
         a_x = -a_x ! a_x = -<upp>
@@ -823,7 +873,7 @@ program IRM_vorticity
 
         ! Write out 2D postprocessing file
         call write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
-                          R11, R12, R13, R22, R23, R33, a_x, a_y, a_z)
+                          R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, eta, xi)
 
         write(time_message,'(A,I4,A)') "Time to postprocess step ", step, " :"
         call toc(trim(time_message))
