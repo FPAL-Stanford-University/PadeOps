@@ -22,9 +22,10 @@ module poissonMod
 
 contains
 
-    subroutine init(this,spect)
+    subroutine init(this,spect,nonPeriodicVertical)
         class(poisson), intent(inout) :: this
         class(spectral), intent(in) :: spect
+        logical, intent(in), optional :: nonPeriodicVertical
 
         call spect%alloc_r2c_out(this%tmp,2)
         this%nx_in = size(this%tmp,1)
