@@ -69,7 +69,7 @@ program test_io_VTK
     if (nrank == 0) print*, "Created coordinates and fields"
 
     do step = 1,4
-        call viz%WriteViz(gp, mesh, primary, secondary, ['rank'])
+        call viz%WriteViz(gp, mesh, primary, real(0.,rkind), secondary, ['rank'])
     end do
   
     deallocate(mesh, primary, secondary)

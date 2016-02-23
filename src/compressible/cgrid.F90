@@ -72,6 +72,7 @@ module CompressibleGrid
             procedure          :: laplacian
             procedure          :: gradient 
             procedure          :: advance_RK45
+            procedure          :: simulate
             procedure, private :: get_dt
             procedure, private :: get_primitive
             procedure, private :: get_conserved
@@ -94,6 +95,9 @@ contains
         integer :: nx, ny, nz
         character(len=clen) :: outputdir
         character(len=clen) :: inputdir
+        character(len=clen) :: vizprefix = "cgrid"
+        real(rkind) :: tviz = zero
+        character(len=clen), dimension(10) :: varnames
         logical :: periodicx = .true. 
         logical :: periodicy = .true. 
         logical :: periodicz = .true.
@@ -118,7 +122,7 @@ contains
         real(rkind) :: Ckap = 0.01_rkind
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
-                                              inputdir, outputdir, &
+                             inputdir, outputdir, vizprefix, tviz, &
                                   periodicx, periodicy, periodicz, &
                          derivative_x, derivative_y, derivative_z, &
                                      filter_x, filter_y, filter_z, &
@@ -268,6 +272,21 @@ contains
 
         this%SkewSymm = SkewSymm
 
+        varnames( 1) = 'density'
+        varnames( 2) = 'u'
+        varnames( 3) = 'v'
+        varnames( 4) = 'w'
+        varnames( 5) = 'p'
+        varnames( 6) = 'T'
+        varnames( 7) = 'e'
+        varnames( 8) = 'mu'
+        varnames( 9) = 'bulk'
+        varnames(10) = 'kap'
+
+        allocate(this%viz)
+        call this%viz%init(this%outputdir, vizprefix, 10, varnames)
+        this%tviz = tviz
+
     end subroutine
 
 
@@ -294,6 +313,9 @@ contains
         
         if (allocated(this%Wcnsrv)) deallocate(this%Wcnsrv) 
         
+        call this%viz%destroy()
+        if (allocated(this%viz)) deallocate(this%viz)
+
         call decomp_2d_finalize
         if (allocated(this%decomp)) deallocate(this%decomp) 
 
@@ -370,6 +392,94 @@ contains
 
     end subroutine
 
+    subroutine simulate(this)
+        use reductions, only: P_MEAN
+        use timer,      only: tic, toc
+        use exits,      only: GracefulExit, message
+        class(cgrid), target, intent(inout) :: this
+
+        logical :: tcond, vizcond, stepcond
+        real(rkind) :: cputime, tke, tke0
+
+        call this%get_dt()
+
+        ! Write out initial conditions
+        call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+
+        vizcond = .FALSE.
+        ! Check for visualization condition and adjust time step
+        if ( (this%tviz > zero) .AND. (this%tsim + this%dt > this%tviz * this%viz%vizcount) ) then
+            this%dt = this%tviz * this%viz%vizcount - this%tsim
+            vizcond = .TRUE.
+        end if
+
+        tcond = .TRUE.
+        ! Check tstop condition
+        if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop) ) then
+            tcond = .FALSE.
+        else if ( (this%tstop > zero) .AND. (this%tsim + this%dt >= this%tstop) ) then
+            this%dt = this%tstop - this%tsim
+        end if
+
+        ! Check nsteps condition
+        if ( (this%nsteps <= 0) .OR. (this%step < this%nsteps) ) then
+            stepcond = .TRUE.
+        else
+            stepcond = .FALSE.
+        end if
+
+        if ( (this%tstop <= zero) .AND. (this%nsteps <= 0) ) then
+            call GracefulExit('No stopping criterion set. Set either tstop or nsteps to be positive.', 345)
+        end if
+
+        tke0 = P_MEAN( this%rho * (this%u*this%u + this%v*this%v + this%w*this%w) )
+
+        ! Start the simulation while loop
+        do while ( tcond .AND. stepcond )
+            ! Advance time
+            call tic()
+            call this%advance_RK45()
+            call toc(cputime)
+            call message(2,"CPU time (in seconds)",cputime)
+          
+            ! TEMPORARY: Get TKE for taylorgreen problem
+            tke = P_MEAN( this%rho * (this%u*this%u + this%v*this%v + this%w*this%w) )
+            call message(2,"TKE",tke/tke0)
+
+            ! Write out vizualization dump if vizcond is met 
+            if (vizcond) then
+                call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+                vizcond = .FALSE.
+            end if
+            
+            ! Get the new time step
+            call this%get_dt()
+            
+            ! Check for visualization condition and adjust time step
+            if ( (this%tviz > zero) .AND. (this%tsim + this%dt >= this%tviz * this%viz%vizcount) ) then
+                this%dt = this%tviz * this%viz%vizcount - this%tsim
+                vizcond = .TRUE.
+            end if
+
+            ! Check tstop condition
+            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop) ) then
+                tcond = .FALSE.
+            else if ( (this%tstop > zero) .AND. (this%tsim + this%dt >= this%tstop) ) then
+                this%dt = this%tstop - this%tsim
+                vizcond = .TRUE.
+            end if
+
+            ! Check nsteps condition
+            if ( (this%nsteps <= 0) .OR. (this%step < this%nsteps) ) then
+                stepcond = .TRUE.
+            else
+                stepcond = .FALSE.
+            end if
+
+        end do
+
+    end subroutine
+
     subroutine advance_RK45(this)
         use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B
         use exits,      only: message
@@ -379,8 +489,6 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: rhs  ! RHS for conserved variables
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: Qtmp ! Temporary variable for RK45
         integer :: isub,i
-
-        call this%get_dt()
 
         if (this%step == 0) then
             call this%gas%get_e_from_p(this%rho,this%p,this%e)

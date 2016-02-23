@@ -4,6 +4,7 @@ module GridMod
     use decomp_2d,       only: decomp_info
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
+    use io_VTK_stuff,    only: io_VTK
     use exits,           only: GracefulExit
 
     type, abstract :: grid
@@ -44,7 +45,11 @@ module GridMod
         integer                                              :: t_dataDump, t_restartDump
         
         logical                                              :: SkewSymm 
-        logical                                              :: ViscConsrv         ! Is the viscous term being computed using the conservative formulation?  
+        logical                                              :: ViscConsrv         ! Is the viscous term being computed using the conservative formulation? 
+        
+        type( io_VTK ), allocatable                          :: viz
+        real(rkind)                                          :: tviz
+
     contains
 
         procedure(init_interface),    deferred :: init
