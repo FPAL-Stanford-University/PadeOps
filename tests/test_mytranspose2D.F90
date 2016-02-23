@@ -1,41 +1,22 @@
-module mytranspose
-    use kind_parameters, only: rkind
-    implicit none
-
-    integer, parameter :: nx = 16, ny = 8, nz = 1
-    integer, parameter :: ax = 4, ay = 8, az = 1
-
-contains
-
-    subroutine print_array(x)
-        real(rkind), dimension(:,:,:) :: x
-        integer :: i,j,k
-
-        do k = 1,size(x,3)
-            do j = 1,size(x,2)
-                do i = 1,size(x,1)
-                    print *, x(i,j,k)
-                end do
-            end do
-        end do
-    end subroutine
-
-end module
-
 program mpi_transpose
 
     use mpi
-    use kind_parameters, only: rkind
-    use mytranspose
+    use kind_parameters, only: rkind, clen
+    use mytranspose2DMod, only: mytranspose2D
     implicit none
 
-    integer, dimension(ax,ay,az) :: x
-    integer, dimension(nx,ny/4,az) :: x_trans
-    integer, dimension(ax,ay) :: x_trans_local
+    integer, parameter :: nx = 16, ny = 8
+    integer, parameter :: ax = 4, ay = 2
 
-    integer :: i,j,iblock
+    real(rkind), dimension(ax,ny) :: x
+    real(rkind), dimension(nx,ay) :: x_trans
+
+    type(mytranspose2D) :: gp2D
+
     integer :: rank, nprocs
-    integer :: ierr
+    integer :: i, j, ierr
+
+    character(len=clen) :: ioformat
 
     call MPI_Init(ierr)
     call MPI_COMM_RANK(MPI_COMM_WORLD,   rank, ierr)
@@ -46,56 +27,48 @@ program mpi_transpose
         stop
     end if
 
-    do j = 1,ay
+    ! Initialize gp2D
+    call gp2D%init(nx,ny,MPI_COMM_WORLD)
+
+    do j = 1,ny
         do i = 1,ax
-            x(i,j,1) = i + rank*ax + (j-1)*nx
+            x(i,j) = i + rank*ax + (j-1)*nx
         end do
     end do
 
+    write(ioformat,'(A,I,A)') '(', ax, 'F6.1)'
     call sleep(rank)
     print *, "x: ", rank
-    do j = 1,ay
-        write(*,*) (x(I,j,1), I=1,ax)
+    do j = 1,ny
+        write(*,ioformat) (x(i,j), i=1,ax)
     end do
 
     !!!! Y to X transpose !!!!
-    call MPI_Alltoall(x, ax*ny/nprocs, MPI_INTEGER, x_trans_local, ax*ny/nprocs, MPI_INTEGER, MPI_COMM_WORLD, ierr)
-    
-    do j = 1,ny/4
-        do iblock = 1,4
-            do i = 1,ax
-                x_trans(i+(iblock-1)*ax,j,1) = x_trans_local(i,j+(iblock-1)*ny/nprocs)
-            end do
-        end do
-    end do
+    call gp2D%transpose_y_to_x(x,x_trans)
     !!!! ================ !!!!
 
+    if (rank == 0) print *
     if (rank == 0) print *, "Finished Y to X transpose"
 
+    write(ioformat,'(A,I,A)') '(', nx, 'F6.1)'
     call sleep(rank)
     print *, "x_trans: ", rank
-    do j = 1,ny/nprocs
-        write(*,*) (x_trans(I,j,1), I=1,nx)
+    do j = 1,ay
+        write(*,ioformat) (x_trans(i,j), i=1,nx)
     end do
 
     !!!! Y to X transpose !!!!
-    do j = 1,ny/4
-        do iblock = 1,4
-            do i = 1,ax
-                x_trans_local(i,j+(iblock-1)*ny/nprocs) = x_trans(i+(iblock-1)*ax,j,1)
-            end do
-        end do
-    end do
-    
-    call MPI_Alltoall(x_trans_local, ax*ny/nprocs, MPI_INTEGER, x, ax*ny/nprocs, MPI_INTEGER, MPI_COMM_WORLD, ierr)
+    call gp2D%transpose_x_to_y(x_trans,x)
     !!!! ================ !!!!
    
+    if (rank == 0) print *
     if (rank == 0) print *, "Finished X to Y transpose"
 
+    write(ioformat,'(A,I,A)') '(', ax, 'F6.1)'
     call sleep(rank)
     print *, "x: ", rank
-    do j = 1,ay
-        write(*,*) (x(I,j,1), I=1,ax)
+    do j = 1,ny
+        write(*,ioformat) (x(i,j), i=1,ax)
     end do
 
     call MPI_Finalize(ierr)
