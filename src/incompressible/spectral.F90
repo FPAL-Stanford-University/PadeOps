@@ -26,7 +26,7 @@ module spectralMod
         integer :: nx_r,ny_r,nz_r
         integer :: nx_c,ny_c,nz_c
         type(fft_3d), allocatable :: FT
-        logical :: use2decompFFT = .true. 
+        logical :: use2decompFFT = .false. 
         logical :: useConsrvD2 = .true. 
         real(rkind) :: normfact 
 
@@ -39,7 +39,6 @@ module spectralMod
             procedure           :: fft
             procedure           :: ifft
             procedure, private  :: initializeAllPeriodic
-            procedure, private  :: initializeTwoPeriodic
             !procedure, private  :: upsample_Fhat
             !procedure, private  :: downsample_Fhat
 
@@ -74,8 +73,8 @@ contains
 
         if (present(dimTransform)) then
             if (dimTransform == 2) then
-                call this%initializeTwoPeriodic(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt)
                 this%is3dFFT = .false.
+                call this%initializeAllPeriodic(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt,.true.)
             else if (dimTransform == 3) then
                 call this%initializeAllPeriodic(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt)
             else
@@ -92,7 +91,7 @@ contains
     end subroutine 
 
 
-    subroutine initializeAllPeriodic(this,pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt)
+    subroutine initializeAllPeriodic(this,pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt,nonPeriodic)
         class(spectral),  intent(inout)         :: this
         character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction
         integer,          intent(in)            :: nx_g, ny_g, nz_g    ! Global data size
@@ -107,6 +106,12 @@ contains
         real(rkind), dimension(:,:,:), allocatable :: tmp1, tmp2
         integer :: i, j, k, rPencil, ierr  
         real(rkind), dimension(:,:,:), allocatable :: k1four, k2four, k3four
+        logical, optional, intent(in) :: nonPeriodic
+        logical :: TwoPeriodic = .false. 
+
+        if (present(nonPeriodic)) then
+                if (nonPeriodic) TwoPeriodic = .true.
+        end if 
 
         ! STEP 0: Figure out what the input decomposition is going to be  
         select case (pencil)
@@ -126,7 +131,8 @@ contains
         call message("Now Generating the SPECTRAL - Derived Type for the problem.")
 
         ! STEP 1: Start the 3d FFT engine
-        if (this%use2decompFFT) then
+        
+        if ((this%use2decompFFT) .and. this%is3dFFT) then
             call message(2, "WARNING: Using the 2decomp 3dFFT. Performance will be terrible if &
                         & 2decomp was not compiled using FFTW")
             call message(2, "Heading to 2DECOMP for an appropriate FFT Library.")
@@ -141,17 +147,24 @@ contains
                 call message (3, "Successfully initialized!")
             else
                 call GracefulExit("Couldn't initialize 3d FFT inside SPECTRAL derived type",123)
-            end if    
+            end if   
+            this%use2decompFFT = .false. 
         end if 
 
         ! STEP 2: Allocate wavenumbers and temporary decomp for spectral transposes
         allocate(spectdecomp)
         select case (rPencil)
         case(1)
-           call decomp_info_init(nx_g/2+1, ny_g, nz_g, spectdecomp) 
-           this%fft_size(1) = spectdecomp%zsz(1)    
-           this%fft_size(2) = spectdecomp%zsz(2)    
-           this%fft_size(3) = spectdecomp%zsz(3)    
+           call decomp_info_init(nx_g/2+1, ny_g, nz_g, spectdecomp)
+           if (TwoPeriodic) then
+                this%fft_size(1) = spectdecomp%ysz(1)    
+                this%fft_size(2) = spectdecomp%ysz(2)    
+                this%fft_size(3) = spectdecomp%ysz(3) 
+           else 
+                this%fft_size(1) = spectdecomp%zsz(1)    
+                this%fft_size(2) = spectdecomp%zsz(2)    
+                this%fft_size(3) = spectdecomp%zsz(3) 
+           end if    
         case(3)
            call decomp_info_init(nx_g, ny_g, nz_g/2+1, spectdecomp) 
            this%fft_size(1) = spectdecomp%xsz(1)    
@@ -200,8 +213,12 @@ contains
         select case (rPencil)
         case(1)
             allocate(tmp2(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
-            call transpose_x_to_y(tmp1,tmp2,spectdecomp)
-            call transpose_y_to_z(tmp2,this%k1,spectdecomp)
+            if (TwoPeriodic) then
+                call transpose_x_to_y(tmp1,this%k1,spectdecomp)
+            else
+                call transpose_x_to_y(tmp1,tmp2,spectdecomp)
+                call transpose_y_to_z(tmp2,this%k1,spectdecomp)
+            end if 
             deallocate(tmp2)
         case(3)
             this%k1 = tmp1
@@ -218,7 +235,11 @@ contains
 
         select case (rPencil)
         case (1)
-            call transpose_y_to_z(tmp1,this%k2,spectdecomp)
+            if (TwoPeriodic) then
+                this%k2 = tmp1
+            else
+                call transpose_y_to_z(tmp1,this%k2,spectdecomp)
+            end if 
         case(3)
             call transpose_y_to_x(tmp1,this%k2,spectdecomp)
         end select 
@@ -234,7 +255,14 @@ contains
 
         select case (rPencil)
         case (1)
-            this%k3 = tmp1
+            if (TwoPeriodic) then
+                allocate(tmp2(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
+                call transpose_z_to_y(tmp1,tmp2,spectdecomp)
+                this%k3 = tmp2 
+                deallocate(tmp2)
+            else
+                this%k3 = tmp1
+            end if 
         case (3)
             allocate(tmp2(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
             call transpose_z_to_y(tmp1,tmp2,spectdecomp)
@@ -242,8 +270,13 @@ contains
             deallocate(tmp2)
         end select
         deallocate(tmp1)
-        deallocate (spectdecomp) 
-        this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
+        deallocate (spectdecomp)
+
+        if (TwoPeriodic) then
+                this%kabs_sq = this%k1**2 + this%k2**2  
+        else 
+                this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
+        end if 
         k1four = this%k1
         k2four = this%k2
         k3four = this%k3
@@ -259,7 +292,11 @@ contains
             tmp1 = GetCF90TransferFunction(this%k2,dy)
             this%Gdealias = this%Gdealias*tmp1
             tmp1 = GetCF90TransferFunction(this%k3,dz)
-            this%Gdealias = this%Gdealias*tmp1
+            if (TwoPeriodic) then
+                this%Gdealias = this%Gdealias
+            else
+                this%Gdealias = this%Gdealias*tmp1
+            end if 
             deallocate(tmp1)
         case ("none")
             this%Gdealias = one 
@@ -290,7 +327,12 @@ contains
         deallocate(tmp1)        
 
         ! STEP 9: Get the other wavenumber dependent attributes
-        this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
+        if (TwoPeriodic) then
+            this%kabs_sq = this%k1**2 + this%k2**2
+        else 
+            this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
+        end if
+ 
         do k = 1,size(this%kabs_sq,3)
             do j = 1,size(this%kabs_sq,2)  
                 do i = 1,size(this%kabs_sq,1)
@@ -387,24 +429,6 @@ contains
         ! Finished !
     end subroutine
     
-    subroutine initializeTwoPeriodic(this,pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt)
-        class(spectral),  intent(inout)         :: this
-        character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction
-        integer,          intent(in)            :: nx_g, ny_g, nz_g    ! Global data size
-        real(rkind),      intent(in)            :: dx, dy, dz          ! PHYSICAL grid spacing 
-        character(len=*), intent(in)            :: scheme              ! Scheme used for modified wavenumbers
-        character(len=*), intent(in)            :: filt                ! Scheme used for modified wavenumbers
-    
-        call GracefulExit("CODE INCOMPLETE: Currently 2d FFT is not supported. Only fully periodic problems allowed", 103)
-        ! Rubbish code that avoids compile time warnings. 
-        print*, this%isInitialized
-        print*, nx_g, ny_g, nz_g
-        print*, dx, dy, dz
-        print*, scheme
-        print*, filt
-        print*, pencil 
-    end subroutine
-
     subroutine destroy(this)
         class(spectral), intent(inout) :: this
       
@@ -418,7 +442,9 @@ contains
             call this%FT%destroy
             deallocate(this%FT)
         end if 
-        deallocate(this%Gdealias)
+        if (allocated(this%Gdealias)) then
+                deallocate(this%Gdealias)
+        end if 
         deallocate( this%k1, this%k2, this%k3, this%kabs_sq, this%k1_der2, this%k2_der2, this%k3_der2, this%one_by_kabs_sq)
         this%isInitialized = .false. 
     
@@ -430,15 +456,19 @@ contains
         real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r) :: arr_in
         complex(rkind), dimension(this%nx_c,this%ny_c,this%nz_c) :: arr_out
 
-        if (.not. this%use2decompFFT) then
-            select case (this%rPencil) 
-            case (1)
-                call this%FT%fft3_x2z(arr_in,arr_out)
-            case (3)
-                call this%FT%fft3_z2x(arr_in,arr_out)
-            end select
-        else 
-            call decomp_2d_fft_3d(arr_in,arr_out)
+        if (this%is3dFFT) then
+            if (.not. this%use2decompFFT) then
+                select case (this%rPencil) 
+                case (1)
+                    call this%FT%fft3_x2z(arr_in,arr_out)
+                case (3)
+                    call this%FT%fft3_z2x(arr_in,arr_out)
+                end select
+            else 
+                call decomp_2d_fft_3d(arr_in,arr_out)
+            end if 
+        else
+            call this%FT%fft2_x2y(arr_in,arr_out)        
         end if 
 
     end subroutine
@@ -449,16 +479,20 @@ contains
         complex(rkind), dimension(this%nx_c,this%ny_c,this%nz_c) :: arr_in
         real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r) :: arr_out 
 
-        if (.not. this%use2decompFFT) then
-            select case (this%rPencil)
-            case (1)
-                call this%FT%ifft3_z2x(arr_in,arr_out)
-            case (3)
-                call this%FT%ifft3_x2z(arr_in,arr_out)
-            end select
-        else  
-            call decomp_2d_fft_3d(arr_in,arr_out)
-            arr_out = arr_out*this%normfact
+        if (this%is3dFFT) then
+            if (.not. this%use2decompFFT) then
+                select case (this%rPencil)
+                case (1)
+                    call this%FT%ifft3_z2x(arr_in,arr_out)
+                case (3)
+                    call this%FT%ifft3_x2z(arr_in,arr_out)
+                end select
+            else  
+                call decomp_2d_fft_3d(arr_in,arr_out)
+                arr_out = arr_out*this%normfact
+            end if 
+        else
+            call this%FT%ifft2_y2x(arr_in,arr_out)
         end if 
     end subroutine
 

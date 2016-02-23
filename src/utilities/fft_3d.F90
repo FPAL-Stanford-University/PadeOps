@@ -15,7 +15,7 @@ module fft_3d_stuff
         type(decomp_info),public    :: spectral
         
         character(len=1)  :: base_pencil
-        real (rkind) :: normfactor
+        real (rkind) :: normfactor, normfactor2d
 
         complex(rkind), dimension(:,:,:), allocatable :: f_yhat_in_yD
         complex(rkind), dimension(:,:,:), allocatable :: f_xyhat_in_xD
@@ -46,7 +46,7 @@ module fft_3d_stuff
         integer(kind=8) :: plan_r2c_y
         integer(kind=8) :: plan_c2r_z
         integer(kind=8) :: plan_r2c_z
-        
+        integer(kind=8) :: plan_c2c_bwd_y_oop
 
         logical :: fixOddball = .false. 
         logical :: initialized = .false.
@@ -60,6 +60,8 @@ module fft_3d_stuff
             procedure :: ifft3_z2x
             procedure :: fft3_z2x
             procedure :: ifft3_x2z
+            procedure :: ifft2_y2x
+            procedure :: fft2_x2y
             procedure :: destroy
             procedure :: alloc_input
             procedure, private :: alloc_3d_real
@@ -82,7 +84,7 @@ contains
         integer :: ierr, i, j, k
         integer, dimension(2) :: dims, dummy_periods, dummy_coords
         real(rkind), dimension(:,:), allocatable :: real_arr_2d
-        complex(rkind), dimension(:,:), allocatable :: cmplx_arr_2d
+        complex(rkind), dimension(:,:), allocatable :: cmplx_arr_2d, cmplx_arr_2d_oop
         integer :: n_sizeact, n_sizeinput, n_sizeoutput, n_chunk, n_howmany, n_jump
          
         real(rkind), dimension(:,:,:), allocatable :: k1_in_x
@@ -223,6 +225,7 @@ contains
         
             ! Define complex -> complex transforms in y
             allocate(cmplx_arr_2d(this%spectral%ysz(1),this%spectral%ysz(2)),STAT=ierr)
+            allocate(cmplx_arr_2d_oop(this%spectral%ysz(1),this%spectral%ysz(2)),STAT=ierr)
 
             ! fwd transform in y (in place transform)
              call dfftw_plan_many_dft(this%plan_c2c_fwd_y, 1, this%spectral%ysz(2),&  
@@ -235,8 +238,14 @@ contains
                     this%spectral%ysz(1), cmplx_arr_2d, this%spectral%ysz(2),this%spectral%ysz(1), &
                     1, cmplx_arr_2d, this%spectral%ysz(2), this%spectral%ysz(1),1, &   
                     FFTW_BACKWARD, this%fft_plan)
+            
+             ! bwd transform in y (out of place transform)
+             call dfftw_plan_many_dft(this%plan_c2c_bwd_y_oop, 1, this%spectral%ysz(2),&  
+                    this%spectral%ysz(1), cmplx_arr_2d, this%spectral%ysz(2),this%spectral%ysz(1), &
+                    1, cmplx_arr_2d_oop, this%spectral%ysz(2), this%spectral%ysz(1),1, &   
+                    FFTW_BACKWARD, this%fft_plan)
 
-            deallocate (cmplx_arr_2d)
+            deallocate (cmplx_arr_2d,cmplx_arr_2d_oop)
 
             allocate(dummy_in_z(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)))        
             ! Create plan for bwd transform in z (out-of-place transform)
@@ -305,7 +314,8 @@ contains
 
                 
          this%base_pencil = base_pencil_
-         this%normfactor = 1._rkind/(real(nx_global*ny_global*nz_global))
+         this%normfactor   = 1._rkind/(real(nx_global*ny_global*nz_global,rkind))
+         this%normfactor2d = 1._rkind/(real(nx_global*ny_global,rkind))
 
        
          if (this%allocK) then 
@@ -555,7 +565,51 @@ contains
 
         ! Done 
     end subroutine
-    
+
+    subroutine fft2_x2y(this,input,output)
+        class(fft_3d), intent(inout) :: this
+        real(rkind), dimension(this%physical%xsz(1),this%physical%xsz(2),this%physical%xsz(3)), intent(in) :: input
+        complex(rkind), dimension(size(this%f_xyhat_in_yD,1),size(this%f_xyhat_in_yD,2),size(this%f_xyhat_in_yD,3)), intent(out) :: output
+       
+        integer :: k
+
+        ! First get the x tranform (r2c)
+        call dfftw_execute_dft_r2c(this%plan_r2c_x, input, this%f_xhat_in_xD)  
+
+        ! Now transpose from x-> y
+        call transpose_x_to_y(this%f_xhat_in_xD,output,this%spectral)
+       
+        ! The take fwd transform in y (c2c, inplace)
+        do k = 1,this%spectral%ysz(3)
+            call dfftw_execute_dft(this%plan_c2c_fwd_y, output(:,:,k), output(:,:,k))  
+        end do 
+
+    end subroutine
+
+    subroutine ifft2_y2x(this,input,output)
+        class(fft_3d), intent(inout) :: this
+        complex(rkind), dimension(size(this%f_xyhat_in_yD,1),size(this%f_xyhat_in_yD,2),size(this%f_xyhat_in_yD,3)), intent(in) :: input
+        real(rkind), dimension(this%physical%xsz(1),this%physical%xsz(2),this%physical%xsz(3)), intent(out) :: output
+        
+        integer :: k 
+
+        ! Then transform in y (c2c, out of place)
+        do k = 1,this%spectral%ysz(3)
+            call dfftw_execute_dft(this%plan_c2c_bwd_y_oop, input(:,:,k), this%f_xyhat_in_yD(:,:,k))  
+        end do 
+
+        ! Then transpose from y-> x
+        call transpose_y_to_x(this%f_xyhat_in_yD,this%f_xhat_in_xD,this%spectral)
+
+        ! Then transform in x (c2r transform)
+        call dfftw_execute_dft_c2r(this%plan_c2r_x, this%f_xhat_in_xD, output)
+        
+        ! Normalize the tranform 
+        output = output*this%normfactor2d
+
+    end subroutine        
+   
+ 
     subroutine ifft3_z2x(this,input,output)
         class(fft_3d), intent(inout) :: this
         complex(rkind), dimension(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)), intent(in) :: input

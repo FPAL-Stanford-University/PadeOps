@@ -3,6 +3,7 @@ SetupEnv.sh
 build*
 *.mod
 *.F90.swp
+*.F90~
 dependencies/*[^gz]
 data/*
 tags
