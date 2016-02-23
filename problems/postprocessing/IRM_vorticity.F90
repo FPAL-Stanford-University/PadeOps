@@ -964,7 +964,7 @@ program IRM_vorticity
         if ( writeviz ) then
             ! Set vizcount to be same as Miranda step
             call viz%SetVizcount(step)
-            call viz%WriteViz(mir%gp, mir%mesh, buffer(:,:,:,1:nVTKvars), Xs, ['volume_fraction_1','volume_fraction_2'])
+            call viz%WriteViz(mir%gp, mir%mesh, buffer(:,:,:,1:nVTKvars), secondary=Xs, secondary_names=['volume_fraction_1','volume_fraction_2'])
         end if
 
         ! Write out 2D postprocessing file
