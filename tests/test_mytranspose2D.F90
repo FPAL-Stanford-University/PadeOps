@@ -2,8 +2,8 @@ module mytranspose
     use kind_parameters, only: rkind
     implicit none
 
-    integer, parameter :: nx = 8, ny = 8, nz = 1
-    integer, parameter :: ax = 2, ay = 8, az = 1
+    integer, parameter :: nx = 16, ny = 8, nz = 1
+    integer, parameter :: ax = 4, ay = 8, az = 1
 
 contains
 
@@ -30,7 +30,7 @@ program mpi_transpose
     implicit none
 
     integer, dimension(ax,ay,az) :: x
-    integer, dimension(ay,ax,az) :: x_trans
+    integer, dimension(nx,ny/4,az) :: x_trans
     integer, dimension(ax,ay) :: x_trans_local
 
     integer :: i,j,iblock
@@ -58,39 +58,39 @@ program mpi_transpose
         write(*,*) (x(I,j,1), I=1,ax)
     end do
 
-    !!!! X to Y transpose !!!!
-    call MPI_Alltoall(x, ax*ax, MPI_INTEGER, x_trans_local, ax*ax, MPI_INTEGER, MPI_COMM_WORLD, ierr)
+    !!!! Y to X transpose !!!!
+    call MPI_Alltoall(x, ax*ny/nprocs, MPI_INTEGER, x_trans_local, ax*ny/nprocs, MPI_INTEGER, MPI_COMM_WORLD, ierr)
     
-    do j = 1,ax
+    do j = 1,ny/4
         do iblock = 1,4
             do i = 1,ax
-                x_trans(i+(iblock-1)*ax,j,1) = x_trans_local(i,j+(iblock-1)*ax)
+                x_trans(i+(iblock-1)*ax,j,1) = x_trans_local(i,j+(iblock-1)*ny/nprocs)
             end do
         end do
     end do
     !!!! ================ !!!!
 
-    if (rank == 0) print *, "Finished X to Y transpose"
+    if (rank == 0) print *, "Finished Y to X transpose"
 
     call sleep(rank)
     print *, "x_trans: ", rank
-    do j = 1,ax
-        write(*,*) (x_trans(I,j,1), I=1,ay)
+    do j = 1,ny/nprocs
+        write(*,*) (x_trans(I,j,1), I=1,nx)
     end do
 
     !!!! Y to X transpose !!!!
-    do j = 1,ax
+    do j = 1,ny/4
         do iblock = 1,4
             do i = 1,ax
-                x_trans_local(i,j+(iblock-1)*ax) = x_trans(i+(iblock-1)*ax,j,1)
+                x_trans_local(i,j+(iblock-1)*ny/nprocs) = x_trans(i+(iblock-1)*ax,j,1)
             end do
         end do
     end do
     
-    call MPI_Alltoall(x_trans_local, ax*ax, MPI_INTEGER, x, ax*ax, MPI_INTEGER, MPI_COMM_WORLD, ierr)
+    call MPI_Alltoall(x_trans_local, ax*ny/nprocs, MPI_INTEGER, x, ax*ny/nprocs, MPI_INTEGER, MPI_COMM_WORLD, ierr)
     !!!! ================ !!!!
    
-    if (rank == 0) print *, "Finished Y to X transpose"
+    if (rank == 0) print *, "Finished X to Y transpose"
 
     call sleep(rank)
     print *, "x: ", rank
