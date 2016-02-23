@@ -9,7 +9,7 @@ module IRM_vorticity_mod
     use FiltersMod,      only: filters
     use decomp_2d,       only: nrank, nproc, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y, &
                                decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize
-    use exits,           only: message, GracefulExit
+    use exits,           only: message, warning, GracefulExit
     use reductions,      only: P_MAXVAL, P_AVGZ
 
     implicit none
@@ -242,6 +242,34 @@ contains
             write(iounit,'(2A26)') "# bin", "PDF"
             do i=1,n
                 write(iounit,'(2ES26.16)') half*(bins(i)+bins(i+1)), pdf(i)
+            end do
+
+            close(iounit)
+        end if
+
+    end subroutine
+
+    subroutine write_tpc(step, varname, tpc)
+        integer, intent(in) :: step
+        character(len=*), intent(in) :: varname
+        real(rkind), dimension(:), intent(in) :: tpc
+
+        character(len=clen) :: filename
+        integer :: i,n,iounit=51
+
+        ! Assume all processors have same pdf array, so only master proc can
+        ! write out the file
+        n = size(tpc)
+
+        write(filename,'(4A,I4.4,A)') trim(outputdir), "/tpc_", trim(varname), "_", step, ".dat"
+        call message(1,"Writing " // trim(varname) // " two-point correlation to " // trim(filename))
+        if (nrank == 0) then
+            open(unit=iounit, file=trim(filename), form='FORMATTED', status="REPLACE")
+
+            write(iounit,'(2A)') "# Two-point correlation for ", trim(varname)
+            write(iounit,'(A,ES26.16)') "# dx ", mir%dx
+            do i=1,n
+                write(iounit,'(ES26.16)') tpc(i)
             end do
 
             close(iounit)
@@ -486,6 +514,59 @@ contains
 
     end subroutine
 
+    subroutine two_point_correlation(f,g,tpc,region)
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)), intent(in)  :: f, g, region
+        real(rkind), dimension(mir%nz/2 + 1), intent(out) :: tpc
+
+        real(rkind), dimension(mir%gp%zsz(1), mir%gp%zsz(2), mir%gp%zsz(3)) :: fz, gz, regionz
+        real(rkind), dimension(mir%nz/2 + 1) :: tpc_proc
+
+        integer :: i, j, k1, k2, dk, nregion, ierr
+
+        ! Transpose everything to Z before doing two-point correlation stuff
+        call transpose_y_to_z(f, fz, mir%gp)
+        call transpose_y_to_z(g, gz, mir%gp)
+        call transpose_y_to_z(region, regionz, mir%gp)
+
+        if (.NOT. mir%periodicz) then
+            call warning("WARNING: two_point_correlation assumes periodicity in Z, but that's not the case here.")
+        end if
+
+        nregion = 0
+        tpc_proc = zero
+
+        do j = 1,mir%gp%zsz(2)
+            do i = 1,mir%gp%zsz(1)
+
+                ! Compute two-point correlation only for (x,y) in region
+                if (regionz(i,j,1) .GT. zero) then
+                    nregion = nregion + 1
+
+                    do dk = 0,mir%nz/2
+                        do k1 = 1,mir%nz
+                            k2 = k1 + dk
+                            if (k2 .GT. mir%nz) then
+                                k2 = k2 - mir%nz ! Assuming periodicity in Z
+                            end if
+                            tpc_proc(dk+1) = tpc_proc(dk+1) + fz(i,j,k1)*gz(i,j,k2)/real(mir%nz,rkind)
+                        end do
+                    end do
+
+                end if
+
+            end do
+        end do
+
+        if (nregion .GT. 0) then
+            tpc_proc = tpc_proc / real(nregion,rkind)
+        end if
+       
+        ! Reduce tpc from all processors to one mean tpc
+        call MPI_Allreduce(tpc_proc, tpc, mir%nz/2 + 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+        tpc = tpc / real(nproc,rkind)
+
+    end subroutine
+
 end module
 
 program IRM_vorticity
@@ -525,7 +606,7 @@ program IRM_vorticity
     real(rkind), dimension(:), allocatable :: Y_air_x, Y_CO2_x
 
     integer :: nbins = 64
-    real(rkind), dimension(:), allocatable :: bins, pdf
+    real(rkind), dimension(:), allocatable :: bins, pdf, tpc
 
     complex(rkind), dimension(:), allocatable :: TKEfft
 
@@ -627,12 +708,14 @@ program IRM_vorticity
     xi                       => buffer2d(:,:,25)
     
     allocate( TKEfft(mir%nz/2+1) )
+    allocate( tpc   (mir%nz/2+1) )
 
     allocate( Y_air_x( mir%gp%ysz(1) ) )
     allocate( Y_CO2_x( mir%gp%ysz(1) ) )
 
     allocate( bins(nbins+1) )
     allocate( pdf (nbins  ) )
+    
 
     ! Initialize visualization stuff
     if ( writeviz ) then
@@ -869,6 +952,9 @@ program IRM_vorticity
         ! Get Y_CO2 PDF
         call get_pdf(mir%Ys(:,:,:,2),nbins,bins,0.1_rkind,0.9_rkind,pdf,Rij)
         call write_pdf(step, "CO2", bins, pdf)
+    
+        call two_point_correlation(wpp,wpp,tpc,region)
+        call write_tpc(step, "wpp", tpc)
 
         if(nrank == 0) then
             write(iounit,'(10ES26.16)') real(step*1.0d-4,rkind), mwidth, vortz_int, vortz_pos, vortz_neg, TKE_int, chi_int, chi_art, MMF_int, rhop_sq_int
@@ -896,6 +982,7 @@ program IRM_vorticity
     if (allocated(buffer  )) deallocate( buffer   )
     if (allocated(buffer2d)) deallocate( buffer2d )
     if (allocated( TKEfft )) deallocate( TKEfft   )
+    if (allocated( tpc    )) deallocate( tpc      )
     if (allocated( Y_air_x)) deallocate( Y_air_x  )
     if (allocated( Y_CO2_x)) deallocate( Y_CO2_x  )
     if (allocated( bins   )) deallocate( bins     )
