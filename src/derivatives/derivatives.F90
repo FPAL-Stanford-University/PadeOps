@@ -50,10 +50,43 @@ module DerivativesMod
             procedure :: getMethodx
             procedure :: getMethody
             procedure :: getMethodz
+            procedure :: set_xsz
+            procedure :: set_ysz
+            procedure :: set_zsz
     end type
 
 
 contains
+
+    subroutine set_xsz(this,xsz)
+        class(derivatives), intent(inout) :: this
+        integer, dimension(3), intent(in) :: xsz
+
+        if (this%xsz(1) /= xsz(1)) then
+            call GracefulExit("Cannot change xsz(1) in set_xsz",453)
+        end if
+        this%xsz = xsz
+    end subroutine
+
+    subroutine set_ysz(this,ysz)
+        class(derivatives), intent(inout) :: this
+        integer, dimension(3), intent(in) :: ysz
+
+        if (this%ysz(2) /= ysz(2)) then
+            call GracefulExit("Cannot change ysz(2) in set_ysz",453)
+        end if
+        this%ysz = ysz
+    end subroutine
+
+    subroutine set_zsz(this,zsz)
+        class(derivatives), intent(inout) :: this
+        integer, dimension(3), intent(in) :: zsz
+
+        if (this%zsz(3) /= zsz(3)) then
+            call GracefulExit("Cannot change zsz(3) in set_zsz",453)
+        end if
+        this%zsz = zsz
+    end subroutine
 
     function getMethodx(this) result(m)
         class(derivatives), intent(in) :: this
