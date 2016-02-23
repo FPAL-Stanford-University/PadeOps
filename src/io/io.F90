@@ -38,7 +38,7 @@ module io_stuff
             class(io), intent(inout) :: this
         end subroutine
 
-        subroutine WriteViz_interface(this, gp, mesh, primary, secondary, secondary_names)
+        subroutine WriteViz_interface(this, gp, mesh, primary, tsim, secondary, secondary_names)
             import :: io
             import :: decomp_info
             import :: rkind
@@ -47,6 +47,7 @@ module io_stuff
             class(decomp_info), intent(in) :: gp
             real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),3), intent(in) :: mesh
             real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),this%nprimary), intent(in) :: primary
+            real(rkind), intent(in), optional :: tsim
             real(rkind), dimension(:,:,:,:), intent(in), optional :: secondary
             character(len=*), dimension(:), intent(in), optional :: secondary_names
         end subroutine

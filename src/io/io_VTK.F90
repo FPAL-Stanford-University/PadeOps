@@ -72,11 +72,12 @@ contains
 
     end subroutine
 
-    subroutine WriteViz(this, gp, mesh, primary, secondary, secondary_names)
+    subroutine WriteViz(this, gp, mesh, primary, tsim, secondary, secondary_names)
         class(io_VTK), intent(inout) :: this
         class(decomp_info), intent(in) :: gp
         real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),3), intent(in) :: mesh
         real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),this%nprimary), intent(in) :: primary
+        real(rkind), intent(in), optional :: tsim
         real(rkind), dimension(:,:,:,:), intent(in), optional :: secondary
         character(len=*), dimension(:), intent(in), optional :: secondary_names
 
@@ -88,6 +89,7 @@ contains
 
         character(len=clen) :: dummy
 
+        call system('mkdir -p ' // adjustl(trim(this%vizdir)//'/'//trim(strz(4,this%vizcount))))
         write(dummy,'(I4)') this%vizcount
         call message("Writing viz dump "//trim(dummy)//" to " //trim(this%vizdir)//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'.pvts')
 
@@ -121,9 +123,16 @@ contains
         nn = (nx2-nx1+1)*(ny2-ny1+1)*(nz2-nz1+1)
     
         E_IO = VTK_INI_XML_WRITE(fformat='binary', &
-                           filename=trim(this%vizdir)//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'_'//trim(strz(6,nrank))//'.vts', &
+                           filename=trim(this%vizdir)//'/'//trim(strz(4,this%vizcount))//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'_'//trim(strz(6,nrank))//'.vts', &
                            mesh_topology='StructuredGrid', nx1=nx1, nx2=nx2, ny1=ny1, ny2=ny2, nz1=nz1, nz2=nz2)
         
+        E_IO = VTK_FLD_XML(fld_action='open')
+        if (present(tsim)) then
+            E_IO = VTK_FLD_XML(fld=tsim,fname='TIME')
+        end if
+        E_IO = VTK_FLD_XML(fld=this%vizcount,fname='CYCLE')
+        E_IO = VTK_FLD_XML(fld_action='close')
+
         ! Halo update for x, y and z
         call update_halo(mesh(:,:,:,1),tmp1,1,gp,.FALSE.)
         call update_halo(mesh(:,:,:,2),tmp2,1,gp,.FALSE.)
@@ -175,7 +184,7 @@ contains
                     call MPI_RECV(nz2,1,MPI_INTEGER,i,i+5*nproc,MPI_COMM_WORLD,mpistatus,ierr)
                 end if
                 E_IO = PVTK_GEO_XML(nx1=nx1,nx2=nx2,ny1=ny1,ny2=ny2,nz1=nz1,nz2=nz2,&
-                                    source=trim(this%file_prefix)//trim(strz(4,this%vizcount))//'_'//trim(strz(6,i))//'.vts')
+                                    source=trim(strz(4,this%vizcount))//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'_'//trim(strz(6,i))//'.vts')
             end do
 
             E_IO = PVTK_DAT_XML(var_location='node',var_block_action='open')
