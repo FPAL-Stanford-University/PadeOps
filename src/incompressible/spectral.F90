@@ -9,7 +9,7 @@ module spectralMod
     use fft_3d_stuff, only: fft_3d 
     implicit none
     private
-    public :: spectral 
+    public :: spectral, GetWaveNums 
 
     logical :: useExhaustiveFFT = .false. 
 
@@ -22,14 +22,14 @@ module spectralMod
         logical :: is3dFFT = .true. ! use 3d FFTs
         logical :: isInitialized = .false.
         logical :: fixOddball = .true. 
-        integer :: nx_g, ny_g, nz_g
+        integer, public :: nx_g, ny_g, nz_g
         integer :: nx_r,ny_r,nz_r
         integer :: nx_c,ny_c,nz_c
         type(fft_3d), allocatable :: FT
         logical :: use2decompFFT = .false. 
         logical :: useConsrvD2 = .true. 
         real(rkind) :: normfact 
-
+        type(decomp_info), allocatable, public :: spectdecomp
         contains
             procedure           :: init
             procedure           :: destroy
@@ -38,7 +38,7 @@ module spectralMod
             generic             :: alloc_r2c_out => alloc_r2c_out_Rank4, alloc_r2c_out_Rank3
             procedure           :: fft
             procedure           :: ifft
-            procedure, private  :: initializeAllPeriodic
+            procedure, private  :: initializeEverything
             !procedure, private  :: upsample_Fhat
             !procedure, private  :: downsample_Fhat
 
@@ -74,15 +74,15 @@ contains
         if (present(dimTransform)) then
             if (dimTransform == 2) then
                 this%is3dFFT = .false.
-                call this%initializeAllPeriodic(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt,.true.)
+                call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt,.true.)
             else if (dimTransform == 3) then
-                call this%initializeAllPeriodic(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt)
+                call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt)
             else
                 call GracefulExit("Incorrect choice for DIMTRANSFORM while initializing SPECTRAL derived type. &
                                    & Available options include 2 and 3", 102)
             end if 
         else
-            call this%initializeAllPeriodic(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt)
+            call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt)
         end if 
       
         this%normfact = one/real(nx_g)/real(ny_g)/real(nz_g) 
@@ -91,8 +91,8 @@ contains
     end subroutine 
 
 
-    subroutine initializeAllPeriodic(this,pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt,nonPeriodic)
-        class(spectral),  intent(inout)         :: this
+    subroutine initializeEverything(this,pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt,nonPeriodic)
+        class(spectral),  intent(inout), target :: this
         character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction
         integer,          intent(in)            :: nx_g, ny_g, nz_g    ! Global data size
         real(rkind),      intent(in)            :: dx, dy, dz          ! PHYSICAL grid spacing 
@@ -153,9 +153,11 @@ contains
 
         ! STEP 2: Allocate wavenumbers and temporary decomp for spectral transposes
         allocate(spectdecomp)
+        allocate(this%spectdecomp)
         select case (rPencil)
         case(1)
            call decomp_info_init(nx_g/2+1, ny_g, nz_g, spectdecomp)
+           call decomp_info_init(nx_g/2+1, ny_g, nz_g, this%spectdecomp)
            if (TwoPeriodic) then
                 this%fft_size(1) = spectdecomp%ysz(1)    
                 this%fft_size(2) = spectdecomp%ysz(2)    
@@ -167,12 +169,13 @@ contains
            end if    
         case(3)
            call decomp_info_init(nx_g, ny_g, nz_g/2+1, spectdecomp) 
+           call decomp_info_init(nx_g, ny_g, nz_g/2+1, this%spectdecomp)
            this%fft_size(1) = spectdecomp%xsz(1)    
            this%fft_size(2) = spectdecomp%xsz(2)    
            this%fft_size(3) = spectdecomp%xsz(3)    
         end select 
         
-        
+
         if (allocated(this%k1)) deallocate(this%k1)
         allocate (this%k1(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
         if (allocated(this%k2)) deallocate(this%k2)
@@ -388,21 +391,31 @@ contains
             allocate(spectdecomp)
             select case (rPencil) 
             case (1) 
-                call decomp_info_init(nx_g/2+1, ny_g, nz_g, spectdecomp) 
-                this%k3(:,:,nz_g/2+1) = zero
-                allocate (tmp1(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
-                allocate (tmp2(spectdecomp%xsz(1),spectdecomp%xsz(2),spectdecomp%xsz(3)))
+                call decomp_info_init(nx_g/2+1, ny_g, nz_g, spectdecomp)
                 
-                call transpose_z_to_y(this%k2,tmp1,spectdecomp)
-                tmp1(:,ny_g/2+1,:) = zero
-                call transpose_y_to_z(tmp1,this%k2,spectdecomp)
-                
-                call transpose_z_to_y(this%k1,tmp1,spectdecomp)
-                call transpose_y_to_x(tmp1,tmp2,spectdecomp)
-                tmp2(nx_g/2+1,:,:) = zero
-                call transpose_x_to_y(tmp2,tmp1,spectdecomp)
-                call transpose_y_to_z(tmp1,this%k1,spectdecomp)
-            
+                if (TwoPeriodic) then
+                    allocate (tmp1(spectdecomp%zsz(1),spectdecomp%zsz(2),spectdecomp%zsz(3)))
+                    ! Fuck k3
+                    this%k2(:,ny_g/2+1,:) = zero
+                    allocate (tmp2(spectdecomp%xsz(1),spectdecomp%xsz(2),spectdecomp%xsz(3)))
+                    call transpose_y_to_x(this%k1,tmp2,spectdecomp)
+                    tmp2(nx_g/2+1,:,:) = zero
+                    call transpose_x_to_y(tmp2,this%k1,spectdecomp)
+                else
+                    this%k3(:,:,nz_g/2+1) = zero
+                    allocate (tmp1(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
+                    allocate (tmp2(spectdecomp%xsz(1),spectdecomp%xsz(2),spectdecomp%xsz(3)))
+                    
+                    call transpose_z_to_y(this%k2,tmp1,spectdecomp)
+                    tmp1(:,ny_g/2+1,:) = zero
+                    call transpose_y_to_z(tmp1,this%k2,spectdecomp)
+                    
+                    call transpose_z_to_y(this%k1,tmp1,spectdecomp)
+                    call transpose_y_to_x(tmp1,tmp2,spectdecomp)
+                    tmp2(nx_g/2+1,:,:) = zero
+                    call transpose_x_to_y(tmp2,tmp1,spectdecomp)
+                    call transpose_y_to_z(tmp1,this%k1,spectdecomp)
+                end if 
             case (3)
                 call decomp_info_init(nx_g, ny_g, nz_g/2+1, spectdecomp) 
                 this%k1(nx_g/2+1,:,:) = zero
@@ -446,8 +459,11 @@ contains
                 deallocate(this%Gdealias)
         end if 
         deallocate( this%k1, this%k2, this%k3, this%kabs_sq, this%k1_der2, this%k2_der2, this%k3_der2, this%one_by_kabs_sq)
+       
+        if (allocated(this%spectdecomp)) deallocate(this%spectdecomp)
         this%isInitialized = .false. 
-    
+   
+
     end subroutine 
 
     subroutine fft(this,arr_in,arr_out)
