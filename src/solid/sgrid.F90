@@ -119,6 +119,7 @@ module SolidGrid
 
 contains
     subroutine init(this, inputfile )
+        use reductions, only: P_MAXVAL
         class(sgrid),target, intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
 
@@ -282,7 +283,7 @@ contains
         allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
 
         call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        call this%elastic%get_eelastic(rho0,trG,trG2,detG,this%eel)
+        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
        
         this%e = this%e + this%eel
         call this%sgas%get_T(this%e,this%T)
@@ -592,18 +593,21 @@ contains
         use reductions, only: P_MAXVAL, P_MINVAL
         class(sgrid), target, intent(inout) :: this
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: rhs  ! RHS for conserved variables
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: Qtmp ! Temporary variable for RK45
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: rhs   ! RHS for conserved variables
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: Qtmp  ! Temporary variable for RK45
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for g tensor equation
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: Qtmpg ! Temporary variable for RK45
         integer :: isub,i,j,k,l
 
         character(len=clen) :: charout
 
-        if (this%step == 0) then
-            call this%gas%get_e_from_p(this%rho,this%p,this%e)
-            call this%gas%get_T(this%e,this%T)
-        end if
+        ! if (this%step == 0) then
+        !     call this%gas%get_e_from_p(this%rho,this%p,this%e)
+        !     call this%gas%get_T(this%e,this%T)
+        ! end if
 
-        Qtmp = zero
+        Qtmp  = zero
+        Qtmpg = zero
 
         do isub = 1,RK45_steps
             call this%get_conserved()
@@ -614,13 +618,20 @@ contains
                 call GracefulExit(trim(charout), 999)
             end if
 
-            call this%getRHS(rhs)
-            Qtmp = this%dt*rhs + RK45_A(isub)*Qtmp
+            call this%getRHS(rhs, rhsg)
+            Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
+            Qtmpg = this%dt*rhsg + RK45_A(isub)*Qtmpg
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
+            this%g      = this%g      + RK45_B(isub)*Qtmpg
 
             ! Filter the conserved variables
             do i = 1,5
                 call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1)
+            end do
+            
+            ! Filter the g tensor
+            do i = 1,9
+                call this%filter(this%g(:,:,:,i), this%fil, 1)
             end do
             
             call this%get_primitive()
@@ -655,6 +666,9 @@ contains
         real(rkind), dimension(:,:,:), pointer :: onebyrho
         real(rkind), dimension(:,:,:), pointer :: rhou,rhov,rhow,TE
 
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6) :: finger, fingersq
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: trG, trG2, detG
+
         onebyrho => this%ybuf(:,:,:,1)
 
         this%rho  =  this%Wcnsrv(:,:,:,1)
@@ -670,8 +684,11 @@ contains
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
         
-        call this%gas%get_p(this%rho,this%e,this%p)
-        call this%gas%get_T(this%e,this%T)
+        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
+        
+        call this%sgas%get_T(this%e,this%T)
+        call this%sgas%get_p(this%rho,(this%e-this%eel),this%p)
 
     end subroutine
 
@@ -682,7 +699,7 @@ contains
         this%Wcnsrv(:,:,:,2) = this%rho * this%u
         this%Wcnsrv(:,:,:,3) = this%rho * this%v
         this%Wcnsrv(:,:,:,4) = this%rho * this%w
-        this%Wcnsrv(:,:,:,5) = ( this%p*(this%gas%onebygam_m1) + this%rho*half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
+        this%Wcnsrv(:,:,:,5) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
 
     end subroutine
 
