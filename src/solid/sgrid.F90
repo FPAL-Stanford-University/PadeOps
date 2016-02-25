@@ -686,13 +686,16 @@ contains
 
     end subroutine
 
-    subroutine getRHS(this, rhs)
+    subroutine getRHS(this, rhs, rhsg)
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,5), intent(out) :: rhs
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), intent(out) :: rhsg
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
         real(rkind), dimension(:,:,:), pointer :: qx,qy,qz
+        real(rkind), dimension(:,:,:), pointer :: penalty, tmp
+        real(rkind), dimension(:,:,:,:), pointer :: curlg
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
@@ -732,6 +735,37 @@ contains
                            tauxz,tauyz,tauzz,&
                                qz )
 
+        ! inverse deformation gradient tensor
+        penalty => this%ybuf(:,:,:,1)
+        tmp => this%ybuf(:,:,:,2)
+        curlg => this%ybuf(:,:,:,3:5)
+
+        penalty = etafac*(this%rho/detG/this%rho0-one)
+
+        tmp = -this%u*this%g11-this%v*this%g12-this%w*this%g13
+        call this%gradient(tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3))
+        
+        call curl(this%decomp, this%der, this%g11, this%g12, this%g13, curlg)
+        rhsg(:,:,:,1) = rhsg(:,:,:,1) + this%v*curlg(:,:,:,3) - this%w*curlg(:,:,:,2) + penalty*this%g11
+        rhsg(:,:,:,2) = rhsg(:,:,:,2) + this%w*curlg(:,:,:,1) - this%u*curlg(:,:,:,3) + penalty*this%g12
+        rhsg(:,:,:,3) = rhsg(:,:,:,3) + this%u*curlg(:,:,:,2) - this%v*curlg(:,:,:,1) + penalty*this%g13
+ 
+        tmp = -this%u*this%g21-this%v*this%g22-this%w*this%g23
+        call this%gradient(tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6))
+        
+        call curl(this%decomp, this%der, this%g21, this%g22, this%g23, curlg)
+        rhsg(:,:,:,4) = rhsg(:,:,:,4) + this%v*curlg(:,:,:,3) - this%w*curlg(:,:,:,2) + penalty*this%g21
+        rhsg(:,:,:,5) = rhsg(:,:,:,5) + this%w*curlg(:,:,:,1) - this%u*curlg(:,:,:,3) + penalty*this%g22
+        rhsg(:,:,:,6) = rhsg(:,:,:,6) + this%u*curlg(:,:,:,2) - this%v*curlg(:,:,:,1) + penalty*this%g23
+ 
+        tmp = -this%u*this%g31-this%v*this%g32-this%w*this%g33
+        call this%gradient(tmp,rhsg(:,:,:,7),rhsg(:,:,:,8),rhsg(:,:,:,9))
+
+        call curl(this%decomp, this%der, this%g31, this%g32, this%g33, curlg)
+        rhsg(:,:,:,7) = rhsg(:,:,:,7) + this%v*curlg(:,:,:,3) - this%w*curlg(:,:,:,2) + penalty*this%g31
+        rhsg(:,:,:,8) = rhsg(:,:,:,8) + this%w*curlg(:,:,:,1) - this%u*curlg(:,:,:,3) + penalty*this%g32
+        rhsg(:,:,:,9) = rhsg(:,:,:,9) + this%u*curlg(:,:,:,2) - this%v*curlg(:,:,:,1) + penalty*this%g33
+ 
     end subroutine
 
     subroutine getRHS_x(       this,  rhs,&
