@@ -98,7 +98,8 @@ contains
 
     pure subroutine get_eelastic(this,rho0,trG,trG2,detG,eelastic)
         class(idealgas), intent(in) :: this
-        real(rkind), dimension(:,:,:), intent(in)  :: rho0,trG,trG2,detG
+        real(rkind),                   intent(in)  :: rho0
+        real(rkind), dimension(:,:,:), intent(in)  :: trG,trG2,detG
         real(rkind), dimension(:,:,:), intent(out) :: eelastic
 
         eelastic = fourth*this%mu/rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
@@ -107,7 +108,7 @@ contains
 
     pure subroutine get_sos(this,rho0,sos)
         class(idealgas), intent(in) :: this
-        real(rkind), dimension(:,:,:), intent(in)  :: rho0
+        real(rkind),                   intent(in)  :: rho0
         real(rkind), dimension(:,:,:), intent(inout) :: sos
 
         sos = sqrt(sos**two + fourthird*this%mu/rho0)

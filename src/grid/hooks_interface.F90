@@ -25,6 +25,17 @@ module hooks
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
         end subroutine 
+        subroutine initfields(decomp, dx, dy, dz, inpDirectory, mesh, fields, rho0)
+            import :: rkind
+            import :: decomp_info
+            type(decomp_info), intent(in) :: decomp
+            real(rkind), intent(inout) :: dx, dy, dz
+            character(len=*), intent(in) :: inpDirectory
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+            real(rkind),                     intent(inout) :: rho0
+
+        end subroutine 
     end interface
 
     interface hook_output

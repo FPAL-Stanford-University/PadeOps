@@ -8,7 +8,8 @@ module SolidGrid
     use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                     transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
-    use IdealGasEOS,     only: idealgas
+    use StiffGasEOS,     only: stiffgas
+    use Sep1SolidEOS,    only: sep1solid
    
     implicit none
 
@@ -22,6 +23,18 @@ module SolidGrid
     integer, parameter :: mu_index     = 8
     integer, parameter :: bulk_index   = 9
     integer, parameter :: kap_index    = 10
+    integer, parameter :: g11_index    = 11
+    integer, parameter :: g12_index    = 12
+    integer, parameter :: g13_index    = 13
+    integer, parameter :: g21_index    = 14
+    integer, parameter :: g22_index    = 15
+    integer, parameter :: g23_index    = 16
+    integer, parameter :: g31_index    = 17
+    integer, parameter :: g32_index    = 18
+    integer, parameter :: g33_index    = 19
+    integer, parameter :: eel_index    = 20
+
+    integer, parameter :: nfields = 20
 
     ! These indices are for data management, do not change if you're not sure of what you're doing
     integer, parameter :: tauxyidx = 2
@@ -41,15 +54,19 @@ module SolidGrid
     integer, parameter :: nbufsy = 6
     integer, parameter :: nbufsz = 2
 
-    type, extends(grid) :: cgrid
+    type, extends(grid) :: sgrid
        
-        type(filters),  allocatable :: gfil
-        type(idealgas), allocatable :: gas
+        type(filters),   allocatable :: gfil
+
+        type(stiffgas),  allocatable :: sgas
+        type(sep1solid), allocatable :: elastic
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
        
         real(rkind) :: Cmu, Cbeta, Ckap
+
+        real(rkind) :: rho0
 
         real(rkind), dimension(:,:,:), pointer :: x 
         real(rkind), dimension(:,:,:), pointer :: y 
@@ -65,6 +82,19 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: mu 
         real(rkind), dimension(:,:,:), pointer :: bulk 
         real(rkind), dimension(:,:,:), pointer :: kap
+
+        real(rkind), dimension(:,:,:,:), pointer :: g
+        real(rkind), dimension(:,:,:), pointer :: g11
+        real(rkind), dimension(:,:,:), pointer :: g12
+        real(rkind), dimension(:,:,:), pointer :: g13
+        real(rkind), dimension(:,:,:), pointer :: g21
+        real(rkind), dimension(:,:,:), pointer :: g22
+        real(rkind), dimension(:,:,:), pointer :: g23
+        real(rkind), dimension(:,:,:), pointer :: g31
+        real(rkind), dimension(:,:,:), pointer :: g32
+        real(rkind), dimension(:,:,:), pointer :: g33
+        
+        real(rkind), dimension(:,:,:), pointer :: eel
          
         contains
             procedure          :: init
@@ -89,15 +119,15 @@ module SolidGrid
 
 contains
     subroutine init(this, inputfile )
-        class(cgrid),target, intent(inout) :: this
+        class(sgrid),target, intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
 
         integer :: nx, ny, nz
         character(len=clen) :: outputdir
         character(len=clen) :: inputdir
-        character(len=clen) :: vizprefix = "cgrid"
+        character(len=clen) :: vizprefix = "sgrid"
         real(rkind) :: tviz = zero
-        character(len=clen), dimension(10) :: varnames
+        character(len=clen), dimension(nfields) :: varnames
         logical :: periodicx = .true. 
         logical :: periodicy = .true. 
         logical :: periodicz = .true.
@@ -112,6 +142,9 @@ contains
         integer :: ioUnit
         real(rkind) :: gam = 1.4_rkind
         real(rkind) :: Rgas = one
+        real(rkind) :: PInf = zero
+        real(rkind) :: shmod = zero
+        real(rkind) :: rho0 = one
         integer :: nsteps = -1
         real(rkind) :: dt = -one
         real(rkind) :: tstop = one
@@ -121,6 +154,9 @@ contains
         real(rkind) :: Cbeta = 1.75_rkind
         real(rkind) :: Ckap = 0.01_rkind
 
+        real(rkind), dimension(:,:,:,:), allocatable :: finger, fingersq
+        real(rkind), dimension(:,:,:),   allocatable :: trG, trG2, detG
+
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                              inputdir, outputdir, vizprefix, tviz, &
                                   periodicx, periodicy, periodicz, &
@@ -128,13 +164,12 @@ contains
                                      filter_x, filter_y, filter_z, &
                                                        prow, pcol, &
                                                          SkewSymm  
-        namelist /CINPUT/  gam, Rgas, Cmu, Cbeta, Ckap
-
+        namelist /SINPUT/  gam, Rgas, PInf, shmod, rho0, Cmu, Cbeta, Ckap
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
         read(unit=ioUnit, NML=INPUT)
-        read(unit=ioUnit, NML=CINPUT)
+        read(unit=ioUnit, NML=SINPUT)
         close(ioUnit)
 
         this%nx = nx
@@ -148,6 +183,8 @@ contains
 
         this%step = 0
         this%nsteps = nsteps
+
+        this%rho0 = rho0
 
         this%Cmu = Cmu
         this%Cbeta = Cbeta
@@ -186,38 +223,79 @@ contains
             end do 
         end do  
 
-        ! Allocate gas
-        if ( allocated(this%gas) ) deallocate(this%gas)
-        allocate(this%gas)
-        call this%gas%init(gam,Rgas)
+        ! Allocate sgas
+        if ( allocated(this%sgas) ) deallocate(this%sgas)
+        allocate(this%sgas)
+        call this%sgas%init(gam,Rgas,PInf)
+
+        ! Allocate elastic
+        if ( allocated(this%elastic) ) deallocate(this%elastic)
+        allocate(this%elastic)
+        call this%elastic%init(shmod)
 
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
 
         ! Allocate fields
         if ( allocated(this%fields) ) deallocate(this%fields) 
-        call alloc_buffs(this%fields,10,'y',this%decomp)
+        call alloc_buffs(this%fields,nfields,'y',this%decomp)
         call alloc_buffs(this%Wcnsrv,5,'y',this%decomp)
         
         ! Associate pointers for ease of use
-        this%rho  => this%fields(:,:,:, 1) 
-        this%u    => this%fields(:,:,:, 2) 
-        this%v    => this%fields(:,:,:, 3) 
-        this%w    => this%fields(:,:,:, 4)  
-        this%p    => this%fields(:,:,:, 5)  
-        this%T    => this%fields(:,:,:, 6)  
-        this%e    => this%fields(:,:,:, 7)  
-        this%mu   => this%fields(:,:,:, 8)  
-        this%bulk => this%fields(:,:,:, 9)  
-        this%kap  => this%fields(:,:,:,10)   
+        this%rho  => this%fields(:,:,:, rho_index) 
+        this%u    => this%fields(:,:,:,   u_index) 
+        this%v    => this%fields(:,:,:,   v_index) 
+        this%w    => this%fields(:,:,:,   w_index)  
+        this%p    => this%fields(:,:,:,   p_index)  
+        this%T    => this%fields(:,:,:,   T_index)  
+        this%e    => this%fields(:,:,:,   e_index)  
+        this%mu   => this%fields(:,:,:,  mu_index)  
+        this%bulk => this%fields(:,:,:,bulk_index)  
+        this%kap  => this%fields(:,:,:, kap_index)   
+       
+        this%g    => this%fields(:,:,:,g11_index:g33_index)
+        this%g11  => this%fields(:,:,:, g11_index)   
+        this%g12  => this%fields(:,:,:, g12_index)   
+        this%g13  => this%fields(:,:,:, g13_index)   
+        this%g21  => this%fields(:,:,:, g21_index)   
+        this%g22  => this%fields(:,:,:, g22_index)   
+        this%g23  => this%fields(:,:,:, g23_index)   
+        this%g31  => this%fields(:,:,:, g31_index)   
+        this%g32  => this%fields(:,:,:, g32_index)   
+        this%g33  => this%fields(:,:,:, g33_index)   
+        
+        this%eel  => this%fields(:,:,:, eel_index)   
        
         ! Initialize everything to a constant Zero
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired 
-        call initfields(this%decomp, this%dx, this%dy, this%dz, inputdir, this%mesh, this%fields)
-        call this%gas%get_e_from_p(this%rho,this%p,this%e)
-        call this%gas%get_T(this%e,this%T)
+        call initfields(this%decomp, this%dx, this%dy, this%dz, inputdir, this%mesh, this%fields, this%rho0)
+       
+        ! Get hydrodynamic and elastic energies 
+        call this%sgas%get_e_from_p(this%rho,this%p,this%e)
+
+        call alloc_buffs(finger,  6,"y",this%decomp)
+        call alloc_buffs(fingersq,6,"y",this%decomp)
+        allocate( trG (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+        allocate( trG2(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+        allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+
+        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+        call this%elastic%get_eelastic(rho0,trG,trG2,detG,this%eel)
+       
+        this%e = this%e + this%eel
+        call this%sgas%get_T(this%e,this%T)
+
+        if (P_MAXVAL(abs( this%rho/this%rho0/(detG)**half - one )) > 10._rkind*eps) then
+            call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
+        end if
+
+        deallocate( finger   )
+        deallocate( fingersq )
+        deallocate( trG      )
+        deallocate( trG2     )
+        deallocate( detG     )
 
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
@@ -283,16 +361,26 @@ contains
         varnames( 8) = 'mu'
         varnames( 9) = 'bulk'
         varnames(10) = 'kap'
+        varnames(11) = 'g11'
+        varnames(12) = 'g12'
+        varnames(13) = 'g13'
+        varnames(14) = 'g21'
+        varnames(15) = 'g22'
+        varnames(16) = 'g23'
+        varnames(17) = 'g31'
+        varnames(18) = 'g32'
+        varnames(19) = 'g33'
+        varnames(20) = 'e_elastic'
 
         allocate(this%viz)
-        call this%viz%init(this%outputdir, vizprefix, 10, varnames)
+        call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
 
     end subroutine
 
 
     subroutine destroy(this)
-        class(cgrid), intent(inout) :: this
+        class(sgrid), intent(inout) :: this
 
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
@@ -310,7 +398,8 @@ contains
         call destroy_buffs(this%ybuf)
         call destroy_buffs(this%zbuf)
 
-        if (allocated(this%gas)) deallocate(this%gas) 
+        if (allocated(this%sgas)) deallocate(this%sgas) 
+        if (allocated(this%elastic)) deallocate(this%elastic) 
         
         if (allocated(this%Wcnsrv)) deallocate(this%Wcnsrv) 
         
@@ -323,7 +412,7 @@ contains
     end subroutine
 
     subroutine gradient(this, f, dfdx, dfdy, dfdz)
-        class(cgrid),target, intent(inout) :: this
+        class(sgrid),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdx
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdy
@@ -357,7 +446,7 @@ contains
 
     subroutine laplacian(this, f, lapf)
         use timer
-        class(cgrid),target, intent(inout) :: this
+        class(sgrid),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
         
@@ -397,7 +486,7 @@ contains
         use reductions, only: P_MEAN
         use timer,      only: tic, toc
         use exits,      only: GracefulExit, message
-        class(cgrid), target, intent(inout) :: this
+        class(sgrid), target, intent(inout) :: this
 
         logical :: tcond, vizcond, stepcond
         real(rkind) :: cputime
@@ -501,7 +590,7 @@ contains
         use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B
         use exits,      only: message,nancheck,GracefulExit
         use reductions, only: P_MAXVAL, P_MINVAL
-        class(cgrid), target, intent(inout) :: this
+        class(sgrid), target, intent(inout) :: this
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: rhs  ! RHS for conserved variables
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: Qtmp ! Temporary variable for RK45
@@ -550,7 +639,7 @@ contains
     end subroutine
 
     subroutine get_dt(this)
-        class(cgrid), target, intent(inout) :: this
+        class(sgrid), target, intent(inout) :: this
 
         if (this%CFL > zero) then
             return
@@ -562,7 +651,7 @@ contains
     end subroutine
 
     pure subroutine get_primitive(this)
-        class(cgrid), target, intent(inout) :: this
+        class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(:,:,:), pointer :: onebyrho
         real(rkind), dimension(:,:,:), pointer :: rhou,rhov,rhow,TE
 
@@ -587,7 +676,7 @@ contains
     end subroutine
 
     pure subroutine get_conserved(this)
-        class(cgrid), intent(inout) :: this
+        class(sgrid), intent(inout) :: this
 
         this%Wcnsrv(:,:,:,1) = this%rho
         this%Wcnsrv(:,:,:,2) = this%rho * this%u
@@ -598,7 +687,7 @@ contains
     end subroutine
 
     subroutine getRHS(this, rhs)
-        class(cgrid), target, intent(inout) :: this
+        class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,5), intent(out) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
@@ -648,7 +737,7 @@ contains
     subroutine getRHS_x(       this,  rhs,&
                         tauxx,tauxy,tauxz,&
                             qx )
-        class(cgrid), target, intent(inout) :: this
+        class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, 5), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
@@ -681,7 +770,7 @@ contains
     subroutine getRHS_y(       this,  rhs,&
                         tauxy,tauyy,tauyz,&
                             qy )
-        class(cgrid), target, intent(inout) :: this
+        class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, 5), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxy,tauyy,tauyz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qy
@@ -712,7 +801,7 @@ contains
     subroutine getRHS_z(       this,  rhs,&
                         tauxz,tauyz,tauzz,&
                             qz )
-        class(cgrid), target, intent(inout) :: this
+        class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, 5), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxz,tauyz,tauzz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qz
@@ -746,7 +835,7 @@ contains
                            dvdx,dvdy,dvdz,&
                            dwdx,dwdy,dwdz )
         use reductions, only: P_MAXVAL
-        class(cgrid), target, intent(inout) :: this
+        class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: mustar,bulkstar,kapstar,func
@@ -890,7 +979,7 @@ contains
     end subroutine
 
     subroutine filter(this,arr,myfil,numtimes)
-        class(cgrid), target, intent(inout) :: this
+        class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
         type(filters), target, optional, intent(in) :: myfil
         integer, optional, intent(in) :: numtimes
@@ -968,7 +1057,7 @@ contains
     end subroutine
    
     subroutine getPhysicalProperties(this)
-        class(cgrid), intent(inout) :: this
+        class(sgrid), intent(inout) :: this
 
         ! If inviscid set everything to zero (otherwise use a model)
         this%mu = zero
@@ -978,7 +1067,7 @@ contains
     end subroutine  
 
     subroutine get_tau(this,duidxj)
-        class(cgrid), target, intent(inout) :: this
+        class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), target, intent(inout) :: duidxj
 
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
@@ -1026,7 +1115,7 @@ contains
     end subroutine 
 
     subroutine get_q(this,duidxj)
-        class(cgrid), target, intent(inout) :: this
+        class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: duidxj
 
         real(rkind), dimension(:,:,:), pointer :: tmp1_in_x, tmp2_in_x, tmp1_in_y, tmp1_in_z, tmp2_in_z
