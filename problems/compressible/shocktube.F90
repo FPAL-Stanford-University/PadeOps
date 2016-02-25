@@ -1,5 +1,4 @@
-#include "shocktube_files/meshgen.F90"
-#include "shocktube_files/initfields.F90"
+#include "shocktube_files/hooks.F90"
 
 program shocktube
 

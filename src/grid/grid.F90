@@ -38,7 +38,7 @@ module GridMod
         real(rkind), dimension(:,:,:,:), allocatable         :: mesh
         real(rkind), dimension(:,:,:,:), allocatable         :: fields
 
-        real(rkind)                                          :: tstop, dt, tsim, CFL
+        real(rkind)                                          :: tstop, dt, dtfixed, tsim, CFL
         integer                                              :: step, nsteps
         integer                                              :: nxp, nyp, nzp
 

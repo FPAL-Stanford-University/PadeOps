@@ -4,7 +4,7 @@ module CompressibleGrid
     use FiltersMod, only: filters
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
-    use hooks, only: meshgen, initfields
+    use hooks, only: meshgen, initfields, hook_output, hook_bc, hook_timestep
     use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                     transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
@@ -143,6 +143,7 @@ contains
 
         this%tsim = zero
         this%tstop = tstop
+        this%dtfixed = dt
         this%dt = dt
 
         this%step = 0
@@ -399,14 +400,35 @@ contains
         class(cgrid), target, intent(inout) :: this
 
         logical :: tcond, vizcond, stepcond
-        real(rkind) :: cputime, tke, tke0
+        real(rkind) :: cputime
+        real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
 
         call this%get_dt()
 
-        ! Write out initial conditions
-        call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+        allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
+        ! Get artificial properties for initial conditions
+        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+        
+        call this%gradient(this%u,dudx,dudy,dudz)
+        call this%gradient(this%v,dvdx,dvdy,dvdz)
+        call this%gradient(this%w,dwdx,dwdy,dwdz)
 
+        call this%getPhysicalProperties()
+
+        call this%getSGS(dudx,dudy,dudz,&
+                         dvdx,dvdy,dvdz,&
+                         dwdx,dwdy,dwdz )
+        deallocate( duidxj )
+        ! ------------------------------------------------
+
+        ! Write out initial conditions
+        call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
+        call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
         vizcond = .FALSE.
+        
         ! Check for visualization condition and adjust time step
         if ( (this%tviz > zero) .AND. (this%tsim + this%dt > this%tviz * this%viz%vizcount) ) then
             this%dt = this%tviz * this%viz%vizcount - this%tsim
@@ -432,8 +454,6 @@ contains
             call GracefulExit('No stopping criterion set. Set either tstop or nsteps to be positive.', 345)
         end if
 
-        tke0 = P_MEAN( this%rho * (this%u*this%u + this%v*this%v + this%w*this%w) )
-
         ! Start the simulation while loop
         do while ( tcond .AND. stepcond )
             ! Advance time
@@ -442,12 +462,9 @@ contains
             call toc(cputime)
             call message(2,"CPU time (in seconds)",cputime)
           
-            ! TEMPORARY: Get TKE for taylorgreen problem
-            tke = P_MEAN( this%rho * (this%u*this%u + this%v*this%v + this%w*this%w) )
-            call message(2,"TKE",tke/tke0)
-
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
+                call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
                 vizcond = .FALSE.
             end if
@@ -482,13 +499,15 @@ contains
 
     subroutine advance_RK45(this)
         use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B
-        use exits,      only: message
+        use exits,      only: message,nancheck,GracefulExit
         use reductions, only: P_MAXVAL, P_MINVAL
         class(cgrid), target, intent(inout) :: this
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: rhs  ! RHS for conserved variables
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: Qtmp ! Temporary variable for RK45
-        integer :: isub,i
+        integer :: isub,i,j,k,l
+
+        character(len=clen) :: charout
 
         if (this%step == 0) then
             call this%gas%get_e_from_p(this%rho,this%p,this%e)
@@ -500,6 +519,12 @@ contains
         do isub = 1,RK45_steps
             call this%get_conserved()
 
+            if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
+                call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
+                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution at substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
+                call GracefulExit(trim(charout), 999)
+            end if
+
             call this%getRHS(rhs)
             Qtmp = this%dt*rhs + RK45_A(isub)*Qtmp
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
@@ -510,6 +535,7 @@ contains
             end do
             
             call this%get_primitive()
+            call hook_bc(this%decomp, this%mesh, this%fields, this%tsim)
         end do
 
         this%tsim = this%tsim + this%dt
@@ -517,24 +543,21 @@ contains
             
         call message(1,"Time",this%tsim)
         call message(2,"Minimum density",P_MINVAL(this%rho))
-        call message(2,"Maximum u velocity",P_MAXVAL(this%u))
-        call message(2,"Maximum shear viscosity",P_MAXVAL(this%mu))
-        call message(2,"Maximum bulk viscosity",P_MAXVAL(this%bulk))
-        call message(2,"Maximum conductivity",P_MAXVAL(this%kap))
+        call message(2,"Maximum velocity",sqrt(P_MAXVAL(this%u*this%u+this%v*this%v+this%w*this%w)))
+        call message(2,"Minimum pressure",P_MINVAL(this%p))
+        call hook_timestep(this%decomp, this%mesh, this%fields, this%tsim)
 
     end subroutine
 
     subroutine get_dt(this)
         class(cgrid), target, intent(inout) :: this
 
-        ! Use fixed time step if CFL <= 0
-        if (this%CFL .LE. zero) then
-            this%dt = real(1.0D-3,rkind)
+        if (this%CFL > zero) then
             return
         end if
 
-        ! Else, use CFL condition (Not implemented yet)
-        this%dt = real(1.0D-3,rkind)
+        ! Use fixed time step if CFL <= 0
+        this%dt = this%dtfixed
 
     end subroutine
 
@@ -651,7 +674,7 @@ contains
         end do
 
         ! Add to rhs
-        rhs = rhs + flux
+        rhs = rhs - flux
 
     end subroutine
 
@@ -681,7 +704,7 @@ contains
             call this%der%ddy(flux(:,:,:,i),ytmp1)
 
             ! Add to rhs
-            rhs(:,:,:,i) = rhs(:,:,:,i) + ytmp1
+            rhs(:,:,:,i) = rhs(:,:,:,i) - ytmp1
         end do
 
     end subroutine
@@ -715,7 +738,7 @@ contains
         end do
 
         ! Add to rhs
-        rhs = rhs + flux
+        rhs = rhs - flux
 
     end subroutine
 

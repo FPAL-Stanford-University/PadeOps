@@ -36,7 +36,7 @@ program mpi_transpose
         end do
     end do
 
-    write(ioformat,'(A,I,A)') '(', ax, 'F6.1)'
+    write(ioformat,'(A,I3,A)') '(', ax, 'F6.1)'
     call sleep(rank)
     print *, "x: ", rank
     do j = 1,ny
@@ -50,7 +50,7 @@ program mpi_transpose
     if (rank == 0) print *
     if (rank == 0) print *, "Finished Y to X transpose"
 
-    write(ioformat,'(A,I,A)') '(', nx, 'F6.1)'
+    write(ioformat,'(A,I3,A)') '(', nx, 'F6.1)'
     call sleep(rank)
     print *, "x_trans: ", rank
     do j = 1,ay
@@ -64,7 +64,7 @@ program mpi_transpose
     if (rank == 0) print *
     if (rank == 0) print *, "Finished X to Y transpose"
 
-    write(ioformat,'(A,I,A)') '(', ax, 'F6.1)'
+    write(ioformat,'(A,I3,A)') '(', ax, 'F6.1)'
     call sleep(rank)
     print *, "x: ", rank
     do j = 1,ny

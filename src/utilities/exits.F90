@@ -15,6 +15,10 @@ module exits
     interface warning
         module procedure warning_char
     end interface
+
+    interface nancheck
+        module procedure nancheck_std, nancheck_ind
+    end interface
      
 contains
 
@@ -95,7 +99,7 @@ contains
         if (nrank == 0) write(stdout,*) full_message, " = ", val
     end subroutine
 
-    logical function nancheck(f)
+    logical function nancheck_std(f) result(nancheck)
         real(rkind), dimension(:,:,:,:), intent(in) :: f
         integer :: i,j,k,l
         
@@ -109,8 +113,34 @@ contains
                             exit
                         end if
                     end do
+                    if (nancheck) exit
                 end do
+                if (nancheck) exit
             end do
+            if (nancheck) exit
+        end do
+
+    end function
+
+    logical function nancheck_ind(f,i,j,k,l) result(nancheck)
+        real(rkind), dimension(:,:,:,:), intent(in) :: f
+        integer, intent(out) :: i,j,k,l
+        
+        nancheck = .FALSE.
+        do l = 1,size(f,4)
+            do k = 1,size(f,3)
+                do j = 1,size(f,2)
+                    do i = 1,size(f,1)
+                        if ( isnan(f(i,j,k,l)) .OR. ( f(i,j,k,l) + one == f(i,j,k,l) ) ) then
+                            nancheck = .TRUE.
+                            exit
+                        end if
+                    end do
+                    if (nancheck) exit
+                end do
+                if (nancheck) exit
+            end do
+            if (nancheck) exit
         end do
 
     end function

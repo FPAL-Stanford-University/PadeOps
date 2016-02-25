@@ -27,5 +27,42 @@ module hooks
         end subroutine 
     end interface
 
+    interface hook_output
+        subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
+            import :: rkind
+            import :: decomp_info
+            character(len=*),                intent(in) :: outputdir
+            type(decomp_info),               intent(in) :: decomp
+            real(rkind),                     intent(in) :: dx,dy,dz,tsim
+            integer,                         intent(in) :: vizcount
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            real(rkind), dimension(:,:,:,:), intent(in) :: fields
+
+        end subroutine
+    end interface
+
+    interface hook_bc
+        subroutine hook_bc(decomp,mesh,fields,tsim)
+            import :: rkind
+            import :: decomp_info
+            type(decomp_info),               intent(in) :: decomp
+            real(rkind),                     intent(in) :: tsim
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            real(rkind), dimension(:,:,:,:), intent(in) :: fields
+
+        end subroutine
+    end interface
+
+    interface hook_timestep
+        subroutine hook_timestep(decomp,mesh,fields,tsim)
+            import :: rkind
+            import :: decomp_info
+            type(decomp_info),               intent(in) :: decomp
+            real(rkind),                     intent(in) :: tsim
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            real(rkind), dimension(:,:,:,:), intent(in) :: fields
+
+        end subroutine
+    end interface
 
 end module 
