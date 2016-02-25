@@ -2,7 +2,7 @@ module staggOpsMod
     use kind_parameters, only: rkind
     use exits, only: GracefulExit
     use decomp_2d
-    use constants, only: half
+    use constants, only: half,one,two,three, zero
 
     implicit none
 
@@ -12,40 +12,135 @@ module staggOpsMod
 
     type :: staggOps
         private
-        integer :: nxcell, nycell, nzcell
-        integer :: nxedge, nyedge, nzedge
+        integer :: nxC, nyC, nzC
+        integer :: nxE, nyE, nzE
         type(decomp_info), pointer :: cellDecomp
-        type(decomp_info), allocatable :: edgeDecomp
+        type(decomp_info), pointer :: edgeDecomp
         integer :: stagg_scheme
         real(rkind) :: dx, dy, dz
         contains
             procedure :: init
             procedure :: destroy
-            procedure :: InterpZ_Edge2Cell 
-            
-            !procedure :: InterpZ_Cell2Edge
-            !procedure :: Stagg_ddz
+            procedure, private :: InterpZ_Edge2Cell_CMPLX
+            procedure, private :: InterpZ_Edge2Cell_REAL
+            generic :: InterpZ_Edge2Cell => InterpZ_Edge2Cell_CMPLX, InterpZ_Edge2Cell_REAL
+            procedure, private :: InterpZ_Cell2Edge_CMPLX
+            procedure, private :: InterpZ_Cell2Edge_REAL
+            generic :: InterpZ_Cell2Edge => InterpZ_Cell2Edge_CMPLX, InterpZ_Cell2Edge_REAL
+            procedure :: ddz_E2C
+            procedure :: ddz_C2C
+            procedure :: d2dz2_C2C
+            procedure :: d2dz2_E2E
     end type
 
 contains
 
-    subroutine init(this, gp, stagg_scheme , dx, dy, dz)
+    pure subroutine ddz_E2C(this,fE,dfdzC)
+        class(staggOps), intent(in) :: this
+        real(rkind), dimension(this%nxE,this%nyE,this%nzE), intent(in) :: fE
+        real(rkind), dimension(this%nxC,this%nyC,this%nzC), intent(out):: dfdzC
+        real(rkind) :: OneByDz
+
+        OneByDz = one/this%dz
+        dfdzC(:,:,1:this%nzC) = fE(:,:,2:this%nzE) - fE(:,:,1:this%nzE-1)
+        dfdzC = OneByDz*dfdzC
+
+    end subroutine
+
+    pure subroutine ddz_C2C(this,fC,dfdzC, isTopEven, isBotEven)
+        class(staggOps), intent(in) :: this
+        real(rkind), dimension(this%nxC,this%nyC,this%nzC), intent(in) :: fC
+        real(rkind), dimension(this%nxC,this%nyC,this%nzC), intent(out):: dfdzC
+        real(rkind) :: OneBy2Dz
+        logical, intent(in) :: isTopEven, isBotEven
+
+        OneBy2Dz = one/(two*this%dz)
+        dfdzC(:,:,2:this%nzC-1) =  fC(:,:,3:this%nzE) - fC(:,:,1:this%nzE-2) 
+        dfdzC(:,:,2:this%nzC-1) = OneBy2Dz*dfdzC(:,:,2:this%nzC-1)
+
+        if (isBotEven) then
+            dfdzC(:,:,1) = OneBy2Dz*(fC(:,:,2) - fC(:,:,1))
+        else 
+            dfdzC(:,:,1) = OneBy2Dz*(fC(:,:,2) + fC(:,:,1))
+        end if
+
+        if (isTopEven) then
+            dfdzC(:,:,this%nzC) = OneBy2Dz*(fC(:,:,this%nzC) - fC(:,:,this%nzC-1))
+        else 
+            dfdzC(:,:,this%nzC) = -OneBy2Dz*(fC(:,:,this%nzC) + fC(:,:,this%nzC-1))
+        end if
+
+    end subroutine
+   
+    pure subroutine d2dz2_C2C(this,fC,d2fdz2C, isTopEven, isBotEven)
+        class(staggOps), intent(in) :: this
+        real(rkind), dimension(this%nxC,this%nyC,this%nzC), intent(in) :: fC
+        real(rkind), dimension(this%nxC,this%nyC,this%nzC), intent(out):: d2fdz2C
+        real(rkind) :: OneByDzSq
+        logical, intent(in) :: isTopEven, isBotEven
+
+        OneByDzSq = one/(this%dz**2)
+        d2fdz2C(:,:,2:this%nzC-1) =  fC(:,:,3:this%nzE) - two*fC(:,:,2:this%nzC-1) + fC(:,:,1:this%nzE-2) 
+        
+        if (isBotEven) then
+            d2fdz2C(:,:,1) = fC(:,:,2) - fC(:,:,1)
+        else 
+            d2fdz2C(:,:,1) = fC(:,:,2) - three*fC(:,:,1)
+        end if
+
+        if (isTopEven) then
+            d2fdz2C(:,:,this%nzC) = fC(:,:,this%nzC-1) - fC(:,:,this%nzC)
+        else
+            d2fdz2C(:,:,this%nzC) = fC(:,:,this%nzC-1) - three*fC(:,:,this%nzC)
+        end if 
+
+        d2fdz2C = OneByDzSq*d2fdz2C
+
+    end subroutine
+
+    pure subroutine d2dz2_E2E(this,fE,d2fdz2E, isTopEven, isBotEven)
+        class(staggOps), intent(in) :: this
+        real(rkind), dimension(this%nxE,this%nyE,this%nzE), intent(in) :: fE
+        real(rkind), dimension(this%nxE,this%nyE,this%nzE), intent(out):: d2fdz2E
+        real(rkind) :: OneByDzSq
+        logical, intent(in) :: isTopEven, isBotEven
+
+        OneByDzSq = one/(this%dz**2)
+        d2fdz2E(:,:,2:this%nzE-1) =  fE(:,:,3:this%nzE) - two*fE(:,:,2:this%nzE-1) + fE(:,:,1:this%nzE-2) 
+        
+        if (isBotEven) then
+            d2fdz2E(:,:,1) = two*(fE(:,:,2) - fE(:,:,1)) 
+        else 
+            d2fdz2E(:,:,1) = zero  
+        end if
+
+        if (isTopEven) then
+            d2fdz2E(:,:,this%nzE) = two*(fE(:,:,this%nzE-1) - fE(:,:,this%nzE))
+        else
+            d2fdz2E(:,:,this%nzE) = zero  
+        end if 
+
+        d2fdz2E = OneByDzSq*d2fdz2E
+
+    end subroutine
+
+    pure subroutine init(this, gpC, gpE, stagg_scheme , dx, dy, dz)
         class(staggOps), intent(inout) :: this
-        class(decomp_info), intent(in), target:: gp
+        class(decomp_info), intent(in), target:: gpC, gpE
         integer, intent(in) :: stagg_scheme
         real(rkind), intent(in) :: dx, dy, dz
 
-        this%nxcell = gp%zsz(1)
-        this%nycell = gp%zsz(2)
-        this%nzcell = gp%zsz(3)
+        this%nxC = gpC%zsz(1)
+        this%nyC = gpC%zsz(2)
+        this%nzC = gpC%zsz(3)
 
-        this%nzedge = this%nzcell + 1
-        this%nxedge = this%nxcell 
-        this%nyedge = this%nycell 
+        this%nxE = gpE%zsz(1) 
+        this%nyE = gpE%zsz(2) 
+        this%nzE = gpE%zsz(3)
 
         this%stagg_scheme = stagg_scheme
-        this%cellDecomp => gp
-        call decomp_info_init(this%nxedge, this%nyedge, this%nzedge, this%edgedecomp)
+        this%cellDecomp => gpC
+        this%edgeDecomp => gpE
 
         this%dx = dx
         this%dy = dy
@@ -54,29 +149,60 @@ contains
     end subroutine
 
 
-    subroutine destroy(this)
+    pure subroutine destroy(this)
         class(staggOps), intent(inout) :: this
 
-        if (allocated(this%edgeDecomp)) deallocate(this%edgeDecomp)
+        nullify(this%edgeDecomp)
+        nullify(this%cellDecomp)
 
     end subroutine
 
-    pure subroutine InterpZ_Edge2Cell(this, edgeArr, cellArr)
+    pure subroutine InterpZ_Edge2Cell_REAL(this, edgeArr, cellArr)
         class(staggOps), intent(in) :: this
-        complex(rkind), intent(in), dimension(this%nxedge, this%nyedge, this%nzedge) :: edgeArr
-        complex(rkind), intent(out), dimension(this%nxcell, this%nycell, this%nzcell) :: cellArr
-        integer :: k, j, i 
+        real(rkind), intent(in), dimension(this%nxE, this%nyE, this%nzE) :: edgeArr
+        real(rkind), intent(out), dimension(this%nxC, this%nyC, this%nzC) :: cellArr
 
-        cellArr = edgeArr(1:this%nxcell,1:this%nycell,1:this%nzcell)
-        do k = 1,this%nzedge-1
-            do j = 1,this%nycell
-                do i = 1,this%nxcell
-                    cellArr(i,j,k) = cellArr(i,j,k) + edgeArr(i,j,k+1)
-                 end do 
-            end do 
-        end do
+        cellArr = edgeArr(1:this%nxC,1:this%nyC,1:this%nzC)
+        cellArr = cellArr + edgeArr(:,:,2:this%nzC+1)
         cellArr = half*cellArr   
 
+    end subroutine
+    
+    pure subroutine InterpZ_Edge2Cell_CMPLX(this, edgeArr, cellArr)
+        class(staggOps), intent(in) :: this
+        complex(rkind), intent(in), dimension(this%nxE, this%nyE, this%nzE) :: edgeArr
+        complex(rkind), intent(out), dimension(this%nxC, this%nyC, this%nzC) :: cellArr
+
+        cellArr = edgeArr(1:this%nxC,1:this%nyC,1:this%nzC)
+        cellArr = cellArr + edgeArr(:,:,2:this%nzC+1)
+        cellArr = half*cellArr   
+
+    end subroutine 
+
+    pure subroutine InterpZ_Cell2Edge_CMPLX(this, cellArr, edgeArr, BotVal, TopVal)
+        class(staggOps), intent(in) :: this
+        complex(rkind), intent(in), dimension(this%nxC, this%nyC, this%nzC) :: cellArr
+        complex(rkind), intent(out), dimension(this%nxE, this%nyE, this%nzE) :: edgeArr
+        complex(rkind), intent(in) :: BotVal, TopVal
+
+        edgeArr(:,:,this%nzE) = TopVal
+        edgeArr(:,:,1          ) = BotVal
+        edgeArr(:,:,2:this%nzE-1) = cellArr(:,:,1:this%nzC-1) 
+        edgeArr(:,:,2:this%nzE-1) = edgeArr(:,:,2:this%nzE-1) + cellArr(:,:,2:this%nzC)
+        edgeArr = half*edgeArr
+    end subroutine
+
+    pure subroutine InterpZ_Cell2Edge_REAL(this, cellArr, edgeArr, BotVal, TopVal)
+        class(staggOps), intent(in) :: this
+        real(rkind), intent(in), dimension(this%nxC, this%nyC, this%nzC) :: cellArr
+        real(rkind), intent(out), dimension(this%nxE, this%nyE, this%nzE) :: edgeArr
+        real(rkind), intent(in) :: BotVal, TopVal
+
+        edgeArr(:,:,this%nzE) = TopVal
+        edgeArr(:,:,1          ) = BotVal
+        edgeArr(:,:,2:this%nzE-1) = cellArr(:,:,1:this%nzC-1) 
+        edgeArr(:,:,2:this%nzE-1) = edgeArr(:,:,2:this%nzE-1) + cellArr(:,:, 2:this%nzC)
+        edgeArr(:,:,2:this%nzE-1) = half*edgeArr(:,:,2:this%nzE)
     end subroutine
 
 end module 
