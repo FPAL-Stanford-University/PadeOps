@@ -587,6 +587,8 @@ contains
 
     end subroutine
 
+
+
     subroutine advance_RK45(this)
         use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B
         use exits,      only: message,nancheck,GracefulExit
@@ -650,14 +652,54 @@ contains
     end subroutine
 
     subroutine get_dt(this)
+        use reductions, only : P_MAXVAL
         class(sgrid), target, intent(inout) :: this
+        !real(rkind), dimension(:,:,:,:), intent(in)  :: u
+        !real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(in) :: mu
+        !real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(in) :: bulk
+        !real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(in) :: kap
+        !real(rkind),                     intent(in)  :: dx
+        !real(rkind),                     intent(out) :: dt
+        !character(len=*),                intent(out) :: stability
+        !real(rkind), dimension(this%nxp,this%nyp,this%nzp)           :: cs
+        !real(rkind) :: dtCFL, dtmu, dtbulk, dtkap
 
-        if (this%CFL > zero) then
-            return
-        end if
 
-        ! Use fixed time step if CFL <= 0
-        this%dt = this%dtfixed
+        !if (this%CFL > zero) then
+
+
+        !call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
+        !call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
+
+        !dtCFL  = CFL / P_MINVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz + cs*dsqrt(one/dx**two + one/dy**two + one/dz**two))
+        !dtmu   = 0.2_rkind * dx**2 / (P_MAXVAL( mu/u(:,:,:,1) ) + eps)
+        !dtbulk = 0.2_rkind * dx**2 / (P_MAXVAL( bulk/u(:,:,:,1) ) + eps)
+        !dtkap  = 0.2_rkind * one / (P_MAXVAL( kap*T/(u(:,:,:,1)* (cs**2) * (dx**2)) ) + eps)
+
+        !if ( CFL .LE. zero ) then
+        !    dt = dt_fixed
+        !    stability = 'fixed'
+        !else
+        !    stability = 'convective'
+        !    dt = dtCFL
+        !    if ( dt > dtmu ) then
+        !        dt = dtmu
+        !        stability = 'shear'
+        !    else if ( dt > dtbulk ) then
+        !        dt = dtbulk
+        !        stability = 'bulk'
+        !    else if ( dt > dtkap ) then
+        !        dt = dtkap
+        !        stability = 'conductive'
+        !    end if
+        !end if
+
+
+
+        !end if
+
+        !! Use fixed time step if CFL <= 0
+        !this%dt = this%dtfixed
 
     end subroutine
 
@@ -1015,7 +1057,8 @@ contains
         kapstar = kapstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3)
 
         ! Now, all ytmps are free to use
-        call this%gas%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound
+        call this%sgas%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound - hydrodynamic part
+        call this%elastic%get_sos(this%rho0,ytmp1)     ! Speed of sound - elastic part
 
         kapstar = this%Ckap*this%rho*ytmp1*abs(kapstar)/this%T
 
