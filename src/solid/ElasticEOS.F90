@@ -19,39 +19,40 @@ module ElasticEOSMod
 
     abstract interface
 
-        pure subroutine get_finger(this,g,finger,fingersq,trG,trG2,detG)
+        pure subroutine get_finger_interface(this,g,finger,fingersq,trG,trG2,detG)
             import :: elasticeos
             import :: rkind
             class(elasticeos), intent(in) :: this
             real(rkind), dimension(:,:,:,:), intent(in)  :: g
             real(rkind), dimension(:,:,:,:), intent(out) :: finger
             real(rkind), dimension(:,:,:,:), intent(out), optional :: fingersq
-            real(rkind), dimension(:,:,:), intent(out), optional :: trG, trG2, detG
+            real(rkind), dimension(:,:,:),   intent(out), optional :: trG, trG2, detG
         end subroutine
 
-        pure subroutine get_devstress(this,finger,fingersq,trG,trG2,detG,devstress)
+        pure subroutine get_devstress_interface(this,finger,fingersq,trG,trG2,detG,devstress)
             import :: elasticeos
             import :: rkind
             class(elasticeos), intent(in) :: this
             real(rkind), dimension(:,:,:,:), intent(in)  :: finger
-            real(rkind), dimension(:,:,:,:), intent(in), optional  :: fingersq
-            real(rkind), dimension(:,:,:), intent(in), optional  :: trG, trG2, detG
+            real(rkind), dimension(:,:,:,:), intent(in)  :: fingersq
+            real(rkind), dimension(:,:,:),   intent(in)  :: trG, trG2, detG
             real(rkind), dimension(:,:,:,:), intent(out) :: devstress
         end subroutine
 
-        pure subroutine get_eelastic(this,rho0,trG,trG2,detG,eelastic)
+        pure subroutine get_eelastic_interface(this,rho0,trG,trG2,detG,eelastic)
             import :: elasticeos
             import :: rkind
             class(elasticeos), intent(in) :: this
-            real(rkind), dimension(:,:,:), intent(in)  :: rho0,trG,trG2,detG
+            real(rkind),                   intent(in)  :: rho0
+            real(rkind), dimension(:,:,:), intent(in)  :: trG,trG2,detG
             real(rkind), dimension(:,:,:), intent(out) :: eelastic
         end subroutine
 
-        pure subroutine get_sos(this,rho0,sos)
+        pure subroutine get_sos_interface(this,rho0,sos)
             import :: elasticeos
             import :: rkind
-            class(idealgas), intent(in) :: this
-            real(rkind), dimension(:,:,:), intent(in)  :: rho0
+            class(elasticeos), intent(in) :: this
+            real(rkind),                   intent(in)  :: rho0
             real(rkind), dimension(:,:,:), intent(inout) :: sos
         end subroutine
 

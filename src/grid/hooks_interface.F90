@@ -25,7 +25,7 @@ module hooks
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
         end subroutine 
-        subroutine initfields(decomp, dx, dy, dz, inpDirectory, mesh, fields, rho0)
+        subroutine initfields_solid(decomp, dx, dy, dz, inpDirectory, mesh, fields, rho0)
             import :: rkind
             import :: decomp_info
             type(decomp_info), intent(in) :: decomp

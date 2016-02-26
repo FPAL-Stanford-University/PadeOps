@@ -1,6 +1,6 @@
 module SolidGrid
     use kind_parameters, only: rkind, clen
-    use constants, only: zero,half,one,two,three,four
+    use constants, only: zero,eps,half,one,two,three,four
     use FiltersMod, only: filters
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
@@ -195,6 +195,7 @@ contains
         this%tstop = tstop
         this%dtfixed = dt
         this%dt = dt
+        this%CFL = CFL
 
         this%step = 0
         this%nsteps = nsteps
@@ -681,59 +682,43 @@ contains
 
     end subroutine
 
-    subroutine get_dt(this)
+    subroutine get_dt(this,stability)
         use reductions, only : P_MAXVAL
         class(sgrid), target, intent(inout) :: this
-        !real(rkind), dimension(:,:,:,:), intent(in)  :: u
-        !real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(in) :: mu
-        !real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(in) :: bulk
-        !real(rkind), dimension(SIZE(u,1),SIZE(u,2),SIZE(u,3)), intent(in) :: kap
-        !real(rkind),                     intent(in)  :: dx
-        !real(rkind),                     intent(out) :: dt
-        !character(len=*),                intent(out) :: stability
-        !real(rkind), dimension(this%nxp,this%nyp,this%nzp)           :: cs
-        !real(rkind) :: dtCFL, dtmu, dtbulk, dtkap
+        character(len=*),                intent(out) :: stability
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)           :: cs
+        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap
 
+        call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
+        call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
 
-        !if (this%CFL > zero) then
+        dtCFL  = this%CFL / P_MINVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz + cs*sqrt(one/dx**two + one/dy**two + one/dz**two))
+        dtmu   = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
+        dtbulk = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
+        dtkap  = 0.2_rkind * one / (P_MAXVAL( this%kap*this%T/(this%rho* (cs**2) * (min(this%dx,this%dy,this%dz)**2)) ) + eps)
 
-
-        !call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
-        !call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
-
-        !dtCFL  = CFL / P_MINVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz + cs*dsqrt(one/dx**two + one/dy**two + one/dz**two))
-        !dtmu   = 0.2_rkind * dx**2 / (P_MAXVAL( mu/u(:,:,:,1) ) + eps)
-        !dtbulk = 0.2_rkind * dx**2 / (P_MAXVAL( bulk/u(:,:,:,1) ) + eps)
-        !dtkap  = 0.2_rkind * one / (P_MAXVAL( kap*T/(u(:,:,:,1)* (cs**2) * (dx**2)) ) + eps)
-
-        !if ( CFL .LE. zero ) then
-        !    dt = dt_fixed
-        !    stability = 'fixed'
-        !else
-        !    stability = 'convective'
-        !    dt = dtCFL
-        !    if ( dt > dtmu ) then
-        !        dt = dtmu
-        !        stability = 'shear'
-        !    else if ( dt > dtbulk ) then
-        !        dt = dtbulk
-        !        stability = 'bulk'
-        !    else if ( dt > dtkap ) then
-        !        dt = dtkap
-        !        stability = 'conductive'
-        !    end if
-        !end if
-
-
-
-        !end if
-
-        !! Use fixed time step if CFL <= 0
-        !this%dt = this%dtfixed
+        ! Use fixed time step if CFL <= 0
+        if ( this%CFL .LE. zero ) then
+            this%dt = this%dtfixed
+            stability = 'fixed'
+        else
+            stability = 'convective'
+            this%dt = dtCFL
+            if ( this%dt > dtmu ) then
+                this%dt = dtmu
+                stability = 'shear'
+            else if ( this%dt > dtbulk ) then
+                this%dt = dtbulk
+                stability = 'bulk'
+            else if ( this%dt > dtkap ) then
+                this%dt = dtkap
+                stability = 'conductive'
+            end if
+        end if
 
     end subroutine
 
-    pure subroutine get_primitive(this)
+    subroutine get_primitive(this)
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(:,:,:), pointer :: onebyrho
         real(rkind), dimension(:,:,:), pointer :: rhou,rhov,rhow,TE
