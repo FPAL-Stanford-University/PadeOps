@@ -1,9 +1,10 @@
 module poissonMod
     use kind_parameters, only: rkind
     use spectralMod, only: spectral, GetWaveNums 
-    use constants, only: zero, one, two
+    use constants, only: zero, one, two, imi
     use exits, only: GracefulExit
     use decomp_2d
+    use staggOpsMod, only: staggOps
 
     implicit none 
 
@@ -18,22 +19,62 @@ module poissonMod
         logical :: zperiodic = .true. 
 
         type(decomp_info), pointer, public :: sp_gp
+        type(decomp_info), pointer, public :: sp_gpE
+        type(spectral), pointer, public :: spect
 
         ! Stuff for thomas algorithm
         integer :: nz_inZ, nx_inZ, ny_inZ
         real(rkind), dimension(:), allocatable :: k1_inZ, k2_inZ
         real(rkind) :: dz, dzsq
         integer :: xst, xen, yst, yen, zst, zen
-            
+        type(staggOps), pointer :: Ops    
+        complex(rkind), dimension(:,:,:), allocatable :: tmpbuff, tmpbuffz1C, tmpbuffz2C, tmpbuffz1E, tmpbuffz2E 
+
         contains
             procedure :: init
             procedure :: destroy
             procedure :: PressureProj
             procedure :: PoissonSolveZ    
-            procedure :: allocArrZ    
+            procedure, private :: PoissonSolveZ_InPlace   
+            procedure :: allocArrZ   
+            procedure :: PressureProjNP
+            procedure :: DivergenceCheck 
     end type 
 
 contains
+
+
+    subroutine DivergenceCheck(this,uhat,vhat,what, divergence)
+        class(poisson), intent(inout) :: this
+        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: uhat, vhat
+        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: what
+
+        real(rkind), dimension(this%sp_gp%xsz(1),this%sp_gp%xsz(2),this%sp_gp%xsz(3)), intent(out) :: divergence
+
+        ! Compute dudx_hat and add dvdy_hat
+        this%tmpbuff = this%spect%k1*uhat 
+        this%tmpbuff = this%tmpbuff + this%spect%k2*vhat 
+        this%tmpbuff = imi*this%tmpbuff
+
+        ! Transpose y -> z
+        call transpose_y_to_z(this%tmpbuff,this%tmpbuffz1C,this%sp_gp)
+        call transpose_y_to_z(what,this%tmpbuffz1E,this%sp_gpE)
+
+        ! Compute dwdz_hat and add
+        call this%Ops%ddz_E2C(this%tmpbuffz1E,this%tmpbuffz2C)
+        this%tmpbuffz1C = this%tmpbuffz1C + this%tmpbuffz2C
+
+        ! Transpose back from z -> y
+        call transpose_z_to_y(this%tmpbuffz1C,this%tmpbuff,this%sp_gp)
+
+        ! Compute IFFT to go back from y -> x
+        this%tmpbuff(:,this%sp_gp%ysz(2)/2+1,:) = zero
+        call this%spect%ifft(this%tmpbuff,divergence,.true.)
+
+        ! Done !
+
+
+    end subroutine 
 
     subroutine allocArrZ(this,arr)
         class(poisson), intent(in) :: this
@@ -46,11 +87,13 @@ contains
     end subroutine
 
 
-    subroutine init(this,spect,PeriodicVertical,dx,dy,dz)
+    subroutine init(this,spect,PeriodicVertical,dx,dy,dz,Ops,spectE)
         class(poisson), intent(inout) :: this
         class(spectral), intent(in), target :: spect
+        class(spectral), intent(in), target, optional :: spectE
         logical, intent(in), optional :: PeriodicVertical
         real(rkind), optional :: dx, dy, dz
+        type(staggOps), optional, target :: Ops
        
         if (present(PeriodicVertical)) then
             this%zperiodic = PeriodicVertical
@@ -71,6 +114,8 @@ contains
             this%mfact3 = spect%k3*spect%one_by_kabs_sq
         else
             if (.not.present(dz)) call GracefulExit("Need to send in dz as input to poisson init",31)
+            if (.not.present(Ops)) call GracefulExit("Need to send in STAGGOPS as input to poisson init",31)
+            if (.not.present(SpectE)) call GracefulExit("Need to send in spectE as input to poisson init",31)
             this%dz = dz 
             this%dzsq = dz**2
             this%nz_inZ = spect%nz_g
@@ -81,12 +126,21 @@ contains
             this%k1_inZ = GetWaveNums(spect%nx_g,dx)
             this%k2_inZ = GetWaveNums(spect%ny_g,dy)
             this%sp_gp => spect%spectdecomp
+            this%sp_gpE => spectE%spectdecomp
+            this%spect => spect
             this%xst = this%sp_gp%zst(1)
             this%xen = this%sp_gp%zen(1)
             this%yst = this%sp_gp%zst(2)
             this%yen = this%sp_gp%zen(2)
             this%zst = this%sp_gp%zst(3)
             this%zen = this%sp_gp%zen(3)
+            this%Ops => Ops
+            allocate(this%tmpbuff(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)))
+            allocate(this%tmpbuffz1C(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+            allocate(this%tmpbuffz2C(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+            allocate(this%tmpbuffz1E(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
+            allocate(this%tmpbuffz2E(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
+
         end if 
 
     end subroutine
@@ -100,8 +154,50 @@ contains
         if (allocated(this%mfact3)) deallocate(this%mfact3) 
         if (allocated(this%k1_inZ)) deallocate(this%k1_inZ)
         if (allocated(this%k2_inZ)) deallocate(this%k2_inZ)
+        if (allocated(this%tmpbuff)) deallocate(this%tmpbuff)
+        if (allocated(this%tmpbuffz1C)) deallocate(this%tmpbuffz1C)
+        if (allocated(this%tmpbuffz2C)) deallocate(this%tmpbuffz2C)
+        if (allocated(this%tmpbuffz1E)) deallocate(this%tmpbuffz1E)
+        if (allocated(this%tmpbuffz2E)) deallocate(this%tmpbuffz2E)
     end subroutine
 
+    subroutine PressureProjNP(this,uhat,vhat,what)
+        class(poisson), intent(inout) :: this
+        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: uhat, vhat
+        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: what
+
+
+        ! Compute dudx_hat and add dvdy_hat
+        this%tmpbuff = this%spect%k1*uhat 
+        this%tmpbuff = this%tmpbuff + this%spect%k2*vhat 
+        this%tmpbuff = imi*this%tmpbuff
+
+        ! Transpose y -> z
+        call transpose_y_to_z(this%tmpbuff,this%tmpbuffz1C,this%sp_gp)
+        call transpose_y_to_z(what,this%tmpbuffz1E,this%sp_gpE)
+
+        ! Compute dwdz_hat and add
+        call this%Ops%ddz_E2C(this%tmpbuffz1E,this%tmpbuffz2C)
+        this%tmpbuffz1C = this%tmpbuffz1C + this%tmpbuffz2C
+
+        ! Poisson Solver in z decomp
+        call this%PoissonSolveZ_inPlace(this%tmpbuffz1C)
+
+
+        ! Compute dpdz_hat and project out what
+        call this%Ops%ddz_C2E(this%tmpbuffz1C,this%tmpbuffz2E,.true.,.true.)
+        this%tmpbuffz1E = this%tmpbuffz1E - this%tmpbuffz2E
+
+        ! Transpose z -> y
+        call transpose_z_to_y(this%tmpbuffz1E,what,this%sp_gpE)
+        call transpose_z_to_y(this%tmpbuffz1C,this%tmpbuff,this%sp_gp)
+        
+
+        ! Project out uhat and vhat 
+        uhat = uhat - imi*this%spect%k1*this%tmpbuff
+        vhat = vhat - imi*this%spect%k2*this%tmpbuff
+
+    end subroutine 
 
     subroutine PressureProj(this,Sfields,spect)
         class(poisson), target, intent(inout) :: this
@@ -176,6 +272,37 @@ contains
 
     end subroutine    
 
+    subroutine PoissonSolveZ_InPlace(this,fhat)
+        ! Assuming that everything is in z-decomp
+        class(poisson), intent(in) :: this 
+        complex(rkind), dimension(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen), intent(inout) :: fhat
+        real(rkind), dimension(this%nz_inZ) :: a, b, c
+        integer :: i, j
+        real(rkind) :: k1, k2, aa       
+        complex(rkind), dimension(this%nz_inZ) :: y, rhs
+       
+        do j = this%yst,this%yen
+            do i = this%xst,this%xen
+                k1 = this%k1_inZ(i)
+                k2 = this%k2_inZ(j)
+                
+                rhs = this%dzsq*fhat(i,j,:)
+                
+                if ((i == 1).and. (j == 1)) then
+                    call genTridiag2ndOrder(k1,k2,this%dz,this%nz_inZ,a,b,c)
+                    a(1) = one; b(1) = zero; c(1) = zero
+                    rhs(1) = zero
+                    call solveTridiag_Poiss(a,b,c,rhs,y,this%nz_inZ)
+                    fhat(i,j,:) = y
+                else
+                    aa = (-(k1*this%dz)**2 - (k2*this%dz)**2 - two)
+                    call solveTridiag_Poiss_InPlace_quick(aa,one,one,rhs,this%nz_inZ)
+                    fhat(i,j,:) = rhs
+                end if 
+            end do 
+        end do 
+
+    end subroutine    
 
     pure subroutine genTridiag2ndOrder(k1,k2,dz,n,a,b,c)
         real(rkind), intent(in) :: k1, k2, dz

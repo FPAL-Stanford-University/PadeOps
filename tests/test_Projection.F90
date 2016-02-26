@@ -23,9 +23,9 @@ program test_projection
     character(len=clen) :: filename = "/home/aditya90/Codes/PadeOps/data/OpenFoam_AllData.txt" 
     real(rkind), dimension(:,:), allocatable :: temp 
     type(spectral), allocatable :: spect
+    type(spectral), allocatable :: spectE
     type(poisson), allocatable :: poiss 
-    real(rkind), dimension(:,:,:), allocatable :: rtmp1z, rtmp2z, rtmp1x, rtmp1y, rtmp1yE, rtmp1zE
-    complex(rkind), dimension(:,:,:), allocatable :: ctmp1y, ctmp2y, ctmp1z, ctmp2z
+    real(rkind), dimension(:,:,:), allocatable :: divergence, rtmp1z, rtmp2z, rtmp1x, rtmp1y, rtmp1yE, rtmp1zE
     complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what
 
     call MPI_Init(ierr)
@@ -44,6 +44,7 @@ program test_projection
     allocate( u ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     allocate( v ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     allocate( w ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
+    allocate( divergence ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     
    
 
@@ -77,13 +78,15 @@ program test_projection
 
     deallocate(temp,tmp)
 
-    !! Allocate the operator and spectral classes
+    !! Allocate the operator, spectral and poisson classes
     allocate(spect)
+    allocate(spectE)
     allocate(Ops)
     allocate(poiss)
-    call spect%init("x", nx, ny, nz, dx, dy, dz, "four", "2/3rd", dimTransform)
-    call Ops%Init(gpC,gpE,0, dx, dy, dz)
-    call poiss%init(spect,.false.,dx, dy, dz)
+    call spect%init("x", nx, ny, nz, dx, dy, dz, "four", "2/3rd", dimTransform,.false.)
+    call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", "2/3rd", dimTransform,.false.,.false.,.false.,.false.)
+    call Ops%Init(gpC,gpE,0, dx, dy, dz,spect%spectdecomp,spectE%spectdecomp)
+    call poiss%init(spect,.false.,dx, dy, dz,Ops,spectE)
 
     !! Generate wE
     allocate(wE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
@@ -91,7 +94,6 @@ program test_projection
     allocate(rtmp1z(gpC%zsz(1),gpC%zsz(2),gpC%zsz(3)))
     allocate(rtmp1zE(gpE%zsz(1),gpE%zsz(2),gpE%zsz(3)))
     allocate(rtmp1yE(gpE%ysz(1),gpE%ysz(2),gpE%ysz(3)))
-    allocate(rtmp1x(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
 
     ! Step 1: take w from x -> z
     call transpose_x_to_y(w,rtmp1y,gpC)
@@ -103,56 +105,38 @@ program test_projection
     ! Step 3: Transpose back from z -> x
     call transpose_z_to_y(rtmp1zE,rtmp1yE,gpE)
     call transpose_y_to_x(rtmp1yE,wE,gpE)
-
+    deallocate(rtmp1y,rtmp1z,rtmp1zE,rtmp1yE)
 
 
     !! Allocate storage for ffts
     call spect%alloc_r2c_out(uhat)
     call spect%alloc_r2c_out(vhat)
-    call spect%alloc_r2c_out(what)
-    call spect%alloc_r2c_out(ctmp1y)
-    call spect%alloc_r2c_out(ctmp2y)
+    call spectE%alloc_r2c_out(what)
     
     !! Take FFTs
     call spect%fft(u,uhat)
     call spect%fft(v,vhat)
-    call spect%fft(w,what)
-
-    ! Compute dudx_hat and add to dvdy_hat
-    ctmp1y = imi*spect%k1*uhat
-    ctmp1y = ctmp1y + imi*spect%k2*vhat
-
-
-    ! Compute dwdz (in Z) and bring it back to x
-    call Ops%ddz_E2C(rtmp1zE,rtmp1z)
-    call transpose_z_to_y(rtmp1z,rtmp1y,gpC)
-    call transpose_y_to_x(rtmp1y,rtmp1x,gpC)
-
-    ! Compute dwdz_hat
-    call spect%fft(rtmp1x,ctmp2y)
-    
-    ! Add to ctmp1y
-    ctmp1y = ctmp1y + ctmp2y 
-
-    ! Transpose to z
-    allocate(ctmp1z(poiss%sp_gp%zsz(1),poiss%sp_gp%zsz(2),poiss%sp_gp%zsz(3)))
-    allocate(ctmp2z(poiss%sp_gp%zsz(1),poiss%sp_gp%zsz(2),poiss%sp_gp%zsz(3)))
-    call transpose_y_to_z(ctmp1y,ctmp1z,poiss%sp_gp)
-  
-    ! Solve the poisson equation
-    call poiss%PoissonSolveZ(ctmp1z,ctmp2z)
+    call spectE%fft(wE,what)
+ 
+    !! Call Poisson Projection
+    call poiss%PressureProjNP(uhat,vhat,what) 
    
-    ! Compute dpdz_hat and take 
-    call Ops%ddz_C2E(ctmp2z,ctmp1z,.true.,.true.) 
-    
-    
+
+    !! Divergence Check 
+    call poiss%DivergenceCheck(uhat,vhat,what,divergence) 
+   
+    print*, p_maxval(divergence)
+
     !! Deallocate storage
     deallocate(uhat, vhat, what)
+
+    deallocate(wE,w,u,v, divergence)
 
     !! Destroy classes
     call poiss%destroy()
     call Ops%destroy()
     call spect%destroy()
+    call spectE%destroy()
     deallocate(spect)
     deallocate(Ops)
     deallocate(poiss)

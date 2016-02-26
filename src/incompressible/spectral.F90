@@ -30,6 +30,7 @@ module spectralMod
         logical :: useConsrvD2 = .true. 
         real(rkind) :: normfact 
         type(decomp_info), allocatable, public :: spectdecomp
+        logical                                 :: StoreK = .true. 
         contains
             procedure           :: init
             procedure           :: destroy
@@ -45,7 +46,7 @@ module spectralMod
     end type
 
 contains
-    subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2) 
+    subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK) 
         class(spectral),  intent(inout)         :: this
         character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction
         integer,          intent(in)            :: nx_g, ny_g, nz_g    ! Global data size
@@ -56,8 +57,11 @@ contains
         logical,                      optional  :: fixOddball          ! Fix the oddball wavenumber - default is TRUE
         logical,                      optional  :: use2decompFFT       ! Use the 3d fft procedures defined in 2decomp - default is TRUE
         logical,                      optional  :: useConsrvD2         ! Use the conservative form of 2nd derivative - default is TRUE
-        
+        logical, intent(in),          optional  :: createK 
 
+        if (present(createK)) then
+                this%storeK = createK
+        end if 
 
         if (this%isInitialized) then
             call GracefulExit("You are trying to reinitialize SPECTRAL derived type. This is not allowed", 111)
@@ -174,204 +178,209 @@ contains
            this%fft_size(2) = spectdecomp%xsz(2)    
            this%fft_size(3) = spectdecomp%xsz(3)    
         end select 
-        
+       
+        if (this%storeK) then 
 
-        if (allocated(this%k1)) deallocate(this%k1)
-        allocate (this%k1(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-        if (allocated(this%k2)) deallocate(this%k2)
-        allocate (this%k2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-        if (allocated(this%k3)) deallocate(this%k3)
-        allocate (this%k3(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-        if (allocated(this%kabs_sq)) deallocate(this%kabs_sq)
-        allocate (this%kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-        if (allocated(this%k1_der2)) deallocate(this%k1_der2)
-        allocate (this%k1_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-        if (allocated(this%k2_der2)) deallocate(this%k2_der2)
-        allocate (this%k2_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-        if (allocated(this%k3_der2)) deallocate(this%k3_der2)
-        allocate (this%k3_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-        if (allocated(this%one_by_kabs_sq)) deallocate(this%one_by_kabs_sq)
-        allocate(this%one_by_kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
-        if (allocated(this%Gdealias)) deallocate(this%Gdealias)
-        allocate (this%Gdealias(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-        
-        allocate(k1four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
-        allocate(k2four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
-        allocate(k3four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
+            if (allocated(this%k1)) deallocate(this%k1)
+            allocate (this%k1(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            if (allocated(this%k2)) deallocate(this%k2)
+            allocate (this%k2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            if (allocated(this%k3)) deallocate(this%k3)
+            allocate (this%k3(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            if (allocated(this%kabs_sq)) deallocate(this%kabs_sq)
+            allocate (this%kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            if (allocated(this%k1_der2)) deallocate(this%k1_der2)
+            allocate (this%k1_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            if (allocated(this%k2_der2)) deallocate(this%k2_der2)
+            allocate (this%k2_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            if (allocated(this%k3_der2)) deallocate(this%k3_der2)
+            allocate (this%k3_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            if (allocated(this%one_by_kabs_sq)) deallocate(this%one_by_kabs_sq)
+            allocate(this%one_by_kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
+            if (allocated(this%Gdealias)) deallocate(this%Gdealias)
+            allocate (this%Gdealias(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            
+            allocate(k1four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
+            allocate(k2four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
+            allocate(k3four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
 
-        ! STEP 3: Generate 1d wavenumbers 
-        k1_1d = GetWaveNums(nx_g,dx) 
-        k2_1d = GetWaveNums(ny_g,dy) 
-        k3_1d = GetWaveNums(nz_g,dz) 
+            ! STEP 3: Generate 1d wavenumbers 
+            k1_1d = GetWaveNums(nx_g,dx) 
+            k2_1d = GetWaveNums(ny_g,dy) 
+            k3_1d = GetWaveNums(nz_g,dz) 
        
        
-        ! STEP 4: Create temporary array for k1 and transpose it to the appropriate dimension
-        allocate(tmp1(spectdecomp%xsz(1),spectdecomp%xsz(2),spectdecomp%xsz(3)))
-        do k = 1,size(tmp1,3)
-            do j = 1,size(tmp1,2)
-                tmp1(1:spectdecomp%xsz(1),j,k) = k1_1d(1:spectdecomp%xsz(1))
-            end do 
-        end do 
-        
-        select case (rPencil)
-        case(1)
-            allocate(tmp2(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
-            if (TwoPeriodic) then
-                call transpose_x_to_y(tmp1,this%k1,spectdecomp)
-            else
-                call transpose_x_to_y(tmp1,tmp2,spectdecomp)
-                call transpose_y_to_z(tmp2,this%k1,spectdecomp)
-            end if 
-            deallocate(tmp2)
-        case(3)
-            this%k1 = tmp1
-        end select     
-        deallocate(tmp1)
-
-        ! STEP 5: Create temporary array for k2 and transpose it to the appropriate dimension
-        allocate(tmp1(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3))) 
-        do k = 1,size(tmp1,3)
-            do i = 1,size(tmp1,1)
-                tmp1(i,1:spectdecomp%ysz(2),k) = k2_1d(1:spectdecomp%ysz(2))
-            end do 
-        end do 
-
-        select case (rPencil)
-        case (1)
-            if (TwoPeriodic) then
-                this%k2 = tmp1
-            else
-                call transpose_y_to_z(tmp1,this%k2,spectdecomp)
-            end if 
-        case(3)
-            call transpose_y_to_x(tmp1,this%k2,spectdecomp)
-        end select 
-        deallocate(tmp1)
-
-        ! STEP 6: Create temporary array for k3 and transpose it to the appropriate dimension
-        allocate(tmp1(spectdecomp%zsz(1),spectdecomp%zsz(2),spectdecomp%zsz(3)))
-        do j = 1,size(tmp1,2)
-            do i = 1,size(tmp1,1)
-                tmp1(i,j,1:spectdecomp%zsz(3)) = k3_1d(1:spectdecomp%zsz(3))
-            end do 
-        end do 
-
-        select case (rPencil)
-        case (1)
-            if (TwoPeriodic) then
-                allocate(tmp2(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
-                call transpose_z_to_y(tmp1,tmp2,spectdecomp)
-                this%k3 = tmp2 
-                deallocate(tmp2)
-            else
-                this%k3 = tmp1
-            end if 
-        case (3)
-            allocate(tmp2(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
-            call transpose_z_to_y(tmp1,tmp2,spectdecomp)
-            call transpose_y_to_x(tmp2,this%k3,spectdecomp)
-            deallocate(tmp2)
-        end select
-        deallocate(tmp1)
-        deallocate (spectdecomp)
-
-        if (TwoPeriodic) then
-                this%kabs_sq = this%k1**2 + this%k2**2  
-        else 
-                this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
-        end if 
-        k1four = this%k1
-        k2four = this%k2
-        k3four = this%k3
-
-        ! STEP 7: Create the dealiasing filter transfer function 
-        select case (filt)
-        case ("2/3rd")
-            this%Gdealias = TwoThirdsRule(nx_g,ny_g,nz_g,this%kabs_sq)
-        case ("cf90")
-            allocate(tmp1(size(this%Gdealias,1),size(this%Gdealias,2),size(this%Gdealias,3)))
-            tmp1 = GetCF90TransferFunction(this%k1,dx)
-            this%Gdealias = tmp1
-            tmp1 = GetCF90TransferFunction(this%k2,dy)
-            this%Gdealias = this%Gdealias*tmp1
-            tmp1 = GetCF90TransferFunction(this%k3,dz)
-            if (TwoPeriodic) then
-                this%Gdealias = this%Gdealias
-            else
-                this%Gdealias = this%Gdealias*tmp1
-            end if 
-            deallocate(tmp1)
-        case ("none")
-            this%Gdealias = one 
-        case default
-            call GracefulExit("The dealiasing filter specified is incorrect.",104)
-        end select
-       
-        ! STEP 8: Correct the wavenumber to be the modified wavenumber based on the scheme
-        allocate(tmp1(size(this%k1,1),size(this%k1,2),size(this%k1,3)))
-        select case (trim(scheme))
-        case ("cd10")
-            tmp1 = GetCD10ModWaveNum(k1four,dx)
-            this%k1 = tmp1 
-            tmp1 = GetCD10ModWaveNum(k2four,dy)
-            this%k2 = tmp1 
-            tmp1 = GetCD10ModWaveNum(k3four,dz)
-            this%k3 = tmp1 
-        case ("cd06")
-            tmp1 = GetCD06ModWaveNum(k1four,dx)
-            this%k1 = tmp1 
-            tmp1 = GetCD06ModWaveNum(k2four,dy)
-            this%k2 = tmp1 
-            tmp1 = GetCD06ModWaveNum(k3four,dz)
-            this%k3 = tmp1 
-        case ("four")
-            ! Do nothing !
-        end select 
-        deallocate(tmp1)        
-
-        ! STEP 9: Get the other wavenumber dependent attributes
-        if (TwoPeriodic) then
-            this%kabs_sq = this%k1**2 + this%k2**2
-        else 
-            this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
-        end if
- 
-        do k = 1,size(this%kabs_sq,3)
-            do j = 1,size(this%kabs_sq,2)  
-                do i = 1,size(this%kabs_sq,1)
-                    if ((this%kabs_sq(i,j,k)) .lt. real(1d-16,rkind)) then
-                        this%one_by_kabs_sq(i,j,k) = 1d-16
-                    else
-                        this%one_by_kabs_sq(i,j,k) = one/this%kabs_sq(i,j,k) 
-                    end if 
+            ! STEP 4: Create temporary array for k1 and transpose it to the appropriate dimension
+            allocate(tmp1(spectdecomp%xsz(1),spectdecomp%xsz(2),spectdecomp%xsz(3)))
+            do k = 1,size(tmp1,3)
+                do j = 1,size(tmp1,2)
+                    tmp1(1:spectdecomp%xsz(1),j,k) = k1_1d(1:spectdecomp%xsz(1))
                 end do 
             end do 
-        end do 
+            
+            select case (rPencil)
+            case(1)
+                allocate(tmp2(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
+                if (TwoPeriodic) then
+                    call transpose_x_to_y(tmp1,this%k1,spectdecomp)
+                else
+                    call transpose_x_to_y(tmp1,tmp2,spectdecomp)
+                    call transpose_y_to_z(tmp2,this%k1,spectdecomp)
+                end if 
+                deallocate(tmp2)
+            case(3)
+                this%k1 = tmp1
+            end select     
+            deallocate(tmp1)
+
+            ! STEP 5: Create temporary array for k2 and transpose it to the appropriate dimension
+            allocate(tmp1(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3))) 
+            do k = 1,size(tmp1,3)
+                do i = 1,size(tmp1,1)
+                    tmp1(i,1:spectdecomp%ysz(2),k) = k2_1d(1:spectdecomp%ysz(2))
+                end do 
+            end do 
+
+            select case (rPencil)
+            case (1)
+                if (TwoPeriodic) then
+                    this%k2 = tmp1
+                else
+                    call transpose_y_to_z(tmp1,this%k2,spectdecomp)
+                end if 
+            case(3)
+                call transpose_y_to_x(tmp1,this%k2,spectdecomp)
+            end select 
+            deallocate(tmp1)
+
+            ! STEP 6: Create temporary array for k3 and transpose it to the appropriate dimension
+            allocate(tmp1(spectdecomp%zsz(1),spectdecomp%zsz(2),spectdecomp%zsz(3)))
+            do j = 1,size(tmp1,2)
+                do i = 1,size(tmp1,1)
+                    tmp1(i,j,1:spectdecomp%zsz(3)) = k3_1d(1:spectdecomp%zsz(3))
+                end do 
+            end do 
+
+            select case (rPencil)
+            case (1)
+                if (TwoPeriodic) then
+                    allocate(tmp2(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
+                    call transpose_z_to_y(tmp1,tmp2,spectdecomp)
+                    this%k3 = tmp2 
+                    deallocate(tmp2)
+                else
+                    this%k3 = tmp1
+                end if 
+            case (3)
+                allocate(tmp2(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
+                call transpose_z_to_y(tmp1,tmp2,spectdecomp)
+                call transpose_y_to_x(tmp2,this%k3,spectdecomp)
+                deallocate(tmp2)
+            end select
+            deallocate(tmp1)
+            deallocate (spectdecomp)
+
+            if (TwoPeriodic) then
+                    this%kabs_sq = this%k1**2 + this%k2**2  
+            else 
+                    this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
+            end if 
+            k1four = this%k1
+            k2four = this%k2
+            k3four = this%k3
+
+            ! STEP 7: Create the dealiasing filter transfer function 
+            select case (filt)
+            case ("2/3rd")
+                this%Gdealias = TwoThirdsRule(nx_g,ny_g,nz_g,this%kabs_sq)
+            case ("cf90")
+                allocate(tmp1(size(this%Gdealias,1),size(this%Gdealias,2),size(this%Gdealias,3)))
+                tmp1 = GetCF90TransferFunction(this%k1,dx)
+                this%Gdealias = tmp1
+                tmp1 = GetCF90TransferFunction(this%k2,dy)
+                this%Gdealias = this%Gdealias*tmp1
+                tmp1 = GetCF90TransferFunction(this%k3,dz)
+                if (TwoPeriodic) then
+                    this%Gdealias = this%Gdealias
+                else
+                    this%Gdealias = this%Gdealias*tmp1
+                end if 
+                deallocate(tmp1)
+            case ("none")
+                this%Gdealias = one 
+            case default
+                call GracefulExit("The dealiasing filter specified is incorrect.",104)
+            end select
+       
+            ! STEP 8: Correct the wavenumber to be the modified wavenumber based on the scheme
+            allocate(tmp1(size(this%k1,1),size(this%k1,2),size(this%k1,3)))
+            select case (trim(scheme))
+            case ("cd10")
+                tmp1 = GetCD10ModWaveNum(k1four,dx)
+                this%k1 = tmp1 
+                tmp1 = GetCD10ModWaveNum(k2four,dy)
+                this%k2 = tmp1 
+                tmp1 = GetCD10ModWaveNum(k3four,dz)
+                this%k3 = tmp1 
+            case ("cd06")
+                tmp1 = GetCD06ModWaveNum(k1four,dx)
+                this%k1 = tmp1 
+                tmp1 = GetCD06ModWaveNum(k2four,dy)
+                this%k2 = tmp1 
+                tmp1 = GetCD06ModWaveNum(k3four,dz)
+                this%k3 = tmp1 
+            case ("four")
+                ! Do nothing !
+            end select 
+            deallocate(tmp1)        
+
+            ! STEP 9: Get the other wavenumber dependent attributes
+            if (TwoPeriodic) then
+                this%kabs_sq = this%k1**2 + this%k2**2
+            else 
+                this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
+            end if
+ 
+            do k = 1,size(this%kabs_sq,3)
+                do j = 1,size(this%kabs_sq,2)  
+                    do i = 1,size(this%kabs_sq,1)
+                        if ((this%kabs_sq(i,j,k)) .lt. real(1d-16,rkind)) then
+                            this%one_by_kabs_sq(i,j,k) = 1d-16
+                        else
+                            this%one_by_kabs_sq(i,j,k) = one/this%kabs_sq(i,j,k) 
+                        end if 
+                    end do 
+                end do 
+            end do 
       
-        select case (trim(scheme))
-        case ("cd10")
-            if (this%useConsrvD2) then
+            select case (trim(scheme))
+            case ("cd10")
+                if (this%useConsrvD2) then
+                    this%k1_der2 = this%k1**2
+                    this%k2_der2 = this%k2**2
+                    this%k3_der2 = this%k3**2
+                else
+                    this%k1_der2 = GetCD10D2ModWaveNum(k1four,dx)
+                    this%k2_der2 = GetCD10D2ModWaveNum(k2four,dy)
+                    this%k3_der2 = GetCD10D2ModWaveNum(k3four,dz)
+                end if  
+            case ("cd06")
                 this%k1_der2 = this%k1**2
                 this%k2_der2 = this%k2**2
                 this%k3_der2 = this%k3**2
-            else
-                this%k1_der2 = GetCD10D2ModWaveNum(k1four,dx)
-                this%k2_der2 = GetCD10D2ModWaveNum(k2four,dy)
-                this%k3_der2 = GetCD10D2ModWaveNum(k3four,dz)
-            end if  
-        case ("cd06")
-            this%k1_der2 = this%k1**2
-            this%k2_der2 = this%k2**2
-            this%k3_der2 = this%k3**2
-        case("four")    
-            this%k1_der2 = this%k1**2
-            this%k2_der2 = this%k2**2
-            this%k3_der2 = this%k3**2
-        end select  
+            case("four")    
+                this%k1_der2 = this%k1**2
+                this%k2_der2 = this%k2**2
+                this%k3_der2 = this%k3**2
+            end select  
        
-        deallocate(k1four, k2four, k3four) 
+            deallocate(k1four, k2four, k3four) 
+        
+        end if    
+
         ! STEP 10: Determine the sizes of the fft and ifft input arrays
         this%nx_c = this%fft_size(1); this%ny_c = this%fft_size(2); this%nz_c = this%fft_size(3)
+        if (allocated(spectdecomp)) deallocate(spectdecomp)
         allocate(spectdecomp)
         call decomp_info_init(nx_g, ny_g, nz_g, spectdecomp) 
         select case (rPencil)
@@ -387,55 +396,56 @@ contains
         deallocate(spectdecomp)
 
         ! STEP 11: Fix Oddball wavenumbers
-        if (this%fixOddball) then 
-            allocate(spectdecomp)
-            select case (rPencil) 
-            case (1) 
-                call decomp_info_init(nx_g/2+1, ny_g, nz_g, spectdecomp)
-                
-                if (TwoPeriodic) then
-                    allocate (tmp1(spectdecomp%zsz(1),spectdecomp%zsz(2),spectdecomp%zsz(3)))
-                    ! Fuck k3
-                    this%k2(:,ny_g/2+1,:) = zero
-                    allocate (tmp2(spectdecomp%xsz(1),spectdecomp%xsz(2),spectdecomp%xsz(3)))
-                    call transpose_y_to_x(this%k1,tmp2,spectdecomp)
-                    tmp2(nx_g/2+1,:,:) = zero
-                    call transpose_x_to_y(tmp2,this%k1,spectdecomp)
-                else
-                    this%k3(:,:,nz_g/2+1) = zero
+        if (this%StoreK) then
+            if (this%fixOddball) then 
+                allocate(spectdecomp)
+                select case (rPencil) 
+                case (1) 
+                    call decomp_info_init(nx_g/2+1, ny_g, nz_g, spectdecomp)
+                    
+                    if (TwoPeriodic) then
+                        allocate (tmp1(spectdecomp%zsz(1),spectdecomp%zsz(2),spectdecomp%zsz(3)))
+                        ! Fuck k3
+                        this%k2(:,ny_g/2+1,:) = zero
+                        allocate (tmp2(spectdecomp%xsz(1),spectdecomp%xsz(2),spectdecomp%xsz(3)))
+                        call transpose_y_to_x(this%k1,tmp2,spectdecomp)
+                        tmp2(nx_g/2+1,:,:) = zero
+                        call transpose_x_to_y(tmp2,this%k1,spectdecomp)
+                    else
+                        this%k3(:,:,nz_g/2+1) = zero
+                        allocate (tmp1(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
+                        allocate (tmp2(spectdecomp%xsz(1),spectdecomp%xsz(2),spectdecomp%xsz(3)))
+                        
+                        call transpose_z_to_y(this%k2,tmp1,spectdecomp)
+                        tmp1(:,ny_g/2+1,:) = zero
+                        call transpose_y_to_z(tmp1,this%k2,spectdecomp)
+                        
+                        call transpose_z_to_y(this%k1,tmp1,spectdecomp)
+                        call transpose_y_to_x(tmp1,tmp2,spectdecomp)
+                        tmp2(nx_g/2+1,:,:) = zero
+                        call transpose_x_to_y(tmp2,tmp1,spectdecomp)
+                        call transpose_y_to_z(tmp1,this%k1,spectdecomp)
+                    end if 
+                case (3)
+                    call decomp_info_init(nx_g, ny_g, nz_g/2+1, spectdecomp) 
+                    this%k1(nx_g/2+1,:,:) = zero
                     allocate (tmp1(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
-                    allocate (tmp2(spectdecomp%xsz(1),spectdecomp%xsz(2),spectdecomp%xsz(3)))
+                    allocate (tmp2(spectdecomp%zsz(1),spectdecomp%zsz(2),spectdecomp%zsz(3)))
                     
-                    call transpose_z_to_y(this%k2,tmp1,spectdecomp)
+                    call transpose_x_to_y(this%k2,tmp1,spectdecomp)
                     tmp1(:,ny_g/2+1,:) = zero
-                    call transpose_y_to_z(tmp1,this%k2,spectdecomp)
-                    
-                    call transpose_z_to_y(this%k1,tmp1,spectdecomp)
-                    call transpose_y_to_x(tmp1,tmp2,spectdecomp)
-                    tmp2(nx_g/2+1,:,:) = zero
-                    call transpose_x_to_y(tmp2,tmp1,spectdecomp)
-                    call transpose_y_to_z(tmp1,this%k1,spectdecomp)
-                end if 
-            case (3)
-                call decomp_info_init(nx_g, ny_g, nz_g/2+1, spectdecomp) 
-                this%k1(nx_g/2+1,:,:) = zero
-                allocate (tmp1(spectdecomp%ysz(1),spectdecomp%ysz(2),spectdecomp%ysz(3)))
-                allocate (tmp2(spectdecomp%zsz(1),spectdecomp%zsz(2),spectdecomp%zsz(3)))
-                
-                call transpose_x_to_y(this%k2,tmp1,spectdecomp)
-                tmp1(:,ny_g/2+1,:) = zero
-                call transpose_y_to_x(tmp1,this%k2,spectdecomp)
+                    call transpose_y_to_x(tmp1,this%k2,spectdecomp)
 
-                call transpose_x_to_y(this%k3,tmp1,spectdecomp)
-                call transpose_y_to_z(tmp1,tmp2,spectdecomp)
-                tmp2(:,:,nz_g/2+1) = zero
-                call transpose_z_to_y(tmp2,tmp1,spectdecomp)
-                call transpose_y_to_x(tmp1,this%k3,spectdecomp)
-            end select
-            deallocate (tmp1, tmp2)
-            deallocate(spectdecomp)
-        end if
-
+                    call transpose_x_to_y(this%k3,tmp1,spectdecomp)
+                    call transpose_y_to_z(tmp1,tmp2,spectdecomp)
+                    tmp2(:,:,nz_g/2+1) = zero
+                    call transpose_z_to_y(tmp2,tmp1,spectdecomp)
+                    call transpose_y_to_x(tmp1,this%k3,spectdecomp)
+                end select
+                deallocate (tmp1, tmp2)
+                deallocate(spectdecomp)
+            end if
+        end if 
         ! STEP 12: Print completion message 
         call message("SPECTRAL - Derived Type for the problem generated successfully.")
         call message("===============================================================")
@@ -457,8 +467,15 @@ contains
         end if 
         if (allocated(this%Gdealias)) then
                 deallocate(this%Gdealias)
-        end if 
-        deallocate( this%k1, this%k2, this%k3, this%kabs_sq, this%k1_der2, this%k2_der2, this%k3_der2, this%one_by_kabs_sq)
+        end if
+        if (allocated(this%k1)) deallocate(this%k1) 
+        if (allocated(this%k2)) deallocate(this%k2) 
+        if (allocated(this%k3)) deallocate(this%k3) 
+        if (allocated(this%kabs_sq)) deallocate(this%kabs_sq) 
+        if (allocated(this%k1_der2)) deallocate(this%k1_der2)
+        if (allocated(this%k2_der2)) deallocate(this%k2_der2)
+        if (allocated(this%k3_der2)) deallocate(this%k3_der2)
+        if (allocated(this%one_by_kabs_sq)) deallocate(this%one_by_kabs_sq)
        
         if (allocated(this%spectdecomp)) deallocate(this%spectdecomp)
         this%isInitialized = .false. 
@@ -489,11 +506,12 @@ contains
 
     end subroutine
 
-    subroutine ifft(this,arr_in,arr_out)
+    subroutine ifft(this,arr_in,arr_out,setOddball)
         use decomp_2d_fft, only: decomp_2d_fft_3d
         class(spectral), intent(inout) :: this
         complex(rkind), dimension(this%nx_c,this%ny_c,this%nz_c) :: arr_in
         real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r) :: arr_out 
+        logical, intent(in), optional :: setOddball
 
         if (this%is3dFFT) then
             if (.not. this%use2decompFFT) then
@@ -508,7 +526,15 @@ contains
                 arr_out = arr_out*this%normfact
             end if 
         else
-            call this%FT%ifft2_y2x(arr_in,arr_out)
+            if (present(setOddBall)) then
+                if (setOddBall) then
+                    call this%FT%ifft2_y2x(arr_in,arr_out,.true.) 
+                else
+                    call this%FT%ifft2_y2x(arr_in,arr_out,.false.)
+                end if  
+            else                    
+                call this%FT%ifft2_y2x(arr_in,arr_out,.false.)
+            end if
         end if 
     end subroutine
 
