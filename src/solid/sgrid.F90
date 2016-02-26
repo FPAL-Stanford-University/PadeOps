@@ -33,8 +33,14 @@ module SolidGrid
     integer, parameter :: g32_index    = 18
     integer, parameter :: g33_index    = 19
     integer, parameter :: eel_index    = 20
+    integer, parameter :: sxx_index    = 21
+    integer, parameter :: sxy_index    = 22
+    integer, parameter :: sxz_index    = 23
+    integer, parameter :: syy_index    = 24
+    integer, parameter :: syz_index    = 25
+    integer, parameter :: szz_index    = 26
 
-    integer, parameter :: nfields = 20
+    integer, parameter :: nfields = 26
 
     ! These indices are for data management, do not change if you're not sure of what you're doing
     integer, parameter :: tauxyidx = 2
@@ -93,6 +99,14 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: g31
         real(rkind), dimension(:,:,:), pointer :: g32
         real(rkind), dimension(:,:,:), pointer :: g33
+       
+        real(rkind), dimension(:,:,:,:), pointer :: devstress
+        real(rkind), dimension(:,:,:), pointer :: sxx
+        real(rkind), dimension(:,:,:), pointer :: sxy
+        real(rkind), dimension(:,:,:), pointer :: sxz
+        real(rkind), dimension(:,:,:), pointer :: syy
+        real(rkind), dimension(:,:,:), pointer :: syz
+        real(rkind), dimension(:,:,:), pointer :: szz
         
         real(rkind), dimension(:,:,:), pointer :: eel
          
@@ -265,6 +279,14 @@ contains
         this%g32  => this%fields(:,:,:, g32_index)   
         this%g33  => this%fields(:,:,:, g33_index)   
         
+        this%devstress => this%fields(:,:,:,sxx_index:szz_index)
+        this%sxx  => this%fields(:,:,:, sxx_index)   
+        this%sxy  => this%fields(:,:,:, sxy_index)   
+        this%sxz  => this%fields(:,:,:, sxz_index)   
+        this%syy  => this%fields(:,:,:, syy_index)   
+        this%syz  => this%fields(:,:,:, syz_index)   
+        this%szz  => this%fields(:,:,:, szz_index)   
+        
         this%eel  => this%fields(:,:,:, eel_index)   
        
         ! Initialize everything to a constant Zero
@@ -284,7 +306,9 @@ contains
 
         call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
         call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
-       
+      
+        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+
         this%e = this%e + this%eel
         call this%sgas%get_T(this%e,this%T)
 
@@ -372,6 +396,12 @@ contains
         varnames(18) = 'g32'
         varnames(19) = 'g33'
         varnames(20) = 'e_elastic'
+        varnames(21) = 'sxx'
+        varnames(22) = 'sxy'
+        varnames(23) = 'sxz'
+        varnames(24) = 'syy'
+        varnames(25) = 'syz'
+        varnames(26) = 'szz'
 
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
@@ -690,6 +720,8 @@ contains
         call this%sgas%get_T(this%e,this%T)
         call this%sgas%get_p(this%rho,(this%e-this%eel),this%p)
 
+        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+
     end subroutine
 
     pure subroutine get_conserved(this)
@@ -713,6 +745,7 @@ contains
         real(rkind), dimension(:,:,:), pointer :: qx,qy,qz
         real(rkind), dimension(:,:,:), pointer :: penalty, tmp
         real(rkind), dimension(:,:,:,:), pointer :: curlg
+        real(rkind), parameter :: etafac = one/32._rkind
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
@@ -736,6 +769,11 @@ contains
         tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
                                          tauyy => duidxj(:,:,:,tauyyidx); tauyz => duidxj(:,:,:,tauyzidx);
                                                                           tauzz => duidxj(:,:,:,tauzzidx);
+       
+        ! Add the deviatoric stress to the tau for use in fluxes 
+        tauxx = tauxx + this%sxx; tauxy = tauxy + this%sxy; tauxz = tauxz + this%sxz
+                                  tauyy = tauyy + this%syy; tauyz = tauyz + this%syz
+                                                            tauzz = tauzz + this%szz
         
         qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
 
