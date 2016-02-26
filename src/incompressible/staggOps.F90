@@ -29,8 +29,11 @@ module staggOpsMod
             generic :: InterpZ_Cell2Edge => InterpZ_Cell2Edge_CMPLX, InterpZ_Cell2Edge_REAL
             procedure :: ddz_E2C
             procedure :: ddz_C2C
+            procedure, private :: ddz_C2E_cmplx
+            procedure, private :: ddz_C2E_real
             procedure :: d2dz2_C2C
             procedure :: d2dz2_E2E
+            generic :: ddz_C2E => ddz_C2E_real, ddz_C2E_cmplx
     end type
 
 contains
@@ -47,6 +50,59 @@ contains
 
     end subroutine
 
+
+    pure subroutine ddz_C2E_Real(this,fC,dfdzE, isTopEven, isBotEven)
+        class(staggOps), intent(in) :: this
+        real(rkind), dimension(this%nxC,this%nyC,this%nzC), intent(in) :: fC
+        real(rkind), dimension(this%nxE,this%nyE,this%nzE), intent(out):: dfdzE
+        real(rkind) :: OneByDz
+        logical, intent(in) :: isTopEven, isBotEven
+
+        OneByDz = one/(this%dz)
+        dfdzE(:,:,2:this%nzE-1) =  fC(:,:,2:this%nzC) - fC(:,:,1:this%nzC-1) 
+
+        if (isBotEven) then
+            dfdzE(:,:,1) = zero
+        else 
+            dfdzE(:,:,1) = two*fc(:,:,1)
+        end if
+
+        if (isTopEven) then
+            dfdzE(:,:,this%nzE) = zero
+        else 
+            dfdzE(:,:,this%nzE) = -two*fC(:,:,this%nzC)
+        end if
+
+        dfdzE = dfdzE*OneByDz
+
+    end subroutine
+
+    pure subroutine ddz_C2E_Cmplx(this,fC,dfdzE, isTopEven, isBotEven)
+        class(staggOps), intent(in) :: this
+        complex(rkind), dimension(this%nxC,this%nyC,this%nzC), intent(in) :: fC
+        complex(rkind), dimension(this%nxE,this%nyE,this%nzE), intent(out):: dfdzE
+        real(rkind) :: OneByDz
+        logical, intent(in) :: isTopEven, isBotEven
+
+        OneByDz = one/(this%dz)
+        dfdzE(:,:,2:this%nzE-1) =  fC(:,:,2:this%nzC) - fC(:,:,1:this%nzC-1) 
+
+        if (isBotEven) then
+            dfdzE(:,:,1) = zero
+        else 
+            dfdzE(:,:,1) = two*fc(:,:,1)
+        end if
+
+        if (isTopEven) then
+            dfdzE(:,:,this%nzE) = zero
+        else 
+            dfdzE(:,:,this%nzE) = -two*fC(:,:,this%nzC)
+        end if
+
+        dfdzE = dfdzE*OneByDz
+
+    end subroutine
+
     pure subroutine ddz_C2C(this,fC,dfdzC, isTopEven, isBotEven)
         class(staggOps), intent(in) :: this
         real(rkind), dimension(this%nxC,this%nyC,this%nzC), intent(in) :: fC
@@ -55,7 +111,7 @@ contains
         logical, intent(in) :: isTopEven, isBotEven
 
         OneBy2Dz = one/(two*this%dz)
-        dfdzC(:,:,2:this%nzC-1) =  fC(:,:,3:this%nzE) - fC(:,:,1:this%nzE-2) 
+        dfdzC(:,:,2:this%nzC-1) =  fC(:,:,3:this%nzC) - fC(:,:,1:this%nzC-2) 
         dfdzC(:,:,2:this%nzC-1) = OneBy2Dz*dfdzC(:,:,2:this%nzC-1)
 
         if (isBotEven) then
@@ -124,7 +180,7 @@ contains
 
     end subroutine
 
-    pure subroutine init(this, gpC, gpE, stagg_scheme , dx, dy, dz)
+    subroutine init(this, gpC, gpE, stagg_scheme , dx, dy, dz)
         class(staggOps), intent(inout) :: this
         class(decomp_info), intent(in), target:: gpC, gpE
         integer, intent(in) :: stagg_scheme

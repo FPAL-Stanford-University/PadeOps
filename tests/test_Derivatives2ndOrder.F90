@@ -14,7 +14,7 @@ program test_deriv2ndOrder
     real(rkind), dimension(:,:,:), allocatable :: tmp3, tmp4
     type(decomp_info) :: gpC, gpE
     type(staggOps), allocatable :: Ops
-    integer :: nx = 8, ny = 8, nz = 128
+    integer :: nx = 8, ny = 8, nz = 16
     integer :: prow = 0, pcol = 0
     integer :: ierr, i, j, k, ii, jj, kk
     real(rkind) :: dx, dy, dz, zbot, fmean
@@ -80,6 +80,13 @@ program test_deriv2ndOrder
     tmp2 = -two*pi*sin(two*pi*z)
     print*, "First Deivative C->C"
     print*, maxval(abs(tmp1 - tmp2))
+
+
+    ! Center to Edge
+    call Ops%ddz_C2E(wC,tmp3,.true.,.true.)
+    tmp4 = -two*pi*sin(two*pi*zE)
+    print*, "First Deivative C->E"
+    print*, maxval(abs(tmp4 - tmp3))
 
 
     !! Second Derivative Check 
