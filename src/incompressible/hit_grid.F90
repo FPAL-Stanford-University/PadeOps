@@ -29,7 +29,7 @@ module IncompressibleGrid
 
     logical :: fixOddball = .TRUE. 
 
-    type, extends(grid) :: igrid
+    type, extends(grid) :: hit_grid
         ! Spectral realization of the fields 
         complex(rkind), dimension(:,:,:,:), allocatable :: Sfields 
         real(rkind),    dimension(:,:,:,:), allocatable :: duidxj
@@ -102,7 +102,7 @@ module IncompressibleGrid
 
 contains
     subroutine init(this, inputfile )
-        class(igrid),target, intent(inout) :: this
+        class(hit_grid),target, intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
 
         integer :: nx, ny, nz
@@ -329,7 +329,7 @@ contains
 
 
     subroutine destroy(this)
-        class(igrid), intent(inout) :: this
+        class(hit_grid), intent(inout) :: this
         call this%der%destroy()
         call this%spect%destroy()
         call this%poiss%destroy() 
@@ -363,7 +363,7 @@ contains
     end subroutine
 
     subroutine gradient(this, f, dfdx, dfdy, dfdz)
-        class(igrid),target, intent(inout) :: this
+        class(hit_grid),target, intent(inout) :: this
         real(rkind), intent(in),  dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdx
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdy
@@ -383,7 +383,7 @@ contains
 
     subroutine laplacian(this, f, lapf)
         use timer
-        class(igrid),target, intent(inout) :: this
+        class(hit_grid),target, intent(inout) :: this
         real(rkind), intent(in),  dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
         
@@ -399,7 +399,7 @@ contains
 
     subroutine AdamsBashforth(this)
         use constants, only: three 
-        class(igrid), target, intent(inout) :: this
+        class(hit_grid), target, intent(inout) :: this
         type(spectral), pointer :: spec
         real(rkind) :: dtby2
 
@@ -444,7 +444,7 @@ contains
     end subroutine 
 
     subroutine getDT(this)
-        class(igrid), intent(inout) :: this 
+        class(hit_grid), intent(inout) :: this 
 
         if (this%CFL < 0) then
             return
@@ -456,7 +456,7 @@ contains
 
     subroutine get_duidxj(this)
         use constants, only: imi
-        class(igrid), target, intent(inout) :: this
+        class(hit_grid), target, intent(inout) :: this
         complex(rkind), dimension(:,:,:), pointer :: Ctmp1, Ctmp2
         type(spectral), pointer :: spec
         real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz, dvdx, dvdy,&
@@ -512,7 +512,7 @@ contains
     end subroutine
 
     subroutine getRHS(this)
-        class(igrid), target, intent(inout) :: this
+        class(hit_grid), target, intent(inout) :: this
 
         if ((this%useSGS) .or. (this%SkewSymm)) then 
             call this%get_duidxj() 
@@ -531,7 +531,7 @@ contains
 
     subroutine NonCnsrvFrm(this)
         use constants, only: half 
-        class(igrid),target, intent(inout) :: this
+        class(hit_grid),target, intent(inout) :: this
         type(spectral), pointer :: spec
         real(rkind), dimension(:,:,:), pointer :: tmp1
         complex(rkind), dimension(:,:,:), pointer :: ctmp1
@@ -579,7 +579,7 @@ contains
 
     subroutine CnsrvFrm(this)
         use constants, only: imi 
-        class(igrid), target, intent(inout) :: this
+        class(hit_grid), target, intent(inout) :: this
         type(spectral), pointer :: spec
         real(rkind), dimension(:,:,:), pointer :: tmp1
         complex(rkind), dimension(:,:,:), pointer :: ctmp1
@@ -629,7 +629,7 @@ contains
     end subroutine
 
     subroutine addVisc(this)
-        class(igrid),target, intent(inout) :: this
+        class(hit_grid),target, intent(inout) :: this
         type(spectral), pointer :: spec
         complex(rkind), dimension(:,:,:), pointer :: ctmp1, ctmp2
 
@@ -660,7 +660,7 @@ contains
     subroutine printDivergence(this)
         use reductions, only: p_maxval
         use constants, only: imi
-        class(igrid),target, intent(inout) :: this
+        class(hit_grid),target, intent(inout) :: this
         type(derivatives), pointer :: der
         
         real(rkind), dimension(:,:,:), pointer :: xtmp1, xtmp2

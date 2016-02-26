@@ -12,10 +12,10 @@ module hitCD_IO
 contains
 
     subroutine start_io(gp)
-        use IncompressibleGrid, only: hit_grid
+        use IncompressibleGrid, only: igrid
         use mpi 
         
-        class(hit_grid), target, intent(in) :: gp 
+        class(igrid), target, intent(in) :: gp 
         character(len=clen) :: fname
         character(len=clen) :: tempname
         character(len=clen) :: command
@@ -60,11 +60,11 @@ contains
     end subroutine
 
     subroutine dumpData4Matlab(gp)
-        use IncompressibleGrid, only: hit_grid
+        use IncompressibleGrid, only: igrid
         use gridtools,          only: alloc_buffs
         use decomp_2d,        only: transpose_y_to_x
         
-        class(hit_grid), target, intent(in) :: gp 
+        class(igrid), target, intent(in) :: gp 
         integer :: tid, runIDX
         character(len=clen) :: fname
         character(len=clen) :: tempname

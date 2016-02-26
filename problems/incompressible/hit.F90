@@ -1,5 +1,5 @@
 ! Template for PadeOps
-! Grid - igrid
+! Grid - hit_grid
 ! Problem - HIT
 
 #include "hit_files/meshgen.F90"       
@@ -10,14 +10,14 @@
 program hitcd
     use mpi
     use kind_parameters,  only: rkind,clen,stdout,stderr
-    use IncompressibleGrid, only: igrid
+    use IncompressibleGrid, only: hit_grid
     use hitCD_IO, only: start_io, finalize_io
     use constants, only: half 
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc 
     implicit none
 
-    type(igrid), allocatable, target :: igp
+    type(hit_grid), allocatable, target :: igp
     character(len=clen) :: inputfile
     integer :: ierr
 
@@ -25,9 +25,9 @@ program hitcd
 
     call GETARG(1,inputfile)          !<-- Get the location of the input file
 
-    allocate(igp)                     !<-- Initialize igrid with defaults
+    allocate(igp)                     !<-- Initialize hit_grid with defaults
 
-    call igp%init(inputfile)          !<-- Properly initialize the igrid solver (see igrid.F90)
+    call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
     
     call start_io(igp)                !<-- Start I/O by creating a header file (see io.F90)
 
@@ -35,7 +35,7 @@ program hitcd
     call igp%printDivergence()
     do while (igp%tsim < igp%tstop) 
         
-        call igp%AdamsBashforth()     !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
+        call igp%AdamsBashforth()     !<-- Time stepping scheme + Pressure Proj. (see hit_grid.F90)
         
         call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
         
