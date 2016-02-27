@@ -29,7 +29,7 @@ module StiffGasEOS
 contains
 
     subroutine init(this,gam_,Rgas_,PInf_)
-        class(idealgas), intent(inout) :: this
+        class(stiffgas), intent(inout) :: this
         real(rkind) :: gam_
         real(rkind) :: Rgas_
         real(rkind) :: PInf_
@@ -45,7 +45,7 @@ contains
     end subroutine
 
     pure subroutine get_p(this,rho,e,p)
-        class(idealgas), intent(in) :: this
+        class(stiffgas), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: rho,e
         real(rkind), dimension(:,:,:), intent(out) :: p
 
@@ -54,7 +54,7 @@ contains
     end subroutine
 
     pure subroutine get_e_from_p(this,rho,p,e)
-        class(idealgas), intent(in) :: this
+        class(stiffgas), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: rho,p
         real(rkind), dimension(:,:,:), intent(out) :: e
 
@@ -63,7 +63,7 @@ contains
     end subroutine
 
     pure subroutine get_T(this,e,T)
-        class(idealgas), intent(in) :: this
+        class(stiffgas), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: e
         real(rkind), dimension(:,:,:), intent(out) :: T
 
@@ -72,7 +72,7 @@ contains
     end subroutine
 
     pure subroutine get_sos(this,rho,p,sos)
-        class(idealgas), intent(in) :: this
+        class(stiffgas), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: rho,p
         real(rkind), dimension(:,:,:), intent(out) :: sos
 

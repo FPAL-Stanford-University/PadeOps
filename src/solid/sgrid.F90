@@ -521,11 +521,10 @@ contains
         class(sgrid), target, intent(inout) :: this
 
         logical :: tcond, vizcond, stepcond
+        character(len=clen) :: stability
         real(rkind) :: cputime
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
-
-        call this%get_dt()
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
         ! Get artificial properties for initial conditions
@@ -545,6 +544,8 @@ contains
         deallocate( duidxj )
         ! ------------------------------------------------
 
+        call this%get_dt(stability)
+
         ! Write out initial conditions
         call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
@@ -554,6 +555,7 @@ contains
         if ( (this%tviz > zero) .AND. (this%tsim + this%dt > this%tviz * this%viz%vizcount) ) then
             this%dt = this%tviz * this%viz%vizcount - this%tsim
             vizcond = .TRUE.
+            stability = 'vizdump'
         end if
 
         tcond = .TRUE.
@@ -582,6 +584,7 @@ contains
             call this%advance_RK45()
             call toc(cputime)
             call message(2,"CPU time (in seconds)",cputime)
+            call message(2,"Stability limit: "//trim(stability))
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
@@ -591,7 +594,7 @@ contains
             end if
             
             ! Get the new time step
-            call this%get_dt()
+            call this%get_dt(stability)
             
             ! Check for visualization condition and adjust time step
             if ( (this%tviz > zero) .AND. (this%tsim + this%dt >= this%tviz * this%viz%vizcount) ) then
@@ -604,6 +607,7 @@ contains
                 tcond = .FALSE.
             else if ( (this%tstop > zero) .AND. (this%tsim + this%dt >= this%tstop) ) then
                 this%dt = this%tstop - this%tsim
+                stability = 'vizdump'
                 vizcond = .TRUE.
             end if
 
@@ -617,8 +621,6 @@ contains
         end do
 
     end subroutine
-
-
 
     subroutine advance_RK45(this)
         use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B
@@ -683,16 +685,17 @@ contains
     end subroutine
 
     subroutine get_dt(this,stability)
-        use reductions, only : P_MAXVAL
+        use reductions, only : P_MAXVAL,P_MINVAL
         class(sgrid), target, intent(inout) :: this
-        character(len=*),                intent(out) :: stability
+        character(len=*), intent(out) :: stability
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)           :: cs
         real(rkind) :: dtCFL, dtmu, dtbulk, dtkap
 
         call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
         call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
 
-        dtCFL  = this%CFL / P_MINVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz + cs*sqrt(one/dx**two + one/dy**two + one/dz**two))
+        dtCFL  = this%CFL / P_MINVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
+               + cs*sqrt(one/this%dx**two + one/this%dy**two + one/this%dz**two))
         dtmu   = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
         dtbulk = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
         dtkap  = 0.2_rkind * one / (P_MAXVAL( this%kap*this%T/(this%rho* (cs**2) * (min(this%dx,this%dy,this%dz)**2)) ) + eps)
@@ -770,7 +773,7 @@ contains
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
         real(rkind), dimension(:,:,:), pointer :: qx,qy,qz
-        real(rkind), dimension(:,:,:), pointer :: penalty, tmp
+        real(rkind), dimension(:,:,:), pointer :: penalty, tmp, detg
         real(rkind), dimension(:,:,:,:), pointer :: curlg
         real(rkind), parameter :: etafac = one/32._rkind
 
@@ -821,8 +824,13 @@ contains
         penalty => this%ybuf(:,:,:,1)
         tmp => this%ybuf(:,:,:,2)
         curlg => this%ybuf(:,:,:,3:5)
+        detg => this%ybuf(:,:,:,6)
 
-        penalty = etafac*(this%rho/detG/this%rho0-one)
+        detg = this%g11*(this%g22*this%g33-this%g23*this%g32) &
+             - this%g12*(this%g21*this%g33-this%g31*this%g23) &
+             + this%g13*(this%g21*this%g32-this%g31*this%g22)
+
+        penalty = etafac*(this%rho/detg/this%rho0-one)
 
         tmp = -this%u*this%g11-this%v*this%g12-this%w*this%g13
         call this%gradient(tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3))
