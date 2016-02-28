@@ -3,12 +3,12 @@
 inputdir  =  "/home/aditya90/Codes/PadeOps/data/EkmanBL/input/"       ! Directory for input files
 outputdir  = "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"      ! Directory for output files
 
-nx = 256                  ! Number of points in X
-ny = 256                  ! Number of points in Y
+nx = 192                  ! Number of points in X
+ny = 192                  ! Number of points in Y
 nz = 512                  ! Number of points in Z
 
 dt = 1.D-1               ! Fixed time step value (Set to negative to disable)
-tstop = 6.D0              ! Physical time to stop the simulation
+tstop = 2400.D0              ! Physical time to stop the simulation
 CFL = -1.D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
@@ -16,21 +16,12 @@ periodicx = .TRUE.        ! Periodic in X?
 periodicy = .TRUE.        ! Periodic in Y?
 periodicz = .FALSE.        ! Periodic in Z?
 
-derivative_x = "four"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
-derivative_y = "four"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
-derivative_z = "ed02"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
-
-filter_x = "2/3rd"         ! What dealiasing filter to use in X: "cf90", "gaussian", "lstsq", "2/3rd"
-filter_y = "2/3rd"         ! What dealiasing filter to use in X: "cf90", "gaussian", "lstsq", "2/3rd"
-filter_z = "none"         ! What dealiasing filter to use in X: "cf90", "gaussian", "lstsq", "2/3rd"
 
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 t_restartDump = 999999    ! Number of timesteps before restart file is written 
 t_dataDump    = 1000       ! Number of timesteps before data dump is performed 
 
-ViscConsrv = .FALSE.      ! Evaluate the viscous term in conservative form ? 
-SkewSymm = .TRUE.         ! Solve the skew-symmetric form of the equations? 
 
 /
 
@@ -40,5 +31,9 @@ SkewSymm = .TRUE.         ! Solve the skew-symmetric form of the equations?
 nu = 1.14D-5               ! Kinematic viscosity
 Pr = 0.7D0               ! Kinematic viscosity
 runID = 1                 ! Run ID (for output file name)
-useSGS = .FALSE.          ! LES mode or DNS mode? 
+useSGS = .FALSE.          ! LES mode or DNS mode?
+Ref = 400.D0
+deltat_by_D = 13.D0
+ustar_by_G = 0.065D0
+f = 1.454D-4
 /

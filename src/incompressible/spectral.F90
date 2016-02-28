@@ -2,7 +2,7 @@ module spectralMod
     use kind_parameters, only: rkind
     use decomp_2d, only: decomp_info, decomp_info_init, &
                     transpose_x_to_y, transpose_y_to_x, &
-                    transpose_y_to_z, transpose_z_to_y 
+                    transpose_y_to_z, transpose_z_to_y, nrank 
     use decomp_2d_fft, only: decomp_2d_fft_init, decomp_2d_fft_finalize, decomp_2d_fft_get_size
     use exits, only: GracefulExit, message 
     use constants, only: one, zero, two, three 
@@ -30,7 +30,10 @@ module spectralMod
         logical :: useConsrvD2 = .true. 
         real(rkind) :: normfact 
         type(decomp_info), allocatable, public :: spectdecomp
-        logical                                 :: StoreK = .true. 
+        logical                                 :: StoreK = .true.
+        logical, public :: carryingZeroK = .false.
+        integer, public :: zeroK_i = 123456, zeroK_j = 123456
+         
         contains
             procedure           :: init
             procedure           :: destroy
@@ -292,7 +295,11 @@ contains
             ! STEP 7: Create the dealiasing filter transfer function 
             select case (filt)
             case ("2/3rd")
-                this%Gdealias = TwoThirdsRule(nx_g,ny_g,nz_g,this%kabs_sq)
+                if (TwoPeriodic) then
+                    this%Gdealias = TwoThirdsRule2D(dx,dy,this%k1,this%k2)
+                else
+                    this%Gdealias = TwoThirdsRule(nx_g,ny_g,nz_g,this%kabs_sq)
+                end if 
             case ("cf90")
                 allocate(tmp1(size(this%Gdealias,1),size(this%Gdealias,2),size(this%Gdealias,3)))
                 tmp1 = GetCF90TransferFunction(this%k1,dx)
@@ -446,6 +453,24 @@ contains
                 deallocate(spectdecomp)
             end if
         end if 
+        
+        ! STEP 12: Carrying zero wavenumber
+
+        if (TwoPeriodic) then
+            do j = 1,size(this%k1,2)
+                do i = 1,size(this%k1,1)
+                    if ((abs(this%k1(i,j,1))<1.D-14) .and. (abs(this%k2(i,j,1))<1.D-14)) then
+                        this%carryingZeroK = .true.
+                        this%ZeroK_i = i
+                        this%ZeroK_j = j
+                        !print*,  "Identified ZERO wavenumber on process:", nrank
+                        !print*,  "i - index:", i
+                        !print*,  "j - index:", j
+                    end if 
+                end do 
+            end do 
+        end if 
+        
         ! STEP 12: Print completion message 
         call message("SPECTRAL - Derived Type for the problem generated successfully.")
         call message("===============================================================")
@@ -579,6 +604,28 @@ contains
 
     end function
 
+    function TwoThirdsRule2D(dx,dy,k1,k2) result(Tf)
+        use constants, only: one, pi, zero, two, three
+        real(rkind), intent(in) :: dx, dy 
+        real(rkind), dimension(:,:,:), intent(in) :: k1, k2
+        real(rkind), dimension(size(k1,1),size(k1,2), size(k1,3)) :: Tf
+        real(rkind) :: kxd, kyd, kdealias
+
+        kxd = (two/three)*pi/dx
+        kyd = (two/three)*pi/dy
+        kdealias = min(kxd,kyd)
+        
+        Tf = one
+        where(abs(k1)>kdealias)
+                Tf = zero
+        end where
+        
+        where(abs(k2)>kdealias)
+                Tf = zero
+        end where
+
+
+    end function
     
 
     pure elemental function GetCF90TransferFunction(kin,dx) result(T)

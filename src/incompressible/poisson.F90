@@ -21,6 +21,7 @@ module poissonMod
         type(decomp_info), pointer, public :: sp_gp
         type(decomp_info), pointer, public :: sp_gpE
         type(spectral), pointer, public :: spect
+        real(rkind), dimension(:,:,:), pointer :: k1, k2
 
         ! Stuff for thomas algorithm
         integer :: nz_inZ, nx_inZ, ny_inZ
@@ -29,6 +30,7 @@ module poissonMod
         integer :: xst, xen, yst, yen, zst, zen
         type(staggOps), pointer :: Ops    
         complex(rkind), dimension(:,:,:), allocatable :: tmpbuff, tmpbuffz1C, tmpbuffz2C, tmpbuffz1E, tmpbuffz2E 
+
 
         contains
             procedure :: init
@@ -46,11 +48,12 @@ contains
 
     subroutine DivergenceCheck(this,uhat,vhat,what, divergence)
         class(poisson), intent(inout) :: this
-        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: uhat, vhat
-        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: what
+        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat
+        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in) :: what
 
         real(rkind), dimension(this%sp_gp%xsz(1),this%sp_gp%xsz(2),this%sp_gp%xsz(3)), intent(out) :: divergence
 
+        real(rkind) :: maxDiv
         ! Compute dudx_hat and add dvdy_hat
         this%tmpbuff = this%spect%k1*uhat 
         this%tmpbuff = this%tmpbuff + this%spect%k2*vhat 
@@ -71,6 +74,11 @@ contains
         this%tmpbuff(:,this%sp_gp%ysz(2)/2+1,:) = zero
         call this%spect%ifft(this%tmpbuff,divergence,.true.)
 
+        !maxDiv = maxval(abs(divergence))
+        !if (maxDiv>1D-12) then
+        !    print*, "Max divergence exceeded"
+        !    stop 
+        !end if 
         ! Done !
 
 
@@ -141,6 +149,7 @@ contains
             allocate(this%tmpbuffz1E(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
             allocate(this%tmpbuffz2E(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
 
+
         end if 
 
     end subroutine
@@ -197,6 +206,7 @@ contains
         uhat = uhat - imi*this%spect%k1*this%tmpbuff
         vhat = vhat - imi*this%spect%k2*this%tmpbuff
 
+       
     end subroutine 
 
     subroutine PressureProj(this,Sfields,spect)
@@ -242,32 +252,36 @@ contains
     subroutine PoissonSolveZ(this,fhat,phat)
         ! Assuming that everything is in z-decomp
         class(poisson), intent(in) :: this 
-        complex(rkind), dimension(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen), intent(in) :: fhat
-        complex(rkind), dimension(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen), intent(out)::phat
-        real(rkind), dimension(this%nz_inZ) :: a, b, c
-        integer :: i, j
+        complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)), intent(in) :: fhat
+        complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)), intent(out):: phat
+        real(rkind), dimension(this%sp_gp%zsz(3)) :: a, b, c
+        integer :: i, j, ii, jj
         real(rkind) :: k1, k2, aa       
-        complex(rkind), dimension(this%nz_inZ) :: y, rhs
+        complex(rkind), dimension(this%sp_gp%zsz(3)) :: y, rhs
        
-        do j = this%yst,this%yen
-            do i = this%xst,this%xen
+        jj = 1
+        do j = this%sp_gp%zst(2),this%sp_gp%zen(2)
+            ii = 1
+            do i = this%sp_gp%zst(1),this%sp_gp%zen(1)
                 k1 = this%k1_inZ(i)
                 k2 = this%k2_inZ(j)
                 
-                rhs = this%dzsq*fhat(i,j,:)
+                rhs = this%dzsq*fhat(ii,jj,:)
                 
                 if ((i == 1).and. (j == 1)) then
                     call genTridiag2ndOrder(k1,k2,this%dz,this%nz_inZ,a,b,c)
                     a(1) = one; b(1) = zero; c(1) = zero
                     rhs(1) = zero
                     call solveTridiag_Poiss(a,b,c,rhs,y,this%nz_inZ)
-                    phat(i,j,:) = y
+                    phat(ii,jj,:) = y
                 else
                     aa = (-(k1*this%dz)**2 - (k2*this%dz)**2 - two)
                     call solveTridiag_Poiss_InPlace_quick(aa,one,one,rhs,this%nz_inZ)
-                    phat(i,j,:) = rhs
+                    phat(ii,jj,:) = rhs
                 end if 
+                ii = ii + 1
             end do 
+            jj = jj + 1
         end do 
 
     end subroutine    
@@ -275,31 +289,36 @@ contains
     subroutine PoissonSolveZ_InPlace(this,fhat)
         ! Assuming that everything is in z-decomp
         class(poisson), intent(in) :: this 
-        complex(rkind), dimension(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen), intent(inout) :: fhat
+        complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)), intent(inout):: fhat
         real(rkind), dimension(this%nz_inZ) :: a, b, c
-        integer :: i, j
+        integer :: i, j, ii, jj
         real(rkind) :: k1, k2, aa       
         complex(rkind), dimension(this%nz_inZ) :: y, rhs
        
-        do j = this%yst,this%yen
-            do i = this%xst,this%xen
+
+        jj = 1
+        do j = this%sp_gp%zst(2),this%sp_gp%zen(2)
+            ii = 1
+            do i = this%sp_gp%zst(1),this%sp_gp%zen(1)
                 k1 = this%k1_inZ(i)
                 k2 = this%k2_inZ(j)
                 
-                rhs = this%dzsq*fhat(i,j,:)
+                rhs = this%dzsq*fhat(ii,jj,:)
                 
                 if ((i == 1).and. (j == 1)) then
                     call genTridiag2ndOrder(k1,k2,this%dz,this%nz_inZ,a,b,c)
                     a(1) = one; b(1) = zero; c(1) = zero
                     rhs(1) = zero
                     call solveTridiag_Poiss(a,b,c,rhs,y,this%nz_inZ)
-                    fhat(i,j,:) = y
+                    fhat(ii,jj,:) = y
                 else
                     aa = (-(k1*this%dz)**2 - (k2*this%dz)**2 - two)
                     call solveTridiag_Poiss_InPlace_quick(aa,one,one,rhs,this%nz_inZ)
-                    fhat(i,j,:) = rhs
+                    fhat(ii,jj,:) = rhs
                 end if 
-            end do 
+                ii = ii + 1
+            end do
+            jj = jj + 1 
         end do 
 
     end subroutine    
