@@ -32,7 +32,7 @@ if ( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
     if ( CMAKE_BUILD_TYPE MATCHES "Release" )
         set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O5 -warn all -xhost -dynamic -qopt-report=2 -qopt-report-phase=vec")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -pg -check all -check noarg-temp-created -fpe0 -warn -traceback -debug extended")
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -pg -check all -check noarg-temp-created -fpe0 -warn -traceback -debug extended -assume realloc_lhs -fstack-protector -assume protect_parens -implicitnone")
     endif()
 
 # GNU compiler on OSX

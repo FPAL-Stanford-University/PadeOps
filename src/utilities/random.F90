@@ -19,16 +19,20 @@ module random
     end interface 
 contains
 
-    subroutine grand3R(array,mu,sigma)
+    subroutine grand3R(array,mu,sigma,seed)
         real(rkind), dimension(:,:,:), intent(inout) :: array
         real(rkind), intent(in) :: mu, sigma
-        
+        integer, intent(in), optional :: seed
         real(rkind), dimension(:,:,:), allocatable, target :: uarr
         real(rkind), dimension(:,:,:), pointer :: uarr1, uarr2      
  
         allocate(uarr(size(array,1),size(array,2),2*size(array,3))) 
         
-        call uniform_random(uarr,zero,one)
+        if (present(seed)) then
+            call uniform_random(uarr,zero,one,seed)
+        else
+            call uniform_random(uarr,zero,one)
+        end if 
         uarr1 => uarr(:,:,1:size(array,3)) 
         uarr2 => uarr(:,:,size(array,3)+1:2*size(array,3)) 
        
@@ -41,16 +45,23 @@ contains
     end subroutine
 
 
-    subroutine grand2R(array,mu,sigma)
+    subroutine grand2R(array,mu,sigma,seed)
         real(rkind), dimension(:,:), intent(inout) :: array
         real(rkind), intent(in) :: mu, sigma
+        integer, intent(in), optional :: seed
         
         real(rkind), dimension(:,:), allocatable, target :: uarr
         real(rkind), dimension(:,:), pointer :: uarr1, uarr2      
  
         allocate(uarr(size(array,1),2*size(array,2))) 
         
-        call uniform_random(uarr,zero,one)
+        if (present(seed)) then
+            call uniform_random(uarr,zero,one,seed)
+        else
+            call uniform_random(uarr,zero,one)
+        end if 
+        
+        
         uarr1 => uarr(:,1:size(array,2)) 
         uarr2 => uarr(:,size(array,2)+1:2*size(array,2)) 
        
@@ -63,16 +74,22 @@ contains
         deallocate(uarr)
     end subroutine
 
-    subroutine grand1R(array,mu,sigma)
+    subroutine grand1R(array,mu,sigma,seed)
         real(rkind), dimension(:), intent(inout) :: array
         real(rkind), intent(in) :: mu, sigma
+        integer, intent(in), optional :: seed
         
         real(rkind), dimension(:), allocatable, target :: uarr
         real(rkind), dimension(:), pointer :: uarr1, uarr2      
  
         allocate(uarr(2*size(array,1))) 
         
-        call uniform_random(uarr,zero,one)
+        if (present(seed)) then
+            call uniform_random(uarr,zero,one,seed)
+        else
+            call uniform_random(uarr,zero,one)
+        end if 
+        
         uarr1 => uarr(1:size(array,1)) 
         uarr2 => uarr(size(array,1)+1:2*size(array,1)) 
        
@@ -85,40 +102,73 @@ contains
         deallocate(uarr)
     end subroutine
     
-    subroutine unrand3R(array,left, right)
+    subroutine unrand3R(array,left, right, seed)
         real(rkind), dimension(:,:,:), intent(inout) :: array
         real(rkind), intent(in) :: left, right
+        integer, optional, intent(in) :: seed
         real(rkind) :: diff
+        integer, allocatable :: iseed(:)
+        integer :: n
 
         diff = right - left
-    
-        call init_random_seed()
+   
+        if (present(seed)) then
+            call random_seed(size = n)
+            allocate(iseed(n))
+            iseed = seed
+            call random_seed(put=iseed)
+            deallocate(iseed)
+        else
+            call init_random_seed()
+        end if 
         call random_number(array)
         array = diff*array
         array = array + left
     end subroutine
 
-    subroutine unrand2R(array,left, right)
+    subroutine unrand2R(array,left, right, seed)
         real(rkind), dimension(:,:), intent(inout) :: array
         real(rkind), intent(in) :: left, right
         real(rkind) :: diff
+        integer, optional, intent(in) :: seed
+        integer, allocatable :: iseed(:)
+        integer :: n
 
         diff = right - left
     
-        call init_random_seed()
+        if (present(seed)) then
+            call random_seed(size = n)
+            allocate(iseed(n))
+            iseed = seed
+            call random_seed(put=iseed)
+            deallocate(iseed)
+        else
+            call init_random_seed()
+        end if 
         call random_number(array)
         array = diff*array
         array = array + left
     end subroutine
 
-    subroutine unrand1R(array,left, right)
+    subroutine unrand1R(array,left, right, seed)
         real(rkind), dimension(:), intent(inout) :: array
         real(rkind), intent(in) :: left, right
         real(rkind) :: diff
+        integer, optional, intent(in) :: seed
+        integer, allocatable :: iseed(:)
+        integer :: n
 
         diff = right - left
     
-        call init_random_seed()
+        if (present(seed)) then
+            call random_seed(size = n)
+            allocate(iseed(n))
+            iseed = seed
+            call random_seed(put=iseed)
+            deallocate(iseed)
+        else
+            call init_random_seed()
+        end if 
         call random_number(array)
         array = diff*array
         array = array + left

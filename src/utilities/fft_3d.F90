@@ -99,9 +99,16 @@ contains
                 dims, dummy_periods, dummy_coords, ierr) 
 
 
-        if ( (mod(ny_global,2) .ne. 0) .or. (mod(nx_global,2) .ne. 0) .or. (mod(nz_global,2) .ne. 0) ) then
-            call decomp_2d_abort(301,"Only even number of data are supported &
-          & in X, Y and Z direction. NY_GLOBAL, NX_GLOBAL and NZ_GLOBAL must be an even number.") 
+        if ((base_pencil_ == "y") .or. (base_pencil_ == "z")) then
+            if ( (mod(ny_global,2) .ne. 0) .or. (mod(nx_global,2) .ne. 0) .or. (mod(nz_global,2) .ne. 0) ) then
+                call decomp_2d_abort(301,"Only even number of data are supported &
+              & in X, Y and Z direction. NY_GLOBAL, NX_GLOBAL and NZ_GLOBAL must be an even number.") 
+            end if 
+        else
+            if ( (mod(ny_global,2) .ne. 0) .or. (mod(nx_global,2) .ne. 0) ) then
+                call decomp_2d_abort(301,"Only even number of data are supported &
+              & in X, Y and Z direction. NY_GLOBAL, NX_GLOBAL and NZ_GLOBAL must be an even number.") 
+            end if 
         end if 
         
         if (present(exhaustive)) then
@@ -586,12 +593,14 @@ contains
 
     end subroutine
 
-    subroutine ifft2_y2x(this,input,output)
+    subroutine ifft2_y2x(this,input,output,setOddBall)
         class(fft_3d), intent(inout) :: this
         complex(rkind), dimension(size(this%f_xyhat_in_yD,1),size(this%f_xyhat_in_yD,2),size(this%f_xyhat_in_yD,3)), intent(in) :: input
         real(rkind), dimension(this%physical%xsz(1),this%physical%xsz(2),this%physical%xsz(3)), intent(out) :: output
         
         integer :: k 
+        logical :: setOddBall
+
 
         ! Then transform in y (c2c, out of place)
         do k = 1,this%spectral%ysz(3)
@@ -600,6 +609,10 @@ contains
 
         ! Then transpose from y-> x
         call transpose_y_to_x(this%f_xyhat_in_yD,this%f_xhat_in_xD,this%spectral)
+        
+        if (setOddBall) then
+            this%f_xhat_in_xD(this%physical%xsz(1)/2+1,:,:) = zero
+        end if 
 
         ! Then transform in x (c2r transform)
         call dfftw_execute_dft_c2r(this%plan_c2r_x, this%f_xhat_in_xD, output)

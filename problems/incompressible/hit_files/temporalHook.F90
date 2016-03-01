@@ -1,6 +1,6 @@
 module temporalHook
     use kind_parameters,    only: rkind
-    use IncompressibleGrid, only: igrid
+    use IncompressibleGrid, only: hit_grid
     use reductions,         only: P_MAXVAL
     use exits,              only: message
     use hitCD_IO,           only: dumpData4Matlab 
@@ -10,7 +10,7 @@ module temporalHook
 contains
 
     subroutine doTemporalStuff(gp)
-        class(igrid), intent(in) :: gp 
+        class(hit_grid), intent(in) :: gp 
       
         if (mod(gp%step,nt_print2screen) == 0) then
             call message(0,"Time",gp%tsim)
