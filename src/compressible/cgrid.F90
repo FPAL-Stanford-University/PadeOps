@@ -1,6 +1,6 @@
 module CompressibleGrid
     use kind_parameters, only: rkind, clen
-    use constants, only: zero,half,one,two,three,four
+    use constants, only: zero,eps,third,half,one,two,three,four
     use FiltersMod, only: filters
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
@@ -145,6 +145,7 @@ contains
         this%tstop = tstop
         this%dtfixed = dt
         this%dt = dt
+        this%CFL = CFL
 
         this%step = 0
         this%nsteps = nsteps
@@ -400,11 +401,12 @@ contains
         class(cgrid), target, intent(inout) :: this
 
         logical :: tcond, vizcond, stepcond
+        character(len=clen) :: stability
         real(rkind) :: cputime
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
 
-        call this%get_dt()
+        call this%get_dt(stability)
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
         ! Get artificial properties for initial conditions
@@ -460,6 +462,8 @@ contains
             call tic()
             call this%advance_RK45()
             call toc(cputime)
+            call message(2,"Time step",this%dt)
+            call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
           
             ! Write out vizualization dump if vizcond is met 
@@ -470,7 +474,7 @@ contains
             end if
             
             ! Get the new time step
-            call this%get_dt()
+            call this%get_dt(stability)
             
             ! Check for visualization condition and adjust time step
             if ( (this%tviz > zero) .AND. (this%tsim + this%dt >= this%tviz * this%viz%vizcount) ) then
@@ -549,15 +553,44 @@ contains
 
     end subroutine
 
-    subroutine get_dt(this)
+    subroutine get_dt(this,stability)
+        use reductions, only : P_MAXVAL
         class(cgrid), target, intent(inout) :: this
+        character(len=*), intent(out) :: stability
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
+        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap
 
-        if (this%CFL > zero) then
-            return
-        end if
+        call this%gas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
+
+        dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
+               + cs*sqrt( one/(this%dx**two) + one/(this%dy**two) + one/(this%dz**two) ))
+        dtmu   = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
+        dtbulk = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
+        dtkap  = 0.2_rkind * one / ( (P_MAXVAL( this%kap*this%T/(this%rho* (min(this%dx,this%dy,this%dz)**4))))**(third) + eps)
 
         ! Use fixed time step if CFL <= 0
-        this%dt = this%dtfixed
+        if ( this%CFL .LE. zero ) then
+            this%dt = this%dtfixed
+            stability = 'fixed'
+        else
+            stability = 'convective'
+            this%dt = dtCFL
+            if ( this%dt > dtmu ) then
+                this%dt = dtmu
+                stability = 'shear'
+            else if ( this%dt > dtbulk ) then
+                this%dt = dtbulk
+                stability = 'bulk'
+            else if ( this%dt > dtkap ) then
+                this%dt = dtkap
+                stability = 'conductive'
+            end if
+
+            if (this%step .LE. 10) then
+                this%dt = this%dt / 10._rkind
+                stability = 'startup'
+            end if
+        end if
 
     end subroutine
 
@@ -830,7 +863,7 @@ contains
 
         ! Now, all ytmps are free to use
         ytmp1 = dwdy-dvdz; ytmp2 = dudz-dwdx; ytmp3 = dvdx-dudy
-        ytmp4 = ytmp1*ytmp1 + ytmp2+ytmp2 + ytmp3*ytmp3 ! |curl(u)|^2
+        ytmp4 = ytmp1*ytmp1 + ytmp2*ytmp2 + ytmp3*ytmp3 ! |curl(u)|^2
         ytmp2 = func*func
 
         ! Calculate the switching function

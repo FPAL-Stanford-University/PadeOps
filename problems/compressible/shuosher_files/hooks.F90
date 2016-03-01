@@ -1,13 +1,18 @@
-module shocktube_data
+module shuosher_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,eight
+    use constants,        only: zero,one
     implicit none
     
-    real(rkind) :: rhoL = one
-    real(rkind) :: rhoR = one/eight
+    real(rkind) :: xshk = -4._rkind
+    
+    real(rkind) :: rhoL = 3.857143_rkind
+    real(rkind) :: rhoR
 
-    real(rkind) :: pL = one
-    real(rkind) :: pR = 0.1_rkind
+    real(rkind) :: uL = 2.629369_rkind
+    real(rkind) :: uR = zero
+
+    real(rkind) :: pL = 10.33333_rkind
+    real(rkind) :: pR = one
 
 end module
 
@@ -16,7 +21,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: half,one
     use decomp_2d,        only: decomp_info
 
-    use shocktube_data
+    use shuosher_data
 
     implicit none
 
@@ -38,14 +43,14 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = one/real(nx-1,rkind)
+        dx = 10._rkind/real(nx-1,rkind)
         dy = dx
         dz = dx
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - half
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - 5._rkind
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -62,7 +67,7 @@ subroutine initfields(decomp,dx,dy,dz,inpDirectory,mesh,fields)
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
     use decomp_2d,        only: decomp_info
     
-    use shocktube_data
+    use shuosher_data
 
     implicit none
     character(len=*),                                               intent(in)    :: inpDirectory
@@ -79,13 +84,16 @@ subroutine initfields(decomp,dx,dy,dz,inpDirectory,mesh,fields)
                  e => fields(:,:,:,  e_index),                             &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
-        tmp = half * ( one+tanh(x/(dx)) )
+        tmp = half * ( one+tanh( (x-xshk)/(0.1_rkind*dx)) )
 
-        rho = (one-tmp)*rhoL + tmp*rhoR
-        u   = zero
+        rho = (one-tmp)*rhoL + tmp*(one + 0.2_rkind*sin(5._rkind*x))
+        u   = (one-tmp)*uL + tmp*uR
         v   = zero
         w   = zero
         p   = (one-tmp)*pL + tmp*pR
+
+        ! This is only for a single processor
+        rhoR = rho(decomp%ysz(1),1,1)
            
     end associate
 
@@ -97,7 +105,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
 
-    use shocktube_data
+    use shuosher_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -118,7 +126,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/shocktube_", vizcount, ".dat"
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/shuosher_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
         do i=1,decomp%ysz(1)
@@ -137,7 +145,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
 
-    use shocktube_data
+    use shuosher_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -151,6 +159,20 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+        !if (decomp%yst(1) == 1) then
+            rho(1,:,:) = rhoL
+            u  (1,:,:) = uL
+            v  (1,:,:) = zero
+            w  (1,:,:) = zero
+            p  (1,:,:) = pL
+        !end if
+        !if (decomp%yen(1) == decomp%xsz(1)) then
+            rho(decomp%ysz(1),:,:) = rhoR
+            u  (decomp%ysz(1),:,:) = uR
+            v  (decomp%ysz(1),:,:) = zero
+            w  (decomp%ysz(1),:,:) = zero
+            p  (decomp%ysz(1),:,:) = pR
+        !end if
     end associate
 end subroutine
 
@@ -161,7 +183,7 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
     use exits,            only: message
     use reductions,       only: P_MAXVAL,P_MINVAL
 
-    use shocktube_data
+    use shuosher_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -178,7 +200,6 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
         
         call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
         call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
-        call message(2,"Minimum bulk viscosity",P_MINVAL(bulk))
         call message(2,"Maximum conductivity",P_MAXVAL(kap))
 
     end associate

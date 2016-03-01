@@ -36,7 +36,7 @@ endif()
 
 # Create a library called SolidOps
 add_library(SolidOps STATIC ${grid_source_files} ${solid_source_files})
-target_link_libraries(SolidOps PadeOps ${MPI_LIBRARIES})
+target_link_libraries(SolidOps CompressibleOps ${MPI_LIBRARIES})
 
 if (MPI_Fortran_COMPILER_FLAGS)
     set_target_properties(SolidOps PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")

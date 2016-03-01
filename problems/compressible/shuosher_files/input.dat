@@ -1,7 +1,7 @@
 &INPUT
 
-inputdir  =  "/home/akshays/Data/PadeOps/shocktube"      ! Directory for input files
-outputdir  = "/home/akshays/Data/PadeOps/shocktube"      ! Directory for output files
+inputdir  =  "/home/akshays/Data/PadeOps/shuosher"      ! Directory for input files
+outputdir  = "/home/akshays/Data/PadeOps/shuosher"      ! Directory for output files
 
 nx = 201                  ! Number of points in X
 ny = 10                   ! Number of points in Y
@@ -13,7 +13,7 @@ CFL = 0.5D0               ! CFL criterion for calculating the time step (Set to 
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
 tviz = 1.0D-2             ! Time between visualization dumps (Set to negative to disable)
-vizprefix = "shocktube"   ! Prefix for the visualization files
+vizprefix = "shuosher"    ! Prefix for the visualization files
 
 periodicx = .FALSE.       ! Periodic in X?
 periodicy = .TRUE.        ! Periodic in Y?

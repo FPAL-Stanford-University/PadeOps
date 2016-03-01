@@ -1,6 +1,6 @@
 module SolidGrid
     use kind_parameters, only: rkind, clen
-    use constants, only: zero,eps,half,one,two,three,four
+    use constants, only: zero,eps,third,half,one,two,three,four
     use FiltersMod, only: filters
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
@@ -134,6 +134,7 @@ module SolidGrid
 contains
     subroutine init(this, inputfile )
         use reductions, only: P_MAXVAL
+        use exits,      only: message, warning, nancheck, GracefulExit
         class(sgrid),target, intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
 
@@ -153,7 +154,7 @@ contains
         character(len=clen) :: filter_y = "cf90" 
         character(len=clen) :: filter_z = "cf90"
         integer :: prow = 0, pcol = 0 
-        integer :: i, j, k 
+        integer :: i, j, k, l 
         integer :: ioUnit
         real(rkind) :: gam = 1.4_rkind
         real(rkind) :: Rgas = one
@@ -169,6 +170,7 @@ contains
         real(rkind) :: Cbeta = 1.75_rkind
         real(rkind) :: Ckap = 0.01_rkind
 
+        character(len=clen) :: charout
         real(rkind), dimension(:,:,:,:), allocatable :: finger, fingersq
         real(rkind), dimension(:,:,:),   allocatable :: trG, trG2, detG
 
@@ -298,6 +300,11 @@ contains
        
         ! Get hydrodynamic and elastic energies 
         call this%sgas%get_e_from_p(this%rho,this%p,this%e)
+        
+        ! Check if the initialization was okay
+        if ( nancheck(this%e) ) then
+            call GracefulExit("NaN encountered at initialization in the hydrodynamic energy", 999)
+        end if
 
         call alloc_buffs(finger,  6,"y",this%decomp)
         call alloc_buffs(fingersq,6,"y",this%decomp)
@@ -306,9 +313,14 @@ contains
         allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
 
         call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
-      
+        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel) 
         call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+        
+        ! Check if the initialization was okay
+        if ( nancheck(this%eel) ) then
+            call GracefulExit("NaN encountered at initialization in the elastic energy", 999)
+        end if
+
 
         this%e = this%e + this%eel
         call this%sgas%get_T(this%e,this%T)
@@ -397,17 +409,24 @@ contains
         varnames(18) = 'g32'
         varnames(19) = 'g33'
         varnames(20) = 'e_elastic'
-        varnames(21) = 'sxx'
-        varnames(22) = 'sxy'
-        varnames(23) = 'sxz'
-        varnames(24) = 'syy'
-        varnames(25) = 'syz'
-        varnames(26) = 'szz'
+        varnames(21) = 'Sxx'
+        varnames(22) = 'Sxy'
+        varnames(23) = 'Sxz'
+        varnames(24) = 'Syy'
+        varnames(25) = 'Syz'
+        varnames(26) = 'Szz'
 
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
 
+        ! Check if the initialization was okay
+        if ( nancheck(this%fields(:,:,:,8:26),i,j,k,l) ) then
+            call message("fields: ",this%fields(i,j,k,l))
+            write(charout,'(A,4(I5,A))') "NaN encountered in initialization ("//trim(varnames(l+7))//")  at (",i,", ",j,", ",k,", ",l,") of fields"
+            call GracefulExit(trim(charout), 999)
+        end if
+        
     end subroutine
 
 
@@ -636,11 +655,6 @@ contains
 
         character(len=clen) :: charout
 
-        ! if (this%step == 0) then
-        !     call this%gas%get_e_from_p(this%rho,this%p,this%e)
-        !     call this%gas%get_T(this%e,this%T)
-        ! end if
-
         Qtmp  = zero
         Qtmpg = zero
 
@@ -649,7 +663,12 @@ contains
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
                 call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
-                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution at substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
+                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (Wcnsrv) at substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
+                call GracefulExit(trim(charout), 999)
+            end if
+            if ( nancheck(this%g,i,j,k,l) ) then
+                call message("g: ",this%g(i,j,k,l))
+                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (g) at substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
                 call GracefulExit(trim(charout), 999)
             end if
 
@@ -685,20 +704,20 @@ contains
     end subroutine
 
     subroutine get_dt(this,stability)
-        use reductions, only : P_MAXVAL,P_MINVAL
+        use reductions, only : P_MAXVAL
         class(sgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)           :: cs
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
         real(rkind) :: dtCFL, dtmu, dtbulk, dtkap
 
         call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
         call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
 
-        dtCFL  = this%CFL / P_MINVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
-               + cs*sqrt(one/this%dx**two + one/this%dy**two + one/this%dz**two))
+        dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
+               + cs*sqrt( one/(this%dx**two) + one/(this%dy**two) + one/(this%dz**two) ))
         dtmu   = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
         dtbulk = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
-        dtkap  = 0.2_rkind * one / (P_MAXVAL( this%kap*this%T/(this%rho* (cs**2) * (min(this%dx,this%dy,this%dz)**2)) ) + eps)
+        dtkap  = 0.2_rkind * one / ( (P_MAXVAL( this%kap*this%T/(this%rho* (min(this%dx,this%dy,this%dz)**4))))**(third) + eps)
 
         ! Use fixed time step if CFL <= 0
         if ( this%CFL .LE. zero ) then
@@ -716,6 +735,11 @@ contains
             else if ( this%dt > dtkap ) then
                 this%dt = dtkap
                 stability = 'conductive'
+            end if
+
+            if (this%step .LE. 10) then
+                this%dt = this%dt / 10._rkind
+                stability = 'startup'
             end if
         end if
 
@@ -766,6 +790,7 @@ contains
     end subroutine
 
     subroutine getRHS(this, rhs, rhsg)
+        use operators, only: curl
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,5), intent(out) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), intent(out) :: rhsg
@@ -1043,7 +1068,7 @@ contains
 
         ! Now, all ytmps are free to use
         ytmp1 = dwdy-dvdz; ytmp2 = dudz-dwdx; ytmp3 = dvdx-dudy
-        ytmp4 = ytmp1*ytmp1 + ytmp2+ytmp2 + ytmp3*ytmp3 ! |curl(u)|^2
+        ytmp4 = ytmp1*ytmp1 + ytmp2*ytmp2 + ytmp3*ytmp3 ! |curl(u)|^2
         ytmp2 = func*func
 
         ! Calculate the switching function
