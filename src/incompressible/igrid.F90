@@ -23,6 +23,8 @@ module IncompressibleGridNP
     logical :: topBC_u = .true.  , topBC_v = .true. , topBC_w = .false.
     logical :: botBC_u = .false. , botBC_v = .false., botBC_w = .false. 
 
+    logical :: rotationalForm = .true. 
+
     type, extends(grid) :: igrid
         
         type(decomp_info), allocatable :: gpC, gpE
@@ -69,7 +71,8 @@ module IncompressibleGridNP
             procedure, private :: interp_wHat_to_wHatC
             procedure, private :: interp_w_to_wC
             procedure, private :: compute_vorticity
-            procedure, private :: addNonLinearTerm
+            procedure, private :: addNonLinearTerm_Rot
+            procedure, private :: addNonLinearTerm_Cnsrv
             procedure, private :: addCoriolisTerm
             procedure, private :: addViscousTerm 
     end type
@@ -168,7 +171,6 @@ contains
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC)
         allocate(this%gpE)
-
 
         call decomp_2d_init(nx, ny, nz, prow, pcol)
         call get_decomp_info(this%gpC)
@@ -316,6 +318,10 @@ contains
         call transpose_z_to_y(zbuffC,ybuffC,this%gpC)
         call transpose_y_to_x(ybuffC,this%wC,this%gpC)
 
+        nullify(ybuffE) 
+        nullify(zbuffE) 
+        nullify(zbuffC) 
+        nullify(ybuffC) 
         ! Done !
     end subroutine
 
@@ -337,6 +343,12 @@ contains
 
         ! Step 3: Transpose back from z -> y
         call transpose_z_to_y(zbuffC,this%whatC,this%sp_gpC)
+
+        nullify(ybuffE) 
+        nullify(zbuffE) 
+        nullify(zbuffC) 
+        nullify(ybuffC) 
+
 
         ! Done !
     end subroutine
@@ -372,8 +384,14 @@ contains
 
     subroutine destroy(this)
         class(igrid), intent(inout) :: this
-
-
+        
+        nullify(this%u, this%uhat, this%v, this%vhat, this%w, this%what, this%wC)
+        deallocate(this%PfieldsC, this%PfieldsE, this%SfieldsC, this%SfieldsE)
+        nullify(this%u_rhs, this%v_rhs, this%w_rhs)
+        deallocate(this%rhsC, this%rhsE, this%OrhsC, this%OrhsE)
+        call this%spectC%destroy()
+        call this%spectE%destroy()
+        deallocate(this%spectC, this%spectE)
     end subroutine
 
     subroutine compute_vorticity(this)
@@ -410,12 +428,13 @@ contains
         call this%spectC%ifft(this%oxhat,this%ox)
         call this%spectC%ifft(this%oyhat,this%oy)
         call this%spectC%ifft(this%ozhat,this%oz)
-
+        
+        nullify(k1, k2, cbuffz1, cbuffz2)
 
     end subroutine
 
 
-    subroutine addNonLinearTerm(this)
+    subroutine addNonLinearTerm_Rot(this)
         class(igrid), intent(inout), target :: this
         real(rkind), dimension(:,:,:), pointer :: rtmpx1
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
@@ -433,7 +452,7 @@ contains
         call this%spectC%fft(rtmpx1,this%u_rhs)
 
         ! y equation
-        rtmpx1 = this%ox*this%w
+        rtmpx1 = this%ox*this%wC
         rtmpx1 = rtmpx1 - this%oz*this%u
         call this%spectC%fft(rtmpx1,this%v_rhs)
 
@@ -448,8 +467,79 @@ contains
         call transpose_z_to_y(ctmpz2,this%w_rhs,this%sp_gpE)
 
         ! Done 
+        nullify(rtmpx1) 
+        nullify(ctmpz1) 
+        nullify(ctmpz2) 
     end subroutine
 
+    subroutine addNonLinearTerm_Cnsrv(this)
+        class(igrid), intent(inout), target :: this
+        real(rkind), dimension(:,:,:), pointer :: rtmpx1
+        complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2!, ctmpz3
+        complex(rkind), dimension(:,:,:), pointer :: ctmpy1, ctmpy2
+
+        
+        ! Assume that the rhs vectors haven't been populated
+
+        rtmpx1 => this%rbuffxC(:,:,:,1)
+        ctmpz1 => this%cbuffzC(:,:,:,1)
+        ctmpz2 => this%cbuffzE(:,:,:,1)
+        !ctmpz3 => this%cbuffzC(:,:,:,2)
+        ctmpy1 => this%cbuffyC(:,:,:,1)
+        ctmpy2 => this%cbuffyE(:,:,:,1)
+
+
+        ! uv terms
+        rtmpx1 = -this%u*this%v
+        call this%spectC%fft(rtmpx1,this%u_rhs)
+        this%v_rhs = imi*this%spectC%k1*this%u_rhs
+        this%u_rhs = imi*this%spectC%k2*this%u_rhs
+
+        ! uw terms
+        rtmpx1 = -this%u*this%wC
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)
+        call transpose_z_to_y(ctmpz2,this%w_rhs,this%sp_gpE)
+        this%w_rhs = imi*this%spectE%k1*this%w_rhs
+        call this%Ops%ddz_E2C(ctmpz2,ctmpz1)
+        call transpose_z_to_y(ctmpz1,ctmpy1,this%sp_gpC)
+        this%u_rhs = this%u_rhs + ctmpy1
+
+        ! vw terms
+        rtmpx1 = -this%v*this%wC
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)
+        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
+        this%w_rhs = this%w_rhs + imi*this%spectE%k2*ctmpy2
+        call this%Ops%ddz_E2C(ctmpz2,ctmpz1)
+        call transpose_z_to_y(ctmpz1,ctmpy1,this%sp_gpC)
+        this%v_rhs = this%v_rhs + ctmpy1
+     
+        ! uu term 
+        rtmpx1 = -this%u*this%u
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%u_rhs = this%u_rhs + this%spectC%k1*ctmpy1
+        
+        ! vv term
+        rtmpx1 = -this%v*this%v
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%v_rhs = this%v_rhs + this%spectC%k2*ctmpy1
+
+        ! ww term 
+        rtmpx1 =  -this%wC*this%wC
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        call this%Ops%ddz_C2E(ctmpz1,ctmpz2,.true., .true.)
+        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE) 
+        this%w_rhs = this%w_rhs + ctmpy2
+
+        ! Done 
+        nullify(rtmpx1) 
+        nullify(ctmpz1) 
+        nullify(ctmpz2) 
+    end subroutine
 
     subroutine addCoriolisTerm(this)
         class(igrid), intent(inout) :: this
@@ -462,7 +552,7 @@ contains
         if (this%spectC%carryingZeroK) then
             this%v_rhs(this%spectC%ZeroK_i,this%spectC%ZeroK_j,:) =  & 
                     this%v_rhs(this%spectC%ZeroK_i,this%spectC%ZeroK_j,:) & 
-                                + this%fCor*this%Gx
+                                + this%fCor*this%Gx*this%ny*this%nx
         end if 
 
         ! w equation 
@@ -503,14 +593,19 @@ contains
         this%w_rhs =  this%w_rhs - this%nu0*this%spectE%kabs_sq *this%what 
         this%w_rhs =  this%w_rhs + this%nu0*cytmp2
 
+        nullify(cytmp1,cytmp2,cztmp1,cztmp2,cztmp3,cztmp4)
     end subroutine 
 
     subroutine AdamsBashforth(this)
-        class(igrid), intent(inout), target :: this
+        class(igrid), intent(inout) :: this
 
-        ! Step 1: Non Linear Term 
-        call this%AddNonLinearTerm()
-        
+        if (RotationalForm) then
+            ! Step 1: Non Linear Term 
+            call this%AddNonLinearTerm_Rot()
+        else
+            call this%AddNonLinearTerm_Cnsrv()
+        end if 
+
         ! Step 2: Coriolis Term
         call this%AddCoriolisTerm()
 
@@ -535,6 +630,7 @@ contains
 
         ! Step 6: Pressure projection
         call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
+        call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence) 
 
         ! Step 7: Take it back to physical fields
         call this%spectC%ifft(this%uhat,this%u)
@@ -546,9 +642,10 @@ contains
         call this%interp_wHat_to_wHatC()
 
 
-        ! STEP 9: Compute Vorticity 
-        call this%compute_Vorticity()
-
+        if (RotationalForm) then
+            ! STEP 9: Compute Vorticity 
+            call this%compute_Vorticity()
+        end if 
 
         ! STEP 10: Copy the RHS for using during next time step 
         this%u_Orhs = this%u_rhs

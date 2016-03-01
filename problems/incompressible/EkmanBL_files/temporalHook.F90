@@ -6,8 +6,10 @@ module temporalHook
     use EkmanBL_IO,           only: dumpData4Matlab 
     use constants,          only: half
     use timer,              only: tic, toc 
+    use mpi
     integer :: nt_print2screen = 10
     integer :: nt_getMaxKE = 10
+    integer :: ierr 
 contains
 
     subroutine doTemporalStuff(gp)
@@ -19,7 +21,6 @@ contains
 
         if (mod(gp%step,nt_getMaxKE) == 0) then
             call message(1,"Max KE:",P_MAXVAL(half*(gp%u**2 + gp%v**2 + gp%wC**2)))
-            call gp%printDivergence()
             call toc()
             call tic()
         end if 
@@ -29,6 +30,7 @@ contains
            call dumpData4Matlab(gp) 
         end if 
 
+        call mpi_barrier(mpi_comm_world,ierr)
         !if (mod(gp%step,gp%t_restartDump) == 0) then
         !    ! Incomplete 
         !end if 

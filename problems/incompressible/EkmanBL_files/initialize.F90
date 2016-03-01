@@ -18,7 +18,7 @@ module EkmanBL_parameters
     integer :: seedu = 321341
     integer :: seedv = 423424
     integer :: seedw = 131344
-    real(rkind) :: randomScaleFact = 0.02_rkind ! 5% of the mean value
+    real(rkind) :: randomScaleFact = 0.0005_rkind ! 5% of the mean value
 
     integer :: nperiods = 8
     real(rkind) :: oscScaleFact = 0.2_rkind    ! 20% of the mean value
@@ -81,6 +81,7 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     use IncompressibleGrid, only: u_index,v_index,w_index
     use random,             only: gaussian_random
     use decomp_2d,          only: decomp_info, nrank  
+    use reductions,         only: p_maxval
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -95,6 +96,7 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     logical :: useSGS 
     real(rkind) :: mfactor, sig
     real(rkind), dimension(:,:,:), allocatable :: randArr
+    real(rkind) :: epsfac, Uperiods, Vperiods , zpeak
     namelist /IINPUT/ runId, nu, Pr, useSGS, f, deltat_by_D, ustar_by_G, Ref 
 
 
@@ -121,49 +123,59 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     dzP =  dz*ustar/nu
 
     u_g = G
-    u = G*(one - exp(-z/D)*cos(z/D))
-    v = G*exp(-z/D)*sin(z/D)
+    !u = G*(one - exp(-z/D)*cos(z/D))
+    !v = G*exp(-z/D)*sin(z/D)
+    !w = zero
+
+    Uperiods = 4.0; Vperiods = 4.0; zpeak = D;
+    epsfac = 0.5d0;
+
+    u = 1.2*(1.0-exp(-z*2.5d0)*cos(z*2.50d0)+epsfac*exp(0.5d0)*(z/Lz)*cos(Uperiods*2.0d0**pi*y/Ly)*exp(-0.5e0*(z/zpeak/Lz)**2.0d0))
+    v = 1.2*(exp(-z*2.5d0)*sin(z*2.50d0)+epsfac*exp(0.5d0)*(z/Lz)*cos(Vperiods*2.0d0**pi*x/Lx)*exp(-0.5d0*(z/zpeak/Lz)**2.0d0))
     w = zero
 
+    u = u*G
+    v = v*G
 
     ! Add random numbers
-    !allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
-    !do k = 1,size(u,3)
-    !    sig = randomScaleFact*abs(u(1,1,k))
-    !    u(:,:,k) = u(:,:,k) + sig*randArr(:,:,1)
-    !end do  
-    !deallocate(randArr)
-    !
-    !allocate(randArr(size(v,1),size(v,2),size(v,3)))
-    !call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
-    !do k = 1,size(v,3)
-    !    sig = randomScaleFact*abs(v(1,1,k))
-    !    v(:,:,k) = v(:,:,k) + sig*randArr(:,:,1)
-    !end do  
-    !deallocate(randArr)
+    allocate(randArr(size(u,1),size(u,2),size(u,3)))
+    call gaussian_random(randArr,zero,one,seedu + 10*nrank)
+    do k = 1,size(u,3)
+        sig = G*randomScaleFact*(1 - exp(-z(1,1,k)/D)*cos(z(1,1,k)/D))
+        u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)*0.5*(1 - cos(2*pi*y(:,:,k)/Ly))*0.5*(1 - cos(2*pi*x(:,:,k)/Lx))
+    end do  
+    deallocate(randArr)
+    
+    allocate(randArr(size(v,1),size(v,2),size(v,3)))
+    call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
+    do k = 1,size(v,3)
+        sig = G*randomScaleFact*exp(-z(1,1,k)/D)*sin(z(1,1,k)/D)
+        v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)*0.5*(1 - cos(2*pi*y(:,:,k)/Ly))*0.5*(1 - cos(2*pi*x(:,:,k)/Lx))
+    end do  
+    deallocate(randArr)
 
+    nullify(u,v,w,x,y,z)
     !allocate(randArr(size(w,1),size(w,2),size(w,3)))
     !call gaussian_random(randArr,zero,one,seedw+ 10*nrank)
     !do k = 2,size(w,3)-1
     !    sig = randomScaleFact*abs(v(1,1,k))
-    !    w(:,:,k) = w(:,:,k) + sig*randArr(:,:,1)
+    !    w(:,:,k) = w(:,:,k) + sig*randArr(:,:,k)
     !end do  
     !deallocate(randArr)
 
-    do k = 1,size(u,3)
-        mfactor = u(2,2,k)
-        u(:,:,k) = u(:,:,k) - mfactor*oscScaleFact*cos(nperiods*two*pi*x(:,:,k)/Lx)*sin(nperiods*two*pi*y(:,:,k)/Ly)
-        mfactor = v(2,2,k)
-        v(:,:,k) = v(:,:,k) + mfactor*oscScaleFact*sin(nperiods*two*pi*x(:,:,k)/Lx)*cos(nperiods*two*pi*y(:,:,k)/Ly)
-    end do 
+    !do k = 1,size(u,3)
+    !    mfactor = u(2,2,k)
+    !    u(:,:,k) = u(:,:,k) - mfactor*oscScaleFact*cos(nperiods*two*pi*x(:,:,k)/Lx)*sin(nperiods*two*pi*y(:,:,k)/Ly)
+    !    mfactor = v(2,2,k)
+    !    v(:,:,k) = v(:,:,k) + mfactor*oscScaleFact*sin(nperiods*two*pi*x(:,:,k)/Lx)*cos(nperiods*two*pi*y(:,:,k)/Ly)
+    !end do 
 
-    do k = 1,size(u,3)
-        mfactor = u(4,4,k)
-        u(:,:,k) = u(:,:,k) + 0.5*mfactor*oscScaleFact*sin(4*nperiods*two*pi*x(:,:,k)/Lx)*cos(nperiods*two*pi*y(:,:,k)/Ly)
-        mfactor = v(4,4,k)
-        v(:,:,k) = v(:,:,k) - 0.5*mfactor*oscScaleFact*cos(4*nperiods*two*pi*x(:,:,k)/Lx)*sin(nperiods*two*pi*y(:,:,k)/Ly)
-    end do 
+    !do k = 1,size(u,3)
+    !    mfactor = u(4,4,k)
+    !    u(:,:,k) = u(:,:,k) + 0.5*mfactor*oscScaleFact*sin(4*nperiods*two*pi*x(:,:,k)/Lx)*cos(nperiods*two*pi*y(:,:,k)/Ly)
+    !    mfactor = v(4,4,k)
+    !    v(:,:,k) = v(:,:,k) - 0.5*mfactor*oscScaleFact*cos(4*nperiods*two*pi*x(:,:,k)/Lx)*sin(nperiods*two*pi*y(:,:,k)/Ly)
+    !end do 
     call message(0,"============================================================================")
     call message(0,"Initialized Velocity Fields (Lam. Ekman Solution + Perturbations)")
     call message(0,"Summary:")

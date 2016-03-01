@@ -47,13 +47,18 @@ contains
 
 
     subroutine DivergenceCheck(this,uhat,vhat,what, divergence)
+        use mpi
+        use exits, only: message
+        use reductions, only: p_maxval
         class(poisson), intent(inout) :: this
-        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat
-        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in) :: what
+        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: uhat, vhat
+        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: what
 
         real(rkind), dimension(this%sp_gp%xsz(1),this%sp_gp%xsz(2),this%sp_gp%xsz(3)), intent(out) :: divergence
 
         real(rkind) :: maxDiv
+        integer :: ierr
+
         ! Compute dudx_hat and add dvdy_hat
         this%tmpbuff = this%spect%k1*uhat 
         this%tmpbuff = this%tmpbuff + this%spect%k2*vhat 
@@ -74,12 +79,38 @@ contains
         this%tmpbuff(:,this%sp_gp%ysz(2)/2+1,:) = zero
         call this%spect%ifft(this%tmpbuff,divergence,.true.)
 
-        !maxDiv = maxval(abs(divergence))
-        !if (maxDiv>1D-12) then
-        !    print*, "Max divergence exceeded"
-        !    stop 
-        !end if 
-        ! Done !
+        maxDiv = p_maxval(maxval(abs(divergence)))
+        
+        if (maxDiv>1D-12) then
+            !call message(3,"Divergence not zero, repeating projection")
+            call mpi_barrier(mpi_comm_world,ierr)
+            call this%PressureProjNP(uhat,vhat,what)
+            
+            ! Compute dudx_hat and add dvdy_hat
+            this%tmpbuff = this%spect%k1*uhat 
+            this%tmpbuff = this%tmpbuff + this%spect%k2*vhat 
+            this%tmpbuff = imi*this%tmpbuff
+
+            ! Transpose y -> z
+            call transpose_y_to_z(this%tmpbuff,this%tmpbuffz1C,this%sp_gp)
+            call transpose_y_to_z(what,this%tmpbuffz1E,this%sp_gpE)
+
+            ! Compute dwdz_hat and add
+            call this%Ops%ddz_E2C(this%tmpbuffz1E,this%tmpbuffz2C)
+            this%tmpbuffz1C = this%tmpbuffz1C + this%tmpbuffz2C
+
+            ! Transpose back from z -> y
+            call transpose_z_to_y(this%tmpbuffz1C,this%tmpbuff,this%sp_gp)
+
+            ! Compute IFFT to go back from y -> x
+            this%tmpbuff(:,this%sp_gp%ysz(2)/2+1,:) = zero
+            call this%spect%ifft(this%tmpbuff,divergence,.true.)
+            maxDiv = p_maxval(maxval(abs(divergence)))
+            if (maxDiv > 1D-12) then
+                    call GracefulExit("Divergence is not zero. Terminating run.",4324)
+            end if 
+            !call message(0,"Divergence is now:", p_maxval(maxval(abs(divergence))))
+        end if 
 
 
     end subroutine 
@@ -91,7 +122,7 @@ contains
 
         gp => this%sp_gp
         allocate(arr(gp%zsz(1),gp%zsz(2),gp%zsz(3)))
-    
+        nullify(gp) 
     end subroutine
 
 
@@ -149,7 +180,6 @@ contains
             allocate(this%tmpbuffz1E(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
             allocate(this%tmpbuffz2E(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
 
-
         end if 
 
     end subroutine
@@ -168,6 +198,11 @@ contains
         if (allocated(this%tmpbuffz2C)) deallocate(this%tmpbuffz2C)
         if (allocated(this%tmpbuffz1E)) deallocate(this%tmpbuffz1E)
         if (allocated(this%tmpbuffz2E)) deallocate(this%tmpbuffz2E)
+        nullify(this%sp_gp)
+        nullify(this%sp_gpE)
+        nullify(this%spect)
+        nullify(this%k1, this%k2)
+        nullify(this%Ops)
     end subroutine
 
     subroutine PressureProjNP(this,uhat,vhat,what)
@@ -196,6 +231,8 @@ contains
         ! Compute dpdz_hat and project out what
         call this%Ops%ddz_C2E(this%tmpbuffz1C,this%tmpbuffz2E,.true.,.true.)
         this%tmpbuffz1E = this%tmpbuffz1E - this%tmpbuffz2E
+        this%tmpbuffz1E(:,:,1) = zero
+        this%tmpbuffz1E(:,:,this%sp_gpE%zsz(3)) = zero
 
         ! Transpose z -> y
         call transpose_z_to_y(this%tmpbuffz1E,what,this%sp_gpE)
@@ -206,6 +243,7 @@ contains
         uhat = uhat - imi*this%spect%k1*this%tmpbuff
         vhat = vhat - imi*this%spect%k2*this%tmpbuff
 
+        ! Check if divergence is exactly zero
        
     end subroutine 
 
@@ -245,7 +283,8 @@ contains
         else
             print*, "Incomplete"    
         end if 
-
+        
+        nullify(tmp1, tmp2, uhat, vhat, what, k1, k2, k3)
         ! DONE - the new velocity fields is divergence free
     end subroutine
 
