@@ -25,6 +25,17 @@ module hooks
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
         end subroutine 
+        subroutine initfields_solid(decomp, dx, dy, dz, inpDirectory, mesh, fields, rho0)
+            import :: rkind
+            import :: decomp_info
+            type(decomp_info), intent(in) :: decomp
+            real(rkind), intent(inout) :: dx, dy, dz
+            character(len=*), intent(in) :: inpDirectory
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+            real(rkind),                     intent(inout) :: rho0
+
+        end subroutine 
     end interface
 
 
@@ -63,10 +74,10 @@ module hooks
         subroutine hook_bc(decomp,mesh,fields,tsim)
             import :: rkind
             import :: decomp_info
-            type(decomp_info),               intent(in) :: decomp
-            real(rkind),                     intent(in) :: tsim
-            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
-            real(rkind), dimension(:,:,:,:), intent(in) :: fields
+            type(decomp_info),               intent(in)    :: decomp
+            real(rkind),                     intent(in)    :: tsim
+            real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+            real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
         end subroutine
     end interface

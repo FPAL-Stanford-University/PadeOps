@@ -9,6 +9,10 @@ module operators
    
     implicit none
 
+    interface crossprod
+        module procedure crossprod_components, crossprod_arrays
+    end interface
+
 contains
 
     subroutine gradient(decomp, der, f, dfdx, dfdy, dfdz)
@@ -131,6 +135,26 @@ contains
 
         div = div + ytmp
 
-    end subroutine 
+    end subroutine
+
+    subroutine crossprod_components(rx,ry,rz,ux,uy,uz,vx,vy,vz)
+        real(kind=rkind), dimension(:,:,:), intent(in) :: ux,uy,uz,vx,vy,vz
+        real(kind=rkind), dimension(:,:,:), intent(out) :: rx,ry,rz
+    
+        rx = uy*vz - uz*vy
+        ry = uz*vx - ux*vz
+        rz = ux*vy - uy*vx
+    
+    end subroutine crossprod_components
+    
+    subroutine crossprod_arrays(r,u,v)
+        real(kind=rkind), dimension(:,:,:,:), intent(in) :: u,v
+        real(kind=rkind), dimension(:,:,:,:), intent(out) :: r
+    
+        r(:,:,:,1) = u(:,:,:,2)*v(:,:,:,3) - u(:,:,:,3)*v(:,:,:,2)
+        r(:,:,:,2) = u(:,:,:,3)*v(:,:,:,1) - u(:,:,:,1)*v(:,:,:,3)
+        r(:,:,:,3) = u(:,:,:,1)*v(:,:,:,2) - u(:,:,:,2)*v(:,:,:,1)
+    
+    end subroutine crossprod_arrays
 
 end module

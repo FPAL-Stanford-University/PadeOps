@@ -4,6 +4,7 @@ file(GLOB filters_source_files filters/*.F90)
 file(GLOB io_source_files io/*.F90)
 file(GLOB grid_source_files grid/*.F90)
 file(GLOB compressible_source_files compressible/*.F90)
+file(GLOB solid_source_files solid/*.F90)
 file(GLOB poisson_source_files incompressible/poisson/*.F90)
 file(GLOB incompressible_source_files incompressible/*.F90)
 
@@ -31,6 +32,14 @@ target_link_libraries(CompressibleOps PadeOps ${MPI_LIBRARIES})
 
 if (MPI_Fortran_COMPILER_FLAGS)
     set_target_properties(CompressibleOps PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")
+endif()
+
+# Create a library called SolidOps
+add_library(SolidOps STATIC ${grid_source_files} ${solid_source_files})
+target_link_libraries(SolidOps CompressibleOps ${MPI_LIBRARIES})
+
+if (MPI_Fortran_COMPILER_FLAGS)
+    set_target_properties(SolidOps PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")
 endif()
 
 # Create a library called IncompressibleOps

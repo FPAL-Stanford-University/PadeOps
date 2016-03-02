@@ -13,13 +13,13 @@ foreach ( sproblemfile ${sproblems_source_files} )
   
     add_executable( ${sproblemexec} ${sproblemfile} )
     
-    target_link_libraries( ${sproblemexec} PadeOps )
+    target_link_libraries( ${sproblemexec} SolidOps )
 
     if (MPI_Fortran_COMPILER_FLAGS)
         set_target_properties(${sproblemexec} PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")
     endif()
 
-    # file(MAKE_DIRECTORY ${PadeOps_BINARY_DIR}/problems/solids/${sproblemexec}_files)
-    # file(COPY ${sproblemexec}/input.dat DESTINATION ${PadeOps_BINARY_DIR}/problems/solids/${sproblemexec}_files/input.dat)
+    file(MAKE_DIRECTORY ${PadeOps_BINARY_DIR}/problems/solids/${sproblemexec}_files)
+    file(COPY ${sproblemexec}_files/input.dat DESTINATION ${PadeOps_BINARY_DIR}/problems/solids/${sproblemexec}_files)
     
 endforeach()

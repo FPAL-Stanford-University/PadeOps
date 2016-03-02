@@ -122,10 +122,10 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     use taylorgreen_data
 
     implicit none
-    type(decomp_info),               intent(in) :: decomp
-    real(rkind),                     intent(in) :: tsim
-    real(rkind), dimension(:,:,:,:), intent(in) :: mesh
-    real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(in)    :: tsim
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &

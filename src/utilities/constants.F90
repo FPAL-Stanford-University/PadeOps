@@ -17,7 +17,14 @@ module constants
 
     real(rkind), parameter :: half = 1._rkind/2._rkind
     real(rkind), parameter :: third = 1._rkind/3._rkind
+    real(rkind), parameter :: fourth = 1._rkind/4._rkind
+    real(rkind), parameter :: fifth = 1._rkind/5._rkind
+    real(rkind), parameter :: sixth = 1._rkind/6._rkind
+    real(rkind), parameter :: seventh = 1._rkind/7._rkind
+    real(rkind), parameter :: eighth = 1._rkind/8._rkind
+
     real(rkind), parameter :: twothird = 2._rkind/3._rkind
+    real(rkind), parameter :: fourthird = 4._rkind/3._rkind
 
     real(rkind), parameter :: pi=4._rkind*atan(1._rkind)
     
