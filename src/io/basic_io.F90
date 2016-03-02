@@ -1,5 +1,6 @@
 module basic_io
     use kind_parameters, only: rkind, clen
+    implicit none 
 interface write_binary
     module procedure write_2D_binary, write_3D_binary
 end interface
@@ -9,15 +10,20 @@ contains
     subroutine write_2d_ascii(raw_data,filename)
         real(kind=rkind), intent(in) :: raw_data(:,:)
         character(len=*), intent(in) :: filename
-        integer :: n1, i
+        integer :: n1, im, n2
+        integer :: i, j 
 
         n1 = size(raw_data,1)
+        n2 = size(raw_data,2)
         OPEN(UNIT=10, FILE=trim(filename))
 
-        do i = 1,n1
-            write(10,*) raw_data(i,:) ! Write with default precision (all sigfigs are written)
-        end do
-
+        !do i = 1,n1
+        !    do j = 1,n2
+        !    write(10,*, advance='no') raw_data(i,j) ! Write with default precision (all sigfigs are written)
+        !end do
+        do i=1,n1
+            write(10,"(100g15.5)") ( raw_data(i,j), j=1,n2 )
+        enddo
         CLOSE(10)
     end subroutine
 

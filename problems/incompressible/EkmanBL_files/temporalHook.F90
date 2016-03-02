@@ -7,8 +7,11 @@ module temporalHook
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
+    use AllStatistics 
     integer :: nt_print2screen = 10
     integer :: nt_getMaxKE = 10
+    integer :: tid_statsDump = 200
+    real(rkind) :: time_startDumping = 10._rkind
     integer :: ierr 
 contains
 
@@ -28,6 +31,10 @@ contains
         if (mod(gp%step,gp%t_dataDump)==0) then
            call message("Data dump!")
            call dumpData4Matlab(gp) 
+        end if 
+
+        if ((mod(gp%step,tid_statsDump) == 0) .and. (gp%tsim > time_startDumping)) then
+            call dump_stats(gp)
         end if 
 
         call mpi_barrier(mpi_comm_world,ierr)

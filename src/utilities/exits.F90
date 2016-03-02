@@ -17,7 +17,7 @@ module exits
     end interface
 
     interface nancheck
-        module procedure nancheck_std, nancheck_ind
+        module procedure nancheck_std, nancheck_ind, nancheck_std_arr3
     end interface
      
 contains
@@ -114,6 +114,26 @@ contains
                         end if
                     end do
                     if (nancheck) exit
+                end do
+                if (nancheck) exit
+            end do
+            if (nancheck) exit
+        end do
+
+    end function
+
+    logical function nancheck_std_arr3(f) result(nancheck)
+        real(rkind), dimension(:,:,:), intent(in) :: f
+        integer :: i,j,k
+        
+        nancheck = .FALSE.
+        do k = 1,size(f,3)
+            do j = 1,size(f,2)
+                do i = 1,size(f,1)
+                    if ( isnan(f(i,j,k)) .OR. ( f(i,j,k) + one == f(i,j,k) ) ) then
+                        nancheck = .TRUE.
+                        exit
+                    end if
                 end do
                 if (nancheck) exit
             end do

@@ -13,7 +13,9 @@ program EkmanBL
     use EkmanBL_IO, only: start_io, finalize_io
     use constants, only: half 
     use temporalhook, only: doTemporalStuff
-    use timer, only: tic, toc 
+    use timer, only: tic, toc
+    use allStatistics, only: init_stats, finalize_stats
+
     implicit none
 
     type(igrid), allocatable, target :: igp
@@ -31,7 +33,9 @@ program EkmanBL
     call start_io(igp)                !<-- Start I/O by creating a header file (see io.F90)
 
     call igp%printDivergence()
-   
+  
+    call init_stats(igp)  
+
     call tic() 
     do while (igp%tsim < igp%tstop) 
        
@@ -46,7 +50,9 @@ program EkmanBL
     call finalize_io                  !<-- Close the header file (wrap up i/o)
 
     call igp%destroy()                !<-- Destroy the IGRID derived type 
-    
+   
+    call finalize_stats()
+
     deallocate(igp)                   !<-- Deallocate all the memory associated with scalar defaults
     
     call MPI_Finalize(ierr)           !<-- Terminate MPI 

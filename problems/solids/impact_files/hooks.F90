@@ -1,13 +1,10 @@
-module shocktube_data
+module impact_data
     use kind_parameters,  only: rkind
     use constants,        only: one,eight
     implicit none
     
-    real(rkind) :: rhoL = one
-    real(rkind) :: rhoR = one/eight
-
-    real(rkind) :: pL = one
-    real(rkind) :: pR = 0.1_rkind
+    real(rkind) :: uimpact = 100._rkind
+    real(rkind) :: pinit   = real(1.0D5,rkind)
 
 end module
 
@@ -16,7 +13,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: half,one
     use decomp_2d,        only: decomp_info
 
-    use shocktube_data
+    use impact_data
 
     implicit none
 
@@ -45,7 +42,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - half
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -56,37 +53,50 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inpDirectory,mesh,fields)
+subroutine initfields_solid(decomp,dx,dy,dz,inpDirectory,mesh,fields,rho0)
     use kind_parameters,  only: rkind
-    use constants,        only: zero,half,one,two,pi,eight
-    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
+    use constants,        only: zero,third,half,one,two,pi,eight
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
+                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
     
-    use shocktube_data
+    use impact_data
 
     implicit none
     character(len=*),                                               intent(in)    :: inpDirectory
     type(decomp_info),                                              intent(in)    :: decomp
     real(rkind),                                                    intent(in)    :: dx,dy,dz
+    real(rkind),                                                    intent(out)   :: rho0
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
 
-    associate( rho => fields(:,:,:,rho_index), u => fields(:,:,:,u_index), &
-                 v => fields(:,:,:,  v_index), w => fields(:,:,:,w_index), &
-                 p => fields(:,:,:,  p_index), T => fields(:,:,:,T_index), &
-                 e => fields(:,:,:,  e_index),                             &
+    associate( rho => fields(:,:,:,rho_index),   u => fields(:,:,:,  u_index), &
+                 v => fields(:,:,:,  v_index),   w => fields(:,:,:,  w_index), &
+                 p => fields(:,:,:,  p_index),   T => fields(:,:,:,  T_index), &
+                 e => fields(:,:,:,  e_index), g11 => fields(:,:,:,g11_index), &
+               g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
+               g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), & 
+               g23 => fields(:,:,:,g23_index), g31 => fields(:,:,:,g31_index), & 
+               g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
-        tmp = half * ( one+tanh(x/(dx)) )
+        tmp = tanh( (x-half)/dx )
 
-        rho = (one-tmp)*rhoL + tmp*rhoR
-        u   = zero
+        u   = -uimpact*tmp
         v   = zero
         w   = zero
-        p   = (one-tmp)*pL + tmp*pR
-           
+        p   = pinit
+
+        g11 = one;  g12 = zero; g13 = zero
+        g21 = zero; g22 = one;  g23 = zero
+        g31 = zero; g32 = zero; g33 = one
+
+        ! Get rho compatible with det(g) and rho0
+        tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
+        rho = rho0 * tmp
+
     end associate
 
 end subroutine
@@ -94,10 +104,11 @@ end subroutine
 subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
-    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
+                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
 
-    use shocktube_data
+    use impact_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -116,14 +127,17 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+               g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
+               g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
+               g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/shocktube_", vizcount, ".dat"
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/impact_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
         do i=1,decomp%ysz(1)
-            write(outputunit,'(8ES26.16)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
-                                           mu(i,1,1), bulk(i,1,1), kap(i,1,1)
+            write(outputunit,'(10ES26.16)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
+                                           g11(i,1,1), g21(i,1,1), mu(i,1,1), bulk(i,1,1), kap(i,1,1)
         
         end do
         close(outputunit)
@@ -134,10 +148,10 @@ end subroutine
 subroutine hook_bc(decomp,mesh,fields,tsim)
     use kind_parameters,  only: rkind
     use constants,        only: zero
-    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
 
-    use shocktube_data
+    use impact_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -156,12 +170,12 @@ end subroutine
 
 subroutine hook_timestep(decomp,mesh,fields,tsim)
     use kind_parameters,  only: rkind
-    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+    use SolidGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use exits,            only: message
-    use reductions,       only: P_MAXVAL,P_MINVAL
+    use reductions,       only: P_MAXVAL
 
-    use shocktube_data
+    use impact_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -178,7 +192,6 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
         
         call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
         call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
-        call message(2,"Minimum bulk viscosity",P_MINVAL(bulk))
         call message(2,"Maximum conductivity",P_MAXVAL(kap))
 
     end associate

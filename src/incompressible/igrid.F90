@@ -47,7 +47,7 @@ module IncompressibleGridNP
         complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what
         complex(rkind), dimension(:,:,:), pointer :: oxhat, oyhat, ozhat
 
-        real(rkind), dimension(:,:,:,:), allocatable :: rbuffxC, rbuffyC, rbuffzC
+        real(rkind), dimension(:,:,:,:), allocatable, public :: rbuffxC, rbuffyC, rbuffzC
         real(rkind), dimension(:,:,:,:), allocatable :: rbuffxE, rbuffyE, rbuffzE
         
         complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffzC
@@ -59,6 +59,8 @@ module IncompressibleGridNP
             
         real(rkind) :: nu0, Gx, Gy, Gz, fCor, dtby2
 
+        integer :: tid_statsDump
+        real(rkind) :: time_startDumping 
         
         integer :: runID
         contains
@@ -70,7 +72,7 @@ module IncompressibleGridNP
             procedure :: AdamsBashforth
             procedure, private :: interp_wHat_to_wHatC
             procedure, private :: interp_w_to_wC
-            procedure, private :: compute_vorticity
+            procedure :: compute_vorticity
             procedure, private :: addNonLinearTerm_Rot
             procedure, private :: addNonLinearTerm_Cnsrv
             procedure, private :: addCoriolisTerm
@@ -107,16 +109,19 @@ contains
         real(rkind) :: u_g = 1._rkind
         integer :: runID = 0
         integer :: t_dataDump = 99999
+        integer :: tid_statsDump = 1000
+        real(rkind) :: time_startDumping = 100000._rkind
         integer :: t_restartDump = 99999
         logical :: ViscConsrv = .TRUE. 
         real(rkind) :: Pr = 0.7_rkind 
+        integer :: topWall = 2, botWall = 1
         real(rkind) :: deltat_by_D, ustar_by_G, Ref, f        
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
                                   periodicx, periodicy, periodicz, &
                                                        prow, pcol, &
                                         t_restartDump, t_dataDump
-        namelist /IINPUT/  nu, useSGS, runID, Ref, Pr, deltat_by_D, ustar_by_G, f 
+        namelist /IINPUT/  nu, useSGS, runID, Ref, Pr, deltat_by_D, ustar_by_G, f, tid_statsDump, time_startDumping 
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -153,7 +158,34 @@ contains
         this%tstop = tstop 
         this%t_dataDump = t_dataDump
 
+        this%tid_statsDump = tid_statsDump
+        this%time_startDumping = time_startDumping 
+       
         this%fCor = f
+
+        select case(topWall)
+        case(2)
+            topBC_u = .true.
+            topBC_v = .true.
+        case(1)
+            topBC_u = .false.
+            topBC_v = .false.
+        case default 
+            call GracefulExit("Incorrect choice for topWall. Only two choices &
+            & allowed: slip or no slip",101) 
+        end select 
+
+        select case(botWall)
+        case(2)
+            botBC_u = .true.
+            botBC_v = .true.
+        case(1)
+            botBC_u = .false.
+            botBC_v = .false.
+        case default 
+            call GracefulExit("Incorrect choice for botWall. Only two choices & 
+            & allowed: slip or no slip",101) 
+        end select 
 
         if (.not. periodicx) then
             call GracefulExit("Currently only Periodic BC is supported in x direction",102)
