@@ -10,8 +10,8 @@ module temporalHook
     use AllStatistics 
     integer :: nt_print2screen = 10
     integer :: nt_getMaxKE = 10
-    integer :: tid_statsDump = 200
-    real(rkind) :: time_startDumping = 10._rkind
+    integer :: tid_statsDump = 10000
+    real(rkind) :: time_startDumping = 15000._rkind
     integer :: ierr 
 contains
 

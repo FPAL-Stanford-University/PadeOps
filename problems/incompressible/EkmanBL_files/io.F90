@@ -116,19 +116,19 @@ contains
         runIDX = gp%runID
         tid = gp%step 
 
-        write(tempname,"(A3,I2.2,A2,I4.4,A2,I5.5,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_uVEL",".out"
+        write(tempname,"(A3,I2.2,A2,I4.4,A2,I6.6,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_uVEL",".out"
         fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
         open(fid,file=trim(fname),form='unformatted',status='replace')
         write(fid) fieldsPhys(:,:,:,1)
         close(fid)
 
-        write(tempname,"(A3,I2.2,A2,I4.4,A2,I5.5,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_vVEL",".out"
+        write(tempname,"(A3,I2.2,A2,I4.4,A2,I6.6,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_vVEL",".out"
         fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
         open(fid,file=trim(fname),form='unformatted',status='replace')
         write(fid) fieldsPhys(:,:,:,2)
         close(fid)
 
-        write(tempname,"(A3,I2.2,A2,I4.4,A2,I5.5,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_wVEL",".out"
+        write(tempname,"(A3,I2.2,A2,I4.4,A2,I6.6,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_wVEL",".out"
         fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
         open(fid,file=trim(fname),form='unformatted',status='replace')
         write(fid) fieldsPhys(:,:,:,3)

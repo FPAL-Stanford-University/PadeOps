@@ -6,9 +6,9 @@
 #SBATCH -p normal
 
 #SBATCH --time=48:00:00
-#SBATCH --qos=
+#SBATCH --qos=normal
 
-#SBATCH --nodes=4
+#SBATCH --nodes=8
 #SBATCH --ntasks-per-node=16
 
 # Load required modules
