@@ -23,7 +23,7 @@ module IncompressibleGridNP
     logical :: topBC_u = .true.  , topBC_v = .true. , topBC_w = .false.
     logical :: botBC_u = .false. , botBC_v = .false., botBC_w = .false. 
 
-    logical :: rotationalForm = .true. 
+    integer, parameter :: AdvectionForm = 3 
 
     type, extends(grid) :: igrid
         
@@ -53,7 +53,7 @@ module IncompressibleGridNP
         complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffzC
         complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyE, cbuffzE
 
-        complex(rkind), dimension(:,:,:,:), allocatable :: duidxj_hat, rhsC, rhsE, OrhsC, OrhsE 
+        complex(rkind), dimension(:,:,:,:), allocatable :: duidxj, rhsC, rhsE, OrhsC, OrhsE 
         complex(rkind), dimension(:,:,:), pointer:: u_rhs, v_rhs, wC_rhs, w_rhs 
         complex(rkind), dimension(:,:,:), pointer:: u_Orhs, v_Orhs, w_Orhs
             
@@ -73,8 +73,10 @@ module IncompressibleGridNP
             procedure, private :: interp_wHat_to_wHatC
             procedure, private :: interp_w_to_wC
             procedure :: compute_vorticity
+            procedure, private :: compute_duidxj
             procedure, private :: addNonLinearTerm_Rot
             procedure, private :: addNonLinearTerm_Cnsrv
+            procedure, private :: addNonLinearTerm_SkewSymm 
             procedure, private :: addCoriolisTerm
             procedure, private :: addViscousTerm 
     end type
@@ -235,7 +237,7 @@ contains
         allocate(this%divergence(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
         allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),1))
         call this%spectC%alloc_r2c_out(this%SfieldsC,6)
-        !call this%spectC%alloc_r2c_out(this%duidxj_hat,9)
+        call this%spectC%alloc_r2c_out(this%duidxj,9)
         call this%spectC%alloc_r2c_out(this%rhsC,3)
         call this%spectC%alloc_r2c_out(this%OrhsC,2)
         call this%spectE%alloc_r2c_out(this%rhsE,1)
@@ -504,6 +506,95 @@ contains
         nullify(ctmpz2) 
     end subroutine
 
+    subroutine addNonLinearTerm_SkewSymm(this)
+        class(igrid), intent(inout), target :: this
+        real(rkind), dimension(:,:,:), pointer :: rtmpx1
+        complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2!, ctmpz3
+        complex(rkind), dimension(:,:,:), pointer :: ctmpy1, ctmpy2
+        complex(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
+        complex(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
+        complex(rkind), dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
+
+        dudx => this%duidxj(:,:,:,1); dudy => this%duidxj(:,:,:,2); dudz => this%duidxj(:,:,:,3); 
+        dvdx => this%duidxj(:,:,:,4); dvdy => this%duidxj(:,:,:,5); dvdz => this%duidxj(:,:,:,6); 
+        dwdx => this%duidxj(:,:,:,7); dwdy => this%duidxj(:,:,:,8); dwdz => this%duidxj(:,:,:,9); 
+
+        ctmpz1 => this%cbuffzC(:,:,:,1)
+
+        rtmpx1 => this%rbuffxC(:,:,:,1)
+        ctmpz1 => this%cbuffzC(:,:,:,1)
+        ctmpz2 => this%cbuffzE(:,:,:,1)
+        ctmpy1 => this%cbuffyC(:,:,:,1)
+        ctmpy2 => this%cbuffyE(:,:,:,1)
+        
+        call this%addNonLinearTerm_Cnsrv()
+        this%u_rhs = half*this%u_rhs
+        this%v_rhs = half*this%v_rhs
+        this%w_rhs = half*this%w_rhs
+
+        call this%spectC%ifft(dudx,rtmpx1)
+        rtmpx1 = rtmpx1*this%u
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%u_rhs = this%u_rhs - half*ctmpy1
+        
+        call this%spectC%ifft(dudy,rtmpx1)
+        rtmpx1 = rtmpx1*this%v
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%u_rhs = this%u_rhs - half*ctmpy1
+
+        call this%spectC%ifft(dudz,rtmpx1)
+        rtmpx1 = rtmpx1*this%w
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%u_rhs = this%u_rhs - half*ctmpy1
+
+        call this%spectC%ifft(dvdx,rtmpx1)
+        rtmpx1 = rtmpx1*this%u
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%v_rhs = this%v_rhs - half*ctmpy1
+
+        call this%spectC%ifft(dvdy,rtmpx1)
+        rtmpx1 = rtmpx1*this%v
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%v_rhs = this%v_rhs - half*ctmpy1
+
+        call this%spectC%ifft(dvdz,rtmpx1)
+        rtmpx1 = rtmpx1*this%wC
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%v_rhs = this%v_rhs - half*ctmpy1
+
+        
+        call this%spectC%ifft(dwdx,rtmpx1)
+        rtmpx1 = rtmpx1*this%u
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)
+        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)  
+        this%w_rhs = this%w_rhs - half*ctmpy2
+    
+
+        call this%spectC%ifft(dwdy,rtmpx1)
+        rtmpx1 = rtmpx1*this%v
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)
+        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)  
+        this%w_rhs = this%w_rhs - half*ctmpy2
+
+
+        call this%spectC%ifft(dwdz,rtmpx1)
+        rtmpx1 = rtmpx1*this%wC
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)
+        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)  
+        this%w_rhs = this%w_rhs - half*ctmpy2
+
+        nullify( dudx, dudy, dudz) 
+        nullify( dvdx, dvdy, dvdz)
+        nullify( dwdx, dwdy, dwdz)
+    end subroutine
+
+
     subroutine addNonLinearTerm_Cnsrv(this)
         class(igrid), intent(inout), target :: this
         real(rkind), dimension(:,:,:), pointer :: rtmpx1
@@ -631,12 +722,15 @@ contains
     subroutine AdamsBashforth(this)
         class(igrid), intent(inout) :: this
 
-        if (RotationalForm) then
-            ! Step 1: Non Linear Term 
+        ! Step 1: Non Linear Term 
+        select case(AdvectionForm)
+        case (1) ! Rotational Form
             call this%AddNonLinearTerm_Rot()
-        else
+        case (2) ! Conservative Form
             call this%AddNonLinearTerm_Cnsrv()
-        end if 
+        case (3) ! Skew Symmetric Form
+            call this%AddNonLinearTerm_SkewSymm()
+        end select  
 
         ! Step 2: Coriolis Term
         call this%AddCoriolisTerm()
@@ -674,10 +768,13 @@ contains
         call this%interp_wHat_to_wHatC()
 
 
-        if (RotationalForm) then
-            ! STEP 9: Compute Vorticity 
+        ! STEP 9: Compute either vorticity or duidxj 
+        select case (AdvectionForm)
+        case (1)    
             call this%compute_Vorticity()
-        end if 
+        case (3)
+            call this%compute_duidxj()
+        end select  
 
         ! STEP 10: Copy the RHS for using during next time step 
         this%u_Orhs = this%u_rhs
@@ -686,4 +783,50 @@ contains
 
     end subroutine
 
+    subroutine compute_duidxj(this)
+        class(igrid), intent(inout), target :: this
+        complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
+        complex(rkind), dimension(:,:,:), pointer :: ctmpz3, ctmpz4
+        complex(rkind), dimension(:,:,:), pointer :: ctmpy1, ctmpy2
+        complex(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
+        complex(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
+        complex(rkind), dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
+
+        dudx => this%duidxj(:,:,:,1); dudy => this%duidxj(:,:,:,2); dudz => this%duidxj(:,:,:,3); 
+        dvdx => this%duidxj(:,:,:,4); dvdy => this%duidxj(:,:,:,5); dvdz => this%duidxj(:,:,:,6); 
+        dwdx => this%duidxj(:,:,:,7); dwdy => this%duidxj(:,:,:,8); dwdz => this%duidxj(:,:,:,9); 
+
+        ctmpz1 => this%cbuffzC(:,:,:,1)
+        ctmpz2 => this%cbuffzE(:,:,:,1)
+        ctmpz3 => this%cbuffzC(:,:,:,2)
+        ctmpz4 => this%cbuffzE(:,:,:,2)
+        
+        ctmpy1 => this%cbuffyC(:,:,:,1)
+        ctmpy2 => this%cbuffyE(:,:,:,1)
+
+
+
+        dudx = imi*this%spectC%k1*this%uhat
+        dudy = imi*this%spectC%k2*this%uhat
+        dvdx = imi*this%spectC%k1*this%vhat
+        dvdx = imi*this%spectC%k2*this%vhat
+        dwdx = imi*this%spectC%k1*this%whatC
+        dwdx = imi*this%spectC%k2*this%whatC
+       
+
+        call transpose_y_to_z(this%uhat,ctmpz1, this%sp_gpC)
+        call this%Ops%ddz_C2C(ctmpz1,ctmpz3,topBC_u,botBC_u) 
+        call transpose_z_to_y(ctmpz3,dudz,this%sp_gpC)
+
+        call transpose_y_to_z(this%vhat,ctmpz1, this%sp_gpC)
+        call this%Ops%ddz_C2C(ctmpz1,ctmpz3,topBC_v,botBC_v) 
+        call transpose_z_to_y(ctmpz3,dvdz,this%sp_gpC)
+
+        call transpose_y_to_z(this%what,ctmpz2, this%sp_gpE)
+        call this%Ops%ddz_E2C(ctmpz2,ctmpz3) 
+        call transpose_z_to_y(ctmpz3,dwdz,this%sp_gpC)
+        nullify( dudx, dudy, dudz) 
+        nullify( dvdx, dvdy, dvdz)
+        nullify( dwdx, dwdy, dwdz)
+    end subroutine
 end module 
