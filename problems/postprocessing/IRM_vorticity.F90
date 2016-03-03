@@ -67,11 +67,13 @@ contains
     end subroutine
 
     subroutine write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
-                            R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi)
+                            R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi, &
+                            pdil, meandiss, production, dissipation, pdil_fluct)
         integer, intent(in) :: step
         real(rkind), dimension(:,:,:), intent(in) :: vort_avgz
         real(rkind), dimension(:,:),   intent(in) :: TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation
         real(rkind), dimension(:,:),   intent(in) :: R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi
+        real(rkind), dimension(:,:),   intent(in) :: pdil, meandiss, production, dissipation, pdil_fluct
 
         character(len=clen) :: post2d_file
         integer :: i, ierr, iounit2d=91
@@ -111,6 +113,11 @@ contains
                     write(iounit2d) rhop_sq
                     write(iounit2d) eta
                     write(iounit2d) xi
+                    write(iounit2d) pdil
+                    write(iounit2d) meandiss
+                    write(iounit2d) production
+                    write(iounit2d) dissipation
+                    write(iounit2d) pdil_fluct
                     close(iounit2d)
                 end if
             end if
@@ -1184,7 +1191,8 @@ program IRM_vorticity
 
         ! Write out 2D postprocessing file
         call write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
-                          R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi)
+                          R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi, &
+                          pdil, meandiss, production, dissipation, pdil_fluct)
 
         write(time_message,'(A,I4,A)') "Time to postprocess step ", step, " :"
         call toc(trim(time_message))
