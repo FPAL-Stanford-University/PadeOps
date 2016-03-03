@@ -1,24 +1,26 @@
 module IRM_vorticity_mod
     use mpi
-    use kind_parameters, only: rkind, clen, mpirkind, mpickind
-    use constants,       only: zero, eps, half, one, three
-    use fftstuff,        only: ffts
-    use miranda_tools,   only: miranda_reader
-    use io_VTK_stuff,    only: io_VTK
-    use DerivativesMod,  only: derivatives
-    use FiltersMod,      only: filters
-    use decomp_2d,       only: nrank, nproc, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y, &
-                               decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize
-    use exits,           only: message, warning, GracefulExit
-    use reductions,      only: P_MAXVAL, P_AVGZ
+    use kind_parameters,  only: rkind, clen, mpirkind, mpickind
+    use constants,        only: zero, eps, half, one, three
+    use fftstuff,         only: ffts
+    use miranda_tools,    only: miranda_reader
+    use io_VTK_stuff,     only: io_VTK
+    use DerivativesMod,   only: derivatives
+    use FiltersMod,       only: filters
+    use decomp_2d,        only: nrank, nproc, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y, &
+                                decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize
+    use mytranspose2DMod, only: mytranspose2D
+    use exits,            only: message, warning, GracefulExit
+    use reductions,       only: P_MAXVAL, P_AVGZ
 
     implicit none
 
     type(miranda_reader) :: mir
     type(io_VTK)         :: viz
-    type(derivatives)    :: der
+    type(derivatives)    :: der, der2D
     type(filters)        :: gfil
     type(ffts)           :: fftz
+    type(mytranspose2D)  :: gp2D
 
     character(len=clen)  :: inputdir, outputdir                                                 ! Input and output dirs
     integer              :: prow, pcol                                                          ! Procs in x and z
@@ -26,6 +28,9 @@ module IRM_vorticity_mod
     character(len=4)     :: derivative_x = 'cd10', derivative_y = 'cd10', derivative_z = 'cd10' ! Derivative method to use
 
     logical              :: writeviz                                                            ! Write out VTK viz files?
+
+    integer              :: XY_COMM
+    integer              :: xyrank, xyproc
 
     ! This part is from the Miranda problem file to recalculate the physical species diffusivity
     ! Material properties list ------ Property --------  Air ------------ CO2 --------
@@ -567,6 +572,167 @@ contains
 
     end subroutine
 
+    subroutine get_duidxj(u,v,w,duidxj)
+        use operators, only: gradient
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)),            intent(in)  :: u, v, w
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 9), target, intent(out) :: duidxj
+
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+
+        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+
+        call gradient(mir%gp,der,u,dudx,dudy,dudz)
+        call gradient(mir%gp,der,v,dvdx,dvdy,dvdz)
+        call gradient(mir%gp,der,w,dwdx,dwdy,dwdz)
+
+    end subroutine
+
+    subroutine get_duidxj2D(u,v,w,duidxj2D)
+        use operators, only: gradient
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)),            intent(in)  :: u, v, w
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), 9), target, intent(out) :: duidxj2D
+
+        real(rkind), dimension(mir%gp%xsz(1),mir%gp%xsz(2),1) :: xbuf1, xbuf2
+        real(rkind), dimension(:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+
+        dudx => duidxj2D(:,:,1); dudy => duidxj2D(:,:,2); dudz => duidxj2D(:,:,3);
+        dvdx => duidxj2D(:,:,4); dvdy => duidxj2D(:,:,5); dvdz => duidxj2D(:,:,6);
+        dwdx => duidxj2D(:,:,7); dwdy => duidxj2D(:,:,8); dwdz => duidxj2D(:,:,9);
+
+        ! Set Z derivatives to zero
+        dudz = zero; dvdz = zero; dwdz = zero
+
+        ! dudx
+        call gp2D%transpose_y_to_x(u,xbuf1)
+        call der2D%ddx(xbuf1,xbuf2)
+        call gp2D%transpose_x_to_y(xbuf2,dudx)
+        
+        ! dvdx
+        call gp2D%transpose_y_to_x(v,xbuf1)
+        call der2D%ddx(xbuf1,xbuf2)
+        call gp2D%transpose_x_to_y(xbuf2,dvdx)
+        
+        ! dwdx
+        call gp2D%transpose_y_to_x(w,xbuf1)
+        call der2D%ddx(xbuf1,xbuf2)
+        call gp2D%transpose_x_to_y(xbuf2,dwdx)
+
+        call der2D%ddy(u,dudy)
+        call der2D%ddy(v,dvdy)
+        call der2D%ddy(w,dwdy)
+        
+    end subroutine
+
+    subroutine get_tauij(duidxj,mu,beta,tauij)
+        use constants, only: two, three, four
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 9), target, intent(in)  :: duidxj
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)   ),         intent(in)  :: mu, beta
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 6), target, intent(out) :: tauij
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(:,:,:), pointer :: tauxx, tauxy, tauxz, tauyy, tauyz, tauzz
+
+        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+        
+        tauxx => tauij(:,:,:,1); tauxy => tauij(:,:,:,2); tauxz => tauij(:,:,:,3);
+                                 tauyy => tauij(:,:,:,4); tauyz => tauij(:,:,:,5);
+                                                          tauzz => tauij(:,:,:,6);
+
+        tauxx = ( (four/three)*mu + beta )*dudx + (beta - (two/three)*mu)*(dvdy+dwdz)
+        tauxy = mu * (dudy + dvdx)
+        tauxz = mu * (dudz + dwdx)
+        tauyy = ( (four/three)*mu + beta )*dvdy + (beta - (two/three)*mu)*(dudx+dwdz)
+        tauyz = mu * (dvdz + dwdy)
+        tauzz = ( (four/three)*mu + beta )*dwdz + (beta - (two/three)*mu)*(dudx+dvdy)
+    end subroutine
+
+    subroutine get_tauij_avg(tauij, tauij_avg)
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 6), intent(in)  :: tauij
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2),                6), intent(out) :: tauij_avg
+
+        integer :: i
+
+        do i=1,6
+            call P_AVGZ( mir%gp, tauij(:,:,:,i), tauij_avg(:,:,i) )
+        end do
+    end subroutine
+
+    subroutine get_dissipation(upp,vpp,wpp,tauij,dissipation,pdil_fluct)
+        use operators, only: gradient
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)   ),         intent(in)  :: upp,vpp,wpp
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 6), target, intent(in)  :: tauij
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)),                           intent(out) :: dissipation, pdil_fluct
+        
+        real(rkind), dimension(:,:,:), pointer :: tauxx, tauxy, tauxz, tauyy, tauyz, tauzz
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) :: ytmp1,ytmp2,ytmp3,diss,pdil
+
+        tauxx => tauij(:,:,:,1); tauxy => tauij(:,:,:,2); tauxz => tauij(:,:,:,3);
+                                 tauyy => tauij(:,:,:,4); tauyz => tauij(:,:,:,5);
+                                                          tauzz => tauij(:,:,:,6);
+
+        ! Dissipation = <tau_ij dupp_i/dx_j>
+        call gradient(mir%gp,der,upp,ytmp1,ytmp2,ytmp3)
+        diss = tauxx*ytmp1 + tauxy*ytmp2 + tauxz*ytmp3
+        pdil = ytmp1
+
+        call gradient(mir%gp,der,vpp,ytmp1,ytmp2,ytmp3)
+        diss = diss + tauxy*ytmp1 + tauyy*ytmp2 + tauyz*ytmp3
+        pdil = pdil + ytmp2
+
+        call gradient(mir%gp,der,wpp,ytmp1,ytmp2,ytmp3)
+        diss = diss + tauxz*ytmp1 + tauyz*ytmp2 + tauzz*ytmp3
+        pdil = pdil + ytmp3
+
+        call P_AVGZ( mir%gp, diss, dissipation )
+
+        call P_AVGZ( mir%gp, mir%p*pdil, pdil_fluct )
+
+    end subroutine
+
+    subroutine get_production(R11,R12,R13,R22,R23,R33,duidxj2D,rho_avg,production)
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)   ),         intent(in)  :: R11,R12,R13,R22,R23,R33,rho_avg
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), 9), target, intent(in)  :: duidxj2D
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)   ),         intent(out) :: production
+        
+        real(rkind), dimension(:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+
+        dudx => duidxj2D(:,:,1); dudy => duidxj2D(:,:,2); dudz => duidxj2D(:,:,3);
+        dvdx => duidxj2D(:,:,4); dvdy => duidxj2D(:,:,5); dvdz => duidxj2D(:,:,6);
+        dwdx => duidxj2D(:,:,7); dwdy => duidxj2D(:,:,8); dwdz => duidxj2D(:,:,9);
+
+        production = R11*dudx + R12*dudy + R13*dudz &
+                   + R12*dvdx + R22*dvdy + R23*dvdz &
+                   + R13*dwdx + R23*dwdy + R33*dwdz
+
+        production = -rho_avg*production
+
+    end subroutine
+
+    subroutine get_meandiss(tauij_avg,duidxj2D,meandiss)
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), 6), target, intent(in)  :: tauij_avg
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), 9), target, intent(in)  :: duidxj2D
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)   ),         intent(out) :: meandiss
+        
+        real(rkind), dimension(:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(:,:), pointer :: tauxx, tauxy, tauxz, tauyy, tauyz, tauzz
+
+        dudx => duidxj2D(:,:,1); dudy => duidxj2D(:,:,2); dudz => duidxj2D(:,:,3);
+        dvdx => duidxj2D(:,:,4); dvdy => duidxj2D(:,:,5); dvdz => duidxj2D(:,:,6);
+        dwdx => duidxj2D(:,:,7); dwdy => duidxj2D(:,:,8); dwdz => duidxj2D(:,:,9);
+        
+        tauxx => tauij_avg(:,:,1); tauxy => tauij_avg(:,:,2); tauxz => tauij_avg(:,:,3);
+                                   tauyy => tauij_avg(:,:,4); tauyz => tauij_avg(:,:,5);
+                                                              tauzz => tauij_avg(:,:,6);
+
+        meandiss = tauxx*dudx + tauxy*dudy + tauxz*dudz &
+                 + tauxy*dvdx + tauyy*dvdy + tauyz*dvdz &
+                 + tauxz*dwdx + tauyz*dwdy + tauzz*dwdz
+
+    end subroutine
+
 end module
 
 program IRM_vorticity
@@ -602,6 +768,12 @@ program IRM_vorticity
     real(rkind), dimension(:,:), pointer :: rho_avg, u_avg, v_avg, w_avg, CO2_avg, TKE_avg, div_avg, chi_avg, MMF_avg, density_self_correlation
     real(rkind), dimension(:,:), pointer :: R11, R12, R13, R22, R23, R33
     real(rkind), dimension(:,:), pointer :: a_x, a_y, a_z, rhop_sq, eta, xi
+    real(rkind), dimension(:,:), pointer :: p_avg, pdil, meandiss, production, dissipation, pdil_fluct
+
+    real(rkind), dimension(:,:,:,:), allocatable :: duidxj, tauij
+    real(rkind), dimension(:,:,:),   allocatable :: duidxj2D, tauij_avg
+
+    real(rkind), dimension(:,:,:), allocatable :: xtmp1, xtmp2, ytmp1
 
     real(rkind), dimension(:), allocatable :: Y_air_x, Y_CO2_x
 
@@ -654,6 +826,20 @@ program IRM_vorticity
                           mir%dx,        mir%dy,        mir%dz, &
                    mir%periodicx, mir%periodicy, mir%periodicz, &
                     derivative_x,  derivative_y,  derivative_z  )
+    call der2D%init(                                    mir%gp, &
+                          mir%dx,        mir%dy,        mir%dz, &
+                   mir%periodicx, mir%periodicy, mir%periodicz, &
+                    derivative_x,  derivative_y,  derivative_z  )
+    call der2D%set_xsz( [mir%gp%xsz(1), mir%gp%xsz(2), 1] )                 ! Set xsz to make arrays 2D
+    call der2D%set_ysz( [mir%gp%ysz(1), mir%gp%ysz(2), 1] )                 ! Set ysz to make arrays 2D
+
+    ! Split MPI_COMM_WORLD into individual XY plane communicators
+    call MPI_COMM_SPLIT(MPI_COMM_WORLD, mir%gp%yst(3), nrank, XY_COMM, ierr)
+    call MPI_COMM_RANK(XY_COMM, xyrank, ierr)
+    call MPI_COMM_SIZE(XY_COMM, xyproc, ierr)
+
+    ! Initialize gp2D
+    call gp2D%init(mir%nx,mir%ny,XY_COMM)
 
     call message("Initializing the gaussian filter object" )
     call gfil%init(                                     mir%gp, &
@@ -682,14 +868,14 @@ program IRM_vorticity
     Rij    => buffer(:,:,:,i)
 
     ! Allocate 2D buffer and associate pointers for convenience
-    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 25 ) )
+    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 31 ) )
     vort_avgz                => buffer2d(:,:,1:3)
-    rho_avg                  => buffer2d(:,:,4)
-    u_avg                    => buffer2d(:,:,5)
-    v_avg                    => buffer2d(:,:,6)
-    w_avg                    => buffer2d(:,:,7)
-    CO2_avg                  => buffer2d(:,:,8)
-    TKE_avg                  => buffer2d(:,:,9)
+    rho_avg                  => buffer2d(:,:,4 )
+    u_avg                    => buffer2d(:,:,5 )
+    v_avg                    => buffer2d(:,:,6 )
+    w_avg                    => buffer2d(:,:,7 )
+    CO2_avg                  => buffer2d(:,:,8 )
+    TKE_avg                  => buffer2d(:,:,9 )
     div_avg                  => buffer2d(:,:,10)
     chi_avg                  => buffer2d(:,:,11)
     MMF_avg                  => buffer2d(:,:,12)
@@ -706,6 +892,17 @@ program IRM_vorticity
     rhop_sq                  => buffer2d(:,:,23)
     eta                      => buffer2d(:,:,24)
     xi                       => buffer2d(:,:,25)
+    p_avg                    => buffer2d(:,:,26)
+    pdil                     => buffer2d(:,:,27)
+    meandiss                 => buffer2d(:,:,28)
+    production               => buffer2d(:,:,29)
+    dissipation              => buffer2d(:,:,30)
+    pdil_fluct               => buffer2d(:,:,31)
+    
+    allocate( xtmp1( mir%gp%xsz(1), mir%gp%xsz(2), 1 ) )
+    allocate( xtmp2( mir%gp%xsz(1), mir%gp%xsz(2), 1 ) )
+    
+    allocate( ytmp1( mir%gp%ysz(1), mir%gp%ysz(2), 1 ) )
     
     allocate( TKEfft(mir%nz/2+1) )
     allocate( tpc   (mir%nz/2+1) )
@@ -716,6 +913,11 @@ program IRM_vorticity
     allocate( bins(nbins+1) )
     allocate( pdf (nbins  ) )
     
+    allocate( duidxj(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 9) )
+    allocate( tauij (mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 6) )
+    allocate( duidxj2D (mir%gp%ysz(1), mir%gp%ysz(2), 9) )
+    allocate( tauij_avg(mir%gp%ysz(1), mir%gp%ysz(2), 6) )
+
 
     ! Initialize visualization stuff
     if ( writeviz ) then
@@ -771,18 +973,6 @@ program IRM_vorticity
                 end if
             end do
         end do
-        ! where( (mir%Ys(:,:,:,1) .GT. Ymin) .AND. (mir%Ys(:,:,:,1) .LT. (one-Ymin)) )
-        !     region = one
-        ! end where
-        ! call P_AVGZ( mir%gp, region, div_avg ) ! Put avg of region in div avg for now
-        ! where ( div_avg .GT. one/(real(2*mir%nz,rkind)) )
-        !     div_avg = one
-        ! elsewhere
-        !     div_avg = zero
-        ! end where
-        ! do i = 1,mir%gp%ysz(3)
-        !     region(:,:,i) = div_avg
-        ! end do
 
         ! Clip volume fractions above and below bounds
         where ( Xs .GT. one )
@@ -956,6 +1146,31 @@ program IRM_vorticity
         call two_point_correlation(wpp,wpp,tpc,region)
         call write_tpc(step, "wpp", tpc)
 
+        !!!! =============================================
+        !!!! Energetics ----------------------------------
+        
+        call get_duidxj(mir%u,mir%v,mir%w,duidxj)
+        call get_tauij(duidxj,mir%mu,mir%bulk,tauij)
+        call get_tauij_avg(tauij, tauij_avg)
+
+        call get_duidxj2D(u_avg,v_avg,w_avg,duidxj2D)
+
+        ! Pressure-dilatation correlation
+        call P_AVGZ( mir%gp, mir%p, p_avg )
+        pdil = p_avg*(duidxj2D(:,:,1) + duidxj2D(:,:,5))
+
+        ! Mean-dissipation
+        call get_meandiss(tauij_avg,duidxj2D,meandiss)
+
+        ! Shear-production
+        call get_production(R11,R12,R13,R22,R23,R33,duidxj2D,rho_avg,production)
+
+        ! Turbulent dissipation and fluctuation pressure-dilatation
+        call get_dissipation(upp,vpp,wpp,tauij,dissipation,pdil_fluct)
+
+        !!!! Energetics ----------------------------------
+        !!!! =============================================
+
         if(nrank == 0) then
             write(iounit,'(10ES26.16)') real(step*1.0d-4,rkind), mwidth, vortz_int, vortz_pos, vortz_neg, TKE_int, chi_int, chi_art, MMF_int, rhop_sq_int
         end if
@@ -981,12 +1196,20 @@ program IRM_vorticity
     ! Destroy all variables and exit cleanly
     if (allocated(buffer  )) deallocate( buffer   )
     if (allocated(buffer2d)) deallocate( buffer2d )
+    if (allocated( xtmp1  )) deallocate( xtmp1    )
+    if (allocated( xtmp2  )) deallocate( xtmp2    )
+    if (allocated( ytmp1  )) deallocate( ytmp1    )
     if (allocated( TKEfft )) deallocate( TKEfft   )
     if (allocated( tpc    )) deallocate( tpc      )
     if (allocated( Y_air_x)) deallocate( Y_air_x  )
     if (allocated( Y_CO2_x)) deallocate( Y_CO2_x  )
     if (allocated( bins   )) deallocate( bins     )
     if (allocated( pdf    )) deallocate( pdf      )
+    if (allocated( duidxj )) deallocate( duidxj )
+    if (allocated( tauij )) deallocate( tauij )
+    if (allocated( duidxj2D )) deallocate( duidxj2D )
+    if (allocated( tauij_avg )) deallocate( tauij_avg )
+
     call der%destroy()
     call gfil%destroy()
     call mir%destroy()
