@@ -1480,7 +1480,7 @@ contains
     subroutine dd1(this, f, df, na, nb)
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: na, nb
-        real(rkind), dimension(this%n,na,nb), intent(in) :: f
+        real(rkind), dimension(this%n,na,nb), intent(in)  :: f
         real(rkind), dimension(this%n,na,nb), intent(out) :: df
 
         if(this%n == 1) then

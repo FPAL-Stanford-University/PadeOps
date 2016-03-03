@@ -293,7 +293,6 @@ contains
         character(len=*)  , intent(in)             :: method_z
         integer :: ierr
 
-
         select case (method_x)
         case ("cd10")
             allocate(this%xcd10)

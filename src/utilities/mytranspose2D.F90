@@ -18,7 +18,6 @@ module mytranspose2DMod
     contains
 
         procedure :: init
-        procedure :: destroy
 
         procedure :: transpose_x_to_y
         procedure :: transpose_y_to_x
@@ -51,10 +50,6 @@ contains
             call GracefulExit("ny not a multiple of nprocs in mytranspose2D",231)
         end if
 
-    end subroutine
-
-    subroutine destroy(this)
-        class(mytranspose2D), intent(inout) :: this
     end subroutine
 
     subroutine transpose_x_to_y(this, input, output)
