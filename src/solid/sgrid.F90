@@ -68,7 +68,6 @@ module SolidGrid
         type(sep1solid), allocatable :: elastic
 
         logical     :: plastic
-        real(rkind) :: yield
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -132,7 +131,7 @@ module SolidGrid
             procedure          :: getPhysicalProperties
             procedure, private :: get_tau
             procedure, private :: get_q
-            procedure, private :: plastic_deformation
+            ! procedure, private :: plastic_deformation
     end type
 
 contains
@@ -215,7 +214,6 @@ contains
         this%Ckap = Ckap
 
         this%plastic = plastic
-        this%yield   = yield
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -258,7 +256,7 @@ contains
         ! Allocate elastic
         if ( allocated(this%elastic) ) deallocate(this%elastic)
         allocate(this%elastic)
-        call this%elastic%init(shmod)
+        call this%elastic%init(shmod,yield)
 
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
@@ -700,7 +698,7 @@ contains
 
             if (this%plastic) then
                 ! Effect plastic deformations
-                call this%plastic_deformation()
+                call this%elastic%plastic_deformation(this%g)
                 call this%get_primitive()
 
                 ! Filter the conserved variables
@@ -1324,97 +1322,99 @@ contains
         ! Done
     end subroutine
 
-    subroutine plastic_deformation(this)
-        class(sgrid), target, intent(inout) :: this
-        real(rkind), dimension(3,3) :: g, u, vt, gradf
-        real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new
-        real(rkind), dimension(15)  :: work
-        real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t
-        real(rkind) :: tol = real(1.D-8,rkind)
-        integer :: i,j,k
-        integer :: iters, niters = 500
-        integer :: info
-        integer, dimension(3) :: ipiv
-
-        ! Get optimal lwork
-        lwork = -1
-        call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, work, lwork, info)
-        lwork = work(1)
-
-        do k = 1,this%nzp
-            do j = 1,this%nyp
-                do i = 1,this%nxp
-                    g(1,1) = this%g11(i,j,k); g(1,2) = this%g12(i,j,k); g(1,3) = this%g13(i,j,k)
-                    g(2,1) = this%g21(i,j,k); g(2,2) = this%g22(i,j,k); g(2,3) = this%g23(i,j,k)
-                    g(3,1) = this%g31(i,j,k); g(3,2) = this%g32(i,j,k); g(3,3) = this%g33(i,j,k)
-
-                    ! Get SVD of g
-                    call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, work, lwork, info)
-                    if(info .ne. 0) print '(A,I,A)', 'proc ', nrank, ': Problem with SVD. Please check.'
-
-                    sqrt_om = sval(1)*sval(2)*sval(3)
-                    beta = sval**two / sqrt_om**(two/three)
-
-                    betasum = sum( beta*(beta-one) ) / three
-                    Sa = -this%elastic%mu*sqrt_om * ( beta*(beta-one) - betasum )
-
-                    Sabymu_sq = sum(Sa**two) / this%elastic%mu**two
-                    ycrit = Sabymu_sq - (two/three)*(this%yield/this%elastic%mu)**two
-
-                    if (ycrit .LE. zero) then
-                        print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
-                        cycle
-                    end if
-
-                    C0 = Sabymu_sq / ycrit
-                    Sa = Sa*( sqrt(C0 - one)/sqrt(C0) )
-
-                    ! Now get new beta
-                    f = Sa / (this%elastic%mu*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
-                    
-                    betasum = sum( beta*(beta-one) ) / three
-                    f1 = -( beta*(beta-one) - betasum ); f1(3) = beta(1)*beta(2)*beta(3)   ! Original function value
-                    residual = sqrt(sum( (f1-f)**two ))                                    ! Norm of the residual
-                    iters = 0
-                    do while ( (iters < niters) .AND. (residual .GT. tol) )
-                        ! Get newton step
-                        gradf(1,1) = -twothird*(two*beta(1)-one); gradf(1,2) =     third*(two*beta(2)-one); gradf(1,3) = third*(two*beta(3)-one)
-                        gradf(2,1) =     third*(two*beta(1)-one); gradf(2,2) = -twothird*(two*beta(2)-onw); gradf(2,3) = third*(two*beta(3)-one)
-                        gradf(3,1) = beta(2)*beta(3);             gradf(3,2) = beta(3)*beta(1);             gradf(3,3) = beta(1)*beta(2)
-
-                        dbeta = (f-f1)
-                        call dgesv(3, 3, gradf, 3, ipiv, dbeta, 1, info)
-                        
-                        ! Backtracking line search
-                        t = 1.
-                        beta_new = beta + t * dbeta
-                        betasum = sum( beta_new*(beta_new-one) ) / three
-                        f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
-                        do while ( sqrt(sum( (f2-f)**two )) .GE. residual )
-                            t = half*t
-                            beta_new = beta + t * dbeta
-                            betasum = sum( beta_new*(beta_new-one) ) / three
-                            f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
-                        end do
-                        beta = beta_new
-                        f1 = f2
-                        residual = sqrt(sum( (f1-f)**two ))                                    ! Norm of the residual
-                    end do
-                    if (iters >= niters) print '(A)', 'Newton solve in plastic_deformation did not converge'
-                    
-                    ! Then get new svals
-                    sval = sqrt(beta) * sqrt_om**(one/three)
-                    
-                    ! Get g = u*sval*vt
-                    vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! sval*vt
-                    g = MATMUL(u,vt) ! u*sval*vt
-
-                    this%g11(i,j,k) = g(1,1); this%g12(i,j,k) = g(1,2); this%g13(i,j,k) = g(1,3)
-                    this%g21(i,j,k) = g(2,1); this%g22(i,j,k) = g(2,2); this%g23(i,j,k) = g(2,3)
-                    this%g31(i,j,k) = g(3,1); this%g32(i,j,k) = g(3,2); this%g33(i,j,k) = g(3,3)
-                end do
-            end do
-        end do
-    end subroutine
+!    subroutine plastic_deformation(this)
+!        use constants, only: twothird
+!        use decomp_2d, only: nrank
+!        class(sgrid), target, intent(inout) :: this
+!        real(rkind), dimension(3,3) :: g, u, vt, gradf
+!        real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new
+!        real(rkind), dimension(15)  :: work
+!        real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t
+!        real(rkind) :: tol = real(1.D-8,rkind), residual
+!        integer :: i,j,k
+!        integer :: iters, niters = 500
+!        integer :: lwork, info
+!        integer, dimension(3) :: ipiv
+!
+!        ! Get optimal lwork
+!        lwork = -1
+!        call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, work, lwork, info)
+!        lwork = work(1)
+!
+!        do k = 1,this%nzp
+!            do j = 1,this%nyp
+!                do i = 1,this%nxp
+!                    g(1,1) = this%g11(i,j,k); g(1,2) = this%g12(i,j,k); g(1,3) = this%g13(i,j,k)
+!                    g(2,1) = this%g21(i,j,k); g(2,2) = this%g22(i,j,k); g(2,3) = this%g23(i,j,k)
+!                    g(3,1) = this%g31(i,j,k); g(3,2) = this%g32(i,j,k); g(3,3) = this%g33(i,j,k)
+!
+!                    ! Get SVD of g
+!                    call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, work, lwork, info)
+!                    if(info .ne. 0) print '(A,I,A)', 'proc ', nrank, ': Problem with SVD. Please check.'
+!
+!                    sqrt_om = sval(1)*sval(2)*sval(3)
+!                    beta = sval**two / sqrt_om**(two/three)
+!
+!                    betasum = sum( beta*(beta-one) ) / three
+!                    Sa = -this%elastic%mu*sqrt_om * ( beta*(beta-one) - betasum )
+!
+!                    Sabymu_sq = sum(Sa**two) / this%elastic%mu**two
+!                    ycrit = Sabymu_sq - (two/three)*(this%yield/this%elastic%mu)**two
+!
+!                    if (ycrit .LE. zero) then
+!                        print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
+!                        cycle
+!                    end if
+!
+!                    C0 = Sabymu_sq / ycrit
+!                    Sa = Sa*( sqrt(C0 - one)/sqrt(C0) )
+!
+!                    ! Now get new beta
+!                    f = Sa / (this%elastic%mu*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
+!                    
+!                    betasum = sum( beta*(beta-one) ) / three
+!                    f1 = -( beta*(beta-one) - betasum ); f1(3) = beta(1)*beta(2)*beta(3)   ! Original function value
+!                    residual = sqrt(sum( (f1-f)**two ))                                    ! Norm of the residual
+!                    iters = 0
+!                    do while ( (iters < niters) .AND. (residual .GT. tol) )
+!                        ! Get newton step
+!                        gradf(1,1) = -twothird*(two*beta(1)-one); gradf(1,2) =     third*(two*beta(2)-one); gradf(1,3) = third*(two*beta(3)-one)
+!                        gradf(2,1) =     third*(two*beta(1)-one); gradf(2,2) = -twothird*(two*beta(2)-one); gradf(2,3) = third*(two*beta(3)-one)
+!                        gradf(3,1) = beta(2)*beta(3);             gradf(3,2) = beta(3)*beta(1);             gradf(3,3) = beta(1)*beta(2)
+!
+!                        dbeta = (f-f1)
+!                        call dgesv(3, 3, gradf, 3, ipiv, dbeta, 1, info)
+!                        
+!                        ! Backtracking line search
+!                        t = 1.
+!                        beta_new = beta + t * dbeta
+!                        betasum = sum( beta_new*(beta_new-one) ) / three
+!                        f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
+!                        do while ( sqrt(sum( (f2-f)**two )) .GE. residual )
+!                            t = half*t
+!                            beta_new = beta + t * dbeta
+!                            betasum = sum( beta_new*(beta_new-one) ) / three
+!                            f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
+!                        end do
+!                        beta = beta_new
+!                        f1 = f2
+!                        residual = sqrt(sum( (f1-f)**two ))                                    ! Norm of the residual
+!                    end do
+!                    if (iters >= niters) print '(A)', 'Newton solve in plastic_deformation did not converge'
+!                    
+!                    ! Then get new svals
+!                    sval = sqrt(beta) * sqrt_om**(one/three)
+!                    
+!                    ! Get g = u*sval*vt
+!                    vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! sval*vt
+!                    g = MATMUL(u,vt) ! u*sval*vt
+!
+!                    this%g11(i,j,k) = g(1,1); this%g12(i,j,k) = g(1,2); this%g13(i,j,k) = g(1,3)
+!                    this%g21(i,j,k) = g(2,1); this%g22(i,j,k) = g(2,2); this%g23(i,j,k) = g(2,3)
+!                    this%g31(i,j,k) = g(3,1); this%g32(i,j,k) = g(3,2); this%g33(i,j,k) = g(3,3)
+!                end do
+!            end do
+!        end do
+!    end subroutine
 
 end module 
