@@ -18,7 +18,7 @@ module EkmanBL_parameters
     integer :: seedu = 321341
     integer :: seedv = 423424
     integer :: seedw = 131344
-    real(rkind) :: randomScaleFact = 0.0005_rkind ! 5% of the mean value
+    real(rkind) :: randomScaleFact = 0.000000005_rkind ! 5% of the mean value
 
     integer :: nperiods = 8
     real(rkind) :: oscScaleFact = 0.2_rkind    ! 20% of the mean value
