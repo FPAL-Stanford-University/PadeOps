@@ -165,29 +165,29 @@ contains
        
         this%fCor = f
 
-        select case(topWall)
-        case(2)
-            topBC_u = .true.
-            topBC_v = .true.
-        case(1)
-            topBC_u = .false.
-            topBC_v = .false.
-        case default 
-            call GracefulExit("Incorrect choice for topWall. Only two choices &
-            & allowed: slip or no slip",101) 
-        end select 
+        !select case(topWall)
+        !case(1)
+        !    topBC_u = .false.
+        !    topBC_v = .false.
+        !case(2)
+        !    topBC_u = .true.
+        !    topBC_v = .true.
+        !case default 
+        !    call GracefulExit("Incorrect choice for topWall. Only two choices &
+        !    & allowed: 1 (no slip) or 2 (slip)",101) 
+        !end select 
 
-        select case(botWall)
-        case(2)
-            botBC_u = .true.
-            botBC_v = .true.
-        case(1)
-            botBC_u = .false.
-            botBC_v = .false.
-        case default 
-            call GracefulExit("Incorrect choice for botWall. Only two choices & 
-            & allowed: slip or no slip",101) 
-        end select 
+        !select case(botWall)
+        !case(1)
+        !    botBC_u = .false.
+        !    botBC_v = .false.
+        !case(2)
+        !    botBC_u = .true.
+        !    botBC_v = .true.
+        !case default 
+        !    call GracefulExit("Incorrect choice for botWall. Only two choices & 
+        !    & allowed: 1 (no slip) or 2 (slip)",101) 
+        !end select 
 
         if (.not. periodicx) then
             call GracefulExit("Currently only Periodic BC is supported in x direction",102)
@@ -482,7 +482,7 @@ contains
         
         ! x equation
         rtmpx1 = this%oz*this%v
-        rtmpx1 = rtmpx1 - this%oy*this%w
+        rtmpx1 = rtmpx1 - this%oy*this%wC
         call this%spectC%fft(rtmpx1,this%u_rhs)
 
         ! y equation
@@ -506,7 +506,7 @@ contains
         nullify(ctmpz2) 
     end subroutine
 
-    subroutine addNonLinearTerm_SkewSymm(this)
+    subroutine addNonLinearTerm_SkewSymm(this, useCnsrv)
         class(igrid), intent(inout), target :: this
         real(rkind), dimension(:,:,:), pointer :: rtmpx1
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2!, ctmpz3
@@ -514,6 +514,8 @@ contains
         complex(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
         complex(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
         complex(rkind), dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
+        logical, intent(in) :: useCnsrv
+        real(rkind) :: cnst 
 
         dudx => this%duidxj(:,:,:,1); dudy => this%duidxj(:,:,:,2); dudz => this%duidxj(:,:,:,3); 
         dvdx => this%duidxj(:,:,:,4); dvdy => this%duidxj(:,:,:,5); dvdz => this%duidxj(:,:,:,6); 
@@ -526,41 +528,50 @@ contains
         ctmpz2 => this%cbuffzE(:,:,:,1)
         ctmpy1 => this%cbuffyC(:,:,:,1)
         ctmpy2 => this%cbuffyE(:,:,:,1)
-        
-        call this%addNonLinearTerm_Cnsrv()
-        this%u_rhs = half*this%u_rhs
-        this%v_rhs = half*this%v_rhs
-        this%w_rhs = half*this%w_rhs
+
+        if (useCnsrv) then        
+            call this%addNonLinearTerm_Cnsrv()
+            cnst = half
+            this%u_rhs = half*this%u_rhs
+            this%v_rhs = half*this%v_rhs
+            this%w_rhs = half*this%w_rhs
+        else 
+            cnst = one
+            this%u_rhs = zero
+            this%v_rhs = zero
+            this%w_rhs = zero
+        end if 
+
 
         call this%spectC%ifft(dudx,rtmpx1)
         rtmpx1 = rtmpx1*this%u
         call this%spectC%fft(rtmpx1,ctmpy1)
-        this%u_rhs = this%u_rhs - half*ctmpy1
+        this%u_rhs = this%u_rhs - cnst*ctmpy1
         
         call this%spectC%ifft(dudy,rtmpx1)
         rtmpx1 = rtmpx1*this%v
         call this%spectC%fft(rtmpx1,ctmpy1)
-        this%u_rhs = this%u_rhs - half*ctmpy1
+        this%u_rhs = this%u_rhs - cnst*ctmpy1
 
         call this%spectC%ifft(dudz,rtmpx1)
         rtmpx1 = rtmpx1*this%w
         call this%spectC%fft(rtmpx1,ctmpy1)
-        this%u_rhs = this%u_rhs - half*ctmpy1
+        this%u_rhs = this%u_rhs - cnst*ctmpy1
 
         call this%spectC%ifft(dvdx,rtmpx1)
         rtmpx1 = rtmpx1*this%u
         call this%spectC%fft(rtmpx1,ctmpy1)
-        this%v_rhs = this%v_rhs - half*ctmpy1
+        this%v_rhs = this%v_rhs - cnst*ctmpy1
 
         call this%spectC%ifft(dvdy,rtmpx1)
         rtmpx1 = rtmpx1*this%v
         call this%spectC%fft(rtmpx1,ctmpy1)
-        this%v_rhs = this%v_rhs - half*ctmpy1
+        this%v_rhs = this%v_rhs - cnst*ctmpy1
 
         call this%spectC%ifft(dvdz,rtmpx1)
         rtmpx1 = rtmpx1*this%wC
         call this%spectC%fft(rtmpx1,ctmpy1)
-        this%v_rhs = this%v_rhs - half*ctmpy1
+        this%v_rhs = this%v_rhs - cnst*ctmpy1
 
         
         call this%spectC%ifft(dwdx,rtmpx1)
@@ -569,7 +580,7 @@ contains
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
         call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)  
-        this%w_rhs = this%w_rhs - half*ctmpy2
+        this%w_rhs = this%w_rhs - cnst*ctmpy2
     
 
         call this%spectC%ifft(dwdy,rtmpx1)
@@ -578,7 +589,7 @@ contains
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
         call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)  
-        this%w_rhs = this%w_rhs - half*ctmpy2
+        this%w_rhs = this%w_rhs - cnst*ctmpy2
 
 
         call this%spectC%ifft(dwdz,rtmpx1)
@@ -587,7 +598,7 @@ contains
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
         call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)  
-        this%w_rhs = this%w_rhs - half*ctmpy2
+        this%w_rhs = this%w_rhs - cnst*ctmpy2
 
         nullify( dudx, dudy, dudz) 
         nullify( dvdx, dvdy, dvdz)
@@ -729,7 +740,9 @@ contains
         case (2) ! Conservative Form
             call this%AddNonLinearTerm_Cnsrv()
         case (3) ! Skew Symmetric Form
-            call this%AddNonLinearTerm_SkewSymm()
+            call this%AddNonLinearTerm_SkewSymm(.true.)
+        case (4) ! Skew Symmetric Form
+            call this%AddNonLinearTerm_SkewSymm(.false.)
         end select  
 
         ! Step 2: Coriolis Term
@@ -773,6 +786,8 @@ contains
         case (1)    
             call this%compute_Vorticity()
         case (3)
+            call this%compute_duidxj()
+        case (4)
             call this%compute_duidxj()
         end select  
 
