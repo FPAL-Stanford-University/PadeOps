@@ -231,7 +231,6 @@ contains
         allocate(this%Ops)
         call this%Ops%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp,this%spectE%spectdecomp)
         
-
         ! STEP 6: ALLOCATE MEMORY FOR FIELD ARRAYS
         allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6))
         allocate(this%divergence(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
