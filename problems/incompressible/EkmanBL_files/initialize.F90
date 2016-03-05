@@ -98,7 +98,9 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     real(rkind) :: mfactor, sig
     real(rkind), dimension(:,:,:), allocatable :: randArr
     real(rkind) :: epsfac, Uperiods, Vperiods , zpeak
-    namelist /IINPUT/ runId, nu, Pr, useSGS, f, deltat_by_D, ustar_by_G, Ref 
+    namelist /IINPUT/  nu, useSGS, runID, Ref, Pr, deltat_by_D, & 
+                                ustar_by_G, f, tid_statsDump, &
+                                time_startDumping, topWall, botWall 
 
 
     ioUnit = 11

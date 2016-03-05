@@ -116,14 +116,17 @@ contains
         integer :: t_restartDump = 99999
         logical :: ViscConsrv = .TRUE. 
         real(rkind) :: Pr = 0.7_rkind 
-        integer :: topWall = 2, botWall = 1
+        integer :: topWall = 2
+        integer :: botWall = 1
         real(rkind) :: deltat_by_D, ustar_by_G, Ref, f        
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
                                   periodicx, periodicy, periodicz, &
                                                        prow, pcol, &
                                         t_restartDump, t_dataDump
-        namelist /IINPUT/  nu, useSGS, runID, Ref, Pr, deltat_by_D, ustar_by_G, f, tid_statsDump, time_startDumping 
+        namelist /IINPUT/  nu, useSGS, runID, Ref, Pr, deltat_by_D, & 
+                                ustar_by_G, f, tid_statsDump, &
+                                time_startDumping, topWall, botWall 
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
