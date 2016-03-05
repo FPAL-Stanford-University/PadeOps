@@ -40,7 +40,7 @@ module hooks
 
 
     interface initfields_stagg
-        subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inpDirectory, mesh, fieldsC, fieldsE, u_g)
+        subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inpDirectory, mesh, fieldsC, fieldsE, u_g, fcorr)
             import :: rkind
             import :: decomp_info
             type(decomp_info), intent(in) :: decompC
@@ -50,11 +50,10 @@ module hooks
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(inout) :: fieldsC
             real(rkind), dimension(:,:,:,:), intent(inout) :: fieldsE
-            real(rkind), intent(out), optional :: u_g
+            real(rkind), intent(out) :: u_g, fcorr
 
         end subroutine 
     end interface
-
 
     interface hook_output
         subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)

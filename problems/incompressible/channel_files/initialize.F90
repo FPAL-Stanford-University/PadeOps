@@ -178,7 +178,7 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     !    v(:,:,k) = v(:,:,k) - 0.5*mfactor*oscScaleFact*cos(4*nperiods*two*pi*x(:,:,k)/Lx)*sin(nperiods*two*pi*y(:,:,k)/Ly)
     !end do 
     call message(0,"============================================================================")
-    call message(0,"Initialized Velocity Fields (Lam. Ekman Solution + Perturbations)")
+    call message(0,"Initialized Velocity Fields (Lam. channel Solution + Perturbations)")
     call message(0,"Summary:")
     call message(1,"Geostrophic Velocity (x-direction):", G)
     call message(1,"Friction Velocity (ustar):", ustar)

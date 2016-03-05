@@ -19,11 +19,13 @@ module IncompressibleGridNP
 
     complex(rkind), parameter :: zeroC = zero + imi*zero 
 
+    integer, parameter :: no_slip = 1, slip = 2
+
     ! Allow non-zero value (isEven) 
     logical :: topBC_u = .true.  , topBC_v = .true. , topBC_w = .false.
     logical :: botBC_u = .false. , botBC_v = .false., botBC_w = .false. 
 
-    integer, parameter :: AdvectionForm = 3 
+    integer, parameter :: AdvectionForm = 1 
 
     type, extends(grid) :: igrid
         
@@ -63,6 +65,7 @@ module IncompressibleGridNP
         real(rkind) :: time_startDumping 
         
         integer :: runID
+        logical :: useCoriolis = .true. 
         contains
             procedure :: init
             procedure :: destroy
@@ -116,16 +119,16 @@ contains
         integer :: t_restartDump = 99999
         logical :: ViscConsrv = .TRUE. 
         real(rkind) :: Pr = 0.7_rkind 
-        integer :: topWall = 2
-        integer :: botWall = 1
-        real(rkind) :: deltat_by_D, ustar_by_G, Ref, f        
+        integer :: topWall = slip
+        integer :: botWall = no_slip
+        logical :: useCoriolis = .true. 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
                                   periodicx, periodicy, periodicz, &
                                                        prow, pcol, &
                                         t_restartDump, t_dataDump
-        namelist /IINPUT/  nu, useSGS, runID, Ref, Pr, deltat_by_D, & 
-                                ustar_by_G, f, tid_statsDump, &
+        namelist /IINPUT/  nu, useSGS, runID, Pr, useCoriolis, & 
+                                tid_statsDump, &
                                 time_startDumping, topWall, botWall 
 
         ! STEP 1: READ INPUT 
@@ -165,32 +168,31 @@ contains
 
         this%tid_statsDump = tid_statsDump
         this%time_startDumping = time_startDumping 
-       
-        this%fCor = f
+        this%useCoriolis = useCoriolis 
 
-        !select case(topWall)
-        !case(1)
-        !    topBC_u = .false.
-        !    topBC_v = .false.
-        !case(2)
-        !    topBC_u = .true.
-        !    topBC_v = .true.
-        !case default 
-        !    call GracefulExit("Incorrect choice for topWall. Only two choices &
-        !    & allowed: 1 (no slip) or 2 (slip)",101) 
-        !end select 
+        select case(topWall)
+        case(slip)
+            topBC_u = .false.
+            topBC_v = .false.
+        case(no_slip)
+            topBC_u = .true.
+            topBC_v = .true.
+        case default 
+            call GracefulExit("Incorrect choice for topWall. Only two choices &
+            & allowed: 1 (no slip) or 2 (slip)",101) 
+        end select 
 
-        !select case(botWall)
-        !case(1)
-        !    botBC_u = .false.
-        !    botBC_v = .false.
-        !case(2)
-        !    botBC_u = .true.
-        !    botBC_v = .true.
-        !case default 
-        !    call GracefulExit("Incorrect choice for botWall. Only two choices & 
-        !    & allowed: 1 (no slip) or 2 (slip)",101) 
-        !end select 
+        select case(botWall)
+        case(slip)
+            botBC_u = .false.
+            botBC_v = .false.
+        case(no_slip)
+            botBC_u = .true.
+            botBC_v = .true.
+        case default 
+            call GracefulExit("Incorrect choice for botWall. Only two choices & 
+            & allowed: 1 (no slip) or 2 (slip)",101) 
+        end select 
 
         if (.not. periodicx) then
             call GracefulExit("Currently only Periodic BC is supported in x direction",102)
@@ -280,7 +282,7 @@ contains
         
         ! STEP 7: INITIALIZE THE FIELDS 
         call initfields_stagg(this%gpC, this%gpE, this%dx, this%dy, this%dz, &
-            inputfile, this%mesh, this%PfieldsC, this%PfieldsE, u_g)! <-- this procedure is part of user defined HOOKS
+            inputfile, this%mesh, this%PfieldsC, this%PfieldsE, u_g, this%fcor)! <-- this procedure is part of user defined HOOKS
 
         this%nu0 = nu
         this%Gx = u_g
@@ -748,7 +750,9 @@ contains
         end select  
 
         ! Step 2: Coriolis Term
-        call this%AddCoriolisTerm()
+        if (this%useCoriolis) then
+            call this%AddCoriolisTerm()
+        end if 
 
         ! Step 3: Viscous Term
         call this%AddViscousTerm()

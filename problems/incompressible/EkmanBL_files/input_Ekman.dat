@@ -7,8 +7,8 @@ nx = 192                  ! Number of points in X
 ny = 192                  ! Number of points in Y
 nz = 512                  ! Number of points in Z
 
-dt = 1.D-1               ! Fixed time step value (Set to negative to disable)
-tstop = 2400.D0              ! Physical time to stop the simulation
+dt = 0.5D0               ! Fixed time step value (Set to negative to disable)
+tstop = 60000.D0              ! Physical time to stop the simulation
 CFL = -1.D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
@@ -22,7 +22,6 @@ pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 
 t_restartDump = 999999    ! Number of timesteps before restart file is written 
 t_dataDump    = 1000       ! Number of timesteps before data dump is performed 
 
-
 /
 
 /
@@ -32,8 +31,13 @@ nu = 1.14D-5               ! Kinematic viscosity
 Pr = 0.7D0               ! Kinematic viscosity
 runID = 1                 ! Run ID (for output file name)
 useSGS = .FALSE.          ! LES mode or DNS mode?
+useCoriolis = .TRUE. 
+topWall = 2               ! no_slip = 1, slip = 2
+botWall = 1                ! no_slip = 1, slip = 2  
+
+&EKMANINPUT
 Ref = 400.D0
 deltat_by_D = 13.D0
 ustar_by_G = 0.065D0
-f = 1.454D-4
+f = 1.454D-4              ! Coriolis parameter   
 /

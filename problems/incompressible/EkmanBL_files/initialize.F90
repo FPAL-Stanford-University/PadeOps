@@ -22,7 +22,7 @@ module EkmanBL_parameters
 
     integer :: nperiods = 8
     real(rkind) :: oscScaleFact = 0.2_rkind    ! 20% of the mean value
-
+    integer :: nxg, nyg, nzg
 
 end module     
 
@@ -37,17 +37,13 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     real(rkind),                                                intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     integer :: i,j,k
-    integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
+    integer :: ix1, ixn, iy1, iyn, iz1, izn
 
     D = sqrt(two*nu/f)
     Lx = 150*D; Ly = 75*D; Lz = 24*D
     
 
-    nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
-
-    dx = Lx/real(nx,rkind)
-    dy = Ly/real(ny,rkind)
-    dz = Lz/real(nz,rkind)
+    nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
 
     ! If base decomposition is in Y
@@ -56,9 +52,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = Lx/real(nx,rkind)
-        dy = Ly/real(ny,rkind)
-        dz = Lz/real(nz,rkind)
+        dx = Lx/real(nxg,rkind)
+        dy = Ly/real(nyg,rkind)
+        dz = Lz/real(nzg,rkind)
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
@@ -74,7 +70,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, fieldsC, fieldsE, u_g)
+subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, fieldsC, fieldsE, u_g, f_corr)
     use EkmanBL_parameters
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two,pi
@@ -91,21 +87,21 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
+    real(rkind), intent(out), optional :: f_corr, u_g
     integer :: ioUnit, runID, k
     real(rkind), dimension(:,:,:), pointer :: u, v, w, x, y, z
-    real(rkind), intent(out), optional :: u_g
     logical :: useSGS 
     real(rkind) :: mfactor, sig
     real(rkind), dimension(:,:,:), allocatable :: randArr
     real(rkind) :: epsfac, Uperiods, Vperiods , zpeak
-    namelist /IINPUT/  nu, useSGS, runID, Ref, Pr, deltat_by_D, & 
-                                ustar_by_G, f, tid_statsDump, &
-                                time_startDumping, topWall, botWall 
+
+    namelist /EKMANINPUT/ Ref, deltat_by_D, & 
+                                ustar_by_G, f 
 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=IINPUT)
+    read(unit=ioUnit, NML=EKMANINPUT)
     close(ioUnit)    
 
     u => fieldsC(:,:,:,1)
@@ -126,6 +122,7 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     dzP =  dz*ustar/nu
 
     u_g = G
+    f_corr = f
     !u = G*(one - exp(-z/D)*cos(z/D))
     !v = G*exp(-z/D)*sin(z/D)
     !w = zero
@@ -192,6 +189,20 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     call message(0,"============================================================================")
 
 end subroutine
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 module allStatistics
     use kind_parameters, only: rkind

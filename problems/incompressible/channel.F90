@@ -10,7 +10,7 @@ program EkmanBL
     use mpi
     use kind_parameters,  only: rkind,clen,stdout,stderr
     use IncompressibleGridNP, only: igrid
-    use EkmanBL_IO, only: start_io, finalize_io
+    use channel_IO, only: start_io, finalize_io
     use constants, only: half 
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
