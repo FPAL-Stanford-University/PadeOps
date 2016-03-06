@@ -175,25 +175,31 @@ contains
         case(slip)
             topBC_u = .false.
             topBC_v = .false.
+            call message(1, "TopWall BC set to SLIP")
         case(no_slip)
             topBC_u = .true.
             topBC_v = .true.
+            call message(1, "TopWall BC set to NO SLIP")
         case default 
             call GracefulExit("Incorrect choice for topWall. Only two choices &
             & allowed: 1 (no slip) or 2 (slip)",101) 
         end select 
+        topBC_w = .false.
 
         select case(botWall)
         case(slip)
             botBC_u = .false.
             botBC_v = .false.
+            call message(1, "BotWall BC set to SLIP")
         case(no_slip)
             botBC_u = .true.
             botBC_v = .true.
+            call message(1, "BotWall BC set to NO SLIP")
         case default 
             call GracefulExit("Incorrect choice for botWall. Only two choices & 
             & allowed: 1 (no slip) or 2 (slip)",101) 
         end select 
+        botBC_w = .false.
 
         if (.not. periodicx) then
             call GracefulExit("Currently only Periodic BC is supported in x direction",102)

@@ -8,6 +8,7 @@ module spectralMod
     use constants, only: pi, one, zero, two, three 
     use fft_3d_stuff, only: fft_3d
     use mpi
+    use reductions, only: p_sum 
  
     implicit none
     private
@@ -216,7 +217,7 @@ contains
         real(rkind), dimension(:,:,:), allocatable :: k1four, k2four, k3four
         logical, optional, intent(in) :: nonPeriodic
         logical :: TwoPeriodic = .false. 
-        real(rkind) :: kdealias_sq
+        real(rkind) ::kdealiasx, kdealiasy 
 
         if (present(nonPeriodic)) then
                 if (nonPeriodic) TwoPeriodic = .true.
@@ -429,11 +430,12 @@ contains
            ! case default
            !     call GracefulExit("The dealiasing filter specified is incorrect.",104)
            ! end select
-            kdealias_sq = ((two/three)*min(pi/dx, pi/dy))**2
+            kdealiasx = ((two/three)*pi/dx)
+            kdealiasy = ((two/three)*pi/dy)
             do k = 1,size(this%k1,3)
                 do j = 1,size(this%k1,2)
-                    do i = 1,size(this%k2,1)
-                        if (this%kabs_sq(i,j,k) < kdealias_sq) then
+                    do i = 1,size(this%k1,1)
+                        if ((abs(this%k1(i,j,k)) < kdealiasx) .and. (abs(this%k2(i,j,k))< kdealiasy)) then
                             this%Gdealias(i,j,k) = one
                         else
                             this%Gdealias(i,j,k) = zero
@@ -441,8 +443,8 @@ contains
                     end do 
                 end do  
             end do 
-
-       
+            call message(1, "Dealiasing Summary:")
+            call message(2, "Total non zero:", p_sum(sum(this%Gdealias))) 
             ! STEP 8: Correct the wavenumber to be the modified wavenumber based on the scheme
             !allocate(tmp1(size(this%k1,1),size(this%k1,2),size(this%k1,3)))
             !select case (trim(scheme))
@@ -742,7 +744,7 @@ contains
         kxd = (two/three)*pi/dx
         kyd = (two/three)*pi/dy
         kdealias = min(kxd,kyd)
-        
+        print*, kxd, kyd 
         Tf = one
         where(abs(k1)>kdealias)
                 Tf = zero
