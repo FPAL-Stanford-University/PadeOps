@@ -17,9 +17,9 @@ module IncompressibleGridNP
     private
     public :: igrid 
 
+    integer, parameter :: no_slip = 1, slip = 2
     complex(rkind), parameter :: zeroC = zero + imi*zero 
 
-    integer, parameter :: no_slip = 1, slip = 2
 
     ! Allow non-zero value (isEven) 
     logical :: topBC_u = .true.  , topBC_v = .true. , topBC_w = .false.
@@ -89,7 +89,6 @@ contains
     subroutine init(this,inputfile)
         class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
-
         integer :: nx, ny, nz
         character(len=clen) :: outputdir
         character(len=clen) :: inputdir
@@ -276,6 +275,7 @@ contains
         this%v_Orhs => this%OrhsC(:,:,:,2)
         this%w_Orhs => this%OrhsE(:,:,:,1)
 
+        
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE 
         allocate(this%poiss)
         call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE)  
@@ -288,6 +288,7 @@ contains
         this%Gx = u_g
         this%Gy = zero
         this%Gz = zero
+        
 
         call this%spectC%fft(this%u,this%uhat)   
         call this%spectC%fft(this%v,this%vhat)   
