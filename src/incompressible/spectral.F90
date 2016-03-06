@@ -45,12 +45,111 @@ module spectralMod
             procedure           :: fft
             procedure           :: ifft
             procedure, private  :: initializeEverything
+            procedure           :: dealias
+            procedure           :: mTimes_ik1_oop
+            procedure           :: mTimes_ik1_ip
+            procedure           :: mTimes_ik2_oop
+            procedure           :: mTimes_ik2_ip
             !procedure, private  :: upsample_Fhat
             !procedure, private  :: downsample_Fhat
 
     end type
 
 contains
+    pure subroutine mTimes_ik1_oop(this, fin, fout)
+        class(spectral),  intent(in)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(in) :: fin
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(out) :: fout
+        integer :: i, j, k
+        real(rkind) :: rpart, ipart
+        
+        do k = 1,this%fft_size(3)
+            do j = 1,this%fft_size(2)
+                do i = 1,this%fft_size(1)
+                    rpart = -this%k1(i,j,k)*dimag(fin(i,j,k))
+                    ipart = this%k1(i,j,k)*dreal(fin(i,j,k))
+                    fout(i,j,k) = dcmplx(rpart,ipart)
+                end do 
+            end do 
+        end do 
+
+    end subroutine
+    
+    pure subroutine mTimes_ik2_oop(this, fin, fout)
+        class(spectral),  intent(in)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(in) :: fin
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(out) :: fout
+        integer :: i, j, k
+        real(rkind) :: rpart, ipart
+        
+        do k = 1,this%fft_size(3)
+            do j = 1,this%fft_size(2)
+                do i = 1,this%fft_size(1)
+                    rpart = -this%k2(i,j,k)*dimag(fin(i,j,k))
+                    ipart = this%k2(i,j,k)*dreal(fin(i,j,k))
+                    fout(i,j,k) = dcmplx(rpart,ipart)
+                end do 
+            end do 
+        end do 
+
+    end subroutine
+
+
+    subroutine mTimes_ik1_ip(this, fin)
+        class(spectral),  intent(in)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fin
+        integer :: i, j, k
+        real(rkind) :: rpart, ipart
+        
+        do k = 1,this%fft_size(3)
+            do j = 1,this%fft_size(2)
+                do i = 1,this%fft_size(1)
+                    rpart = -this%k1(i,j,k)*dimag(fin(i,j,k))
+                    ipart = this%k1(i,j,k)*dreal(fin(i,j,k))
+                    fin(i,j,k) = dcmplx(rpart,ipart)
+                end do 
+            end do 
+        end do 
+
+    end subroutine
+
+    subroutine mTimes_ik2_ip(this, fin)
+        class(spectral),  intent(in)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fin
+        integer :: i, j, k
+        real(rkind) :: rpart, ipart
+        
+        do k = 1,this%fft_size(3)
+            do j = 1,this%fft_size(2)
+                do i = 1,this%fft_size(1)
+                    rpart = -this%k2(i,j,k)*dimag(fin(i,j,k))
+                    ipart = this%k2(i,j,k)*dreal(fin(i,j,k))
+                    fin(i,j,k) = dcmplx(rpart,ipart)
+                end do 
+            end do 
+        end do 
+
+    end subroutine
+
+
+
+
+
+    subroutine dealias(this, fhat)
+        class(spectral),  intent(in)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fhat
+        integer :: i, j, k
+
+        do k = 1,this%fft_size(3)
+            do j = 1,this%fft_size(2)
+                do i = 1,this%fft_size(1)
+                    fhat(i,j,k) = fhat(i,j,k)*this%Gdealias(i,j,k)
+                end do 
+            end do 
+        end do 
+         
+    end subroutine
+    
     subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK) 
         class(spectral),  intent(inout)         :: this
         character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction

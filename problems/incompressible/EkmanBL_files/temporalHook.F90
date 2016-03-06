@@ -23,7 +23,7 @@ contains
         end if
 
         if (mod(gp%step,nt_getMaxKE) == 0) then
-            call message(1,"Max KE:",P_MAXVAL(half*(gp%u**2 + gp%v**2 + gp%wC**2)))
+            call message(1,"Max KE:",P_MAXVAL(gp%getMaxKE()))
             call toc()
             call tic()
         end if 
@@ -33,9 +33,9 @@ contains
            call dumpData4Matlab(gp) 
         end if 
 
-        if ((mod(gp%step,tid_statsDump) == 0) .and. (gp%tsim > time_startDumping)) then
-            call dump_stats(gp)
-        end if 
+        !if ((mod(gp%step,tid_statsDump) == 0) .and. (gp%tsim > time_startDumping)) then
+        !    call dump_stats(gp)
+        !end if 
 
         call mpi_barrier(mpi_comm_world,ierr)
         !if (mod(gp%step,gp%t_restartDump) == 0) then

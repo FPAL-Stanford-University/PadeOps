@@ -20,6 +20,7 @@ module IncompressibleGridNP
     integer, parameter :: no_slip = 1, slip = 2
     complex(rkind), parameter :: zeroC = zero + imi*zero 
 
+    integer :: ierr 
 
     ! Allow non-zero value (isEven) 
     logical :: topBC_u = .true.  , topBC_v = .true. , topBC_w = .false.
@@ -73,6 +74,7 @@ module IncompressibleGridNP
             procedure :: laplacian
             procedure :: gradient
             procedure :: AdamsBashforth
+            procedure :: getMaxKE
             procedure, private :: interp_wHat_to_wHatC
             procedure, private :: interp_w_to_wC
             procedure :: compute_vorticity
@@ -279,11 +281,14 @@ contains
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE 
         allocate(this%poiss)
         call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE)  
-        
+       
+               
+ 
         ! STEP 7: INITIALIZE THE FIELDS 
         call initfields_stagg(this%gpC, this%gpE, this%dx, this%dy, this%dz, &
             inputfile, this%mesh, this%PfieldsC, this%PfieldsE, u_g, this%fcor)! <-- this procedure is part of user defined HOOKS
 
+        
         this%nu0 = nu
         this%Gx = u_g
         this%Gy = zero
@@ -293,11 +298,13 @@ contains
         call this%spectC%fft(this%u,this%uhat)   
         call this%spectC%fft(this%v,this%vhat)   
         call this%spectE%fft(this%w,this%what)   
+        
 
         ! Dealias before projection
-        this%uhat = this%uhat*this%spectC%Gdealias 
-        this%vhat = this%vhat*this%spectC%Gdealias 
-        this%what = this%what*this%spectE%Gdealias 
+        call this%spectC%dealias(this%uhat)
+        call this%spectC%dealias(this%vhat)
+        call this%spectE%dealias(this%what)
+
 
 
         ! Pressure projection
@@ -328,13 +335,37 @@ contains
         ! STEP 9: Interpolate the cell center values of w
         call this%interp_w_to_wC()
         call this%interp_wHat_to_wHatC()
-        call message(1,"Max KE:",P_MAXVAL(half*(this%u**2 + this%v**2 + this%wC**2)))
-
+        
+        
+        call message(1,"Max KE:",P_MAXVAL(this%getMaxKE()))
+      
 
         ! STEP 10: Compute Vorticity 
         call this%compute_Vorticity()
-
+        call message("IGRID initialized successfully!")
     end subroutine
+
+
+
+    pure function getMaxKE(this) result(maxKE)
+        class(igrid), intent(in) :: this
+        real(rkind)  :: maxKE
+        integer :: i, j, k
+        real(rkind) :: keloc
+
+        maxKE = zero
+        do k = 1,size(this%u,3)
+            do j = 1,size(this%u,3)
+                do i = 1,size(this%u,3)
+                    keloc = this%u(i,j,k)**2 
+                    keloc = keloc + this%v(i,j,k)**2
+                    keloc = keloc + this%w(i,j,k)**2
+                    maxKE = max(maxKE,keloc)
+                end do 
+            end do 
+        end do 
+
+    end function
 
     subroutine interp_W_to_WC(this)
         class(igrid), intent(inout), target :: this
@@ -435,40 +466,63 @@ contains
 
     subroutine compute_vorticity(this)
         class(igrid), intent(inout), target :: this
-        real(rkind), dimension(:,:,:), pointer :: k1, k2
         complex(rkind), dimension(:,:,:), pointer :: cbuffz1, cbuffz2
+        complex(rkind), dimension(:,:,:), pointer :: cbuffy1
+        integer :: i, j, k
 
         ! Call this subroutine only after all uhat and u fields are the latest
         ! ones
 
-        k1 => this%spectC%k1
-        k2 => this%spectC%k2
         cbuffz1 => this%cbuffzC(:,:,:,1)
         cbuffz2 => this%cbuffzC(:,:,:,2)
+        cbuffy1 => this%cbuffyC(:,:,:,1)
 
         ! Compute omega_x hat
         call transpose_y_to_z(this%vhat,cbuffz1,this%sp_gpC)
         call this%Ops%ddz_C2C(cbuffz1,cbuffz2,topBC_v,botBC_v)
         call transpose_z_to_y(cbuffz2,this%oxhat,this%sp_gpC)
-        this%oxhat = imi*k2*this%whatC - this%oxhat 
+        call this%spectC%mTimes_ik2_oop(this%whatC,cbuffy1) 
+
+        do k = 1,size(this%oxhat,3)
+            do j = 1,size(this%oxhat,2)
+                do i = 1,size(this%oxhat,1)
+                    this%oxhat(i,j,k) = - this%oxhat(i,j,k) + cbuffy1(i,j,k)
+                end do 
+            end do 
+        end do 
+
 
         ! Compute omega_y hat
         call transpose_y_to_z(this%uhat,cbuffz1,this%sp_gpC)
         call this%Ops%ddz_C2C(cbuffz1,cbuffz2,topBC_u,botBC_u)
         call transpose_z_to_y(cbuffz2,this%oyhat,this%sp_gpC)
-        this%oyhat = this%oyhat - imi*k1*this%whatC 
+        call this%spectC%mTimes_ik1_oop(this%whatC,cbuffy1) 
+        do k = 1,size(this%oxhat,3)
+            do j = 1,size(this%oxhat,2)
+                do i = 1,size(this%oxhat,1)
+                    this%oyhat(i,j,k) =  this%oyhat(i,j,k) - cbuffy1(i,j,k)
+                end do 
+            end do 
+        end do 
 
         ! Compute omega_z hat
-        this%ozhat = k1*this%vhat 
-        this%ozhat = this%ozhat - k2*this%uhat
-        this%ozhat = imi*this%ozhat 
+        !this%ozhat = k1*this%vhat 
+        call this%spectC%mTimes_ik1_oop(this%vhat,this%ozhat) 
+        call this%spectC%mTimes_ik2_oop(this%uhat,cbuffy1) 
+        do k = 1,size(this%oxhat,3)
+            do j = 1,size(this%oxhat,2)
+                do i = 1,size(this%oxhat,1)
+                    this%ozhat(i,j,k) =  this%ozhat(i,j,k) - cbuffy1(i,j,k)
+                end do 
+            end do 
+        end do 
    
         ! Compute ox, oy, oz
         call this%spectC%ifft(this%oxhat,this%ox)
         call this%spectC%ifft(this%oyhat,this%oy)
         call this%spectC%ifft(this%ozhat,this%oz)
         
-        nullify(k1, k2, cbuffz1, cbuffz2)
+        nullify(cbuffz1, cbuffz2, cbuffy1)
 
     end subroutine
 
@@ -477,7 +531,7 @@ contains
         class(igrid), intent(inout), target :: this
         real(rkind), dimension(:,:,:), pointer :: rtmpx1
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
-
+        integer :: i, j, k
         
         ! Assume that the rhs vectors haven't been populated
 
@@ -486,18 +540,33 @@ contains
         ctmpz2 => this%cbuffzE(:,:,:,1)
         
         ! x equation
-        rtmpx1 = this%oz*this%v
-        rtmpx1 = rtmpx1 - this%oy*this%wC
+        do k = 1,size(this%oz,3)
+            do j = 1,size(this%oz,2)
+                do i = 1,size(this%oz,1)
+                    rtmpx1(i,j,k) = this%oz(i,j,k)*this%v(i,j,k) - this%oy(i,j,k)*this%wC(i,j,k)
+                end do 
+            end do 
+        end do 
         call this%spectC%fft(rtmpx1,this%u_rhs)
 
         ! y equation
-        rtmpx1 = this%ox*this%wC
-        rtmpx1 = rtmpx1 - this%oz*this%u
+        do k = 1,size(this%oz,3)
+            do j = 1,size(this%oz,2)
+                do i = 1,size(this%oz,1)
+                    rtmpx1(i,j,k) = this%ox(i,j,k)*this%wC(i,j,k) - this%oz(i,j,k)*this%u(i,j,k)
+                end do 
+            end do 
+        end do 
         call this%spectC%fft(rtmpx1,this%v_rhs)
 
         ! z equation 
-        rtmpx1 = this%oy*this%u
-        rtmpx1 = rtmpx1 - this%ox*this%v
+        do k = 1,size(this%oz,3)
+            do j = 1,size(this%oz,2)
+                do i = 1,size(this%oz,1)
+                    rtmpx1(i,j,k) = this%oy(i,j,k)*this%u(i,j,k) - this%ox(i,j,k)*this%v(i,j,k)
+                end do 
+            end do 
+        end do 
         call this%spectC%fft(rtmpx1,this%wC_rhs)
         
         ! Interpolate w_rhs using wC_rhs
@@ -682,12 +751,26 @@ contains
 
     subroutine addCoriolisTerm(this)
         class(igrid), intent(inout) :: this
+        integer :: i, j, k
 
         ! u equation 
-        this%u_rhs = this%u_rhs + this%fCor*this%vhat 
+        do k = 1,size(this%u_rhs,3)
+            do j = 1,size(this%u_rhs,2)
+                do i = 1,size(this%u_rhs,1)
+                    this%u_rhs(i,j,k) = this%u_rhs(i,j,k) + this%fCor*this%vhat(i,j,k)
+                end do 
+            end do 
+        end do 
+        
 
         ! v equation 
-        this%v_rhs = this%v_rhs - this%fCor*this%uhat
+        do k = 1,size(this%u_rhs,3)
+            do j = 1,size(this%u_rhs,2)
+                do i = 1,size(this%u_rhs,1)
+                    this%v_rhs(i,j,k) = this%v_rhs(i,j,k) - this%fCor*this%uhat(i,j,k)
+                end do 
+            end do 
+        end do 
         if (this%spectC%carryingZeroK) then
             this%v_rhs(this%spectC%ZeroK_i,this%spectC%ZeroK_j,:) =  & 
                     this%v_rhs(this%spectC%ZeroK_i,this%spectC%ZeroK_j,:) & 
@@ -702,7 +785,7 @@ contains
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: cytmp1, cztmp1, cztmp2
         complex(rkind), dimension(:,:,:), pointer :: cztmp3, cztmp4, cytmp2
-
+        integer :: i, j, k
         
         cytmp1 => this%cbuffyC(:,:,:,1)
         cytmp2 => this%cbuffyE(:,:,:,1)
@@ -715,28 +798,47 @@ contains
         call transpose_y_to_z(this%uhat, cztmp1,this%sp_gpC)
         call this%Ops%d2dz2_C2C(cztmp1,cztmp2,topBC_u,botBC_u)
         call transpose_z_to_y(cztmp2,cytmp1,this%sp_gpC)
-        this%u_rhs = this%u_rhs - this%nu0*this%spectC%kabs_sq *this%uhat 
-        this%u_rhs = this%u_rhs + this%nu0*cytmp1
-        
+        do k = 1,size(this%u_rhs,3)
+            do j = 1,size(this%u_rhs,2)
+                do i = 1,size(this%u_rhs,1)
+                    this%u_rhs(i,j,k) = this%u_rhs(i,j,k) + this%nu0*cytmp1(i,j,k) &
+                             - this%nu0*this%spectC%kabs_sq(i,j,k) *this%uhat(i,j,k)
+                end do 
+            end do 
+        end do 
+
         ! v equation 
         call transpose_y_to_z(this%vhat, cztmp1,this%sp_gpC)
         call this%Ops%d2dz2_C2C(cztmp1,cztmp2,topBC_v,botBC_v)
         call transpose_z_to_y(cztmp2,cytmp1,this%sp_gpC)
-        this%v_rhs =  this%v_rhs - this%nu0*this%spectC%kabs_sq *this%vhat 
-        this%v_rhs =  this%v_rhs + this%nu0*cytmp1 
+        do k = 1,size(this%v_rhs,3)
+            do j = 1,size(this%v_rhs,2)
+                do i = 1,size(this%v_rhs,1)
+                    this%v_rhs(i,j,k) = this%v_rhs(i,j,k) + this%nu0*cytmp1(i,j,k) &
+                             - this%nu0*this%spectC%kabs_sq(i,j,k) *this%vhat(i,j,k)
+                end do 
+            end do 
+        end do 
         
         ! w equation
         call transpose_y_to_z(this%what, cztmp3,this%sp_gpE)
         call this%Ops%d2dz2_E2E(cztmp3,cztmp4,topBC_w,botBC_w)
         call transpose_z_to_y(cztmp4,cytmp2,this%sp_gpC)
-        this%w_rhs =  this%w_rhs - this%nu0*this%spectE%kabs_sq *this%what 
-        this%w_rhs =  this%w_rhs + this%nu0*cytmp2
+        do k = 1,size(this%w_rhs,3)
+            do j = 1,size(this%w_rhs,2)
+                do i = 1,size(this%w_rhs,1)
+                    this%w_rhs(i,j,k) = this%w_rhs(i,j,k) + this%nu0*cytmp2(i,j,k) &
+                             - this%nu0*this%spectE%kabs_sq(i,j,k) *this%what(i,j,k)
+                end do 
+            end do 
+        end do 
 
         nullify(cytmp1,cytmp2,cztmp1,cztmp2,cztmp3,cztmp4)
     end subroutine 
 
     subroutine AdamsBashforth(this)
         class(igrid), intent(inout) :: this
+        integer :: i, j, k
 
         ! Step 1: Non Linear Term 
         select case(AdvectionForm)
@@ -760,19 +862,58 @@ contains
 
         ! Step 4: Time Step 
         if (this%step == 0) then
-            this%uhat = this%uhat + this%dt*this%u_rhs
-            this%vhat = this%vhat + this%dt*this%v_rhs
-            this%what = this%what + this%dt*this%w_rhs
+            do k = 1,size(this%uhat,3)
+                do j = 1,size(this%uhat,2)
+                    do i = 1,size(this%uhat,1)
+                        this%uhat(i,j,k) = this%uhat(i,j,k) + this%dt*this%u_rhs(i,j,k)
+                    end do 
+                end do 
+            end do  
+            do k = 1,size(this%vhat,3)
+                do j = 1,size(this%vhat,2)
+                    do i = 1,size(this%vhat,1)
+                        this%vhat(i,j,k) = this%vhat(i,j,k) + this%dt*this%v_rhs(i,j,k)
+                    end do 
+                end do 
+            end do  
+            do k = 1,size(this%what,3)
+                do j = 1,size(this%what,2)
+                    do i = 1,size(this%what,1)
+                        this%what(i,j,k) = this%what(i,j,k) + this%dt*this%w_rhs(i,j,k)
+                    end do 
+                end do 
+            end do  
         else
-            this%uhat = this%uhat + this%dtby2*(three*this%u_rhs - this%u_Orhs) 
-            this%vhat = this%vhat + this%dtby2*(three*this%v_rhs - this%v_Orhs) 
-            this%what = this%what + this%dtby2*(three*this%w_rhs - this%w_Orhs) 
+            do k = 1,size(this%uhat,3)
+                do j = 1,size(this%uhat,2)
+                    do i = 1,size(this%uhat,1)
+                        this%uhat(i,j,k) = this%uhat(i,j,k) + this%dtby2*(three*this%u_rhs(i,j,k) - &
+                                                                this%u_Orhs(i,j,k))
+                    end do 
+                end do 
+            end do  
+            do k = 1,size(this%vhat,3)
+                do j = 1,size(this%vhat,2)
+                    do i = 1,size(this%vhat,1)
+                        this%vhat(i,j,k) = this%vhat(i,j,k) + this%dtby2*(three*this%v_rhs(i,j,k) - &
+                                                                this%v_Orhs(i,j,k))
+                    end do 
+                end do 
+            end do  
+            do k = 1,size(this%what,3)
+                do j = 1,size(this%what,2)
+                    do i = 1,size(this%what,1)
+                        this%what(i,j,k) = this%what(i,j,k) + this%dtby2*(three*this%w_rhs(i,j,k) - &
+                                                                this%w_Orhs(i,j,k))
+                    end do 
+                end do 
+            end do 
         end if 
-
+        
         ! Step 5: Dealias 
-        this%uhat = this%uhat*this%spectC%Gdealias 
-        this%vhat = this%vhat*this%spectC%Gdealias 
-        this%what = this%what*this%spectE%Gdealias 
+        call this%spectC%dealias(this%uhat)
+        call this%spectC%dealias(this%vhat)
+        call this%spectE%dealias(this%what)
 
         ! Step 6: Pressure projection
         call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
@@ -799,11 +940,31 @@ contains
         end select  
 
         ! STEP 10: Copy the RHS for using during next time step 
-        this%u_Orhs = this%u_rhs
-        this%v_Orhs = this%v_rhs
-        this%w_Orhs = this%w_rhs
+        do k = 1,size(this%uhat,3)
+            do j = 1,size(this%uhat,2)
+                do i = 1,size(this%uhat,1)
+                    this%u_Orhs(i,j,k) = this%u_rhs(i,j,k)
+                end do 
+            end do
+        end do  
+        do k = 1,size(this%uhat,3)
+            do j = 1,size(this%uhat,2)
+                do i = 1,size(this%uhat,1)
+                    this%v_Orhs(i,j,k) = this%v_rhs(i,j,k)
+                end do 
+            end do
+        end do  
+        do k = 1,size(this%what,3)
+            do j = 1,size(this%what,2)
+                do i = 1,size(this%what,1)
+                    this%w_Orhs(i,j,k) = this%w_rhs(i,j,k)
+                end do 
+            end do
+        end do  
 
     end subroutine
+
+
 
     subroutine compute_duidxj(this)
         class(igrid), intent(inout), target :: this
