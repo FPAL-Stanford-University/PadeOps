@@ -5,8 +5,10 @@ module spectralMod
                     transpose_y_to_z, transpose_z_to_y, nrank 
     use decomp_2d_fft, only: decomp_2d_fft_init, decomp_2d_fft_finalize, decomp_2d_fft_get_size
     use exits, only: GracefulExit, message 
-    use constants, only: one, zero, two, three 
-    use fft_3d_stuff, only: fft_3d 
+    use constants, only: pi, one, zero, two, three 
+    use fft_3d_stuff, only: fft_3d
+    use mpi
+ 
     implicit none
     private
     public :: spectral, GetWaveNums 
@@ -115,6 +117,7 @@ contains
         real(rkind), dimension(:,:,:), allocatable :: k1four, k2four, k3four
         logical, optional, intent(in) :: nonPeriodic
         logical :: TwoPeriodic = .false. 
+        real(rkind) :: kdealias_sq
 
         if (present(nonPeriodic)) then
                 if (nonPeriodic) TwoPeriodic = .true.
@@ -188,24 +191,27 @@ contains
             allocate (this%k1(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             if (allocated(this%k2)) deallocate(this%k2)
             allocate (this%k2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            if (allocated(this%k3)) deallocate(this%k3)
-            allocate (this%k3(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            if (.not. TwoPeriodic) then
+                call gracefulExit("3D fft using the SPECTRAL derived type has been temporarily switched off",32)
+                if (allocated(this%k3)) deallocate(this%k3)
+                allocate (this%k3(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            end if 
             if (allocated(this%kabs_sq)) deallocate(this%kabs_sq)
             allocate (this%kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            if (allocated(this%k1_der2)) deallocate(this%k1_der2)
-            allocate (this%k1_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            if (allocated(this%k2_der2)) deallocate(this%k2_der2)
-            allocate (this%k2_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            if (allocated(this%k3_der2)) deallocate(this%k3_der2)
-            allocate (this%k3_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            if (allocated(this%one_by_kabs_sq)) deallocate(this%one_by_kabs_sq)
-            allocate(this%one_by_kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
+            !if (allocated(this%k1_der2)) deallocate(this%k1_der2)
+            !allocate (this%k1_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            !if (allocated(this%k2_der2)) deallocate(this%k2_der2)
+            !allocate (this%k2_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            !if (allocated(this%k3_der2)) deallocate(this%k3_der2)
+            !allocate (this%k3_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            !if (allocated(this%one_by_kabs_sq)) deallocate(this%one_by_kabs_sq)
+            !allocate(this%one_by_kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
             if (allocated(this%Gdealias)) deallocate(this%Gdealias)
             allocate (this%Gdealias(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             
-            allocate(k1four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
-            allocate(k2four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
-            allocate(k3four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
+            !allocate(k1four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
+            !allocate(k2four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
+            !allocate(k3four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
 
             ! STEP 3: Generate 1d wavenumbers 
             k1_1d = GetWaveNums(nx_g,dx) 
@@ -282,106 +288,129 @@ contains
             end select
             deallocate(tmp1)
             deallocate (spectdecomp)
+            
 
             if (TwoPeriodic) then
-                    this%kabs_sq = this%k1**2 + this%k2**2  
+                    do k = 1,size(this%k1,3)
+                        do j = 1,size(this%k1,2)
+                            do i = 1,size(this%k1,1)
+                                this%kabs_sq(i,j,k) = this%k1(i,j,k)*2 + this%k2(i,j,k)*2
+                            end do 
+                        end do 
+                    end do                 
+
             else 
                     this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
             end if 
-            k1four = this%k1
-            k2four = this%k2
-            k3four = this%k3
+            
 
             ! STEP 7: Create the dealiasing filter transfer function 
-            select case (filt)
-            case ("2/3rd")
-                if (TwoPeriodic) then
-                    this%Gdealias = TwoThirdsRule2D(dx,dy,this%k1,this%k2)
-                else
-                    this%Gdealias = TwoThirdsRule(nx_g,ny_g,nz_g,this%kabs_sq)
-                end if 
-            case ("cf90")
-                allocate(tmp1(size(this%Gdealias,1),size(this%Gdealias,2),size(this%Gdealias,3)))
-                tmp1 = GetCF90TransferFunction(this%k1,dx)
-                this%Gdealias = tmp1
-                tmp1 = GetCF90TransferFunction(this%k2,dy)
-                this%Gdealias = this%Gdealias*tmp1
-                tmp1 = GetCF90TransferFunction(this%k3,dz)
-                if (TwoPeriodic) then
-                    this%Gdealias = this%Gdealias
-                else
-                    this%Gdealias = this%Gdealias*tmp1
-                end if 
-                deallocate(tmp1)
-            case ("none")
-                this%Gdealias = one 
-            case default
-                call GracefulExit("The dealiasing filter specified is incorrect.",104)
-            end select
+            !select case (filt)
+            !case ("2/3rd")
+            !    if (TwoPeriodic) then
+            !        this%Gdealias = TwoThirdsRule2D(dx,dy,this%k1,this%k2)
+           !     else
+           !         this%Gdealias = TwoThirdsRule(nx_g,ny_g,nz_g,this%kabs_sq)
+           !     end if 
+           ! case ("cf90")
+           !     allocate(tmp1(size(this%Gdealias,1),size(this%Gdealias,2),size(this%Gdealias,3)))
+           !     tmp1 = GetCF90TransferFunction(this%k1,dx)
+           !     this%Gdealias = tmp1
+           !     tmp1 = GetCF90TransferFunction(this%k2,dy)
+           !     this%Gdealias = this%Gdealias*tmp1
+           !     tmp1 = GetCF90TransferFunction(this%k3,dz)
+           !     if (TwoPeriodic) then
+           !         this%Gdealias = this%Gdealias
+           !     else
+           !         this%Gdealias = this%Gdealias*tmp1
+           !     end if 
+           !     deallocate(tmp1)
+           ! case ("none")
+           !     this%Gdealias = one 
+           ! case default
+           !     call GracefulExit("The dealiasing filter specified is incorrect.",104)
+           ! end select
+            kdealias_sq = ((two/three)*min(pi/dx, pi/dy))**2
+            do k = 1,size(this%k1,3)
+                do j = 1,size(this%k1,2)
+                    do i = 1,size(this%k2,1)
+                        if (this%kabs_sq(i,j,k) < kdealias_sq) then
+                            this%Gdealias(i,j,k) = one
+                        else
+                            this%Gdealias(i,j,k) = zero
+                        end if
+                    end do 
+                end do  
+            end do 
+
        
             ! STEP 8: Correct the wavenumber to be the modified wavenumber based on the scheme
-            allocate(tmp1(size(this%k1,1),size(this%k1,2),size(this%k1,3)))
-            select case (trim(scheme))
-            case ("cd10")
-                tmp1 = GetCD10ModWaveNum(k1four,dx)
-                this%k1 = tmp1 
-                tmp1 = GetCD10ModWaveNum(k2four,dy)
-                this%k2 = tmp1 
-                tmp1 = GetCD10ModWaveNum(k3four,dz)
-                this%k3 = tmp1 
-            case ("cd06")
-                tmp1 = GetCD06ModWaveNum(k1four,dx)
-                this%k1 = tmp1 
-                tmp1 = GetCD06ModWaveNum(k2four,dy)
-                this%k2 = tmp1 
-                tmp1 = GetCD06ModWaveNum(k3four,dz)
-                this%k3 = tmp1 
-            case ("four")
-                ! Do nothing !
-            end select 
-            deallocate(tmp1)        
+            !allocate(tmp1(size(this%k1,1),size(this%k1,2),size(this%k1,3)))
+            !select case (trim(scheme))
+            !case ("cd10")
+            !    k1four = this%k1
+            !    k2four = this%k2
+            !    k3four = this%k3
+            !    tmp1 = GetCD10ModWaveNum(k1four,dx)
+            !    this%k1 = tmp1 
+            !    tmp1 = GetCD10ModWaveNum(k2four,dy)
+            !    this%k2 = tmp1 
+            !    tmp1 = GetCD10ModWaveNum(k3four,dz)
+            !    this%k3 = tmp1 
+            !    this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
+            !case ("cd06")
+            !    k1four = this%k1
+            !    k2four = this%k2
+            !    k3four = this%k3
+            !    tmp1 = GetCD06ModWaveNum(k1four,dx)
+            !    this%k1 = tmp1 
+            !    tmp1 = GetCD06ModWaveNum(k2four,dy)
+            !    this%k2 = tmp1 
+            !    tmp1 = GetCD06ModWaveNum(k3four,dz)
+            !    this%k3 = tmp1 
+            !    this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
+            !case ("four")
+            !    ! Do nothing !
+            !end select 
+            !deallocate(tmp1)        
 
+            
             ! STEP 9: Get the other wavenumber dependent attributes
-            if (TwoPeriodic) then
-                this%kabs_sq = this%k1**2 + this%k2**2
-            else 
-                this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
-            end if
  
-            do k = 1,size(this%kabs_sq,3)
-                do j = 1,size(this%kabs_sq,2)  
-                    do i = 1,size(this%kabs_sq,1)
-                        if ((this%kabs_sq(i,j,k)) .lt. real(1d-16,rkind)) then
-                            this%one_by_kabs_sq(i,j,k) = 1d-16
-                        else
-                            this%one_by_kabs_sq(i,j,k) = one/this%kabs_sq(i,j,k) 
-                        end if 
-                    end do 
-                end do 
-            end do 
+            !do k = 1,size(this%kabs_sq,3)
+            !    do j = 1,size(this%kabs_sq,2)  
+            !        do i = 1,size(this%kabs_sq,1)
+            !            if ((this%kabs_sq(i,j,k)) .lt. real(1d-16,rkind)) then
+            !                this%one_by_kabs_sq(i,j,k) = 1d-16
+            !            else
+            !                this%one_by_kabs_sq(i,j,k) = one/this%kabs_sq(i,j,k) 
+            !            end if 
+            !        end do 
+            !    end do 
+            !end do 
       
-            select case (trim(scheme))
-            case ("cd10")
-                if (this%useConsrvD2) then
-                    this%k1_der2 = this%k1**2
-                    this%k2_der2 = this%k2**2
-                    this%k3_der2 = this%k3**2
-                else
-                    this%k1_der2 = GetCD10D2ModWaveNum(k1four,dx)
-                    this%k2_der2 = GetCD10D2ModWaveNum(k2four,dy)
-                    this%k3_der2 = GetCD10D2ModWaveNum(k3four,dz)
-                end if  
-            case ("cd06")
-                this%k1_der2 = this%k1**2
-                this%k2_der2 = this%k2**2
-                this%k3_der2 = this%k3**2
-            case("four")    
-                this%k1_der2 = this%k1**2
-                this%k2_der2 = this%k2**2
-                this%k3_der2 = this%k3**2
-            end select  
+            !select case (trim(scheme))
+            !case ("cd10")
+            !    if (this%useConsrvD2) then
+            !        this%k1_der2 = this%k1**2
+            !        this%k2_der2 = this%k2**2
+            !        this%k3_der2 = this%k3**2
+            !    else
+            !        this%k1_der2 = GetCD10D2ModWaveNum(k1four,dx)
+            !        this%k2_der2 = GetCD10D2ModWaveNum(k2four,dy)
+            !        this%k3_der2 = GetCD10D2ModWaveNum(k3four,dz)
+            !    end if  
+            !case ("cd06")
+            !    this%k1_der2 = this%k1**2
+            !    this%k2_der2 = this%k2**2
+            !    this%k3_der2 = this%k3**2
+            !case("four")    
+            !    this%k1_der2 = this%k1**2
+            !    this%k2_der2 = this%k2**2
+            !    this%k3_der2 = this%k3**2
+            !end select  
        
-            deallocate(k1four, k2four, k3four) 
+            !deallocate(k1four, k2four, k3four) 
         
         end if    
 

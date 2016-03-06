@@ -2,7 +2,7 @@
 
 CWD=`pwd`
 export COMPILER_ID=Intel
-export FC=mpiifort
+export FC=mpif90
 export CC=mpiicc
 export CXX=mpiicpc
 export FFTW_PATH=${CWD}/dependencies/fftw-3.3.4
