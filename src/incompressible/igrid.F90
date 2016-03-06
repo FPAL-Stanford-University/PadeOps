@@ -25,7 +25,7 @@ module IncompressibleGridNP
     logical :: topBC_u = .true.  , topBC_v = .true. , topBC_w = .false.
     logical :: botBC_u = .false. , botBC_v = .false., botBC_w = .false. 
 
-    integer, parameter :: AdvectionForm = 1 
+    integer, parameter :: AdvectionForm = 3 
 
     type, extends(grid) :: igrid
         
