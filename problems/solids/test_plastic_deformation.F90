@@ -38,7 +38,7 @@ contains
 
                     ! Get SVD of g
                     call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, work, lwork, info)
-                    if(info .ne. 0) print '(A,I,A)', 'proc ', nrank, ': Problem with SVD. Please check.'
+                    if(info .ne. 0) print '(A,I6,A)', 'proc ', nrank, ': Problem with SVD. Please check.'
 
                     sqrt_om = sval(1)*sval(2)*sval(3)
                     beta = sval**two / sqrt_om**(two/three)
@@ -48,7 +48,6 @@ contains
 
                     Sabymu_sq = sum(Sa**two) / mu**two
                     ycrit = Sabymu_sq - (two/three)*(yield/mu)**two
-                    print *, "ycrit = ", ycrit
 
                     if (ycrit .LE. zero) then
                         print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
@@ -57,10 +56,6 @@ contains
 
                     C0 = Sabymu_sq / ycrit
                     Sa = Sa*( sqrt(C0 - one)/sqrt(C0) )
-
-                    Sabymu_sq = sum(Sa**two) / mu**two
-                    ycrit = Sabymu_sq - (two/three)*(yield/mu)**two
-                    print *, "ycrit = ", ycrit
 
                     ! Now get new beta
                     f = Sa / (mu*sqrt_om); f(3) = one     ! New function value (target to attain)
@@ -84,7 +79,7 @@ contains
                         betasum = sum( beta_new*(beta_new-one) ) / three
                         f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
                         do while ( sqrt(sum( (f2-f)**two )) .GE. residual )
-                            t = half*t
+                            t = 0.9_rkind*t
                             beta_new = beta + t * dbeta
                             betasum = sum( beta_new*(beta_new-one) ) / three
                             f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
@@ -131,7 +126,7 @@ end module
 
 program test_plastic_deformation
     use kind_parameters, only: rkind
-    use constants,       only: one, two, three, four
+    use constants,       only: one, two, three
     use test_plastic
     implicit none
 
@@ -158,8 +153,8 @@ program test_plastic_deformation
     write(*,*) g31(1,1,1), g32(1,1,1), g33(1,1,1)
     write(*,*) "Initial SS/mu - (2/3)(yield/mu)^2", SS(1,1,1)/mu**2 - (two/three)*(yield/mu)**2
 
-    ! call plastic_deformation(g11,g12,g13,g21,g22,g23,g31,g32,g33)
-    call elastic%plastic_deformation(g)
+    call plastic_deformation(g11,g12,g13,g21,g22,g23,g31,g32,g33)
+    ! call elastic%plastic_deformation(g)
 
     call get_SS(g,SS)
     write(*,*) "Final g:"

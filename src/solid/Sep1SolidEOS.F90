@@ -150,7 +150,7 @@ contains
 
                     ! Get SVD of g
                     call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, work, lwork, info)
-                    if(info .ne. 0) print '(A,I,A)', 'proc ', nrank, ': Problem with SVD. Please check.'
+                    if(info .ne. 0) print '(A,I6,A)', 'proc ', nrank, ': Problem with SVD. Please check.'
 
                     sqrt_om = sval(1)*sval(2)*sval(3)
                     beta = sval**two / sqrt_om**(two/three)
@@ -162,7 +162,7 @@ contains
                     ycrit = Sabymu_sq - (two/three)*(this%yield/this%mu)**two
 
                     if (ycrit .LE. zero) then
-                        print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
+                        ! print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
                         cycle
                     end if
 
