@@ -1,6 +1,6 @@
 module hooks
     use kind_parameters, only: rkind
-    use decomp_2d, only: decomp_info 
+    use decomp_2d, only: decomp_info
     implicit none
 
     interface meshgen
@@ -15,7 +15,7 @@ module hooks
     end interface
 
     interface initfields
-        subroutine initfields(decomp, dx, dy, dz, inpDirectory, mesh, fields)
+        subroutine initfields(decomp, dx, dy, dz, inpDirectory, mesh, fields, rho0, mu, gam, PInf)
             import :: rkind
             import :: decomp_info
             type(decomp_info), intent(in) :: decomp
@@ -23,17 +23,7 @@ module hooks
             character(len=*), intent(in) :: inpDirectory
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-
-        end subroutine 
-        subroutine initfields_solid(decomp, dx, dy, dz, inpDirectory, mesh, fields, rho0)
-            import :: rkind
-            import :: decomp_info
-            type(decomp_info), intent(in) :: decomp
-            real(rkind), intent(inout) :: dx, dy, dz
-            character(len=*), intent(in) :: inpDirectory
-            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
-            real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-            real(rkind),                     intent(inout) :: rho0
+            real(rkind),           optional, intent(inout) :: rho0, mu, gam, PInf
 
         end subroutine 
     end interface
@@ -90,6 +80,19 @@ module hooks
             real(rkind),                     intent(in) :: tsim
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(in) :: fields
+
+        end subroutine
+    end interface
+
+    interface hook_source
+        subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
+            import :: rkind
+            import :: decomp_info
+            type(decomp_info),               intent(in)    :: decomp
+            real(rkind),                     intent(in)    :: tsim
+            real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+            real(rkind), dimension(:,:,:,:), intent(in)    :: fields
+            real(rkind), dimension(:,:,:,:), intent(inout) :: rhs, rhsg
 
         end subroutine
     end interface

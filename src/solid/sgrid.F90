@@ -4,7 +4,7 @@ module SolidGrid
     use FiltersMod, only: filters
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
-    use hooks, only: meshgen, initfields, hook_output, hook_bc, hook_timestep
+    use hooks, only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
     use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                     transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
@@ -303,7 +303,8 @@ contains
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired 
-        call initfields(this%decomp, this%dx, this%dy, this%dz, inputdir, this%mesh, this%fields, this%rho0)
+        call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
+                        rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf)
        
         ! Get hydrodynamic and elastic energies 
         call this%sgas%get_e_from_p(this%rho,this%p,this%e)
@@ -629,11 +630,11 @@ contains
             end if
 
             ! Check tstop condition
-            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop) ) then
+            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop - eps) ) then
                 tcond = .FALSE.
-            else if ( (this%tstop > zero) .AND. (this%tsim + this%dt >= this%tstop) ) then
+            else if ( (this%tstop > zero) .AND. (this%tsim + this%dt + eps >= this%tstop) ) then
                 this%dt = this%tstop - this%tsim
-                stability = 'vizdump'
+                stability = 'stop'
                 vizcond = .TRUE.
             end if
 
@@ -654,6 +655,7 @@ contains
         use reductions, only: P_MAXVAL, P_MINVAL
         class(sgrid), target, intent(inout) :: this
 
+        real(rkind)                                          :: Qtmpt ! Temporary variable for RK45
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: rhs   ! RHS for conserved variables
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: Qtmp  ! Temporary variable for RK45
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for g tensor equation
@@ -664,6 +666,7 @@ contains
 
         Qtmp  = zero
         Qtmpg = zero
+        Qtmpt = zero
 
         do isub = 1,RK45_steps
             call this%get_conserved()
@@ -682,8 +685,10 @@ contains
             call this%getRHS(rhs, rhsg)
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
             Qtmpg = this%dt*rhsg + RK45_A(isub)*Qtmpg
+            Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
             this%g      = this%g      + RK45_B(isub)*Qtmpg
+            this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
             ! Filter the conserved variables
             do i = 1,5
@@ -714,10 +719,11 @@ contains
             call hook_bc(this%decomp, this%mesh, this%fields, this%tsim)
         end do
 
-        this%tsim = this%tsim + this%dt
+        ! this%tsim = this%tsim + this%dt
         this%step = this%step + 1
             
         call message(1,"Time",this%tsim)
+        call message(2,"Time step",this%dt)
         call message(2,"Minimum density",P_MINVAL(this%rho))
         call message(2,"Maximum velocity",sqrt(P_MAXVAL(this%u*this%u+this%v*this%v+this%w*this%w)))
         call message(2,"Minimum pressure",P_MINVAL(this%p))
@@ -902,6 +908,9 @@ contains
         rhsg(:,:,:,7) = rhsg(:,:,:,7) + this%v*curlg(:,:,:,3) - this%w*curlg(:,:,:,2) + penalty*this%g31
         rhsg(:,:,:,8) = rhsg(:,:,:,8) + this%w*curlg(:,:,:,1) - this%u*curlg(:,:,:,3) + penalty*this%g32
         rhsg(:,:,:,9) = rhsg(:,:,:,9) + this%u*curlg(:,:,:,2) - this%v*curlg(:,:,:,1) + penalty*this%g33
+
+        ! Call problem source hook
+        call hook_source(this%decomp, this%mesh, this%fields, this%tsim, rhs, rhsg)
  
     end subroutine
 
@@ -1321,100 +1330,5 @@ contains
 
         ! Done
     end subroutine
-
-!    subroutine plastic_deformation(this)
-!        use constants, only: twothird
-!        use decomp_2d, only: nrank
-!        class(sgrid), target, intent(inout) :: this
-!        real(rkind), dimension(3,3) :: g, u, vt, gradf
-!        real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new
-!        real(rkind), dimension(15)  :: work
-!        real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t
-!        real(rkind) :: tol = real(1.D-8,rkind), residual
-!        integer :: i,j,k
-!        integer :: iters, niters = 500
-!        integer :: lwork, info
-!        integer, dimension(3) :: ipiv
-!
-!        ! Get optimal lwork
-!        lwork = -1
-!        call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, work, lwork, info)
-!        lwork = work(1)
-!
-!        do k = 1,this%nzp
-!            do j = 1,this%nyp
-!                do i = 1,this%nxp
-!                    g(1,1) = this%g11(i,j,k); g(1,2) = this%g12(i,j,k); g(1,3) = this%g13(i,j,k)
-!                    g(2,1) = this%g21(i,j,k); g(2,2) = this%g22(i,j,k); g(2,3) = this%g23(i,j,k)
-!                    g(3,1) = this%g31(i,j,k); g(3,2) = this%g32(i,j,k); g(3,3) = this%g33(i,j,k)
-!
-!                    ! Get SVD of g
-!                    call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, work, lwork, info)
-!                    if(info .ne. 0) print '(A,I,A)', 'proc ', nrank, ': Problem with SVD. Please check.'
-!
-!                    sqrt_om = sval(1)*sval(2)*sval(3)
-!                    beta = sval**two / sqrt_om**(two/three)
-!
-!                    betasum = sum( beta*(beta-one) ) / three
-!                    Sa = -this%elastic%mu*sqrt_om * ( beta*(beta-one) - betasum )
-!
-!                    Sabymu_sq = sum(Sa**two) / this%elastic%mu**two
-!                    ycrit = Sabymu_sq - (two/three)*(this%yield/this%elastic%mu)**two
-!
-!                    if (ycrit .LE. zero) then
-!                        print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
-!                        cycle
-!                    end if
-!
-!                    C0 = Sabymu_sq / ycrit
-!                    Sa = Sa*( sqrt(C0 - one)/sqrt(C0) )
-!
-!                    ! Now get new beta
-!                    f = Sa / (this%elastic%mu*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
-!                    
-!                    betasum = sum( beta*(beta-one) ) / three
-!                    f1 = -( beta*(beta-one) - betasum ); f1(3) = beta(1)*beta(2)*beta(3)   ! Original function value
-!                    residual = sqrt(sum( (f1-f)**two ))                                    ! Norm of the residual
-!                    iters = 0
-!                    do while ( (iters < niters) .AND. (residual .GT. tol) )
-!                        ! Get newton step
-!                        gradf(1,1) = -twothird*(two*beta(1)-one); gradf(1,2) =     third*(two*beta(2)-one); gradf(1,3) = third*(two*beta(3)-one)
-!                        gradf(2,1) =     third*(two*beta(1)-one); gradf(2,2) = -twothird*(two*beta(2)-one); gradf(2,3) = third*(two*beta(3)-one)
-!                        gradf(3,1) = beta(2)*beta(3);             gradf(3,2) = beta(3)*beta(1);             gradf(3,3) = beta(1)*beta(2)
-!
-!                        dbeta = (f-f1)
-!                        call dgesv(3, 3, gradf, 3, ipiv, dbeta, 1, info)
-!                        
-!                        ! Backtracking line search
-!                        t = 1.
-!                        beta_new = beta + t * dbeta
-!                        betasum = sum( beta_new*(beta_new-one) ) / three
-!                        f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
-!                        do while ( sqrt(sum( (f2-f)**two )) .GE. residual )
-!                            t = half*t
-!                            beta_new = beta + t * dbeta
-!                            betasum = sum( beta_new*(beta_new-one) ) / three
-!                            f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
-!                        end do
-!                        beta = beta_new
-!                        f1 = f2
-!                        residual = sqrt(sum( (f1-f)**two ))                                    ! Norm of the residual
-!                    end do
-!                    if (iters >= niters) print '(A)', 'Newton solve in plastic_deformation did not converge'
-!                    
-!                    ! Then get new svals
-!                    sval = sqrt(beta) * sqrt_om**(one/three)
-!                    
-!                    ! Get g = u*sval*vt
-!                    vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! sval*vt
-!                    g = MATMUL(u,vt) ! u*sval*vt
-!
-!                    this%g11(i,j,k) = g(1,1); this%g12(i,j,k) = g(1,2); this%g13(i,j,k) = g(1,3)
-!                    this%g21(i,j,k) = g(2,1); this%g22(i,j,k) = g(2,2); this%g23(i,j,k) = g(2,3)
-!                    this%g31(i,j,k) = g(3,1); this%g32(i,j,k) = g(3,2); this%g33(i,j,k) = g(3,3)
-!                end do
-!            end do
-!        end do
-!    end subroutine
 
 end module 

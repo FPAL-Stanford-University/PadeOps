@@ -812,7 +812,7 @@ contains
         real(rkind), dimension(this%n,na,nb), intent(out) :: df
 
         if(this%n == 1) then
-            df = zero
+            df = f
             return
         end if
         
@@ -834,7 +834,7 @@ contains
         real(rkind), dimension(na,this%n,nb), intent(out) :: df
 
         if(this%n == 1) then
-            df = zero
+            df = f
             return
         end if
         
@@ -856,7 +856,7 @@ contains
         real(rkind), dimension(na,nb,this%n), intent(out) :: df
 
         if(this%n == 1) then
-            df = zero
+            df = f
             return
         end if
         

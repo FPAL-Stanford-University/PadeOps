@@ -3,17 +3,17 @@
 inputdir  =  "/home/akshays/Data/PadeOps/impact_plastic"      ! Directory for input files
 outputdir  = "/home/akshays/Data/PadeOps/impact_plastic"      ! Directory for output files
 
-nx = 201                  ! Number of points in X
-ny = 10                   ! Number of points in Y
-nz = 10                   ! Number of points in Z
+nx = 401                  ! Number of points in X
+ny = 1                    ! Number of points in Y
+nz = 1                    ! Number of points in Z
 
 dt = 1.0D-8               ! Fixed time step value (Set to negative to disable)
-tstop = 1.0D-6            ! Physical time to stop the simulation
+tstop = 1.0D-4            ! Physical time to stop the simulation
 CFL = 0.5D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
-tviz = 1.0D-7             ! Time between visualization dumps (Set to negative to disable)
-vizprefix = "impact_plastic"  ! Prefix for the visualization files
+tviz = 1.0D-5             ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "impact_plastic_compare_300"  ! Prefix for the visualization files
 
 periodicx = .FALSE.       ! Periodic in X?
 periodicy = .TRUE.        ! Periodic in Y?
@@ -52,4 +52,8 @@ Cbeta   = 1.75D0          ! Coefficient for artificial bulk viscosity
 Ckap    = 1.D-2           ! Coefficient for artificial thermal conductivity
 plastic = .TRUE.          ! Logical to turn on plasticity
 yield   = 2.49D9          ! Yield strength of material
+/
+
+&PROBINPUT
+uimpact = 300.D0          ! Normal impact velocity
 /
