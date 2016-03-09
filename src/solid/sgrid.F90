@@ -4,7 +4,7 @@ module SolidGrid
     use FiltersMod, only: filters
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
-    use hooks, only: meshgen, initfields, hook_output, hook_bc, hook_timestep
+    use hooks, only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
     use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                     transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
@@ -66,6 +66,8 @@ module SolidGrid
 
         type(stiffgas),  allocatable :: sgas
         type(sep1solid), allocatable :: elastic
+
+        logical     :: plastic
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -129,6 +131,7 @@ module SolidGrid
             procedure          :: getPhysicalProperties
             procedure, private :: get_tau
             procedure, private :: get_q
+            ! procedure, private :: plastic_deformation
     end type
 
 contains
@@ -169,6 +172,8 @@ contains
         real(rkind) :: Cmu = 0.002_rkind
         real(rkind) :: Cbeta = 1.75_rkind
         real(rkind) :: Ckap = 0.01_rkind
+        logical     :: plastic = .FALSE.
+        real(rkind) :: yield = real(1.D30,rkind)
 
         character(len=clen) :: charout
         real(rkind), dimension(:,:,:,:), allocatable :: finger, fingersq
@@ -181,7 +186,7 @@ contains
                                      filter_x, filter_y, filter_z, &
                                                        prow, pcol, &
                                                          SkewSymm  
-        namelist /SINPUT/  gam, Rgas, PInf, shmod, rho0, Cmu, Cbeta, Ckap
+        namelist /SINPUT/  gam, Rgas, PInf, shmod, rho0, plastic, yield, Cmu, Cbeta, Ckap
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -207,6 +212,8 @@ contains
         this%Cmu = Cmu
         this%Cbeta = Cbeta
         this%Ckap = Ckap
+
+        this%plastic = plastic
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -249,7 +256,7 @@ contains
         ! Allocate elastic
         if ( allocated(this%elastic) ) deallocate(this%elastic)
         allocate(this%elastic)
-        call this%elastic%init(shmod)
+        call this%elastic%init(shmod,yield)
 
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
@@ -296,7 +303,8 @@ contains
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired 
-        call initfields(this%decomp, this%dx, this%dy, this%dz, inputdir, this%mesh, this%fields, this%rho0)
+        call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
+                        rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf)
        
         ! Get hydrodynamic and elastic energies 
         call this%sgas%get_e_from_p(this%rho,this%p,this%e)
@@ -622,11 +630,11 @@ contains
             end if
 
             ! Check tstop condition
-            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop) ) then
+            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop - eps) ) then
                 tcond = .FALSE.
-            else if ( (this%tstop > zero) .AND. (this%tsim + this%dt >= this%tstop) ) then
+            else if ( (this%tstop > zero) .AND. (this%tsim + this%dt + eps >= this%tstop) ) then
                 this%dt = this%tstop - this%tsim
-                stability = 'vizdump'
+                stability = 'stop'
                 vizcond = .TRUE.
             end if
 
@@ -647,6 +655,7 @@ contains
         use reductions, only: P_MAXVAL, P_MINVAL
         class(sgrid), target, intent(inout) :: this
 
+        real(rkind)                                          :: Qtmpt ! Temporary variable for RK45
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: rhs   ! RHS for conserved variables
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: Qtmp  ! Temporary variable for RK45
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for g tensor equation
@@ -657,6 +666,7 @@ contains
 
         Qtmp  = zero
         Qtmpg = zero
+        Qtmpt = zero
 
         do isub = 1,RK45_steps
             call this%get_conserved()
@@ -675,27 +685,45 @@ contains
             call this%getRHS(rhs, rhsg)
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
             Qtmpg = this%dt*rhsg + RK45_A(isub)*Qtmpg
+            Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
             this%g      = this%g      + RK45_B(isub)*Qtmpg
+            this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
             ! Filter the conserved variables
             do i = 1,5
                 call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1)
             end do
-            
             ! Filter the g tensor
             do i = 1,9
                 call this%filter(this%g(:,:,:,i), this%fil, 1)
             end do
             
             call this%get_primitive()
+
+            if (this%plastic) then
+                ! Effect plastic deformations
+                call this%elastic%plastic_deformation(this%g)
+                call this%get_primitive()
+
+                ! Filter the conserved variables
+                do i = 1,5
+                    call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1)
+                end do
+                ! Filter the g tensor
+                do i = 1,9
+                    call this%filter(this%g(:,:,:,i), this%fil, 1)
+                end do
+            end if
+            
             call hook_bc(this%decomp, this%mesh, this%fields, this%tsim)
         end do
 
-        this%tsim = this%tsim + this%dt
+        ! this%tsim = this%tsim + this%dt
         this%step = this%step + 1
             
         call message(1,"Time",this%tsim)
+        call message(2,"Time step",this%dt)
         call message(2,"Minimum density",P_MINVAL(this%rho))
         call message(2,"Maximum velocity",sqrt(P_MAXVAL(this%u*this%u+this%v*this%v+this%w*this%w)))
         call message(2,"Minimum pressure",P_MINVAL(this%p))
@@ -880,6 +908,9 @@ contains
         rhsg(:,:,:,7) = rhsg(:,:,:,7) + this%v*curlg(:,:,:,3) - this%w*curlg(:,:,:,2) + penalty*this%g31
         rhsg(:,:,:,8) = rhsg(:,:,:,8) + this%w*curlg(:,:,:,1) - this%u*curlg(:,:,:,3) + penalty*this%g32
         rhsg(:,:,:,9) = rhsg(:,:,:,9) + this%u*curlg(:,:,:,2) - this%v*curlg(:,:,:,1) + penalty*this%g33
+
+        ! Call problem source hook
+        call hook_source(this%decomp, this%mesh, this%fields, this%tsim, rhs, rhsg)
  
     end subroutine
 
@@ -1298,5 +1329,6 @@ contains
         duidxj(:,:,:,qzidx) = -this%kap*tmp1_in_y
 
         ! Done
-    end subroutine 
+    end subroutine
+
 end module 
