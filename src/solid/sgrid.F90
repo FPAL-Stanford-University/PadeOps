@@ -304,7 +304,8 @@ contains
 
         ! Go to hooks if a different initialization is derired 
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
-                        rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf)
+                        rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf, &
+                        tstop=this%tstop, dt=this%dtfixed, tviz=tviz)
        
         ! Get hydrodynamic and elastic energies 
         call this%sgas%get_e_from_p(this%rho,this%p,this%e)
@@ -610,8 +611,12 @@ contains
             call tic()
             call this%advance_RK45()
             call toc(cputime)
-            call message(2,"CPU time (in seconds)",cputime)
+            
+            call hook_timestep(this%decomp, this%mesh, this%fields, this%tsim)
+            call message(1,"Time",this%tsim)
+            call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
+            call message(2,"CPU time (in seconds)",cputime)
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
@@ -722,13 +727,6 @@ contains
         ! this%tsim = this%tsim + this%dt
         this%step = this%step + 1
             
-        call message(1,"Time",this%tsim)
-        call message(2,"Time step",this%dt)
-        call message(2,"Minimum density",P_MINVAL(this%rho))
-        call message(2,"Maximum velocity",sqrt(P_MAXVAL(this%u*this%u+this%v*this%v+this%w*this%w)))
-        call message(2,"Minimum pressure",P_MINVAL(this%p))
-        call hook_timestep(this%decomp, this%mesh, this%fields, this%tsim)
-
     end subroutine
 
     subroutine get_dt(this,stability)

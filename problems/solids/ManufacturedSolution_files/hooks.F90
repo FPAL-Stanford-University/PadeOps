@@ -524,9 +524,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,gam,PInf)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,gam,PInf,tstop,dt,tviz)
     use kind_parameters,  only: rkind
-    use constants,        only: zero,third,half,one,two,three,pi,eight
+    use constants,        only: zero,third,half,one,two,three,pi,four,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
@@ -539,13 +539,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,gam,PInf)
     character(len=*),                                               intent(in)    :: inputfile
     type(decomp_info),                                              intent(in)    :: decomp
     real(rkind),                                                    intent(in)    :: dx,dy,dz
-    real(rkind),                                          optional, intent(inout) :: rho0, mu, gam, PInf
+    real(rkind),                                          optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: sig11, eps11
-    real(rkind) :: t = zero
+    real(rkind) :: t = zero, p_star, rho_star, c_star
 
     namelist /PROBINPUT/  sigma_0
     
@@ -564,6 +564,28 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,gam,PInf)
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
+
+        p_star = gam*PInf + (four/three)*mu
+        rho_star = rho0
+        c_star = sqrt(p_star/rho_star)
+        sigma_0 = sigma_0 / p_star
+        tstop = tstop * c_star
+        dt = dt * c_star
+        tviz = tviz * c_star
+
+        print*, "p_star = ", p_star
+        print*, "rho_star = ", rho_star
+        print*, "c_star = ", c_star
+        print*, "sigma_0 = ", sigma_0
+        print*, "tstop = ", tstop
+        print*, "dt = ", dt
+        print*, "tviz = ", tviz
+
+        ! Non-dimensionalize problem parameters
+        rho0 = rho0 / rho_star
+        mu = mu / p_star
+        PInf = PInf / p_star
+
         gamma = gam
         p_infty = PInf
         rho_0 = rho0
@@ -626,11 +648,11 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        write(str,'(ES7.1E2)') sigma_0
+        write(str,'(ES7.1E2,A1,I4.4)') sigma_0, "_", decomp%ysz(1)
         write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ManufacturedSolution_"//trim(str)//"_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
-        write(outputunit,'(4ES26.16)') sigma_0, muL, lamL, cL
+        write(outputunit,'(6ES26.16)') tsim, sigma_0, muL, lamL, cL, p_infty
         do i=1,decomp%ysz(1)
             write(outputunit,'(14ES26.16)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
                                            g11(i,1,1), g21(i,1,1), mu(i,1,1), bulk(i,1,1), kap(i,1,1), &
@@ -689,9 +711,6 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
-        call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
-        call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
-        call message(2,"Maximum conductivity",P_MAXVAL(kap))
 
     end associate
 end subroutine
