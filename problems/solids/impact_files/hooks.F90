@@ -5,6 +5,7 @@ module impact_data
     
     real(rkind) :: uimpact = 100._rkind
     real(rkind) :: pinit   = real(1.0D5,rkind)
+    real(rkind) :: rho_0
 
 end module
 
@@ -53,7 +54,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields_solid(decomp,dx,dy,dz,inpDirectory,mesh,fields,rho0)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,gam,PInf,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
@@ -63,14 +64,24 @@ subroutine initfields_solid(decomp,dx,dy,dz,inpDirectory,mesh,fields,rho0)
     use impact_data
 
     implicit none
-    character(len=*),                                               intent(in)    :: inpDirectory
+    character(len=*),                                               intent(in)    :: inputfile
     type(decomp_info),                                              intent(in)    :: decomp
     real(rkind),                                                    intent(in)    :: dx,dy,dz
-    real(rkind),                                                    intent(out)   :: rho0
+    real(rkind),                                          optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
+    integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
+
+    namelist /PROBINPUT/  uimpact
+    
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PROBINPUT)
+    close(ioUnit)
+
+    rho_0 = rho0
 
     associate( rho => fields(:,:,:,rho_index),   u => fields(:,:,:,  u_index), &
                  v => fields(:,:,:,  v_index),   w => fields(:,:,:,  w_index), &
@@ -119,7 +130,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
     integer                                     :: outputunit=229
 
-    character(len=clen) :: outputfile
+    character(len=clen) :: outputfile, velstr
     integer :: i
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
@@ -132,7 +143,8 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/impact_", vizcount, ".dat"
+        write(velstr,'(I3.3)') int(uimpact)
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/impact_"//trim(velstr)//"_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
         do i=1,decomp%ysz(1)
@@ -147,8 +159,9 @@ end subroutine
 
 subroutine hook_bc(decomp,mesh,fields,tsim)
     use kind_parameters,  only: rkind
-    use constants,        only: zero
-    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+    use constants,        only: zero, one
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
+                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
 
     use impact_data
@@ -159,12 +172,40 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
+    integer :: nx
+
+    nx = decomp%ysz(1)
+
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+               g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
+               g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
+               g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+        rho( 1,:,:) = rho_0
+        u  ( 1,:,:) = uimpact
+        v  ( 1,:,:) = zero
+        w  ( 1,:,:) = zero
+        p  ( 1,:,:) = pinit
+        
+        g11( 1,:,:) = one;  g12( 1,:,:) = zero; g13( 1,:,:) = zero
+        g21( 1,:,:) = zero; g22( 1,:,:) = one;  g23( 1,:,:) = zero
+        g31( 1,:,:) = zero; g32( 1,:,:) = zero; g33( 1,:,:) = one
+
+        rho(nx,:,:) = rho_0
+        u  (nx,:,:) = -uimpact
+        v  (nx,:,:) = zero
+        w  (nx,:,:) = zero
+        p  (nx,:,:) = pinit
+        
+        g11(nx,:,:) = one;  g12(nx,:,:) = zero; g13(nx,:,:) = zero
+        g21(nx,:,:) = zero; g22(nx,:,:) = one;  g23(nx,:,:) = zero
+        g31(nx,:,:) = zero; g32(nx,:,:) = zero; g33(nx,:,:) = one
+
     end associate
 end subroutine
 
@@ -196,3 +237,24 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
 
     end associate
 end subroutine
+
+subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
+    use kind_parameters,  only: rkind
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(in)    :: tsim
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    real(rkind), dimension(:,:,:,:), intent(in)    :: fields
+    real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
+    real(rkind), dimension(:,:,:,:), intent(inout) :: rhsg
+
+    associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
+                 v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
+                 p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
+                 e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
+                 bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+    end associate
+end subroutine
+
