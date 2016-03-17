@@ -40,8 +40,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: ix1, ixn, iy1, iyn, iz1, izn
 
     D = sqrt(two*nu/f)
-    Lx = 150*D; Ly = 75*D; Lz = 24*D
+    Lx = 100.d0*D; Ly = 100.d0*D; Lz = 24.d0*D
     
+    print*, D
 
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
@@ -66,6 +67,15 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
             end do
         end do
 
+        ! Shift everything to the origin 
+        x = x - dx
+        y = y - dy
+        z = z - dz 
+
+        print*, dx, dy, dz, nxg, nyg, nzg
+        print*, x(32,12,90)
+        print*, y(43,19,18)
+        print*, z(2,60,4)  
     end associate
 
 end subroutine
@@ -130,17 +140,17 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     do k = 1,size(u,3)
         do j = 1,size(u,2)
             do i = 1,size(u,1)
-                u(i,j,k) = 1.2*(1.0-exp(-z(i,j,k)*2.5d0)*cos(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz) &
+                u(i,j,k) = 1.2d0*(1.0d0-exp(-z(i,j,k)*2.5d0)*cos(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz) &
                         *cos(Uperiods*2.0d0**pi*y(i,j,k)/Ly)*exp(-0.5e0*(z(i,j,k)/zpeak/Lz)**2.0d0))
-                v(i,j,k) = 1.2*(exp(-z(i,j,k)*2.5d0)*sin(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz)& 
+                v(i,j,k) = 1.2d0*(exp(-z(i,j,k)*2.5d0)*sin(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz)& 
                             *cos(Vperiods*2.0d0**pi*x(i,j,k)/Lx)*exp(-0.5d0*(z(i,j,k)/zpeak/Lz)**2.0d0))
-                w(i,j,k) = zero
+                w(i,j,k) = 0.1d0*sin(2*pi*(z(i,j,k)-0.5d0*dz)/Lz)*cos(x(i,j,k))*sin(y(i,j,k))
             end do 
         end do 
     end do 
     u = u*G
     v = v*G
-
+    w = w*G
     ! Add random numbers
     !allocate(randArr(size(u,1),size(u,2),size(u,3)))
     !call gaussian_random(randArr,zero,one,seedu + 10*nrank)

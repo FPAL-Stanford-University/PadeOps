@@ -45,9 +45,6 @@ program EkmanBL
        igp%step = igp%step + 1 
        igp%tsim = igp%tsim + igp%dt
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
-      call mpi_barrier(mpi_comm_world, ierr)
-        call message("Reached here")
-        call mpi_barrier(mpi_comm_world, ierr) 
     end do 
     
     call finalize_io                  !<-- Close the header file (wrap up i/o)
