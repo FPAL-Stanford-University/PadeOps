@@ -78,7 +78,6 @@ module IncompressibleGridNP
             procedure :: AdamsBashforth
             procedure :: getMaxKE
             procedure, private :: interp_wHat_to_wHatC
-            procedure, private :: interp_w_to_wC
             procedure :: compute_vorticity
             procedure, private :: compute_duidxj
             procedure, private :: addNonLinearTerm_Rot
@@ -342,7 +341,6 @@ contains
 
 
         ! STEP 9: Interpolate the cell center values of w
-        call this%interp_w_to_wC()
         call this%interp_wHat_to_wHatC()
         
         
@@ -383,34 +381,6 @@ contains
         end do 
 
     end function
-
-    subroutine interp_W_to_WC(this)
-        class(igrid), intent(inout), target :: this
-        real(rkind), dimension(:,:,:), pointer :: ybuffC, ybuffE, zbuffC, zbuffE
-
-        !ybuffE => this%rbuffyE(:,:,:,1)
-        !zbuffE => this%rbuffzE(:,:,:,1)
-        !zbuffC => this%rbuffzC(:,:,:,1)
-        !ybuffC => this%rbuffyC(:,:,:,1)
-
-
-        ! Step 1: Transpose w from x -> z
-        !call transpose_x_to_y(this%w,ybuffE,this%gpE)
-        !call transpose_y_to_z(ybuffE,zbuffE,this%gpE)
-
-        !! Step 2: Interpolate from E -> C
-        !call this%Ops%InterpZ_Edge2Cell(zbuffE,zbuffC)
-
-        !! Step 3: Transpose back from z -> x
-        !call transpose_z_to_y(zbuffC,ybuffC,this%gpC)
-        !call transpose_y_to_x(ybuffC,this%wC,this%gpC)
-
-        !nullify(ybuffE) 
-        !nullify(zbuffE) 
-        !nullify(zbuffC) 
-        !nullify(ybuffC) 
-        ! Done !
-    end subroutine
 
     subroutine interp_What_to_WhatC(this)
         class(igrid), intent(inout), target :: this
@@ -737,7 +707,6 @@ contains
         class(igrid), intent(inout) :: this
         integer :: i, j, k
 
-        call tic()
         ! Step 1: Non Linear Term 
         select case(AdvectionForm)
         case (1) ! Rotational Form
@@ -749,23 +718,16 @@ contains
         case (4) ! Skew Symmetric Form
             call this%AddNonLinearTerm_SkewSymm(.false.)
         end select  
-        call toc("Advection Step:")
 
-        call tic()
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
         end if 
-        call toc("Coriolis Step:")
-
-        call tic()
 
         ! Step 3: Viscous Term
         call this%AddViscousTerm()
-        call toc("Viscous Step:")
 
 
-        call tic() 
         ! Step 4: Time Step 
         if (this%step == 0) then
             do k = 1,size(this%uhat,3)
@@ -822,29 +784,20 @@ contains
         call this%spectC%dealias(this%vhat)
         call this%spectE%dealias(this%what)
 
-        call toc("Time Advancing and dealiasing:")
 
-        call tic()
         ! Step 6: Pressure projection
         call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
         call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence) 
-        call toc("Pressure Projection and divergence check:")
 
-        call tic()
         ! Step 7: Take it back to physical fields
         call this%spectC%ifft(this%uhat,this%u)
         call this%spectC%ifft(this%vhat,this%v)
         call this%spectE%ifft(this%what,this%w)
-        call toc("Transforming back to Physical Space:")
 
-        call tic()
         ! STEP 8: Interpolate the cell center values of w
-        call this%interp_w_to_wC()
         call this%interp_wHat_to_wHatC()
-        call toc("Interpolating w:")
 
 
-        call tic()
         ! STEP 9: Compute either vorticity or duidxj 
         select case (AdvectionForm)
         case (1)    
@@ -854,9 +807,7 @@ contains
         case (4)
             call this%compute_duidxj()
         end select  
-        call toc("Computing Vorticity:")
-
-        call tic()
+        
         ! STEP 10: Copy the RHS for using during next time step 
         do k = 1,size(this%uhat,3)
             do j = 1,size(this%uhat,2)
@@ -879,9 +830,7 @@ contains
                 end do 
             end do
         end do  
-        call toc("Copy RHS:")
-
-        call message("==============")
+        
     end subroutine
 
 
