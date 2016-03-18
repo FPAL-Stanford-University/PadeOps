@@ -11,6 +11,7 @@ module IncompressibleGridNP
     use PoissonMod, only: poisson
     use mpi 
     use reductions, only: p_maxval
+    use timer, only: tic, toc
 
     implicit none
 
@@ -61,6 +62,7 @@ module IncompressibleGridNP
         complex(rkind), dimension(:,:,:), pointer:: u_Orhs, v_Orhs, w_Orhs
             
         real(rkind) :: nu0, Gx, Gy, Gz, fCor, dtby2
+        complex(rkind), dimension(:,:,:), allocatable :: GxHat 
 
         integer :: tid_statsDump
         real(rkind) :: time_startDumping 
@@ -254,6 +256,7 @@ contains
         call this%spectE%alloc_r2c_out(this%rhsE,1)
         call this%spectE%alloc_r2c_out(this%OrhsE,1)
 
+        
         call this%spectE%alloc_r2c_out(this%SfieldsE,1)
         
         this%u => this%PfieldsC(:,:,:,1) 
@@ -306,35 +309,21 @@ contains
         call this%spectE%fft(this%w,this%what)   
       
 
-        print*, this%mesh(32,12,90,1) 
-        print*, this%mesh(43,19,18,2) 
-        print*, this%mesh(2,60,4,3) 
- 
-        print*, this%u(32,12,90) 
-        print*, this%v(43,19,18) 
-        print*, this%w(2,60,4) 
-        
-        print*, this%uhat(32,12,90) 
-        print*, this%vhat(43,19,18) 
-        print*, this%what(2,60,4) 
-
-        stop 
-        
         ! Dealias before projection
         call this%spectC%dealias(this%uhat)
         call this%spectC%dealias(this%vhat)
         call this%spectE%dealias(this%what)
 
 
-
         ! Pressure projection
         call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
+        call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
 
         ! Take it back to physical fields
         call this%spectC%ifft(this%uhat,this%u)
         call this%spectC%ifft(this%vhat,this%v)
         call this%spectE%ifft(this%what,this%w)
-
+        
 
         ! STEP 8: ALLOCATE STORAGE FOR BUFFERS AND DUIDXJHAT
         allocate(this%cbuffyC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),2))
@@ -358,10 +347,18 @@ contains
         
         
         call message(1,"Max KE:",P_MAXVAL(this%getMaxKE()))
-      
+     
 
         ! STEP 10: Compute Vorticity 
         call this%compute_Vorticity()
+
+        ! STEP 11: Compute Coriolis Term
+        if (this%useCoriolis) then 
+            call this%spectC%alloc_r2c_out(this%GxHat)
+            this%rbuffxC(:,:,:,1) = this%Gx
+            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gxhat)
+        end if 
+
         call message("IGRID initialized successfully!")
     end subroutine
 
@@ -375,8 +372,8 @@ contains
 
         maxKE = zero
         do k = 1,size(this%u,3)
-            do j = 1,size(this%u,3)
-                do i = 1,size(this%u,3)
+            do j = 1,size(this%u,2)
+                do i = 1,size(this%u,1)
                     keloc = this%u(i,j,k)**2 
                     keloc = keloc + this%v(i,j,k)**2
                     keloc = keloc + this%w(i,j,k)**2
@@ -391,27 +388,27 @@ contains
         class(igrid), intent(inout), target :: this
         real(rkind), dimension(:,:,:), pointer :: ybuffC, ybuffE, zbuffC, zbuffE
 
-        ybuffE => this%rbuffyE(:,:,:,1)
-        zbuffE => this%rbuffzE(:,:,:,1)
-        zbuffC => this%rbuffzC(:,:,:,1)
-        ybuffC => this%rbuffyC(:,:,:,1)
+        !ybuffE => this%rbuffyE(:,:,:,1)
+        !zbuffE => this%rbuffzE(:,:,:,1)
+        !zbuffC => this%rbuffzC(:,:,:,1)
+        !ybuffC => this%rbuffyC(:,:,:,1)
 
 
         ! Step 1: Transpose w from x -> z
-        call transpose_x_to_y(this%w,ybuffE,this%gpE)
-        call transpose_y_to_z(ybuffE,zbuffE,this%gpE)
+        !call transpose_x_to_y(this%w,ybuffE,this%gpE)
+        !call transpose_y_to_z(ybuffE,zbuffE,this%gpE)
 
-        ! Step 2: Interpolate from E -> C
-        call this%Ops%InterpZ_Edge2Cell(zbuffE,zbuffC)
+        !! Step 2: Interpolate from E -> C
+        !call this%Ops%InterpZ_Edge2Cell(zbuffE,zbuffC)
 
-        ! Step 3: Transpose back from z -> x
-        call transpose_z_to_y(zbuffC,ybuffC,this%gpC)
-        call transpose_y_to_x(ybuffC,this%wC,this%gpC)
+        !! Step 3: Transpose back from z -> x
+        !call transpose_z_to_y(zbuffC,ybuffC,this%gpC)
+        !call transpose_y_to_x(ybuffC,this%wC,this%gpC)
 
-        nullify(ybuffE) 
-        nullify(zbuffE) 
-        nullify(zbuffC) 
-        nullify(ybuffC) 
+        !nullify(ybuffE) 
+        !nullify(zbuffE) 
+        !nullify(zbuffC) 
+        !nullify(ybuffC) 
         ! Done !
     end subroutine
 
@@ -433,6 +430,9 @@ contains
 
         ! Step 3: Transpose back from z -> y
         call transpose_z_to_y(zbuffC,this%whatC,this%sp_gpC)
+
+        ! Step 4: Get wC
+        call this%spectC%ifft(this%whatC,this%wC)
 
         nullify(ybuffE) 
         nullify(zbuffE) 
@@ -623,76 +623,6 @@ contains
         ctmpy1 => this%cbuffyC(:,:,:,1)
         ctmpy2 => this%cbuffyE(:,:,:,1)
 
-        if (useCnsrv) then        
-            call this%addNonLinearTerm_Cnsrv()
-            cnst = half
-            this%u_rhs = half*this%u_rhs
-            this%v_rhs = half*this%v_rhs
-            this%w_rhs = half*this%w_rhs
-        else 
-            cnst = one
-            this%u_rhs = zero
-            this%v_rhs = zero
-            this%w_rhs = zero
-        end if 
-
-
-        call this%spectC%ifft(dudx,rtmpx1)
-        rtmpx1 = rtmpx1*this%u
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%u_rhs = this%u_rhs - cnst*ctmpy1
-        
-        call this%spectC%ifft(dudy,rtmpx1)
-        rtmpx1 = rtmpx1*this%v
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%u_rhs = this%u_rhs - cnst*ctmpy1
-
-        call this%spectC%ifft(dudz,rtmpx1)
-        rtmpx1 = rtmpx1*this%w
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%u_rhs = this%u_rhs - cnst*ctmpy1
-
-        call this%spectC%ifft(dvdx,rtmpx1)
-        rtmpx1 = rtmpx1*this%u
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%v_rhs = this%v_rhs - cnst*ctmpy1
-
-        call this%spectC%ifft(dvdy,rtmpx1)
-        rtmpx1 = rtmpx1*this%v
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%v_rhs = this%v_rhs - cnst*ctmpy1
-
-        call this%spectC%ifft(dvdz,rtmpx1)
-        rtmpx1 = rtmpx1*this%wC
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%v_rhs = this%v_rhs - cnst*ctmpy1
-
-        
-        call this%spectC%ifft(dwdx,rtmpx1)
-        rtmpx1 = rtmpx1*this%u
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)
-        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)  
-        this%w_rhs = this%w_rhs - cnst*ctmpy2
-    
-
-        call this%spectC%ifft(dwdy,rtmpx1)
-        rtmpx1 = rtmpx1*this%v
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)
-        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)  
-        this%w_rhs = this%w_rhs - cnst*ctmpy2
-
-
-        call this%spectC%ifft(dwdz,rtmpx1)
-        rtmpx1 = rtmpx1*this%wC
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)
-        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)  
-        this%w_rhs = this%w_rhs - cnst*ctmpy2
 
         nullify( dudx, dudy, dudz) 
         nullify( dvdx, dvdy, dvdz)
@@ -716,54 +646,6 @@ contains
         ctmpy1 => this%cbuffyC(:,:,:,1)
         ctmpy2 => this%cbuffyE(:,:,:,1)
 
-
-        ! uv terms
-        rtmpx1 = -this%u*this%v
-        call this%spectC%fft(rtmpx1,this%u_rhs)
-        this%v_rhs = imi*this%spectC%k1*this%u_rhs
-        this%u_rhs = imi*this%spectC%k2*this%u_rhs
-
-        ! uw terms
-        rtmpx1 = -this%u*this%wC
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)
-        call transpose_z_to_y(ctmpz2,this%w_rhs,this%sp_gpE)
-        this%w_rhs = imi*this%spectE%k1*this%w_rhs
-        call this%Ops%ddz_E2C(ctmpz2,ctmpz1)
-        call transpose_z_to_y(ctmpz1,ctmpy1,this%sp_gpC)
-        this%u_rhs = this%u_rhs + ctmpy1
-
-        ! vw terms
-        rtmpx1 = -this%v*this%wC
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)
-        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
-        this%w_rhs = this%w_rhs + imi*this%spectE%k2*ctmpy2
-        call this%Ops%ddz_E2C(ctmpz2,ctmpz1)
-        call transpose_z_to_y(ctmpz1,ctmpy1,this%sp_gpC)
-        this%v_rhs = this%v_rhs + ctmpy1
-     
-        ! uu term 
-        rtmpx1 = -this%u*this%u
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%u_rhs = this%u_rhs + this%spectC%k1*ctmpy1
-        
-        ! vv term
-        rtmpx1 = -this%v*this%v
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%v_rhs = this%v_rhs + this%spectC%k2*ctmpy1
-
-        ! ww term 
-        rtmpx1 =  -this%wC*this%wC
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%Ops%ddz_C2E(ctmpz1,ctmpz2,.true., .true.)
-        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE) 
-        this%w_rhs = this%w_rhs + ctmpy2
-
-        ! Done 
         nullify(rtmpx1) 
         nullify(ctmpz1) 
         nullify(ctmpz2) 
@@ -787,15 +669,10 @@ contains
         do k = 1,size(this%u_rhs,3)
             do j = 1,size(this%u_rhs,2)
                 do i = 1,size(this%u_rhs,1)
-                    this%v_rhs(i,j,k) = this%v_rhs(i,j,k) - this%fCor*this%uhat(i,j,k)
+                    this%v_rhs(i,j,k) = this%v_rhs(i,j,k) +  this%fCor*(this%GxHat(i,j,k) - this%uhat(i,j,k))
                 end do 
             end do 
         end do 
-        if (this%spectC%carryingZeroK) then
-            this%v_rhs(this%spectC%ZeroK_i,this%spectC%ZeroK_j,:) =  & 
-                    this%v_rhs(this%spectC%ZeroK_i,this%spectC%ZeroK_j,:) & 
-                                + this%fCor*this%Gx*this%ny*this%nx
-        end if 
 
         ! w equation 
         ! Do nothing 
@@ -860,6 +737,7 @@ contains
         class(igrid), intent(inout) :: this
         integer :: i, j, k
 
+        call tic()
         ! Step 1: Non Linear Term 
         select case(AdvectionForm)
         case (1) ! Rotational Form
@@ -871,15 +749,23 @@ contains
         case (4) ! Skew Symmetric Form
             call this%AddNonLinearTerm_SkewSymm(.false.)
         end select  
+        call toc("Advection Step:")
 
+        call tic()
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
         end if 
+        call toc("Coriolis Step:")
+
+        call tic()
 
         ! Step 3: Viscous Term
         call this%AddViscousTerm()
+        call toc("Viscous Step:")
 
+
+        call tic() 
         ! Step 4: Time Step 
         if (this%step == 0) then
             do k = 1,size(this%uhat,3)
@@ -930,25 +816,35 @@ contains
             end do 
         end if 
         
+
         ! Step 5: Dealias 
         call this%spectC%dealias(this%uhat)
         call this%spectC%dealias(this%vhat)
         call this%spectE%dealias(this%what)
 
+        call toc("Time Advancing and dealiasing:")
+
+        call tic()
         ! Step 6: Pressure projection
         call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
         call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence) 
+        call toc("Pressure Projection and divergence check:")
 
+        call tic()
         ! Step 7: Take it back to physical fields
         call this%spectC%ifft(this%uhat,this%u)
         call this%spectC%ifft(this%vhat,this%v)
         call this%spectE%ifft(this%what,this%w)
+        call toc("Transforming back to Physical Space:")
 
+        call tic()
         ! STEP 8: Interpolate the cell center values of w
         call this%interp_w_to_wC()
         call this%interp_wHat_to_wHatC()
+        call toc("Interpolating w:")
 
 
+        call tic()
         ! STEP 9: Compute either vorticity or duidxj 
         select case (AdvectionForm)
         case (1)    
@@ -958,7 +854,9 @@ contains
         case (4)
             call this%compute_duidxj()
         end select  
+        call toc("Computing Vorticity:")
 
+        call tic()
         ! STEP 10: Copy the RHS for using during next time step 
         do k = 1,size(this%uhat,3)
             do j = 1,size(this%uhat,2)
@@ -967,9 +865,9 @@ contains
                 end do 
             end do
         end do  
-        do k = 1,size(this%uhat,3)
-            do j = 1,size(this%uhat,2)
-                do i = 1,size(this%uhat,1)
+        do k = 1,size(this%vhat,3)
+            do j = 1,size(this%vhat,2)
+                do i = 1,size(this%vhat,1)
                     this%v_Orhs(i,j,k) = this%v_rhs(i,j,k)
                 end do 
             end do
@@ -981,7 +879,9 @@ contains
                 end do 
             end do
         end do  
+        call toc("Copy RHS:")
 
+        call message("==============")
     end subroutine
 
 
@@ -1008,14 +908,12 @@ contains
         ctmpy2 => this%cbuffyE(:,:,:,1)
 
 
-
-        dudx = imi*this%spectC%k1*this%uhat
-        dudy = imi*this%spectC%k2*this%uhat
-        dvdx = imi*this%spectC%k1*this%vhat
-        dvdx = imi*this%spectC%k2*this%vhat
-        dwdx = imi*this%spectC%k1*this%whatC
-        dwdx = imi*this%spectC%k2*this%whatC
-       
+        call this%spectC%mTimes_ik1_oop(this%uhat,dudx)
+        call this%spectC%mTimes_ik2_oop(this%uhat,dudy)
+        call this%spectC%mTimes_ik1_oop(this%vhat,dvdx)
+        call this%spectC%mTimes_ik2_oop(this%vhat,dvdy)
+        call this%spectC%mTimes_ik1_oop(this%whatC,dwdx)
+        call this%spectC%mTimes_ik2_oop(this%whatC,dwdy)
 
         call transpose_y_to_z(this%uhat,ctmpz1, this%sp_gpC)
         call this%Ops%ddz_C2C(ctmpz1,ctmpz3,topBC_u,botBC_u) 

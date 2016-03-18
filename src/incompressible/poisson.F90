@@ -238,13 +238,12 @@ contains
         call transpose_z_to_y(this%tmpbuffz1E,what,this%sp_gpE)
         call transpose_z_to_y(this%tmpbuffz1C,this%tmpbuff,this%sp_gp)
         
-
         ! Project out uhat and vhat 
         uhat = uhat - imi*this%spect%k1*this%tmpbuff
         vhat = vhat - imi*this%spect%k2*this%tmpbuff
 
         ! Check if divergence is exactly zero
-       
+
     end subroutine 
 
     subroutine PressureProj(this,Sfields,spect)

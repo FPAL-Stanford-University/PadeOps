@@ -42,8 +42,6 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     D = sqrt(two*nu/f)
     Lx = 100.d0*D; Ly = 100.d0*D; Lz = 24.d0*D
     
-    print*, D
-
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
 
@@ -72,10 +70,6 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         y = y - dy
         z = z - dz 
 
-        print*, dx, dy, dz, nxg, nyg, nzg
-        print*, x(32,12,90)
-        print*, y(43,19,18)
-        print*, z(2,60,4)  
     end associate
 
 end subroutine

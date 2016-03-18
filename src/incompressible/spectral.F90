@@ -394,7 +394,7 @@ contains
                     do k = 1,size(this%k1,3)
                         do j = 1,size(this%k1,2)
                             do i = 1,size(this%k1,1)
-                                this%kabs_sq(i,j,k) = this%k1(i,j,k)*2 + this%k2(i,j,k)*2
+                                this%kabs_sq(i,j,k) = this%k1(i,j,k)**2 + this%k2(i,j,k)**2
                             end do 
                         end do 
                     end do                 
