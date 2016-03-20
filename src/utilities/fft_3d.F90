@@ -599,7 +599,7 @@ contains
         real(rkind), dimension(this%physical%xsz(1),this%physical%xsz(2),this%physical%xsz(3)), intent(out) :: output
         
         integer :: k 
-        logical :: setOddBall
+        logical, intent(in) :: setOddBall
 
 
         ! Then transform in y (c2c, out of place)

@@ -3,19 +3,18 @@ program test_projection
     use constants, only: pi, two, one, imi, zero
     use reductions, only: p_maxval
     use timer, only: tic, toc
-    use staggOpsMod, only: staggOps
     use basic_io, only: read_2d_ascii 
     use decomp_2d
     use spectralMod, only: spectral
-    use poissonMod, only: poisson
-
+    use cd06staggstuff, only: cd06stagg 
+    use PadePoissonMod, only: padepoisson
+    use exits, only: message
 
     implicit none
    
     real(rkind), dimension(:,:,:), allocatable :: x, y, z, u, v, w, wE
     real(rkind), dimension(:,:,:), allocatable :: tmp
     type(decomp_info) :: gpC, gpE
-    type(staggOps), allocatable :: Ops
     integer :: nx = 100, ny = 100, nz = 60
     integer :: ierr, prow = 0, pcol = 0
     real(rkind) :: dx, dy, dz
@@ -24,9 +23,10 @@ program test_projection
     real(rkind), dimension(:,:), allocatable :: temp 
     type(spectral), allocatable :: spect
     type(spectral), allocatable :: spectE
-    type(poisson), allocatable :: poiss 
+    type(padepoisson), allocatable :: poiss 
     real(rkind), dimension(:,:,:), allocatable :: divergence, rtmp1z, rtmp2z, rtmp1x, rtmp1y, rtmp1yE, rtmp1zE
     complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what
+    type(cd06stagg), allocatable :: der
 
     call MPI_Init(ierr)
     
@@ -81,12 +81,14 @@ program test_projection
     !! Allocate the operator, spectral and poisson classes
     allocate(spect)
     allocate(spectE)
-    allocate(Ops)
     allocate(poiss)
+    allocate(der)
+
+    call der%init(nz, dz, .false., .false.) 
     call spect%init("x", nx, ny, nz, dx, dy, dz, "four", "2/3rd", dimTransform,.false.)
     call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", "2/3rd", dimTransform,.false.,.false.,.false.,.false.)
-    call Ops%Init(gpC,gpE,0, dx, dy, dz,spect%spectdecomp,spectE%spectdecomp)
-    call poiss%init(spect,.false.,dx, dy, dz,Ops,spectE)
+    call poiss%init(dx, dy, dz, spect, spectE, der)
+
 
     !! Generate wE
     allocate(wE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
@@ -100,7 +102,7 @@ program test_projection
     call transpose_y_to_z(rtmp1y,rtmp1z,gpC)
 
     ! Step 2: Interpolate onto rtmp1zE
-    call Ops%InterpZ_Cell2Edge(rtmp1z,rtmp1zE,zero,zero)
+    call der%InterpZ_C2E(rtmp1z,rtmp1zE,size(rtmp1z,1),size(rtmp1z,2))
 
     ! Step 3: Transpose back from z -> x
     call transpose_z_to_y(rtmp1zE,rtmp1yE,gpE)
@@ -117,16 +119,31 @@ program test_projection
     call spect%fft(u,uhat)
     call spect%fft(v,vhat)
     call spectE%fft(wE,what)
- 
-    !! Call Poisson Projection
-    call tic()
-    call poiss%PressureProjNP(uhat,vhat,what) 
-    call toc()
+
+    !! Set Oddballs to zero
+    uhat(:,ny/2+1,:) = zero + imi*zero
+    vhat(:,ny/2+1,:) = zero + imi*zero
+    what(:,ny/2+1,:) = zero + imi*zero
+    call spectE%ifft(what, wE, .true.) 
+    call spect%ifft(uhat, u, .true.) 
+    call spect%ifft(vhat, v, .true.) 
+    call spect%fft(u,uhat)
+    call spect%fft(v,vhat)
+    call spectE%fft(wE,what)
 
     !! Divergence Check 
     call poiss%DivergenceCheck(uhat,vhat,what,divergence) 
-   
-    print*, p_maxval(divergence)
+    call message(1,"Max Divergence before projection:", p_maxval(divergence))
+
+    call tic()
+    !! Call Poisson Projection
+    call poiss%PressureProjection(uhat,vhat,what) 
+    call toc()   
+
+
+    !! Divergence Check 
+    call poiss%DivergenceCheck(uhat,vhat,what,divergence) 
+    call message(1,"Max Divergence after projection:", p_maxval(divergence))
 
     !! Deallocate storage
     deallocate(uhat, vhat, what)
@@ -135,11 +152,11 @@ program test_projection
 
     !! Destroy classes
     call poiss%destroy()
-    call Ops%destroy()
+    call der%destroy()
     call spect%destroy()
     call spectE%destroy()
     deallocate(spect)
-    deallocate(Ops)
+    deallocate(der)
     deallocate(poiss)
 
 
