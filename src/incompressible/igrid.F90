@@ -12,11 +12,17 @@ module IncompressibleGridNP
     use mpi 
     use reductions, only: p_maxval
     use timer, only: tic, toc
+    use PadePoissonMod, only: Padepoisson 
+    use cd06staggstuff, only: cd06stagg
+    use cf90stuff, only: cf90
 
     implicit none
 
     private
     public :: igrid 
+
+    logical, parameter :: useCompactFD = .true. 
+
 
     integer, parameter :: no_slip = 1, slip = 2
     complex(rkind), parameter :: zeroC = zero + imi*zero 
@@ -44,12 +50,16 @@ module IncompressibleGridNP
 
 
         type(poisson), allocatable :: poiss
+        type(padepoisson), allocatable :: padepoiss
         real(rkind), dimension(:,:,:), allocatable :: divergence
 
         real(rkind), dimension(:,:,:), pointer :: u, v, wC, w
         real(rkind), dimension(:,:,:), pointer :: ox,oy,oz
         complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what
         complex(rkind), dimension(:,:,:), pointer :: oxhat, oyhat, ozhat
+
+        type(cd06stagg), allocatable :: derU, derV, derW
+        type(cf90),      allocatable :: filzE, filzC
 
         real(rkind), dimension(:,:,:,:), allocatable, public :: rbuffxC, rbuffyC, rbuffzC
         real(rkind), dimension(:,:,:,:), allocatable :: rbuffxE, rbuffyE, rbuffzE
@@ -64,6 +74,7 @@ module IncompressibleGridNP
         real(rkind) :: nu0, Gx, Gy, Gz, fCor, dtby2
         complex(rkind), dimension(:,:,:), allocatable :: GxHat 
 
+        integer :: nxZ, nyZ
         integer :: tid_statsDump
         real(rkind) :: time_startDumping 
         
@@ -85,6 +96,7 @@ module IncompressibleGridNP
             procedure, private :: addNonLinearTerm_SkewSymm 
             procedure, private :: addCoriolisTerm
             procedure, private :: addViscousTerm 
+            procedure, private :: ApplyCompactFilter 
     end type
 
 contains 
@@ -241,9 +253,19 @@ contains
 
 
         ! STEP 5: ALLOCATE/INITIALIZE THE OPERATORS DERIVED TYPE
-        allocate(this%Ops)
-        call this%Ops%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp,this%spectE%spectdecomp)
-        
+        if (useCompactFD) then
+            allocate(this%derU, this%derV, this%derW)
+            call this%derU%init (nz  , this%dz, topBC_u, botBC_u) 
+            call this%derV%init (nz  , this%dz, topBC_v, botBC_v) 
+            call this%derW%init (nz  , this%dz, topBC_w, botBC_w)
+            allocate(this%filzC, this%filzE)
+            ierr = this%filzC%init(nz  , .false.)
+            ierr = this%filzE%init(nz+1, .false.)
+        else
+            allocate(this%Ops)
+            call this%Ops%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp,this%spectE%spectdecomp)
+        end if 
+
         ! STEP 6: ALLOCATE MEMORY FOR FIELD ARRAYS
         allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6))
         allocate(this%divergence(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
@@ -286,10 +308,14 @@ contains
         this%w_Orhs => this%OrhsE(:,:,:,1)
 
         
-        ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE 
-        allocate(this%poiss)
-        call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE)  
-       
+        ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
+        if (useCompactFD) then
+            allocate(this%padepoiss)
+            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, this%derW) 
+        else    
+            allocate(this%poiss)
+            call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE)  
+        end if 
                
  
         ! STEP 7: INITIALIZE THE FIELDS 
@@ -308,15 +334,19 @@ contains
         call this%spectE%fft(this%w,this%what)   
       
 
-        ! Dealias before projection
+        ! Dealias and filter before projection
         call this%spectC%dealias(this%uhat)
         call this%spectC%dealias(this%vhat)
         call this%spectE%dealias(this%what)
 
-
         ! Pressure projection
-        call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
-        call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        if (useCompactFD) then
+            call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
+            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        else
+            call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
+            call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        end if
 
         ! Take it back to physical fields
         call this%spectC%ifft(this%uhat,this%u)
@@ -338,7 +368,8 @@ contains
         allocate(this%rbuffxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2))
         allocate(this%rbuffyE(this%gpE%ysz(1),this%gpE%ysz(2),this%gpE%ysz(3),2))
         allocate(this%rbuffzE(this%gpE%zsz(1),this%gpE%zsz(2),this%gpE%zsz(3),2))
-
+        this%nxZ = size(this%cbuffzE,1)
+        this%nyZ = size(this%cbuffzE,2)
 
         ! STEP 9: Interpolate the cell center values of w
         call this%interp_wHat_to_wHatC()
@@ -396,7 +427,11 @@ contains
         call transpose_y_to_z(this%what,zbuffE,this%sp_gpE)
 
         ! Step 2: Interpolate from E -> C
-        call this%Ops%InterpZ_Edge2Cell(zbuffE,zbuffC)
+        if (useCompactFD) then
+            call this%derW%InterpZ_E2C(zbuffE,zbuffC,this%nxZ, this%nyZ)
+        else
+            call this%Ops%InterpZ_Edge2Cell(zbuffE,zbuffC)
+        end if
 
         ! Step 3: Transpose back from z -> y
         call transpose_z_to_y(zbuffC,this%whatC,this%sp_gpC)
@@ -416,11 +451,39 @@ contains
 
     subroutine printDivergence(this)
         class(igrid), intent(inout) :: this
-        call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+
+        if (useCompactFD) then
+            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        else
+            call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        end if 
         call message(1, "Domain Maximum Divergence:", p_maxval(this%divergence))
         
-
     end subroutine 
+
+    subroutine ApplyCompactFilter(this)
+        class(igrid), intent(inout), target :: this
+        complex(rkind), dimension(:,:,:), pointer :: zbuff1, zbuff2, zbuff3, zbuff4
+        zbuff1 => this%cbuffzC(:,:,:,1)
+        zbuff2 => this%cbuffzC(:,:,:,2)
+        zbuff3 => this%cbuffzE(:,:,:,1)
+        zbuff4 => this%cbuffzE(:,:,:,2)
+        
+        call transpose_y_to_z(this%uhat,zbuff1, this%sp_gpC)
+        call this%filzC%filter3(zbuff1,zbuff2,this%nxZ, this%nyZ)
+        call transpose_z_to_y(zbuff1,this%uhat, this%sp_gpC)
+
+        call transpose_y_to_z(this%vhat,zbuff1, this%sp_gpC)
+        call this%filzC%filter3(zbuff1,zbuff2,this%nxZ, this%nyZ)
+        call transpose_z_to_y(zbuff1,this%vhat, this%sp_gpC)
+
+        call transpose_y_to_z(this%what,zbuff3, this%sp_gpE)
+        call this%filzC%filter3(zbuff3,zbuff4,this%nxZ, this%nyZ)
+        call transpose_z_to_y(zbuff4,this%what, this%sp_gpE)
+
+        nullify(zbuff1, zbuff2, zbuff3, zbuff4)
+    end subroutine
+
 
     subroutine laplacian(this, f, lapf)
         class(igrid),target, intent(inout) :: this
@@ -469,7 +532,11 @@ contains
 
         ! Compute omega_x hat
         call transpose_y_to_z(this%vhat,cbuffz1,this%sp_gpC)
-        call this%Ops%ddz_C2C(cbuffz1,cbuffz2,topBC_v,botBC_v)
+        if (useCompactFD) then
+            call this%derV%ddz_C2C(cbuffz1,cbuffz2,this%nxZ,this%nyZ)    
+        else
+            call this%Ops%ddz_C2C(cbuffz1,cbuffz2,topBC_v,botBC_v)
+        end if 
         call transpose_z_to_y(cbuffz2,this%oxhat,this%sp_gpC)
         call this%spectC%mTimes_ik2_oop(this%whatC,cbuffy1) 
 
@@ -484,7 +551,11 @@ contains
 
         ! Compute omega_y hat
         call transpose_y_to_z(this%uhat,cbuffz1,this%sp_gpC)
-        call this%Ops%ddz_C2C(cbuffz1,cbuffz2,topBC_u,botBC_u)
+        if (useCompactFD) then
+            call this%derU%ddz_C2C(cbuffz1,cbuffz2,this%nxZ,this%nyZ)
+        else
+            call this%Ops%ddz_C2C(cbuffz1,cbuffz2,topBC_u,botBC_u)
+        end if 
         call transpose_z_to_y(cbuffz2,this%oyhat,this%sp_gpC)
         call this%spectC%mTimes_ik1_oop(this%whatC,cbuffy1) 
         do k = 1,size(this%oxhat,3)
@@ -561,7 +632,11 @@ contains
         
         ! Interpolate w_rhs using wC_rhs
         call transpose_y_to_z(this%wC_rhs,ctmpz1, this%sp_gpC)
-        call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)   
+        if (useCompactFD) then
+            call this%derW%InterpZ_C2E(ctmpz1,ctmpz2,this%nxZ, this%nyZ)
+        else
+            call this%Ops%InterpZ_Cell2Edge(ctmpz1,ctmpz2,zeroC,zeroC)   
+        end if 
         call transpose_z_to_y(ctmpz2,this%w_rhs,this%sp_gpE)
 
         ! Done 
@@ -663,7 +738,12 @@ contains
         
         ! u equation 
         call transpose_y_to_z(this%uhat, cztmp1,this%sp_gpC)
-        call this%Ops%d2dz2_C2C(cztmp1,cztmp2,topBC_u,botBC_u)
+        if (useCompactFD) then
+            call this%derU%d2dz2_C2C(cztmp1,cztmp2,this%nxZ,this%nyZ)
+        else
+            call this%Ops%d2dz2_C2C(cztmp1,cztmp2,topBC_u,botBC_u)
+        end if 
+        
         call transpose_z_to_y(cztmp2,cytmp1,this%sp_gpC)
         do k = 1,size(this%u_rhs,3)
             do j = 1,size(this%u_rhs,2)
@@ -676,7 +756,11 @@ contains
 
         ! v equation 
         call transpose_y_to_z(this%vhat, cztmp1,this%sp_gpC)
-        call this%Ops%d2dz2_C2C(cztmp1,cztmp2,topBC_v,botBC_v)
+        if (useCompactFD) then
+            call this%derV%d2dz2_C2C(cztmp1,cztmp2,this%nxZ,this%nyZ)
+        else
+            call this%Ops%d2dz2_C2C(cztmp1,cztmp2,topBC_v,botBC_v)
+        end if 
         call transpose_z_to_y(cztmp2,cytmp1,this%sp_gpC)
         do k = 1,size(this%v_rhs,3)
             do j = 1,size(this%v_rhs,2)
@@ -689,7 +773,12 @@ contains
         
         ! w equation
         call transpose_y_to_z(this%what, cztmp3,this%sp_gpE)
-        call this%Ops%d2dz2_E2E(cztmp3,cztmp4,topBC_w,botBC_w)
+        if (useCompactFD) then
+            call this%derW%d2dz2_C2C(cztmp3,cztmp4,this%nxZ,this%nyZ)
+        else
+            call this%Ops%d2dz2_E2E(cztmp3,cztmp4,topBC_w,botBC_w)
+        end if 
+
         call transpose_z_to_y(cztmp4,cytmp2,this%sp_gpC)
         do k = 1,size(this%w_rhs,3)
             do j = 1,size(this%w_rhs,2)
@@ -719,14 +808,14 @@ contains
             call this%AddNonLinearTerm_SkewSymm(.false.)
         end select  
 
+
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
         end if 
-
+        
         ! Step 3: Viscous Term
         call this%AddViscousTerm()
-
 
         ! Step 4: Time Step 
         if (this%step == 0) then
@@ -784,10 +873,18 @@ contains
         call this%spectC%dealias(this%vhat)
         call this%spectE%dealias(this%what)
 
+        !if (useCompactFD) then
+        !    call this%ApplyCompactFilter()
+        !end if 
 
         ! Step 6: Pressure projection
-        call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
-        call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence) 
+        if (useCompactFD) then
+            call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
+            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence, .true.) 
+        else
+            call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
+            call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence) 
+        end if 
 
         ! Step 7: Take it back to physical fields
         call this%spectC%ifft(this%uhat,this%u)
@@ -832,7 +929,6 @@ contains
         end do  
         
     end subroutine
-
 
 
     subroutine compute_duidxj(this)

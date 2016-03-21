@@ -14,7 +14,7 @@ module spectralMod
     private
     public :: spectral, GetWaveNums 
 
-    logical :: useExhaustiveFFT = .false. 
+    logical :: useExhaustiveFFT = .true. 
 
     type :: spectral
         private
