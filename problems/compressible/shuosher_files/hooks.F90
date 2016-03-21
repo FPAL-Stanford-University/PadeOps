@@ -204,3 +204,18 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
 
     end associate
 end subroutine
+
+subroutine hook_source(decomp,mesh,fields,tsim,rhs)
+    use kind_parameters, only: rkind
+    use decomp_2d,       only: decomp_info
+
+    use shuosher_data
+
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(in)    :: tsim
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    real(rkind), dimension(:,:,:,:), intent(in)    :: fields
+    real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
+
+end subroutine
