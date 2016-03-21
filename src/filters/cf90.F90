@@ -69,7 +69,8 @@ module cf90stuff
 
         procedure, private :: ComputeXRHS
         procedure, private :: ComputeYRHS
-        procedure, private :: ComputeZRHS
+        procedure, private :: ComputeZRHS_REAL
+        procedure, private :: ComputeZRHS_CMPLX
         
         procedure, private :: SolveXLU
         procedure, private :: SolveYLU
@@ -80,11 +81,14 @@ module cf90stuff
 
         procedure, private :: SolveXPenta
         procedure, private :: SolveYPenta
-        procedure, private :: SolveZPenta
+        procedure, private :: SolveZPenta_REAL
+        procedure, private :: SolveZPenta_CMPLX
         
         procedure :: filter1
         procedure :: filter2
-        procedure :: filter3
+        procedure, private :: filter3_REAL
+        procedure, private :: filter3_CMPLX
+        generic :: filter3 => filter3_REAL, filter3_CMPLX 
         
     end type
 
@@ -481,26 +485,25 @@ contains
 
     end subroutine
 
-    subroutine SolveZPenta(this,y,n1,n2)
+    subroutine SolveZPenta_REAL(this,y,n1,n2)
 
         class( cf90 ), intent(in) :: this
         integer, intent(in) :: n1,n2
         real(rkind), dimension(n1,n2,this%n), intent(inout) :: y
         integer :: k
 
-        ! Step 1
-        y(:,:,2) = y(:,:,2) - this%penta(2,8)*y(:,:,1)
-        do k = 3,this%n
-            y(:,:,k) = y(:,:,k) - this%penta(k,9)*y(:,:,k-2) - this%penta(k,8)*y(:,:,k-1)
-        end do 
+#include "CF90_files/SolveZPenta_common.F90"        
 
-        ! Step 2
-        y(:,:,this%n) = y(:,:,this%n)*this%penta(this%n,7)
-        
-        y(:,:,this%n-1) = y(:,:,this%n-1)*this%penta(this%n-1,7) - this%penta(this%n-1,10)*y(:,:,this%n)
-        do k = this%n-2,1,-1
-            y(:,:,k) = y(:,:,k)*this%penta(k,7) - y(:,:,k+2)*this%penta(k,5)*this%penta(k,7) - y(:,:,k+1)*this%penta(k,10)
-        end do 
+    end subroutine
+
+    subroutine SolveZPenta_CMPLX(this,y,n1,n2)
+
+        class( cf90 ), intent(in) :: this
+        integer, intent(in) :: n1,n2
+        complex(rkind), dimension(n1,n2,this%n), intent(inout) :: y
+        integer :: k
+
+#include "CF90_files/SolveZPenta_common.F90"        
 
     end subroutine
 
@@ -711,100 +714,28 @@ contains
     
     end subroutine
 
-    pure subroutine ComputeZRHS(this, f, RHS, n1, n2)
+    pure subroutine ComputeZRHS_REAL(this, f, RHS, n1, n2)
     
         class( cf90 ), intent(in) :: this
         integer, intent(in) :: n1, n2
         real(rkind), dimension(n1,n2,this%n), intent(in) :: f
         real(rkind), dimension(n1,n2,this%n), intent(out) :: RHS
-    
-        select case (this%periodic)
-        case (.TRUE.)
-                RHS(:,:,         1) = a90 * ( f(:,:,         1) )                     &
-                                    + b90 * ( f(:,:,         2) + f(:,:,    this%n) ) &
-                                    + c90 * ( f(:,:,         3) + f(:,:,  this%n-1) ) &
-                                    + d90 * ( f(:,:,         4) + f(:,:,  this%n-2) ) &
-                                    + e90 * ( f(:,:,         5) + f(:,:,  this%n-3) )
-                RHS(:,:,         2) = a90 * ( f(:,:,         2) )                     &
-                                    + b90 * ( f(:,:,         3) + f(:,:,         1) ) &
-                                    + c90 * ( f(:,:,         4) + f(:,:,    this%n) ) &
-                                    + d90 * ( f(:,:,         5) + f(:,:,  this%n-1) ) &
-                                    + e90 * ( f(:,:,         6) + f(:,:,  this%n-2) )
-                RHS(:,:,         3) = a90 * ( f(:,:,         3) )                     &
-                                    + b90 * ( f(:,:,         4) + f(:,:,         2) ) &
-                                    + c90 * ( f(:,:,         5) + f(:,:,         1) ) &
-                                    + d90 * ( f(:,:,         6) + f(:,:,    this%n) ) &
-                                    + e90 * ( f(:,:,         7) + f(:,:,  this%n-1) )
-                RHS(:,:,         4) = a90 * ( f(:,:,         4) )                     &
-                                    + b90 * ( f(:,:,         5) + f(:,:,         3) ) &
-                                    + c90 * ( f(:,:,         6) + f(:,:,         2) ) &
-                                    + d90 * ( f(:,:,         7) + f(:,:,         1) ) &
-                                    + e90 * ( f(:,:,         8) + f(:,:,    this%n) )
-                RHS(:,:,5:this%n-4) = a90 * ( f(:,:,5:this%n-4) )                     &
-                                    + b90 * ( f(:,:,6:this%n-3) + f(:,:,4:this%n-5) ) &
-                                    + c90 * ( f(:,:,7:this%n-2) + f(:,:,3:this%n-6) ) &
-                                    + d90 * ( f(:,:,8:this%n-1) + f(:,:,2:this%n-7) ) &
-                                    + e90 * ( f(:,:,9:this%n  ) + f(:,:,1:this%n-8) )
-                RHS(:,:,  this%n-3) = a90 * ( f(:,:,  this%n-3) )                     &
-                                    + b90 * ( f(:,:,  this%n-2) + f(:,:,  this%n-4) ) &
-                                    + c90 * ( f(:,:,  this%n-1) + f(:,:,  this%n-5) ) &
-                                    + d90 * ( f(:,:,    this%n) + f(:,:,  this%n-6) ) &
-                                    + e90 * ( f(:,:,         1) + f(:,:,  this%n-7) )
-                RHS(:,:,  this%n-2) = a90 * ( f(:,:,  this%n-2) )                     &
-                                    + b90 * ( f(:,:,  this%n-1) + f(:,:,  this%n-3) ) &
-                                    + c90 * ( f(:,:,    this%n) + f(:,:,  this%n-4) ) &
-                                    + d90 * ( f(:,:,         1) + f(:,:,  this%n-5) ) &
-                                    + e90 * ( f(:,:,         2) + f(:,:,  this%n-6) )
-                RHS(:,:,  this%n-1) = a90 * ( f(:,:,  this%n-1) )                     &
-                                    + b90 * ( f(:,:,    this%n) + f(:,:,  this%n-2) ) &
-                                    + c90 * ( f(:,:,         1) + f(:,:,  this%n-3) ) &
-                                    + d90 * ( f(:,:,         2) + f(:,:,  this%n-4) ) &
-                                    + e90 * ( f(:,:,         3) + f(:,:,  this%n-5) )
-                RHS(:,:,    this%n) = a90 * ( f(:,:,    this%n) )                     &
-                                    + b90 * ( f(:,:,         1) + f(:,:,  this%n-1) ) &
-                                    + c90 * ( f(:,:,         2) + f(:,:,  this%n-2) ) &
-                                    + d90 * ( f(:,:,         3) + f(:,:,  this%n-3) ) &
-                                    + e90 * ( f(:,:,         4) + f(:,:,  this%n-4) )
-        case (.FALSE.)
-                    
-            RHS(:,:,         1) =    one * ( f(:,:,         1) )                     
 
-            RHS(:,:,         2) = b2_a90 * ( f(:,:,         2) )                     &
-                                + b2_b90 * ( f(:,:,         3) + f(:,:,         1) ) 
-            
-            RHS(:,:,         3) = b3_a90 * ( f(:,:,         3) )                     &
-                                + b3_b90 * ( f(:,:,         4) + f(:,:,         2) ) &
-                                + b3_c90 * ( f(:,:,         5) + f(:,:,         1) )
-
-            RHS(:,:,         4) = b4_a90 * ( f(:,:,         4) )                     &
-                                + b4_b90 * ( f(:,:,         5) + f(:,:,         3) ) &
-                                + b4_c90 * ( f(:,:,         6) + f(:,:,         2) ) &
-                                + b4_d90 * ( f(:,:,         7) + f(:,:,         1) ) 
-
-            RHS(:,:,5:this%n-4) =    a90 * ( f(:,:,5:this%n-4) )                     &
-                                +    b90 * ( f(:,:,6:this%n-3) + f(:,:,4:this%n-5) ) &
-                                +    c90 * ( f(:,:,7:this%n-2) + f(:,:,3:this%n-6) ) &
-                                +    d90 * ( f(:,:,8:this%n-1) + f(:,:,2:this%n-7) ) &
-                                +    e90 * ( f(:,:,9:this%n  ) + f(:,:,1:this%n-8) )
-
-            RHS(:,:,  this%n-3) = b4_a90 * ( f(:,:,  this%n-3) )                     &
-                                + b4_b90 * ( f(:,:,  this%n-2) + f(:,:,  this%n-4) ) &
-                                + b4_c90 * ( f(:,:,  this%n-1) + f(:,:,  this%n-5) ) &
-                                + b4_d90 * ( f(:,:,    this%n) + f(:,:,  this%n-6) ) 
-
-            RHS(:,:,  this%n-2) = b3_a90 * ( f(:,:,  this%n-2) )                     &
-                                + b3_b90 * ( f(:,:,  this%n-1) + f(:,:,  this%n-3) ) &
-                                + b3_c90 * ( f(:,:,    this%n) + f(:,:,  this%n-4) ) 
-
-            RHS(:,:,  this%n-1) = b2_a90 * ( f(:,:,  this%n-1) )                     &
-                                + b2_b90 * ( f(:,:,    this%n) + f(:,:,  this%n-2) ) 
-
-            RHS(:,:,    this%n) =    one * ( f(:,:,    this%n) )                     
-
-        end select
+#include "CF90_files/ComputeZRHS_common.F90"    
     
     end subroutine
     
+    pure subroutine ComputeZRHS_CMPLX(this, f, RHS, n1, n2)
+    
+        class( cf90 ), intent(in) :: this
+        integer, intent(in) :: n1, n2
+        complex(rkind), dimension(n1,n2,this%n), intent(in) :: f
+        complex(rkind), dimension(n1,n2,this%n), intent(out) :: RHS
+
+#include "CF90_files/ComputeZRHS_common.F90"    
+    
+    end subroutine
+
     subroutine filter1(this, f, df, na, nb)
         class( cf90 ), intent(in) :: this
         integer, intent(in) :: na, nb
@@ -849,7 +780,7 @@ contains
     
     end subroutine
 
-    subroutine filter3(this, f, df, na, nb)
+    subroutine filter3_REAL(this, f, df, na, nb)
         class( cf90 ), intent(in) :: this
         integer, intent(in) :: na, nb
         real(rkind), dimension(na,nb,this%n), intent(in) :: f
@@ -860,14 +791,30 @@ contains
             return
         end if
         
-        call this%ComputeZRHS(f, df, na, nb)
+        call this%ComputeZRHS_REAL(f, df, na, nb)
 
         select case (this%periodic)
         case(.TRUE.)
             call this%SolveZLU(df, na, nb)
         case(.FALSE.)
-            call this%SolveZPenta(df, na, nb)
+            call this%SolveZPenta_REAL(df, na, nb)
         end select
+    
+    end subroutine
+
+    subroutine filter3_CMPLX(this, f, df, na, nb)
+        class( cf90 ), intent(in) :: this
+        integer, intent(in) :: na, nb
+        complex(rkind), dimension(na,nb,this%n), intent(in) :: f
+        complex(rkind), dimension(na,nb,this%n), intent(out) :: df
+
+        if(this%n == 1) then
+            df = f
+            return
+        end if
+        
+        call this%ComputeZRHS_CMPLX(f, df, na, nb)
+        call this%SolveZPenta_CMPLX(df, na, nb)
     
     end subroutine
 

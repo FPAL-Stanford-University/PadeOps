@@ -9,6 +9,8 @@ program test_projection
     use cd06staggstuff, only: cd06stagg 
     use PadePoissonMod, only: padepoisson
     use exits, only: message
+    use cf90stuff, only: cf90
+    use basic_io, only: write_binary
 
     implicit none
    
@@ -27,6 +29,8 @@ program test_projection
     real(rkind), dimension(:,:,:), allocatable :: divergence, rtmp1z, rtmp2z, rtmp1x, rtmp1y, rtmp1yE, rtmp1zE
     complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what
     type(cd06stagg), allocatable :: der
+    complex(rkind), dimension(:,:,:), allocatable :: ctmp1, ctmp2, ctmp3, ctmp4
+    type(cf90) :: filzC, filzE
 
     call MPI_Init(ierr)
     
@@ -88,7 +92,15 @@ program test_projection
     call spect%init("x", nx, ny, nz, dx, dy, dz, "four", "2/3rd", dimTransform,.false.)
     call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", "2/3rd", dimTransform,.false.,.false.,.false.,.false.)
     call poiss%init(dx, dy, dz, spect, spectE, der)
+    ierr = filzC%init(nz,.false.)
+    print*, ierr
+    ierr = filzE%init(nz+1,.false.)
+    print*, ierr
 
+    allocate(ctmp1(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3)))
+    allocate(ctmp2(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3)))
+    allocate(ctmp3(spectE%spectdecomp%zsz(1),spectE%spectdecomp%zsz(2),spectE%spectdecomp%zsz(3)))
+    allocate(ctmp4(spectE%spectdecomp%zsz(1),spectE%spectdecomp%zsz(2),spectE%spectdecomp%zsz(3)))
 
     !! Generate wE
     allocate(wE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
@@ -107,6 +119,8 @@ program test_projection
     ! Step 3: Transpose back from z -> x
     call transpose_z_to_y(rtmp1zE,rtmp1yE,gpE)
     call transpose_y_to_x(rtmp1yE,wE,gpE)
+
+    
     deallocate(rtmp1y,rtmp1z,rtmp1zE,rtmp1yE)
 
 
@@ -131,6 +145,32 @@ program test_projection
     call spect%fft(v,vhat)
     call spectE%fft(wE,what)
 
+    call write_binary(u,"u_preF.dat")
+    call write_binary(v,"v_preF.dat")
+    call write_binary(wE,"w_preF.dat")
+
+    !! Filter in z
+    call tic()
+    call transpose_y_to_z(uhat,ctmp1,spect%spectdecomp)
+    call filzC%filter3(ctmp1,ctmp2,size(ctmp1,1),size(ctmp1,2))
+    call transpose_z_to_y(ctmp2,uhat,spect%spectdecomp)
+    call transpose_y_to_z(vhat,ctmp1,spect%spectdecomp)
+    call filzC%filter3(ctmp1,ctmp2,size(ctmp1,1),size(ctmp1,2))
+    call transpose_z_to_y(ctmp2,vhat,spect%spectdecomp)
+    call transpose_y_to_z(what,ctmp3,spectE%spectdecomp)
+    call filzE%filter3(ctmp3,ctmp4,size(ctmp3,1),size(ctmp3,2))
+    call transpose_z_to_y(ctmp4,what,spectE%spectdecomp)
+    call toc()
+    
+    
+    call spect%ifft(uhat,u)
+    call spect%ifft(vhat,v)
+    call spect%ifft(what,wE)
+
+    call write_binary(u,"u_postF.dat")
+    call write_binary(v,"v_postF.dat")
+    call write_binary(wE,"w_postF.dat")
+
     !! Divergence Check 
     call poiss%DivergenceCheck(uhat,vhat,what,divergence) 
     call message(1,"Max Divergence before projection:", p_maxval(divergence))
@@ -144,6 +184,15 @@ program test_projection
     !! Divergence Check 
     call poiss%DivergenceCheck(uhat,vhat,what,divergence) 
     call message(1,"Max Divergence after projection:", p_maxval(divergence))
+
+    !! IFFT back to x 
+    call spect%ifft(uhat,u)
+    call spect%ifft(vhat,v)
+    call spect%ifft(what,wE)
+    
+    call write_binary(u,"u_postP.dat")
+    call write_binary(v,"v_postP.dat")
+    call write_binary(wE,"w_postP.dat")
 
     !! Deallocate storage
     deallocate(uhat, vhat, what)

@@ -222,4 +222,76 @@
     end subroutine
 
 
+    subroutine ComputeTriD2_E2E(this)
+        class (cd06stagg), intent(inout) :: this
+        integer             :: i, n 
+        real(rkind), dimension(:), allocatable :: ddn, dg, dup, cp, den
+        real(rkind), parameter :: alpha = 2._rkind/11._rkind
 
+        n = this%nE
+
+        allocate(ddn(n));  allocate(dg(n)); allocate(dup(n)); allocate(cp(n)); allocate(den(n))
+        ddn  = alpha; dg = one; dup = alpha 
+
+        if (this%isTopEven) then
+            dg(n) =  one; ddn(n) = two*alpha
+        else
+            dg(n) =  one; ddn(n) = zero
+        end if 
+
+        if (this%isBotEven) then
+            dg(1) = one; dup(1) = two*alpha
+        else
+            dg(1) = one; dup(1) = zero 
+        end if
+
+        cp(1) = dup(1)/dg(1)
+        do i = 2,n-1
+            cp(i) = dup(i)/(dg(i) - ddn(i)*cp(i-1))
+        end do
+            
+        den(1) = one/dg(1)
+        den(2:n) = one/(dg(2:n) - ddn(2:n)*cp(1:n-1))
+
+        this%TriD2_E2E(:,1) = ddn*den; this%TriD2_E2E(:,2) = den; this%TriD2_E2E(:,3) = cp
+
+        deallocate(ddn, dg, dup, den, cp)
+
+    end subroutine
+
+    subroutine ComputeTriD2_C2C(this)
+        class (cd06stagg), intent(inout) :: this
+        integer             :: i, n 
+        real(rkind), dimension(:), allocatable :: ddn, dg, dup, cp, den
+        real(rkind), parameter :: alpha = 2._rkind/11._rkind
+
+        n = this%n
+
+        allocate(ddn(n));  allocate(dg(n)); allocate(dup(n)); allocate(cp(n)); allocate(den(n))
+        ddn  = alpha; dg = one; dup = alpha 
+
+        if (this%isTopEven) then
+            dg(n) =  one + alpha
+        else
+            dg(n) =  one - alpha
+        end if 
+
+        if (this%isBotEven) then
+            dg(1) = one + alpha
+        else
+            dg(1) = one - alpha 
+        end if
+
+        cp(1) = dup(1)/dg(1)
+        do i = 2,n-1
+            cp(i) = dup(i)/(dg(i) - ddn(i)*cp(i-1))
+        end do
+            
+        den(1) = one/dg(1)
+        den(2:n) = one/(dg(2:n) - ddn(2:n)*cp(1:n-1))
+
+        this%TriD2_C2C(:,1) = ddn*den; this%TriD2_C2C(:,2) = den; this%TriD2_C2C(:,3) = cp
+
+        deallocate(ddn, dg, dup, den, cp)
+
+    end subroutine
