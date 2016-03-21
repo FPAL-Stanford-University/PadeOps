@@ -4,8 +4,8 @@ inputdir  =  "/home/akshays/Data/PadeOps/shocktube"      ! Directory for input f
 outputdir  = "/home/akshays/Data/PadeOps/shocktube"      ! Directory for output files
 
 nx = 201                  ! Number of points in X
-ny = 10                   ! Number of points in Y
-nz = 10                   ! Number of points in Z
+ny = 1                    ! Number of points in Y
+nz = 1                    ! Number of points in Z
 
 dt = 1.0D-4               ! Fixed time step value (Set to negative to disable)
 tstop = 0.2D0             ! Physical time to stop the simulation

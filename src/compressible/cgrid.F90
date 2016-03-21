@@ -4,7 +4,7 @@ module CompressibleGrid
     use FiltersMod, only: filters
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
-    use hooks, only: meshgen, initfields, hook_output, hook_bc, hook_timestep
+    use hooks, only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
     use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                     transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
@@ -89,6 +89,7 @@ module CompressibleGrid
 
 contains
     subroutine init(this, inputfile )
+        use exits, only: message, nancheck, GracefulExit
         class(cgrid),target, intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
 
@@ -108,7 +109,7 @@ contains
         character(len=clen) :: filter_y = "cf90" 
         character(len=clen) :: filter_z = "cf90"
         integer :: prow = 0, pcol = 0 
-        integer :: i, j, k 
+        integer :: i, j, k, l
         integer :: ioUnit
         real(rkind) :: gam = 1.4_rkind
         real(rkind) :: Rgas = one
@@ -120,6 +121,7 @@ contains
         real(rkind) :: Cmu = 0.002_rkind
         real(rkind) :: Cbeta = 1.75_rkind
         real(rkind) :: Ckap = 0.01_rkind
+        character(len=clen) :: charout
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                              inputdir, outputdir, vizprefix, tviz, &
@@ -288,6 +290,13 @@ contains
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, 10, varnames)
         this%tviz = tviz
+
+        ! Check if the initialization was okay
+        if ( nancheck(this%fields,i,j,k,l) ) then
+            call message("fields: ",this%fields(i,j,k,l))
+            write(charout,'(A,4(I5,A))') "NaN encountered in initialization ("//trim(varnames(l))//") at (",i,", ",j,", ",k,", ",l,") of fields"
+            call GracefulExit(trim(charout),999)
+        end if
 
     end subroutine
 
@@ -462,6 +471,9 @@ contains
             call tic()
             call this%advance_RK45()
             call toc(cputime)
+            
+            call hook_timestep(this%decomp, this%mesh, this%fields, this%tsim)
+            call message(1,"Time",this%tsim)
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
@@ -483,7 +495,7 @@ contains
             end if
 
             ! Check tstop condition
-            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop) ) then
+            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop - eps) ) then
                 tcond = .FALSE.
             else if ( (this%tstop > zero) .AND. (this%tsim + this%dt >= this%tstop) ) then
                 this%dt = this%tstop - this%tsim
@@ -507,6 +519,7 @@ contains
         use reductions, only: P_MAXVAL, P_MINVAL
         class(cgrid), target, intent(inout) :: this
 
+        real(rkind)                                          :: Qtmpt
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: rhs  ! RHS for conserved variables
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,5) :: Qtmp ! Temporary variable for RK45
         integer :: isub,i,j,k,l
@@ -519,6 +532,7 @@ contains
         end if
 
         Qtmp = zero
+        Qtmpt = zero
 
         do isub = 1,RK45_steps
             call this%get_conserved()
@@ -531,7 +545,9 @@ contains
 
             call this%getRHS(rhs)
             Qtmp = this%dt*rhs + RK45_A(isub)*Qtmp
+            Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
+            this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
             ! Filter the conserved variables
             do i = 1,5
@@ -542,15 +558,9 @@ contains
             call hook_bc(this%decomp, this%mesh, this%fields, this%tsim)
         end do
 
-        this%tsim = this%tsim + this%dt
+        !this%tsim = this%tsim + this%dt
         this%step = this%step + 1
             
-        call message(1,"Time",this%tsim)
-        call message(2,"Minimum density",P_MINVAL(this%rho))
-        call message(2,"Maximum velocity",sqrt(P_MAXVAL(this%u*this%u+this%v*this%v+this%w*this%w)))
-        call message(2,"Minimum pressure",P_MINVAL(this%p))
-        call hook_timestep(this%decomp, this%mesh, this%fields, this%tsim)
-
     end subroutine
 
     subroutine get_dt(this,stability)
@@ -675,6 +685,9 @@ contains
         call this%getRHS_z(              rhs,&
                            tauxz,tauyz,tauzz,&
                                qz )
+
+        ! Call problem source hook
+        call hook_source(this%decomp, this%mesh, this%fields, this%tsim, rhs)
 
     end subroutine
 

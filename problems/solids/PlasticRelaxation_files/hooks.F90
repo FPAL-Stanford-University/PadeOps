@@ -4,6 +4,10 @@ module PlasticRelaxation_data
     implicit none
 
     real(rkind) :: g0 = one
+    real(rkind) :: tau_0
+    real(rkind) :: sigma_Y
+    real(rkind) :: shmod
+    real(rkind) :: dtprob
 
 end module
 
@@ -92,6 +96,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
+        tau_0 = tau0
+        sigma_Y = yield
+        shmod = mu
+        dtprob = dt
+
         u   = zero
         v   = zero
         w   = zero
@@ -112,10 +121,12 @@ end subroutine
 
 subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     use kind_parameters,  only: rkind,clen
-    use constants,        only: zero,eps,half,one,two,pi,eight
+    use constants,        only: zero,eps,half,twothird,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
-                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
+                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index, &
+                                sxx_index,sxy_index,sxz_index,syy_index,syz_index,szz_index
     use decomp_2d,        only: decomp_info
+    use reductions,       only: P_MAXVAL
 
     use PlasticRelaxation_data
 
@@ -130,6 +141,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
 
     character(len=clen) :: outputfile, str
     integer :: i
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: invtaurel
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -139,18 +151,34 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
                g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
                g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
+                 sxx  => fields(:,:,:, sxx_index), sxy => fields(:,:,:,sxy_index), & 
+                 sxz  => fields(:,:,:, sxz_index), syy => fields(:,:,:,syy_index), & 
+                 syz  => fields(:,:,:, syz_index), szz => fields(:,:,:,szz_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        write(str,'(ES7.1E2,A1,I4.4)') g0, "_", decomp%ysz(1)
+        ! Get S'S'
+        invtaurel = sxx*sxx + two*sxy*sxy + two*sxz*sxz &
+                            +     syy*syy + two*syz*syz &
+                                          +     szz*szz
+
+        ! 1/tau_rel
+        invtaurel = ( invtaurel - (twothird)*sigma_Y**2 ) / shmod**2
+        where (invtaurel .LE. zero)
+            invtaurel = zero
+        end where
+
+        write(str,'(ES8.1E2,A1,ES7.1E2)') g0, "_", dtprob
         write(outputfile,'(2A)') trim(outputdir),"/PlasticRelaxation_"//trim(str)//".dat"
 
         if (vizcount == 0) then
             open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
+            write(outputunit,'(12A26)') "Time", "rho", "u", "e", "p", "g11", "g22", "g33", "sxx", "syy", "szz", "yield criterion"
         else
             open(unit=outputunit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
         end if
-        write(outputunit,'(14ES26.16)') tsim, rho(1,1,1), u(1,1,1), e(1,1,1), p(1,1,1), &
-                                       g11(1,1,1), g22(1,1,1), g33(1,1,1)
+        write(outputunit,'(12ES26.16)') tsim, rho(1,1,1), u(1,1,1), e(1,1,1), p(1,1,1), &
+                                       g11(1,1,1), g22(1,1,1), g33(1,1,1), &
+                                       sxx(1,1,1), syy(1,1,1), szz(1,1,1), P_MAXVAL(invtaurel)
         close(outputunit)
 
     end associate
@@ -180,8 +208,10 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
 end subroutine
 
 subroutine hook_timestep(decomp,mesh,fields,tsim)
-    use kind_parameters,  only: rkind
-    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+    use kind_parameters,  only: rkind,clen
+    use constants,        only: zero,twothird,two
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,&
+                                sxx_index,sxy_index,sxz_index,syy_index,syz_index,szz_index
     use decomp_2d,        only: decomp_info
     use exits,            only: message
     use reductions,       only: P_MAXVAL
@@ -193,14 +223,33 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    
+    character(len=clen) :: charout
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: invtaurel
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+                 sxx  => fields(:,:,:, sxx_index), sxy => fields(:,:,:,sxy_index), & 
+                 sxz  => fields(:,:,:, sxz_index), syy => fields(:,:,:,syy_index), & 
+                 syz  => fields(:,:,:, syz_index), szz => fields(:,:,:,szz_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
+        ! Get S'S'
+        invtaurel = sxx*sxx + two*sxy*sxy + two*sxz*sxz &
+                            +     syy*syy + two*syz*syz &
+                                          +     szz*szz
+
+        ! 1/tau_rel
+        invtaurel = ( invtaurel - (twothird)*sigma_Y**2 ) / shmod**2
+        where (invtaurel .LE. zero)
+            invtaurel = zero
+        end where
+
+        write(charout,'(A,ES26.16,A,ES26.16)') "Time = ", tsim, "    Maximum Yeild criterion = ", P_MAXVAL(invtaurel)
+        call message(trim(charout))
 
     end associate
 end subroutine
@@ -234,6 +283,5 @@ subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
                g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        print*, tsim, maxval(abs(rhsg))
     end associate
 end subroutine

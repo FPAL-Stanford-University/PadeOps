@@ -1366,7 +1366,6 @@ contains
 
         ! 1/tau_rel
         invtaurel = this%invtau0 * ( invtaurel - (twothird)*this%elastic%yield**2 ) / this%elastic%mu**2
-        print*, this%tsim, this%g11(1,1,1), maxval( invtaurel )
         where (invtaurel .LE. zero)
             invtaurel = zero
         end where

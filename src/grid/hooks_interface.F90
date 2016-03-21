@@ -92,7 +92,8 @@ module hooks
             real(rkind),                     intent(in)    :: tsim
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(in)    :: fields
-            real(rkind), dimension(:,:,:,:), intent(inout) :: rhs, rhsg
+            real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
+            real(rkind), dimension(:,:,:,:), optional, intent(inout) ::rhsg
 
         end subroutine
     end interface
