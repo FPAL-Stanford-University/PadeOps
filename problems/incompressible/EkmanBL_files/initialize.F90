@@ -156,7 +156,8 @@ end subroutine
 module allStatistics
     use kind_parameters, only: rkind
     use decomp_2d
-    use IncompressibleGridNP, only: igrid  
+    use IncompressibleGridNP, only: igrid 
+    use constants, only: zero  
     implicit none
 
     real(rkind), dimension(:,:), allocatable, target :: zStats2dump, runningSum, TemporalMnNOW 
@@ -184,6 +185,7 @@ contains
         uw_mean => zStats2dump(:,7); oxox_mean => zStats2dump(:,8); oyoy_mean => zStats2dump(:,9); 
         ozoz_mean => zStats2dump(:,10)
 
+        runningSum = zero
         nullify(gpC)
     end subroutine
 
@@ -263,7 +265,7 @@ contains
     end subroutine 
 
     subroutine dump_stats(ig)
-        use basic_io, only: write_2d_ascii
+        use basic_io, only: write_2d_ascii, write_2D_binary
         use exits, only: message
         use kind_parameters, only: clen
         use mpi
@@ -280,7 +282,8 @@ contains
             write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", ig%RunID,"_t",tid,".stt"
             fname = ig%OutputDir(:len_trim(ig%OutputDir))//"/"//trim(tempname)
             call write_2d_ascii(TemporalMnNOW,fname)
-        end if 
+            !call write_2D_binary(TemporalMnNOW,fname)
+        end if
         call message(1, "Just dumped a .stt file")
         call message(2, "Number ot tsteps averaged:",tidSUM)
 
