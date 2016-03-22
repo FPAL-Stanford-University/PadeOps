@@ -68,6 +68,9 @@ module SolidGrid
         type(sep1solid), allocatable :: elastic
 
         logical     :: plastic
+        logical     :: explPlast
+        real(rkind) :: tau0
+        real(rkind) :: invtau0
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -131,7 +134,7 @@ module SolidGrid
             procedure          :: getPhysicalProperties
             procedure, private :: get_tau
             procedure, private :: get_q
-            ! procedure, private :: plastic_deformation
+            procedure, private :: getPlasticSources
     end type
 
 contains
@@ -174,6 +177,8 @@ contains
         real(rkind) :: Ckap = 0.01_rkind
         logical     :: plastic = .FALSE.
         real(rkind) :: yield = real(1.D30,rkind)
+        logical     :: explPlast = .FALSE.
+        real(rkind) :: tau0 = one
 
         character(len=clen) :: charout
         real(rkind), dimension(:,:,:,:), allocatable :: finger, fingersq
@@ -186,7 +191,8 @@ contains
                                      filter_x, filter_y, filter_z, &
                                                        prow, pcol, &
                                                          SkewSymm  
-        namelist /SINPUT/  gam, Rgas, PInf, shmod, rho0, plastic, yield, Cmu, Cbeta, Ckap
+        namelist /SINPUT/  gam, Rgas, PInf, shmod, rho0, plastic, yield, &
+                           explPlast, tau0, Cmu, Cbeta, Ckap
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -214,6 +220,9 @@ contains
         this%Ckap = Ckap
 
         this%plastic = plastic
+        
+        this%explPlast = explPlast
+        this%tau0 = tau0
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -305,7 +314,8 @@ contains
         ! Go to hooks if a different initialization is derired 
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf, &
-                        tstop=this%tstop, dt=this%dtfixed, tviz=tviz)
+                        tstop=this%tstop, dt=this%dtfixed, tviz=tviz, yield=this%elastic%yield, &
+                        tau0=this%tau0)
        
         ! Get hydrodynamic and elastic energies 
         call this%sgas%get_e_from_p(this%rho,this%p,this%e)
@@ -428,6 +438,9 @@ contains
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
+
+        ! Do this here to keep tau0 and invtau0 compatible at the end of this subroutine
+        this%invtau0 = one/this%tau0
 
         ! Check if the initialization was okay
         if ( nancheck(this%fields(:,:,:,8:26),i,j,k,l) ) then
@@ -706,19 +719,21 @@ contains
             
             call this%get_primitive()
 
-            if (this%plastic) then
-                ! Effect plastic deformations
-                call this%elastic%plastic_deformation(this%g)
-                call this%get_primitive()
+            if (.NOT. this%explPlast) then
+                if (this%plastic) then
+                    ! Effect plastic deformations
+                    call this%elastic%plastic_deformation(this%g)
+                    call this%get_primitive()
 
-                ! Filter the conserved variables
-                do i = 1,5
-                    call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1)
-                end do
-                ! Filter the g tensor
-                do i = 1,9
-                    call this%filter(this%g(:,:,:,i), this%fil, 1)
-                end do
+                    ! Filter the conserved variables
+                    do i = 1,5
+                        call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1)
+                    end do
+                    ! Filter the g tensor
+                    do i = 1,9
+                        call this%filter(this%g(:,:,:,i), this%fil, 1)
+                    end do
+                end if
             end if
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%tsim)
@@ -734,7 +749,7 @@ contains
         class(sgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
-        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap
+        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtplast
 
         call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
         call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
@@ -744,6 +759,7 @@ contains
         dtmu   = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
         dtbulk = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
         dtkap  = 0.2_rkind * one / ( (P_MAXVAL( this%kap*this%T/(this%rho* (min(this%dx,this%dy,this%dz)**4))))**(third) + eps)
+        dtplast = this%tau0
 
         ! Use fixed time step if CFL <= 0
         if ( this%CFL .LE. zero ) then
@@ -761,6 +777,9 @@ contains
             else if ( this%dt > dtkap ) then
                 this%dt = dtkap
                 stability = 'conductive'
+            else if ( this%dt > dtplast ) then
+                this%dt = dtplast
+                stability = 'plastic'
             end if
 
             if (this%step .LE. 10) then
@@ -906,6 +925,10 @@ contains
         rhsg(:,:,:,7) = rhsg(:,:,:,7) + this%v*curlg(:,:,:,3) - this%w*curlg(:,:,:,2) + penalty*this%g31
         rhsg(:,:,:,8) = rhsg(:,:,:,8) + this%w*curlg(:,:,:,1) - this%u*curlg(:,:,:,3) + penalty*this%g32
         rhsg(:,:,:,9) = rhsg(:,:,:,9) + this%u*curlg(:,:,:,2) - this%v*curlg(:,:,:,1) + penalty*this%g33
+
+        if (this%explPlast) then
+            call this%getPlasticSources(detg,rhsg)
+        end if
 
         ! Call problem source hook
         call hook_source(this%decomp, this%mesh, this%fields, this%tsim, rhs, rhsg)
@@ -1329,4 +1352,37 @@ contains
         ! Done
     end subroutine
 
+    subroutine getPlasticSources(this, detg, rhsg)
+        use constants, only: twothird
+        class(sgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)    :: detg
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: rhsg
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: invtaurel
+
+        ! Get S'S'
+        invtaurel = this%sxx*this%sxx + two*this%sxy*this%sxy + two*this%sxz*this%sxz &
+                                      +     this%syy*this%syy + two*this%syz*this%syz &
+                                                              +     this%szz*this%szz
+
+        ! 1/tau_rel
+        invtaurel = this%invtau0 * ( invtaurel - (twothird)*this%elastic%yield**2 ) / this%elastic%mu**2
+        where (invtaurel .LE. zero)
+            invtaurel = zero
+        end where
+        invtaurel = invtaurel / (two * this%elastic%mu * detg)
+
+        ! Add (1/tau_rel)*g*S to the rhsg (explicit plastic source terms)
+        rhsg(:,:,:,1) = rhsg(:,:,:,1) + invtaurel * ( this%g11*this%sxx + this%g12*this%sxy + this%g13*this%sxz ) ! g11 
+        rhsg(:,:,:,2) = rhsg(:,:,:,2) + invtaurel * ( this%g11*this%sxy + this%g12*this%syy + this%g13*this%syz ) ! g12 
+        rhsg(:,:,:,3) = rhsg(:,:,:,3) + invtaurel * ( this%g11*this%sxz + this%g12*this%syz + this%g13*this%szz ) ! g13 
+ 
+        rhsg(:,:,:,4) = rhsg(:,:,:,4) + invtaurel * ( this%g21*this%sxx + this%g22*this%sxy + this%g23*this%sxz ) ! g21 
+        rhsg(:,:,:,5) = rhsg(:,:,:,5) + invtaurel * ( this%g21*this%sxy + this%g22*this%syy + this%g23*this%syz ) ! g22 
+        rhsg(:,:,:,6) = rhsg(:,:,:,6) + invtaurel * ( this%g21*this%sxz + this%g22*this%syz + this%g23*this%szz ) ! g23 
+
+        rhsg(:,:,:,7) = rhsg(:,:,:,7) + invtaurel * ( this%g31*this%sxx + this%g32*this%sxy + this%g33*this%sxz ) ! g31 
+        rhsg(:,:,:,8) = rhsg(:,:,:,8) + invtaurel * ( this%g31*this%sxy + this%g32*this%syy + this%g33*this%syz ) ! g32 
+        rhsg(:,:,:,9) = rhsg(:,:,:,9) + invtaurel * ( this%g31*this%sxz + this%g32*this%syz + this%g33*this%szz ) ! g33 
+
+    end subroutine
 end module 
