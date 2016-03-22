@@ -10,9 +10,9 @@ module temporalHook
     use AllStatistics 
     integer :: nt_print2screen = 10
     integer :: nt_getMaxKE = 10
-    integer :: tid_statsDump = 10000
-    integer :: tid_compStats = 200
-    real(rkind) :: time_startDumping = 100._rkind
+    integer :: tid_statsDump = 100
+    integer :: tid_compStats = 20
+    real(rkind) :: time_startDumping = 2._rkind
     integer :: ierr 
 contains
 
@@ -42,6 +42,11 @@ contains
             call compute_stats(gp)
             call dump_stats(gp)
         end if 
+        
+        
+        if (mod(gp%step,gp%t_restartDump) == 0) then
+            call gp%dumpRestartfile()
+        end if
 
         call mpi_barrier(mpi_comm_world,ierr)
         !if (mod(gp%step,gp%t_restartDump) == 0) then
