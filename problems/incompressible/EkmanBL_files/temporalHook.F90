@@ -42,11 +42,11 @@ contains
             call compute_stats(gp)
             call dump_stats(gp)
         end if 
-
-        !call mpi_barrier(mpi_comm_world,ierr)
-        !if (mod(gp%step,gp%t_restartDump) == 0) then
-        !    ! Incomplete 
-        !end if 
+        
+        
+        if (mod(gp%step,gp%t_restartDump) == 0) then
+            call gp%dumpRestartfile()
+        end if
 
     end subroutine
 

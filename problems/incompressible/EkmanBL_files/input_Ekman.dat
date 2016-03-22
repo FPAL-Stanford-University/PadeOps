@@ -1,10 +1,10 @@
 &INPUT
 
-inputdir  =  "/home/aditya90/Codes/PadeOps/data/EkmanBL/input/"       ! Directory for input files
+inputdir  =  "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"       ! Directory for input files
 outputdir  = "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"      ! Directory for output files
 
-nx = 32                  ! Number of points in X
-ny = 32                  ! Number of points in Y
+nx = 64                  ! Number of points in X
+ny = 64                  ! Number of points in Y
 nz = 128                 ! Number of points in Z
 
 dt = 0.01D0               ! Fixed time step value (Set to negative to disable)
@@ -19,7 +19,7 @@ periodicz = .FALSE.        ! Periodic in Z?
 
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-t_restartDump = 999999    ! Number of timesteps before restart file is written 
+t_restartDump = 500    ! Restart File Frequency 
 t_dataDump    = 4000       ! Number of timesteps before data dump is performed 
 
 /
@@ -35,6 +35,8 @@ useCoriolis = .TRUE.
 useExtraForcing = .FALSE. 
 topWall = 2               ! no_slip = 1, slip = 2
 botWall = 1               ! no_slip = 1, slip = 2  
+useRestartFile = .TRUE. 
+restartFile_TID = 999
 
 &EKMANINPUT
 Ro = 9.9                ! Rossby Number 

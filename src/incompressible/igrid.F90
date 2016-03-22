@@ -3,7 +3,7 @@ module IncompressibleGridNP
     use constants, only: imi, zero,one,two,three,half 
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
-    use hooks, only: meshgen, initfields_stagg, getforcing
+    use igrid_hooks, only: meshgen, initfields_stagg, getforcing
     use decomp_2d
     use StaggOpsMod, only: staggOps  
     use exits, only: GracefulExit, message
@@ -39,6 +39,8 @@ module IncompressibleGridNP
 
     type, extends(grid) :: igrid
         
+        character(clen) :: inputDir
+
         type(decomp_info), allocatable :: gpC, gpE
         type(decomp_info), pointer :: Sp_gpC, Sp_gpE
         type(spectral), allocatable :: spectE, spectC
@@ -104,7 +106,9 @@ module IncompressibleGridNP
             procedure, private :: addCoriolisTerm
             procedure, private :: addViscousTerm 
             procedure, private :: addExtraForcingTerm 
-            procedure, private :: ApplyCompactFilter 
+            procedure, private :: ApplyCompactFilter
+            procedure          :: dumpRestartFile
+            procedure, private :: readRestartFile 
     end type
 
 contains 
@@ -146,6 +150,8 @@ contains
         logical :: useCoriolis = .true. 
         logical :: useExtraForcing = .false.
         real(rkind) :: dpFdx = zero
+        integer :: restartFile_TID
+        logical :: useRestartFile = .false. 
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
@@ -154,7 +160,8 @@ contains
                                         t_restartDump, t_dataDump
         namelist /IINPUT/  Re, useSGS, runID, Pr, useCoriolis, & 
                                 tid_statsDump, useExtraForcing, &
-                                time_startDumping, topWall, botWall 
+                                time_startDumping, topWall, botWall, &
+                                useRestartFile, restartFile_TID 
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -174,6 +181,7 @@ contains
 
         this%Re = Re
         this%outputdir = outputdir 
+        this%inputdir = inputdir 
         
         this%periodicx = periodicx
         this%periodicy = periodicy
@@ -188,10 +196,10 @@ contains
         this%filter_z = filter_z  
 
         this%runID = runID
-        this%step = 0
         this%tstop = tstop 
         this%t_dataDump = t_dataDump
 
+        this%t_restartDump = t_restartDump
         this%tid_statsDump = tid_statsDump
         this%time_startDumping = time_startDumping 
         this%useCoriolis = useCoriolis 
@@ -324,10 +332,16 @@ contains
         end if 
                
  
-        ! STEP 7: INITIALIZE THE FIELDS 
-        call initfields_stagg(this%gpC, this%gpE, this%dx, this%dy, this%dz, &
-            inputfile, this%mesh, this%PfieldsC, this%PfieldsE, u_g, this%Ro)! <-- this procedure is part of user defined HOOKS
-
+        ! STEP 7: INITIALIZE THE FIELDS
+        if (useRestartFile) then
+            call this%readRestartFile(restartfile_TID)
+            this%step = restartfile_TID
+        else 
+            call initfields_stagg(this%gpC, this%gpE, this%dx, this%dy, this%dz, &
+                inputfile, this%mesh, this%PfieldsC, this%PfieldsE, u_g, this%Ro)! <-- this procedure is part of user defined HOOKS
+            this%step = 0
+            this%tsim = zero
+        end if 
         
         this%Gx = u_g
         this%Gy = zero
@@ -404,6 +418,9 @@ contains
             this%rbuffxC(:,:,:,1) = dpFdx
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%dpF_dxhat)
         end if  
+
+        ! STEP 13: Dump a restart file
+        call this%dumpRestartfile()
 
         call message("IGRID initialized successfully!")
     end subroutine
@@ -956,7 +973,8 @@ contains
                 end do 
             end do
         end do  
-        
+
+
     end subroutine
 
 
@@ -1004,4 +1022,74 @@ contains
         nullify( dvdx, dvdy, dvdz)
         nullify( dwdx, dwdy, dwdz)
     end subroutine
+
+
+    subroutine readRestartFile(this, tid)
+        use decomp_2d_io
+        use mpi
+        use exits, only: message
+        class(igrid), intent(inout) :: this
+        integer, intent(in) :: tid
+        character(len=clen) :: tempname, fname
+        integer :: fid, ierr
+
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",tid
+        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+        call decomp_2d_read_one(1,this%u,fname)
+
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_v.",tid
+        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+        call decomp_2d_read_one(1,this%v,fname)
+
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_w.",tid
+        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+        call decomp_2d_read_one(1,this%w,fname)
+
+        write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",this%runID, "_info.",tid
+        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+
+        open(unit=10,file=fname,access='sequential',form='formatted')
+        read (10, *)  this%tsim
+        close(10)
+
+        call mpi_barrier(mpi_comm_world, ierr)
+        call message("================= RESTART FILE USED ======================")
+        call message(0, "Simulation Time at restart:", this%tsim)
+        call message("=================================== ======================")
+
+    end subroutine
+
+    subroutine dumpRestartFile(this)
+        use decomp_2d_io
+        use mpi
+        use exits, only: message
+        class(igrid), intent(in) :: this
+        character(len=clen) :: tempname, fname
+        integer :: fid, ierr
+
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",this%step
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1,this%u,fname)
+
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_v.",this%step
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1,this%v,fname)
+
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_w.",this%step
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1,this%w,fname)
+
+        write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",this%runID, "_info.",this%step
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+
+        OPEN(UNIT=10, FILE=trim(fname))
+        write(10,"(100g15.5)") this%tsim
+        close(10)
+
+        call mpi_barrier(mpi_comm_world, ierr)
+        call message(1, "Just Dumped a RESTART file")
+
+    end subroutine 
+
 end module 
+

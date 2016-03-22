@@ -109,21 +109,11 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     x => mesh(:,:,:,1)
  
 
-    Uperiods = 4.0; Vperiods = 4.0; zpeak = 0.3;
+    !! CAREFUL - z in mesh is cell centers but W is at edges !!
+
+    Uperiods = 2.0; Vperiods = 2.0; zpeak = 0.3;
     epsfac = 0.5d0;
 
-    !do k = 1,size(u,3)
-    !    do j = 1,size(u,2)
-    !        do i = 1,size(u,1)
-    !            u(i,j,k) = (1.0d0-exp(-z(i,j,k)*2.5d0)*cos(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz) &
-    !                    *cos(Uperiods*2.0d0*pi*y(i,j,k)/Ly)*exp(-0.5e0*(z(i,j,k)/zpeak/Lz)**2.0d0))
-    !            v(i,j,k) = (exp(-z(i,j,k)*2.5d0)*sin(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz)& 
-    !                        *cos(Vperiods*2.0d0*pi*x(i,j,k)/Lx)*exp(-0.5d0*(z(i,j,k)/zpeak/Lz)**2.0d0))
-    !            w(i,j,k) = zero  
-    !        end do 
-    !    end do 
-    !end do 
-   
     u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
             + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     v = exp(-z/delta_Ek)*sin(z/delta_Ek) + &

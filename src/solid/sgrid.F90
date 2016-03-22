@@ -312,10 +312,10 @@ contains
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired 
-        !call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
-        !                rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf, &
-        !                tstop=this%tstop, dt=this%dtfixed, tviz=tviz, yield=this%elastic%yield, &
-        !                tau0=this%tau0)
+        call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
+                        rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf, &
+                        tstop=this%tstop, dt=this%dtfixed, tviz=tviz, yield=this%elastic%yield, &
+                        tau0=this%tau0)
        
         ! Get hydrodynamic and elastic energies 
         call this%sgas%get_e_from_p(this%rho,this%p,this%e)
