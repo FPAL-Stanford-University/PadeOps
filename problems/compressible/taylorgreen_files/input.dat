@@ -8,8 +8,8 @@ ny = 64                   ! Number of points in Y
 nz = 64                   ! Number of points in Z
 
 dt = 1.0D-3               ! Fixed time step value (Set to negative to disable)
-tstop = 2.5D1             ! Physical time to stop the simulation
-CFL = -1.D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+tstop = 1.5D1             ! Physical time to stop the simulation
+CFL = 0.5D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
 tviz = 1.0D-1             ! Time between visualization dumps (Set to negative to disable)

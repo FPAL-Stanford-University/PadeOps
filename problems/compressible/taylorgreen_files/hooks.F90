@@ -3,7 +3,7 @@ module taylorgreen_data
     use constants,        only: one,eight
     implicit none
     
-    real(rkind) :: tke0, tke
+    real(rkind) :: tke0, enstrophy0
 
 end module
 
@@ -52,21 +52,22 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inpDirectory,mesh,fields)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields)
     use kind_parameters,  only: rkind
-    use constants,        only: zero,one,two,pi
+    use constants,        only: zero,half,one,two,pi
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
     use decomp_2d,        only: decomp_info
-    use reductions,       only: P_MEAN
     
     use taylorgreen_data
 
     implicit none
-    character(len=*),                                               intent(in)    :: inpDirectory
+    character(len=*),                                               intent(in)    :: inputfile
     type(decomp_info),                                              intent(in)    :: decomp
     real(rkind),                                                    intent(in)    :: dx,dy,dz
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),3) :: vorticity
 
     associate( rho => fields(:,:,:,rho_index), u => fields(:,:,:,u_index), &
                  v => fields(:,:,:,  v_index), w => fields(:,:,:,w_index), &
@@ -79,29 +80,35 @@ subroutine initfields(decomp,dx,dy,dz,inpDirectory,mesh,fields)
         v   = -cos(x)*sin(y)*cos(z)
         w   = zero
         p   = 100._rkind + ( (cos(two*z) + two)*(cos(two*x) + cos(two*y)) - two ) / 16._rkind
-           
-        tke0 = P_MEAN( rho * (u*u + v*v + w*w) )
+
     end associate
 
 end subroutine
 
-subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
+subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use DerivativesMod,   only: derivatives
+    use operators,        only: curl
+    use reductions,       only: P_MEAN
 
     use taylorgreen_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    
     integer                                     :: outputunit=229
-    character(len=clen) :: outputfile
+    character(len=clen) :: outputfile, str
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tke, enstrophy
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),3) :: vorticity
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -109,6 +116,26 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+        ! Get TKE and Enstrophy to output to file
+        tke = half*rho*(u*u + v*v + w*w)
+        call curl(decomp, der, u, v, w, vorticity)
+        enstrophy = vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2
+
+        write(str,'(I4.4)') decomp%ysz(2)
+        write(outputfile,'(2A)') trim(outputdir),"/taylorgreen_"//trim(str)//".dat"
+
+        if (vizcount == 0) then
+            tke0 = P_MEAN( tke )
+            enstrophy0 = P_MEAN( vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2 )
+            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
+            write(outputunit,'(3A26)') "Time", "TKE", "Enstrophy"
+        else
+            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
+        end if
+        write(outputunit,'(3ES26.16)') tsim, P_MEAN(tke)/tke0, P_MEAN(enstrophy)/enstrophy0
+        
+        close(outputunit)
 
     end associate
 end subroutine
@@ -138,6 +165,7 @@ end subroutine
 
 subroutine hook_timestep(decomp,mesh,fields,tsim)
     use kind_parameters,  only: rkind
+    use constants,        only: half
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use exits,            only: message
@@ -151,6 +179,8 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
 
+    real(rkind) :: tke
+
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
@@ -158,7 +188,7 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
        
-        tke = P_MEAN( rho * (u*u + v*v + w*w) )
+        tke = P_MEAN( half * rho * (u*u + v*v + w*w) )
 
         call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
         call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))

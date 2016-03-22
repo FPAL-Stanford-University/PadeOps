@@ -218,7 +218,7 @@ contains
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired 
-        call initfields(this%decomp, this%dx, this%dy, this%dz, inputdir, this%mesh, this%fields)
+        call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields)
         call this%gas%get_e_from_p(this%rho,this%p,this%e)
         call this%gas%get_T(this%e,this%T)
 
@@ -436,7 +436,7 @@ contains
         ! ------------------------------------------------
 
         ! Write out initial conditions
-        call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
+        call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
         vizcond = .FALSE.
         
@@ -472,15 +472,15 @@ contains
             call this%advance_RK45()
             call toc(cputime)
             
-            call hook_timestep(this%decomp, this%mesh, this%fields, this%tsim)
             call message(1,"Time",this%tsim)
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
+            call hook_timestep(this%decomp, this%mesh, this%fields, this%tsim)
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
-                call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
+                call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
                 vizcond = .FALSE.
             end if
@@ -495,7 +495,7 @@ contains
             end if
 
             ! Check tstop condition
-            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop - eps) ) then
+            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop*(one - eps) ) ) then
                 tcond = .FALSE.
             else if ( (this%tstop > zero) .AND. (this%tsim + this%dt >= this%tstop) ) then
                 this%dt = this%tstop - this%tsim

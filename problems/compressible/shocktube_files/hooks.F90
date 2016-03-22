@@ -56,7 +56,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inpDirectory,mesh,fields)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields)
     use kind_parameters,  only: rkind
     use constants,        only: zero,half,one,two,pi,eight
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
@@ -65,7 +65,7 @@ subroutine initfields(decomp,dx,dy,dz,inpDirectory,mesh,fields)
     use shocktube_data
 
     implicit none
-    character(len=*),                                               intent(in)    :: inpDirectory
+    character(len=*),                                               intent(in)    :: inputfile
     type(decomp_info),                                              intent(in)    :: decomp
     real(rkind),                                                    intent(in)    :: dx,dy,dz
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
@@ -91,17 +91,19 @@ subroutine initfields(decomp,dx,dy,dz,inpDirectory,mesh,fields)
 
 end subroutine
 
-subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
+subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use DerivativesMod,   only: derivatives
 
     use shocktube_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh

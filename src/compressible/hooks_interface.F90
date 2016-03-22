@@ -1,6 +1,7 @@
 module hooks
     use kind_parameters, only: rkind
     use decomp_2d, only: decomp_info
+    use DerivativesMod, only: derivatives
     implicit none
 
     interface meshgen
@@ -30,28 +31,14 @@ module hooks
     end interface
 
 
-    interface initfields_stagg
-        subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inpDirectory, mesh, fieldsC, fieldsE, u_g, fcorr)
-            import :: rkind
-            import :: decomp_info
-            type(decomp_info), intent(in) :: decompC
-            type(decomp_info), intent(in) :: decompE
-            real(rkind), intent(inout) :: dx, dy, dz
-            character(len=*), intent(in) :: inpDirectory
-            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
-            real(rkind), dimension(:,:,:,:), intent(inout) :: fieldsC
-            real(rkind), dimension(:,:,:,:), intent(inout) :: fieldsE
-            real(rkind), intent(out) :: u_g, fcorr
-
-        end subroutine 
-    end interface
-
     interface hook_output
-        subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
+        subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
             import :: rkind
             import :: decomp_info
+            import :: derivatives
             character(len=*),                intent(in) :: outputdir
             type(decomp_info),               intent(in) :: decomp
+            type(derivatives),               intent(in) :: der
             real(rkind),                     intent(in) :: dx,dy,dz,tsim
             integer,                         intent(in) :: vizcount
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
