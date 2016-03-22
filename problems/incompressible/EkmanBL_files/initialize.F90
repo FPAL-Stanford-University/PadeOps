@@ -11,7 +11,7 @@ module EkmanBL_parameters
     integer :: seedu = 321341
     integer :: seedv = 423424
     integer :: seedw = 131344
-    real(rkind) :: randomScaleFact = 0.000000005_rkind ! 5% of the mean value
+    real(rkind) :: randomScaleFact = 0.05_rkind ! 5% of the mean value
 
     integer :: nperiods = 8
     real(rkind) :: oscScaleFact = 0.2_rkind    ! 20% of the mean value
@@ -32,7 +32,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: i,j,k
     integer :: ix1, ixn, iy1, iyn, iz1, izn
 
-    Lx = pi; Ly = pi; Lz = 1.5_rkind
+    Lx = 1.5_rkind*pi; Ly = 1.5_rkind*pi; Lz = 1._rkind
 
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
@@ -124,28 +124,28 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     !    end do 
     !end do 
    
-    u = (z**2)/(Lz**2)!one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
-        !    + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    v = zero!exp(-z/delta_Ek)*sin(z/delta_Ek) + &
-        !    + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
+            + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    v = exp(-z/delta_Ek)*sin(z/delta_Ek) + &
+            + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     w = zero  
 
     ! Add random numbers
-    !allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
-    !do k = 1,size(u,3)
-    !    sig = G*randomScaleFact*(1 - exp(-z(1,1,k)/D)*cos(z(1,1,k)/D))
-    !    u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)*0.5*(1 - cos(2*pi*y(:,:,k)/Ly))*0.5*(1 - cos(2*pi*x(:,:,k)/Lx))
-    !end do  
-    !deallocate(randArr)
-    !
-    !allocate(randArr(size(v,1),size(v,2),size(v,3)))
-    !call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
-    !do k = 1,size(v,3)
-    !    sig = G*randomScaleFact*exp(-z(1,1,k)/D)*sin(z(1,1,k)/D)
-    !    v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)*0.5*(1 - cos(2*pi*y(:,:,k)/Ly))*0.5*(1 - cos(2*pi*x(:,:,k)/Lx))
-    !end do  
-    !deallocate(randArr)
+    allocate(randArr(size(u,1),size(u,2),size(u,3)))
+    call gaussian_random(randArr,zero,one,seedu + 10*nrank)
+    do k = 1,size(u,3)
+        sig = randomScaleFact*(1 - exp(-z(1,1,k)/delta_Ek)*cos(z(1,1,k)/delta_Ek))
+        u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
+    end do  
+    deallocate(randArr)
+    
+    allocate(randArr(size(v,1),size(v,2),size(v,3)))
+    call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
+    do k = 1,size(v,3)
+        sig = G*randomScaleFact*exp(-z(1,1,k)/delta_Ek)*sin(z(1,1,k)/delta_Ek)
+        v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
+    end do  
+    deallocate(randArr)
 
     nullify(u,v,w,x,y,z)
     
