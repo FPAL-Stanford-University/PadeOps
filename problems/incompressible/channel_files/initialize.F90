@@ -4,25 +4,16 @@ module channel_parameters
     use kind_parameters,  only: rkind
     
     implicit none
-    real(rkind)  :: Lx, Ly, Lz, D, G, ustar
-    real(rkind)  :: nu = 1.14_rkind*(10**(-5._rkind))
-    real(rkind)  :: f  = 1.454_rkind*(10**(-4._rkind))
-    real(rkind)  :: Pr = 0.7_rkind
-    real(rkind)  :: Ref = 400._rkind
-    real(rkind)  :: ustar_by_G = 0.065_rkind
-    real(rkind)  :: deltat_by_D = 13._rkind
-    real(rkind)  :: dxP, dyP, dzP
-    real(rkind)  :: Re_deltat, Re_tau
-    real(rkind)  :: deltat
+    real(rkind)  :: Lx, Ly, Lz, G, ustar
 
     integer :: seedu = 321341
     integer :: seedv = 423424
     integer :: seedw = 131344
-    real(rkind) :: randomScaleFact = 0.0005_rkind ! 5% of the mean value
+    real(rkind) :: randomScaleFact = 0.000000005_rkind ! 5% of the mean value
 
     integer :: nperiods = 8
     real(rkind) :: oscScaleFact = 0.2_rkind    ! 20% of the mean value
-
+    integer :: nxg, nyg, nzg
 
 end module     
 
@@ -37,18 +28,11 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     real(rkind),                                                intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     integer :: i,j,k
-    integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
+    integer :: ix1, ixn, iy1, iyn, iz1, izn
 
-    D = sqrt(two*nu/f)
-    Lx = 150*D; Ly = 75*D; Lz = 24*D
-    
+    Lx = pi; Ly = pi; Lz = 2._rkind
 
-    nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
-
-    dx = Lx/real(nx,rkind)
-    dy = Ly/real(ny,rkind)
-    dz = Lz/real(nz,rkind)
-
+    nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
     ! If base decomposition is in Y
     ix1 = decomp%xst(1); iy1 = decomp%xst(2); iz1 = decomp%xst(3)
@@ -56,9 +40,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = Lx/real(nx,rkind)
-        dy = Ly/real(ny,rkind)
-        dz = Lz/real(nz,rkind)
+        dx = Lx/real(nxg,rkind)
+        dy = Ly/real(nyg,rkind)
+        dz = Lz/real(nzg,rkind)
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
@@ -70,14 +54,30 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
             end do
         end do
 
+        ! Shift everything to the origin 
+        x = x - dx
+        y = y - dy
+        z = z - dz 
+
     end associate
 
 end subroutine
 
-subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, fieldsC, fieldsE, u_g)
+subroutine getForcing(dpdx)
+    use constants, only: two
+    use kind_parameters, only: rkind
+    real(rkind), intent(out) :: dpdx
+
+    dpdx = two/500._rkind
+    
+
+end subroutine
+
+
+subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, fieldsC, fieldsE, u_g, Ro)
     use channel_parameters
     use kind_parameters,    only: rkind
-    use constants,          only: zero, one, two,pi
+    use constants,          only: zero, one, two,pi, half
     use gridtools,          only: alloc_buffs
     use IncompressibleGrid, only: u_index,v_index,w_index
     use random,             only: gaussian_random
@@ -91,21 +91,17 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
-    integer :: ioUnit, runID, k
+    real(rkind), intent(out), optional :: Ro, u_g
+    integer :: ioUnit, i, j, k
     real(rkind), dimension(:,:,:), pointer :: u, v, w, x, y, z
-    real(rkind), intent(out), optional :: u_g
     logical :: useSGS 
     real(rkind) :: mfactor, sig
     real(rkind), dimension(:,:,:), allocatable :: randArr
     real(rkind) :: epsfac, Uperiods, Vperiods , zpeak
-    namelist /IINPUT/ runId, nu, Pr, useSGS, f, deltat_by_D, ustar_by_G, Ref 
 
 
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=IINPUT)
-    close(ioUnit)    
-
+    u_g = zero
+    
     u => fieldsC(:,:,:,1)
     v => fieldsC(:,:,:,2)
     w => fieldsE(:,:,:,1)
@@ -113,83 +109,66 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     z => mesh(:,:,:,3)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
-   
-    ustar = f*D*deltat_by_D
-    G = ustar/ustar_by_G
-    deltat = D*deltat_by_D
-    Re_deltat = G*deltat/nu
-    Re_tau = ustar*deltat/nu 
-    dxP =  dx*ustar/nu
-    dyP =  dy*ustar/nu
-    dzP =  dz*ustar/nu
+ 
 
-    u_g = G
-    !u = G*(one - exp(-z/D)*cos(z/D))
-    !v = G*exp(-z/D)*sin(z/D)
-    !w = zero
-
-    Uperiods = 4.0; Vperiods = 4.0; zpeak = D;
+    Uperiods = 4.0; Vperiods = 4.0; zpeak = 0.3;
     epsfac = 0.5d0;
 
-    u = 1.2*(1.0-exp(-z*2.5d0)*cos(z*2.50d0)+epsfac*exp(0.5d0)*(z/Lz)*cos(Uperiods*2.0d0**pi*y/Ly)*exp(-0.5e0*(z/zpeak/Lz)**2.0d0))
-    v = 1.2*(exp(-z*2.5d0)*sin(z*2.50d0)+epsfac*exp(0.5d0)*(z/Lz)*cos(Vperiods*2.0d0**pi*x/Lx)*exp(-0.5d0*(z/zpeak/Lz)**2.0d0))
-    w = zero
-
-    u = u*G
-    v = v*G
+    !do k = 1,size(u,3)
+    !    do j = 1,size(u,2)
+    !        do i = 1,size(u,1)
+    !            u(i,j,k) = (1.0d0-exp(-z(i,j,k)*2.5d0)*cos(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz) &
+    !                    *cos(Uperiods*2.0d0*pi*y(i,j,k)/Ly)*exp(-0.5e0*(z(i,j,k)/zpeak/Lz)**2.0d0))
+    !            v(i,j,k) = (exp(-z(i,j,k)*2.5d0)*sin(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz)& 
+    !                        *cos(Vperiods*2.0d0*pi*x(i,j,k)/Lx)*exp(-0.5d0*(z(i,j,k)/zpeak/Lz)**2.0d0))
+    !            w(i,j,k) = zero  
+    !        end do 
+    !    end do 
+    !end do 
+   
+    u = half*z*(Lz - z) !one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
+        !    + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    v = zero!exp(-z/delta_Ek)*sin(z/delta_Ek) + &
+        !    + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    !w = zero  
+    w = half*half*z*(Lz - z) 
 
     ! Add random numbers
-    allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    call gaussian_random(randArr,zero,one,seedu + 10*nrank)
-    do k = 1,size(u,3)
-        sig = G*randomScaleFact*(1 - exp(-z(1,1,k)/D)*cos(z(1,1,k)/D))
-        u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)*0.5*(1 - cos(2*pi*y(:,:,k)/Ly))*0.5*(1 - cos(2*pi*x(:,:,k)/Lx))
-    end do  
-    deallocate(randArr)
-    
-    allocate(randArr(size(v,1),size(v,2),size(v,3)))
-    call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
-    do k = 1,size(v,3)
-        sig = G*randomScaleFact*exp(-z(1,1,k)/D)*sin(z(1,1,k)/D)
-        v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)*0.5*(1 - cos(2*pi*y(:,:,k)/Ly))*0.5*(1 - cos(2*pi*x(:,:,k)/Lx))
-    end do  
-    deallocate(randArr)
-
-    nullify(u,v,w,x,y,z)
-    !allocate(randArr(size(w,1),size(w,2),size(w,3)))
-    !call gaussian_random(randArr,zero,one,seedw+ 10*nrank)
-    !do k = 2,size(w,3)-1
-    !    sig = randomScaleFact*abs(v(1,1,k))
-    !    w(:,:,k) = w(:,:,k) + sig*randArr(:,:,k)
+    !allocate(randArr(size(u,1),size(u,2),size(u,3)))
+    !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
+    !do k = 1,size(u,3)
+    !    sig = G*randomScaleFact*(1 - exp(-z(1,1,k)/D)*cos(z(1,1,k)/D))
+    !    u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)*0.5*(1 - cos(2*pi*y(:,:,k)/Ly))*0.5*(1 - cos(2*pi*x(:,:,k)/Lx))
+    !end do  
+    !deallocate(randArr)
+    !
+    !allocate(randArr(size(v,1),size(v,2),size(v,3)))
+    !call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
+    !do k = 1,size(v,3)
+    !    sig = G*randomScaleFact*exp(-z(1,1,k)/D)*sin(z(1,1,k)/D)
+    !    v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)*0.5*(1 - cos(2*pi*y(:,:,k)/Ly))*0.5*(1 - cos(2*pi*x(:,:,k)/Lx))
     !end do  
     !deallocate(randArr)
 
-    !do k = 1,size(u,3)
-    !    mfactor = u(2,2,k)
-    !    u(:,:,k) = u(:,:,k) - mfactor*oscScaleFact*cos(nperiods*two*pi*x(:,:,k)/Lx)*sin(nperiods*two*pi*y(:,:,k)/Ly)
-    !    mfactor = v(2,2,k)
-    !    v(:,:,k) = v(:,:,k) + mfactor*oscScaleFact*sin(nperiods*two*pi*x(:,:,k)/Lx)*cos(nperiods*two*pi*y(:,:,k)/Ly)
-    !end do 
-
-    !do k = 1,size(u,3)
-    !    mfactor = u(4,4,k)
-    !    u(:,:,k) = u(:,:,k) + 0.5*mfactor*oscScaleFact*sin(4*nperiods*two*pi*x(:,:,k)/Lx)*cos(nperiods*two*pi*y(:,:,k)/Ly)
-    !    mfactor = v(4,4,k)
-    !    v(:,:,k) = v(:,:,k) - 0.5*mfactor*oscScaleFact*cos(4*nperiods*two*pi*x(:,:,k)/Lx)*sin(nperiods*two*pi*y(:,:,k)/Ly)
-    !end do 
-    call message(0,"============================================================================")
-    call message(0,"Initialized Velocity Fields (Lam. channel Solution + Perturbations)")
-    call message(0,"Summary:")
-    call message(1,"Geostrophic Velocity (x-direction):", G)
-    call message(1,"Friction Velocity (ustar):", ustar)
-    call message(1,"Friction Reynolds Number:", Re_tau)
-    call message(1,"Grid Spacings:")
-    call message(2,"dx_plus =", dxP) 
-    call message(2,"dy_plus =", dyP) 
-    call message(2,"dz_plus =", dzP) 
-    call message(0,"============================================================================")
+    nullify(u,v,w,x,y,z)
+    
+    call message(0,"Velocity Field Initialized")
 
 end subroutine
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 module allStatistics
     use kind_parameters, only: rkind

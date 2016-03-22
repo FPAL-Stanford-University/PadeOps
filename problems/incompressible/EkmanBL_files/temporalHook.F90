@@ -11,7 +11,8 @@ module temporalHook
     integer :: nt_print2screen = 10
     integer :: nt_getMaxKE = 10
     integer :: tid_statsDump = 10000
-    real(rkind) :: time_startDumping = 15000._rkind
+    integer :: tid_compStats = 200
+    real(rkind) :: time_startDumping = 100._rkind
     integer :: ierr 
 contains
 
@@ -33,9 +34,14 @@ contains
            call dumpData4Matlab(gp) 
         end if 
 
-        !if ((mod(gp%step,tid_statsDump) == 0) .and. (gp%tsim > time_startDumping)) then
-        !    call dump_stats(gp)
-        !end if 
+        if ((mod(gp%step,tid_compStats)==0) .and. (gp%tsim > time_startDumping)) then
+            call compute_stats(gp)
+        end if 
+
+        if ((mod(gp%step,tid_statsDump) == 0) .and. (gp%tsim > time_startDumping)) then
+            call compute_stats(gp)
+            call dump_stats(gp)
+        end if 
 
         call mpi_barrier(mpi_comm_world,ierr)
         !if (mod(gp%step,gp%t_restartDump) == 0) then
