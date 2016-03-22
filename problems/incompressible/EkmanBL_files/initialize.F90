@@ -4,16 +4,9 @@ module EkmanBL_parameters
     use kind_parameters,  only: rkind
     
     implicit none
-    real(rkind)  :: Lx, Ly, Lz, D, G, ustar
-    real(rkind)  :: nu = 1.14_rkind*(10**(-5._rkind))
-    real(rkind)  :: f  = 1.454_rkind*(10**(-4._rkind))
-    real(rkind)  :: Pr = 0.7_rkind
-    real(rkind)  :: Ref = 400._rkind
-    real(rkind)  :: ustar_by_G = 0.065_rkind
-    real(rkind)  :: deltat_by_D = 13._rkind
+    real(rkind)  :: Lx, Ly, Lz, G, ustar
     real(rkind)  :: dxP, dyP, dzP
-    real(rkind)  :: Re_deltat, Re_tau
-    real(rkind)  :: deltat
+    real(rkind)  :: delta_Ek
 
     integer :: seedu = 321341
     integer :: seedv = 423424
@@ -39,11 +32,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: i,j,k
     integer :: ix1, ixn, iy1, iyn, iz1, izn
 
-    D = sqrt(two*nu/f)
-    Lx = 100.d0*D; Ly = 100.d0*D; Lz = 24.d0*D
-    
-    nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
+    Lx = pi; Ly = pi; Lz = 1.5_rkind
 
+    nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
     ! If base decomposition is in Y
     ix1 = decomp%xst(1); iy1 = decomp%xst(2); iz1 = decomp%xst(3)
@@ -74,10 +65,10 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, fieldsC, fieldsE, u_g, f_corr)
+subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, fieldsC, fieldsE, u_g, Ro)
     use EkmanBL_parameters
     use kind_parameters,    only: rkind
-    use constants,          only: zero, one, two,pi
+    use constants,          only: zero, one, two,pi, half
     use gridtools,          only: alloc_buffs
     use IncompressibleGrid, only: u_index,v_index,w_index
     use random,             only: gaussian_random
@@ -91,7 +82,7 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
-    real(rkind), intent(out), optional :: f_corr, u_g
+    real(rkind), intent(out), optional :: Ro, u_g
     integer :: ioUnit, i, j, k
     real(rkind), dimension(:,:,:), pointer :: u, v, w, x, y, z
     logical :: useSGS 
@@ -99,8 +90,7 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     real(rkind), dimension(:,:,:), allocatable :: randArr
     real(rkind) :: epsfac, Uperiods, Vperiods , zpeak
 
-    namelist /EKMANINPUT/ Ref, deltat_by_D, & 
-                                ustar_by_G, f 
+    namelist /EKMANINPUT/ Ro, delta_Ek  
 
 
     ioUnit = 11
@@ -108,6 +98,8 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     read(unit=ioUnit, NML=EKMANINPUT)
     close(ioUnit)    
 
+    u_g = one
+    
     u => fieldsC(:,:,:,1)
     v => fieldsC(:,:,:,2)
     w => fieldsE(:,:,:,1)
@@ -115,36 +107,29 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     z => mesh(:,:,:,3)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
-   
-    ustar = f*D*deltat_by_D
-    G = ustar/ustar_by_G
-    deltat = D*deltat_by_D
-    Re_deltat = G*deltat/nu
-    Re_tau = ustar*deltat/nu 
-    dxP =  dx*ustar/nu
-    dyP =  dy*ustar/nu
-    dzP =  dz*ustar/nu
+ 
 
-    u_g = G
-    f_corr = f
-
-    Uperiods = 4.0; Vperiods = 4.0; zpeak = D;
+    Uperiods = 4.0; Vperiods = 4.0; zpeak = 0.3;
     epsfac = 0.5d0;
 
-    do k = 1,size(u,3)
-        do j = 1,size(u,2)
-            do i = 1,size(u,1)
-                u(i,j,k) = 1.2d0*(1.0d0-exp(-z(i,j,k)*2.5d0)*cos(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz) &
-                        *cos(Uperiods*2.0d0**pi*y(i,j,k)/Ly)*exp(-0.5e0*(z(i,j,k)/zpeak/Lz)**2.0d0))
-                v(i,j,k) = 1.2d0*(exp(-z(i,j,k)*2.5d0)*sin(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz)& 
-                            *cos(Vperiods*2.0d0**pi*x(i,j,k)/Lx)*exp(-0.5d0*(z(i,j,k)/zpeak/Lz)**2.0d0))
-                w(i,j,k) = 0.1d0*sin(2*pi*(z(i,j,k)-0.5d0*dz)/Lz)*cos(x(i,j,k))*sin(y(i,j,k))
-            end do 
-        end do 
-    end do 
-    u = u*G
-    v = v*G
-    w = w*G
+    !do k = 1,size(u,3)
+    !    do j = 1,size(u,2)
+    !        do i = 1,size(u,1)
+    !            u(i,j,k) = (1.0d0-exp(-z(i,j,k)*2.5d0)*cos(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz) &
+    !                    *cos(Uperiods*2.0d0*pi*y(i,j,k)/Ly)*exp(-0.5e0*(z(i,j,k)/zpeak/Lz)**2.0d0))
+    !            v(i,j,k) = (exp(-z(i,j,k)*2.5d0)*sin(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz)& 
+    !                        *cos(Vperiods*2.0d0*pi*x(i,j,k)/Lx)*exp(-0.5d0*(z(i,j,k)/zpeak/Lz)**2.0d0))
+    !            w(i,j,k) = zero  
+    !        end do 
+    !    end do 
+    !end do 
+   
+    u = (z**2)/(Lz**2)!one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
+        !    + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    v = zero!exp(-z/delta_Ek)*sin(z/delta_Ek) + &
+        !    + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    w = zero  
+
     ! Add random numbers
     !allocate(randArr(size(u,1),size(u,2),size(u,3)))
     !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
@@ -164,33 +149,19 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
 
     nullify(u,v,w,x,y,z)
     
-    call message(0,"============================================================================")
-    call message(0,"Initialized Velocity Fields (Lam. Ekman Solution + Perturbations)")
-    call message(0,"Summary:")
-    call message(1,"Geostrophic Velocity (x-direction):", G)
-    call message(1,"Friction Velocity (ustar):", ustar)
-    call message(1,"Friction Reynolds Number:", Re_tau)
-    call message(1,"Grid Spacings:")
-    call message(2,"dx_plus =", dxP) 
-    call message(2,"dy_plus =", dyP) 
-    call message(2,"dz_plus =", dzP) 
-    call message(0,"============================================================================")
+    call message(0,"Velocity Field Initialized")
 
 end subroutine
 
 
+subroutine getForcing(dpdx)
+    use kind_parameters, only: rkind
+    real(rkind), intent(out) :: dpdx
 
+    dpdx = zero
+    
 
-
-
-
-
-
-
-
-
-
-
+end subroutine
 
 module allStatistics
     use kind_parameters, only: rkind
@@ -226,25 +197,15 @@ contains
         nullify(gpC)
     end subroutine
 
-
-
-    subroutine dump_stats(ig)
-        use basic_io, only: write_2d_ascii
-        use kind_parameters, only: clen
+    subroutine compute_stats(ig)
         use mpi
-        use exits, only: message
         type(igrid), intent(inout), target :: ig
         type(decomp_info), pointer :: gpC
         real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3
-        character(len=clen) :: fname
-        character(len=clen) :: tempname
-        character(len=clen) :: OutputDir
-        integer :: tid
 
         rbuff1 => ig%rbuffxC(:,:,:,1); rbuff2 => ig%rbuffyC(:,:,:,1);
         rbuff3 => ig%rbuffzC(:,:,:,1); 
         gpC => ig%gpC
-        tid = ig%step
 
         tidSUM = tidSUM + 1
 
@@ -308,16 +269,32 @@ contains
         call compute_z_mean(rbuff3, ozoz_mean)
 
         runningSum = runningSum + zStats2dump
-        TemporalMnNOW = runningSum/tidSUM
+
+    end subroutine 
+
+    subroutine dump_stats(ig)
+        use basic_io, only: write_2d_ascii
+        use exits, only: message
+        use kind_parameters, only: clen
+        use mpi
+        type(igrid), intent(in), target :: ig
+        character(len=clen) :: fname
+        character(len=clen) :: tempname
+        character(len=clen) :: OutputDir
+        integer :: tid
+
+        TemporalMnNOW = runningSum/real(tidSUM,rkind)
+        tid = ig%step
 
         if (nrank == 0) then
             write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", ig%RunID,"_t",tid,".stt"
             fname = ig%OutputDir(:len_trim(ig%OutputDir))//"/"//trim(tempname)
             call write_2d_ascii(TemporalMnNOW,fname)
         end if 
-        call message(0, "Just dumped a .stt file")
+        call message(1, "Just dumped a .stt file")
+        call message(2, "Number ot tsteps averaged:",tidSUM)
 
-    end subroutine 
+    end subroutine
 
     subroutine compute_z_mean(arr_in, vec_out)
         use reductions, only: P_SUM

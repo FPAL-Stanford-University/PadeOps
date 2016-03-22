@@ -3,7 +3,7 @@ module IncompressibleGridNP
     use constants, only: imi, zero,one,two,three,half 
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
-    use hooks, only: meshgen, initfields_stagg
+    use hooks, only: meshgen, initfields_stagg, getforcing
     use decomp_2d
     use StaggOpsMod, only: staggOps  
     use exits, only: GracefulExit, message
@@ -30,8 +30,10 @@ module IncompressibleGridNP
     integer :: ierr 
 
     ! Allow non-zero value (isEven) 
-    logical :: topBC_u = .true.  , topBC_v = .true. , topBC_w = .false.
-    logical :: botBC_u = .false. , botBC_v = .false., botBC_w = .false. 
+    logical :: topBC_u = .true.  , topBC_v = .true. 
+    logical :: botBC_u = .false. , botBC_v = .false. 
+
+    logical, parameter :: topBC_w = .false. , botBC_w = .false. 
 
     integer, parameter :: AdvectionForm = 1 
 
@@ -71,8 +73,9 @@ module IncompressibleGridNP
         complex(rkind), dimension(:,:,:), pointer:: u_rhs, v_rhs, wC_rhs, w_rhs 
         complex(rkind), dimension(:,:,:), pointer:: u_Orhs, v_Orhs, w_Orhs
             
-        real(rkind) :: nu0, Gx, Gy, Gz, fCor, dtby2
+        real(rkind) :: Re, Gx, Gy, Gz, dtby2
         complex(rkind), dimension(:,:,:), allocatable :: GxHat 
+        real(rkind) :: Ro = 1.d5
 
         integer :: nxZ, nyZ
         integer :: tid_statsDump
@@ -80,6 +83,10 @@ module IncompressibleGridNP
         
         integer :: runID
         logical :: useCoriolis = .true. 
+        logical :: useExtraForcing = .false.
+        
+        complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
+
         contains
             procedure :: init
             procedure :: destroy
@@ -96,6 +103,7 @@ module IncompressibleGridNP
             procedure, private :: addNonLinearTerm_SkewSymm 
             procedure, private :: addCoriolisTerm
             procedure, private :: addViscousTerm 
+            procedure, private :: addExtraForcingTerm 
             procedure, private :: ApplyCompactFilter 
     end type
 
@@ -124,7 +132,7 @@ contains
         real(rkind) :: dt = -one
         real(rkind) :: tstop = one
         real(rkind) :: CFL = -one
-        real(rkind) :: nu = 0.02_rkind
+        real(rkind) :: Re = 800.00_rkind
         real(rkind) :: u_g = 1._rkind
         integer :: runID = 0
         integer :: t_dataDump = 99999
@@ -136,13 +144,16 @@ contains
         integer :: topWall = slip
         integer :: botWall = no_slip
         logical :: useCoriolis = .true. 
+        logical :: useExtraForcing = .false.
+        real(rkind) :: dpFdx = zero
+
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
                                   periodicx, periodicy, periodicz, &
                                                        prow, pcol, &
                                         t_restartDump, t_dataDump
-        namelist /IINPUT/  nu, useSGS, runID, Pr, useCoriolis, & 
-                                tid_statsDump, &
+        namelist /IINPUT/  Re, useSGS, runID, Pr, useCoriolis, & 
+                                tid_statsDump, useExtraForcing, &
                                 time_startDumping, topWall, botWall 
 
         ! STEP 1: READ INPUT 
@@ -161,6 +172,7 @@ contains
         this%dt = dt
         this%dtby2 = dt/two 
 
+        this%Re = Re
         this%outputdir = outputdir 
         
         this%periodicx = periodicx
@@ -183,36 +195,8 @@ contains
         this%tid_statsDump = tid_statsDump
         this%time_startDumping = time_startDumping 
         this%useCoriolis = useCoriolis 
+        this%useExtraForcing = useExtraForcing
 
-        !select case(topWall)
-        !case(slip)
-        !    topBC_u = .false.
-        !    topBC_v = .false.
-        !    call message(1, "TopWall BC set to SLIP")
-        !case(no_slip)
-        !    topBC_u = .true.
-        !    topBC_v = .true.
-        !    call message(1, "TopWall BC set to NO SLIP")
-        !case default 
-        !    call GracefulExit("Incorrect choice for topWall. Only two choices &
-        !    & allowed: 1 (no slip) or 2 (slip)",101) 
-        !end select 
-        !topBC_w = .false.
-
-        !select case(botWall)
-        !case(slip)
-        !    botBC_u = .false.
-        !    botBC_v = .false.
-        !    call message(1, "BotWall BC set to SLIP")
-        !case(no_slip)
-        !    botBC_u = .true.
-        !    botBC_v = .true.
-        !    call message(1, "BotWall BC set to NO SLIP")
-        !case default 
-        !    call GracefulExit("Incorrect choice for botWall. Only two choices & 
-        !    & allowed: 1 (no slip) or 2 (slip)",101) 
-        !end select 
-        !botBC_w = .false.
 
         if (.not. periodicx) then
             call GracefulExit("Currently only Periodic BC is supported in x direction",102)
@@ -234,6 +218,28 @@ contains
         call decomp_2d_init(nx, ny, nz, prow, pcol)
         call get_decomp_info(this%gpC)
         call decomp_info_init(nx,ny,nz+1,this%gpE)
+       
+        ! Set Top and Bottom BCs
+        if (topWall == slip) then
+            topBC_u = .true.; topBC_v = .true.
+            call message(1, "TopWall BC set to: SLIP")
+        elseif (topWall == no_slip) then
+            topBC_u = .false.; topBC_v = .false.
+            call message(1, "TopWall BC set to: NO_SLIP")
+        else
+            call message("WARNING: No Top BCs provided. Using defaults found in igrid.F90")
+        end if 
+        
+        if (botWall == slip) then
+            botBC_u = .true.; botBC_v = .true.
+            call message(1, "BotWall BC set to: SLIP")
+        elseif (botWall == no_slip) then
+            botBC_u = .false.; botBC_v = .false.
+            call message(1, "BotWall BC set to: NO_SLIP")
+        else
+            call message("WARNING: No Bottom BCs provided. Using defaults found in igrid.F90")
+        end if 
+        
         
         ! STEP 3: GENERATE MESH (CELL CENTERED) 
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
@@ -320,10 +326,9 @@ contains
  
         ! STEP 7: INITIALIZE THE FIELDS 
         call initfields_stagg(this%gpC, this%gpE, this%dx, this%dy, this%dz, &
-            inputfile, this%mesh, this%PfieldsC, this%PfieldsE, u_g, this%fcor)! <-- this procedure is part of user defined HOOKS
+            inputfile, this%mesh, this%PfieldsC, this%PfieldsE, u_g, this%Ro)! <-- this procedure is part of user defined HOOKS
 
         
-        this%nu0 = nu
         this%Gx = u_g
         this%Gy = zero
         this%Gz = zero
@@ -382,15 +387,26 @@ contains
         call this%compute_Vorticity()
 
         ! STEP 11: Compute Coriolis Term
-        if (this%useCoriolis) then 
+        if (this%useCoriolis) then
+            call message(0, "Turning on Coriolis with Geostrophic Forcing")
+            call message(1, "Geostrophic Velocity:", this%Gx) 
             call this%spectC%alloc_r2c_out(this%GxHat)
             this%rbuffxC(:,:,:,1) = this%Gx
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gxhat)
-        end if 
+        end if
+
+        ! STEP 12: Compute additional forcing (channel)
+        if (this%useExtraForcing) then
+            call getForcing(dpFdx)
+            call message(0," Turning on aditional forcing")
+            call message(1," dP_dx = ", dpFdx)
+            call this%spectC%alloc_r2c_out(this%dpF_dxhat)
+            this%rbuffxC(:,:,:,1) = dpFdx
+            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%dpF_dxhat)
+        end if  
 
         call message("IGRID initialized successfully!")
     end subroutine
-
 
 
     pure function getMaxKE(this) result(maxKE)
@@ -704,7 +720,7 @@ contains
         do k = 1,size(this%u_rhs,3)
             do j = 1,size(this%u_rhs,2)
                 do i = 1,size(this%u_rhs,1)
-                    this%u_rhs(i,j,k) = this%u_rhs(i,j,k) + this%fCor*this%vhat(i,j,k)
+                    this%u_rhs(i,j,k) = this%u_rhs(i,j,k) + this%vhat(i,j,k)/this%Ro
                 end do 
             end do 
         end do 
@@ -714,7 +730,7 @@ contains
         do k = 1,size(this%u_rhs,3)
             do j = 1,size(this%u_rhs,2)
                 do i = 1,size(this%u_rhs,1)
-                    this%v_rhs(i,j,k) = this%v_rhs(i,j,k) +  this%fCor*(this%GxHat(i,j,k) - this%uhat(i,j,k))
+                    this%v_rhs(i,j,k) = this%v_rhs(i,j,k) +  (this%GxHat(i,j,k) - this%uhat(i,j,k))/this%Ro
                 end do 
             end do 
         end do 
@@ -722,6 +738,14 @@ contains
         ! w equation 
         ! Do nothing 
     end subroutine  
+
+
+    subroutine addExtraForcingTerm(this)
+        class(igrid), intent(inout) :: this
+       
+        this%u_rhs = this%u_rhs + this%dpF_dxhat
+
+    end subroutine
 
     subroutine addViscousTerm(this)
         class(igrid), intent(inout), target :: this
@@ -748,8 +772,8 @@ contains
         do k = 1,size(this%u_rhs,3)
             do j = 1,size(this%u_rhs,2)
                 do i = 1,size(this%u_rhs,1)
-                    this%u_rhs(i,j,k) = this%u_rhs(i,j,k) + this%nu0*cytmp1(i,j,k) &
-                             - this%nu0*this%spectC%kabs_sq(i,j,k) *this%uhat(i,j,k)
+                    this%u_rhs(i,j,k) = this%u_rhs(i,j,k) + (one/this%Re)*cytmp1(i,j,k) &
+                             - (one/this%Re)*this%spectC%kabs_sq(i,j,k) *this%uhat(i,j,k)
                 end do 
             end do 
         end do 
@@ -765,8 +789,8 @@ contains
         do k = 1,size(this%v_rhs,3)
             do j = 1,size(this%v_rhs,2)
                 do i = 1,size(this%v_rhs,1)
-                    this%v_rhs(i,j,k) = this%v_rhs(i,j,k) + this%nu0*cytmp1(i,j,k) &
-                             - this%nu0*this%spectC%kabs_sq(i,j,k) *this%vhat(i,j,k)
+                    this%v_rhs(i,j,k) = this%v_rhs(i,j,k) + (one/this%Re)*cytmp1(i,j,k) &
+                             - (one/this%Re)*this%spectC%kabs_sq(i,j,k) *this%vhat(i,j,k)
                 end do 
             end do 
         end do 
@@ -783,8 +807,8 @@ contains
         do k = 1,size(this%w_rhs,3)
             do j = 1,size(this%w_rhs,2)
                 do i = 1,size(this%w_rhs,1)
-                    this%w_rhs(i,j,k) = this%w_rhs(i,j,k) + this%nu0*cytmp2(i,j,k) &
-                             - this%nu0*this%spectE%kabs_sq(i,j,k) *this%what(i,j,k)
+                    this%w_rhs(i,j,k) = this%w_rhs(i,j,k) + (one/this%Re)*cytmp2(i,j,k) &
+                             - (one/this%Re)*this%spectE%kabs_sq(i,j,k) *this%what(i,j,k)
                 end do 
             end do 
         end do 
@@ -813,7 +837,12 @@ contains
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
         end if 
-        
+       
+
+        if (this%useExtraForcing) then
+            call this%addExtraForcingTerm()
+        end if 
+
         ! Step 3: Viscous Term
         call this%AddViscousTerm()
 

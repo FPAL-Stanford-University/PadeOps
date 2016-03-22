@@ -28,6 +28,12 @@ module hooks
         end subroutine 
     end interface
 
+    interface getForcing
+        subroutine getForcing(dpdx)
+            import :: rkind
+            real(rkind), intent(out) :: dpdx 
+        end subroutine
+    end interface
 
     interface initfields_stagg
         subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inpDirectory, mesh, fieldsC, fieldsE, u_g, fcorr)
