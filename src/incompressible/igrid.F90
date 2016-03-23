@@ -3,7 +3,7 @@ module IncompressibleGridNP
     use constants, only: imi, zero,one,two,three,half 
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
-    use hooks, only: meshgen, initfields_stagg, getforcing
+    use igrid_hooks, only: meshgen, initfields_stagg, getforcing
     use decomp_2d
     use StaggOpsMod, only: staggOps  
     use exits, only: GracefulExit, message

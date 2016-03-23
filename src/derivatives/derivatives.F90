@@ -453,14 +453,15 @@ contains
 
     end subroutine
 
-    subroutine ddx(this,f,dfdx)
+    subroutine ddx(this,f,dfdx,bc1,bcn)
         class(derivatives), intent(in) :: this
         real(rkind), intent(in), dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: f
         real(rkind), intent(out),dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: dfdx
+        integer, optional, intent(in) :: bc1, bcn
 
         select case (this%xmethod)
         case (1)
-            call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+            call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
         case (2)
             call this%xcd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
         case (3)
@@ -471,14 +472,15 @@ contains
 
     end subroutine 
 
-    subroutine ddy(this,f,dfdx)
+    subroutine ddy(this,f,dfdx,bc1,bcn)
         class(derivatives), intent(in) :: this
         real(rkind), intent(in), dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: f
         real(rkind), intent(out),dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: dfdx
+        integer, optional, intent(in) :: bc1, bcn
 
         select case (this%ymethod)
         case (1)
-            call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
+            call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
         case (2)
             call this%ycd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
         case (3)
@@ -489,14 +491,15 @@ contains
 
     end subroutine 
     
-    subroutine ddz(this,f,dfdx)
+    subroutine ddz(this,f,dfdx,bc1,bcn)
         class(derivatives), intent(in) :: this
         real(rkind), intent(in), dimension(this%zsz(1),this%zsz(2),this%zsz(3)) :: f
         real(rkind), intent(out),dimension(this%zsz(1),this%zsz(2),this%zsz(3)) :: dfdx
+        integer, optional, intent(in) :: bc1, bcn
 
         select case (this%zmethod)
         case (1)
-            call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
+            call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
         case (2)
             call this%zcd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
         case (3)
@@ -506,14 +509,15 @@ contains
         end select 
     end subroutine 
 
-    subroutine d2dx2(this,f,d2fdx2)
+    subroutine d2dx2(this,f,d2fdx2,bc1,bcn)
         class(derivatives), intent(in) :: this
         real(rkind), intent(in), dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: f
         real(rkind), intent(out),dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: d2fdx2
+        integer, optional, intent(in) :: bc1, bcn
 
         select case (this%xmethod)
         case (1)
-            call this%xcd10 % d2d1(f,d2fdx2,this%xsz(2),this%xsz(3))
+            call this%xcd10 % d2d1(f,d2fdx2,this%xsz(2),this%xsz(3),bc1,bcn)
         case (2)
             call GracefulExit("CD06 is incomplete right now",21)
         case (3)
@@ -524,14 +528,15 @@ contains
 
     end subroutine 
     
-    subroutine d2dy2(this,f,d2fdx2)
+    subroutine d2dy2(this,f,d2fdx2,bc1,bcn)
         class(derivatives), intent(in) :: this
         real(rkind), intent(in), dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: f
         real(rkind), intent(out),dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: d2fdx2
+        integer, optional, intent(in) :: bc1, bcn
 
         select case (this%ymethod)
         case (1)
-            call this%ycd10 % d2d2(f,d2fdx2,this%ysz(1),this%ysz(3))
+            call this%ycd10 % d2d2(f,d2fdx2,this%ysz(1),this%ysz(3),bc1,bcn)
         case (2)
             call GracefulExit("CD06 is incomplete right now",21)
         case (3)
@@ -542,14 +547,15 @@ contains
 
     end subroutine
 
-    subroutine d2dz2(this,f,d2fdx2)
+    subroutine d2dz2(this,f,d2fdx2,bc1,bcn)
         class(derivatives), intent(in) :: this
         real(rkind), intent(in), dimension(this%zsz(1),this%zsz(2),this%zsz(3)) :: f
         real(rkind), intent(out),dimension(this%zsz(1),this%zsz(2),this%zsz(3)) :: d2fdx2
+        integer, optional, intent(in) :: bc1, bcn
 
         select case (this%zmethod)
         case (1)
-            call this%zcd10 % d2d3(f,d2fdx2,this%zsz(1),this%zsz(2))
+            call this%zcd10 % d2d3(f,d2fdx2,this%zsz(1),this%zsz(2),bc1,bcn)
         case (2)
             call GracefulExit("CD06 is incomplete right now",21)
         case (3)
