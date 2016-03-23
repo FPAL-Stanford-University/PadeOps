@@ -570,9 +570,11 @@ contains
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
             ! Filter the conserved variables
-            do i = 1,5
-                call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1)
-            end do
+            call this%filter(this%Wcnsrv(:,:,:,1), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+            call this%filter(this%Wcnsrv(:,:,:,2), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
+            call this%filter(this%Wcnsrv(:,:,:,3), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
+            call this%filter(this%Wcnsrv(:,:,:,4), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
+            call this%filter(this%Wcnsrv(:,:,:,5), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
             
             call this%get_primitive()
             call hook_bc(this%decomp, this%mesh, this%fields, this%tsim)
@@ -872,7 +874,7 @@ contains
         mustar = this%Cmu*this%rho*abs(mustar)
         
         ! Filter mustar
-        call this%filter(mustar, this%gfil, 2)
+        call this%filter(mustar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
         
         ! -------- Artificial Bulk Viscosity --------
         
@@ -920,7 +922,7 @@ contains
         bulkstar = this%Cbeta*this%rho*ytmp1*abs(bulkstar)
 
         ! Filter bulkstar
-        call this%filter(bulkstar, this%gfil, 2)
+        call this%filter(bulkstar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
 
         ! -------- Artificial Conductivity --------
 
@@ -958,7 +960,7 @@ contains
         kapstar = this%Ckap*this%rho*ytmp1*abs(kapstar)/this%T
 
         ! Filter kapstar
-        call this%filter(kapstar, this%gfil, 2)
+        call this%filter(kapstar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
 
         ! Now, add to physical fluid properties
         this%mu   = this%mu   + mustar
@@ -967,11 +969,12 @@ contains
 
     end subroutine
 
-    subroutine filter(this,arr,myfil,numtimes)
+    subroutine filter(this,arr,myfil,numtimes, x_bc, y_bc, z_bc)
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
         type(filters), target, optional, intent(in) :: myfil
         integer, optional, intent(in) :: numtimes
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         
         type(filters), pointer :: fil2use
         integer :: times2fil
@@ -1007,22 +1010,22 @@ contains
        
         
         ! First filter in y
-        call fil2use%filtery(arr,tmp_in_y)
+        call fil2use%filtery(arr,tmp_in_y,y_bc(1),y_bc(2))
         ! Subsequent refilters 
         do idx = 1,times2fil-1
             arr = tmp_in_y
-            call fil2use%filtery(arr,tmp_in_y)
+            call fil2use%filtery(arr,tmp_in_y,y_bc(1),y_bc(2))
         end do
         
         ! Then transpose to x
         call transpose_y_to_x(tmp_in_y,tmp1_in_x,this%decomp)
 
         ! First filter in x
-        call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+        call fil2use%filterx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
         ! Subsequent refilters
         do idx = 1,times2fil-1
             tmp1_in_x = tmp2_in_x
-            call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+            call fil2use%filterx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
         end do 
 
         ! Now transpose back to y
@@ -1032,11 +1035,11 @@ contains
         call transpose_y_to_z(tmp_in_y,tmp1_in_z,this%decomp)
 
         !First filter in z
-        call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+        call fil2use%filterz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
         ! Subsequent refilters
         do idx = 1,times2fil-1
             tmp1_in_z = tmp2_in_z
-            call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+            call fil2use%filterz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
         end do 
 
         ! Now transpose back to y

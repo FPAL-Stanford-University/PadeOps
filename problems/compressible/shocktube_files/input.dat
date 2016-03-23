@@ -35,6 +35,8 @@ pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 
 &CINPUT
 gam  = 1.4D0              ! Ratio of specific heats
 Rgas = 1.D0               ! Ratio of specific heats
+x_bc1 = 1                 ! Left  X boundary ( 0 => general, 1 => symmetric ) 
+x_bcn = 1                 ! Right X boundary ( 0 => general, 1 => symmetric ) 
 /
 
 &IINPUT
