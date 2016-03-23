@@ -1,12 +1,12 @@
 module CompressibleGrid
     use kind_parameters, only: rkind, clen
-    use constants, only: zero,eps,third,half,one,two,three,four
-    use FiltersMod, only: filters
-    use GridMod, only: grid
-    use gridtools, only: alloc_buffs, destroy_buffs
-    use cgrid_hooks, only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
-    use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
-                    transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
+    use constants,       only: zero,eps,third,half,one,two,three,four
+    use FiltersMod,      only: filters
+    use GridMod,         only: grid
+    use gridtools,       only: alloc_buffs, destroy_buffs
+    use cgrid_hooks,     only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
+    use decomp_2d,       only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
+                               transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
     use IdealGasEOS,     only: idealgas
    
@@ -66,6 +66,10 @@ module CompressibleGrid
         real(rkind), dimension(:,:,:), pointer :: bulk 
         real(rkind), dimension(:,:,:), pointer :: kap
          
+        integer, dimension(2)                                :: x_bc = [0,0]       ! X boundary (0=standard, 1=symmetric,-1=antisymmetric)
+        integer, dimension(2)                                :: y_bc = [0,0]       ! Y boundary (0=standard, 1=symmetric,-1=antisymmetric)
+        integer, dimension(2)                                :: z_bc = [0,0]       ! Z boundary (0=standard, 1=symmetric,-1=antisymmetric)
+
         contains
             procedure          :: init
             procedure          :: destroy
@@ -102,6 +106,9 @@ contains
         logical :: periodicx = .true. 
         logical :: periodicy = .true. 
         logical :: periodicz = .true.
+        integer :: x_bc1 = 0, x_bcn = 0
+        integer :: y_bc1 = 0, y_bcn = 0
+        integer :: z_bc1 = 0, z_bcn = 0
         character(len=clen) :: derivative_x = "cd10"  
         character(len=clen) :: derivative_y = "cd10" 
         character(len=clen) :: derivative_z = "cd10"
@@ -130,7 +137,8 @@ contains
                                      filter_x, filter_y, filter_z, &
                                                        prow, pcol, &
                                                          SkewSymm  
-        namelist /CINPUT/  gam, Rgas, Cmu, Cbeta, Ckap
+        namelist /CINPUT/  gam, Rgas, Cmu, Cbeta, Ckap, &
+                           x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
 
         ioUnit = 11
@@ -228,6 +236,16 @@ contains
         this%periodicx = periodicx
         this%periodicy = periodicy
         this%periodicz = periodicz
+
+        if ( ((x_bc1 /= 0) .AND. (x_bc1 /= 1)) ) call GracefulExit("x_bc1 can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((x_bcn /= 0) .AND. (x_bcn /= 1)) ) call GracefulExit("x_bcn can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((y_bc1 /= 0) .AND. (y_bc1 /= 1)) ) call GracefulExit("y_bc1 can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((y_bcn /= 0) .AND. (y_bcn /= 1)) ) call GracefulExit("y_bcn can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((z_bc1 /= 0) .AND. (z_bc1 /= 1)) ) call GracefulExit("z_bc1 can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((z_bcn /= 0) .AND. (z_bcn /= 1)) ) call GracefulExit("z_bcn can be only 0 (general) or 1 (symmetric)",4634)
+        this%x_bc = [x_bc1, x_bcn]
+        this%y_bc = [y_bc1, y_bcn]
+        this%z_bc = [z_bc1, z_bcn]
 
         this%derivative_x = derivative_x    
         this%derivative_y = derivative_y    
@@ -332,12 +350,13 @@ contains
 
     end subroutine
 
-    subroutine gradient(this, f, dfdx, dfdy, dfdz)
+    subroutine gradient(this, f, dfdx, dfdy, dfdz, x_bc, y_bc, z_bc)
         class(cgrid),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdx
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdy
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdz
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
 
         type(derivatives), pointer :: der
         type(decomp_info), pointer :: decomp
@@ -351,25 +370,26 @@ contains
         zdum => this%zbuf(:,:,:,2)
 
         ! Get Y derivatives
-        call der%ddy(f,dfdy)
+        call der%ddy(f,dfdy,y_bc(1),y_bc(2))
 
         ! Get X derivatives
         call transpose_y_to_x(f,xtmp,decomp)
-        call der%ddx(xtmp,xdum)
+        call der%ddx(xtmp,xdum,x_bc(1),x_bc(2))
         call transpose_x_to_y(xdum,dfdx)
 
         ! Get Z derivatives
         call transpose_y_to_z(f,ztmp,decomp)
-        call der%ddz(ztmp,zdum)
+        call der%ddz(ztmp,zdum,z_bc(1),z_bc(2))
         call transpose_z_to_y(zdum,dfdz)
 
     end subroutine 
 
-    subroutine laplacian(this, f, lapf)
+    subroutine laplacian(this, f, lapf, x_bc, y_bc, z_bc)
         use timer
         class(cgrid),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         
         real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum, ytmp
         type(derivatives), pointer :: der
@@ -385,18 +405,18 @@ contains
         ytmp => this%ybuf(:,:,:,1)
 
         ! Get Y derivatives
-        call der%d2dy2(f,lapf)
+        call der%d2dy2(f,lapf,y_bc(1),y_bc(2))
         
         ! Get X derivatives
         call transpose_y_to_x(f,xtmp,this%decomp) 
-        call this%der%d2dx2(xtmp,xdum)
+        call this%der%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
         call transpose_x_to_y(xdum,ytmp,this%decomp)
 
         lapf = lapf + ytmp
 
         ! Get Z derivatives
         call transpose_y_to_z(f,ztmp,this%decomp)
-        call this%der%d2dz2(ztmp,zdum)
+        call this%der%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
         call transpose_z_to_y(zdum,ytmp,this%decomp)
         
         lapf = lapf + ytmp
@@ -423,9 +443,9 @@ contains
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
         
-        call this%gradient(this%u,dudx,dudy,dudz)
-        call this%gradient(this%v,dvdx,dvdy,dvdz)
-        call this%gradient(this%w,dwdx,dwdy,dwdz)
+        call this%gradient(this%u,dudx,dudy,dudz,-this%x_bc, this%y_bc, this%z_bc)
+        call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
+        call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
         call this%getPhysicalProperties()
 
@@ -652,9 +672,9 @@ contains
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
         
-        call this%gradient(this%u,dudx,dudy,dudz)
-        call this%gradient(this%v,dvdx,dvdy,dvdz)
-        call this%gradient(this%w,dwdx,dwdy,dwdz)
+        call this%gradient(this%u,dudx,dudy,dudz,-this%x_bc, this%y_bc, this%z_bc)
+        call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
+        call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
         call this%getPhysicalProperties()
 
@@ -715,7 +735,11 @@ contains
         ! Now, get the x-derivative of the fluxes
         do i=1,5
             call transpose_y_to_x(flux(:,:,:,i),xtmp1,this%decomp)
-            call this%der%ddx(xtmp1,xtmp2)
+            if (i /= 2) then
+                call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but rho*u
+            else
+                call this%der%ddx(xtmp1,xtmp2, this%x_bc(1), this%x_bc(2))
+            end if
             call transpose_x_to_y(xtmp2,flux(:,:,:,i),this%decomp)
         end do
 
@@ -747,7 +771,11 @@ contains
 
         ! Now, get the x-derivative of the fluxes
         do i=1,5
-            call this%der%ddy(flux(:,:,:,i),ytmp1)
+            if (i /= 3) then
+                call this%der%ddy(flux(:,:,:,i),ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but rho*v
+            else
+                call this%der%ddy(flux(:,:,:,i),ytmp1, this%y_bc(1), this%y_bc(2))
+            end if
 
             ! Add to rhs
             rhs(:,:,:,i) = rhs(:,:,:,i) - ytmp1
@@ -779,7 +807,11 @@ contains
         ! Now, get the x-derivative of the fluxes
         do i=1,5
             call transpose_y_to_z(flux(:,:,:,i),ztmp1,this%decomp)
-            call this%der%ddz(ztmp1,ztmp2)
+            if (i /= 4) then
+                call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but rho*w
+            else
+                call this%der%ddz(ztmp1,ztmp2, this%z_bc(1), this%z_bc(2))
+            end if
             call transpose_z_to_y(ztmp2,flux(:,:,:,i),this%decomp)
         end do
 
@@ -818,22 +850,22 @@ contains
         
         ! Get 4th derivative in X
         call transpose_y_to_x(func,xtmp1,this%decomp)
-        call this%der%d2dx2(xtmp1,xtmp2)
-        call this%der%d2dx2(xtmp2,xtmp1)
+        call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+        call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
         xtmp2 = xtmp1*this%dx**6
         call transpose_x_to_y(xtmp2,mustar,this%decomp)
         
         ! Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
-        call this%der%d2dz2(ztmp1,ztmp2)
-        call this%der%d2dz2(ztmp2,ztmp1)
+        call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+        call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
         ztmp2 = ztmp1*this%dz**6
         call transpose_z_to_y(ztmp2,ytmp1,this%decomp)
         mustar = mustar + ytmp1
         
         ! Get 4th derivative in Y
-        call this%der%d2dy2(func,ytmp1)
-        call this%der%d2dy2(ytmp1,ytmp2)
+        call this%der%d2dy2(func,ytmp1,this%y_bc(1),this%y_bc(2))
+        call this%der%d2dy2(ytmp1,ytmp2,this%y_bc(1),this%y_bc(2))
         ytmp1 = ytmp2*this%dy**6
         mustar = mustar + ytmp1
 
@@ -847,30 +879,30 @@ contains
         func = dudx + dvdy + dwdz      ! dilatation
         
         ! Step 1: Get components of grad(rho) squared individually
-        call this%gradient(this%rho,ytmp1,ytmp2,ytmp3) ! Does not use any Y buffers
+        call this%gradient(this%rho,ytmp1,ytmp2,ytmp3,this%x_bc,this%y_bc,this%z_bc) ! Does not use any Y buffers
         ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
 
         ! Step 2: Get 4th derivative in X
         call transpose_y_to_x(func,xtmp1,this%decomp)
-        call this%der%d2dx2(xtmp1,xtmp2)
-        call this%der%d2dx2(xtmp2,xtmp1)
+        call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+        call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
         xtmp2 = xtmp1*this%dx**6
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         bulkstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
-        call this%der%d2dz2(ztmp1,ztmp2)
-        call this%der%d2dz2(ztmp2,ztmp1)
+        call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+        call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
         ztmp2 = ztmp1*this%dz**6
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
         bulkstar = bulkstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
 
         ! Step 4: Get 4th derivative in Y
-        call this%der%d2dy2(func,ytmp4)
-        call this%der%d2dy2(ytmp4,ytmp5)
+        call this%der%d2dy2(func,ytmp4,this%y_bc(1),this%y_bc(2))
+        call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
         ytmp4 = ytmp5*this%dy**6
         bulkstar = bulkstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
 
@@ -893,32 +925,32 @@ contains
         ! -------- Artificial Conductivity --------
 
         ! Step 1: Get components of grad(e) squared individually
-        call this%gradient(this%e,ytmp1,ytmp2,ytmp3) ! Does not use any Y buffers
+        call this%gradient(this%e,ytmp1,ytmp2,ytmp3,this%x_bc,this%y_bc,this%z_bc) ! Does not use any Y buffers
         ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
 
         ! Step 2: Get 4th derivative in X
         call transpose_y_to_x(this%e,xtmp1,this%decomp)
-        call this%der%d2dx2(xtmp1,xtmp2)
-        call this%der%d2dx2(xtmp2,xtmp1)
+        call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+        call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
         xtmp2 = xtmp1*this%dx**6
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        kapstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3)
+        kapstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + eps) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(this%e,ztmp1,this%decomp)
-        call this%der%d2dz2(ztmp1,ztmp2)
-        call this%der%d2dz2(ztmp2,ztmp1)
+        call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+        call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
         ztmp2 = ztmp1*this%dz**6
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        kapstar = kapstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3)
+        kapstar = kapstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + eps) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
-        call this%der%d2dy2(this%e,ytmp4)
-        call this%der%d2dy2(ytmp4,ytmp5)
+        call this%der%d2dy2(this%e,ytmp4,this%y_bc(1),this%y_bc(2))
+        call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
         ytmp4 = ytmp5*this%dy**6
-        kapstar = kapstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3)
+        kapstar = kapstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + eps) ! Add eps in case denominator is zero
 
         ! Now, all ytmps are free to use
         call this%gas%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound
@@ -1089,18 +1121,18 @@ contains
         tmp1_in_y => this%ybuf(:,:,:,1)
         
         ! Step 1: Get qy (dvdy is destroyed)
-        call der%ddy(this%T,tmp1_in_y)
+        call der%ddy(this%T,tmp1_in_y,this%y_bc(1),this%y_bc(2))
         duidxj(:,:,:,qyidx) = -this%kap*tmp1_in_y
 
         ! Step 2: Get qx (dudx is destroyed)
         call transpose_y_to_x(this%T,tmp1_in_x,this%decomp)
-        call der%ddx(tmp1_in_x,tmp2_in_x)
+        call der%ddx(tmp1_in_x,tmp2_in_x,this%x_bc(1),this%x_bc(2))
         call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
         duidxj(:,:,:,qxidx) = -this%kap*tmp1_in_y
 
         ! Step 3: Get qz (dwdz is destroyed)
         call transpose_y_to_z(this%T,tmp1_in_z,this%decomp)
-        call der%ddz(tmp1_in_z,tmp2_in_z)
+        call der%ddz(tmp1_in_z,tmp2_in_z,this%z_bc(1),this%z_bc(2))
         call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
         duidxj(:,:,:,qzidx) = -this%kap*tmp1_in_y
 

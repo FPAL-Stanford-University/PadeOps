@@ -15,13 +15,14 @@ module operators
 
 contains
 
-    subroutine gradient(decomp, der, f, dfdx, dfdy, dfdz)
+    subroutine gradient(decomp, der, f, dfdx, dfdy, dfdz, x_bc, y_bc, z_bc)
         type(decomp_info), intent(in) :: decomp
         type(derivatives) :: der
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(in)  :: f
         real(rkind), dimension(size(f,1), size(f,2), size(f,3)),             intent(out) :: dfdx
         real(rkind), dimension(size(f,1), size(f,2), size(f,3)),             intent(out) :: dfdy
         real(rkind), dimension(size(f,1), size(f,2), size(f,3)),             intent(out) :: dfdz
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) :: xtmp,xdum
         real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) :: ztmp,zdum
@@ -32,25 +33,26 @@ contains
         end if
 
         ! Get Y derivatives
-        call der%ddy(f,dfdy)
+        call der%ddy(f,dfdy,y_bc(1),y_bc(2))
 
         ! Get X derivatives
         call transpose_y_to_x(f,xtmp,decomp)
-        call der%ddx(xtmp,xdum)
+        call der%ddx(xtmp,xdum,x_bc(1),x_bc(2))
         call transpose_x_to_y(xdum,dfdx)
 
         ! Get Z derivatives
         call transpose_y_to_z(f,ztmp,decomp)
-        call der%ddz(ztmp,zdum)
+        call der%ddz(ztmp,zdum,z_bc(1),z_bc(2))
         call transpose_z_to_y(zdum,dfdz)
 
     end subroutine 
 
-    subroutine curl(decomp, der, u, v, w, curlu)
+    subroutine curl(decomp, der, u, v, w, curlu, x_bc, y_bc, z_bc)
         type(decomp_info), intent(in) :: decomp
         type(derivatives) :: der
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(in)  :: u, v, w
         real(rkind), dimension(size(u,1), size(u,2), size(u,3),3),             intent(out) :: curlu
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) :: xtmp,xdum
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: ytmp
@@ -70,44 +72,45 @@ contains
         end if
 
         ! Get dw/dy
-        call der%ddy( w, curlu(:,:,:,1) )
+        call der%ddy( w, curlu(:,:,:,1), y_bc(1), y_bc(2) )
 
         ! Get dv/dz
         call transpose_y_to_z( v, ztmp, decomp)
-        call der%ddz(ztmp,zdum)
+        call der%ddz(ztmp,zdum,z_bc(1),z_bc(2))
         call transpose_z_to_y(zdum,ytmp)
 
         curlu(:,:,:,1) = curlu(:,:,:,1) - ytmp ! dw/dy - dv/dz
 
         ! Get du/dz
         call transpose_y_to_z( u, ztmp, decomp)
-        call der%ddz(ztmp,zdum)
+        call der%ddz(ztmp,zdum,z_bc(1),z_bc(2))
         call transpose_z_to_y(zdum, curlu(:,:,:,2) )
 
         ! Get dw/dx
         call transpose_y_to_x( w, xtmp, decomp)
-        call der%ddx(xtmp,xdum)
+        call der%ddx(xtmp,xdum,x_bc(1),x_bc(2))
         call transpose_x_to_y(xdum, ytmp )
 
         curlu(:,:,:,2) = curlu(:,:,:,2) - ytmp ! du/dz - dw/dx
 
         ! Get dv/dx
         call transpose_y_to_x( v, xtmp, decomp)
-        call der%ddx(xtmp,xdum)
+        call der%ddx(xtmp,xdum,x_bc(1),x_bc(2))
         call transpose_x_to_y(xdum, curlu(:,:,:,3) )
 
         ! Get du/dy
-        call der%ddy( u, ytmp )
+        call der%ddy( u, ytmp, y_bc(1), y_bc(2) )
 
         curlu(:,:,:,3) = curlu(:,:,:,3) - ytmp ! dv/dx - du/dy
 
     end subroutine 
 
-    subroutine divergence(decomp, der, u, v, w, div)
+    subroutine divergence(decomp, der, u, v, w, div, x_bc, y_bc, z_bc)
         type(decomp_info), intent(in) :: decomp
         type(derivatives) :: der
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(in)  :: u, v, w
         real(rkind), dimension(size(u,1), size(u,2), size(u,3)),             intent(out) :: div
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) :: xtmp,xdum
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: ytmp
@@ -119,18 +122,18 @@ contains
         end if
 
         ! Get Y derivatives
-        call der%ddy(v,div)
+        call der%ddy(v,div,-y_bc(1),-y_bc(2))
 
         ! Get X derivatives
         call transpose_y_to_x(u,xtmp,decomp)
-        call der%ddx(xtmp,xdum)
+        call der%ddx(xtmp,xdum,-x_bc(1),-x_bc(2))
         call transpose_x_to_y(xdum,ytmp)
 
         div = div + ytmp
 
         ! Get Z derivatives
         call transpose_y_to_z(w,ztmp,decomp)
-        call der%ddz(ztmp,zdum)
+        call der%ddz(ztmp,zdum,-z_bc(1),-z_bc(2))
         call transpose_z_to_y(zdum,ytmp)
 
         div = div + ytmp
