@@ -8,7 +8,7 @@ program test_cd10
 
     integer :: nx = 32, ny=32, nz=32
 
-    logical, parameter :: periodic = .TRUE.
+    logical, parameter :: periodic = .FALSE.
 
     type( cd10 ) :: xcd10, ycd10, zcd10
     real(rkind), dimension(:,:,:), allocatable :: x,y,z,f,df,df_exact,d2f,d2f_exact
@@ -31,9 +31,9 @@ program test_cd10
         dy = two*pi/real(ny,rkind)
         dz = two*pi/real(nz,rkind)
     else
-        dx = two*pi/real(nx-1,rkind)
-        dy = two*pi/real(ny-1,rkind)
-        dz = two*pi/real(nz-1,rkind)
+        dx = pi/two/real(nx-1,rkind)
+        dy = pi/two/real(ny-1,rkind)
+        dz = pi/two/real(nz-1,rkind)
     end if
     
 
@@ -48,37 +48,37 @@ program test_cd10
     end do 
     print*, "Created initial data"
 
-    f = sin(omega * x) + sin(omega * y) + sin(omega * z)
+    f = cos(omega * x) * cos(omega * y) * cos(omega * z)
     ierr = xcd10%init( nx, dx, periodic, 0, 0)
     ierr = ycd10%init( ny, dy, periodic, 0, 0)
     ierr = zcd10%init( nz, dz, periodic, 0, 0)
 
     call tic() 
-    call xcd10 % dd1(f,df,ny,nz)
-    call xcd10 % d2d1(f,d2f,ny,nz)
+    call xcd10 % dd1(f,df,ny,nz,1,-1)
+    call xcd10 % d2d1(f,d2f,ny,nz,1,-1)
     call toc ("Time to get the x derivative:")
-    df_exact = omega* cos(omega * x) 
-    d2f_exact = -omega* omega* sin(omega * x) 
-    print*, "Maximum error (first  der) = ", MAXVAL( ABS(df - df_exact))
-    print*, "Maximum error (second der) = ", MAXVAL( ABS(d2f - d2f_exact))
+    df_exact =-omega* sin(omega * x)  * cos(omega * y) * cos(omega * z)
+    d2f_exact = -omega* omega* cos(omega * x)  * cos(omega * y) * cos(omega * z)
+    print*, "Maximum error (first  der) = ", MAXVAL( ABS(df - df_exact)), " at ", MAXLOC(ABS(df - df_exact))
+    print*, "Maximum error (second der) = ", MAXVAL( ABS(d2f - d2f_exact)), " at ", MAXLOC(ABS(d2f - d2f_exact))
 
     call tic() 
-    call ycd10 % dd2(f,df,nx,nz)
-    call ycd10 % d2d2(f,d2f,nx,nz)
+    call ycd10 % dd2(f,df,nx,nz,1,-1)
+    call ycd10 % d2d2(f,d2f,nx,nz,1,-1)
     call toc ("Time to get the y derivative:")
-    df_exact = omega* cos(omega * y) 
-    d2f_exact = -omega* omega* sin(omega * y) 
-    print*, "Maximum error (first  der) = ", MAXVAL( ABS(df - df_exact))
-    print*, "Maximum error (second der) = ", MAXVAL( ABS(d2f - d2f_exact))
+    df_exact =-omega* sin(omega * y)  * cos(omega * x) * cos(omega * z)
+    d2f_exact = -omega* omega* cos(omega * y)  * cos(omega * x) * cos(omega * z)
+    print*, "Maximum error (first  der) = ", MAXVAL( ABS(df - df_exact)), " at ", MAXLOC(ABS(df - df_exact))
+    print*, "Maximum error (second der) = ", MAXVAL( ABS(d2f - d2f_exact)), " at ", MAXLOC(ABS(d2f - d2f_exact))
 
     call tic() 
-    call zcd10 % dd3(f,df,nx,ny)
-    call zcd10 % d2d3(f,d2f,nx,ny)
+    call zcd10 % dd3(f,df,nx,ny,1,-1)
+    call zcd10 % d2d3(f,d2f,nx,ny,1,-1)
     call toc ("Time to get the z derivative:")
-    df_exact = omega* cos(omega * z) 
-    d2f_exact = -omega* omega* sin(omega * z) 
-    print*, "Maximum error (first  der) = ", MAXVAL( ABS(df - df_exact))
-    print*, "Maximum error (second der) = ", MAXVAL( ABS(d2f - d2f_exact))
+    df_exact =-omega* sin(omega * z)  * cos(omega * y) * cos(omega * x)
+    d2f_exact = -omega* omega* cos(omega * z)  * cos(omega * y) * cos(omega * x)
+    print*, "Maximum error (first  der) = ", MAXVAL( ABS(df - df_exact)), " at ", MAXLOC(ABS(df - df_exact))
+    print*, "Maximum error (second der) = ", MAXVAL( ABS(d2f - d2f_exact)), " at ", MAXLOC(ABS(d2f - d2f_exact))
 
     call xcd10%destroy()
     call ycd10%destroy()

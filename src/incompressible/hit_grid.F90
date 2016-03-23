@@ -3,7 +3,7 @@ module IncompressibleGrid
     use constants, only: zero,one,two,three,half 
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
-    use hooks, only: meshgen, initfields
+    use igrid_hooks, only: meshgen, initfields
     use decomp_2d, only: decomp_info, nrank, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                     transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives

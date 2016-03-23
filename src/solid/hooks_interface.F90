@@ -1,4 +1,4 @@
-module hooks
+module sgrid_hooks
     use kind_parameters, only: rkind
     use decomp_2d, only: decomp_info
     implicit none
