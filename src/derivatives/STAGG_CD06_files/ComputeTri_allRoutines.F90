@@ -46,6 +46,7 @@
         allocate(ddn(n));  allocate(dg(n)); allocate(dup(n)); allocate(cp(n)); allocate(den(n))
         ddn  = alpha; dg = one; dup = alpha 
 
+
         if (this%isTopEven) then
             dup(n) = zero; ddn(n) = zero
         else
@@ -77,23 +78,52 @@
         integer             :: i, n 
         real(rkind), dimension(:), allocatable :: ddn, dg, dup, cp, den
         real(rkind), parameter :: alpha = 1._rkind/3._rkind
+        real(rkind), parameter :: alphaLOW = 3._rkind
 
         n = this%n
 
         allocate(ddn(n));  allocate(dg(n)); allocate(dup(n)); allocate(cp(n)); allocate(den(n))
         ddn  = alpha; dg = one; dup = alpha 
 
-        if (this%isTopEven) then
-            dg(n) = (one - alpha)
+        if (this%isTopSided) then
+            dup(this%n  ) = w1*zero
+            dup(this%n-1) = w2*alpha_p
+            dup(this%n-2) = w3*alpha_pp 
+
+            dg (this%n  ) = w1*one
+            dg (this%n-1) = w2*one
+            dg (this%n-2) = w3*one 
+
+            ddn(this%n  ) = w1*alphaLOW
+            ddn(this%n-1) = w2*alpha_p
+            ddn(this%n-2) = w3*alpha_pp 
         else
-            dg(n) = (one + alpha)
+            if (this%isTopEven) then
+                dg(n) = (one - alpha)
+            else
+                dg(n) = (one + alpha)
+            end if 
         end if 
 
-        if (this%isBotEven) then
-            dg(1) = (one - alpha)
-        else
-            dg(1) = (one + alpha)
-        end if
+        if (this%isBotSided) then
+            ddn(1) = w1*zero
+            ddn(2) = w2*alpha_p
+            ddn(3) = w3*alpha_pp 
+
+            dg (1) = w1*one
+            dg (2) = w2*one
+            dg (3) = w3*one
+
+            dup(1) = w1*alphaLOW
+            dup(2) = w2*alpha_p
+            dup(3) = w3*alpha_pp
+        else        
+            if (this%isBotEven) then
+                dg(1) = (one - alpha)
+            else
+                dg(1) = (one + alpha)
+            end if
+        end if 
 
         cp(1) = dup(1)/dg(1)
         do i = 2,n-1
