@@ -225,7 +225,7 @@ contains
 
         select case (this%xmethod)
         case (1)
-            call this%xcf90%filter1( f, ff, this%xsz(2), this%xsz(3))
+            call this%xcf90%filter1( f, ff, this%xsz(2), this%xsz(3), bc1, bcn)
         case (2)
             call this%xgauf%filter1( f, ff, this%xsz(2), this%xsz(3), bc1, bcn)
         case (3)
@@ -242,7 +242,7 @@ contains
 
         select case (this%ymethod)
         case (1)
-            call this%ycf90%filter2( f, ff, this%ysz(1), this%ysz(3))
+            call this%ycf90%filter2( f, ff, this%ysz(1), this%ysz(3), bc1, bcn)
         case (2)
             call this%ygauf%filter2( f, ff, this%ysz(1), this%ysz(3), bc1, bcn)
         case (3)
@@ -259,7 +259,7 @@ contains
 
         select case (this%zmethod)
         case (1)
-            call this%zcf90%filter3( f, ff, this%zsz(1), this%zsz(2))
+            call this%zcf90%filter3( f, ff, this%zsz(1), this%zsz(2), bc1, bcn)
         case (2)
             call this%zgauf%filter3( f, ff, this%zsz(1), this%zsz(2), bc1, bcn)
         case (3)
