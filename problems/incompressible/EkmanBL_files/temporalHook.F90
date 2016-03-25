@@ -24,7 +24,8 @@ contains
         end if
 
         if (mod(gp%step,nt_getMaxKE) == 0) then
-            call message(1,"Max KE:",P_MAXVAL(gp%getMaxKE()))
+            call message(1,"Max KE:",gp%getMaxKE())
+            call message(1,"Max nuSGS:",gp%max_nuSGS)
             call toc()
             call tic()
         end if 

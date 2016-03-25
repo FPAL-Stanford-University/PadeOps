@@ -14,7 +14,8 @@ module IncompressibleGridNP
     use timer, only: tic, toc
     use PadePoissonMod, only: Padepoisson 
     use cd06staggstuff, only: cd06stagg
-    use cf90stuff, only: cf90
+    use cf90stuff, only: cf90  
+    use sigmaSGSmod, only: sigmasgs
 
     implicit none
 
@@ -22,20 +23,17 @@ module IncompressibleGridNP
     public :: igrid 
 
     logical, parameter :: useCompactFD = .true. 
-
+    integer, parameter :: AdvectionForm = 1 
 
     integer, parameter :: no_slip = 1, slip = 2
     complex(rkind), parameter :: zeroC = zero + imi*zero 
 
-    integer :: ierr 
 
     ! Allow non-zero value (isEven) 
     logical :: topBC_u = .true.  , topBC_v = .true. 
     logical :: botBC_u = .false. , botBC_v = .false. 
-
     logical, parameter :: topBC_w = .false. , botBC_w = .false. 
-
-    integer, parameter :: AdvectionForm = 1 
+    integer :: ierr 
 
     type, extends(grid) :: igrid
         
@@ -45,6 +43,7 @@ module IncompressibleGridNP
         type(decomp_info), pointer :: Sp_gpC, Sp_gpE
         type(spectral), allocatable :: spectE, spectC
         type(staggOps), allocatable :: Ops
+        type(sigmaSGS), allocatable :: SGS
 
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsC
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsE
@@ -62,7 +61,7 @@ module IncompressibleGridNP
         complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what
         complex(rkind), dimension(:,:,:), pointer :: oxhat, oyhat, ozhat
 
-        type(cd06stagg), allocatable :: derU, derV, derW
+        type(cd06stagg), allocatable :: derU, derV, derW, derWW
         type(cf90),      allocatable :: filzE, filzC
 
         real(rkind), dimension(:,:,:,:), allocatable, public :: rbuffxC, rbuffyC, rbuffzC
@@ -71,7 +70,8 @@ module IncompressibleGridNP
         complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffzC
         complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyE, cbuffzE
 
-        complex(rkind), dimension(:,:,:,:), allocatable :: duidxj, rhsC, rhsE, OrhsC, OrhsE 
+        complex(rkind), dimension(:,:,:,:), allocatable :: rhsC, rhsE, OrhsC, OrhsE 
+        real(rkind), dimension(:,:,:,:), allocatable :: duidxj 
         complex(rkind), dimension(:,:,:), pointer:: u_rhs, v_rhs, wC_rhs, w_rhs 
         complex(rkind), dimension(:,:,:), pointer:: u_Orhs, v_Orhs, w_Orhs
             
@@ -86,8 +86,14 @@ module IncompressibleGridNP
         integer :: runID
         logical :: useCoriolis = .true. 
         logical :: useExtraForcing = .false.
-        
+        logical :: useWallModelTop = .false., useWallModelBot = .false. 
+        logical :: isInviscid = .false. 
+        logical :: useSGS = .false. 
+        logical :: useVerticalFilter = .true. 
+
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
+
+        real(rkind) :: max_nuSGS
 
         contains
             procedure :: init
@@ -101,7 +107,6 @@ module IncompressibleGridNP
             procedure :: compute_vorticity
             procedure, private :: compute_duidxj
             procedure, private :: addNonLinearTerm_Rot
-            procedure, private :: addNonLinearTerm_Cnsrv
             procedure, private :: addNonLinearTerm_SkewSymm 
             procedure, private :: addCoriolisTerm
             procedure, private :: addViscousTerm 
@@ -151,7 +156,11 @@ contains
         logical :: useExtraForcing = .false.
         real(rkind) :: dpFdx = zero
         integer :: restartFile_TID
+        integer :: restartFile_RID
         logical :: useRestartFile = .false. 
+        logical :: useWallModelTop = .false., useWallModelBot = .false.
+        logical :: isInviscid = .false., useVerticalFilter = .true.  
+
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
@@ -161,7 +170,9 @@ contains
         namelist /IINPUT/  Re, useSGS, runID, Pr, useCoriolis, & 
                                 tid_statsDump, useExtraForcing, &
                                 time_startDumping, topWall, botWall, &
-                                useRestartFile, restartFile_TID 
+                                useRestartFile, restartFile_TID, restartFile_RID, &
+                                useWallModelTop, useWallModelBot, isInviscid, &
+                                useVerticalFilter
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -205,6 +216,13 @@ contains
         this%useCoriolis = useCoriolis 
         this%useExtraForcing = useExtraForcing
 
+        this%useWallModelTop = useWallModelTop
+        this%useWallModelBot = useWallModelBot
+        this%isInviscid = isInviscid
+
+        this%useSGS = useSGS
+
+        this%useVerticalFilter = useVerticalFilter
 
         if (.not. periodicx) then
             call GracefulExit("Currently only Periodic BC is supported in x direction",102)
@@ -268,24 +286,28 @@ contains
 
         ! STEP 5: ALLOCATE/INITIALIZE THE OPERATORS DERIVED TYPE
         if (useCompactFD) then
-            allocate(this%derU, this%derV, this%derW)
-            call this%derU%init (nz  , this%dz, topBC_u, botBC_u) 
-            call this%derV%init (nz  , this%dz, topBC_v, botBC_v) 
+            allocate(this%derU, this%derV, this%derW, this%derWW)
+            call this%derU%init (nz  , this%dz, topBC_u, botBC_u, useWallModelTop, useWallModelBot) 
+            call this%derV%init (nz  , this%dz, topBC_v, botBC_v, useWallModelTop, useWallModelBot)  
             call this%derW%init (nz  , this%dz, topBC_w, botBC_w)
-            allocate(this%filzC, this%filzE)
-            ierr = this%filzC%init(nz  , .false.)
-            ierr = this%filzE%init(nz+1, .false.)
+            call this%derWW%init(nz , this%dz, .true., .true.)
         else
             allocate(this%Ops)
             call this%Ops%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp,this%spectE%spectdecomp)
+        end if 
+        
+        if (this%useVerticalFilter) then
+            allocate(this%filzC, this%filzE)
+            ierr = this%filzC%init(nz  , .false.)
+            ierr = this%filzE%init(nz+1, .false.)
         end if 
 
         ! STEP 6: ALLOCATE MEMORY FOR FIELD ARRAYS
         allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6))
         allocate(this%divergence(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+        allocate(this%duidxj(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9))
         allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),1))
         call this%spectC%alloc_r2c_out(this%SfieldsC,6)
-        call this%spectC%alloc_r2c_out(this%duidxj,9)
         call this%spectC%alloc_r2c_out(this%rhsC,3)
         call this%spectC%alloc_r2c_out(this%OrhsC,2)
         call this%spectE%alloc_r2c_out(this%rhsE,1)
@@ -321,59 +343,6 @@ contains
         this%v_Orhs => this%OrhsC(:,:,:,2)
         this%w_Orhs => this%OrhsE(:,:,:,1)
 
-        
-        ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
-        if (useCompactFD) then
-            allocate(this%padepoiss)
-            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, this%derW) 
-        else    
-            allocate(this%poiss)
-            call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE)  
-        end if 
-               
- 
-        ! STEP 7: INITIALIZE THE FIELDS
-        if (useRestartFile) then
-            call this%readRestartFile(restartfile_TID)
-            this%step = restartfile_TID
-        else 
-            call initfields_stagg(this%gpC, this%gpE, this%dx, this%dy, this%dz, &
-                inputfile, this%mesh, this%PfieldsC, this%PfieldsE, u_g, this%Ro)! <-- this procedure is part of user defined HOOKS
-            this%step = 0
-            this%tsim = zero
-        end if 
-        
-        this%Gx = u_g
-        this%Gy = zero
-        this%Gz = zero
-        
-
-        call this%spectC%fft(this%u,this%uhat)   
-        call this%spectC%fft(this%v,this%vhat)   
-        call this%spectE%fft(this%w,this%what)   
-      
-
-        ! Dealias and filter before projection
-        call this%spectC%dealias(this%uhat)
-        call this%spectC%dealias(this%vhat)
-        call this%spectE%dealias(this%what)
-
-        ! Pressure projection
-        if (useCompactFD) then
-            call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
-            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
-        else
-            call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
-            call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
-        end if
-
-        ! Take it back to physical fields
-        call this%spectC%ifft(this%uhat,this%u)
-        call this%spectC%ifft(this%vhat,this%v)
-        call this%spectE%ifft(this%what,this%w)
-        
-
-        ! STEP 8: ALLOCATE STORAGE FOR BUFFERS AND DUIDXJHAT
         allocate(this%cbuffyC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),2))
         allocate(this%cbuffyE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3),2))
         
@@ -390,17 +359,71 @@ contains
         this%nxZ = size(this%cbuffzE,1)
         this%nyZ = size(this%cbuffzE,2)
 
-        ! STEP 9: Interpolate the cell center values of w
+
+        ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
+        if (useCompactFD) then
+            allocate(this%padepoiss)
+            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, this%derW) 
+        else    
+            allocate(this%poiss)
+            call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE)  
+        end if 
+               
+ 
+        ! STEP 7: INITIALIZE THE FIELDS
+        if (useRestartFile) then
+            call this%readRestartFile(restartfile_TID, restartfile_RID)
+            this%step = restartfile_TID
+        else 
+            call initfields_stagg(this%gpC, this%gpE, this%dx, this%dy, this%dz, &
+                inputfile, this%mesh, this%PfieldsC, this%PfieldsE, u_g, this%Ro)! <-- this procedure is part of user defined HOOKS
+            this%step = 0
+            this%tsim = zero
+            call this%dumpRestartfile()
+        end if 
+        
+        this%Gx = u_g
+        this%Gy = zero
+        this%Gz = zero
+        
+
+        call this%spectC%fft(this%u,this%uhat)   
+        call this%spectC%fft(this%v,this%vhat)   
+        call this%spectE%fft(this%w,this%what)   
+      
+        ! Dealias and filter before projection
+        call this%spectC%dealias(this%uhat)
+        call this%spectC%dealias(this%vhat)
+        call this%spectE%dealias(this%what)
+        if (this%useVerticalFilter) then
+            call this%ApplyCompactFilter()
+        end if 
+
+        ! Pressure projection
+        if (useCompactFD) then
+            call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
+            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        else
+            call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
+            call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        end if
+
+        ! Take it back to physical fields
+        call this%spectC%ifft(this%uhat,this%u)
+        call this%spectC%ifft(this%vhat,this%v)
+        call this%spectE%ifft(this%what,this%w)
+        
+        ! STEP 8: Interpolate the cell center values of w
         call this%interp_wHat_to_wHatC()
-        
-        
         call message(1,"Max KE:",P_MAXVAL(this%getMaxKE()))
      
-
-        ! STEP 10: Compute Vorticity 
+        ! STEP 9: Compute Vorticity 
         call this%compute_Vorticity()
+        if ((AdvectionForm == 2) .or. (this%useSGS)) then
+            call this%compute_duidxj()
+        end if 
 
-        ! STEP 11: Compute Coriolis Term
+        ! STEP 10a: Compute Coriolis Term
         if (this%useCoriolis) then
             call message(0, "Turning on Coriolis with Geostrophic Forcing")
             call message(1, "Geostrophic Velocity:", this%Gx) 
@@ -409,7 +432,7 @@ contains
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gxhat)
         end if
 
-        ! STEP 12: Compute additional forcing (channel)
+        ! STEP 10b: Compute additional forcing (channel)
         if (this%useExtraForcing) then
             call getForcing(dpFdx)
             call message(0," Turning on aditional forcing")
@@ -419,10 +442,22 @@ contains
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%dpF_dxhat)
         end if  
 
-        ! STEP 13: Dump a restart file
-        call this%dumpRestartfile()
+        ! STEP 12: Initialize SGS model
+        if (this%useSGS) then
+            allocate(this%SGS)
+            call this%sgs%init(this%spectC, this%spectE, this%gpC, this%gpE, this%dx, this%dy, this%dz)
+            call message(0,"SGS model initialized successfully")
+        end if 
+
+
+        ! Final Step: Safeguard against unfinished procedures
+        if ((.not.useCompactFD) .and. (AdvectionForm == 2)) then
+            call GracefulExit("Skew Symmetric Form is not allowed with 2nd order & 
+                & FD. Use 6th order Compact FD scheme instead",213)
+        end if 
 
         call message("IGRID initialized successfully!")
+        call message("===========================================================")
     end subroutine
 
 
@@ -678,56 +713,128 @@ contains
         nullify(ctmpz2) 
     end subroutine
 
-    subroutine addNonLinearTerm_SkewSymm(this, useCnsrv)
+    subroutine addNonLinearTerm_SkewSymm(this)
         class(igrid), intent(inout), target :: this
-        real(rkind), dimension(:,:,:), pointer :: rtmpx1
-        complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2!, ctmpz3
+        real(rkind), dimension(:,:,:), pointer :: rtmpx1, rtmpx2
+        complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2, ctmpz3, ctmpz4
         complex(rkind), dimension(:,:,:), pointer :: ctmpy1, ctmpy2
-        complex(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
-        complex(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
-        complex(rkind), dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
-        logical, intent(in) :: useCnsrv
-        real(rkind) :: cnst 
+        real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
+        real(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
+        real(rkind), dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
 
         dudx => this%duidxj(:,:,:,1); dudy => this%duidxj(:,:,:,2); dudz => this%duidxj(:,:,:,3); 
         dvdx => this%duidxj(:,:,:,4); dvdy => this%duidxj(:,:,:,5); dvdz => this%duidxj(:,:,:,6); 
         dwdx => this%duidxj(:,:,:,7); dwdy => this%duidxj(:,:,:,8); dwdz => this%duidxj(:,:,:,9); 
 
-        ctmpz1 => this%cbuffzC(:,:,:,1)
 
-        rtmpx1 => this%rbuffxC(:,:,:,1)
-        ctmpz1 => this%cbuffzC(:,:,:,1)
-        ctmpz2 => this%cbuffzE(:,:,:,1)
-        ctmpy1 => this%cbuffyC(:,:,:,1)
-        ctmpy2 => this%cbuffyE(:,:,:,1)
+        rtmpx1 => this%rbuffxC(:,:,:,1); rtmpx2 => this%rbuffxE(:,:,:,1)
+        
+        ctmpz1 => this%cbuffzC(:,:,:,1); ctmpz2 => this%cbuffzC(:,:,:,2)
+        ctmpz3 => this%cbuffzE(:,:,:,1); ctmpz4 => this%cbuffzE(:,:,:,2)
+        
+        ctmpy1 => this%cbuffyC(:,:,:,1); ctmpy2 => this%cbuffyE(:,:,:,1)
 
+        ! Conservative Form Terms
+        rtmpx1 = -half*this%u*this%u
+        call this%spectC%fft(rtmpx1,this%u_rhs)
+        call this%spectC%mtimes_ik1_ip(this%u_rhs)
+
+        
+        rtmpx1 = -half*this%v*this%v
+        call this%spectC%fft(rtmpx1,this%v_rhs)
+        call this%spectC%mtimes_ik2_ip(this%v_rhs)
+       
+        
+        rtmpx2 = -half*this%w*this%w
+        call this%spectE%fft(rtmpx2,this%w_rhs)
+        call transpose_y_to_z(this%w_rhs,ctmpz3,this%sp_gpE)
+        call this%derWW%ddz_E2E(ctmpz3,ctmpz4,size(ctmpz3,1),size(ctmpz3,2))
+        call transpose_z_to_y(ctmpz4,this%w_rhs,this%sp_gpE)
+
+        
+        rtmpx1 = -half*this%u*this%v
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call this%spectC%mtimes_ik2_ip(ctmpy1)
+        this%u_rhs = this%u_rhs + ctmpy1
+        call this%spectC%mtimes_ik1_ip(ctmpy1)
+        this%v_rhs = this%v_rhs + ctmpy1
+
+        
+        rtmpx1 = -half*this%u*this%wC
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        
+        call this%derW%InterpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
+        call this%spectE%mtimes_ik1_ip(ctmpy2)
+        this%w_rhs = this%w_rhs + ctmpy2
+        
+        call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        call transpose_z_to_y(ctmpz2,ctmpy1,this%sp_gpC)
+        this%u_rhs = this%u_rhs + ctmpy1
+
+
+        rtmpx1 = -half*this%v*this%wC
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        
+        call this%derW%InterpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
+        call this%spectE%mtimes_ik2_ip(ctmpy2)
+        this%w_rhs = this%w_rhs + ctmpy2
+        
+        call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        call transpose_z_to_y(ctmpz2,ctmpy1,this%sp_gpC)
+        this%v_rhs = this%v_rhs + ctmpy1
+
+        
+        ! Advection Form Terms
+        rtmpx1 = -half*this%u*dudx
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%u_rhs = this%u_rhs + ctmpy1
+        rtmpx1 = -half*this%v*dudy
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%u_rhs = this%u_rhs + ctmpy1
+        rtmpx1 = -half*this%wC*dudz
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%u_rhs = this%u_rhs + ctmpy1
+
+        rtmpx1 = -half*this%u*dvdx
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%v_rhs = this%v_rhs + ctmpy1
+        rtmpx1 = -half*this%v*dvdy
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%v_rhs = this%v_rhs + ctmpy1
+        rtmpx1 = -half*this%wC*dvdz
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%v_rhs = this%v_rhs + ctmpy1
+        
+        rtmpx1 = -half*this%u*dwdx
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
+        this%w_rhs = this%w_rhs + ctmpy2
+
+        rtmpx1 = -half*this%v*dwdy
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
+        this%w_rhs = this%w_rhs + ctmpy2
+
+        rtmpx1 = -half*this%wC*dwdz
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
+        this%w_rhs = this%w_rhs + ctmpy2
 
         nullify( dudx, dudy, dudz) 
         nullify( dvdx, dvdy, dvdz)
         nullify( dwdx, dwdy, dwdz)
     end subroutine
 
-
-    subroutine addNonLinearTerm_Cnsrv(this)
-        class(igrid), intent(inout), target :: this
-        real(rkind), dimension(:,:,:), pointer :: rtmpx1
-        complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2!, ctmpz3
-        complex(rkind), dimension(:,:,:), pointer :: ctmpy1, ctmpy2
-
-        
-        ! Assume that the rhs vectors haven't been populated
-
-        rtmpx1 => this%rbuffxC(:,:,:,1)
-        ctmpz1 => this%cbuffzC(:,:,:,1)
-        ctmpz2 => this%cbuffzE(:,:,:,1)
-        !ctmpz3 => this%cbuffzC(:,:,:,2)
-        ctmpy1 => this%cbuffyC(:,:,:,1)
-        ctmpy2 => this%cbuffyE(:,:,:,1)
-
-        nullify(rtmpx1) 
-        nullify(ctmpz1) 
-        nullify(ctmpz2) 
-    end subroutine
 
     subroutine addCoriolisTerm(this)
         class(igrid), intent(inout) :: this
@@ -841,27 +948,29 @@ contains
         select case(AdvectionForm)
         case (1) ! Rotational Form
             call this%AddNonLinearTerm_Rot()
-        case (2) ! Conservative Form
-            call this%AddNonLinearTerm_Cnsrv()
-        case (3) ! Skew Symmetric Form
-            call this%AddNonLinearTerm_SkewSymm(.true.)
-        case (4) ! Skew Symmetric Form
-            call this%AddNonLinearTerm_SkewSymm(.false.)
+        case (2) ! SkewSymm Form
+            call this%AddNonLinearTerm_SkewSymm()
         end select  
-
 
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
         end if 
        
-
         if (this%useExtraForcing) then
             call this%addExtraForcingTerm()
         end if 
 
-        ! Step 3: Viscous Term
-        call this%AddViscousTerm()
+        ! Step 3a: Viscous Term
+        if (.not. this%isInviscid) then
+            call this%AddViscousTerm()
+        end if 
+
+        ! Step 3b: SGS Viscous Term
+        if (this%useSGS) then
+            call this%SGS%getRHS_SGS(this%duidxj,this%u_rhs,this%v_rhs,this%w_rhs, this%max_nuSGS)
+        end if 
+
 
         ! Step 4: Time Step 
         if (this%step == 0) then
@@ -918,10 +1027,9 @@ contains
         call this%spectC%dealias(this%uhat)
         call this%spectC%dealias(this%vhat)
         call this%spectE%dealias(this%what)
-
-        !if (useCompactFD) then
-        !    call this%ApplyCompactFilter()
-        !end if 
+        if (this%useVerticalFilter) then
+            call this%ApplyCompactFilter()
+        end if 
 
         ! Step 6: Pressure projection
         if (useCompactFD) then
@@ -941,15 +1049,11 @@ contains
         call this%interp_wHat_to_wHatC()
 
 
-        ! STEP 9: Compute either vorticity or duidxj 
-        select case (AdvectionForm)
-        case (1)    
-            call this%compute_Vorticity()
-        case (3)
+        ! STEP 9: Compute vorticity and duidxj 
+        call this%compute_Vorticity()
+        if ((AdvectionForm == 2) .or. (this%useSGS)) then
             call this%compute_duidxj()
-        case (4)
-            call this%compute_duidxj()
-        end select  
+        end if 
         
         ! STEP 10: Copy the RHS for using during next time step 
         do k = 1,size(this%uhat,3)
@@ -983,9 +1087,9 @@ contains
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
         complex(rkind), dimension(:,:,:), pointer :: ctmpz3, ctmpz4
         complex(rkind), dimension(:,:,:), pointer :: ctmpy1, ctmpy2
-        complex(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
-        complex(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
-        complex(rkind), dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
+        real(rkind),    dimension(:,:,:), pointer :: dudx, dudy, dudz
+        real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
+        real(rkind),    dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
 
         dudx => this%duidxj(:,:,:,1); dudy => this%duidxj(:,:,:,2); dudz => this%duidxj(:,:,:,3); 
         dvdx => this%duidxj(:,:,:,4); dvdy => this%duidxj(:,:,:,5); dvdz => this%duidxj(:,:,:,6); 
@@ -1000,52 +1104,81 @@ contains
         ctmpy2 => this%cbuffyE(:,:,:,1)
 
 
-        call this%spectC%mTimes_ik1_oop(this%uhat,dudx)
-        call this%spectC%mTimes_ik2_oop(this%uhat,dudy)
-        call this%spectC%mTimes_ik1_oop(this%vhat,dvdx)
-        call this%spectC%mTimes_ik2_oop(this%vhat,dvdy)
-        call this%spectC%mTimes_ik1_oop(this%whatC,dwdx)
-        call this%spectC%mTimes_ik2_oop(this%whatC,dwdy)
+        call this%spectC%mTimes_ik1_oop(this%uhat,ctmpy1)
+        call this%spectC%ifft(ctmpy1,dudx)
+
+        call this%spectC%mTimes_ik2_oop(this%uhat,ctmpy1)
+        call this%spectC%ifft(ctmpy1,dudy)
+
+        call this%spectC%mTimes_ik1_oop(this%vhat,ctmpy1)
+        call this%spectC%ifft(ctmpy1,dvdx)
+
+        call this%spectC%mTimes_ik2_oop(this%vhat,ctmpy1)
+        call this%spectC%ifft(ctmpy1,dvdy)
+        
+        call this%spectC%mTimes_ik1_oop(this%whatC,ctmpy1)
+        call this%spectC%ifft(ctmpy1,dwdx)
+
+        call this%spectC%mTimes_ik2_oop(this%whatC,ctmpy1)
+        call this%spectC%ifft(ctmpy1,dwdy)
 
         call transpose_y_to_z(this%uhat,ctmpz1, this%sp_gpC)
-        call this%Ops%ddz_C2C(ctmpz1,ctmpz3,topBC_u,botBC_u) 
-        call transpose_z_to_y(ctmpz3,dudz,this%sp_gpC)
+        if (useCompactFD) then
+            call this%derU%ddz_C2C(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%ddz_C2C(ctmpz1,ctmpz3,topBC_u,botBC_u) 
+        end if 
+        call transpose_z_to_y(ctmpz3,ctmpy1,this%sp_gpC)
+        call this%spectC%ifft(ctmpy1,dudz)
 
         call transpose_y_to_z(this%vhat,ctmpz1, this%sp_gpC)
-        call this%Ops%ddz_C2C(ctmpz1,ctmpz3,topBC_v,botBC_v) 
-        call transpose_z_to_y(ctmpz3,dvdz,this%sp_gpC)
+        if (useCompactFD) then
+            call this%derV%ddz_C2C(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else    
+            call this%Ops%ddz_C2C(ctmpz1,ctmpz3,topBC_v,botBC_v) 
+        end if 
+        call transpose_z_to_y(ctmpz3,ctmpy1,this%sp_gpC)
+        call this%spectC%ifft(ctmpy1,dvdz)
 
         call transpose_y_to_z(this%what,ctmpz2, this%sp_gpE)
-        call this%Ops%ddz_E2C(ctmpz2,ctmpz3) 
-        call transpose_z_to_y(ctmpz3,dwdz,this%sp_gpC)
+        if (useCompactFD) then
+            call this%derW%ddz_E2C(ctmpz2,ctmpz3,size(ctmpz2,1),size(ctmpz2,2))
+        else
+            call this%Ops%ddz_E2C(ctmpz2,ctmpz3) 
+        end if 
+        call transpose_z_to_y(ctmpz3,ctmpy1,this%sp_gpC)
+        call this%spectC%ifft(ctmpy1,dwdz)
+        
         nullify( dudx, dudy, dudz) 
         nullify( dvdx, dvdy, dvdz)
         nullify( dwdx, dwdy, dwdz)
+        nullify(ctmpy1,ctmpy2,ctmpz1, ctmpz2, ctmpz3,ctmpz4)
+
     end subroutine
 
 
-    subroutine readRestartFile(this, tid)
+    subroutine readRestartFile(this, tid, rid)
         use decomp_2d_io
         use mpi
         use exits, only: message
         class(igrid), intent(inout) :: this
-        integer, intent(in) :: tid
+        integer, intent(in) :: tid, rid
         character(len=clen) :: tempname, fname
-        integer :: fid, ierr
+        integer :: ierr
 
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",tid
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_u.",tid
         fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
         call decomp_2d_read_one(1,this%u,fname)
 
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_v.",tid
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_v.",tid
         fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
         call decomp_2d_read_one(1,this%v,fname)
 
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_w.",tid
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_w.",tid
         fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
         call decomp_2d_read_one(1,this%w,fname)
 
-        write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",this%runID, "_info.",tid
+        write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
         fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
 
         open(unit=10,file=fname,access='sequential',form='formatted')
@@ -1065,7 +1198,7 @@ contains
         use exits, only: message
         class(igrid), intent(in) :: this
         character(len=clen) :: tempname, fname
-        integer :: fid, ierr
+        integer :: ierr
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)

@@ -9,7 +9,50 @@ module cd06staggstuff
 
     private
     public :: cd06stagg
+  
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+    !! NOTE : The following variables are used for non-periodic 1st derivative evaluation !!
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
     
+    ! Set the scheme for the edge nodes (Ref. for notation: Lele - JCP paper)
+    ! 1st derivative 
+    real(rkind), parameter                   :: alpha =  3._rkind
+    real(rkind), parameter                   :: p     = 17._rkind / 6._rkind
+    real(rkind), parameter                   :: q     =  3._rkind / 2._rkind
+    real(rkind), parameter                   :: r     =  3._rkind / 2._rkind
+    real(rkind), parameter                   :: s     = -1._rkind / 6._rkind 
+
+
+    !!  Calculate the corressponding weights 
+    ! Step 1: Assign the interior scheme
+    real(rkind), parameter                   :: alpha06d1   =  1.0_rkind / 3.0_rkind
+    real(rkind), parameter                   :: a06d1       = (14.0_rkind / 9.0_rkind) / 2.0_rkind
+    real(rkind), parameter                   :: b06d1       = ( 1.0_rkind / 9.0_rkind) / 4.0_rkind
+    real(rkind), parameter                   :: qhat        = a06d1
+    real(rkind), parameter                   :: rhat        = b06d1
+    real(rkind), parameter                   :: alpha_hat   = alpha06d1
+
+    ! Step 2: Assign the scheme at node 2 to be Standard Pade (4th Order)
+    real(rkind), parameter                   :: q_p          = 3._rkind/4._rkind
+    real(rkind), parameter                   :: alpha_p     = 1._rkind/4._rkind
+    
+    ! Step 3: Get the scheme at the node 3
+    real(rkind), parameter                   :: alpha_pp = ((40*alpha_hat - 1)*q  + 7*(4*alpha_hat &
+                                                         -  1)*s)/(16*(alpha_hat + 2)*q + 8*(1      &
+                                                         -  4*alpha_hat)*s)
+    real(rkind), parameter                   :: q_pp     = (1._rkind/3._rkind)*(alpha_pp + 2)
+    real(rkind), parameter                   :: r_pp     = (1._rkind/12._rkind)*(4*alpha_pp - 1)
+    real(rkind), parameter                   :: s_pp     =  0._rkind
+
+    ! Step 4: Get the weights
+    real(rkind), parameter                   :: w1 = (2*alpha_hat + 1)/(2*(q + s))
+    real(rkind), parameter                   :: w2 = ((8*alpha_hat + 7)*q - 6*(2*alpha_hat + 1)*r &
+                                                   + (8*alpha_hat + 7)*s)/(9*(q + s))
+    real(rkind), parameter                   :: w3 = (4*(alpha_hat + 2)*q + 2*(1 - 4*alpha_hat)*s) &
+                                                   / (9*(q + s))
+
+
     type cd06stagg
 
         private
@@ -22,6 +65,9 @@ module cd06staggstuff
 
         logical     :: isTopEven                          ! Boundary condition type. 
         logical     :: isBotEven                          ! Boundary condition type. 
+
+        logical     :: isTopSided = .FALSE.
+        logical     :: isBotSided = .FALSE.
 
         real(rkind), allocatable, dimension(:,:) :: TriD1_E2C
         real(rkind), allocatable, dimension(:,:) :: TriD1_C2E
@@ -95,17 +141,26 @@ module cd06staggstuff
     end type
 
 contains
-    subroutine init(this, nx, dx, isTopEven, isBotEven) 
+    subroutine init(this, nx, dx, isTopEven, isBotEven, isTopSided, isBotSided) 
         class( cd06stagg ), intent(inout) :: this
         integer, intent(in) :: nx
         real(rkind), intent(in) :: dx
         logical, intent(in) :: isTopEven, isBotEven
+        logical, intent(in), optional :: isTopSided, isBotSided
     
         this%n = nx; this%nE = nx + 1
         this%dx = dx; this%onebydx = one/dx; this%onebydx2 = this%onebydx/dx
     
         this%isTopEven = isTopEven; this%isBotEven = isBotEven
-  
+ 
+        if (present(isTopSided)) then
+            this%isTopSided = isTopSided
+        end if 
+
+        if (present(isBotSided)) then
+            this%isBotSided = isBotSided
+        end if 
+
         if (nx .LE. 4) then
             call GracefulExit("CD06_stagg requires at least 4 points",21)
         end if  

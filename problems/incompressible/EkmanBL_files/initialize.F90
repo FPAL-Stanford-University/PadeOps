@@ -146,6 +146,7 @@ end subroutine
 
 subroutine getForcing(dpdx)
     use kind_parameters, only: rkind
+    use constants, only: zero  
     real(rkind), intent(out) :: dpdx
 
     dpdx = zero
