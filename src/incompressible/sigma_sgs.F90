@@ -1,20 +1,21 @@
-module omegaSGSmod
+module sigmaSGSmod
     use kind_parameters, only: rkind, clen
     use constants, only: imi, pi, zero,one,two,three,half, nine, six  
     use decomp_2d
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
     use mpi 
-
+    use cd06staggstuff, only: cd06stagg
+    use reductions, only: p_maxval
 
     implicit none
 
     private
-    public :: omegaSGS
+    public :: sigmaSGS
 
     real(rkind) :: c_sigma = 1.35_rkind
 
-    type :: omegaSGS
+    type :: sigmaSGS
         private
         type(spectral), pointer :: spect, spectE 
         real(rkind), allocatable, dimension(:,:,:,:) :: rbuff
@@ -25,8 +26,13 @@ module omegaSGSmod
         type(decomp_info), pointer :: sp_gpE, gpE
 
         complex(rkind), allocatable, dimension(:,:,:,:) :: cbuff
-        complex(rkind), allocatable, dimension(:,:,:) :: ctmpC, ctmpE
+        complex(rkind), allocatable, dimension(:,:,:) :: ctmpCz, ctmpEz, ctmpEy, ctmpCz2
         complex(rkind), pointer, dimension(:,:,:) :: nuSGShat
+
+        type(cd06stagg), allocatable :: derZ
+
+        logical :: useWallModel = .false.
+        !type(moengWall), allocatable :: wallModel
 
         contains 
             procedure :: init
@@ -37,12 +43,17 @@ module omegaSGSmod
 
 contains
 
-    subroutine init(this, spectC, spectE, gpC, gpE, dx, dy, dz)
-        class(omegaSGS), intent(inout), target :: this
+    subroutine init(this, spectC, spectE, gpC, gpE, dx, dy, dz)!, WallModel)
+        class(sigmaSGS), intent(inout), target :: this
         type(spectral), intent(in), target :: spectC, spectE
         type(decomp_info), intent(in), target :: gpC, gpE
         real(rkind), intent(in) :: dx, dy, dz
+       ! type(moengWall), intent(in), target, optional :: WallModel
 
+        !if (present(WallModel)) then
+        !    this%useWallModel = .true.
+        !end if 
+        
         allocate(this%rbuff(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),15))
         
         this%spect => spectC
@@ -65,34 +76,37 @@ contains
         allocate(this%cbuff(this%sp_gp%ysz(1), this%sp_gp%ysz(2), this%sp_gp%ysz(3),3))
         this%nuSGShat => this%cbuff(:,:,:,1)
 
-        allocate(this%ctmpC(this%sp_gp%zsz(1), this%sp_gp%zsz(2), this%sp_gp%zsz(3)))
-        allocate(this%ctmpE(this%sp_gpE%zsz(1), this%sp_gpE%zsz(2), this%sp_gpE%zsz(3)))
+        allocate(this%ctmpCz(this%sp_gp%zsz(1), this%sp_gp%zsz(2), this%sp_gp%zsz(3)))
+        allocate(this%ctmpEz(this%sp_gpE%zsz(1), this%sp_gpE%zsz(2), this%sp_gpE%zsz(3)))
+        allocate(this%ctmpEy(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)))
+        
+        allocate(this%ctmpCz2(this%sp_gp%zsz(1), this%sp_gp%zsz(2), this%sp_gp%zsz(3)))
+
+        allocate(this%derZ)
+        call this%derZ%init( this%sp_gp%zsz(3), dz, isTopEven = .true., isBotEven = .true., & 
+                             isTopSided = .true., isBotSided = .true.) 
+
 
     end subroutine
 
     subroutine destroy(this)
-        class(omegaSGS), intent(inout) :: this
+        class(sigmaSGS), intent(inout) :: this
 
+        call this%derZ%destroy()
+        deallocate(this%derZ)
         nullify(this%G11, this%G13, this%G13, this%G22, this%G23, this%G33, this%nuSGS)
         nullify(this%sp_gp, this%gp, this%spect)
         deallocate(this%rbuff, this%cbuff)
     end subroutine
 
     subroutine get_nuSGS(this,duidxj)
-        class(omegaSGS), intent(inout), target :: this
+        class(sigmaSGS), intent(inout), target :: this
         real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3),9), intent(in), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz
         real(rkind), dimension(:,:,:), pointer :: I1, I2, I3, I1sq, I1cu
         real(rkind), dimension(:,:,:), pointer :: alpha1, alpha2, alpha3, alpha1sqrt
-        real(rkind), dimension(:,:,:), pointer :: tmp1, tmp2, tmp3, alpha1tmp
+        real(rkind), dimension(:,:,:), pointer :: alpha1tmp
         real(rkind), dimension(:,:,:), pointer :: sigma1, sigma2, sigma3, sigma1sq 
-        integer :: i, j, k, nx, ny, nz, info
-
-        real(rkind), dimension(3,3) :: Gloc
-        real(rkind), dimension(3) :: lambda
-
-        integer, parameter :: lwork = 8
-        real(rkind), dimension(lwork) :: work 
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3)
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6)
@@ -125,21 +139,20 @@ contains
         I3 = I3 + this%G12*(this%G13*this%G23 - this%G12*this%G33) 
         I3 = I3 + this%G13*(this%G12*this%G23 - this%G22*this%G13)  
 
-       
         alpha1 = I1sq/nine - I2/three
         alpha1 = max(alpha1,zero)
         
         alpha2 = I1cu/27._rkind - I1*I2/six + I3/two
        
-
         alpha1sqrt => this%rbuff(:,:,:,4)
         alpha1sqrt = sqrt(alpha1)    
         alpha1tmp => this%rbuff(:,:,:,5) 
         alpha1tmp = alpha1*alpha1sqrt
-        alpha1tmp = alpha2/alpha1tmp
+        alpha1tmp = alpha2/(alpha1tmp)
         alpha1tmp = min(alpha1tmp,one)
         alpha1tmp = max(alpha1tmp,-one)
-        alpha3 = (one/three)*acos(alpha1tmp)
+        alpha1tmp = acos(alpha1tmp)
+        alpha3 = (one/three)*(alpha1tmp)
           
   
         sigma1 => this%rbuff(:,:,:,9); sigma2 => this%rbuff(:,:,:,10); sigma3 => this%rbuff(:,:,:,11)
@@ -147,9 +160,8 @@ contains
 
         sigma1sq = I1/three + two*alpha1sqrt*cos(alpha3)
         sigma1sq = max(sigma1sq,zero)
-        
         sigma1 = sqrt(sigma1sq)
-        
+
         sigma2 = pi/three + alpha3
         sigma2 = (-two)*alpha1sqrt*cos(sigma2)
         sigma2 = sigma2 + I1/three
@@ -162,7 +174,7 @@ contains
         sigma3 = max(sigma3,zero)
         sigma3 = sqrt(sigma3)
 
-        this%nuSGS = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/sigma1sq
+        this%nuSGS = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
         this%nuSGS = this%mconst*this%nuSGS
 
         call this%spect%fft(this%nuSGS,this%nuSGShat)
@@ -171,53 +183,44 @@ contains
 
     end subroutine
 
-    subroutine getRHS_SGS(this,uhat,vhat,what, duidxj, urhs, vrhs, wrhs)
-        class(omegaSGS), intent(inout) :: this
-        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat
-        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in) :: what
-        real(rkind)   , dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3),9), intent(in) :: duidxj
-
+    subroutine getRHS_SGS(this, duidxj, urhs, vrhs, wrhs, max_nuSGS)
+        class(sigmaSGS), intent(inout), target :: this
+        real(rkind)   , dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3),9), intent(in), target :: duidxj
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: urhs, vrhs
         complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
         
         real(rkind), dimension(:,:,:), pointer :: tau11, tau12, tau13, tau22, tau23, tau33
-        complex(rkind), dimension(:,:,:), pointer :: tauhat                
+        complex(rkind), dimension(:,:,:), pointer :: tauhat, tauhat2    
+        real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz
+        real(rkind), intent(out), optional :: max_nuSGS
 
-        !dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3)
-        !dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6)
-        !dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9)
+        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3)
+        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6)
+        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9)
     
-        !tauhat => this%cbuff(:,:,:,1)        
+        tauhat => this%cbuff(:,:,:,1); tauhat2 => this%cbuff(:,:,:,2)        
 
-        !tau11 => this%rbuff(:,:,:,1); tau12 => this%rbuff(:,:,:,2); tau13 => this%rbuff(:,:,:,3)
-        !tau22 => this%rbuff(:,:,:,4); tau23 => this%rbuff(:,:,:,5); tau33 => this%rbuff(:,:,:,6)
+        tau11 => this%rbuff(:,:,:,1); tau12 => this%rbuff(:,:,:,2); tau13 => this%rbuff(:,:,:,3)
+        tau22 => this%rbuff(:,:,:,4); tau23 => this%rbuff(:,:,:,5); tau33 => this%rbuff(:,:,:,6)
 
-        !call this%get_nuSGS(duidxj)
-        !
-        !tau11 = two*this%nuSGS*dudx
-        !tau12 = this%nuSGS*(dvdx + dudy)
-        !tau13 = this%nuSGS*(dwdx + dudz)
-        !
-        !tau22 = two*this%nuSGS*dvdy
-        !tau23 = this%nuSGS*(dvdz + dwdy)
+        call this%get_nuSGS(duidxj)
+     
 
-        !tau33 = two*this%nuSGS*dwdz    
-       
-        !call this%spect%fft(tau11,tauhat)
-        !call this%spect%mtimes_ik1_ip(tauhat)
-        !urhs = urhs + tauhat
+        tau11 = two*this%nuSGS*dudx
+        tau12 = this%nuSGS*(dvdx + dudy)
+        tau13 = this%nuSGS*(dwdx + dudz)
+      
+        tau22 = two*this%nuSGS*dvdy
+        tau23 = this%nuSGS*(dvdz + dwdy)
 
-        !call this%spect%fft(tau22,tauhat)
-        !call this%spect%mtimes_ik2_ip(tauhat)
-        !vrhs = vrhs + tauhat
-        !
-        !call this%spect%fft(tau33,tauhat)
-        !call transpose_y_to_z(tauhat,this%ctmpC,this%sp_gp)
+        tau33 = two*this%nuSGS*dwdz   
 
+#include "sgs_models/getRHS_common.F90"
 
- 
+        if (present(max_nuSGS)) then
+            max_nuSGS = p_maxval(maxval(this%nuSGS))
+        end if 
+
     end subroutine
-
-
 
 end module 

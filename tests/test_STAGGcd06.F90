@@ -7,7 +7,7 @@ program testSTAGGcd06
 
     real(rkind), dimension(:,:,:), allocatable :: zE, zC
     complex(rkind), dimension(:,:,:), allocatable :: fE, fC, dfEt, dfE, dfCt, dfC
-    integer :: nx = 1, ny = 1, nz = 36
+    integer :: nx = 1, ny = 1, nz = 60
     real(rkind) :: omega = 2._rkind, dz
     logical :: isTopEven, isBotEven
     type(cd06stagg), allocatable :: der
@@ -32,26 +32,34 @@ program testSTAGGcd06
 
     zC = 0.5_rkind*(zE(:,:,2:nz+1) + zE(:,:,1:nz))
 
-    fE = cos(two*pi*omega*zE) + imi*cos(two*pi*omega*zE)
-    fC = cos(two*pi*omega*zC) + imi*cos(two*pi*omega*zC)
+    print*, zC(1,1,1:3)
+    !fE = cos(two*pi*omega*zE) + imi*cos(two*pi*omega*zE)
+    !fC = cos(two*pi*omega*zC) + imi*cos(two*pi*omega*zC)
 
+    fC = zC*(one - zC) + imi*(zC*(one - zC))
     allocate(der)
-    call der%init(nz, dz, isTopEven, isBotEven,.false.,.true.)
+    call der%init(nz, dz, isTopEven, isBotEven,.true.,.true.)
     allocate(der2)
     i =  der2%init(nz,dz, .false., 0, 0)
 
 
+    print*, fC(1,1,1:5)
 
     call der%ddz_C2C(fC,dfC,nx,ny)
 
-    dfEt = -omega*two*pi*sin(two*pi*omega*zE) + imi*(-omega*two*pi*sin(two*pi*omega*zE))
-    dfCt = -omega*two*pi*sin(two*pi*omega*zC) + imi*(-omega*two*pi*sin(two*pi*omega*zC))
+    print*, dfC(1,1,1:5)
+    call der%ddz_C2C(dfC,fC,nx,ny)
+    print*, fC(1,1,1:5)
+
+    !dfEt = -omega*two*pi*sin(two*pi*omega*zE) + imi*(-omega*two*pi*sin(two*pi*omega*zE))
+    !dfCt = -omega*two*pi*sin(two*pi*omega*zC) + imi*(-omega*two*pi*sin(two*pi*omega*zC))
 
     !print*, dfC
-    print*, maxval(abs(real(dfCt,rkind) - real(dfC,rkind)))
+    !print*, maxval(abs(real(dfCt,rkind) - real(dfC,rkind)))
 
     print*, "============================="
     call der2%dd3(real(fC,rkind), zC, nx, ny)
+    print*, zC(1,1,1:5)
     !print*, zC
     print*, maxval(abs(zC - real(dfCt,rkind)))
 
