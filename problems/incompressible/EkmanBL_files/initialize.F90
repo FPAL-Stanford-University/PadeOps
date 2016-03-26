@@ -83,9 +83,8 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     real(rkind), intent(out), optional :: Ro, u_g
-    integer :: ioUnit, i, j, k
+    integer :: ioUnit, k
     real(rkind), dimension(:,:,:), pointer :: u, v, w, x, y, z
-    logical :: useSGS 
     real(rkind) :: mfactor, sig
     real(rkind), dimension(:,:,:), allocatable :: randArr
     real(rkind) :: epsfac, Uperiods, Vperiods , zpeak
@@ -178,13 +177,12 @@ contains
         nxg = gpC%xsz(1)
         tidSUM = 0
 
-        allocate(zStats2dump(nzg,10))
-        allocate(runningSum(nzg,10))
-        allocate(TemporalMnNOW(nzg,10))
+        allocate(zStats2dump(nzg,7))
+        allocate(runningSum(nzg,7))
+        allocate(TemporalMnNOW(nzg,7))
         u_mean => zStats2dump(:,1); v_mean => zStats2dump(:,2); w_mean => zStats2dump(:,3); 
         uu_mean => zStats2dump(:,4); vv_mean => zStats2dump(:,5); ww_mean => zStats2dump(:,6); 
-        uw_mean => zStats2dump(:,7); oxox_mean => zStats2dump(:,8); oyoy_mean => zStats2dump(:,9); 
-        ozoz_mean => zStats2dump(:,10)
+        uw_mean => zStats2dump(:,7)
 
         runningSum = zero
         nullify(gpC)
@@ -221,45 +219,29 @@ contains
         rbuff1 = ig%u*ig%u
         call transpose_x_to_y(rbuff1,rbuff2,ig%gpC)
         call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
+        call compute_z_fluct(rbuff3)
         call compute_z_mean(rbuff3, uu_mean)
 
         ! Compute vv - mean 
         rbuff1 = ig%v*ig%v
         call transpose_x_to_y(rbuff1,rbuff2,ig%gpC)
         call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
+        call compute_z_fluct(rbuff3)
         call compute_z_mean(rbuff3, vv_mean)
 
         ! Compute ww - mean 
         rbuff1 = ig%w*ig%w
         call transpose_x_to_y(rbuff1,rbuff2,ig%gpC)
         call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
+        call compute_z_fluct(rbuff3)
         call compute_z_mean(rbuff3, ww_mean)
 
         ! Compute uw - mean 
         rbuff1 = ig%u*ig%w
         call transpose_x_to_y(rbuff1,rbuff2,ig%gpC)
         call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
+        call compute_z_fluct(rbuff3)
         call compute_z_mean(rbuff3, uw_mean)
-
-        call ig%compute_vorticity()
-        
-        ! Compute ox-ox mean
-        rbuff1 = ig%ox*ig%ox
-        call transpose_x_to_y(rbuff1,rbuff2,ig%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
-        call compute_z_mean(rbuff3, oxox_mean)
-
-        ! Compute oy-oy mean
-        rbuff1 = ig%oy*ig%oy
-        call transpose_x_to_y(rbuff1,rbuff2,ig%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
-        call compute_z_mean(rbuff3, oyoy_mean)
-
-        ! Compute oz-oz mean
-        rbuff1 = ig%ox*ig%ox
-        call transpose_x_to_y(rbuff1,rbuff2,ig%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
-        call compute_z_mean(rbuff3, ozoz_mean)
 
         runningSum = runningSum + zStats2dump
 
@@ -287,6 +269,19 @@ contains
         end if
         call message(1, "Just dumped a .stt file")
         call message(2, "Number ot tsteps averaged:",tidSUM)
+
+    end subroutine
+
+    subroutine compute_z_fluct(fin)
+        use reductions, only: P_SUM
+        real(rkind), dimension(:,:,:), intent(inout) :: fin
+        integer :: k
+        real(rkind) :: fmean
+
+        do k = 1,size(fin,3)
+            fmean = P_SUM(sum(fin(:,:,k)))/(real(nxg,rkind)*real(nyg,rkind))
+            fin(:,:,k) = fin(:,:,k) - fmean
+        end do 
 
     end subroutine
 

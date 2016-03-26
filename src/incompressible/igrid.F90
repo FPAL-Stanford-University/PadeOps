@@ -23,7 +23,7 @@ module IncompressibleGridNP
     public :: igrid 
 
     logical, parameter :: useCompactFD = .true. 
-    integer, parameter :: AdvectionForm = 1 
+    integer, parameter :: AdvectionForm = 2 
 
     integer, parameter :: no_slip = 1, slip = 2
     complex(rkind), parameter :: zeroC = zero + imi*zero 
@@ -417,8 +417,10 @@ contains
         call this%interp_wHat_to_wHatC()
         call message(1,"Max KE:",P_MAXVAL(this%getMaxKE()))
      
-        ! STEP 9: Compute Vorticity 
-        call this%compute_Vorticity()
+        ! STEP 9: Compute Vorticity
+        if (AdvectionForm == 1) then 
+            call this%compute_Vorticity()
+        end if 
         if ((AdvectionForm == 2) .or. (this%useSGS)) then
             call this%compute_duidxj()
         end if 
@@ -448,7 +450,7 @@ contains
             call this%sgs%init(this%spectC, this%spectE, this%gpC, this%gpE, this%dx, this%dy, this%dz)
             call message(0,"SGS model initialized successfully")
         end if 
-
+        this%max_nuSGS = zero
 
         ! Final Step: Safeguard against unfinished procedures
         if ((.not.useCompactFD) .and. (AdvectionForm == 2)) then
@@ -717,7 +719,7 @@ contains
         class(igrid), intent(inout), target :: this
         real(rkind), dimension(:,:,:), pointer :: rtmpx1, rtmpx2
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2, ctmpz3, ctmpz4
-        complex(rkind), dimension(:,:,:), pointer :: ctmpy1, ctmpy2
+        complex(rkind), dimension(:,:,:), pointer :: ctmpy1, ctmpy2, ctmpy3
         real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
         real(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
         real(rkind), dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
@@ -733,102 +735,101 @@ contains
         ctmpz3 => this%cbuffzE(:,:,:,1); ctmpz4 => this%cbuffzE(:,:,:,2)
         
         ctmpy1 => this%cbuffyC(:,:,:,1); ctmpy2 => this%cbuffyE(:,:,:,1)
+        ctmpy3 => this%cbuffyC(:,:,:,2)
 
-        ! Conservative Form Terms
-        rtmpx1 = -half*this%u*this%u
+        ! Advection Form Terms
+        rtmpx1 = -this%u*dudx
         call this%spectC%fft(rtmpx1,this%u_rhs)
-        call this%spectC%mtimes_ik1_ip(this%u_rhs)
-
-        
-        rtmpx1 = -half*this%v*this%v
-        call this%spectC%fft(rtmpx1,this%v_rhs)
-        call this%spectC%mtimes_ik2_ip(this%v_rhs)
-       
-        
-        rtmpx2 = -half*this%w*this%w
-        call this%spectE%fft(rtmpx2,this%w_rhs)
-        call transpose_y_to_z(this%w_rhs,ctmpz3,this%sp_gpE)
-        call this%derWW%ddz_E2E(ctmpz3,ctmpz4,size(ctmpz3,1),size(ctmpz3,2))
-        call transpose_z_to_y(ctmpz4,this%w_rhs,this%sp_gpE)
-
-        
-        rtmpx1 = -half*this%u*this%v
+        rtmpx1 = -this%v*dudy
         call this%spectC%fft(rtmpx1,ctmpy1)
-        call this%spectC%mtimes_ik2_ip(ctmpy1)
         this%u_rhs = this%u_rhs + ctmpy1
-        call this%spectC%mtimes_ik1_ip(ctmpy1)
-        this%v_rhs = this%v_rhs + ctmpy1
+        rtmpx1 = -this%wC*dudz
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%u_rhs = this%u_rhs + ctmpy1
 
+        rtmpx1 = -this%u*dvdx
+        call this%spectC%fft(rtmpx1,this%v_rhs)
+        rtmpx1 = -this%v*dvdy
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%v_rhs = this%v_rhs + ctmpy1
+        rtmpx1 = -this%wC*dvdz
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        this%v_rhs = this%v_rhs + ctmpy1
         
-        rtmpx1 = -half*this%u*this%wC
+        rtmpx1 = -this%u*dwdx
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        call transpose_z_to_y(ctmpz3,this%w_rhs,this%sp_gpE)
+
+        rtmpx1 = -this%v*dwdy
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
+        this%w_rhs = this%w_rhs + ctmpy2
+
+        rtmpx1 = -this%wC*dwdz
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
+        this%w_rhs = this%w_rhs + ctmpy2
+
+
+
+        this%u_rhs = half*this%u_rhs
+        this%v_rhs = half*this%v_rhs
+        this%w_rhs = half*this%w_rhs
+
+        ! Conservative Form Terms        
+        rtmpx1 = -this%u*this%u
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call this%spectC%mtimes_ik1_ip(ctmpy1)
+        this%u_rhs = this%u_rhs + half*ctmpy1
         
+        rtmpx1 = -this%u*this%v
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call this%spectC%mtimes_ik2_oop(ctmpy1,ctmpy3)
+        this%u_rhs = this%u_rhs + half*ctmpy3
+        call this%spectC%mtimes_ik1_oop(ctmpy1,ctmpy3)
+        this%v_rhs = this%v_rhs + half*ctmpy3
+
+        rtmpx1 = -this%u*this%wC
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
+        call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        call transpose_z_to_y(ctmpz2,ctmpy1,this%sp_gpC)
+        this%u_rhs = this%u_rhs + half*ctmpy1
         call this%derW%InterpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
         call this%spectE%mtimes_ik1_ip(ctmpy2)
-        this%w_rhs = this%w_rhs + ctmpy2
-        
-        call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
-        call transpose_z_to_y(ctmpz2,ctmpy1,this%sp_gpC)
-        this%u_rhs = this%u_rhs + ctmpy1
+        this%w_rhs = this%w_rhs + half*ctmpy2
+
+        rtmpx1 = -this%v*this%v
+        call this%spectC%fft(rtmpx1,ctmpy1)
+        call this%spectC%mtimes_ik2_ip(ctmpy1)
+        this%v_rhs = this%v_rhs + half*ctmpy1
 
 
-        rtmpx1 = -half*this%v*this%wC
+        rtmpx1 = -this%v*this%wC
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        
+        call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        call transpose_z_to_y(ctmpz2,ctmpy1,this%sp_gpC)
+        this%v_rhs = this%v_rhs + half*ctmpy1
         call this%derW%InterpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
         call this%spectE%mtimes_ik2_ip(ctmpy2)
-        this%w_rhs = this%w_rhs + ctmpy2
-        
-        call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
-        call transpose_z_to_y(ctmpz2,ctmpy1,this%sp_gpC)
-        this%v_rhs = this%v_rhs + ctmpy1
+        this%w_rhs = this%w_rhs + half*ctmpy2
 
-        
-        ! Advection Form Terms
-        rtmpx1 = -half*this%u*dudx
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%u_rhs = this%u_rhs + ctmpy1
-        rtmpx1 = -half*this%v*dudy
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%u_rhs = this%u_rhs + ctmpy1
-        rtmpx1 = -half*this%wC*dudz
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%u_rhs = this%u_rhs + ctmpy1
-
-        rtmpx1 = -half*this%u*dvdx
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%v_rhs = this%v_rhs + ctmpy1
-        rtmpx1 = -half*this%v*dvdy
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%v_rhs = this%v_rhs + ctmpy1
-        rtmpx1 = -half*this%wC*dvdz
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        this%v_rhs = this%v_rhs + ctmpy1
-        
-        rtmpx1 = -half*this%u*dwdx
+        rtmpx1 = -this%wC*this%wC
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        call this%derWW%ddz_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
-        this%w_rhs = this%w_rhs + ctmpy2
+        this%w_rhs = this%w_rhs + half*ctmpy2
 
-        rtmpx1 = -half*this%v*dwdy
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
-        call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
-        this%w_rhs = this%w_rhs + ctmpy2
-
-        rtmpx1 = -half*this%wC*dwdz
-        call this%spectC%fft(rtmpx1,ctmpy1)
-        call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
-        call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
-        this%w_rhs = this%w_rhs + ctmpy2
 
         nullify( dudx, dudy, dudz) 
         nullify( dvdx, dvdy, dvdz)
@@ -1050,7 +1051,9 @@ contains
 
 
         ! STEP 9: Compute vorticity and duidxj 
-        call this%compute_Vorticity()
+        if (AdvectionForm == 1) then
+            call this%compute_Vorticity()
+        end if 
         if ((AdvectionForm == 2) .or. (this%useSGS)) then
             call this%compute_duidxj()
         end if 
