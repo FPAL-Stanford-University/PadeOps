@@ -20,7 +20,7 @@ module spectralMod
         private
         real(rkind), dimension(:,:,:), allocatable, public :: k1, k2, k3, kabs_sq, k1_der2, k2_der2, k3_der2, one_by_kabs_sq
         integer, dimension(3) :: fft_start, fft_end, fft_size
-        real(rkind), dimension(:,:,:), allocatable, public :: Gdealias
+        real(rkind), dimension(:,:,:), allocatable, public :: Gdealias, GtestFilt
         integer :: rPencil ! Pencil dimension for the real input
         logical :: is3dFFT = .true. ! use 3d FFTs
         logical :: isInitialized = .false.
@@ -51,6 +51,8 @@ module spectralMod
             procedure           :: mTimes_ik1_ip
             procedure           :: mTimes_ik2_oop
             procedure           :: mTimes_ik2_ip
+            procedure           :: TestFilter_ip
+            procedure           :: TestFilter_oop
             !procedure, private  :: upsample_Fhat
             !procedure, private  :: downsample_Fhat
 
@@ -132,10 +134,6 @@ contains
 
     end subroutine
 
-
-
-
-
     subroutine dealias(this, fhat)
         class(spectral),  intent(in)         :: this
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fhat
@@ -150,7 +148,40 @@ contains
         end do 
          
     end subroutine
-    
+   
+    subroutine TestFilter_ip(this, fhat)
+        class(spectral),  intent(in)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fhat
+        integer :: i, j, k
+
+        do k = 1,this%fft_size(3)
+            do j = 1,this%fft_size(2)
+                do i = 1,this%fft_size(1)
+                    fhat(i,j,k) = fhat(i,j,k)*this%GTestFilt(i,j,k)
+                end do 
+            end do 
+        end do 
+         
+    end subroutine
+
+
+    pure subroutine TestFilter_oop(this, fhat,fhatout)
+        class(spectral),  intent(in)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(in) :: fhat
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(out) :: fhatout
+        integer :: i, j, k
+
+        do k = 1,this%fft_size(3)
+            do j = 1,this%fft_size(2)
+                do i = 1,this%fft_size(1)
+                    fhatout(i,j,k) = fhat(i,j,k)*this%GTestFilt(i,j,k)
+                end do 
+            end do 
+        end do 
+         
+    end subroutine
+
+
     subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK) 
         class(spectral),  intent(inout)         :: this
         character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction
@@ -308,6 +339,8 @@ contains
             !allocate(this%one_by_kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
             if (allocated(this%Gdealias)) deallocate(this%Gdealias)
             allocate (this%Gdealias(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            if (allocated(this%GTestFilt)) deallocate(this%GTestFilt)
+            allocate (this%GTestFilt(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             
             !allocate(k1four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
             !allocate(k2four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
@@ -444,7 +477,26 @@ contains
                 end do  
             end do 
             call message(1, "Dealiasing Summary:")
-            call message(2, "Total non zero:", p_sum(sum(this%Gdealias))) 
+            call message(2, "Total non zero:", p_sum(sum(this%Gdealias)))
+
+
+            kdealiasx = ((one/three)*pi/dx)
+            kdealiasy = ((one/three)*pi/dy)
+            do k = 1,size(this%k1,3)
+                do j = 1,size(this%k1,2)
+                    do i = 1,size(this%k1,1)
+                        if ((abs(this%k1(i,j,k)) < kdealiasx) .and. (abs(this%k2(i,j,k))< kdealiasy)) then
+                            this%GTestFilt(i,j,k) = one
+                        else
+                            this%GTestFilt(i,j,k) = zero
+                        end if
+                    end do 
+                end do  
+            end do 
+            call message(1, "TestFilter Summary:")
+            call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
+
+
             ! STEP 8: Correct the wavenumber to be the modified wavenumber based on the scheme
             !allocate(tmp1(size(this%k1,1),size(this%k1,2),size(this%k1,3)))
             !select case (trim(scheme))

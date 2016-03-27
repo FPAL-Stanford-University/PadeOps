@@ -135,7 +135,8 @@ contains
         character(len=clen) :: filter_y = "2/3rd" 
         character(len=clen) :: filter_z = "2/3rd"
         integer :: prow = 0, pcol = 0 
-        logical :: useSGS = .false. 
+        logical :: useSGS = .false., useDynamicProcedure = .false.
+        logical :: useSGSclipping = .true.  
         integer :: ioUnit
         integer :: nsteps = -1
         real(rkind) :: dt = -one
@@ -155,8 +156,8 @@ contains
         logical :: useCoriolis = .true. 
         logical :: useExtraForcing = .false.
         real(rkind) :: dpFdx = zero
-        integer :: restartFile_TID
-        integer :: restartFile_RID
+        integer :: restartFile_TID = 1
+        integer :: restartFile_RID = 1
         logical :: useRestartFile = .false. 
         logical :: useWallModelTop = .false., useWallModelBot = .false.
         logical :: isInviscid = .false., useVerticalFilter = .true.  
@@ -167,8 +168,8 @@ contains
                                   periodicx, periodicy, periodicz, &
                                                        prow, pcol, &
                                         t_restartDump, t_dataDump
-        namelist /IINPUT/  Re, useSGS, runID, Pr, useCoriolis, & 
-                                tid_statsDump, useExtraForcing, &
+        namelist /IINPUT/  Re, useSGS, useDynamicProcedure,runID, Pr, useCoriolis, & 
+                                tid_statsDump, useExtraForcing, useSGSclipping, &
                                 time_startDumping, topWall, botWall, &
                                 useRestartFile, restartFile_TID, restartFile_RID, &
                                 useWallModelTop, useWallModelBot, isInviscid, &
@@ -447,7 +448,8 @@ contains
         ! STEP 12: Initialize SGS model
         if (this%useSGS) then
             allocate(this%SGS)
-            call this%sgs%init(this%spectC, this%spectE, this%gpC, this%gpE, this%dx, this%dy, this%dz)
+            call this%sgs%init(this%spectC, this%spectE, this%gpC, this%gpE, this%dx, this%dy, this%dz, & 
+                                 useDynamicProcedure, useSGSclipping)
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -969,7 +971,14 @@ contains
 
         ! Step 3b: SGS Viscous Term
         if (this%useSGS) then
-            call this%SGS%getRHS_SGS(this%duidxj,this%u_rhs,this%v_rhs,this%w_rhs, this%max_nuSGS)
+            call this%SGS%getRHS_SGS(this%duidxj,this%u_rhs,this%v_rhs,this%w_rhs, &
+                                     this%uhat  ,this%vhat ,this%whatC,this%u    , &
+                                     this%v     ,this%wC   ,this%max_nuSGS       )
+
+            !! IMPORTANT: duidxj, u, v and wC are all corrupted if SGS was initialized to use the
+            !! Dynamic Procedure. DON'T USE duidxj again within this time step.
+            !! Make the SGS call at the very end, just before the time
+            !! advancement.
         end if 
 
 

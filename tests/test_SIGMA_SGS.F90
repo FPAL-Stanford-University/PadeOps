@@ -18,7 +18,7 @@ program test_SIGMA_SGS
     real(rkind), dimension(:,:,:), allocatable :: x, y, z, u, v, w, wE
     real(rkind), dimension(:,:,:), allocatable :: tmp
     type(decomp_info) :: gpC, gpE
-    integer :: nx = 64, ny = 64, nz = 128
+    integer :: nx = 96, ny = 96, nz = 192
     integer :: ierr, prow = 0, pcol = 0
     real(rkind) :: dx, dy, dz
     real(rkind), dimension(:,:), allocatable :: temp 
@@ -27,6 +27,7 @@ program test_SIGMA_SGS
     type(padepoisson), allocatable :: poiss 
     real(rkind), dimension(:,:,:), allocatable :: divergence, rtmp1z, rtmp2z, rtmp1x, rtmp1y, rtmp1yE, rtmp1zE
     complex(rkind), dimension(:,:,:), allocatable :: urhs, vrhs, wrhs
+    complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what
     type(cd06stagg), allocatable :: derZu, derZv, derZw
     complex(rkind), dimension(:,:,:), allocatable :: ctmp1, ctmp2, ctmpz1,ctmpz2
     type(cf90) :: filzC, filzE
@@ -36,15 +37,21 @@ program test_SIGMA_SGS
     integer :: i,j,k
     real(rkind), dimension(:,:,:,:), allocatable :: duidxj
     integer :: dimTransform = 2
+    character(len=clen) :: filename = "/home/aditya90/Codes/PadeOps/data/OpenFoam_AllData.txt" 
     type(sigmaSGS) :: sgs
+    real(rkind) :: maxnuSGS
+    
+    logical :: useEkmanInit = .true. 
+    logical :: useDynamicProcedure = .false. 
+    logical :: useClipping = .false. 
+
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, prow, pcol)
 
     call get_decomp_info(gpC)
     call decomp_info_init(nx, ny, nz+1, gpE)
-
-    allocate(tmp(nx,ny,nz))
+    
     allocate( x ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     allocate( y ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     allocate( z ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
@@ -56,40 +63,67 @@ program test_SIGMA_SGS
    
     allocate(spect, spectE)
 
-    Lx = 1.5_rkind*pi; Ly = 1.5_rkind*pi; Lz = 1._rkind
-
     nx = gpC%xsz(1); ny = gpC%ysz(2); nz = gpC%zsz(3)
 
-    ! If base gpCosition is in Y
-    ix1 = gpC%xst(1); iy1 = gpC%xst(2); iz1 = gpC%xst(3)
-    ixn = gpC%xen(1); iyn = gpC%xen(2); izn = gpC%xen(3)
-    
+    if (useEkmanInit) then
+        ! If base gpCosition is in Y
+        ix1 = gpC%xst(1); iy1 = gpC%xst(2); iz1 = gpC%xst(3)
+        ixn = gpC%xen(1); iyn = gpC%xen(2); izn = gpC%xen(3)
+        
+        Lx = 1.5_rkind*pi; Ly = 1.5_rkind*pi; Lz = 1._rkind
 
-    dx = Lx/real(nx,rkind); dy = Ly/real(ny,rkind); dz = Lz/real(nz,rkind)
+        dx = Lx/real(nx,rkind); dy = Ly/real(ny,rkind); dz = Lz/real(nz,rkind)
 
-    do k=1,size(x,3)
-        do j=1,size(x,2)
-            do i=1,size(x,1)
-                x(i,j,k) = real( ix1 + i - 1, rkind ) * dx
-                y(i,j,k) = real( iy1 + j - 1, rkind ) * dy
-                z(i,j,k) = real( iz1 + k - 1, rkind ) * dz + dz/two
+        do k=1,size(x,3)
+            do j=1,size(x,2)
+                do i=1,size(x,1)
+                    x(i,j,k) = real( ix1 + i - 1, rkind ) * dx
+                    y(i,j,k) = real( iy1 + j - 1, rkind ) * dy
+                    z(i,j,k) = real( iz1 + k - 1, rkind ) * dz + dz/two
+                end do
             end do
         end do
-    end do
    
-    x = x - dx
-    y = y - dy
-    z = z - dz 
+        x = x - dx
+        y = y - dy
+        z = z - dz 
 
-    Uperiods = 2.0; Vperiods = 2.0; zpeak = 0.3;
-    epsfac = 0.5d0; delta_Ek = 0.14071 
+        Uperiods = 2.0; Vperiods = 2.0; zpeak = 0.3;
+        epsfac = 0.5d0; delta_Ek = 0.14071 
 
-    u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
-            + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    v = exp(-z/delta_Ek)*sin(z/delta_Ek) + &
-            + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-    w = zero 
+        u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
+                + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+        v = exp(-z/delta_Ek)*sin(z/delta_Ek) + &
+                + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+        w = zero 
 
+    else 
+        call read_2d_ascii(temp,filename)
+        allocate(tmp(nx,ny,nz))
+        tmp = reshape(temp(:,4),[nx,ny,nz])
+        u = tmp(gpC%xst(1):gpC%xen(1),gpC%xst(2):gpC%xen(2),gpC%xst(3):gpC%xen(3))
+
+        tmp = reshape(temp(:,5),[nx,ny,nz])
+        v = tmp(gpC%xst(1):gpC%xen(1),gpC%xst(2):gpC%xen(2),gpC%xst(3):gpC%xen(3))
+        
+        tmp = reshape(temp(:,6),[nx,ny,nz])
+        w = tmp(gpC%xst(1):gpC%xen(1),gpC%xst(2):gpC%xen(2),gpC%xst(3):gpC%xen(3))
+        
+        tmp = reshape(temp(:,1),[nx,ny,nz])
+        x = tmp(gpC%xst(1):gpC%xen(1),gpC%xst(2):gpC%xen(2),gpC%xst(3):gpC%xen(3))
+        
+        tmp = reshape(temp(:,2),[nx,ny,nz])
+        y = tmp(gpC%xst(1):gpC%xen(1),gpC%xst(2):gpC%xen(2),gpC%xst(3):gpC%xen(3))
+        
+        tmp = reshape(temp(:,3),[nx,ny,nz])
+        z = tmp(gpC%xst(1):gpC%xen(1),gpC%xst(2):gpC%xen(2),gpC%xst(3):gpC%xen(3))
+        
+        dx = x(2,1,1) - x(1,1,1)
+        dy = y(1,2,1) - y(1,1,1)
+        dz = z(1,1,2) - z(1,1,1)
+   
+        deallocate(tmp, temp) 
+    end if 
 
     call spect%init("x", nx, ny, nz, dx, dy, dz, "four", "2/3rd", dimTransform,.false.)
     call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", "2/3rd", dimTransform,.false.)
@@ -97,12 +131,19 @@ program test_SIGMA_SGS
     call spect%alloc_r2c_out(ctmp2)
     call spect%alloc_r2c_out(urhs)
     call spect%alloc_r2c_out(vrhs)
-    call spectE%alloc_r2c_out(wrhs)
+    call spect%alloc_r2c_out(wrhs)
+    call spect%alloc_r2c_out(uhat)
+    call spect%alloc_r2c_out(vhat)
+    call spect%alloc_r2c_out(what)
 
     urhs = zero
     vrhs = zero
     wrhs = zero
 
+    uhat = zero
+    vhat = zero
+    what = zero
+    
     allocate(derZu, derZv, derZw)
     call derZu%init(nz,dz,.true.,.false.,.false.,.false.)
     call derZv%init(nz,dz,.true.,.false.,.false.,.false.)
@@ -142,14 +183,21 @@ program test_SIGMA_SGS
     call transpose_z_to_y(ctmpz2,ctmp2,spect%spectdecomp)
     call spect%ifft(ctmp2,duidxj(:,:,:,9))
 
-    call sgs%init(spect, spectE, gpC, gpE, dx, dy, dz)
+    call spect%fft(u,uhat)
+    call spect%fft(v,vhat)
+    call spect%fft(w,what)
+
+    call sgs%init(spect, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping)
     !duidxj(2,3,4,1) = 1.d0; duidxj(2,3,4,2) = 2.d0; duidxj(2,3,4,3) = 3.d0
     !duidxj(2,3,4,4) = 4.d0; duidxj(2,3,4,5) = -1.d0; duidxj(2,3,4,6) = 6.d0
 
-    call sgs%getRHS_SGS(duidxj, urhs, vrhs, wrhs)
-  
+    call tic()
+    call sgs%getRHS_SGS(duidxj, urhs, vrhs, wrhs, uhat, vhat, what, u, v, w, maxnuSGS)
+    call toc()
+
     call spect%ifft(urhs,u)
-    call message("Max val:", p_maxval(u))
+    call message("Max val RHS:", p_maxval(u))
+    call message("Max val nuSGS:", maxnuSGS)
 
     call derZu%destroy()
     call derZv%destroy()
