@@ -1239,9 +1239,11 @@ contains
             df = f
             return
         end if
-      
-        bc1 = bc1_; bcn = bcn_
-        bc1 = 0; bcn = 0
+        if (present(bcn_)) then
+            bc1 = bc1_; bcn = bcn_
+        else 
+            bc1 = 0; bcn = 0
+        end if 
 
         call this%ComputeZRHS_CMPLX(f, df, na, nb, bc1, bcn)
         call this%SolveZPenta_CMPLX(this%penta_nn, df, na, nb)
