@@ -110,7 +110,7 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
 
     !! CAREFUL - z in mesh is cell centers but W is at edges !!
 
-    Uperiods = 2.0; Vperiods = 2.0; zpeak = 0.3;
+    Uperiods = 6.0; Vperiods = 6.0; zpeak = 0.3;
     epsfac = 0.5d0;
 
     u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
