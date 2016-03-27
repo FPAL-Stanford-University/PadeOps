@@ -192,10 +192,11 @@ contains
         use mpi
         type(igrid), intent(inout), target :: ig
         type(decomp_info), pointer :: gpC
-        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3
+        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3, rbuff4
 
         rbuff1 => ig%rbuffxC(:,:,:,1); rbuff2 => ig%rbuffyC(:,:,:,1);
         rbuff3 => ig%rbuffzC(:,:,:,1); 
+        rbuff4 => ig%rbuffzC(:,:,:,2); 
         gpC => ig%gpC
 
         tidSUM = tidSUM + 1
@@ -204,44 +205,31 @@ contains
         call transpose_x_to_y(ig%u,rbuff2,ig%gpC)
         call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
         call compute_z_mean(rbuff3, u_mean)
+        ! uu mean
+        call compute_z_fluct(rbuff3)
+        rbuff4 = rbuff3*rbuff3
+        call compute_z_mean(rbuff4, uu_mean)
 
+        ! Compute w - mean 
+        call transpose_x_to_y(ig%wC,rbuff2,ig%gpC)
+        call transpose_y_to_z(rbuff2,rbuff4,ig%gpC)
+        call compute_z_mean(rbuff4, w_mean)
+        call compute_z_fluct(rbuff4)
+        ! uw mean
+        rbuff3 = rbuff3*rbuff4
+        call compute_z_mean(rbuff3, uw_mean)
+        ! ww mean 
+        rbuff3 = rbuff4*rbuff4
+        call compute_z_mean(rbuff3, ww_mean)
+        
         ! Compute v - mean 
         call transpose_x_to_y(ig%v,rbuff2,ig%gpC)
         call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
         call compute_z_mean(rbuff3, v_mean)
-
-        ! Compute w - mean 
-        call transpose_x_to_y(ig%wC,rbuff2,ig%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
-        call compute_z_mean(rbuff3, w_mean)
-
-        ! Compute uu - mean 
-        rbuff1 = ig%u*ig%u
-        call transpose_x_to_y(rbuff1,rbuff2,ig%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
         call compute_z_fluct(rbuff3)
-        call compute_z_mean(rbuff3, uu_mean)
-
-        ! Compute vv - mean 
-        rbuff1 = ig%v*ig%v
-        call transpose_x_to_y(rbuff1,rbuff2,ig%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
-        call compute_z_fluct(rbuff3)
-        call compute_z_mean(rbuff3, vv_mean)
-
-        ! Compute ww - mean 
-        rbuff1 = ig%w*ig%w
-        call transpose_x_to_y(rbuff1,rbuff2,ig%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
-        call compute_z_fluct(rbuff3)
-        call compute_z_mean(rbuff3, ww_mean)
-
-        ! Compute uw - mean 
-        rbuff1 = ig%u*ig%w
-        call transpose_x_to_y(rbuff1,rbuff2,ig%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,ig%gpC)
-        call compute_z_fluct(rbuff3)
-        call compute_z_mean(rbuff3, uw_mean)
+        ! vv mean 
+        rbuff4 = rbuff3*rbuff3
+        call compute_z_mean(rbuff4, vv_mean)
 
         runningSum = runningSum + zStats2dump
 
