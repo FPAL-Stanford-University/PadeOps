@@ -15,7 +15,7 @@ module IncompressibleGridNP
     use PadePoissonMod, only: Padepoisson 
     use cd06staggstuff, only: cd06stagg
     use cf90stuff, only: cf90  
-    use sigmaSGSmod, only: sigmasgs
+    use sgsmod, only: sgs
 
     implicit none
 
@@ -43,7 +43,7 @@ module IncompressibleGridNP
         type(decomp_info), pointer :: Sp_gpC, Sp_gpE
         type(spectral), allocatable :: spectE, spectC
         type(staggOps), allocatable :: Ops
-        type(sigmaSGS), allocatable :: SGS
+        type(sgs), allocatable :: SGSmodel
 
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsC
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsE
@@ -447,8 +447,8 @@ contains
 
         ! STEP 12: Initialize SGS model
         if (this%useSGS) then
-            allocate(this%SGS)
-            call this%sgs%init(this%spectC, this%spectE, this%gpC, this%gpE, this%dx, this%dy, this%dz, & 
+            allocate(this%SGSmodel)
+            call this%sgsModel%init(this%spectC, this%spectE, this%gpC, this%gpE, this%dx, this%dy, this%dz, & 
                                  useDynamicProcedure, useSGSclipping)
             call message(0,"SGS model initialized successfully")
         end if 
@@ -971,7 +971,7 @@ contains
 
         ! Step 3b: SGS Viscous Term
         if (this%useSGS) then
-            call this%SGS%getRHS_SGS(this%duidxj,this%u_rhs,this%v_rhs,this%w_rhs, &
+            call this%SGSmodel%getRHS_SGS(this%duidxj,this%u_rhs,this%v_rhs,this%w_rhs, &
                                      this%uhat  ,this%vhat ,this%whatC,this%u    , &
                                      this%v     ,this%wC   ,this%max_nuSGS       )
 

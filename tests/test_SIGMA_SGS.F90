@@ -11,7 +11,7 @@ program test_SIGMA_SGS
     use exits, only: message
     use cf90stuff, only: cf90
     use basic_io, only: write_binary
-    use sigmaSGSmod, only: sigmaSGS
+    use sgsmod, only: sgs
 
     implicit none
    
@@ -38,7 +38,7 @@ program test_SIGMA_SGS
     real(rkind), dimension(:,:,:,:), allocatable :: duidxj
     integer :: dimTransform = 2
     character(len=clen) :: filename = "/home/aditya90/Codes/PadeOps/data/OpenFoam_AllData.txt" 
-    type(sigmaSGS) :: sgs
+    type(sgs) :: sgsModel
     real(rkind) :: maxnuSGS
     
     logical :: useEkmanInit = .true. 
@@ -187,12 +187,12 @@ program test_SIGMA_SGS
     call spect%fft(v,vhat)
     call spect%fft(w,what)
 
-    call sgs%init(spect, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping)
+    call sgsModel%init(spect, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping)
     !duidxj(2,3,4,1) = 1.d0; duidxj(2,3,4,2) = 2.d0; duidxj(2,3,4,3) = 3.d0
     !duidxj(2,3,4,4) = 4.d0; duidxj(2,3,4,5) = -1.d0; duidxj(2,3,4,6) = 6.d0
 
     call tic()
-    call sgs%getRHS_SGS(duidxj, urhs, vrhs, wrhs, uhat, vhat, what, u, v, w, maxnuSGS)
+    call sgsModel%getRHS_SGS(duidxj, urhs, vrhs, wrhs, uhat, vhat, what, u, v, w, maxnuSGS)
     call toc()
 
     call spect%ifft(urhs,u)
