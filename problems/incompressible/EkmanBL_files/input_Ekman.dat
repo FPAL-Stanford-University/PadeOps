@@ -32,6 +32,9 @@ Pr = 0.7D0                ! Prandtl Number
 runID = 10                 ! Run ID (for output file name)
 useSGS = .TRUE.          ! LES mode or DNS mode?
 useCoriolis = .TRUE. 
+SGSModelID = 1            ! 0: smagorinsky, 1: sigma
+useDynamicProcedure = .TRUE. 
+useSGSClipping = .TRUE. 
 useExtraForcing = .FALSE. 
 topWall = 2               ! no_slip = 1, slip = 2
 botWall = 1               ! no_slip = 1, slip = 2  

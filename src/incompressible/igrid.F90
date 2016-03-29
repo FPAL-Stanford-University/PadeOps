@@ -1261,6 +1261,8 @@ contains
 
     end subroutine 
 
+    !! STATISTICS !!
+
     subroutine init_stats( this)
         class(igrid), intent(inout), target :: this
         type(decomp_info), pointer  :: gpC
