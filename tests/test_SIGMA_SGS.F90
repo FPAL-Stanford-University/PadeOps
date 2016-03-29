@@ -40,7 +40,8 @@ program test_SIGMA_SGS
     character(len=clen) :: filename = "/home/aditya90/Codes/PadeOps/data/OpenFoam_AllData.txt" 
     type(sgs) :: sgsModel
     real(rkind) :: maxnuSGS
-    
+   
+    integer :: ModelID = 1 
     logical :: useEkmanInit = .true. 
     logical :: useDynamicProcedure = .false. 
     logical :: useClipping = .false. 
@@ -187,7 +188,7 @@ program test_SIGMA_SGS
     call spect%fft(v,vhat)
     call spect%fft(w,what)
 
-    call sgsModel%init(spect, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping)
+    call sgsModel%init(modelID, spect, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping)
     !duidxj(2,3,4,1) = 1.d0; duidxj(2,3,4,2) = 2.d0; duidxj(2,3,4,3) = 3.d0
     !duidxj(2,3,4,4) = 4.d0; duidxj(2,3,4,5) = -1.d0; duidxj(2,3,4,6) = 6.d0
 

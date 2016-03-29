@@ -40,6 +40,8 @@ module sgsmod
         
         real(rkind) :: meanFact
 
+        integer :: SGSmodel ! 0: Standard Smag, 1: Sigma Model 
+
         contains 
             procedure :: init
             procedure :: destroy
@@ -47,22 +49,43 @@ module sgsmod
             procedure, private :: DynamicProcedure
             procedure, private :: planarAverage 
             procedure :: getRHS_SGS
+            procedure :: link_pointers
     end type 
 
 contains
 
-    subroutine init(this, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping)!, WallModel)
+
+    subroutine link_pointers(this,nuSGS,c_SGS, tauSGS_ij)
+        class(sgs), intent(in), target :: this
+        real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: c_SGS, nuSGS
+        real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: tauSGS_ij
+
+        if (allocated(this%rbuff)) then
+            c_SGS => this%rbuff(:,:,:,8)
+            nuSGS => this%rbuff(:,:,:,7)
+            tauSGS_ij => this%rbuff(:,:,:,13:18)
+        else
+            call gracefulExit("You have called SGS%LINK_POINTERS before &
+                & initializing SGS",324)
+        end if 
+
+    end subroutine
+
+
+
+    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping)!, WallModel)
         class(sgs), intent(inout), target :: this
         type(spectral), intent(in), target :: spectC, spectE
         type(decomp_info), intent(in), target :: gpC, gpE
         real(rkind), intent(in) :: dx, dy, dz
         logical, intent(in) :: useDynamicProcedure, useClipping
+        integer, intent(in) :: modelID
        ! type(moengWall), intent(in), target, optional :: WallModel
 
         !if (present(WallModel)) then
         !    this%useWallModel = .true.
         !end if 
-        
+        this%SGSmodel = modelID 
         this%useDynamicProcedure = useDynamicProcedure
         this%useClipping = useClipping
 
@@ -125,85 +148,23 @@ contains
         real(rkind), dimension(:,:,:), pointer :: alpha1, alpha2, alpha3, alpha1sqrt
         real(rkind), dimension(:,:,:), pointer :: alpha1tmp
         real(rkind), dimension(:,:,:), pointer :: sigma1, sigma2, sigma3, sigma1sq 
-        real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out), optional :: nuSGSfil
+        real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out), target, optional :: nuSGSfil
+        real(rkind), pointer, dimension(:,:,:) :: S11, S12, S13, S22, S23, S33, Snorm
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3)
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6)
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9)
 
-        G11 => this%rbuff(:,:,:,1); G12 => this%rbuff(:,:,:,2); G13 => this%rbuff(:,:,:,3)
-        G22 => this%rbuff(:,:,:,4); G23 => this%rbuff(:,:,:,5); G33 => this%rbuff(:,:,:,6)
-        
-        I1 => this%rbuff(:,:,:,8); I2 => this%rbuff(:,:,:,9); I3 => this%rbuff(:,:,:,10)
-        I1sq => this%rbuff(:,:,:,11); I1cu => this%rbuff(:,:,:,12)
 
-        alpha1 => this%rbuff(:,:,:,1); alpha2 => this%rbuff(:,:,:,2); alpha3 => this%rbuff(:,:,:,3)
-
-        G11 = dudx*dudx + dvdx*dvdx + dwdx*dwdx 
-        G12 = dudx*dudy + dvdx*dvdy + dwdx*dwdy 
-        G13 = dudx*dudz + dvdx*dvdz + dwdx*dwdz
-        G22 = dudy*dudy + dvdy*dvdy + dwdy*dwdy 
-        G23 = dudy*dudz + dvdy*dvdz + dwdy*dwdz 
-        G33 = dudz*dudz + dvdz*dvdz + dwdz*dwdz
-
-        I1 = G11 + G22 + G33
-        I1sq = I1*I1
-        I1cu = I1sq*I1
-        
-        I2 = -G11*G11 - G22*G22 - G33*G33
-        I2 = I2 - two*G12*G12 - two*G13*G13
-        I2 = I2 - two*G23*G23
-        I2 = I2 + I1sq
-        I2 = half*I2
-
-        I3 = G11*(G22*G33 - G23*G23) 
-        I3 = I3 + G12*(G13*G23 - G12*G33) 
-        I3 = I3 + G13*(G12*G23 - G22*G13)  
-
-        alpha1 = I1sq/nine - I2/three
-        alpha1 = max(alpha1,zero)
-        
-        alpha2 = I1cu/27._rkind - I1*I2/six + I3/two
-       
-        alpha1sqrt => this%rbuff(:,:,:,4)
-        alpha1sqrt = sqrt(alpha1)    
-        alpha1tmp => this%rbuff(:,:,:,5) 
-        alpha1tmp = alpha1*alpha1sqrt
-        alpha1tmp = alpha2/(alpha1tmp)
-        alpha1tmp = min(alpha1tmp,one)
-        alpha1tmp = max(alpha1tmp,-one)
-        alpha1tmp = acos(alpha1tmp)
-        alpha3 = (one/three)*(alpha1tmp)
-          
-  
-        sigma1 => this%rbuff(:,:,:,9); sigma2 => this%rbuff(:,:,:,10); sigma3 => this%rbuff(:,:,:,11)
-        sigma1sq => this%rbuff(:,:,:,12)
-
-        sigma1sq = I1/three + two*alpha1sqrt*cos(alpha3)
-        sigma1sq = max(sigma1sq,zero)
-        sigma1 = sqrt(sigma1sq)
-
-        sigma2 = pi/three + alpha3
-        sigma2 = (-two)*alpha1sqrt*cos(sigma2)
-        sigma2 = sigma2 + I1/three
-        sigma2 = max(sigma2,zero)
-        sigma2 = sqrt(sigma2)
-        
-        sigma3 = pi/three - alpha3
-        sigma3 = (-two)*alpha1sqrt*cos(sigma3)
-        sigma3 = sigma3 + I1/three
-        sigma3 = max(sigma3,zero)
-        sigma3 = sqrt(sigma3)
-
-        if (present(nuSGSfil)) then
-            nuSGSfil = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
-        else
-            this%nuSGS = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
-            call this%spect%fft(this%nuSGS,this%nuSGShat)
-            call this%spect%dealias(this%nuSGShat)
-            call this%spect%ifft(this%nuSGShat,this%nuSGS)  
-        end if 
-        
+        select case (this%SGSmodel)
+        case (0) ! Standard Smagorinsky
+#include "sgs_models/smagorinsky_model_get_nuSGS.F90"
+        case (1) ! Standard Sigma
+#include "sgs_models/sigma_model_get_nuSGS.F90"
+        case default
+            this%nuSGSfil = zero
+            if (present(nuSGSfil)) nuSGSfil = zero
+        end select
 
     end subroutine
 
@@ -411,11 +372,8 @@ contains
         call this%spect%TestFilter_ip(ctmpY)
         call this%spect%ifft(ctmpY,dwdz)  ! <= dwdz is corrwpted
     
-        ! Step 5: Compute Mkl: get \tilde{Dm}
-        call this%get_nuSGS(duidxj,this%nuSGSfil)
-        this%nuSGSfil = deltaRatio * this%nuSGSfil
 
-        ! Step 6: Compute Mkl: Compute \tilde{Skl}
+        ! Step 5: Compute Mkl: Compute \tilde{Skl}
         Sf11 = dudx
         Sf12 = half*(dvdx + dudy)
         Sf13 = half*(dwdx + dudz)
@@ -423,6 +381,10 @@ contains
         Sf23 = half*(dvdz + dwdy)
         Sf33 = dwdz   
 
+        ! Step 6: Compute Mkl: get \tilde{Dm}
+        call this%get_nuSGS(duidxj,this%nuSGSfil)
+        this%nuSGSfil = deltaRatio * this%nuSGSfil
+        
         ! Step 7: Add deltaRat*\tilde{Dm}*\tilde{Skl} to Mkl
         M11 = M11 + this%nuSGSfil*Sf11
         M12 = M12 + this%nuSGSfil*Sf12

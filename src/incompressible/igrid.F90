@@ -95,8 +95,24 @@ module IncompressibleGridNP
 
         real(rkind) :: max_nuSGS
 
+        ! Statistics to compute 
+        real(rkind), dimension(:,:), allocatable :: zStats2dump, runningSum, TemporalMnNOW
+        real(rkind), dimension(:), pointer :: u_mean, v_mean, w_mean, uu_mean, vv_mean, ww_mean, uw_mean 
+        integer :: tidSUM
+
+
+        ! Pointers linked to SGS stuff
+        real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
+        real(rkind), dimension(:,:,:)  , pointer :: nu_SGS
+        real(rkind), dimension(:,:,:)  , pointer :: c_SGS 
+        ! Note that c_SGS is linked to a variable that is constant along & 
+        ! i, j but is still stored as a full 3 rank array. This is mostly done to
+        ! make it convenient us to later do transposes or to compute Sij.
+
+
         contains
             procedure :: init
+            procedure :: init_stats
             procedure :: destroy
             procedure :: printDivergence 
             procedure :: laplacian
@@ -113,7 +129,12 @@ module IncompressibleGridNP
             procedure, private :: addExtraForcingTerm 
             procedure, private :: ApplyCompactFilter
             procedure          :: dumpRestartFile
-            procedure, private :: readRestartFile 
+            procedure, private :: readRestartFile
+            procedure, private :: compute_z_mean 
+            procedure, private :: compute_z_fluct
+            procedure          :: dump_stats
+            procedure          :: compute_stats 
+            procedure          :: finalize_stats 
     end type
 
 contains 
@@ -161,7 +182,7 @@ contains
         logical :: useRestartFile = .false. 
         logical :: useWallModelTop = .false., useWallModelBot = .false.
         logical :: isInviscid = .false., useVerticalFilter = .true.  
-
+        integer :: SGSModelID = 1
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
@@ -173,7 +194,7 @@ contains
                                 time_startDumping, topWall, botWall, &
                                 useRestartFile, restartFile_TID, restartFile_RID, &
                                 useWallModelTop, useWallModelBot, isInviscid, &
-                                useVerticalFilter
+                                useVerticalFilter, SGSModelID 
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -448,8 +469,9 @@ contains
         ! STEP 12: Initialize SGS model
         if (this%useSGS) then
             allocate(this%SGSmodel)
-            call this%sgsModel%init(this%spectC, this%spectE, this%gpC, this%gpE, this%dx, this%dy, this%dz, & 
-                                 useDynamicProcedure, useSGSclipping)
+            call this%sgsModel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
+            this%dy, this%dz, useDynamicProcedure, useSGSclipping)
+            call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij)
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -587,6 +609,9 @@ contains
         call this%spectC%destroy()
         call this%spectE%destroy()
         deallocate(this%spectC, this%spectE)
+        nullify(this%nu_SGS, this%c_SGS, this%tauSGS_ij)
+        call this%sgsModel%destroy()
+        deallocate(this%sgsModel)
     end subroutine
 
     subroutine compute_vorticity(this)
@@ -1236,5 +1261,126 @@ contains
 
     end subroutine 
 
-end module 
+    subroutine init_stats( this)
+        class(igrid), intent(inout), target :: this
+        type(decomp_info), pointer  :: gpC
 
+        gpC => this%gpC
+        this%tidSUM = 0
+
+        allocate(this%zStats2dump(this%nz,7))
+        allocate(this%runningSum(this%nz,7))
+        allocate(this%TemporalMnNOW(this%nz,7))
+        this%u_mean => this%zStats2dump(:,1); this%v_mean => this%zStats2dump(:,2); 
+        this%w_mean => this%zStats2dump(:,3); this%uu_mean => this%zStats2dump(:,4); 
+        this%vv_mean => this%zStats2dump(:,5); this%ww_mean => this%zStats2dump(:,6); 
+        this%uw_mean => this%zStats2dump(:,7)
+
+        this%runningSum = zero
+        nullify(gpC)
+    end subroutine
+
+    subroutine compute_stats(this)
+        class(igrid), intent(inout), target :: this
+        type(decomp_info), pointer :: gpC
+        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3, rbuff4
+
+        rbuff1 => this%rbuffxC(:,:,:,1); rbuff2 => this%rbuffyC(:,:,:,1);
+        rbuff3 => this%rbuffzC(:,:,:,1); 
+        rbuff4 => this%rbuffzC(:,:,:,2); 
+        gpC => this%gpC
+
+        this%tidSUM = this%tidSUM + 1
+
+        ! Compute u - mean 
+        call transpose_x_to_y(this%u,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%u_mean)
+        ! uu mean
+        call this%compute_z_fluct(rbuff3)
+        rbuff4 = rbuff3*rbuff3
+        call this%compute_z_mean(rbuff4, this%uu_mean)
+
+        ! Compute w - mean 
+        call transpose_x_to_y(this%wC,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff4,this%gpC)
+        call this%compute_z_mean(rbuff4, this%w_mean)
+        call this%compute_z_fluct(rbuff4)
+        ! uw mean
+        rbuff3 = rbuff3*rbuff4
+        call this%compute_z_mean(rbuff3, this%uw_mean)
+        ! ww mean 
+        rbuff3 = rbuff4*rbuff4
+        call this%compute_z_mean(rbuff3, this%ww_mean)
+        
+        ! Compute v - mean 
+        call transpose_x_to_y(this%v,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%v_mean)
+        call this%compute_z_fluct(rbuff3)
+        ! vv mean 
+        rbuff4 = rbuff3*rbuff3
+        call this%compute_z_mean(rbuff4, this%vv_mean)
+
+        this%runningSum = this%runningSum + this%zStats2dump
+
+    end subroutine 
+
+    subroutine dump_stats(this)
+        use basic_io, only: write_2d_ascii, write_2D_binary
+        use exits, only: message
+        use kind_parameters, only: clen
+        use mpi
+        class(igrid), intent(inout), target :: this
+        character(len=clen) :: fname
+        character(len=clen) :: tempname
+        integer :: tid
+
+        this%TemporalMnNOW = this%runningSum/real(this%tidSUM,rkind)
+        tid = this%step
+
+        if (nrank == 0) then
+            write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%RunID,"_t",tid,".stt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call write_2d_ascii(this%TemporalMnNOW,fname)
+            !call write_2D_binary(TemporalMnNOW,fname)
+        end if
+        call message(1, "Just dumped a .stt file")
+        call message(2, "Number ot tsteps averaged:",this%tidSUM)
+
+    end subroutine
+
+    subroutine compute_z_fluct(this,fin)
+        use reductions, only: P_SUM
+        class(igrid), intent(in), target :: this
+        real(rkind), dimension(:,:,:), intent(inout) :: fin
+        integer :: k
+        real(rkind) :: fmean
+
+        do k = 1,size(fin,3)
+            fmean = P_SUM(sum(fin(:,:,k)))/(real(this%nx,rkind)*real(this%ny,rkind))
+            fin(:,:,k) = fin(:,:,k) - fmean
+        end do 
+
+    end subroutine
+
+    subroutine compute_z_mean(this, arr_in, vec_out)
+        use reductions, only: P_SUM
+        class(igrid), intent(in), target :: this
+        real(rkind), dimension(:,:,:), intent(in) :: arr_in
+        real(rkind), dimension(:), intent(out) :: vec_out
+        integer :: k
+
+        do k = 1,size(arr_in,3)
+            vec_out(k) = P_SUM(sum(arr_in(:,:,k)))/(real(this%nx,rkind)*real(this%ny,rkind))
+        end do 
+
+    end subroutine
+
+    subroutine finalize_stats(this)
+        class(igrid), intent(inout) :: this
+        nullify(this%u_mean, this%v_mean, this%w_mean, this%uu_mean, this%vv_mean, this%ww_mean, this%uw_mean) 
+        deallocate(this%zStats2dump, this%runningSum, this%TemporalMnNOW)
+    end subroutine 
+
+end module 

@@ -36,4 +36,8 @@ useExtraForcing = .TRUE.
 topWall = 1               ! no_slip = 1, slip = 2
 botWall = 1               ! no_slip = 1, slip = 2  
 
+&CHANNELINPUT
+dpdxForcing = 2.d0/500.d0 
 /
+
+

@@ -7,10 +7,10 @@ module temporalHook
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
-    use AllStatistics 
     integer :: nt_print2screen = 10
     integer :: nt_getMaxKE = 10
     integer :: tid_statsDump = 10000
+    integer :: tid_compStats = 20
     real(rkind) :: time_startDumping = 15000._rkind
     integer :: ierr 
 contains
@@ -23,7 +23,8 @@ contains
         end if
 
         if (mod(gp%step,nt_getMaxKE) == 0) then
-            call message(1,"Max KE:",P_MAXVAL(half*(gp%u**2 + gp%v**2 + gp%wC**2)))
+            call message(1,"Max KE:",gp%getMaxKE())
+            call message(1,"Max nuSGS:",gp%max_nuSGS)
             call toc()
             call tic()
         end if 
@@ -33,14 +34,18 @@ contains
            call dumpData4Matlab(gp) 
         end if 
 
-        if ((mod(gp%step,tid_statsDump) == 0) .and. (gp%tsim > time_startDumping)) then
-            call dump_stats(gp)
+        if ((mod(gp%step,tid_compStats)==0) .and. (gp%tsim > time_startDumping)) then
+            call gp%compute_stats()
         end if 
 
-        call mpi_barrier(mpi_comm_world,ierr)
-        !if (mod(gp%step,gp%t_restartDump) == 0) then
-        !    ! Incomplete 
-        !end if 
+        if ((mod(gp%step,tid_statsDump) == 0) .and. (gp%tsim > time_startDumping)) then
+            call gp%compute_stats()
+            call gp%dump_stats()
+        end if 
+        
+        if (mod(gp%step,gp%t_restartDump) == 0) then
+            call gp%dumpRestartfile()
+        end if
 
     end subroutine
 
