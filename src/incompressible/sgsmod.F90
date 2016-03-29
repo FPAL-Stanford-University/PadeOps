@@ -149,7 +149,7 @@ contains
             deallocate(this%Ops2ndOrder)
         end if     
         nullify( this%nuSGS)
-        deallocate(this%Lij, this%Mkl)
+        if(this%useDynamicProcedure) deallocate(this%Lij, this%Mkl)
         nullify(this%sp_gp, this%gp, this%spect)
         deallocate(this%rbuff, this%cbuff)
         deallocate(this%rtmpZ, this%rtmpY)
