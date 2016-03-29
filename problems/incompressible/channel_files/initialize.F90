@@ -20,7 +20,7 @@ end module
 subroutine meshgen(decomp, dx, dy, dz, mesh)
     use channel_parameters    
     use kind_parameters,  only: rkind
-    use constants,        only: two,pi
+    use constants,        only: two,pi,four,three
     use decomp_2d,        only: decomp_info
     implicit none
 
@@ -30,7 +30,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: i,j,k
     integer :: ix1, ixn, iy1, iyn, iz1, izn
 
-    Lx = pi; Ly = pi; Lz = 2._rkind
+    Lx = four*pi; Ly = four/three*pi; Lz = 2._rkind
 
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
@@ -63,11 +63,18 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine getForcing(dpdx)
+subroutine getForcing(inputfile,dpdx)
     use constants, only: two
     use kind_parameters, only: rkind
+    character(len=*), intent(in) :: inputfile
     real(rkind), intent(out) :: dpdx
     real(rkind) :: dpdxForcing = two/500._rkind
+    integer :: ioUnit
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=CHANNELINPUT)
+    close(ioUnit)
 
     namelist /CHANNELINPUT/ dpdxForcing
     
@@ -115,26 +122,30 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
  
 
     Uperiods = 4.0; Vperiods = 4.0; zpeak = 0.3;
-    epsfac = 0.5d0;
+    epsfac = 0.1d0;
 
-    !do k = 1,size(u,3)
-    !    do j = 1,size(u,2)
-    !        do i = 1,size(u,1)
-    !            u(i,j,k) = (1.0d0-exp(-z(i,j,k)*2.5d0)*cos(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz) &
-    !                    *cos(Uperiods*2.0d0*pi*y(i,j,k)/Ly)*exp(-0.5e0*(z(i,j,k)/zpeak/Lz)**2.0d0))
-    !            v(i,j,k) = (exp(-z(i,j,k)*2.5d0)*sin(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz)& 
-    !                        *cos(Vperiods*2.0d0*pi*x(i,j,k)/Lx)*exp(-0.5d0*(z(i,j,k)/zpeak/Lz)**2.0d0))
-    !            w(i,j,k) = zero  
-    !        end do 
-    !    end do 
-    !end do 
+    do k = 1,size(u,3)
+        do j = 1,size(u,2)
+            do i = 1,size(u,1)
+                !u(i,j,k) = (1.0d0-exp(-z(i,j,k)*2.5d0)*cos(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz) &
+                !        *cos(Uperiods*2.0d0*pi*y(i,j,k)/Ly)*exp(-0.5e0*(z(i,j,k)/zpeak/Lz)**2.0d0))
+                !v(i,j,k) = (exp(-z(i,j,k)*2.5d0)*sin(z(i,j,k)*2.50d0)+epsfac*exp(0.5d0)*(z(i,j,k)/Lz)& 
+                !            *cos(Vperiods*2.0d0*pi*x(i,j,k)/Lx)*exp(-0.5d0*(z(i,j,k)/zpeak/Lz)**2.0d0))
+                !w(i,j,k) = zero  
+                u(i,j,k) = (1.0d0-(z(i,j,k)-1.0d0)**8) + epsfac*0.5d0*Lx*dsin(pi*(z(i,j,k)-1.0d0))*dcos(2.0d0*two*pi/Lx*x(i,j,k))*dsin(two*pi/Ly*y(i,j,k))
+                v(i,j,k) = -epsfac*0.5d0*Ly*dsin(pi*(z(i,j,k)-1.0d0))*dsin(2.0d0*two*pi/Lx*x(i,j,k))*dcos(two*pi/Ly*y(i,j,k))
+                w(i,j,k) = -epsfac*(1.0d0+dcos(pi*(z(i,j,k)-1.0d0-dz/two)))*dsin(2.0d0*two*pi/Lx*x(i,j,k))*dsin(two*pi/Ly*y(i,j,k))
+
+            end do 
+        end do 
+    end do 
    
-    u = half*z*(Lz - z) !one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
-        !    + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    v = zero!exp(-z/delta_Ek)*sin(z/delta_Ek) + &
-        !    + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-    !w = zero  
-    w = half*half*z*(Lz - z) 
+    !u = half*z*(Lz - z) !one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
+    !    !    + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    !v = zero!exp(-z/delta_Ek)*sin(z/delta_Ek) + &
+    !    !    + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    !!w = zero  
+    !w = half*half*z*(Lz - z) 
 
     ! Add random numbers
     !allocate(randArr(size(u,1),size(u,2),size(u,3)))
@@ -152,6 +163,12 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     !    v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)*0.5*(1 - cos(2*pi*y(:,:,k)/Ly))*0.5*(1 - cos(2*pi*x(:,:,k)/Lx))
     !end do  
     !deallocate(randArr)
+    !write(*,*) '--x--', maxval(x), minval(x)
+    !write(*,*) '--y--', maxval(y), minval(y)
+    !write(*,*) '--z--', maxval(z), minval(z)
+    !write(*,*) '--u--', maxval(u), minval(u)
+    !write(*,*) '--v--', maxval(v), minval(v)
+    !write(*,*) '--w--', maxval(w), minval(w)
 
     nullify(u,v,w,x,y,z)
     

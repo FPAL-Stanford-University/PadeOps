@@ -1,6 +1,6 @@
 module IncompressibleGridNP
     use kind_parameters, only: rkind, clen
-    use constants, only: imi, zero,one,two,three,half 
+    use constants, only: imi, zero,one,two,three,half,fourth 
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
     use igrid_hooks, only: meshgen, initfields_stagg, getforcing
@@ -97,7 +97,10 @@ module IncompressibleGridNP
 
         ! Statistics to compute 
         real(rkind), dimension(:,:), allocatable :: zStats2dump, runningSum, TemporalMnNOW
-        real(rkind), dimension(:), pointer :: u_mean, v_mean, w_mean, uu_mean, vv_mean, ww_mean, uw_mean 
+        real(rkind), dimension(:), pointer :: u_mean, v_mean, w_mean, uu_mean, uv_mean, uw_mean, vv_mean, vw_mean, ww_mean
+        real(rkind), dimension(:), pointer :: tau11_mean, tau12_mean, tau13_mean, tau22_mean, tau23_mean, tau33_mean
+        real(rkind), dimension(:), pointer :: S11_mean, S12_mean, S13_mean, S22_mean, S23_mean, S33_mean
+        real(rkind), dimension(:), pointer :: viscdissp, sgsdissp, sgscoeff_mean
         integer :: tidSUM
 
 
@@ -198,6 +201,7 @@ contains
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
+        write(*,*) inputfile
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
         read(unit=ioUnit, NML=INPUT)
         read(unit=ioUnit, NML=IINPUT)
@@ -373,7 +377,7 @@ contains
 
         allocate(this%rbuffxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),2))
         allocate(this%rbuffyC(this%gpC%ysz(1),this%gpC%ysz(2),this%gpC%ysz(3),2))
-        allocate(this%rbuffzC(this%gpC%zsz(1),this%gpC%zsz(2),this%gpC%zsz(3),2))
+        allocate(this%rbuffzC(this%gpC%zsz(1),this%gpC%zsz(2),this%gpC%zsz(3),4))
 
         allocate(this%rbuffxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2))
         allocate(this%rbuffyE(this%gpE%ysz(1),this%gpE%ysz(2),this%gpE%ysz(3),2))
@@ -458,7 +462,7 @@ contains
 
         ! STEP 10b: Compute additional forcing (channel)
         if (this%useExtraForcing) then
-            call getForcing(dpFdx)
+            call getForcing(inputfile, dpFdx)
             call message(0," Turning on aditional forcing")
             call message(1," dP_dx = ", dpFdx)
             call this%spectC%alloc_r2c_out(this%dpF_dxhat)
@@ -1270,13 +1274,36 @@ contains
         gpC => this%gpC
         this%tidSUM = 0
 
-        allocate(this%zStats2dump(this%nz,7))
-        allocate(this%runningSum(this%nz,7))
-        allocate(this%TemporalMnNOW(this%nz,7))
-        this%u_mean => this%zStats2dump(:,1); this%v_mean => this%zStats2dump(:,2); 
-        this%w_mean => this%zStats2dump(:,3); this%uu_mean => this%zStats2dump(:,4); 
-        this%vv_mean => this%zStats2dump(:,5); this%ww_mean => this%zStats2dump(:,6); 
-        this%uw_mean => this%zStats2dump(:,7)
+        allocate(this%zStats2dump(this%nz,24))
+        allocate(this%runningSum(this%nz,24))
+        allocate(this%TemporalMnNOW(this%nz,24))
+
+        ! mean velocities
+        this%u_mean => this%zStats2dump(:,1);  this%v_mean  => this%zStats2dump(:,2);  this%w_mean => this%zStats2dump(:,3) 
+
+        ! mean squared velocities
+        this%uu_mean => this%zStats2dump(:,4); this%uv_mean => this%zStats2dump(:,5); this%uw_mean => this%zStats2dump(:,6)
+                                               this%vv_mean => this%zStats2dump(:,7); this%vw_mean => this%zStats2dump(:,8) 
+                                                                                      this%ww_mean => this%zStats2dump(:,9)
+
+        ! SGS stresses
+        this%tau11_mean => this%zStats2dump(:,10); this%tau12_mean => this%zStats2dump(:,11); this%tau13_mean => this%zStats2dump(:,12)
+                                                   this%tau22_mean => this%zStats2dump(:,13); this%tau23_mean => this%zStats2dump(:,14) 
+                                                                                              this%tau33_mean => this%zStats2dump(:,15)
+
+        ! SGS dissipation
+        this%sgsdissp => this%zStats2dump(:,16)
+
+        ! velocity derivative products - for viscous dissipation
+        this%viscdissp => this%zStats2dump(:,17)
+
+        ! means of velocity derivatives
+        this%S11_mean => this%zStats2dump(:,18); this%S12_mean => this%zStats2dump(:,19); this%S13_mean => this%zStats2dump(:,20)
+                                                 this%S22_mean => this%zStats2dump(:,21); this%S23_mean => this%zStats2dump(:,22)
+                                                                                          this%S33_mean => this%zStats2dump(:,23)
+
+        ! SGS model coefficient
+        this%sgscoeff_mean => this%zStats2dump(:,24)
 
         this%runningSum = zero
         nullify(gpC)
@@ -1285,11 +1312,14 @@ contains
     subroutine compute_stats(this)
         class(igrid), intent(inout), target :: this
         type(decomp_info), pointer :: gpC
-        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3, rbuff4
+        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3, rbuff4, rbuff5, rbuff6
 
         rbuff1 => this%rbuffxC(:,:,:,1); rbuff2 => this%rbuffyC(:,:,:,1);
         rbuff3 => this%rbuffzC(:,:,:,1); 
         rbuff4 => this%rbuffzC(:,:,:,2); 
+        rbuff5 => this%rbuffzC(:,:,:,3); 
+        rbuff6 => this%rbuffzC(:,:,:,4); 
+        !rbuff7 => this%rbuffzC(:,:,:,5); 
         gpC => this%gpC
 
         this%tidSUM = this%tidSUM + 1
@@ -1298,33 +1328,134 @@ contains
         call transpose_x_to_y(this%u,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
         call this%compute_z_mean(rbuff3, this%u_mean)
-        ! uu mean
-        call this%compute_z_fluct(rbuff3)
-        rbuff4 = rbuff3*rbuff3
-        call this%compute_z_mean(rbuff4, this%uu_mean)
+
+        ! Compute v - mean 
+        call transpose_x_to_y(this%v,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff4,this%gpC)
+        call this%compute_z_mean(rbuff4, this%v_mean)
 
         ! Compute w - mean 
         call transpose_x_to_y(this%wC,rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff4,this%gpC)
-        call this%compute_z_mean(rbuff4, this%w_mean)
-        call this%compute_z_fluct(rbuff4)
+        call transpose_y_to_z(rbuff2,rbuff5,this%gpC)
+        call this%compute_z_mean(rbuff5, this%w_mean)
+
+        ! uu mean
+        rbuff6 = rbuff3*rbuff3
+        call this%compute_z_mean(rbuff6, this%uu_mean)
+
+        ! uv mean
+        rbuff6 = rbuff3*rbuff4
+        call this%compute_z_mean(rbuff6, this%uv_mean)
+
         ! uw mean
-        rbuff3 = rbuff3*rbuff4
-        call this%compute_z_mean(rbuff3, this%uw_mean)
-        ! ww mean 
-        rbuff3 = rbuff4*rbuff4
-        call this%compute_z_mean(rbuff3, this%ww_mean)
-        
-        ! Compute v - mean 
-        call transpose_x_to_y(this%v,rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%v_mean)
-        call this%compute_z_fluct(rbuff3)
+        rbuff6 = rbuff3*rbuff5
+        call this%compute_z_mean(rbuff6, this%uw_mean)
+
         ! vv mean 
-        rbuff4 = rbuff3*rbuff3
-        call this%compute_z_mean(rbuff4, this%vv_mean)
+        rbuff6 = rbuff4*rbuff4
+        call this%compute_z_mean(rbuff6, this%vv_mean)
+
+        ! vw mean 
+        rbuff6 = rbuff4*rbuff5
+        call this%compute_z_mean(rbuff6, this%vw_mean)
+
+        ! ww mean 
+        rbuff6 = rbuff5*rbuff5
+        call this%compute_z_mean(rbuff6, this%ww_mean)
+
+        ! tau_11
+        call transpose_x_to_y(this%tauSGS_ij(:,:,:,1),rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%tau11_mean)
+
+        ! tau_12
+        call transpose_x_to_y(this%tauSGS_ij(:,:,:,2),rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%tau12_mean)
+
+        ! tau_13
+        call transpose_x_to_y(this%tauSGS_ij(:,:,:,3),rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%tau13_mean)
+
+        ! tau_22
+        call transpose_x_to_y(this%tauSGS_ij(:,:,:,4),rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%tau22_mean)
+
+        ! tau_23
+        call transpose_x_to_y(this%tauSGS_ij(:,:,:,5),rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%tau23_mean)
+
+        ! tau_33
+        call transpose_x_to_y(this%tauSGS_ij(:,:,:,6),rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%tau33_mean)
+
+
+        ! sgs dissipation
+        rbuff1 = this%tauSGS_ij(:,:,:,1)*this%tauSGS_ij(:,:,:,1) + &
+                 this%tauSGS_ij(:,:,:,2)*this%tauSGS_ij(:,:,:,2) + &
+                 this%tauSGS_ij(:,:,:,3)*this%tauSGS_ij(:,:,:,3)
+        rbuff1 = rbuff1 + two*(this%tauSGS_ij(:,:,:,4)*this%tauSGS_ij(:,:,:,4) + &
+                               this%tauSGS_ij(:,:,:,5)*this%tauSGS_ij(:,:,:,5) + &
+                               this%tauSGS_ij(:,:,:,6)*this%tauSGS_ij(:,:,:,6) )
+        rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)         ! note: factor of half is in dump_stats
+
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%sgsdissp)
+
+        ! viscous dissipation- *****????? Is rbuff1 contaminated after transpose_x_to_y? *****?????
+        rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)        ! note: factor of fourth is in dump_stats
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%viscdissp)
+
+        ! note: factor of half in all S_** is in dump_stats
+        ! S_11
+        rbuff1 = this%tauSGS_ij(:,:,:,1)/(this%nu_SGS + 1.0d-14)
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%S11_mean)
+
+        ! S_12
+        rbuff1 = this%tauSGS_ij(:,:,:,2)/(this%nu_SGS + 1.0d-14)
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%S12_mean)
+
+        ! S_13
+        rbuff1 = this%tauSGS_ij(:,:,:,3)/(this%nu_SGS + 1.0d-14)
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%S13_mean)
+
+        ! S_22
+        rbuff1 = this%tauSGS_ij(:,:,:,4)/(this%nu_SGS + 1.0d-14)
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%S22_mean)
+
+        ! S_23
+        rbuff1 = this%tauSGS_ij(:,:,:,5)/(this%nu_SGS + 1.0d-14)
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%S23_mean)
+
+        ! S_33
+        rbuff1 = this%tauSGS_ij(:,:,:,6)/(this%nu_SGS + 1.0d-14)
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%S33_mean)
 
         this%runningSum = this%runningSum + this%zStats2dump
+
+        !write(*,*) 'In stats'
+        !write(*,*) 'umean', maxval(this%u_mean), minval(this%u_mean)
+        !write(*,*) 'vmean', maxval(this%v_mean), minval(this%v_mean)
+        !write(*,*) 'wmean', maxval(this%w_mean), minval(this%w_mean)
 
     end subroutine 
 
@@ -1340,6 +1471,27 @@ contains
 
         this%TemporalMnNOW = this%runningSum/real(this%tidSUM,rkind)
         tid = this%step
+
+        ! compute (u_i'u_j')
+        this%TemporalMnNOW(:,4) = this%TemporalMnNOW(:,4) - this%TemporalMnNOW(:,1)*this%TemporalMnNOW(:,1)
+        this%TemporalMnNOW(:,5) = this%TemporalMnNOW(:,5) - this%TemporalMnNOW(:,1)*this%TemporalMnNOW(:,2)
+        this%TemporalMnNOW(:,6) = this%TemporalMnNOW(:,6) - this%TemporalMnNOW(:,1)*this%TemporalMnNOW(:,3)
+        this%TemporalMnNOW(:,7) = this%TemporalMnNOW(:,7) - this%TemporalMnNOW(:,2)*this%TemporalMnNOW(:,2)
+        this%TemporalMnNOW(:,8) = this%TemporalMnNOW(:,8) - this%TemporalMnNOW(:,2)*this%TemporalMnNOW(:,3)
+        this%TemporalMnNOW(:,9) = this%TemporalMnNOW(:,9) - this%TemporalMnNOW(:,3)*this%TemporalMnNOW(:,3)
+
+        ! compute sgs dissipation
+        this%TemporalMnNOW(:,16) = half*this%TemporalMnNOW(:,16)
+
+        ! compute viscous dissipation
+        this%TemporalMnNOW(:,17) = this%TemporalMnNOW(:,17) - (                        &
+                                   this%TemporalMnNOW(:,18)*this%TemporalMnNOW(:,18) + &
+                                   this%TemporalMnNOW(:,21)*this%TemporalMnNOW(:,21) + &
+                                   this%TemporalMnNOW(:,23)*this%TemporalMnNOW(:,23) + &
+                              two*(this%TemporalMnNOW(:,19)*this%TemporalMnNOW(:,19) + &
+                                   this%TemporalMnNOW(:,20)*this%TemporalMnNOW(:,20) + & 
+                                   this%TemporalMnNOW(:,22)*this%TemporalMnNOW(:,22)))
+        this%TemporalMnNOW(:,17) = half*this%TemporalMnNOW(:,17)/this%Re     ! note: this is actually 2/Re*(..)/4
 
         if (nrank == 0) then
             write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%RunID,"_t",tid,".stt"
@@ -1381,7 +1533,10 @@ contains
 
     subroutine finalize_stats(this)
         class(igrid), intent(inout) :: this
-        nullify(this%u_mean, this%v_mean, this%w_mean, this%uu_mean, this%vv_mean, this%ww_mean, this%uw_mean) 
+        nullify(this%u_mean, this%v_mean, this%w_mean, this%uu_mean, this%uv_mean, this%uw_mean, this%vv_mean, this%vw_mean, this%ww_mean)
+        nullify(this%tau11_mean, this%tau12_mean, this%tau13_mean, this%tau22_mean, this%tau23_mean, this%tau33_mean)
+        nullify(this%S11_mean, this%S12_mean, this%S13_mean, this%S22_mean, this%S23_mean, this%S33_mean)
+        nullify(this%sgsdissp, this%viscdissp, this%sgscoeff_mean)
         deallocate(this%zStats2dump, this%runningSum, this%TemporalMnNOW)
     end subroutine 
 

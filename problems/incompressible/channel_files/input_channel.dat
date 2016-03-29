@@ -1,14 +1,14 @@
 &INPUT
 
-inputdir  =  "/home/aditya90/Codes/PadeOps/data/channel/input/"       ! Directory for input files
-outputdir  = "/home/aditya90/Codes/PadeOps/data/channel/output/"      ! Directory for output files
+inputdir  =  "/home/nghaisas/PadeRuns/channel/180_sigma/input/"       ! Directory for input files
+outputdir  = "/home/nghaisas/PadeRuns/channel/180_sigma/output/"      ! Directory for output files
 
 nx = 32                  ! Number of points in X
 ny = 32                  ! Number of points in Y
-nz = 128                 ! Number of points in Z
+nz = 64                 ! Number of points in Z
 
 dt = 0.01D0               ! Fixed time step value (Set to negative to disable)
-tstop = 6000.D0              ! Physical time to stop the simulation
+tstop = 1.D0              ! Physical time to stop the simulation
 CFL = -1.D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
@@ -19,21 +19,21 @@ periodicz = .FALSE.        ! Periodic in Z?
 
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-t_restartDump = 999999    ! Number of timesteps before restart file is written 
-t_dataDump    = 4000       ! Number of timesteps before data dump is performed 
+t_restartDump = 50    ! Number of timesteps before restart file is written 
+t_dataDump    = 10       ! Number of timesteps before data dump is performed 
 
 /
 
 /
 
 &IINPUT
-Re = 500.D0              ! Reynolds Number
+Re = 3250.D0              ! Reynolds Number
 Pr = 0.7D0                ! Prandtl Number
-runID = 20                 ! Run ID (for output file name)
+runID = 0                 ! Run ID (for output file name)
 useSGS = .TRUE.          ! LES mode or DNS mode?
 useCoriolis = .FALSE. 
 SGSModelID = 1            ! 0: smagorinsky, 1: sigma
-useDynamicProcedure = .TRUE. 
+useDynamicProcedure = .FALSE. 
 useSGSClipping = .TRUE. 
 useExtraForcing = .TRUE. 
 topWall = 1               ! no_slip = 1, slip = 2
@@ -48,7 +48,7 @@ useVerticalFilter = .TRUE.
 
 
 &CHANNELINPUT
-dpdxForcing = 2.d0/500.d0 
+dpdxForcing = 0.00301846153d0 
 /
 
 
