@@ -16,17 +16,16 @@ module IncompressibleGridNP
     use cd06staggstuff, only: cd06stagg
     use cf90stuff, only: cf90  
     use sgsmod, only: sgs
+    use numerics, only: useCompactFD, AdvectionForm
 
     implicit none
 
     private
     public :: igrid 
 
-    logical, parameter :: useCompactFD = .true. 
-    integer, parameter :: AdvectionForm = 2 
 
-    integer, parameter :: no_slip = 1, slip = 2
     complex(rkind), parameter :: zeroC = zero + imi*zero 
+   integer, parameter :: no_slip = 1, slip = 2
 
 
     ! Allow non-zero value (isEven) 
@@ -477,10 +476,6 @@ contains
         this%max_nuSGS = zero
 
         ! Final Step: Safeguard against unfinished procedures
-        if ((.not.useCompactFD) .and. (AdvectionForm == 2)) then
-            call GracefulExit("Skew Symmetric Form is not allowed with 2nd order & 
-                & FD. Use 6th order Compact FD scheme instead",213)
-        end if 
 
         call message("IGRID initialized successfully!")
         call message("===========================================================")
@@ -786,23 +781,34 @@ contains
         rtmpx1 = -this%u*dwdx
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        if (useCompactFD) then
+            call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%interpZ_Cell2Edge(ctmpz1,ctmpz3,zeroC,zeroC)
+        end if 
         call transpose_z_to_y(ctmpz3,this%w_rhs,this%sp_gpE)
 
         rtmpx1 = -this%v*dwdy
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        if (useCompactFD) then
+            call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%interpZ_Cell2Edge(ctmpz1,ctmpz3,zeroC,zeroC)
+        end if 
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
         this%w_rhs = this%w_rhs + ctmpy2
 
         rtmpx1 = -this%wC*dwdz
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        if (useCompactFD) then
+            call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%interpZ_Cell2Edge(ctmpz1,ctmpz3,zeroC,zeroC)
+        end if 
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
         this%w_rhs = this%w_rhs + ctmpy2
-
 
 
         this%u_rhs = half*this%u_rhs
@@ -825,10 +831,22 @@ contains
         rtmpx1 = -this%u*this%wC
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        
+        if (useCompactFD) then
+            call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%ddz_C2C(ctmpz1,ctmpz2,topBC_w,botBC_w)
+        end if 
+        
         call transpose_z_to_y(ctmpz2,ctmpy1,this%sp_gpC)
         this%u_rhs = this%u_rhs + half*ctmpy1
-        call this%derW%InterpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        
+        if (useCompactFD) then
+            call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%interpZ_Cell2Edge(ctmpz1,ctmpz3,zeroC,zeroC)
+        end if 
+        
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
         call this%spectE%mtimes_ik1_ip(ctmpy2)
         this%w_rhs = this%w_rhs + half*ctmpy2
@@ -842,10 +860,22 @@ contains
         rtmpx1 = -this%v*this%wC
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        
+        if (useCompactFD) then
+            call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%ddz_C2C(ctmpz1,ctmpz2,topBC_w,botBC_w)
+        end if 
+        
         call transpose_z_to_y(ctmpz2,ctmpy1,this%sp_gpC)
         this%v_rhs = this%v_rhs + half*ctmpy1
-        call this%derW%InterpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+
+        if (useCompactFD) then
+            call this%derW%InterpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%ddz_C2E(ctmpz1,ctmpz3,topBC_w,botBC_w)
+        end if 
+
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
         call this%spectE%mtimes_ik2_ip(ctmpy2)
         this%w_rhs = this%w_rhs + half*ctmpy2
@@ -853,7 +883,13 @@ contains
         rtmpx1 = -this%wC*this%wC
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derWW%ddz_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        
+        if (useCompactFD) then
+            call this%derWW%ddz_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%ddz_C2E(ctmpz1,ctmpz3,.true.,.true.)
+        end if 
+
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
         this%w_rhs = this%w_rhs + half*ctmpy2
 

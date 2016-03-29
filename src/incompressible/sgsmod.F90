@@ -7,6 +7,8 @@ module sgsmod
     use mpi 
     use cd06staggstuff, only: cd06stagg
     use reductions, only: p_maxval, p_sum
+    use numerics, only: useCompactFD 
+    use StaggOpsMod, only: staggOps  
 
     implicit none
 
@@ -15,6 +17,7 @@ module sgsmod
 
     real(rkind) :: c_sigma = 1.35_rkind
     real(rkind), parameter :: deltaRatio = four**(two/three)
+    complex(rkind), parameter :: zeroC = zero + imi*zero
 
     type :: sgs
         private
@@ -31,7 +34,8 @@ module sgsmod
         
         real(rkind), dimension(:,:,:), allocatable :: rtmpY, rtmpZ
 
-        type(cd06stagg), allocatable :: derZ
+        type(cd06stagg), allocatable :: derZ_EE, derZ_OO
+        type(staggOps), allocatable :: Ops2ndOrder
 
         logical :: useWallModel = .false.
         logical :: useDynamicProcedure = .false.
@@ -112,26 +116,38 @@ contains
         
         allocate(this%ctmpCz2(this%sp_gp%zsz(1), this%sp_gp%zsz(2), this%sp_gp%zsz(3)))
 
-        allocate(this%derZ)
-        call this%derZ%init( this%sp_gp%zsz(3), dz, isTopEven = .true., isBotEven = .true., & 
+        if (useCompactFD) then
+            allocate(this%derZ_EE, this%derZ_OO)
+            call this%derZ_EE%init( this%sp_gp%zsz(3), dz, isTopEven = .true., isBotEven = .true., & 
                              isTopSided = .true., isBotSided = .true.) 
+            call this%derZ_OO%init( this%sp_gp%zsz(3), dz, isTopEven = .false., isBotEven = .false., & 
+                             isTopSided = .true., isBotSided = .true.) 
+        else
+            allocate(this%Ops2ndOrder)
+            call this%Ops2ndOrder%init(gpC,gpE,0,dx,dy,dz,spectC%spectdecomp,spectE%spectdecomp)
+        end if 
+        if (this%useDynamicProcedure) then
+           allocate(this%Lij(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
+           allocate(this%Mkl(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
+        end if 
 
-         if (this%useDynamicProcedure) then
-            allocate(this%Lij(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
-            allocate(this%Mkl(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
-         end if 
-
-         this%meanFact = one/(gpC%xsz(1)*gpC%ysz(2))
-         allocate(this%rtmpY(gpC%ysz(1),gpC%ysz(2),gpC%ysz(3)))
-         allocate(this%rtmpZ(gpC%zsz(1),gpC%zsz(2),gpC%zsz(3)))
+        this%meanFact = one/(real(gpC%xsz(1))*real(gpC%ysz(2)))
+        allocate(this%rtmpY(gpC%ysz(1),gpC%ysz(2),gpC%ysz(3)))
+        allocate(this%rtmpZ(gpC%zsz(1),gpC%zsz(2),gpC%zsz(3)))
 
     end subroutine
 
     subroutine destroy(this)
         class(sgs), intent(inout) :: this
 
-        call this%derZ%destroy()
-        deallocate(this%derZ)
+        if (useCompactFD) then
+            call this%derZ_OO%destroy()
+            call this%derZ_EE%destroy()
+            deallocate(this%derZ_OO, this%derZ_EE)
+        else
+            call this%Ops2ndOrder%destroy()
+            deallocate(this%Ops2ndOrder)
+        end if     
         nullify( this%nuSGS)
         deallocate(this%Lij, this%Mkl)
         nullify(this%sp_gp, this%gp, this%spect)
