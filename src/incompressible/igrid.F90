@@ -200,7 +200,6 @@ contains
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
-        write(*,*) inputfile
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
         read(unit=ioUnit, NML=INPUT)
         read(unit=ioUnit, NML=IINPUT)
@@ -1484,6 +1483,12 @@ contains
         call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
         call this%compute_z_mean(rbuff3, this%S33_mean)
+
+        ! sgs coefficient
+        call transpose_x_to_y(this%c_SGS,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        !call this%compute_z_mean(rbuff3, this%sgscoeff_mean)    ! -- averaging not needed
+        this%sgscoeff_mean(:) = rbuff3(1,1,:)
 
         this%runningSum = this%runningSum + this%zStats2dump
 
