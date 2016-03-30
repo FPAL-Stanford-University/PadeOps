@@ -1046,7 +1046,6 @@ contains
             !! advancement.
         end if 
 
-
         ! Step 4: Time Step 
         if (this%step == 0) then
             do k = 1,size(this%uhat,3)

@@ -25,6 +25,7 @@ contains
         if (mod(gp%step,nt_getMaxKE) == 0) then
             call message(1,"Max KE:",gp%getMaxKE())
             call message(1,"Max nuSGS:",gp%max_nuSGS)
+            call message(1,"Max cSGS:",p_maxval(maxval(gp%c_SGS(1,1,:))))
             call toc()
             call tic()
         end if 

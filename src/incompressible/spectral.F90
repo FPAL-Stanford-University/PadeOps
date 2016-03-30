@@ -5,7 +5,7 @@ module spectralMod
                     transpose_y_to_z, transpose_z_to_y, nrank 
     use decomp_2d_fft, only: decomp_2d_fft_init, decomp_2d_fft_finalize, decomp_2d_fft_get_size
     use exits, only: GracefulExit, message 
-    use constants, only: pi, one, zero, two, three 
+    use constants, only: pi, one, zero, two, three, four 
     use fft_3d_stuff, only: fft_3d
     use mpi
     use reductions, only: p_sum 

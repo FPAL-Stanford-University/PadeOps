@@ -4,7 +4,7 @@
         I1 => this%rbuff(:,:,:,8); I2 => this%rbuff(:,:,:,9); I3 => this%rbuff(:,:,:,10)
         I1sq => this%rbuff(:,:,:,11); I1cu => this%rbuff(:,:,:,12)
 
-        alpha1 => this%rbuff(:,:,:,1); alpha2 => this%rbuff(:,:,:,2); alpha3 => this%rbuff(:,:,:,3)
+        alpha1 => this%rbuff(:,:,:,19); alpha2 => this%rbuff(:,:,:,20); alpha3 => this%rbuff(:,:,:,21)
 
         G11 = dudx*dudx + dvdx*dvdx + dwdx*dwdx 
         G12 = dudx*dudy + dvdx*dvdy + dwdx*dwdy 

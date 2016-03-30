@@ -1,6 +1,6 @@
 module sgsmod
     use kind_parameters, only: rkind, clen
-    use constants, only: imi, pi, zero,one,two,three,half, four, nine, six  
+    use constants, only: imi, pi, zero,one,two,three,half, four,eight, nine, six  
     use decomp_2d
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
@@ -16,6 +16,7 @@ module sgsmod
     public :: sgs
 
     real(rkind) :: c_sigma = 1.35_rkind
+    real(rkind) :: c_smag = 0.165_rkind
     real(rkind), parameter :: deltaRatio = four**(two/three)
     complex(rkind), parameter :: zeroC = zero + imi*zero
 
@@ -65,7 +66,11 @@ contains
         real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: tauSGS_ij
 
         if (allocated(this%rbuff)) then
-            c_SGS => this%rbuff(:,:,:,8)
+            if (this%useDynamicProcedure) then
+                c_SGS => this%rbuff(:,:,:,8)
+            else
+                c_SGS => this%rbuff(:,:,:,19) !Locations that are certainly zero
+            end if 
             nuSGS => this%rbuff(:,:,:,7)
             tauSGS_ij => this%rbuff(:,:,:,13:18)
         else
@@ -93,12 +98,20 @@ contains
         this%useDynamicProcedure = useDynamicProcedure
         this%useClipping = useClipping
 
-        allocate(this%rbuff(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),19))
-        
+        allocate(this%rbuff(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),21))
+        this%rbuff = zero  
         this%spect => spectC
         this%spectE => spectE
         this%deltaFilter = ((1.5_rkind**2)*dx*dy*dz)**(one/three)
-        this%mconst = (this%deltaFilter*c_sigma)**2
+
+        select case (this%SGSmodel)
+        case(0)
+            this%mconst = (this%deltaFilter*c_smag)**2
+        case(1)
+            this%mconst = (this%deltaFilter*c_sigma)**2
+        case default 
+            call GracefulExit("Invalid choice for SGS model.",2013)
+        end select
 
         this%nuSGS => this%rbuff(:,:,:,7)
         this%nuSGSfil => this%rbuff(:,:,:,19)
@@ -165,7 +178,7 @@ contains
         real(rkind), dimension(:,:,:), pointer :: alpha1tmp
         real(rkind), dimension(:,:,:), pointer :: sigma1, sigma2, sigma3, sigma1sq 
         real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out), target, optional :: nuSGSfil
-        real(rkind), pointer, dimension(:,:,:) :: S11, S12, S13, S22, S23, S33, Snorm
+        real(rkind), pointer, dimension(:,:,:) :: S11, S12, S13, S22, S23, S33
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3)
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6)
@@ -205,7 +218,6 @@ contains
         tau11 => this%rbuff(:,:,:,13); tau12 => this%rbuff(:,:,:,14); tau13 => this%rbuff(:,:,:,15)
         tau22 => this%rbuff(:,:,:,16); tau23 => this%rbuff(:,:,:,17); tau33 => this%rbuff(:,:,:,18)
 
-        call this%get_nuSGS(duidxj)
 
         ! COmpute S_ij (here denoted as tau_ij)
         tau11 = dudx
@@ -214,6 +226,8 @@ contains
         tau22 = dvdy
         tau23 = half*(dvdz + dwdy)
         tau33 = dwdz   
+        
+        call this%get_nuSGS(duidxj)
         
         if (this%useDynamicProcedure) then
             call this%DynamicProcedure(uhat,vhat,wChat,u,v,wC,duidxj) 
@@ -425,7 +439,6 @@ contains
         ! Step 11: Compute the true nuSGS
         numerator = -half*numerator/(denominator + 1d-14)
         this%nuSGS = numerator*this%nuSGS
-       
     end subroutine
 
     subroutine planarAverage(this,f, useClipping)

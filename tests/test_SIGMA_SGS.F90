@@ -18,7 +18,7 @@ program test_SIGMA_SGS
     real(rkind), dimension(:,:,:), allocatable :: x, y, z, u, v, w, wE
     real(rkind), dimension(:,:,:), allocatable :: tmp
     type(decomp_info) :: gpC, gpE
-    integer :: nx = 96, ny = 96, nz = 192
+    integer :: nx = 100, ny = 100, nz = 60
     integer :: ierr, prow = 0, pcol = 0
     real(rkind) :: dx, dy, dz
     real(rkind), dimension(:,:), allocatable :: temp 
@@ -42,9 +42,9 @@ program test_SIGMA_SGS
     real(rkind) :: maxnuSGS
    
     integer :: ModelID = 1 
-    logical :: useEkmanInit = .true. 
-    logical :: useDynamicProcedure = .false. 
-    logical :: useClipping = .false. 
+    logical :: useEkmanInit = .false. 
+    logical :: useDynamicProcedure = .true. 
+    logical :: useClipping = .true. 
 
 
     call MPI_Init(ierr)
@@ -123,7 +123,7 @@ program test_SIGMA_SGS
         dy = y(1,2,1) - y(1,1,1)
         dz = z(1,1,2) - z(1,1,1)
    
-        deallocate(tmp, temp) 
+        !deallocate(tmp, temp) 
     end if 
 
     call spect%init("x", nx, ny, nz, dx, dy, dz, "four", "2/3rd", dimTransform,.false.)
