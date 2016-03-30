@@ -2,14 +2,14 @@ module temporalHook
     use kind_parameters,    only: rkind
     use IncompressibleGridNP, only: igrid
     use reductions,         only: P_MAXVAL
-    use exits,              only: message
+    use exits,              only: GracefulExit, message
     use channel_IO,           only: dumpData4Matlab 
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
     integer :: nt_print2screen = 10
     integer :: nt_getMaxKE = 10
-    integer :: tid_statsDump = 50000
+    integer :: tid_statsDump = 40000
     integer :: tid_compStats = 10
     real(rkind) :: time_startDumping = 2000.0_rkind
     integer :: ierr 
@@ -17,6 +17,7 @@ contains
 
     subroutine doTemporalStuff(gp)
         class(igrid), intent(inout) :: gp 
+        integer :: ierr
       
         if (mod(gp%step,nt_print2screen) == 0) then
             call message(0,"Time",gp%tsim)
@@ -46,6 +47,9 @@ contains
         if (mod(gp%step,gp%t_restartDump) == 0) then
             call gp%dumpRestartfile()
         end if
+
+        open(unit=20,file='exit',status='old',iostat=ierr)
+        if(ierr==0) call GracefulExit("exit file found in working directory. Stopping run.",123)
 
     end subroutine
 
