@@ -30,19 +30,21 @@ t_dataDump    = 10       ! Number of timesteps before data dump is performed
 Re = 3250.D0              ! Reynolds Number
 Pr = 0.7D0                ! Prandtl Number
 runID = 0                 ! Run ID (for output file name)
-useSGS = .TRUE.          ! LES mode or DNS mode?
 useCoriolis = .FALSE. 
+
+useSGS = .TRUE.          ! LES mode or DNS mode?
 SGSModelID = 1            ! 0: smagorinsky, 1: sigma
 useDynamicProcedure = .FALSE. 
 useSGSClipping = .TRUE. 
+
 useExtraForcing = .TRUE. 
 topWall = 1               ! no_slip = 1, slip = 2
 botWall = 1               ! no_slip = 1, slip = 2  
+
 useRestartFile = .FALSE. 
 restartFile_TID = 999
 restartFile_RID = 10
-useWallModelTop = .FALSE.
-useWallModelBot = .FALSE.
+
 isInviscid = .FALSE.
 useVerticalFilter = .TRUE.
 

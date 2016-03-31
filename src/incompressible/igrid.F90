@@ -91,6 +91,7 @@ module IncompressibleGridNP
         logical :: isInviscid = .false. 
         logical :: useSGS = .false. 
         logical :: useVerticalFilter = .true. 
+        logical :: useDynamicProcedure 
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
@@ -247,6 +248,7 @@ contains
         this%isInviscid = isInviscid
 
         this%useSGS = useSGS
+        this%UseDynamicProcedure = useDynamicProcedure
 
         this%useVerticalFilter = useVerticalFilter
 
