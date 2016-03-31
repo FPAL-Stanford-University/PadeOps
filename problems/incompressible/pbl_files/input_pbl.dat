@@ -5,10 +5,10 @@ outputdir  = "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"      ! Director
 
 nx = 96                  ! Number of points in X
 ny = 96                  ! Number of points in Y
-nz = 192                 ! Number of points in Z
+nz = 96                 ! Number of points in Z
 
-dt = 0.001D0               ! Fixed time step value (Set to negative to disable)
-tstop = 200.D0              ! Physical time to stop the simulation
+dt = 5D-5               ! Fixed time step value (Set to negative to disable)
+tstop = 8.D-1              ! Physical time to stop the simulation
 CFL = -1.D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
@@ -16,39 +16,36 @@ periodicx = .TRUE.        ! Periodic in X?
 periodicy = .TRUE.        ! Periodic in Y?
 periodicz = .FALSE.        ! Periodic in Z?
 
+
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-
 t_restartDump = 4000    ! Restart File Frequency 
-t_dataDump    = 2000       ! Number of timesteps before data dump is performed 
+t_dataDump    = 1000       ! Number of timesteps before data dump is performed 
 
 /
 
 /
 
 &IINPUT
-Re = 8000.D0              ! Reynolds Number
 Pr = 0.7D0                ! Prandtl Number
-runID = 10                 ! Run ID (for output file name)
-useCoriolis = .TRUE. 
-
+runID = 50                 ! Run ID (for output file name)
 useSGS = .TRUE.          ! LES mode or DNS mode?
+useCoriolis = .FALSE. 
 SGSModelID = 1            ! 0: smagorinsky, 1: sigma
-useDynamicProcedure = .TRUE. 
+useDynamicProcedure = .FALSE. 
 useSGSClipping = .TRUE. 
-
-useExtraForcing = .FALSE. 
-topWall = 2               ! no_slip = 1, slip = 2
-botWall = 1               ! no_slip = 1, slip = 2  
-
+useExtraForcing = .TRUE. 
+topWall = 2               ! no_slip = 1, slip = 2 , wall model = 3
+botWall = 3               ! no_slip = 1, slip = 2 , wall model = 3
 useRestartFile = .FALSE. 
 restartFile_TID = 999
 restartFile_RID = 10
-
-isInviscid = .FALSE.
+isInviscid = .TRUE.
 useVerticalFilter = .TRUE.
 
-&EKMANINPUT
-Ro = 9.9                ! Rossby Number 
-delta_Ek = 0.0497      ! Non-Dimensional Laminar Ekman Layer Depth (= sqrt(2Ro/Re))
+&PBLINPUT
+H = 1000.d0
+ustar = 0.45d0
+z0 = 0.1d0
+dpdxF = 1.d0
 /
