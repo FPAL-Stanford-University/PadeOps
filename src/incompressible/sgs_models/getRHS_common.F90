@@ -45,6 +45,8 @@
         
         call this%spect%fft(tau23,tauhat)
         call transpose_y_to_z(tauhat,this%ctmpCz,this%sp_gp)
+        
+       
         if (useCompactFD) then
             call this%derZ_OO%InterpZ_C2E(this%ctmpCz,this%ctmpEz,size(this%ctmpCz,1),size(this%ctmpCz,2))
         else

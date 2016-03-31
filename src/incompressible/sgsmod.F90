@@ -9,6 +9,7 @@ module sgsmod
     use reductions, only: p_maxval, p_sum
     use numerics, only: useCompactFD 
     use StaggOpsMod, only: staggOps  
+    use wallModelmod, only: wallmodel
 
     implicit none
 
@@ -38,12 +39,15 @@ module sgsmod
         type(cd06stagg), allocatable :: derZ_EE, derZ_OO
         type(staggOps), allocatable :: Ops2ndOrder
 
-        logical :: useWallModel = .false.
         logical :: useDynamicProcedure = .false.
         logical :: useClipping = .false. 
         !type(moengWall), allocatable :: wallModel
         
         real(rkind) :: meanFact
+
+        logical :: useWallModel = .false.  
+        type(wallmodel), pointer :: moengWall
+        real(rkind) :: UmeanAtWall
 
         integer :: SGSmodel ! 0: Standard Smag, 1: Sigma Model 
 
@@ -53,6 +57,7 @@ module sgsmod
             procedure, private :: get_nuSGS
             procedure, private :: DynamicProcedure
             procedure, private :: planarAverage 
+            procedure, private :: BroadcastMeanAtWall 
             procedure :: getRHS_SGS
             procedure :: link_pointers
     end type 
@@ -80,20 +85,20 @@ contains
 
     end subroutine
 
-
-
-    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping)!, WallModel)
+    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, moengWall)
         class(sgs), intent(inout), target :: this
         type(spectral), intent(in), target :: spectC, spectE
         type(decomp_info), intent(in), target :: gpC, gpE
         real(rkind), intent(in) :: dx, dy, dz
         logical, intent(in) :: useDynamicProcedure, useClipping
         integer, intent(in) :: modelID
-       ! type(moengWall), intent(in), target, optional :: WallModel
+        type(wallModel), intent(in), target, optional :: moengWall
 
-        !if (present(WallModel)) then
-        !    this%useWallModel = .true.
-        !end if 
+        if (present(moengWall)) then
+            this%moengWall => moengWall
+            this%useWallModel = .true. 
+        end if
+
         this%SGSmodel = modelID 
         this%useDynamicProcedure = useDynamicProcedure
         this%useClipping = useClipping
@@ -242,13 +247,34 @@ contains
         tau23 = two*this%nuSGS*tau23
         tau33 = two*this%nuSGS*tau33
 
-        tauhat => this%cbuff(:,:,:,1); tauhat2 => this%cbuff(:,:,:,2)        
+        tauhat => this%cbuff(:,:,:,1); tauhat2 => this%cbuff(:,:,:,2)       
+
+
+        if (this%useWallModel) then
+            call this%BroadcastMeanAtWall(uhat)
+            call this%moengWall%updateWallStress(tau13, tau23, u, v, this%UmeanAtWall)
+        end if 
+
 #include "sgs_models/getRHS_common.F90"
 
         if (present(max_nuSGS)) then
             max_nuSGS = p_maxval(maxval(this%nuSGS))
         end if 
 
+    end subroutine
+
+    subroutine BroadcastMeanAtWall(this, uhat)
+        use kind_parameters, only: mpirkind
+        class(sgs), intent(inout) :: this
+        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat
+        integer :: ierr
+
+        if (nrank == 0) then
+            this%UmeanAtWall = real(uhat(1,1,1),rkind)*this%meanFact
+        end if
+
+        call mpi_bcast(this%UmeanAtWall,1,mpirkind,0,mpi_comm_world,ierr)
+      
     end subroutine
 
     subroutine DynamicProcedure(this,uhat,vhat,wChat,u,v,wC,duidxj)

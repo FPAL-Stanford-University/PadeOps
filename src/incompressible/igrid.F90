@@ -17,6 +17,7 @@ module IncompressibleGridNP
     use cf90stuff, only: cf90  
     use sgsmod, only: sgs
     use numerics, only: useCompactFD, AdvectionForm
+    use wallmodelMod, only: wallmodel
 
     implicit none
 
@@ -43,6 +44,7 @@ module IncompressibleGridNP
         type(spectral), allocatable :: spectE, spectC
         type(staggOps), allocatable :: Ops
         type(sgs), allocatable :: SGSmodel
+        type(wallmodel), allocatable :: moengWall
 
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsC
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsE
@@ -195,7 +197,7 @@ contains
                                 tid_statsDump, useExtraForcing, useSGSclipping, &
                                 time_startDumping, topWall, botWall, &
                                 useRestartFile, restartFile_TID, restartFile_RID, &
-                                useWallModelTop, useWallModelBot, isInviscid, &
+                                isInviscid, &
                                 useVerticalFilter, SGSModelID 
 
         ! STEP 1: READ INPUT 
@@ -276,6 +278,8 @@ contains
         elseif (topWall == no_slip) then
             topBC_u = .false.; topBC_v = .false.
             call message(1, "TopWall BC set to: NO_SLIP")
+        elseif (topWall == 3) then
+            call GracefulExit("Wall model for the top wall is not currently supported", 321)
         else
             call message("WARNING: No Top BCs provided. Using defaults found in igrid.F90")
         end if 
@@ -286,6 +290,10 @@ contains
         elseif (botWall == no_slip) then
             botBC_u = .false.; botBC_v = .false.
             call message(1, "BotWall BC set to: NO_SLIP")
+        elseif (botWall == 3) then
+            botBC_u = .true.; botBC_v = .true.
+            useWallModelBot = .true. 
+            call message(1, "BotWall BC set to: WALL MODEL (Moeng)")
         else
             call message("WARNING: No Bottom BCs provided. Using defaults found in igrid.F90")
         end if 
@@ -448,6 +456,7 @@ contains
         if ((AdvectionForm == 2) .or. (this%useSGS)) then
             call this%compute_duidxj()
         end if 
+        
 
         ! STEP 10a: Compute Coriolis Term
         if (this%useCoriolis) then
@@ -468,11 +477,23 @@ contains
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%dpF_dxhat)
         end if  
 
+        ! STEP 11: Initialize Wall Model
+        if (useWallModelBot) then
+            allocate(this%moengWall)
+            call this%moengWall%init(this%dz, inputfile, this%gpC, this%rbuffxC, this%rbuffyC, this%rbuffzC )
+            call message(0,"Wall model initialized successfully")
+        end if 
+
         ! STEP 12: Initialize SGS model
         if (this%useSGS) then
             allocate(this%SGSmodel)
-            call this%sgsModel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
-            this%dy, this%dz, useDynamicProcedure, useSGSclipping)
+            if (allocated(this%moengWall)) then
+                call this%sgsModel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
+                    this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%moengWall)
+            else
+                call this%sgsModel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
+                    this%dy, this%dz, useDynamicProcedure, useSGSclipping)
+            end if
             call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij)
             call message(0,"SGS model initialized successfully")
         end if 
