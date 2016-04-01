@@ -80,6 +80,7 @@ module CompressibleGrid
             procedure, private :: get_dt
             procedure, private :: get_primitive
             procedure, private :: get_conserved
+            procedure, private :: post_bc
             procedure, private :: getRHS
             procedure, private :: getRHS_x
             procedure, private :: getRHS_y
@@ -578,6 +579,7 @@ contains
             
             call this%get_primitive()
             call hook_bc(this%decomp, this%mesh, this%fields, this%tsim)
+            call this%post_bc()
         end do
 
         !this%tsim = this%tsim + this%dt
@@ -659,6 +661,14 @@ contains
         this%Wcnsrv(:,:,:,3) = this%rho * this%v
         this%Wcnsrv(:,:,:,4) = this%rho * this%w
         this%Wcnsrv(:,:,:,5) = ( this%p*(this%gas%onebygam_m1) + this%rho*half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
+
+    end subroutine
+
+    subroutine post_bc(this)
+        class(cgrid), intent(inout) :: this
+
+        call this%gas%get_e_from_p(this%rho,this%p,this%e)
+        call this%gas%get_T(this%e,this%T)
 
     end subroutine
 

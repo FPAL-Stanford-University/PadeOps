@@ -125,6 +125,7 @@ module SolidGrid
             procedure, private :: get_dt
             procedure, private :: get_primitive
             procedure, private :: get_conserved
+            procedure, private :: post_bc
             procedure, private :: getRHS
             procedure, private :: getRHS_x
             procedure, private :: getRHS_y
@@ -625,11 +626,11 @@ contains
             call this%advance_RK45()
             call toc(cputime)
             
-            call hook_timestep(this%decomp, this%mesh, this%fields, this%tsim)
             call message(1,"Time",this%tsim)
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
+            call hook_timestep(this%decomp, this%mesh, this%fields, this%step, this%tsim)
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
@@ -737,6 +738,7 @@ contains
             end if
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%tsim)
+            call this%post_bc()
         end do
 
         ! this%tsim = this%tsim + this%dt
@@ -831,6 +833,24 @@ contains
         this%Wcnsrv(:,:,:,3) = this%rho * this%v
         this%Wcnsrv(:,:,:,4) = this%rho * this%w
         this%Wcnsrv(:,:,:,5) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
+
+    end subroutine
+
+    subroutine post_bc(this)
+        class(sgrid), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6) :: finger, fingersq
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: trG, trG2, detG
+
+        this%e = this%e - this%eel ! Get only hydrodynamic part
+
+        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)  ! Update elastic energy
+        
+        call this%sgas%get_e_from_p(this%rho,this%p,this%e)  ! Update hydrodynamic energy
+        this%e = this%e + this%eel ! Combine both energies
+        call this%sgas%get_T(this%e,this%T)  ! Get updated temperature
+
+        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)  ! Get updated stress
 
     end subroutine
 

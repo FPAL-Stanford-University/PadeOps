@@ -15,14 +15,15 @@ module operators
 
 contains
 
-    subroutine gradient(decomp, der, f, dfdx, dfdy, dfdz, x_bc, y_bc, z_bc)
+    subroutine gradient(decomp, der, f, dfdx, dfdy, dfdz, x_bc_, y_bc_, z_bc_)
         type(decomp_info), intent(in) :: decomp
         type(derivatives) :: der
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(in)  :: f
         real(rkind), dimension(size(f,1), size(f,2), size(f,3)),             intent(out) :: dfdx
         real(rkind), dimension(size(f,1), size(f,2), size(f,3)),             intent(out) :: dfdy
         real(rkind), dimension(size(f,1), size(f,2), size(f,3)),             intent(out) :: dfdz
-        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+        integer, dimension(2), optional, intent(in) :: x_bc_, y_bc_, z_bc_
+        integer, dimension(2) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) :: xtmp,xdum
         real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) :: ztmp,zdum
@@ -31,6 +32,10 @@ contains
             call GracefulExit("Either size of input array to gradient operator is inconsistent with decomp or not in Y decomp. Other&
                              & decomps have yet to be implemented",234)
         end if
+
+        x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
+        y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
+        z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
 
         ! Get Y derivatives
         call der%ddy(f,dfdy,y_bc(1),y_bc(2))
@@ -47,12 +52,13 @@ contains
 
     end subroutine 
 
-    subroutine curl(decomp, der, u, v, w, curlu, x_bc, y_bc, z_bc)
+    subroutine curl(decomp, der, u, v, w, curlu, x_bc_, y_bc_, z_bc_)
         type(decomp_info), intent(in) :: decomp
         type(derivatives) :: der
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(in)  :: u, v, w
         real(rkind), dimension(size(u,1), size(u,2), size(u,3),3),             intent(out) :: curlu
-        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+        integer, dimension(2), optional, intent(in) :: x_bc_, y_bc_, z_bc_
+        integer, dimension(2) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) :: xtmp,xdum
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: ytmp
@@ -70,6 +76,10 @@ contains
             call GracefulExit("Either size of input array 'w' to the curl operator is inconsistent with decomp or not in Y decomp. Other&
                              & decomps have yet to be implemented",234)
         end if
+
+        x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
+        y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
+        z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
 
         ! Get dw/dy
         call der%ddy( w, curlu(:,:,:,1), y_bc(1), y_bc(2) )
@@ -105,12 +115,13 @@ contains
 
     end subroutine 
 
-    subroutine divergence(decomp, der, u, v, w, div, x_bc, y_bc, z_bc)
+    subroutine divergence(decomp, der, u, v, w, div, x_bc_, y_bc_, z_bc_)
         type(decomp_info), intent(in) :: decomp
         type(derivatives) :: der
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(in)  :: u, v, w
         real(rkind), dimension(size(u,1), size(u,2), size(u,3)),             intent(out) :: div
-        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+        integer, dimension(2), optional, intent(in) :: x_bc_, y_bc_, z_bc_
+        integer, dimension(2) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) :: xtmp,xdum
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: ytmp
@@ -120,6 +131,10 @@ contains
             call GracefulExit("Either size of input array to divergence operator is inconsistent with decomp or not in Y decomp. Other&
                              & decomps have yet to be implemented",234)
         end if
+
+        x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
+        y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
+        z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
 
         ! Get Y derivatives
         call der%ddy(v,div,-y_bc(1),-y_bc(2))

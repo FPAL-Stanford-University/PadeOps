@@ -71,13 +71,13 @@ subroutine getForcing(inputfile,dpdx)
     real(rkind) :: dpdxForcing = two/500._rkind
     integer :: ioUnit
 
+    namelist /CHANNELINPUT/ dpdxForcing
+    
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=CHANNELINPUT)
     close(ioUnit)
 
-    namelist /CHANNELINPUT/ dpdxForcing
-    
     dpdx = dpdxForcing 
     
 
@@ -177,5 +177,19 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
 end subroutine
 
 
+subroutine set_planes_io(xplanes, yplanes, zplanes)
+    implicit none
+    integer, dimension(:), allocatable,  intent(inout) :: xplanes
+    integer, dimension(:), allocatable,  intent(inout) :: yplanes
+    integer, dimension(:), allocatable,  intent(inout) :: zplanes
+    integer, parameter :: nxplanes = 2, nyplanes = 2, nzplanes = 2
+
+    allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
+
+    xplanes = [2 , 10]
+    yplanes = [2 , 10]
+    zplanes = [2 , 10]
+
+end subroutine
 
 

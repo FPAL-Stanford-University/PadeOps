@@ -31,10 +31,10 @@ contains
         character(len=*), intent(in) :: inputfile
         real(rkind), dimension(:,:,:,:), intent(in), target :: xbuff, ybuff, zbuff
         type(decomp_info), target, intent(in) :: decompC
-        real(rkind) :: z0 = 0.1_rkind, H = 1000._rkind, dpdxF = 1._rkind, ustar = 0.454_rkind
+        real(rkind) :: z0 = 0.1_rkind, H = 1000._rkind, G = 15._rkind, f = 1.454d-4
         integer :: iounit
 
-        namelist /PBLINPUT/ H, ustar, z0, dpdxF
+        namelist /PBLINPUT/ H, z0, G, f
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -76,6 +76,9 @@ contains
         call transpose_x_to_y(u,this%ybuff,this%decomp)
         call transpose_y_to_z(this%ybuff,this%zbuff2,this%decomp)
         this%zbuff1(:,:,1) = this%zbuff2(:,:,1)*this%mfactor*umn
+        !if (nrank == 0) then
+        !        print*, this%zbuff1(1,1,1:3)
+        !end if 
         call transpose_z_to_y(this%zbuff1,this%ybuff,this%decomp)
         call transpose_y_to_x(this%ybuff,tau13,this%decomp)
 
@@ -85,6 +88,9 @@ contains
         call transpose_x_to_y(v,this%ybuff,this%decomp)
         call transpose_y_to_z(this%ybuff,this%zbuff2,this%decomp)
         this%zbuff1(:,:,1) = this%zbuff2(:,:,1)*this%mfactor*umn
+        !if (nrank == 0) then
+        !        print*, this%zbuff1(1,1,1:3)
+        !end if 
         call transpose_z_to_y(this%zbuff1,this%ybuff,this%decomp)
         call transpose_y_to_x(this%ybuff,tau23,this%decomp)
 
