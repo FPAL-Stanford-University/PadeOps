@@ -209,7 +209,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,tsim)
+subroutine hook_timestep(decomp,mesh,fields,step,tsim)
     use kind_parameters,  only: rkind
     use SolidGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
@@ -220,6 +220,7 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
+    integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields

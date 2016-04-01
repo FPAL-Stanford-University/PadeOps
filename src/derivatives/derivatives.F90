@@ -461,7 +461,11 @@ contains
 
         select case (this%xmethod)
         case (1)
-            call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+            else
+                call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+            end if
         case (2)
             call this%xcd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
         case (3)
@@ -480,7 +484,11 @@ contains
 
         select case (this%ymethod)
         case (1)
-            call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+            else
+                call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
+            end if
         case (2)
             call this%ycd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
         case (3)
@@ -499,7 +507,11 @@ contains
 
         select case (this%zmethod)
         case (1)
-            call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+            else
+                call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
+            end if
         case (2)
             call this%zcd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
         case (3)
