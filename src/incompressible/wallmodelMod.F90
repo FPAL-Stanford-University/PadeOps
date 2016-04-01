@@ -76,6 +76,9 @@ contains
         call transpose_x_to_y(u,this%ybuff,this%decomp)
         call transpose_y_to_z(this%ybuff,this%zbuff2,this%decomp)
         this%zbuff1(:,:,1) = this%zbuff2(:,:,1)*this%mfactor*umn
+        !if (nrank == 0) then
+        !        print*, this%zbuff1(1,1,1:3)
+        !end if 
         call transpose_z_to_y(this%zbuff1,this%ybuff,this%decomp)
         call transpose_y_to_x(this%ybuff,tau13,this%decomp)
 
@@ -85,6 +88,9 @@ contains
         call transpose_x_to_y(v,this%ybuff,this%decomp)
         call transpose_y_to_z(this%ybuff,this%zbuff2,this%decomp)
         this%zbuff1(:,:,1) = this%zbuff2(:,:,1)*this%mfactor*umn
+        !if (nrank == 0) then
+        !        print*, this%zbuff1(1,1,1:3)
+        !end if 
         call transpose_z_to_y(this%zbuff1,this%ybuff,this%decomp)
         call transpose_y_to_x(this%ybuff,tau23,this%decomp)
 

@@ -177,5 +177,19 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
 end subroutine
 
 
+subroutine set_planes_io(xplanes, yplanes, zplanes)
+    implicit none
+    integer, dimension(:), allocatable,  intent(inout) :: xplanes
+    integer, dimension(:), allocatable,  intent(inout) :: yplanes
+    integer, dimension(:), allocatable,  intent(inout) :: zplanes
+    integer, parameter :: nxplanes = 2, nyplanes = 2, nzplanes = 2
+
+    allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
+
+    xplanes = [2 , 10]
+    yplanes = [2 , 10]
+    zplanes = [2 , 10]
+
+end subroutine
 
 

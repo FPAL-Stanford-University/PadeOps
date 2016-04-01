@@ -3,7 +3,7 @@ module IncompressibleGridNP
     use constants, only: imi, zero,one,two,three,half,fourth 
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
-    use igrid_hooks, only: meshgen, initfields_stagg, getforcing
+    use igrid_hooks, only: meshgen, initfields_stagg, getforcing, set_planes_io
     use decomp_2d
     use StaggOpsMod, only: staggOps  
     use exits, only: GracefulExit, message
@@ -110,6 +110,8 @@ module IncompressibleGridNP
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
         real(rkind), dimension(:,:,:)  , pointer :: nu_SGS
         real(rkind), dimension(:,:,:)  , pointer :: c_SGS 
+        
+        integer, dimension(:), allocatable :: xplanes, yplanes, zplanes
         ! Note that c_SGS is linked to a variable that is constant along & 
         ! i, j but is still stored as a full 3 rank array. This is mostly done to
         ! make it convenient us to later do transposes or to compute Sij.
@@ -139,7 +141,8 @@ module IncompressibleGridNP
             procedure, private :: compute_z_fluct
             procedure          :: dump_stats
             procedure          :: compute_stats 
-            procedure          :: finalize_stats 
+            procedure          :: finalize_stats
+            procedure          :: dump_planes 
     end type
 
 contains 
@@ -502,6 +505,11 @@ contains
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
+
+
+        ! STEP 13: Set visualization planes for io
+        call set_planes_io(this%xplanes, this%yplanes, this%zplanes)
+
 
         ! Final Step: Safeguard against unfinished procedures
 
@@ -1226,7 +1234,11 @@ contains
         if (useCompactFD) then
             call this%derU%ddz_C2C(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
         else
-            call this%Ops%ddz_C2C(ctmpz1,ctmpz3,topBC_u,botBC_u) 
+            call this%Ops%ddz_C2C(ctmpz1,ctmpz3,topBC_u,botBC_u)
+            !if (nrank == 0) then
+            !       print*, ctmpz3(1,1,1:3)
+            !       print*, ctmpz3(1,1,1:3)
+            !end if  
         end if 
         call transpose_z_to_y(ctmpz3,ctmpy1,this%sp_gpC)
         call this%spectC%ifft(ctmpy1,dudz)
@@ -1236,6 +1248,10 @@ contains
             call this%derV%ddz_C2C(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
         else    
             call this%Ops%ddz_C2C(ctmpz1,ctmpz3,topBC_v,botBC_v) 
+            !if (nrank == 0) then
+            !       print*, ctmpz3(1,1,1:3)
+            !       print*, ctmpz3(1,1,1:3)
+            !end if  
         end if 
         call transpose_z_to_y(ctmpz3,ctmpy1,this%sp_gpC)
         call this%spectC%ifft(ctmpy1,dvdz)
@@ -1245,6 +1261,9 @@ contains
             call this%derW%ddz_E2C(ctmpz2,ctmpz3,size(ctmpz2,1),size(ctmpz2,2))
         else
             call this%Ops%ddz_E2C(ctmpz2,ctmpz3) 
+            !if (nrank == 0) then
+            !       print*, ctmpz3(3,4,1:3)
+            !end if  
         end if 
         call transpose_z_to_y(ctmpz3,ctmpy1,this%sp_gpC)
         call this%spectC%ifft(ctmpy1,dwdz)
@@ -1422,98 +1441,101 @@ contains
         rbuff6 = rbuff5*rbuff5
         call this%compute_z_mean(rbuff6, this%ww_mean)
 
-        ! tau_11
-        call transpose_x_to_y(this%tauSGS_ij(:,:,:,1),rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%tau11_mean)
+        if (this%useSGS) then
+            ! tau_11
+            call transpose_x_to_y(this%tauSGS_ij(:,:,:,1),rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%tau11_mean)
 
-        ! tau_12
-        call transpose_x_to_y(this%tauSGS_ij(:,:,:,2),rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%tau12_mean)
+            ! tau_12
+            call transpose_x_to_y(this%tauSGS_ij(:,:,:,2),rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%tau12_mean)
 
-        ! tau_13
-        call transpose_x_to_y(this%tauSGS_ij(:,:,:,3),rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%tau13_mean)
+            ! tau_13
+            call transpose_x_to_y(this%tauSGS_ij(:,:,:,3),rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%tau13_mean)
 
-        ! tau_22
-        call transpose_x_to_y(this%tauSGS_ij(:,:,:,4),rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%tau22_mean)
+            ! tau_22
+            call transpose_x_to_y(this%tauSGS_ij(:,:,:,4),rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%tau22_mean)
 
-        ! tau_23
-        call transpose_x_to_y(this%tauSGS_ij(:,:,:,5),rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%tau23_mean)
+            ! tau_23
+            call transpose_x_to_y(this%tauSGS_ij(:,:,:,5),rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%tau23_mean)
 
-        ! tau_33
-        call transpose_x_to_y(this%tauSGS_ij(:,:,:,6),rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%tau33_mean)
+            ! tau_33
+            call transpose_x_to_y(this%tauSGS_ij(:,:,:,6),rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%tau33_mean)
 
 
-        ! sgs dissipation
-        rbuff1 = this%tauSGS_ij(:,:,:,1)*this%tauSGS_ij(:,:,:,1) + &
-                 this%tauSGS_ij(:,:,:,2)*this%tauSGS_ij(:,:,:,2) + &
-                 this%tauSGS_ij(:,:,:,3)*this%tauSGS_ij(:,:,:,3)
-        rbuff1 = rbuff1 + two*(this%tauSGS_ij(:,:,:,4)*this%tauSGS_ij(:,:,:,4) + &
-                               this%tauSGS_ij(:,:,:,5)*this%tauSGS_ij(:,:,:,5) + &
-                               this%tauSGS_ij(:,:,:,6)*this%tauSGS_ij(:,:,:,6) )
-        rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)         ! note: factor of half is in dump_stats
+            ! sgs dissipation
+            rbuff1 = this%tauSGS_ij(:,:,:,1)*this%tauSGS_ij(:,:,:,1) + &
+                     this%tauSGS_ij(:,:,:,2)*this%tauSGS_ij(:,:,:,2) + &
+                     this%tauSGS_ij(:,:,:,3)*this%tauSGS_ij(:,:,:,3)
+            rbuff1 = rbuff1 + two*(this%tauSGS_ij(:,:,:,4)*this%tauSGS_ij(:,:,:,4) + &
+                                   this%tauSGS_ij(:,:,:,5)*this%tauSGS_ij(:,:,:,5) + &
+                                   this%tauSGS_ij(:,:,:,6)*this%tauSGS_ij(:,:,:,6) )
+            rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)         ! note: factor of half is in dump_stats
 
-        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%sgsdissp)
+            call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%sgsdissp)
 
-        ! viscous dissipation- *****????? Is rbuff1 contaminated after transpose_x_to_y? *****?????
-        rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)        ! note: factor of fourth is in dump_stats
-        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%viscdissp)
+            ! viscous dissipation- *****????? Is rbuff1 contaminated after transpose_x_to_y? *****?????
+            rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)        ! note: factor of fourth is in dump_stats
+            call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%viscdissp)
 
-        ! note: factor of half in all S_** is in dump_stats
-        ! S_11
-        rbuff1 = this%tauSGS_ij(:,:,:,1)/(this%nu_SGS + 1.0d-14)
-        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%S11_mean)
+            ! note: factor of half in all S_** is in dump_stats
+            ! S_11
+            rbuff1 = this%tauSGS_ij(:,:,:,1)/(this%nu_SGS + 1.0d-14)
+            call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%S11_mean)
 
-        ! S_12
-        rbuff1 = this%tauSGS_ij(:,:,:,2)/(this%nu_SGS + 1.0d-14)
-        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%S12_mean)
+            ! S_12
+            rbuff1 = this%tauSGS_ij(:,:,:,2)/(this%nu_SGS + 1.0d-14)
+            call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%S12_mean)
 
-        ! S_13
-        rbuff1 = this%tauSGS_ij(:,:,:,3)/(this%nu_SGS + 1.0d-14)
-        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%S13_mean)
+            ! S_13
+            rbuff1 = this%tauSGS_ij(:,:,:,3)/(this%nu_SGS + 1.0d-14)
+            call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%S13_mean)
 
-        ! S_22
-        rbuff1 = this%tauSGS_ij(:,:,:,4)/(this%nu_SGS + 1.0d-14)
-        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%S22_mean)
+            ! S_22
+            rbuff1 = this%tauSGS_ij(:,:,:,4)/(this%nu_SGS + 1.0d-14)
+            call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%S22_mean)
 
-        ! S_23
-        rbuff1 = this%tauSGS_ij(:,:,:,5)/(this%nu_SGS + 1.0d-14)
-        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%S23_mean)
+            ! S_23
+            rbuff1 = this%tauSGS_ij(:,:,:,5)/(this%nu_SGS + 1.0d-14)
+            call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%S23_mean)
 
-        ! S_33
-        rbuff1 = this%tauSGS_ij(:,:,:,6)/(this%nu_SGS + 1.0d-14)
-        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        call this%compute_z_mean(rbuff3, this%S33_mean)
+            ! S_33
+            rbuff1 = this%tauSGS_ij(:,:,:,6)/(this%nu_SGS + 1.0d-14)
+            call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call this%compute_z_mean(rbuff3, this%S33_mean)
 
-        ! sgs coefficient
-        call transpose_x_to_y(this%c_SGS,rbuff2,this%gpC)
-        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-        !call this%compute_z_mean(rbuff3, this%sgscoeff_mean)    ! -- averaging not needed
-        this%sgscoeff_mean(:) = rbuff3(1,1,:)
+            ! sgs coefficient
+            call transpose_x_to_y(this%c_SGS,rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            !call this%compute_z_mean(rbuff3, this%sgscoeff_mean)    ! -- averaging not needed
+            this%sgscoeff_mean(:) = rbuff3(1,1,:)
+        
+        end if 
 
         this%runningSum = this%runningSum + this%zStats2dump
 
@@ -1604,5 +1626,80 @@ contains
         nullify(this%sgsdissp, this%viscdissp, this%sgscoeff_mean)
         deallocate(this%zStats2dump, this%runningSum, this%TemporalMnNOW)
     end subroutine 
+
+    subroutine dump_planes(this)
+        use decomp_2d_io
+        class(igrid), intent(in) :: this
+        integer :: nxplanes, nyplanes, nzplanes
+        integer :: idx, pid, dirid, tid
+        character(len=clen) :: fname
+        character(len=clen) :: tempname
+
+        tid = this%step 
+        if (allocated(this%xplanes)) then
+            nxplanes = size(this%xplanes)
+            dirid = 1
+            do idx = 1,nxplanes
+                pid = this%xplanes(idx)
+                write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plu"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_plane(1,this%u,dirid, pid, fname)
+
+                write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plv"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_plane(1,this%v,dirid, pid, fname)
+
+                write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plw"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_plane(1,this%wC,dirid, pid, fname)
+            end do 
+        end if 
+            
+            
+        if (allocated(this%yplanes)) then
+            nyplanes = size(this%yplanes)
+            dirid = 2
+            do idx = 1,nyplanes
+                pid = this%yplanes(idx)
+                write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plu"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_plane(1,this%u,dirid, pid, fname)
+
+                write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plv"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_plane(1,this%v,dirid, pid, fname)
+
+                write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plw"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_plane(1,this%wC,dirid, pid, fname)
+            end do 
+        end if 
+        
+        
+        if (allocated(this%zplanes)) then
+            nzplanes = size(this%zplanes)
+            dirid = 3
+            do idx = 1,nzplanes
+                pid = this%zplanes(idx)
+                write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plu"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_plane(1,this%u,dirid, pid, fname)
+
+                write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plv"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_plane(1,this%v,dirid, pid, fname)
+
+                write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plw"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_plane(1,this%wC,dirid, pid, fname)
+            end do 
+        end if 
+        call message(1, "Dumped Planes.")        
+    end subroutine 
+
+
+
+
+
 
 end module 

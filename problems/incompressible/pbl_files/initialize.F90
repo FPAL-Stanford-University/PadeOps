@@ -116,9 +116,10 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     !v = epsnd*sin(two*pi*x/Lx)*cos(two*pi*y/Ly)*cos(two*pi*z/Lz)
     !wC= epsnd*sin(two*pi*x/Lx)*sin(two*pi*y/Ly)*sin(two*pi*z/Lz)
         
-    u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
-            + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    v = exp(-z/delta_Ek)*sin(z/delta_Ek) + &
+    !u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
+    u = (0.65/G)*(one/kappa)*log(z/(z0nd))  &
+        + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    v = zero  &
             + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     w = zero  
 
@@ -180,4 +181,20 @@ subroutine getForcing(inputfile, dpdx)
     
 
 end subroutine
+
+subroutine set_planes_io(xplanes, yplanes, zplanes)
+    implicit none
+    integer, dimension(:), allocatable,  intent(inout) :: xplanes
+    integer, dimension(:), allocatable,  intent(inout) :: yplanes
+    integer, dimension(:), allocatable,  intent(inout) :: zplanes
+    integer, parameter :: nxplanes = 2, nyplanes = 2, nzplanes = 2
+
+    allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
+
+    xplanes = [2 , 10]
+    yplanes = [2 , 10]
+    zplanes = [2 , 10]
+
+end subroutine
+
 

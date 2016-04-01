@@ -37,7 +37,7 @@
         if (useCompactFD) then
             call this%derZ_EE%ddz_C2C(this%ctmpCz,this%ctmpCz2, size(this%ctmpCz,1),size(this%ctmpCz,2)) 
         else
-            call this%Ops2ndOrder%ddz_C2C(this%ctmpCz,this%ctmpCz2, .false., .false.) 
+            call this%Ops2ndOrder%ddz_C2C(this%ctmpCz,this%ctmpCz2, .false., .true.) 
         end if 
         call transpose_z_to_y(this%ctmpCz2,tauhat,this%sp_gp)
         urhs = urhs + tauhat
@@ -59,7 +59,7 @@
         if (useCompactFD) then
             call this%derZ_EE%ddz_C2C(this%ctmpCz,this%ctmpCz2, size(this%ctmpCz,1),size(this%ctmpCz,2)) 
         else
-            call this%Ops2ndOrder%ddz_C2C(this%ctmpCz,this%ctmpCz2, .false., .false.) 
+            call this%Ops2ndOrder%ddz_C2C(this%ctmpCz,this%ctmpCz2, .false., .true.) 
         end if 
         call transpose_z_to_y(this%ctmpCz2,tauhat,this%sp_gp)
         vrhs = vrhs + tauhat

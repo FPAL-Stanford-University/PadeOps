@@ -153,3 +153,19 @@ subroutine getForcing(dpdx)
 
 end subroutine
 
+
+subroutine set_planes_io(xplanes, yplanes, zplanes)
+    implicit none
+    integer, dimension(:), allocatable,  intent(inout) :: xplanes
+    integer, dimension(:), allocatable,  intent(inout) :: yplanes
+    integer, dimension(:), allocatable,  intent(inout) :: zplanes
+    integer, parameter :: nxplanes = 2, nyplanes = 2, nzplanes = 5
+
+    allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
+
+    xplanes = [1 , 68]
+    yplanes = [1 , 68]
+    zplanes = [5 , 20, 50, 100, 200]
+
+end subroutine
+
