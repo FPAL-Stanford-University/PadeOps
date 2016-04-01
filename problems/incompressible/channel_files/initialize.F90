@@ -71,13 +71,13 @@ subroutine getForcing(inputfile,dpdx)
     real(rkind) :: dpdxForcing = two/500._rkind
     integer :: ioUnit
 
+    namelist /CHANNELINPUT/ dpdxForcing
+    
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=CHANNELINPUT)
     close(ioUnit)
 
-    namelist /CHANNELINPUT/ dpdxForcing
-    
     dpdx = dpdxForcing 
     
 
