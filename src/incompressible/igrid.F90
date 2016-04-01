@@ -321,13 +321,14 @@ contains
         ! STEP 5: ALLOCATE/INITIALIZE THE OPERATORS DERIVED TYPE
         if (useCompactFD) then
             allocate(this%derU, this%derV, this%derW, this%derWW)
-            call this%derU%init (nz  , this%dz, topBC_u, botBC_u, useWallModelTop, useWallModelBot) 
-            call this%derV%init (nz  , this%dz, topBC_v, botBC_v, useWallModelTop, useWallModelBot)  
+            call this%derU%init (nz  , this%dz, topBC_u, botBC_u, .false., useWallModelBot) 
+            call this%derV%init (nz  , this%dz, topBC_v, botBC_v, .false., useWallModelBot)  
             call this%derW%init (nz  , this%dz, topBC_w, botBC_w)
             call this%derWW%init(nz , this%dz, .true., .true.)
         else
             allocate(this%Ops)
-            call this%Ops%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp,this%spectE%spectdecomp)
+            call this%Ops%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp, &
+                        this%spectE%spectdecomp, .false., useWallModelBot)
         end if 
         
         if (this%useVerticalFilter) then
@@ -464,6 +465,7 @@ contains
         if (this%useCoriolis) then
             call message(0, "Turning on Coriolis with Geostrophic Forcing")
             call message(1, "Geostrophic Velocity:", this%Gx) 
+            call message(1, "Rossby Number       :", this%Ro) 
             call this%spectC%alloc_r2c_out(this%GxHat)
             this%rbuffxC(:,:,:,1) = this%Gx
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gxhat)

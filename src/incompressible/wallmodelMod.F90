@@ -31,10 +31,10 @@ contains
         character(len=*), intent(in) :: inputfile
         real(rkind), dimension(:,:,:,:), intent(in), target :: xbuff, ybuff, zbuff
         type(decomp_info), target, intent(in) :: decompC
-        real(rkind) :: z0 = 0.1_rkind, H = 1000._rkind, dpdxF = 1._rkind, ustar = 0.454_rkind
+        real(rkind) :: z0 = 0.1_rkind, H = 1000._rkind, G = 15._rkind, f = 1.454d-4
         integer :: iounit
 
-        namelist /PBLINPUT/ H, ustar, z0, dpdxF
+        namelist /PBLINPUT/ H, z0, G, f
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
