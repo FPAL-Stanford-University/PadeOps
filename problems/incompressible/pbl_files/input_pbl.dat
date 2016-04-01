@@ -45,7 +45,7 @@ useVerticalFilter = .TRUE.
 
 &PBLINPUT
 H = 1000.d0
-ustar = 0.45d0
+G = 15.d0
 z0 = 0.1d0
-dpdxF = 1.d0
+f = 1.454d-4
 /

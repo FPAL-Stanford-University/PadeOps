@@ -142,7 +142,7 @@ contains
                              isTopSided = .true., isBotSided = .true.) 
         else
             allocate(this%Ops2ndOrder)
-            call this%Ops2ndOrder%init(gpC,gpE,0,dx,dy,dz,spectC%spectdecomp,spectE%spectdecomp)
+            call this%Ops2ndOrder%init(gpC,gpE,0,dx,dy,dz,spectC%spectdecomp,spectE%spectdecomp, .true., .true.)
         end if 
         if (this%useDynamicProcedure) then
            allocate(this%Lij(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
