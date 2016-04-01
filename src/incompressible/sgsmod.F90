@@ -1,26 +1,30 @@
-module sigmaSGSmod
+module sgsmod
     use kind_parameters, only: rkind, clen
-    use constants, only: imi, pi, zero,one,two,three,half, four, nine, six  
+    use constants, only: imi, pi, zero,one,two,three,half, four,eight, nine, six  
     use decomp_2d
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
     use mpi 
     use cd06staggstuff, only: cd06stagg
     use reductions, only: p_maxval, p_sum
+    use numerics, only: useCompactFD 
+    use StaggOpsMod, only: staggOps  
+    use wallModelmod, only: wallmodel
 
     implicit none
 
     private
-    public :: sigmaSGS
+    public :: sgs
 
     real(rkind) :: c_sigma = 1.35_rkind
+    real(rkind) :: c_smag = 0.165_rkind
     real(rkind), parameter :: deltaRatio = four**(two/three)
+    complex(rkind), parameter :: zeroC = zero + imi*zero
 
-    type :: sigmaSGS
+    type :: sgs
         private
         type(spectral), pointer :: spect, spectE 
         real(rkind), allocatable, dimension(:,:,:,:) :: rbuff, Lij, Mkl
-        real(rkind), pointer, dimension(:,:,:) :: G11, G12, G13, G22, G23, G33
         real(rkind), pointer, dimension(:,:,:) :: nuSGS, nuSGSfil
         real(rkind) :: deltaFilter, mconst
         type(decomp_info), pointer :: sp_gp, gp
@@ -32,14 +36,20 @@ module sigmaSGSmod
         
         real(rkind), dimension(:,:,:), allocatable :: rtmpY, rtmpZ
 
-        type(cd06stagg), allocatable :: derZ
+        type(cd06stagg), allocatable :: derZ_EE, derZ_OO
+        type(staggOps), allocatable :: Ops2ndOrder
 
-        logical :: useWallModel = .false.
         logical :: useDynamicProcedure = .false.
         logical :: useClipping = .false. 
         !type(moengWall), allocatable :: wallModel
         
         real(rkind) :: meanFact
+
+        logical :: useWallModel = .false.  
+        type(wallmodel), pointer :: moengWall
+        real(rkind) :: UmeanAtWall
+
+        integer :: SGSmodel ! 0: Standard Smag, 1: Sigma Model 
 
         contains 
             procedure :: init
@@ -47,39 +57,67 @@ module sigmaSGSmod
             procedure, private :: get_nuSGS
             procedure, private :: DynamicProcedure
             procedure, private :: planarAverage 
+            procedure, private :: BroadcastMeanAtWall 
             procedure :: getRHS_SGS
+            procedure :: link_pointers
     end type 
 
 contains
 
-    subroutine init(this, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping)!, WallModel)
-        class(sigmaSGS), intent(inout), target :: this
+
+    subroutine link_pointers(this,nuSGS,c_SGS, tauSGS_ij)
+        class(sgs), intent(in), target :: this
+        real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: c_SGS, nuSGS
+        real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: tauSGS_ij
+
+        if (allocated(this%rbuff)) then
+            if (this%useDynamicProcedure) then
+                c_SGS => this%rbuff(:,:,:,8)
+            else
+                c_SGS => this%rbuff(:,:,:,19) !Locations that are certainly zero
+            end if 
+            nuSGS => this%rbuff(:,:,:,7)
+            tauSGS_ij => this%rbuff(:,:,:,13:18)
+        else
+            call gracefulExit("You have called SGS%LINK_POINTERS before &
+                & initializing SGS",324)
+        end if 
+
+    end subroutine
+
+    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, moengWall)
+        class(sgs), intent(inout), target :: this
         type(spectral), intent(in), target :: spectC, spectE
         type(decomp_info), intent(in), target :: gpC, gpE
         real(rkind), intent(in) :: dx, dy, dz
         logical, intent(in) :: useDynamicProcedure, useClipping
-       ! type(moengWall), intent(in), target, optional :: WallModel
+        integer, intent(in) :: modelID
+        type(wallModel), intent(in), target, optional :: moengWall
 
-        !if (present(WallModel)) then
-        !    this%useWallModel = .true.
-        !end if 
-        
+        if (present(moengWall)) then
+            this%moengWall => moengWall
+            this%useWallModel = .true. 
+        end if
+
+        this%SGSmodel = modelID 
         this%useDynamicProcedure = useDynamicProcedure
         this%useClipping = useClipping
 
-        allocate(this%rbuff(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),19))
-        
+        allocate(this%rbuff(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),21))
+        this%rbuff = zero  
         this%spect => spectC
         this%spectE => spectE
         this%deltaFilter = ((1.5_rkind**2)*dx*dy*dz)**(one/three)
-        this%mconst = (this%deltaFilter*c_sigma)**2
 
-        this%G11 => this%rbuff(:,:,:,1)
-        this%G12 => this%rbuff(:,:,:,2)
-        this%G13 => this%rbuff(:,:,:,3)
-        this%G22 => this%rbuff(:,:,:,4)
-        this%G23 => this%rbuff(:,:,:,5)
-        this%G33 => this%rbuff(:,:,:,6)
+        select case (this%SGSmodel)
+        case(0)
+            this%mconst = (this%deltaFilter*c_smag)**2
+        case(1)
+            this%mconst = (this%deltaFilter*c_sigma)**2
+        case default 
+            call GracefulExit("Invalid choice for SGS model.",2013)
+        end select
+
         this%nuSGS => this%rbuff(:,:,:,7)
         this%nuSGSfil => this%rbuff(:,:,:,19)
         this%gp => gpC
@@ -96,123 +134,76 @@ contains
         
         allocate(this%ctmpCz2(this%sp_gp%zsz(1), this%sp_gp%zsz(2), this%sp_gp%zsz(3)))
 
-        allocate(this%derZ)
-        call this%derZ%init( this%sp_gp%zsz(3), dz, isTopEven = .true., isBotEven = .true., & 
+        if (useCompactFD) then
+            allocate(this%derZ_EE, this%derZ_OO)
+            call this%derZ_EE%init( this%sp_gp%zsz(3), dz, isTopEven = .true., isBotEven = .true., & 
                              isTopSided = .true., isBotSided = .true.) 
+            call this%derZ_OO%init( this%sp_gp%zsz(3), dz, isTopEven = .false., isBotEven = .false., & 
+                             isTopSided = .true., isBotSided = .true.) 
+        else
+            allocate(this%Ops2ndOrder)
+            call this%Ops2ndOrder%init(gpC,gpE,0,dx,dy,dz,spectC%spectdecomp,spectE%spectdecomp)
+        end if 
+        if (this%useDynamicProcedure) then
+           allocate(this%Lij(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
+           allocate(this%Mkl(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
+        end if 
 
-         if (this%useDynamicProcedure) then
-            allocate(this%Lij(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
-            allocate(this%Mkl(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
-         end if 
-
-         this%meanFact = one/(gpC%xsz(1)*gpC%ysz(2))
-         allocate(this%rtmpY(gpC%ysz(1),gpC%ysz(2),gpC%ysz(3)))
-         allocate(this%rtmpZ(gpC%zsz(1),gpC%zsz(2),gpC%zsz(3)))
+        this%meanFact = one/(real(gpC%xsz(1))*real(gpC%ysz(2)))
+        allocate(this%rtmpY(gpC%ysz(1),gpC%ysz(2),gpC%ysz(3)))
+        allocate(this%rtmpZ(gpC%zsz(1),gpC%zsz(2),gpC%zsz(3)))
 
     end subroutine
 
     subroutine destroy(this)
-        class(sigmaSGS), intent(inout) :: this
+        class(sgs), intent(inout) :: this
 
-        call this%derZ%destroy()
-        deallocate(this%derZ)
-        nullify(this%G11, this%G13, this%G13, this%G22, this%G23, this%G33, this%nuSGS)
-        deallocate(this%Lij, this%Mkl)
+        if (useCompactFD) then
+            call this%derZ_OO%destroy()
+            call this%derZ_EE%destroy()
+            deallocate(this%derZ_OO, this%derZ_EE)
+        else
+            call this%Ops2ndOrder%destroy()
+            deallocate(this%Ops2ndOrder)
+        end if     
+        nullify( this%nuSGS)
+        if(this%useDynamicProcedure) deallocate(this%Lij, this%Mkl)
         nullify(this%sp_gp, this%gp, this%spect)
         deallocate(this%rbuff, this%cbuff)
         deallocate(this%rtmpZ, this%rtmpY)
     end subroutine
 
     subroutine get_nuSGS(this,duidxj,nuSGSfil)
-        class(sigmaSGS), intent(inout), target :: this
+        class(sgs), intent(inout), target :: this
         real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3),9), intent(in), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz
         real(rkind), dimension(:,:,:), pointer :: I1, I2, I3, I1sq, I1cu
+        real(rkind), pointer, dimension(:,:,:) :: G11, G12, G13, G22, G23, G33
         real(rkind), dimension(:,:,:), pointer :: alpha1, alpha2, alpha3, alpha1sqrt
         real(rkind), dimension(:,:,:), pointer :: alpha1tmp
         real(rkind), dimension(:,:,:), pointer :: sigma1, sigma2, sigma3, sigma1sq 
-        real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out), optional :: nuSGSfil
+        real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out), target, optional :: nuSGSfil
+        real(rkind), pointer, dimension(:,:,:) :: S11, S12, S13, S22, S23, S33
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3)
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6)
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9)
 
-        
-        I1 => this%rbuff(:,:,:,8); I2 => this%rbuff(:,:,:,9); I3 => this%rbuff(:,:,:,10)
-        I1sq => this%rbuff(:,:,:,11); I1cu => this%rbuff(:,:,:,12)
 
-        alpha1 => this%rbuff(:,:,:,1); alpha2 => this%rbuff(:,:,:,2); alpha3 => this%rbuff(:,:,:,3)
-
-        this%G11 = dudx*dudx + dvdx*dvdx + dwdx*dwdx 
-        this%G12 = dudx*dudy + dvdx*dvdy + dwdx*dwdy 
-        this%G13 = dudx*dudz + dvdx*dvdz + dwdx*dwdz
-        this%G22 = dudy*dudy + dvdy*dvdy + dwdy*dwdy 
-        this%G23 = dudy*dudz + dvdy*dvdz + dwdy*dwdz 
-        this%G33 = dudz*dudz + dvdz*dvdz + dwdz*dwdz
-
-        I1 = this%G11 + this%G22 + this%G33
-        I1sq = I1*I1
-        I1cu = I1sq*I1
-        
-        I2 = -this%G11*this%G11 - this%G22*this%G22 - this%G33*this%G33
-        I2 = I2 - two*this%G12*this%G12 - two*this%G13*this%G13
-        I2 = I2 - two*this%G23*this%G23
-        I2 = I2 + I1sq
-        I2 = half*I2
-
-        I3 = this%G11*(this%G22*this%G33 - this%G23*this%G23) 
-        I3 = I3 + this%G12*(this%G13*this%G23 - this%G12*this%G33) 
-        I3 = I3 + this%G13*(this%G12*this%G23 - this%G22*this%G13)  
-
-        alpha1 = I1sq/nine - I2/three
-        alpha1 = max(alpha1,zero)
-        
-        alpha2 = I1cu/27._rkind - I1*I2/six + I3/two
-       
-        alpha1sqrt => this%rbuff(:,:,:,4)
-        alpha1sqrt = sqrt(alpha1)    
-        alpha1tmp => this%rbuff(:,:,:,5) 
-        alpha1tmp = alpha1*alpha1sqrt
-        alpha1tmp = alpha2/(alpha1tmp)
-        alpha1tmp = min(alpha1tmp,one)
-        alpha1tmp = max(alpha1tmp,-one)
-        alpha1tmp = acos(alpha1tmp)
-        alpha3 = (one/three)*(alpha1tmp)
-          
-  
-        sigma1 => this%rbuff(:,:,:,9); sigma2 => this%rbuff(:,:,:,10); sigma3 => this%rbuff(:,:,:,11)
-        sigma1sq => this%rbuff(:,:,:,12)
-
-        sigma1sq = I1/three + two*alpha1sqrt*cos(alpha3)
-        sigma1sq = max(sigma1sq,zero)
-        sigma1 = sqrt(sigma1sq)
-
-        sigma2 = pi/three + alpha3
-        sigma2 = (-two)*alpha1sqrt*cos(sigma2)
-        sigma2 = sigma2 + I1/three
-        sigma2 = max(sigma2,zero)
-        sigma2 = sqrt(sigma2)
-        
-        sigma3 = pi/three - alpha3
-        sigma3 = (-two)*alpha1sqrt*cos(sigma3)
-        sigma3 = sigma3 + I1/three
-        sigma3 = max(sigma3,zero)
-        sigma3 = sqrt(sigma3)
-
-        if (present(nuSGSfil)) then
-            nuSGSfil = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
-        else
-            this%nuSGS = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
-            call this%spect%fft(this%nuSGS,this%nuSGShat)
-            call this%spect%dealias(this%nuSGShat)
-            call this%spect%ifft(this%nuSGShat,this%nuSGS)  
-        end if 
-        
+        select case (this%SGSmodel)
+        case (0) ! Standard Smagorinsky
+#include "sgs_models/smagorinsky_model_get_nuSGS.F90"
+        case (1) ! Standard Sigma
+#include "sgs_models/sigma_model_get_nuSGS.F90"
+        case default
+            this%nuSGSfil = zero
+            if (present(nuSGSfil)) nuSGSfil = zero
+        end select
 
     end subroutine
 
     subroutine getRHS_SGS(this, duidxj, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, max_nuSGS)
-        class(sigmaSGS), intent(inout), target :: this
+        class(sgs), intent(inout), target :: this
         real(rkind)   , dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3),9), intent(inout), target :: duidxj
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: urhs, vrhs
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat, wChat
@@ -232,7 +223,6 @@ contains
         tau11 => this%rbuff(:,:,:,13); tau12 => this%rbuff(:,:,:,14); tau13 => this%rbuff(:,:,:,15)
         tau22 => this%rbuff(:,:,:,16); tau23 => this%rbuff(:,:,:,17); tau33 => this%rbuff(:,:,:,18)
 
-        call this%get_nuSGS(duidxj)
 
         ! COmpute S_ij (here denoted as tau_ij)
         tau11 = dudx
@@ -241,6 +231,8 @@ contains
         tau22 = dvdy
         tau23 = half*(dvdz + dwdy)
         tau33 = dwdz   
+        
+        call this%get_nuSGS(duidxj)
         
         if (this%useDynamicProcedure) then
             call this%DynamicProcedure(uhat,vhat,wChat,u,v,wC,duidxj) 
@@ -255,7 +247,14 @@ contains
         tau23 = two*this%nuSGS*tau23
         tau33 = two*this%nuSGS*tau33
 
-        tauhat => this%cbuff(:,:,:,1); tauhat2 => this%cbuff(:,:,:,2)        
+        tauhat => this%cbuff(:,:,:,1); tauhat2 => this%cbuff(:,:,:,2)       
+
+
+        if (this%useWallModel) then
+            call this%BroadcastMeanAtWall(uhat)
+            call this%moengWall%updateWallStress(tau13, tau23, u, v, this%UmeanAtWall)
+        end if 
+
 #include "sgs_models/getRHS_common.F90"
 
         if (present(max_nuSGS)) then
@@ -264,8 +263,22 @@ contains
 
     end subroutine
 
+    subroutine BroadcastMeanAtWall(this, uhat)
+        use kind_parameters, only: mpirkind
+        class(sgs), intent(inout) :: this
+        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat
+        integer :: ierr
+
+        if (nrank == 0) then
+            this%UmeanAtWall = real(uhat(1,1,1),rkind)*this%meanFact
+        end if
+
+        call mpi_bcast(this%UmeanAtWall,1,mpirkind,0,mpi_comm_world,ierr)
+      
+    end subroutine
+
     subroutine DynamicProcedure(this,uhat,vhat,wChat,u,v,wC,duidxj)
-        class(sigmaSGS), intent(inout), target :: this
+        class(sgs), intent(inout), target :: this
         real(rkind)   , dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3),9), intent(inout), target :: duidxj
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat, wChat
         real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(inout) :: u, v, wC
@@ -415,11 +428,8 @@ contains
         call this%spect%TestFilter_ip(ctmpY)
         call this%spect%ifft(ctmpY,dwdz)  ! <= dwdz is corrwpted
     
-        ! Step 5: Compute Mkl: get \tilde{Dm}
-        call this%get_nuSGS(duidxj,this%nuSGSfil)
-        this%nuSGSfil = deltaRatio * this%nuSGSfil
 
-        ! Step 6: Compute Mkl: Compute \tilde{Skl}
+        ! Step 5: Compute Mkl: Compute \tilde{Skl}
         Sf11 = dudx
         Sf12 = half*(dvdx + dudy)
         Sf13 = half*(dwdx + dudz)
@@ -427,6 +437,10 @@ contains
         Sf23 = half*(dvdz + dwdy)
         Sf33 = dwdz   
 
+        ! Step 6: Compute Mkl: get \tilde{Dm}
+        call this%get_nuSGS(duidxj,this%nuSGSfil)
+        this%nuSGSfil = deltaRatio * this%nuSGSfil
+        
         ! Step 7: Add deltaRat*\tilde{Dm}*\tilde{Skl} to Mkl
         M11 = M11 + this%nuSGSfil*Sf11
         M12 = M12 + this%nuSGSfil*Sf12
@@ -451,11 +465,10 @@ contains
         ! Step 11: Compute the true nuSGS
         numerator = -half*numerator/(denominator + 1d-14)
         this%nuSGS = numerator*this%nuSGS
-       
     end subroutine
 
     subroutine planarAverage(this,f, useClipping)
-        class(sigmasgs), intent(inout) :: this
+        class(sgs), intent(inout) :: this
         real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(inout) :: f
         logical, intent(in) :: useClipping
         integer :: k

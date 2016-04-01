@@ -22,7 +22,7 @@ contains
         !    write(10,*, advance='no') raw_data(i,j) ! Write with default precision (all sigfigs are written)
         !end do
         do i=1,n1
-            write(10,"(100g15.5)") ( raw_data(i,j), j=1,n2 )
+            write(10,"(100(e19.12,1x))") ( raw_data(i,j), j=1,n2 )
         enddo
         CLOSE(10)
     end subroutine

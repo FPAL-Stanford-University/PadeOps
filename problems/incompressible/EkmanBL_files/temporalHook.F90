@@ -7,7 +7,9 @@ module temporalHook
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
-    use AllStatistics 
+
+    implicit none 
+
     integer :: nt_print2screen = 20
     integer :: nt_getMaxKE = 20
     integer :: tid_statsDump = 2000
@@ -26,6 +28,9 @@ contains
         if (mod(gp%step,nt_getMaxKE) == 0) then
             call message(1,"Max KE:",gp%getMaxKE())
             call message(1,"Max nuSGS:",gp%max_nuSGS)
+            if (gp%useDynamicProcedure) then
+                call message(1,"Max cSGS:",p_maxval(maxval(gp%c_SGS(1,1,:))))
+            end if 
             call toc()
             call tic()
         end if 
@@ -36,14 +41,13 @@ contains
         end if 
 
         if ((mod(gp%step,tid_compStats)==0) .and. (gp%tsim > time_startDumping)) then
-            call compute_stats(gp)
+            call gp%compute_stats()
         end if 
 
         if ((mod(gp%step,tid_statsDump) == 0) .and. (gp%tsim > time_startDumping)) then
-            call compute_stats(gp)
-            call dump_stats(gp)
+            call gp%compute_stats()
+            call gp%dump_stats()
         end if 
-        
         
         if (mod(gp%step,gp%t_restartDump) == 0) then
             call gp%dumpRestartfile()

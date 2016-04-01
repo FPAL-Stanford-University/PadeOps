@@ -11,14 +11,14 @@ program test_SIGMA_SGS
     use exits, only: message
     use cf90stuff, only: cf90
     use basic_io, only: write_binary
-    use sigmaSGSmod, only: sigmaSGS
+    use sgsmod, only: sgs
 
     implicit none
    
     real(rkind), dimension(:,:,:), allocatable :: x, y, z, u, v, w, wE
     real(rkind), dimension(:,:,:), allocatable :: tmp
     type(decomp_info) :: gpC, gpE
-    integer :: nx = 96, ny = 96, nz = 192
+    integer :: nx = 100, ny = 100, nz = 60
     integer :: ierr, prow = 0, pcol = 0
     real(rkind) :: dx, dy, dz
     real(rkind), dimension(:,:), allocatable :: temp 
@@ -38,12 +38,13 @@ program test_SIGMA_SGS
     real(rkind), dimension(:,:,:,:), allocatable :: duidxj
     integer :: dimTransform = 2
     character(len=clen) :: filename = "/home/aditya90/Codes/PadeOps/data/OpenFoam_AllData.txt" 
-    type(sigmaSGS) :: sgs
+    type(sgs) :: sgsModel
     real(rkind) :: maxnuSGS
-    
-    logical :: useEkmanInit = .true. 
-    logical :: useDynamicProcedure = .false. 
-    logical :: useClipping = .false. 
+   
+    integer :: ModelID = 1 
+    logical :: useEkmanInit = .false. 
+    logical :: useDynamicProcedure = .true. 
+    logical :: useClipping = .true. 
 
 
     call MPI_Init(ierr)
@@ -122,7 +123,7 @@ program test_SIGMA_SGS
         dy = y(1,2,1) - y(1,1,1)
         dz = z(1,1,2) - z(1,1,1)
    
-        deallocate(tmp, temp) 
+        !deallocate(tmp, temp) 
     end if 
 
     call spect%init("x", nx, ny, nz, dx, dy, dz, "four", "2/3rd", dimTransform,.false.)
@@ -187,12 +188,12 @@ program test_SIGMA_SGS
     call spect%fft(v,vhat)
     call spect%fft(w,what)
 
-    call sgs%init(spect, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping)
+    call sgsModel%init(modelID, spect, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping)
     !duidxj(2,3,4,1) = 1.d0; duidxj(2,3,4,2) = 2.d0; duidxj(2,3,4,3) = 3.d0
     !duidxj(2,3,4,4) = 4.d0; duidxj(2,3,4,5) = -1.d0; duidxj(2,3,4,6) = 6.d0
 
     call tic()
-    call sgs%getRHS_SGS(duidxj, urhs, vrhs, wrhs, uhat, vhat, what, u, v, w, maxnuSGS)
+    call sgsModel%getRHS_SGS(duidxj, urhs, vrhs, wrhs, uhat, vhat, what, u, v, w, maxnuSGS)
     call toc()
 
     call spect%ifft(urhs,u)

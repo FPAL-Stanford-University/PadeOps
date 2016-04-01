@@ -1,19 +1,20 @@
 ! Template for PadeOps
-! Grid - channel_grid
+! Grid - hit_grid
 ! Problem - HIT
 
-#include "channel_files/initialize.F90"       
-#include "channel_files/io.F90"            
-#include "channel_files/temporalHook.F90"  
+#include "pbl_files/initialize.F90"       
+#include "pbl_files/io.F90"            
+#include "pbl_files/temporalHook.F90"  
 
-program EkmanBL
+program pbl
     use mpi
     use kind_parameters,  only: rkind,clen,stdout,stderr
     use IncompressibleGridNP, only: igrid
-    use channel_IO, only: start_io, finalize_io
+    use pbl_IO, only: start_io, finalize_io
     use constants, only: half 
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
+    use exits, only: message
 
     implicit none
 
@@ -43,7 +44,6 @@ program EkmanBL
        igp%step = igp%step + 1 
        igp%tsim = igp%tsim + igp%dt
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
-       
     end do 
     
     call finalize_io                  !<-- Close the header file (wrap up i/o)
@@ -51,6 +51,7 @@ program EkmanBL
     call igp%finalize_stats()
     
     call igp%destroy()                !<-- Destroy the IGRID derived type 
+   
 
     deallocate(igp)                   !<-- Deallocate all the memory associated with scalar defaults
     

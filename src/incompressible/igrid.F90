@@ -1,6 +1,6 @@
 module IncompressibleGridNP
     use kind_parameters, only: rkind, clen
-    use constants, only: imi, zero,one,two,three,half 
+    use constants, only: imi, zero,one,two,three,half,fourth 
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
     use igrid_hooks, only: meshgen, initfields_stagg, getforcing
@@ -15,18 +15,18 @@ module IncompressibleGridNP
     use PadePoissonMod, only: Padepoisson 
     use cd06staggstuff, only: cd06stagg
     use cf90stuff, only: cf90  
-    use sigmaSGSmod, only: sigmasgs
+    use sgsmod, only: sgs
+    use numerics, only: useCompactFD, AdvectionForm
+    use wallmodelMod, only: wallmodel
 
     implicit none
 
     private
     public :: igrid 
 
-    logical, parameter :: useCompactFD = .true. 
-    integer, parameter :: AdvectionForm = 2 
 
-    integer, parameter :: no_slip = 1, slip = 2
     complex(rkind), parameter :: zeroC = zero + imi*zero 
+   integer, parameter :: no_slip = 1, slip = 2
 
 
     ! Allow non-zero value (isEven) 
@@ -43,7 +43,8 @@ module IncompressibleGridNP
         type(decomp_info), pointer :: Sp_gpC, Sp_gpE
         type(spectral), allocatable :: spectE, spectC
         type(staggOps), allocatable :: Ops
-        type(sigmaSGS), allocatable :: SGS
+        type(sgs), allocatable :: SGSmodel
+        type(wallmodel), allocatable :: moengWall
 
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsC
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsE
@@ -90,13 +91,33 @@ module IncompressibleGridNP
         logical :: isInviscid = .false. 
         logical :: useSGS = .false. 
         logical :: useVerticalFilter = .true. 
+        logical :: useDynamicProcedure 
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
         real(rkind) :: max_nuSGS
 
+        ! Statistics to compute 
+        real(rkind), dimension(:,:), allocatable :: zStats2dump, runningSum, TemporalMnNOW
+        real(rkind), dimension(:), pointer :: u_mean, v_mean, w_mean, uu_mean, uv_mean, uw_mean, vv_mean, vw_mean, ww_mean
+        real(rkind), dimension(:), pointer :: tau11_mean, tau12_mean, tau13_mean, tau22_mean, tau23_mean, tau33_mean
+        real(rkind), dimension(:), pointer :: S11_mean, S12_mean, S13_mean, S22_mean, S23_mean, S33_mean
+        real(rkind), dimension(:), pointer :: viscdissp, sgsdissp, sgscoeff_mean
+        integer :: tidSUM
+
+
+        ! Pointers linked to SGS stuff
+        real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
+        real(rkind), dimension(:,:,:)  , pointer :: nu_SGS
+        real(rkind), dimension(:,:,:)  , pointer :: c_SGS 
+        ! Note that c_SGS is linked to a variable that is constant along & 
+        ! i, j but is still stored as a full 3 rank array. This is mostly done to
+        ! make it convenient us to later do transposes or to compute Sij.
+
+
         contains
             procedure :: init
+            procedure :: init_stats
             procedure :: destroy
             procedure :: printDivergence 
             procedure :: laplacian
@@ -113,7 +134,12 @@ module IncompressibleGridNP
             procedure, private :: addExtraForcingTerm 
             procedure, private :: ApplyCompactFilter
             procedure          :: dumpRestartFile
-            procedure, private :: readRestartFile 
+            procedure, private :: readRestartFile
+            procedure, private :: compute_z_mean 
+            procedure, private :: compute_z_fluct
+            procedure          :: dump_stats
+            procedure          :: compute_stats 
+            procedure          :: finalize_stats 
     end type
 
 contains 
@@ -161,7 +187,7 @@ contains
         logical :: useRestartFile = .false. 
         logical :: useWallModelTop = .false., useWallModelBot = .false.
         logical :: isInviscid = .false., useVerticalFilter = .true.  
-
+        integer :: SGSModelID = 1
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
@@ -172,8 +198,8 @@ contains
                                 tid_statsDump, useExtraForcing, useSGSclipping, &
                                 time_startDumping, topWall, botWall, &
                                 useRestartFile, restartFile_TID, restartFile_RID, &
-                                useWallModelTop, useWallModelBot, isInviscid, &
-                                useVerticalFilter
+                                isInviscid, &
+                                useVerticalFilter, SGSModelID 
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -222,6 +248,7 @@ contains
         this%isInviscid = isInviscid
 
         this%useSGS = useSGS
+        this%UseDynamicProcedure = useDynamicProcedure
 
         this%useVerticalFilter = useVerticalFilter
 
@@ -253,6 +280,8 @@ contains
         elseif (topWall == no_slip) then
             topBC_u = .false.; topBC_v = .false.
             call message(1, "TopWall BC set to: NO_SLIP")
+        elseif (topWall == 3) then
+            call GracefulExit("Wall model for the top wall is not currently supported", 321)
         else
             call message("WARNING: No Top BCs provided. Using defaults found in igrid.F90")
         end if 
@@ -263,6 +292,10 @@ contains
         elseif (botWall == no_slip) then
             botBC_u = .false.; botBC_v = .false.
             call message(1, "BotWall BC set to: NO_SLIP")
+        elseif (botWall == 3) then
+            botBC_u = .true.; botBC_v = .true.
+            useWallModelBot = .true. 
+            call message(1, "BotWall BC set to: WALL MODEL (Moeng)")
         else
             call message("WARNING: No Bottom BCs provided. Using defaults found in igrid.F90")
         end if 
@@ -352,7 +385,7 @@ contains
 
         allocate(this%rbuffxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),2))
         allocate(this%rbuffyC(this%gpC%ysz(1),this%gpC%ysz(2),this%gpC%ysz(3),2))
-        allocate(this%rbuffzC(this%gpC%zsz(1),this%gpC%zsz(2),this%gpC%zsz(3),2))
+        allocate(this%rbuffzC(this%gpC%zsz(1),this%gpC%zsz(2),this%gpC%zsz(3),4))
 
         allocate(this%rbuffxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2))
         allocate(this%rbuffyE(this%gpE%ysz(1),this%gpE%ysz(2),this%gpE%ysz(3),2))
@@ -425,6 +458,7 @@ contains
         if ((AdvectionForm == 2) .or. (this%useSGS)) then
             call this%compute_duidxj()
         end if 
+        
 
         ! STEP 10a: Compute Coriolis Term
         if (this%useCoriolis) then
@@ -437,7 +471,7 @@ contains
 
         ! STEP 10b: Compute additional forcing (channel)
         if (this%useExtraForcing) then
-            call getForcing(dpFdx)
+            call getForcing(inputfile, dpFdx)
             call message(0," Turning on aditional forcing")
             call message(1," dP_dx = ", dpFdx)
             call this%spectC%alloc_r2c_out(this%dpF_dxhat)
@@ -445,20 +479,29 @@ contains
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%dpF_dxhat)
         end if  
 
+        ! STEP 11: Initialize Wall Model
+        if (useWallModelBot) then
+            allocate(this%moengWall)
+            call this%moengWall%init(this%dz, inputfile, this%gpC, this%rbuffxC, this%rbuffyC, this%rbuffzC )
+            call message(0,"Wall model initialized successfully")
+        end if 
+
         ! STEP 12: Initialize SGS model
         if (this%useSGS) then
-            allocate(this%SGS)
-            call this%sgs%init(this%spectC, this%spectE, this%gpC, this%gpE, this%dx, this%dy, this%dz, & 
-                                 useDynamicProcedure, useSGSclipping)
+            allocate(this%SGSmodel)
+            if (allocated(this%moengWall)) then
+                call this%sgsModel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
+                    this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%moengWall)
+            else
+                call this%sgsModel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
+                    this%dy, this%dz, useDynamicProcedure, useSGSclipping)
+            end if
+            call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij)
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
 
         ! Final Step: Safeguard against unfinished procedures
-        if ((.not.useCompactFD) .and. (AdvectionForm == 2)) then
-            call GracefulExit("Skew Symmetric Form is not allowed with 2nd order & 
-                & FD. Use 6th order Compact FD scheme instead",213)
-        end if 
 
         call message("IGRID initialized successfully!")
         call message("===========================================================")
@@ -587,6 +630,9 @@ contains
         call this%spectC%destroy()
         call this%spectE%destroy()
         deallocate(this%spectC, this%spectE)
+        nullify(this%nu_SGS, this%c_SGS, this%tauSGS_ij)
+        call this%sgsModel%destroy()
+        deallocate(this%sgsModel)
     end subroutine
 
     subroutine compute_vorticity(this)
@@ -761,23 +807,34 @@ contains
         rtmpx1 = -this%u*dwdx
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        if (useCompactFD) then
+            call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%interpZ_Cell2Edge(ctmpz1,ctmpz3,zeroC,zeroC)
+        end if 
         call transpose_z_to_y(ctmpz3,this%w_rhs,this%sp_gpE)
 
         rtmpx1 = -this%v*dwdy
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        if (useCompactFD) then
+            call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%interpZ_Cell2Edge(ctmpz1,ctmpz3,zeroC,zeroC)
+        end if 
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
         this%w_rhs = this%w_rhs + ctmpy2
 
         rtmpx1 = -this%wC*dwdz
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        if (useCompactFD) then
+            call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%interpZ_Cell2Edge(ctmpz1,ctmpz3,zeroC,zeroC)
+        end if 
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
         this%w_rhs = this%w_rhs + ctmpy2
-
 
 
         this%u_rhs = half*this%u_rhs
@@ -800,10 +857,22 @@ contains
         rtmpx1 = -this%u*this%wC
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        
+        if (useCompactFD) then
+            call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%ddz_C2C(ctmpz1,ctmpz2,topBC_w,botBC_w)
+        end if 
+        
         call transpose_z_to_y(ctmpz2,ctmpy1,this%sp_gpC)
         this%u_rhs = this%u_rhs + half*ctmpy1
-        call this%derW%InterpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        
+        if (useCompactFD) then
+            call this%derW%interpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%interpZ_Cell2Edge(ctmpz1,ctmpz3,zeroC,zeroC)
+        end if 
+        
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
         call this%spectE%mtimes_ik1_ip(ctmpy2)
         this%w_rhs = this%w_rhs + half*ctmpy2
@@ -817,10 +886,22 @@ contains
         rtmpx1 = -this%v*this%wC
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        
+        if (useCompactFD) then
+            call this%derW%ddz_C2C(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%ddz_C2C(ctmpz1,ctmpz2,topBC_w,botBC_w)
+        end if 
+        
         call transpose_z_to_y(ctmpz2,ctmpy1,this%sp_gpC)
         this%v_rhs = this%v_rhs + half*ctmpy1
-        call this%derW%InterpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+
+        if (useCompactFD) then
+            call this%derW%InterpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%ddz_C2E(ctmpz1,ctmpz3,topBC_w,botBC_w)
+        end if 
+
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
         call this%spectE%mtimes_ik2_ip(ctmpy2)
         this%w_rhs = this%w_rhs + half*ctmpy2
@@ -828,7 +909,13 @@ contains
         rtmpx1 = -this%wC*this%wC
         call this%spectC%fft(rtmpx1,ctmpy1)
         call transpose_y_to_z(ctmpy1,ctmpz1,this%sp_gpC)
-        call this%derWW%ddz_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        
+        if (useCompactFD) then
+            call this%derWW%ddz_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%ddz_C2E(ctmpz1,ctmpz3,.true.,.true.)
+        end if 
+
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
         this%w_rhs = this%w_rhs + half*ctmpy2
 
@@ -971,7 +1058,7 @@ contains
 
         ! Step 3b: SGS Viscous Term
         if (this%useSGS) then
-            call this%SGS%getRHS_SGS(this%duidxj,this%u_rhs,this%v_rhs,this%w_rhs, &
+            call this%SGSmodel%getRHS_SGS(this%duidxj,this%u_rhs,this%v_rhs,this%w_rhs, &
                                      this%uhat  ,this%vhat ,this%whatC,this%u    , &
                                      this%v     ,this%wC   ,this%max_nuSGS       )
 
@@ -980,7 +1067,6 @@ contains
             !! Make the SGS call at the very end, just before the time
             !! advancement.
         end if 
-
 
         ! Step 4: Time Step 
         if (this%step == 0) then
@@ -1236,5 +1322,285 @@ contains
 
     end subroutine 
 
-end module 
+    !! STATISTICS !!
 
+    subroutine init_stats( this)
+        class(igrid), intent(inout), target :: this
+        type(decomp_info), pointer  :: gpC
+
+        gpC => this%gpC
+        this%tidSUM = 0
+
+        allocate(this%zStats2dump(this%nz,24))
+        allocate(this%runningSum(this%nz,24))
+        allocate(this%TemporalMnNOW(this%nz,24))
+
+        ! mean velocities
+        this%u_mean => this%zStats2dump(:,1);  this%v_mean  => this%zStats2dump(:,2);  this%w_mean => this%zStats2dump(:,3) 
+
+        ! mean squared velocities
+        this%uu_mean => this%zStats2dump(:,4); this%uv_mean => this%zStats2dump(:,5); this%uw_mean => this%zStats2dump(:,6)
+                                               this%vv_mean => this%zStats2dump(:,7); this%vw_mean => this%zStats2dump(:,8) 
+                                                                                      this%ww_mean => this%zStats2dump(:,9)
+
+        ! SGS stresses
+        this%tau11_mean => this%zStats2dump(:,10); this%tau12_mean => this%zStats2dump(:,11); this%tau13_mean => this%zStats2dump(:,12)
+                                                   this%tau22_mean => this%zStats2dump(:,13); this%tau23_mean => this%zStats2dump(:,14) 
+                                                                                              this%tau33_mean => this%zStats2dump(:,15)
+
+        ! SGS dissipation
+        this%sgsdissp => this%zStats2dump(:,16)
+
+        ! velocity derivative products - for viscous dissipation
+        this%viscdissp => this%zStats2dump(:,17)
+
+        ! means of velocity derivatives
+        this%S11_mean => this%zStats2dump(:,18); this%S12_mean => this%zStats2dump(:,19); this%S13_mean => this%zStats2dump(:,20)
+                                                 this%S22_mean => this%zStats2dump(:,21); this%S23_mean => this%zStats2dump(:,22)
+                                                                                          this%S33_mean => this%zStats2dump(:,23)
+
+        ! SGS model coefficient
+        this%sgscoeff_mean => this%zStats2dump(:,24)
+
+        this%runningSum = zero
+        nullify(gpC)
+    end subroutine
+
+    subroutine compute_stats(this)
+        class(igrid), intent(inout), target :: this
+        type(decomp_info), pointer :: gpC
+        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3, rbuff4, rbuff5, rbuff6
+
+        rbuff1 => this%rbuffxC(:,:,:,1); rbuff2 => this%rbuffyC(:,:,:,1);
+        rbuff3 => this%rbuffzC(:,:,:,1); 
+        rbuff4 => this%rbuffzC(:,:,:,2); 
+        rbuff5 => this%rbuffzC(:,:,:,3); 
+        rbuff6 => this%rbuffzC(:,:,:,4); 
+        !rbuff7 => this%rbuffzC(:,:,:,5); 
+        gpC => this%gpC
+
+        this%tidSUM = this%tidSUM + 1
+
+        ! Compute u - mean 
+        call transpose_x_to_y(this%u,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%u_mean)
+
+        ! Compute v - mean 
+        call transpose_x_to_y(this%v,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff4,this%gpC)
+        call this%compute_z_mean(rbuff4, this%v_mean)
+
+        ! Compute w - mean 
+        call transpose_x_to_y(this%wC,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff5,this%gpC)
+        call this%compute_z_mean(rbuff5, this%w_mean)
+
+        ! uu mean
+        rbuff6 = rbuff3*rbuff3
+        call this%compute_z_mean(rbuff6, this%uu_mean)
+
+        ! uv mean
+        rbuff6 = rbuff3*rbuff4
+        call this%compute_z_mean(rbuff6, this%uv_mean)
+
+        ! uw mean
+        rbuff6 = rbuff3*rbuff5
+        call this%compute_z_mean(rbuff6, this%uw_mean)
+
+        ! vv mean 
+        rbuff6 = rbuff4*rbuff4
+        call this%compute_z_mean(rbuff6, this%vv_mean)
+
+        ! vw mean 
+        rbuff6 = rbuff4*rbuff5
+        call this%compute_z_mean(rbuff6, this%vw_mean)
+
+        ! ww mean 
+        rbuff6 = rbuff5*rbuff5
+        call this%compute_z_mean(rbuff6, this%ww_mean)
+
+        ! tau_11
+        call transpose_x_to_y(this%tauSGS_ij(:,:,:,1),rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%tau11_mean)
+
+        ! tau_12
+        call transpose_x_to_y(this%tauSGS_ij(:,:,:,2),rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%tau12_mean)
+
+        ! tau_13
+        call transpose_x_to_y(this%tauSGS_ij(:,:,:,3),rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%tau13_mean)
+
+        ! tau_22
+        call transpose_x_to_y(this%tauSGS_ij(:,:,:,4),rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%tau22_mean)
+
+        ! tau_23
+        call transpose_x_to_y(this%tauSGS_ij(:,:,:,5),rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%tau23_mean)
+
+        ! tau_33
+        call transpose_x_to_y(this%tauSGS_ij(:,:,:,6),rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%tau33_mean)
+
+
+        ! sgs dissipation
+        rbuff1 = this%tauSGS_ij(:,:,:,1)*this%tauSGS_ij(:,:,:,1) + &
+                 this%tauSGS_ij(:,:,:,2)*this%tauSGS_ij(:,:,:,2) + &
+                 this%tauSGS_ij(:,:,:,3)*this%tauSGS_ij(:,:,:,3)
+        rbuff1 = rbuff1 + two*(this%tauSGS_ij(:,:,:,4)*this%tauSGS_ij(:,:,:,4) + &
+                               this%tauSGS_ij(:,:,:,5)*this%tauSGS_ij(:,:,:,5) + &
+                               this%tauSGS_ij(:,:,:,6)*this%tauSGS_ij(:,:,:,6) )
+        rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)         ! note: factor of half is in dump_stats
+
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%sgsdissp)
+
+        ! viscous dissipation- *****????? Is rbuff1 contaminated after transpose_x_to_y? *****?????
+        rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)        ! note: factor of fourth is in dump_stats
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%viscdissp)
+
+        ! note: factor of half in all S_** is in dump_stats
+        ! S_11
+        rbuff1 = this%tauSGS_ij(:,:,:,1)/(this%nu_SGS + 1.0d-14)
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%S11_mean)
+
+        ! S_12
+        rbuff1 = this%tauSGS_ij(:,:,:,2)/(this%nu_SGS + 1.0d-14)
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%S12_mean)
+
+        ! S_13
+        rbuff1 = this%tauSGS_ij(:,:,:,3)/(this%nu_SGS + 1.0d-14)
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%S13_mean)
+
+        ! S_22
+        rbuff1 = this%tauSGS_ij(:,:,:,4)/(this%nu_SGS + 1.0d-14)
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%S22_mean)
+
+        ! S_23
+        rbuff1 = this%tauSGS_ij(:,:,:,5)/(this%nu_SGS + 1.0d-14)
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%S23_mean)
+
+        ! S_33
+        rbuff1 = this%tauSGS_ij(:,:,:,6)/(this%nu_SGS + 1.0d-14)
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%S33_mean)
+
+        ! sgs coefficient
+        call transpose_x_to_y(this%c_SGS,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        !call this%compute_z_mean(rbuff3, this%sgscoeff_mean)    ! -- averaging not needed
+        this%sgscoeff_mean(:) = rbuff3(1,1,:)
+
+        this%runningSum = this%runningSum + this%zStats2dump
+
+        !write(*,*) 'In stats'
+        !write(*,*) 'umean', maxval(this%u_mean), minval(this%u_mean)
+        !write(*,*) 'vmean', maxval(this%v_mean), minval(this%v_mean)
+        !write(*,*) 'wmean', maxval(this%w_mean), minval(this%w_mean)
+
+    end subroutine 
+
+    subroutine dump_stats(this)
+        use basic_io, only: write_2d_ascii, write_2D_binary
+        use exits, only: message
+        use kind_parameters, only: clen
+        use mpi
+        class(igrid), intent(inout), target :: this
+        character(len=clen) :: fname
+        character(len=clen) :: tempname
+        integer :: tid
+
+        this%TemporalMnNOW = this%runningSum/real(this%tidSUM,rkind)
+        tid = this%step
+
+        ! compute (u_i'u_j')
+        this%TemporalMnNOW(:,4) = this%TemporalMnNOW(:,4) - this%TemporalMnNOW(:,1)*this%TemporalMnNOW(:,1)
+        this%TemporalMnNOW(:,5) = this%TemporalMnNOW(:,5) - this%TemporalMnNOW(:,1)*this%TemporalMnNOW(:,2)
+        this%TemporalMnNOW(:,6) = this%TemporalMnNOW(:,6) - this%TemporalMnNOW(:,1)*this%TemporalMnNOW(:,3)
+        this%TemporalMnNOW(:,7) = this%TemporalMnNOW(:,7) - this%TemporalMnNOW(:,2)*this%TemporalMnNOW(:,2)
+        this%TemporalMnNOW(:,8) = this%TemporalMnNOW(:,8) - this%TemporalMnNOW(:,2)*this%TemporalMnNOW(:,3)
+        this%TemporalMnNOW(:,9) = this%TemporalMnNOW(:,9) - this%TemporalMnNOW(:,3)*this%TemporalMnNOW(:,3)
+
+        ! compute sgs dissipation
+        this%TemporalMnNOW(:,16) = half*this%TemporalMnNOW(:,16)
+
+        ! compute viscous dissipation
+        this%TemporalMnNOW(:,17) = this%TemporalMnNOW(:,17) - (                        &
+                                   this%TemporalMnNOW(:,18)*this%TemporalMnNOW(:,18) + &
+                                   this%TemporalMnNOW(:,21)*this%TemporalMnNOW(:,21) + &
+                                   this%TemporalMnNOW(:,23)*this%TemporalMnNOW(:,23) + &
+                              two*(this%TemporalMnNOW(:,19)*this%TemporalMnNOW(:,19) + &
+                                   this%TemporalMnNOW(:,20)*this%TemporalMnNOW(:,20) + & 
+                                   this%TemporalMnNOW(:,22)*this%TemporalMnNOW(:,22)))
+        this%TemporalMnNOW(:,17) = half*this%TemporalMnNOW(:,17)/this%Re     ! note: this is actually 2/Re*(..)/4
+
+        if (nrank == 0) then
+            write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%RunID,"_t",tid,".stt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call write_2d_ascii(this%TemporalMnNOW,fname)
+            !call write_2D_binary(TemporalMnNOW,fname)
+        end if
+        call message(1, "Just dumped a .stt file")
+        call message(2, "Number ot tsteps averaged:",this%tidSUM)
+
+    end subroutine
+
+    subroutine compute_z_fluct(this,fin)
+        use reductions, only: P_SUM
+        class(igrid), intent(in), target :: this
+        real(rkind), dimension(:,:,:), intent(inout) :: fin
+        integer :: k
+        real(rkind) :: fmean
+
+        do k = 1,size(fin,3)
+            fmean = P_SUM(sum(fin(:,:,k)))/(real(this%nx,rkind)*real(this%ny,rkind))
+            fin(:,:,k) = fin(:,:,k) - fmean
+        end do 
+
+    end subroutine
+
+    subroutine compute_z_mean(this, arr_in, vec_out)
+        use reductions, only: P_SUM
+        class(igrid), intent(in), target :: this
+        real(rkind), dimension(:,:,:), intent(in) :: arr_in
+        real(rkind), dimension(:), intent(out) :: vec_out
+        integer :: k
+
+        do k = 1,size(arr_in,3)
+            vec_out(k) = P_SUM(sum(arr_in(:,:,k)))/(real(this%nx,rkind)*real(this%ny,rkind))
+        end do 
+
+    end subroutine
+
+    subroutine finalize_stats(this)
+        class(igrid), intent(inout) :: this
+        nullify(this%u_mean, this%v_mean, this%w_mean, this%uu_mean, this%uv_mean, this%uw_mean, this%vv_mean, this%vw_mean, this%ww_mean)
+        nullify(this%tau11_mean, this%tau12_mean, this%tau13_mean, this%tau22_mean, this%tau23_mean, this%tau33_mean)
+        nullify(this%S11_mean, this%S12_mean, this%S13_mean, this%S22_mean, this%S23_mean, this%S33_mean)
+        nullify(this%sgsdissp, this%viscdissp, this%sgscoeff_mean)
+        deallocate(this%zStats2dump, this%runningSum, this%TemporalMnNOW)
+    end subroutine 
+
+end module 

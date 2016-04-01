@@ -29,9 +29,10 @@ module igrid_hooks
     end interface
 
     interface getForcing
-        subroutine getForcing(dpdx)
+        subroutine getForcing(inputfile, dpdx)
             import :: rkind
             real(rkind), intent(out) :: dpdx 
+            character(len=*), intent(in) :: inputfile
         end subroutine
     end interface
 

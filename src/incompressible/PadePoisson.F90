@@ -301,10 +301,11 @@ contains
                 call this%sp%ifft(this%f2dy,divergence)
                 maxDiv = p_maxval(abs(divergence))
                 
-                if (maxDiv > 1d-13) then
+                if (maxDiv > 1d-10) then
+                    call this%PressureProjection(uhat,vhat,what)
                     call message(0,"Maximum Divergence is found to be:", maxDiv)
                     call mpi_barrier(mpi_comm_world, ierr)
-                    call GracefulExit("Divergence is not zero.",342)
+                    !call GracefulExit("Divergence is not zero.",342)
                 end if 
 
             end if 

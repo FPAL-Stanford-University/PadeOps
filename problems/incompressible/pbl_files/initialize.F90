@@ -1,28 +1,24 @@
-module EkmanBL_parameters
+module pbl_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
     
     implicit none
-    real(rkind)  :: Lx, Ly, Lz, G, ustar
-    real(rkind)  :: dxP, dyP, dzP
-    real(rkind)  :: delta_Ek
-
+    real(rkind)  :: Lx, Ly, Lz, G
+    real(rkind)  :: ustar = 0.35_rkind, H = 1000._rkind, z0 = 0.1_rkind
     integer :: seedu = 321341
     integer :: seedv = 423424
     integer :: seedw = 131344
+    real(rkind), parameter :: kappa = 0.41
     real(rkind) :: randomScaleFact = 0.01_rkind ! 5% of the mean value
-
-    integer :: nperiods = 8
-    real(rkind) :: oscScaleFact = 0.2_rkind    ! 20% of the mean value
     integer :: nxg, nyg, nzg
 
 end module     
 
 subroutine meshgen(decomp, dx, dy, dz, mesh)
-    use EkmanBL_parameters    
+    use pbl_parameters    
     use kind_parameters,  only: rkind
-    use constants,        only: two,pi
+    use constants,        only: one, two, three, four, pi
     use decomp_2d,        only: decomp_info
     implicit none
 
@@ -32,7 +28,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: i,j,k
     integer :: ix1, ixn, iy1, iyn, iz1, izn
 
-    Lx = 1.5_rkind*pi; Ly = 1.5_rkind*pi; Lz = 1._rkind
+    Lx = three; Ly = three; Lz = one
 
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
@@ -66,13 +62,13 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 end subroutine
 
 subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, fieldsC, fieldsE, u_g, Ro)
-    use EkmanBL_parameters
+    use pbl_parameters
     use kind_parameters,    only: rkind
-    use constants,          only: zero, one, two,pi, half
+    use constants,          only: zero, one, two, three, four, pi, half
     use gridtools,          only: alloc_buffs
     use IncompressibleGrid, only: u_index,v_index,w_index
     use random,             only: gaussian_random
-    use decomp_2d,          only: decomp_info, nrank  
+    use decomp_2d          
     use reductions,         only: p_maxval
     implicit none
     type(decomp_info),               intent(in)    :: decompC
@@ -84,58 +80,80 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     real(rkind), intent(out), optional :: Ro, u_g
     integer :: ioUnit, k
-    real(rkind), dimension(:,:,:), pointer :: u, v, w, x, y, z
+    real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
     real(rkind) :: mfactor, sig
     real(rkind), dimension(:,:,:), allocatable :: randArr
-    real(rkind) :: epsfac, Uperiods, Vperiods , zpeak
+    real(rkind) :: epsfac = 0.0005_rkind, dpdxF = 0.2
+    real(rkind) :: z0nd, epsnd
+    real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
+    integer :: nz, nzE
 
-    namelist /EKMANINPUT/ Ro, delta_Ek  
+    namelist /PBLINPUT/ H, ustar, z0, dpdxF
 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=EKMANINPUT)
+    read(unit=ioUnit, NML=PBLINPUT)
     close(ioUnit)    
 
-    u_g = one
+    ! No Coriolis right now
+    u_g = zero
+    Ro = 1.d10
     
-    u => fieldsC(:,:,:,1)
-    v => fieldsC(:,:,:,2)
-    w => fieldsE(:,:,:,1)
+    z0nd = z0/H
+    epsnd = epsfac*Ly*H/ustar
+
+    u  => fieldsC(:,:,:,1)
+    v  => fieldsC(:,:,:,2)
+    wC => fieldsC(:,:,:,2)
+    w  => fieldsE(:,:,:,1)
 
     z => mesh(:,:,:,3)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-
-    !! CAREFUL - z in mesh is cell centers but W is at edges !!
-
-    Uperiods = 6.0; Vperiods = 6.0; zpeak = 0.3;
-    epsfac = 0.5d0;
-
-    u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
-            + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    v = exp(-z/delta_Ek)*sin(z/delta_Ek) + &
-            + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-    w = zero  
+    u = (one/kappa)*log(z/z0nd) + epsnd*cos(two*pi*x/Lx)*sin(two*pi*y/Ly)*cos(two*pi*z/Lz)
+    v = epsnd*sin(two*pi*x/Lx)*cos(two*pi*y/Ly)*cos(two*pi*z/Lz)
+    wC= epsnd*sin(two*pi*x/Lx)*sin(two*pi*y/Ly)*sin(two*pi*z/Lz)
+        
 
     ! Add random numbers
-    allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    call gaussian_random(randArr,zero,one,seedu + 10*nrank)
-    do k = 1,size(u,3)
-        sig = randomScaleFact*(1 - exp(-z(1,1,k)/delta_Ek)*cos(z(1,1,k)/delta_Ek))
-        u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
-    end do  
-    deallocate(randArr)
-    
-    allocate(randArr(size(v,1),size(v,2),size(v,3)))
-    call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
-    do k = 1,size(v,3)
-        sig = G*randomScaleFact*exp(-z(1,1,k)/delta_Ek)*sin(z(1,1,k)/delta_Ek)
-        v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
-    end do  
-    deallocate(randArr)
+    !allocate(randArr(size(u,1),size(u,2),size(u,3)))
+    !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
+    !do k = 1,size(u,3)
+    !    sig = randomScaleFact*(1 - exp(-z(1,1,k)/delta_Ek)*cos(z(1,1,k)/delta_Ek))
+    !    u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
+    !end do  
+    !deallocate(randArr)
+    !
+    !allocate(randArr(size(v,1),size(v,2),size(v,3)))
+    !call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
+    !do k = 1,size(v,3)
+    !    sig = G*randomScaleFact*exp(-z(1,1,k)/delta_Ek)*sin(z(1,1,k)/delta_Ek)
+    !    v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
+    !end do  
+    !deallocate(randArr)
 
+
+    ! Interpolate wC to w
+    allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
+    allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
+
+    allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
+    allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
+   
+    nz = decompC%zsz(3)
+    nzE = nz + 1
+
+    call transpose_x_to_y(wC,ybuffC,decompC)
+    call transpose_y_to_z(ybuffC,zbuffC,decompC)
+    zbuffE = zero
+    zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
+    call transpose_z_to_y(zbuffE,ybuffE,decompE)
+    call transpose_y_to_x(ybuffE,w,decompE) 
+   
+    deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
+    
     nullify(u,v,w,x,y,z)
     
     call message(0,"Velocity Field Initialized")
@@ -143,12 +161,24 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
 end subroutine
 
 
-subroutine getForcing(dpdx)
+subroutine getForcing(inputfile, dpdx)
     use kind_parameters, only: rkind
-    use constants, only: zero  
+    use constants, only: zero, one 
+    use pbl_parameters    
+    implicit none
+    character(len=*), intent(in) :: inputfile 
+    real(rkind) :: dpdxF = one
     real(rkind), intent(out) :: dpdx
+    integer :: ioUnit
+    namelist /PBLINPUT/ H, ustar, z0, dpdxF
+    
+    
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PBLINPUT)
+    close(ioUnit)    
 
-    dpdx = zero
+    dpdx = dpdxF
     
 
 end subroutine
