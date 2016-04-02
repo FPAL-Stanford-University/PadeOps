@@ -16,6 +16,10 @@ module temporalHook
     integer :: tid_compStats = 20
     real(rkind) :: time_startDumping = 50._rkind
     integer :: ierr 
+    
+    integer :: tid_start_planes = 1
+    integer :: tid_dump_plane_every = 20
+
 contains
 
     subroutine doTemporalStuff(gp)
@@ -28,7 +32,7 @@ contains
         if (mod(gp%step,nt_getMaxKE) == 0) then
             call message(1,"Max KE:",gp%getMaxKE())
             call message(1,"Max nuSGS:",gp%max_nuSGS)
-            if (gp%useDynamicProcedure) then
+            if ((gp%useDynamicProcedure) .and. (gp%useSGS)) then
                 call message(1,"Max cSGS:",p_maxval(maxval(gp%c_SGS(1,1,:))))
             end if 
             call toc()
@@ -53,6 +57,9 @@ contains
             call gp%dumpRestartfile()
         end if
 
+        if ((mod(gp%step,tid_dump_plane_every) == 0) .and. (gp%step .ge. tid_start_planes)) then
+            call gp%dump_planes()
+        end if 
     end subroutine
 
 

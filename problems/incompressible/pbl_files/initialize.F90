@@ -4,8 +4,9 @@ module pbl_parameters
     use kind_parameters,  only: rkind
     
     implicit none
-    real(rkind)  :: Lx, Ly, Lz, G
-    real(rkind)  :: ustar = 0.35_rkind, H = 1000._rkind, z0 = 0.1_rkind
+    real(rkind)  :: Lx, Ly, Lz, G = 15._rkind
+    real(rkind)  :: ustar = 0.45_rkind, H = 1000._rkind, z0 = 0.1_rkind
+    real(rkind)  :: f = 1.45d-4
     integer :: seedu = 321341
     integer :: seedv = 423424
     integer :: seedw = 131344
@@ -83,12 +84,12 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
     real(rkind) :: mfactor, sig
     real(rkind), dimension(:,:,:), allocatable :: randArr
-    real(rkind) :: epsfac = 0.0005_rkind, dpdxF = 0.2
     real(rkind) :: z0nd, epsnd
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
-
-    namelist /PBLINPUT/ H, ustar, z0, dpdxF
+    real(rkind) :: delta_Ek = 0.08, Uperiods = 3, Vperiods = 3 
+    real(rkind) :: zpeak = 0.3
+    namelist /PBLINPUT/ H, G, f, z0 
 
 
     ioUnit = 11
@@ -97,11 +98,10 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     close(ioUnit)    
 
     ! No Coriolis right now
-    u_g = zero
-    Ro = 1.d10
+    u_g = one
+    Ro = G/(H*f)
     
     z0nd = z0/H
-    epsnd = epsfac*Ly*H/ustar
 
     u  => fieldsC(:,:,:,1)
     v  => fieldsC(:,:,:,2)
@@ -112,10 +112,16 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    u = (one/kappa)*log(z/z0nd) + epsnd*cos(two*pi*x/Lx)*sin(two*pi*y/Ly)*cos(two*pi*z/Lz)
-    v = epsnd*sin(two*pi*x/Lx)*cos(two*pi*y/Ly)*cos(two*pi*z/Lz)
-    wC= epsnd*sin(two*pi*x/Lx)*sin(two*pi*y/Ly)*sin(two*pi*z/Lz)
+    !u = (G/ustar)*(one/kappa)*log(z/z0nd) + epsnd*cos(two*pi*x/Lx)*sin(two*pi*y/Ly)*cos(two*pi*z/Lz)
+    !v = epsnd*sin(two*pi*x/Lx)*cos(two*pi*y/Ly)*cos(two*pi*z/Lz)
+    !wC= epsnd*sin(two*pi*x/Lx)*sin(two*pi*y/Ly)*sin(two*pi*z/Lz)
         
+    !u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
+    u = (0.65/G)*(one/kappa)*log(z/(z0nd))  &
+        + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    v = zero  &
+            + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    w = zero  
 
     ! Add random numbers
     !allocate(randArr(size(u,1),size(u,2),size(u,3)))
@@ -170,16 +176,25 @@ subroutine getForcing(inputfile, dpdx)
     real(rkind) :: dpdxF = one
     real(rkind), intent(out) :: dpdx
     integer :: ioUnit
-    namelist /PBLINPUT/ H, ustar, z0, dpdxF
     
-    
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PBLINPUT)
-    close(ioUnit)    
-
-    dpdx = dpdxF
+    dpdx = zero
     
 
 end subroutine
+
+subroutine set_planes_io(xplanes, yplanes, zplanes)
+    implicit none
+    integer, dimension(:), allocatable,  intent(inout) :: xplanes
+    integer, dimension(:), allocatable,  intent(inout) :: yplanes
+    integer, dimension(:), allocatable,  intent(inout) :: zplanes
+    integer, parameter :: nxplanes = 2, nyplanes = 2, nzplanes = 2
+
+    allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
+
+    xplanes = [2 , 10]
+    yplanes = [2 , 10]
+    zplanes = [2 , 10]
+
+end subroutine
+
 

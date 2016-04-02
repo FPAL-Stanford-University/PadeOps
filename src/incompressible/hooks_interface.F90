@@ -52,6 +52,15 @@ module igrid_hooks
         end subroutine 
     end interface
 
+    interface set_planes_io
+        subroutine set_planes_io(xplanes, yplanes, zplanes)
+            integer, dimension(:), allocatable,  intent(inout) :: xplanes
+            integer, dimension(:), allocatable,  intent(inout) :: yplanes
+            integer, dimension(:), allocatable,  intent(inout) :: zplanes
+        end subroutine
+    end interface
+
+
     interface hook_output
         subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
             import :: rkind
