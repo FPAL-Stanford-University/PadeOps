@@ -15,7 +15,7 @@ module MixtureEOSMod
         class(idealgas), allocatable :: mat
     end type
 
-    type, abstract :: mixture
+    type :: mixture
 
         integer :: ns
         integer :: nxp, nyp, nzp
@@ -54,8 +54,7 @@ contains
         allocate(this%material(this%ns))
 
         do i = 1,this%ns
-            !if (allocated(this%material(i)%mat)) deallocate(this%material(i)%mat); 
-            allocate(idealgas :: this%material(i)%mat)
+            if (allocated(this%material(i)%mat)) deallocate(this%material(i)%mat); allocate(idealgas :: this%material(i)%mat)
             call this%material(i)%mat%init(gam(i), Rgas(i))
         end do
 
