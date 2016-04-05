@@ -607,13 +607,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         g21 = zero; g22 = one;  g23 = zero
         g31 = zero; g32 = zero; g33 = one
 
-        g11 = one / (one + eps11)
+        g11 = ( one / (one + eps11) )**2
 
-        p = PInf*(g11**gam - one)
+        p = PInf*(sqrt(g11)**gam - one)
 
         ! Get rho compatible with det(g) and rho0
         eps11 = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
-        rho = rho0 * eps11
+        rho = rho0 * sqrt(eps11)
 
     end associate
 
@@ -747,16 +747,16 @@ subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
                g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        do k = 1,decomp%ysz(3)
-            do j = 1,decomp%ysz(2)
-                do i = 1,decomp%ysz(1)
-                    rhs (i,j,k,2) = rhs (i,j,k,2) + momentum_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
-                    rhs (i,j,k,5) = rhs (i,j,k,5) + energy_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
-                    rhsg(i,j,k,1) = rhsg(i,j,k,1) + g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
-                    rhs (i,j,k,1) = rhs (i,j,k,1) + rho_0 * g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
-                end do
-            end do
-        end do
+        ! do k = 1,decomp%ysz(3)
+        !     do j = 1,decomp%ysz(2)
+        !         do i = 1,decomp%ysz(1)
+        !             rhs (i,j,k,2) = rhs (i,j,k,2) + momentum_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+        !             rhs (i,j,k,5) = rhs (i,j,k,5) + energy_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+        !             rhsg(i,j,k,1) = rhsg(i,j,k,1) + g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))**2
+        !             rhs (i,j,k,1) = rhs (i,j,k,1) + rho_0 * g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+        !         end do
+        !     end do
+        ! end do
 
     end associate
 end subroutine

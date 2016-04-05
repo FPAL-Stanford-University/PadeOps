@@ -33,23 +33,23 @@ contains
 
     end subroutine
 
-    pure subroutine get_finger(this,g,finger,fingersq,trG,trG2,detG)
+    pure subroutine get_finger(this,G,finger,fingersq,trG,trG2,detG)
         class(sep1solid), intent(in) :: this
-        real(rkind), dimension(:,:,:,:), intent(in)  :: g
+        real(rkind), dimension(:,:,:,:), intent(in)  :: G
         real(rkind), dimension(:,:,:,:), intent(out) :: finger
         real(rkind), dimension(:,:,:,:), intent(out), optional :: fingersq
         real(rkind), dimension(:,:,:),   intent(out), optional :: trG, trG2, detG
 
-        associate ( g11 => g(:,:,:,1), g12 => g(:,:,:,2), g13 => g(:,:,:,3), &
-                    g21 => g(:,:,:,4), g22 => g(:,:,:,5), g23 => g(:,:,:,6), &
-                    g31 => g(:,:,:,7), g32 => g(:,:,:,8), g33 => g(:,:,:,9)  )
+        associate ( G11 => G(:,:,:,1), G12 => G(:,:,:,2), G13 => G(:,:,:,3), &
+                    G21 => G(:,:,:,4), G22 => G(:,:,:,5), G23 => G(:,:,:,6), &
+                    G31 => G(:,:,:,7), G32 => G(:,:,:,8), G33 => G(:,:,:,9)  )
 
-            finger(:,:,:,1) = g11*g11 + g21*g21 + g31*g31
-            finger(:,:,:,2) = g11*g12 + g21*g22 + g31*g32
-            finger(:,:,:,3) = g11*g13 + g21*g23 + g31*g33
-            finger(:,:,:,4) = g12*g12 + g22*g22 + g32*g32
-            finger(:,:,:,5) = g12*g13 + g22*g23 + g32*g33
-            finger(:,:,:,6) = g13*g13 + g23*g23 + g33*g33
+            finger(:,:,:,1) = G11
+            finger(:,:,:,2) = G12
+            finger(:,:,:,3) = G13
+            finger(:,:,:,4) = G22
+            finger(:,:,:,5) = G23
+            finger(:,:,:,6) = G33
 
         end associate
 

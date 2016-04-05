@@ -23,15 +23,15 @@ module SolidGrid
     integer, parameter :: mu_index     = 8
     integer, parameter :: bulk_index   = 9
     integer, parameter :: kap_index    = 10
-    integer, parameter :: g11_index    = 11
-    integer, parameter :: g12_index    = 12
-    integer, parameter :: g13_index    = 13
-    integer, parameter :: g21_index    = 14
-    integer, parameter :: g22_index    = 15
-    integer, parameter :: g23_index    = 16
-    integer, parameter :: g31_index    = 17
-    integer, parameter :: g32_index    = 18
-    integer, parameter :: g33_index    = 19
+    integer, parameter :: G11_index    = 11
+    integer, parameter :: G12_index    = 12
+    integer, parameter :: G13_index    = 13
+    integer, parameter :: G21_index    = 14
+    integer, parameter :: G22_index    = 15
+    integer, parameter :: G23_index    = 16
+    integer, parameter :: G31_index    = 17
+    integer, parameter :: G32_index    = 18
+    integer, parameter :: G33_index    = 19
     integer, parameter :: eel_index    = 20
     integer, parameter :: sxx_index    = 21
     integer, parameter :: sxy_index    = 22
@@ -94,16 +94,16 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: bulk 
         real(rkind), dimension(:,:,:), pointer :: kap
 
-        real(rkind), dimension(:,:,:,:), pointer :: g
-        real(rkind), dimension(:,:,:), pointer :: g11
-        real(rkind), dimension(:,:,:), pointer :: g12
-        real(rkind), dimension(:,:,:), pointer :: g13
-        real(rkind), dimension(:,:,:), pointer :: g21
-        real(rkind), dimension(:,:,:), pointer :: g22
-        real(rkind), dimension(:,:,:), pointer :: g23
-        real(rkind), dimension(:,:,:), pointer :: g31
-        real(rkind), dimension(:,:,:), pointer :: g32
-        real(rkind), dimension(:,:,:), pointer :: g33
+        real(rkind), dimension(:,:,:,:), pointer :: G
+        real(rkind), dimension(:,:,:), pointer :: G11
+        real(rkind), dimension(:,:,:), pointer :: G12
+        real(rkind), dimension(:,:,:), pointer :: G13
+        real(rkind), dimension(:,:,:), pointer :: G21
+        real(rkind), dimension(:,:,:), pointer :: G22
+        real(rkind), dimension(:,:,:), pointer :: G23
+        real(rkind), dimension(:,:,:), pointer :: G31
+        real(rkind), dimension(:,:,:), pointer :: G32
+        real(rkind), dimension(:,:,:), pointer :: G33
        
         real(rkind), dimension(:,:,:,:), pointer :: devstress
         real(rkind), dimension(:,:,:), pointer :: sxx
@@ -288,16 +288,16 @@ contains
         this%bulk => this%fields(:,:,:,bulk_index)  
         this%kap  => this%fields(:,:,:, kap_index)   
        
-        this%g    => this%fields(:,:,:,g11_index:g33_index)
-        this%g11  => this%fields(:,:,:, g11_index)   
-        this%g12  => this%fields(:,:,:, g12_index)   
-        this%g13  => this%fields(:,:,:, g13_index)   
-        this%g21  => this%fields(:,:,:, g21_index)   
-        this%g22  => this%fields(:,:,:, g22_index)   
-        this%g23  => this%fields(:,:,:, g23_index)   
-        this%g31  => this%fields(:,:,:, g31_index)   
-        this%g32  => this%fields(:,:,:, g32_index)   
-        this%g33  => this%fields(:,:,:, g33_index)   
+        this%g    => this%fields(:,:,:,G11_index:G33_index)
+        this%g11  => this%fields(:,:,:, G11_index)   
+        this%g12  => this%fields(:,:,:, G12_index)   
+        this%g13  => this%fields(:,:,:, G13_index)   
+        this%g21  => this%fields(:,:,:, G21_index)   
+        this%g22  => this%fields(:,:,:, G22_index)   
+        this%g23  => this%fields(:,:,:, G23_index)   
+        this%g31  => this%fields(:,:,:, G31_index)   
+        this%g32  => this%fields(:,:,:, G32_index)   
+        this%g33  => this%fields(:,:,:, G33_index)   
         
         this%devstress => this%fields(:,:,:,sxx_index:szz_index)
         this%sxx  => this%fields(:,:,:, sxx_index)   
@@ -332,7 +332,7 @@ contains
         allocate( trG2(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
         allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
 
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+        call this%elastic%get_finger(this%G,finger,fingersq,trG,trG2,detG)
         call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel) 
         call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
         
@@ -419,15 +419,15 @@ contains
         varnames( 8) = 'mu'
         varnames( 9) = 'bulk'
         varnames(10) = 'kap'
-        varnames(11) = 'g11'
-        varnames(12) = 'g12'
-        varnames(13) = 'g13'
-        varnames(14) = 'g21'
-        varnames(15) = 'g22'
-        varnames(16) = 'g23'
-        varnames(17) = 'g31'
-        varnames(18) = 'g32'
-        varnames(19) = 'g33'
+        varnames(11) = 'G11'
+        varnames(12) = 'G12'
+        varnames(13) = 'G13'
+        varnames(14) = 'G21'
+        varnames(15) = 'G22'
+        varnames(16) = 'G23'
+        varnames(17) = 'G31'
+        varnames(18) = 'G32'
+        varnames(19) = 'G33'
         varnames(20) = 'e_elastic'
         varnames(21) = 'Sxx'
         varnames(22) = 'Sxy'
@@ -695,9 +695,9 @@ contains
                 write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (Wcnsrv) at substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
                 call GracefulExit(trim(charout), 999)
             end if
-            if ( nancheck(this%g,i,j,k,l) ) then
-                call message("g: ",this%g(i,j,k,l))
-                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (g) at substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
+            if ( nancheck(this%G,i,j,k,l) ) then
+                call message("g: ",this%G(i,j,k,l))
+                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (G) at substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
                 call GracefulExit(trim(charout), 999)
             end if
 
@@ -706,7 +706,7 @@ contains
             Qtmpg = this%dt*rhsg + RK45_A(isub)*Qtmpg
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
-            this%g      = this%g      + RK45_B(isub)*Qtmpg
+            this%G      = this%G      + RK45_B(isub)*Qtmpg
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
             ! Filter the conserved variables
@@ -715,7 +715,7 @@ contains
             end do
             ! Filter the g tensor
             do i = 1,9
-                call this%filter(this%g(:,:,:,i), this%fil, 1)
+                call this%filter(this%G(:,:,:,i), this%fil, 1)
             end do
             
             call this%get_primitive()
@@ -723,7 +723,7 @@ contains
             if (.NOT. this%explPlast) then
                 if (this%plastic) then
                     ! Effect plastic deformations
-                    call this%elastic%plastic_deformation(this%g)
+                    call this%elastic%plastic_deformation(this%G)
                     call this%get_primitive()
 
                     ! Filter the conserved variables
@@ -732,7 +732,7 @@ contains
                     end do
                     ! Filter the g tensor
                     do i = 1,9
-                        call this%filter(this%g(:,:,:,i), this%fil, 1)
+                        call this%filter(this%G(:,:,:,i), this%fil, 1)
                     end do
                 end if
             end if
@@ -780,8 +780,10 @@ contains
                 this%dt = dtkap
                 stability = 'conductive'
             else if ( this%dt > dtplast ) then
-                this%dt = dtplast
-                stability = 'plastic'
+                if (this%plastic .AND. this%explPlast) then
+                    this%dt = dtplast
+                    stability = 'plastic'
+                end if
             end if
 
             if (this%step .LE. 10) then
@@ -815,7 +817,7 @@ contains
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
         
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+        call this%elastic%get_finger(this%G,finger,fingersq,trG,trG2,detG)
         call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
         
         call this%sgas%get_T(this%e,this%T)
@@ -843,7 +845,7 @@ contains
 
         this%e = this%e - this%eel ! Get only hydrodynamic part
 
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+        call this%elastic%get_finger(this%G,finger,fingersq,trG,trG2,detG)
         call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)  ! Update elastic energy
         
         call this%sgas%get_e_from_p(this%rho,this%p,this%e)  ! Update hydrodynamic energy
@@ -863,8 +865,8 @@ contains
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
         real(rkind), dimension(:,:,:), pointer :: qx,qy,qz
-        real(rkind), dimension(:,:,:), pointer :: penalty, tmp, detg
-        real(rkind), dimension(:,:,:,:), pointer :: curlg
+        real(rkind), dimension(:,:,:), pointer :: penalty, tmp, detG
+        real(rkind), dimension(:,:,:,:), pointer :: gradG
         real(rkind), parameter :: etafac = one/32._rkind
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
@@ -880,6 +882,57 @@ contains
         call this%getSGS(dudx,dudy,dudz,&
                          dvdx,dvdy,dvdz,&
                          dwdx,dwdy,dwdz )
+
+        ! RHS for finger tensor (Get now since duidxj is available)
+        penalty => this%ybuf(:,:,:,1)
+        tmp => this%ybuf(:,:,:,2)
+        gradG => this%ybuf(:,:,:,3:5)
+        detG => this%ybuf(:,:,:,6)
+
+        detG = this%G11*(this%G22*this%G33-this%G23*this%G32) &
+             - this%G12*(this%G21*this%G33-this%G31*this%G23) &
+             + this%G13*(this%G21*this%G32-this%G31*this%G22)
+
+        penalty = etafac*(this%rho/sqrt(detG)/this%rho0-one)
+
+        call this%gradient(this%G11, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3))
+        rhsg(:,:,:,1) = - (this%u*gradG(:,:,:,1) + this%v*gradG(:,:,:,2) + this%w*gradG(:,:,:,3)) &
+                        - (dudx*this%G11 + dvdx*this%G21 + dwdx*this%G31) &
+                        - (this%G11*dudx + this%G12*dvdx + this%G13*dwdx) + penalty*this%G11
+
+        call this%gradient(this%G12, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3))
+        rhsg(:,:,:,2) = - (this%u*gradG(:,:,:,1) + this%v*gradG(:,:,:,2) + this%w*gradG(:,:,:,3)) &
+                        - (dudx*this%G12 + dvdx*this%G22 + dwdx*this%G32) &
+                        - (this%G11*dudy + this%G12*dvdy + this%G13*dwdy) + penalty*this%G12
+
+        call this%gradient(this%G13, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3))
+        rhsg(:,:,:,3) = - (this%u*gradG(:,:,:,1) + this%v*gradG(:,:,:,2) + this%w*gradG(:,:,:,3)) &
+                        - (dudx*this%G13 + dvdx*this%G23 + dwdx*this%G33) &
+                        - (this%G11*dudz + this%G12*dvdz + this%G13*dwdz) + penalty*this%G13
+
+        rhsg(:,:,:,4) = rhsg(:,:,:,2)  ! Since symmetric
+
+        call this%gradient(this%G22, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3))
+        rhsg(:,:,:,5) = - (this%u*gradG(:,:,:,1) + this%v*gradG(:,:,:,2) + this%w*gradG(:,:,:,3)) &
+                        - (dudy*this%G12 + dvdy*this%G22 + dwdy*this%G32) &
+                        - (this%G21*dudy + this%G22*dvdy + this%G23*dwdy) + penalty*this%G22
+
+        call this%gradient(this%G23, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3))
+        rhsg(:,:,:,6) = - (this%u*gradG(:,:,:,1) + this%v*gradG(:,:,:,2) + this%w*gradG(:,:,:,3)) &
+                        - (dudy*this%G13 + dvdy*this%G23 + dwdy*this%G33) &
+                        - (this%G21*dudz + this%G22*dvdz + this%G23*dwdz) + penalty*this%G23
+
+        rhsg(:,:,:,7) = rhsg(:,:,:,3)  ! Since symmetric
+        rhsg(:,:,:,8) = rhsg(:,:,:,6)  ! Since symmetric
+
+        call this%gradient(this%G33, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3))
+        rhsg(:,:,:,9) = - (this%u*gradG(:,:,:,1) + this%v*gradG(:,:,:,2) + this%w*gradG(:,:,:,3)) &
+                        - (dudz*this%G13 + dvdz*this%G23 + dwdz*this%G33) &
+                        - (this%G31*dudz + this%G32*dvdz + this%G33*dwdz) + penalty*this%G33
+
+        if (this%explPlast) then
+            call this%getPlasticSources(detg,rhsg)
+        end if
 
         ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
         call this%get_tau( duidxj )
@@ -909,46 +962,6 @@ contains
         call this%getRHS_z(              rhs,&
                            tauxz,tauyz,tauzz,&
                                qz )
-
-        ! inverse deformation gradient tensor
-        penalty => this%ybuf(:,:,:,1)
-        tmp => this%ybuf(:,:,:,2)
-        curlg => this%ybuf(:,:,:,3:5)
-        detg => this%ybuf(:,:,:,6)
-
-        detg = this%g11*(this%g22*this%g33-this%g23*this%g32) &
-             - this%g12*(this%g21*this%g33-this%g31*this%g23) &
-             + this%g13*(this%g21*this%g32-this%g31*this%g22)
-
-        penalty = etafac*(this%rho/detg/this%rho0-one)
-
-        tmp = -this%u*this%g11-this%v*this%g12-this%w*this%g13
-        call this%gradient(tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3))
-        
-        call curl(this%decomp, this%der, this%g11, this%g12, this%g13, curlg)
-        rhsg(:,:,:,1) = rhsg(:,:,:,1) + this%v*curlg(:,:,:,3) - this%w*curlg(:,:,:,2) + penalty*this%g11
-        rhsg(:,:,:,2) = rhsg(:,:,:,2) + this%w*curlg(:,:,:,1) - this%u*curlg(:,:,:,3) + penalty*this%g12
-        rhsg(:,:,:,3) = rhsg(:,:,:,3) + this%u*curlg(:,:,:,2) - this%v*curlg(:,:,:,1) + penalty*this%g13
- 
-        tmp = -this%u*this%g21-this%v*this%g22-this%w*this%g23
-        call this%gradient(tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6))
-        
-        call curl(this%decomp, this%der, this%g21, this%g22, this%g23, curlg)
-        rhsg(:,:,:,4) = rhsg(:,:,:,4) + this%v*curlg(:,:,:,3) - this%w*curlg(:,:,:,2) + penalty*this%g21
-        rhsg(:,:,:,5) = rhsg(:,:,:,5) + this%w*curlg(:,:,:,1) - this%u*curlg(:,:,:,3) + penalty*this%g22
-        rhsg(:,:,:,6) = rhsg(:,:,:,6) + this%u*curlg(:,:,:,2) - this%v*curlg(:,:,:,1) + penalty*this%g23
- 
-        tmp = -this%u*this%g31-this%v*this%g32-this%w*this%g33
-        call this%gradient(tmp,rhsg(:,:,:,7),rhsg(:,:,:,8),rhsg(:,:,:,9))
-
-        call curl(this%decomp, this%der, this%g31, this%g32, this%g33, curlg)
-        rhsg(:,:,:,7) = rhsg(:,:,:,7) + this%v*curlg(:,:,:,3) - this%w*curlg(:,:,:,2) + penalty*this%g31
-        rhsg(:,:,:,8) = rhsg(:,:,:,8) + this%w*curlg(:,:,:,1) - this%u*curlg(:,:,:,3) + penalty*this%g32
-        rhsg(:,:,:,9) = rhsg(:,:,:,9) + this%u*curlg(:,:,:,2) - this%v*curlg(:,:,:,1) + penalty*this%g33
-
-        if (this%explPlast) then
-            call this%getPlasticSources(detg,rhsg)
-        end if
 
         ! Call problem source hook
         call hook_source(this%decomp, this%mesh, this%fields, this%tsim, rhs, rhsg)
