@@ -163,8 +163,8 @@ contains
         dfdzC(:,:,2:this%nzC-1) = OneBy2Dz*dfdzC(:,:,2:this%nzC-1)
 
         if (this%isBotSided) then
-            !dfdzC(:,:,1) = (-half*fC(:,:,3) + two*fC(:,:,2) - three/two*fC(:,:,1))/this%dz 
-            dfdzC(:,:,1) = (fC(:,:,2) - fC(:,:,1))/this%dz 
+            dfdzC(:,:,1) = (-half*fC(:,:,3) + two*fC(:,:,2) - three/two*fC(:,:,1))/this%dz 
+            !dfdzC(:,:,1) = (fC(:,:,2) - fC(:,:,1))/this%dz 
         else
             if (isBotEven) then
                 dfdzC(:,:,1) = OneBy2Dz*(fC(:,:,2) - fC(:,:,1))
@@ -174,9 +174,9 @@ contains
         end if 
 
         if (this%isTopSided) then
-            !dfdzC(:,:,this%nzC) = (half*fC(:,:,this%nzC-2) - two*fC(:,:,this%nzC-1) &
-            !            + three/two*fC(:,:,this%nzC))/this%dz 
-            dfdzC(:,:,this%nzC) = (fC(:,:,this%nzC) - fC(:,:,this%nzC-1))/this%dz 
+            dfdzC(:,:,this%nzC) = (half*fC(:,:,this%nzC-2) - two*fC(:,:,this%nzC-1) &
+                        + three/two*fC(:,:,this%nzC))/this%dz 
+            !dfdzC(:,:,this%nzC) = (fC(:,:,this%nzC) - fC(:,:,this%nzC-1))/this%dz 
         else
             if (isTopEven) then
                 dfdzC(:,:,this%nzC) = OneBy2Dz*(fC(:,:,this%nzC) - fC(:,:,this%nzC-1))

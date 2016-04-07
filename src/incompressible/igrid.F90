@@ -191,6 +191,7 @@ contains
         logical :: useWallModelTop = .false., useWallModelBot = .false.
         logical :: isInviscid = .false., useVerticalFilter = .true.  
         integer :: SGSModelID = 1
+        integer :: vscheme = 0, advForm = 1
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
@@ -202,7 +203,7 @@ contains
                                 time_startDumping, topWall, botWall, &
                                 useRestartFile, restartFile_TID, restartFile_RID, &
                                 isInviscid, &
-                                useVerticalFilter, SGSModelID 
+                                useVerticalFilter, SGSModelID, vscheme, advForm 
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -254,6 +255,18 @@ contains
         this%UseDynamicProcedure = useDynamicProcedure
 
         this%useVerticalFilter = useVerticalFilter
+
+        select case (vscheme)
+        case(0)
+            useCompactFD = .true. 
+        case(1)
+            useCompactFD = .false.
+        case default 
+            call GracefulExit("Invalid choice for VSCHEME. Only options &
+                & available are 0 (6th Order) and 1 (2nd order)",3214)
+        end select
+
+        AdvectionForm = advForm 
 
         if (.not. periodicx) then
             call GracefulExit("Currently only Periodic BC is supported in x direction",102)

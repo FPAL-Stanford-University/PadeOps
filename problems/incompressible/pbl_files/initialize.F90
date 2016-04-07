@@ -117,7 +117,7 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     !wC= epsnd*sin(two*pi*x/Lx)*sin(two*pi*y/Ly)*sin(two*pi*z/Lz)
         
     !u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
-    u = (0.65/G)*(one/kappa)*log(z/(z0nd))  &
+    u = (0.70/G)*(one/kappa)*log(z/(z0nd))  &
         + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     v = zero  &
             + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
@@ -173,7 +173,6 @@ subroutine getForcing(inputfile, dpdx)
     use pbl_parameters    
     implicit none
     character(len=*), intent(in) :: inputfile 
-    real(rkind) :: dpdxF = one
     real(rkind), intent(out) :: dpdx
     integer :: ioUnit
     

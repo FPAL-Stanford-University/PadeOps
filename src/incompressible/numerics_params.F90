@@ -1,5 +1,5 @@
 module numerics
-   logical, parameter :: useCompactFD = .true. 
-   integer, parameter :: AdvectionForm = 2 
+   logical :: useCompactFD = .true. 
+   integer :: AdvectionForm = 1 
 
 end module 
