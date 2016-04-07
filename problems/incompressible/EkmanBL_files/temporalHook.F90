@@ -18,7 +18,7 @@ module temporalHook
     integer :: ierr 
     
     integer :: tid_start_planes = 1
-    integer :: tid_dump_plane_every = 20
+    integer :: tid_dump_plane_every = 40
 
 contains
 
