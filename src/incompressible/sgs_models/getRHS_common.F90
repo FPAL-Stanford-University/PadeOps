@@ -26,7 +26,6 @@
         call transpose_y_to_z(tauhat,this%ctmpCz,this%sp_gp)
         if (useCompactFD) then
             call this%derZ_OO%InterpZ_C2E(this%ctmpCz,this%ctmpEz,size(this%ctmpCz,1),size(this%ctmpCz,2))
-            
         else
             call this%Ops2ndOrder%InterpZ_Cell2Edge(this%ctmpCz,this%ctmpEz,zeroC,zeroC)
         end if 
@@ -35,10 +34,14 @@
         call this%spectE%mtimes_ik1_ip(this%ctmpEy)
         wrhs = wrhs + this%ctmpEy
         if (useCompactFD) then
-            call this%derZ_EE%ddz_C2C(this%ctmpCz,this%ctmpCz2, size(this%ctmpCz,1),size(this%ctmpCz,2)) 
+            call this%derZ_OO%ddz_C2C(this%ctmpCz,this%ctmpCz2, size(this%ctmpCz,1),size(this%ctmpCz,2)) 
         else
-            call this%Ops2ndOrder%ddz_C2C(this%ctmpCz,this%ctmpCz2, .false., .true.) 
-        end if 
+            call this%Ops2ndOrder%ddz_C2C(this%ctmpCz,this%ctmpCz2, .false., .false.) 
+        end if
+        !print*, "ddz tau13:"
+        !print*, this%ctmpCz2(2,3,1:3) 
+        !print*, "urhs:"
+        !print*, urhs(2,3,1:3) 
         call transpose_z_to_y(this%ctmpCz2,tauhat,this%sp_gp)
         urhs = urhs + tauhat
     
@@ -57,9 +60,13 @@
         wrhs = wrhs + this%ctmpEy
 
         if (useCompactFD) then
-            call this%derZ_EE%ddz_C2C(this%ctmpCz,this%ctmpCz2, size(this%ctmpCz,1),size(this%ctmpCz,2)) 
+            call this%derZ_OO%ddz_C2C(this%ctmpCz,this%ctmpCz2, size(this%ctmpCz,1),size(this%ctmpCz,2)) 
         else
-            call this%Ops2ndOrder%ddz_C2C(this%ctmpCz,this%ctmpCz2, .false., .true.) 
+            call this%Ops2ndOrder%ddz_C2C(this%ctmpCz,this%ctmpCz2, .false., .false.) 
         end if 
+        !print*, "ddz tau23:"
+        !print*, this%ctmpCz2(2,3,1:3)
+        !print*, "vrhs:"
+        !print*, vrhs(2,3,1:3) 
         call transpose_z_to_y(this%ctmpCz2,tauhat,this%sp_gp)
         vrhs = vrhs + tauhat
