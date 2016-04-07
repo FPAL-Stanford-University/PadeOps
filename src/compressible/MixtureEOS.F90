@@ -9,8 +9,6 @@ module MixtureEOSMod
     use EOSMod,          only: eos
     use IdealGasEOS,     only: idealgas
 
-    integer, parameter :: max_materials = 99
-
     type :: material_eos
         class(idealgas), allocatable :: mat
     end type
@@ -24,45 +22,53 @@ module MixtureEOSMod
 
     contains
 
-        procedure :: init
+        ! procedure :: init
+        procedure :: set_material
         procedure :: update
         procedure :: get_p
         procedure :: get_T
         procedure :: get_e_from_p
         procedure :: get_sos
-        procedure :: destroy
+        final     :: destroy
 
     end type
 
+    interface mixture
+        module procedure init
+    end interface
+
 contains
 
-    subroutine init(this,decomp,ns,gam,Rgas)
-        class(mixture),                                intent(inout) :: this
+    function init(decomp,ns) result(this)
+        type(mixture) :: this
         type(decomp_info),                             intent(in)    :: decomp
         integer,                                       intent(in)    :: ns
-        real(rkind), dimension(max_materials),         intent(in)    :: gam, Rgas
-
-        integer :: i
-
-        if (ns .GT. max_materials) call GracefulExit('ns exceeds max_materials.', 3457)
 
         this%ns = ns
         this%nxp = decomp%ysz(1)
         this%nyp = decomp%ysz(2)
         this%nzp = decomp%ysz(3)
 
-        allocate(this%material(this%ns))
+        if (allocated(this%material)) deallocate(this%material); allocate(this%material(this%ns))
 
-        do i = 1,this%ns
-            if (allocated(this%material(i)%mat)) deallocate(this%material(i)%mat); allocate(idealgas :: this%material(i)%mat)
-            call this%material(i)%mat%init(gam(i), Rgas(i))
-        end do
+        if (this%ns .GT. 1) then
+            if (allocated(this%gam )) deallocate(this%gam ); allocate(this%gam (this%nxp,this%nyp,this%nzp))
+            if (allocated(this%Rgas)) deallocate(this%Rgas); allocate(this%Rgas(this%nxp,this%nyp,this%nzp))
+            if (allocated(this%Cv  )) deallocate(this%Cv  ); allocate(this%Cv  (this%nxp,this%nyp,this%nzp))
+            if (allocated(this%Cp  )) deallocate(this%Cp  ); allocate(this%Cp  (this%nxp,this%nyp,this%nzp))
+        end if
 
-        if (allocated(this%gam )) deallocate(this%gam ); allocate(this%gam (this%nxp,this%nyp,this%nzp))
-        if (allocated(this%Rgas)) deallocate(this%Rgas); allocate(this%Rgas(this%nxp,this%nyp,this%nzp))
-        if (allocated(this%Cv  )) deallocate(this%Cv  ); allocate(this%Cv  (this%nxp,this%nyp,this%nzp))
-        if (allocated(this%Cp  )) deallocate(this%Cp  ); allocate(this%Cp  (this%nxp,this%nyp,this%nzp))
+    end function
 
+    subroutine set_material(this, imat, mat)
+        class(mixture),  intent(inout) :: this
+        integer,         intent(in)    :: imat
+        class(idealgas), intent(in)    :: mat
+
+        if ((imat .GT. this%ns) .OR. (imat .LE. 0)) call GracefulExit("Cannot set material with index greater than the number of species.",4534)
+
+        if (allocated(this%material(imat)%mat)) deallocate(this%material(imat)%mat)
+        allocate( this%material(imat)%mat, source=mat )
     end subroutine
 
     pure subroutine update(this,Ys)
@@ -72,16 +78,18 @@ contains
         class(idealgas), pointer :: mat
         integer :: i
         
-        this%Rgas = zero
-        this%Cp = zero
-        do i = 1,this%ns
-            mat => this%material(i)%mat
-            this%Rgas = this%Rgas + (mat%Rgas) * Ys(:,:,:,i)
-            this%Cp = this%Cp + (mat%gam * mat%Rgas * mat%onebygam_m1 ) * Ys(:,:,:,i) ! Cp_i = gam/(gam-1) * Rgas
-        end do
+        if (this%ns .GT. 1) then
+            this%Rgas = zero
+            this%Cp = zero
+            do i = 1,this%ns
+                mat => this%material(i)%mat
+                this%Rgas = this%Rgas + (mat%Rgas) * Ys(:,:,:,i)
+                this%Cp = this%Cp + (mat%gam * mat%Rgas * mat%onebygam_m1 ) * Ys(:,:,:,i) ! Cp_i = gam/(gam-1) * Rgas
+            end do
 
-        this%gam = this%Cp / (this%Cp - this%Rgas)
-        this%Cv = this%Cp / this%gam
+            this%gam = this%Cp / (this%Cp - this%Rgas)
+            this%Cv = this%Cp / this%gam
+        end if
 
     end subroutine
 
@@ -90,7 +98,12 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(in)  :: rho,e
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(out) :: p
 
-        p = (this%gam-one)*rho*e
+        select case(this%ns)
+        case(1)
+            call this%material(1)%mat%get_p(rho,e,p)
+        case default
+            p = (this%gam-one)*rho*e
+        end select
 
     end subroutine
 
@@ -99,7 +112,13 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(in)  :: e
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(out) :: T
 
-        T = e / this%Cv
+        select case(this%ns)
+        case(1)
+            call this%material(1)%mat%get_T(e,T)
+        case default
+            T = e / this%Cv
+        end select
+
     end subroutine
 
     pure subroutine get_e_from_p(this,rho,p,e)
@@ -107,7 +126,13 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(in)  :: rho,p
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(out) :: e
 
-        e = p / ((this%gam - one)*rho)
+        select case(this%ns)
+        case(1)
+            call this%material(1)%mat%get_e_from_p(rho,p,e)
+        case default
+            e = p / ((this%gam - one)*rho)
+        end select
+
     end subroutine
 
     pure subroutine get_sos(this,rho,p,sos)
@@ -115,11 +140,17 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(in)  :: rho,p
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(out) :: sos
 
-        sos = sqrt(this%gam*p/rho)
+        select case(this%ns)
+        case(1)
+            call this%material(1)%mat%get_sos(rho,p,sos)
+        case default
+            sos = sqrt(this%gam*p/rho)
+        end select
+
     end subroutine
 
     subroutine destroy(this)
-        class(mixture), intent(inout)  :: this
+        type(mixture), intent(inout)  :: this
         integer :: i
 
         do i = 1,this%ns

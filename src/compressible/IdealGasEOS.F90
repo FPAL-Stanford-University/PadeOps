@@ -16,7 +16,7 @@ module IdealGasEOS
 
     contains
 
-        procedure :: init
+        ! procedure :: init
         procedure :: get_p
         procedure :: get_e_from_p
         procedure :: get_T
@@ -24,20 +24,22 @@ module IdealGasEOS
 
     end type
 
+    interface idealgas
+        module procedure init
+    end interface
+
 contains
 
-    subroutine init(this,gam_,Rgas_)
-        class(idealgas), intent(inout) :: this
-        real(rkind) :: gam_
-        real(rkind) :: Rgas_
+    function init(gam,Rgas) result(this)
+        type(idealgas) :: this
+        real(rkind), intent(in) :: gam, Rgas
 
-        this%gam = gam_
+        this%gam = gam
         this%onebygam_m1 = one/(this%gam-one)
 
-        this%Rgas = Rgas_
+        this%Rgas = Rgas
         this%onebyRgas = one/this%Rgas
-
-    end subroutine
+    end function
 
     pure subroutine get_p(this,rho,e,p)
         class(idealgas), intent(in) :: this
