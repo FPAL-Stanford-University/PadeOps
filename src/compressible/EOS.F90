@@ -53,14 +53,14 @@ module EOSMod
 
     end interface
 
-    interface eos
-        module procedure init
-    end interface
+    ! interface eos
+    !     module procedure init
+    ! end interface
 
 contains
 
-    function init() result(this)
-        class(eos), pointer :: this
-    end function
+    ! function init() result(this)
+    !     class(eos), pointer :: this
+    ! end function
 
 end module

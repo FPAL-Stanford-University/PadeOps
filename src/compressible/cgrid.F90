@@ -221,8 +221,8 @@ contains
         if (ns .LT. 1) call GracefulExit("Cannot have less than 1 species. Must have ns >= 1.",4568)
 
         ! Allocate mixture
-        if (allocated(this%mix)) deallocate(this%mix); allocate(this%mix)! , source=mixture(this%decomp,ns))
-        call this%mix%init(this%decomp,ns)
+        if (allocated(this%mix)) deallocate(this%mix)
+        allocate(this%mix , source=mixture(this%decomp,ns))
 
         ! Set default materials with the same gam and Rgas
         do i = 1,ns
@@ -1319,9 +1319,11 @@ contains
         sumJx = sum(dYsdx,4); sumJy = sum(dYsdy,4); sumJz = sum(dYsdz,4);
 
         ! Put the fluxes in dYsdx itself
-        dYsdx(:,:,:,i) = -this%rho*( dYsdx(:,:,:,i) - this%Ys(:,:,:,i)*sumJx )
-        dYsdy(:,:,:,i) = -this%rho*( dYsdy(:,:,:,i) - this%Ys(:,:,:,i)*sumJy )
-        dYsdz(:,:,:,i) = -this%rho*( dYsdz(:,:,:,i) - this%Ys(:,:,:,i)*sumJz )
+        do i=1,this%mix%ns
+            dYsdx(:,:,:,i) = -this%rho*( dYsdx(:,:,:,i) - this%Ys(:,:,:,i)*sumJx )
+            dYsdy(:,:,:,i) = -this%rho*( dYsdy(:,:,:,i) - this%Ys(:,:,:,i)*sumJy )
+            dYsdz(:,:,:,i) = -this%rho*( dYsdz(:,:,:,i) - this%Ys(:,:,:,i)*sumJz )
+        end do
 
     end subroutine
 

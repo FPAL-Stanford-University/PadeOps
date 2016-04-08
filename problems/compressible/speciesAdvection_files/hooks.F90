@@ -89,8 +89,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         call mix%set_material( 2, idealgas(gam(2),Rgas(2)) )
 
         ! Set the massfractions (must sum to unity)
-        Ys(:,:,:,2) = erf( (x-half)/0.1_rkind )
+        Ys(:,:,:,2) = exp( -(x/0.1_rkind)**2 )
         Ys(:,:,:,1) = one - Ys(:,:,:,2)
+
+        print*, "Max Ys = ", maxval(Ys(:,:,:,2)), ", Min Ys = ", minval(Ys(:,:,:,2))
 
         ! Use pressure and temperature equilibrium to set density
         p = one / gam(1)
