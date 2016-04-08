@@ -1,0 +1,41 @@
+&INPUT
+
+inputdir  =  "/home/akshays/Data/PadeOps/speciesAdvection"      ! Directory for input files
+outputdir  = "/home/akshays/Data/PadeOps/speciesAdvection"      ! Directory for output files
+
+nx = 201                  ! Number of points in X
+ny = 1                    ! Number of points in Y
+nz = 1                    ! Number of points in Z
+
+dt = 1.0D-4               ! Fixed time step value (Set to negative to disable)
+tstop = 2.0D0             ! Physical time to stop the simulation
+CFL =-0.5D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
+
+tviz = 1.0D-1             ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "speciesAdvection"   ! Prefix for the visualization files
+
+periodicx = .TRUE.        ! Periodic in X?
+periodicy = .TRUE.        ! Periodic in Y?
+periodicz = .TRUE.        ! Periodic in Z?
+
+derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
+
+filter_x = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_y = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+
+prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+
+/
+
+&CINPUT
+ns   = 2                  ! Number of species
+/
+
+&IINPUT
+nu = 0.02D0               ! Kinematic viscosity
+/

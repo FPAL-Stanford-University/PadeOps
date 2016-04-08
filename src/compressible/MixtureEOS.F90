@@ -22,7 +22,7 @@ module MixtureEOSMod
 
     contains
 
-        ! procedure :: init
+        procedure :: init
         procedure :: set_material
         procedure :: update
         procedure :: get_p
@@ -33,14 +33,15 @@ module MixtureEOSMod
 
     end type
 
-    interface mixture
-        module procedure init
-    end interface
+    ! interface mixture
+    !     module procedure init
+    ! end interface
 
 contains
 
-    function init(decomp,ns) result(this)
-        type(mixture) :: this
+    ! function init(decomp,ns) result(this)
+    subroutine init(this,decomp,ns)
+        class(mixture),                                intent(inout) :: this
         type(decomp_info),                             intent(in)    :: decomp
         integer,                                       intent(in)    :: ns
 
@@ -58,7 +59,7 @@ contains
             if (allocated(this%Cp  )) deallocate(this%Cp  ); allocate(this%Cp  (this%nxp,this%nyp,this%nzp))
         end if
 
-    end function
+    end subroutine
 
     subroutine set_material(this, imat, mat)
         class(mixture),  intent(inout) :: this

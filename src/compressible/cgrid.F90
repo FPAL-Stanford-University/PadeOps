@@ -221,8 +221,8 @@ contains
         if (ns .LT. 1) call GracefulExit("Cannot have less than 1 species. Must have ns >= 1.",4568)
 
         ! Allocate mixture
-        if (allocated(this%mix)) deallocate(this%mix)
-        allocate(this%mix, source=mixture(this%decomp,ns))
+        if (allocated(this%mix)) deallocate(this%mix); allocate(this%mix)! , source=mixture(this%decomp,ns))
+        call this%mix%init(this%decomp,ns)
 
         ! Set default materials with the same gam and Rgas
         do i = 1,ns
@@ -262,7 +262,8 @@ contains
         this%Ys(:,:,:,1) = one   ! So that all massfractions add up to unity
 
         ! Go to hooks if a different initialization is derired 
-        call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields)
+        call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
+                        this%mix, this%tstop, this%dtfixed, tviz)
         
         ! Update mix
         call this%mix%update(this%Ys)
@@ -510,7 +511,7 @@ contains
         ! ------------------------------------------------
 
         ! Write out initial conditions
-        call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
+        call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
         vizcond = .FALSE.
         
@@ -550,11 +551,11 @@ contains
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
-            call hook_timestep(this%decomp, this%mesh, this%fields, this%tsim)
+            call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
-                call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
+                call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
                 vizcond = .FALSE.
             end if
@@ -634,7 +635,7 @@ contains
             call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
             
             call this%get_primitive()
-            call hook_bc(this%decomp, this%mesh, this%fields, this%tsim)
+            call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
             call this%post_bc()
         end do
 
@@ -807,7 +808,7 @@ contains
                                qz, Jz )
 
         ! Call problem source hook
-        call hook_source(this%decomp, this%mesh, this%fields, this%tsim, rhs)
+        call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
 
     end subroutine
 
@@ -822,7 +823,7 @@ contains
 
         real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: flux
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
-        integer :: i,j,k,l
+        integer :: i
 
         xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
 

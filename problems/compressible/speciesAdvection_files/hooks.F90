@@ -1,18 +1,11 @@
-module shuosher_data
+module speciesAdvection_data
     use kind_parameters,  only: rkind
-    use constants,        only: zero,one
+    use constants,        only: one,eight
     implicit none
-    
-    real(rkind) :: xshk = -4._rkind
-    
-    real(rkind) :: rhoL = 3.857143_rkind
-    real(rkind) :: rhoR
 
-    real(rkind) :: uL = 2.629369_rkind
-    real(rkind) :: uR = zero
-
-    real(rkind) :: pL = 10.33333_rkind
-    real(rkind) :: pR = one
+    real(rkind), dimension(2) :: gam  = [1.4_rkind, 1.6_rkind]
+    real(rkind), dimension(2) :: Rgas = [one, one]
+    real(rkind) :: rhoRatio = 10._rkind
 
 end module
 
@@ -21,12 +14,12 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: half,one
     use decomp_2d,        only: decomp_info
 
-    use shuosher_data
+    use speciesAdvection_data
 
     implicit none
 
-    type(decomp_info),                                          intent(in)    :: decomp
-    real(rkind),                                                intent(inout) :: dx,dy,dz
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
 
     integer :: i,j,k
@@ -38,19 +31,17 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     ix1 = decomp%yst(1); iy1 = decomp%yst(2); iz1 = decomp%yst(3)
     ixn = decomp%yen(1); iyn = decomp%yen(2); izn = decomp%yen(3)
     
-    ! Create mesh from [0,2*pi)x[0,2*pi)x[0,2*pi) using nx, ny, nz points in x, y and z respectively
     ! Need to set x, y and z as well as  dx, dy and dz
-
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = 10._rkind/real(nx-1,rkind)
+        dx = one/real(nx,rkind)
         dy = dx
         dz = dx
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - 5._rkind
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - half
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -64,11 +55,13 @@ end subroutine
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,half,one,two,pi,eight
-    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
+    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,Ys_index
     use decomp_2d,        only: decomp_info
     use MixtureEOSMod,    only: mixture
+    use IdealGasEOS,      only: idealgas
+    use exits,            only: GracefulExit
     
-    use shuosher_data
+    use speciesAdvection_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -77,26 +70,37 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind),                     intent(in)    :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-    real(rkind),                     intent(inout) :: tstop,dt,tviz
+    real(rkind),                     intent(inout) :: tstop, dt, tviz
 
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
 
-    associate( rho => fields(:,:,:,rho_index), u => fields(:,:,:,u_index), &
-                 v => fields(:,:,:,  v_index), w => fields(:,:,:,w_index), &
-                 p => fields(:,:,:,  p_index), T => fields(:,:,:,T_index), &
-                 e => fields(:,:,:,  e_index),                             &
+    associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),                  &
+                 v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),                  &
+                 p => fields(:,:,:,  p_index), T  => fields(:,:,:,T_index),                  &
+                 e => fields(:,:,:,  e_index), Ys => fields(:,:,:,Ys_index:Ys_index+mix%ns), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-        
-        tmp = half * ( one+tanh( (x-xshk)/(0.1_rkind*dx)) )
 
-        rho = (one-tmp)*rhoL + tmp*(one + 0.2_rkind*sin(5._rkind*x))
-        u   = (one-tmp)*uL + tmp*uR
+        if (mix%ns /= 2) call GracefulExit("This problem can only be run with 2 species. Check your input file.",4562)
+
+        ! First set the materials
+        Rgas(1) = (one/gam(1))   ! Set Rgas(1) = p1/(rho1*T1) based on rho1 = 1, p1 = 1/gam(1), T1 = 1
+        Rgas(2) = Rgas(1) / rhoRatio
+        call mix%set_material( 1, idealgas(gam(1),Rgas(1)) )
+        call mix%set_material( 2, idealgas(gam(2),Rgas(2)) )
+
+        ! Set the massfractions (must sum to unity)
+        Ys(:,:,:,2) = erf( (x-half)/0.1_rkind )
+        Ys(:,:,:,1) = one - Ys(:,:,:,2)
+
+        ! Use pressure and temperature equilibrium to set density
+        p = one / gam(1)
+        T = one
+        call mix%update(Ys)
+        rho = p / (mix%Rgas * T)
+
+        u   = half
         v   = zero
         w   = zero
-        p   = (one-tmp)*pL + tmp*pR
-
-        ! This is only for a single processor
-        rhoR = rho(decomp%ysz(1),1,1)
            
     end associate
 
@@ -105,12 +109,12 @@ end subroutine
 subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
-    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,Ys_index
     use decomp_2d,        only: decomp_info
     use DerivativesMod,   only: derivatives
     use MixtureEOSMod,    only: mixture
 
-    use shuosher_data
+    use speciesAdvection_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -131,14 +135,15 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+                 Ys   => fields(:,:,:,Ys_index:Ys_index+mix%ns),                   &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/shuosher_", vizcount, ".dat"
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/speciesAdvection_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
         do i=1,decomp%ysz(1)
-            write(outputunit,'(8ES26.16)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
-                                           mu(i,1,1), bulk(i,1,1), kap(i,1,1)
+            write(outputunit,'(10ES26.16)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
+                                           mu(i,1,1), bulk(i,1,1), kap(i,1,1), Ys(i,1,1,1), Ys(i,1,1,2)
         
         end do
         close(outputunit)
@@ -153,7 +158,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim)
     use decomp_2d,        only: decomp_info
     use MixtureEOSMod,    only: mixture
 
-    use shuosher_data
+    use speciesAdvection_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -168,20 +173,6 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-        !if (decomp%yst(1) == 1) then
-            rho(1,:,:) = rhoL
-            u  (1,:,:) = uL
-            v  (1,:,:) = zero
-            w  (1,:,:) = zero
-            p  (1,:,:) = pL
-        !end if
-        !if (decomp%yen(1) == decomp%xsz(1)) then
-            rho(decomp%ysz(1),:,:) = rhoR
-            u  (decomp%ysz(1),:,:) = uR
-            v  (decomp%ysz(1),:,:) = zero
-            w  (decomp%ysz(1),:,:) = zero
-            p  (decomp%ysz(1),:,:) = pR
-        !end if
     end associate
 end subroutine
 
@@ -193,7 +184,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
     use exits,            only: message
     use reductions,       only: P_MAXVAL,P_MINVAL
 
-    use shuosher_data
+    use speciesAdvection_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -211,6 +202,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
         
         call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
         call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
+        call message(2,"Minimum bulk viscosity",P_MINVAL(bulk))
         call message(2,"Maximum conductivity",P_MAXVAL(kap))
 
     end associate
@@ -219,9 +211,9 @@ end subroutine
 subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
     use kind_parameters, only: rkind
     use decomp_2d,       only: decomp_info
-    use MixtureEOSMod,   only: mixture
+    use MixtureEOSMod,    only: mixture
 
-    use shuosher_data
+    use speciesAdvection_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
