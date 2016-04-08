@@ -922,7 +922,7 @@ contains
         if (useCompactFD) then
             call this%derW%InterpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
         else
-            call this%Ops%ddz_C2E(ctmpz1,ctmpz3,topBC_w,botBC_w)
+            call this%Ops%interpZ_Cell2Edge(ctmpz1,ctmpz3,zeroC,zeroC)
         end if 
 
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
@@ -1150,6 +1150,7 @@ contains
             call this%ApplyCompactFilter()
         end if 
 
+        
         ! Step 6: Pressure projection
         if (useCompactFD) then
             call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
@@ -1281,6 +1282,7 @@ contains
         call transpose_z_to_y(ctmpz3,ctmpy1,this%sp_gpC)
         call this%spectC%ifft(ctmpy1,dwdz)
         
+        !print*, dudz(3,4,1:3)
         nullify( dudx, dudy, dudz) 
         nullify( dvdx, dvdy, dvdz)
         nullify( dwdx, dwdy, dwdz)

@@ -16,7 +16,7 @@ module sgsmod
     private
     public :: sgs
 
-    real(rkind) :: c_sigma = 1.35_rkind
+    real(rkind) :: c_sigma = 1.5_rkind
     real(rkind) :: c_smag = 0.165_rkind
     real(rkind), parameter :: deltaRatio = four**(two/three)
     complex(rkind), parameter :: zeroC = zero + imi*zero
