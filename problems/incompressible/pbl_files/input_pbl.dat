@@ -3,12 +3,12 @@
 inputdir  =  "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"       ! Directory for input files
 outputdir  = "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"      ! Directory for output files
 
-nx = 96                  ! Number of points in X
-ny = 96                  ! Number of points in Y
-nz = 96                 ! Number of points in Z
+nx = 32                  ! Number of points in X
+ny = 32                  ! Number of points in Y
+nz = 32                 ! Number of points in Z
 
-dt = 5D-5               ! Fixed time step value (Set to negative to disable)
-tstop = 8.D-1              ! Physical time to stop the simulation
+dt = 1D-3               ! Fixed time step value (Set to negative to disable)
+tstop = 50.D0              ! Physical time to stop the simulation
 CFL = -1.D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
@@ -27,19 +27,28 @@ t_dataDump    = 1000       ! Number of timesteps before data dump is performed
 /
 
 &IINPUT
+vscheme = 0               ! 0: 6th order Compact, 1: 2nd order Finite Difference
+advForm = 1               ! 1: Rotational Form,   2: Skew-Symm Form 
+
 Pr = 0.7D0                ! Prandtl Number
 runID = 50                 ! Run ID (for output file name)
+
+useCoriolis = .TRUE. 
+useExtraForcing = .FALSE. 
+
 useSGS = .TRUE.          ! LES mode or DNS mode?
-useCoriolis = .FALSE. 
-SGSModelID = 1            ! 0: smagorinsky, 1: sigma
-useDynamicProcedure = .FALSE. 
+SGSModelID = 0            ! 0: smagorinsky, 1: sigma
+useDynamicProcedure = .TRUE. 
 useSGSClipping = .TRUE. 
-useExtraForcing = .TRUE. 
+
+
 topWall = 2               ! no_slip = 1, slip = 2 , wall model = 3
 botWall = 3               ! no_slip = 1, slip = 2 , wall model = 3
-useRestartFile = .FALSE. 
-restartFile_TID = 999
-restartFile_RID = 10
+
+useRestartFile = .TRUE. 
+restartFile_TID = 20000
+restartFile_RID = 50
+
 isInviscid = .TRUE.
 useVerticalFilter = .TRUE.
 

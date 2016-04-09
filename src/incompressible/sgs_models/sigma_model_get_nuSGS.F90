@@ -64,12 +64,12 @@
 
         if (present(nuSGSfil)) then
             nuSGSfil = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
-            call this%spect%fft(nuSGSfil,this%nuSGShat)
-            call this%spect%dealias(this%nuSGShat)
-            call this%spect%ifft(this%nuSGShat,nuSGSfil)  
+            !call this%spect%fft(nuSGSfil,this%nuSGShat)
+            !call this%spect%dealias(this%nuSGShat)
+            !call this%spect%ifft(this%nuSGShat,nuSGSfil)  
         else
             this%nuSGS = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
-            call this%spect%fft(this%nuSGS,this%nuSGShat)
-            call this%spect%dealias(this%nuSGShat)
-            call this%spect%ifft(this%nuSGShat,this%nuSGS)  
+            !call this%spect%fft(this%nuSGS,this%nuSGShat)
+            !call this%spect%dealias(this%nuSGShat)
+            !call this%spect%ifft(this%nuSGShat,this%nuSGS)  
         end if 

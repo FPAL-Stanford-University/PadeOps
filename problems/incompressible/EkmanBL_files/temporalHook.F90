@@ -14,11 +14,11 @@ module temporalHook
     integer :: nt_getMaxKE = 20
     integer :: tid_statsDump = 2000
     integer :: tid_compStats = 20
-    real(rkind) :: time_startDumping = 50._rkind
+    real(rkind) :: time_startDumping = 75._rkind
     integer :: ierr 
     
     integer :: tid_start_planes = 1
-    integer :: tid_dump_plane_every = 20
+    integer :: tid_dump_plane_every = 40
 
 contains
 

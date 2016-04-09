@@ -16,7 +16,7 @@ module sgsmod
     private
     public :: sgs
 
-    real(rkind) :: c_sigma = 1.35_rkind
+    real(rkind) :: c_sigma = 1.5_rkind
     real(rkind) :: c_smag = 0.165_rkind
     real(rkind), parameter :: deltaRatio = four**(two/three)
     complex(rkind), parameter :: zeroC = zero + imi*zero
@@ -251,7 +251,7 @@ contains
 
 
         if (this%useWallModel) then
-            call this%BroadcastMeanAtWall(uhat)
+            call this%BroadcastMeanAtWall(u,v)
             call this%moengWall%updateWallStress(tau13, tau23, u, v, this%UmeanAtWall)
         end if 
 
@@ -263,14 +263,22 @@ contains
 
     end subroutine
 
-    subroutine BroadcastMeanAtWall(this, uhat)
+    subroutine BroadcastMeanAtWall(this, u,v)
         use kind_parameters, only: mpirkind
-        class(sgs), intent(inout) :: this
-        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat
+        class(sgs), intent(inout), target :: this
+        real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in) :: u, v
         integer :: ierr
+        real(rkind), dimension(:,:,:), pointer :: rbuff
+        complex(rkind), dimension(:,:,:), pointer :: cbuff
+
+        rbuff => this%rbuff(:,:,:,1)
+        cbuff => this%cbuff(:,:,:,1)
+
+        rbuff = sqrt(u*u + v*v)
+        call this%spect%fft(rbuff,cbuff)
 
         if (nrank == 0) then
-            this%UmeanAtWall = real(uhat(1,1,1),rkind)*this%meanFact
+            this%UmeanAtWall = real(cbuff(1,1,1),rkind)*this%meanFact
         end if
 
         call mpi_bcast(this%UmeanAtWall,1,mpirkind,0,mpi_comm_world,ierr)

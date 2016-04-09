@@ -191,6 +191,7 @@ contains
         logical :: useWallModelTop = .false., useWallModelBot = .false.
         logical :: isInviscid = .false., useVerticalFilter = .true.  
         integer :: SGSModelID = 1
+        integer :: vscheme = 0, advForm = 1
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
@@ -202,7 +203,7 @@ contains
                                 time_startDumping, topWall, botWall, &
                                 useRestartFile, restartFile_TID, restartFile_RID, &
                                 isInviscid, &
-                                useVerticalFilter, SGSModelID 
+                                useVerticalFilter, SGSModelID, vscheme, advForm 
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -254,6 +255,18 @@ contains
         this%UseDynamicProcedure = useDynamicProcedure
 
         this%useVerticalFilter = useVerticalFilter
+
+        select case (vscheme)
+        case(0)
+            useCompactFD = .true. 
+        case(1)
+            useCompactFD = .false.
+        case default 
+            call GracefulExit("Invalid choice for VSCHEME. Only options &
+                & available are 0 (6th Order) and 1 (2nd order)",3214)
+        end select
+
+        AdvectionForm = advForm 
 
         if (.not. periodicx) then
             call GracefulExit("Currently only Periodic BC is supported in x direction",102)
@@ -909,7 +922,7 @@ contains
         if (useCompactFD) then
             call this%derW%InterpZ_C2E(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
         else
-            call this%Ops%ddz_C2E(ctmpz1,ctmpz3,topBC_w,botBC_w)
+            call this%Ops%interpZ_Cell2Edge(ctmpz1,ctmpz3,zeroC,zeroC)
         end if 
 
         call transpose_z_to_y(ctmpz3,ctmpy2,this%sp_gpE)
@@ -1137,6 +1150,7 @@ contains
             call this%ApplyCompactFilter()
         end if 
 
+        
         ! Step 6: Pressure projection
         if (useCompactFD) then
             call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
@@ -1268,6 +1282,7 @@ contains
         call transpose_z_to_y(ctmpz3,ctmpy1,this%sp_gpC)
         call this%spectC%ifft(ctmpy1,dwdz)
         
+        !print*, dudz(3,4,1:3)
         nullify( dudx, dudy, dudz) 
         nullify( dvdx, dvdy, dvdz)
         nullify( dwdx, dwdy, dwdz)
