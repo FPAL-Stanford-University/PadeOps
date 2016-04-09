@@ -137,12 +137,12 @@ contains
         if (useCompactFD) then
             allocate(this%derZ_EE, this%derZ_OO)
             call this%derZ_EE%init( this%sp_gp%zsz(3), dz, isTopEven = .true., isBotEven = .true., & 
-                             isTopSided = .false., isBotSided = .true.) 
+                             isTopSided = .true., isBotSided = .true.) 
             call this%derZ_OO%init( this%sp_gp%zsz(3), dz, isTopEven = .false., isBotEven = .false., & 
-                             isTopSided = .false., isBotSided = .true.) 
+                             isTopSided = .true., isBotSided = .true.) 
         else
             allocate(this%Ops2ndOrder)
-            call this%Ops2ndOrder%init(gpC,gpE,0,dx,dy,dz,spectC%spectdecomp,spectE%spectdecomp, .false., .true.)
+            call this%Ops2ndOrder%init(gpC,gpE,0,dx,dy,dz,spectC%spectdecomp,spectE%spectdecomp, .true., .true.)
         end if 
         if (this%useDynamicProcedure) then
            allocate(this%Lij(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
