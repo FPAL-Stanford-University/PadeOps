@@ -56,20 +56,23 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,half,one,two,pi,eight
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
     use decomp_2d,        only: decomp_info
-    
+    use MixtureEOSMod,    only: mixture
+ 
     use shocktube_data
 
     implicit none
-    character(len=*),                                               intent(in)    :: inputfile
-    type(decomp_info),                                              intent(in)    :: decomp
-    real(rkind),                                                    intent(in)    :: dx,dy,dz
-    real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
+    character(len=*),                intent(in)    :: inputfile
+    type(decomp_info),               intent(in)    :: decomp
+    type(mixture),                   intent(inout) :: mix
+    real(rkind),                     intent(in)    :: dx,dy,dz
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    real(rkind),                     intent(inout) :: tstop,dt,tviz
 
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
 
@@ -91,12 +94,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields)
 
 end subroutine
 
-subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
+subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use DerivativesMod,   only: derivatives
+    use MixtureEOSMod,    only: mixture
 
     use shocktube_data
 
@@ -104,6 +108,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
     type(derivatives),               intent(in) :: der
+    type(mixture),                   intent(in) :: mix
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
@@ -133,16 +138,18 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     end associate
 end subroutine
 
-subroutine hook_bc(decomp,mesh,fields,tsim)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim)
     use kind_parameters,  only: rkind
     use constants,        only: zero
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use MixtureEOSMod,    only: mixture
 
     use shocktube_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
+    type(mixture),                   intent(in)    :: mix
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
@@ -156,10 +163,11 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,tsim)
+subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
     use kind_parameters,  only: rkind
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use MixtureEOSMod,    only: mixture
     use exits,            only: message
     use reductions,       only: P_MAXVAL,P_MINVAL
 
@@ -167,6 +175,7 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
+    type(mixture),                   intent(in) :: mix
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
@@ -186,14 +195,16 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
     end associate
 end subroutine
 
-subroutine hook_source(decomp,mesh,fields,tsim,rhs)
+subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
     use kind_parameters, only: rkind
     use decomp_2d,       only: decomp_info
+    use MixtureEOSMod,   only: mixture
 
     use shocktube_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
+    type(mixture),                   intent(in)    :: mix
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
