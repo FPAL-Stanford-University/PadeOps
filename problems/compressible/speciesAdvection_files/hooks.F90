@@ -99,7 +99,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         call mix%set_material( 2, idealgas(gam(2),Rgas(2)) )
 
         ! Set the massfractions (must sum to unity)
-        Ys(:,:,:,2) = half*(tanh( (x+0.25_rkind)/(thick*dx) ) - tanh( (x-0.25_rkind)/(thick*dx) ))
+        Ys(:,:,:,2) = half*(erf( (x+0.25_rkind)/(thick*dx) ) - erf( (x-0.25_rkind)/(thick*dx) ))
         Ys(:,:,:,1) = one - Ys(:,:,:,2)
 
         print*, "Max Ys = ", maxval(Ys(:,:,:,2)), ", Min Ys = ", minval(Ys(:,:,:,2))
