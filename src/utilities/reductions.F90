@@ -10,11 +10,11 @@ module reductions
     public :: P_MAXVAL, P_MINVAL, P_SUM, P_MEAN, P_AVGZ
 
     interface P_MAXVAL
-        module procedure P_MAXVAL_arr3, P_MAXVAL_arr2, P_MAXVAL_sca
+        module procedure P_MAXVAL_arr4, P_MAXVAL_arr3, P_MAXVAL_arr2, P_MAXVAL_sca
     end interface
 
     interface P_MINVAL
-        module procedure P_MINVAL_arr3, P_MINVAL_arr2, P_MINVAL_sca
+        module procedure P_MINVAL_arr4, P_MINVAL_arr3, P_MINVAL_arr2, P_MINVAL_sca
     end interface
 
     interface P_SUM
@@ -50,6 +50,17 @@ contains
 
     end function
 
+    function P_MAXVAL_arr4(x) result(maximum)
+        real(rkind), dimension(:,:,:,:), intent(in) :: x
+        real(rkind) :: maximum
+        real(rkind) :: mymax
+        integer :: ierr
+
+        mymax = MAXVAL(x)
+        call MPI_Allreduce(mymax, maximum, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
+
+    end function
+
     function P_MAXVAL_arr3(x) result(maximum)
         real(rkind), dimension(:,:,:), intent(in) :: x
         real(rkind) :: maximum
@@ -81,6 +92,17 @@ contains
 
     end function
     
+    function P_MINVAL_arr4(x) result(minimum)
+        real(rkind), dimension(:,:,:,:), intent(in) :: x
+        real(rkind) :: minimum
+        real(rkind) :: mymin
+        integer :: ierr
+
+        mymin = MINVAL(x)
+        call MPI_Allreduce(mymin, minimum, 1, mpirkind, MPI_MIN, MPI_COMM_WORLD, ierr)
+
+    end function
+
     function P_MINVAL_arr3(x) result(minimum)
         real(rkind), dimension(:,:,:), intent(in) :: x
         real(rkind) :: minimum

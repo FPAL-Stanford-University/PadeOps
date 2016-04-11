@@ -58,7 +58,7 @@ module CompressibleGrid
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
        
-        real(rkind) :: Cmu, Cbeta, Ckap, Cd, CY
+        real(rkind) :: Cmu, Cbeta, Ckap, Cdiff, CY
 
         real(rkind), dimension(:,:,:), pointer :: x 
         real(rkind), dimension(:,:,:), pointer :: y 
@@ -143,7 +143,7 @@ contains
         real(rkind) :: Cmu = 0.002_rkind
         real(rkind) :: Cbeta = 1.75_rkind
         real(rkind) :: Ckap = 0.01_rkind
-        real(rkind) :: Cd = 0.003_rkind
+        real(rkind) :: Cdiff = 0.003_rkind
         real(rkind) :: CY = 100.0_rkind
         character(len=clen) :: charout
         real(rkind) :: Ys_error
@@ -155,7 +155,7 @@ contains
                                      filter_x, filter_y, filter_z, &
                                                        prow, pcol, &
                                                          SkewSymm  
-        namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cd, CY, &
+        namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
 
@@ -181,6 +181,8 @@ contains
         this%Cmu = Cmu
         this%Cbeta = Cbeta
         this%Ckap = Ckap
+        this%Cdiff = Cdiff
+        this%CY = CY
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -488,12 +490,17 @@ contains
         character(len=clen) :: stability
         real(rkind) :: cputime
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
-        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(:,:,:,:), allocatable, target :: gradYs
+        real(rkind), dimension(:,:,:),   pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
+        integer :: i
 
         call this%get_dt(stability)
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
-        ! Get artificial properties for initial conditions
+        allocate( gradYs(this%nxp, this%nyp, this%nzp,3*this%mix%ns) )
+        
+        ! Get artificial properties for initial condition output file
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
@@ -502,11 +509,23 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
+        if (this%mix%ns .GT. 1) then
+            dYsdx => gradYs(:,:,:,              1:  this%mix%ns)
+            dYsdy => gradYs(:,:,:,  this%mix%ns+1:2*this%mix%ns)
+            dYsdz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns)
+
+            do i = 1,this%mix%ns
+                call this%gradient(this%Ys(:,:,:,i),dYsdx(:,:,:,i),dYsdy(:,:,:,i),dYsdz(:,:,:,i), this%x_bc, this%y_bc, this%z_bc)
+            end do
+        end if
+        
         call this%getPhysicalProperties()
 
-        call this%getLAD(dudx,dudy,dudz,&
-                         dvdx,dvdy,dvdz,&
-                         dwdx,dwdy,dwdz )
+        call this%getLAD(dudx, dudy, dudz,&
+                         dvdx, dvdy, dvdz,&
+                         dwdx, dwdy, dwdz,&
+                        dYsdx,dYsdy,dYsdz )
+        deallocate( gradYs )
         deallocate( duidxj )
         ! ------------------------------------------------
 
@@ -551,7 +570,7 @@ contains
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
-            call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
+            call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
@@ -649,7 +668,7 @@ contains
         class(cgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
-        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap
+        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtdiff
 
         call this%mix%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
 
@@ -658,6 +677,7 @@ contains
         dtmu   = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
         dtbulk = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
         dtkap  = 0.2_rkind * one / ( (P_MAXVAL( this%kap*this%T/(this%rho* (min(this%dx,this%dy,this%dz)**4))))**(third) + eps)
+        dtdiff = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%diff ) + eps)
 
         ! Use fixed time step if CFL <= 0
         if ( this%CFL .LE. zero ) then
@@ -675,6 +695,9 @@ contains
             else if ( this%dt > dtkap ) then
                 this%dt = dtkap
                 stability = 'conductive'
+            else if ( this%dt > dtdiff ) then
+                this%dt = dtdiff
+                stability = 'diffusive'
             end if
 
             if (this%step .LE. 10) then
@@ -772,27 +795,27 @@ contains
         
         call this%getPhysicalProperties()
 
-        call this%getLAD(dudx,dudy,dudz,&
-                         dvdx,dvdy,dvdz,&
-                         dwdx,dwdy,dwdz )
+        call this%getLAD(dudx, dudy, dudz,&
+                         dvdx, dvdy, dvdz,&
+                         dwdx, dwdy, dwdz,&
+                        dYsdx,dYsdy,dYsdz )
 
         ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
         call this%get_tau( duidxj )
-        call this%get_q  ( duidxj )
+        ! Now, associate the pointers to understand what's going on better
+        tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
+                                         tauyy => duidxj(:,:,:,tauyyidx); tauyz => duidxj(:,:,:,tauyzidx);
+                                                                          tauzz => duidxj(:,:,:,tauzzidx);
 
         ! Get species mass fluxes. Put in components on gradYs
         if (this%mix%ns .GT. 1) then
             call this%get_J( gradYs )
         end if
+        Jx => gradYs(:,:,:,1:this%mix%ns); Jy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns); Jz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);
 
-        ! Now, associate the pointers to understand what's going on better
-        tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
-                                         tauyy => duidxj(:,:,:,tauyyidx); tauyz => duidxj(:,:,:,tauyzidx);
-                                                                          tauzz => duidxj(:,:,:,tauzzidx);
-        
+        call this%get_q  ( duidxj, Jx, Jy, Jz )
         qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
 
-        Jx => gradYs(:,:,:,1:this%mix%ns); Jy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns); Jz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);
 
         rhs = zero
         call this%getRHS_x(              rhs,&
@@ -862,7 +885,7 @@ contains
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
 
-        flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz - qx ! Total Energy
+        flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz + qx ! Total Energy
         call transpose_y_to_x(flux,xtmp1,this%decomp)
         call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
         call transpose_x_to_y(xtmp2,flux,this%decomp)
@@ -910,7 +933,7 @@ contains
         call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - ytmp1
 
-        flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauyy)*this%v - this%u*tauxy - this%w*tauyz - qy ! Total Energy
+        flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauyy)*this%v - this%u*tauxy - this%w*tauyz + qy ! Total Energy
         call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - ytmp1
 
@@ -966,7 +989,7 @@ contains
         call transpose_z_to_y(ztmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
 
-        flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauzz)*this%w - this%u*tauxz - this%v*tauyz - qz ! Total Energy
+        flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauzz)*this%w - this%u*tauxz - this%v*tauyz + qz ! Total Energy
         call transpose_y_to_z(flux,ztmp1,this%decomp)
         call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
         call transpose_z_to_y(ztmp2,flux,this%decomp)
@@ -974,24 +997,27 @@ contains
 
     end subroutine
 
-    subroutine getLAD(this,dudx,dudy,dudz,&
-                           dvdx,dvdy,dvdz,&
-                           dwdx,dwdy,dwdz )
+    subroutine getLAD(this, dudx, dudy, dudz,&
+                            dvdx, dvdy, dvdz,&
+                            dwdx, dwdy, dwdz,&
+                           dYsdx,dYsdy,dYsdz )
         use reductions, only: P_MAXVAL
         class(cgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp),              intent(in) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp, this%mix%ns), intent(in) :: dYsdx,dYsdy,dYsdz
         
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: mustar,bulkstar,kapstar,func
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: mustar,bulkstar,kapstar,diffstar,func
+        integer :: i
         
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
-        real(rkind), dimension(:,:,:), pointer :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5
+        real(rkind), dimension(:,:,:), pointer :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6
         real(rkind), dimension(:,:,:), pointer :: ztmp1,ztmp2
 
         xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
         
         ytmp1 => this%ybuf(:,:,:,1); ytmp2 => this%ybuf(:,:,:,2)
         ytmp3 => this%ybuf(:,:,:,3); ytmp4 => this%ybuf(:,:,:,4)
-        ytmp5 => this%ybuf(:,:,:,5)
+        ytmp5 => this%ybuf(:,:,:,5); ytmp6 => this%ybuf(:,:,:,6)
         
         ztmp1 => this%zbuf(:,:,:,1); ztmp2 => this%zbuf(:,:,:,2)
 
@@ -1042,28 +1068,28 @@ contains
         call transpose_y_to_x(func,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
-        xtmp2 = xtmp1*this%dx**6
+        xtmp2 = xtmp1*this%dx**4
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        bulkstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
+        bulkstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
-        ztmp2 = ztmp1*this%dz**6
+        ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        bulkstar = bulkstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
+        bulkstar = bulkstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(func,ytmp4,this%y_bc(1),this%y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
-        ytmp4 = ytmp5*this%dy**6
-        bulkstar = bulkstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
+        ytmp4 = ytmp5*this%dy**4
+        bulkstar = bulkstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
         ! Now, all ytmps are free to use
         ytmp1 = dwdy-dvdz; ytmp2 = dudz-dwdx; ytmp3 = dvdx-dudy
         ytmp4 = ytmp1*ytmp1 + ytmp2*ytmp2 + ytmp3*ytmp3 ! |curl(u)|^2
-        ytmp2 = func*func
+        ytmp2 = func*func ! dilatation^2
 
         ! Calculate the switching function
         ytmp1 = ytmp2 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
@@ -1088,23 +1114,23 @@ contains
         call transpose_y_to_x(this%e,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
-        xtmp2 = xtmp1*this%dx**6
+        xtmp2 = xtmp1*this%dx**4
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        kapstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + eps) ! Add eps in case denominator is zero
+        kapstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(this%e,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
-        ztmp2 = ztmp1*this%dz**6
+        ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        kapstar = kapstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + eps) ! Add eps in case denominator is zero
+        kapstar = kapstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(this%e,ytmp4,this%y_bc(1),this%y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
-        ytmp4 = ytmp5*this%dy**6
-        kapstar = kapstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + eps) ! Add eps in case denominator is zero
+        ytmp4 = ytmp5*this%dy**4
+        kapstar = kapstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Now, all ytmps are free to use
         call this%mix%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound
@@ -1113,6 +1139,55 @@ contains
 
         ! Filter kapstar
         call this%filter(kapstar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
+
+        ! -------- Artificial Diffusivity ---------
+        if (this%mix%ns .GT. 1) then
+            do i = 1,this%mix%ns
+                ! Step 1: Get components of grad(Ys) squared individually
+                ytmp1 = dYsdx(:,:,:,i)*dYsdx(:,:,:,i)
+                ytmp2 = dYsdy(:,:,:,i)*dYsdy(:,:,:,i)
+                ytmp3 = dYsdz(:,:,:,i)*dYsdz(:,:,:,i)
+
+                call this%mix%get_sos(this%rho,this%p,ytmp6)  ! Speed of sound
+
+                ! Step 2: Get 4th derivative in X
+                call transpose_y_to_x(this%Ys(:,:,:,i),xtmp1,this%decomp)
+                call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+                call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
+                xtmp2 = xtmp1*this%dx**4
+                call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+                diffstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
+                ! Step 3: Get 4th derivative in Z
+                call transpose_y_to_z(this%Ys(:,:,:,i),ztmp1,this%decomp)
+                call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+                call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
+                ztmp2 = ztmp1*this%dz**4
+                call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
+                diffstar = diffstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
+                ! Step 4: Get 4th derivative in Y
+                call this%der%d2dy2(this%Ys(:,:,:,i),ytmp4,this%y_bc(1),this%y_bc(2))
+                call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
+                ytmp4 = ytmp5*this%dy**4
+                diffstar = diffstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
+
+                diffstar = this%Cdiff*ytmp6*abs(diffstar) ! CD part of diff
+
+                ytmp4 = (sqrt(ytmp1)*this%dx + sqrt(ytmp2)*this%dy + sqrt(ytmp3)*this%dz) &
+                                / ( sqrt(ytmp1+ytmp2+ytmp3) + real(1.0D-32,rkind) ) ! grid scale
+                ytmp5 = this%CY*ytmp6*( half*(abs(this%Ys(:,:,:,i))-one + abs(this%Ys(:,:,:,i)-one)) )*ytmp4 ! CY part of diff
+
+                diffstar = max(diffstar, ytmp5) ! Take max of both terms instead of add to minimize the dissipation
+
+                ! Filter diffstar
+                call this%filter(diffstar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
+
+                ! Add to physical diffusivity
+                this%diff(:,:,:,i) = this%diff(:,:,:,i) + diffstar
+            end do
+        end if
 
         ! Now, add to physical fluid properties
         this%mu   = this%mu   + mustar
@@ -1259,10 +1334,13 @@ contains
         ! Done 
     end subroutine 
 
-    subroutine get_q(this,duidxj)
+    subroutine get_q(this,duidxj,Jx,Jy,Jz)
+        use exits, only: nancheck
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: duidxj
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,this%mix%ns), intent(in) :: Jx,Jy,Jz
 
+        integer :: i
         real(rkind), dimension(:,:,:), pointer :: tmp1_in_x, tmp2_in_x, tmp1_in_y, tmp1_in_z, tmp2_in_z
         type(derivatives), pointer :: der
 
@@ -1291,6 +1369,16 @@ contains
         call der%ddz(tmp1_in_z,tmp2_in_z,this%z_bc(1),this%z_bc(2))
         call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
         duidxj(:,:,:,qzidx) = -this%kap*tmp1_in_y
+
+        ! If multispecies, add the inter-species enthalpy flux
+        if (this%mix%ns .GT. 1) then
+            do i = 1,this%mix%ns
+                call this%mix%material(i)%mat%get_enthalpy(this%T,tmp1_in_y)
+                duidxj(:,:,:,qxidx) = duidxj(:,:,:,qxidx) + ( tmp1_in_y * Jx(:,:,:,i) )
+                duidxj(:,:,:,qyidx) = duidxj(:,:,:,qyidx) + ( tmp1_in_y * Jy(:,:,:,i) )
+                duidxj(:,:,:,qzidx) = duidxj(:,:,:,qzidx) + ( tmp1_in_y * Jz(:,:,:,i) )
+            end do
+        end if
 
         ! Done
     end subroutine 

@@ -21,6 +21,7 @@ module IdealGasEOS
         procedure :: get_e_from_p
         procedure :: get_T
         procedure :: get_sos
+        procedure :: get_enthalpy
 
     end type
 
@@ -74,6 +75,15 @@ contains
         real(rkind), dimension(:,:,:), intent(out) :: sos
 
         sos = sqrt(this%gam*p/rho)
+
+    end subroutine
+
+    pure subroutine get_enthalpy(this,T,h)
+        class(idealgas), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in)  :: T
+        real(rkind), dimension(:,:,:), intent(out) :: h
+
+        h = this%gam * this%onebygam_m1 * this%Rgas * T
 
     end subroutine
 
