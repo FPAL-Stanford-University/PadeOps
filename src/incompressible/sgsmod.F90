@@ -202,9 +202,10 @@ contains
 
     end subroutine
 
-    subroutine getRHS_SGS(this, duidxj, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, max_nuSGS)
+    subroutine getRHS_SGS(this, duidxj, duidxjhat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, max_nuSGS)
         class(sgs), intent(inout), target :: this
         real(rkind)   , dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3),9), intent(inout), target :: duidxj
+        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3),9), intent(inout) :: duidxjhat
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: urhs, vrhs
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat, wChat
         complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
@@ -235,7 +236,7 @@ contains
         call this%get_nuSGS(duidxj)
         
         if (this%useDynamicProcedure) then
-            call this%DynamicProcedure(uhat,vhat,wChat,u,v,wC,duidxj) 
+            call this%DynamicProcedure(uhat,vhat,wChat,u,v,wC,duidxj, duidxjhat) 
         else
             this%nuSGS = this%mconst*this%nuSGS
         end if 
@@ -285,10 +286,11 @@ contains
       
     end subroutine
 
-    subroutine DynamicProcedure(this,uhat,vhat,wChat,u,v,wC,duidxj)
+    subroutine DynamicProcedure(this,uhat,vhat,wChat,u,v,wC,duidxj,duidxjhat)
         class(sgs), intent(inout), target :: this
         real(rkind)   , dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3),9), intent(inout), target :: duidxj
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat, wChat
+        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3),9), intent(inout) :: duidxjhat
         real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(inout) :: u, v, wC
 
         real(rkind), dimension(:,:,:), pointer :: tau11, tau12, tau13, tau22, tau23, tau33
@@ -298,12 +300,16 @@ contains
         real(rkind), dimension(:,:,:), pointer :: M11, M12, M13, M22, M23, M33
         complex(rkind), dimension(:,:,:), pointer :: ctmpY 
         real(rkind), dimension(:,:,:), pointer :: numerator, denominator        
-
+        integer :: idx
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3)
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6)
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9)
     
+        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3)
+        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6)
+        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9)
+        
         Sf11 => this%rbuff(:,:,:,1); Sf12 => this%rbuff(:,:,:,2); Sf13 => this%rbuff(:,:,:,3)
         Sf22 => this%rbuff(:,:,:,4); Sf23 => this%rbuff(:,:,:,5); Sf33 => this%rbuff(:,:,:,6)
 
@@ -369,72 +375,86 @@ contains
         ! Step 3: Compute Mkl: \tilde{Dm * S_kl}
         ! Note that we have already computed S_ij (stored in Tau_ij buffers)
         ! and also computed Dm which is stored in this%nuSGS
-        M11 = -this%nuSGS * tau11
-        call this%spect%fft(M11,ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,M11)
+        
+        ! Use Sij that are in rbuffs 13 - 18
+        do idx = 1,6 
+            this%Mkl(:,:,:,idx) = -this%nuSGS * this%rbuff(:,:,:, idx+12)
+            call this%spect%fft(this%Mkl(:,:,:,idx),ctmpY)
+            call this%spect%TestFilter_ip(ctmpY)
+            call this%spect%ifft(ctmpY,this%Mkl(:,:,:,idx))
+        end do 
+           
+        !M11 = -this%nuSGS * tau11
+        !call this%spect%fft(M11,ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,M11)
 
-        M12 = -this%nuSGS * tau12
-        call this%spect%fft(M12,ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,M12)
+        !M12 = -this%nuSGS * tau12
+        !call this%spect%fft(M12,ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,M12)
 
-        M13 = -this%nuSGS * tau13
-        call this%spect%fft(M13,ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,M13)
+        !M13 = -this%nuSGS * tau13
+        !call this%spect%fft(M13,ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,M13)
 
-        M22 = -this%nuSGS * tau22
-        call this%spect%fft(M22,ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,M22)
+        !M22 = -this%nuSGS * tau22
+        !call this%spect%fft(M22,ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,M22)
 
-        M23 = -this%nuSGS * tau23
-        call this%spect%fft(M23,ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,M23)
+        !M23 = -this%nuSGS * tau23
+        !call this%spect%fft(M23,ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,M23)
 
-        M33 = -this%nuSGS * tau33
-        call this%spect%fft(M33,ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,M33)
+        !M33 = -this%nuSGS * tau33
+        !call this%spect%fft(M33,ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,M33)
 
         ! Step 4: Compute Mkl: get \tide{duidxj}
-        call this%spect%fft(dudx, ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,dudx)  ! <= dudx is corrupted
+        do idx = 1,9
+            call this%spect%TestFilter_ip(duidxjhat(:,:,:,idx))
+            call this%spect%ifft(duidxjhat(:,:,:,idx),duidxj(:,:,:,idx))
+        end do 
+        
+        !call this%spect%fft(dudx, ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,dudx)  ! <= dudx is corrupted
 
-        call this%spect%fft(dudy, ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,dudy)  ! <= dudy is corrupted
+        !call this%spect%fft(dudy, ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,dudy)  ! <= dudy is corrupted
 
-        call this%spect%fft(dudz, ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,dudz)  ! <= dudz is corrupted
+        !call this%spect%fft(dudz, ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,dudz)  ! <= dudz is corrupted
 
-        call this%spect%fft(dvdx, ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,dvdx)  ! <= dvdx is corrvpted
+        !call this%spect%fft(dvdx, ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,dvdx)  ! <= dvdx is corrvpted
 
-        call this%spect%fft(dvdy, ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,dvdy)  ! <= dvdy is corrvpted
+        !call this%spect%fft(dvdy, ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,dvdy)  ! <= dvdy is corrvpted
 
-        call this%spect%fft(dvdz, ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,dvdz)  ! <= dvdz is corrvpted
+        !call this%spect%fft(dvdz, ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,dvdz)  ! <= dvdz is corrvpted
 
-        call this%spect%fft(dwdx, ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,dwdx)  ! <= dwdx is corrwpted
+        !call this%spect%fft(dwdx, ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,dwdx)  ! <= dwdx is corrwpted
 
-        call this%spect%fft(dwdy, ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,dwdy)  ! <= dwdy is corrwpted
+        !call this%spect%fft(dwdy, ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,dwdy)  ! <= dwdy is corrwpted
 
-        call this%spect%fft(dwdz, ctmpY)
-        call this%spect%TestFilter_ip(ctmpY)
-        call this%spect%ifft(ctmpY,dwdz)  ! <= dwdz is corrwpted
+        !call this%spect%fft(dwdz, ctmpY)
+        !call this%spect%TestFilter_ip(ctmpY)
+        !call this%spect%ifft(ctmpY,dwdz)  ! <= dwdz is corrwpted
     
 
         ! Step 5: Compute Mkl: Compute \tilde{Skl}

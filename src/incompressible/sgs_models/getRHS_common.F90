@@ -1,11 +1,14 @@
+        !! Add tau11 term to urhs
         call this%spect%fft(tau11,tauhat)
         call this%spect%mtimes_ik1_ip(tauhat)
         urhs = urhs + tauhat
 
+        !! Add tau22 term to vrhs
         call this%spect%fft(tau22,tauhat)
         call this%spect%mtimes_ik2_ip(tauhat)
         vrhs = vrhs + tauhat
         
+        !! Add tau33 term to wrhs
         call this%spect%fft(tau33,tauhat)
         call transpose_y_to_z(tauhat,this%ctmpCz,this%sp_gp)
         if (useCompactFD) then
@@ -16,40 +19,43 @@
         call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
         wrhs = wrhs + this%ctmpEy
 
+        !! Add tau12 terms to urhs and vrhs 
         call this%spect%fft(tau12,tauhat)
         call this%spect%mtimes_ik2_oop(tauhat,tauhat2)
         urhs = urhs + tauhat2
         call this%spect%mtimes_ik1_ip(tauhat)
         vrhs = vrhs + tauhat
 
+        !! Add tau13 terms to urhs and wrhs 
         call this%spect%fft(tau13,tauhat)
         call transpose_y_to_z(tauhat,this%ctmpCz,this%sp_gp)
+        ! if wall model is used, then update tau13hat at z = 1
+        if (this%useWallModel) call this%moengWall%updateTAU_i3(this%ctmpCz,this%UmeanAtWall,uhat)
+        ! first, the w equation
         if (useCompactFD) then
             call this%derZ_OO%InterpZ_C2E(this%ctmpCz,this%ctmpEz,size(this%ctmpCz,1),size(this%ctmpCz,2))
         else
             call this%Ops2ndOrder%InterpZ_Cell2Edge(this%ctmpCz,this%ctmpEz,zeroC,zeroC)
         end if 
-
         call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
         call this%spectE%mtimes_ik1_ip(this%ctmpEy)
         wrhs = wrhs + this%ctmpEy
+        ! then, the u equation 
         if (useCompactFD) then
             call this%derZ_OO%ddz_C2C(this%ctmpCz,this%ctmpCz2, size(this%ctmpCz,1),size(this%ctmpCz,2)) 
         else
             call this%Ops2ndOrder%ddz_C2C(this%ctmpCz,this%ctmpCz2, .false., .false.) 
         end if
-        !print*, "ddz tau13:"
-        !print*, this%ctmpCz2(2,3,1:3) 
-        !print*, "urhs:"
-        !print*, urhs(2,3,1:3) 
         call transpose_z_to_y(this%ctmpCz2,tauhat,this%sp_gp)
         urhs = urhs + tauhat
     
-        
+       
+        !! Add tau23 terms to vrhs and wrhs  
         call this%spect%fft(tau23,tauhat)
         call transpose_y_to_z(tauhat,this%ctmpCz,this%sp_gp)
-        
-       
+        ! if wall model is used, then update tau23hat at z = 1
+        if (this%useWallModel) call this%moengWall%updateTAU_i3(this%ctmpCz,this%UmeanAtWall,vhat)
+        ! first, the w equation
         if (useCompactFD) then
             call this%derZ_OO%InterpZ_C2E(this%ctmpCz,this%ctmpEz,size(this%ctmpCz,1),size(this%ctmpCz,2))
         else
@@ -58,15 +64,11 @@
         call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
         call this%spectE%mtimes_ik2_ip(this%ctmpEy)
         wrhs = wrhs + this%ctmpEy
-
+        ! then, the v equation 
         if (useCompactFD) then
             call this%derZ_OO%ddz_C2C(this%ctmpCz,this%ctmpCz2, size(this%ctmpCz,1),size(this%ctmpCz,2)) 
         else
             call this%Ops2ndOrder%ddz_C2C(this%ctmpCz,this%ctmpCz2, .false., .false.) 
         end if 
-        !print*, "ddz tau23:"
-        !print*, this%ctmpCz2(2,3,1:3)
-        !print*, "vrhs:"
-        !print*, vrhs(2,3,1:3) 
         call transpose_z_to_y(this%ctmpCz2,tauhat,this%sp_gp)
         vrhs = vrhs + tauhat
