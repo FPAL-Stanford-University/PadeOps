@@ -17,7 +17,8 @@ module sgsmod
     public :: sgs
 
     real(rkind) :: c_sigma = 1.5_rkind
-    real(rkind) :: c_smag = 0.165_rkind
+    real(rkind) :: c_smag = 0.17_rkind
+    real(rkind) :: kappa = 0.41_rkind
     real(rkind), parameter :: deltaRatio = four**(two/three)
     complex(rkind), parameter :: zeroC = zero + imi*zero
 
@@ -25,7 +26,7 @@ module sgsmod
         private
         type(spectral), pointer :: spect, spectE 
         real(rkind), allocatable, dimension(:,:,:,:) :: rbuff, Lij, Mkl
-        real(rkind), pointer, dimension(:,:,:) :: nuSGS, nuSGSfil
+        real(rkind), pointer, dimension(:,:,:) :: cSMAG_WALL, nuSGS, nuSGSfil
         real(rkind) :: deltaFilter, mconst
         type(decomp_info), pointer :: sp_gp, gp
         type(decomp_info), pointer :: sp_gpE, gpE
@@ -39,6 +40,7 @@ module sgsmod
         type(cd06stagg), allocatable :: derZ_EE, derZ_OO
         type(staggOps), allocatable :: Ops2ndOrder
 
+        logical :: useWallFunction = .false. 
         logical :: useDynamicProcedure = .false.
         logical :: useClipping = .false. 
         !type(moengWall), allocatable :: wallModel
@@ -85,7 +87,7 @@ contains
 
     end subroutine
 
-    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, moengWall)
+    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, moengWall,zmesh, nCwall)
         class(sgs), intent(inout), target :: this
         type(spectral), intent(in), target :: spectC, spectE
         type(decomp_info), intent(in), target :: gpC, gpE
@@ -93,6 +95,8 @@ contains
         logical, intent(in) :: useDynamicProcedure, useClipping
         integer, intent(in) :: modelID
         type(wallModel), intent(in), target, optional :: moengWall
+        integer, intent(in), optional :: nCwall
+        real(rkind), dimension(:,:,:), intent(in), optional :: zMesh
 
         if (present(moengWall)) then
             this%moengWall => moengWall
@@ -107,13 +111,31 @@ contains
         this%rbuff = zero  
         this%spect => spectC
         this%spectE => spectE
-        this%deltaFilter = ((1.5_rkind**2)*dx*dy*dz)**(one/three)
+        this%deltaFilter = (dx*dy*dz)**(one/three)
 
         select case (this%SGSmodel)
         case(0)
             this%mconst = (this%deltaFilter*c_smag)**2
+            call message(1,"SMAGORINSKY SGS model initialized")
         case(1)
             this%mconst = (this%deltaFilter*c_sigma)**2
+            call message(1,"SIGMA SGS model initialized")
+        case(2)
+            this%cSMAG_WALL => this%rbuff(:,:,:,19)
+            if (this%UseDynamicProcedure) then
+                call GracefulExit("Dynamic Procedure cannot be used if damping &
+                    & function is being used",3213)
+            endif 
+            if (.not. present(zMesh)) then
+                call GracefulExit("Need to pass in the zCell, z0 values if Dynamic &
+                   & Procedure is used", 43)
+            end if 
+            this%cSMAG_WALL = ( c_smag**(-ncWall) + (kappa*(zMesh/this%deltaFilter + &
+                & moengWall%getz0()/this%deltaFilter))**(-ncWall)  )**(-one/ncWall)
+            
+            this%cSMAG_WALL = (this%deltaFilter*this%cSMAG_WALL)**2    
+            this%useWallFunction = .true. 
+            call message(1,"SMAGORINSKY (w/ Wall function) SGS model initialized")
         case default 
             call GracefulExit("Invalid choice for SGS model.",2013)
         end select
@@ -137,9 +159,9 @@ contains
         if (useCompactFD) then
             allocate(this%derZ_EE, this%derZ_OO)
             call this%derZ_EE%init( this%sp_gp%zsz(3), dz, isTopEven = .true., isBotEven = .true., & 
-                             isTopSided = .true., isBotSided = .true.) 
+                             isTopSided = .false., isBotSided = .true.) 
             call this%derZ_OO%init( this%sp_gp%zsz(3), dz, isTopEven = .false., isBotEven = .false., & 
-                             isTopSided = .true., isBotSided = .true.) 
+                             isTopSided = .false., isBotSided = .true.) 
         else
             allocate(this%Ops2ndOrder)
             call this%Ops2ndOrder%init(gpC,gpE,0,dx,dy,dz,spectC%spectdecomp,spectE%spectdecomp, .true., .true.)
@@ -147,6 +169,7 @@ contains
         if (this%useDynamicProcedure) then
            allocate(this%Lij(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
            allocate(this%Mkl(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
+            call message(1,"Dynamic Procedure initialized")
         end if 
 
         this%meanFact = one/(real(gpC%xsz(1))*real(gpC%ysz(2)))
@@ -195,9 +218,8 @@ contains
 #include "sgs_models/smagorinsky_model_get_nuSGS.F90"
         case (1) ! Standard Sigma
 #include "sgs_models/sigma_model_get_nuSGS.F90"
-        case default
-            this%nuSGSfil = zero
-            if (present(nuSGSfil)) nuSGSfil = zero
+        case (2) 
+#include "sgs_models/smagorinsky_model_get_nuSGS.F90"
         end select
 
     end subroutine
@@ -237,7 +259,11 @@ contains
         if (this%useDynamicProcedure) then
             call this%DynamicProcedure(uhat,vhat,wChat,u,v,wC,duidxj) 
         else
-            this%nuSGS = this%mconst*this%nuSGS
+            if (this%useWallFunction) then
+                this%nuSGS = this%cSMAG_WALL*this%nuSGS
+            else
+                this%nuSGS = this%mconst*this%nuSGS
+            end if 
         end if 
 
         tau11 = two*this%nuSGS*tau11

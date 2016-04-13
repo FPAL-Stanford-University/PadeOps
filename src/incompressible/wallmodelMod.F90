@@ -17,13 +17,23 @@ module wallmodelMod
         real(rkind), dimension(:,:,:), pointer :: xbuff, ybuff, zbuff1, zbuff2
         type(decomp_info), pointer :: decomp
         integer :: nxX, nyX, nzX
+        real(rkind) :: z0nd
     contains
         procedure :: init
         procedure :: destroy
-        procedure :: updateWallStress       
+        procedure :: updateWallStress      
+        procedure :: getz0 
     end type
 
 contains
+
+    pure function getz0(this) result(val)
+        class(wallmodel), intent(in) :: this
+        real(rkind) :: val
+
+        val = this%z0nd
+
+    end function
 
     subroutine init(this,dz,inputfile, decompC, xbuff, ybuff, zbuff)
         class(wallmodel), intent(inout) :: this
@@ -55,7 +65,8 @@ contains
         this%nyX = decompC%xsz(2)
         this%nzX = decompC%xsz(3)
 
-        this%IsInitialized = .true. 
+        this%IsInitialized = .true.
+        this%z0nd = z0 
     end subroutine
    
     subroutine destroy(this)

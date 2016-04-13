@@ -143,23 +143,23 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
 
 
     ! Interpolate wC to w
-    !allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
-    !allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
+    allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
+    allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
 
-    !allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
-    !allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
+    allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
+    allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
    
-    !nz = decompC%zsz(3)
-    !nzE = nz + 1
+    nz = decompC%zsz(3)
+    nzE = nz + 1
 
-    !call transpose_x_to_y(wC,ybuffC,decompC)
-    !call transpose_y_to_z(ybuffC,zbuffC,decompC)
-    !zbuffE = zero
-    !zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
-    !call transpose_z_to_y(zbuffE,ybuffE,decompE)
-    !call transpose_y_to_x(ybuffE,w,decompE) 
+    call transpose_x_to_y(wC,ybuffC,decompC)
+    call transpose_y_to_z(ybuffC,zbuffC,decompC)
+    zbuffE = zero
+    zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
+    call transpose_z_to_y(zbuffE,ybuffE,decompE)
+    call transpose_y_to_x(ybuffE,w,decompE) 
    
-    !deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
+    deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
     
     nullify(u,v,w,x,y,z)
     
