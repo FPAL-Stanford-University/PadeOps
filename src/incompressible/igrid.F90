@@ -512,7 +512,7 @@ contains
             allocate(this%SGSmodel)
             if (allocated(this%moengWall)) then
                 call this%sgsModel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
-                    this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%moengWall)
+                    this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%moengWall, this%mesh(:,:,:,3),1)
             else
                 call this%sgsModel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
                     this%dy, this%dz, useDynamicProcedure, useSGSclipping)

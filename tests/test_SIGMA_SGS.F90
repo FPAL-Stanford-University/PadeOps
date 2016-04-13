@@ -193,7 +193,8 @@ program test_SIGMA_SGS
     !duidxj(2,3,4,4) = 4.d0; duidxj(2,3,4,5) = -1.d0; duidxj(2,3,4,6) = 6.d0
 
     call tic()
-    call sgsModel%getRHS_SGS(duidxj, urhs, vrhs, wrhs, uhat, vhat, what, u, v, w, maxnuSGS)
+    !call sgsModel%getRHS_SGS(duidxj, urhs, vrhs, wrhs, uhat, vhat, what, u, v, w, maxnuSGS)
+    print*, "CANNOT TEST Since the code is incomplete"
     call toc()
 
     call spect%ifft(urhs,u)
