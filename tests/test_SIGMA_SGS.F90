@@ -36,12 +36,13 @@ program test_SIGMA_SGS
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     integer :: i,j,k
     real(rkind), dimension(:,:,:,:), allocatable :: duidxj
+    complex(rkind), dimension(:,:,:,:), allocatable :: duidxjH
     integer :: dimTransform = 2
     character(len=clen) :: filename = "/home/aditya90/Codes/PadeOps/data/OpenFoam_AllData.txt" 
     type(sgs) :: sgsModel
     real(rkind) :: maxnuSGS
    
-    integer :: ModelID = 1 
+    integer :: ModelID = 0 
     logical :: useEkmanInit = .false. 
     logical :: useDynamicProcedure = .true. 
     logical :: useClipping = .true. 
@@ -136,6 +137,7 @@ program test_SIGMA_SGS
     call spect%alloc_r2c_out(uhat)
     call spect%alloc_r2c_out(vhat)
     call spect%alloc_r2c_out(what)
+    call spect%alloc_r2c_out(duidxjH,9)
 
     urhs = zero
     vrhs = zero
@@ -184,6 +186,10 @@ program test_SIGMA_SGS
     call transpose_z_to_y(ctmpz2,ctmp2,spect%spectdecomp)
     call spect%ifft(ctmp2,duidxj(:,:,:,9))
 
+    do i = 1,9
+        call spect%fft(duidxj(:,:,:,i),duidxjH(:,:,:,i))
+    end do 
+
     call spect%fft(u,uhat)
     call spect%fft(v,vhat)
     call spect%fft(w,what)
@@ -193,8 +199,7 @@ program test_SIGMA_SGS
     !duidxj(2,3,4,4) = 4.d0; duidxj(2,3,4,5) = -1.d0; duidxj(2,3,4,6) = 6.d0
 
     call tic()
-    !call sgsModel%getRHS_SGS(duidxj, urhs, vrhs, wrhs, uhat, vhat, what, u, v, w, maxnuSGS)
-    print*, "CANNOT TEST Since the code is incomplete"
+    call sgsModel%getRHS_SGS(duidxj, duidxjH, urhs, vrhs, wrhs, uhat, vhat, what, u, v, w, maxnuSGS)
     call toc()
 
     call spect%ifft(urhs,u)
