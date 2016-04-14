@@ -480,8 +480,8 @@ contains
             call message(2, "Total non zero:", p_sum(sum(this%Gdealias)))
 
 
-            kdealiasx = ((one/three)*pi/dx)
-            kdealiasy = ((one/three)*pi/dy)
+            kdealiasx = kdealiasx/2.828d0
+            kdealiasy = kdealiasy/2.828d0
             do k = 1,size(this%k1,3)
                 do j = 1,size(this%k1,2)
                     do i = 1,size(this%k1,1)

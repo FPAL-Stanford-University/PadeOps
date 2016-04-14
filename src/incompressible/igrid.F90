@@ -617,26 +617,6 @@ contains
     end subroutine
 
 
-    !subroutine laplacian(this, f, lapf)
-    !    class(igrid),target, intent(inout) :: this
-    !    real(rkind), intent(in),  dimension(this%nxp, this%nyp, this%nzp) :: f
-    !    real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
-
-    !    lapf = f 
-    !end subroutine
-
-    !subroutine gradient(this,f,dfdx,dfdy,dfdz)
-    !    class(igrid), intent(inout), target :: this
-    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in):: f
-    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: dfdx 
-    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: dfdy
-    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: dfdz
-    !    
-    !    dfdx = f
-    !    dfdy = f
-    !    dfdz = f
-    !end subroutine 
-
     subroutine destroy(this)
         class(igrid), intent(inout) :: this
         
