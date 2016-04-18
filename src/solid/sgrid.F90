@@ -130,7 +130,7 @@ module SolidGrid
             procedure, private :: getRHS_x
             procedure, private :: getRHS_y
             procedure, private :: getRHS_z
-            procedure          :: getSGS
+            procedure          :: getLAD
             procedure          :: filter
             procedure          :: getPhysicalProperties
             procedure, private :: get_tau
@@ -562,7 +562,7 @@ contains
         use exits,      only: GracefulExit, message
         class(sgrid), target, intent(inout) :: this
 
-        logical :: tcond, vizcond, stepcond
+        logical :: tcond, vizcond, stepcond, hookcond = .FALSE.
         character(len=clen) :: stability
         real(rkind) :: cputime
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
@@ -580,7 +580,7 @@ contains
 
         call this%getPhysicalProperties()
 
-        call this%getSGS(dudx,dudy,dudz,&
+        call this%getLAD(dudx,dudy,dudz,&
                          dvdx,dvdy,dvdz,&
                          dwdx,dwdy,dwdz )
         deallocate( duidxj )
@@ -620,17 +620,18 @@ contains
         end if
 
         ! Start the simulation while loop
-        do while ( tcond .AND. stepcond )
+        do while ( tcond .AND. stepcond .AND. (.NOT. hookcond) )
             ! Advance time
             call tic()
             call this%advance_RK45()
             call toc(cputime)
-            
+           
+            if (hookcond) stability = "hook"
             call message(1,"Time",this%tsim)
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
-            call hook_timestep(this%decomp, this%mesh, this%fields, this%step, this%tsim)
+            call hook_timestep(this%decomp, this%mesh, this%fields, this%step, this%tsim, hookcond)
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
@@ -877,7 +878,7 @@ contains
 
         call this%getPhysicalProperties()
 
-        call this%getSGS(dudx,dudy,dudz,&
+        call this%getLAD(dudx,dudy,dudz,&
                          dvdx,dvdy,dvdz,&
                          dwdx,dwdy,dwdz )
 
@@ -1052,7 +1053,7 @@ contains
 
     end subroutine
 
-    subroutine getSGS(this,dudx,dudy,dudz,&
+    subroutine getLAD(this,dudx,dudy,dudz,&
                            dvdx,dvdy,dvdz,&
                            dwdx,dwdy,dwdz )
         use reductions, only: P_MAXVAL
@@ -1120,28 +1121,28 @@ contains
         call transpose_y_to_x(func,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2)
         call this%der%d2dx2(xtmp2,xtmp1)
-        xtmp2 = xtmp1*this%dx**6
+        xtmp2 = xtmp1*this%dx**4
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        bulkstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
+        bulkstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2)
         call this%der%d2dz2(ztmp2,ztmp1)
-        ztmp2 = ztmp1*this%dz**6
+        ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        bulkstar = bulkstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
+        bulkstar = bulkstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(func,ytmp4)
         call this%der%d2dy2(ytmp4,ytmp5)
-        ytmp4 = ytmp5*this%dy**6
-        bulkstar = bulkstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
+        ytmp4 = ytmp5*this%dy**4
+        bulkstar = bulkstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
         ! Now, all ytmps are free to use
         ytmp1 = dwdy-dvdz; ytmp2 = dudz-dwdx; ytmp3 = dvdx-dudy
         ytmp4 = ytmp1*ytmp1 + ytmp2*ytmp2 + ytmp3*ytmp3 ! |curl(u)|^2
-        ytmp2 = func*func
+        ytmp2 = func*func ! dilatation^2
 
         ! Calculate the switching function
         ytmp1 = ytmp2 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
@@ -1166,23 +1167,23 @@ contains
         call transpose_y_to_x(this%e,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2)
         call this%der%d2dx2(xtmp2,xtmp1)
-        xtmp2 = xtmp1*this%dx**6
+        xtmp2 = xtmp1*this%dx**4
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        kapstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3)
+        kapstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(this%e,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2)
         call this%der%d2dz2(ztmp2,ztmp1)
-        ztmp2 = ztmp1*this%dz**6
+        ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        kapstar = kapstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3)
+        kapstar = kapstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(this%e,ytmp4)
         call this%der%d2dy2(ytmp4,ytmp5)
-        ytmp4 = ytmp5*this%dy**6
-        kapstar = kapstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3)
+        ytmp4 = ytmp5*this%dy**4
+        kapstar = kapstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Now, all ytmps are free to use
         call this%sgas%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound - hydrodynamic part
