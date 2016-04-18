@@ -1,15 +1,16 @@
 module SolidGrid
     use kind_parameters, only: rkind, clen
-    use constants, only: zero,eps,third,half,one,two,three,four
-    use FiltersMod, only: filters
-    use GridMod, only: grid
-    use gridtools, only: alloc_buffs, destroy_buffs
-    use sgrid_hooks, only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
-    use decomp_2d, only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
-                    transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
+    use constants,       only: zero,eps,third,half,one,two,three,four
+    use FiltersMod,      only: filters
+    use GridMod,         only: grid
+    use gridtools,       only: alloc_buffs, destroy_buffs
+    use sgrid_hooks,     only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
+    use decomp_2d,       only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
+                               transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
     use StiffGasEOS,     only: stiffgas
     use Sep1SolidEOS,    only: sep1solid
+    use SolidMixtureMod, only: solid_mixture
    
     implicit none
 
@@ -23,24 +24,15 @@ module SolidGrid
     integer, parameter :: mu_index     = 8
     integer, parameter :: bulk_index   = 9
     integer, parameter :: kap_index    = 10
-    integer, parameter :: g11_index    = 11
-    integer, parameter :: g12_index    = 12
-    integer, parameter :: g13_index    = 13
-    integer, parameter :: g21_index    = 14
-    integer, parameter :: g22_index    = 15
-    integer, parameter :: g23_index    = 16
-    integer, parameter :: g31_index    = 17
-    integer, parameter :: g32_index    = 18
-    integer, parameter :: g33_index    = 19
-    integer, parameter :: eel_index    = 20
-    integer, parameter :: sxx_index    = 21
-    integer, parameter :: sxy_index    = 22
-    integer, parameter :: sxz_index    = 23
-    integer, parameter :: syy_index    = 24
-    integer, parameter :: syz_index    = 25
-    integer, parameter :: szz_index    = 26
+    integer, parameter :: sxx_index    = 11
+    integer, parameter :: sxy_index    = 12
+    integer, parameter :: sxz_index    = 13
+    integer, parameter :: syy_index    = 14
+    integer, parameter :: syz_index    = 15
+    integer, parameter :: szz_index    = 16
 
-    integer, parameter :: nfields = 26
+    integer :: nfields = 16
+    integer :: ncnsrv  = 5
 
     ! These indices are for data management, do not change if you're not sure of what you're doing
     integer, parameter :: tauxyidx = 2
@@ -64,8 +56,7 @@ module SolidGrid
        
         type(filters),   allocatable :: gfil
 
-        type(stiffgas),  allocatable :: sgas
-        type(sep1solid), allocatable :: elastic
+        type(solid_mixture), allocatable :: mix
 
         logical     :: plastic
         logical     :: explPlast
@@ -75,7 +66,7 @@ module SolidGrid
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
        
-        real(rkind) :: Cmu, Cbeta, Ckap
+        real(rkind) :: Cmu, Cbeta, Ckap, Cdiff, CY
 
         real(rkind) :: rho0
 
@@ -94,17 +85,6 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: bulk 
         real(rkind), dimension(:,:,:), pointer :: kap
 
-        real(rkind), dimension(:,:,:,:), pointer :: g
-        real(rkind), dimension(:,:,:), pointer :: g11
-        real(rkind), dimension(:,:,:), pointer :: g12
-        real(rkind), dimension(:,:,:), pointer :: g13
-        real(rkind), dimension(:,:,:), pointer :: g21
-        real(rkind), dimension(:,:,:), pointer :: g22
-        real(rkind), dimension(:,:,:), pointer :: g23
-        real(rkind), dimension(:,:,:), pointer :: g31
-        real(rkind), dimension(:,:,:), pointer :: g32
-        real(rkind), dimension(:,:,:), pointer :: g33
-       
         real(rkind), dimension(:,:,:,:), pointer :: devstress
         real(rkind), dimension(:,:,:), pointer :: sxx
         real(rkind), dimension(:,:,:), pointer :: sxy
@@ -113,8 +93,6 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: syz
         real(rkind), dimension(:,:,:), pointer :: szz
         
-        real(rkind), dimension(:,:,:), pointer :: eel
-         
         contains
             procedure          :: init
             procedure          :: destroy
@@ -130,7 +108,7 @@ module SolidGrid
             procedure, private :: getRHS_x
             procedure, private :: getRHS_y
             procedure, private :: getRHS_z
-            procedure          :: getSGS
+            procedure          :: getLAD
             procedure          :: filter
             procedure          :: getPhysicalProperties
             procedure, private :: get_tau
@@ -146,6 +124,7 @@ contains
         character(len=clen), intent(in) :: inputfile  
 
         integer :: nx, ny, nz
+        integer :: ns = 1
         character(len=clen) :: outputdir
         character(len=clen) :: inputdir
         character(len=clen) :: vizprefix = "sgrid"
@@ -176,6 +155,8 @@ contains
         real(rkind) :: Cmu = 0.002_rkind
         real(rkind) :: Cbeta = 1.75_rkind
         real(rkind) :: Ckap = 0.01_rkind
+        real(rkind) :: Cdiff = 0.003_rkind
+        real(rkind) :: CY = 100._rkind
         logical     :: plastic = .FALSE.
         real(rkind) :: yield = real(1.D30,rkind)
         logical     :: explPlast = .FALSE.
@@ -193,7 +174,7 @@ contains
                                                        prow, pcol, &
                                                          SkewSymm  
         namelist /SINPUT/  gam, Rgas, PInf, shmod, rho0, plastic, yield, &
-                           explPlast, tau0, Cmu, Cbeta, Ckap
+                           explPlast, tau0, ns, Cmu, Cbeta, Ckap, Cdiff, CY
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -204,6 +185,7 @@ contains
         this%nx = nx
         this%ny = ny
         this%nz = nz
+        this%ns = ns
 
         this%tsim = zero
         this%tstop = tstop
@@ -219,6 +201,8 @@ contains
         this%Cmu = Cmu
         this%Cbeta = Cbeta
         this%Ckap = Ckap
+        this%Cdiff = Cdiff
+        this%CY = CY
 
         this%plastic = plastic
         
@@ -233,128 +217,6 @@ contains
         call decomp_2d_init(nx, ny, nz, prow, pcol)
         call get_decomp_info(this%decomp)
         
-        ! Allocate mesh
-        if ( allocated(this%mesh) ) deallocate(this%mesh) 
-        call alloc_buffs(this%mesh,3,'y',this%decomp)
-        
-        ! Associate pointers for ease of use
-        this%x    => this%mesh  (:,:,:, 1) 
-        this%y    => this%mesh  (:,:,:, 2) 
-        this%z    => this%mesh  (:,:,:, 3)
-
-        ! Generate default mesh: X \in [-1, 1), Y \in [-1, 1), Z \in [-1, 1)
-        this%dx = two/nx
-        this%dy = two/ny
-        this%dz = two/nz
-
-        ! Generate default mesh 
-        do k = 1,size(this%mesh,3)
-            do j = 1,size(this%mesh,2)
-                do i = 1,size(this%mesh,1)
-                    this%mesh(i,j,k,1) = -one + (this%decomp%yst(1) - 1 + i - 1)*this%dx           
-                    this%mesh(i,j,k,2) = -one + (this%decomp%yst(2) - 1 + j - 1)*this%dy           
-                    this%mesh(i,j,k,3) = -one + (this%decomp%yst(3) - 1 + k - 1)*this%dz           
-                end do 
-            end do 
-        end do  
-
-        ! Allocate sgas
-        if ( allocated(this%sgas) ) deallocate(this%sgas)
-        allocate(this%sgas)
-        call this%sgas%init(gam,Rgas,PInf)
-
-        ! Allocate elastic
-        if ( allocated(this%elastic) ) deallocate(this%elastic)
-        allocate(this%elastic)
-        call this%elastic%init(shmod,yield)
-
-        ! Go to hooks if a different mesh is desired 
-        call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
-
-        ! Allocate fields
-        if ( allocated(this%fields) ) deallocate(this%fields) 
-        call alloc_buffs(this%fields,nfields,'y',this%decomp)
-        call alloc_buffs(this%Wcnsrv,5,'y',this%decomp)
-        
-        ! Associate pointers for ease of use
-        this%rho  => this%fields(:,:,:, rho_index) 
-        this%u    => this%fields(:,:,:,   u_index) 
-        this%v    => this%fields(:,:,:,   v_index) 
-        this%w    => this%fields(:,:,:,   w_index)  
-        this%p    => this%fields(:,:,:,   p_index)  
-        this%T    => this%fields(:,:,:,   T_index)  
-        this%e    => this%fields(:,:,:,   e_index)  
-        this%mu   => this%fields(:,:,:,  mu_index)  
-        this%bulk => this%fields(:,:,:,bulk_index)  
-        this%kap  => this%fields(:,:,:, kap_index)   
-       
-        this%g    => this%fields(:,:,:,g11_index:g33_index)
-        this%g11  => this%fields(:,:,:, g11_index)   
-        this%g12  => this%fields(:,:,:, g12_index)   
-        this%g13  => this%fields(:,:,:, g13_index)   
-        this%g21  => this%fields(:,:,:, g21_index)   
-        this%g22  => this%fields(:,:,:, g22_index)   
-        this%g23  => this%fields(:,:,:, g23_index)   
-        this%g31  => this%fields(:,:,:, g31_index)   
-        this%g32  => this%fields(:,:,:, g32_index)   
-        this%g33  => this%fields(:,:,:, g33_index)   
-        
-        this%devstress => this%fields(:,:,:,sxx_index:szz_index)
-        this%sxx  => this%fields(:,:,:, sxx_index)   
-        this%sxy  => this%fields(:,:,:, sxy_index)   
-        this%sxz  => this%fields(:,:,:, sxz_index)   
-        this%syy  => this%fields(:,:,:, syy_index)   
-        this%syz  => this%fields(:,:,:, syz_index)   
-        this%szz  => this%fields(:,:,:, szz_index)   
-        
-        this%eel  => this%fields(:,:,:, eel_index)   
-       
-        ! Initialize everything to a constant Zero
-        this%fields = zero  
-
-        ! Go to hooks if a different initialization is derired 
-        call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
-                        rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf, &
-                        tstop=this%tstop, dt=this%dtfixed, tviz=tviz, yield=this%elastic%yield, &
-                        tau0=this%tau0)
-       
-        ! Get hydrodynamic and elastic energies 
-        call this%sgas%get_e_from_p(this%rho,this%p,this%e)
-        
-        ! Check if the initialization was okay
-        if ( nancheck(this%e) ) then
-            call GracefulExit("NaN encountered at initialization in the hydrodynamic energy", 999)
-        end if
-
-        call alloc_buffs(finger,  6,"y",this%decomp)
-        call alloc_buffs(fingersq,6,"y",this%decomp)
-        allocate( trG (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
-        allocate( trG2(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
-        allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
-
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel) 
-        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
-        
-        ! Check if the initialization was okay
-        if ( nancheck(this%eel) ) then
-            call GracefulExit("NaN encountered at initialization in the elastic energy", 999)
-        end if
-
-
-        this%e = this%e + this%eel
-        call this%sgas%get_T(this%e,this%T)
-
-        if (P_MAXVAL(abs( this%rho/this%rho0/(detG)**half - one )) > 10._rkind*eps) then
-            call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
-        end if
-
-        deallocate( finger   )
-        deallocate( fingersq )
-        deallocate( trG      )
-        deallocate( trG2     )
-        deallocate( detG     )
-
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
         
@@ -400,6 +262,111 @@ contains
         this%nxp = this%decomp%ysz(1)
         this%nyp = this%decomp%ysz(2)
         this%nzp = this%decomp%ysz(3)
+
+        ! Allocate mesh
+        if ( allocated(this%mesh) ) deallocate(this%mesh) 
+        call alloc_buffs(this%mesh,3,'y',this%decomp)
+        
+        ! Associate pointers for ease of use
+        this%x    => this%mesh  (:,:,:, 1) 
+        this%y    => this%mesh  (:,:,:, 2) 
+        this%z    => this%mesh  (:,:,:, 3)
+
+        ! Generate default mesh: X \in [-1, 1), Y \in [-1, 1), Z \in [-1, 1)
+        this%dx = two/nx
+        this%dy = two/ny
+        this%dz = two/nz
+
+        ! Generate default mesh 
+        do k = 1,size(this%mesh,3)
+            do j = 1,size(this%mesh,2)
+                do i = 1,size(this%mesh,1)
+                    this%mesh(i,j,k,1) = -one + (this%decomp%yst(1) - 1 + i - 1)*this%dx           
+                    this%mesh(i,j,k,2) = -one + (this%decomp%yst(2) - 1 + j - 1)*this%dy           
+                    this%mesh(i,j,k,3) = -one + (this%decomp%yst(3) - 1 + k - 1)*this%dz           
+                end do 
+            end do 
+        end do  
+
+        ! Allocate mixture
+        if ( allocated(this%mix) ) deallocate(this%mix)
+        allocate(this%mix, source=solid_mixture(this%decomp,this%der,ns))
+
+        ! Go to hooks if a different mesh is desired 
+        call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
+
+        ! Allocate fields
+        if ( allocated(this%fields) ) deallocate(this%fields) 
+        call alloc_buffs(this%fields,nfields,'y',this%decomp)
+        
+        if ( allocated(this%Wcnsrv) ) deallocate(this%Wcnsrv) 
+        call alloc_buffs(this%Wcnsrv,ncnsrv,'y',this%decomp)
+        
+        ! Associate pointers for ease of use
+        this%rho  => this%fields(:,:,:, rho_index) 
+        this%u    => this%fields(:,:,:,   u_index) 
+        this%v    => this%fields(:,:,:,   v_index) 
+        this%w    => this%fields(:,:,:,   w_index)  
+        this%p    => this%fields(:,:,:,   p_index)  
+        this%T    => this%fields(:,:,:,   T_index)  
+        this%e    => this%fields(:,:,:,   e_index)  
+        this%mu   => this%fields(:,:,:,  mu_index)  
+        this%bulk => this%fields(:,:,:,bulk_index)  
+        this%kap  => this%fields(:,:,:, kap_index)   
+       
+        this%devstress => this%fields(:,:,:,sxx_index:szz_index)
+        this%sxx  => this%fields(:,:,:, sxx_index)   
+        this%sxy  => this%fields(:,:,:, sxy_index)   
+        this%sxz  => this%fields(:,:,:, sxz_index)   
+        this%syy  => this%fields(:,:,:, syy_index)   
+        this%syz  => this%fields(:,:,:, syz_index)   
+        this%szz  => this%fields(:,:,:, szz_index)   
+        
+        ! Initialize everything to a constant Zero
+        this%fields = zero  
+
+        ! Go to hooks if a different initialization is derired 
+        call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
+                        rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf, &
+                        tstop=this%tstop, dt=this%dtfixed, tviz=tviz, yield=this%elastic%yield, &
+                        tau0=this%tau0)
+       
+        ! Get hydrodynamic and elastic energies 
+        call this%sgas%get_e_from_p(this%rho,this%p,this%e)
+        
+        ! Check if the initialization was okay
+        if ( nancheck(this%e) ) then
+            call GracefulExit("NaN encountered at initialization in the hydrodynamic energy", 999)
+        end if
+
+        call alloc_buffs(finger,  6,"y",this%decomp)
+        call alloc_buffs(fingersq,6,"y",this%decomp)
+        allocate( trG (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+        allocate( trG2(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+        allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+
+        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel) 
+        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+        
+        ! Check if the initialization was okay
+        if ( nancheck(this%eel) ) then
+            call GracefulExit("NaN encountered at initialization in the elastic energy", 999)
+        end if
+
+
+        this%e = this%e + this%eel
+        call this%sgas%get_T(this%e,this%T)
+
+        if (P_MAXVAL(abs( this%rho/this%rho0/(detG)**half - one )) > 10._rkind*eps) then
+            call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
+        end if
+
+        deallocate( finger   )
+        deallocate( fingersq )
+        deallocate( trG      )
+        deallocate( trG2     )
+        deallocate( detG     )
 
 
         ! Allocate 2 buffers for each of the three decompositions
@@ -580,7 +547,7 @@ contains
 
         call this%getPhysicalProperties()
 
-        call this%getSGS(dudx,dudy,dudz,&
+        call this%getLAD(dudx,dudy,dudz,&
                          dvdx,dvdy,dvdz,&
                          dwdx,dwdy,dwdz )
         deallocate( duidxj )
@@ -703,10 +670,12 @@ contains
 
             call this%getRHS(rhs, rhsg)
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
-            Qtmpg = this%dt*rhsg + RK45_A(isub)*Qtmpg
-            Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
+
+            Qtmpg = this%dt*rhsg + RK45_A(isub)*Qtmpg
             this%g      = this%g      + RK45_B(isub)*Qtmpg
+
+            Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
             ! Filter the conserved variables
@@ -828,11 +797,14 @@ contains
     pure subroutine get_conserved(this)
         class(sgrid), intent(inout) :: this
 
-        this%Wcnsrv(:,:,:,1) = this%rho
+        this%Wcnsrv(:,:,:,1) = this%rho              ! remove this
         this%Wcnsrv(:,:,:,2) = this%rho * this%u
         this%Wcnsrv(:,:,:,3) = this%rho * this%v
         this%Wcnsrv(:,:,:,4) = this%rho * this%w
         this%Wcnsrv(:,:,:,5) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
+
+        ! add 2M (mass fraction and hydrodynamic energy) variables here
+
 
     end subroutine
 
@@ -875,11 +847,14 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz)
         call this%gradient(this%w,dwdx,dwdy,dwdz)
 
+ 
+        ! get grad Y
+       
         call this%getPhysicalProperties()
 
-        call this%getSGS(dudx,dudy,dudz,&
+        call this%getLAD(dudx,dudy,dudz,&
                          dvdx,dvdy,dvdz,&
-                         dwdx,dwdy,dwdz )
+                         dwdx,dwdy,dwdz )     ! add species mass diffusivities and conductivities here
 
         ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
         call this%get_tau( duidxj )
@@ -910,7 +885,7 @@ contains
                            tauxz,tauyz,tauzz,&
                                qz )
 
-        ! inverse deformation gradient tensor
+        ! inverse deformation gradient tensor --  move this to SolidMod
         penalty => this%ybuf(:,:,:,1)
         tmp => this%ybuf(:,:,:,2)
         curlg => this%ybuf(:,:,:,3:5)
@@ -1052,7 +1027,7 @@ contains
 
     end subroutine
 
-    subroutine getSGS(this,dudx,dudy,dudz,&
+    subroutine getLAD(this,dudx,dudy,dudz,&
                            dvdx,dvdy,dvdz,&
                            dwdx,dwdy,dwdz )
         use reductions, only: P_MAXVAL

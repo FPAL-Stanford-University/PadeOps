@@ -9,6 +9,8 @@ module MixtureEOSMod
     use EOSMod,          only: eos
     use IdealGasEOS,     only: idealgas
 
+    implicit none
+
     type :: material_eos
         class(idealgas), allocatable :: mat
     end type
