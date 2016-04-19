@@ -1,7 +1,7 @@
 module SolidMixtureMod
 
     use kind_parameters, only: rkind,clen
-    use constants,       only: zero,one
+    use constants,       only: zero,one,two,third
     use decomp_2d,       only: decomp_info
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
@@ -77,5 +77,126 @@ contains
         if (allocated(this%material(imat)%elastic)) deallocate(this%material(imat)%elastic)
         allocate( this%material(imat)%elastic, source=elastic )
     end subroutine
+
+    subroutine relaxPressure(this)
+        class(solid_mixture), intent(inout) :: this
+
+        real(rkind), dimension(4*this%ns), target :: fparams
+        integer, dimension(1)             :: iparams
+        real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
+
+        real(rkind), dimension(1:this%ns) :: fac
+
+        ! get species hydrodynamic energy; mixture hydrodynamic energy
+        ! get species pressure from species energy
+
+        vf   => fparams(  1:this%ns)
+        gam  => fparams(  this%ns+1:2*this%ns)
+        psph => fparams(2*this%ns+1:3*this%ns)
+        pinf => fparams(3*this%ns+1:4*this%ns)
+        
+        do k=1,this%nzp
+         do j=1,this%nyp
+          do i=1,this%nxp
+            ! set fparams
+            fparams(  1:this%ns)           = this%material(1:this%ns)%VF(i,j,k)    ! volume fractions
+            fparams(  this%ns+1:2*this%ns) = this%material(1:this%ns)%hydro%gam    ! gamma
+            fparams(2*this%ns+1:3*this%ns) = this%material(1:this%ns)%p(i,j,k)     ! pressure before eqb
+            fparams(3*this%ns+1:4*this%ns) = this%material(1:this%ns)%hydro%PInf   ! PInf
+
+            ! set iparams
+            iparams(1) = 0     ! dummy; not really used
+
+            ! scale all pressures by max over all PInfs
+            maxp = maxval(fparams(3*this%ns+1:4*this%ns))
+            fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)/maxp
+
+            ! set initial guess
+            peqb = sum(fparams(1:this%ns)*fparams(2*this%ns+1:3*this%ns))
+
+            ! solve non-linear equation
+            call this%rootfind_nr_1d(peqb,fparams,iparams)
+
+            ! rescale all pressures by maxp
+            fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*maxp
+            peqb = peqb*maxp
+
+            ! update species VF, eh, ...
+            fac = (psph + gam*pinf + (gam-one)*peqb)/(gam*(pinf+peqb))
+            vf = vf*fac
+            !this%material(1:this%ns)%g = this%material(1:this%ns)%g*fac**third        !! --- not clear if this is needed or if it works
+
+            peqb = (rho(i,j,k)*eh(i,j,k) - sum(vf*gam*pinf/(gam-one))) / sum(vf/(gam-one))
+            psph = peqb
+
+          enddo
+         enddo
+        enddo
+
+        ! compute get species energy from species pressure
+
+    end subroutine
+
+
+    subroutine fnumden(this,pf,fparams,iparams,num,den)
+        class(solid_mixture), intent(inout)   :: this
+        real(rkind), intent(in)               :: pf
+        real(rkind), intent(in), dimension(:), target :: fparams
+        integer, intent(in), dimension(:)     :: iparams
+        real(rkind), intent(out)              :: num, den
+
+        integer :: im
+        real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
+
+        vf   => fparams(  1:this%ns)
+        gam  => fparams(  this%ns+1:2*this%ns)
+        psph => fparams(2*this%ns+1:3*this%ns)
+        pinf => fparams(3*this%ns+1:4*this%ns)
+        
+        num = zero; den = zero;
+        do im = 1, this%ns
+          fac = vf(im)/gam(im)/(pinf(im)+pf)
+          num = num + fac*(psph(im)-pf)
+          den = den + fac*(psph(im)-pinf(im)-two*pf)/(pinf(im)+pf)
+        enddo
+
+        nullify(vf,gam,psph,pinf)
+
+    end subroutine
+
+    subroutine rootfind_nr_1d(this,pf,fparams,iparams)
+        class(solid_mixture), intent(inout)   :: this
+        real(rkind), intent(inout)            :: pf
+        real(rkind), intent(in), dimension(:) :: fparams
+        integer, intent(in), dimension(:)     :: iparams
+    
+        integer     :: ii, itmax = 1000
+        real(rkind) :: tol = 1.0d-8
+        real(rkind) :: dpf, num, den, den_conv
+    
+        !pfinitguess = pf
+        do ii = 1, itmax
+          call this%fnumden(pf,fparams,iparams,num,den)
+          if(dabs(den)>1.0d-12) then
+            dpf = num/den
+          else
+            write(*,*) 'den very small, please check.', num, num/den
+            stop
+          endif
+          pf = pf - dpf
+          ! check for convergence
+          if(dabs(pf)>1.0d-12) then
+            den_conv = dabs(pf)
+          else
+            den_conv = one
+          endif
+          if(dabs(dpf)/den_conv<1.0d-8) exit
+        enddo
+        if(ii==itmax+1) then
+          write(*,*) 'Newtons method for pf did not converge. Check details.', iparams(1)
+        endif
+    
+    end subroutine rootfind_nr_1d
+
 
 end module
