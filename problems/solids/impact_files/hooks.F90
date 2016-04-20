@@ -86,11 +86,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     associate( rho => fields(:,:,:,rho_index),   u => fields(:,:,:,  u_index), &
                  v => fields(:,:,:,  v_index),   w => fields(:,:,:,  w_index), &
                  p => fields(:,:,:,  p_index),   T => fields(:,:,:,  T_index), &
-                 e => fields(:,:,:,  e_index), g11 => fields(:,:,:,g11_index), &
-               g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
-               g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), & 
-               g23 => fields(:,:,:,g23_index), g31 => fields(:,:,:,g31_index), & 
-               g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
+                 e => fields(:,:,:,  e_index), G11 => fields(:,:,:,G11_index), &
+               G12 => fields(:,:,:,G12_index), G13 => fields(:,:,:,G13_index), & 
+               G21 => fields(:,:,:,G21_index), G22 => fields(:,:,:,G22_index), & 
+               G23 => fields(:,:,:,G23_index), G31 => fields(:,:,:,G31_index), & 
+               G32 => fields(:,:,:,G32_index), G33 => fields(:,:,:,G33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
         tmp = tanh( (x-half)/dx )
@@ -100,13 +100,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         w   = zero
         p   = pinit
 
-        g11 = one;  g12 = zero; g13 = zero
-        g21 = zero; g22 = one;  g23 = zero
-        g31 = zero; g32 = zero; g33 = one
+        G11 = one;  G12 = zero; G13 = zero
+        G21 = zero; G22 = one;  G23 = zero
+        G31 = zero; G32 = zero; G33 = one
 
-        ! Get rho compatible with det(g) and rho0
-        tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
-        rho = rho0 * tmp
+        ! Get rho compatible with det(G) and rho0
+        tmp = G11*(G22*G33-G23*G32) - G12*(G21*G33-G31*G23) + G13*(G21*G32-G31*G22)
+        rho = rho0 * sqrt(tmp)
 
     end associate
 
@@ -138,9 +138,9 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
-               g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
-               g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
-               g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
+               G11 => fields(:,:,:,G11_index), G12 => fields(:,:,:,G12_index), G13 => fields(:,:,:,G13_index), & 
+               G21 => fields(:,:,:,G21_index), G22 => fields(:,:,:,G22_index), G23 => fields(:,:,:,G23_index), &
+               G31 => fields(:,:,:,G31_index), G32 => fields(:,:,:,G32_index), G33 => fields(:,:,:,G33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         write(velstr,'(I3.3)') int(uimpact)
@@ -149,7 +149,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
         do i=1,decomp%ysz(1)
             write(outputunit,'(10ES26.16)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
-                                           g11(i,1,1), g21(i,1,1), mu(i,1,1), bulk(i,1,1), kap(i,1,1)
+                                           G11(i,1,1), G21(i,1,1), mu(i,1,1), bulk(i,1,1), kap(i,1,1)
         
         end do
         close(outputunit)
