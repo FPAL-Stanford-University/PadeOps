@@ -37,7 +37,11 @@ contains
 
         if (mod(gp%step,gp%t_dataDump)==0) then
            call message("Data dump!")
-           call dumpData4Matlab(gp) 
+           !call dumpData4Matlab(gp) 
+           call gp%dumpFullField(gp%u,'uVel')
+           call gp%dumpFullField(gp%v,'vVel')
+           call gp%dumpFullField(gp%wC,'wVel')
+           call gp%dumpFullField(gp%nu_SGS,'nuSG')
         end if 
 
         if ((mod(gp%step,tid_compStats)==0) .and. (gp%tsim > time_startDumping)) then

@@ -132,7 +132,8 @@ module IncompressibleGridWallM
             procedure          :: dump_stats
             procedure          :: compute_stats 
             procedure          :: finalize_stats
-            procedure          :: dump_planes 
+            procedure          :: dump_planes
+            procedure          :: dumpFullField 
     end type
 
 contains 
@@ -761,6 +762,23 @@ contains
         call message(1, "Just Dumped a RESTART file")
 
     end subroutine 
+
+
+    subroutine dumpFullField(this,arr,label)
+        use decomp_2d_io
+        use mpi
+        use exits, only: message
+        class(igridWallM), intent(in) :: this
+        character(len=clen) :: tempname, fname
+        real(rkind), dimension(:,:,:), intent(in) :: arr
+        character(len=4), intent(in) :: label
+
+        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1,arr,fname)
+
+    end subroutine
+
 
     !! STATISTICS !!
 

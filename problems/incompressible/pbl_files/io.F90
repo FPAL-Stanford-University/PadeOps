@@ -95,7 +95,11 @@ contains
         call mpi_barrier(mpi_comm_world,ierr)
 
         ! Now perform the initializing data dump
-        call dumpData4Matlab(gp)
+        !call dumpData4Matlab(gp)
+        call gp%dumpFullField(gp%u,'uVel')
+        call gp%dumpFullField(gp%v,'vVel')
+        call gp%dumpFullField(gp%wC,'wVel')
+        call gp%dumpFullField(gp%nu_SGS,'nuSG')
     end subroutine
 
     subroutine dumpData4Matlab(gp)
