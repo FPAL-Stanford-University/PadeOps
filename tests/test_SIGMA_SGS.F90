@@ -12,6 +12,7 @@ program test_SIGMA_SGS
     use cf90stuff, only: cf90
     use basic_io, only: write_binary
     use sgsmod, only: sgs
+    use numerics, only: useCompactFD
 
     implicit none
    
@@ -46,6 +47,7 @@ program test_SIGMA_SGS
     logical :: useEkmanInit = .false. 
     logical :: useDynamicProcedure = .true. 
     logical :: useClipping = .true. 
+    logical :: useCompact = .true. 
 
 
     call MPI_Init(ierr)
@@ -53,13 +55,16 @@ program test_SIGMA_SGS
 
     call get_decomp_info(gpC)
     call decomp_info_init(nx, ny, nz+1, gpE)
-    
+   
+    useCompactFD = useCompact
+
     allocate( x ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     allocate( y ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     allocate( z ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     allocate( u ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     allocate( v ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     allocate( w ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
+    allocate( wE ( gpE%xsz(1), gpE%xsz(2), gpE%xsz(3) ) )
     allocate( duidxj( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) , 9) )
     allocate( divergence ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
    
@@ -133,12 +138,12 @@ program test_SIGMA_SGS
     call spect%alloc_r2c_out(ctmp2)
     call spect%alloc_r2c_out(urhs)
     call spect%alloc_r2c_out(vrhs)
-    call spect%alloc_r2c_out(wrhs)
+    call spectE%alloc_r2c_out(wrhs)
     call spect%alloc_r2c_out(uhat)
     call spect%alloc_r2c_out(vhat)
     call spect%alloc_r2c_out(what)
     call spect%alloc_r2c_out(duidxjH,9)
-
+    
     urhs = zero
     vrhs = zero
     wrhs = zero
@@ -198,11 +203,17 @@ program test_SIGMA_SGS
     !duidxj(2,3,4,1) = 1.d0; duidxj(2,3,4,2) = 2.d0; duidxj(2,3,4,3) = 3.d0
     !duidxj(2,3,4,4) = 4.d0; duidxj(2,3,4,5) = -1.d0; duidxj(2,3,4,6) = 6.d0
 
+    do i = 1,9
+        call spect%fft(duidxj(:,:,:,i),duidxjH(:,:,:,i))
+    end do 
+
     call tic()
     call sgsModel%getRHS_SGS(duidxj, duidxjH, urhs, vrhs, wrhs, uhat, vhat, what, u, v, w, maxnuSGS)
     call toc()
 
-    call spect%ifft(urhs,u)
+    call spectE%ifft(wrhs,wE)
+    
+    print*, wE(5,4,:)
     call message("Max val RHS:", p_maxval(u))
     call message("Max val nuSGS:", maxnuSGS)
 
