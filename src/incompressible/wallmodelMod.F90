@@ -128,7 +128,7 @@ contains
         real(rkind), intent(in) :: umn
         
         call transpose_y_to_z(ui_hat,this%czbuff,this%decompSP)
-        taui3HAT(:,:,1) = this%czbuff(:,:,1)*this%mfactor*umn
+        taui3HAT(:,:,1) = -this%czbuff(:,:,1)*this%mfactor*umn
 
     end subroutine
 
