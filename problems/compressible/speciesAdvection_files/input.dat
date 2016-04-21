@@ -1,21 +1,21 @@
 &INPUT
 
-inputdir  =  "/home/akshays/Data/PadeOps/shocktube"      ! Directory for input files
-outputdir  = "/home/akshays/Data/PadeOps/shocktube"      ! Directory for output files
+inputdir  =  "/home/akshays/Data/PadeOps/speciesAdvection"      ! Directory for input files
+outputdir  = "/home/akshays/Data/PadeOps/speciesAdvection"      ! Directory for output files
 
 nx = 201                  ! Number of points in X
 ny = 1                    ! Number of points in Y
 nz = 1                    ! Number of points in Z
 
 dt = 1.0D-4               ! Fixed time step value (Set to negative to disable)
-tstop = 0.2D0             ! Physical time to stop the simulation
-CFL = 1.0D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+tstop = 2.0D0             ! Physical time to stop the simulation
+CFL = 0.5D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
-tviz = 1.0D-2             ! Time between visualization dumps (Set to negative to disable)
-vizprefix = "shocktube"   ! Prefix for the visualization files
+tviz = 1.0D-1             ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "speciesAdvection"   ! Prefix for the visualization files
 
-periodicx = .FALSE.       ! Periodic in X?
+periodicx = .TRUE.        ! Periodic in X?
 periodicy = .TRUE.        ! Periodic in Y?
 periodicz = .TRUE.        ! Periodic in Z?
 
@@ -33,10 +33,12 @@ pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 
 /
 
 &CINPUT
-gam  = 1.4D0              ! Ratio of specific heats
-Rgas = 1.D0               ! Ratio of specific heats
-x_bc1 = 1                 ! Left  X boundary ( 0 => general, 1 => symmetric ) 
-x_bcn = 1                 ! Right X boundary ( 0 => general, 1 => symmetric ) 
+ns    = 2                 ! Number of species
+Cmu   = 2.D-3             ! Coefficient for artificial shear viscosity
+Cbeta = 1.75D0            ! Coefficient for artificial bulk viscosity
+Ckap  = 1.D-2             ! Coefficient for artificial thermal conductivity
+Cdiff = 3.0D-3            ! Coefficient for artificial species diffusivity
+CY    = 1.0D2             ! Coefficient for species massfraction bounds control
 /
 
 &IINPUT
