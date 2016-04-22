@@ -87,7 +87,7 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     real(rkind) :: z0nd, epsnd = 0.1
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
-    real(rkind) :: delta_Ek = 0.08, Uperiods = 3, Vperiods = 3 
+    real(rkind) :: delta_Ek = 0.08, Xperiods = 3, Yperiods = 3, Zperiods = 3 
     real(rkind) :: zpeak = 0.3
     namelist /PBLINPUT/ H, z0, dpdxF 
 
@@ -115,9 +115,9 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     ustar = 0.45d0
     epsnd = 0.0005d0*1000.d0
 
-    u = (one/kappa)*log(z/z0nd) + (half/ustar)*Lx*epsnd*cos(two*pi*x/Lx)*sin(two*pi*y/Ly)*cos(two*pi*z/Lz)
-    v = (half*epsnd*Ly/ustar)*sin(two*pi*x/Lx)*cos(two*pi*y/Ly)*cos(two*pi*z/Lz)
-    wC= (epsnd*Lz/ustar)*sin(two*pi*x/Lx)*sin(two*pi*y/Ly)*sin(two*pi*z/Lz)
+    u = (one/kappa)*log(z/z0nd) + (half/ustar)*Lx*epsnd*cos(two*pi*x*Xperiods/Lx)*sin(two*pi*y*Yperiods/Ly)*cos(two*pi*z*Zperiods/Lz)
+    v = (half*epsnd*Ly/ustar)*sin(two*pi*x*Xperiods/Lx)*cos(two*pi*y*Yperiods/Ly)*cos(two*pi*z*Zperiods/Lz)
+    wC= (epsnd*Lz/ustar)*sin(two*pi*x*Xperiods/Lx)*sin(two*pi*y*Yperiods/Ly)*sin(two*pi*z*Zperiods/Lz)
     
     !u  = ustar/kappa * log(z/z0)
     !u = u + 1.*exp(0.5)*(z/Lz)*cos(Uperiods*2*pi*y/Ly)*exp(-0.5*(z/zpeak/Lz)**2);
@@ -198,13 +198,13 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 2, nyplanes = 2, nzplanes = 2
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 2
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [2 , 10]
-    yplanes = [2 , 10]
-    zplanes = [2 , 10]
+    xplanes = [64]
+    yplanes = [64]
+    zplanes = [5 , 30]
 
 end subroutine
 

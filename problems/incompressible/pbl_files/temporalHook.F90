@@ -13,9 +13,14 @@ module temporalHook
     integer :: nt_print2screen = 20
     integer :: nt_getMaxKE = 20
     integer :: tid_statsDump = 5000
-    integer :: tid_compStats = 20
-    real(rkind) :: time_startDumping = 200._rkind
+    integer :: tid_compStats = 80
+    real(rkind) :: time_startDumping = 2.5_rkind
     integer :: ierr 
+    
+    integer :: tid_start_planes = 1
+    integer :: tid_stop_planes = 100000
+    integer :: tid_dump_plane_every = 100
+
 contains
 
     subroutine doTemporalStuff(gp)
@@ -56,6 +61,10 @@ contains
         if (mod(gp%step,gp%t_restartDump) == 0) then
             call gp%dumpRestartfile()
         end if
+        
+        if ((mod(gp%step,tid_dump_plane_every) == 0) .and. (gp%step .ge. tid_start_planes) .and. (gp%step .le. tid_stop_planes)) then
+            call gp%dump_planes()
+        end if 
 
     end subroutine
 
