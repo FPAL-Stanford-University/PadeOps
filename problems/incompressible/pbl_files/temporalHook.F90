@@ -13,8 +13,8 @@ module temporalHook
     integer :: nt_print2screen = 20
     integer :: nt_getMaxKE = 20
     integer :: tid_statsDump = 5000
-    integer :: tid_compStats = 80
-    real(rkind) :: time_startDumping = 2.5_rkind
+    integer :: tid_compStats = 100
+    real(rkind) :: time_startDumping = 3.0_rkind
     integer :: ierr 
     
     integer :: tid_start_planes = 1
@@ -33,6 +33,9 @@ contains
         if (mod(gp%step,nt_getMaxKE) == 0) then
             call message(1,"Max KE:",gp%getMaxKE())
             call message(1,"Max nuSGS:",gp%max_nuSGS)
+            if (gp%useCFL) then
+                call message(1,"Current dt:",gp%dt)
+            end if 
             if ((gp%useDynamicProcedure) .and. (gp%useSGS)) then
                 call message(1,"Max cSGS:",p_maxval(maxval(gp%c_SGS(1,1,:))))
             end if 
@@ -62,7 +65,8 @@ contains
             call gp%dumpRestartfile()
         end if
         
-        if ((mod(gp%step,tid_dump_plane_every) == 0) .and. (gp%step .ge. tid_start_planes) .and. (gp%step .le. tid_stop_planes)) then
+        if ((gp%dumpPlanes) .and. (mod(gp%step,tid_dump_plane_every) == 0) .and. &
+                 (gp%step .ge. tid_start_planes) .and. (gp%step .le. tid_stop_planes)) then
             call gp%dump_planes()
         end if 
 

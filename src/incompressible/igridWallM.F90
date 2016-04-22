@@ -15,15 +15,16 @@ module IncompressibleGridWallM
     use PadePoissonMod, only: Padepoisson 
     use sgsmod, only: sgs
     use wallmodelMod, only: wallmodel
-
+    
     implicit none
 
     private
     public :: igridWallM 
 
-
+    real(rkind), parameter :: kappa = 0.41d0
     complex(rkind), parameter :: zeroC = zero + imi*zero 
-   integer, parameter :: no_slip = 1, slip = 2
+    integer, parameter :: no_slip = 1, slip = 2
+
 
 
     ! Allow non-zero value (isEven) 
@@ -85,26 +86,28 @@ module IncompressibleGridWallM
         logical :: useSGS = .false. 
         logical :: useVerticalFilter = .false. 
         logical :: useDynamicProcedure 
+        logical :: useCFL = .false.  
+        logical :: dumpPlanes = .false.
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
         real(rkind) :: max_nuSGS
 
         ! Wallmodel stuff
-        real(rkind) :: z0, ustar, Umn, Vmn 
+        real(rkind) :: z0, ustar, Umn, Vmn, Uspmn, dtOld, dtRat 
 
         ! Statistics to compute 
         real(rkind), dimension(:,:), allocatable :: zStats2dump, runningSum, TemporalMnNOW
         real(rkind), dimension(:), pointer :: u_mean, v_mean, w_mean, uu_mean, uv_mean, uw_mean, vv_mean, vw_mean, ww_mean
         real(rkind), dimension(:), pointer :: tau11_mean, tau12_mean, tau13_mean, tau22_mean, tau23_mean, tau33_mean
         real(rkind), dimension(:), pointer :: S11_mean, S12_mean, S13_mean, S22_mean, S23_mean, S33_mean
-        real(rkind), dimension(:), pointer :: viscdissp, sgsdissp, sgscoeff_mean
+        real(rkind), dimension(:), pointer :: viscdissp, sgsdissp, sgscoeff_mean, PhiM
         integer :: tidSUM
 
 
         ! Pointers linked to SGS stuff
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
-        real(rkind), dimension(:,:,:)  , pointer :: nu_SGS
+        real(rkind), dimension(:,:,:)  , pointer :: nu_SGS, tau13, tau23
         real(rkind), dimension(:,:,:)  , pointer :: c_SGS 
         
         integer, dimension(:), allocatable :: xplanes, yplanes, zplanes
@@ -125,10 +128,12 @@ module IncompressibleGridWallM
             procedure, private :: addNonLinearTerm_Rot
             procedure, private :: addCoriolisTerm
             procedure, private :: addExtraForcingTerm 
+            procedure, private :: compute_and_bcast_surface_Mn
             procedure          :: dumpRestartFile
             procedure, private :: readRestartFile
             procedure, private :: compute_z_mean 
             procedure, private :: compute_z_fluct
+            procedure, private :: compute_deltaT
             procedure          :: dump_stats
             procedure          :: compute_stats 
             procedure          :: finalize_stats
@@ -170,6 +175,7 @@ contains
         logical :: isInviscid = .false., useVerticalFilter = .true.  
         integer :: SGSModelID = 1
         real(rkind) :: z0 = 1.d-4
+        logical :: dumpPlanes = .false. 
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                                               inputdir, outputdir, &
@@ -179,7 +185,7 @@ contains
                                 tid_statsDump, useExtraForcing, useSGSclipping, &
                                 time_startDumping, topWall, &
                                 useRestartFile, restartFile_TID, restartFile_RID, &
-                                isInviscid, &
+                                isInviscid, dumpPlanes, &
                                 useVerticalFilter, SGSModelID
 
         namelist /WALLMODEL/ z0
@@ -198,6 +204,12 @@ contains
         this%outputdir = outputdir; this%inputdir = inputdir 
         
         this%runID = runID; this%tstop = tstop; this%t_dataDump = t_dataDump
+        this%CFL = CFL; this%dumpPlanes = dumpPlanes
+        if (this%CFL > zero) this%useCFL = .true. 
+        if ((this%CFL < zero) .and. (this%dt < zero)) then
+            call GracefulExit("Both CFL and dt cannot be negative. Have you &
+            & specified either one of these in the input file?", 124)
+        end if 
 
         this%t_restartDump = t_restartDump; this%tid_statsDump = tid_statsDump
         this%time_startDumping = time_startDumping ; this%useCoriolis = useCoriolis 
@@ -325,6 +337,7 @@ contains
         call this%spectE%ifft(this%what,this%w)
        
         ! STEP 8: Interpolate the cell center values of w
+        call this%compute_and_bcast_surface_Mn()
         call this%interp_PrimitiveVars()
         call message(1,"Max KE:",P_MAXVAL(this%getMaxKE()))
      
@@ -357,7 +370,7 @@ contains
             allocate(this%SGSmodel)
             call this%SGSmodel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
                 this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3),1, this%z0, .true.)
-            call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij)
+            call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23)
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -366,6 +379,11 @@ contains
         ! STEP 12: Set visualization planes for io
         call set_planes_io(this%xplanes, this%yplanes, this%zplanes)
 
+
+        ! STEP 13: Compute the timestep
+        call this%compute_deltaT()
+        this%dtOld = this%dt
+        this%dtRat = one 
 
         !call debug(this)
         ! Final Step: Safeguard against unfinished procedures
@@ -377,6 +395,29 @@ contains
     end subroutine
 
 
+    subroutine compute_deltaT(this)
+        use reductions, only: p_minval
+        class(igridWallM), intent(inout), target :: this
+        real(rkind) :: t1, t2, t3, tmin
+
+
+
+        if (this%useCFL) then
+            t1 = p_maxval(maxval(this%u))
+            t1 = this%dx/(t1 + 1d-13)
+
+            t2 = p_maxval(maxval(this%v))
+            t2 = this%dy/(t2 + 1d-13)
+            
+            t3 = p_maxval(maxval(this%w))
+            t3 = this%dz/(t3 + 1d-13)
+            
+            tmin = min(t1,t2,t3)
+            this%dt = this%CFL*tmin
+        end if 
+
+
+    end subroutine
 
 
     function getMaxKE(this) result(maxKE)
@@ -391,12 +432,14 @@ contains
     subroutine interp_PrimitiveVars(this)
         class(igridWallM), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ybuffC, ybuffE, zbuffC, zbuffE
+        complex(rkind), dimension(:,:)  , pointer :: dudz_dzby2, dvdz_dzby2
 
         ybuffE => this%cbuffyE(:,:,:,1)
         zbuffE => this%cbuffzE(:,:,:,1)
         zbuffC => this%cbuffzC(:,:,:,1)
         ybuffC => this%cbuffyC(:,:,:,1)
 
+        dudz_dzby2 => this%cbuffzE(:,:,1,2); dvdz_dzby2 => this%cbuffzE(:,:,1,2)
 
         ! Step 1: Interpolate w -> wC
         call transpose_y_to_z(this%what,zbuffE,this%sp_gpE)
@@ -407,16 +450,27 @@ contains
         ! Step 2: Interpolate u -> uE
         call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
         call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
-        zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
+        
+        dudz_dzby2 = zbuffC(:,:,1)/((this%dz/two)*log(this%dz/two/this%z0))
+        call this%spectE%SurfaceFilter_ip(dudz_dzby2)
+        dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
+        
+        zbuffE(:,:,1) = half*(zbuffC(:,:,1) + zbuffC(:,:,2)) - (this%dz/two)*dudz_dzby2
+        !zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
         zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
+
         call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
         call this%spectE%ifft(ybuffE,this%uE)
         
         ! Step 3: Interpolate v -> vE
         call transpose_y_to_z(this%vhat,zbuffC,this%sp_gpC)
         call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
-        zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
+        
+        dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
+        zbuffE(:,:,1) = half*(zbuffC(:,:,1) + zbuffC(:,:,2)) - (this%dz/two)*dudz_dzby2
+        !zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
         zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
+        
         call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
         call this%spectE%ifft(ybuffE,this%vE)
 
@@ -536,6 +590,11 @@ contains
     
     subroutine AdamsBashforth(this)
         class(igridWallM), intent(inout) :: this
+        real(rkind) :: abf1, abf2
+
+        ! Step 0: Compute TimeStep 
+        call this%compute_deltaT
+        this%dtRat = this%dt/this%dtOld
 
         ! Step 1: Non Linear Term 
         call this%AddNonLinearTerm_Rot()
@@ -569,9 +628,14 @@ contains
             this%vhat = this%vhat + this%dt*this%v_rhs 
             this%what = this%what + this%dt*this%w_rhs 
         else
-            this%uhat = this%uhat + this%dtby2*(three*this%u_rhs - this%u_Orhs )
-            this%vhat = this%vhat + this%dtby2*(three*this%v_rhs - this%v_Orhs )
-            this%what = this%what + this%dtby2*(three*this%w_rhs - this%w_Orhs )
+            abf1 = (one + half*this%dtRat)*this%dt
+            abf2 = -half*this%dtRat*this%dt
+            !this%uhat = this%uhat + this%dtby2*(three*this%u_rhs - this%u_Orhs )
+            this%uhat = this%uhat + abf1*this%u_rhs + abf2*this%u_Orhs
+            !this%vhat = this%vhat + this%dtby2*(three*this%v_rhs - this%v_Orhs )
+            this%vhat = this%vhat + abf1*this%v_rhs + abf2*this%v_Orhs
+            !this%what = this%what + this%dtby2*(three*this%w_rhs - this%w_Orhs )
+            this%what = this%what + abf1*this%w_rhs + abf2*this%w_Orhs
         end if 
         
 
@@ -591,6 +655,7 @@ contains
         call this%spectE%ifft(this%what,this%w)
 
         ! STEP 8: Interpolate the cell center values of w
+        call this%compute_and_bcast_surface_Mn()
         call this%interp_PrimitiveVars()
 
         ! STEP 9: Compute duidxjC 
@@ -600,14 +665,14 @@ contains
         this%u_Orhs = this%u_rhs
         this%v_Orhs = this%v_rhs
         this%w_Orhs = this%w_rhs
+        this%dtOld = this%dt
+
     end subroutine
 
     subroutine compute_duidxj(this)
-        use mpi
-        use kind_parameters, only: mpirkind
         class(igridWallM), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
-        complex(rkind), dimension(:,:,:), pointer :: ctmpz3, ctmpz4
+        complex(rkind), dimension(:,:,:), pointer :: ctmpz3!, ctmpz4
         complex(rkind), dimension(:,:,:), pointer :: ctmpy1, ctmpy2
         real(rkind),    dimension(:,:,:), pointer :: dudx, dudy, dudz
         real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
@@ -619,8 +684,7 @@ contains
         complex(rkind), dimension(:,:,:), pointer :: dvdxH, dvdyH, dvdzH
         complex(rkind), dimension(:,:,:), pointer :: dwdxH, dwdyH, dwdzH
 
-        real(rkind), parameter :: kappa = 0.41d0
-        integer :: ierr 
+        complex(rkind), dimension(:,:)  , pointer :: dudz_dzby2, dvdz_dzby2
 
         dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
         dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
@@ -634,8 +698,12 @@ contains
         dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
 
         ctmpz1 => this%cbuffzC(:,:,:,1); ctmpz2 => this%cbuffzE(:,:,:,1); 
-        ctmpz3 => this%cbuffzC(:,:,:,2); ctmpz4 => this%cbuffzE(:,:,:,2)
+        ctmpz3 => this%cbuffzC(:,:,:,2)!; ctmpz4 => this%cbuffzE(:,:,:,2)
         ctmpy1 => this%cbuffyC(:,:,:,1); ctmpy2 => this%cbuffyE(:,:,:,1)
+
+
+        dudz_dzby2 => this%cbuffzE(:,:,1,2); dvdz_dzby2 => this%cbuffzE(:,:,1,2)
+
 
         call this%spectC%mTimes_ik1_oop(this%uhat,dudxH)
         call this%spectC%ifft(dudxH,dudx)
@@ -666,27 +734,31 @@ contains
         call transpose_z_to_y(ctmpz1,dwdzH,this%sp_gpC)
         call this%spectC%ifft(dwdzH,dwdz)
 
-        ! Compute USTAR and Umn at z = dz/2
-        if (nrank == 0) then
-            this%Umn = real(this%uhat(1,1,1),rkind)*this%meanFact
-        end if
-        call mpi_bcast(this%Umn,1,mpirkind,0,mpi_comm_world,ierr)
-        this%ustar = this%Umn*kappa/log(this%dz/two/this%z0)
        
+
         ! Compute dudz, dvdz 
         call transpose_y_to_z(this%uhat,ctmpz1,this%sp_gpC)
         call this%Ops%ddz_C2E(ctmpz1,ctmpz2,.true.,topBC_u)
-        
-        ctmpz2(:,:,1) = (ctmpz1(:,:,2) - ctmpz1(:,:,1))/(two*this%dz)
+            
+
+        dudz_dzby2 = ctmpz1(:,:,1)/((this%dz/two)*log(this%dz/two/this%z0))
+        call this%spectE%SurfaceFilter_ip(dudz_dzby2)
+        dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
+
+        ctmpz2(:,:,1) = two*dudz_dzby2 - ctmpz2(:,:,2)
+        !ctmpz2(:,:,1) = (ctmpz1(:,:,2) - ctmpz1(:,:,1))/(two*this%dz)
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dudz)
         call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
         call transpose_z_to_y(ctmpz1,dudzH,this%sp_gpC)
         call this%spectC%ifft(dudzH,dudzC)
+
         call transpose_y_to_z(this%vhat,ctmpz1,this%sp_gpC)
         call this%Ops%ddz_C2E(ctmpz1,ctmpz2,.true.,topBC_v)
-        
-        ctmpz2(:,:,1) = (ctmpz1(:,:,2) - ctmpz1(:,:,1))/(two*this%dz)
+       
+        dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
+        ctmpz2(:,:,1) = two*dvdz_dzby2 - ctmpz2(:,:,2)
+        !ctmpz2(:,:,1) = (ctmpz1(:,:,2) - ctmpz1(:,:,1))/(two*this%dz)
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dvdz)
         call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
@@ -695,6 +767,33 @@ contains
 
     end subroutine
 
+    subroutine compute_and_bcast_surface_Mn(this)
+        use mpi
+        use kind_parameters, only: mpirkind
+        class(igridWallM), intent(inout), target :: this
+        real(rkind), dimension(:,:,:), pointer :: rbuff
+        complex(rkind), dimension(:,:,:), pointer :: cbuff
+        integer :: ierr 
+       
+        rbuff => this%rbuffxC(:,:,:,1)
+        cbuff => this%cbuffyC(:,:,:,1)
+        rbuff = this%u*this%u
+        rbuff = rbuff + this%v*this%v
+        rbuff = sqrt(rbuff)
+        call this%spectC%fft(rbuff,cbuff)
+
+        if (nrank == 0) then
+            this%Umn = real(this%uhat(1,1,1),rkind)*this%meanFact
+            this%Vmn = real(this%vhat(1,1,1),rkind)*this%meanFact
+            this%Uspmn = real(cbuff(1,1,1),rkind)*this%meanFact
+        end if
+        call mpi_bcast(this%Umn,1,mpirkind,0,mpi_comm_world,ierr)
+        call mpi_bcast(this%Vmn,1,mpirkind,0,mpi_comm_world,ierr)
+        call mpi_bcast(this%Uspmn,1,mpirkind,0,mpi_comm_world,ierr)
+
+        ! Compute USTAR and Umn at z = dz/2
+        this%ustar = this%Umn*kappa/log(this%dz/two/this%z0)
+    end subroutine
 
     subroutine readRestartFile(this, tid, rid)
         use decomp_2d_io
@@ -789,9 +888,9 @@ contains
         gpC => this%gpC
         this%tidSUM = 0
 
-        allocate(this%zStats2dump(this%nz,24))
-        allocate(this%runningSum(this%nz,24))
-        allocate(this%TemporalMnNOW(this%nz,24))
+        allocate(this%zStats2dump(this%nz,25))
+        allocate(this%runningSum(this%nz,25))
+        allocate(this%TemporalMnNOW(this%nz,25))
 
         ! mean velocities
         this%u_mean => this%zStats2dump(:,1);  this%v_mean  => this%zStats2dump(:,2);  this%w_mean => this%zStats2dump(:,3) 
@@ -820,6 +919,7 @@ contains
         ! SGS model coefficient
         this%sgscoeff_mean => this%zStats2dump(:,24)
 
+        this%PhiM => this%zStats2dump(:,25)
         this%runningSum = zero
         nullify(gpC)
     end subroutine
@@ -827,9 +927,10 @@ contains
     subroutine compute_stats(this)
         class(igridWallM), intent(inout), target :: this
         type(decomp_info), pointer :: gpC
-        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3, rbuff4, rbuff5, rbuff6
+        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3E, rbuff2E, rbuff3, rbuff4, rbuff5, rbuff6
 
-        rbuff1 => this%rbuffxC(:,:,:,1); rbuff2 => this%rbuffyC(:,:,:,1);
+        rbuff1  => this%rbuffxC(:,:,:,1); rbuff2  => this%rbuffyC(:,:,:,1);
+        rbuff2E => this%rbuffyE(:,:,:,1); rbuff3E => this%rbuffzE(:,:,:,1);
         rbuff3 => this%rbuffzC(:,:,:,1); 
         rbuff4 => this%rbuffzC(:,:,:,2); 
         rbuff5 => this%rbuffzC(:,:,:,3); 
@@ -890,8 +991,9 @@ contains
             call this%compute_z_mean(rbuff3, this%tau12_mean)
 
             ! tau_13
-            call transpose_x_to_y(this%tauSGS_ij(:,:,:,3),rbuff2,this%gpC)
-            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call transpose_x_to_y(this%tau13,rbuff2E,this%gpE)
+            call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+            call this%Ops%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call this%compute_z_mean(rbuff3, this%tau13_mean)
 
             ! tau_22
@@ -900,8 +1002,9 @@ contains
             call this%compute_z_mean(rbuff3, this%tau22_mean)
 
             ! tau_23
-            call transpose_x_to_y(this%tauSGS_ij(:,:,:,5),rbuff2,this%gpC)
-            call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+            call transpose_x_to_y(this%tau23,rbuff2E,this%gpE)
+            call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+            call this%Ops%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call this%compute_z_mean(rbuff3, this%tau23_mean)
 
             ! tau_33
@@ -972,7 +1075,13 @@ contains
             !call this%compute_z_mean(rbuff3, this%sgscoeff_mean)    ! -- averaging not needed
             this%sgscoeff_mean(:) = rbuff3(1,1,:)
         
-        end if 
+        end if
+
+        rbuff1 = this%duidxjC(:,:,:,3)*this%mesh(:,:,:,3)
+        call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
+        call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+        call this%compute_z_mean(rbuff3, this%PhiM)
+        this%PhiM = this%PhiM*kappa/this%ustar
 
         this%runningSum = this%runningSum + this%zStats2dump
 
