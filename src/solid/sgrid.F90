@@ -386,15 +386,6 @@ contains
         varnames( 8) = 'mu'
         varnames( 9) = 'bulk'
         varnames(10) = 'kap'
-        varnames(11) = 'g11'
-        varnames(12) = 'g12'
-        varnames(13) = 'g13'
-        varnames(14) = 'g21'
-        varnames(15) = 'g22'
-        varnames(16) = 'g23'
-        varnames(17) = 'g31'
-        varnames(18) = 'g32'
-        varnames(19) = 'g33'
         varnames(20) = 'e_elastic'
         varnames(21) = 'Sxx'
         varnames(22) = 'Sxy'
@@ -659,22 +650,35 @@ contains
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
                 call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
-                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (Wcnsrv) at substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
+                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (Wcnsrv) at &
+                    &substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
                 call GracefulExit(trim(charout), 999)
             end if
             if ( nancheck(this%g,i,j,k,l) ) then
                 call message("g: ",this%g(i,j,k,l))
-                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (g) at substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
+                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (g) at &
+                    &substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
                 call GracefulExit(trim(charout), 999)
             end if
 
-            call this%getRHS(rhs, rhsg)
+            ! Pre-compute stress, LAD, J, etc.
+            ! call this%mix%get_devstress(this%devstress)    ! This also computes individual species stresses (computed in get_primitive)
+            call this%mix%getLAD(...)                      ! Compute LAD, etc.
+            call this%mix%get_J(...)                       ! Compute diffusive mass fluxes
+            call this%mix%get_q(...)                       ! Compute diffusive thermal fluxes (including enthalpy diffusion)
+
+            ! Update total mixture conserved variables
+            call this%getRHS(rhs)
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
-            Qtmpg = this%dt*rhsg + RK45_A(isub)*Qtmpg
-            this%g      = this%g      + RK45_B(isub)*Qtmpg
+            ! Now update all the individual species variables
+            call this%mix%update_g (isub,this%dt,rho,u,v,w)  ! g tensor
+            call this%mix%update_Ys(isub,this%dt,rho,u,v,w)  ! Volume Fraction
+            call this%mix%update_eh(isub,this%dt,rho,u,v,w)  ! Hydrodynamic energy
+            call this%mix%update_VF(isub,this%dt,rho,u,v,w)  ! Volume Fraction
 
+            ! Integrate simulation time to keep it in sync with RK substep
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
@@ -682,17 +686,17 @@ contains
             do i = 1,5
                 call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1)
             end do
-            ! Filter the g tensor
-            do i = 1,9
-                call this%filter(this%g(:,:,:,i), this%fil, 1)
-            end do
+
+            ! Filter the individual species variables
+            call this%mix%filter(this%fil, 1)
             
             call this%get_primitive()
 
             if (.NOT. this%explPlast) then
                 if (this%plastic) then
                     ! Effect plastic deformations
-                    call this%elastic%plastic_deformation(this%g)
+                    ! call this%elastic%plastic_deformation(this%g)
+                    call this%mix%plastic_deformation()
                     call this%get_primitive()
 
                     ! Filter the conserved variables
@@ -706,7 +710,7 @@ contains
                 end if
             end if
             
-            call hook_bc(this%decomp, this%mesh, this%fields, this%tsim)
+            call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
             call this%post_bc()
         end do
 
@@ -771,40 +775,46 @@ contains
 
         onebyrho => this%ybuf(:,:,:,1)
 
-        this%rho  =  this%Wcnsrv(:,:,:,1)
+        ! this%rho  =  this%Wcnsrv(:,:,:,1)
         
-        rhou => this%Wcnsrv(:,:,:,2)
-        rhov => this%Wcnsrv(:,:,:,3)
-        rhow => this%Wcnsrv(:,:,:,4)
-        TE   => this%Wcnsrv(:,:,:,5)
+        call this%mix%get_rho(this%rho)
+
+        rhou => this%Wcnsrv(:,:,:,1)
+        rhov => this%Wcnsrv(:,:,:,2)
+        rhow => this%Wcnsrv(:,:,:,3)
+        TE   => this%Wcnsrv(:,:,:,4)
 
         onebyrho = one/this%rho
         this%u = rhou * onebyrho
         this%v = rhov * onebyrho
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
+       
+        call this%mix%get_primitive(...)    ! Get primitive variables for individual species
+        call this%mix%get_eelastic(...)  ! Get mixture elastic energy
         
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
-        
-        call this%sgas%get_T(this%e,this%T)
-        call this%sgas%get_p(this%rho,(this%e-this%eel),this%p)
+        ! call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+        ! call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
+        ! 
+        ! call this%sgas%get_T(this%e,this%T)
+        ! call this%sgas%get_p(this%rho,(this%e-this%eel),this%p)
 
-        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+        call this%mix%get_devstress(this%devstress)
+        ! call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
 
     end subroutine
 
     pure subroutine get_conserved(this)
         class(sgrid), intent(inout) :: this
 
-        this%Wcnsrv(:,:,:,1) = this%rho              ! remove this
-        this%Wcnsrv(:,:,:,2) = this%rho * this%u
-        this%Wcnsrv(:,:,:,3) = this%rho * this%v
-        this%Wcnsrv(:,:,:,4) = this%rho * this%w
-        this%Wcnsrv(:,:,:,5) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
+        ! Assume rho is already available
+        this%Wcnsrv(:,:,:,1) = this%rho * this%u
+        this%Wcnsrv(:,:,:,2) = this%rho * this%v
+        this%Wcnsrv(:,:,:,3) = this%rho * this%w
+        this%Wcnsrv(:,:,:,4) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
 
         ! add 2M (mass fraction and hydrodynamic energy) variables here
-
+        call this%mix%get_conserved(...)
 
     end subroutine
 
@@ -815,14 +825,18 @@ contains
 
         this%e = this%e - this%eel ! Get only hydrodynamic part
 
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)  ! Update elastic energy
-        
-        call this%sgas%get_e_from_p(this%rho,this%p,this%e)  ! Update hydrodynamic energy
+        call this%mix%get_eelastic(...)  ! Get mixture elastic energy
+        ! call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+        ! call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)  ! Update elastic energy
+       
+        call this%mix%get_ehydro(...)  ! Get mixture hydrodynamic energy
+        ! call this%sgas%get_e_from_p(this%rho,this%p,this%e)  ! Update hydrodynamic energy
         this%e = this%e + this%eel ! Combine both energies
-        call this%sgas%get_T(this%e,this%T)  ! Get updated temperature
+        call this%mix%get_T(this%T) ! Get mixture temperature (?)
+        !call this%sgas%get_T(this%e,this%T)  ! Get updated temperature
 
-        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)  ! Get updated stress
+        call this%mix%get_devstress(this%devstress)
+        ! call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)  ! Get updated stress
 
     end subroutine
 

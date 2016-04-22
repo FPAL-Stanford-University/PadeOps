@@ -165,7 +165,8 @@ contains
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
-        penalty = etafac*(rho*this%Ys/detg/this%elastic%rho0-one)
+        tmp = rho*this%Ys/(this%VF + real(1.0D-32,rkind))  ! Get the species density = rho*Y/VF
+        penalty = etafac*( tmp/detg/this%elastic%rho0-one) ! Penalty term to keep g consistent with species density
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3))
