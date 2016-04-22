@@ -11,7 +11,7 @@ module pbl_parameters
     integer :: seedv = 423424
     integer :: seedw = 131344
     real(rkind), parameter :: kappa = 0.41d0
-    real(rkind) :: randomScaleFact = 0.002_rkind ! 5% of the mean value
+    real(rkind) :: randomScaleFact = 0.005_rkind ! 5% of the mean value
     integer :: nxg, nyg, nzg
 
 end module     
@@ -29,7 +29,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: i,j,k
     integer :: ix1, ixn, iy1, iyn, iz1, izn
 
-    Lx = three; Ly = three; Lz = one
+    Lx = two*pi; Ly = two*pi; Lz = one
 
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
@@ -87,8 +87,8 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     real(rkind) :: z0nd, epsnd = 0.1
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
-    real(rkind) :: delta_Ek = 0.08, Uperiods = 3, Vperiods = 3 
-    real(rkind) :: zpeak = 0.3
+    real(rkind) :: delta_Ek = 0.08 
+    real(rkind) :: zpeak = 0.3, xPeriods = 1, yPeriods = 1, zPeriods = 1
     namelist /PBLINPUT/ H, z0, dpdxF 
 
 
@@ -115,9 +115,9 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     ustar = 0.45d0
     epsnd = 0.0005d0*1000.d0
 
-    u = (one/kappa)*log(z/z0nd) + (half/ustar)*Lx*epsnd*cos(two*pi*x/Lx)*sin(two*pi*y/Ly)*cos(two*pi*z/Lz)
-    v = (half*epsnd*Ly/ustar)*sin(two*pi*x/Lx)*cos(two*pi*y/Ly)*cos(two*pi*z/Lz)
-    wC= (epsnd*Lz/ustar)*sin(two*pi*x/Lx)*sin(two*pi*y/Ly)*sin(two*pi*z/Lz)
+    u = (one/kappa)*log(z/z0nd) + (half/ustar)*Lx*epsnd*cos(two*pi*x*xPeriods/Lx)*sin(two*pi*y*yPeriods/Ly)*cos(two*pi*z*zPeriods/Lz)
+    v = (half*epsnd*Ly/ustar)*sin(two*pi*x*xPeriods/Lx)*cos(two*pi*y*yPeriods/Ly)*cos(two*pi*z*zPeriods/Lz)
+    wC= (epsnd*Lz/ustar)*sin(two*pi*x*xPeriods/Lx)*sin(two*pi*y*yPeriods/Ly)*sin(two*pi*z*zPeriods/Lz)
     
     !u  = ustar/kappa * log(z/z0)
     !u = u + 1.*exp(0.5)*(z/Lz)*cos(Uperiods*2*pi*y/Ly)*exp(-0.5*(z/zpeak/Lz)**2);
@@ -126,21 +126,21 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     !print*, maxval(v)
     !wC = zero
     ! Add random numbers
-    !allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
-    !do k = 1,size(u,3)
-    !    sig = randomScaleFact*(one/kappa)*log(z(1,1,k)/z0nd)
-    !    u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
-    !end do  
-    !deallocate(randArr)
-    !
-    !allocate(randArr(size(v,1),size(v,2),size(v,3)))
-    !call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
-    !do k = 1,size(v,3)
-    !    sig = G*randomScaleFact*exp(-z(1,1,k)/delta_Ek)*sin(z(1,1,k)/delta_Ek)
-    !    v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
-    !end do  
-    !deallocate(randArr)
+    allocate(randArr(size(u,1),size(u,2),size(u,3)))
+    call gaussian_random(randArr,zero,one,seedu + 10*nrank)
+    do k = 1,size(u,3)
+        sig = randomScaleFact*(one/kappa)*log(z(1,1,k)/z0nd)
+        u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
+    end do  
+    deallocate(randArr)
+    
+    allocate(randArr(size(v,1),size(v,2),size(v,3)))
+    call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
+    do k = 1,size(v,3)
+        sig = G*randomScaleFact*exp(-z(1,1,k)/delta_Ek)*sin(z(1,1,k)/delta_Ek)
+        v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
+    end do  
+    deallocate(randArr)
 
 
     ! Interpolate wC to w

@@ -7,16 +7,16 @@ nx = 64                  ! Number of points in X
 ny = 64                  ! Number of points in Y
 nz = 64                 ! Number of points in Z
 
-dt = 1D-5               ! Fixed time step value (Set to negative to disable)
-tstop = 1.D-5              ! Physical time to stop the simulation
-CFL = -1.D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+dt = 1.D-4               ! Fixed time step value (Set to negative to disable)
+tstop = 10.D0              ! Physical time to stop the simulation
+CFL = 0.1D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
 
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 t_restartDump = 4000    ! Restart File Frequency 
-t_dataDump    = 1       ! Number of timesteps before data dump is performed 
+t_dataDump    = 4000       ! Number of timesteps before data dump is performed 
 
 /
 
@@ -25,7 +25,7 @@ t_dataDump    = 1       ! Number of timesteps before data dump is performed
 &IINPUT
 
 Pr = 0.7D0                ! Prandtl Number
-runID = 99                 ! Run ID (for output file name)
+runID = 86                 ! Run ID (for output file name)
 
 useCoriolis = .FALSE. 
 useExtraForcing = .TRUE. 
@@ -38,12 +38,13 @@ useSGSClipping = .TRUE.
 topWall = 2               ! no_slip = 1, slip = 2 , wall model = 3
 
 useRestartFile = .FALSE. 
-restartFile_TID = 20000
-restartFile_RID = 50
+restartFile_TID = 8000
+restartFile_RID = 87
 
 isInviscid = .TRUE.
-useVerticalFilter = .TRUE.
+useVerticalFilter = .FALSE.
 
+dumpPlanes = .FALSE.      ! Dump plane visualations. Select planes in initialize.F90
 /
 
 &WALLMODEL 

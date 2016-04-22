@@ -12,9 +12,9 @@ module temporalHook
 
     integer :: nt_print2screen = 20
     integer :: nt_getMaxKE = 20
-    integer :: tid_statsDump = 5000
-    integer :: tid_compStats = 20
-    real(rkind) :: time_startDumping = 200._rkind
+    integer :: tid_statsDump = 2000
+    integer :: tid_compStats = 100
+    real(rkind) :: time_startDumping = 3.0_rkind
     integer :: ierr 
 contains
 
@@ -28,6 +28,9 @@ contains
         if (mod(gp%step,nt_getMaxKE) == 0) then
             call message(1,"Max KE:",gp%getMaxKE())
             call message(1,"Max nuSGS:",gp%max_nuSGS)
+            if (gp%useCFL) then
+                call message(1,"Current dt:",gp%dt)
+            end if 
             if ((gp%useDynamicProcedure) .and. (gp%useSGS)) then
                 call message(1,"Max cSGS:",p_maxval(maxval(gp%c_SGS(1,1,:))))
             end if 

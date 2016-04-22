@@ -43,7 +43,7 @@ program test_SIGMA_SGS
     type(sgs) :: sgsModel
     real(rkind) :: maxnuSGS
    
-    integer :: ModelID = 0 
+    integer :: ModelID = 0
     logical :: useEkmanInit = .false. 
     logical :: useDynamicProcedure = .true. 
     logical :: useClipping = .true. 
@@ -213,7 +213,7 @@ program test_SIGMA_SGS
 
     call spectE%ifft(wrhs,wE)
     
-    print*, wE(5,4,:)
+    !print*, wE(5,4,:)
     call message("Max val RHS:", p_maxval(u))
     call message("Max val nuSGS:", maxnuSGS)
 

@@ -25,14 +25,29 @@
             this%useWallModel = useWallModel
             allocate(this%rbuffE(gpE%xsz(1), gpE%xsz(2), gpE%xsz(3),2))
             this%rbuffE = zero
+            if (this%useWallModel) then
+                if (.not. present(z0)) then
+                    call GracefulExit("Need to provide z0 if wall model is being used", 442)
+                else
+                    this%z0 = z0
+                end if 
+            end if 
         end if 
 
         select case (this%SGSmodel)
         case(0)
             this%mconst = (this%deltaFilter*c_smag)**2
             call message(1,"SMAGORINSKY SGS model initialized")
+            this%useWallFunction = .false. 
         case(1)
-            call GracefulExit("SIGMA MODEL has been temporarily redacted",9)
+            this%mconst = (this%deltaFilter*c_sigma)**2
+            allocate(this%SIGMAbuffs(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),14))
+            if (this%useDynamicProcedure) then
+                call GracefulExit("The standard dynamic procedure is not &
+                & available with the SIGMA model.", 321)
+            end if
+            this%useWallFunction = .false. 
+            call message(1,"SIGMA SGS model initialized")
         case(2)
             this%cSMAG_WALL => this%rbuff(:,:,:,8)
             if (this%UseDynamicProcedure) then
@@ -106,7 +121,8 @@
         else
             call this%Ops2ndOrder%destroy()
             deallocate(this%Ops2ndOrder)
-        end if     
+        end if    
+        if (allocated(this%SIGMAbuffs)) deallocate(this%SIGMAbuffs) 
         nullify( this%nuSGS)
         if(this%useDynamicProcedure) deallocate(this%Lij, this%Mij)
         nullify(this%sp_gp, this%gpC, this%spectC)

@@ -18,13 +18,13 @@ module sgsmod
     real(rkind) :: c_sigma = 1.5_rkind
     real(rkind) :: c_smag = 0.17_rkind
     real(rkind) :: kappa = 0.41_rkind
-    real(rkind), parameter :: deltaRatio = two
+    real(rkind), parameter :: deltaRatio = 2.0_rkind
     complex(rkind), parameter :: zeroC = zero + imi*zero
 
     type :: sgs
         private
         type(spectral), pointer :: spectC, spectE 
-        real(rkind), allocatable, dimension(:,:,:,:) :: rbuff, rbuffE,  Lij, Mij
+        real(rkind), allocatable, dimension(:,:,:,:) :: rbuff, rbuffE, SIGMAbuffs, Lij, Mij
         real(rkind), pointer, dimension(:,:,:) :: cSMAG_WALL, nuSGS, nuSGSfil
         real(rkind) :: deltaFilter, mconst, deltaTFilter 
         type(decomp_info), pointer :: sp_gp, gpC
@@ -46,7 +46,7 @@ module sgsmod
         real(rkind) :: meanFact
 
         logical :: useWallModel = .false.  
-        real(rkind) :: UmeanAtWall
+        real(rkind) :: z0
 
         integer :: SGSmodel ! 0: Standard Smag, 1: Sigma Model 
 
@@ -56,6 +56,7 @@ module sgsmod
             procedure, private :: DynamicProcedure
             procedure, private :: planarAverage 
             procedure, private :: get_SMAG_Op
+            procedure, private :: get_SIGMA_Op
             procedure, private :: testFilter_ip
             procedure, private :: testFilter_oop
             procedure, private :: testFilter_oop_C2R
@@ -67,10 +68,12 @@ module sgsmod
 contains
 
 #include "sgs_models/initialize.F90"
+#include "sgs_models/sigma_model_get_nuSGS.F90"
 
-    subroutine link_pointers(this,nuSGS,c_SGS, tauSGS_ij)
+    subroutine link_pointers(this,nuSGS,c_SGS, tauSGS_ij, tau13, tau23)
         class(sgs), intent(in), target :: this
         real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: c_SGS, nuSGS
+        real(rkind), dimension(:,:,:)  , pointer, intent(inout), optional :: tau13, tau23
         real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: tauSGS_ij
 
         if (allocated(this%rbuff)) then
@@ -81,6 +84,15 @@ contains
             end if 
             nuSGS => this%rbuff(:,:,:,7)
             tauSGS_ij => this%rbuff(:,:,:,1:6)
+            if ((present(tau13)) .and. (present(tau23))) then
+                if (this%useWallModel) then
+                    tau13 => this%rbuffE(:,:,:,1)
+                    tau13 => this%rbuffE(:,:,:,2)
+                else
+                    tau13 => this%rbuff(:,:,:,3)
+                    tau23 => this%rbuff(:,:,:,5)
+                end if 
+            end if 
         else
             call gracefulExit("You have called SGS%LINK_POINTERS before &
                 & initializing SGS",324)
@@ -101,9 +113,6 @@ contains
         nuSGS = two*nuSGS
         nuSGS = sqrt(nuSGS)
 
-        !call this%spect%fft(nuSGS,this%nuSGShat)
-        !call this%spect%dealias(this%nuSGShat)
-        !call this%spect%ifft(this%nuSGShat,nuSGS)
     end subroutine
 
     subroutine getRHS_SGS(this, duidxj, duidxjhat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, max_nuSGS)
@@ -137,7 +146,14 @@ contains
         S12 = half*(dvdx + dudy); S13 = half*(dwdx + dudz); S23 = half*(dvdz + dwdy)
         
         ! STEP 2: Call the SGS model operator
-        call this%get_SMAG_Op(this%nuSGS, S11,S22,S33,S12,S13,S23)
+        select case (this%SGSmodel)
+        case (0)     
+            call this%get_SMAG_Op(this%nuSGS, S11,S22,S33,S12,S13,S23)
+        case (1)
+            call this%get_SIGMA_Op(this%nuSGS, dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz)
+        case (2)
+            call this%get_SMAG_Op(this%nuSGS, S11,S22,S33,S12,S13,S23)
+        end select
         
         if (this%useDynamicProcedure) then
             call this%DynamicProcedure(u,v,wC,uhat, vhat, wChat, duidxj,duidxjhat) 
@@ -148,6 +164,8 @@ contains
                 this%nuSGS = this%mconst*this%nuSGS
             end if 
         end if 
+
+        print*, this%nuSGS(4,3,:)
 
         tau11 = -two*this%nuSGS*S11; tau12 = -two*this%nuSGS*S12; tau13 = -two*this%nuSGS*S13
         tau22 = -two*this%nuSGS*S22; tau23 = -two*this%nuSGS*S23; tau33 = -two*this%nuSGS*S33
@@ -211,8 +229,15 @@ contains
         S13C = half*(dudzC + dwdxC); S23C = half*(dvdzC + dwdyC)
 
         ! STEP 2: Call the SGS model operator
-        call this%get_SMAG_Op(this%nuSGS, S11,S22,S33,S12,S13C,S23C)
-       
+        select case (this%SGSmodel)
+        case (0)     
+            call this%get_SMAG_Op(this%nuSGS, S11,S22,S33,S12,S13C,S23C)
+        case (1)
+            call this%get_SIGMA_Op(this%nuSGS, dudx, dudy, dudzC, dvdx, dvdy, dvdzC, dwdxC, dwdyC, dwdz)
+        case (2)
+            call this%get_SMAG_Op(this%nuSGS, S11,S22,S33,S12,S13C,S23C)
+        end select
+
         if (this%useDynamicProcedure) then
             call this%DynamicProcedure(u,v,wC,uhat, vhat, wChat, duidxjC,duidxjChat) 
         else
@@ -297,7 +322,7 @@ contains
         call transpose_y_to_z(tauhat,this%ctmpCz,this%sp_gp)
         call this%Ops2ndOrder%ddz_C2E(this%ctmpCz,this%ctmpEz,.true.,.true.)
         call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
-        wrhs = wrhs - this%ctmpEz
+        wrhs = wrhs - this%ctmpEy
 
     end subroutine
     
