@@ -29,7 +29,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: i,j,k
     integer :: ix1, ixn, iy1, iyn, iz1, izn
 
-    Lx = two*pi; Ly = two*pi; Lz = one
+    Lx = three; Ly = three; Lz = one
 
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 

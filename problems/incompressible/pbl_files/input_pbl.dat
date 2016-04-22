@@ -7,9 +7,9 @@ nx = 64                  ! Number of points in X
 ny = 64                  ! Number of points in Y
 nz = 64                 ! Number of points in Z
 
-dt = 1.D-4               ! Fixed time step value (Set to negative to disable)
+dt = 2D-5               ! Fixed time step value (Set to negative to disable)
 tstop = 10.D0              ! Physical time to stop the simulation
-CFL = 0.1D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+CFL = -1.D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
 
