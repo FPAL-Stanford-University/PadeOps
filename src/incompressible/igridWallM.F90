@@ -451,12 +451,12 @@ contains
         call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
         call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
         
-        dudz_dzby2 = zbuffC(:,:,1)/((this%dz/two)*log(this%dz/two/this%z0))
-        call this%spectE%SurfaceFilter_ip(dudz_dzby2)
-        dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
+        !dudz_dzby2 = this%Umn/((this%dz/two)*log(this%dz/two/this%z0))
+        !call this%spectE%SurfaceFilter_ip(dudz_dzby2)
+        !dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
         
-        zbuffE(:,:,1) = half*(zbuffC(:,:,1) + zbuffC(:,:,2)) - (this%dz/two)*dudz_dzby2
-        !zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
+        !zbuffE(:,:,1) = half*(zbuffC(:,:,1) + zbuffC(:,:,2)) - (this%dz/two)*dudz_dzby2
+        zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
         zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
 
         call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
@@ -466,9 +466,9 @@ contains
         call transpose_y_to_z(this%vhat,zbuffC,this%sp_gpC)
         call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
         
-        dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
-        zbuffE(:,:,1) = half*(zbuffC(:,:,1) + zbuffC(:,:,2)) - (this%dz/two)*dudz_dzby2
-        !zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
+        !dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
+        !zbuffE(:,:,1) = half*(zbuffC(:,:,1) + zbuffC(:,:,2)) - (this%dz/two)*dudz_dzby2
+        zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
         zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
         
         call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
@@ -741,12 +741,12 @@ contains
         call this%Ops%ddz_C2E(ctmpz1,ctmpz2,.true.,topBC_u)
             
 
-        dudz_dzby2 = ctmpz1(:,:,1)/((this%dz/two)*log(this%dz/two/this%z0))
-        call this%spectE%SurfaceFilter_ip(dudz_dzby2)
-        dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
+        !dudz_dzby2 = ctmpz1(:,:,1)/((this%dz/two)*log(this%dz/two/this%z0))
+        !call this%spectE%SurfaceFilter_ip(dudz_dzby2)
+        !dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
 
-        ctmpz2(:,:,1) = two*dudz_dzby2 - ctmpz2(:,:,2)
-        !ctmpz2(:,:,1) = (ctmpz1(:,:,2) - ctmpz1(:,:,1))/(two*this%dz)
+        !ctmpz2(:,:,1) = two*dudz_dzby2 - ctmpz2(:,:,2)
+        ctmpz2(:,:,1) = (ctmpz1(:,:,2) - ctmpz1(:,:,1))/(two*this%dz)
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dudz)
         call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
@@ -756,9 +756,9 @@ contains
         call transpose_y_to_z(this%vhat,ctmpz1,this%sp_gpC)
         call this%Ops%ddz_C2E(ctmpz1,ctmpz2,.true.,topBC_v)
        
-        dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
-        ctmpz2(:,:,1) = two*dvdz_dzby2 - ctmpz2(:,:,2)
-        !ctmpz2(:,:,1) = (ctmpz1(:,:,2) - ctmpz1(:,:,1))/(two*this%dz)
+        !dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
+        !ctmpz2(:,:,1) = two*dvdz_dzby2 - ctmpz2(:,:,2)
+        ctmpz2(:,:,1) = (ctmpz1(:,:,2) - ctmpz1(:,:,1))/(two*this%dz)
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dvdz)
         call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
@@ -993,6 +993,7 @@ contains
             ! tau_13
             call transpose_x_to_y(this%tau13,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+            rbuff3E(:,:,1) = -(this%ustar**2)
             call this%Ops%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call this%compute_z_mean(rbuff3, this%tau13_mean)
 
@@ -1004,6 +1005,7 @@ contains
             ! tau_23
             call transpose_x_to_y(this%tau23,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+            rbuff3E(:,:,1) = -(this%ustar**2)*this%Vmn/this%Umn
             call this%Ops%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call this%compute_z_mean(rbuff3, this%tau23_mean)
 
