@@ -46,6 +46,10 @@ module SolidMod
         
         real(rkind), dimension(:,:,:),   allocatable :: p
 
+        ! species-specific artificial properties
+        real(rkind), dimension(:,:,:),   allocatable :: kap
+        real(rkind), dimension(:,:,:),   allocatable :: Ji
+
     contains
 
         procedure :: getRHS_g
@@ -230,5 +234,152 @@ contains
         rhsg(:,:,:,8) = rhsg(:,:,:,8) + invtaurel * ( this%g31*this%sxy + this%g32*this%syy + this%g33*this%syz ) ! g32 
         rhsg(:,:,:,9) = rhsg(:,:,:,9) + invtaurel * ( this%g31*this%sxz + this%g32*this%syz + this%g33*this%szz ) ! g33 
     end subroutine
+
+    subroutine getRHS_VF(this,u,v,w,rhsVF)
+        use operators, only: gradient
+        class(solid),                                       intent(in)  :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
+
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF
+        !real(rkind) :: etafac = one/32._rkind
+
+        call gradient(this%decomp,this%der,this%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3))
+        rhsVF = -u*gradVF(:,:,:,1) -v*gradVF(:,:,:,2) -w*gradVF(:,:,:,3)
+
+        ! any penalty term to keep VF between 0 and 1???
+
+    end subroutine
+
+    subroutine getRHS_eh(this,rho,u,v,w,divu,rhseh)
+        use operators, only: gradient, divergence
+        class(solid),                                       intent(in)  :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhseh
+
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
+        !real(rkind) :: etafac = one/32._rkind
+        !real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+
+        ! artificial conductivity terms
+        rhseh = this%VF*this%eh;   
+        call gradient(this%decomp,this%der,rhseh,tmp1,tmp2,tmp3)
+        call this%get_kap()
+        tmp1 = -this%kap*tmp1;   tmp2 = -this%kap*tmp2;   tmp3 = -this%kap*tmp3
+
+        ! artificial interdiffusional enthalpy -- ???
+
+        ! add convective terms 
+        rhseh = -this%Ys*rho*this%eh;    
+        tmp1 = tmp1 + rhseh*u;   tmp2 = tmp2 + rhseh*v;   tmp3 = tmp3 + rhesh*w
+
+        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh)
+
+        ! this would be required for species total energy equation. for
+        ! hydrodynamic energy, only divu is required
+        !dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+        !dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+        !dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+
+        !tmp1 = this%VF*(-this%p + this%sxx); tmp2 = this%VF*(-this%p + this%syy); tmp3 = this%VF*(-this%p + this%szz)
+        !rhseh = rhseh  + tmp1*dudx + tmp2*dvdy + tmp3*dwdz &
+        !               + this%sxy * (dudy + dvdx) &
+        !               + this%sxz * (dudz + dwdx) &
+        !               + this%syz * (dvdz + dwdy)
+
+        !nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
+
+        rhseh = rhseh -this%VF*this%p*divu        ! should this%p be augmented with an artificial term???
+
+    end subroutine
+
+    !subroutine get_kap(this)
+    !    class(solid),                                         intent(in)    :: this
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: VFeh, tmp1, tmp2, tmp3
+
+    !    ! Step 0: Artificial conductivity based on this quantity
+    !    VFeh = this%VF*this%eh
+
+    !    ! Step 1: Get components of grad(e) squared individually
+    !    call this%gradient(VFeh,ytmp1,ytmp2,ytmp3) ! Does not use any Y buffers
+    !    ytmp1 = ytmp1*ytmp1
+    !    ytmp2 = ytmp2*ytmp2
+    !    ytmp3 = ytmp3*ytmp3
+
+    !    ! Step 2: Get 4th derivative in X
+    !    call transpose_y_to_x(VFeh,xtmp1,this%decomp)
+    !    call this%der%d2dx2(xtmp1,xtmp2)
+    !    call this%der%d2dx2(xtmp2,xtmp1)
+    !    xtmp2 = xtmp1*this%dx**6
+    !    call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+    !    kapstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3)
+
+    !    ! Step 3: Get 4th derivative in Z
+    !    call transpose_y_to_z(VFeh,ztmp1,this%decomp)
+    !    call this%der%d2dz2(ztmp1,ztmp2)
+    !    call this%der%d2dz2(ztmp2,ztmp1)
+    !    ztmp2 = ztmp1*this%dz**6
+    !    call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
+    !    kapstar = kapstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3)
+
+    !    ! Step 4: Get 4th derivative in Y
+    !    call this%der%d2dy2(VFeh,ytmp4)
+    !    call this%der%d2dy2(ytmp4,ytmp5)
+    !    ytmp4 = ytmp5*this%dy**6
+    !    kapstar = kapstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3)
+
+    !    ! Now, all ytmps are free to use
+    !    call this%sgas%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound - hydrodynamic part
+    !    call this%elastic%get_sos(this%rho0,ytmp1)     ! Speed of sound - elastic part
+
+    !    kapstar = this%Ckap*this%rho*ytmp1*abs(kapstar)/this%T
+
+    !    ! Filter kapstar
+    !    call this%filter(kapstar, this%gfil, 2)
+
+    !    ! Now, add to physical fluid properties
+    !    this%mu   = this%mu   + mustar
+    !    this%bulk = this%bulk + bulkstar
+    !    this%kap  = this%kap  + kapstar
+
+    !end subroutine
+
+    !subroutine get_q(this,duidxj)
+    !    class(sgrid), target, intent(inout) :: this
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: duidxj
+
+    !    real(rkind), dimension(:,:,:), pointer :: tmp1_in_x, tmp2_in_x, tmp1_in_y, tmp1_in_z, tmp2_in_z
+    !    type(derivatives), pointer :: der
+
+    !    der => this%der
+
+    !    tmp1_in_x => this%xbuf(:,:,:,1)
+    !    tmp2_in_x => this%xbuf(:,:,:,2)
+
+    !    tmp1_in_z => this%zbuf(:,:,:,1)
+    !    tmp2_in_z => this%zbuf(:,:,:,2)
+
+    !    tmp1_in_y => this%ybuf(:,:,:,1)
+
+    !    ! Step 1: Get qy (dvdy is destroyed)
+    !    call der%ddy(this%T,tmp1_in_y)
+    !    duidxj(:,:,:,qyidx) = -this%kap*tmp1_in_y
+
+    !    ! Step 2: Get qx (dudx is destroyed)
+    !    call transpose_y_to_x(this%T,tmp1_in_x,this%decomp)
+    !    call der%ddx(tmp1_in_x,tmp2_in_x)
+    !    call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
+    !    duidxj(:,:,:,qxidx) = -this%kap*tmp1_in_y
+
+    !    ! Step 3: Get qz (dwdz is destroyed)
+    !    call transpose_y_to_z(this%T,tmp1_in_z,this%decomp)
+    !    call der%ddz(tmp1_in_z,tmp2_in_z)
+    !    call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
+    !    duidxj(:,:,:,qzidx) = -this%kap*tmp1_in_y
+
+    !    ! Done
+    !end subroutine
+
 
 end module
