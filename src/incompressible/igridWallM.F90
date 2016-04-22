@@ -630,12 +630,12 @@ contains
         else
             abf1 = (one + half*this%dtRat)*this%dt
             abf2 = -half*this%dtRat*this%dt
-            !this%uhat = this%uhat + this%dtby2*(three*this%u_rhs - this%u_Orhs )
-            this%uhat = this%uhat + abf1*this%u_rhs + abf2*this%u_Orhs
-            !this%vhat = this%vhat + this%dtby2*(three*this%v_rhs - this%v_Orhs )
-            this%vhat = this%vhat + abf1*this%v_rhs + abf2*this%v_Orhs
-            !this%what = this%what + this%dtby2*(three*this%w_rhs - this%w_Orhs )
-            this%what = this%what + abf1*this%w_rhs + abf2*this%w_Orhs
+            this%uhat = this%uhat + this%dtby2*(three*this%u_rhs - this%u_Orhs )
+            !this%uhat = this%uhat + abf1*this%u_rhs + abf2*this%u_Orhs
+            this%vhat = this%vhat + this%dtby2*(three*this%v_rhs - this%v_Orhs )
+            !this%vhat = this%vhat + abf1*this%v_rhs + abf2*this%v_Orhs
+            this%what = this%what + this%dtby2*(three*this%w_rhs - this%w_Orhs )
+            !this%what = this%what + abf1*this%w_rhs + abf2*this%w_Orhs
         end if 
         
 
@@ -993,6 +993,7 @@ contains
             ! tau_13
             call transpose_x_to_y(this%tau13,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+            rbuff3E(:,:,1) = -(this%ustar**2)
             call this%Ops%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call this%compute_z_mean(rbuff3, this%tau13_mean)
 
@@ -1004,6 +1005,7 @@ contains
             ! tau_23
             call transpose_x_to_y(this%tau23,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+            rbuff3E(:,:,1) = -(this%ustar**2)*this%Vmn/this%Umn
             call this%Ops%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call this%compute_z_mean(rbuff3, this%tau23_mean)
 

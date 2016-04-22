@@ -87,7 +87,7 @@ contains
             if ((present(tau13)) .and. (present(tau23))) then
                 if (this%useWallModel) then
                     tau13 => this%rbuffE(:,:,:,1)
-                    tau13 => this%rbuffE(:,:,:,2)
+                    tau23 => this%rbuffE(:,:,:,2)
                 else
                     tau13 => this%rbuff(:,:,:,3)
                     tau23 => this%rbuff(:,:,:,5)
