@@ -384,7 +384,6 @@ contains
         this%dtOld = this%dt
         this%dtRat = one 
 
-        !call debug(this)
         ! Final Step: Safeguard against unfinished procedures
 
         call message("IGRID initialized successfully!")
@@ -526,6 +525,11 @@ contains
         T1C = T1C + T2C
         call this%spectC%fft(T1C,this%v_rhs)
 
+        !print*, "-------------"
+        !print*, dvdz(3,4,55:65)
+        !print*, "-------------"
+        !print*, dvdzC(3,4,55:64)
+
         ! Step 3: w - equation
         T1E = dudz - dwdx
         T1E = T1E*this%uE
@@ -554,31 +558,6 @@ contains
         this%u_rhs = this%u_rhs + this%dpF_dxhat
     end subroutine
 
-    subroutine debug(this)
-        class(igridWallM), intent(inout), target :: this
-        real(rkind),    dimension(:,:,:), pointer :: dudx, dudy, dudz
-        real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
-        real(rkind),    dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
-        real(rkind),    dimension(:,:,:), pointer :: dvdzC, dudzC
-        real(rkind),    dimension(:,:,:), pointer :: dwdxC, dwdyC
-        real(rkind), dimension(:,:,:), pointer :: rbuff
-        complex(rkind), dimension(:,:,:), pointer :: cbuff
-
-        dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
-        dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
-        dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
-
-        dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
-        dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
-
-        rbuff => this%rbuffxC(:,:,:,1); cbuff => this%cbuffyC(:,:,:,1)
-
-        call this%spectC%ifft(this%u_rhs,rbuff)
-        print*, "=------"
-        print*, rbuff(43,23,1)
-
-        !stop 
-    end subroutine 
     
     subroutine AdamsBashforth(this)
         class(igridWallM), intent(inout) :: this
@@ -730,7 +709,7 @@ contains
 
         ! Compute dudz, dvdz 
         call transpose_y_to_z(this%uhat,ctmpz1,this%sp_gpC)
-        call this%Ops%ddz_C2E(ctmpz1,ctmpz2,.true.,topBC_u)
+        call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_u,.true.)
             
 
         !dudz_dzby2 = ctmpz1(:,:,1)/((this%dz/two)*log(this%dz/two/this%z0))
@@ -738,7 +717,7 @@ contains
         !dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
 
         !ctmpz2(:,:,1) = two*dudz_dzby2 - ctmpz2(:,:,2)
-        ctmpz2(:,:,1) = (ctmpz1(:,:,2) - ctmpz1(:,:,1))/(two*this%dz)
+        ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dudz)
         call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
@@ -746,11 +725,11 @@ contains
         call this%spectC%ifft(dudzH,dudzC)
 
         call transpose_y_to_z(this%vhat,ctmpz1,this%sp_gpC)
-        call this%Ops%ddz_C2E(ctmpz1,ctmpz2,.true.,topBC_v)
-       
+        call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_v,.true.)
+
         !dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
         !ctmpz2(:,:,1) = two*dvdz_dzby2 - ctmpz2(:,:,2)
-        ctmpz2(:,:,1) = (ctmpz1(:,:,2) - ctmpz1(:,:,1))/(two*this%dz)
+        ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dvdz)
         call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
@@ -759,6 +738,34 @@ contains
 
     end subroutine
 
+    subroutine debug(this)
+        class(igridWallM), intent(inout), target :: this
+        real(rkind),    dimension(:,:,:), pointer :: dudx, dudy, dudz
+        real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
+        real(rkind),    dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
+        real(rkind),    dimension(:,:,:), pointer :: dvdzC, dudzC
+        real(rkind),    dimension(:,:,:), pointer :: dwdxC, dwdyC
+        real(rkind), dimension(:,:,:), pointer :: rbuff
+        complex(rkind), dimension(:,:,:), pointer :: cbuff, dvdzH
+
+        dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
+        dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
+        dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
+
+        dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
+        dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
+
+        rbuff => this%rbuffxC(:,:,:,1); cbuff => this%cbuffyC(:,:,:,1)
+        dvdzH => this%duidxjChat(:,:,:,6) 
+
+        !call this%spectC%ifft(this%v_rhs,rbuff)
+        if (nrank == 0) then
+            print*, "=------"
+            print*, real(dvdzH(1,1,55:64))
+        end if 
+        !stop 
+    end subroutine 
+    
     subroutine compute_and_bcast_surface_Mn(this)
         use mpi
         use kind_parameters, only: mpirkind

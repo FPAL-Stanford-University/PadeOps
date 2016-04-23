@@ -88,7 +88,7 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
     real(rkind) :: delta_Ek = 0.08, Xperiods = 3, Yperiods = 3, Zperiods = 1
-    real(rkind) :: zpeak = 0.3
+    real(rkind) :: zpeak = 0.2
     namelist /PBLINPUT/ H, z0, dpdxF 
 
 
