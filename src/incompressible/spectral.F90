@@ -670,7 +670,6 @@ contains
         end if 
        
 
-
         ! STEP 13: Surface Filter
         allocate(tmp1(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)))
         allocate(tmp2(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)))

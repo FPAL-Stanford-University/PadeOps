@@ -205,6 +205,7 @@ contains
         real(rkind), intent(in) :: ustar, Umn
         real(rkind), intent(out), optional :: max_nuSGS
         complex(rkind), dimension(:,:,:), pointer :: tauhat, tauhat2    
+        integer :: nz
 
 
         dudx  => duidxjC(:,:,:,1); dudy  => duidxjC(:,:,:,2); dudzC => duidxjC(:,:,:,3); 
@@ -261,6 +262,8 @@ contains
         call transpose_x_to_y(this%nuSGS,this%rtmpY,this%gpC)
         call transpose_y_to_z(this%rtmpY,this%rtmpZ,this%gpC)
         call this%Ops2ndOrder%InterpZ_Cell2Edge(this%rtmpZ,this%rtmpZE,zero,zero)
+        nz = size(this%rtmpz,3)
+        this%rtmpzE(:,:,nz+1) = two*this%rtmpZ(:,:,nz) - this%rtmpzE(:,:,nz)
 
         call transpose_x_to_y(S13,this%rtmpYE,this%gpE)
         call transpose_y_to_z(this%rtmpYE,this%rtmpZE2,this%gpE)

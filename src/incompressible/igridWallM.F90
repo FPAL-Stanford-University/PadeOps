@@ -239,7 +239,6 @@ contains
         end if 
         
         
-        
         ! STEP 3: GENERATE MESH (CELL CENTERED) 
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         allocate(this%mesh(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),3))
@@ -401,7 +400,6 @@ contains
         real(rkind) :: t1, t2, t3, tmin
 
 
-
         if (this%useCFL) then
             t1 = p_maxval(maxval(this%u))
             t1 = this%dx/(t1 + 1d-13)
@@ -432,14 +430,12 @@ contains
     subroutine interp_PrimitiveVars(this)
         class(igridWallM), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ybuffC, ybuffE, zbuffC, zbuffE
-        complex(rkind), dimension(:,:)  , pointer :: dudz_dzby2, dvdz_dzby2
 
         ybuffE => this%cbuffyE(:,:,:,1)
         zbuffE => this%cbuffzE(:,:,:,1)
         zbuffC => this%cbuffzC(:,:,:,1)
         ybuffC => this%cbuffyC(:,:,:,1)
 
-        dudz_dzby2 => this%cbuffzE(:,:,1,2); dvdz_dzby2 => this%cbuffzE(:,:,1,2)
 
         ! Step 1: Interpolate w -> wC
         call transpose_y_to_z(this%what,zbuffE,this%sp_gpE)
@@ -451,11 +447,6 @@ contains
         call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
         call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
         
-        !dudz_dzby2 = this%Umn/((this%dz/two)*log(this%dz/two/this%z0))
-        !call this%spectE%SurfaceFilter_ip(dudz_dzby2)
-        !dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
-        
-        !zbuffE(:,:,1) = half*(zbuffC(:,:,1) + zbuffC(:,:,2)) - (this%dz/two)*dudz_dzby2
         zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
         zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
 
@@ -466,8 +457,6 @@ contains
         call transpose_y_to_z(this%vhat,zbuffC,this%sp_gpC)
         call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
         
-        !dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
-        !zbuffE(:,:,1) = half*(zbuffC(:,:,1) + zbuffC(:,:,2)) - (this%dz/two)*dudz_dzby2
         zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
         zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
         
@@ -559,6 +548,9 @@ contains
 
     subroutine addExtraForcingTerm(this)
         class(igridWallM), intent(inout) :: this
+        !if (this%spectC%carryingZeroK) then
+        !    this%dpF_dxhat(1,1,:) = cmplx(this%ustar*this%ustar*this%nx*this%ny,zero)
+        !end if
         this%u_rhs = this%u_rhs + this%dpF_dxhat
     end subroutine
 
@@ -621,6 +613,7 @@ contains
             !! Make the SGS call at the very end, just before the time
             !! advancement.
         end if 
+        
 
         ! Step 4: Time Step 
         if (this%step == 0) then
@@ -734,7 +727,6 @@ contains
         call transpose_z_to_y(ctmpz1,dwdzH,this%sp_gpC)
         call this%spectC%ifft(dwdzH,dwdz)
 
-       
 
         ! Compute dudz, dvdz 
         call transpose_y_to_z(this%uhat,ctmpz1,this%sp_gpC)
