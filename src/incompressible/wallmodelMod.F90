@@ -85,7 +85,7 @@ contains
         call transpose_y_to_x(this%ybuff,tau13,this%decomp)
         !print*, "Tau13 after:"
         !print*, tau13(3,2,1:3)
-        if(nrank==0) write(*,'(a,3(1x,e19.12))') "===", umn, sqrt(this%mfactor)*umn
+        !if(nrank==0) write(*,'(a,3(1x,e19.12))') "===", umn, sqrt(this%mfactor)*umn
 
 
         !print*, "Tau23 before:"

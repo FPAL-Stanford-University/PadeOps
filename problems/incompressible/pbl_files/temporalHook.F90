@@ -12,9 +12,9 @@ module temporalHook
 
     integer :: nt_print2screen = 20
     integer :: nt_getMaxKE = 20
-    integer :: tid_statsDump = 25000
-    integer :: tid_compStats = 200
-    real(rkind) :: time_startDumping = 400._rkind
+    integer :: tid_statsDump = 10000
+    integer :: tid_compStats = 50
+    real(rkind) :: time_startDumping = 30._rkind
     integer :: ierr 
 contains
 
