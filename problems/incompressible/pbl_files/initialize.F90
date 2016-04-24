@@ -4,13 +4,13 @@ module pbl_parameters
     use kind_parameters,  only: rkind
     
     implicit none
-    real(rkind)  :: Lx, Ly, Lz, G = 15._rkind
-    real(rkind)  :: ustar = 0.45_rkind, H = 1000._rkind, z0 = 0.1_rkind
-    real(rkind)  :: f = 1.45d-4
+    real(rkind)  :: Lx, Ly, Lz, G = 10.35_rkind
+    real(rkind)  :: ustar = 0.45_rkind, H = 1.0_rkind, z0 = 0.0001_rkind
+    real(rkind)  :: f = 0.0d-4
     integer :: seedu = 321341
     integer :: seedv = 423424
     integer :: seedw = 131344
-    real(rkind), parameter :: kappa = 0.41
+    real(rkind), parameter :: kappa = 0.4
     real(rkind) :: randomScaleFact = 0.01_rkind ! 5% of the mean value
     integer :: nxg, nyg, nzg
 
@@ -29,7 +29,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: i,j,k
     integer :: ix1, ixn, iy1, iyn, iz1, izn
 
-    Lx = three; Ly = three; Lz = one
+    Lx = two*pi; Ly = two*pi; Lz = one
 
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
@@ -84,12 +84,12 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
     real(rkind) :: mfactor, sig
     real(rkind), dimension(:,:,:), allocatable :: randArr
-    real(rkind) :: z0nd, epsnd
+    real(rkind) :: z0nd, epsnd, dpdx
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
-    real(rkind) :: delta_Ek = 0.08, Uperiods = 3, Vperiods = 3 
+    real(rkind) :: delta_Ek = 0.08, Uperiods = 4, Vperiods = 4 
     real(rkind) :: zpeak = 0.3
-    namelist /PBLINPUT/ H, G, f, z0 
+    namelist /PBLINPUT/ H, G, f, z0, dpdx 
 
 
     ioUnit = 11
@@ -99,7 +99,7 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
 
     ! No Coriolis right now
     u_g = one
-    Ro = G/(H*f)
+    Ro = 1.0d16!G/(H*f)
     
     z0nd = z0/H
 
@@ -117,11 +117,17 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     !wC= epsnd*sin(two*pi*x/Lx)*sin(two*pi*y/Ly)*sin(two*pi*z/Lz)
         
     !u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
-    u = (0.70/G)*(one/kappa)*log(z/(z0nd))  &
+    u = (ustar/kappa)*log(z/(z0nd))  &
         + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     v = zero  &
             + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-    w = zero  
+    !w = zero  
+    wC = zero
+
+    if(nrank==0) then
+       write(*,*) '----1----'
+       write(*,*) u(:,3,7)
+     endif
 
     ! Add random numbers
     !allocate(randArr(size(u,1),size(u,2),size(u,3)))
@@ -157,7 +163,9 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
     call transpose_z_to_y(zbuffE,ybuffE,decompE)
     call transpose_y_to_x(ybuffE,w,decompE) 
-   
+  
+    write(*,*) maxval(wC), minval(wC)
+ 
     deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
     
     nullify(u,v,w,x,y,z)
@@ -175,8 +183,17 @@ subroutine getForcing(inputfile, dpdx)
     character(len=*), intent(in) :: inputfile 
     real(rkind), intent(out) :: dpdx
     integer :: ioUnit
+    namelist /PBLINPUT/ H, G, f, z0, dpdx
+
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PBLINPUT)
+    close(ioUnit)
+
     
-    dpdx = zero
+    dpdx = 0.2025_rkind
+    !dpdx = zero
     
 
 end subroutine

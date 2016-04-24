@@ -97,6 +97,8 @@ module IncompressibleGridNP
 
         real(rkind) :: max_nuSGS
 
+        !real(rkind) :: max_ustar, min_ustar, mean_ustar
+
         ! Statistics to compute 
         real(rkind), dimension(:,:), allocatable :: zStats2dump, runningSum, TemporalMnNOW
         real(rkind), dimension(:), pointer :: u_mean, v_mean, w_mean, uu_mean, uv_mean, uw_mean, vv_mean, vw_mean, ww_mean
@@ -412,6 +414,7 @@ contains
 
 
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
+        write(*,*) 'useCFD: ', useCompactFD
         if (useCompactFD) then
             allocate(this%padepoiss)
             call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, this%derW) 
@@ -458,11 +461,21 @@ contains
             call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
             call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
         end if
-
+ 
+    if(nrank==0) then 
+       write(*,*) '----2----'
+       write(*,*) this%u(:,3,7)
+     endif
+        
         ! Take it back to physical fields
         call this%spectC%ifft(this%uhat,this%u)
         call this%spectC%ifft(this%vhat,this%v)
         call this%spectE%ifft(this%what,this%w)
+
+    if(nrank==0) then 
+       write(*,*) '----3----'
+       write(*,*) this%u(:,3,7)
+     endif
         
         ! STEP 8: Interpolate the cell center values of w
         call this%interp_wHat_to_wHatC()
@@ -518,6 +531,9 @@ contains
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
+        !this%max_ustar = zero
+        !this%min_ustar = zero
+        !this%mean_ustar = zero
 
 
         ! STEP 13: Set visualization planes for io
@@ -1176,7 +1192,7 @@ contains
         if ((AdvectionForm == 2) .or. (this%useSGS)) then
             call this%compute_duidxj()
         end if 
-        
+
         ! STEP 10: Copy the RHS for using during next time step 
         do k = 1,size(this%uhat,3)
             do j = 1,size(this%uhat,2)

@@ -7,7 +7,7 @@ module wallmodelMod
     private
     public :: wallmodel
 
-    real(rkind), parameter :: kappa = 0.41_rkind
+    real(rkind), parameter :: kappa = 0.4_rkind
 
     type wallmodel
         integer :: modelID 
@@ -31,10 +31,10 @@ contains
         character(len=*), intent(in) :: inputfile
         real(rkind), dimension(:,:,:,:), intent(in), target :: xbuff, ybuff, zbuff
         type(decomp_info), target, intent(in) :: decompC
-        real(rkind) :: z0 = 0.1_rkind, H = 1000._rkind, G = 15._rkind, f = 1.454d-4
+        real(rkind) :: z0 = 0.1_rkind, H = 1000._rkind, G = 15._rkind, f = 1.454d-4, dpdx
         integer :: iounit
 
-        namelist /PBLINPUT/ H, z0, G, f
+        namelist /PBLINPUT/ H, z0, G, f, dpdx
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -85,7 +85,7 @@ contains
         call transpose_y_to_x(this%ybuff,tau13,this%decomp)
         !print*, "Tau13 after:"
         !print*, tau13(3,2,1:3)
-        !print*, "============================"
+        if(nrank==0) write(*,'(a,3(1x,e19.12))') "===", umn, sqrt(this%mfactor)*umn
 
 
         !print*, "Tau23 before:"

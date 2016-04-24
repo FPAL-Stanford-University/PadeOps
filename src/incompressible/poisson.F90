@@ -212,7 +212,7 @@ contains
 
 
         ! Compute dudx_hat and add dvdy_hat
-        this%tmpbuff = this%spect%k1*uhat 
+        this%tmpbuff = this%spect%k1*uhat
         this%tmpbuff = this%tmpbuff + this%spect%k2*vhat 
         this%tmpbuff = imi*this%tmpbuff
 
