@@ -790,8 +790,8 @@ contains
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
        
-        call this%mix%get_primitive(...)    ! Get primitive variables for individual species
-        call this%mix%get_eelastic(...)  ! Get mixture elastic energy
+        call this%mix%get_primitive(onebyrho)    ! Get primitive variables for individual species
+        call this%mix%get_eelastic_devstress(this%devstress)   ! Get mixture elastic energy
         
         ! call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
         ! call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
@@ -799,7 +799,7 @@ contains
         ! call this%sgas%get_T(this%e,this%T)
         ! call this%sgas%get_p(this%rho,(this%e-this%eel),this%p)
 
-        call this%mix%get_devstress(this%devstress)
+        !call this%mix%get_devstress(this%devstress)
         ! call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
 
     end subroutine
@@ -814,7 +814,7 @@ contains
         this%Wcnsrv(:,:,:,4) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
 
         ! add 2M (mass fraction and hydrodynamic energy) variables here
-        call this%mix%get_conserved(...)
+        call this%mix%get_conserved(rho)
 
     end subroutine
 
