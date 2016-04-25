@@ -1,4 +1,4 @@
-    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, zmesh, nCwall, z0, useWallModel)
+    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, zmesh, nCwall, z0, useWallModel, TfilterZ)
         class(sgs), intent(inout), target :: this
         type(spectral), intent(in), target :: spectC, spectE
         type(decomp_info), intent(in), target :: gpC, gpE
@@ -8,7 +8,8 @@
         integer, intent(in), optional :: nCwall
         real(rkind), dimension(:,:,:), intent(in), optional :: zMesh
         real(rkind), intent(in), optional :: z0
-        logical, intent(in), optional :: useWallModel
+        logical, intent(in), optional :: useWallModel, TfilterZ
+        integer :: ierr
 
         this%SGSmodel = modelID 
         this%useDynamicProcedure = useDynamicProcedure
@@ -20,11 +21,13 @@
         this%spectE => spectE
         this%deltaFilter = ((1.5*dx)*(1.5*dy)*dz)**(one/three)
         this%deltaTFilter = deltaRatio*this%deltaFilter
+        if (present(TfilterZ))  useVerticalTfilter = TfilterZ
 
         if (present(useWallmodel)) then
             this%useWallModel = useWallModel
-            allocate(this%rbuffE(gpE%xsz(1), gpE%xsz(2), gpE%xsz(3),2))
+            allocate(this%rbuffE(gpE%xsz(1), gpE%xsz(2), gpE%xsz(3),3))
             this%rbuffE = zero
+            this%nuSGSE => this%rbuffE(:,:,:,3)
             if (this%useWallModel) then
                 if (.not. present(z0)) then
                     call GracefulExit("Need to provide z0 if wall model is being used", 442)
@@ -104,11 +107,14 @@
         this%meanFact = one/(real(gpC%xsz(1))*real(gpC%ysz(2)))
         allocate(this%rtmpY(gpC%ysz(1),gpC%ysz(2),gpC%ysz(3)))
         allocate(this%rtmpZ(gpC%zsz(1),gpC%zsz(2),gpC%zsz(3)))
+        allocate(this%rtmpZ2(gpC%zsz(1),gpC%zsz(2),gpC%zsz(3)))
 
         allocate(this%rtmpYE(gpE%ysz(1),gpE%ysz(2),gpE%ysz(3)))
         allocate(this%rtmpZE(gpE%zsz(1),gpE%zsz(2),gpE%zsz(3)))
         allocate(this%rtmpZE2(gpE%zsz(1),gpE%zsz(2),gpE%zsz(3)))
 
+        ierr = this%Tfilz%init(this%sp_gp%zsz(3),.false.)
+        ierr = this%Gfilz%init(this%sp_gp%zsz(3),.false.)
     end subroutine
 
     subroutine destroy(this)
@@ -121,7 +127,8 @@
         else
             call this%Ops2ndOrder%destroy()
             deallocate(this%Ops2ndOrder)
-        end if    
+        end if   
+         
         if (allocated(this%SIGMAbuffs)) deallocate(this%SIGMAbuffs) 
         nullify( this%nuSGS)
         if(this%useDynamicProcedure) deallocate(this%Lij, this%Mij)

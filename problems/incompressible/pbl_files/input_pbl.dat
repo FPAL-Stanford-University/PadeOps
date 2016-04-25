@@ -9,14 +9,14 @@ nz = 64                 ! Number of points in Z
 
 dt = 2D-5               ! Fixed time step value (Set to negative to disable)
 tstop = 10.D0              ! Physical time to stop the simulation
-CFL = -1.D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+CFL = 0.1D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
 
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 t_restartDump = 4000    ! Restart File Frequency 
-t_dataDump    = 4000       ! Number of timesteps before data dump is performed 
+t_dataDump    = 1000       ! Number of timesteps before data dump is performed 
 
 /
 
@@ -30,7 +30,7 @@ runID = 86                 ! Run ID (for output file name)
 useCoriolis = .FALSE. 
 useExtraForcing = .TRUE. 
 
-SGSModelID = 2            ! 0: smagorinsky, 1: sigma
+SGSModelID = 2            ! 0: smagorinsky, 1: sigma, 2: Smag with wall damping
 useDynamicProcedure = .FALSE. 
 useSGSClipping = .TRUE. 
 

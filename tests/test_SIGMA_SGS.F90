@@ -199,7 +199,7 @@ program test_SIGMA_SGS
     call spect%fft(v,vhat)
     call spect%fft(w,what)
 
-    call sgsModel%init(modelID, spect, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping)
+    call sgsModel%init(modelID, spect, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, z, 1, 0.1d0, .false., .true. )
     !duidxj(2,3,4,1) = 1.d0; duidxj(2,3,4,2) = 2.d0; duidxj(2,3,4,3) = 3.d0
     !duidxj(2,3,4,4) = 4.d0; duidxj(2,3,4,5) = -1.d0; duidxj(2,3,4,6) = 6.d0
 

@@ -15,7 +15,7 @@ module IncompressibleGridWallM
     use PadePoissonMod, only: Padepoisson 
     use sgsmod, only: sgs
     use wallmodelMod, only: wallmodel
-    
+    use numerics, only: use3by2rule 
     implicit none
 
     private
@@ -239,6 +239,7 @@ contains
         end if 
         
         
+
         ! STEP 3: GENERATE MESH (CELL CENTERED) 
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         allocate(this%mesh(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),3))
@@ -368,7 +369,7 @@ contains
         if (this%useSGS) then
             allocate(this%SGSmodel)
             call this%SGSmodel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
-                this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3),1, this%z0, .true.)
+                this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3),1, this%z0, .true.,.true.)
             call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23)
             call message(0,"SGS model initialized successfully")
         end if 
@@ -525,11 +526,6 @@ contains
         T1C = T1C + T2C
         call this%spectC%fft(T1C,this%v_rhs)
 
-        !print*, "-------------"
-        !print*, dvdz(3,4,55:65)
-        !print*, "-------------"
-        !print*, dvdzC(3,4,55:64)
-
         ! Step 3: w - equation
         T1E = dudz - dwdx
         T1E = T1E*this%uE
@@ -611,11 +607,10 @@ contains
         end if 
         
 
-        ! Step 5: Dealias 
+        ! Step 5: Dealias
         call this%spectC%dealias(this%uhat)
         call this%spectC%dealias(this%vhat)
         call this%spectE%dealias(this%what)
-
         
         ! Step 6: Pressure projection
         call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)

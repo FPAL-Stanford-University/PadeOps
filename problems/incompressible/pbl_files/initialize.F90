@@ -115,11 +115,10 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     ustar = 0.45d0
     epsnd = 5.d0
 
-    u = (one/kappa)*log(z/z0nd) + epsnd*(z/Lz)*cos(Xperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    v = epsnd*(z/Lz)*cos(Yperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    u = (one/kappa)*log(z/z0nd) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     wC= zero  
     
-
     ! Add random numbers
     !allocate(randArr(size(u,1),size(u,2),size(u,3)))
     !call gaussian_random(randArr,zero,one,seedu + 10*nrank)

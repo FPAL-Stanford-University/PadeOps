@@ -1,0 +1,42 @@
+The system is: Linux - 2.6.32-504.el6.x86_64 - x86_64
+Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+Compiler: /share/apps/mvapich2/2.2b-intel-16/bin/mpicc 
+Build flags: 
+Id flags: 
+
+The output was:
+0
+
+
+Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "a.out"
+
+The C compiler identification is Intel, found in "/home/aditya90/Codes/PadeOps/CMakeFiles/2.8.12.2/CompilerIdC/a.out"
+
+Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+Compiler: /share/apps/mvapich2/2.2b-intel-16/bin/mpicxx 
+Build flags: 
+Id flags: 
+
+The output was:
+0
+
+
+Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "a.out"
+
+The CXX compiler identification is Intel, found in "/home/aditya90/Codes/PadeOps/CMakeFiles/2.8.12.2/CompilerIdCXX/a.out"
+
+Determining if the C compiler works passed with the following output:
+Change Dir: /home/aditya90/Codes/PadeOps/CMakeFiles/CMakeTmp
+
+Run Build Command:/usr/bin/gmake "cmTryCompileExec3783569721/fast"
+/usr/bin/gmake -f CMakeFiles/cmTryCompileExec3783569721.dir/build.make CMakeFiles/cmTryCompileExec3783569721.dir/build
+gmake[1]: Entering directory `/home/aditya90/Codes/PadeOps/CMakeFiles/CMakeTmp'
+/share/apps/cmake/2.8.12.2/bin/cmake -E cmake_progress_report /home/aditya90/Codes/PadeOps/CMakeFiles/CMakeTmp/CMakeFiles 1
+Building C object CMakeFiles/cmTryCompileExec3783569721.dir/testCCompiler.c.o
+/share/apps/mvapich2/2.2b-intel-16/bin/mpicc    -o CMakeFiles/cmTryCompileExec3783569721.dir/testCCompiler.c.o   -c /home/aditya90/Codes/PadeOps/CMakeFiles/CMakeTmp/testCCompiler.c
+Linking C executable cmTryCompileExec3783569721
+/share/apps/cmake/2.8.12.2/bin/cmake -E cmake_link_script CMakeFiles/cmTryCompileExec3783569721.dir/link.txt --verbose=1
+/share/apps/mvapich2/2.2b-intel-16/bin/mpicc       CMakeFiles/cmTryCompileExec3783569721.dir/testCCompiler.c.o  -o cmTryCompileExec3783569721 -rdynamic 
+gmake[1]: Leaving directory `/home/aditya90/Codes/PadeOps/CMakeFiles/CMakeTmp'
+
+
