@@ -9,6 +9,7 @@ module spectralMod
     use fft_3d_stuff, only: fft_3d
     use mpi
     use reductions, only: p_sum 
+    use numerics, only: use3by2rule
  
     implicit none
     private
@@ -20,7 +21,7 @@ module spectralMod
         private
         real(rkind), dimension(:,:,:), allocatable, public :: k1, k2, k3, kabs_sq, k1_der2, k2_der2, k3_der2, one_by_kabs_sq
         integer, dimension(3) :: fft_start, fft_end, fft_size
-        real(rkind), dimension(:,:,:), allocatable, public :: Gdealias, GtestFilt
+        real(rkind), dimension(:,:,:), allocatable, public :: Gdealias, GtestFilt, arr1Up, arr2Up
         integer :: rPencil ! Pencil dimension for the real input
         logical :: is3dFFT = .true. ! use 3d FFTs
         logical :: isInitialized = .false.
@@ -32,11 +33,12 @@ module spectralMod
         logical :: use2decompFFT = .false. 
         logical :: useConsrvD2 = .true. 
         real(rkind) :: normfact 
-        type(decomp_info), allocatable, public :: spectdecomp
+        type(decomp_info), allocatable, public :: spectdecomp, dealiasdecomp
         logical                                 :: StoreK = .true.
         logical, public :: carryingZeroK = .false.
         integer, public :: zeroK_i = 123456, zeroK_j = 123456
-         
+        real(rkind), dimension(:,:), allocatable :: GsurfaceFilter 
+
         contains
             procedure           :: init
             procedure           :: destroy
@@ -53,6 +55,14 @@ module spectralMod
             procedure           :: mTimes_ik2_ip
             procedure           :: TestFilter_ip
             procedure           :: TestFilter_oop
+            procedure           :: SurfaceFilter_ip
+            procedure           :: SurfaceFilter_oop
+            procedure           :: dealiasedMult_ip
+            procedure           :: dealiasedMult_oop
+            procedure           :: dealiasedDiv_ip
+            procedure           :: dealiasedDiv_oop
+            procedure           :: dealiasedSquare_ip
+            procedure           :: dealiasedSquare_oop
             !procedure, private  :: upsample_Fhat
             !procedure, private  :: downsample_Fhat
 
@@ -164,7 +174,21 @@ contains
          
     end subroutine
 
+    subroutine SurfaceFilter_ip(this, fhat)
+        class(spectral), intent(in) :: this
+        complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(1)), intent(inout) :: fhat
 
+        fhat = fhat * this%GsurfaceFilter
+    end subroutine 
+
+    pure subroutine SurfaceFilter_oop(this, fin, fout)
+        class(spectral), intent(in) :: this
+        complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(1)), intent(in) :: fin
+        complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(1)), intent(out) :: fout
+
+        fout = fin * this%GsurfaceFilter
+    end subroutine 
+    
     pure subroutine TestFilter_oop(this, fhat,fhatout)
         class(spectral),  intent(in)         :: this
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(in) :: fhat
@@ -272,25 +296,17 @@ contains
         call message("Now Generating the SPECTRAL - Derived Type for the problem.")
 
         ! STEP 1: Start the 3d FFT engine
-        
-        if ((this%use2decompFFT) .and. this%is3dFFT) then
-            call message(2, "WARNING: Using the 2decomp 3dFFT. Performance will be terrible if &
-                        & 2decomp was not compiled using FFTW")
-            call message(2, "Heading to 2DECOMP for an appropriate FFT Library.")
-            call decomp_2d_fft_init(rPencil, nx_g, ny_g, nz_g)   
+        call message ( " ***** Using the FFTW (version 3.x) engine &
+                & (found in: src/utilities/fft_3d.F90)  ***** ")
+        allocate(this%FT)
+        ierr = this%FT%init(nx_g,ny_g,nz_g,pencil, dx, &
+            dy,dz, useExhaustiveFFT, .false., .false.)  
+        if (ierr == 0) then
+            call message (3, "Successfully initialized!")
         else
-            call message ( " ***** Using the FFTW (version 3.x) engine &
-                    & (found in: src/utilities/fft_3d.F90)  ***** ")
-            allocate(this%FT)
-            ierr = this%FT%init(nx_g,ny_g,nz_g,pencil, dx, &
-                dy,dz, useExhaustiveFFT, .false., .false.)  
-            if (ierr == 0) then
-                call message (3, "Successfully initialized!")
-            else
-                call GracefulExit("Couldn't initialize 3d FFT inside SPECTRAL derived type",123)
-            end if   
-            this%use2decompFFT = .false. 
-        end if 
+            call GracefulExit("Couldn't initialize 3d FFT inside SPECTRAL derived type",123)
+        end if   
+        this%use2decompFFT = .false. 
 
         ! STEP 2: Allocate wavenumbers and temporary decomp for spectral transposes
         allocate(spectdecomp)
@@ -480,8 +496,8 @@ contains
             call message(2, "Total non zero:", p_sum(sum(this%Gdealias)))
 
 
-            kdealiasx = ((one/three)*pi/dx)
-            kdealiasy = ((one/three)*pi/dy)
+            kdealiasx = kdealiasx/3.d0
+            kdealiasy = kdealiasy/3.d0
             do k = 1,size(this%k1,3)
                 do j = 1,size(this%k1,2)
                     do i = 1,size(this%k1,1)
@@ -497,74 +513,6 @@ contains
             call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
 
 
-            ! STEP 8: Correct the wavenumber to be the modified wavenumber based on the scheme
-            !allocate(tmp1(size(this%k1,1),size(this%k1,2),size(this%k1,3)))
-            !select case (trim(scheme))
-            !case ("cd10")
-            !    k1four = this%k1
-            !    k2four = this%k2
-            !    k3four = this%k3
-            !    tmp1 = GetCD10ModWaveNum(k1four,dx)
-            !    this%k1 = tmp1 
-            !    tmp1 = GetCD10ModWaveNum(k2four,dy)
-            !    this%k2 = tmp1 
-            !    tmp1 = GetCD10ModWaveNum(k3four,dz)
-            !    this%k3 = tmp1 
-            !    this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
-            !case ("cd06")
-            !    k1four = this%k1
-            !    k2four = this%k2
-            !    k3four = this%k3
-            !    tmp1 = GetCD06ModWaveNum(k1four,dx)
-            !    this%k1 = tmp1 
-            !    tmp1 = GetCD06ModWaveNum(k2four,dy)
-            !    this%k2 = tmp1 
-            !    tmp1 = GetCD06ModWaveNum(k3four,dz)
-            !    this%k3 = tmp1 
-            !    this%kabs_sq = this%k1**2 + this%k2**2 + this%k3**2 
-            !case ("four")
-            !    ! Do nothing !
-            !end select 
-            !deallocate(tmp1)        
-
-            
-            ! STEP 9: Get the other wavenumber dependent attributes
- 
-            !do k = 1,size(this%kabs_sq,3)
-            !    do j = 1,size(this%kabs_sq,2)  
-            !        do i = 1,size(this%kabs_sq,1)
-            !            if ((this%kabs_sq(i,j,k)) .lt. real(1d-16,rkind)) then
-            !                this%one_by_kabs_sq(i,j,k) = 1d-16
-            !            else
-            !                this%one_by_kabs_sq(i,j,k) = one/this%kabs_sq(i,j,k) 
-            !            end if 
-            !        end do 
-            !    end do 
-            !end do 
-      
-            !select case (trim(scheme))
-            !case ("cd10")
-            !    if (this%useConsrvD2) then
-            !        this%k1_der2 = this%k1**2
-            !        this%k2_der2 = this%k2**2
-            !        this%k3_der2 = this%k3**2
-            !    else
-            !        this%k1_der2 = GetCD10D2ModWaveNum(k1four,dx)
-            !        this%k2_der2 = GetCD10D2ModWaveNum(k2four,dy)
-            !        this%k3_der2 = GetCD10D2ModWaveNum(k3four,dz)
-            !    end if  
-            !case ("cd06")
-            !    this%k1_der2 = this%k1**2
-            !    this%k2_der2 = this%k2**2
-            !    this%k3_der2 = this%k3**2
-            !case("four")    
-            !    this%k1_der2 = this%k1**2
-            !    this%k2_der2 = this%k2**2
-            !    this%k3_der2 = this%k3**2
-            !end select  
-       
-            !deallocate(k1four, k2four, k3four) 
-        
         end if    
 
         ! STEP 10: Determine the sizes of the fft and ifft input arrays
@@ -652,7 +600,33 @@ contains
                 end do 
             end do 
         end if 
-        
+       
+
+        ! STEP 13: Surface Filter
+        allocate(tmp1(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)))
+        allocate(tmp2(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)))
+        call transpose_y_to_z(this%k1,tmp1,this%spectdecomp)
+        call transpose_y_to_z(this%k2,tmp2,this%spectdecomp)
+        allocate(this%Gsurfacefilter(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2)))
+        kdealiasx = (one/three)*pi/dx
+        kdealiasy = (one/three)*pi/dy
+        do j = 1,size(tmp1,2)
+            do i = 1,size(tmp1,1)
+                if ((abs(tmp1(i,j,1)) < kdealiasx) .and. (abs(tmp2(i,j,1))< kdealiasy)) then
+                    this%GSurfaceFilter(i,j) = one
+                else
+                    this%GSurfaceFilter(i,j) = zero
+                end if
+            end do 
+        end do 
+      
+
+
+        ! STEP 13: Allocate 3/2s rule arrays
+        call this%FT%alloc_upsampledArr(this%arr1Up)
+        call this%FT%alloc_upsampledArr(this%arr2Up)
+
+
         ! STEP 12: Print completion message 
         call message("SPECTRAL - Derived Type for the problem generated successfully.")
         call message("===============================================================")
@@ -675,6 +649,7 @@ contains
         if (allocated(this%Gdealias)) then
                 deallocate(this%Gdealias)
         end if
+        if (allocated(this%GsurfaceFilter)) deallocate(this%GsurfaceFilter)
         if (allocated(this%k1)) deallocate(this%k1) 
         if (allocated(this%k2)) deallocate(this%k2) 
         if (allocated(this%k3)) deallocate(this%k3) 
@@ -683,7 +658,8 @@ contains
         if (allocated(this%k2_der2)) deallocate(this%k2_der2)
         if (allocated(this%k3_der2)) deallocate(this%k3_der2)
         if (allocated(this%one_by_kabs_sq)) deallocate(this%one_by_kabs_sq)
-       
+      
+        deallocate(this%arr1Up, this%arr2Up) 
         if (allocated(this%spectdecomp)) deallocate(this%spectdecomp)
         this%isInitialized = .false. 
    
@@ -693,20 +669,16 @@ contains
     subroutine fft(this,arr_in,arr_out)
         use decomp_2d_fft, only: decomp_2d_fft_3d
         class(spectral), intent(inout) :: this
-        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r) :: arr_in
-        complex(rkind), dimension(this%nx_c,this%ny_c,this%nz_c) :: arr_out
+        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r), intent(in) :: arr_in
+        complex(rkind), dimension(this%nx_c,this%ny_c,this%nz_c), intent(out) :: arr_out
 
         if (this%is3dFFT) then
-            if (.not. this%use2decompFFT) then
-                select case (this%rPencil) 
-                case (1)
-                    call this%FT%fft3_x2z(arr_in,arr_out)
-                case (3)
-                    call this%FT%fft3_z2x(arr_in,arr_out)
-                end select
-            else 
-                call decomp_2d_fft_3d(arr_in,arr_out)
-            end if 
+            select case (this%rPencil) 
+            case (1)
+                call this%FT%fft3_x2z(arr_in,arr_out)
+            case (3)
+                call this%FT%fft3_z2x(arr_in,arr_out)
+            end select
         else
             call this%FT%fft2_x2y(arr_in,arr_out)        
         end if 
@@ -716,35 +688,124 @@ contains
     subroutine ifft(this,arr_in,arr_out,setOddball)
         use decomp_2d_fft, only: decomp_2d_fft_3d
         class(spectral), intent(inout) :: this
-        complex(rkind), dimension(this%nx_c,this%ny_c,this%nz_c) :: arr_in
-        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r) :: arr_out 
+        complex(rkind), dimension(this%nx_c,this%ny_c,this%nz_c), intent(in) :: arr_in
+        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r), intent(out) :: arr_out 
         logical, intent(in), optional :: setOddball
 
         if (this%is3dFFT) then
-            if (.not. this%use2decompFFT) then
-                select case (this%rPencil)
-                case (1)
-                    call this%FT%ifft3_z2x(arr_in,arr_out)
-                case (3)
-                    call this%FT%ifft3_x2z(arr_in,arr_out)
-                end select
-            else  
-                call decomp_2d_fft_3d(arr_in,arr_out)
-                arr_out = arr_out*this%normfact
-            end if 
+            select case (this%rPencil)
+            case (1)
+                call this%FT%ifft3_z2x(arr_in,arr_out)
+            case (3)
+                call this%FT%ifft3_x2z(arr_in,arr_out)
+            end select
         else
             if (present(setOddBall)) then
-                if (setOddBall) then
-                    call this%FT%ifft2_y2x(arr_in,arr_out,.true.) 
-                else
-                    call this%FT%ifft2_y2x(arr_in,arr_out,.false.)
-                end if  
+                    call this%FT%ifft2_y2x(arr_in,arr_out,setOddball) 
             else                    
-                call this%FT%ifft2_y2x(arr_in,arr_out,.false.)
+               call this%FT%ifft2_y2x(arr_in,arr_out,.false.)
             end if
         end if 
     end subroutine
 
+    !!!!!!!!!!!!!!!!!!!!!! DEALISED MULTIPLICATIONS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    subroutine dealiasedMult_oop(this,arr1,arr2,arrout)
+        class(spectral), intent(inout) :: this
+        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r), intent(in) :: arr1, arr2
+        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r), intent(out) :: arrOut
+       
+        if (use3by2rule) then 
+            call this%FT%upsample(arr1,this%arr1Up)
+            call this%FT%upsample(arr2,this%arr2Up)
+            this%arr1Up = this%arr1Up * this%arr2Up
+            call this%FT%downsample(this%arr1Up,arrout)
+        else
+            arrout = arr1*arr2
+        end if 
+
+
+    end subroutine
+
+    subroutine dealiasedMult_ip(this,arr1,arr2)
+        class(spectral), intent(inout) :: this
+        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r), intent(in) :: arr2
+        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r), intent(inout) :: arr1
+       
+        if (use3by2rule) then 
+            call this%FT%upsample(arr1,this%arr1Up)
+            call this%FT%upsample(arr2,this%arr2Up)
+            this%arr1Up = this%arr1Up * this%arr2Up
+            call this%FT%downsample(this%arr1Up,arr1)
+        else
+            arr1 = arr1*arr2
+        end if 
+
+
+    end subroutine
+
+    subroutine dealiasedDiv_oop(this,arrNum,arrDen,arrout)
+        class(spectral), intent(inout) :: this
+        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r), intent(in) :: arrNum, arrDen
+        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r), intent(out) :: arrOut
+       
+        if (use3by2rule) then 
+            call this%FT%upsample(arrNum,this%arr1Up)
+            call this%FT%upsample(arrDen,this%arr2Up)
+            this%arr1Up = this%arr1Up / ( this%arr2Up + 1d-13)
+            call this%FT%downsample(this%arr1Up,arrout)
+        else
+            arrout = arrNum/(arrDen + 1d-13)
+        end if 
+
+    end subroutine
+    
+    subroutine dealiasedDiv_ip(this,arrNum,arrDen)
+        class(spectral), intent(inout) :: this
+        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r), intent(in) :: arrDen
+        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r), intent(inout) :: arrNum
+       
+        if (use3by2rule) then 
+            call this%FT%upsample(arrNum,this%arr1Up)
+            call this%FT%upsample(arrDen,this%arr2Up)
+            this%arr1Up = this%arr1Up / ( this%arr2Up + 1d-13)
+            call this%FT%downsample(this%arr1Up,arrNum)
+        else
+            arrNum = arrNum/(arrDen + 1d-13)
+        end if 
+
+    end subroutine
+    
+    subroutine dealiasedSquare_oop(this,arr1,arrout)
+        class(spectral), intent(inout) :: this
+        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r), intent(in) :: arr1
+        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r), intent(out) :: arrOut
+      
+        if (use3by2rule) then 
+            call this%FT%upsample(arr1,this%arr1Up)
+            this%arr1Up = this%arr1Up * this%arr1Up
+            call this%FT%downsample(this%arr1Up,arrout)
+        else
+            arrout = arr1*arr1
+        end if 
+
+    end subroutine
+    
+    subroutine dealiasedSquare_ip(this,arr1)
+        class(spectral), intent(inout) :: this
+        real(rkind), dimension(this%nx_r,this%ny_r,this%nz_r), intent(inout) :: arr1
+      
+        if (use3by2rule) then 
+            call this%FT%upsample(arr1,this%arr1Up)
+            this%arr1Up = this%arr1Up * this%arr1Up
+            call this%FT%downsample(this%arr1Up,arr1)
+        else
+            arr1 = arr1*arr1
+        end if 
+
+    end subroutine
+    
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    
     subroutine alloc_r2c_out_Rank3(this,arr_inout)
         class(spectral), intent(in) :: this
         complex(rkind), dimension(:,:,:), allocatable, intent(out) :: arr_inout

@@ -16,8 +16,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     implicit none
 
-    type(decomp_info),                                          intent(in)    :: decomp
-    real(rkind),                                                intent(inout) :: dx,dy,dz
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
 
     integer :: i,j,k
@@ -52,20 +52,23 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,half,one,two,pi
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
     use decomp_2d,        only: decomp_info
+    use MixtureEOSMod,    only: mixture
     
     use taylorgreen_data
 
     implicit none
-    character(len=*),                                               intent(in)    :: inputfile
-    type(decomp_info),                                              intent(in)    :: decomp
-    real(rkind),                                                    intent(in)    :: dx,dy,dz
-    real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
+    character(len=*),                intent(in)    :: inputfile
+    type(decomp_info),               intent(in)    :: decomp
+    type(mixture),                   intent(inout) :: mix
+    real(rkind),                     intent(in)    :: dx,dy,dz
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    real(rkind),                     intent(inout) :: tstop,dt,tviz
     
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),3) :: vorticity
 
@@ -85,12 +88,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields)
 
 end subroutine
 
-subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
+subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
-    use decomp_2d,        only: decomp_info
+    use decomp_2d,        only: decomp_info, nrank
     use DerivativesMod,   only: derivatives
+    use MixtureEOSMod,    only: mixture
     use operators,        only: curl
     use reductions,       only: P_MEAN
 
@@ -100,6 +104,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
     type(derivatives),               intent(in) :: der
+    type(mixture),                   intent(in)    :: mix
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
@@ -134,22 +139,40 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
             open(unit=outputunit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
         end if
         write(outputunit,'(3ES26.16)') tsim, P_MEAN(tke)/tke0, P_MEAN(enstrophy)/enstrophy0
+        close(outputunit)
         
+        write(str,'(I4.4,A,I4.4,A,I6.6)') decomp%ysz(2), "_", vizcount, "_", nrank
+        write(outputfile,'(2A)') trim(outputdir),"/taylorgreen_"//trim(str)//".dat"
+        open(unit=outputunit, file=trim(outputfile), form='UNFORMATTED', status='REPLACE')
+        write(outputunit) tsim
+        write(outputunit) decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)
+        write(outputunit) decomp%yst(1), decomp%yst(2), decomp%yst(3)
+        write(outputunit) decomp%yen(1), decomp%yen(2), decomp%yen(3)
+        write(outputunit) rho
+        write(outputunit) u
+        write(outputunit) v
+        write(outputunit) w
+        write(outputunit) vorticity(:,:,:,1)
+        write(outputunit) vorticity(:,:,:,2)
+        write(outputunit) vorticity(:,:,:,3)
+        write(outputunit) p
         close(outputunit)
 
     end associate
 end subroutine
 
-subroutine hook_bc(decomp,mesh,fields,tsim)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim)
     use kind_parameters,  only: rkind
     use constants,        only: zero
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use MixtureEOSMod,    only: mixture
 
     use taylorgreen_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
+    type(mixture),                   intent(in)    :: mix
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
@@ -163,11 +186,12 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,tsim)
+subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
     use kind_parameters,  only: rkind
     use constants,        only: half
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use MixtureEOSMod,    only: mixture
     use exits,            only: message
     use reductions,       only: P_MAXVAL, P_MEAN
 
@@ -175,6 +199,7 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
+    type(mixture),                   intent(in)    :: mix
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
@@ -198,14 +223,16 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
     end associate
 end subroutine
 
-subroutine hook_source(decomp,mesh,fields,tsim,rhs)
+subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
     use kind_parameters, only: rkind
     use decomp_2d,       only: decomp_info
+    use MixtureEOSMod,   only: mixture
 
     use taylorgreen_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
+    type(mixture),                   intent(in)    :: mix
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields

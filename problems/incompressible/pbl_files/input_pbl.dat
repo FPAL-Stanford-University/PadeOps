@@ -5,16 +5,12 @@ outputdir  = "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"      ! Director
 
 nx = 64                  ! Number of points in X
 ny = 64                  ! Number of points in Y
-nz = 64                  ! Number of points in Z
+nz = 64                 ! Number of points in Z
 
-dt = 2D-3               ! Fixed time step value (Set to negative to disable)
-tstop = 600.D0              ! Physical time to stop the simulation
-CFL = -1.D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+dt = 2D-5               ! Fixed time step value (Set to negative to disable)
+tstop = 10.D0              ! Physical time to stop the simulation
+CFL = 0.1D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
-
-periodicx = .TRUE.        ! Periodic in X?
-periodicy = .TRUE.        ! Periodic in Y?
-periodicz = .FALSE.        ! Periodic in Z?
 
 
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
@@ -27,34 +23,36 @@ t_dataDump    = 30000       ! Number of timesteps before data dump is performed
 /
 
 &IINPUT
-vscheme = 0               ! 0: 6th order Compact, 1: 2nd order Finite Difference
-advForm = 1               ! 1: Rotational Form,   2: Skew-Symm Form 
 
 Pr = 0.7D0                ! Prandtl Number
-runID = 50                 ! Run ID (for output file name)
+runID = 86                 ! Run ID (for output file name)
 
 useCoriolis = .FALSE. 
 useExtraForcing = .TRUE. 
 
-useSGS = .TRUE.          ! LES mode or DNS mode?
-SGSModelID = 0            ! 0: smagorinsky, 1: sigma
+SGSModelID = 2            ! 0: smagorinsky, 1: sigma, 2: Smag with wall damping
 useDynamicProcedure = .FALSE. 
 useSGSClipping = .TRUE. 
 
 
 topWall = 2               ! no_slip = 1, slip = 2 , wall model = 3
-botWall = 3               ! no_slip = 1, slip = 2 , wall model = 3
 
 useRestartFile = .FALSE. 
-restartFile_TID = 20000
-restartFile_RID = 50
+restartFile_TID = 8000
+restartFile_RID = 87
 
 isInviscid = .TRUE.
-useVerticalFilter = .TRUE.
+useVerticalFilter = .FALSE.
+
+dumpPlanes = .FALSE.      ! Dump plane visualations. Select planes in initialize.F90
+/
+
+&WALLMODEL 
+z0 = 1.d-4
+/
 
 &PBLINPUT
-H = 1.d0
-G = 10.35d0
-z0 = 0.0001d0
-f = 1.454d-4
+H = 1000.d0
+z0 = 0.1d0
+dpdxF = 1.d0
 /

@@ -42,7 +42,7 @@ nu = 0.02D0               ! Kinematic viscosity
 /
 
 &SINPUT
-gam     = 2.84D0          ! Ratio of specific heats
+gam     = 1.4D0           ! Ratio of specific heats
 Rgas    = 1.D0            ! Gas constant
 PInf    = 6.D8            ! P_infinity, material stiffness
 shmod   = 0.0D0           ! Shear modulus
@@ -57,4 +57,5 @@ yield   = 2.49D9          ! Yield strength of material
 &PROBINPUT
 pRatio   = 4.5D0          ! Pressure Ratio ( p2 / p1 )
 pinfbyp1 = 1.0D3          ! P_infty / p1
+Cbeta   = 1.75D0          ! Coefficient for artificial bulk viscosity
 /
