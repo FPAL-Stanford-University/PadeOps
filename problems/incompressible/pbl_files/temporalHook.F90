@@ -19,7 +19,7 @@ module temporalHook
     
     integer :: tid_start_planes = 1
     integer :: tid_stop_planes = 100000
-    integer :: tid_dump_plane_every = 100
+    integer :: tid_dump_plane_every = 500
 
 contains
 

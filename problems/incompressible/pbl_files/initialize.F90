@@ -11,7 +11,7 @@ module pbl_parameters
     integer :: seedv = 423424
     integer :: seedw = 131344
     real(rkind), parameter :: kappa = 0.41d0
-    real(rkind) :: randomScaleFact = 0.005_rkind ! 5% of the mean value
+    real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
 
 end module     
@@ -120,21 +120,21 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     wC= zero  
     
     ! Add random numbers
-    !allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
-    !do k = 1,size(u,3)
-    !    sig = randomScaleFact*(one/kappa)*log(z(1,1,k)/z0nd)
-    !    u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
-    !end do  
-    !deallocate(randArr)
-    !
-    !allocate(randArr(size(v,1),size(v,2),size(v,3)))
-    !call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
-    !do k = 1,size(v,3)
-    !    sig = G*randomScaleFact*exp(-z(1,1,k)/delta_Ek)*sin(z(1,1,k)/delta_Ek)
-    !    v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
-    !end do  
-    !deallocate(randArr)
+    allocate(randArr(size(u,1),size(u,2),size(u,3)))
+    call gaussian_random(randArr,zero,one,seedu + 10*nrank)
+    do k = 1,size(u,3)
+        sig = randomScaleFact*(one/kappa)*log(z(1,1,k)/z0nd)
+        u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
+    end do  
+    deallocate(randArr)
+    
+    allocate(randArr(size(v,1),size(v,2),size(v,3)))
+    call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
+    do k = 1,size(v,3)
+        sig = randomScaleFact*z(1,1,k)*exp(-half*(z/zpeak/Lz)**2)
+        v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
+    end do  
+    deallocate(randArr)
 
 
     ! Interpolate wC to w
@@ -192,13 +192,13 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 2
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
     xplanes = [64]
     yplanes = [64]
-    zplanes = [5 , 30]
+    zplanes = [30]
 
 end subroutine
 

@@ -800,15 +800,15 @@ contains
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_u.",tid
         fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
-        call decomp_2d_read_one(1,this%u,fname)
+        call decomp_2d_read_one(1,this%u,fname, this%gpC)
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_v.",tid
         fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
-        call decomp_2d_read_one(1,this%v,fname)
+        call decomp_2d_read_one(1,this%v,fname, this%gpC)
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_w.",tid
         fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
-        call decomp_2d_read_one(1,this%w,fname)
+        call decomp_2d_read_one(1,this%w,fname, this%gpE)
 
         write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
         fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
@@ -834,15 +834,15 @@ contains
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1,this%u,fname)
+        call decomp_2d_write_one(1,this%u,fname, this%gpC)
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_v.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1,this%v,fname)
+        call decomp_2d_write_one(1,this%v,fname, this%gpC)
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_w.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1,this%w,fname)
+        call decomp_2d_write_one(1,this%w,fname, this%gpE)
 
         write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",this%runID, "_info.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
