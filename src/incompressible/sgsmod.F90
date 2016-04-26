@@ -21,7 +21,7 @@ module sgsmod
     real(rkind) :: kappa = 0.41_rkind
     real(rkind), parameter :: deltaRatio = 2.0_rkind
     complex(rkind), parameter :: zeroC = zero + imi*zero
-    logical :: useVerticalTfilter = .true. 
+    logical :: useVerticalTfilter = .false. 
     integer :: applyDynEvery  = 5
 
     type :: sgs

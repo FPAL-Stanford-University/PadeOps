@@ -372,7 +372,7 @@ contains
         if (this%useSGS) then
             allocate(this%SGSmodel)
             call this%SGSmodel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
-                this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3),1, this%z0, .true., WallMType, .true.)
+                this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3),1, this%z0, .true., WallMType, .false.)
             call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23)
             call message(0,"SGS model initialized successfully")
         end if 
@@ -502,7 +502,9 @@ contains
         real(rkind),    dimension(:,:,:), pointer :: dvdzC, dudzC
         real(rkind),    dimension(:,:,:), pointer :: dwdxC, dwdyC
         real(rkind),    dimension(:,:,:), pointer :: T1C, T2C, T1E, T2E 
-        
+        complex(rkind), dimension(:,:,:), pointer :: fT1C, fT2C, fT1E, fT2E 
+        complex(rkind), dimension(:,:,:), pointer :: tzC, tzE
+
         dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
         dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
         dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
@@ -513,21 +515,49 @@ contains
         T1C => this%rbuffxC(:,:,:,1); T2C => this%rbuffxC(:,:,:,2)
         T1E => this%rbuffxE(:,:,:,1); T2E => this%rbuffxE(:,:,:,2)
        
+        fT1C => this%cbuffyC(:,:,:,1); fT2C => this%cbuffyC(:,:,:,2)
+        fT1E => this%cbuffyE(:,:,:,1); fT2E => this%cbuffyE(:,:,:,2)
+        
+        tzC => this%cbuffzC(:,:,:,1); tzE => this%cbuffzE(:,:,:,1)
+
+
         ! Step 1: u - equation rhs
+        !T1C = dvdx - dudy
+        !T1C = T1c*this%v
+        !T2C = dwdxC - dudzC
+        !T2C = T2C*this%wC
+        !T1C = T1C + T2C
+        !call this%spectC%fft(T1C,this%u_rhs)
+
         T1C = dvdx - dudy
         T1C = T1c*this%v
-        T2C = dwdxC - dudzC
-        T2C = T2C*this%wC
-        T1C = T1C + T2C
-        call this%spectC%fft(T1C,this%u_rhs)
+        call this%spectC%fft(T1C,fT1C)
+        T2E = dwdx - dudz
+        T2E = T2E*this%w
+        call this%spectE%fft(T2E,fT2E)
+        call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
+        call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        call transpose_z_to_y(tzC,this%u_rhs, this%sp_gpC)
+        this%u_rhs = this%u_rhs + fT1C
 
         ! Step 2: v - equation rhs
+        !T1C = dudy - dvdx
+        !T1C = T1C*this%u
+        !T2C = dwdyC - dvdzC
+        !T2C = T2C*this%wC
+        !T1C = T1C + T2C
+        !call this%spectC%fft(T1C,this%v_rhs)
+
         T1C = dudy - dvdx
         T1C = T1C*this%u
-        T2C = dwdyC - dvdzC
-        T2C = T2C*this%wC
-        T1C = T1C + T2C
-        call this%spectC%fft(T1C,this%v_rhs)
+        call this%spectC%fft(T1C,fT1C)
+        T2E = dwdy - dvdz
+        T2E = T2E*this%w
+        call this%spectE%fft(T2E,fT2E)
+        call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
+        call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        call transpose_z_to_y(tzC,this%v_rhs, this%sp_gpC)
+        this%v_rhs = this%v_rhs + fT1C
 
         ! Step 3: w - equation
         T1E = dudz - dwdx
