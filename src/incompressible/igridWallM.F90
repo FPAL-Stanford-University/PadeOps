@@ -93,8 +93,9 @@ module IncompressibleGridWallM
 
         real(rkind) :: max_nuSGS
 
-        ! Wallmodel stuff
-        real(rkind) :: z0, ustar, Umn, Vmn, Uspmn, dtOld, dtRat 
+        real(rkind) :: z0, ustar, Umn, Vmn, Uspmn, dtOld, dtRat
+        real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
+        integer :: wallMType 
 
         ! Statistics to compute 
         real(rkind), dimension(:,:), allocatable :: zStats2dump, runningSum, TemporalMnNOW
@@ -134,6 +135,7 @@ module IncompressibleGridWallM
             procedure, private :: compute_z_mean 
             procedure, private :: compute_z_fluct
             procedure, private :: compute_deltaT
+            procedure, private :: getfilteredSpeedSqAtWall
             procedure          :: dump_stats
             procedure          :: compute_stats 
             procedure          :: finalize_stats
@@ -173,7 +175,7 @@ contains
         integer :: restartFile_RID = 1
         logical :: useRestartFile = .false. 
         logical :: isInviscid = .false., useVerticalFilter = .true.  
-        integer :: SGSModelID = 1
+        integer :: SGSModelID = 1, WallMType = 0
         real(rkind) :: z0 = 1.d-4
         logical :: dumpPlanes = .false. 
 
@@ -188,7 +190,7 @@ contains
                                 isInviscid, dumpPlanes, &
                                 useVerticalFilter, SGSModelID
 
-        namelist /WALLMODEL/ z0
+        namelist /WALLMODEL/ z0, wallMType 
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -202,7 +204,7 @@ contains
         this%meanfact = one/(real(nx,rkind)*real(ny,rkind))
         this%dt = dt; this%dtby2 = dt/two ; this%z0 = z0 ; this%Re = Re
         this%outputdir = outputdir; this%inputdir = inputdir 
-        
+        this%WallMtype = WallMType
         this%runID = runID; this%tstop = tstop; this%t_dataDump = t_dataDump
         this%CFL = CFL; this%dumpPlanes = dumpPlanes
         if (this%CFL > zero) this%useCFL = .true. 
@@ -298,6 +300,7 @@ contains
         allocate(this%rbuffxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2))
         allocate(this%rbuffyE(this%gpE%ysz(1),this%gpE%ysz(2),this%gpE%ysz(3),2))
         allocate(this%rbuffzE(this%gpE%zsz(1),this%gpE%zsz(2),this%gpE%zsz(3),2))
+        allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
         this%nxZ = size(this%cbuffzE,1); this%nyZ = size(this%cbuffzE,2)
 
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
@@ -369,7 +372,7 @@ contains
         if (this%useSGS) then
             allocate(this%SGSmodel)
             call this%SGSmodel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
-                this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3),1, this%z0, .true.,.true.)
+                this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3),1, this%z0, .true., WallMType, .false.)
             call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23)
             call message(0,"SGS model initialized successfully")
         end if 
@@ -499,7 +502,9 @@ contains
         real(rkind),    dimension(:,:,:), pointer :: dvdzC, dudzC
         real(rkind),    dimension(:,:,:), pointer :: dwdxC, dwdyC
         real(rkind),    dimension(:,:,:), pointer :: T1C, T2C, T1E, T2E 
-        
+        complex(rkind), dimension(:,:,:), pointer :: fT1C, fT2C, fT1E, fT2E 
+        complex(rkind), dimension(:,:,:), pointer :: tzC, tzE
+
         dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
         dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
         dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
@@ -510,21 +515,49 @@ contains
         T1C => this%rbuffxC(:,:,:,1); T2C => this%rbuffxC(:,:,:,2)
         T1E => this%rbuffxE(:,:,:,1); T2E => this%rbuffxE(:,:,:,2)
        
+        fT1C => this%cbuffyC(:,:,:,1); fT2C => this%cbuffyC(:,:,:,2)
+        fT1E => this%cbuffyE(:,:,:,1); fT2E => this%cbuffyE(:,:,:,2)
+        
+        tzC => this%cbuffzC(:,:,:,1); tzE => this%cbuffzE(:,:,:,1)
+
+
         ! Step 1: u - equation rhs
+        !T1C = dvdx - dudy
+        !T1C = T1c*this%v
+        !T2C = dwdxC - dudzC
+        !T2C = T2C*this%wC
+        !T1C = T1C + T2C
+        !call this%spectC%fft(T1C,this%u_rhs)
+
         T1C = dvdx - dudy
         T1C = T1c*this%v
-        T2C = dwdxC - dudzC
-        T2C = T2C*this%wC
-        T1C = T1C + T2C
-        call this%spectC%fft(T1C,this%u_rhs)
+        call this%spectC%fft(T1C,fT1C)
+        T2E = dwdx - dudz
+        T2E = T2E*this%w
+        call this%spectE%fft(T2E,fT2E)
+        call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
+        call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        call transpose_z_to_y(tzC,this%u_rhs, this%sp_gpC)
+        this%u_rhs = this%u_rhs + fT1C
 
         ! Step 2: v - equation rhs
+        !T1C = dudy - dvdx
+        !T1C = T1C*this%u
+        !T2C = dwdyC - dvdzC
+        !T2C = T2C*this%wC
+        !T1C = T1C + T2C
+        !call this%spectC%fft(T1C,this%v_rhs)
+
         T1C = dudy - dvdx
         T1C = T1C*this%u
-        T2C = dwdyC - dvdzC
-        T2C = T2C*this%wC
-        T1C = T1C + T2C
-        call this%spectC%fft(T1C,this%v_rhs)
+        call this%spectC%fft(T1C,fT1C)
+        T2E = dwdy - dvdz
+        T2E = T2E*this%w
+        call this%spectE%fft(T2E,fT2E)
+        call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
+        call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        call transpose_z_to_y(tzC,this%v_rhs, this%sp_gpC)
+        this%v_rhs = this%v_rhs + fT1C
 
         ! Step 3: w - equation
         T1E = dudz - dwdx
@@ -577,11 +610,12 @@ contains
 
         ! Step 3b: SGS Viscous Term
         if (this%useSGS) then
-            call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE, this%duidxjChat,& 
-                                                this%u_rhs  , this%v_rhs  , this%w_rhs     ,&
-                                                this%uhat   , this%vhat   , this%whatC     ,&
-                                                this%u      , this%v      , this%wC        ,&
-                                                this%ustar  , this%Umn    , this%max_nuSGS  )
+            call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE  , this%duidxjChat,& 
+                                                this%u_rhs  , this%v_rhs    , this%w_rhs     ,&
+                                                this%uhat   , this%vhat     , this%whatC     ,&
+                                                this%u      , this%v        , this%wC        ,&
+                                                this%ustar  , this%Umn      , this%Vmn       ,&
+                                                this%Uspmn  , this%filteredSpeedSq, this%max_nuSGS)
 
             !! IMPORTANT: duidxjC, u, v and wC are all corrupted if SGS was initialized to use the
             !! Dynamic Procedure. DON'T USE duidxjC again within this time step.
@@ -598,11 +632,8 @@ contains
         else
             abf1 = (one + half*this%dtRat)*this%dt
             abf2 = -half*this%dtRat*this%dt
-            !this%uhat = this%uhat + this%dtby2*(three*this%u_rhs - this%u_Orhs )
             this%uhat = this%uhat + abf1*this%u_rhs + abf2*this%u_Orhs
-            !this%vhat = this%vhat + this%dtby2*(three*this%v_rhs - this%v_Orhs )
             this%vhat = this%vhat + abf1*this%v_rhs + abf2*this%v_Orhs
-            !this%what = this%what + this%dtby2*(three*this%w_rhs - this%w_Orhs )
             this%what = this%what + abf1*this%w_rhs + abf2*this%w_Orhs
         end if 
         
@@ -785,6 +816,7 @@ contains
         call mpi_bcast(this%Vmn,1,mpirkind,0,mpi_comm_world,ierr)
         call mpi_bcast(this%Uspmn,1,mpirkind,0,mpi_comm_world,ierr)
 
+        call this%getfilteredSpeedSqAtWall()
         ! Compute USTAR and Umn at z = dz/2
         this%ustar = this%Umn*kappa/log(this%dz/two/this%z0)
     end subroutine
@@ -800,15 +832,15 @@ contains
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_u.",tid
         fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
-        call decomp_2d_read_one(1,this%u,fname)
+        call decomp_2d_read_one(1,this%u,fname, this%gpC)
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_v.",tid
         fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
-        call decomp_2d_read_one(1,this%v,fname)
+        call decomp_2d_read_one(1,this%v,fname, this%gpC)
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_w.",tid
         fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
-        call decomp_2d_read_one(1,this%w,fname)
+        call decomp_2d_read_one(1,this%w,fname, this%gpE)
 
         write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
         fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
@@ -834,15 +866,15 @@ contains
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1,this%u,fname)
+        call decomp_2d_write_one(1,this%u,fname, this%gpC)
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_v.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1,this%v,fname)
+        call decomp_2d_write_one(1,this%v,fname, this%gpC)
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_w.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1,this%w,fname)
+        call decomp_2d_write_one(1,this%w,fname, this%gpE)
 
         write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",this%runID, "_info.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
@@ -1241,6 +1273,30 @@ contains
 
 
 
+    subroutine getfilteredSpeedSqAtWall(this)
+        class(igridWallM), intent(inout), target :: this
+
+        real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2
+        complex(rkind), dimension(:,:,:), pointer :: cbuffy, tauWallH
+
+        cbuffy => this%cbuffyC(:,:,:,1); tauWallH => this%cbuffzC(:,:,:,1)     
+        rbuffx1 => this%filteredSpeedSq; rbuffx2 => this%rbuffxC(:,:,:,1)
+
+        call transpose_y_to_z(this%uhat,tauWallH,this%sp_gpC)
+        call this%spectC%SurfaceFilter_ip(tauWallH(:,:,1))
+        call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
+        call this%spectC%ifft(cbuffy,rbuffx1)
+
+        call transpose_y_to_z(this%vhat,tauWallH,this%sp_gpC)
+        call this%spectC%SurfaceFilter_ip(tauWallH(:,:,1))
+        call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
+        call this%spectC%ifft(cbuffy,rbuffx2)
+
+        rbuffx1 = rbuffx1*rbuffx1
+        rbuffx2 = rbuffx2*rbuffx2
+        rbuffx1 = rbuffx1 + rbuffx2
+
+    end subroutine  
 
 
 

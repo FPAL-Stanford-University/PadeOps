@@ -49,12 +49,14 @@ module sgsmod
         real(rkind) :: meanFact
 
         logical :: useWallModel = .false.  
-        real(rkind) :: z0
+        real(rkind) :: z0, dz
 
         type(gaussian) :: Gfilz 
         type(lstsq) :: Tfilz 
         integer :: SGSmodel ! 0: Standard Smag, 1: Sigma Model 
 
+        integer :: WallModel = 1
+        real(rkind) :: WallMfactor
         integer :: mstep = 0
         contains 
             procedure :: init
@@ -67,6 +69,7 @@ module sgsmod
             procedure, private :: testFilter_oop
             procedure, private :: testFilter_oop_C2R
             procedure, private :: filtCoeff
+            procedure, private :: getLocalWallModel
             procedure :: getRHS_SGS
             procedure :: getRHS_SGS_WallM
             procedure :: link_pointers
@@ -198,7 +201,7 @@ contains
     end subroutine
 
 
-    subroutine getRHS_SGS_WallM(this, duidxjC, duidxjE, duidxjChat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, ustar, Umn, max_nuSGS)    
+    subroutine getRHS_SGS_WallM(this, duidxjC, duidxjE, duidxjChat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, ustar, Umn, Vmn, Uspmn, filteredSpeedSq, max_nuSGS)    
         class(sgs), intent(inout), target :: this
         real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(inout), target :: duidxjC
         real(rkind)   , dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(inout), target :: duidxjE
@@ -206,7 +209,7 @@ contains
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: urhs, vrhs
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat, wChat
         complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
-        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: u, v, wC
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: u, v, wC, filteredSpeedSq
         real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
         real(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
         real(rkind), dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
@@ -214,7 +217,7 @@ contains
         real(rkind), dimension(:,:,:), pointer :: dwdxC, dwdyC
         real(rkind), dimension(:,:,:), pointer :: tau11, tau12, tau13, tau13C, tau22, tau23, tau23C, tau33
         real(rkind), dimension(:,:,:), pointer :: S11, S12, S13, S13C, S22, S23, S23C, S33
-        real(rkind), intent(in) :: ustar, Umn
+        real(rkind), intent(in) :: ustar, Umn, Vmn, Uspmn
         real(rkind), intent(out), optional :: max_nuSGS
         complex(rkind), dimension(:,:,:), pointer :: tauhat, tauhat2    
         integer :: nz
@@ -296,31 +299,60 @@ contains
 
         endif
 
-        ! STEP 4: tau13 -> ddz() in urhs, ddx in wrhs
-        call transpose_y_to_z(uhat,this%ctmpCz,this%sp_gp) ! <- send uhat to z decomp (wallmodel)
+        select case(this%wallModel) 
+        case(0)
+            this%WallMFactor = -ustar*ustar/(Umn + 1.D-13)
+            
+            ! STEP 4: tau13 -> ddz() in urhs, ddx in wrhs
+            call transpose_y_to_z(uhat,this%ctmpCz,this%sp_gp) ! <- send uhat to z decomp (wallmodel)
+            call this%spectE%fft(tau13,this%ctmpEy)
+            call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
+            this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1) 
+            call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
+            call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
+            urhs = urhs - tauhat
+            call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
+            call this%spectE%mtimes_ik1_ip(this%ctmpEy)
+            wrhs = wrhs - this%ctmpEy
+            
+            ! STEP 5: tau23 -> ddz() in vrhs, ddy in wrhs
+            call transpose_y_to_z(vhat,this%ctmpCz,this%sp_gp) ! <- send vhat to z decomp (wallmodel)
 
-        call this%spectE%fft(tau13,this%ctmpEy)
-        call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
-        this%ctmpEz(:,:,1) = -(ustar*ustar)*this%ctmpCz(:,:,1)/Umn 
-        call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
-        call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
-        urhs = urhs - tauhat
-        call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
-        call this%spectE%mtimes_ik1_ip(this%ctmpEy)
-        wrhs = wrhs - this%ctmpEy
-        
-        ! STEP 5: tau23 -> ddz() in vrhs, ddy in wrhs
-        call transpose_y_to_z(vhat,this%ctmpCz,this%sp_gp) ! <- send vhat to z decomp (wallmodel)
+            call this%spectE%fft(tau23,this%ctmpEy)
+            call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
+            this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1)
+            call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
+            call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
+            vrhs = vrhs - tauhat
+            call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
+            call this%spectE%mtimes_ik2_ip(this%ctmpEy)
+            wrhs = wrhs - this%ctmpEy
+        case(1)
+            call this%getLocalWallModel(filteredSpeedSq, this%ctmpCz)
+            this%WallMFactor = -(kappa/log(this%dz/(two*this%z0)))**2 
+            
+            call this%spectE%fft(tau13,this%ctmpEy)
+            call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
+            this%ctmpEz(:,:,1) = (this%WallMFactor*Umn/Uspmn)*this%ctmpCz(:,:,1) 
+            call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
+            call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
+            urhs = urhs - tauhat
+            call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
+            call this%spectE%mtimes_ik1_ip(this%ctmpEy)
+            wrhs = wrhs - this%ctmpEy
+            
+            ! STEP 5: tau23 -> ddz() in vrhs, ddy in wrhs
+            call this%spectE%fft(tau23,this%ctmpEy)
+            call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
+            this%ctmpEz(:,:,1) = (this%WallMFactor*Vmn/Uspmn)*this%ctmpCz(:,:,1) 
+            call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
+            call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
+            vrhs = vrhs - tauhat
+            call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
+            call this%spectE%mtimes_ik2_ip(this%ctmpEy)
+            wrhs = wrhs - this%ctmpEy
+        end select
 
-        call this%spectE%fft(tau23,this%ctmpEy)
-        call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
-        this%ctmpEz(:,:,1) = -(ustar*ustar)*this%ctmpCz(:,:,1)/Umn 
-        call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
-        call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
-        vrhs = vrhs - tauhat
-        call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
-        call this%spectE%mtimes_ik2_ip(this%ctmpEy)
-        wrhs = wrhs - this%ctmpEy
 
         ! STEP 6: tau12 -> ddy in urhs, ddx in vrhs
         call this%spectC%fft(tau12,tauhat)
@@ -350,5 +382,19 @@ contains
     
 
 #include "sgs_models/dynamicprocedure.F90"
+
+
+    subroutine getLocalWallModel(this, filteredSpeedSq, tauWallH)
+        class(sgs), intent(inout), target :: this
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) ::filteredSpeedSq
+        complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)), intent(out) :: tauWallH
+
+        complex(rkind), dimension(:,:,:), pointer :: cbuffy
+
+        cbuffy => this%cbuff(:,:,:,1)
+        call this%spectC%fft(filteredSpeedSq,cbuffy)
+        call transpose_y_to_z(cbuffy,tauWallH,this%sp_gp)
+    end subroutine  
+
 
 end module 
