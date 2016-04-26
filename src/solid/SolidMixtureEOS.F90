@@ -86,8 +86,10 @@ contains
         allocate( this%material(imat)%elastic, source=elastic )
     end subroutine
 
-    subroutine relaxPressure(this)
+    subroutine relaxPressure(this,rho,mixTotE,mixP)
         class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixTotE
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP
 
         real(rkind), dimension(4*this%ns), target :: fparams
         integer, dimension(1)             :: iparams
@@ -106,11 +108,13 @@ contains
         do k=1,this%nzp
          do j=1,this%nyp
           do i=1,this%nxp
-            ! set fparams
-            fparams(  1:this%ns)           = this%material(1:this%ns)%VF(i,j,k)    ! volume fractions
-            fparams(  this%ns+1:2*this%ns) = this%material(1:this%ns)%hydro%gam    ! gamma
-            fparams(2*this%ns+1:3*this%ns) = this%material(1:this%ns)%p(i,j,k)     ! pressure before eqb
-            fparams(3*this%ns+1:4*this%ns) = this%material(1:this%ns)%hydro%PInf   ! PInf
+            do imat=1,this%ns
+                ! set fparams
+                fparams(          imat) = this%material(imat)%VF(i,j,k)    ! volume fractions
+                fparams(  this%ns+imat) = this%material(imat)%hydro%gam    ! gamma
+                fparams(2*this%ns+imat) = this%material(imat)%p(i,j,k)     ! pressure before eqb
+                fparams(3*this%ns+imat) = this%material(imat)%hydro%PInf   ! PInf
+            end do
 
             ! set iparams
             iparams(1) = 0     ! dummy; not really used
@@ -137,11 +141,20 @@ contains
             peqb = (rho(i,j,k)*eh(i,j,k) - sum(vf*gam*pinf/(gam-one))) / sum(vf/(gam-one))
             psph = peqb
 
+            mixP(i,j,k) = peqb
+            do imat=1,this%ns
+              this%material(imat)%VF(i,j,k) = vf(imat)
+              this%material(imat)%p(i,j,k) = psph(imat)
+            enddo
+
           enddo
          enddo
         enddo
 
         ! compute get species energy from species pressure
+        do imat = 1, this%ns
+            call this%material(imat)%get_ehydro_from_p(rho)
+        end do
 
     end subroutine
 

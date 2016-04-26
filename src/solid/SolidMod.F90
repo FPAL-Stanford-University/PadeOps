@@ -533,6 +533,14 @@ contains
 
     end subroutine
 
+    subroutine get_ehydro_from_p(this, rho)
+        class(solid), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
+
+        call this%hydro%get_e_from_p(this%Ys*rho/(this%VF+epssmall),this%p,this%eh)
+
+    end subroutine
+
     subroutine get_eelastic_devstress(this)
         class(solid), intent(inout) :: this
 
