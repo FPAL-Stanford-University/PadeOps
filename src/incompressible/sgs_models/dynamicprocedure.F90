@@ -10,7 +10,7 @@
         call this%spectC%testFilter_ip(ctmpY)
         if (useVerticalTfilter) then
             call transpose_y_to_z(ctmpY,ctmpZ1,this%sp_gp)
-            call this%Tfilz%filter3(ctmpZ1,ctmpZ2,size(ctmpZ1,1),size(ctmpZ1,2))
+            call this%Gfilz%filter3(ctmpZ1,ctmpZ2,size(ctmpZ1,1),size(ctmpZ1,2))
             call transpose_z_to_y(ctmpZ2,ctmpY,this%sp_gp)
         end if 
         call this%spectC%ifft(ctmpY,field)
@@ -29,7 +29,7 @@
         call this%spectC%testFilter_ip(ctmpY)
         if (useVerticalTfilter) then
             call transpose_y_to_z(ctmpY,ctmpZ1,this%sp_gp)
-            call this%Tfilz%filter3(ctmpZ1,ctmpZ2,size(ctmpZ1,1),size(ctmpZ1,2))
+            call this%Gfilz%filter3(ctmpZ1,ctmpZ2,size(ctmpZ1,1),size(ctmpZ1,2))
             call transpose_z_to_y(ctmpZ2,ctmpY,this%sp_gp)
         end if 
         call this%spectC%ifft(ctmpY,fout)

@@ -29,7 +29,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: i,j,k
     integer :: ix1, ixn, iy1, iyn, iz1, izn
 
-    Lx = two*pi; Ly = two*pi; Lz = one
+    Lx = three; Ly = three; Lz = one
 
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
@@ -120,21 +120,21 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     wC= zero  
     
     ! Add random numbers
-    allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    call gaussian_random(randArr,zero,one,seedu + 10*nrank)
-    do k = 1,size(u,3)
-        sig = randomScaleFact*(one/kappa)*log(z(1,1,k)/z0nd)
-        u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
-    end do  
-    deallocate(randArr)
-    
-    allocate(randArr(size(v,1),size(v,2),size(v,3)))
-    call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
-    do k = 1,size(v,3)
-        sig = randomScaleFact*z(1,1,k)*exp(-half*(z/zpeak/Lz)**2)
-        v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
-    end do  
-    deallocate(randArr)
+    !allocate(randArr(size(u,1),size(u,2),size(u,3)))
+    !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
+    !do k = 1,size(u,3)
+    !    sig = randomScaleFact*(one/kappa)*log(z(1,1,k)/z0nd)
+    !    u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
+    !end do  
+    !deallocate(randArr)
+    !
+    !allocate(randArr(size(v,1),size(v,2),size(v,3)))
+    !call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
+    !do k = 1,size(v,3)
+    !    sig = randomScaleFact*z(1,1,k)*exp(-half*(z(1,1,k)/zpeak/Lz)**2)
+    !    v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
+    !end do  
+    !deallocate(randArr)
 
 
     ! Interpolate wC to w
