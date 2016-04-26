@@ -558,7 +558,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
 
         call this%hydro%get_e_from_p( this%Ys*rho/(this%VF+epssmall), this%p, this%eh )
-        call this%hydro%get_T(this%eh, this%T)
+        call this%hydro%get_T(this%eh, this%Ys*rho/(this%VF+epssmall), this%T)
 
     end subroutine
 
@@ -584,6 +584,7 @@ contains
     end subroutine
 
     subroutine get_primitive(this,onebyrho)
+        use operators, only : gradient
         class(solid), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: onebyrho
 
@@ -591,6 +592,8 @@ contains
         this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
 
         call this%hydro%get_T(this%eh, this%T)
+
+        call gradient(this%decomp,this%der,this%Ys,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3))
 
     end subroutine
 

@@ -213,27 +213,39 @@ contains
 
     end subroutine
 
-    subroutine get_ehydro_pT(this,p, T)
+    subroutine get_p_from_ehydro(this, rho)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho
+
+        integer :: imat
+
+        ! get species pressure from species energy
+        do imat = 1, this%ns
+            call this%material(imat)%get_p_from_ehydro(rho)
+        enddo
+
+    end subroutine
+
+    subroutine get_ehydro_from_p(this,p)
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: p
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: T
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: Cvmix
         real(rkind) :: Cvmat
         integer :: imat
 
-        p = zero;     T = zero;     Cvmix = zero
+        p = zero;     !T = zero;     Cvmix = zero
 
         ! get species energy from species pressure
         do imat = 1, this%ns
             call this%material(imat)%get_ehydroT_from_p(rho)             ! computes species ehydro and T from species p
             p = p + this%material(imat)%VF * this%material(imat)%p       ! computes mixture p
 
-            T = T + this%material(imat)%Ys * this%material(imat)%eh      ! computes mixture T
-            call this%material(imat)%hydro%get_Cv(Cvmat)
-            Cvmix = Cvmix + this%material(imat)%Ys * Cvmat
+            !T = T + this%material(imat)%Ys * this%material(imat)%eh      ! computes mixture T
+            !call this%material(imat)%hydro%get_Cv(Cvmat)
+            !Cvmix = Cvmix + this%material(imat)%Ys * Cvmat
         enddo
-        T = T/Cvmix
+        !T = T/Cvmix
 
     end subroutine
 

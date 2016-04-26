@@ -171,8 +171,8 @@ contains
         real(rkind) :: tau0 = one
 
         character(len=clen) :: charout
-        real(rkind), dimension(:,:,:,:), allocatable :: finger, fingersq
-        real(rkind), dimension(:,:,:),   allocatable :: trG, trG2, detG
+        !real(rkind), dimension(:,:,:,:), allocatable :: finger, fingersq
+        !real(rkind), dimension(:,:,:),   allocatable :: trG, trG2, detG
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                              inputdir, outputdir, vizprefix, tviz, &
@@ -181,7 +181,7 @@ contains
                                      filter_x, filter_y, filter_z, &
                                                        prow, pcol, &
                                                          SkewSymm  
-        namelist /SINPUT/  gam, Rgas, PInf, shmod, rho0, plastic, yield, &
+        namelist /SINPUT/  ns, gam, Rgas, PInf, shmod, rho0, plastic, yield, &
                            explPlast, tau0, ns, Cmu, Cbeta, Ckap, Cdiff, CY
 
         ioUnit = 11
@@ -352,11 +352,11 @@ contains
             call GracefulExit("NaN encountered at initialization in the hydrodynamic energy", 999)
         end if
 
-        call alloc_buffs(finger,  6,"y",this%decomp)
-        call alloc_buffs(fingersq,6,"y",this%decomp)
-        allocate( trG (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
-        allocate( trG2(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
-        allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+        !call alloc_buffs(finger,  6,"y",this%decomp)
+        !call alloc_buffs(fingersq,6,"y",this%decomp)
+        !allocate( trG (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+        !allocate( trG2(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+        !allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
 
         call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
         call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel) 
@@ -818,7 +818,9 @@ contains
        
         call this%mix%get_primitive(onebyrho)                  ! Get primitive variables for individual species
         call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
-        
+        call this%mix%get_p_from_ehydro(this%rho)            ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
+        call this%mix%get_pmix(this%p)
+
         ! call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
         ! call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
         ! 
@@ -848,7 +850,7 @@ contains
         class(sgrid), intent(inout) :: this
 
         call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
-        call this%mix%get_ehydro_pT(this%p, this%T)            ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
+        call this%mix%get_ehydro_from_p(this%p)            ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
        
         !call this%mix%get_T(this%T) ! Get mixture temperature (?)
         !call this%sgas%get_T(this%e,this%T)  ! Get updated temperature
