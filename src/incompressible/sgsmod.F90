@@ -76,6 +76,7 @@ contains
 
 #include "sgs_models/initialize.F90"
 #include "sgs_models/sigma_model_get_nuSGS.F90"
+#include "sgs_models/mgm_model.F90"
 
     subroutine link_pointers(this,nuSGS,c_SGS, tauSGS_ij, tau13, tau23)
         class(sgs), intent(in), target :: this
@@ -248,6 +249,8 @@ contains
             call this%get_SIGMA_Op(this%nuSGS, dudx, dudy, dudzC, dvdx, dvdy, dvdzC, dwdxC, dwdyC, dwdz)
         case (2)
             call this%get_SMAG_Op(this%nuSGS, S11,S22,S33,S12,S13C,S23C)
+        case (3)
+            call this%get_MGM_Op(this%rbuff(:,:,:,1:6), this%rbuffE(:,:,:,1:2) duidxjC, duidxjE)
         end select
 
         if (this%useDynamicProcedure) then
@@ -273,19 +276,25 @@ contains
         end if 
 
         ! STEP 3: Compute TAUij
-        this%nuSGS = -two*this%nuSGS
-        tau11 = this%nuSGS*S11; tau22 = this%nuSGS*S22; tau33 = this%nuSGS*S33
-        tau12 = this%nuSGS*S12
+        if(eddyViscMod) then
+            this%nuSGS = -two*this%nuSGS
+            tau11 = this%nuSGS*S11; tau22 = this%nuSGS*S22; tau33 = this%nuSGS*S33
+            tau12 = this%nuSGS*S12
 
-        call transpose_x_to_y(this%nuSGS,this%rtmpY,this%gpC)
-        call transpose_y_to_z(this%rtmpY,this%rtmpZ,this%gpC)
-        call this%Ops2ndOrder%InterpZ_Cell2Edge(this%rtmpZ,this%rtmpZE,zero,zero)
-        nz = size(this%rtmpz,3)
-        this%rtmpzE(:,:,nz+1) = two*this%rtmpZ(:,:,nz) - this%rtmpzE(:,:,nz)
-        call transpose_z_to_y(this%rtmpzE,this%rtmpYE,this%gpE)
-        call transpose_y_to_x(this%rtmpYE,this%nuSGSE,this%gpE)
-        tau13 = this%nuSGSE * S13
-        tau23 = this%nuSGSE * S23
+            call transpose_x_to_y(this%nuSGS,this%rtmpY,this%gpC)
+            call transpose_y_to_z(this%rtmpY,this%rtmpZ,this%gpC)
+            call this%Ops2ndOrder%InterpZ_Cell2Edge(this%rtmpZ,this%rtmpZE,zero,zero)
+            nz = size(this%rtmpz,3)
+            this%rtmpzE(:,:,nz+1) = two*this%rtmpZ(:,:,nz) - this%rtmpzE(:,:,nz)
+            call transpose_z_to_y(this%rtmpzE,this%rtmpYE,this%gpE)
+            call transpose_y_to_x(this%rtmpYE,this%nuSGSE,this%gpE)
+            tau13 = this%nuSGSE * S13
+            tau23 = this%nuSGSE * S23
+        else
+
+            ! already computed
+
+        endif
 
         ! STEP 4: tau13 -> ddz() in urhs, ddx in wrhs
         call transpose_y_to_z(uhat,this%ctmpCz,this%sp_gp) ! <- send uhat to z decomp (wallmodel)

@@ -1,5 +1,5 @@
 module temporalHook
-    use kind_parameters,    only: rkind
+    use kind_parameters,    only: rkind, clen
     use IncompressibleGridWallM, only: igridWallM
     use reductions,         only: P_MAXVAL
     use exits,              only: message,GracefulExit
@@ -12,9 +12,9 @@ module temporalHook
 
     integer :: nt_print2screen = 20
     integer :: nt_getMaxKE = 20
-    integer :: tid_statsDump = 5000
-    integer :: tid_compStats = 100
-    real(rkind) :: time_startDumping = 10.0_rkind
+    integer :: tid_statsDump! = 5000
+    integer :: tid_compStats! = 100
+    real(rkind) :: time_startDumping! = 10.0_rkind
     integer :: ierr 
     
     integer :: tid_start_planes = 1
@@ -23,9 +23,32 @@ module temporalHook
 
 contains
 
+    subroutine init_temporal(inputfile)
+        character(len=clen), intent(in)  :: inputfile
+
+        integer :: ioUnit, statsDump, compStats
+        real(rkind) :: startDumping
+
+        namelist /STATSINPUT/  statsDump, compStats, startDumping
+
+        ! READ INPUT 
+        ioUnit = 11
+        open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+        read(unit=ioUnit, NML=STATSINPUT)
+        close(ioUnit)
+
+        tid_statsDump = statsDump
+        tid_compStats = compStats
+        time_startDumping = startDumping
+
+        write(*,*) 'Stats inputs: ', tid_statsDump, tid_compStats, time_startDumping
+        
+    end subroutine
+
+     
     subroutine doTemporalStuff(gp)
         class(igridWallM), intent(inout) :: gp 
-      
+     
         if (mod(gp%step,nt_print2screen) == 0) then
             call message(0,"Time",gp%tsim)
         end if
@@ -39,14 +62,14 @@ contains
             if ((gp%useDynamicProcedure) .and. (gp%useSGS)) then
                 call message(1,"Max cSGS:",p_maxval(maxval(gp%c_SGS(1,1,:))))
             end if 
-            !call message(1,"Mean ustar:",gp%mean_ustar)
+            call message(1,"Mean ustar:",gp%ustar)
             !call message(1,"Max ustar:",gp%max_ustar)
             !call message(1,"Min ustar:",gp%min_ustar)
             call toc()
             call tic()
         end if 
 
-        if (mod(gp%step,100*nt_print2screen)==0) then
+        if (mod(gp%step,10000*nt_print2screen)==0) then
            call message("Dumped Planes")
            call gp%dump_planes()
         end if 

@@ -12,7 +12,7 @@ program pbl
     use IncompressibleGridWallM, only: igridWallM
     use pbl_IO, only: start_io, finalize_io
     use constants, only: half 
-    use temporalhook, only: doTemporalStuff
+    use temporalhook, only: doTemporalStuff, init_temporal
     use timer, only: tic, toc
     use exits, only: message
 
@@ -35,6 +35,8 @@ program pbl
     call igp%printDivergence()
   
     call igp%init_stats()  
+
+    call init_temporal(inputfile)
 
     call tic() 
     do while (igp%tsim < igp%tstop) 
