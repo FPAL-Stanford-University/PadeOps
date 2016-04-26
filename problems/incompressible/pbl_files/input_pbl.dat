@@ -49,7 +49,7 @@ dumpPlanes = .FALSE.      ! Dump plane visualations. Select planes in initialize
 
 &WALLMODEL 
 z0 = 1.d-4
-WallMType = 1
+WallMType = 1        ! 0: standard model of Moeng, 1: Local model of Bou-Zeid (use this) 
 /
 
 &PBLINPUT
