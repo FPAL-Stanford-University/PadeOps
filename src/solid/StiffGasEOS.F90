@@ -62,6 +62,14 @@ contains
 
     end subroutine
 
+    pure subroutine get_Cv(this,Cv_)
+        class(stiffgas), intent(in) :: this
+        real(rkind), intent(out)  :: Cv_
+
+        Cv_ = this%Rgas / (this%gam-one)
+
+    end subroutine
+
     pure subroutine get_T(this,e,T)
         class(stiffgas), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: e

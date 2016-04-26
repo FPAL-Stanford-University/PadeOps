@@ -87,9 +87,11 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: p 
         real(rkind), dimension(:,:,:), pointer :: T 
         real(rkind), dimension(:,:,:), pointer :: e 
+        real(rkind), dimension(:,:,:), pointer :: sos 
         real(rkind), dimension(:,:,:), pointer :: mu 
         real(rkind), dimension(:,:,:), pointer :: bulk 
         real(rkind), dimension(:,:,:), pointer :: kap
+        real(rkind), dimension(:,:,:), pointer :: tauaiidivu
 
         real(rkind), dimension(:,:,:,:), pointer :: devstress
         real(rkind), dimension(:,:,:), pointer :: sxx
@@ -549,12 +551,16 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz)
         call this%gradient(this%w,dwdx,dwdy,dwdz)
 
+        ! compute artificial shear and bulk viscosities
         call this%getPhysicalProperties()
+        call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 
-        call this%getLAD(dudx,dudy,dudz,&
-                         dvdx,dvdy,dvdz,&
-                         dwdx,dwdy,dwdz )
+        nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
         deallocate( duidxj )
+
+        ! compute species artificial conductivities and diffusivities
+        call this%mix%getSOS(this%rho,this%p,this%sos)
+        call this%mix%getLAD(this%rho,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
         ! ------------------------------------------------
 
         call this%get_dt(stability)
@@ -664,16 +670,18 @@ contains
                     &substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
                 call GracefulExit(trim(charout), 999)
             end if
-            if ( nancheck(this%g,i,j,k,l) ) then
-                call message("g: ",this%g(i,j,k,l))
-                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (g) at &
-                    &substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
-                call GracefulExit(trim(charout), 999)
-            end if
+            !if ( nancheck(this%g,i,j,k,l) ) then
+            !    call message("g: ",this%g(i,j,k,l))
+            !    write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (g) at &
+            !        &substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
+            !    call GracefulExit(trim(charout), 999)
+            !end if
 
             ! Pre-compute stress, LAD, J, etc.
             ! call this%mix%get_devstress(this%devstress)       ! This also computes individual species stresses (computed in get_primitive)
-            call this%mix%getLAD(this%rho,sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
+
+            call this%mix%getSOS(this%rho,this%p,this%sos)
+            call this%mix%getLAD(this%rho,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
 
@@ -683,10 +691,10 @@ contains
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
             ! Now update all the individual species variables
-            call this%mix%update_g (isub,this%dt,rho,u,v,w)  ! g tensor
-            call this%mix%update_Ys(isub,this%dt,rho,u,v,w)  ! Volume Fraction
-            call this%mix%update_eh(isub,this%dt,rho,u,v,w)  ! Hydrodynamic energy
-            call this%mix%update_VF(isub,this%dt,rho,u,v,w)  ! Volume Fraction
+            call this%mix%update_g (isub,this%dt,rho,u,v,w)            ! g tensor
+            call this%mix%update_Ys(isub,this%dt,rho,u,v,w)            ! Volume Fraction
+            call this%mix%update_eh(isub,this%dt,rho,u,v,w,tauiiadivu) ! Hydrodynamic energy
+            call this%mix%update_VF(isub,this%dt,rho,u,v,w)            ! Volume Fraction
 
             ! Integrate simulation time to keep it in sync with RK substep
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
@@ -736,17 +744,23 @@ contains
         class(sgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
-        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtplast
+        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtplast, delta
+
+        delta = min(this%dx, this%dy, this%dz)
 
         call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
         call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
 
+        ! continuum
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
                + cs*sqrt( one/(this%dx**two) + one/(this%dy**two) + one/(this%dz**two) ))
-        dtmu   = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
-        dtbulk = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
-        dtkap  = 0.2_rkind * one / ( (P_MAXVAL( this%kap*this%T/(this%rho* (min(this%dx,this%dy,this%dz)**4))))**(third) + eps)
-        dtplast = this%tau0
+        dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
+        dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
+
+        ! species specific
+        call this%mix%get_dt(this%rho, delta, thisdtkap, dtDiff, dtplast)
+        dtkap = 0.2_rkind * dtkap
+        dtDiff = 0.2_rkind * dtDiff
 
         ! Use fixed time step if CFL <= 0
         if ( this%CFL .LE. zero ) then
@@ -802,8 +816,8 @@ contains
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
        
-        call this%mix%get_primitive(onebyrho)    ! Get primitive variables for individual species
-        call this%mix%get_eelastic_devstress(this%devstress)   ! Get mixture elastic energy
+        call this%mix%get_primitive(onebyrho)                  ! Get primitive variables for individual species
+        call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
         
         ! call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
         ! call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
@@ -832,30 +846,19 @@ contains
 
     subroutine post_bc(this)
         class(sgrid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6) :: finger, fingersq
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: trG, trG2, detG
 
-        this%e = this%e - this%eel ! Get only hydrodynamic part
-
-        call this%mix%get_eelastic(...)  ! Get mixture elastic energy
-        ! call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        ! call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)  ! Update elastic energy
+        call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
+        call this%mix%get_ehydro_pT(this%p, this%T)            ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
        
-        call this%mix%get_ehydro(...)  ! Get mixture hydrodynamic energy
-        ! call this%sgas%get_e_from_p(this%rho,this%p,this%e)  ! Update hydrodynamic energy
-        this%e = this%e + this%eel ! Combine both energies
-        call this%mix%get_T(this%T) ! Get mixture temperature (?)
+        !call this%mix%get_T(this%T) ! Get mixture temperature (?)
         !call this%sgas%get_T(this%e,this%T)  ! Get updated temperature
-
-        call this%mix%get_devstress(this%devstress)
-        ! call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)  ! Get updated stress
 
     end subroutine
 
     subroutine getRHS(this, rhs)
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,5), intent(out) :: rhs
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), intent(out) :: rhsg
+        !real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), intent(out) :: rhsg
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
@@ -881,6 +884,10 @@ contains
         tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
                                          tauyy => duidxj(:,:,:,tauyyidx); tauyz => duidxj(:,:,:,tauyzidx);
                                                                           tauzz => duidxj(:,:,:,tauzzidx);
+
+        ! for use in species hydrodynamic equations --- check carefully that
+        ! dudx, dvdy, dwdz have not been destroyed in get_tau
+        tauiiadivu = tauxx*dudx + tauyy*dvdy + tauzz*dwdz
        
         ! Add the deviatoric stress to the tau for use in fluxes 
         tauxx = tauxx + this%sxx; tauxy = tauxy + this%sxy; tauxz = tauxz + this%sxz
@@ -888,7 +895,7 @@ contains
                                                             tauzz = tauzz + this%szz
         
         qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
-        call this%get_qmix(qx, qy, qz)
+        call this%mix%get_qmix(qx, qy, qz)
 
         rhs = zero
         call this%getRHS_x(              rhs,&
@@ -904,7 +911,7 @@ contains
                                qz )
 
         ! Call problem source hook
-        call hook_source(this%decomp, this%mesh, this%fields, this%tsim, rhs, rhsg)
+        call hook_source(this%decomp, this%mesh, this%fields, this%tsim, rhs)
  
     end subroutine
 
@@ -1154,7 +1161,6 @@ contains
         ! If inviscid set everything to zero (otherwise use a model)
         this%mu = zero
         this%bulk = zero
-        this%kap = zero
 
     end subroutine  
 

@@ -61,13 +61,14 @@ module sgrid_hooks
     end interface
 
     interface hook_bc
-        subroutine hook_bc(decomp,mesh,fields,tsim)
+        subroutine hook_bc(decomp,mesh,fields,mix,tsim)
             import :: rkind
             import :: decomp_info
             type(decomp_info),               intent(in)    :: decomp
-            real(rkind),                     intent(in)    :: tsim
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+            type(solid_mixture),             intent(in)    :: mix
+            real(rkind),                     intent(in)    :: tsim
 
         end subroutine
     end interface
@@ -86,7 +87,7 @@ module sgrid_hooks
     end interface
 
     interface hook_source
-        subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
+        subroutine hook_source(decomp,mesh,fields,tsim,rhs)
             import :: rkind
             import :: decomp_info
             type(decomp_info),               intent(in)    :: decomp
@@ -94,7 +95,6 @@ module sgrid_hooks
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(in)    :: fields
             real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-            real(rkind), dimension(:,:,:,:), optional, intent(inout) ::rhsg
 
         end subroutine
     end interface
