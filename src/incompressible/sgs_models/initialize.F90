@@ -1,4 +1,4 @@
-    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, zmesh, nCwall, z0, useWallModel, TfilterZ)
+    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, zmesh, nCwall, z0, useWallModel, wallMtype,  TfilterZ)
         class(sgs), intent(inout), target :: this
         type(spectral), intent(in), target :: spectC, spectE
         type(decomp_info), intent(in), target :: gpC, gpE
@@ -8,6 +8,7 @@
         integer, intent(in), optional :: nCwall
         real(rkind), dimension(:,:,:), intent(in), optional :: zMesh
         real(rkind), intent(in), optional :: z0
+        integer, intent(in), optional :: wallMtype
         logical, intent(in), optional :: useWallModel, TfilterZ
         integer :: ierr
 
@@ -15,12 +16,13 @@
         this%useDynamicProcedure = useDynamicProcedure
         this%useClipping = useClipping
 
-        allocate(this%rbuff(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),8))
+        allocate(this%rbuff(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),10))
         this%rbuff = zero  
         this%spectC => spectC
         this%spectE => spectE
         this%deltaFilter = ((1.5*dx)*(1.5*dy)*dz)**(one/three)
         this%deltaTFilter = deltaRatio*this%deltaFilter
+        this%dz = dz
         if (present(TfilterZ))  useVerticalTfilter = TfilterZ
 
         if (present(useWallmodel)) then
@@ -33,7 +35,12 @@
                     call GracefulExit("Need to provide z0 if wall model is being used", 442)
                 else
                     this%z0 = z0
-                end if 
+                end if
+                if (.not. present(wallMtype)) then
+                    this%WallModel = 0
+                else
+                    this%WallModel = wallMtype
+                end if  
             end if 
         end if 
 
