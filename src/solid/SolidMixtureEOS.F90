@@ -30,6 +30,14 @@ module SolidMixtureMod
         procedure :: set_material
         procedure :: relaxPressure
         procedure :: getLAD
+        procedure :: update_g
+        procedure :: update_Ys
+        procedure :: update_eh
+        procedure :: update_VF
+        procedure :: filter
+        procedure :: get_rho
+        procedure :: get_primitive
+        procedure :: get_conserved
         final     :: destroy
 
     end type
@@ -170,6 +178,26 @@ contains
 
     end subroutine
 
+    subroutine get_eelastic_devstress(this,devstress)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(out) :: devstress
+
+        integer :: imat
+
+        devstress = zero
+
+        do imat = 1, this%ns
+          call this%material(imat)%get_eelastic_devstress()
+          devstress(:,:,:,1) = devstress(:,:,:,1) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,1)
+          devstress(:,:,:,2) = devstress(:,:,:,2) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,2)
+          devstress(:,:,:,3) = devstress(:,:,:,3) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,3)
+          devstress(:,:,:,4) = devstress(:,:,:,4) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,4)
+          devstress(:,:,:,5) = devstress(:,:,:,5) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,5)
+          devstress(:,:,:,6) = devstress(:,:,:,6) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,6)
+        end do
+
+    end subroutine
+
     subroutine get_J(this,rho)
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho  ! Mixture density
@@ -194,6 +222,43 @@ contains
             this%material(i)%Ji(:,:,:,1) = -rho*( this%material(i)%Ji(:,:,:,1) - this%material(i)%Ys*sumJx )
             this%material(i)%Ji(:,:,:,2) = -rho*( this%material(i)%Ji(:,:,:,2) - this%material(i)%Ys*sumJy )
             this%material(i)%Ji(:,:,:,3) = -rho*( this%material(i)%Ji(:,:,:,3) - this%material(i)%Ys*sumJz )
+        end do
+
+    end subroutine
+
+    subroutine get_conserved(this,rho)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho
+
+        integer :: imat
+
+        do imat = 1, this%ns
+          call this%material(imat)%get_conserved(rho)
+        end do
+
+    end subroutine
+
+    subroutine get_primitive(this,onebyrho)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: onebyrho
+
+        integer :: imat
+
+        do imat = 1, this%ns
+          call this%material(imat)%get_primitive(onebyrho)
+        end do
+
+    end subroutine
+
+    subroutine get_rho(this,rho)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rho
+
+        integer :: imat
+
+        rho = zero
+        do imat = 1, this%ns
+          rho = rho + this%material(imat)%consrv(:,:,:,1)
         end do
 
     end subroutine
@@ -260,6 +325,47 @@ contains
 
     end subroutine
 
+    subroutine filter(this, fil, 1)
+        class(solid_mixture), intent(inout) :: this
+        type(filters),        intent(in)    :: fil
+        integer,              intent(in)    :: iflag
+
+        integer :: imat
+
+        do imat = 1, this%ns
+          call this%material(imat)%filter(fil, iflag)
+        end do
+
+    end subroutine
+
+    subroutine update_g(this,isub,dt,rho,u,v,w)
+        class(solid_mixture), intent(inout) :: this
+        integer,              intent(in)    :: isub
+        real(rkind),          intent(in)    :: dt
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+
+        integer :: imat
+
+        do imat = 1, this%ns
+          call this%material(imat)%update_g(isub,dt,rho,u,v,w)
+        end do
+
+    end subroutine
+
+    subroutine update_Ys(this,isub,dt,rho,u,v,w)
+        class(solid_mixture), intent(inout) :: this
+        integer,              intent(in)    :: isub
+        real(rkind),          intent(in)    :: dt
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+
+        integer :: imat
+
+        do imat = 1, this%ns
+          call this%material(imat)%update_Ys(isub,dt,rho,u,v,w)
+        end do
+
+    end subroutine
+
     subroutine get_pmix(this,p)
         class(solid_mixture), intent(in) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: p  ! Mixture pressure
@@ -271,9 +377,37 @@ contains
 
     end subroutine
 
+    subroutine update_eh(this,isub,dt,rho,u,v,w,tauiiart,divu)
+        class(solid_mixture), intent(inout) :: this
+        integer,              intent(in)    :: isub
+        real(rkind),          intent(in)    :: dt
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,tauiiart,divu
+
+        integer :: imat
+
+        do imat = 1, this%ns
+          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,tauiiart,divu)
+        end do
+
+    end subroutine
+
     subroutine get_sos(this,rho,p)
         class(solid_mixture), intent(in) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho, p  ! Mixture density and pressure
+    end subroutine
+
+    subroutine update_VF(this,isub,dt,rho,u,v,w)
+        class(solid_mixture), intent(inout) :: this
+        integer,              intent(in)    :: isub
+        real(rkind),          intent(in)    :: dt
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+
+        integer :: imat
+
+        do imat = 1, this%ns
+          call this%material(imat)%update_VF(isub,dt,rho,u,v,w)
+        end do
+
     end subroutine
 
     subroutine fnumden(this,pf,fparams,iparams,num,den)
