@@ -45,9 +45,11 @@ module SolidMod
         real(rkind), dimension(:,:,:),   pointer     :: szz
         
         real(rkind), dimension(:,:,:),   allocatable :: p
+        real(rkind), dimension(:,:,:),   allocatable :: T
 
         ! species-specific artificial properties
         real(rkind), dimension(:,:,:),   allocatable :: kap
+        real(rkind), dimension(:,:,:),   allocatable :: diff
         real(rkind), dimension(:,:,:),   allocatable :: Ji
 
     contains
