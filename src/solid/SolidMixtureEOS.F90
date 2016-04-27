@@ -104,16 +104,17 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixE
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP
 
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix
         real(rkind), dimension(4*this%ns), target :: fparams
         integer, dimension(1)             :: iparams
         real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
 
         real(rkind), dimension(1:this%ns) :: fac
 
-        ! get species pressure from species hydrodynamic energy
+        ehmix = mixE
         do imat = 1, this%ns
-            call this%material(imat)%get_p_from_ehydro(rho)
-        end do
+            ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
+        enddo
 
         ! equilibrate and reset species pressures, reset volume fractions
 
@@ -155,7 +156,7 @@ contains
             vf = vf*fac
             !this%material(1:this%ns)%g = this%material(1:this%ns)%g*fac**third        !! --- not clear if this is needed or if it works
 
-            peqb = (rho(i,j,k)*eh(i,j,k) - sum(vf*gam*pinf/(gam-one))) / sum(vf/(gam-one))
+            peqb = (rho(i,j,k)*ehmix(i,j,k) - sum(vf*gam*pinf/(gam-one))) / sum(vf/(gam-one))
             psph = peqb
 
             mixP(i,j,k) = peqb

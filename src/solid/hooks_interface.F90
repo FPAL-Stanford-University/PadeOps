@@ -1,6 +1,7 @@
 module sgrid_hooks
     use kind_parameters, only: rkind
     use decomp_2d, only: decomp_info
+    use SolidMixtureMod, only : solid_mixture
     implicit none
 
     interface meshgen
@@ -15,36 +16,21 @@ module sgrid_hooks
     end interface
 
     interface initfields
-        subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PInf,tau0,tstop,dt,tviz)
+        subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             import :: rkind
             import :: decomp_info
+            import :: solid_mixture
             type(decomp_info), intent(in) :: decomp
             real(rkind), intent(inout) :: dx, dy, dz
             character(len=*), intent(in) :: inputfile
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-            real(rkind),           optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz
-            real(rkind),           optional, intent(inout) :: yield, tau0
+            type(solid_mixture),              intent(inout) :: mix
+            real(rkind),           optional, intent(inout) :: tstop, dt, tviz
 
         end subroutine 
     end interface
 
-
-    interface initfields_stagg
-        subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inpDirectory, mesh, fieldsC, fieldsE, u_g, fcorr)
-            import :: rkind
-            import :: decomp_info
-            type(decomp_info), intent(in) :: decompC
-            type(decomp_info), intent(in) :: decompE
-            real(rkind), intent(inout) :: dx, dy, dz
-            character(len=*), intent(in) :: inpDirectory
-            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
-            real(rkind), dimension(:,:,:,:), intent(inout) :: fieldsC
-            real(rkind), dimension(:,:,:,:), intent(inout) :: fieldsE
-            real(rkind), intent(out) :: u_g, fcorr
-
-        end subroutine 
-    end interface
 
     interface hook_output
         subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)

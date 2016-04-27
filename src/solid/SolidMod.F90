@@ -145,6 +145,22 @@ contains
         if( allocated( this%p ) ) deallocate( this%p )
         allocate( this%p(this%nxp,this%nyp,this%nzp) )
 
+        ! Allocate material temperature array
+        if( allocated( this%T ) ) deallocate( this%T )
+        allocate( this%T(this%nxp,this%nyp,this%nzp) )
+
+        ! Allocate material kappa array
+        if( allocated( this%kap ) ) deallocate( this%kap )
+        allocate( this%kap(this%nxp,this%nyp,this%nzp) )
+
+        ! Allocate material diffusivity array
+        if( allocated( this%diff ) ) deallocate( this%diff )
+        allocate( this%diff(this%nxp,this%nyp,this%nzp) )
+
+        ! Allocate material diffusive flux
+        if( allocated( this%Ji ) ) deallocate( this%Ji )
+        allocate( this%Ji(this%nxp,this%nyp,this%nzp,3) )
+        
         ! Allocate material conserved variables
         if( allocated( this%consrv ) ) deallocate( this%consrv )
         allocate( this%consrv(this%nxp,this%nyp,this%nzp,2) )
@@ -189,6 +205,10 @@ contains
 
         if( allocated( this%consrv ) ) deallocate( this%consrv )
         if( allocated( this%eel )        ) deallocate( this%eel )
+        if( allocated( this%T )        ) deallocate( this%T )
+        if( allocated( this%kap )        ) deallocate( this%kap )
+        if( allocated( this%diff )        ) deallocate( this%diff )
+        if( allocated( this%Ji )        ) deallocate( this%Ji )
 
         if( allocated( this%Qtmpg ) ) deallocate( this%Qtmpg )
         if( allocated( this%QtmpYs ) ) deallocate( this%QtmpYs )
