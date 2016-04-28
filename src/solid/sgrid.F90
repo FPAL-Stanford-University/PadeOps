@@ -533,7 +533,7 @@ contains
         use exits,      only: GracefulExit, message
         class(sgrid), target, intent(inout) :: this
 
-        logical :: tcond, vizcond, stepcond
+        logical :: tcond, vizcond, stepcond, hookcond = .FALSE.
         character(len=clen) :: stability
         real(rkind) :: cputime
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
@@ -591,17 +591,18 @@ contains
         end if
 
         ! Start the simulation while loop
-        do while ( tcond .AND. stepcond )
+        do while ( tcond .AND. stepcond .AND. (.NOT. hookcond) )
             ! Advance time
             call tic()
             call this%advance_RK45()
             call toc(cputime)
-            
+           
+            if (hookcond) stability = "hook"
             call message(1,"Time",this%tsim)
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
-            call hook_timestep(this%decomp, this%mesh, this%fields, this%step, this%tsim)
+            call hook_timestep(this%decomp, this%mesh, this%fields, this%step, this%tsim, hookcond)
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then

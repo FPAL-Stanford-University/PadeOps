@@ -36,7 +36,7 @@ module spectralMod
         logical                                 :: StoreK = .true.
         logical, public :: carryingZeroK = .false.
         integer, public :: zeroK_i = 123456, zeroK_j = 123456
-         
+        real(rkind), dimension(:,:), allocatable :: GsurfaceFilter 
         contains
             procedure           :: init
             procedure           :: destroy
@@ -53,6 +53,8 @@ module spectralMod
             procedure           :: mTimes_ik2_ip
             procedure           :: TestFilter_ip
             procedure           :: TestFilter_oop
+            procedure           :: SurfaceFilter_ip
+            procedure           :: SurfaceFilter_oop
             !procedure, private  :: upsample_Fhat
             !procedure, private  :: downsample_Fhat
 
@@ -164,7 +166,21 @@ contains
          
     end subroutine
 
+    subroutine SurfaceFilter_ip(this, fhat)
+        class(spectral), intent(in) :: this
+        complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(1)), intent(inout) :: fhat
 
+        fhat = fhat * this%GsurfaceFilter
+    end subroutine 
+
+    pure subroutine SurfaceFilter_oop(this, fin, fout)
+        class(spectral), intent(in) :: this
+        complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(1)), intent(in) :: fin
+        complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(1)), intent(out) :: fout
+
+        fout = fin * this%GsurfaceFilter
+    end subroutine 
+    
     pure subroutine TestFilter_oop(this, fhat,fhatout)
         class(spectral),  intent(in)         :: this
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(in) :: fhat
@@ -480,8 +496,8 @@ contains
             call message(2, "Total non zero:", p_sum(sum(this%Gdealias)))
 
 
-            kdealiasx = ((one/three)*pi/dx)
-            kdealiasy = ((one/three)*pi/dy)
+            kdealiasx = kdealiasx/3.5d0
+            kdealiasy = kdealiasy/3.5d0
             do k = 1,size(this%k1,3)
                 do j = 1,size(this%k1,2)
                     do i = 1,size(this%k1,1)
@@ -652,7 +668,27 @@ contains
                 end do 
             end do 
         end if 
-        
+       
+
+
+        ! STEP 13: Surface Filter
+        allocate(tmp1(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)))
+        allocate(tmp2(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)))
+        call transpose_y_to_z(this%k1,tmp1,this%spectdecomp)
+        call transpose_y_to_z(this%k2,tmp2,this%spectdecomp)
+        allocate(this%Gsurfacefilter(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2)))
+        kdealiasx = (one/three)*pi/dx
+        kdealiasy = (one/three)*pi/dy
+        do j = 1,size(tmp1,2)
+            do i = 1,size(tmp1,1)
+                if ((abs(tmp1(i,j,1)) < kdealiasx) .and. (abs(tmp2(i,j,1))< kdealiasy)) then
+                    this%GSurfaceFilter(i,j) = one
+                else
+                    this%GSurfaceFilter(i,j) = zero
+                end if
+            end do 
+        end do 
+       
         ! STEP 12: Print completion message 
         call message("SPECTRAL - Derived Type for the problem generated successfully.")
         call message("===============================================================")
@@ -675,6 +711,7 @@ contains
         if (allocated(this%Gdealias)) then
                 deallocate(this%Gdealias)
         end if
+        if (allocated(this%GsurfaceFilter)) deallocate(this%GsurfaceFilter)
         if (allocated(this%k1)) deallocate(this%k1) 
         if (allocated(this%k2)) deallocate(this%k2) 
         if (allocated(this%k3)) deallocate(this%k3) 
