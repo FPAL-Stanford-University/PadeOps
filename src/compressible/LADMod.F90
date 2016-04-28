@@ -264,10 +264,11 @@ contains
                         / ( sqrt(ytmp1+ytmp2+ytmp3) + real(1.0D-32,rkind) ) ! grid scale
         ytmp5 = this%CY*sos*( half*(abs(Ys)-one + abs(Ys-one)) )*ytmp4 ! CY part of diff
 
-        diffstar = max(diffstar, ytmp5) ! Take max of both terms instead of add to minimize the dissipation
-
-        ! Filter diffstar
+        ! Filter each part
         call this%filter(diffstar, x_bc, y_bc, z_bc)
+        call this%filter(ytmp5, x_bc, y_bc, z_bc)
+
+        diffstar = max(diffstar, ytmp5) ! Take max of both terms instead of add to minimize the dissipation
 
         diff = diff + diffstar
     end subroutine

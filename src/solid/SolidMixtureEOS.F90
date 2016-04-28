@@ -99,19 +99,24 @@ contains
         allocate( this%material(imat)%elastic, source=elastic )
     end subroutine
 
-    subroutine relaxPressure(this,rho,mixTotE,mixP)
+    subroutine relaxPressure(this,rho,mixE,mixP)
         class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixTotE
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixE
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP
 
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix
         real(rkind), dimension(4*this%ns), target :: fparams
         integer, dimension(1)             :: iparams
         real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
 
         real(rkind), dimension(1:this%ns) :: fac
 
-        ! get species hydrodynamic energy; mixture hydrodynamic energy
-        ! get species pressure from species energy
+        ehmix = mixE
+        do imat = 1, this%ns
+            ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
+        enddo
+
+        ! equilibrate and reset species pressures, reset volume fractions
 
         vf   => fparams(  1:this%ns)
         gam  => fparams(  this%ns+1:2*this%ns)
@@ -151,7 +156,7 @@ contains
             vf = vf*fac
             !this%material(1:this%ns)%g = this%material(1:this%ns)%g*fac**third        !! --- not clear if this is needed or if it works
 
-            peqb = (rho(i,j,k)*eh(i,j,k) - sum(vf*gam*pinf/(gam-one))) / sum(vf/(gam-one))
+            peqb = (rho(i,j,k)*ehmix(i,j,k) - sum(vf*gam*pinf/(gam-one))) / sum(vf/(gam-one))
             psph = peqb
 
             mixP(i,j,k) = peqb
@@ -164,10 +169,26 @@ contains
          enddo
         enddo
 
-        ! compute get species energy from species pressure
+        ! get species energy from species pressure
         do imat = 1, this%ns
-            call this%material(imat)%get_ehydro_from_p(rho)
+            call this%material(imat)%get_ehydroT_from_p(rho)
         end do
+
+    end subroutine
+
+    subroutine get_dt(this, rho, delta, dtkap, dtDiff, dtplast)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho
+        real(rkind), intent(in)  :: delta
+        real(rkind), intent(out) :: dtkap, dtDiff, dtplast
+
+        dtkap = one/epssmall; dtDiff = dtkap; dtplast = dtDiff
+
+        do imat = 1, this%ns
+          dtkap =   min(dtkap,   one / ( (P_MAXVAL( this%material(imat)%kap*this%material(imat)%T/(this%rho* delta**4)))**(third) + eps))
+          dtDiff =  min(dtDiff,  one / ( (P_MAXVAL( this%material(imat)%diff/delta**2) + eps))
+          dtplast = min(dtplast, this%material(imat)%elastic%tau0)
+        enddo
 
     end subroutine
 
@@ -180,6 +201,8 @@ contains
         integer :: i
 
         do i = 1,this%ns
+            call this%material(i)%getPhysicalProperties()
+
             ! Artificial conductivity
             call this%LAD%get_conductivity(rho, this%material(i)%eh, this%material(i)%T, sos, &
                                                 this%material(i)%kap, x_bc, y_bc, z_bc)
@@ -188,6 +211,42 @@ contains
                                           this%material(i)%Ji(:,:,:,2), this%material(i)%Ji(:,:,:,3), &
                                           sos, this%material(i)%diff)
         end do
+
+    end subroutine
+
+    subroutine get_p_from_ehydro(this, rho)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho
+
+        integer :: imat
+
+        ! get species pressure from species energy
+        do imat = 1, this%ns
+            call this%material(imat)%get_p_from_ehydro(rho)
+        enddo
+
+    end subroutine
+
+    subroutine get_ehydro_from_p(this,p)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: p
+
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: Cvmix
+        real(rkind) :: Cvmat
+        integer :: imat
+
+        p = zero;     !T = zero;     Cvmix = zero
+
+        ! get species energy from species pressure
+        do imat = 1, this%ns
+            call this%material(imat)%get_ehydroT_from_p(rho)             ! computes species ehydro and T from species p
+            p = p + this%material(imat)%VF * this%material(imat)%p       ! computes mixture p
+
+            !T = T + this%material(imat)%Ys * this%material(imat)%eh      ! computes mixture T
+            !call this%material(imat)%hydro%get_Cv(Cvmat)
+            !Cvmix = Cvmix + this%material(imat)%Ys * Cvmat
+        enddo
+        !T = T/Cvmix
 
     end subroutine
 
@@ -312,10 +371,6 @@ contains
                 this%material(i)%q1(:,:,:,2) = this%material(i)%q1(:,:,:,2) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,2) )
                 this%material(i)%q1(:,:,:,3) = this%material(i)%q1(:,:,:,3) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,3) )
             end if
-
-            qx = qx + this%material(i)%VF * this%material(i)%qi(:,:,:,1)
-            qy = qy + this%material(i)%VF * this%material(i)%qi(:,:,:,2)
-            qz = qz + this%material(i)%VF * this%material(i)%qi(:,:,:,3)
         end do
 
         ! Done
@@ -390,16 +445,16 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,tauiiart,divu)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,tauiiadivu)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,tauiiart,divu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,tauiiadivu
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,tauiiart,divu)
+          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,tauiiadivu)
         end do
 
     end subroutine

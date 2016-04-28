@@ -9,7 +9,8 @@ module Sep1SolidEOS
     type, extends(elasticeos) :: sep1solid
 
         real(rkind) :: mu = zero                     ! Shear Modulus
-        real(rkind) :: yield = one                   ! Shear Modulus
+        real(rkind) :: yield = one                   ! Yield Stress
+        real(rkind) :: tau0 = 1.0d-10                ! Plastic relaxation time scale
 
     contains
 

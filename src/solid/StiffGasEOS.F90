@@ -15,6 +15,7 @@ module StiffGasEOS
         real(rkind) :: onebyRgas = one      ! 1/Rgas
 
         real(rkind) :: PInf = one           ! Gas constant
+        real(rkind) :: Cv = one           ! Gas constant
 
     contains
 
@@ -41,6 +42,7 @@ contains
         this%onebyRgas = one/this%Rgas
 
         this%PInf = PInf_
+        this%Cv = this%Rgas/(this%gam-one)
 
     end subroutine
 
@@ -62,12 +64,20 @@ contains
 
     end subroutine
 
-    pure subroutine get_T(this,e,T)
+    !pure subroutine get_Cv(this,Cv_)
+    !    class(stiffgas), intent(in) :: this
+    !    real(rkind), intent(out)  :: Cv_
+
+    !    Cv_ = this%Rgas / (this%gam-one)
+
+    !end subroutine
+
+    pure subroutine get_T(this,e,rho,T)
         class(stiffgas), intent(in) :: this
-        real(rkind), dimension(:,:,:), intent(in)  :: e
+        real(rkind), dimension(:,:,:), intent(in)  :: e, rho
         real(rkind), dimension(:,:,:), intent(out) :: T
 
-        T = (this%gam-one)*e*this%onebyRgas
+        T =  (e - this%PInf/rho)/this%Cv
 
     end subroutine
 

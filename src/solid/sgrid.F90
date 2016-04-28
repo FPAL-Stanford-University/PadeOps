@@ -87,9 +87,11 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: p 
         real(rkind), dimension(:,:,:), pointer :: T 
         real(rkind), dimension(:,:,:), pointer :: e 
+        real(rkind), dimension(:,:,:), pointer :: sos 
         real(rkind), dimension(:,:,:), pointer :: mu 
         real(rkind), dimension(:,:,:), pointer :: bulk 
         real(rkind), dimension(:,:,:), pointer :: kap
+        real(rkind), dimension(:,:,:), pointer :: tauaiidivu
 
         real(rkind), dimension(:,:,:,:), pointer :: devstress
         real(rkind), dimension(:,:,:), pointer :: sxx
@@ -169,8 +171,8 @@ contains
         real(rkind) :: tau0 = one
 
         character(len=clen) :: charout
-        real(rkind), dimension(:,:,:,:), allocatable :: finger, fingersq
-        real(rkind), dimension(:,:,:),   allocatable :: trG, trG2, detG
+        !real(rkind), dimension(:,:,:,:), allocatable :: finger, fingersq
+        !real(rkind), dimension(:,:,:),   allocatable :: trG, trG2, detG
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                              inputdir, outputdir, vizprefix, tviz, &
@@ -294,6 +296,9 @@ contains
             end do 
         end do  
 
+        ! Go to hooks if a different mesh is desired 
+        call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
+
         ! Allocate LAD object
         if ( allocated(this%LAD) ) deallocate(this%LAD)
         allocate(this%LAD)
@@ -301,10 +306,7 @@ contains
 
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
-        allocate(this%mix, source=solid_mixture(this%decomp,this%der,ns))
-
-        ! Go to hooks if a different mesh is desired 
-        call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
+        allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields
         if ( allocated(this%fields) ) deallocate(this%fields) 
@@ -338,47 +340,19 @@ contains
 
         ! Go to hooks if a different initialization is derired 
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
-                        rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf, &
-                        tstop=this%tstop, dt=this%dtfixed, tviz=tviz, yield=this%elastic%yield, &
-                        tau0=this%tau0)
+                        this%mix, tstop=this%tstop, dt=this%dtfixed, tviz=tviz)
        
-        ! Get hydrodynamic and elastic energies 
-        call this%sgas%get_e_from_p(this%rho,this%p,this%e)
+        ! Get hydrodynamic and elastic energies, stresses
+        call this%post_bc()
         
         ! Check if the initialization was okay
-        if ( nancheck(this%e) ) then
-            call GracefulExit("NaN encountered at initialization in the hydrodynamic energy", 999)
+        if ( nancheck(this%fields) ) then
+            call GracefulExit("NaN encountered at initialization in fields", 999)
         end if
 
-        call alloc_buffs(finger,  6,"y",this%decomp)
-        call alloc_buffs(fingersq,6,"y",this%decomp)
-        allocate( trG (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
-        allocate( trG2(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
-        allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
-
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel) 
-        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
-        
-        ! Check if the initialization was okay
-        if ( nancheck(this%eel) ) then
-            call GracefulExit("NaN encountered at initialization in the elastic energy", 999)
-        end if
-
-
-        this%e = this%e + this%eel
-        call this%sgas%get_T(this%e,this%T)
-
-        if (P_MAXVAL(abs( this%rho/this%rho0/(detG)**half - one )) > 10._rkind*eps) then
-            call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
-        end if
-
-        deallocate( finger   )
-        deallocate( fingersq )
-        deallocate( trG      )
-        deallocate( trG2     )
-        deallocate( detG     )
-
+        !if (P_MAXVAL(abs( this%rho/this%rho0/(detG)**half - one )) > 10._rkind*eps) then
+        !    call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
+        !end if
 
         ! Allocate 2 buffers for each of the three decompositions
         call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
@@ -549,12 +523,16 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz)
         call this%gradient(this%w,dwdx,dwdy,dwdz)
 
+        ! compute artificial shear and bulk viscosities
         call this%getPhysicalProperties()
+        call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 
-        call this%getLAD(dudx,dudy,dudz,&
-                         dvdx,dvdy,dvdz,&
-                         dwdx,dwdy,dwdz )
+        nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
         deallocate( duidxj )
+
+        ! compute species artificial conductivities and diffusivities
+        call this%mix%getSOS(this%rho,this%p,this%sos)
+        call this%mix%getLAD(this%rho,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
         ! ------------------------------------------------
 
         call this%get_dt(stability)
@@ -648,6 +626,7 @@ contains
         real(rkind)                                          :: Qtmpt ! Temporary variable for RK45
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,4) :: rhs   ! RHS for conserved variables
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,4) :: Qtmp  ! Temporary variable for RK45
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: tauiiadivu  ! Temporary variable for RK45
         integer :: isub,i,j,k,l
 
         character(len=clen) :: charout
@@ -664,29 +643,31 @@ contains
                     &substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
                 call GracefulExit(trim(charout), 999)
             end if
-            if ( nancheck(this%g,i,j,k,l) ) then
-                call message("g: ",this%g(i,j,k,l))
-                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (g) at &
-                    &substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
-                call GracefulExit(trim(charout), 999)
-            end if
+            !if ( nancheck(this%g,i,j,k,l) ) then
+            !    call message("g: ",this%g(i,j,k,l))
+            !    write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (g) at &
+            !        &substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
+            !    call GracefulExit(trim(charout), 999)
+            !end if
 
             ! Pre-compute stress, LAD, J, etc.
             ! call this%mix%get_devstress(this%devstress)       ! This also computes individual species stresses (computed in get_primitive)
-            call this%mix%getLAD(this%rho,sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
+
+            call this%mix%getSOS(this%rho,this%p,this%sos)
+            call this%mix%getLAD(this%rho,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
 
             ! Update total mixture conserved variables
-            call this%getRHS(rhs)
+            call this%getRHS(rhs,tauiiadivu)
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
             ! Now update all the individual species variables
-            call this%mix%update_g (isub,this%dt,rho,u,v,w)  ! g tensor
-            call this%mix%update_Ys(isub,this%dt,rho,u,v,w)  ! Volume Fraction
-            call this%mix%update_eh(isub,this%dt,rho,u,v,w)  ! Hydrodynamic energy
-            call this%mix%update_VF(isub,this%dt,rho,u,v,w)  ! Volume Fraction
+            call this%mix%update_g (isub,this%dt,rho,u,v,w)            ! g tensor
+            call this%mix%update_Ys(isub,this%dt,rho,u,v,w)            ! Volume Fraction
+            call this%mix%update_eh(isub,this%dt,rho,u,v,w,tauiiadivu) ! Hydrodynamic energy
+            call this%mix%update_VF(isub,this%dt,rho,u,v,w)            ! Volume Fraction
 
             ! Integrate simulation time to keep it in sync with RK substep
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
@@ -736,17 +717,23 @@ contains
         class(sgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
-        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtplast
+        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtplast, delta
+
+        delta = min(this%dx, this%dy, this%dz)
 
         call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
         call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
 
+        ! continuum
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
                + cs*sqrt( one/(this%dx**two) + one/(this%dy**two) + one/(this%dz**two) ))
-        dtmu   = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
-        dtbulk = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
-        dtkap  = 0.2_rkind * one / ( (P_MAXVAL( this%kap*this%T/(this%rho* (min(this%dx,this%dy,this%dz)**4))))**(third) + eps)
-        dtplast = this%tau0
+        dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
+        dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
+
+        ! species specific
+        call this%mix%get_dt(this%rho, delta, thisdtkap, dtDiff, dtplast)
+        dtkap = 0.2_rkind * dtkap
+        dtDiff = 0.2_rkind * dtDiff
 
         ! Use fixed time step if CFL <= 0
         if ( this%CFL .LE. zero ) then
@@ -802,9 +789,11 @@ contains
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
        
-        call this%mix%get_primitive(onebyrho)    ! Get primitive variables for individual species
-        call this%mix%get_eelastic_devstress(this%devstress)   ! Get mixture elastic energy
-        
+        call this%mix%get_primitive(onebyrho)                  ! Get primitive variables for individual species
+        call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
+        call this%mix%get_p_from_ehydro(this%rho)            ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
+        call this%mix%get_pmix(this%p)
+
         ! call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
         ! call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
         ! 
@@ -832,30 +821,19 @@ contains
 
     subroutine post_bc(this)
         class(sgrid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6) :: finger, fingersq
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: trG, trG2, detG
 
-        this%e = this%e - this%eel ! Get only hydrodynamic part
-
-        call this%mix%get_eelastic(...)  ! Get mixture elastic energy
-        ! call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        ! call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)  ! Update elastic energy
+        call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
+        call this%mix%get_ehydro_from_p(this%p)            ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
        
-        call this%mix%get_ehydro(...)  ! Get mixture hydrodynamic energy
-        ! call this%sgas%get_e_from_p(this%rho,this%p,this%e)  ! Update hydrodynamic energy
-        this%e = this%e + this%eel ! Combine both energies
-        call this%mix%get_T(this%T) ! Get mixture temperature (?)
+        !call this%mix%get_T(this%T) ! Get mixture temperature (?)
         !call this%sgas%get_T(this%e,this%T)  ! Get updated temperature
-
-        call this%mix%get_devstress(this%devstress)
-        ! call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)  ! Get updated stress
 
     end subroutine
 
     subroutine getRHS(this, rhs)
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,5), intent(out) :: rhs
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), intent(out) :: rhsg
+        !real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), intent(out) :: rhsg
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
@@ -881,6 +859,10 @@ contains
         tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
                                          tauyy => duidxj(:,:,:,tauyyidx); tauyz => duidxj(:,:,:,tauyzidx);
                                                                           tauzz => duidxj(:,:,:,tauzzidx);
+
+        ! for use in species hydrodynamic equations --- check carefully that
+        ! dudx, dvdy, dwdz have not been destroyed in get_tau
+        tauiiadivu = tauxx*dudx + tauyy*dvdy + tauzz*dwdz
        
         ! Add the deviatoric stress to the tau for use in fluxes 
         tauxx = tauxx + this%sxx; tauxy = tauxy + this%sxy; tauxz = tauxz + this%sxz
@@ -888,7 +870,7 @@ contains
                                                             tauzz = tauzz + this%szz
         
         qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
-        call this%get_qmix(qx, qy, qz)
+        call this%mix%get_qmix(qx, qy, qz)
 
         rhs = zero
         call this%getRHS_x(              rhs,&
@@ -904,7 +886,7 @@ contains
                                qz )
 
         ! Call problem source hook
-        call hook_source(this%decomp, this%mesh, this%fields, this%tsim, rhs, rhsg)
+        call hook_source(this%decomp, this%mesh, this%fields, this%tsim, rhs)
  
     end subroutine
 
@@ -1154,7 +1136,6 @@ contains
         ! If inviscid set everything to zero (otherwise use a model)
         this%mu = zero
         this%bulk = zero
-        this%kap = zero
 
     end subroutine  
 
@@ -1178,101 +1159,38 @@ contains
 
         ! Step 1: Get tau_12  (dudy is destroyed)
         dudy =  dudy + dvdx
+        tauiiadivu  = (this%mu*dudy) * (dudy)  ! tau_12 * (S_12+S_21) (Since symmetric)
         dudy = this%mu*dudy
         !tauxyidz = 2
     
         ! Step 2: Get tau_13 (dudz is destroyed)
         dudz = dudz + dwdx
+        tauiiadivu  = tauiiadivu + (this%mu*dudz) * (dudz)  ! tau_13 *(S_13 + S_31)
         dudz = this%mu*dudz
         !tauxzidx = 3
 
         ! Step 3: Get tau_23 (dvdz is destroyed)
         dvdz = dvdz + dwdy
+        tauiiadivu  = tauiiadivu + (this%mu*dvdz) * (half*dvdz)  ! tau_23 * (S_23 + S_32)
         dvdz = this%mu*dvdz
         !tauyzidx = 6
 
         ! Step 4: Get tau_11 (dvdx is destroyed)
         dvdx = bambda*dudx + lambda*(dvdy + dwdz)
+        tauiiadivu  = tauiiadivu + dvdx * dudx  ! tau_11 * S_11
         !tauxxidx = 4
 
         ! Step 5: Get tau_22 (dwdx is destroyed)
         dwdx = bambda*dvdy + lambda*(dudx + dwdz)
+        tauiiadivu  = tauiiadivu + dwdx * dvdy  ! tau_22 * S_22
         !tauyyidx = 7
 
         ! Step 6: Get tau_33 (dwdy is destroyed)
         dwdy = bambda*dwdz + lambda*(dudx + dvdy)
+        tauiiadivu  = tauiiadivu + dwdy * dwdz  ! tau_33 * S_33
         !tauzzidx = 8
 
         ! Done 
     end subroutine 
 
-    subroutine get_q(this,duidxj)
-        class(sgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: duidxj
-
-        real(rkind), dimension(:,:,:), pointer :: tmp1_in_x, tmp2_in_x, tmp1_in_y, tmp1_in_z, tmp2_in_z
-        type(derivatives), pointer :: der
-
-        der => this%der
-        
-        tmp1_in_x => this%xbuf(:,:,:,1)
-        tmp2_in_x => this%xbuf(:,:,:,2)
-
-        tmp1_in_z => this%zbuf(:,:,:,1)
-        tmp2_in_z => this%zbuf(:,:,:,2)
-
-        tmp1_in_y => this%ybuf(:,:,:,1)
-        
-        ! Step 1: Get qy (dvdy is destroyed)
-        call der%ddy(this%T,tmp1_in_y)
-        duidxj(:,:,:,qyidx) = -this%kap*tmp1_in_y
-
-        ! Step 2: Get qx (dudx is destroyed)
-        call transpose_y_to_x(this%T,tmp1_in_x,this%decomp)
-        call der%ddx(tmp1_in_x,tmp2_in_x)
-        call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
-        duidxj(:,:,:,qxidx) = -this%kap*tmp1_in_y
-
-        ! Step 3: Get qz (dwdz is destroyed)
-        call transpose_y_to_z(this%T,tmp1_in_z,this%decomp)
-        call der%ddz(tmp1_in_z,tmp2_in_z)
-        call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
-        duidxj(:,:,:,qzidx) = -this%kap*tmp1_in_y
-
-        ! Done
-    end subroutine
-
-    subroutine getPlasticSources(this, detg, rhsg)
-        use constants, only: twothird
-        class(sgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)    :: detg
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: rhsg
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: invtaurel
-
-        ! Get S'S'
-        invtaurel = this%sxx*this%sxx + two*this%sxy*this%sxy + two*this%sxz*this%sxz &
-                                      +     this%syy*this%syy + two*this%syz*this%syz &
-                                                              +     this%szz*this%szz
-
-        ! 1/tau_rel
-        invtaurel = this%invtau0 * ( invtaurel - (twothird)*this%elastic%yield**2 ) / this%elastic%mu**2
-        where (invtaurel .LE. zero)
-            invtaurel = zero
-        end where
-        invtaurel = invtaurel / (two * this%elastic%mu * detg)
-
-        ! Add (1/tau_rel)*g*S to the rhsg (explicit plastic source terms)
-        rhsg(:,:,:,1) = rhsg(:,:,:,1) + invtaurel * ( this%g11*this%sxx + this%g12*this%sxy + this%g13*this%sxz ) ! g11 
-        rhsg(:,:,:,2) = rhsg(:,:,:,2) + invtaurel * ( this%g11*this%sxy + this%g12*this%syy + this%g13*this%syz ) ! g12 
-        rhsg(:,:,:,3) = rhsg(:,:,:,3) + invtaurel * ( this%g11*this%sxz + this%g12*this%syz + this%g13*this%szz ) ! g13 
- 
-        rhsg(:,:,:,4) = rhsg(:,:,:,4) + invtaurel * ( this%g21*this%sxx + this%g22*this%sxy + this%g23*this%sxz ) ! g21 
-        rhsg(:,:,:,5) = rhsg(:,:,:,5) + invtaurel * ( this%g21*this%sxy + this%g22*this%syy + this%g23*this%syz ) ! g22 
-        rhsg(:,:,:,6) = rhsg(:,:,:,6) + invtaurel * ( this%g21*this%sxz + this%g22*this%syz + this%g23*this%szz ) ! g23 
-
-        rhsg(:,:,:,7) = rhsg(:,:,:,7) + invtaurel * ( this%g31*this%sxx + this%g32*this%sxy + this%g33*this%sxz ) ! g31 
-        rhsg(:,:,:,8) = rhsg(:,:,:,8) + invtaurel * ( this%g31*this%sxy + this%g32*this%syy + this%g33*this%syz ) ! g32 
-        rhsg(:,:,:,9) = rhsg(:,:,:,9) + invtaurel * ( this%g31*this%sxz + this%g32*this%syz + this%g33*this%szz ) ! g33 
-
-    end subroutine
 end module 

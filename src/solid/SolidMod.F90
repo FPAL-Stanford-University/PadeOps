@@ -1,7 +1,7 @@
 module SolidMod
 
     use kind_parameters, only: rkind,clen
-    use constants,       only: zero,one,two
+    use constants,       only: zero,one,two,epssmall
     use decomp_2d,       only: decomp_info
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
@@ -145,6 +145,22 @@ contains
         if( allocated( this%p ) ) deallocate( this%p )
         allocate( this%p(this%nxp,this%nyp,this%nzp) )
 
+        ! Allocate material temperature array
+        if( allocated( this%T ) ) deallocate( this%T )
+        allocate( this%T(this%nxp,this%nyp,this%nzp) )
+
+        ! Allocate material kappa array
+        if( allocated( this%kap ) ) deallocate( this%kap )
+        allocate( this%kap(this%nxp,this%nyp,this%nzp) )
+
+        ! Allocate material diffusivity array
+        if( allocated( this%diff ) ) deallocate( this%diff )
+        allocate( this%diff(this%nxp,this%nyp,this%nzp) )
+
+        ! Allocate material diffusive flux
+        if( allocated( this%Ji ) ) deallocate( this%Ji )
+        allocate( this%Ji(this%nxp,this%nyp,this%nzp,3) )
+        
         ! Allocate material conserved variables
         if( allocated( this%consrv ) ) deallocate( this%consrv )
         allocate( this%consrv(this%nxp,this%nyp,this%nzp,2) )
@@ -189,6 +205,10 @@ contains
 
         if( allocated( this%consrv ) ) deallocate( this%consrv )
         if( allocated( this%eel )        ) deallocate( this%eel )
+        if( allocated( this%T )        ) deallocate( this%T )
+        if( allocated( this%kap )        ) deallocate( this%kap )
+        if( allocated( this%diff )        ) deallocate( this%diff )
+        if( allocated( this%Ji )        ) deallocate( this%Ji )
 
         if( allocated( this%Qtmpg ) ) deallocate( this%Qtmpg )
         if( allocated( this%QtmpYs ) ) deallocate( this%QtmpYs )
@@ -198,6 +218,14 @@ contains
         ! Now deallocate the EOS objects
         if ( allocated(this%hydro)      ) deallocate(this%hydro)
         if ( allocated(this%elastic)    ) deallocate(this%elastic)
+
+    end subroutine
+
+    subroutine getPhysicalProperties(this)
+        class(solid), intent(inout) :: this
+
+        this%diff = zero
+        this%kap = zero
 
     end subroutine
 
@@ -233,7 +261,7 @@ contains
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
-        tmp = rho*this%Ys/(this%VF + real(1.0D-32,rkind))  ! Get the species density = rho*Y/VF
+        tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
         penalty = etafac*( tmp/detg/this%elastic%rho0-one) ! Penalty term to keep g consistent with species density
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
@@ -332,14 +360,14 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,tauiiart,divu)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,tauiiadivu)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,tauiiart,divu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,tauiiadivu
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
 
-        call this%getRHS_eh(rho,u,v,w,tauiiart,divu,rhseh)
+        call this%getRHS_eh(rho,u,v,w,tauiiadivu,rhseh)
 
         ! advance sub-step
         if(isub==1) this%Qtmpeh = zero                   ! not really needed, since RK45_A(1) = 0
@@ -348,17 +376,17 @@ contains
 
     end subroutine
 
-    subroutine getRHS_eh(this,rho,u,v,w,tauiiart,divu,rhseh)
+    subroutine getRHS_eh(this,rho,u,v,w,tauiiadivu,rhseh)
         use operators, only: gradient, divergence
         class(solid),                                       intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,tauiiadivu
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhseh
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
         ! artificial conductivity terms
-        call gradient(this%decomp,this%der,-this%eh,tmp1,tmp2,tmp3)
+        call gradient(this%decomp,this%der,-this%T,tmp1,tmp2,tmp3)
         tmp1 = this%VF * this%kap * tmp1   
         tmp2 = this%VF * this%kap * tmp2   
         tmp3 = this%VF * this%kap * tmp3
@@ -391,7 +419,7 @@ contains
 
         !nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
 
-        rhseh = rhseh - this%VF * (this%p + tauiiart) * divu        ! only diagonal terms of artificial stress tensor used here; off-diagonal assumed to affect e_elastic, not e_hydro
+        rhseh = rhseh - this%VF * (this%p*divu + tauiiadivu)       ! only diagonal terms of artificial stress tensor used here; off-diagonal assumed to affect e_elastic, not e_hydro
 
     end subroutine
 
@@ -535,11 +563,22 @@ contains
 
     end subroutine
 
-    subroutine get_ehydro_from_p(this, rho)
+    ! computes p from ehydro
+    subroutine get_p_from_ehydro(this, rho)
         class(solid), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
 
-        call this%hydro%get_e_from_p(this%Ys*rho/(this%VF+epssmall),this%p,this%eh)
+        call this%hydro%get_p( this%Ys*rho/(this%VF+epssmall), this%eh, this%p )
+
+    end subroutine
+
+    ! computes ehydro from p; and T from ehydro
+    subroutine get_ehydroT_from_p(this, rho)
+        class(solid), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
+
+        call this%hydro%get_e_from_p( this%Ys*rho/(this%VF+epssmall), this%p, this%eh )
+        call this%hydro%get_T(this%eh, this%Ys*rho/(this%VF+epssmall), this%T)
 
     end subroutine
 
@@ -565,11 +604,16 @@ contains
     end subroutine
 
     subroutine get_primitive(this,onebyrho)
+        use operators, only : gradient
         class(solid), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: onebyrho
 
         this%Ys = this%consrv(:,:,:,1) * onebyrho
         this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
+
+        call this%hydro%get_T(this%eh, this%T)
+
+        call gradient(this%decomp,this%der,this%Ys,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3))
 
     end subroutine
 

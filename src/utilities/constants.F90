@@ -31,4 +31,5 @@ module constants
     complex(rkind), parameter :: imi=(zero,one)
 
     real(rkind), parameter :: eps = epsilon(real(1.0,rkind))
+    real(rkind), parameter :: epssmall = real(1.0D-32,rkind)
 end module
