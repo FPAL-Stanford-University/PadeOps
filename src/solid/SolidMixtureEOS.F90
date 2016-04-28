@@ -404,9 +404,24 @@ contains
 
     end subroutine
 
-    subroutine get_sos(this,rho,p)
+    subroutine getSOS(this,rho,p,sos)
+        use constants, only: fourthird
         class(solid_mixture), intent(in) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho, p  ! Mixture density and pressure
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho, p  ! Mixture density and pressure
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: sos     ! Mixture speed of sound
+
+        integer :: i
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: mixmu, mixgam, mixgamPinf
+
+        mixmu = zero; mixgam = zero; mixgamPinf = zero
+        do i = 1,this%ns
+            mixmu = mixmu + this%material(i)%VF * this%material(i)%elastic%mu
+            mixgam = mixgam + this%material(i)%VF * this%material(i)%hydro%gam
+            mixgamPinf = mixgamPinf + this%material(i)%VF * this%material(i)%hydro%gam * this%material(i)%hydro%Pinf
+        end do
+
+        sos = sqrt( (mixgam*p + mixgamPinf + fourthird*mixmu)/rho )
+
     end subroutine
 
     subroutine update_VF(this,isub,dt,rho,u,v,w)
