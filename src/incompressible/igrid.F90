@@ -73,7 +73,6 @@ module IncompressibleGridNP
 
         complex(rkind), dimension(:,:,:,:), allocatable :: rhsC, rhsE, OrhsC, OrhsE 
         real(rkind), dimension(:,:,:,:), allocatable :: duidxj 
-        complex(rkind), dimension(:,:,:,:), allocatable :: duidxjhat
         complex(rkind), dimension(:,:,:), pointer:: u_rhs, v_rhs, wC_rhs, w_rhs 
         complex(rkind), dimension(:,:,:), pointer:: u_Orhs, v_Orhs, w_Orhs
             
@@ -123,8 +122,8 @@ module IncompressibleGridNP
             procedure :: init_stats
             procedure :: destroy
             procedure :: printDivergence 
-            !procedure :: laplacian
-            !procedure :: gradient
+            procedure :: laplacian
+            procedure :: gradient
             procedure :: AdamsBashforth
             procedure :: getMaxKE
             procedure, private :: interp_wHat_to_wHatC
@@ -360,7 +359,6 @@ contains
         allocate(this%duidxj(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9))
         allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),1))
         call this%spectC%alloc_r2c_out(this%SfieldsC,6)
-        call this%spectC%alloc_r2c_out(this%duidxjhat,9)
         call this%spectC%alloc_r2c_out(this%rhsC,3)
         call this%spectC%alloc_r2c_out(this%OrhsC,2)
         call this%spectE%alloc_r2c_out(this%rhsE,1)
@@ -499,11 +497,23 @@ contains
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%dpF_dxhat)
         end if  
 
+        ! STEP 11: Initialize Wall Model
+        if (useWallModelBot) then
+            allocate(this%moengWall)
+            call this%moengWall%init(this%dz, inputfile, this%gpC, this%rbuffxC, this%rbuffyC, this%rbuffzC )
+            call message(0,"Wall model initialized successfully")
+        end if 
+
         ! STEP 12: Initialize SGS model
         if (this%useSGS) then
             allocate(this%SGSmodel)
-            call this%sgsModel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
-                this%dy, this%dz, useDynamicProcedure, useSGSclipping)
+            if (allocated(this%moengWall)) then
+                call this%sgsModel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
+                    this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%moengWall)
+            else
+                call this%sgsModel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
+                    this%dy, this%dz, useDynamicProcedure, useSGSclipping)
+            end if
             call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij)
             call message(0,"SGS model initialized successfully")
         end if 
@@ -521,12 +531,23 @@ contains
     end subroutine
 
 
-    function getMaxKE(this) result(maxKE)
-        class(igrid), intent(inout) :: this
+    pure function getMaxKE(this) result(maxKE)
+        class(igrid), intent(in) :: this
         real(rkind)  :: maxKE
+        integer :: i, j, k
+        real(rkind) :: keloc
 
-        this%rbuffxC(:,:,:,1) = this%u**2 + this%v**2 + this%wC**2
-        maxKE = half*p_maxval(maxval(this%rbuffxC))
+        maxKE = zero
+        do k = 1,size(this%u,3)
+            do j = 1,size(this%u,2)
+                do i = 1,size(this%u,1)
+                    keloc = this%u(i,j,k)**2 
+                    keloc = keloc + this%v(i,j,k)**2
+                    keloc = keloc + this%w(i,j,k)**2
+                    maxKE = max(maxKE,keloc)
+                end do 
+            end do 
+        end do 
 
     end function
 
@@ -602,6 +623,26 @@ contains
     end subroutine
 
 
+    subroutine laplacian(this, f, lapf)
+        class(igrid),target, intent(inout) :: this
+        real(rkind), intent(in),  dimension(this%nxp, this%nyp, this%nzp) :: f
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
+
+        lapf = f 
+    end subroutine
+
+    subroutine gradient(this,f,dfdx,dfdy,dfdz)
+        class(igrid), intent(inout), target :: this
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in):: f
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: dfdx 
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: dfdy
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: dfdz
+        
+        dfdx = f
+        dfdy = f
+        dfdz = f
+    end subroutine 
+
     subroutine destroy(this)
         class(igrid), intent(inout) :: this
         
@@ -609,7 +650,6 @@ contains
         deallocate(this%PfieldsC, this%PfieldsE, this%SfieldsC, this%SfieldsE)
         nullify(this%u_rhs, this%v_rhs, this%w_rhs)
         deallocate(this%rhsC, this%rhsE, this%OrhsC, this%OrhsE)
-        deallocate(this%duidxj, this%duidxjhat)
         call this%spectC%destroy()
         call this%spectE%destroy()
         deallocate(this%spectC, this%spectE)
@@ -1041,10 +1081,9 @@ contains
 
         ! Step 3b: SGS Viscous Term
         if (this%useSGS) then
-            call this%SGSmodel%getRHS_SGS(this%duidxj, this%duidxjhat, this%u_rhs, &
-                                          this%v_rhs , this%w_rhs    , this%uhat , &
-                                          this%vhat  , this%whatC    , this%u    , &
-                                          this%v     , this%wC       , this%max_nuSGS)
+            call this%SGSmodel%getRHS_SGS(this%duidxj,this%u_rhs,this%v_rhs,this%w_rhs, &
+                                     this%uhat  ,this%vhat ,this%whatC,this%u    , &
+                                     this%v     ,this%wC   ,this%max_nuSGS       )
 
             !! IMPORTANT: duidxj, u, v and wC are all corrupted if SGS was initialized to use the
             !! Dynamic Procedure. DON'T USE duidxj again within this time step.
@@ -1164,6 +1203,7 @@ contains
 
     end subroutine
 
+
     subroutine compute_duidxj(this)
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
@@ -1172,75 +1212,81 @@ contains
         real(rkind),    dimension(:,:,:), pointer :: dudx, dudy, dudz
         real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
         real(rkind),    dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
-        complex(rkind), dimension(:,:,:), pointer :: dudxH, dudyH, dudzH 
-        complex(rkind), dimension(:,:,:), pointer :: dvdxH, dvdyH, dvdzH
-        complex(rkind), dimension(:,:,:), pointer :: dwdxH, dwdyH, dwdzH
 
         dudx => this%duidxj(:,:,:,1); dudy => this%duidxj(:,:,:,2); dudz => this%duidxj(:,:,:,3); 
         dvdx => this%duidxj(:,:,:,4); dvdy => this%duidxj(:,:,:,5); dvdz => this%duidxj(:,:,:,6); 
         dwdx => this%duidxj(:,:,:,7); dwdy => this%duidxj(:,:,:,8); dwdz => this%duidxj(:,:,:,9); 
 
-        dudxH => this%duidxjhat(:,:,:,1); dudyH => this%duidxjhat(:,:,:,2); dudzH => this%duidxjhat(:,:,:,3); 
-        dvdxH => this%duidxjhat(:,:,:,4); dvdyH => this%duidxjhat(:,:,:,5); dvdzH => this%duidxjhat(:,:,:,6); 
-        dwdxH => this%duidxjhat(:,:,:,7); dwdyH => this%duidxjhat(:,:,:,8); dwdzH => this%duidxjhat(:,:,:,9); 
+        ctmpz1 => this%cbuffzC(:,:,:,1)
+        ctmpz2 => this%cbuffzE(:,:,:,1)
+        ctmpz3 => this%cbuffzC(:,:,:,2)
+        ctmpz4 => this%cbuffzE(:,:,:,2)
         
-        ctmpz1 => this%cbuffzC(:,:,:,1); ctmpz2 => this%cbuffzE(:,:,:,1); 
-        ctmpz3 => this%cbuffzC(:,:,:,2); ctmpz4 => this%cbuffzE(:,:,:,2)
+        ctmpy1 => this%cbuffyC(:,:,:,1)
+        ctmpy2 => this%cbuffyE(:,:,:,1)
+
+
+        call this%spectC%mTimes_ik1_oop(this%uhat,ctmpy1)
+        call this%spectC%ifft(ctmpy1,dudx)
+
+        call this%spectC%mTimes_ik2_oop(this%uhat,ctmpy1)
+        call this%spectC%ifft(ctmpy1,dudy)
+
+        call this%spectC%mTimes_ik1_oop(this%vhat,ctmpy1)
+        call this%spectC%ifft(ctmpy1,dvdx)
+
+        call this%spectC%mTimes_ik2_oop(this%vhat,ctmpy1)
+        call this%spectC%ifft(ctmpy1,dvdy)
         
-        ctmpy1 => this%cbuffyC(:,:,:,1); ctmpy2 => this%cbuffyE(:,:,:,1)
+        call this%spectC%mTimes_ik1_oop(this%whatC,ctmpy1)
+        call this%spectC%ifft(ctmpy1,dwdx)
 
-        call this%spectC%mTimes_ik1_oop(this%uhat,dudxH)
-        call this%spectC%ifft(dudxH,dudx)
-
-        call this%spectC%mTimes_ik2_oop(this%uhat,dudyH)
-        call this%spectC%ifft(dudyH,dudy)
-
-        call this%spectC%mTimes_ik1_oop(this%vhat,dvdxH)
-        call this%spectC%ifft(dvdxH,dvdx)
-
-        call this%spectC%mTimes_ik2_oop(this%vhat,dvdyH)
-        call this%spectC%ifft(dvdyH,dvdy)
-        
-        call this%spectC%mTimes_ik1_oop(this%whatC,dwdxH)
-        call this%spectC%ifft(dwdxH,dwdx)
-
-        call this%spectC%mTimes_ik2_oop(this%whatC,dwdyH)
-        call this%spectC%ifft(dwdyH,dwdy)
+        call this%spectC%mTimes_ik2_oop(this%whatC,ctmpy1)
+        call this%spectC%ifft(ctmpy1,dwdy)
 
         call transpose_y_to_z(this%uhat,ctmpz1, this%sp_gpC)
         if (useCompactFD) then
             call this%derU%ddz_C2C(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
         else
             call this%Ops%ddz_C2C(ctmpz1,ctmpz3,topBC_u,botBC_u)
+            !if (nrank == 0) then
+            !       print*, ctmpz3(1,1,1:3)
+            !       print*, ctmpz3(1,1,1:3)
+            !end if  
         end if 
-        call transpose_z_to_y(ctmpz3,dudzH,this%sp_gpC)
-        call this%spectC%ifft(dudzH,dudz)
+        call transpose_z_to_y(ctmpz3,ctmpy1,this%sp_gpC)
+        call this%spectC%ifft(ctmpy1,dudz)
 
         call transpose_y_to_z(this%vhat,ctmpz1, this%sp_gpC)
         if (useCompactFD) then
             call this%derV%ddz_C2C(ctmpz1,ctmpz3,size(ctmpz1,1),size(ctmpz1,2))
         else    
             call this%Ops%ddz_C2C(ctmpz1,ctmpz3,topBC_v,botBC_v) 
+            !if (nrank == 0) then
+            !       print*, ctmpz3(1,1,1:3)
+            !       print*, ctmpz3(1,1,1:3)
+            !end if  
         end if 
-        call transpose_z_to_y(ctmpz3,dvdzH,this%sp_gpC)
-        call this%spectC%ifft(dvdzH,dvdz)
+        call transpose_z_to_y(ctmpz3,ctmpy1,this%sp_gpC)
+        call this%spectC%ifft(ctmpy1,dvdz)
 
         call transpose_y_to_z(this%what,ctmpz2, this%sp_gpE)
         if (useCompactFD) then
             call this%derW%ddz_E2C(ctmpz2,ctmpz3,size(ctmpz2,1),size(ctmpz2,2))
         else
             call this%Ops%ddz_E2C(ctmpz2,ctmpz3) 
+            !if (nrank == 0) then
+            !       print*, ctmpz3(3,4,1:3)
+            !end if  
         end if 
-        call transpose_z_to_y(ctmpz3,dwdzH,this%sp_gpC)
-        call this%spectC%ifft(dwdzH,dwdz)
+        call transpose_z_to_y(ctmpz3,ctmpy1,this%sp_gpC)
+        call this%spectC%ifft(ctmpy1,dwdz)
         
+        !print*, dudz(3,4,1:3)
         nullify( dudx, dudy, dudz) 
         nullify( dvdx, dvdy, dvdz)
         nullify( dwdx, dwdy, dwdz)
-        nullify( dudxH, dudyH, dudzH) 
-        nullify( dvdxH, dvdyH, dvdzH)
-        nullify( dwdxH, dwdyH, dwdzH)
-        nullify( ctmpy1,ctmpy2,ctmpz1, ctmpz2, ctmpz3,ctmpz4)
+        nullify(ctmpy1,ctmpy2,ctmpz1, ctmpz2, ctmpz3,ctmpz4)
 
     end subroutine
 

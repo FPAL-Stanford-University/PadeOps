@@ -73,15 +73,14 @@ module sgrid_hooks
     end interface
 
     interface hook_timestep
-        subroutine hook_timestep(decomp,mesh,fields,step,tsim,hookcond)
+        subroutine hook_timestep(decomp,mesh,fields,step,tsim)
             import :: rkind
             import :: decomp_info
-            type(decomp_info),               intent(in)    :: decomp
-            integer,                         intent(in)    :: step
-            real(rkind),                     intent(in)    :: tsim
-            logical,               optional, intent(inout) :: hookcond
-            real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
-            real(rkind), dimension(:,:,:,:), intent(in)    :: fields
+            type(decomp_info),               intent(in) :: decomp
+            integer,                         intent(in) :: step
+            real(rkind),                     intent(in) :: tsim
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            real(rkind), dimension(:,:,:,:), intent(in) :: fields
 
         end subroutine
     end interface

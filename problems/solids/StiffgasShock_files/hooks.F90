@@ -5,11 +5,9 @@ module StiffgasShock_data
     
     real(rkind) :: pRatio = real(4.5,rkind)
     real(rkind) :: pinfbyp1 = real(1.0D3,rkind)
-    real(rkind) :: gamma
     real(rkind) :: thick = one
     real(rkind) :: p1, p2, rho1, rho2, u1, u2
     real(rkind) :: Cbeta
-    real(rkind) :: sthick_prev, mwa_prev, mwa_prev2
 
 end module
 
@@ -95,9 +93,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
                g23 => fields(:,:,:,g23_index), g31 => fields(:,:,:,g31_index), & 
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-
-        gamma = gam
+        
         tmp = half * ( one + erf( (x-half)/(thick*dx) ) )
+
         rhoRatio = ( (gam+one)*pRatio + (two*gam)*pinfbyp1 + (gam-one) ) / ( (gam-one)*pRatio + (two*gam)*pinfbyp1 + (gam+one) )
 
         rho0 = one
@@ -248,9 +246,9 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,step,tsim,hookcond)
+subroutine hook_timestep(decomp,mesh,fields,step,tsim)
     use kind_parameters,  only: rkind, clen
-    use constants,        only: zero, eps, half, one, two
+    use constants,        only: zero, half, one, two
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use exits,            only: message
@@ -259,12 +257,11 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim,hookcond)
     use StiffgasShock_data
 
     implicit none
-    type(decomp_info),               intent(in)    :: decomp
-    integer,                         intent(in)    :: step
-    real(rkind),                     intent(in)    :: tsim
-    logical,               optional, intent(inout) :: hookcond
-    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
-    real(rkind), dimension(:,:,:,:), intent(in)    :: fields
+    type(decomp_info),               intent(in) :: decomp
+    integer,                         intent(in) :: step
+    real(rkind),                     intent(in) :: tsim
+    real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+    real(rkind), dimension(:,:,:,:), intent(in) :: fields
 
     integer :: nx, istart, iend
     real(rkind), dimension(decomp%ysz(1)) :: p_exact, dpdx
@@ -312,7 +309,7 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim,hookcond)
         call message(2,"Shock thickness", sthick)
         call message(2,"Maximum Wiggles Amplitude", mwa)
 
-        write(outputfile,'(3(A,ES8.2E2),A)') "StiffgasShock_stats_", Cbeta,"_", pRatio, "_", pinfbyp1, ".dat"
+        write(outputfile,'(A,ES8.2E2,A)') "StiffgasShock_stats_", Cbeta,".dat"
         if (step == 1) then
             open(unit=iounit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
             write(iounit,'(3A26)') "Time", "Shock thickness", "MWA"
@@ -321,12 +318,6 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim,hookcond)
         end if
         write(iounit,'(3ES26.16)') tsim, sthick, mwa
         close(iounit)
-
-        if ( abs( mwa - mwa_prev )/(mwa+eps) .LT. real(1.D-6,rkind) .AND. abs( sthick - sthick_prev )/(sthick+eps) .LT. real(1.D-6,rkind)) hookcond = .TRUE.
-
-        sthick_prev = sthick
-        mwa_prev2 = mwa_prev
-        mwa_prev = mwa
 
     end associate
 end subroutine

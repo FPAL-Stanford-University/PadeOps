@@ -1,23 +1,10 @@
-    subroutine get_SIGMA_Op(this, nuSGS, dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz)
-        class(sgs), intent(inout), target :: this
-        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dudx, dudy, dudz 
-        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dvdx, dvdy, dvdz 
-        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dwdx, dwdy, dwdz 
-        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(out) :: nuSGS
-
-        real(rkind), dimension(:,:,:), pointer :: G11, G12, G13, G22, G23, G33
-        real(rkind), dimension(:,:,:), pointer :: I1, I2, I3, I1sq, I1cu
-        real(rkind), dimension(:,:,:), pointer :: alpha1, alpha2, alpha3 
-        real(rkind), dimension(:,:,:), pointer :: sigma1, sigma2, sigma3 
-        real(rkind), dimension(:,:,:), pointer :: alpha1sqrt, sigma1sq, alpha1tmp 
-
-        G11=>this%SIGMAbuffs(:,:,:,1); G12=>this%SIGMAbuffs(:,:,:,2); G13=>this%SIGMAbuffs(:,:,:,3)
-        G22=>this%SIGMAbuffs(:,:,:,4); G23=>this%SIGMAbuffs(:,:,:,5); G33=>this%SIGMAbuffs(:,:,:,6)
+        G11 => this%rbuff(:,:,:,1); G12 => this%rbuff(:,:,:,2); G13 => this%rbuff(:,:,:,3)
+        G22 => this%rbuff(:,:,:,4); G23 => this%rbuff(:,:,:,5); G33 => this%rbuff(:,:,:,6)
         
-        I1=>this%SIGMAbuffs(:,:,:,7); I2=>this%SIGMAbuffs(:,:,:,8); I3=>this%SIGMAbuffs(:,:,:,9)
-        I1sq=>this%SIGMAbuffs(:,:,:,10); I1cu=>this%SIGMAbuffs(:,:,:,11)
+        I1 => this%rbuff(:,:,:,8); I2 => this%rbuff(:,:,:,9); I3 => this%rbuff(:,:,:,10)
+        I1sq => this%rbuff(:,:,:,11); I1cu => this%rbuff(:,:,:,12)
 
-        alpha1=>this%SIGMAbuffs(:,:,:,12); alpha2=>this%SIGMAbuffs(:,:,:,13); alpha3=>this%SIGMAbuffs(:,:,:,14)
+        alpha1 => this%rbuff(:,:,:,19); alpha2 => this%rbuff(:,:,:,20); alpha3 => this%rbuff(:,:,:,21)
 
         G11 = dudx*dudx + dvdx*dvdx + dwdx*dwdx 
         G12 = dudx*dudy + dvdx*dvdy + dwdx*dwdy 
@@ -45,18 +32,19 @@
         
         alpha2 = I1cu/27._rkind - I1*I2/six + I3/two
        
-        alpha1sqrt => this%SIGMAbuffs(:,:,:,4)
+        alpha1sqrt => this%rbuff(:,:,:,4)
         alpha1sqrt = sqrt(alpha1)    
-        alpha1tmp => this%SIGMAbuffs(:,:,:,5) 
+        alpha1tmp => this%rbuff(:,:,:,5) 
         alpha1tmp = alpha1*alpha1sqrt
         alpha1tmp = alpha2/(alpha1tmp)
         alpha1tmp = min(alpha1tmp,one)
         alpha1tmp = max(alpha1tmp,-one)
         alpha1tmp = acos(alpha1tmp)
         alpha3 = (one/three)*(alpha1tmp)
+          
   
-        sigma1 => this%SIGMAbuffs(:,:,:,9); sigma2 => this%SIGMAbuffs(:,:,:,10); sigma3 => this%SIGMAbuffs(:,:,:,11)
-        sigma1sq => this%SIGMAbuffs(:,:,:,12)
+        sigma1 => this%rbuff(:,:,:,9); sigma2 => this%rbuff(:,:,:,10); sigma3 => this%rbuff(:,:,:,11)
+        sigma1sq => this%rbuff(:,:,:,12)
 
         sigma1sq = I1/three + two*alpha1sqrt*cos(alpha3)
         sigma1sq = max(sigma1sq,zero)
@@ -73,6 +61,15 @@
         sigma3 = sigma3 + I1/three
         sigma3 = max(sigma3,zero)
         sigma3 = sqrt(sigma3)
-            
-        nuSGS = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
-    end subroutine 
+
+        if (present(nuSGSfil)) then
+            nuSGSfil = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
+            !call this%spect%fft(nuSGSfil,this%nuSGShat)
+            !call this%spect%dealias(this%nuSGShat)
+            !call this%spect%ifft(this%nuSGShat,nuSGSfil)  
+        else
+            this%nuSGS = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
+            !call this%spect%fft(this%nuSGS,this%nuSGShat)
+            !call this%spect%dealias(this%nuSGShat)
+            !call this%spect%ifft(this%nuSGShat,this%nuSGS)  
+        end if 

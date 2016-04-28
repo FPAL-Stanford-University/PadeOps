@@ -12,10 +12,10 @@ module pbl_IO
 contains
 
     subroutine start_io(gp)
-        use IncompressibleGridWallM, only: igridWallM
+        use IncompressibleGridNP, only: igrid
         use mpi 
         
-        class(igridWallM), target, intent(in) :: gp 
+        class(igrid), target, intent(in) :: gp 
         character(len=clen) :: fname
         character(len=clen) :: tempname
         !character(len=clen) :: command
@@ -95,19 +95,15 @@ contains
         call mpi_barrier(mpi_comm_world,ierr)
 
         ! Now perform the initializing data dump
-        !call dumpData4Matlab(gp)
-        call gp%dumpFullField(gp%u,'uVel')
-        call gp%dumpFullField(gp%v,'vVel')
-        call gp%dumpFullField(gp%wC,'wVel')
-        call gp%dumpFullField(gp%nu_SGS,'nuSG')
+        call dumpData4Matlab(gp)
     end subroutine
 
     subroutine dumpData4Matlab(gp)
-        use IncompressibleGridWallM, only: igridWallM
+        use IncompressibleGridNP, only: igrid
         use gridtools,          only: alloc_buffs
         use decomp_2d,        only: transpose_y_to_x
         
-        class(igridWallM), target, intent(in) :: gp 
+        class(igrid), target, intent(in) :: gp 
         integer :: tid, runIDX
         character(len=clen) :: fname
         character(len=clen) :: tempname
@@ -136,12 +132,6 @@ contains
         fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
         open(fid,file=trim(fname),form='unformatted',status='replace')
         write(fid) fieldsPhys(:,:,:,3)
-        close(fid)
-        
-        write(tempname,"(A3,I2.2,A2,I4.4,A2,I6.6,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_nuSG",".out"
-        fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
-        open(fid,file=trim(fname),form='unformatted',status='replace')
-        write(fid) gp%nu_SGS(:,:,:)
         close(fid)
         
         if (nrank == 0) then

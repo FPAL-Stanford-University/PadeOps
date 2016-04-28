@@ -9,7 +9,7 @@
 program pbl
     use mpi
     use kind_parameters,  only: rkind,clen,stdout,stderr
-    use IncompressibleGridWallM, only: igridWallM
+    use IncompressibleGridNP, only: igrid
     use pbl_IO, only: start_io, finalize_io
     use constants, only: half 
     use temporalhook, only: doTemporalStuff
@@ -18,7 +18,7 @@ program pbl
 
     implicit none
 
-    type(igridWallM), allocatable, target :: igp
+    type(igrid), allocatable, target :: igp
     character(len=clen) :: inputfile
     integer :: ierr
 

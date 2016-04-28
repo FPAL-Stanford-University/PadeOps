@@ -10,8 +10,8 @@ module pbl_parameters
     integer :: seedu = 321341
     integer :: seedv = 423424
     integer :: seedw = 131344
-    real(rkind), parameter :: kappa = 0.41d0
-    real(rkind) :: randomScaleFact = 0.005_rkind ! 5% of the mean value
+    real(rkind), parameter :: kappa = 0.41
+    real(rkind) :: randomScaleFact = 0.01_rkind ! 5% of the mean value
     integer :: nxg, nyg, nzg
 
 end module     
@@ -82,14 +82,14 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     real(rkind), intent(out), optional :: Ro, u_g
     integer :: ioUnit, k
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind) :: mfactor, sig, dpdxF
+    real(rkind) :: mfactor, sig
     real(rkind), dimension(:,:,:), allocatable :: randArr
-    real(rkind) :: z0nd, epsnd = 0.1
+    real(rkind) :: z0nd, epsnd
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
-    real(rkind) :: delta_Ek = 0.08, Xperiods = 1, Yperiods = 1, Zperiods = 1
+    real(rkind) :: delta_Ek = 0.08, Uperiods = 3, Vperiods = 3 
     real(rkind) :: zpeak = 0.3
-    namelist /PBLINPUT/ H, z0, dpdxF 
+    namelist /PBLINPUT/ H, G, f, z0 
 
 
     ioUnit = 11
@@ -105,26 +105,30 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
 
     u  => fieldsC(:,:,:,1)
     v  => fieldsC(:,:,:,2)
-    wC => fieldsC(:,:,:,3)
+    wC => fieldsC(:,:,:,2)
     w  => fieldsE(:,:,:,1)
 
     z => mesh(:,:,:,3)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    ustar = 0.45d0
-    epsnd = 0.0005d0*1000.d0
-
-    u = (one/kappa)*log(z/z0nd) + (half/ustar)*Lx*epsnd*cos(two*pi*x*Xperiods/Lx)*sin(two*pi*y*Yperiods/Ly)*cos(two*pi*z*Zperiods/Lz)
-    v = (half*epsnd*Ly/ustar)*sin(two*pi*x*Xperiods/Lx)*cos(two*pi*y*Yperiods/Ly)*cos(two*pi*z*Zperiods/Lz)
-    wC= (epsnd*Lz/ustar)*sin(two*pi*x*Xperiods/Lx)*sin(two*pi*y*Yperiods/Ly)*sin(two*pi*z*Zperiods/Lz)
-    
-
+    !u = (G/ustar)*(one/kappa)*log(z/z0nd) + epsnd*cos(two*pi*x/Lx)*sin(two*pi*y/Ly)*cos(two*pi*z/Lz)
+    !v = epsnd*sin(two*pi*x/Lx)*cos(two*pi*y/Ly)*cos(two*pi*z/Lz)
+    !wC= epsnd*sin(two*pi*x/Lx)*sin(two*pi*y/Ly)*sin(two*pi*z/Lz)
+        
+    !u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
+    !u = (0.70/G)*(one/kappa)*log(z/(z0nd))  &
+    !    + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    u  = (1 - (z-1)**8) + 0.1*0.5*Lx*sin(pi*(z -one))*cos(4*pi*x/Lx)*sin(2*pi*y/Ly)
+    !v = zero  &
+    !        + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    v =  -0.1*0.5*Ly*sin(pi*(z-1))*sin(4*pi*x/Lx)*cos(2*pi*y/Ly)
+    wC = zero
     ! Add random numbers
     !allocate(randArr(size(u,1),size(u,2),size(u,3)))
     !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
     !do k = 1,size(u,3)
-    !    sig = randomScaleFact*(one/kappa)*log(z(1,1,k)/z0nd)
+    !    sig = randomScaleFact*(1 - exp(-z(1,1,k)/delta_Ek)*cos(z(1,1,k)/delta_Ek))
     !    u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
     !end do  
     !deallocate(randArr)
@@ -139,29 +143,26 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
 
 
     ! Interpolate wC to w
-    allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
-    allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
+    !allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
+    !allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
 
-    allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
-    allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
+    !allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
+    !allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
    
-    nz = decompC%zsz(3)
-    nzE = nz + 1
+    !nz = decompC%zsz(3)
+    !nzE = nz + 1
 
-    call transpose_x_to_y(wC,ybuffC,decompC)
-    call transpose_y_to_z(ybuffC,zbuffC,decompC)
-    zbuffE = zero
-    zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
-    call transpose_z_to_y(zbuffE,ybuffE,decompE)
-    call transpose_y_to_x(ybuffE,w,decompE) 
+    !call transpose_x_to_y(wC,ybuffC,decompC)
+    !call transpose_y_to_z(ybuffC,zbuffC,decompC)
+    !zbuffE = zero
+    !zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
+    !call transpose_z_to_y(zbuffE,ybuffE,decompE)
+    !call transpose_y_to_x(ybuffE,w,decompE) 
+   
+    !deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
     
-
-    deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
-  
-      
     nullify(u,v,w,x,y,z)
-   
-
+    
     call message(0,"Velocity Field Initialized")
 
 end subroutine
@@ -175,15 +176,8 @@ subroutine getForcing(inputfile, dpdx)
     character(len=*), intent(in) :: inputfile 
     real(rkind), intent(out) :: dpdx
     integer :: ioUnit
-    real(rkind) :: dpdxF = 1.d0 
-    namelist /PBLINPUT/ H, z0, dpdxF 
     
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PBLINPUT)
-    close(ioUnit)    
-    
-    dpdx = dpdxF
+    dpdx = zero
     
 
 end subroutine
@@ -193,13 +187,13 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 2
+    integer, parameter :: nxplanes = 2, nyplanes = 2, nzplanes = 2
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [64]
-    yplanes = [64]
-    zplanes = [5 , 30]
+    xplanes = [2 , 10]
+    yplanes = [2 , 10]
+    zplanes = [2 , 10]
 
 end subroutine
 
