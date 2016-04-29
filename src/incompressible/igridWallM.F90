@@ -10,7 +10,7 @@ module IncompressibleGridWallM
     use spectralMod, only: spectral  
     use PoissonMod, only: poisson
     use mpi 
-    use reductions, only: p_maxval
+    use reductions, only: p_maxval, p_minval
     use timer, only: tic, toc
     use PadePoissonMod, only: Padepoisson 
     use sgsmod, only: sgs
@@ -91,7 +91,7 @@ module IncompressibleGridWallM
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
-        real(rkind) :: max_nuSGS
+        real(rkind) :: max_nuSGS, max_Dissp
 
         real(rkind) :: z0, ustar, Umn, Vmn, Uspmn, dtOld, dtRat
         real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
@@ -377,6 +377,7 @@ contains
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
+        this%max_Dissp = zero
 
 
         ! STEP 12: Set visualization planes for io
@@ -590,7 +591,7 @@ contains
     
     subroutine AdamsBashforth(this)
         class(igridWallM), intent(inout) :: this
-        real(rkind) :: abf1, abf2
+        real(rkind) :: abf1, abf2, rdum1, rdum2, rdum3, rdum4, rdum5, rdum6
 
         ! Step 0: Compute TimeStep 
         call this%compute_deltaT
@@ -608,6 +609,14 @@ contains
             call this%addExtraForcingTerm()
         end if 
 
+        !rdum1 = p_maxval(abs(real(this%u_rhs))); rdum2 = p_maxval(abs(aimag(this%u_rhs)))
+        !rdum3 = p_maxval(abs(real(this%v_rhs))); rdum4 = p_maxval(abs(aimag(this%v_rhs)))
+        !rdum5 = p_maxval(abs(real(this%w_rhs))); rdum6 = p_maxval(abs(aimag(this%w_rhs)))
+        !if(nrank==0) then
+        !  write(*,*) '--Bef-RHS-1--', rdum1, rdum2
+        !  write(*,*) '--Bef-RHS-2--', rdum3, rdum4
+        !  write(*,*) '--Bef-RHS-3--', rdum5, rdum6
+        !endif
         ! Step 3b: SGS Viscous Term
         if (this%useSGS) then
             call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE  , this%duidxjChat,& 
@@ -615,13 +624,23 @@ contains
                                                 this%uhat   , this%vhat     , this%whatC     ,&
                                                 this%u      , this%v        , this%wC        ,&
                                                 this%ustar  , this%Umn      , this%Vmn       ,&
-                                                this%Uspmn  , this%filteredSpeedSq, this%max_nuSGS)
+                                                this%Uspmn  , this%filteredSpeedSq           ,&
+                                                this%dx     , this%dy       , this%dz        ,&
+                                                this%max_nuSGS, this%max_Dissp)
 
             !! IMPORTANT: duidxjC, u, v and wC are all corrupted if SGS was initialized to use the
             !! Dynamic Procedure. DON'T USE duidxjC again within this time step.
             !! Make the SGS call at the very end, just before the time
             !! advancement.
         end if 
+        !rdum1 = p_maxval(abs(real(this%u_rhs))); rdum2 = p_maxval(abs(aimag(this%u_rhs)))
+        !rdum3 = p_maxval(abs(real(this%v_rhs))); rdum4 = p_maxval(abs(aimag(this%v_rhs)))
+        !rdum5 = p_maxval(abs(real(this%w_rhs))); rdum6 = p_maxval(abs(aimag(this%w_rhs)))
+        !if(nrank==0) then
+        !  write(*,*) '--Aft-RHS-1--', rdum1, rdum2
+        !  write(*,*) '--Aft-RHS-2--', rdum3, rdum4
+        !  write(*,*) '--Aft-RHS-3--', rdum5, rdum6
+        !endif
         
 
         ! Step 4: Time Step 
@@ -683,6 +702,8 @@ contains
         complex(rkind), dimension(:,:,:), pointer :: dwdxH, dwdyH, dwdzH
 
         complex(rkind), dimension(:,:)  , pointer :: dudz_dzby2, dvdz_dzby2
+
+        real(rkind) :: rdum1,rdum2,rdum3,rdum4,rdum5,rdum6,rdum7,rdum8,rdum9
 
         dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
         dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
@@ -761,6 +782,17 @@ contains
         call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
         call transpose_z_to_y(ctmpz1,dvdzH,this%sp_gpC)
         call this%spectC%ifft(dvdzH,dvdzC)
+
+        !rdum1 = p_maxval(abs(dudx));  rdum2 = p_maxval(abs(dudy));  rdum3 = p_maxval(abs(dudzC))
+        !rdum4 = p_maxval(abs(dvdx));  rdum5 = p_maxval(abs(dvdy));  rdum6 = p_maxval(abs(dvdzC))
+        !rdum7 = p_maxval(abs(dwdxC)); rdum8 = p_maxval(abs(dwdyC)); rdum9 = p_maxval(abs(dwdz))
+        !if(nrank==0) then
+        !  write(*,*) '------------Inside compute_duidxj---------------'
+        !  write(*,*) '--dudx, dudy, dudz--', rdum1, rdum2, rdum3
+        !  write(*,*) '--dvdx, dvdy, dvdz--', rdum4, rdum5, rdum6
+        !  write(*,*) '--dwdx, dwdy, dwdz--', rdum7, rdum8, rdum9
+        !  write(*,*) '------------Inside compute_duidxj---------------'
+        !endif
 
     end subroutine
 

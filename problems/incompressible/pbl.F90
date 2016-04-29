@@ -38,7 +38,7 @@ program pbl
 
     call init_temporal(inputfile)
 
-    call tic() 
+    call tic()
     do while (igp%tsim < igp%tstop) 
        
        call igp%AdamsBashforth()     !<-- Time stepping scheme + Pressure Proj. (see hit_grid.F90)

@@ -6,7 +6,7 @@ module sgsmod
     use spectralMod, only: spectral  
     use mpi 
     use cd06staggstuff, only: cd06stagg
-    use reductions, only: p_maxval, p_sum
+    use reductions, only: p_maxval, p_sum, p_minval
     use numerics, only: useCompactFD 
     use StaggOpsMod, only: staggOps  
     use gaussianstuff, only: gaussian
@@ -18,6 +18,8 @@ module sgsmod
 
     real(rkind) :: c_sigma = 1.5_rkind
     real(rkind) :: c_smag = 0.17_rkind
+    real(rkind) :: c_mgm = 1.0_rkind
+    integer     :: mgm_option = 1
     real(rkind) :: kappa = 0.41_rkind
     real(rkind), parameter :: deltaRatio = 2.0_rkind
     complex(rkind), parameter :: zeroC = zero + imi*zero
@@ -27,7 +29,7 @@ module sgsmod
     type :: sgs
         private
         type(spectral), pointer :: spectC, spectE 
-        real(rkind), allocatable, dimension(:,:,:,:) :: rbuff, rbuffE, SIGMAbuffs, Lij, Mij
+        real(rkind), allocatable, dimension(:,:,:,:) :: rbuff, rbuffE, SIGMAbuffs, Lij, Mij, MGMbuffs, MGMbuffsE
         real(rkind), pointer, dimension(:,:,:) :: cSMAG_WALL, nuSGS, nuSGSfil,nuSGSE
         real(rkind) :: deltaFilter, mconst, deltaTFilter 
         type(decomp_info), pointer :: sp_gp, gpC
@@ -45,6 +47,8 @@ module sgsmod
         logical :: useWallFunction = .false. 
         logical :: useDynamicProcedure = .false.
         logical :: useClipping = .false. 
+        
+        logical :: eddyViscModel != .true.    ! whether SGS model used is eddy-viscosity
         
         real(rkind) :: meanFact
 
@@ -65,6 +69,7 @@ module sgsmod
             procedure, private :: planarAverage 
             procedure, private :: get_SMAG_Op
             procedure, private :: get_SIGMA_Op
+            procedure, private :: get_MGM_Op
             procedure, private :: testFilter_ip
             procedure, private :: testFilter_oop
             procedure, private :: testFilter_oop_C2R
@@ -201,7 +206,7 @@ contains
     end subroutine
 
 
-    subroutine getRHS_SGS_WallM(this, duidxjC, duidxjE, duidxjChat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, ustar, Umn, Vmn, Uspmn, filteredSpeedSq, max_nuSGS)    
+    subroutine getRHS_SGS_WallM(this, duidxjC, duidxjE, duidxjChat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, ustar, Umn, Vmn, Uspmn, filteredSpeedSq, dxmesh, dymesh, dzmesh, max_nuSGS, max_Dissp)    
         class(sgs), intent(inout), target :: this
         real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(inout), target :: duidxjC
         real(rkind)   , dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(inout), target :: duidxjE
@@ -210,6 +215,7 @@ contains
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat, wChat
         complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: u, v, wC, filteredSpeedSq
+        real(rkind), intent(in) :: dxmesh, dymesh, dzmesh
         real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
         real(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
         real(rkind), dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
@@ -219,9 +225,11 @@ contains
         real(rkind), dimension(:,:,:), pointer :: S11, S12, S13, S13C, S22, S23, S23C, S33
         real(rkind), intent(in) :: ustar, Umn, Vmn, Uspmn
         real(rkind), intent(out), optional :: max_nuSGS
+        real(rkind), intent(out), optional :: max_Dissp
         complex(rkind), dimension(:,:,:), pointer :: tauhat, tauhat2    
         integer :: nz
 
+        real(rkind) :: rdum1, rdum2, rdum3, rdum4, rdum5, rdum6, maxDissp
 
         dudx  => duidxjC(:,:,:,1); dudy  => duidxjC(:,:,:,2); dudzC => duidxjC(:,:,:,3); 
         dvdx  => duidxjC(:,:,:,4); dvdy  => duidxjC(:,:,:,5); dvdzC => duidxjC(:,:,:,6); 
@@ -238,11 +246,22 @@ contains
         S13 => this%rbuffE(:,:,:,1); S23 => this%rbuffE(:,:,:,2)
         tauhat => this%cbuff(:,:,:,1); tauhat2 => this%cbuff(:,:,:,2)       
 
+        !dudx = 0.000000000000000d0; dudy = -2.82213938648046d0; dudzC = 16.3412720830710d0
+        !dvdx = -0.658965189138041d0; dvdy = 0.00000000000000d0; dvdzC = 1.83481339601369d0
+        !dwdxC = 0.0d0; dwdyC = 0.0d0; dwdz = 0.0d0
+
         ! STEP 1: Compute Sij
         S11 = dudx; S22 = dvdy; S33 = dwdz
         S13 = half*(dudz + dwdx); S23 = half*(dvdz + dwdy); S12 = half*(dudy + dvdx)
 
         S13C = half*(dudzC + dwdxC); S23C = half*(dvdzC + dwdyC)
+
+        !rdum1 = p_maxval((S11));  rdum2 = p_maxval((S22));  rdum3 = p_maxval((S33)); 
+        !rdum4 = p_maxval((S13C)); rdum5 = p_maxval((S23C)); rdum6 = p_maxval((S12))
+        !if(nrank==0) then
+        !  write(*,*) '--S11, 22, 33--', rdum1, rdum2, rdum3
+        !  write(*,*) '--S13, 23, 12--', rdum4, rdum5, rdum6
+        !endif
 
         ! STEP 2: Call the SGS model operator
         select case (this%SGSmodel)
@@ -253,7 +272,12 @@ contains
         case (2)
             call this%get_SMAG_Op(this%nuSGS, S11,S22,S33,S12,S13C,S23C)
         case (3)
-            call this%get_MGM_Op(this%rbuff(:,:,:,1:6), this%rbuffE(:,:,:,1:2) duidxjC, duidxjE)
+            call this%get_MGM_Op(tau11, tau12, tau13C, tau22, tau23C, tau33, tau13, tau23, &
+                                  dudx,  dudy,  dudzC,  dvdx,  dvdy,  dvdzC, dwdxC, dwdyC, dwdz, dudz, dvdz, dwdx, dwdy, &
+                                  dxmesh**2, dymesh**2, dzmesh**2, mgm_option, maxDissp)
+            if (present(max_Dissp)) then
+                max_Dissp = maxDissp
+            end if 
         end select
 
         if (this%useDynamicProcedure) then
@@ -279,7 +303,7 @@ contains
         end if 
 
         ! STEP 3: Compute TAUij
-        if(eddyViscMod) then
+        if(this%eddyViscModel) then
             this%nuSGS = -two*this%nuSGS
             tau11 = this%nuSGS*S11; tau22 = this%nuSGS*S22; tau33 = this%nuSGS*S33
             tau12 = this%nuSGS*S12
@@ -293,11 +317,28 @@ contains
             call transpose_y_to_x(this%rtmpYE,this%nuSGSE,this%gpE)
             tau13 = this%nuSGSE * S13
             tau23 = this%nuSGSE * S23
+
         else
 
             ! already computed
 
         endif
+
+        !rdum1 = p_maxval(abs(tau11)); rdum2 = p_maxval(abs(tau12)); rdum3 = p_maxval(abs(tau13)); 
+        !rdum4 = p_maxval(abs(tau22)); rdum5 = p_maxval(abs(tau23)); rdum6 = p_maxval(abs(tau33))
+        !if(nrank==0) then
+        !  write(*,'(a,3(e19.12,1x))') '--tau11, 12, 13--', rdum1, rdum2, rdum3
+        !  write(*,'(a,3(e19.12,1x))') '--tau22, 23, 33--', rdum4, rdum5, rdum6
+        !endif
+
+        !rdum1 = p_maxval(abs(real(urhs))); rdum2 = p_maxval(abs(aimag(urhs)))
+        !rdum3 = p_maxval(abs(real(vrhs))); rdum4 = p_maxval(abs(aimag(vrhs)))
+        !rdum5 = p_maxval(abs(real(wrhs))); rdum6 = p_maxval(abs(aimag(wrhs)))
+        !if(nrank==0) then
+        !  write(*,*) '--Ins-RHS-1--', rdum1, rdum2
+        !  write(*,*) '--Ins-RHS-2--', rdum3, rdum4
+        !  write(*,*) '--Ins-RHS-3--', rdum5, rdum6
+        !endif
 
         select case(this%wallModel) 
         case(0)
@@ -352,6 +393,14 @@ contains
             call this%spectE%mtimes_ik2_ip(this%ctmpEy)
             wrhs = wrhs - this%ctmpEy
         end select
+        !rdum1 = p_maxval(abs(real(urhs))); rdum2 = p_maxval(abs(aimag(urhs)))
+        !rdum3 = p_maxval(abs(real(vrhs))); rdum4 = p_maxval(abs(aimag(vrhs)))
+        !rdum5 = p_maxval(abs(real(wrhs))); rdum6 = p_maxval(abs(aimag(wrhs)))
+        !if(nrank==0) then
+        !  write(*,*) '--IWM-RHS-1--', rdum1, rdum2
+        !  write(*,*) '--IWM-RHS-2--', rdum3, rdum4
+        !  write(*,*) '--IWM-RHS-3--', rdum5, rdum6
+        !endif
 
 
         ! STEP 6: tau12 -> ddy in urhs, ddx in vrhs

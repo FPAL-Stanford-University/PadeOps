@@ -41,8 +41,6 @@ contains
         tid_compStats = compStats
         time_startDumping = startDumping
 
-        write(*,*) 'Stats inputs: ', tid_statsDump, tid_compStats, time_startDumping
-        
     end subroutine
 
      
@@ -56,6 +54,7 @@ contains
         if (mod(gp%step,nt_getMaxKE) == 0) then
             call message(1,"Max KE:",gp%getMaxKE())
             call message(1,"Max nuSGS:",gp%max_nuSGS)
+            call message(1,"Max Dissp:",gp%max_Dissp)
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 
