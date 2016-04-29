@@ -342,15 +342,26 @@ contains
 
     end subroutine
 
-    subroutine get_primitive(this,onebyrho)
+    subroutine get_primitive(this,rho,devstress,p,sos,e)
         class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: onebyrho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho, e
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(out) :: devstress
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: p, sos
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%get_primitive(onebyrho)
+          call this%material(imat)%get_primitive(rho)
         end do
+  
+        call this%get_eelastic_devstress(devstress)   ! Get species elastic energies, and mixture and species devstress
+        if(this%ns == 1) then
+          this%material(1)%eh = e - this%material(1)%eel
+        endif
+        call this%get_p_from_ehydro(rho)              ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
+        call this%get_pmix(p)
+        call this%getSOS(rho,p,sos)
+
 
     end subroutine
 

@@ -582,16 +582,16 @@ contains
 
     end subroutine
 
-    subroutine get_primitive(this,onebyrho)
+    subroutine get_primitive(this,rho)
         use operators, only : gradient
         class(solid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: onebyrho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
 
-        this%Ys = this%consrv(:,:,:,1) * onebyrho
+        this%Ys = this%consrv(:,:,:,1) / rho
         this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
 
-        call this%getSpeciesDensity(one/onebyrho,rhom)
+        call this%getSpeciesDensity(rho,rhom)
         call this%hydro%get_T(this%eh, this%T, rhom)
         ! call this%hydro%get_T(this%eh, this%T, this%consrv(:,:,:,1)/(this%VF+epssmall))
 

@@ -343,7 +343,6 @@ contains
         ! Get hydrodynamic and elastic energies, stresses
         call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
         call this%post_bc()
-        call this%mix%get_emix(this%e)
         
         !if (P_MAXVAL(abs( this%rho/this%rho0/(detG)**half - one )) > 10._rkind*eps) then
         !    call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
@@ -794,20 +793,7 @@ contains
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
        
-        call this%mix%get_primitive(onebyrho)                  ! Get primitive variables for individual species
-        call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
-        call this%mix%get_p_from_ehydro(this%rho)              ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
-        call this%mix%get_pmix(this%p)
-        call this%mix%getSOS(this%rho,this%p,this%sos)
-
-        ! call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        ! call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
-        ! 
-        ! call this%sgas%get_T(this%e,this%T)
-        ! call this%sgas%get_p(this%rho,(this%e-this%eel),this%p)
-
-        !call this%mix%get_devstress(this%devstress)
-        ! call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+        call this%mix%get_primitive(this%rho, this%devstress, this%p, this%sos, this%e)                  ! Get primitive variables for individual species
 
     end subroutine
 
@@ -831,6 +817,10 @@ contains
         call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
         call this%mix%get_ehydro_from_p(this%rho,this%p)            ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
         call this%mix%getSOS(this%rho,this%p,this%sos)
+
+        ! assuming pressures have relaxed and sum( (Ys*(ehydro + eelastic) ) over all
+        ! materials equals e
+        call this%mix%get_emix(this%e)
        
         !call this%mix%get_T(this%T) ! Get mixture temperature (?)
         !call this%sgas%get_T(this%e,this%T)  ! Get updated temperature
