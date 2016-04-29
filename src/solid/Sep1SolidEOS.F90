@@ -8,13 +8,14 @@ module Sep1SolidEOS
 
     type, extends(elasticeos) :: sep1solid
 
+        real(rkind) :: rho0 = one                    ! Reference density
         real(rkind) :: mu = zero                     ! Shear Modulus
         real(rkind) :: yield = one                   ! Yield Stress
         real(rkind) :: tau0 = 1.0d-10                ! Plastic relaxation time scale
 
     contains
 
-        procedure :: init
+        ! procedure :: init
         procedure :: get_finger
         procedure :: get_devstress
         procedure :: get_eelastic
@@ -23,16 +24,22 @@ module Sep1SolidEOS
 
     end type
 
+    interface sep1solid
+        module procedure init
+    end interface
+
 contains
 
-    subroutine init(this,mu_,yield_)
-        class(sep1solid), intent(inout) :: this
-        real(rkind), intent(in) :: mu_, yield_
+    function init(rho0_,mu_,yield_,tau0_) result(this)
+        type(sep1solid) :: this
+        real(rkind), intent(in) :: rho0_,mu_, yield_, tau0_
 
+        this%rho0 = rho0_
         this%mu = mu_
         this%yield = yield_
+        this%tau0 = tau0_
 
-    end subroutine
+    end function
 
     pure subroutine get_finger(this,g,finger,fingersq,trG,trG2,detG)
         class(sep1solid), intent(in) :: this
@@ -100,22 +107,20 @@ contains
 
     end subroutine
 
-    pure subroutine get_eelastic(this,rho0,trG,trG2,detG,eelastic)
+    pure subroutine get_eelastic(this,trG,trG2,detG,eelastic)
         class(sep1solid), intent(in) :: this
-        real(rkind),                   intent(in)  :: rho0
         real(rkind), dimension(:,:,:), intent(in)  :: trG,trG2,detG
         real(rkind), dimension(:,:,:), intent(out) :: eelastic
 
-        eelastic = fourth*this%mu/rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
+        eelastic = fourth*this%mu/this%rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
 
     end subroutine
 
-    pure subroutine get_sos(this,rho0,sos)
+    pure subroutine get_sos(this,sos)
         class(sep1solid), intent(in) :: this
-        real(rkind),                   intent(in)  :: rho0
         real(rkind), dimension(:,:,:), intent(inout) :: sos
 
-        sos = sqrt(sos**two + fourthird*this%mu/rho0)
+        sos = sqrt(sos**two + fourthird*this%mu/this%rho0)
 
     end subroutine
 

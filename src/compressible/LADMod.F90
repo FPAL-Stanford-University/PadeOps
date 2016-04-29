@@ -30,19 +30,19 @@ module LADMod
         procedure          :: get_conductivity
         procedure          :: get_diffusivity
         procedure, private :: filter
-        procedure          :: destroy
+        final              :: destroy
 
     end type
 
 contains
 
     subroutine init(this,decomp,der,fil,nfils,dx,dy,dz,Cbeta,Cmu,Ckap,Cdiff,CY)
-        class(ladobject),        intent(in) :: this
-        type(decomp_info), intent(in) :: decomp
-        type(derivatives), intent(in) :: der
-        type(filters),     intent(in) :: fil
+        class(ladobject),        intent(inout) :: this
+        type(decomp_info), target, intent(in) :: decomp
+        type(derivatives), target, intent(in) :: der
+        type(filters),     target, intent(in) :: fil
         integer,           intent(in) :: nfils
-        real(rkind),       intent(in) :: Cbeta,Cmu,Ckap,Cdiff,CY
+        real(rkind),       intent(in) :: Cbeta,Cmu,Ckap,Cdiff,CY,dx,dy,dz
 
         ! Set all coefficients
         this%Cbeta = Cbeta
@@ -65,6 +65,16 @@ contains
         this%dz = dz
     end subroutine
 
+
+    pure elemental subroutine destroy(this)
+        type(ladobject),        intent(inout) :: this
+
+        nullify(this%fil)
+        nullify(this%der)
+        nullify(this%decomp)
+
+    end subroutine
+
     subroutine get_viscosities(this,rho,duidxj,mu,bulk,x_bc,y_bc,z_bc)
         class(ladobject),        intent(in) :: this
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(in)  :: rho
@@ -72,7 +82,7 @@ contains
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(inout) :: mu, bulk
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), pointer, intent(in) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
 
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: mustar, bulkstar
         real(rkind), dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2
@@ -123,7 +133,7 @@ contains
         func = dudx + dvdy + dwdz      ! dilatation
         
         ! Step 1: Get components of grad(rho) squared individually
-        call this%gradient(rho,ytmp1,ytmp2,ytmp3,x_bc,y_bc,z_bc) ! Does not use any Y buffers
+        call gradient(this%decomp,this%der,rho,ytmp1,ytmp2,ytmp3,x_bc,y_bc,z_bc) ! Does not use any Y buffers
         ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
@@ -183,7 +193,7 @@ contains
         ! -------- Artificial Conductivity --------
 
         ! Step 1: Get components of grad(e) squared individually
-        call this%gradient(e,ytmp1,ytmp2,ytmp3,x_bc,y_bc,z_bc) ! Does not use any Y buffers
+        call gradient(this%decomp,this%der,e,ytmp1,ytmp2,ytmp3,x_bc,y_bc,z_bc) ! Does not use any Y buffers
         ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
@@ -218,9 +228,9 @@ contains
         kap = kap + kapstar
     end subroutine
 
-    subroutine get_diffusivity(this,Ys,dYsdx,dYsdy,dYsdz,sos,diff)
+    subroutine get_diffusivity(this,Ys,dYsdx,dYsdy,dYsdz,sos,diff,x_bc,y_bc,z_bc)
         class(ladobject),  intent(in) :: this
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)  :: rho,Ys,dYsdx,dYsdy,dYsdz,sos
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)  :: Ys,dYsdx,dYsdy,dYsdz,sos
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(inout) :: diff
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
@@ -281,7 +291,9 @@ contains
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: tmp_in_y
         real(rkind), dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: tmp1_in_x, tmp2_in_x
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: tmp1_in_z, tmp2_in_z
-        
+       
+        integer :: idx
+
         ! First filter in y
         call this%fil%filtery(arr,tmp_in_y,y_bc(1),y_bc(2))
         ! Subsequent refilters 

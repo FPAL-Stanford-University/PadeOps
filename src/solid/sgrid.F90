@@ -338,18 +338,15 @@ contains
         ! Initialize everything to a constant Zero
         this%fields = zero  
 
-        ! Go to hooks if a different initialization is derired 
+        ! Go to hooks if a different initialization is derired (Set mixture p, Ys, VF, u, v, w, rho)
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         this%mix, tstop=this%tstop, dt=this%dtfixed, tviz=tviz)
        
         ! Get hydrodynamic and elastic energies, stresses
+        call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
         call this%post_bc()
+        call this%mix%get_emix(this%e)
         
-        ! Check if the initialization was okay
-        if ( nancheck(this%fields) ) then
-            call GracefulExit("NaN encountered at initialization in fields", 999)
-        end if
-
         !if (P_MAXVAL(abs( this%rho/this%rho0/(detG)**half - one )) > 10._rkind*eps) then
         !    call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
         !end if
@@ -385,13 +382,6 @@ contains
         ! Do this here to keep tau0 and invtau0 compatible at the end of this subroutine
         this%invtau0 = one/this%tau0
 
-        ! Check if the initialization was okay
-        if ( nancheck(this%fields(:,:,:,8:26),i,j,k,l) ) then
-            call message("fields: ",this%fields(i,j,k,l))
-            write(charout,'(A,4(I5,A))') "NaN encountered in initialization ("//trim(varnames(l+7))//")  at (",i,", ",j,", ",k,", ",l,") of fields"
-            call GracefulExit(trim(charout), 999)
-        end if
-        
     end subroutine
 
 
@@ -413,6 +403,8 @@ contains
         call destroy_buffs(this%xbuf)
         call destroy_buffs(this%ybuf)
         call destroy_buffs(this%zbuf)
+
+        if ( allocated(this%mix) ) deallocate(this%mix)
 
         call this%LAD%destroy()
         if ( allocated(this%LAD) ) deallocate(this%LAD)
@@ -522,6 +514,11 @@ contains
         call this%gradient(this%u,dudx,dudy,dudz)
         call this%gradient(this%v,dvdx,dvdy,dvdz)
         call this%gradient(this%w,dwdx,dwdy,dwdz)
+
+        do i=1,this%mix%ns
+            call this%gradient(this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),&
+                               this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3))
+        end do
 
         ! compute artificial shear and bulk viscosities
         call this%getPhysicalProperties()
@@ -643,16 +640,9 @@ contains
                     &substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
                 call GracefulExit(trim(charout), 999)
             end if
-            !if ( nancheck(this%g,i,j,k,l) ) then
-            !    call message("g: ",this%g(i,j,k,l))
-            !    write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (g) at &
-            !        &substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
-            !    call GracefulExit(trim(charout), 999)
-            !end if
+            call this%mix%checkNaN()
 
             ! Pre-compute stress, LAD, J, etc.
-            ! call this%mix%get_devstress(this%devstress)       ! This also computes individual species stresses (computed in get_primitive)
-
             call this%mix%getSOS(this%rho,this%p,this%sos)
             call this%mix%getLAD(this%rho,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
@@ -666,7 +656,7 @@ contains
             ! Now update all the individual species variables
             call this%mix%update_g (isub,this%dt,rho,u,v,w)            ! g tensor
             call this%mix%update_Ys(isub,this%dt,rho,u,v,w)            ! Volume Fraction
-            call this%mix%update_eh(isub,this%dt,rho,u,v,w,tauiiadivu) ! Hydrodynamic energy
+            call this%mix%update_eh(isub,this%dt,rho,u,v,w,divu,tauiiadivu) ! Hydrodynamic energy
             call this%mix%update_VF(isub,this%dt,rho,u,v,w)            ! Volume Fraction
 
             ! Integrate simulation time to keep it in sync with RK substep
@@ -717,7 +707,7 @@ contains
         class(sgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
-        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtplast, delta
+        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtdiff, dtplast, delta
 
         delta = min(this%dx, this%dy, this%dz)
 
@@ -731,9 +721,9 @@ contains
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
 
         ! species specific
-        call this%mix%get_dt(this%rho, delta, thisdtkap, dtDiff, dtplast)
+        call this%mix%get_dt(this%rho, delta, dtkap, dtdiff, dtplast)
         dtkap = 0.2_rkind * dtkap
-        dtDiff = 0.2_rkind * dtDiff
+        dtdiff = 0.2_rkind * dtdiff
 
         ! Use fixed time step if CFL <= 0
         if ( this%CFL .LE. zero ) then
@@ -847,9 +837,6 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz)
         call this%gradient(this%w,dwdx,dwdy,dwdz)
 
- 
-        ! get grad Y
-       
         call this%getPhysicalProperties()
         call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 

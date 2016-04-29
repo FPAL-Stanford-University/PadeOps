@@ -1,7 +1,7 @@
 module SolidMixtureMod
 
     use kind_parameters, only: rkind,clen
-    use constants,       only: zero,one,two,third
+    use constants,       only: zero,epssmall,eps,one,two,third
     use decomp_2d,       only: decomp_info
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
@@ -38,6 +38,10 @@ module SolidMixtureMod
         procedure :: get_rho
         procedure :: get_primitive
         procedure :: get_conserved
+        procedure :: get_ehydro_from_p
+        procedure :: checkNaN
+        procedure :: fnumden
+        procedure :: rootfind_nr_1d
         final     :: destroy
 
     end type
@@ -49,14 +53,17 @@ module SolidMixtureMod
 contains
 
     function init(decomp,der,fil,LAD,ns) result(this)
-        type(solid_mixture)               :: this
-        type(decomp_info),  intent(in)    :: decomp
-        type(derivatives),  intent(in)    :: der
-        type(ladobject),    intent(in)    :: LAD
-        integer,            intent(in)    :: ns
+        type(solid_mixture)                      :: this
+        type(decomp_info), target, intent(in)    :: decomp
+        type(filters),     target, intent(in)    :: fil
+        type(derivatives), target, intent(in)    :: der
+        type(ladobject),   target, intent(in)    :: LAD
+        integer,                   intent(in)    :: ns
 
         type(solid), allocatable :: dummy
         integer :: i
+
+        if (ns < 1) call GracefulExit("Must have at least 1 species in the problem. Check input file for errors",3457)
 
         this%ns = ns
         this%nxp = decomp%ysz(1)
@@ -69,19 +76,33 @@ contains
         this%LAD => LAD
 
         ! Allocate array of solid objects (Use a dummy to avoid memory leaks)
-        allocate(dummy, source=solid(decomp,der))
+        allocate(dummy)
+        call dummy%init(decomp,der,fil)
+
         if (allocated(this%material)) deallocate(this%material)
         allocate(this%material(this%ns), source=dummy)
         deallocate(dummy)
+
+        this%material(1)%Ys = one
+        this%material(1)%VF = one
+        do i=2,this%ns
+            this%material(i)%Ys = zero
+            this%material(i)%VF = zero
+        end do
 
     end function
 
     pure elemental subroutine destroy(this)
         type(solid_mixture), intent(inout)  :: this
-        integer :: i
 
         ! Deallocate array of solids (Destructor of solid should take care of everything else)
         if (allocated(this%material)) deallocate(this%material)
+
+        nullify(this%LAD)
+        nullify(this%fil)
+        nullify(this%der)
+        nullify(this%decomp)
+
     end subroutine
 
     subroutine set_material(this, imat, hydro, elastic)
@@ -101,13 +122,16 @@ contains
 
     subroutine relaxPressure(this,rho,mixE,mixP)
         class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixE
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho, mixE
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix
         real(rkind), dimension(4*this%ns), target :: fparams
         integer, dimension(1)             :: iparams
         real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
+
+        integer :: i,j,k,imat
+        real(rkind) :: maxp, peqb
 
         real(rkind), dimension(1:this%ns) :: fac
 
@@ -177,16 +201,19 @@ contains
     end subroutine
 
     subroutine get_dt(this, rho, delta, dtkap, dtDiff, dtplast)
+        use reductions, only: P_MAXVAL
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho
         real(rkind), intent(in)  :: delta
         real(rkind), intent(out) :: dtkap, dtDiff, dtplast
 
+        integer :: imat
+
         dtkap = one/epssmall; dtDiff = dtkap; dtplast = dtDiff
 
         do imat = 1, this%ns
-          dtkap =   min(dtkap,   one / ( (P_MAXVAL( this%material(imat)%kap*this%material(imat)%T/(this%rho* delta**4)))**(third) + eps))
-          dtDiff =  min(dtDiff,  one / ( (P_MAXVAL( this%material(imat)%diff/delta**2) + eps))
+          dtkap =   min(dtkap,   one / ( (P_MAXVAL( this%material(imat)%kap*this%material(imat)%T/(rho* delta**4)))**(third) + eps))
+          dtDiff =  min(dtDiff,  one / ( (P_MAXVAL( this%material(imat)%diff/delta**2) + eps)) )
           dtplast = min(dtplast, this%material(imat)%elastic%tau0)
         enddo
 
@@ -209,7 +236,7 @@ contains
             ! Artificial diffusivity (grad(Ys) is stored in Ji at this stage)
             call this%LAD%get_diffusivity(this%material(i)%Ys, this%material(i)%Ji(:,:,:,1), &
                                           this%material(i)%Ji(:,:,:,2), this%material(i)%Ji(:,:,:,3), &
-                                          sos, this%material(i)%diff)
+                                          sos, this%material(i)%diff, x_bc, y_bc, z_bc)
         end do
 
     end subroutine
@@ -227,26 +254,20 @@ contains
 
     end subroutine
 
-    subroutine get_ehydro_from_p(this,p)
+    subroutine get_ehydro_from_p(this,rho,p)
         class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: p
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: Cvmix
-        real(rkind) :: Cvmat
         integer :: imat
 
-        p = zero;     !T = zero;     Cvmix = zero
+        p = zero
 
         ! get species energy from species pressure
         do imat = 1, this%ns
             call this%material(imat)%get_ehydroT_from_p(rho)             ! computes species ehydro and T from species p
             p = p + this%material(imat)%VF * this%material(imat)%p       ! computes mixture p
-
-            !T = T + this%material(imat)%Ys * this%material(imat)%eh      ! computes mixture T
-            !call this%material(imat)%hydro%get_Cv(Cvmat)
-            !Cvmix = Cvmix + this%material(imat)%Ys * Cvmat
         enddo
-        !T = T/Cvmix
 
     end subroutine
 
@@ -274,7 +295,8 @@ contains
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho  ! Mixture density
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: sunJx,sumJy,sumJz
+        integer :: i
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: sumJx,sumJy,sumJz
 
         sumJx = zero; sumJy = zero; sumJz = zero;
         ! Get diff*gradYs (gradYs are in Ji's)
@@ -335,9 +357,27 @@ contains
 
     end subroutine
 
+    subroutine get_rhoYs_from_gVF(this,rho)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhom
+
+        integer :: imat
+
+        rho = zero
+        do imat = 1, this%ns
+          call this%material(imat)%getSpeciesDensity(rhom)
+          rho = rho + this%material(imat)%VF * rhom
+        end do
+
+        do imat = 1,this%ns
+            call this%material(imat)%getSpeciesDensity(rhom)
+            this%material(imat)%Ys = this%material(imat)%VF * rhom / rho
+        end do
+    end subroutine
+
     subroutine get_q(this,x_bc,y_bc,z_bc)
         class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: qx,qy,qz
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: i
@@ -345,31 +385,29 @@ contains
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: tmp1_in_y
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: tmp1_in_z, tmp2_in_z
 
-        qx = zero; qy = zero; qz = zero
-
         do i = 1,this%ns
             ! Step 1: Get qy
-            call this%der%ddy(this%material(i)%T,tmp1_in_y,this%y_bc(1),this%y_bc(2))
+            call this%der%ddy(this%material(i)%T,tmp1_in_y,y_bc(1),y_bc(2))
             this%material(i)%qi(:,:,:,2) = -this%material(i)%kap*tmp1_in_y
 
             ! Step 2: Get qx
             call transpose_y_to_x(this%material(i)%T,tmp1_in_x,this%decomp)
-            call this%der%ddx(tmp1_in_x,tmp2_in_x,this%x_bc(1),this%x_bc(2))
+            call this%der%ddx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
             call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
             this%material(i)%qi(:,:,:,1) = -this%material(i)%kap*tmp1_in_y
 
             ! Step 3: Get qz
             call transpose_y_to_z(this%material(i)%T,tmp1_in_z,this%decomp)
-            call this%der%ddz(tmp1_in_z,tmp2_in_z,this%z_bc(1),this%z_bc(2))
+            call this%der%ddz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
             call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
             this%material(i)%qi(:,:,:,3) = -this%material(i)%kap*tmp1_in_y
 
             ! If multispecies, add the inter-species enthalpy flux
             if (this%ns .GT. 1) then
-                call this%material(i)%get_enthalpy(this%T,tmp1_in_y)
-                this%material(i)%q1(:,:,:,1) = this%material(i)%q1(:,:,:,1) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,1) )
-                this%material(i)%q1(:,:,:,2) = this%material(i)%q1(:,:,:,2) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,2) )
-                this%material(i)%q1(:,:,:,3) = this%material(i)%q1(:,:,:,3) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,3) )
+                call this%material(i)%get_enthalpy(tmp1_in_y)
+                this%material(i)%qi(:,:,:,1) = this%material(i)%qi(:,:,:,1) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,1) )
+                this%material(i)%qi(:,:,:,2) = this%material(i)%qi(:,:,:,2) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,2) )
+                this%material(i)%qi(:,:,:,3) = this%material(i)%qi(:,:,:,3) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,3) )
             end if
         end do
 
@@ -379,7 +417,6 @@ contains
     subroutine get_qmix(this,qx,qy,qz)
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: qx,qy,qz
-        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: i
 
@@ -393,15 +430,14 @@ contains
 
     end subroutine
 
-    subroutine filter(this, fil, 1)
+    subroutine filter(this, iflag)
         class(solid_mixture), intent(inout) :: this
-        type(filters),        intent(in)    :: fil
         integer,              intent(in)    :: iflag
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%filter(fil, iflag)
+          call this%material(imat)%filter(iflag)
         end do
 
     end subroutine
@@ -438,6 +474,8 @@ contains
         class(solid_mixture), intent(in) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: p  ! Mixture pressure
 
+        integer :: i
+
         p = zero
         do i = 1,this%ns
             p = p + this%material(i)%VF * this%material(i)%p  ! Volume fraction weighted sum
@@ -445,16 +483,29 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,tauiiadivu)
+    subroutine get_emix(this,e)
+        class(solid_mixture), intent(in) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: e  ! Mixture internal energy
+
+        integer :: i
+
+        e = zero
+        do i = 1,this%ns
+            e = e + this%material(i)%Ys * ( this%material(i)%eh + this%material(i)%eel )  ! Mass fraction weighted sum
+        end do
+
+    end subroutine
+
+    subroutine update_eh(this,isub,dt,rho,u,v,w,divu,tauiiadivu)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,tauiiadivu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,tauiiadivu
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,tauiiadivu)
+          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,divu,tauiiadivu)
         end do
 
     end subroutine
@@ -479,16 +530,26 @@ contains
 
     end subroutine
 
-    subroutine update_VF(this,isub,dt,rho,u,v,w)
+    subroutine update_VF(this,isub,dt,u,v,w)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: u,v,w
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_VF(isub,dt,rho,u,v,w)
+          call this%material(imat)%update_VF(isub,dt,u,v,w)
+        end do
+
+    end subroutine
+
+    subroutine checkNaN(this)
+        class(solid_mixture), intent(in)   :: this
+        integer :: imat
+
+        do imat=1,this%ns
+            call this%material(imat)%checkNaN(imat)
         end do
 
     end subroutine
@@ -502,6 +563,7 @@ contains
 
         integer :: im
         real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
+        real(rkind) :: fac
 
         vf   => fparams(  1:this%ns)
         gam  => fparams(  this%ns+1:2*this%ns)
@@ -526,7 +588,7 @@ contains
         integer, intent(in), dimension(:)     :: iparams
     
         integer     :: ii, itmax = 1000
-        real(rkind) :: tol = 1.0d-8
+        !real(rkind) :: tol = 1.0d-8
         real(rkind) :: dpf, num, den, den_conv
     
         !pfinitguess = pf

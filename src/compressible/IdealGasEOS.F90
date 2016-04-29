@@ -60,10 +60,11 @@ contains
 
     end subroutine
 
-    pure subroutine get_T(this,e,T)
+    pure subroutine get_T(this,e,T,rho)
         class(idealgas), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: e
         real(rkind), dimension(:,:,:), intent(out) :: T
+        real(rkind), dimension(:,:,:), intent(in), optional  :: rho
 
         T = (this%gam-one)*e*this%onebyRgas
 

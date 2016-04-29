@@ -27,12 +27,13 @@ module EOSMod
             real(rkind), dimension(:,:,:), intent(out) :: p
         end subroutine
 
-        pure subroutine get_T_interface(this,e,T)
+        pure subroutine get_T_interface(this,e,T,rho)
             import :: eos
             import :: rkind
             class(eos),                    intent(in)  :: this
             real(rkind), dimension(:,:,:), intent(in)  :: e
             real(rkind), dimension(:,:,:), intent(out) :: T
+            real(rkind), dimension(:,:,:), intent(in), optional :: rho
         end subroutine
 
         pure subroutine get_e_from_p_interface(this,rho,p,e)

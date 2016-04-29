@@ -19,18 +19,23 @@ module StiffGasEOS
 
     contains
 
-        procedure :: init
+        ! procedure :: init
         procedure :: get_p
         procedure :: get_e_from_p
         procedure :: get_T
+        procedure :: get_enthalpy
         procedure :: get_sos
 
     end type
 
+    interface stiffgas
+        module procedure init
+    end interface
+
 contains
 
-    subroutine init(this,gam_,Rgas_,PInf_)
-        class(stiffgas), intent(inout) :: this
+    function init(gam_,Rgas_,PInf_) result(this)
+        type(stiffgas) :: this
         real(rkind) :: gam_
         real(rkind) :: Rgas_
         real(rkind) :: PInf_
@@ -44,7 +49,7 @@ contains
         this%PInf = PInf_
         this%Cv = this%Rgas/(this%gam-one)
 
-    end subroutine
+    end function
 
     pure subroutine get_p(this,rho,e,p)
         class(stiffgas), intent(in) :: this
@@ -72,13 +77,22 @@ contains
 
     !end subroutine
 
-    pure subroutine get_T(this,e,rho,T)
+    pure subroutine get_T(this,e,T,rho)
         class(stiffgas), intent(in) :: this
-        real(rkind), dimension(:,:,:), intent(in)  :: e, rho
+        real(rkind), dimension(:,:,:), intent(in)  :: e
         real(rkind), dimension(:,:,:), intent(out) :: T
+        real(rkind), dimension(:,:,:), intent(in), optional  :: rho
 
         T =  (e - this%PInf/rho)/this%Cv
 
+    end subroutine
+
+    pure subroutine get_enthalpy(this,T,enthalpy)
+        class(stiffgas), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in)  :: T
+        real(rkind), dimension(:,:,:), intent(out) :: enthalpy
+
+        enthalpy = this%gam*this%Cv*T
     end subroutine
 
     pure subroutine get_sos(this,rho,p,sos)

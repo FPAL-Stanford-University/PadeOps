@@ -15,11 +15,14 @@ module SolidMod
     type :: solid
         integer :: nxp, nyp, nzp
 
+        logical :: explPlast = .FALSE.
+
         class(stiffgas ), allocatable :: hydro
         class(sep1solid), allocatable :: elastic
 
         type(decomp_info), pointer :: decomp
         type(derivatives), pointer :: der
+        type(filters),     pointer :: fil
 
         real(rkind), dimension(:,:,:), allocatable :: Ys
         real(rkind), dimension(:,:,:), allocatable :: VF
@@ -50,8 +53,9 @@ module SolidMod
 
         ! species-specific artificial properties
         real(rkind), dimension(:,:,:),   allocatable :: kap
+        real(rkind), dimension(:,:,:,:), allocatable :: qi
         real(rkind), dimension(:,:,:),   allocatable :: diff
-        real(rkind), dimension(:,:,:),   allocatable :: Ji
+        real(rkind), dimension(:,:,:,:), allocatable :: Ji
 
         ! species-specific conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: consrv
@@ -64,43 +68,57 @@ module SolidMod
 
     contains
 
+        procedure :: init
         procedure :: getRHS_g
-        procedure :: getPlasticSources
-        procedure :: getRHS_VF
+        procedure :: getRHS_Ys
         procedure :: getRHS_eh
+        procedure :: getRHS_VF
         procedure :: update_g
         procedure :: update_Ys
         procedure :: update_eh
         procedure :: update_VF
+        procedure :: getPhysicalProperties
+        procedure :: getPlasticSources
+        procedure :: get_p_from_ehydro
+        procedure :: get_ehydroT_from_p
+        procedure :: get_eelastic_devstress
+        procedure :: get_conserved
+        procedure :: get_primitive
+        procedure :: getSpeciesDensity
+        procedure :: get_enthalpy
+        procedure :: checkNaN
         procedure :: filter
         final     :: destroy
 
     end type
 
-    interface solid
-        module procedure init
-    end interface
+    ! interface solid
+    !     module procedure init
+    ! end interface
 
 contains
 
-    function init(decomp,der) result(this)
-        type(solid) :: this
-        type(decomp_info), intent(in) :: decomp
-        type(derivatives), intent(in) :: der
+    !function init(decomp,der,fil,hydro,elastic) result(this)
+    subroutine init(this,decomp,der,fil)
+        class(solid), target, intent(inout) :: this
+        type(decomp_info), target, intent(in) :: decomp
+        type(derivatives), target, intent(in) :: der
+        type(filters),     target, intent(in) :: fil
 
         this%decomp => decomp
         this%der => der
+        this%fil => fil
        
         ! Assume everything is in Y decomposition
         this%nxp = decomp%ysz(1)
         this%nyp = decomp%ysz(2)
         this%nzp = decomp%ysz(3)
 
-        ! if (allocated(this%hydro)) deallocate(this%hydro)
-        ! allocate( this%hydro, source=hydro )
-        ! 
-        ! if (allocated(this%elastic)) deallocate(this%elastic)
-        ! allocate( this%elastic, source=elastic )
+        if (allocated(this%hydro)) deallocate(this%hydro)
+        allocate( this%hydro )
+        
+        if (allocated(this%elastic)) deallocate(this%elastic)
+        allocate( this%elastic )
         
         ! Allocate material massfraction
         if( allocated( this%Ys ) ) deallocate( this%Ys )
@@ -153,6 +171,10 @@ contains
         if( allocated( this%kap ) ) deallocate( this%kap )
         allocate( this%kap(this%nxp,this%nyp,this%nzp) )
 
+        ! Allocate material diffusive flux
+        if( allocated( this%qi ) ) deallocate( this%qi )
+        allocate( this%qi(this%nxp,this%nyp,this%nzp,3) )
+        
         ! Allocate material diffusivity array
         if( allocated( this%diff ) ) deallocate( this%diff )
         allocate( this%diff(this%nxp,this%nyp,this%nzp) )
@@ -182,43 +204,47 @@ contains
         if( allocated( this%QtmpVF ) ) deallocate( this%QtmpVF )
         allocate( this%QtmpVF(this%nxp,this%nyp,this%nzp) )
 
-    end function
+    !end function
+    end subroutine
 
     pure elemental subroutine destroy(this)
-        class(solid), intent(inout) :: this
+        type(solid), intent(inout) :: this
 
         ! First deallocate all the arrays
-        if( allocated( this%Ys )        ) deallocate( this%Ys )
-        if( allocated( this%VF )        ) deallocate( this%VF )
-        if( allocated( this%eh )        ) deallocate( this%eh )
-        if( allocated( this%g )         ) deallocate( this%g )
-        if( allocated( this%devstress ) ) deallocate( this%devstress )
-        if( allocated( this%p )         ) deallocate( this%p )
-
-        nullify( this%g11 ); nullify( this%g12 ); nullify( this%g13 )
-        nullify( this%g21 ); nullify( this%g22 ); nullify( this%g23 )
-        nullify( this%g31 ); nullify( this%g32 ); nullify( this%g33 )
+        if( allocated( this%QtmpVF ) ) deallocate( this%QtmpVF )
+        if( allocated( this%Qtmpeh ) ) deallocate( this%Qtmpeh )
+        if( allocated( this%QtmpYs ) ) deallocate( this%QtmpYs )
+        if( allocated( this%Qtmpg  ) ) deallocate( this%Qtmpg )
+        if( allocated( this%consrv ) ) deallocate( this%consrv )
+        
+        if( allocated( this%Ji )   ) deallocate( this%Ji )
+        if( allocated( this%diff ) ) deallocate( this%diff )
+        if( allocated( this%kap )  ) deallocate( this%kap )
+        if( allocated( this%T )    ) deallocate( this%T )
+        if( allocated( this%p )    ) deallocate( this%p )
 
         nullify( this%sxx ); nullify( this%sxy ); nullify( this%sxz )
                              nullify( this%syy ); nullify( this%syz )
                                                   nullify( this%szz )
+        if( allocated( this%devstress ) ) deallocate( this%devstress )
 
-        if( allocated( this%consrv ) ) deallocate( this%consrv )
-        if( allocated( this%eel )        ) deallocate( this%eel )
-        if( allocated( this%T )        ) deallocate( this%T )
-        if( allocated( this%kap )        ) deallocate( this%kap )
-        if( allocated( this%diff )        ) deallocate( this%diff )
-        if( allocated( this%Ji )        ) deallocate( this%Ji )
+        nullify( this%g11 ); nullify( this%g12 ); nullify( this%g13 )
+        nullify( this%g21 ); nullify( this%g22 ); nullify( this%g23 )
+        nullify( this%g31 ); nullify( this%g32 ); nullify( this%g33 )
+        if( allocated( this%g )         ) deallocate( this%g )
 
-        if( allocated( this%Qtmpg ) ) deallocate( this%Qtmpg )
-        if( allocated( this%QtmpYs ) ) deallocate( this%QtmpYs )
-        if( allocated( this%Qtmpeh ) ) deallocate( this%Qtmpeh )
-        if( allocated( this%QtmpVF ) ) deallocate( this%QtmpVF )
+        if( allocated( this%eel ) ) deallocate( this%eel )
+        if( allocated( this%eh )  ) deallocate( this%eh )
+        if( allocated( this%VF )  ) deallocate( this%VF )
+        if( allocated( this%Ys )  ) deallocate( this%Ys )
 
         ! Now deallocate the EOS objects
-        if ( allocated(this%hydro)      ) deallocate(this%hydro)
-        if ( allocated(this%elastic)    ) deallocate(this%elastic)
+        if ( allocated(this%hydro)   ) deallocate(this%hydro)
+        if ( allocated(this%elastic) ) deallocate(this%elastic)
 
+        nullify( this%fil    )
+        nullify( this%der    )
+        nullify( this%decomp )
     end subroutine
 
     subroutine getPhysicalProperties(this)
@@ -229,14 +255,29 @@ contains
 
     end subroutine
 
+    subroutine getSpeciesDensity(this,rho)
+        class(solid), intent(in) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out)  :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: detg
+
+        detg = this%g11*(this%g22*this%g33-this%g23*this%g32) &
+             - this%g12*(this%g21*this%g33-this%g31*this%g23) &
+             + this%g13*(this%g21*this%g32-this%g31*this%g22)
+
+        rho = detg*this%elastic%rho0
+
+    end subroutine
+
     subroutine update_g(this,isub,dt,rho,u,v,w)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
+        integer, intent(in) :: isub
+        real(rkind), intent(in) :: dt
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for g tensor equation
 
-        call this%getRHS_g(rho,u,v,w,rhsg)
+        call this%getRHS_g(rho,u,v,w,dt,rhsg)
 
         ! advance sub-step
         if(isub==1) this%Qtmpg = zero                   ! not really needed, since RK45_A(1) = 0
@@ -245,15 +286,16 @@ contains
 
     end subroutine
 
-    subroutine getRHS_g(this,rho,u,v,w,rhsg)
+    subroutine getRHS_g(this,rho,u,v,w,dt,rhsg)
         use operators, only: gradient, curl
         class(solid),                                         intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        real(rkind),                                          intent(in)  :: dt
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
-        real(rkind) :: etafac = one/6._rkind
+        real(rkind), parameter :: etafac = one/6._rkind
 
         rhsg = zero
 
@@ -262,7 +304,7 @@ contains
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
         tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
-        penalty = etafac*( tmp/detg/this%elastic%rho0-one) ! Penalty term to keep g consistent with species density
+        penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3))
@@ -307,7 +349,7 @@ contains
                                                               +     this%szz*this%szz
 
         ! 1/tau_rel
-        invtaurel = this%invtau0 * ( invtaurel - (twothird)*this%elastic%yield**2 ) / this%elastic%mu**2
+        invtaurel = (one / this%elastic%tau0) * ( invtaurel - (twothird)*this%elastic%yield**2 ) / this%elastic%mu**2
         where (invtaurel .LE. zero)
             invtaurel = zero
         end where
@@ -330,6 +372,8 @@ contains
     subroutine update_Ys(this,isub,dt,rho,u,v,w)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
+        integer, intent(in) :: isub
+        real(rkind), intent(in) :: dt
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsYs  ! RHS for mass fraction equation
@@ -344,7 +388,7 @@ contains
     end subroutine
 
     subroutine getRHS_Ys(this,rho,u,v,w,rhsYs)
-        use operators, only: gradient, curl
+        use operators, only: divergence
         class(solid),                                         intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: rhsYs
@@ -352,22 +396,24 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
         rhsYs = -rho*this%Ys
-        tmp1 = rhsYs*u - Ji(:,:,:,1)   
-        tmp2 = rhsYs*v - Ji(:,:,:,2)
-        tmp3 = rhsYs*w - Ji(:,:,:,3)
+        tmp1 = rhsYs*u - this%Ji(:,:,:,1)   
+        tmp2 = rhsYs*v - this%Ji(:,:,:,2)
+        tmp3 = rhsYs*w - this%Ji(:,:,:,3)
 
         call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs)
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,tauiiadivu)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,divu,tauiiadivu)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,tauiiadivu
+        integer, intent(in) :: isub
+        real(rkind), intent(in) :: dt
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,tauiiadivu
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
 
-        call this%getRHS_eh(rho,u,v,w,tauiiadivu,rhseh)
+        call this%getRHS_eh(rho,u,v,w,divu,tauiiadivu,rhseh)
 
         ! advance sub-step
         if(isub==1) this%Qtmpeh = zero                   ! not really needed, since RK45_A(1) = 0
@@ -376,61 +422,65 @@ contains
 
     end subroutine
 
-    subroutine getRHS_eh(this,rho,u,v,w,tauiiadivu,rhseh)
+    subroutine getRHS_eh(this,rho,u,v,w,divu,tauiiadivu,rhseh)
         use operators, only: gradient, divergence
         class(solid),                                       intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,tauiiadivu
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu,tauiiadivu
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhseh
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
+        ! === Need to change this completely to use this%q1 ===
+
         ! artificial conductivity terms
-        call gradient(this%decomp,this%der,-this%T,tmp1,tmp2,tmp3)
-        tmp1 = this%VF * this%kap * tmp1   
-        tmp2 = this%VF * this%kap * tmp2   
-        tmp3 = this%VF * this%kap * tmp3
+        ! call gradient(this%decomp,this%der,-this%T,tmp1,tmp2,tmp3)
+        ! tmp1 = this%VF * this%kap * tmp1   
+        ! tmp2 = this%VF * this%kap * tmp2   
+        ! tmp3 = this%VF * this%kap * tmp3
 
-        ! add artificial interdiffusional enthalpy terms
-        rhseh = -(this%VF*this%eh + this%VF*this%VF*this%p/(this%Ys*rho + epssmall))
-        tmp1 = tmp1 + rhseh * this%Ji(:,:,:,1)
-        tmp2 = tmp2 + rhseh * this%Ji(:,:,:,2)
-        tmp3 = tmp3 + rhseh * this%Ji(:,:,:,3)
+        ! ! add artificial interdiffusional enthalpy terms
+        ! rhseh = -(this%VF*this%eh + this%VF*this%VF*this%p/(this%Ys*rho + epssmall))
+        ! tmp1 = tmp1 + rhseh * this%Ji(:,:,:,1)
+        ! tmp2 = tmp2 + rhseh * this%Ji(:,:,:,2)
+        ! tmp3 = tmp3 + rhseh * this%Ji(:,:,:,3)
 
-        ! add convective terms 
-        rhseh = -rho*this%Ys*this%eh
-        tmp1 = tmp1 + rhseh*u
-        tmp2 = tmp2 + rhseh*v
-        tmp3 = tmp3 + rhseh*w
+        ! ! add convective terms 
+        ! rhseh = -rho*this%Ys*this%eh
+        ! tmp1 = tmp1 + rhseh*u
+        ! tmp2 = tmp2 + rhseh*v
+        ! tmp3 = tmp3 + rhseh*w
 
-        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh)
+        ! call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh)
 
-        ! this would be required for species total energy equation. for
-        ! hydrodynamic energy, only divu is required
-        !dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
-        !dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
-        !dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+        ! ! this would be required for species total energy equation. for
+        ! ! hydrodynamic energy, only divu is required
+        ! !dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+        ! !dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+        ! !dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
 
-        !tmp1 = this%VF*(-this%p + this%sxx); tmp2 = this%VF*(-this%p + this%syy); tmp3 = this%VF*(-this%p + this%szz)
-        !rhseh = rhseh  + tmp1*dudx + tmp2*dvdy + tmp3*dwdz &
-        !               + this%sxy * (dudy + dvdx) &
-        !               + this%sxz * (dudz + dwdx) &
-        !               + this%syz * (dvdz + dwdy)
+        ! !tmp1 = this%VF*(-this%p + this%sxx); tmp2 = this%VF*(-this%p + this%syy); tmp3 = this%VF*(-this%p + this%szz)
+        ! !rhseh = rhseh  + tmp1*dudx + tmp2*dvdy + tmp3*dwdz &
+        ! !               + this%sxy * (dudy + dvdx) &
+        ! !               + this%sxz * (dudz + dwdx) &
+        ! !               + this%syz * (dvdz + dwdy)
 
-        !nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
+        ! !nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
 
-        rhseh = rhseh - this%VF * (this%p*divu + tauiiadivu)       ! only diagonal terms of artificial stress tensor used here; off-diagonal assumed to affect e_elastic, not e_hydro
+        ! rhseh = rhseh - this%VF * (this%p*divu + tauiiadivu)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
 
     end subroutine
 
-    subroutine update_VF(this,isub,dt,rho,u,v,w)
+    subroutine update_VF(this,isub,dt,u,v,w)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        integer, intent(in) :: isub
+        real(rkind), intent(in) :: dt
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: u,v,w
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
 
-        call this%getRHS_VF(rho,u,v,w,rhsVF)
+        call this%getRHS_VF(u,v,w,rhsVF)
 
         ! advance sub-step
         if(isub==1) this%QtmpVF = zero                   ! not really needed, since RK45_A(1) = 0
@@ -454,112 +504,30 @@ contains
 
     end subroutine
 
-    subroutine filter(this, fil, 1)
+    subroutine filter(this, iflag)
+        use operators, only: filter3D
         class(solid),  intent(inout) :: this
-        type(filters), intent(in)    :: fil
         integer,       intent(in)    :: iflag
 
         ! filter g
-        call this%filter(this%g11, fil, iflag)
-        call this%filter(this%g12, fil, iflag)
-        call this%filter(this%g13, fil, iflag)
-        call this%filter(this%g21, fil, iflag)
-        call this%filter(this%g22, fil, iflag)
-        call this%filter(this%g23, fil, iflag)
-        call this%filter(this%g31, fil, iflag)
-        call this%filter(this%g32, fil, iflag)
-        call this%filter(this%g33, fil, iflag)
+        call filter3D(this%decomp, this%fil, this%g11, iflag)
+        call filter3D(this%decomp, this%fil, this%g12, iflag)
+        call filter3D(this%decomp, this%fil, this%g13, iflag)
+        call filter3D(this%decomp, this%fil, this%g21, iflag)
+        call filter3D(this%decomp, this%fil, this%g22, iflag)
+        call filter3D(this%decomp, this%fil, this%g23, iflag)
+        call filter3D(this%decomp, this%fil, this%g31, iflag)
+        call filter3D(this%decomp, this%fil, this%g32, iflag)
+        call filter3D(this%decomp, this%fil, this%g33, iflag)
 
         ! filter Ys
-        call this%filter(consrv(:,:,:,1), fil, iflag)
+        call filter3D(this%decomp, this%fil, this%consrv(:,:,:,1), iflag)
 
         ! filter eh
-        call this%filter(consrv(:,:,:,2), fil, iflag)
+        call filter3D(this%decomp, this%fil, this%consrv(:,:,:,2), iflag)
 
         ! filter VF
-        call this%filter(this%VF, fil, iflag)
-
-    end subroutine
-
-
-    ! note ::directly copied from sgrid. Need to go through this subroutine and
-    ! make necessary modifications.
-    subroutine filter(this,arr,myfil,numtimes)
-        class(solid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
-        type(filters), target, optional, intent(in) :: myfil
-        integer, optional, intent(in) :: numtimes
-
-        type(filters), pointer :: fil2use
-        integer :: times2fil
-        real(rkind), dimension(:,:,:), pointer :: tmp_in_y, tmp1_in_x, tmp1_in_z, tmp2_in_x, tmp2_in_z
-        integer :: lastx, lasty, lastz, idx
-
-
-        if (present(myfil)) then
-            fil2use => myfil
-        else
-            fil2use => this%fil
-        end if
-
-        if (present(numtimes)) then
-            times2fil = numtimes
-        else
-            times2fil = 1
-        end if
-
-        ! Allocate pointers for the needed buffers 
-        ! Atleast 2 buffers in x and z are assumed
-        ! Last two buffers are occupied
-
-        lastx = size(this%xbuf,4)
-        lasty = size(this%ybuf,4)
-        lastz = size(this%zbuf,4)
-
-        tmp1_in_x => this%xbuf(:,:,:,lastx)
-        tmp2_in_x => this%xbuf(:,:,:,lastx-1)
-        tmp_in_y => this%ybuf(:,:,:,lasty)
-        tmp1_in_z => this%zbuf(:,:,:,lastz)
-        tmp2_in_z => this%zbuf(:,:,:,lastz-1)
-
-
-        ! First filter in y
-        call fil2use%filtery(arr,tmp_in_y)
-        ! Subsequent refilters 
-        do idx = 1,times2fil-1
-            arr = tmp_in_y
-            call fil2use%filtery(arr,tmp_in_y)
-        end do
-
-        ! Then transpose to x
-        call transpose_y_to_x(tmp_in_y,tmp1_in_x,this%decomp)
-
-        ! First filter in x
-        call fil2use%filterx(tmp1_in_x,tmp2_in_x)
-        ! Subsequent refilters
-        do idx = 1,times2fil-1
-            tmp1_in_x = tmp2_in_x
-            call fil2use%filterx(tmp1_in_x,tmp2_in_x)
-        end do
-
-        ! Now transpose back to y
-        call transpose_x_to_y(tmp2_in_x,tmp_in_y,this%decomp)
-
-        ! Now transpose to z
-        call transpose_y_to_z(tmp_in_y,tmp1_in_z,this%decomp)
-
-        !First filter in z
-        call fil2use%filterz(tmp1_in_z,tmp2_in_z)
-        ! Subsequent refilters
-        do idx = 1,times2fil-1
-            tmp1_in_z = tmp2_in_z
-            call fil2use%filterz(tmp1_in_z,tmp2_in_z)
-        end do
-
-        ! Now transpose back to y
-        call transpose_z_to_y(tmp2_in_z,arr,this%decomp)
-
-        ! Finished
+        call filter3D(this%decomp, this%fil, this%VF, iflag)
 
     end subroutine
 
@@ -578,8 +546,15 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
 
         call this%hydro%get_e_from_p( this%Ys*rho/(this%VF+epssmall), this%p, this%eh )
-        call this%hydro%get_T(this%eh, this%Ys*rho/(this%VF+epssmall), this%T)
+        call this%hydro%get_T(this%eh, this%T, this%Ys*rho/(this%VF+epssmall))
 
+    end subroutine
+
+    subroutine get_enthalpy(this,enthalpy)
+        class(solid), intent(in) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: enthalpy
+
+        call this%hydro%get_enthalpy(this%T,enthalpy)
     end subroutine
 
     subroutine get_eelastic_devstress(this)
@@ -589,7 +564,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: trG, trG2, detG
 
         call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
+        call this%elastic%get_eelastic(trG,trG2,detG,this%eel)
         call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
 
     end subroutine
@@ -611,9 +586,36 @@ contains
         this%Ys = this%consrv(:,:,:,1) * onebyrho
         this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
 
-        call this%hydro%get_T(this%eh, this%T)
+        call this%hydro%get_T(this%eh, this%T, this%consrv(:,:,:,1)/(this%VF+epssmall))
 
+        ! Get gradients of Ys and put in Ji for subsequent use
         call gradient(this%decomp,this%der,this%Ys,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3))
+
+    end subroutine
+
+    subroutine checkNaN(this,imat)
+        use exits, only : nancheck
+        class(solid), intent(in) :: this
+        integer, intent(in) :: imat
+        character(len=clen) :: charout
+
+        integer :: i,j,k,l
+
+        if ( nancheck(this%g,i,j,k,l) ) then
+            write(charout,'(A,5(I0,A))') "NaN encountered in material ", imat,&
+                         &" at (",i,", ",j,", ",k,", ",l,") of g"
+            call GracefulExit(charout,4809)
+        end if
+        if ( nancheck(this%VF,i,j,k) ) then
+            write(charout,'(A,4(I0,A))') "NaN encountered in material ", imat,&
+                         &" at (",i,", ",j,", ",k,") of VF"
+            call GracefulExit(charout,4809)
+        end if
+        if ( nancheck(this%consrv,i,j,k,l) ) then
+            write(charout,'(A,5(I0,A))') "NaN encountered in material ", imat,&
+                         &" at (",i,", ",j,", ",k,", ",l,") of consrv"
+            call GracefulExit(charout,4809)
+        end if
 
     end subroutine
 

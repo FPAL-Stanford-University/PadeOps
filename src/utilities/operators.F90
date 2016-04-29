@@ -175,4 +175,59 @@ contains
     
     end subroutine crossprod_arrays
 
+    subroutine filter3D(decomp,fil,arr,numtimes)
+        type(decomp_info), intent(in) :: decomp
+        type(filters),     intent(in) :: fil
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(inout)  :: arr
+        integer, optional, intent(in) :: numtimes
+
+        integer :: times2fil, idx
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: tmp_in_y, tmp1_in_x, tmp1_in_z, tmp2_in_x, tmp2_in_z
+
+
+        if (present(numtimes)) then
+            times2fil = numtimes
+        else
+            times2fil = 1
+        end if
+
+        ! First filter in y
+        call fil%filtery(arr,tmp_in_y)
+        ! Subsequent refilters 
+        do idx = 1,times2fil-1
+            arr = tmp_in_y
+            call fil%filtery(arr,tmp_in_y)
+        end do
+
+        ! Then transpose to x
+        call transpose_y_to_x(tmp_in_y,tmp1_in_x,decomp)
+
+        ! First filter in x
+        call fil%filterx(tmp1_in_x,tmp2_in_x)
+        ! Subsequent refilters
+        do idx = 1,times2fil-1
+            tmp1_in_x = tmp2_in_x
+            call fil%filterx(tmp1_in_x,tmp2_in_x)
+        end do
+
+        ! Now transpose back to y
+        call transpose_x_to_y(tmp2_in_x,tmp_in_y,decomp)
+
+        ! Now transpose to z
+        call transpose_y_to_z(tmp_in_y,tmp1_in_z,decomp)
+
+        !First filter in z
+        call fil%filterz(tmp1_in_z,tmp2_in_z)
+        ! Subsequent refilters
+        do idx = 1,times2fil-1
+            tmp1_in_z = tmp2_in_z
+            call fil%filterz(tmp1_in_z,tmp2_in_z)
+        end do
+
+        ! Now transpose back to y
+        call transpose_z_to_y(tmp2_in_z,arr,decomp)
+
+        ! Finished
+    end subroutine
+
 end module
