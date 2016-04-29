@@ -22,17 +22,18 @@ module SolidGrid
     integer, parameter :: p_index      = 5
     integer, parameter :: T_index      = 6
     integer, parameter :: e_index      = 7
-    integer, parameter :: mu_index     = 8
-    integer, parameter :: bulk_index   = 9
-    integer, parameter :: kap_index    = 10
-    integer, parameter :: sxx_index    = 11
-    integer, parameter :: sxy_index    = 12
-    integer, parameter :: sxz_index    = 13
-    integer, parameter :: syy_index    = 14
-    integer, parameter :: syz_index    = 15
-    integer, parameter :: szz_index    = 16
+    integer, parameter :: sos_index    = 8
+    integer, parameter :: mu_index     = 9
+    integer, parameter :: bulk_index   = 10
+    integer, parameter :: kap_index    = 11
+    integer, parameter :: sxx_index    = 12
+    integer, parameter :: sxy_index    = 13
+    integer, parameter :: sxz_index    = 14
+    integer, parameter :: syy_index    = 15
+    integer, parameter :: syz_index    = 16
+    integer, parameter :: szz_index    = 17
 
-    integer, parameter :: nfields = 16
+    integer, parameter :: nfields = 17
 
     integer, parameter :: mom_index = 1
     integer, parameter :: TE_index = mom_index+3
@@ -58,11 +59,9 @@ module SolidGrid
 
     type, extends(grid) :: sgrid
        
-        type(filters),   allocatable :: gfil
-
+        type(filters),       allocatable :: gfil
         type(solid_mixture), allocatable :: mix
-
-        type(ladobject), allocatable :: LAD
+        type(ladobject),     allocatable :: LAD
 
         logical     :: plastic
         logical     :: explPlast
@@ -116,12 +115,12 @@ module SolidGrid
             procedure, private :: getRHS_x
             procedure, private :: getRHS_y
             procedure, private :: getRHS_z
-            procedure          :: getLAD
+            ! procedure          :: getLAD
             procedure          :: filter
             procedure          :: getPhysicalProperties
             procedure, private :: get_tau
-            procedure, private :: get_q
-            procedure, private :: getPlasticSources
+            ! procedure, private :: get_q
+            ! procedure, private :: getPlasticSources
     end type
 
 contains
@@ -148,7 +147,7 @@ contains
         character(len=clen) :: filter_y = "cf90" 
         character(len=clen) :: filter_z = "cf90"
         integer :: prow = 0, pcol = 0 
-        integer :: i, j, k, l 
+        integer :: i, j, k 
         integer :: ioUnit
         real(rkind) :: gam = 1.4_rkind
         real(rkind) :: Rgas = one
@@ -170,7 +169,6 @@ contains
         logical     :: explPlast = .FALSE.
         real(rkind) :: tau0 = one
 
-        character(len=clen) :: charout
         !real(rkind), dimension(:,:,:,:), allocatable :: finger, fingersq
         !real(rkind), dimension(:,:,:),   allocatable :: trG, trG2, detG
 
@@ -193,7 +191,6 @@ contains
         this%nx = nx
         this%ny = ny
         this%nz = nz
-        this%ns = ns
 
         this%tsim = zero
         this%tstop = tstop
@@ -323,6 +320,7 @@ contains
         this%p    => this%fields(:,:,:,   p_index)  
         this%T    => this%fields(:,:,:,   T_index)  
         this%e    => this%fields(:,:,:,   e_index)  
+        this%sos  => this%fields(:,:,:, sos_index)  
         this%mu   => this%fields(:,:,:,  mu_index)  
         this%bulk => this%fields(:,:,:,bulk_index)  
         this%kap  => this%fields(:,:,:, kap_index)   
@@ -340,7 +338,7 @@ contains
 
         ! Go to hooks if a different initialization is derired (Set mixture p, Ys, VF, u, v, w, rho)
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
-                        this%mix, tstop=this%tstop, dt=this%dtfixed, tviz=tviz)
+                        this%mix, this%tstop, this%dtfixed, tviz)
        
         ! Get hydrodynamic and elastic energies, stresses
         call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
@@ -365,15 +363,16 @@ contains
         varnames( 5) = 'p'
         varnames( 6) = 'T'
         varnames( 7) = 'e'
-        varnames( 8) = 'mu'
-        varnames( 9) = 'bulk'
-        varnames(10) = 'kap'
-        varnames(11) = 'Sxx'
-        varnames(12) = 'Sxy'
-        varnames(13) = 'Sxz'
-        varnames(14) = 'Syy'
-        varnames(15) = 'Syz'
-        varnames(16) = 'Szz'
+        varnames( 8) = 'sos'
+        varnames( 9) = 'mu'
+        varnames(10) = 'bulk'
+        varnames(11) = 'kap'
+        varnames(12) = 'Sxx'
+        varnames(13) = 'Sxy'
+        varnames(14) = 'Sxz'
+        varnames(15) = 'Syy'
+        varnames(16) = 'Syz'
+        varnames(17) = 'Szz'
 
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
@@ -387,6 +386,28 @@ contains
 
     subroutine destroy(this)
         class(sgrid), intent(inout) :: this
+
+        ! Nullify pointers
+        nullify(this%x); nullify(this%y); nullify(this%z)
+
+        nullify(this%rho      )
+        nullify(this%u        )
+        nullify(this%v        )
+        nullify(this%w        )
+        nullify(this%p        )
+        nullify(this%T        )
+        nullify(this%e        )
+        nullify(this%sos      )
+        nullify(this%mu       )
+        nullify(this%bulk     )
+        nullify(this%kap      )
+        nullify(this%devstress)
+        nullify(this%sxx      )
+        nullify(this%sxy      )
+        nullify(this%sxz      )
+        nullify(this%syy      )
+        nullify(this%syz      )
+        nullify(this%szz      )
 
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
@@ -406,11 +427,7 @@ contains
 
         if ( allocated(this%mix) ) deallocate(this%mix)
 
-        call this%LAD%destroy()
         if ( allocated(this%LAD) ) deallocate(this%LAD)
-        
-        if (allocated(this%sgas)) deallocate(this%sgas) 
-        if (allocated(this%elastic)) deallocate(this%elastic) 
         
         if (allocated(this%Wcnsrv)) deallocate(this%Wcnsrv) 
         
@@ -504,6 +521,7 @@ contains
         real(rkind) :: cputime
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        integer :: i
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
         ! Get artificial properties for initial conditions
@@ -528,14 +546,14 @@ contains
         deallocate( duidxj )
 
         ! compute species artificial conductivities and diffusivities
-        call this%mix%getSOS(this%rho,this%p,this%sos)
+        ! call this%mix%getSOS(this%rho,this%p,this%sos)
         call this%mix%getLAD(this%rho,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
         ! ------------------------------------------------
 
         call this%get_dt(stability)
 
         ! Write out initial conditions
-        call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
+        call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
         vizcond = .FALSE.
         
@@ -576,11 +594,11 @@ contains
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
-            call hook_timestep(this%decomp, this%mesh, this%fields, this%step, this%tsim)
+            call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
-                call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
+                call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
                 vizcond = .FALSE.
             end if
@@ -623,7 +641,8 @@ contains
         real(rkind)                                          :: Qtmpt ! Temporary variable for RK45
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,4) :: rhs   ! RHS for conserved variables
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,4) :: Qtmp  ! Temporary variable for RK45
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: tauiiadivu  ! Temporary variable for RK45
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: viscwork  ! Viscous work term for species energy eq
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: divu      ! Velocity divergence for species energy eq
         integer :: isub,i,j,k,l
 
         character(len=clen) :: charout
@@ -643,21 +662,21 @@ contains
             call this%mix%checkNaN()
 
             ! Pre-compute stress, LAD, J, etc.
-            call this%mix%getSOS(this%rho,this%p,this%sos)
+            ! call this%mix%getSOS(this%rho,this%p,this%sos)
             call this%mix%getLAD(this%rho,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
 
             ! Update total mixture conserved variables
-            call this%getRHS(rhs,tauiiadivu)
+            call this%getRHS(rhs,divu,viscwork)
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
             ! Now update all the individual species variables
-            call this%mix%update_g (isub,this%dt,rho,u,v,w)            ! g tensor
-            call this%mix%update_Ys(isub,this%dt,rho,u,v,w)            ! Volume Fraction
-            call this%mix%update_eh(isub,this%dt,rho,u,v,w,divu,tauiiadivu) ! Hydrodynamic energy
-            call this%mix%update_VF(isub,this%dt,rho,u,v,w)            ! Volume Fraction
+            call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w)               ! g tensor
+            call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w)               ! Volume Fraction
+            call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,divu,viscwork) ! Hydrodynamic energy
+            call this%mix%update_VF(isub,this%dt,this%u,this%v,this%w)                        ! Volume Fraction
 
             ! Integrate simulation time to keep it in sync with RK substep
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
@@ -669,7 +688,7 @@ contains
             end do
 
             ! Filter the individual species variables
-            call this%mix%filter(this%fil, 1)
+            call this%mix%filter(1)
             
             call this%get_primitive()
 
@@ -706,17 +725,16 @@ contains
         use reductions, only : P_MAXVAL
         class(sgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
         real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtdiff, dtplast, delta
 
         delta = min(this%dx, this%dy, this%dz)
 
-        call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
-        call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
+        ! call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
+        ! call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
 
         ! continuum
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
-               + cs*sqrt( one/(this%dx**two) + one/(this%dy**two) + one/(this%dz**two) ))
+               + this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2) + one/(this%dz**2) ))
         dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
 
@@ -759,9 +777,6 @@ contains
         real(rkind), dimension(:,:,:), pointer :: onebyrho
         real(rkind), dimension(:,:,:), pointer :: rhou,rhov,rhow,TE
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6) :: finger, fingersq
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: trG, trG2, detG
-
         onebyrho => this%ybuf(:,:,:,1)
 
         ! this%rho  =  this%Wcnsrv(:,:,:,1)
@@ -781,8 +796,9 @@ contains
        
         call this%mix%get_primitive(onebyrho)                  ! Get primitive variables for individual species
         call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
-        call this%mix%get_p_from_ehydro(this%rho)            ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
+        call this%mix%get_p_from_ehydro(this%rho)              ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
         call this%mix%get_pmix(this%p)
+        call this%mix%getSOS(this%rho,this%p,this%sos)
 
         ! call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
         ! call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
@@ -805,7 +821,7 @@ contains
         this%Wcnsrv(:,:,:,4) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
 
         ! add 2M (mass fraction and hydrodynamic energy) variables here
-        call this%mix%get_conserved(rho)
+        call this%mix%get_conserved(this%rho)
 
     end subroutine
 
@@ -813,16 +829,19 @@ contains
         class(sgrid), intent(inout) :: this
 
         call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
-        call this%mix%get_ehydro_from_p(this%p)            ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
+        call this%mix%get_ehydro_from_p(this%rho,this%p)            ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
+        call this%mix%getSOS(this%rho,this%p,this%sos)
        
         !call this%mix%get_T(this%T) ! Get mixture temperature (?)
         !call this%sgas%get_T(this%e,this%T)  ! Get updated temperature
 
     end subroutine
 
-    subroutine getRHS(this, rhs)
+    subroutine getRHS(this, rhs, divu, viscwork)
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,5), intent(out) :: rhs
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),     intent(out) :: divu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),     intent(out) :: viscwork
         !real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), intent(out) :: rhsg
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
@@ -837,11 +856,13 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz)
         call this%gradient(this%w,dwdx,dwdy,dwdz)
 
+        divu = dudx + dvdy + dwdz
+
         call this%getPhysicalProperties()
         call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 
         ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
-        call this%get_tau( duidxj )
+        call this%get_tau( duidxj, viscwork )
         ! Now, associate the pointers to understand what's going on better
         tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
                                          tauyy => duidxj(:,:,:,tauyyidx); tauyz => duidxj(:,:,:,tauyzidx);
@@ -849,7 +870,7 @@ contains
 
         ! for use in species hydrodynamic equations --- check carefully that
         ! dudx, dvdy, dwdz have not been destroyed in get_tau
-        tauiiadivu = tauxx*dudx + tauyy*dvdy + tauzz*dwdz
+        ! viscwork = tauxx*dudx + tauyy*dvdy + tauzz*dwdz
        
         ! Add the deviatoric stress to the tau for use in fluxes 
         tauxx = tauxx + this%sxx; tauxy = tauxy + this%sxy; tauxz = tauxz + this%sxz
@@ -873,7 +894,7 @@ contains
                                qz )
 
         ! Call problem source hook
-        call hook_source(this%decomp, this%mesh, this%fields, this%tsim, rhs)
+        call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
  
     end subroutine
 
@@ -887,7 +908,6 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
-        integer :: i
 
         ! flux => this%ybuf(:,:,:,1:4)
         xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
@@ -944,7 +964,6 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
         real(rkind), dimension(:,:,:), pointer :: ytmp1
-        integer :: i
 
         ! flux => this%ybuf(:,:,:,1:5)
         ytmp1 => this%ybuf(:,:,:,6)
@@ -992,7 +1011,6 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
         real(rkind), dimension(:,:,:), pointer :: ztmp1,ztmp2
-        integer :: i
 
         ! flux => this%ybuf(:,:,:,1:5)
         ztmp1 => this%zbuf(:,:,:,1); ztmp2 => this%zbuf(:,:,:,2)
@@ -1126,9 +1144,12 @@ contains
 
     end subroutine  
 
-    subroutine get_tau(this,duidxj)
+    ! Get tau_ij for momentum equation and simulataneously calculate the viscous work
+    ! for the material hydrodynamic equations
+    subroutine get_tau(this,duidxj,viscwork)
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), target, intent(inout) :: duidxj
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),           intent(out)   :: viscwork
 
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: lambda, bambda
@@ -1146,35 +1167,35 @@ contains
 
         ! Step 1: Get tau_12  (dudy is destroyed)
         dudy =  dudy + dvdx
-        tauiiadivu  = (this%mu*dudy) * (dudy)  ! tau_12 * (S_12+S_21) (Since symmetric)
+        viscwork  = (this%mu*dudy) * (dudy)  ! tau_12 * (S_12+S_21) (Since symmetric)
         dudy = this%mu*dudy
         !tauxyidz = 2
     
         ! Step 2: Get tau_13 (dudz is destroyed)
         dudz = dudz + dwdx
-        tauiiadivu  = tauiiadivu + (this%mu*dudz) * (dudz)  ! tau_13 *(S_13 + S_31)
+        viscwork  = viscwork + (this%mu*dudz) * (dudz)  ! tau_13 *(S_13 + S_31)
         dudz = this%mu*dudz
         !tauxzidx = 3
 
         ! Step 3: Get tau_23 (dvdz is destroyed)
         dvdz = dvdz + dwdy
-        tauiiadivu  = tauiiadivu + (this%mu*dvdz) * (half*dvdz)  ! tau_23 * (S_23 + S_32)
+        viscwork  = viscwork + (this%mu*dvdz) * (half*dvdz)  ! tau_23 * (S_23 + S_32)
         dvdz = this%mu*dvdz
         !tauyzidx = 6
 
         ! Step 4: Get tau_11 (dvdx is destroyed)
         dvdx = bambda*dudx + lambda*(dvdy + dwdz)
-        tauiiadivu  = tauiiadivu + dvdx * dudx  ! tau_11 * S_11
+        viscwork  = viscwork + dvdx * dudx  ! tau_11 * S_11
         !tauxxidx = 4
 
         ! Step 5: Get tau_22 (dwdx is destroyed)
         dwdx = bambda*dvdy + lambda*(dudx + dwdz)
-        tauiiadivu  = tauiiadivu + dwdx * dvdy  ! tau_22 * S_22
+        viscwork  = viscwork + dwdx * dvdy  ! tau_22 * S_22
         !tauyyidx = 7
 
         ! Step 6: Get tau_33 (dwdy is destroyed)
         dwdy = bambda*dwdz + lambda*(dudx + dvdy)
-        tauiiadivu  = tauiiadivu + dwdy * dwdz  ! tau_33 * S_33
+        viscwork  = viscwork + dwdy * dwdz  ! tau_33 * S_33
         !tauzzidx = 8
 
         ! Done 

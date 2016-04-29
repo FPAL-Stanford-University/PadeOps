@@ -39,6 +39,16 @@ module SolidMixtureMod
         procedure :: get_primitive
         procedure :: get_conserved
         procedure :: get_ehydro_from_p
+        procedure :: get_p_from_ehydro
+        procedure :: get_rhoYs_from_gVF
+        procedure :: get_emix
+        procedure :: get_pmix
+        procedure :: getSOS
+        procedure :: get_J
+        procedure :: get_q
+        procedure :: get_qmix
+        procedure :: get_dt
+        procedure :: get_eelastic_devstress
         procedure :: checkNaN
         procedure :: fnumden
         procedure :: rootfind_nr_1d
@@ -320,7 +330,7 @@ contains
 
     end subroutine
 
-    subroutine get_conserved(this,rho)
+    pure subroutine get_conserved(this,rho)
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho
 
@@ -496,16 +506,16 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,divu,tauiiadivu)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,divu,viscwork)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,tauiiadivu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,viscwork
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,divu,tauiiadivu)
+          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,divu,viscwork)
         end do
 
     end subroutine

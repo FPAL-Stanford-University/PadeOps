@@ -404,16 +404,16 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,divu,tauiiadivu)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,divu,viscwork)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,tauiiadivu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,viscwork
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
 
-        call this%getRHS_eh(rho,u,v,w,divu,tauiiadivu,rhseh)
+        call this%getRHS_eh(rho,u,v,w,divu,viscwork,rhseh)
 
         ! advance sub-step
         if(isub==1) this%Qtmpeh = zero                   ! not really needed, since RK45_A(1) = 0
@@ -422,11 +422,11 @@ contains
 
     end subroutine
 
-    subroutine getRHS_eh(this,rho,u,v,w,divu,tauiiadivu,rhseh)
+    subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,rhseh)
         use operators, only: gradient, divergence
         class(solid),                                       intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu,tauiiadivu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu,viscwork
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhseh
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
@@ -467,7 +467,7 @@ contains
 
         ! !nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
 
-        ! rhseh = rhseh - this%VF * (this%p*divu + tauiiadivu)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
+        ! rhseh = rhseh - this%VF * (this%p*divu + viscwork)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
 
     end subroutine
 
@@ -569,7 +569,7 @@ contains
 
     end subroutine
 
-    subroutine get_conserved(this,rho)
+    pure subroutine get_conserved(this,rho)
         class(solid), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
 

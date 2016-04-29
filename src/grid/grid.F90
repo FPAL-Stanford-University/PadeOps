@@ -44,6 +44,10 @@ module GridMod
 
         integer                                              :: t_dataDump, t_restartDump
         
+        integer, dimension(2)                                :: x_bc = [0,0]       ! X boundary (0=standard, 1=symmetric,-1=antisymmetric)
+        integer, dimension(2)                                :: y_bc = [0,0]       ! Y boundary (0=standard, 1=symmetric,-1=antisymmetric)
+        integer, dimension(2)                                :: z_bc = [0,0]       ! Z boundary (0=standard, 1=symmetric,-1=antisymmetric)
+
         logical                                              :: SkewSymm 
         logical                                              :: ViscConsrv         ! Is the viscous term being computed using the conservative formulation? 
         
@@ -54,8 +58,6 @@ module GridMod
 
         procedure(init_interface),    deferred :: init
         procedure(destroy_interface), deferred :: destroy
-        ! procedure(laplacian_interface), deferred :: laplacian
-        ! procedure(gradient_interface), deferred :: gradient
 
     end type
 
@@ -73,27 +75,6 @@ module GridMod
             class(grid), intent(inout) :: this
         end subroutine
     
-        ! subroutine laplacian_interface(this, f, lapf, x_bc, y_bc, z_bc)
-        !     import :: grid
-        !     import :: rkind
-        !     class(grid), target, intent(inout) :: this
-        !     real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in):: f   
-        !     real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: lapf
-        !     integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
-        ! end subroutine
-
-        ! subroutine gradient_interface(this, f, dfdx, dfdy, dfdz, x_bc, y_bc, z_bc)
-        !     import :: grid
-        !     import :: rkind
-        !     class(grid), target, intent(inout) :: this
-        !     real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in):: f   
-        !     real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: dfdx
-        !     real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: dfdy
-        !     real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(out):: dfdz
-        !     integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
-
-        ! end subroutine
-
     end interface
 
 contains
