@@ -376,12 +376,12 @@ contains
 
         rho = zero
         do imat = 1, this%ns
-          call this%material(imat)%getSpeciesDensity(rhom)
+          call this%material(imat)%getSpeciesDensity_from_g(rhom)
           rho = rho + this%material(imat)%VF * rhom
         end do
 
         do imat = 1,this%ns
-            call this%material(imat)%getSpeciesDensity(rhom)
+            call this%material(imat)%getSpeciesDensity_from_g(rhom)
             this%material(imat)%Ys = this%material(imat)%VF * rhom / rho
         end do
     end subroutine

@@ -85,6 +85,7 @@ module SolidMod
         procedure :: get_conserved
         procedure :: get_primitive
         procedure :: getSpeciesDensity
+        procedure :: getSpeciesDensity_from_g
         procedure :: get_enthalpy
         procedure :: checkNaN
         procedure :: filter
@@ -255,7 +256,7 @@ contains
 
     end subroutine
 
-    subroutine getSpeciesDensity(this,rho)
+    subroutine getSpeciesDensity_from_g(this,rho)
         class(solid), intent(in) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out)  :: rho
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: detg
@@ -303,7 +304,9 @@ contains
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
-        tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
+        ! Get the species density = rho*Y/VF (additional terms to give correct limiting behaviour as Ys and VF tend to 0)
+        tmp = (rho*this%Ys + this%elastic%rho0*detg*epssmall)/(this%VF + epssmall)   
+        ! tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
         penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
@@ -431,43 +434,22 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
-        ! === Need to change this completely to use this%q1 ===
+        ! artificial conductivity and inter-species enthalpy diffusion fluxes
+        tmp1 = -this%VF * this%qi(:,:,:,1)
+        tmp2 = -this%VF * this%qi(:,:,:,2)
+        tmp3 = -this%VF * this%qi(:,:,:,3)
 
-        ! artificial conductivity terms
-        ! call gradient(this%decomp,this%der,-this%T,tmp1,tmp2,tmp3)
-        ! tmp1 = this%VF * this%kap * tmp1   
-        ! tmp2 = this%VF * this%kap * tmp2   
-        ! tmp3 = this%VF * this%kap * tmp3
+        ! add convective fluxes
+        rhseh = -rho*this%Ys*this%eh
+        tmp1 = tmp1 + rhseh*u
+        tmp2 = tmp2 + rhseh*v
+        tmp3 = tmp3 + rhseh*w
 
-        ! ! add artificial interdiffusional enthalpy terms
-        ! rhseh = -(this%VF*this%eh + this%VF*this%VF*this%p/(this%Ys*rho + epssmall))
-        ! tmp1 = tmp1 + rhseh * this%Ji(:,:,:,1)
-        ! tmp2 = tmp2 + rhseh * this%Ji(:,:,:,2)
-        ! tmp3 = tmp3 + rhseh * this%Ji(:,:,:,3)
+        ! Take divergence of fluxes
+        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh)
 
-        ! ! add convective terms 
-        ! rhseh = -rho*this%Ys*this%eh
-        ! tmp1 = tmp1 + rhseh*u
-        ! tmp2 = tmp2 + rhseh*v
-        ! tmp3 = tmp3 + rhseh*w
-
-        ! call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh)
-
-        ! ! this would be required for species total energy equation. for
-        ! ! hydrodynamic energy, only divu is required
-        ! !dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
-        ! !dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
-        ! !dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
-
-        ! !tmp1 = this%VF*(-this%p + this%sxx); tmp2 = this%VF*(-this%p + this%syy); tmp3 = this%VF*(-this%p + this%szz)
-        ! !rhseh = rhseh  + tmp1*dudx + tmp2*dvdy + tmp3*dwdz &
-        ! !               + this%sxy * (dudy + dvdx) &
-        ! !               + this%sxz * (dudz + dwdx) &
-        ! !               + this%syz * (dvdz + dwdy)
-
-        ! !nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
-
-        ! rhseh = rhseh - this%VF * (this%p*divu + viscwork)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
+        ! Add pressure and viscous work terms
+        rhseh = rhseh - this%VF * (this%p*divu + viscwork)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
 
     end subroutine
 
@@ -531,12 +513,30 @@ contains
 
     end subroutine
 
+    subroutine getSpeciesDensity(this,rho,rhom)
+        class(solid), intent(in) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhom
+
+        ! Get detg in rhom
+        rhom = this%g11*(this%g22*this%g33-this%g23*this%g32) &
+             - this%g12*(this%g21*this%g33-this%g31*this%g23) &
+             + this%g13*(this%g21*this%g32-this%g31*this%g22)
+
+        ! Get rhom = rho*Ys/VF (Additional terms to give correct limiting behaviour when Ys and VF tend to 0)
+        rhom = (rho*this%Ys + this%elastic%rho0*rhom*epssmall)/(this%VF + epssmall)   
+
+    end subroutine
+
     ! computes p from ehydro
     subroutine get_p_from_ehydro(this, rho)
         class(solid), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)              :: rhom
 
-        call this%hydro%get_p( this%Ys*rho/(this%VF+epssmall), this%eh, this%p )
+        call this%getSpeciesDensity(rho,rhom)
+        call this%hydro%get_p( rhom, this%eh, this%p )
+        ! call this%hydro%get_p( this%Ys*rho/(this%VF+epssmall), this%eh, this%p )
 
     end subroutine
 
@@ -544,9 +544,13 @@ contains
     subroutine get_ehydroT_from_p(this, rho)
         class(solid), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)              :: rhom
 
-        call this%hydro%get_e_from_p( this%Ys*rho/(this%VF+epssmall), this%p, this%eh )
-        call this%hydro%get_T(this%eh, this%T, this%Ys*rho/(this%VF+epssmall))
+        call this%getSpeciesDensity(rho,rhom)
+        call this%hydro%get_e_from_p( rhom, this%p, this%eh )
+        call this%hydro%get_T(this%eh, this%T, rhom)
+        ! call this%hydro%get_e_from_p( this%Ys*rho/(this%VF+epssmall), this%p, this%eh )
+        ! call this%hydro%get_T(this%eh, this%T, this%Ys*rho/(this%VF+epssmall))
 
     end subroutine
 
@@ -582,11 +586,14 @@ contains
         use operators, only : gradient
         class(solid), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: onebyrho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
 
         this%Ys = this%consrv(:,:,:,1) * onebyrho
         this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
 
-        call this%hydro%get_T(this%eh, this%T, this%consrv(:,:,:,1)/(this%VF+epssmall))
+        call this%getSpeciesDensity(one/onebyrho,rhom)
+        call this%hydro%get_T(this%eh, this%T, rhom)
+        ! call this%hydro%get_T(this%eh, this%T, this%consrv(:,:,:,1)/(this%VF+epssmall))
 
         ! Get gradients of Ys and put in Ji for subsequent use
         call gradient(this%decomp,this%der,this%Ys,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3))
