@@ -2,9 +2,10 @@ module LADMod
 
     use kind_parameters, only: rkind
     use constants,       only: zero,half,one
-    use decomp_2d,       only: decomp_info
+    use decomp_2d,       only: decomp_info, transpose_y_to_x, transpose_x_to_y, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
+    use operators,       only: gradient
 
     implicit none
 

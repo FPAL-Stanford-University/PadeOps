@@ -567,9 +567,19 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6)  :: finger,fingersq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: trG, trG2, detG
 
+        print *, 'In solidmod', 1
+        write(*,*) 'g11', maxval(this%g11), minval(this%g11)
         call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+        write(*,*) 'size', size(this%g), size(this%g11)
+        write(*,*) 'g11', maxval(this%g11), minval(this%g11)
+        write(*,*) 'detG', maxval(detG), minval(detG)
+        write(*,*) 'detG', maxval(trG), minval(trG)
+        write(*,*) 'detG', maxval(trG2), minval(trG2)
+        print *, 'In solidmod', 2
         call this%elastic%get_eelastic(trG,trG2,detG,this%eel)
+        print *, 'In solidmod', 3
         call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+        print *, 'In solidmod', 4
 
     end subroutine
 

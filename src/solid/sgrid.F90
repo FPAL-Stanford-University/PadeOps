@@ -237,36 +237,12 @@ contains
         this%filter_y = filter_y    
         this%filter_z = filter_z  
         
-        ! Allocate der
-        if ( allocated(this%der) ) deallocate(this%der)
-        allocate(this%der)
-
-        ! Initialize derivatives 
-        call this%der%init(                           this%decomp, &
-                           this%dx,       this%dy,        this%dz, &
-                         periodicx,     periodicy,      periodicz, &
-                      derivative_x,  derivative_y,   derivative_z, &
-                           .false.,       .false.,        .false., &
-                           .false.)      
-
-        ! Allocate fil and gfil
-        if ( allocated(this%fil) ) deallocate(this%fil)
-        allocate(this%fil)
-        if ( allocated(this%gfil) ) deallocate(this%gfil)
-        allocate(this%gfil)
-        
-        ! Initialize filters
-        call this%fil%init(                           this%decomp, &
-                         periodicx,     periodicy,      periodicz, &
-                          filter_x,      filter_y,       filter_z  )      
-        call this%gfil%init(                          this%decomp, &
-                         periodicx,     periodicy,      periodicz, &
-                        "gaussian",    "gaussian",     "gaussian"  )      
-
         ! Finally, set the local array dimensions
         this%nxp = this%decomp%ysz(1)
         this%nyp = this%decomp%ysz(2)
         this%nzp = this%decomp%ysz(3)
+
+       print *, 1
 
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
@@ -296,6 +272,32 @@ contains
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
 
+        ! Allocate der
+        if ( allocated(this%der) ) deallocate(this%der)
+        allocate(this%der)
+
+        ! Initialize derivatives 
+        call this%der%init(                           this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                      derivative_x,  derivative_y,   derivative_z, &
+                           .false.,       .false.,        .false., &
+                           .false.)      
+
+        ! Allocate fil and gfil
+        if ( allocated(this%fil) ) deallocate(this%fil)
+        allocate(this%fil)
+        if ( allocated(this%gfil) ) deallocate(this%gfil)
+        allocate(this%gfil)
+        
+        ! Initialize filters
+        call this%fil%init(                           this%decomp, &
+                         periodicx,     periodicy,      periodicz, &
+                          filter_x,      filter_y,       filter_z  )      
+        call this%gfil%init(                          this%decomp, &
+                         periodicx,     periodicy,      periodicz, &
+                        "gaussian",    "gaussian",     "gaussian"  )      
+
         ! Allocate LAD object
         if ( allocated(this%LAD) ) deallocate(this%LAD)
         allocate(this%LAD)
@@ -303,7 +305,9 @@ contains
 
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
-        allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
+        allocate(this%mix)
+        call this%mix%init(this%decomp,this%der,this%fil,this%LAD,ns)
+        !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields
         if ( allocated(this%fields) ) deallocate(this%fields) 
@@ -339,10 +343,19 @@ contains
         ! Go to hooks if a different initialization is derired (Set mixture p, Ys, VF, u, v, w, rho)
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         this%mix, this%tstop, this%dtfixed, tviz)
+         write(*,*) '--g11', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
+         write(*,*) '--g22', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
        
+       print *, 8
         ! Get hydrodynamic and elastic energies, stresses
         call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
+         write(*,*) '--g11', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
+         write(*,*) '--g22', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
+       print *, 9
         call this%post_bc()
+         write(*,*) '--g11', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
+         write(*,*) '--g22', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
+       print *, 10
         
         !if (P_MAXVAL(abs( this%rho/this%rho0/(detG)**half - one )) > 10._rkind*eps) then
         !    call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
@@ -376,6 +389,7 @@ contains
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
+       print *, 11
 
         ! Do this here to keep tau0 and invtau0 compatible at the end of this subroutine
         this%invtau0 = one/this%tau0
@@ -814,9 +828,14 @@ contains
     subroutine post_bc(this)
         class(sgrid), intent(inout) :: this
 
+       print *, '----'
+         write(*,*) '-+++-g11', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
         call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
+       print *, 10
         call this%mix%get_ehydro_from_p(this%rho,this%p)            ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
+       print *, 10
         call this%mix%getSOS(this%rho,this%p,this%sos)
+       print *, 10
 
         ! assuming pressures have relaxed and sum( (Ys*(ehydro + eelastic) ) over all
         ! materials equals e

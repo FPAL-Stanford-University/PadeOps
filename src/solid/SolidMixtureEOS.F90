@@ -27,6 +27,7 @@ module SolidMixtureMod
 
     contains
 
+        procedure :: init
         procedure :: set_material
         procedure :: relaxPressure
         procedure :: getLAD
@@ -56,14 +57,16 @@ module SolidMixtureMod
 
     end type
 
-    interface solid_mixture
-        module procedure init
-    end interface
+    !interface solid_mixture
+    !    module procedure init
+    !end interface
 
 contains
 
-    function init(decomp,der,fil,LAD,ns) result(this)
-        type(solid_mixture)                      :: this
+    !function init(decomp,der,fil,LAD,ns) result(this)
+    subroutine init(this,decomp,der,fil,LAD,ns)
+        !type(solid_mixture)      , intent(inout) :: this
+        class(solid_mixture)      , intent(inout) :: this
         type(decomp_info), target, intent(in)    :: decomp
         type(filters),     target, intent(in)    :: fil
         type(derivatives), target, intent(in)    :: der
@@ -75,6 +78,8 @@ contains
 
         if (ns < 1) call GracefulExit("Must have at least 1 species in the problem. Check input file for errors",3457)
 
+print *, 'ns=', ns
+print *, '--', 1
         this%ns = ns
         this%nxp = decomp%ysz(1)
         this%nyp = decomp%ysz(2)
@@ -88,10 +93,12 @@ contains
         ! Allocate array of solid objects (Use a dummy to avoid memory leaks)
         allocate(dummy)
         call dummy%init(decomp,der,fil)
+print *, '--', 2
 
         if (allocated(this%material)) deallocate(this%material)
         allocate(this%material(this%ns), source=dummy)
         deallocate(dummy)
+print *, '--', 3
 
         this%material(1)%Ys = one
         this%material(1)%VF = one
@@ -99,8 +106,10 @@ contains
             this%material(i)%Ys = zero
             this%material(i)%VF = zero
         end do
+print *, '--', 4
 
-    end function
+    end subroutine
+    !end function
 
     pure elemental subroutine destroy(this)
         type(solid_mixture), intent(inout)  :: this
@@ -287,9 +296,14 @@ contains
 
         integer :: imat
 
-        devstress = zero
+          write(*,*) maxval(this%material(1)%g11)
+        devstress = 10000.0!zero
+          write(*,*) maxval(this%material(1)%g11)
 
         do imat = 1, this%ns
+          write(*,*) 'imat', imat
+          write(*,*) associated(this%material(imat)%g11)
+          write(*,*) maxval(this%material(imat)%g11)
           call this%material(imat)%get_eelastic_devstress()
           devstress(:,:,:,1) = devstress(:,:,:,1) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,1)
           devstress(:,:,:,2) = devstress(:,:,:,2) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,2)
@@ -398,6 +412,7 @@ contains
     end subroutine
 
     subroutine get_q(this,x_bc,y_bc,z_bc)
+        use decomp_2d, only: transpose_y_to_x, transpose_x_to_y, transpose_y_to_z, transpose_z_to_y
         class(solid_mixture), intent(inout) :: this
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
@@ -585,6 +600,10 @@ contains
         integer :: im
         real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
         real(rkind) :: fac
+
+        if(iparams(1) == 1) then
+        else
+        endif
 
         vf   => fparams(  1:this%ns)
         gam  => fparams(  this%ns+1:2*this%ns)

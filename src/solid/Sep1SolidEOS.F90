@@ -107,12 +107,17 @@ contains
 
     end subroutine
 
-    pure subroutine get_eelastic(this,trG,trG2,detG,eelastic)
+    subroutine get_eelastic(this,trG,trG2,detG,eelastic)
         class(sep1solid), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: trG,trG2,detG
         real(rkind), dimension(:,:,:), intent(out) :: eelastic
 
-        eelastic = fourth*this%mu/this%rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
+        print *, this%mu, this%rho0, maxval(detG), minval(detG)
+        print *, maxval(trG), minval(trG)
+        print *, maxval(trG2), minval(trG2)
+        !eelastic = fourth*this%mu/this%rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
+        eelastic = fourth*this%mu/this%rho0!*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
+        print *, '------99888'
 
     end subroutine
 

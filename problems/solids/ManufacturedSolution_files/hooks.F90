@@ -4,7 +4,7 @@ module ManufacturedSolution_data
     implicit none
 
     real(rkind) :: sigma_0 = one
-    real(rkind) :: gamma, p_infty, rho_0
+    real(rkind) :: Rgas, gamma, p_infty, rho_0
     real(rkind) :: muL, lamL, cL
     real(rkind) :: dtprob
 
@@ -525,14 +525,14 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PInf,tau0,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,one,two,three,pi,four,eight
-    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
-                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
+    use SolidGrid,        only: u_index,v_index,w_index
     use decomp_2d,        only: decomp_info
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
+    use SolidMixtureMod,  only: solid_mixture
     
     use ManufacturedSolution_data
 
@@ -540,7 +540,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     character(len=*),                                               intent(in)    :: inputfile
     type(decomp_info),                                              intent(in)    :: decomp
     real(rkind),                                                    intent(in)    :: dx,dy,dz
-    real(rkind),                                          optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz, yield, tau0
+    type(solid_mixture),                                            intent(inout) :: mix
+    real(rkind),                                          optional, intent(inout) :: tstop, dt, tviz
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
@@ -548,25 +549,18 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: sig11, eps11
     real(rkind) :: t = zero, p_star, rho_star, c_star
 
-    namelist /PROBINPUT/  sigma_0
+    namelist /PROBINPUT/  sigma_0, p_infty, Rgas, gamma, muL, rho_0
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
 
-    associate( rho => fields(:,:,:,rho_index),   u => fields(:,:,:,  u_index), &
-                 v => fields(:,:,:,  v_index),   w => fields(:,:,:,  w_index), &
-                 p => fields(:,:,:,  p_index),   T => fields(:,:,:,  T_index), &
-                 e => fields(:,:,:,  e_index), g11 => fields(:,:,:,g11_index), &
-               g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
-               g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), & 
-               g23 => fields(:,:,:,g23_index), g31 => fields(:,:,:,g31_index), & 
-               g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
+    associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
-        p_star = gam*PInf + (four/three)*mu
-        rho_star = rho0
+        p_star = gamma*p_infty + (four/three)*muL
+        rho_star = rho_0
         c_star = sqrt(p_star/rho_star)
         sigma_0 = sigma_0 / p_star
         tstop = tstop * c_star
@@ -584,47 +578,56 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         print*, "tviz = ", tviz
 
         ! Non-dimensionalize problem parameters
-        rho0 = rho0 / rho_star
-        mu = mu / p_star
-        PInf = PInf / p_star
+        rho_0 = rho_0 / rho_star
+        muL = muL / p_star
+        p_infty = p_infty / p_star
 
-        gamma = gam
-        p_infty = PInf
-        rho_0 = rho0
+        lamL = gamma * p_infty - (two/three)*muL
+        cL = sqrt( (lamL + two*muL)/ rho_0 )
 
-        muL = mu
-        lamL = gam * PInf - (two/three)*mu
-        cL = sqrt( (lamL + two*muL)/ rho0 )
+    print *, '1'   
+        ! Set material
+        call mix%set_material(1,stiffgas(gamma,Rgas,p_infty),sep1solid(rho_0,muL,1.0D30,1.0D-10))
+    print *, '2'   
 
         sig11 = -sigma_0 * exp( -((x - cL*t - half)/(0.1_rkind))**2 )
         eps11 = sig11 / (lamL + two*muL)
+        write(*,*) maxval(abs(sig11)), maxval(abs(eps11))
 
+    print *, '3'   
         u   = - (cL * sig11) / (lamL + two*muL)
         v   = zero
         w   = zero
 
-        g11 = one;  g12 = zero; g13 = zero
-        g21 = zero; g22 = one;  g23 = zero
-        g31 = zero; g32 = zero; g33 = one
+    print *, '4'   
+        mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
+        mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
+        mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
 
-        g11 = one / (one + eps11)
+        write(*,*) 'Inside Hooks'
+        write(*,*) shape(mix%material)
+        write(*,*) shape(mix%material(1)%g)
+        write(*,*) shape(mix%material(1)%g11)
+        write(*,*) maxval(mix%material(1)%g11)
 
-        p = PInf*(g11**gam - one)
+    print *, '5'   
+        mix%material(1)%g11 = one / (one + eps11)
+        write(*,*) maxval(mix%material(1)%g11)
 
-        ! Get rho compatible with det(g) and rho0
-        eps11 = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
-        rho = rho0 * eps11
+    print *, '6'   
+        mix%material(1)%p = p_infty*(mix%material(1)%g11**gamma - one)
 
+    print *, '7'   
     end associate
 
 end subroutine
 
-subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
+subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,eps,half,one,two,pi,eight
-    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
-                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use SolidMixtureMod,  only: solid_mixture
 
     use ManufacturedSolution_data
 
@@ -635,6 +638,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    type(solid_mixture),              intent(in) :: mix
     integer                                     :: outputunit=229
 
     character(len=clen) :: outputfile, str
@@ -645,9 +649,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
-               g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
-               g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
-               g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
+                 g11 => mix%material(1)%g11, g21 => mix%material(1)%g21, &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         write(str,'(ES7.1E2,A1,I4.4,A1,ES7.1E2)') sigma_0, "_", decomp%ysz(1), "_", dtprob
@@ -668,11 +670,12 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     end associate
 end subroutine
 
-subroutine hook_bc(decomp,mesh,fields,tsim)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim)
     use kind_parameters,  only: rkind
     use constants,        only: zero
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use SolidMixtureMod,  only: solid_mixture
 
     use ManufacturedSolution_data
 
@@ -681,6 +684,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    type(solid_mixture),             intent(inout) :: mix
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -691,12 +695,13 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,step,tsim)
+subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use kind_parameters,  only: rkind
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use exits,            only: message
     use reductions,       only: P_MAXVAL
+    use SolidMixtureMod,  only: solid_mixture
 
     use ManufacturedSolution_data
 
@@ -706,6 +711,7 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    type(solid_mixture),             intent(in) :: mix
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -718,12 +724,12 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
     end associate
 end subroutine
 
-subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
+subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
     use kind_parameters,  only: rkind
     use constants,        only: zero
-    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
-                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use SolidMixtureMod,  only: solid_mixture
 
     use ManufacturedSolution_data
 
@@ -734,29 +740,30 @@ subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhsg
+    type(solid_mixture),             intent(in) :: mix
 
     integer :: i,j,k
 
-    associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
-                 v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
-                 p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
-                 e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
-                 bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
-               g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
-               g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
-               g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
-                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+    !associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
+    !             v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
+    !             p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
+    !             e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
+    !             bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+    !           g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
+    !           g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
+    !           g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
+    !             x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        do k = 1,decomp%ysz(3)
-            do j = 1,decomp%ysz(2)
-                do i = 1,decomp%ysz(1)
-                    rhs (i,j,k,2) = rhs (i,j,k,2) + momentum_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
-                    rhs (i,j,k,5) = rhs (i,j,k,5) + energy_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
-                    rhsg(i,j,k,1) = rhsg(i,j,k,1) + g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
-                    rhs (i,j,k,1) = rhs (i,j,k,1) + rho_0 * g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
-                end do
-            end do
-        end do
+    !    do k = 1,decomp%ysz(3)
+    !        do j = 1,decomp%ysz(2)
+    !            do i = 1,decomp%ysz(1)
+    !                rhs (i,j,k,2) = rhs (i,j,k,2) + momentum_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+    !                rhs (i,j,k,5) = rhs (i,j,k,5) + energy_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+    !                rhsg(i,j,k,1) = rhsg(i,j,k,1) + g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+    !                rhs (i,j,k,1) = rhs (i,j,k,1) + rho_0 * g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+    !            end do
+    !        end do
+    !    end do
 
-    end associate
+    !end associate
 end subroutine

@@ -15,15 +15,19 @@ program ManufacturedSolution
 
     ! Get file location 
     call GETARG(1,inputfile)
+    print *, 'A0'   
     
     ! Initialize the grid object
     call sgp%init(inputfile)
+    print *, 'A'   
 
     ! Time advance
     call sgp%simulate()
-        
+    print *, 'B'   
+     
     ! Destroy everythin before ending
     call sgp%destroy()
+    print *, 'C'   
 
     ! End the run
     call MPI_Finalize(ierr)

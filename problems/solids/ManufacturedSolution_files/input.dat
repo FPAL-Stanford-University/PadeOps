@@ -55,5 +55,10 @@ yield   = 2.49D9          ! Yield strength of material
 /
 
 &PROBINPUT
-sigma_0 = 1.0D10          ! Magnitude of initial stress profile
+sigma_0 = 1.0D6           ! Magnitude of initial stress profile
+gamma   = 2.84D0          ! Ratio of specific heats
+Rgas    = 1.D0            ! Gas constant
+p_infty = 6.D8            ! P_infinity, material stiffness
+muL     = 77.D9           ! Shear modulus
+rho_0   = 7.85D3          ! No deformation density
 /
