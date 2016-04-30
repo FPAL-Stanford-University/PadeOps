@@ -96,7 +96,10 @@ print *, '--', 1
 print *, '--', 2
 
         if (allocated(this%material)) deallocate(this%material)
-        allocate(this%material(this%ns), source=dummy)
+        allocate(this%material(this%ns))!, source=dummy)
+        do i=1,this%ns
+            call this%material(i)%init(decomp,der,fil)
+        end do
         deallocate(dummy)
 print *, '--', 3
 
@@ -296,8 +299,9 @@ print *, '--', 4
 
         integer :: imat
 
+        print*, "In get_eelastic_devstress"
           write(*,*) maxval(this%material(1)%g11)
-        devstress = 10000.0!zero
+        devstress = zero
           write(*,*) maxval(this%material(1)%g11)
 
         do imat = 1, this%ns

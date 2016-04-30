@@ -41,12 +41,17 @@ contains
 
     end function
 
-    pure subroutine get_finger(this,g,finger,fingersq,trG,trG2,detG)
+    subroutine get_finger(this,g,finger,fingersq,trG,trG2,detG)
         class(sep1solid), intent(in) :: this
         real(rkind), dimension(:,:,:,:), intent(in)  :: g
         real(rkind), dimension(:,:,:,:), intent(out) :: finger
-        real(rkind), dimension(:,:,:,:), intent(out), optional :: fingersq
-        real(rkind), dimension(:,:,:),   intent(out), optional :: trG, trG2, detG
+        real(rkind), dimension(:,:,:,:), intent(out) :: fingersq
+        real(rkind), dimension(:,:,:),   intent(out) :: trG, trG2, detG
+
+        print*, "In get_finger"
+        print*, "g11: ", minval(g(:,:,:,1)), maxval(g(:,:,:,1))
+        print*, "g22: ", minval(g(:,:,:,5)), maxval(g(:,:,:,5))
+        print*, "g33: ", minval(g(:,:,:,9)), maxval(g(:,:,:,9))
 
         associate ( g11 => g(:,:,:,1), g12 => g(:,:,:,2), g13 => g(:,:,:,3), &
                     g21 => g(:,:,:,4), g22 => g(:,:,:,5), g23 => g(:,:,:,6), &
@@ -65,21 +70,17 @@ contains
                     GG21 => finger(:,:,:,2), GG22 => finger(:,:,:,4), GG23 => finger(:,:,:,5), &
                     GG31 => finger(:,:,:,3), GG32 => finger(:,:,:,5), GG33 => finger(:,:,:,6)  )
 
-            if(present(detG)) then
-                detG = GG11*(GG22*GG33-GG23*GG32) - GG12*(GG21*GG33-GG31*GG23) + GG13*(GG21*GG32-GG31*GG22)
-            endif
+            detG = GG11*(GG22*GG33-GG23*GG32) - GG12*(GG21*GG33-GG31*GG23) + GG13*(GG21*GG32-GG31*GG22)
 
-            if(present(fingersq)) then
-                fingersq(:,:,:,1) = GG11*GG11 + GG12*GG21 + GG13*GG31
-                fingersq(:,:,:,2) = GG11*GG12 + GG12*GG22 + GG13*GG32
-                fingersq(:,:,:,3) = GG11*GG13 + GG12*GG23 + GG13*GG33
-                fingersq(:,:,:,4) = GG21*GG12 + GG22*GG22 + GG23*GG32
-                fingersq(:,:,:,5) = GG21*GG13 + GG22*GG23 + GG23*GG33
-                fingersq(:,:,:,6) = GG31*GG13 + GG32*GG23 + GG33*GG33
-            endif
+            fingersq(:,:,:,1) = GG11*GG11 + GG12*GG21 + GG13*GG31
+            fingersq(:,:,:,2) = GG11*GG12 + GG12*GG22 + GG13*GG32
+            fingersq(:,:,:,3) = GG11*GG13 + GG12*GG23 + GG13*GG33
+            fingersq(:,:,:,4) = GG21*GG12 + GG22*GG22 + GG23*GG32
+            fingersq(:,:,:,5) = GG21*GG13 + GG22*GG23 + GG23*GG33
+            fingersq(:,:,:,6) = GG31*GG13 + GG32*GG23 + GG33*GG33
 
-            if(present(trG)) trG = GG11 + GG22 + GG33
-            if(present(trG2) .and. present(fingersq)) trG2 = fingersq(:,:,:,1) + fingersq(:,:,:,4) + fingersq(:,:,:,6)
+            trG = GG11 + GG22 + GG33
+            trG2 = fingersq(:,:,:,1) + fingersq(:,:,:,4) + fingersq(:,:,:,6)
         end associate
 
     end subroutine
@@ -112,11 +113,12 @@ contains
         real(rkind), dimension(:,:,:), intent(in)  :: trG,trG2,detG
         real(rkind), dimension(:,:,:), intent(out) :: eelastic
 
-        print *, this%mu, this%rho0, maxval(detG), minval(detG)
-        print *, maxval(trG), minval(trG)
-        print *, maxval(trG2), minval(trG2)
+        print *, this%mu, this%rho0
+        print *, "detG ", maxval(detG), minval(detG)
+        print *, "trG ", maxval(trG), minval(trG)
+        print *, "trG2 ", maxval(trG2), minval(trG2)
         !eelastic = fourth*this%mu/this%rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
-        eelastic = fourth*this%mu/this%rho0!*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
+        eelastic = fourth*this%mu/this%rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
         print *, '------99888'
 
     end subroutine
