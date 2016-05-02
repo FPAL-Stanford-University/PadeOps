@@ -709,7 +709,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     end associate
 end subroutine
 
-subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
+subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
     use kind_parameters,  only: rkind
     use constants,        only: zero
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
@@ -724,8 +724,7 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-    real(rkind), dimension(:,:,:,:), intent(inout) :: rhsg
-    type(solid_mixture),             intent(in) :: mix
+    type(solid_mixture),             intent(in)    :: mix
 
     integer :: i,j,k
 
