@@ -242,8 +242,6 @@ contains
         this%nyp = this%decomp%ysz(2)
         this%nzp = this%decomp%ysz(3)
 
-       print *, 1
-
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         call alloc_buffs(this%mesh,3,'y',this%decomp)
@@ -343,19 +341,10 @@ contains
         ! Go to hooks if a different initialization is derired (Set mixture p, Ys, VF, u, v, w, rho)
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         this%mix, this%tstop, this%dtfixed, tviz)
-         write(*,*) '--g11', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
-         write(*,*) '--g22', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
        
-       print *, 8
         ! Get hydrodynamic and elastic energies, stresses
         call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
-         write(*,*) '--g11', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
-         write(*,*) '--g22', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
-       print *, 9
         call this%post_bc()
-         write(*,*) '--g11', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
-         write(*,*) '--g22', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
-       print *, 10
         
         !if (P_MAXVAL(abs( this%rho/this%rho0/(detG)**half - one )) > 10._rkind*eps) then
         !    call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
@@ -389,7 +378,6 @@ contains
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
-       print *, 11
 
         ! Do this here to keep tau0 and invtau0 compatible at the end of this subroutine
         this%invtau0 = one/this%tau0
@@ -598,6 +586,7 @@ contains
 
         ! Start the simulation while loop
         do while ( tcond .AND. stepcond )
+            print*, "In simulate"
             ! Advance time
             call tic()
             call this%advance_RK45()
@@ -664,6 +653,7 @@ contains
         Qtmpt = zero
 
         do isub = 1,RK45_steps
+            print*, "In advance_RK45: ",isub
             call this%get_conserved()
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
@@ -828,14 +818,9 @@ contains
     subroutine post_bc(this)
         class(sgrid), intent(inout) :: this
 
-       print *, '----'
-         write(*,*) '-+++-g11', maxval(this%mix%material(1)%g11), minval(this%mix%material(1)%g11)
         call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
-       print *, 10
         call this%mix%get_ehydro_from_p(this%rho,this%p)            ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
-       print *, 10
         call this%mix%getSOS(this%rho,this%p,this%sos)
-       print *, 10
 
         ! assuming pressures have relaxed and sum( (Ys*(ehydro + eelastic) ) over all
         ! materials equals e

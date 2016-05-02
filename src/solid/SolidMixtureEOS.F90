@@ -78,8 +78,6 @@ contains
 
         if (ns < 1) call GracefulExit("Must have at least 1 species in the problem. Check input file for errors",3457)
 
-print *, 'ns=', ns
-print *, '--', 1
         this%ns = ns
         this%nxp = decomp%ysz(1)
         this%nyp = decomp%ysz(2)
@@ -93,7 +91,6 @@ print *, '--', 1
         ! Allocate array of solid objects (Use a dummy to avoid memory leaks)
         allocate(dummy)
         call dummy%init(decomp,der,fil)
-print *, '--', 2
 
         if (allocated(this%material)) deallocate(this%material)
         allocate(this%material(this%ns))!, source=dummy)
@@ -101,7 +98,6 @@ print *, '--', 2
             call this%material(i)%init(decomp,der,fil)
         end do
         deallocate(dummy)
-print *, '--', 3
 
         this%material(1)%Ys = one
         this%material(1)%VF = one
@@ -109,7 +105,6 @@ print *, '--', 3
             this%material(i)%Ys = zero
             this%material(i)%VF = zero
         end do
-print *, '--', 4
 
     end subroutine
     !end function
@@ -299,15 +294,9 @@ print *, '--', 4
 
         integer :: imat
 
-        print*, "In get_eelastic_devstress"
-          write(*,*) maxval(this%material(1)%g11)
         devstress = zero
-          write(*,*) maxval(this%material(1)%g11)
 
         do imat = 1, this%ns
-          write(*,*) 'imat', imat
-          write(*,*) associated(this%material(imat)%g11)
-          write(*,*) maxval(this%material(imat)%g11)
           call this%material(imat)%get_eelastic_devstress()
           devstress(:,:,:,1) = devstress(:,:,:,1) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,1)
           devstress(:,:,:,2) = devstress(:,:,:,2) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,2)

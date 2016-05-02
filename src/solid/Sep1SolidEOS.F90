@@ -48,11 +48,6 @@ contains
         real(rkind), dimension(:,:,:,:), intent(out) :: fingersq
         real(rkind), dimension(:,:,:),   intent(out) :: trG, trG2, detG
 
-        print*, "In get_finger"
-        print*, "g11: ", minval(g(:,:,:,1)), maxval(g(:,:,:,1))
-        print*, "g22: ", minval(g(:,:,:,5)), maxval(g(:,:,:,5))
-        print*, "g33: ", minval(g(:,:,:,9)), maxval(g(:,:,:,9))
-
         associate ( g11 => g(:,:,:,1), g12 => g(:,:,:,2), g13 => g(:,:,:,3), &
                     g21 => g(:,:,:,4), g22 => g(:,:,:,5), g23 => g(:,:,:,6), &
                     g31 => g(:,:,:,7), g32 => g(:,:,:,8), g33 => g(:,:,:,9)  )
@@ -113,13 +108,7 @@ contains
         real(rkind), dimension(:,:,:), intent(in)  :: trG,trG2,detG
         real(rkind), dimension(:,:,:), intent(out) :: eelastic
 
-        print *, this%mu, this%rho0
-        print *, "detG ", maxval(detG), minval(detG)
-        print *, "trG ", maxval(trG), minval(trG)
-        print *, "trG2 ", maxval(trG2), minval(trG2)
-        !eelastic = fourth*this%mu/this%rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
         eelastic = fourth*this%mu/this%rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
-        print *, '------99888'
 
     end subroutine
 

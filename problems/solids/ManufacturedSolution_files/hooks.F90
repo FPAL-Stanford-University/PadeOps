@@ -585,39 +585,24 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         lamL = gamma * p_infty - (two/three)*muL
         cL = sqrt( (lamL + two*muL)/ rho_0 )
 
-    print *, '1'   
         ! Set material
         call mix%set_material(1,stiffgas(gamma,Rgas,p_infty),sep1solid(rho_0,muL,1.0D30,1.0D-10))
-    print *, '2'   
 
         sig11 = -sigma_0 * exp( -((x - cL*t - half)/(0.1_rkind))**2 )
         eps11 = sig11 / (lamL + two*muL)
-        write(*,*) maxval(abs(sig11)), maxval(abs(eps11))
 
-    print *, '3'   
         u   = - (cL * sig11) / (lamL + two*muL)
         v   = zero
         w   = zero
 
-    print *, '4'   
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
         mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
 
-        write(*,*) 'Inside Hooks'
-        write(*,*) shape(mix%material)
-        write(*,*) shape(mix%material(1)%g)
-        write(*,*) shape(mix%material(1)%g11)
-        write(*,*) maxval(mix%material(1)%g11)
-
-    print *, '5'   
         mix%material(1)%g11 = one / (one + eps11)
-        write(*,*) maxval(mix%material(1)%g11)
 
-    print *, '6'   
         mix%material(1)%p = p_infty*(mix%material(1)%g11**gamma - one)
 
-    print *, '7'   
     end associate
 
 end subroutine
