@@ -586,7 +586,6 @@ contains
 
         ! Start the simulation while loop
         do while ( tcond .AND. stepcond )
-            print*, "In simulate"
             ! Advance time
             call tic()
             call this%advance_RK45()
@@ -640,11 +639,11 @@ contains
         use reductions, only: P_MAXVAL, P_MINVAL
         class(sgrid), target, intent(inout) :: this
 
-        real(rkind)                                          :: Qtmpt ! Temporary variable for RK45
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,4) :: rhs   ! RHS for conserved variables
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,4) :: Qtmp  ! Temporary variable for RK45
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: viscwork  ! Viscous work term for species energy eq
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: divu      ! Velocity divergence for species energy eq
+        real(rkind)                                               :: Qtmpt     ! Temporary variable for RK45
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: rhs       ! RHS for conserved variables
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: Qtmp      ! Temporary variable for RK45
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: divu      ! Velocity divergence for species energy eq
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: viscwork  ! Viscous work term for species energy eq
         integer :: isub,i,j,k,l
 
         character(len=clen) :: charout
@@ -653,7 +652,6 @@ contains
         Qtmpt = zero
 
         do isub = 1,RK45_steps
-            print*, "In advance_RK45: ",isub
             call this%get_conserved()
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
@@ -686,7 +684,7 @@ contains
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
             ! Filter the conserved variables
-            do i = 1,4
+            do i = 1,ncnsrv
                 call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1)
             end do
 
@@ -786,10 +784,10 @@ contains
         
         call this%mix%get_rho(this%rho)
 
-        rhou => this%Wcnsrv(:,:,:,1)
-        rhov => this%Wcnsrv(:,:,:,2)
-        rhow => this%Wcnsrv(:,:,:,3)
-        TE   => this%Wcnsrv(:,:,:,4)
+        rhou => this%Wcnsrv(:,:,:,mom_index  )
+        rhov => this%Wcnsrv(:,:,:,mom_index+1)
+        rhow => this%Wcnsrv(:,:,:,mom_index+2)
+        TE   => this%Wcnsrv(:,:,:, TE_index  )
 
         onebyrho = one/this%rho
         this%u = rhou * onebyrho
@@ -805,10 +803,10 @@ contains
         class(sgrid), intent(inout) :: this
 
         ! Assume rho is already available
-        this%Wcnsrv(:,:,:,1) = this%rho * this%u
-        this%Wcnsrv(:,:,:,2) = this%rho * this%v
-        this%Wcnsrv(:,:,:,3) = this%rho * this%w
-        this%Wcnsrv(:,:,:,4) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
+        this%Wcnsrv(:,:,:,mom_index  ) = this%rho * this%u
+        this%Wcnsrv(:,:,:,mom_index+1) = this%rho * this%v
+        this%Wcnsrv(:,:,:,mom_index+2) = this%rho * this%w
+        this%Wcnsrv(:,:,:, TE_index  ) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
 
         ! add 2M (mass fraction and hydrodynamic energy) variables here
         call this%mix%get_conserved(this%rho)
@@ -833,7 +831,7 @@ contains
 
     subroutine getRHS(this, rhs, divu, viscwork)
         class(sgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp,5), intent(out) :: rhs
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv), intent(out) :: rhs
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),     intent(out) :: divu
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),     intent(out) :: viscwork
         !real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), intent(out) :: rhsg
@@ -896,7 +894,7 @@ contains
                         tauxx,tauxy,tauxz,&
                             qx )
         class(sgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp, 5), intent(inout) :: rhs
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
 
@@ -952,7 +950,7 @@ contains
                         tauxy,tauyy,tauyz,&
                             qy )
         class(sgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp, 5), intent(inout) :: rhs
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxy,tauyy,tauyz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qy
 
@@ -999,7 +997,7 @@ contains
                         tauxz,tauyz,tauzz,&
                             qz )
         class(sgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp, 5), intent(inout) :: rhs
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxz,tauyz,tauzz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qz
 
