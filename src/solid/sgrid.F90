@@ -4,7 +4,7 @@ module SolidGrid
     use FiltersMod,      only: filters
     use GridMod,         only: grid
     use gridtools,       only: alloc_buffs, destroy_buffs
-    use sgrid_hooks,     only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
+    use sgrid_hooks,     only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_mixture_source
     use decomp_2d,       only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                                transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
@@ -674,10 +674,10 @@ contains
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
             ! Now update all the individual species variables
-            call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w)               ! g tensor
-            call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w)               ! Volume Fraction
-            call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,divu,viscwork) ! Hydrodynamic energy
-            call this%mix%update_VF(isub,this%dt,this%u,this%v,this%w)                        ! Volume Fraction
+            call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim)               ! g tensor
+            call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim)               ! Volume Fraction
+            call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork) ! Hydrodynamic energy
+            call this%mix%update_VF(isub,this%dt,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim)                        ! Volume Fraction
 
             ! Integrate simulation time to keep it in sync with RK substep
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
@@ -886,7 +886,7 @@ contains
                                qz )
 
         ! Call problem source hook
-        call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
+        call hook_mixture_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
  
     end subroutine
 

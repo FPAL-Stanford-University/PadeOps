@@ -709,10 +709,11 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     end associate
 end subroutine
 
-subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
+subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use kind_parameters,  only: rkind
     use constants,        only: zero
-    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,&
+                                mom_index,TE_index
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
@@ -728,26 +729,143 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
 
     integer :: i,j,k
 
-    !associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
-    !             v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
-    !             p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
-    !             e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
-    !             bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
-    !           g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
-    !           g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
-    !           g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
-    !             x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+    associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
+                 v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
+                 p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
+                 e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
+                 bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-    !    do k = 1,decomp%ysz(3)
-    !        do j = 1,decomp%ysz(2)
-    !            do i = 1,decomp%ysz(1)
-    !                rhs (i,j,k,2) = rhs (i,j,k,2) + momentum_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
-    !                rhs (i,j,k,5) = rhs (i,j,k,5) + energy_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
-    !                rhsg(i,j,k,1) = rhsg(i,j,k,1) + g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
-    !                rhs (i,j,k,1) = rhs (i,j,k,1) + rho_0 * g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
-    !            end do
+        do k = 1,decomp%ysz(3)
+            do j = 1,decomp%ysz(2)
+                do i = 1,decomp%ysz(1)
+                    rhs (i,j,k,mom_index) = rhs (i,j,k,mom_index) + momentum_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+                    rhs (i,j,k, TE_index) = rhs (i,j,k, TE_index) + energy_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+                end do
+            end do
+        end do
+
+    end associate
+end subroutine
+
+subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+    use kind_parameters,  only: rkind
+    use constants,        only: zero
+    use decomp_2d,        only: decomp_info
+    use StiffGasEOS,      only: stiffgas
+    use Sep1SolidEOS,     only: sep1solid
+
+    use ManufacturedSolution_data
+
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    type(stiffgas),                  intent(in)    :: hydro
+    type(sep1solid),                 intent(in)    :: elastic
+    real(rkind),                     intent(in)    :: tsim
+    real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
+    real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
+    real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
+
+    integer :: i,j,k
+
+    do k = 1,decomp%ysz(3)
+        do j = 1,decomp%ysz(2)
+            do i = 1,decomp%ysz(1)
+                rhs(i,j,k,1) = rhs(i,j,k,1) + g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+            end do
+        end do
+    end do
+end subroutine
+
+subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+    use kind_parameters,  only: rkind
+    use constants,        only: zero
+    use decomp_2d,        only: decomp_info
+    use StiffGasEOS,      only: stiffgas
+    use Sep1SolidEOS,     only: sep1solid
+
+    use ManufacturedSolution_data
+
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    type(stiffgas),                  intent(in)    :: hydro
+    type(sep1solid),                 intent(in)    :: elastic
+    real(rkind),                     intent(in)    :: tsim
+    real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
+    real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
+    real(rkind), dimension(:,:,:),   intent(inout) :: rhs
+
+    integer :: i,j,k
+
+    do k = 1,decomp%ysz(3)
+        do j = 1,decomp%ysz(2)
+            do i = 1,decomp%ysz(1)
+                rhs (i,j,k) = rhs (i,j,k) + rho_0 * g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+            end do
+        end do
+    end do
+end subroutine
+
+subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+    use kind_parameters,  only: rkind
+    use constants,        only: zero
+    use decomp_2d,        only: decomp_info
+    use StiffGasEOS,      only: stiffgas
+    use Sep1SolidEOS,     only: sep1solid
+
+    use ManufacturedSolution_data
+
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    type(stiffgas),                  intent(in)    :: hydro
+    type(sep1solid),                 intent(in)    :: elastic
+    real(rkind),                     intent(in)    :: tsim
+    real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
+    real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
+    real(rkind), dimension(:,:,:),   intent(inout) :: rhs
+
+    integer :: i,j,k
+
+    !do k = 1,decomp%ysz(3)
+    !    do j = 1,decomp%ysz(2)
+    !        do i = 1,decomp%ysz(1)
+    !            rhs (i,j,k,2) = rhs (i,j,k,2) + momentum_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+    !            rhs (i,j,k,5) = rhs (i,j,k,5) + energy_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+    !            rhsg(i,j,k,1) = rhsg(i,j,k,1) + g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+    !            rhs (i,j,k,1) = rhs (i,j,k,1) + rho_0 * g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
     !        end do
     !    end do
+    !end do
+end subroutine
 
-    !end associate
+subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+    use kind_parameters,  only: rkind
+    use constants,        only: zero
+    use decomp_2d,        only: decomp_info
+    use StiffGasEOS,      only: stiffgas
+    use Sep1SolidEOS,     only: sep1solid
+
+    use ManufacturedSolution_data
+
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    type(stiffgas),                  intent(in)    :: hydro
+    type(sep1solid),                 intent(in)    :: elastic
+    real(rkind),                     intent(in)    :: tsim
+    real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
+    real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
+    real(rkind), dimension(:,:,:),   intent(inout) :: rhs
+
+    integer :: i,j,k
+
+    !do k = 1,decomp%ysz(3)
+    !    do j = 1,decomp%ysz(2)
+    !        do i = 1,decomp%ysz(1)
+    !            rhs (i,j,k,2) = rhs (i,j,k,2) + momentum_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+    !            rhs (i,j,k,5) = rhs (i,j,k,5) + energy_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+    !            rhsg(i,j,k,1) = rhsg(i,j,k,1) + g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+    !            rhs (i,j,k,1) = rhs (i,j,k,1) + rho_0 * g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+    !        end do
+    !    end do
+    !end do
 end subroutine

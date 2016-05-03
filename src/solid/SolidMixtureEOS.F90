@@ -471,30 +471,32 @@ contains
 
     end subroutine
 
-    subroutine update_g(this,isub,dt,rho,u,v,w)
+    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,tsim)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
-        real(rkind),          intent(in)    :: dt
+        real(rkind),          intent(in)    :: dt,tsim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_g(isub,dt,rho,u,v,w)
+          call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,tsim)
         end do
 
     end subroutine
 
-    subroutine update_Ys(this,isub,dt,rho,u,v,w)
+    subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
-        real(rkind),          intent(in)    :: dt
+        real(rkind),          intent(in)    :: dt,tsim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_Ys(isub,dt,rho,u,v,w)
+          call this%material(imat)%update_Ys(isub,dt,rho,u,v,w,x,y,z,tsim)
         end do
 
     end subroutine
@@ -525,16 +527,17 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,divu,viscwork)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
-        real(rkind),          intent(in)    :: dt
+        real(rkind),          intent(in)    :: dt,tsim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,viscwork
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,divu,viscwork)
+          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
         end do
 
     end subroutine
@@ -559,16 +562,17 @@ contains
 
     end subroutine
 
-    subroutine update_VF(this,isub,dt,u,v,w)
+    subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
-        real(rkind),          intent(in)    :: dt
+        real(rkind),          intent(in)    :: dt,tsim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: u,v,w
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_VF(isub,dt,u,v,w)
+          call this%material(imat)%update_VF(isub,dt,u,v,w,x,y,z,tsim)
         end do
 
     end subroutine

@@ -97,6 +97,72 @@ module SolidMod
     !     module procedure init
     ! end interface
 
+    ! hooks for sources
+
+    interface hook_material_g_source
+        subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+            import :: rkind
+            import :: decomp_info
+            import :: stiffgas
+            import :: sep1solid
+            type(decomp_info),               intent(in)    :: decomp
+            type(stiffgas),                  intent(in)    :: hydro
+            type(sep1solid),                 intent(in)    :: elastic
+            real(rkind),                     intent(in)    :: tsim
+            real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
+            real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
+            real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
+        end subroutine
+    end interface
+
+    interface hook_material_mass_source
+        subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+            import :: rkind
+            import :: decomp_info
+            import :: stiffgas
+            import :: sep1solid
+            type(decomp_info),               intent(in)    :: decomp
+            type(stiffgas),                  intent(in)    :: hydro
+            type(sep1solid),                 intent(in)    :: elastic
+            real(rkind),                     intent(in)    :: tsim
+            real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
+            real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
+            real(rkind), dimension(:,:,:),   intent(inout) :: rhs
+        end subroutine
+    end interface
+
+    interface hook_material_VF_source
+        subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p,rhs)
+            import :: rkind
+            import :: decomp_info
+            import :: stiffgas
+            import :: sep1solid
+            type(decomp_info),               intent(in)    :: decomp
+            type(stiffgas),                  intent(in)    :: hydro
+            type(sep1solid),                 intent(in)    :: elastic
+            real(rkind),                     intent(in)    :: tsim
+            real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
+            real(rkind), dimension(:,:,:),   intent(in)    :: u,v,w,Ys,VF,p
+            real(rkind), dimension(:,:,:),   intent(inout) :: rhs
+        end subroutine
+    end interface
+
+    interface hook_material_energy_source
+        subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+            import :: rkind
+            import :: decomp_info
+            import :: stiffgas
+            import :: sep1solid
+            type(decomp_info),               intent(in)    :: decomp
+            type(stiffgas),                  intent(in)    :: hydro
+            type(sep1solid),                 intent(in)    :: elastic
+            real(rkind),                     intent(in)    :: tsim
+            real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
+            real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
+            real(rkind), dimension(:,:,:),   intent(inout) :: rhs
+        end subroutine
+    end interface
+
 contains
 
     !function init(decomp,der,fil,hydro,elastic) result(this)
@@ -269,16 +335,18 @@ contains
 
     end subroutine
 
-    subroutine update_g(this,isub,dt,rho,u,v,w)
+    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,tsim)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
-        real(rkind), intent(in) :: dt
+        real(rkind), intent(in) :: dt,tsim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for g tensor equation
 
         call this%getRHS_g(rho,u,v,w,dt,rhsg)
+        call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
         ! advance sub-step
         if(isub==1) this%Qtmpg = zero                   ! not really needed, since RK45_A(1) = 0
@@ -372,16 +440,18 @@ contains
         rhsg(:,:,:,9) = rhsg(:,:,:,9) + invtaurel * ( this%g31*this%sxz + this%g32*this%syz + this%g33*this%szz ) ! g33 
     end subroutine
 
-    subroutine update_Ys(this,isub,dt,rho,u,v,w)
+    subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
-        real(rkind), intent(in) :: dt
+        real(rkind), intent(in) :: dt,tsim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsYs  ! RHS for mass fraction equation
 
         call this%getRHS_Ys(rho,u,v,w,rhsYs)
+        call hook_material_mass_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsYs)
 
         ! advance sub-step
         if(isub==1) this%QtmpYs = zero                   ! not really needed, since RK45_A(1) = 0
@@ -407,16 +477,18 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,divu,viscwork)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
-        real(rkind), intent(in) :: dt
+        real(rkind), intent(in) :: dt,tsim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,viscwork
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
 
         call this%getRHS_eh(rho,u,v,w,divu,viscwork,rhseh)
+        call hook_material_energy_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhseh)
 
         ! advance sub-step
         if(isub==1) this%Qtmpeh = zero                   ! not really needed, since RK45_A(1) = 0
@@ -453,16 +525,18 @@ contains
 
     end subroutine
 
-    subroutine update_VF(this,isub,dt,u,v,w)
+    subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
-        real(rkind), intent(in) :: dt
+        real(rkind), intent(in) :: dt,tsim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: u,v,w
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
 
         call this%getRHS_VF(u,v,w,rhsVF)
+        call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
 
         ! advance sub-step
         if(isub==1) this%QtmpVF = zero                   ! not really needed, since RK45_A(1) = 0

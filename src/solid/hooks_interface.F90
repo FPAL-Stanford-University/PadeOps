@@ -1,7 +1,9 @@
 module sgrid_hooks
     use kind_parameters, only: rkind
-    use decomp_2d, only: decomp_info
+    use decomp_2d,       only: decomp_info
     use SolidMixtureMod, only: solid_mixture
+    use StiffGasEOS,     only: stiffgas
+    use Sep1SolidEOS,    only: sep1solid
     implicit none
 
     interface meshgen
@@ -11,7 +13,6 @@ module sgrid_hooks
             type(decomp_info), intent(in) :: decomp
             real(rkind), intent(inout) :: dx, dy, dz
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
-
         end subroutine 
     end interface
 
@@ -27,7 +28,6 @@ module sgrid_hooks
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
             type(solid_mixture),             intent(inout) :: mix
             real(rkind),                     intent(inout) :: tstop, dt, tviz
-
         end subroutine 
     end interface
 
@@ -44,7 +44,6 @@ module sgrid_hooks
             integer,                         intent(in) :: vizcount
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(in) :: fields
-
         end subroutine
     end interface
 
@@ -58,7 +57,6 @@ module sgrid_hooks
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
             type(solid_mixture),             intent(inout) :: mix
             real(rkind),                     intent(in)    :: tsim
-
         end subroutine
     end interface
 
@@ -73,12 +71,11 @@ module sgrid_hooks
             real(rkind),                     intent(in) :: tsim
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(in) :: fields
-
         end subroutine
     end interface
 
-    interface hook_source
-        subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
+    interface hook_mixture_source
+        subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
             import :: rkind
             import :: decomp_info
             import :: solid_mixture
@@ -88,7 +85,6 @@ module sgrid_hooks
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(in)    :: fields
             real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-
         end subroutine
     end interface
 
