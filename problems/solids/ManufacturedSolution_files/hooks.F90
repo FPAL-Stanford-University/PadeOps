@@ -838,7 +838,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     !end do
 end subroutine
 
-subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p,rhs)
     use kind_parameters,  only: rkind
     use constants,        only: zero
     use decomp_2d,        only: decomp_info
@@ -853,7 +853,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,
     type(sep1solid),                 intent(in)    :: elastic
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
-    real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
+    real(rkind), dimension(:,:,:),   intent(in)    :: u,v,w,Ys,VF,p
     real(rkind), dimension(:,:,:),   intent(inout) :: rhs
 
     integer :: i,j,k
