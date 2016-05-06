@@ -602,7 +602,7 @@ contains
 
         tcond = .TRUE.
         ! Check tstop condition
-        if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop) ) then
+        if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop*(one-eps)) ) then
             tcond = .FALSE.
         else if ( (this%tstop > zero) .AND. (this%tsim + this%dt >= this%tstop) ) then
             this%dt = this%tstop - this%tsim
@@ -650,9 +650,9 @@ contains
             end if
 
             ! Check tstop condition
-            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop - eps) ) then
+            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop*(one - eps) ) ) then
                 tcond = .FALSE.
-            else if ( (this%tstop > zero) .AND. (this%tsim + this%dt + eps >= this%tstop) ) then
+            else if ( (this%tstop > zero) .AND. (this%tsim + this%dt >= this%tstop) ) then
                 this%dt = this%tstop - this%tsim
                 stability = 'stop'
                 vizcond = .TRUE.
