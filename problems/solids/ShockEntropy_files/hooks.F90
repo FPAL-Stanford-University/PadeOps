@@ -243,10 +243,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
         rho = rho0 * tmp
 
-        tmp = sqrt( (gam*(p+pInf) + four/three * mu)/rho )    ! Speed of sound
-        tfactor = one / minval(tmp)
-        tstop = tstop * tfactor
-        tviz = tviz * tfactor
+        ! tmp = sqrt( (gam*(p+pInf) + four/three * mu)/rho )    ! Speed of sound
+        ! tfactor = one / minval(tmp)
+        ! tstop = tstop * tfactor
+        ! tviz = tviz * tfactor
 
         print*, "rho1 = ", rho1
         print*, "rho2 = ", rho2
@@ -257,6 +257,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         print*, "Pinf = ", PInf
 
         print*, "rho diff: ", (rho(1,1,1) - rho2)/rho2
+
+        print*, "tviz = ", tviz
+        print*, "tstop = ", tstop
     end associate
 
 end subroutine
