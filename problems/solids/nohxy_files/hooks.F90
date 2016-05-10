@@ -1,10 +1,10 @@
-module impact_data
+module noh_data
     use kind_parameters,  only: rkind
     use constants,        only: one,eight
     implicit none
     
-    real(rkind) :: uimpact = 100._rkind
-    real(rkind) :: pinit   = real(1.0D5,rkind)
+    real(rkind) :: uradinit = 1._rkind
+    real(rkind) :: pinit   = real(1.0D-5,rkind)
     real(rkind) :: rho_0
 
 end module
@@ -14,7 +14,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: half,one
     use decomp_2d,        only: decomp_info
 
-    use impact_data
+    use noh_data
 
     implicit none
 
@@ -24,6 +24,10 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     integer :: i,j,k
     integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
+    real(rkind) :: xa, xb, yc, yd
+
+    xa = -25.0D0; xb = 25.0D0
+    yc = -25.0D0; yd = 25.0D0
 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
@@ -36,15 +40,15 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = one/real(nx-1,rkind)
-        dy = dx
+        dx = (xb-xa)/real(nx-1,rkind)
+        dy = (yd-yc)/real(ny-1,rkind)
         dz = dx
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
+                    x(i,j,k) = xa + real( ix1 - 1 + i - 1, rkind ) * dx
+                    y(i,j,k) = yc + real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
@@ -61,7 +65,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
     
-    use impact_data
+    use noh_data
 
     implicit none
     character(len=*),                                               intent(in)    :: inputfile
@@ -71,10 +75,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
-    integer :: ioUnit
+    integer :: ioUnit, i, j, k
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
+    real(rkind) :: stp_x,bkstp_x,bkstp_y,phiang,u1,u2,v1,v2,rad,stp_r1,bkstp_r2,regfrac,dxdy
 
-    namelist /PROBINPUT/  uimpact
+    namelist /PROBINPUT/  uradinit
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -95,8 +100,43 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         
         tmp = tanh( (x-half)/dx )
 
-        u   = -uimpact*tmp
-        v   = zero
+        do k=1,decomp%ysz(3)
+         do j=1,decomp%ysz(2)
+          do i=1,decomp%ysz(1)
+
+             stp_x = half*(tanh((x(i,j,k)-zero)/dx) + one)
+             bkstp_x = one - half*(tanh((x(i,j,k)-zero)/dx) + one)
+             bkstp_y = one - half*(tanh((y(i,j,k)-zero)/dx) + one)
+
+             !phiang = atan(y(i,j,k)/(x(i,j,k)+1.0D-32)) + pi*bkstp_x + two*pi*stp_x*bkstp_y
+             phiang = atan2(y(i,j,k), (x(i,j,k)+1.0D-32))
+
+             u1 = -cos(phiang); u2 = zero
+             v1 = -sin(phiang); v2 = zero
+             
+             rad = sqrt(x(i,j,k)**2+y(i,j,k)**2); dxdy = sqrt(dx**2+dy**2)
+             stp_r1 = half*(tanh((rad-5.0d0)/dxdy) + one)
+             bkstp_r2 = one - half*(tanh((rad-15.0d0)/dxdy) + one)
+             regfrac = one - stp_r1*bkstp_r2
+
+             u(i,j,k)   = uradinit * (u1+regfrac*(u2-u1))
+             v(i,j,k)   = uradinit * (v1+regfrac*(v2-v1))
+             !if((i==20  .and. abs(y(i,j,k))<1.0d-10) .or. &
+             !   (i==30  .and. abs(y(i,j,k))<1.0d-10)) then
+             !  write(*,*) '----------'
+             !  write(*,*) i, j, k
+             !  write(*,*) x(i,j,k), y(i,j,k)
+             !  write(*,*) 'stpx=', stp_x, bkstp_x, bkstp_y
+             !  write(*,*) 'atan=', atan(y(i,j,k)/(x(i,j,k)+1.0D-32))
+             !  write(*,*) phiang, u1, v1
+             !  write(*,*)
+             !  write(*,*) rad, stp_r1, bkstp_r2, regfrac
+             !  write(*,*) u(i,j,k), v(i,j,k)
+             !  write(*,*) '----------'
+             !endif
+          end do 
+         end do 
+        end do 
         w   = zero
         p   = pinit
 
@@ -120,7 +160,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                                 sxx_index,sxy_index,sxz_index,syy_index,syz_index,szz_index
     use decomp_2d,        only: decomp_info
 
-    use impact_data
+    use noh_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -147,8 +187,8 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                syy => fields(:,:,:, syy_index), syz => fields(:,:,:, syz_index), szz => fields(:,:,:, szz_index)  )
 
 
-        write(velstr,'(I3.3)') int(uimpact)
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/impact_"//trim(velstr)//"_", vizcount, ".dat"
+        write(velstr,'(I3.3)') int(uradinit)
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/noh_"//trim(velstr)//"_", vizcount, ".dat"
 
         if(vizcount==0) then
           open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
@@ -194,7 +234,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
 
-    use impact_data
+    use noh_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -202,9 +242,9 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
-    integer :: nx
+    integer :: nx, ny
 
-    nx = decomp%ysz(1)
+    nx = decomp%ysz(1); ny = decomp%ysz(2)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -216,8 +256,9 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
                g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
+        ! left x
         rho( 1,:,:) = rho_0
-        u  ( 1,:,:) = uimpact
+        u  ( 1,:,:) = zero
         v  ( 1,:,:) = zero
         w  ( 1,:,:) = zero
         p  ( 1,:,:) = pinit
@@ -226,8 +267,9 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
         g21( 1,:,:) = zero; g22( 1,:,:) = one;  g23( 1,:,:) = zero
         g31( 1,:,:) = zero; g32( 1,:,:) = zero; g33( 1,:,:) = one
 
+        ! right x
         rho(nx,:,:) = rho_0
-        u  (nx,:,:) = -uimpact
+        u  (nx,:,:) = zero
         v  (nx,:,:) = zero
         w  (nx,:,:) = zero
         p  (nx,:,:) = pinit
@@ -235,6 +277,28 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
         g11(nx,:,:) = one;  g12(nx,:,:) = zero; g13(nx,:,:) = zero
         g21(nx,:,:) = zero; g22(nx,:,:) = one;  g23(nx,:,:) = zero
         g31(nx,:,:) = zero; g32(nx,:,:) = zero; g33(nx,:,:) = one
+
+        ! bottom y
+        rho( :,1,:) = rho_0
+        u  ( :,1,:) = zero
+        v  ( :,1,:) = zero
+        w  ( :,1,:) = zero
+        p  ( :,1,:) = pinit
+        
+        g11( :,1,:) = one;  g12( :,1,:) = zero; g13( :,1,:) = zero
+        g21( :,1,:) = zero; g22( :,1,:) = one;  g23( :,1,:) = zero
+        g31( :,1,:) = zero; g32( :,1,:) = zero; g33( :,1,:) = one
+
+        ! top y
+        rho( :,ny,:) = rho_0
+        u  ( :,ny,:) = zero
+        v  ( :,ny,:) = zero
+        w  ( :,ny,:) = zero
+        p  ( :,ny,:) = pinit
+        
+        g11( :,ny,:) = one;  g12( :,ny,:) = zero; g13( :,ny,:) = zero
+        g21( :,ny,:) = zero; g22( :,ny,:) = one;  g23( :,ny,:) = zero
+        g31( :,ny,:) = zero; g32( :,ny,:) = zero; g33( :,ny,:) = one
 
     end associate
 end subroutine
@@ -246,7 +310,7 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
     use exits,            only: message
     use reductions,       only: P_MAXVAL
 
-    use impact_data
+    use noh_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp

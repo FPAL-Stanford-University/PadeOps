@@ -625,7 +625,6 @@ contains
             call tic()
             call this%advance_RK45()
             call toc(cputime)
-           
             if (hookcond) stability = "hook"
             call message(1,"Time",this%tsim)
             call message(2,"Time step",this%dt)

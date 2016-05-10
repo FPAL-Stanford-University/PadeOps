@@ -1,10 +1,12 @@
-module impact_data
+module normal_and_shear_data
     use kind_parameters,  only: rkind
     use constants,        only: one,eight
     implicit none
     
-    real(rkind) :: uimpact = 100._rkind
+    real(rkind) :: ushear = 100._rkind
     real(rkind) :: pinit   = real(1.0D5,rkind)
+    real(rkind) :: p1   = real(1.0D8,rkind)
+    real(rkind) :: p2   = real(1.0D5,rkind)
     real(rkind) :: rho_0
 
 end module
@@ -14,7 +16,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: half,one
     use decomp_2d,        only: decomp_info
 
-    use impact_data
+    use normal_and_shear_data
 
     implicit none
 
@@ -61,7 +63,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
     
-    use impact_data
+    use normal_and_shear_data
 
     implicit none
     character(len=*),                                               intent(in)    :: inputfile
@@ -74,7 +76,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
 
-    namelist /PROBINPUT/  uimpact
+    namelist /PROBINPUT/  ushear, p1, p2
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -95,10 +97,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         
         tmp = tanh( (x-half)/dx )
 
-        u   = -uimpact*tmp
-        v   = zero
+        u   = zero
+        v   = -ushear*tmp
         w   = zero
-        p   = pinit
+        p   = p1 + half*(one+tmp)*(p2-p1)
 
         g11 = one;  g12 = zero; g13 = zero
         g21 = zero; g22 = one;  g23 = zero
@@ -120,7 +122,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                                 sxx_index,sxy_index,sxz_index,syy_index,syz_index,szz_index
     use decomp_2d,        only: decomp_info
 
-    use impact_data
+    use normal_and_shear_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -147,7 +149,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                syy => fields(:,:,:, syy_index), syz => fields(:,:,:, syz_index), szz => fields(:,:,:, szz_index)  )
 
 
-        write(velstr,'(I3.3)') int(uimpact)
+        write(velstr,'(I3.3)') int(ushear)
         write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/impact_"//trim(velstr)//"_", vizcount, ".dat"
 
         if(vizcount==0) then
@@ -194,7 +196,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
 
-    use impact_data
+    use normal_and_shear_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -217,20 +219,20 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         rho( 1,:,:) = rho_0
-        u  ( 1,:,:) = uimpact
-        v  ( 1,:,:) = zero
+        u  ( 1,:,:) = zero
+        v  ( 1,:,:) = ushear
         w  ( 1,:,:) = zero
-        p  ( 1,:,:) = pinit
+        p  ( 1,:,:) = p1
         
         g11( 1,:,:) = one;  g12( 1,:,:) = zero; g13( 1,:,:) = zero
         g21( 1,:,:) = zero; g22( 1,:,:) = one;  g23( 1,:,:) = zero
         g31( 1,:,:) = zero; g32( 1,:,:) = zero; g33( 1,:,:) = one
 
         rho(nx,:,:) = rho_0
-        u  (nx,:,:) = -uimpact
-        v  (nx,:,:) = zero
+        u  (nx,:,:) = zero
+        v  (nx,:,:) = -ushear
         w  (nx,:,:) = zero
-        p  (nx,:,:) = pinit
+        p  (nx,:,:) = p2
         
         g11(nx,:,:) = one;  g12(nx,:,:) = zero; g13(nx,:,:) = zero
         g21(nx,:,:) = zero; g22(nx,:,:) = one;  g23(nx,:,:) = zero
@@ -246,7 +248,7 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
     use exits,            only: message
     use reductions,       only: P_MAXVAL
 
-    use impact_data
+    use normal_and_shear_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
