@@ -1,4 +1,4 @@
-    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, zmesh, nCwall, z0, useWallModel, wallMtype,  TfilterZ)
+    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, zmesh, nCwall, z0, useWallModel, wallMtype,  TfilterZ, Pr)
         class(sgs), intent(inout), target :: this
         type(spectral), intent(in), target :: spectC, spectE
         type(decomp_info), intent(in), target :: gpC, gpE
@@ -7,7 +7,7 @@
         integer, intent(in) :: modelID
         integer, intent(in), optional :: nCwall
         real(rkind), dimension(:,:,:), intent(in), optional :: zMesh
-        real(rkind), intent(in), optional :: z0
+        real(rkind), intent(in), optional :: z0, Pr
         integer, intent(in), optional :: wallMtype
         logical, intent(in), optional :: useWallModel, TfilterZ
         integer :: ierr
@@ -16,7 +16,7 @@
         this%useDynamicProcedure = useDynamicProcedure
         this%useClipping = useClipping
 
-        allocate(this%rbuff(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),10))
+        allocate(this%rbuff(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),11))
         this%rbuff = zero  
         this%spectC => spectC
         this%spectE => spectE
@@ -24,12 +24,13 @@
         this%deltaTFilter = deltaRatio*this%deltaFilter
         this%dz = dz
         if (present(TfilterZ))  useVerticalTfilter = TfilterZ
-
+        if (present(Pr)) this%Pr = Pr
         if (present(useWallmodel)) then
             this%useWallModel = useWallModel
-            allocate(this%rbuffE(gpE%xsz(1), gpE%xsz(2), gpE%xsz(3),3))
+            allocate(this%rbuffE(gpE%xsz(1), gpE%xsz(2), gpE%xsz(3),4))
             this%rbuffE = zero
             this%nuSGSE => this%rbuffE(:,:,:,3)
+            this%nuSCAE => this%rbuffE(:,:,:,4)
             if (this%useWallModel) then
                 if (.not. present(z0)) then
                     call GracefulExit("Need to provide z0 if wall model is being used", 442)
@@ -72,7 +73,7 @@
             this%cSMAG_WALL = ( c_smag**(-real(ncWall,rkind)) + (kappa*(zMesh/this%deltaFilter + &
                 & z0/this%deltaFilter))**(-real(ncWall,rkind))  )**(-one/real(ncWall,rkind))
             this%cSMAG_WALL = (this%deltaFilter*this%cSMAG_WALL)**2    
-            this%useWallFunction = .true. 
+            this%useWallFunction = .true.
             call message(1,"SMAGORINSKY (w/ Wall function) SGS model initialized")
         case default 
             call GracefulExit("Invalid choice for SGS model.",2013)
@@ -80,6 +81,7 @@
 
         this%nuSGS => this%rbuff(:,:,:,7)
         this%nuSGSfil => this%rbuff(:,:,:,8)
+        this%nuSCA => this%rbuff(:,:,:,11)
         this%gpC => gpC
         this%gpE => gpE
         this%sp_gp => this%spectC%spectdecomp

@@ -1,16 +1,14 @@
 ! Template for PadeOps
-! Grid - hit_grid
-! Problem - HIT
 
-#include "pbl_files/initialize.F90"       
-#include "pbl_files/io.F90"            
-#include "pbl_files/temporalHook.F90"  
+#include "gabls_files/initialize.F90"       
+#include "gabls_files/io.F90"            
+#include "gabls_files/temporalHook.F90"  
 
-program pbl
+program gabls
     use mpi
     use kind_parameters,  only: rkind,clen,stdout,stderr
     use IncompressibleGridWallM, only: igridWallM
-    use pbl_IO, only: start_io, finalize_io
+    use gabls_IO, only: start_io, finalize_io
     use constants, only: half 
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc

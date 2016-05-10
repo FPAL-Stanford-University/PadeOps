@@ -3,7 +3,7 @@ module temporalHook
     use IncompressibleGridWallM, only: igridWallM
     use reductions,         only: P_MAXVAL
     use exits,              only: message
-    use pbl_IO,           only: dumpData4Matlab 
+    use gabls_IO,           only: dumpData4Matlab 
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
@@ -41,10 +41,10 @@ contains
 
         if (mod(gp%step,gp%t_dataDump)==0) then
            call message(0,"Data dump!")
-           !call dumpData4Matlab(gp) 
            call gp%dumpFullField(gp%u,'uVel')
            call gp%dumpFullField(gp%v,'vVel')
            call gp%dumpFullField(gp%wC,'wVel')
+           call gp%dumpFullField(gp%T,'potT')
         end if 
 
     end subroutine

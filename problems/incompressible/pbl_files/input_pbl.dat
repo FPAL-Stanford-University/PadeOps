@@ -1,59 +1,77 @@
 &INPUT
-
-inputdir  =  "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"       ! Directory for input files
-outputdir  = "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"      ! Directory for output files
-
-nx = 64                  ! Number of points in X
-ny = 64                  ! Number of points in Y
-nz = 64                 ! Number of points in Z
-
-dt = 2D-5               ! Fixed time step value (Set to negative to disable)
-tstop = 10.D0              ! Physical time to stop the simulation
-CFL = 0.1D0               ! CFL criterion for calculating the time step (Set to negative to disable)
-nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
-
-
-prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-t_restartDump = 4000    ! Restart File Frequency 
-t_dataDump    = 1000       ! Number of timesteps before data dump is performed 
-
+inputdir              = "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"   ! Directory for any input files
+outputdir             = "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"   ! Directory for all output files
+nx                    = 64          ! Number of points in X
+ny                    = 64          ! Number of points in Y
+nz                    = 64          ! Number of points in Z
+tstop                 = 10.D0       ! Physical time to stop the simulation
+CFL                   = 0.1D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+dt                    = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
+prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
+restartFile_TID       = 8000        ! TimeID of the restart file being used
+restartFile_RID       = 87          ! RunID of the restart file being used
 /
-
 /
-
-&IINPUT
-
-Pr = 0.7D0                ! Prandtl Number
-runID = 86                 ! Run ID (for output file name)
-
-useCoriolis = .FALSE. 
-useExtraForcing = .TRUE. 
-
-SGSModelID = 2            ! 0: smagorinsky, 1: sigma, 2: Smag with wall damping
-useDynamicProcedure = .FALSE. 
-useSGSClipping = .TRUE. 
-
-
-topWall = 2               ! no_slip = 1, slip = 2 , wall model = 3
-
-useRestartFile = .FALSE. 
-restartFile_TID = 16000
-restartFile_RID = 86
-
-isInviscid = .TRUE.
-useVerticalFilter = .FALSE.
-
-dumpPlanes = .FALSE.      ! Dump plane visualations. Select planes in initialize.F90
+&IO
+RunID                 = 86          ! Run Label (All output files will be tagged with this nubber)
+t_restartDump         = 4000        ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump            = 4000        ! Data dumping frequency (# of timesteps)
+ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
+dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
+t_planeDump           = 100         ! Plane dumping frequency (# of timesteps)
+t_start_planeDump     = 1           ! When do you want to start dumping planes?
+t_stop_planeDump      = 5000        ! When do you want to stop dumping planes?
 /
-
+/
+&STATS
+tid_StatsDump         = 4000        ! Dumping Frequency for Statistics file (# of time steps)
+tid_compStats         = 100         ! Frequency of Computing Statistics
+tSimStartStats        = 5.d0        ! Simulation time for starting stats calculations 
+/
+/
+&PHYSICS
+isInviscid            = .TRUE.      ! Is this a viscous simulation?
+useCoriolis           = .FALSE.     ! Activate the coriolis term? 
+useExtraForcing       = .TRUE.      ! Is an extra forcing term being used? (non-Geostrophic forcing only)
+useGeostrophicForcing = .FALSE.     ! This is true if forcing is provided using the coriolis term  
+isStratified          = .FALSE.     ! Use Stratification / active scalar in momentum
+Pr                    = 0.6D0       ! Turbulent Prandtl Number; used when 
+Ro                    = 1.D10       ! Rossby Number used when Coriolis is ON
+Re                    = 1.D10       ! Reynolds Number; used when isInvisid is FALSE
+Fr                    = 1.D10       ! Froude number; used when isStratified is TRUE
+Gx                    = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+Gy                    = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+Gz                    = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+dPfdx                 = 1.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
+dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
+dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
+/
+/
+&BCs
+topWall               = 2           ! no_slip = 1, slip = 2
+useVerticalFilter     = .FALSE.     ! Dealiasing filter used in vertical direction
+useSpongeLayer        = .FALSE.     ! Use a sponge layer at the top 
+zstSponge             = 0.8d0       ! Height above which the sponge layer is active
+SpongeTscale          = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
+/
+/
+&LES
+useSGS                = .TRUE.      ! Use a subgrid scale model? 
+SGSModelID            = 0           ! 0: smagorinsky, 1: sigma, 2: Smag with Wall Damping
+useDynamicProcedure   = .TRUE.      ! Use the standard dynamic procedure 
+useSGSClipping        = .TRUE.      ! Clip the constant values when they are negative
+/
+/
 &WALLMODEL 
-z0 = 1.d-4
-WallMType = 1        ! 0: standard model of Moeng, 1: Local model of Bou-Zeid (use this) 
+wallMType             = 1           ! 0: Moeng's original model, 1: Bou-Zeid's fully local model
+z0                    = 1.d-4       ! Roughness length scale (CAREFUL: This is a non-dimensionalized number)
 /
-
+/
 &PBLINPUT
-H = 1000.d0
-z0 = 0.1d0
-dpdxF = 1.d0
+Lx                    = 6.28318530717959d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                    = 6.28318530717959d0 ! Domain Width (appropriate dimesnions/non-dimensionalized)
+Lz                    = 1.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
+z0init                = 1.d-4               ! Roughness scale used to initialize the profile
 /

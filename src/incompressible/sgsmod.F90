@@ -1,6 +1,6 @@
 module sgsmod
     use kind_parameters, only: rkind, clen
-    use constants, only: imi, pi, zero,one,two,three,half, four,eight, nine, six  
+    use constants, only: imi, pi, zero,one,two,three,half, four,eight, nine, six, kappa 
     use decomp_2d
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
@@ -18,17 +18,17 @@ module sgsmod
 
     real(rkind) :: c_sigma = 1.5_rkind
     real(rkind) :: c_smag = 0.17_rkind
-    real(rkind) :: kappa = 0.41_rkind
     real(rkind), parameter :: deltaRatio = 2.0_rkind
     complex(rkind), parameter :: zeroC = zero + imi*zero
     logical :: useVerticalTfilter = .false. 
     integer :: applyDynEvery  = 5
 
+    real(rkind), parameter :: bm = 4.8_rkind, bh = 7.8_rkind
     type :: sgs
         private
         type(spectral), pointer :: spectC, spectE 
         real(rkind), allocatable, dimension(:,:,:,:) :: rbuff, rbuffE, SIGMAbuffs, Lij, Mij
-        real(rkind), pointer, dimension(:,:,:) :: cSMAG_WALL, nuSGS, nuSGSfil,nuSGSE
+        real(rkind), pointer, dimension(:,:,:) :: cSMAG_WALL, nuSGS, nuSGSfil,nuSGSE, nuSCA, nuSCAE
         real(rkind) :: deltaFilter, mconst, deltaTFilter 
         type(decomp_info), pointer :: sp_gp, gpC
         type(decomp_info), pointer :: sp_gpE, gpE
@@ -46,7 +46,7 @@ module sgsmod
         logical :: useDynamicProcedure = .false.
         logical :: useClipping = .false. 
         
-        real(rkind) :: meanFact
+        real(rkind) :: meanFact, Pr
 
         logical :: useWallModel = .false.  
         real(rkind) :: z0, dz
@@ -72,6 +72,7 @@ module sgsmod
             procedure, private :: getLocalWallModel
             procedure :: getRHS_SGS
             procedure :: getRHS_SGS_WallM
+            procedure :: getRHS_SGS_Scalar_WallM
             procedure :: link_pointers
     end type 
 
@@ -200,10 +201,10 @@ contains
     end subroutine
 
 
-    subroutine getRHS_SGS_WallM(this, duidxjC, duidxjE, duidxjChat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, ustar, Umn, Vmn, Uspmn, filteredSpeedSq, max_nuSGS)    
+    subroutine getRHS_SGS_WallM(this, duidxjC, duidxjE, duidxjChat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, ustar, Umn, Vmn, Uspmn, filteredSpeedSq, InvObLength, max_nuSGS)    
         class(sgs), intent(inout), target :: this
         real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(inout), target :: duidxjC
-        real(rkind)   , dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(inout), target :: duidxjE
+        real(rkind)   , dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4), intent(inout), target :: duidxjE
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3),9), intent(inout) :: duidxjChat
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: urhs, vrhs
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat, wChat
@@ -216,7 +217,7 @@ contains
         real(rkind), dimension(:,:,:), pointer :: dwdxC, dwdyC
         real(rkind), dimension(:,:,:), pointer :: tau11, tau12, tau13, tau13C, tau22, tau23, tau23C, tau33
         real(rkind), dimension(:,:,:), pointer :: S11, S12, S13, S13C, S22, S23, S23C, S33
-        real(rkind), intent(in) :: ustar, Umn, Vmn, Uspmn
+        real(rkind), intent(in) :: ustar, Umn, Vmn, Uspmn, InvObLength
         real(rkind), intent(out), optional :: max_nuSGS
         complex(rkind), dimension(:,:,:), pointer :: tauhat, tauhat2    
         integer :: nz
@@ -256,9 +257,6 @@ contains
         if (this%useDynamicProcedure) then
             if (mod(this%mstep,ApplyDynEvery) == 0) then
                 call this%DynamicProcedure(u,v,wC,uhat, vhat, wChat, duidxjC,duidxjChat) 
-                !if (nrank == 0) then
-                !    print*, this%Lij(1,1,1:10,1)
-                !end if 
             end if
             this%nuSGS = this%Lij(:,:,:,1) * (this%deltafilter * this%deltafilter) * this%nuSGS  
         else
@@ -268,6 +266,7 @@ contains
                 this%nuSGS = this%mconst*this%nuSGS
             end if 
         end if
+
 
 
         this%mstep = this%mstep + 1
@@ -320,7 +319,7 @@ contains
             wrhs = wrhs - this%ctmpEy
         case(1)
             call this%getLocalWallModel(filteredSpeedSq, this%ctmpCz)
-            this%WallMFactor = -(kappa/log(this%dz/(two*this%z0)))**2 
+            this%WallMFactor = -(kappa/(log(this%dz/(two*this%z0)) + bm*InvObLength*this%dz/two))**2 
             
             call this%spectE%fft(tau13,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
@@ -374,6 +373,43 @@ contains
 
 #include "sgs_models/dynamicprocedure.F90"
 
+    subroutine getRHS_SGS_Scalar_WallM(this, dTdxC, dTdyC, dTdzE, T_rhs, wTh_surf)
+        class(sgs), intent(inout), target :: this
+        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: T_rhs
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: dTdxC,dTdyC 
+        real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(inout) :: dTdzE
+        real(rkind), intent(in) :: wTh_surf
+        complex(rkind), dimension(:,:,:), pointer :: tauhat, tauhat2    
+        !real(rkind) :: wallMfactor  
+        
+        tauhat => this%cbuff(:,:,:,1); tauhat2 => this%cbuff(:,:,:,2)       
+
+        !wallMfactor = ustar*kappa/(log(this%dz/two/this%z0) + bh*this%dz*InvObLength/two)
+        this%nuSCA = this%nuSGS/(two*this%Pr); this%nuSCAE = this%nuSGSE/(two*this%Pr)
+       
+        dTdxC = this%nuSCA  * dTdxC
+        dTdyC = this%nuSCA  * dTdyC
+        dTdzE = this%nuSCAE * dTdzE
+        
+        call this%spectC%fft(dTdxC,tauhat)
+        call this%spectC%mtimes_ik1_ip(tauhat)
+        T_rhs = T_rhs - tauhat 
+
+        call this%spectC%fft(dTdyC,tauhat)
+        call this%spectC%mtimes_ik2_ip(tauhat)
+        T_rhs = T_rhs - tauhat 
+
+        call this%spectE%fft(dTdzE,this%ctmpEy)
+        call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
+        if (nrank == 0) then
+            this%ctmpEz(1,1,1) = cmplx(wTh_surf/this%MeanFact,zero)
+        end if 
+        call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
+        call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
+        T_rhs = T_rhs - tauhat
+
+
+    end subroutine  
 
     subroutine getLocalWallModel(this, filteredSpeedSq, tauWallH)
         class(sgs), intent(inout), target :: this

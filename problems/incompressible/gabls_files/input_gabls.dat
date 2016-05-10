@@ -1,0 +1,75 @@
+&INPUT
+inputdir              = "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"   ! Directory for any input files
+outputdir             = "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"   ! Directory for all output files
+nx                    = 64          ! Number of points in X
+ny                    = 64          ! Number of points in Y
+nz                    = 64          ! Number of points in Z
+tstop                 = 10.D0       ! Physical time to stop the simulation
+CFL                   = -0.1D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+dt                    = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
+prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
+restartFile_TID       = 8000        ! TimeID of the restart file being used
+restartFile_RID       = 66          ! RunID of the restart file being used
+/
+/
+&IO
+RunID                 = 66          ! Run Label (All output files will be tagged with this nubber)
+t_restartDump         = 4000        ! Restart File Dumping Frequency  (# of time steps)
+t_dataDump            = 1000        ! Data dumping frequency (# of timesteps)
+ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
+dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
+/
+/
+&STATS
+tid_StatsDump         = 4000        ! Dumping Frequency for Statistics file (# of time steps)
+tid_compStats         = 100         ! Frequency of Computing Statistics
+tSimStartStats        = 5.d0        ! Simulation time for starting stats calculations 
+/
+/
+&PHYSICS
+isInviscid            = .TRUE.              ! Is this a viscous simulation?
+useCoriolis           = .TRUE.              ! Activate the coriolis term? 
+useExtraForcing       = .FALSE.             ! Is an extra forcing term being used? (non-Geostrophic forcing only)
+useGeostrophicForcing = .TRUE.              ! This is true if forcing is provided using the coriolis term  
+isStratified          = .TRUE.              ! Use Stratification / active scalar in momentum
+Pr                    = 0.6D0               ! Turbulent Prandtl Number; used when 
+Ro                    = 1.43884892086331D2  ! Rossby Number used when Coriolis is ON
+Re                    = 1D10                ! Reynolds Number; used when isInvisid is FALSE
+Fr                    = 0.127775313D0       ! Froude number; used when isStratified is TRUE
+Gx                    = 1.D0                ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+Gy                    = 0.D0                ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+Gz                    = 0.D0                ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+dPfdx                 = 0.D0                ! Additional Acceleration in X; used if useExtraForcing is ON
+dPfdy                 = 0.D0                ! Additional Acceleration in Y; used if useExtraForcing is ON
+dPfdz                 = 0.D0                ! Additional Acceleration in Z; used if useExtraForcing is ON
+/
+/
+&BCs
+topWall               = 2           ! no_slip = 1, slip = 2
+useVerticalFilter     = .FALSE.     ! Dealiasing filter used in vertical direction
+useSpongeLayer        = .FALSE.     ! Use a sponge layer at the top 
+zstSponge             = 0.75d0      ! Height above which the sponge layer is active
+SpongeTscale          = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50)
+botBC_Temp            = 0           ! Bottom BC type for temperature; 0: Dirichlet, 1: Neumann 
+/
+/
+&LES
+SGSModelID            = 2           ! 0: smagorinsky, 1: sigma, 2: Smag with Wall Damping
+useDynamicProcedure   = .FALSE.     ! Use the standard dynamic procedure 
+useSGSClipping        = .TRUE.      ! Clip the constant values when they are negative
+/
+/
+&WALLMODEL 
+wallMType             = 0           ! 0: Moeng's original model, 1: Bou-Zeid's fully local model
+z0                    = 1.d-4       ! Roughness length scale (CAREFUL: This is in appropriate dimensions)
+/
+/
+&GABLSINPUT
+Lx                    =  1.d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                    =  1.d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
+Lz                    =  1.d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
+Tsurf0                =  265.d0     ! Surface Temp. (at tsim=0) in K (need to take care of the dimensions)
+dTsurf_dt             = -0.25D0     ! Surface Temp. decrease rate in K/hr. (need to take care of the dimensions)
+/

@@ -1,4 +1,4 @@
-module pbl_parameters
+module gabls_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
@@ -9,16 +9,15 @@ module pbl_parameters
     integer :: seedw = 131344
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
-    
-    real(rkind), parameter :: xdim = 1000._rkind, udim = 0.45_rkind
-    real(rkind), parameter :: timeDim = xdim/udim
 
+    real(rkind), parameter :: xdim = 400._rkind, udim = 8._rkind, Tref = 263.5_rkind
+    real(rkind), parameter :: timeDim = xdim/udim
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use pbl_parameters    
+    use gabls_parameters    
     use kind_parameters,  only: rkind
-    use constants,        only: one, two, three, four, pi
+    use constants,        only: zero, one, two, three, four, pi
     use decomp_2d,        only: decomp_info
     implicit none
 
@@ -29,12 +28,12 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tsurf0 = zero, dTsurf_dt = zero
+    namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PBLINPUT)
+    read(unit=ioUnit, NML=GABLSINPUT)
     close(ioUnit)    
 
     !Lx = two*pi; Ly = two*pi; Lz = one
@@ -71,7 +70,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use pbl_parameters
+    use gabls_parameters
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, three, four, pi, half
     use gridtools,          only: alloc_buffs
@@ -87,20 +86,20 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit, k
-    real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind) :: mfactor, sig, dpdxF
-    real(rkind), dimension(:,:,:), allocatable :: randArr
-    real(rkind) :: z0init, epsnd = 0.1
+    real(rkind), dimension(:,:,:), pointer :: u, v, w, T, wC, x, y, z
+    real(rkind) :: mfactor, sig
+    real(rkind), dimension(:,:,:), allocatable :: randArr, ztmp, Tpurt
+    real(rkind) :: z0init, epsnd
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
-    real(rkind) :: delta_Ek = 0.08, Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
-    real(rkind) :: zpeak = 0.2d0
+    real(rkind) :: delta_Ek = 0.08d0, Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
+    real(rkind) :: zpeak = 0.2d0, Tsurf0 = zero, dTsurf_dt = zero
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PBLINPUT)
+    read(unit=ioUnit, NML=GABLSINPUT)
     close(ioUnit)    
 
 
@@ -108,17 +107,34 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     v  => fieldsC(:,:,:,2)
     wC => fieldsC(:,:,:,3)
     w  => fieldsE(:,:,:,1)
+    T  => fieldsC(:,:,:,7)
 
     z => mesh(:,:,:,3)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    epsnd = 5.d0
+    epsnd = 1.d-2
 
-    u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-    wC= zero  
-   
+    u = one !+ epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2.d0)
+    v = zero!epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2.d0)
+    wC= zero 
+
+    allocate(ztmp(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    ztmp = z*xDim
+    T = 0.01d0*(ztmp - 100.d0) + 265.d0    
+    where(ztmp < 100.d0)
+        T = 265.d0
+    end where
+    T = T + 0.0001d0*ztmp
+    Tpurt = 0.1d0*cos(12.d0*two*pi*x)*sin(12.d0*two*pi*y)*sin(12.d0*two*pi*(z - 50.d0/xDim))
+    where (ztmp>50)
+        Tpurt = zero
+    end where
+    T = T + Tpurt
+    deallocate(ztmp, Tpurt)
+    T = T/Tref
+
     ! Add random numbers
     !allocate(randArr(size(u,1),size(u,2),size(u,3)))
     !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
@@ -181,14 +197,28 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
 end subroutine
 
-
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
     use constants,          only: zero
-    character(len=*),                intent(in)    :: inputfile
+    use gabls_parameters
+    implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind) :: Lx, Ly, Lz, z0init = zero, Tsurf0 = zero
+    integer :: ioUnit 
+    namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt 
 
-    Tsurf = zero; dTsurf_dt = zero;
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=GABLSINPUT)
+    close(ioUnit)    
 
-    ! Do nothing really since this is an unstratified simulation
+    ! First change dTsurf_dt to K/s from K/hr
+    dTsurf_dt = dTsurf_dt / 3600._rkind
+    
+    ! Now Normalize: 
+    dTsurf_dt = dTsurf_dt * timeDim / Tref 
+    Tsurf = Tsurf0 / Tref
+
 end subroutine
+
