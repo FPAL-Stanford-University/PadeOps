@@ -16,7 +16,7 @@ program test_SIGMA_SGS
 
     implicit none
    
-    real(rkind), dimension(:,:,:), allocatable :: x, y, z, u, v, w, wE
+    real(rkind), dimension(:,:,:), allocatable :: x, y, z, u, v, w, wE, filtSpSq
     real(rkind), dimension(:,:,:), allocatable :: tmp
     type(decomp_info) :: gpC, gpE
     integer :: nx = 100, ny = 100, nz = 60
@@ -28,7 +28,7 @@ program test_SIGMA_SGS
     type(padepoisson), allocatable :: poiss 
     real(rkind), dimension(:,:,:), allocatable :: divergence, rtmp1z, rtmp2z, rtmp1x, rtmp1y, rtmp1yE, rtmp1zE
     complex(rkind), dimension(:,:,:), allocatable :: urhs, vrhs, wrhs
-    complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what
+    complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what,wChat
     type(cd06stagg), allocatable :: derZu, derZv, derZw
     complex(rkind), dimension(:,:,:), allocatable :: ctmp1, ctmp2, ctmpz1,ctmpz2
     type(cf90) :: filzC, filzE
@@ -36,16 +36,16 @@ program test_SIGMA_SGS
     real(rkind) :: Uperiods, Vperiods, zpeak, epsfac, delta_Ek
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     integer :: i,j,k
-    real(rkind), dimension(:,:,:,:), allocatable :: duidxj
+    real(rkind), dimension(:,:,:,:), allocatable :: duidxj, duidxjE
     complex(rkind), dimension(:,:,:,:), allocatable :: duidxjH
     integer :: dimTransform = 2
     character(len=clen) :: filename = "/home/aditya90/Codes/PadeOps/data/OpenFoam_AllData.txt" 
     type(sgs) :: sgsModel
-    real(rkind) :: maxnuSGS
+    real(rkind) :: max_nuSGS, max_DissP
    
-    integer :: ModelID = 0
-    logical :: useEkmanInit = .false. 
-    logical :: useDynamicProcedure = .true. 
+    integer :: ModelID = 3
+    logical :: useEkmanInit = .true. 
+    logical :: useDynamicProcedure = .false. 
     logical :: useClipping = .true. 
     logical :: useCompact = .true. 
 
@@ -64,8 +64,10 @@ program test_SIGMA_SGS
     allocate( u ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     allocate( v ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     allocate( w ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
+    allocate( filtSpSq ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     allocate( wE ( gpE%xsz(1), gpE%xsz(2), gpE%xsz(3) ) )
     allocate( duidxj( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) , 9) )
+    allocate( duidxjE( gpE%xsz(1), gpE%xsz(2), gpE%xsz(3) , 9) )
     allocate( divergence ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
    
     allocate(spect, spectE)
@@ -142,6 +144,7 @@ program test_SIGMA_SGS
     call spect%alloc_r2c_out(uhat)
     call spect%alloc_r2c_out(vhat)
     call spect%alloc_r2c_out(what)
+    call spectE%alloc_r2c_out(wChat)
     call spect%alloc_r2c_out(duidxjH,9)
     
     urhs = zero
@@ -151,6 +154,7 @@ program test_SIGMA_SGS
     uhat = zero
     vhat = zero
     what = zero
+    wChat = zero
     
     allocate(derZu, derZv, derZw)
     call derZu%init(nz,dz,.true.,.false.,.false.,.false.)
@@ -199,23 +203,34 @@ program test_SIGMA_SGS
     call spect%fft(v,vhat)
     call spect%fft(w,what)
 
-    call sgsModel%init(modelID, spect, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, z, 1, 0.1d0, .false., .true. )
-    !duidxj(2,3,4,1) = 1.d0; duidxj(2,3,4,2) = 2.d0; duidxj(2,3,4,3) = 3.d0
-    !duidxj(2,3,4,4) = 4.d0; duidxj(2,3,4,5) = -1.d0; duidxj(2,3,4,6) = 6.d0
+
+    dx = one; dy = one; dz = one;
+    call sgsModel%init(modelID, spect, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, z, 1, 0.1d0, .true., 0 ,.true. )
+    duidxj(:,:,:,1) = -2.d0; duidxj(:,:,:,2) = 0.d0;  duidxj(:,:,:,3) = 1.d0
+    duidxj(:,:,:,4) = 0.d0; duidxj(:,:,:,5) = 1.d0; duidxj(:,:,:,6) = 0.d0
+    duidxj(:,:,:,7) = 0.d0; duidxj(:,:,:,8) = 0.d0; duidxj(:,:,:,9) = 1.d0
+
+    
 
     do i = 1,9
+        !duidxjE(:,:,:,i) = duidxj(1,1,1,i)
         call spect%fft(duidxj(:,:,:,i),duidxjH(:,:,:,i))
     end do 
+    duidxjE(:,:,:,1) = duidxj(1,1,1,7)
+    duidxjE(:,:,:,2) = duidxj(1,1,1,8)
+    duidxjE(:,:,:,3) = duidxj(1,1,1,3)
+    duidxjE(:,:,:,4) = duidxj(1,1,1,6)
+
 
     call tic()
-    call sgsModel%getRHS_SGS(duidxj, duidxjH, urhs, vrhs, wrhs, uhat, vhat, what, u, v, w, maxnuSGS)
+    !call sgsModel%getRHS_SGS(duidxj, duidxjH, urhs, vrhs, wrhs, uhat, vhat, what, u, v, w, maxnuSGS)
+    call sgsModel%getRHS_SGS_WallM(duidxj, duidxjE, duidxjH, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, w, one, one, one, one, filtSpSq, one, one, one, max_nuSGS, max_Dissp)    
     call toc()
-
     call spectE%ifft(wrhs,wE)
     
     !print*, wE(5,4,:)
     call message("Max val RHS:", p_maxval(u))
-    call message("Max val nuSGS:", maxnuSGS)
+    call message("Max val nuSGS:", max_nuSGS)
 
     call derZu%destroy()
     call derZv%destroy()

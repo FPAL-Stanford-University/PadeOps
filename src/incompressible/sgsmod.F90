@@ -263,6 +263,11 @@ contains
         !  write(*,*) '--S13, 23, 12--', rdum4, rdum5, rdum6
         !endif
 
+        print*, "--------------------------------------"
+        print*, dudx(1,1,1), dudy(1,1,1), dudz(1,1,1)
+        print*, dvdx(1,1,1), dvdy(1,1,1), dvdz(1,1,1)
+        print*, dwdx(1,1,1), dwdy(1,1,1), dwdz(1,1,1)
+        print*, "--------------------------------------"
         ! STEP 2: Call the SGS model operator
         select case (this%SGSmodel)
         case (0)     
@@ -279,6 +284,20 @@ contains
                 max_Dissp = maxDissp
             end if 
         end select
+
+
+        print*, tau11(3,3,3)
+        print*, tau12(3,3,3)
+        print*, tau13(3,3,3)
+        print*, tau22(3,3,3)
+        print*, tau23(3,3,3)
+        print*, tau33(3,3,3)
+
+
+
+
+
+
 
         if (this%useDynamicProcedure) then
             if (mod(this%mstep,ApplyDynEvery) == 0) then

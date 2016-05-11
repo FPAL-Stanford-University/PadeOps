@@ -30,6 +30,17 @@
         tau23C = dxsq * dvdy * dwdxC + dysq * dvdy * dwdyC + dzsq * dvdzC * dwdz 
         tau33  = dxsq * dwdz * dwdxC + dysq * dwdyC* dwdyC + dzsq * dwdz  * dwdz
 
+        print*, "--------------------------------------"
+        print*, dudx(1,1,1), dudy(1,1,1), dudz(1,1,1)
+        print*, dvdx(1,1,1), dvdy(1,1,1), dvdz(1,1,1)
+        print*, dwdx(1,1,1), dwdy(1,1,1), dwdz(1,1,1)
+        print*, "--------------------------------------"
+
+        print*, tau11(1,1,1), tau12(1,1,1), tau13C(1,1,1)
+        print*, tau22(1,1,1), tau23C(1,1,1)
+        print*, tau33(1,1,1)
+
+        print*, "--------------------------------------"
         !rdum1 = p_maxval(tau11); rdum2 = p_minval(tau11)
         !rdum3 = p_maxval(tau12); rdum4 = p_minval(tau12)
         !rdum5 = p_maxval(tau22); rdum6 = p_minval(tau22)
@@ -84,12 +95,14 @@
         tau22 = this%mconst * dissp * tau22
         tau33 = this%mconst * dissp * tau33
 
+            print*, this%mconst
         if(mgm_option == 1) then
             ! ------ option 1 -------!
             ! compute tau13C and tau23C and then interpolate to edges
             tau13C = this%mconst * dissp * tau13C 
             tau23C = this%mconst * dissp * tau23C
-    
+            
+
             ! interpolate(tau13C, tau13)
               call transpose_x_to_y(tau13C,this%rtmpY,this%gpC)
               call transpose_y_to_z(this%rtmpY,this%rtmpZ,this%gpC)
