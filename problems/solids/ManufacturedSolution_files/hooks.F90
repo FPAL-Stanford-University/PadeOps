@@ -610,7 +610,8 @@ end subroutine
 subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,eps,half,one,two,pi,eight
-    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
+                                sxx_index,syy_index,szz_index,sxy_index,sxz_index,syz_index
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
@@ -627,14 +628,19 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     integer                                     :: outputunit=229
 
     character(len=clen) :: outputfile, str
-    integer :: i
+    integer :: i, j, k
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
-                 g11 => mix%material(1)%g11, g21 => mix%material(1)%g21, &
+                 g11 => mix%material(1)%g11, g21 => mix%material(1)%g21, g31 => mix%material(1)%g31, &
+                 g12 => mix%material(1)%g12, g22 => mix%material(1)%g22, g32 => mix%material(1)%g32, &
+                 g13 => mix%material(1)%g13, g23 => mix%material(1)%g23, g33 => mix%material(1)%g33, &
+                 sxx  => fields(:,:,:, sxx_index), syy => fields(:,:,:,syy_index), &
+                 szz  => fields(:,:,:, szz_index), sxy => fields(:,:,:,sxy_index), &
+                 sxz  => fields(:,:,:, sxz_index), syz => fields(:,:,:,syz_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         write(str,'(ES7.1E2,A1,I4.4,A1,ES7.1E2)') sigma_0, "_", decomp%ysz(1), "_", dtprob
@@ -651,6 +657,48 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
                                            rho_0 * g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,1,1))
         end do
         close(outputunit)
+
+        write(outputfile,'(4A)') trim(outputdir),"/tec_ManufacturedSolution_"//trim(str),".dat"
+        if(vizcount==0) then
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='unknown')
+          write(outputunit,'(250a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar","momsrc","ensrc","g11src","rho0g11src"'
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                write(outputunit,'(31ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                                               g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
+                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), &
+                                           momentum_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k)), &
+                                           energy_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k)), &
+                                           g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k)), &
+                                           rho_0 * g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+            end do
+           end do
+          end do
+          close(outputunit)
+        else
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='old', action='write', position='append')
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                write(outputunit,'(28ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                                               g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
+                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), &
+                                           momentum_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k)), &
+                                           energy_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k)), &
+                                           g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k)), &
+                                           rho_0 * g_source(gamma, muL, p_infty, rho_0, sigma_0, tsim, x(i,j,k))
+
+            end do
+           end do
+          end do
+          close(outputunit)
+        endif
 
     end associate
 end subroutine
