@@ -234,6 +234,9 @@ contains
           dtplast = min(dtplast, this%material(imat)%elastic%tau0)
         enddo
 
+        ! For now disable plastic time step limit by setting a large value
+        dtplast = real(1.0D32,rkind)
+
     end subroutine
 
     ! Subroutine to get species art. conductivities and diffusivities
