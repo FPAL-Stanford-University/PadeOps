@@ -148,13 +148,16 @@ contains
         real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
 
         integer :: i,j,k,imat
-        real(rkind) :: maxp, peqb
+        real(rkind) :: maxp, peqb, pest, pdiffmax
 
         real(rkind), dimension(1:this%ns) :: fac
 
+        pdiffmax = zero
         ehmix = mixE
         do imat = 1, this%ns
             ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
+            !write(*,'(a,i4,1x,2(e21.14,1x))') '-e-b-', imat, maxval(this%material(imat)%eh), minval(this%material(imat)%eh)
+            !write(*,'(a,i4,1x,2(e21.14,1x))') '-p-b-', imat, maxval(this%material(imat)%p), minval(this%material(imat)%p)
         enddo
 
         ! equilibrate and reset species pressures, reset volume fractions
@@ -184,9 +187,11 @@ contains
 
             ! set initial guess
             peqb = sum(fparams(1:this%ns)*fparams(2*this%ns+1:3*this%ns))
+            pest = peqb
 
-            ! solve non-linear equation
-            call this%rootfind_nr_1d(peqb,fparams,iparams)
+            !! solve non-linear equation
+            !call this%rootfind_nr_1d(peqb,fparams,iparams)
+            !pdiffmax = max(dabs(pest-peqb),pdiffmax)
 
             ! rescale all pressures by maxp
             fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*maxp
@@ -209,6 +214,7 @@ contains
           enddo
          enddo
         enddo
+            !write(*,*) '--pdiff--', pdiffmax
 
         ! get species energy from species pressure
         do imat = 1, this%ns
@@ -541,6 +547,7 @@ contains
 
         do imat = 1, this%ns
           call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
+          !write(*,'(a,i4,1x,2(e21.14,1x))') '--eh--', imat, maxval(this%material(imat)%eh), minval(this%material(imat)%eh)
         end do
 
     end subroutine

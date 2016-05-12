@@ -21,11 +21,14 @@ program Multispecies
 
     ! Time advance
     call sgp%simulate()
+    write(*,*) 'Done simulate'
         
     ! Destroy everythin before ending
     call sgp%destroy()
+    write(*,*) 'Done destroy'
 
     ! End the run
     call MPI_Finalize(ierr)
+    write(*,*) 'Done finalize'
 
 end program

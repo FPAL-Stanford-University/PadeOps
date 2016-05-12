@@ -409,7 +409,6 @@ contains
         nullify(this%syy      )
         nullify(this%syz      )
         nullify(this%szz      )
-
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
         
@@ -710,8 +709,8 @@ contains
             !         end do
             !     end if
             ! end if
-            
-            call this%mix%relaxPressure(this%rho, this%e, this%p)
+
+             call this%mix%relaxPressure(this%rho, this%e, this%p)
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
             call this%post_bc()
