@@ -30,6 +30,7 @@ module SolidMixtureMod
         procedure :: init
         procedure :: set_material
         procedure :: relaxPressure
+        procedure :: equilibratePressureTemperature
         procedure :: getLAD
         procedure :: update_g
         procedure :: update_Ys
@@ -137,6 +138,37 @@ contains
         allocate( this%material(imat)%elastic, source=elastic )
     end subroutine
 
+    subroutine equilibratePressureTemperature(this,mixRho,mixE,mixP,mixT)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixRho, mixE
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP, mixT
+
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix
+        real(rkind), dimension(4*this%ns), target :: fparams
+        integer, dimension(1)             :: iparams
+        real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
+
+        integer :: i,j,k,imat
+        real(rkind) :: maxp, peqb, pest, pdiffmax
+
+        ! identical materials
+        mixP = (this%material(1)%hydro%gam - one)*mixRho*mixE - &
+                this%material(1)%hydro%gam * this%material(1)%hydro%PInf
+
+        mixT = mixE*(mixP + this%material(1)%hydro%PInf)/(this%material(1)%hydro%Cv *(mixP + this%material(1)%hydro%gam*this%material(1)%hydro%PInf))
+
+        do i = 1, this%ns
+            this%material(i)%T = mixT
+            this%material(i)%p = mixp
+            this%material(i)%VF = mixRho*this%material(i)%Ys*(this%material(i)%hydro%gam-one)* &
+                                         this%material(i)%hydro%Cv*mixT/(mixP + this%material(i)%hydro%PInf)
+
+            this%material(i)%eh = this%material(i)%hydro%Cv*mixT*(mixP + this%material(i)%hydro%gam*this%material(i)%hydro%PInf) / &
+                                                                 (mixP + this%material(i)%hydro%PInf)
+        end do      
+
+    end subroutine
+
     subroutine relaxPressure(this,rho,mixE,mixP)
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho, mixE
@@ -227,15 +259,16 @@ contains
         use reductions, only: P_MAXVAL
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho
-        real(rkind), intent(in)  :: delta
-        real(rkind), intent(out) :: dtkap, dtDiff, dtplast
+        real(rkind), intent(in)  :: delta, dtkap
+        real(rkind), intent(out) :: dtDiff, dtplast
 
         integer :: imat
 
-        dtkap = one/epssmall; dtDiff = dtkap; dtplast = dtDiff
+        !dtkap = one/epssmall; 
+        dtDiff = one/epssmall; dtplast = dtDiff
 
         do imat = 1, this%ns
-          dtkap =   min(dtkap,   one / ( (P_MAXVAL( this%material(imat)%kap*this%material(imat)%T/(rho* delta**4)))**(third) + eps))
+          !dtkap =   min(dtkap,   one / ( (P_MAXVAL( this%material(imat)%kap*this%material(imat)%T/(rho* delta**4)))**(third) + eps))
           dtDiff =  min(dtDiff,  one / ( (P_MAXVAL( this%material(imat)%diff/delta**2) + eps)) )
           dtplast = min(dtplast, this%material(imat)%elastic%tau0)
         enddo
@@ -256,9 +289,10 @@ contains
         do i = 1,this%ns
             call this%material(i)%getPhysicalProperties()
 
-            ! Artificial conductivity
-            call this%LAD%get_conductivity(rho, this%material(i)%eh, this%material(i)%T, sos, &
-                                                this%material(i)%kap, x_bc, y_bc, z_bc)
+            !! Artificial conductivity
+            !call this%LAD%get_conductivity(rho, this%material(i)%eh, this%material(i)%T, sos, &
+            !                                    this%material(i)%kap, x_bc, y_bc, z_bc)
+            this%material(i)%kap = zero
             ! Artificial diffusivity (grad(Ys) is stored in Ji at this stage)
             call this%LAD%get_diffusivity(this%material(i)%Ys, this%material(i)%Ji(:,:,:,1), &
                                           this%material(i)%Ji(:,:,:,2), this%material(i)%Ji(:,:,:,3), &
@@ -280,19 +314,20 @@ contains
 
     end subroutine
 
-    subroutine get_ehydro_from_p(this,rho,p)
+    subroutine get_ehydro_from_p(this,rho,p,T)
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: p
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: p, T
 
         integer :: imat
 
-        p = zero
+        p = zero; T = zero
 
         ! get species energy from species pressure
         do imat = 1, this%ns
             call this%material(imat)%get_ehydroT_from_p(rho)             ! computes species ehydro and T from species p
             p = p + this%material(imat)%VF * this%material(imat)%p       ! computes mixture p
+            T = T + this%material(imat)%VF * this%material(imat)%T       ! computes mixture T - fine for identical materials. not for non-identical
         enddo
 
     end subroutine
@@ -374,9 +409,9 @@ contains
         if(this%ns == 1) then
           this%material(1)%eh = e - this%material(1)%eel
         endif
-        call this%get_p_from_ehydro(rho)              ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
-        call this%get_pmix(p)
-        call this%getSOS(rho,p,sos)
+        !call this%get_p_from_ehydro(rho)              ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
+        !call this%get_pmix(p)
+        !call this%getSOS(rho,p,sos)
 
 
     end subroutine
@@ -424,21 +459,25 @@ contains
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: tmp1_in_z, tmp2_in_z
 
         do i = 1,this%ns
-            ! Step 1: Get qy
-            call this%der%ddy(this%material(i)%T,tmp1_in_y,y_bc(1),y_bc(2))
-            this%material(i)%qi(:,:,:,2) = -this%material(i)%kap*tmp1_in_y
+            ! Done in sgrid
+            !! Step 1: Get qy
+            !call this%der%ddy(this%material(i)%T,tmp1_in_y,y_bc(1),y_bc(2))
+            !this%material(i)%qi(:,:,:,2) = -this%material(i)%kap*tmp1_in_y
+            this%material(i)%qi(:,:,:,2) = zero
 
-            ! Step 2: Get qx
-            call transpose_y_to_x(this%material(i)%T,tmp1_in_x,this%decomp)
-            call this%der%ddx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
-            call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
-            this%material(i)%qi(:,:,:,1) = -this%material(i)%kap*tmp1_in_y
+            !! Step 2: Get qx
+            !call transpose_y_to_x(this%material(i)%T,tmp1_in_x,this%decomp)
+            !call this%der%ddx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
+            !call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
+            !this%material(i)%qi(:,:,:,1) = -this%material(i)%kap*tmp1_in_y
+            this%material(i)%qi(:,:,:,1) = zero
 
-            ! Step 3: Get qz
-            call transpose_y_to_z(this%material(i)%T,tmp1_in_z,this%decomp)
-            call this%der%ddz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
-            call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
-            this%material(i)%qi(:,:,:,3) = -this%material(i)%kap*tmp1_in_y
+            !! Step 3: Get qz
+            !call transpose_y_to_z(this%material(i)%T,tmp1_in_z,this%decomp)
+            !call this%der%ddz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
+            !call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
+            !this%material(i)%qi(:,:,:,3) = -this%material(i)%kap*tmp1_in_y
+            this%material(i)%qi(:,:,:,3) = zero
 
             ! If multispecies, add the inter-species enthalpy flux
             if (this%ns .GT. 1) then

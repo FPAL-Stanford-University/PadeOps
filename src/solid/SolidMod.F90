@@ -252,7 +252,7 @@ contains
         
         ! Allocate material conserved variables
         if( allocated( this%consrv ) ) deallocate( this%consrv )
-        allocate( this%consrv(this%nxp,this%nyp,this%nzp,2) )
+        allocate( this%consrv(this%nxp,this%nyp,this%nzp,1) )
 
         ! Allocate work arrays
         ! g tensor equation
@@ -579,11 +579,11 @@ contains
         ! filter Ys
         call filter3D(this%decomp, this%fil, this%consrv(:,:,:,1), iflag)
 
-        ! filter eh
-        call filter3D(this%decomp, this%fil, this%consrv(:,:,:,2), iflag)
+        !! filter eh
+        !call filter3D(this%decomp, this%fil, this%consrv(:,:,:,2), iflag)
 
-        ! filter VF
-        call filter3D(this%decomp, this%fil, this%VF, iflag)
+        !! filter VF
+        !call filter3D(this%decomp, this%fil, this%VF, iflag)
 
     end subroutine
 
@@ -652,7 +652,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
 
         this%consrv(:,:,:,1) = rho * this%Ys
-        this%consrv(:,:,:,2) = this%consrv(:,:,:,1) * this%eh
+        !this%consrv(:,:,:,2) = this%consrv(:,:,:,1) * this%eh
 
     end subroutine
 
@@ -663,10 +663,10 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
 
         this%Ys = this%consrv(:,:,:,1) / rho
-        this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
+        !this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
 
-        call this%getSpeciesDensity(rho,rhom)
-        call this%hydro%get_T(this%eh, this%T, rhom)
+        !call this%getSpeciesDensity(rho,rhom)
+        !call this%hydro%get_T(this%eh, this%T, rhom)
         ! call this%hydro%get_T(this%eh, this%T, this%consrv(:,:,:,1)/(this%VF+epssmall))
 
         ! Get gradients of Ys and put in Ji for subsequent use
