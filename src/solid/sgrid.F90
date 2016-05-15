@@ -529,10 +529,14 @@ contains
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
         
        print *, 1
+            write(*,'(a,2(e21.14,1x))') 'inf', maxval(this%p)-0.1d0,  minval(this%p)-0.1d0
+            write(*,'(a,2(e21.14,1x))') 'enf', maxval(this%e)-3.75d0,  minval(this%e)-3.75d0
         call this%gradient(this%u,dudx,dudy,dudz)
         call this%gradient(this%v,dvdx,dvdy,dvdz)
         call this%gradient(this%w,dwdx,dwdy,dwdz)
        print *, 2
+            write(*,'(a,2(e21.14,1x))') 'inf', maxval(this%p)-0.1d0,  minval(this%p)-0.1d0
+            write(*,'(a,2(e21.14,1x))') 'enf', maxval(this%e)-3.75d0,  minval(this%e)-3.75d0
 
         do i=1,this%mix%ns
             call this%gradient(this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),&
@@ -542,10 +546,16 @@ contains
         ! compute artificial shear and bulk viscosities
         call this%getPhysicalProperties()
        print *, 3
+            write(*,'(a,2(e21.14,1x))') 'inf', maxval(this%p)-0.1d0,  minval(this%p)-0.1d0
+            write(*,'(a,2(e21.14,1x))') 'enf', maxval(this%e)-3.75d0,  minval(this%e)-3.75d0
         call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
        print *, 4
+            write(*,'(a,2(e21.14,1x))') 'inf', maxval(this%p)-0.1d0,  minval(this%p)-0.1d0
+            write(*,'(a,2(e21.14,1x))') 'enf', maxval(this%e)-3.75d0,  minval(this%e)-3.75d0
         call this%LAD%get_conductivity(this%rho,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
        print *, 5
+            write(*,'(a,2(e21.14,1x))') 'inf', maxval(this%p)-0.1d0,  minval(this%p)-0.1d0
+            write(*,'(a,2(e21.14,1x))') 'enf', maxval(this%e)-3.75d0,  minval(this%e)-3.75d0
 
         nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
         deallocate( duidxj )
@@ -561,6 +571,7 @@ contains
         call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
         vizcond = .FALSE.
+       print *, 6
         
         ! Check for visualization condition and adjust time step
         if ( (this%tviz > zero) .AND. (this%tsim + this%dt > this%tviz * this%viz%vizcount) ) then
@@ -587,12 +598,15 @@ contains
         if ( (this%tstop <= zero) .AND. (this%nsteps <= 0) ) then
             call GracefulExit('No stopping criterion set. Set either tstop or nsteps to be positive.', 345)
         end if
+       print *, 7
 
         ! Start the simulation while loop
         do while ( tcond .AND. stepcond )
             ! Advance time
             call tic()
+       print *, 8
             call this%advance_RK45()
+       print *, 9
             call toc(cputime)
             
             call message(1,"Time",this%tsim)
@@ -656,6 +670,7 @@ contains
         Qtmpt = zero
 
         do isub = 1,RK45_steps
+            write(*,*) '------RK45 substep', isub, '--------'
             call this%get_conserved()
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
@@ -676,6 +691,10 @@ contains
             call this%getRHS(rhs,divu,viscwork)
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
+            !write(*,'(a,2(e21.14,1x))') '-rhsu-', maxval(rhs(:,:,:,1)),  minval(rhs(:,:,:,1))
+            !write(*,'(a,2(e21.14,1x))') '-rhsv-', maxval(rhs(:,:,:,2)),  minval(rhs(:,:,:,2))
+            !write(*,'(a,2(e21.14,1x))') '-rhsw-', maxval(rhs(:,:,:,3)),  minval(rhs(:,:,:,3))
+            !write(*,'(a,2(e21.14,1x))') '-rhse-', maxval(rhs(:,:,:,4)),  minval(rhs(:,:,:,4))
 
             ! Now update all the individual species variables
             call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim)               ! g tensor
@@ -716,9 +735,13 @@ contains
             ! end if
 
              !call this%mix%relaxPressure(this%rho, this%e, this%p)
+            !write(*,'(a,2(e21.14,1x))') 'pbe', maxval(this%p)-0.1d0,  minval(this%p)-0.1d0
+            !write(*,'(a,2(e21.14,1x))') 'ebe', maxval(this%e)-3.75d0, minval(this%e)-3.75d0
              call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T)
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
+            !write(*,'(a,2(e21.14,1x))') '-p-', maxval(this%p)-0.1d0,  minval(this%p)-0.1d0
+            !write(*,'(a,2(e21.14,1x))') '-e-', maxval(this%e)-3.75d0, minval(this%e)-3.75d0
             call this%post_bc()
         end do
 
@@ -805,14 +828,18 @@ contains
 
     end subroutine
 
-    pure subroutine get_conserved(this)
+    !pure subroutine get_conserved(this)
+    subroutine get_conserved(this)
         class(sgrid), intent(inout) :: this
 
         ! Assume rho is already available
         this%Wcnsrv(:,:,:,mom_index  ) = this%rho * this%u
         this%Wcnsrv(:,:,:,mom_index+1) = this%rho * this%v
         this%Wcnsrv(:,:,:,mom_index+2) = this%rho * this%w
+            !write(*,'(a,2(e21.14,1x))') 'ecn', maxval(this%e)-3.75d0,  minval(this%e)-3.75d0
         this%Wcnsrv(:,:,:, TE_index  ) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
+            !this%e = this%Wcnsrv(:,:,:, TE_index  ) / this%rho - ( half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
+            !write(*,'(a,2(e21.14,1x))') 'ecn', maxval(this%e)-3.75d0,  minval(this%e)-3.75d0
 
         ! add 2M (mass fraction and hydrodynamic energy) variables here
         call this%mix%get_conserved(this%rho)
@@ -830,6 +857,8 @@ contains
         ! materials equals e
         call this%mix%get_emix(this%e)
        
+            write(*,'(a,2(e21.14,1x))') 'pbc', maxval(this%p)-0.1d0,  minval(this%p)-0.1d0
+            write(*,'(a,2(e21.14,1x))') 'ebc', maxval(this%e)-3.75d0,  minval(this%e)-3.75d0
         !call this%mix%get_T(this%T) ! Get mixture temperature (?)
         !call this%sgas%get_T(this%e,this%T)  ! Get updated temperature
 
@@ -878,7 +907,15 @@ contains
         
         qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
         call this%mix%get_qmix(qx, qy, qz)     ! get only inter-species enthalpy fluxes
+            !write(*,'(a,2(e21.14,1x))') 'qxb', maxval(qx),  minval(qx)
+            !write(*,'(a,2(e21.14,1x))') 'qyb', maxval(qy),  minval(qy)
+            !write(*,'(a,2(e21.14,1x))') 'qzb', maxval(qz),  minval(qz)
+            !write(*,'(a,2(e21.14,1x))') '---'
         call this%get_q(qx, qy, qz)            ! add artificial thermal conduction fluxes
+            !write(*,'(a,2(e21.14,1x))') 'qxa', maxval(qx),  minval(qx)
+            !write(*,'(a,2(e21.14,1x))') 'qya', maxval(qy),  minval(qy)
+            !write(*,'(a,2(e21.14,1x))') 'qza', maxval(qz),  minval(qz)
+            !write(*,'(a,2(e21.14,1x))') '---'
 
         rhs = zero
         call this%getRHS_x(              rhs,&

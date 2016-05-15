@@ -145,21 +145,84 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix
         real(rkind), dimension(4*this%ns), target :: fparams
-        integer, dimension(1)             :: iparams
+        integer, dimension(4)             :: iparams
         real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
 
         integer :: i,j,k,imat
         real(rkind) :: maxp, peqb, pest, pdiffmax
 
-        ! identical materials
-        mixP = (this%material(1)%hydro%gam - one)*mixRho*mixE - &
-                this%material(1)%hydro%gam * this%material(1)%hydro%PInf
+        ! subtract elastic energy to determine hydrostatic energy. Temperature
+        ! is assumed a function of only hydrostatic energy. Not sure if this is
+        ! correct.
+        ehmix = mixE
+        do imat = 1, this%ns
+            ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
+        enddo
 
-        mixT = mixE*(mixP + this%material(1)%hydro%PInf)/(this%material(1)%hydro%Cv *(mixP + this%material(1)%hydro%gam*this%material(1)%hydro%PInf))
+        !! identical materials
+        !mixP = (this%material(1)%hydro%gam - one)*mixRho*ehmix - &
+        !        this%material(1)%hydro%gam * this%material(1)%hydro%PInf
+
+        !mixT = ehmix*(mixP + this%material(1)%hydro%PInf)/(this%material(1)%hydro%Cv *(mixP + this%material(1)%hydro%gam*this%material(1)%hydro%PInf))
+
+        ! non-identical materials
+
+        ! implement non-linear solve for mixP
+        !vf   => fparams(  1:this%ns)
+        !gam  => fparams(  this%ns+1:2*this%ns)
+        !psph => fparams(2*this%ns+1:3*this%ns)
+        !pinf => fparams(3*this%ns+1:4*this%ns)
+        
+        do k=1,this%nzp
+         do j=1,this%nyp
+          do i=1,this%nxp
+            !do imat=1,this%ns
+
+                !fparams(          imat) = this%material(imat)%VF(i,j,k)    ! volume fractions
+                !fparams(  this%ns+imat) = this%material(imat)%hydro%gam    ! gamma
+                !fparams(2*this%ns+imat) = this%material(imat)%p(i,j,k)     ! pressure before eqb
+                !fparams(3*this%ns+imat) = this%material(imat)%hydro%PInf   ! PInf
+            !end do
+
+            ! set fparams
+            fparams(1) = mixRho(i,j,k)*ehmix(i,j,k)
+
+            ! set iparams
+            iparams(1) = 2     
+            iparams(2) = i; iparams(3) = j; iparams(4) = k;
+
+            maxp = zero; peqb = zero
+            do imat=1,this%ns
+              !! determine max over all PInfs
+              !maxp = maxval(maxp, this%material(imat)%hydro%PInf)
+
+              ! set initial guess
+              peqb = peqb + this%material(imat)%VF(i,j,k)*this%material(imat)%p(i,j,k)
+            end do
+            !pest = peqb
+
+            ! solve non-linear equation
+            call this%rootfind_nr_1d(peqb,fparams,iparams)
+            !pdiffmax = max(dabs(pest-peqb),pdiffmax)
+
+            !! rescale all pressures by maxp
+            !fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*maxp
+            mixP(i,j,k) = peqb !*maxp
+
+          enddo
+         enddo
+        enddo
+
+
+        mixT = zero
+        do i = 1, this%ns
+          mixT = mixT + this%material(i)%Ys*this%material(i)%hydro%Cv *(mixP + this%material(i)%hydro%gam*this%material(i)%hydro%PInf)/(mixP + this%material(i)%hydro%PInf)
+        enddo
+        mixT = ehmix/mixT
 
         do i = 1, this%ns
             this%material(i)%T = mixT
-            this%material(i)%p = mixp
+            this%material(i)%p = mixP
             this%material(i)%VF = mixRho*this%material(i)%Ys*(this%material(i)%hydro%gam-one)* &
                                          this%material(i)%hydro%Cv*mixT/(mixP + this%material(i)%hydro%PInf)
 
@@ -211,7 +274,7 @@ contains
             end do
 
             ! set iparams
-            iparams(1) = 0     ! dummy; not really used
+            iparams(1) = 1     
 
             ! scale all pressures by max over all PInfs
             maxp = maxval(fparams(3*this%ns+1:4*this%ns))
@@ -326,8 +389,8 @@ contains
         ! get species energy from species pressure
         do imat = 1, this%ns
             call this%material(imat)%get_ehydroT_from_p(rho)             ! computes species ehydro and T from species p
-            p = p + this%material(imat)%VF * this%material(imat)%p       ! computes mixture p
-            T = T + this%material(imat)%VF * this%material(imat)%T       ! computes mixture T - fine for identical materials. not for non-identical
+            p = p + this%material(imat)%VF * this%material(imat)%p       ! computes mixture p - redundant when assuming equilibrium
+            T = T + this%material(imat)%VF * this%material(imat)%T       ! computes mixture T - redundant when assuming equilibrium
         enddo
 
     end subroutine
@@ -458,6 +521,8 @@ contains
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: tmp1_in_y
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: tmp1_in_z, tmp2_in_z
 
+            !write(*,'(a,2(e21.14,1x))') '-sumJ1- ', maxval(this%material(1)%Ji(:,:,:,1) + this%material(2)%Ji(:,:,:,1)),  &
+            !                                        minval(this%material(1)%Ji(:,:,:,1) + this%material(2)%Ji(:,:,:,1))
         do i = 1,this%ns
             ! Done in sgrid
             !! Step 1: Get qy
@@ -482,6 +547,10 @@ contains
             ! If multispecies, add the inter-species enthalpy flux
             if (this%ns .GT. 1) then
                 call this%material(i)%get_enthalpy(tmp1_in_y)
+            !write(*,'(a,2(e21.14,1x))') '-enth-', maxval(tmp1_in_y),  minval(tmp1_in_y)
+            !write(*,'(a,2(e21.14,1x))') '-Ji1- ', maxval(this%material(i)%Ji(:,:,:,1)),  minval(this%material(i)%Ji(:,:,:,1))
+            !write(*,'(a,2(e21.14,1x))') '-Ji2- ', maxval(this%material(i)%Ji(:,:,:,2)),  minval(this%material(i)%Ji(:,:,:,2))
+            !write(*,'(a,2(e21.14,1x))') '-Ji3- ', maxval(this%material(i)%Ji(:,:,:,3)),  minval(this%material(i)%Ji(:,:,:,3))
                 this%material(i)%qi(:,:,:,1) = this%material(i)%qi(:,:,:,1) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,1) )
                 this%material(i)%qi(:,:,:,2) = this%material(i)%qi(:,:,:,2) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,2) )
                 this%material(i)%qi(:,:,:,3) = this%material(i)%qi(:,:,:,3) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,3) )
@@ -500,9 +569,12 @@ contains
         qx = zero; qy = zero; qz = zero
 
         do i = 1,this%ns
-            qx = qx + this%material(i)%VF * this%material(i)%qi(:,:,:,1)
-            qy = qy + this%material(i)%VF * this%material(i)%qi(:,:,:,2)
-            qz = qz + this%material(i)%VF * this%material(i)%qi(:,:,:,3)
+            !qx = qx + this%material(i)%VF * this%material(i)%qi(:,:,:,1)
+            !qy = qy + this%material(i)%VF * this%material(i)%qi(:,:,:,2)
+            !qz = qz + this%material(i)%VF * this%material(i)%qi(:,:,:,3)
+            qx = qx + this%material(i)%qi(:,:,:,1)
+            qy = qy + this%material(i)%qi(:,:,:,2)
+            qz = qz + this%material(i)%qi(:,:,:,3)
         end do
 
     end subroutine
@@ -643,27 +715,40 @@ contains
         integer, intent(in), dimension(:)     :: iparams
         real(rkind), intent(out)              :: num, den
 
-        integer :: im
+        integer :: im, i, j, k
         real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
-        real(rkind) :: fac
+        real(rkind) :: fac, gm1, YCv, pinfloc, rhoE
 
         if(iparams(1) == 1) then
-        else
+          ! relaxPressure
+          vf   => fparams(  1:this%ns)
+          gam  => fparams(  this%ns+1:2*this%ns)
+          psph => fparams(2*this%ns+1:3*this%ns)
+          pinf => fparams(3*this%ns+1:4*this%ns)
+          
+          num = zero; den = zero;
+          do im = 1, this%ns
+            fac = vf(im)/gam(im)/(pinf(im)+pf)
+            num = num + fac*(psph(im)-pf)
+            den = den + fac*(psph(im)-pinf(im)-two*pf)/(pinf(im)+pf)
+          enddo
+
+          nullify(vf,gam,psph,pinf)
+        elseif(iparams(1) == 2) then
+          ! equilibratePressureTemperature
+          i = iparams(2); j = iparams(3); k = iparams(4)
+          num = zero; den = zero
+          do im = 1, this%ns
+            gm1 = this%material(im)%hydro%gam-one
+            YCv = this%material(im)%Ys(i,j,k) * this%material(im)%hydro%Cv
+            pinfloc = this%material(im)%hydro%PInf
+            rhoE = fparams(1)
+
+            num = num + YCv*(gm1*rhoE-(pf+this%material(im)%hydro%gam*pinfloc))/(pf+pinfloc)
+            den = den + YCv*gm1*(pinfloc-rhoE) / (pf+pinfloc)**2
+          enddo
         endif
 
-        vf   => fparams(  1:this%ns)
-        gam  => fparams(  this%ns+1:2*this%ns)
-        psph => fparams(2*this%ns+1:3*this%ns)
-        pinf => fparams(3*this%ns+1:4*this%ns)
-        
-        num = zero; den = zero;
-        do im = 1, this%ns
-          fac = vf(im)/gam(im)/(pinf(im)+pf)
-          num = num + fac*(psph(im)-pf)
-          den = den + fac*(psph(im)-pinf(im)-two*pf)/(pinf(im)+pf)
-        enddo
-
-        nullify(vf,gam,psph,pinf)
 
     end subroutine
 

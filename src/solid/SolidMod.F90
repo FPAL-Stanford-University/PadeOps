@@ -451,6 +451,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsYs  ! RHS for mass fraction equation
 
         call this%getRHS_Ys(rho,u,v,w,rhsYs)
+            write(*,'(a,2(e21.14,1x))') '-rhsY-', maxval(rhsYs),  minval(rhsYs)
         call hook_material_mass_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsYs)
 
         ! advance sub-step

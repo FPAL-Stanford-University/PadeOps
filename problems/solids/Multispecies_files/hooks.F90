@@ -1,10 +1,10 @@
 module Multispecies_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,eight
+    use constants,        only: one,eight,two
     implicit none
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
-    real(rkind) :: minYs = 0.2_rkind, thick = one
+    real(rkind) :: minYs = 0.2_rkind, thick = one, rho_ratio = two
     logical     :: sharp = .FALSE.
 
 end module
@@ -77,8 +77,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
+    real(rkind) :: p_infty_2, Rgas_2
 
-    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, sharp, thick, minYs
+    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, sharp, thick, minYs, rho_ratio
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -92,11 +93,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
         end if
 
-        ! Set materials (both are the same material here)
-        call mix%set_material(1,stiffgas(gamma,Rgas,p_infty),sep1solid(rho_0,mu,1.0D30,1.0D-10))
-        call mix%set_material(2,stiffgas(gamma,Rgas,p_infty),sep1solid(rho_0,mu,1.0D30,1.0D-10))
+        ! Set materials (both have same gamma here)
+        p_infty_2 = p_amb/gamma*(rho_ratio-one)+p_infty*rho_ratio
+        Rgas_2 = Rgas/rho_ratio*(p_amb+p_infty_2)/(p_amb+p_infty)
+        call mix%set_material(1,stiffgas(gamma,Rgas,p_infty  ), sep1solid(          rho_0,mu,1.0D30,1.0D-10))
+        call mix%set_material(2,stiffgas(gamma,Rgas,p_infty_2), sep1solid(rho_ratio*rho_0,mu,1.0D30,1.0D-10))
 
-        u   = zero!half
+        u   = half
         v   = zero
         w   = zero
 
@@ -113,7 +116,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         mix%material(1)%p  = p_amb
         mix%material(1)%Ys = minYs + (one-two*minYs)*tmp
-        mix%material(1)%VF = mix%material(1)%Ys
+        mix%material(1)%VF = mix%material(1)%Ys*rho_ratio/(one - (one-rho_ratio)*mix%material(1)%Ys)
 
         ! Set material 2 properties
         mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
@@ -122,7 +125,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         mix%material(2)%p  = p_amb
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
-        mix%material(2)%VF = mix%material(2)%Ys
+        mix%material(2)%VF = one - mix%material(1)%VF ! Enforce sum to unity
 
     end associate
 
