@@ -1,7 +1,7 @@
 &INPUT
 
-inputdir  =  "/home/akshays/Data/PadeOps/Multispecies"      ! Directory for input files
-outputdir  = "/home/akshays/Data/PadeOps/Multispecies"      ! Directory for output files
+inputdir  =  "/home/akshays/Data/PadeOps/Multispecies_nopenalty"      ! Directory for input files
+outputdir  = "/home/akshays/Data/PadeOps/Multispecies_nopenalty"      ! Directory for output files
 
 nx = 201                  ! Number of points in X
 ny = 1                    ! Number of points in Y
@@ -56,13 +56,14 @@ ns      = 2               ! Number of species
 /
 
 &PROBINPUT
-gamma   = 1.4D0           ! Ratio of specific heats
-Rgas    = 1.D0            ! Gas constant
-p_infty = 1.D0            ! P_infinity, material stiffness
-mu      = 1.D1            ! Shear modulus
-rho_0   = 1.D0            ! No deformation density
-p_amb   = 1.D-1           ! Ambient pressure
-minYs   = 0.2D0           ! Minimum mass fraction at initialization
-sharp   = .FALSE.         ! Use sharp interface initializaion
-thick   = 1.D0            ! Initial thickness in grid units for interface
+gamma    = 1.4D0          ! Ratio of specific heats
+Rgas     = 1.D0           ! Gas constant
+p_infty  = 1.D0           ! P_infinity, material stiffness
+mu       = 1.D1           ! Shear modulus
+rho_0    = 1.D0           ! No deformation density
+p_amb    = 1.D-1          ! Ambient pressure
+minVF    = 1.0D-3         ! Minimum mass fraction at initialization
+rhoRatio = 1.0D1          ! Density ratio
+sharp    = .TRUE.         ! Use sharp interface initializaion
+thick    = 3.0D0          ! Initial thickness in grid units for interface
 /

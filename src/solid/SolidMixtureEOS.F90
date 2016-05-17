@@ -420,19 +420,19 @@ contains
         do i = 1,this%ns
             ! Step 1: Get qy
             call this%der%ddy(this%material(i)%T,tmp1_in_y,y_bc(1),y_bc(2))
-            this%material(i)%qi(:,:,:,2) = -this%material(i)%kap*tmp1_in_y
+            this%material(i)%qi(:,:,:,2) = -this%material(i)%VF*this%material(i)%kap*tmp1_in_y
 
             ! Step 2: Get qx
             call transpose_y_to_x(this%material(i)%T,tmp1_in_x,this%decomp)
             call this%der%ddx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
             call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
-            this%material(i)%qi(:,:,:,1) = -this%material(i)%kap*tmp1_in_y
+            this%material(i)%qi(:,:,:,1) = -this%material(i)%VF*this%material(i)%kap*tmp1_in_y
 
             ! Step 3: Get qz
             call transpose_y_to_z(this%material(i)%T,tmp1_in_z,this%decomp)
             call this%der%ddz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
             call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
-            this%material(i)%qi(:,:,:,3) = -this%material(i)%kap*tmp1_in_y
+            this%material(i)%qi(:,:,:,3) = -this%material(i)%VF*this%material(i)%kap*tmp1_in_y
 
             ! If multispecies, add the inter-species enthalpy flux
             if (this%ns .GT. 1) then
@@ -455,9 +455,9 @@ contains
         qx = zero; qy = zero; qz = zero
 
         do i = 1,this%ns
-            qx = qx + this%material(i)%VF * this%material(i)%qi(:,:,:,1)
-            qy = qy + this%material(i)%VF * this%material(i)%qi(:,:,:,2)
-            qz = qz + this%material(i)%VF * this%material(i)%qi(:,:,:,3)
+            qx = qx + this%material(i)%qi(:,:,:,1) ! * this%material(i)%VF
+            qy = qy + this%material(i)%qi(:,:,:,2) ! * this%material(i)%VF
+            qz = qz + this%material(i)%qi(:,:,:,3) ! * this%material(i)%VF
         end do
 
     end subroutine
@@ -634,7 +634,8 @@ contains
         !pfinitguess = pf
         do ii = 1, itmax
           call this%fnumden(pf,fparams,iparams,num,den)
-          if(dabs(den)>1.0d-12) then
+          ! if(dabs(den)>1.0d-12) then
+          if(dabs(den)>1.0d-15) then
             dpf = num/den
           else
             write(*,*) 'den very small, please check.', num, num/den

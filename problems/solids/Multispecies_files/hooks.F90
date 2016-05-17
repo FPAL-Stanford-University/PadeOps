@@ -4,7 +4,8 @@ module Multispecies_data
     implicit none
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
-    real(rkind) :: minYs = 0.2_rkind, thick = one
+    real(rkind) :: minVF = 0.2_rkind, thick = one
+    real(rkind) :: rhoRatio = one
     logical     :: sharp = .FALSE.
 
 end module
@@ -78,7 +79,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
 
-    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, sharp, thick, minYs
+    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, sharp, thick, minVF, rhoRatio
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -94,7 +95,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         ! Set materials (both are the same material here)
         call mix%set_material(1,stiffgas(gamma,Rgas,p_infty),sep1solid(rho_0,mu,1.0D30,1.0D-10))
-        call mix%set_material(2,stiffgas(gamma,Rgas,p_infty),sep1solid(rho_0,mu,1.0D30,1.0D-10))
+        call mix%set_material(2,stiffgas(gamma,Rgas/rhoRatio,p_infty),sep1solid(rhoRatio*rho_0,mu,1.0D30,1.0D-10))
 
         u   = half
         v   = zero
@@ -106,23 +107,23 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             tmp = exp(-((x-half)/0.1_rkind)**2)
         end if
 
-        ! Set material 1 properties
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
         mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
 
-        mix%material(1)%p  = p_amb
-        mix%material(1)%Ys = minYs + (one-two*minYs)*tmp
-        mix%material(1)%VF = mix%material(1)%Ys
-
-        ! Set material 2 properties
         mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
         mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
         mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
+        mix%material(1)%p  = p_amb
         mix%material(2)%p  = p_amb
+
+        mix%material(1)%VF = minVF + (one-two*minVF)*tmp
+        mix%material(2)%VF = one - mix%material(1)%VF
+
+        tmp = rho_0*(mix%material(1)%VF+rhoRatio*(one-mix%material(1)%VF)) ! Mixture density
+        mix%material(1)%Ys = mix%material(1)%VF * rho_0 / tmp
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
-        mix%material(2)%VF = mix%material(2)%Ys
 
     end associate
 
@@ -157,11 +158,16 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        write(str,'(I4.4)') decomp%ysz(1)
+        if (sharp) then
+            write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2,A)') decomp%ysz(1), "_", minVF, "_", rhoRatio, "_sharp"
+        else
+            write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2,A)') decomp%ysz(1), "_", minVF, "_", rhoRatio, "_smooth"
+        end if
+
         write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_"//trim(str)//"_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
-        write(outputunit,'(1ES27.16E3)') tsim
+        write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rhoRatio
         do i=1,decomp%ysz(1)
             write(outputunit,'(23ES27.16E3)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
                                            mix%material(1)%p (i,1,1), mix%material(2)%p (i,1,1), &

@@ -364,7 +364,7 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
-        real(rkind), parameter :: etafac = one/6._rkind
+        real(rkind), parameter :: etafac = zero !one/6._rkind
 
         rhsg = zero
 
@@ -507,9 +507,9 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
         ! artificial conductivity and inter-species enthalpy diffusion fluxes
-        tmp1 = -this%VF * this%qi(:,:,:,1)
-        tmp2 = -this%VF * this%qi(:,:,:,2)
-        tmp3 = -this%VF * this%qi(:,:,:,3)
+        tmp1 = -this%qi(:,:,:,1) ! * this%VF 
+        tmp2 = -this%qi(:,:,:,2) ! * this%VF 
+        tmp3 = -this%qi(:,:,:,3) ! * this%VF 
 
         ! add convective fluxes
         rhseh = -rho*this%Ys*this%eh
