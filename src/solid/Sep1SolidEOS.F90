@@ -112,11 +112,12 @@ contains
 
     end subroutine
 
-    pure subroutine get_sos(this,sos)
+    pure subroutine get_sos(this,rho,sos)
         class(sep1solid), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in) :: rho
         real(rkind), dimension(:,:,:), intent(inout) :: sos
 
-        sos = sqrt(sos**two + fourthird*this%mu/this%rho0)
+        sos = sqrt(sos**two + fourthird*this%mu/rho)
 
     end subroutine
 

@@ -34,8 +34,8 @@ module SolidMixtureMod
         procedure :: getLAD
         procedure :: update_g
         procedure :: update_Ys
-        procedure :: update_eh
-        procedure :: update_VF
+        !procedure :: update_eh
+        !procedure :: update_VF
         procedure :: filter
         procedure :: get_rho
         procedure :: get_primitive
@@ -158,7 +158,7 @@ contains
         do imat = 1, this%ns
             ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
         enddo
-
+        
         !! identical materials
         !mixP = (this%material(1)%hydro%gam - one)*mixRho*ehmix - &
         !        this%material(1)%hydro%gam * this%material(1)%hydro%PInf
@@ -172,7 +172,9 @@ contains
         !gam  => fparams(  this%ns+1:2*this%ns)
         !psph => fparams(2*this%ns+1:3*this%ns)
         !pinf => fparams(3*this%ns+1:4*this%ns)
-        
+        !write(*,'(a,3(e19.12,1x))') '40-', this%material(1)%Ys(40,1,1), this%material(2)%Ys(40,1,1), ehmix(40,1,1)
+        !write(*,'(a,3(e19.12,1x))') '51-', this%material(1)%Ys(51,1,1), this%material(2)%Ys(51,1,1), ehmix(51,1,1)
+
         do k=1,this%nzp
          do j=1,this%nyp
           do i=1,this%nxp
@@ -212,6 +214,8 @@ contains
           enddo
          enddo
         enddo
+        !write(*,'(a,3(e19.12,1x))') '40-', mixP(40,1,1)
+        !write(*,'(a,3(e19.12,1x))') '51-', mixP(51,1,1)
 
 
         mixT = zero
@@ -229,6 +233,7 @@ contains
             this%material(i)%eh = this%material(i)%hydro%Cv*mixT*(mixP + this%material(i)%hydro%gam*this%material(i)%hydro%PInf) / &
                                                                  (mixP + this%material(i)%hydro%PInf)
         end do      
+        !write(*,*) '--eh check--', maxval(abs(ehmix-(this%material(1)%Ys*this%material(1)%eh+this%material(2)%Ys*this%material(2)%eh)))
 
     end subroutine
 
@@ -444,7 +449,7 @@ contains
 
     end subroutine
 
-    pure subroutine get_conserved(this,rho)
+    subroutine get_conserved(this,rho)
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho
 
@@ -547,13 +552,13 @@ contains
             ! If multispecies, add the inter-species enthalpy flux
             if (this%ns .GT. 1) then
                 call this%material(i)%get_enthalpy(tmp1_in_y)
-            !write(*,'(a,2(e21.14,1x))') '-enth-', maxval(tmp1_in_y),  minval(tmp1_in_y)
+            !write(*,'(a,2(e21.14,1x))') '-enth-', tmp1_in_y(45,1,1),  tmp1_in_y(51,1,1)!, maxval(tmp1_in_y),  minval(tmp1_in_y)
             !write(*,'(a,2(e21.14,1x))') '-Ji1- ', maxval(this%material(i)%Ji(:,:,:,1)),  minval(this%material(i)%Ji(:,:,:,1))
-            !write(*,'(a,2(e21.14,1x))') '-Ji2- ', maxval(this%material(i)%Ji(:,:,:,2)),  minval(this%material(i)%Ji(:,:,:,2))
             !write(*,'(a,2(e21.14,1x))') '-Ji3- ', maxval(this%material(i)%Ji(:,:,:,3)),  minval(this%material(i)%Ji(:,:,:,3))
                 this%material(i)%qi(:,:,:,1) = this%material(i)%qi(:,:,:,1) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,1) )
                 this%material(i)%qi(:,:,:,2) = this%material(i)%qi(:,:,:,2) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,2) )
                 this%material(i)%qi(:,:,:,3) = this%material(i)%qi(:,:,:,3) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,3) )
+            !write(*,'(a,2(e21.14,1x))') '-qi1- ', maxval(this%material(i)%qi(:,:,:,1)),  minval(this%material(i)%qi(:,:,:,1))
             end if
         end do
 
@@ -647,21 +652,21 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
-        class(solid_mixture), intent(inout) :: this
-        integer,              intent(in)    :: isub
-        real(rkind),          intent(in)    :: dt,tsim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,viscwork
+    !subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
+    !    class(solid_mixture), intent(inout) :: this
+    !    integer,              intent(in)    :: isub
+    !    real(rkind),          intent(in)    :: dt,tsim
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,viscwork
 
-        integer :: imat
+    !    integer :: imat
 
-        do imat = 1, this%ns
-          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
-          !write(*,'(a,i4,1x,2(e21.14,1x))') '--eh--', imat, maxval(this%material(imat)%eh), minval(this%material(imat)%eh)
-        end do
+    !    do imat = 1, this%ns
+    !      call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
+    !      !write(*,'(a,i4,1x,2(e21.14,1x))') '--eh--', imat, maxval(this%material(imat)%eh), minval(this%material(imat)%eh)
+    !    end do
 
-    end subroutine
+    !end subroutine
 
     subroutine getSOS(this,rho,p,sos)
         use constants, only: fourthird
@@ -670,33 +675,45 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: sos     ! Mixture speed of sound
 
         integer :: i
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: mixmu, mixgam, mixgamPinf
 
-        mixmu = zero; mixgam = zero; mixgamPinf = zero
+        !real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: mixmu, mixgam, mixgamPinf
+
+        !mixmu = zero; mixgam = zero; mixgamPinf = zero
+        !do i = 1,this%ns
+        !    mixmu = mixmu + this%material(i)%VF * this%material(i)%elastic%mu
+        !    mixgam = mixgam + this%material(i)%VF * this%material(i)%hydro%gam
+        !    mixgamPinf = mixgamPinf + this%material(i)%VF * this%material(i)%hydro%gam * this%material(i)%hydro%Pinf
+        !end do
+
+        !sos = sqrt( (mixgam*p + mixgamPinf + fourthird*mixmu)/rho )
+
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhom, sosm
+
+        sos = zero
         do i = 1,this%ns
-            mixmu = mixmu + this%material(i)%VF * this%material(i)%elastic%mu
-            mixgam = mixgam + this%material(i)%VF * this%material(i)%hydro%gam
-            mixgamPinf = mixgamPinf + this%material(i)%VF * this%material(i)%hydro%gam * this%material(i)%hydro%Pinf
+            call this%material(i)%getSpeciesDensity(rho,rhom)
+            call this%material(i)%hydro%get_sos(rhom,p,sosm)
+            call this%material(i)%elastic%get_sos(rhom,sosm)
+            sos = sos + this%material(i)%VF/(rhom*sosm*sosm)
         end do
-
-        sos = sqrt( (mixgam*p + mixgamPinf + fourthird*mixmu)/rho )
+        sos = one / (sqrt(rho*sos) + epssmall)
 
     end subroutine
 
-    subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim)
-        class(solid_mixture), intent(inout) :: this
-        integer,              intent(in)    :: isub
-        real(rkind),          intent(in)    :: dt,tsim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: u,v,w
+    !subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim)
+    !    class(solid_mixture), intent(inout) :: this
+    !    integer,              intent(in)    :: isub
+    !    real(rkind),          intent(in)    :: dt,tsim
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: u,v,w
 
-        integer :: imat
+    !    integer :: imat
 
-        do imat = 1, this%ns
-          call this%material(imat)%update_VF(isub,dt,u,v,w,x,y,z,tsim)
-        end do
+    !    do imat = 1, this%ns
+    !      call this%material(imat)%update_VF(isub,dt,u,v,w,x,y,z,tsim)
+    !    end do
 
-    end subroutine
+    !end subroutine
 
     subroutine checkNaN(this)
         class(solid_mixture), intent(in)   :: this
@@ -765,7 +782,7 @@ contains
         !pfinitguess = pf
         do ii = 1, itmax
           call this%fnumden(pf,fparams,iparams,num,den)
-          if(dabs(den)>1.0d-12) then
+          if(dabs(den)>1.0d-15) then
             dpf = num/den
           else
             write(*,*) 'den very small, please check.', num, num/den
@@ -778,7 +795,7 @@ contains
           else
             den_conv = one
           endif
-          if(dabs(dpf)/den_conv<1.0d-8) exit
+          if(dabs(dpf)/den_conv<1.0d-12) exit
         enddo
         if(ii==itmax+1) then
           write(*,*) 'Newtons method for pf did not converge. Check details.', iparams(1)

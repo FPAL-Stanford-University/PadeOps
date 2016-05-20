@@ -47,10 +47,11 @@ module ElasticEOSMod
             real(rkind), dimension(:,:,:), intent(out) :: eelastic
         end subroutine
 
-        pure subroutine get_sos_interface(this,sos)
+        pure subroutine get_sos_interface(this,rho,sos)
             import :: elasticeos
             import :: rkind
             class(elasticeos), intent(in) :: this
+            real(rkind), dimension(:,:,:), intent(in) :: rho
             real(rkind), dimension(:,:,:), intent(inout) :: sos
         end subroutine
 

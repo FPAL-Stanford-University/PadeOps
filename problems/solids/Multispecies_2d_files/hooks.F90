@@ -1,11 +1,11 @@
-module Multispecies_data
+module Multispecies_2d_data
     use kind_parameters,  only: rkind
     use constants,        only: one,eight,two
     implicit none
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
     real(rkind) :: minVF = 0.2_rkind, thick = one, rho_ratio = two
-    logical     :: sharp = .FALSE.
+    logical     :: sharp = .FALSE., circle = .FALSE., spiral = .FALSE.
 
 end module
 
@@ -14,7 +14,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: one
     use decomp_2d,        only: decomp_info
 
-    use Multispecies_data
+    use Multispecies_2d_data
 
     implicit none
 
@@ -37,7 +37,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         dx = one/real(nx,rkind)
-        dy = dx
+        dy = one/real(ny,rkind)
         dz = dx
 
         do k=1,size(mesh,3)
@@ -56,7 +56,7 @@ end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
-    use constants,        only: zero,half,one,two
+    use constants,        only: zero,half,one,two,pi
     use SolidGrid,        only: u_index,v_index,w_index
     use decomp_2d,        only: decomp_info
     use exits,            only: GracefulExit
@@ -64,7 +64,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
     
-    use Multispecies_data
+    use Multispecies_2d_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -79,7 +79,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
     real(rkind) :: p_infty_2, Rgas_2
 
-    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, sharp, thick, minVF, rho_ratio
+    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, sharp, circle, spiral, thick, minVF, rho_ratio
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -100,14 +100,33 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         call mix%set_material(2,stiffgas(gamma,Rgas_2,p_infty_2), sep1solid(rho_ratio*rho_0,mu,1.0D30,1.0D-10))
 
         u   = half
-        v   = zero
+        v   = half
         w   = zero
 
         if ( sharp ) then
-            tmp = half * ( erf( (x-half+0.1_rkind)/(thick*dx) ) - erf( (x-half-0.1_rkind)/(thick*dx) ) )
-            !tmp = half * ( one + erf( (x-half+0.0_rkind)/(thick*dx) ) )
+            if(circle) then
+              tmp = sqrt((x-half)**2 + (y-half)**2)    ! radius
+              tmp = half * ( one + erf( (tmp-0.1_rkind)/(thick*sqrt(dx*dy)) ))
+            elseif(spiral) then
+              tmp = sqrt((x-half)**2 + (y-0.75_rkind)**2)    ! radius
+              tmp = half * ( one + erf( (tmp-0.1_rkind)/(thick*sqrt(dx*dy)) ))
+              u = -sin(pi*x)**2*sin(two*pi*y)*cos(pi*zero/4.0_rkind)
+              v = sin(pi*y)**2*sin(two*pi*x)*cos(pi*zero/4.0_rkind)
+            else
+              tmp = half * ( erf( (x-half+0.1_rkind)/(thick*dx) ) - erf( (x-half-0.1_rkind)/(thick*dx) ) )
+            endif
         else
-            tmp = exp(-((x-half)/0.1_rkind)**2)
+            if(circle) then
+              tmp = sqrt((x-half)**2 + (y-half)**2)    ! radius
+              tmp = exp(-((tmp-0.1_rkind)/0.1_rkind)**2) 
+            elseif(spiral) then
+              tmp = sqrt((x-half)**2 + (y-0.75_rkind)**2)    ! radius
+              tmp = exp(-((tmp-0.1_rkind)/0.1_rkind)**2) 
+              u = -sin(pi*x)**2*sin(two*pi*y)*cos(pi*zero/4.0_rkind)
+              v = sin(pi*y)**2*sin(two*pi*x)*cos(pi*zero/4.0_rkind)
+            else
+              tmp = exp(-((x-half)/0.1_rkind)**2)
+            endif
         end if
 
         ! Set material 1 properties
@@ -138,10 +157,10 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     use constants,        only: zero,eps,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
                                 sxx_index,syy_index,szz_index,sxy_index,sxz_index,syz_index
-    use decomp_2d,        only: decomp_info
+    use decomp_2d,        only: decomp_info,nrank
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_data
+    use Multispecies_2d_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -166,22 +185,23 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
                  sxz  => fields(:,:,:, sxz_index), syz => fields(:,:,:,syz_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        write(*,*) '----In output----', kap_index, kap(1,1,1)
-        write(str,'(I4.4)') decomp%ysz(1)
+        write(str,'(I4.4)') nrank!decomp%ysz(1)
         write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_"//trim(str)//"_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
         write(outputunit,'(1ES27.16E3)') tsim
-        do i=1,decomp%ysz(1)
-            write(outputunit,'(23ES27.16E3)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
-                                           mix%material(1)%p (i,1,1), mix%material(2)%p (i,1,1), &
-                                           mix%material(1)%Ys(i,1,1), mix%material(2)%Ys(i,1,1), &
-                                           mix%material(1)%VF(i,1,1), mix%material(2)%VF(i,1,1), &
-                                           mix%material(1)%eh(i,1,1), mix%material(2)%eh(i,1,1), &
-                                           mix%material(1)%T (i,1,1), mix%material(2)%T (i,1,1), &
-                                           mix%material(1)%g11(i,1,1), mix%material(2)%g11(i,1,1), &
-                                           mu(i,1,1), bulk(i,1,1), kap(i,1,1), kap(i,1,1), &
-                                           mix%material(1)%diff(i,1,1), mix%material(2)%diff(i,1,1)
+        do j=1,decomp%ysz(2)
+         do i=1,decomp%ysz(1)
+            write(outputunit,'(24ES27.16E3)') x(i,j,1), y(i,j,1), rho(i,j,1), u(i,j,1), e(i,j,1), p(i,j,1), &
+                                           mix%material(1)%p (i,j,1), mix%material(2)%p (i,j,1), &
+                                           mix%material(1)%Ys(i,j,1), mix%material(2)%Ys(i,j,1), &
+                                           mix%material(1)%VF(i,j,1), mix%material(2)%VF(i,j,1), &
+                                           mix%material(1)%eh(i,j,1), mix%material(2)%eh(i,j,1), &
+                                           mix%material(1)%T (i,j,1), mix%material(2)%T (i,j,1), &
+                                           mix%material(1)%g11(i,j,1), mix%material(2)%g11(i,j,1), &
+                                           mu(i,j,1), bulk(i,j,1), mix%material(1)%kap(i,j,1), mix%material(2)%kap(i,j,1), &
+                                           mix%material(1)%diff(i,j,1), mix%material(2)%diff(i,j,1)
+         end do
         end do
         close(outputunit)
 
@@ -245,7 +265,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_data
+    use Multispecies_2d_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -265,21 +285,24 @@ end subroutine
 
 subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use kind_parameters,  only: rkind
+    use constants,        only: two,pi
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
-    use exits,            only: message
+    use exits,            only: message, GracefulExit
     use reductions,       only: P_MAXVAL
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_data
+    use Multispecies_2d_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
     integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
-    real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     type(solid_mixture),             intent(in) :: mix
+
+    integer :: ierr
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -287,18 +310,28 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+      !if(spiral) then
+      !  u = -sin(pi*x)**2*sin(two*pi*y)*cos(pi*tsim/4.0_rkind)
+      !  v = sin(pi*y)**2*sin(two*pi*x)*cos(pi*tsim/4.0_rkind)
+      !endif
+
     end associate
+
+    open(unit=20,file='exit',status='old',iostat=ierr)
+    if(ierr==0) call GracefulExit("exit file found in working directory. Stopping run.",123)
+
 end subroutine
 
 subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use kind_parameters,  only: rkind
-    use constants,        only: zero
+    use constants,        only: zero, two, pi
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,&
                                 mom_index,TE_index
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_data
+    use Multispecies_2d_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -314,6 +347,12 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+      !if(spiral) then
+      !  rhs(:,:,:,mom_index)   = -sin(pi*x)**2*sin(two*pi*y)*cos(pi*tsim/4.0_rkind) ! u
+      !  rhs(:,:,:,mom_index+1) = sin(pi*y)**2*sin(two*pi*x)*cos(pi*tsim/4.0_rkind)  ! v
+      !endif
+
     end associate
 end subroutine
 
@@ -324,7 +363,7 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_data
+    use Multispecies_2d_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -335,6 +374,10 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
 
+      !if(spiral) then
+      !  rhs   = zero
+      !endif
+
 end subroutine
 
 subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
@@ -344,7 +387,7 @@ subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Y
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_data
+    use Multispecies_2d_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -364,7 +407,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_data
+    use Multispecies_2d_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -384,7 +427,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_data
+    use Multispecies_2d_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp

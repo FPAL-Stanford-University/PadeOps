@@ -71,12 +71,12 @@ module SolidMod
         procedure :: init
         procedure :: getRHS_g
         procedure :: getRHS_Ys
-        procedure :: getRHS_eh
-        procedure :: getRHS_VF
+        !procedure :: getRHS_eh
+        !procedure :: getRHS_VF
         procedure :: update_g
         procedure :: update_Ys
-        procedure :: update_eh
-        procedure :: update_VF
+        !procedure :: update_eh
+        !procedure :: update_VF
         procedure :: getPhysicalProperties
         procedure :: getPlasticSources
         procedure :: get_p_from_ehydro
@@ -346,8 +346,10 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for g tensor equation
 
         call this%getRHS_g(rho,u,v,w,dt,rhsg)
+            !write(*,'(a,2(e21.14,1x))') '-rhsg-', maxval(rhsg(:,:,:,1)), minval(rhsg(:,:,:,1))
         call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
+        !rhsg = zero
         ! advance sub-step
         if(isub==1) this%Qtmpg = zero                   ! not really needed, since RK45_A(1) = 0
         this%Qtmpg  = dt*rhsg + RK45_A(isub)*this%Qtmpg
@@ -364,7 +366,7 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
-        real(rkind), parameter :: etafac = one/6._rkind
+        real(rkind), parameter :: etafac = zero !one/6._rkind
 
         rhsg = zero
 
@@ -451,9 +453,10 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsYs  ! RHS for mass fraction equation
 
         call this%getRHS_Ys(rho,u,v,w,rhsYs)
-            write(*,'(a,2(e21.14,1x))') '-rhsY-', maxval(rhsYs),  minval(rhsYs)
+            !write(*,'(a,2(e21.14,1x))') '-rhsY-', maxval(rhsYs),  minval(rhsYs)
         call hook_material_mass_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsYs)
 
+        !rhsYs = zero
         ! advance sub-step
         if(isub==1) this%QtmpYs = zero                   ! not really needed, since RK45_A(1) = 0
         this%QtmpYs  = dt*rhsYs + RK45_A(isub)*this%QtmpYs
@@ -478,94 +481,95 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
-        use RKCoeffs,   only: RK45_A,RK45_B
-        class(solid), intent(inout) :: this
-        integer, intent(in) :: isub
-        real(rkind), intent(in) :: dt,tsim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,viscwork
+    !subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
+    !    use RKCoeffs,   only: RK45_A,RK45_B
+    !    class(solid), intent(inout) :: this
+    !    integer, intent(in) :: isub
+    !    real(rkind), intent(in) :: dt,tsim
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,viscwork
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
 
-        call this%getRHS_eh(rho,u,v,w,divu,viscwork,rhseh)
-        call hook_material_energy_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhseh)
+    !    call this%getRHS_eh(rho,u,v,w,divu,viscwork,rhseh)
+    !    call hook_material_energy_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhseh)
 
-        ! advance sub-step
-        if(isub==1) this%Qtmpeh = zero                   ! not really needed, since RK45_A(1) = 0
-        this%Qtmpeh  = dt*rhseh + RK45_A(isub)*this%Qtmpeh
-        this%consrv(:,:,:,2) = this%consrv(:,:,:,2) + RK45_B(isub)*this%Qtmpeh
+    !    ! advance sub-step
+    !    if(isub==1) this%Qtmpeh = zero                   ! not really needed, since RK45_A(1) = 0
+    !    this%Qtmpeh  = dt*rhseh + RK45_A(isub)*this%Qtmpeh
+    !    this%consrv(:,:,:,2) = this%consrv(:,:,:,2) + RK45_B(isub)*this%Qtmpeh
 
-    end subroutine
+    !end subroutine
 
-    subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,rhseh)
-        use operators, only: gradient, divergence
-        class(solid),                                       intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu,viscwork
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhseh
+    !subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,rhseh)
+    !    use operators, only: gradient, divergence
+    !    class(solid),                                       intent(in)  :: this
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu,viscwork
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhseh
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
-        ! artificial conductivity and inter-species enthalpy diffusion fluxes
-        tmp1 = -this%VF * this%qi(:,:,:,1)
-        tmp2 = -this%VF * this%qi(:,:,:,2)
-        tmp3 = -this%VF * this%qi(:,:,:,3)
+    !    ! artificial conductivity and inter-species enthalpy diffusion fluxes
+    !    tmp1 = -this%VF * this%qi(:,:,:,1)
+    !    tmp2 = -this%VF * this%qi(:,:,:,2)
+    !    tmp3 = -this%VF * this%qi(:,:,:,3)
 
-        ! add convective fluxes
-        rhseh = -rho*this%Ys*this%eh
-        tmp1 = tmp1 + rhseh*u
-        tmp2 = tmp2 + rhseh*v
-        tmp3 = tmp3 + rhseh*w
+    !    ! add convective fluxes
+    !    rhseh = -rho*this%Ys*this%eh
+    !    tmp1 = tmp1 + rhseh*u
+    !    tmp2 = tmp2 + rhseh*v
+    !    tmp3 = tmp3 + rhseh*w
 
-        ! Take divergence of fluxes
-        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh)
+    !    ! Take divergence of fluxes
+    !    call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh)
 
-        ! Add pressure and viscous work terms
-        rhseh = rhseh - this%VF * (this%p*divu + viscwork)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
+    !    ! Add pressure and viscous work terms
+    !    rhseh = rhseh - this%VF * (this%p*divu + viscwork)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
 
-    end subroutine
+    !end subroutine
 
-    subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim)
-        use RKCoeffs,   only: RK45_A,RK45_B
-        class(solid), intent(inout) :: this
-        integer, intent(in) :: isub
-        real(rkind), intent(in) :: dt,tsim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: u,v,w
+    !subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim)
+    !    use RKCoeffs,   only: RK45_A,RK45_B
+    !    class(solid), intent(inout) :: this
+    !    integer, intent(in) :: isub
+    !    real(rkind), intent(in) :: dt,tsim
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: u,v,w
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
 
-        call this%getRHS_VF(u,v,w,rhsVF)
-        call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
+    !    call this%getRHS_VF(u,v,w,rhsVF)
+    !    call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
 
-        ! advance sub-step
-        if(isub==1) this%QtmpVF = zero                   ! not really needed, since RK45_A(1) = 0
-        this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
-        this%VF = this%VF  + RK45_B(isub)*this%QtmpVF
+    !    ! advance sub-step
+    !    if(isub==1) this%QtmpVF = zero                   ! not really needed, since RK45_A(1) = 0
+    !    this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
+    !    this%VF = this%VF  + RK45_B(isub)*this%QtmpVF
 
-    end subroutine
+    !end subroutine
 
-    subroutine getRHS_VF(this,u,v,w,rhsVF)
-        use operators, only: gradient
-        class(solid),                                       intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: u,v,w
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
+    !subroutine getRHS_VF(this,u,v,w,rhsVF)
+    !    use operators, only: gradient
+    !    class(solid),                                       intent(in)  :: this
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: u,v,w
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
-        call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3)
-        rhsVF = u*tmp1 + v*tmp2 + w*tmp3
+    !    call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3)
+    !    rhsVF = u*tmp1 + v*tmp2 + w*tmp3
 
-        ! any penalty term to keep VF between 0 and 1???
+    !    ! any penalty term to keep VF between 0 and 1???
 
-    end subroutine
+    !end subroutine
 
     subroutine filter(this, iflag)
         use operators, only: filter3D
         class(solid),  intent(inout) :: this
         integer,       intent(in)    :: iflag
 
+        integer :: ierr
         ! filter g
         call filter3D(this%decomp, this%fil, this%g11, iflag)
         call filter3D(this%decomp, this%fil, this%g12, iflag)
