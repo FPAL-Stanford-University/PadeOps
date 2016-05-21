@@ -21,7 +21,7 @@ module sgsmod
     real(rkind), parameter :: deltaRatio = 2.0_rkind
     complex(rkind), parameter :: zeroC = zero + imi*zero
     logical :: useVerticalTfilter = .false. 
-    integer :: applyDynEvery  = 5
+    integer :: applyDynEvery  = 10
 
     real(rkind), parameter :: bm = 4.8_rkind, bh = 7.8_rkind
     type :: sgs
@@ -301,6 +301,7 @@ contains
             call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
             call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
             urhs = urhs - tauhat
+            this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,nz+1) = zeroC
             call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
             call this%spectE%mtimes_ik1_ip(this%ctmpEy)
             wrhs = wrhs - this%ctmpEy
@@ -314,6 +315,7 @@ contains
             call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
             call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
             vrhs = vrhs - tauhat
+            this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,nz+1) = zeroC
             call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
             call this%spectE%mtimes_ik2_ip(this%ctmpEy)
             wrhs = wrhs - this%ctmpEy

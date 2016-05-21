@@ -144,6 +144,7 @@ module IncompressibleGridWallM
             procedure, private :: dump_stats
             procedure, private :: compute_stats 
             procedure, private :: getSurfaceQuantities 
+            procedure, private :: addNonLinearTerm_skewSymm
             procedure          :: finalize_stats
             procedure, private :: dump_planes
             procedure          :: dumpFullField 
@@ -612,6 +613,117 @@ contains
 
     end subroutine
 
+    subroutine addNonLinearTerm_skewSymm(this)
+        class(igridWallM), intent(inout), target :: this
+        real(rkind),    dimension(:,:,:), pointer :: dudy, dudz, dudx
+        real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
+        real(rkind),    dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
+        real(rkind),    dimension(:,:,:), pointer :: dvdzC, dudzC
+        real(rkind),    dimension(:,:,:), pointer :: dwdxC, dwdyC
+        real(rkind),    dimension(:,:,:), pointer :: T1C, T2C, T1E, T2E 
+        complex(rkind), dimension(:,:,:), pointer :: fT1C, fT2C, fT1E, fT2E 
+        complex(rkind), dimension(:,:,:), pointer :: tzC, tzE
+
+        dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
+        dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
+        dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
+
+        dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
+        dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
+
+        T1C => this%rbuffxC(:,:,:,1); T2C => this%rbuffxC(:,:,:,2)
+        T1E => this%rbuffxE(:,:,:,1); T2E => this%rbuffxE(:,:,:,2)
+       
+        fT1C => this%cbuffyC(:,:,:,1); fT2C => this%cbuffyC(:,:,:,2)
+        fT1E => this%cbuffyE(:,:,:,1); fT2E => this%cbuffyE(:,:,:,2)
+        
+        tzC => this%cbuffzC(:,:,:,1); tzE => this%cbuffzE(:,:,:,1)
+
+
+        T1C = dudx*this%u
+        T2C = dudy*this%v
+        T1C = T1C + T2C
+        T1E = dudz*this%w
+        call this%spectC%fft(T1C,fT1C)
+        call this%spectE%fft(T1E,fT1E)
+        call transpose_y_to_z(fT1E,tzE, this%sp_gpE)
+        call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        call transpose_z_to_y(tzC,this%u_rhs, this%sp_gpC)
+        this%u_rhs = this%u_rhs + fT1C
+        
+        T1C = dvdx*this%u
+        T2C = dvdy*this%v
+        T1C = T1C + T2C
+        T1E = dvdz*this%w
+        call this%spectC%fft(T1C,fT1C)
+        call this%spectE%fft(T1E,fT1E)
+        call transpose_y_to_z(fT1E,tzE, this%sp_gpE)
+        call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        call transpose_z_to_y(tzC,this%v_rhs, this%sp_gpC)
+        this%v_rhs = this%v_rhs + fT1C
+        
+        T1E = dwdx*this%uE
+        T2E = dwdy*this%vE
+        T2E = T1E + T2E
+        call this%spectE%fft(T2E,fT2E)
+        T1C = dwdz*this%wC
+        call this%spectC%fft(T1C,fT1C)
+        call transpose_y_to_z(fT1C,tzC, this%sp_gpC)
+        call this%Ops%InterpZ_Cell2Edge(tzC,tzE,zeroC,zeroC)
+        call transpose_z_to_y(tzE,this%w_rhs, this%sp_gpE)
+        this%w_rhs = this%w_rhs + fT2E
+
+        T1C = this%u*this%u
+        call this%spectC%fft(T1C,fT1C)
+        call this%spectC%mtimes_ik1_ip(fT1C)
+        this%u_rhs = this%u_rhs + fT1C
+
+        T1C = this%v*this%v
+        call this%spectC%fft(T1C,fT1C)
+        call this%spectC%mtimes_ik2_ip(fT1C)
+        this%v_rhs = this%v_rhs + fT1C
+
+        T1C = this%wC*this%wC
+        call this%spectC%fft(T1C,fT1C)
+        call transpose_y_to_z(fT1C,tzC,this%sp_gpC)
+        call this%Ops%ddz_C2E(tzC,tzE,.true.,.true.)
+        call transpose_z_to_y(tzE,fT1E,this%sp_gpE)
+        this%w_rhs = this%w_rhs + fT1E
+
+        T1C = this%u*this%v
+        call this%spectC%fft(T1C,fT1C)
+        call this%spectC%mtimes_ik2_oop(fT1C,fT2C)
+        this%u_rhs = this%u_rhs + fT2C
+        call this%spectC%mtimes_ik1_ip(fT1C)
+        this%v_rhs = this%v_rhs + fT1C
+
+        T1E = this%uE*this%w
+        call this%spectE%fft(T1E,fT1E)
+        call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
+        call this%Ops%ddz_E2C(tzE,tzC)
+        call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
+        this%u_rhs = this%u_rhs + fT1C
+        
+        call this%spectE%mtimes_ik1_ip(fT1E)
+        this%w_rhs = this%w_rhs + fT1E
+
+
+        T1E = this%vE*this%w
+        call this%spectE%fft(T1E,fT1E)
+        call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
+        call this%Ops%ddz_E2C(tzE,tzC)
+        call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
+        this%v_rhs = this%v_rhs + fT1C
+
+        call this%spectE%mtimes_ik2_ip(fT1E)
+        this%w_rhs = this%w_rhs + fT1E
+
+        this%u_rhs = -half*this%u_rhs
+        this%v_rhs = -half*this%v_rhs
+        this%w_rhs = -half*this%w_rhs
+
+    end subroutine
+
     subroutine addCoriolisTerm(this)
         class(igridWallM), intent(inout) :: this
         ! u equation 
@@ -666,7 +778,8 @@ contains
         this%dtRat = this%dt/this%dtOld
 
         ! Step 1: Non Linear Term 
-        call this%AddNonLinearTerm_Rot()
+        !call this%AddNonLinearTerm_Rot()
+        call this%addNonLinearTerm_skewSymm()
 
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
@@ -683,6 +796,7 @@ contains
             call this%addBuoyancyTerm()
         end if 
 
+        
         ! Step 4: SGS Viscous Term
         if (this%useSGS) then
             call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
@@ -722,7 +836,7 @@ contains
                 this%That = this%That + abf1*this%T_rhs + abf2*this%T_Orhs
             end if 
         end if 
-        
+       
         
         ! Step 5: Dealias
         call this%spectC%dealias(this%uhat)
@@ -857,12 +971,13 @@ contains
         call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_u,.true.)
             
 
-        !dudz_dzby2 = ctmpz1(:,:,1)/((this%dz/two)*log(this%dz/two/this%z0))
-        !call this%spectE%SurfaceFilter_ip(dudz_dzby2)
-        !dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
+        dudz_dzby2 = ctmpz1(:,:,1)/((this%dz/two)*log(this%dz/two/this%z0))
+        call this%spectE%SurfaceFilter_ip(dudz_dzby2)
+        dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
 
         !ctmpz2(:,:,1) = two*dudz_dzby2 - ctmpz2(:,:,2)
-        ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
+        !ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
+        ctmpz2(:,:,1) = (ctmpz2(:,:,2) + dudz_dzby2 - ctmpz2(:,:,3))
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dudz)
         call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
@@ -872,9 +987,10 @@ contains
         call transpose_y_to_z(this%vhat,ctmpz1,this%sp_gpC)
         call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_v,.true.)
 
-        !dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
+        dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
         !ctmpz2(:,:,1) = two*dvdz_dzby2 - ctmpz2(:,:,2)
-        ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
+        !ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
+        ctmpz2(:,:,1) = (ctmpz2(:,:,2) + dvdz_dzby2 - ctmpz2(:,:,3))
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dvdz)
         call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)

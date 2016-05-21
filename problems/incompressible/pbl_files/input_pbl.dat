@@ -1,21 +1,21 @@
 &INPUT
-inputdir              = "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"   ! Directory for any input files
-outputdir             = "/home/aditya90/Codes/PadeOps/data/EkmanBL/output/"   ! Directory for all output files
-nx                    = 64          ! Number of points in X
-ny                    = 64          ! Number of points in Y
+inputdir              = "/home/aditya90/Codes/PadeOps/data/pbl/"   ! Directory for any input files
+outputdir             = "/home/aditya90/Codes/PadeOps/data/pbl/"   ! Directory for all output files
+nx                    = 256          ! Number of points in X
+ny                    = 128          ! Number of points in Y
 nz                    = 64          ! Number of points in Z
-tstop                 = 10.D0       ! Physical time to stop the simulation
-CFL                   = 0.1D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+tstop                 = 30.D0       ! Physical time to stop the simulation
+CFL                   = 0.15D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
-restartFile_TID       = 8000        ! TimeID of the restart file being used
-restartFile_RID       = 87          ! RunID of the restart file being used
+restartFile_TID       = 24000        ! TimeID of the restart file being used
+restartFile_RID       = 86          ! RunID of the restart file being used
 /
 /
 &IO
-RunID                 = 86          ! Run Label (All output files will be tagged with this nubber)
+RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump         = 4000        ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump            = 4000        ! Data dumping frequency (# of timesteps)
 ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
@@ -28,7 +28,7 @@ t_stop_planeDump      = 5000        ! When do you want to stop dumping planes?
 &STATS
 tid_StatsDump         = 4000        ! Dumping Frequency for Statistics file (# of time steps)
 tid_compStats         = 100         ! Frequency of Computing Statistics
-tSimStartStats        = 5.d0        ! Simulation time for starting stats calculations 
+tSimStartStats        = 10.d0       ! Simulation time for starting stats calculations 
 /
 /
 &PHYSICS
@@ -65,12 +65,12 @@ useSGSClipping        = .TRUE.      ! Clip the constant values when they are neg
 /
 /
 &WALLMODEL 
-wallMType             = 1           ! 0: Moeng's original model, 1: Bou-Zeid's fully local model
+wallMType             = 0           ! 0: Moeng's original model, 1: Bou-Zeid's fully local model
 z0                    = 1.d-4       ! Roughness length scale (CAREFUL: This is a non-dimensionalized number)
 /
 /
 &PBLINPUT
-Lx                    = 6.28318530717959d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Lx                    = 12.5663706143591d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Ly                    = 6.28318530717959d0 ! Domain Width (appropriate dimesnions/non-dimensionalized)
 Lz                    = 1.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
 z0init                = 1.d-4               ! Roughness scale used to initialize the profile

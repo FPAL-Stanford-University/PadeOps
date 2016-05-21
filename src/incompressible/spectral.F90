@@ -176,15 +176,14 @@ contains
 
     subroutine SurfaceFilter_ip(this, fhat)
         class(spectral), intent(in) :: this
-        complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(1)), intent(inout) :: fhat
-
+        complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2)), intent(inout) :: fhat
         fhat = fhat * this%GsurfaceFilter
     end subroutine 
 
     pure subroutine SurfaceFilter_oop(this, fin, fout)
         class(spectral), intent(in) :: this
-        complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(1)), intent(in) :: fin
-        complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(1)), intent(out) :: fout
+        complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2)), intent(in) :: fin
+        complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2)), intent(out) :: fout
 
         fout = fin * this%GsurfaceFilter
     end subroutine 

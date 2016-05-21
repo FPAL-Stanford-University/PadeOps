@@ -29,6 +29,7 @@ contains
             call message(0,"Time",gp%tsim)
             call message(1,"Max KE:",gp%getMaxKE())
             call message(1,"Max nuSGS:",gp%max_nuSGS)
+            call message(1,"u_star:",gp%ustar)
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 
@@ -41,7 +42,6 @@ contains
 
         if (mod(gp%step,gp%t_dataDump)==0) then
            call message(0,"Data dump!")
-           !call dumpData4Matlab(gp) 
            call gp%dumpFullField(gp%u,'uVel')
            call gp%dumpFullField(gp%v,'vVel')
            call gp%dumpFullField(gp%wC,'wVel')
