@@ -15,7 +15,11 @@ module IncompressibleGridWallM
     use PadePoissonMod, only: Padepoisson 
     use sgsmod, only: sgs
     use wallmodelMod, only: wallmodel
-    use numerics, only: use3by2rule 
+    use numerics
+    use cd06staggstuff, only: cd06stagg
+    use cf90stuff, only: cf90
+    use PadePoissonMod, only: Padepoisson 
+
     implicit none
 
     private
@@ -39,12 +43,14 @@ module IncompressibleGridWallM
         type(decomp_info), allocatable :: gpC, gpE
         type(decomp_info), pointer :: Sp_gpC, Sp_gpE
         type(spectral), allocatable :: spectE, spectC
-        type(staggOps), allocatable :: Ops
+        type(staggOps), allocatable :: Ops, OpsPP
         type(sgs), allocatable :: sgsmodel
         type(wallmodel), allocatable :: moengWall
 
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsC
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsE
+        type(cd06stagg), allocatable :: derW, derWW, derOO, derEE
+        type(cf90),      allocatable :: filzE, filzC
 
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsE
@@ -86,7 +92,7 @@ module IncompressibleGridWallM
         logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false. 
         logical :: useExtraForcing = .false., useGeostrophicForcing = .false. 
         logical :: useSGS = .false. 
-        logical :: useVerticalFilter = .false. 
+        logical :: UseDealiasFilterVert = .false.
         logical :: useDynamicProcedure 
         logical :: useCFL = .false.  
         logical :: dumpPlanes = .false.
@@ -144,6 +150,7 @@ module IncompressibleGridWallM
             procedure, private :: dump_stats
             procedure, private :: compute_stats 
             procedure, private :: getSurfaceQuantities 
+            procedure, private :: ApplyCompactFilter 
             procedure, private :: addNonLinearTerm_skewSymm
             procedure          :: finalize_stats
             procedure, private :: dump_planes
@@ -158,16 +165,18 @@ contains
         character(len=clen) :: outputdir, inputdir
         integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, topWall = slip, SGSModelID = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
-        integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999, t_stop_planeDump = 1
+        integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999, t_stop_planeDump = 1, ncWall = 1
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID = 1, t_start_planeDump = 1, botBC_Temp = 0
         real(rkind) :: dt = -one,tstop=one,CFL =-one,tSimStartStats = 10000.d0,dpfdy=zero,dPfdz=zero,ztop
-        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, z0 = 1.d-4
+        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, z0 = 1.d-4, Cs = 0.17d0
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0,Gx=0.d0,Gy=0.d0,Gz=0.d0
-        logical :: useRestartFile=.false.,isInviscid=.false.,useVerticalFilter=.true.,useCoriolis = .true. 
+        logical :: useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true. 
         logical :: isStratified=.false.,dumpPlanes = .false., useSGSclipping = .true.,useExtraForcing = .false.
         logical :: useSGS = .true., useDynamicProcedure = .false., useSpongeLayer=.false.
-        logical :: useGeostrophicForcing = .false. 
+        logical :: useGeostrophicForcing = .false., useVerticalTfilter = .false., useWallDamping = .true. 
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
+        integer :: AdvectionTerm = 1, NumericalSchemeVert = 0
+        logical :: ComputeStokesPressure = .false., UseDealiasFilterVert = .false.
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -176,14 +185,18 @@ contains
         namelist /STATS/ tid_StatsDump, tid_compStats, tSimStartStats
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, &
                           useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz
-        namelist /BCs/ topWall, useVerticalFilter, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp
-        namelist /LES/ useSGS, useDynamicProcedure, useSGSclipping, SGSmodelID 
+        namelist /BCs/ topWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp
+        namelist /LES/ useSGS, useDynamicProcedure, useSGSclipping, SGSmodelID, useVerticalTfilter, &
+                        useWallDamping, ncWall, Cs 
         namelist /WALLMODEL/ z0, wallMType 
+        namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, UseDealiasFilterVert
+
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
         read(unit=ioUnit, NML=INPUT)
+        read(unit=ioUnit, NML=NUMERICS)
         read(unit=ioUnit, NML=IO)
         read(unit=ioUnit, NML=STATS)
         read(unit=ioUnit, NML=PHYSICS)
@@ -205,10 +218,12 @@ contains
         this%t_restartDump = t_restartDump; this%tid_statsDump = tid_statsDump
         this%useCoriolis = useCoriolis; this%tSimStartStats = tSimStartStats
         this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS 
-        this%useVerticalFilter = useVerticalFilter; this%useDynamicProcedure = useDynamicProcedure
+        this%useDynamicProcedure = useDynamicProcedure; this%UseDealiasFilterVert = UseDealiasFilterVert
         this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; this%gravity_nd = one/(this%Fr**2)
         this%t_start_planeDump = t_start_planeDump; this%t_stop_planeDump = t_stop_planeDump
         this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro
+        
+
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC); allocate(this%gpE)
@@ -228,6 +243,28 @@ contains
         else
             call message("WARNING: No Top BCs provided. Using defaults found in igridWallM.F90")
         end if 
+
+
+
+        ! Set numerics
+        select case(NumericalSchemeVert)
+        case(0)
+            useCompactFD = .false.
+        case(1)
+            useCompactFD = .true.
+        case default
+            call gracefulExit("Invalid choice for NUMERICALSCHEMEVERT",423)
+        end select
+
+        select case(AdvectionTerm)
+        case(0)
+            useSkewSymm = .false.
+        case(1)
+            useSkewSymm = .true.
+        case default
+            call gracefulExit("Invalid choice for ADVECTIONTERM",423)
+        end select
+
         
 
         ! STEP 3: GENERATE MESH (CELL CENTERED) 
@@ -248,10 +285,33 @@ contains
 
 
         ! STEP 5: ALLOCATE/INITIALIZE THE OPERATORS DERIVED TYPE
-        allocate(this%Ops)
-        call this%Ops%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp, &
+        if (useCompactFD) then
+            allocate(this%derEE, this%derOO, this%derW, this%derWW) 
+            call this%derEE%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
+                             isTopSided = .false., isBotSided = .true.) 
+            call this%derOO%init( this%gpC%zsz(3), this%dz, isTopEven = .false., isBotEven = .false., & 
+                             isTopSided = .false., isBotSided = .true.) 
+            call this%derW%init( this%gpC%zsz(3),  this%dz, isTopEven = .false., isBotEven = .false., & 
+                             isTopSided = .false., isBotSided = .false.) 
+            call this%derWW%init( this%gpC%zsz(3),  this%dz, isTopEven = .true., isBotEven = .true., & 
+                             isTopSided = .false., isBotSided = .false.) 
+        else
+            allocate(this%Ops)
+            call this%Ops%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp, &
+                    this%spectE%spectdecomp, .false., .false.)
+        end if        
+        allocate(this%OpsPP)
+        call this%OpsPP%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp, &
                     this%spectE%spectdecomp, .false., .false.)
         
+        if (this%UseDealiasFilterVert) then
+            allocate(this%filzC, this%filzE)
+            ierr = this%filzC%init(nz  , .false.)
+            ierr = this%filzE%init(nz+1, .false.)
+        end if
+
+
+ 
         ! STEP 6: ALLOCATE MEMORY FOR FIELD ARRAYS
         if (this%isStratified) then
             allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),7))
@@ -313,8 +373,13 @@ contains
         this%nxZ = size(this%cbuffzE,1); this%nyZ = size(this%cbuffzE,2)
 
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
-        allocate(this%poiss)
-        call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE, .true.)  
+        if (useCompactFD) then
+            allocate(this%padepoiss)
+            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, this%derW) 
+        else    
+            allocate(this%poiss)
+            call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE, .true.)  
+        end if 
                
         ! STEP 7: INITIALIZE THE FIELDS
         if (useRestartFile) then
@@ -344,10 +409,19 @@ contains
         call this%spectC%dealias(this%vhat)
         call this%spectE%dealias(this%what)
         if (this%isStratified) call this%spectC%dealias(this%That)
+        if (this%UseDealiasFilterVert) then
+            call this%ApplyCompactFilter()
+        end if
+
 
         ! Pressure projection
-        call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
-        call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        if (useCompactFD) then
+            call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
+            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        else
+            call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
+            call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        end if 
 
         ! Take it back to physical fields
         call this%spectC%ifft(this%uhat,this%u)
@@ -387,7 +461,8 @@ contains
         if (this%useSGS) then
             allocate(this%SGSmodel)
             call this%SGSmodel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
-                this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3),1, this%z0, .true., WallMType, .false., Pr)
+                this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3), this%z0, &
+                .true., WallMType, useVerticalTfilter, Pr, useWallDamping, nCWall, Cs, ComputeStokesPressure )
             call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23)
             call message(0,"SGS model initialized successfully")
         end if 
@@ -402,7 +477,7 @@ contains
             zEinZ => this%rbuffzE(:,:,:,1); zEinY => this%rbuffyE(:,:,:,1)
             call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
             call transpose_y_to_z(zinY,zinZ,this%gpC)
-            call this%Ops%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
+            call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
             zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
             ztop = zEinZ(1,1,this%nz+1)
             call transpose_z_to_y(zEinZ,zEinY,this%gpE)
@@ -428,6 +503,15 @@ contains
         this%dtRat = one 
 
         ! Final Step: Safeguard against unfinished procedures
+        if ((useCompactFD).and.(.not.useSkewSymm)) then
+            call GracefulExit("You must solve in skew symmetric form if you use CD06",54)
+        end if 
+        if ((useCompactFD).and.(ComputeStokesPressure)) then
+            call GracefulExit("You cannot compute Stokes Pressure if you use CD06",54)
+        end if 
+        if ((useCompactFD).and.(this%isStratified)) then
+            call GracefulExit("Stratified case is not currently supported using CD06",54)
+        end if 
 
         call message("IGRID initialized successfully!")
         call message("===========================================================")
@@ -481,26 +565,37 @@ contains
 
         ! Step 1: Interpolate w -> wC
         call transpose_y_to_z(this%what,zbuffE,this%sp_gpE)
-        call this%Ops%InterpZ_Edge2Cell(zbuffE,zbuffC)
+        if (useCompactFD) then
+            call this%derW%InterpZ_E2C(zbuffE,zbuffC,size(zbuffE,1),size(zbuffE,2))
+        else
+            call this%Ops%InterpZ_Edge2Cell(zbuffE,zbuffC)
+        end if
         call transpose_z_to_y(zbuffC,this%whatC,this%sp_gpC)
         call this%spectC%ifft(this%whatC,this%wC)
 
         ! Step 2: Interpolate u -> uE
         call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
-        call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
-        
+        if (useCompactFD) then
+            call this%derEE%InterpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+        else
+            call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
+            zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
+        end if 
         zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
-        zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
 
         call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
         call this%spectE%ifft(ybuffE,this%uE)
         
         ! Step 3: Interpolate v -> vE
         call transpose_y_to_z(this%vhat,zbuffC,this%sp_gpC)
-        call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
+        if (useCompactFD) then
+            call this%derEE%InterpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+        else
+            call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
+            zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
+        end if 
         
         zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
-        zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
         
         call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
         call this%spectE%ifft(ybuffE,this%vE)
@@ -519,9 +614,11 @@ contains
 
     subroutine printDivergence(this)
         class(igridWallM), intent(inout) :: this
-
-        call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
-        
+        if (useCompactFD) then
+            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        else
+            call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        end if 
     end subroutine 
 
 
@@ -647,7 +744,11 @@ contains
         call this%spectC%fft(T1C,fT1C)
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,tzE, this%sp_gpE)
-        call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        if (useCompactFD) then
+            call this%derW%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+        else
+            call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        end if 
         call transpose_z_to_y(tzC,this%u_rhs, this%sp_gpC)
         this%u_rhs = this%u_rhs + fT1C
         
@@ -658,7 +759,11 @@ contains
         call this%spectC%fft(T1C,fT1C)
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,tzE, this%sp_gpE)
-        call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        if (useCompactFD) then
+            call this%derW%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+        else
+            call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        end if 
         call transpose_z_to_y(tzC,this%v_rhs, this%sp_gpC)
         this%v_rhs = this%v_rhs + fT1C
         
@@ -669,7 +774,11 @@ contains
         T1C = dwdz*this%wC
         call this%spectC%fft(T1C,fT1C)
         call transpose_y_to_z(fT1C,tzC, this%sp_gpC)
-        call this%Ops%InterpZ_Cell2Edge(tzC,tzE,zeroC,zeroC)
+        if (useCompactFD) then
+            call this%derW%InterpZ_C2E(tzC,tzE,size(tzC,1),size(tzC,2))
+        else
+            call this%Ops%InterpZ_Cell2Edge(tzC,tzE,zeroC,zeroC)
+        end if 
         call transpose_z_to_y(tzE,this%w_rhs, this%sp_gpE)
         this%w_rhs = this%w_rhs + fT2E
 
@@ -686,7 +795,11 @@ contains
         T1C = this%wC*this%wC
         call this%spectC%fft(T1C,fT1C)
         call transpose_y_to_z(fT1C,tzC,this%sp_gpC)
-        call this%Ops%ddz_C2E(tzC,tzE,.true.,.true.)
+        if (useCompactFD) then
+            call this%derWW%ddz_C2E(tzC,tzE,size(tzC,1),size(tzC,2))
+        else
+            call this%Ops%ddz_C2E(tzC,tzE,.true.,.true.)
+        end if
         call transpose_z_to_y(tzE,fT1E,this%sp_gpE)
         this%w_rhs = this%w_rhs + fT1E
 
@@ -700,7 +813,11 @@ contains
         T1E = this%uE*this%w
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
-        call this%Ops%ddz_E2C(tzE,tzC)
+        if (useCompactFD) then
+            call this%derW%ddz_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+        else
+            call this%Ops%ddz_E2C(tzE,tzC)
+        end if 
         call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
         this%u_rhs = this%u_rhs + fT1C
         
@@ -711,7 +828,11 @@ contains
         T1E = this%vE*this%w
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
-        call this%Ops%ddz_E2C(tzE,tzC)
+        if (useCompactFD) then
+            call this%derW%ddz_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+        else
+            call this%Ops%ddz_E2C(tzE,tzC)
+        end if 
         call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
         this%v_rhs = this%v_rhs + fT1C
 
@@ -778,8 +899,11 @@ contains
         this%dtRat = this%dt/this%dtOld
 
         ! Step 1: Non Linear Term 
-        !call this%AddNonLinearTerm_Rot()
-        call this%addNonLinearTerm_skewSymm()
+        if (useSkewSymm) then
+            call this%addNonLinearTerm_skewSymm()
+        else
+            call this%AddNonLinearTerm_Rot()
+        end if 
 
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
@@ -843,19 +967,25 @@ contains
         call this%spectC%dealias(this%vhat)
         call this%spectE%dealias(this%what)
         if (this%isStratified) call this%spectC%dealias(this%That)
+        if (this%UseDealiasFilterVert) then
+            call this%ApplyCompactFilter()
+        end if
        
-
         ! Step 6: Pressure projection
-        call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
-        !call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence) 
-        
+        if (useCompactFD) then
+            call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
+            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        else
+            call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
+            call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        end if 
 
         ! Step 7: Take it back to physical fields
         call this%spectC%ifft(this%uhat,this%u)
         call this%spectC%ifft(this%vhat,this%v)
         call this%spectE%ifft(this%what,this%w)
         if (this%isStratified) call this%spectC%ifft(this%That,this%T)
-
+    
         ! STEP 8: Interpolate the cell center values of w
         call this%compute_and_bcast_surface_Mn()
         call this%interp_PrimitiveVars()
@@ -899,6 +1029,38 @@ contains
         end if  
 
     end subroutine
+
+    subroutine ApplyCompactFilter(this)
+        class(igridWallM), intent(inout), target :: this
+        complex(rkind), dimension(:,:,:), pointer :: zbuff1, zbuff2, zbuff3, zbuff4
+        zbuff1 => this%cbuffzC(:,:,:,1)
+        zbuff2 => this%cbuffzC(:,:,:,2)
+        zbuff3 => this%cbuffzE(:,:,:,1)
+        zbuff4 => this%cbuffzE(:,:,:,2)
+
+        call transpose_y_to_z(this%uhat,zbuff1, this%sp_gpC)
+        call this%filzC%filter3(zbuff1,zbuff2,this%nxZ, this%nyZ)
+        call transpose_z_to_y(zbuff1,this%uhat, this%sp_gpC)
+
+        call transpose_y_to_z(this%vhat,zbuff1, this%sp_gpC)
+        call this%filzC%filter3(zbuff1,zbuff2,this%nxZ, this%nyZ)
+        call transpose_z_to_y(zbuff1,this%vhat, this%sp_gpC)
+
+        call transpose_y_to_z(this%what,zbuff3, this%sp_gpE)
+        call this%filzC%filter3(zbuff3,zbuff4,this%nxZ, this%nyZ)
+        call transpose_z_to_y(zbuff4,this%what, this%sp_gpE)
+
+        if (this%isStratified) then
+            call transpose_y_to_z(this%That,zbuff1, this%sp_gpC)
+            call this%filzC%filter3(zbuff1,zbuff2,this%nxZ, this%nyZ)
+            call transpose_z_to_y(zbuff1,this%That, this%sp_gpC)
+        end if
+
+        nullify(zbuff1, zbuff2, zbuff3, zbuff4)
+    end subroutine
+
+
+
 
     subroutine compute_duidxj(this)
         class(igridWallM), intent(inout), target :: this
@@ -961,43 +1123,67 @@ contains
         call this%spectE%ifft(ctmpy2,dwdy)
         
         call transpose_y_to_z(this%what,ctmpz2,this%sp_gpE)
-        call this%Ops%ddz_E2C(ctmpz2,ctmpz1)
+        if (useCompactFD) then
+            call this%derW%ddz_E2C(ctmpz2,ctmpz1,size(ctmpz2,1),size(ctmpz2,2))
+        else
+            call this%Ops%ddz_E2C(ctmpz2,ctmpz1)
+        end if 
         call transpose_z_to_y(ctmpz1,dwdzH,this%sp_gpC)
         call this%spectC%ifft(dwdzH,dwdz)
 
 
         ! Compute dudz, dvdz 
         call transpose_y_to_z(this%uhat,ctmpz1,this%sp_gpC)
-        call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_u,.true.)
-            
+        if (useCompactFD) then
+            call this%derEE%ddz_C2E(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        else    
+            call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_u,.true.)
+        end if     
 
         dudz_dzby2 = ctmpz1(:,:,1)/((this%dz/two)*log(this%dz/two/this%z0))
         call this%spectE%SurfaceFilter_ip(dudz_dzby2)
         dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
 
-        !ctmpz2(:,:,1) = two*dudz_dzby2 - ctmpz2(:,:,2)
-        !ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
-        ctmpz2(:,:,1) = (ctmpz2(:,:,2) + dudz_dzby2 - ctmpz2(:,:,3))
+        ! Correct derivative at the z = dz (see Porte Agel, JFM (appendix))
+        if (nrank == 0) then
+            ctmpz2(1,1,2) = ctmpz2(1,1,2) + (0.08976d0/(kappa*this%dz))*real(this%nx,rkind)*real(this%ny,rkind)
+        end if 
+
+
+        ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dudz)
-        call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
+        if (useCompactFD) then
+            call this%derOO%InterpZ_E2C(ctmpz2,ctmpz1,size(ctmpz2,1),size(ctmpz2,2))
+        else
+            call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
+        end if 
+        ctmpz1(:,:,1) = dudz_dzby2 
         call transpose_z_to_y(ctmpz1,dudzH,this%sp_gpC)
         call this%spectC%ifft(dudzH,dudzC)
 
         call transpose_y_to_z(this%vhat,ctmpz1,this%sp_gpC)
-        call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_v,.true.)
+        if (useCompactFD) then
+            call this%derEE%ddz_C2E(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+        else
+            call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_v,.true.)
+        end if 
 
         dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
-        !ctmpz2(:,:,1) = two*dvdz_dzby2 - ctmpz2(:,:,2)
-        !ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
-        ctmpz2(:,:,1) = (ctmpz2(:,:,2) + dvdz_dzby2 - ctmpz2(:,:,3))
+        ctmpz2(:,:,1) = two*dvdz_dzby2 - ctmpz2(:,:,2)
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dvdz)
-        call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
+        if (useCompactFD) then
+            call this%derOO%InterpZ_E2C(ctmpz2,ctmpz1,size(ctmpz2,1),size(ctmpz2,2))
+        else
+            call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
+        end if 
+        ctmpz1(:,:,1) = dvdz_dzby2
         call transpose_z_to_y(ctmpz1,dvdzH,this%sp_gpC)
         call this%spectC%ifft(dvdzH,dvdzC)
 
     end subroutine
+
 
     subroutine compute_dTdxi(this)
         class(igridWallM), intent(inout), target :: this
@@ -1012,7 +1198,7 @@ contains
         call this%spectC%ifft(this%dTdyH,this%dTdyC)
    
         call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
-        call this%Ops%ddz_C2E(ctmpz1,ctmpz2,.true.,.true.)
+        call this%OpsPP%ddz_C2E(ctmpz1,ctmpz2,.true.,.true.)
         ctmpz2(:,:,this%nz+1) = ctmpz2(:,:,this%nz)
         ctmpz2(:,:,1) = two*ctmpz2(:,:,2) - ctmpz2(:,:,3) 
         call transpose_z_to_y(ctmpz2, this%dTdzH, this%sp_gpE)
@@ -1320,7 +1506,7 @@ contains
             call transpose_x_to_y(this%tau13,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
             rbuff3E(:,:,1) = -(this%ustar**2)
-            call this%Ops%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call this%compute_z_mean(rbuff3, this%tau13_mean)
 
             ! tau_22
@@ -1332,7 +1518,7 @@ contains
             call transpose_x_to_y(this%tau23,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
             rbuff3E(:,:,1) = -(this%ustar**2)*this%Vmn/this%Umn
-            call this%Ops%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call this%compute_z_mean(rbuff3, this%tau23_mean)
 
             ! tau_33

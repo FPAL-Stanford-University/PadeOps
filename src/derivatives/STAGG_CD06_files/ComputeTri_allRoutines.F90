@@ -15,10 +15,14 @@
             dg(n) = (one + alpha); dup(n) = zero
         end if 
 
-        if (this%isBotEven) then
-            ddn(1) = zero; dg(1) = (one - alpha)
+        if (this%isBotSided) then
+            ddn(1) = zero; dup(1) = zero;  
         else
-            ddn(1) = zero; dg(1) = (one + alpha)
+            if (this%isBotEven) then
+                ddn(1) = zero; dg(1) = (one - alpha)
+            else
+                ddn(1) = zero; dg(1) = (one + alpha)
+            end if 
         end if 
 
         cp(1) = dup(1)/dg(1)
@@ -53,10 +57,14 @@
             ddn(n) = two*alpha; dup(n) = zero 
         end if 
 
-        if (this%isBotEven) then
-            ddn(1) = zero; dup(1) = zero
+        if (this%isBotSided) then
+            dup(1) = zero; dup(2) = zero; ddn(2) = zero
         else
-            ddn(1) = zero; dup(1) = two*alpha
+            if (this%isBotEven) then
+                ddn(1) = zero; dup(1) = zero
+            else
+                ddn(1) = zero; dup(1) = two*alpha
+            end if 
         end if 
 
         cp(1) = dup(1)/dg(1)
@@ -193,10 +201,15 @@
             ddn(n) = zero; dg(n) = one 
         end if 
 
-        if (this%isBotEven) then
-            dup(1) = two*alpha; dg(1) = one
+        if (this%isBotSided) then
+            dup(1) = zero; ddn(1) = zero; dg(1) = one;
+            dup(2) = zero; ddn(2) = zero; dg(2) = one;
         else
-            dup(1) = zero; dg(1) = one
+            if (this%isBotEven) then
+                dup(1) = two*alpha; dg(1) = one
+            else
+                dup(1) = zero; dg(1) = one
+            end if 
         end if 
 
         cp(1) = dup(1)/dg(1)
@@ -231,10 +244,14 @@
             dg(n) = (one - alpha)
         end if 
 
-        if (this%isBotEven) then
-            dg(1) = (one + alpha)
+        if (this%isBotSided) then
+            dup(1) = zero; ddn(1) = zero; dg(1) = one;
         else
-            dg(1) = (one - alpha)
+            if (this%isBotEven) then
+                dg(1) = (one + alpha)
+            else
+                dg(1) = (one - alpha)
+            end if 
         end if 
 
         cp(1) = dup(1)/dg(1)

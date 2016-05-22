@@ -38,13 +38,15 @@ module sgsmod
         complex(rkind), pointer, dimension(:,:,:) :: nuSGShat
         
         real(rkind), dimension(:,:,:), allocatable :: rtmpY, rtmpZ, rtmpZ2, rtmpZE2, rtmpYE, rtmpZE
+        real(rkind), dimension(:,:,:), allocatable :: SSI_xbuff1, SSI_xbuff2
 
-        type(cd06stagg), allocatable :: derZ_EE, derZ_OO
-        type(staggOps), allocatable :: Ops2ndOrder
+        type(cd06stagg), allocatable :: derZ_EE, derZ_OO, derTAU33
+        type(cd06stagg), allocatable :: derOO
+        type(staggOps), allocatable :: Ops2ndOrder, OpsNU
 
         logical :: useWallFunction = .false. 
         logical :: useDynamicProcedure = .false.
-        logical :: useClipping = .false. 
+        logical :: useClipping = .false., CompStokesP = .false. 
         
         real(rkind) :: meanFact, Pr
 
@@ -53,7 +55,7 @@ module sgsmod
 
         type(gaussian) :: Gfilz 
         type(lstsq) :: Tfilz 
-        integer :: SGSmodel ! 0: Standard Smag, 1: Sigma Model 
+        integer :: SGSmodel 
 
         integer :: WallModel = 1
         real(rkind) :: WallMfactor
@@ -63,7 +65,9 @@ module sgsmod
             procedure :: destroy
             procedure, private :: DynamicProcedure
             procedure, private :: planarAverage 
+            procedure, private :: planarAverage_oop 
             procedure, private :: get_SMAG_Op
+            procedure, private :: get_ShearImpSMAG_Op
             procedure, private :: get_SIGMA_Op
             procedure, private :: testFilter_ip
             procedure, private :: testFilter_oop
@@ -123,6 +127,39 @@ contains
         nuSGS = nuSGS + S11*S11 + S22*S22 + S33*S33
         nuSGS = two*nuSGS
         nuSGS = sqrt(nuSGS)
+
+    end subroutine
+
+    subroutine get_ShearImpSMAG_Op(this, nuSGS, S11, S22, S33, S12, S13, S23)
+        class(sgs), intent(inout) :: this
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: S11, S22, S33
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: S12, S13, S23
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(out) :: nuSGS
+
+        nuSGS = S12*S12 + S13*S13 + S23*S23
+        nuSGS = two*nuSGS
+        nuSGS = nuSGS + S11*S11 + S22*S22 + S33*S33
+        nuSGS = two*nuSGS
+        nuSGS = sqrt(nuSGS)
+
+        call this%planarAverage_oop(S12,this%SSI_xbuff1)
+        this%SSI_xbuff2 = this%SSI_xbuff1*this%SSI_xbuff1
+        call this%planarAverage_oop(S13,this%SSI_xbuff1)
+        this%SSI_xbuff2 = this%SSI_xbuff2 + this%SSI_xbuff1*this%SSI_xbuff1
+        call this%planarAverage_oop(S23,this%SSI_xbuff1)
+        this%SSI_xbuff2 = this%SSI_xbuff2 + this%SSI_xbuff1*this%SSI_xbuff1
+        this%SSI_xbuff2 = two*this%SSI_xbuff2
+
+        call this%planarAverage_oop(S11,this%SSI_xbuff1)
+        this%SSI_xbuff2 = this%SSI_xbuff2 + this%SSI_xbuff1*this%SSI_xbuff1
+        call this%planarAverage_oop(S22,this%SSI_xbuff1)
+        this%SSI_xbuff2 = this%SSI_xbuff2 + this%SSI_xbuff1*this%SSI_xbuff1
+        call this%planarAverage_oop(S33,this%SSI_xbuff1)
+        this%SSI_xbuff2 = this%SSI_xbuff2 + this%SSI_xbuff1*this%SSI_xbuff1
+        this%SSI_xbuff2 = two*this%SSI_xbuff2
+        this%SSI_xbuff2 = sqrt(this%SSI_xbuff2)
+
+        nuSGS = nuSGS - this%SSI_xbuff2
 
     end subroutine
 
@@ -251,7 +288,7 @@ contains
         case (1)
             call this%get_SIGMA_Op(this%nuSGS, dudx, dudy, dudzC, dvdx, dvdy, dvdzC, dwdxC, dwdyC, dwdz)
         case (2)
-            call this%get_SMAG_Op(this%nuSGS, S11,S22,S33,S12,S13C,S23C)
+            call this%get_ShearImpSMAG_Op(this%nuSGS, S11,S22,S33,S12,S13C,S23C)
         end select
 
         if (this%useDynamicProcedure) then
@@ -281,7 +318,7 @@ contains
 
         call transpose_x_to_y(this%nuSGS,this%rtmpY,this%gpC)
         call transpose_y_to_z(this%rtmpY,this%rtmpZ,this%gpC)
-        call this%Ops2ndOrder%InterpZ_Cell2Edge(this%rtmpZ,this%rtmpZE,zero,zero)
+        call this%OpsNU%InterpZ_Cell2Edge(this%rtmpZ,this%rtmpZE,zero,zero)
         nz = size(this%rtmpz,3)
         this%rtmpzE(:,:,nz+1) = two*this%rtmpZ(:,:,nz) - this%rtmpzE(:,:,nz)
         call transpose_z_to_y(this%rtmpzE,this%rtmpYE,this%gpE)
@@ -298,10 +335,16 @@ contains
             call this%spectE%fft(tau13,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1) 
-            call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
+            if(useCompactFD) then
+                call this%derOO%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
+            else
+                call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
+            end if 
             call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
             urhs = urhs - tauhat
-            this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,nz+1) = zeroC
+            if (.not. this%CompStokesP) then
+                this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,nz+1) = zeroC
+            end if 
             call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
             call this%spectE%mtimes_ik1_ip(this%ctmpEy)
             wrhs = wrhs - this%ctmpEy
@@ -312,10 +355,16 @@ contains
             call this%spectE%fft(tau23,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1)
-            call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
+            if(useCompactFD) then
+                call this%derOO%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
+            else
+                call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
+            end if 
             call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
             vrhs = vrhs - tauhat
-            this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,nz+1) = zeroC
+            if (.not. this%CompStokesP) then
+                this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,nz+1) = zeroC
+            end if 
             call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
             call this%spectE%mtimes_ik2_ip(this%ctmpEy)
             wrhs = wrhs - this%ctmpEy
@@ -326,9 +375,16 @@ contains
             call this%spectE%fft(tau13,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = (this%WallMFactor*Umn/Uspmn)*this%ctmpCz(:,:,1) 
-            call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
+            if(useCompactFD) then
+                call this%derOO%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
+            else
+                call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
+            end if 
             call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
             urhs = urhs - tauhat
+            if (.not. this%CompStokesP) then
+                this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,nz+1) = zeroC
+            end if 
             call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
             call this%spectE%mtimes_ik1_ip(this%ctmpEy)
             wrhs = wrhs - this%ctmpEy
@@ -337,9 +393,16 @@ contains
             call this%spectE%fft(tau23,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = (this%WallMFactor*Vmn/Uspmn)*this%ctmpCz(:,:,1) 
-            call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
+            if(useCompactFD) then
+                call this%derOO%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
+            else
+                call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
+            end if 
             call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
             vrhs = vrhs - tauhat
+            if (.not. this%CompStokesP) then
+                this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,nz+1) = zeroC
+            end if 
             call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
             call this%spectE%mtimes_ik2_ip(this%ctmpEy)
             wrhs = wrhs - this%ctmpEy
@@ -366,7 +429,11 @@ contains
         ! STEP 9: tau33 -> ddz() in wrhs
         call this%spectC%fft(tau33,tauhat)
         call transpose_y_to_z(tauhat,this%ctmpCz,this%sp_gp)
-        call this%Ops2ndOrder%ddz_C2E(this%ctmpCz,this%ctmpEz,.true.,.true.)
+        if (useCompactFD) then
+            call this%derTAU33%ddz_C2E(this%ctmpCz,this%ctmpEz,size(this%ctmpCz,1),size(this%ctmpCz,2))
+        else
+            call this%Ops2ndOrder%ddz_C2E(this%ctmpCz,this%ctmpEz,.true.,.true.)
+        end if 
         call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
         wrhs = wrhs - this%ctmpEy
 

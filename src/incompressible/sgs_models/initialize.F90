@@ -1,4 +1,4 @@
-    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, zmesh, nCwall, z0, useWallModel, wallMtype,  TfilterZ, Pr)
+    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, zmesh,  z0, useWallModel, wallMtype,  TfilterZ, Pr, useWallDamping, nCWall, Cs, CompStokesP )
         class(sgs), intent(inout), target :: this
         type(spectral), intent(in), target :: spectC, spectE
         type(decomp_info), intent(in), target :: gpC, gpE
@@ -7,9 +7,9 @@
         integer, intent(in) :: modelID
         integer, intent(in), optional :: nCwall
         real(rkind), dimension(:,:,:), intent(in), optional :: zMesh
-        real(rkind), intent(in), optional :: z0, Pr
+        real(rkind), intent(in), optional :: z0, Pr, Cs
         integer, intent(in), optional :: wallMtype
-        logical, intent(in), optional :: useWallModel, TfilterZ
+        logical, intent(in), optional :: useWallModel, TfilterZ, CompStokesP, useWallDamping
         integer :: ierr
 
         this%SGSmodel = modelID 
@@ -25,6 +25,9 @@
         this%dz = dz
         if (present(TfilterZ))  useVerticalTfilter = TfilterZ
         if (present(Pr)) this%Pr = Pr
+        if (present(CompStokesP)) this%CompStokesP = CompStokesP
+        if (present(useWallDamping)) this%useWallFunction = useWallDamping   
+ 
         if (present(useWallmodel)) then
             this%useWallModel = useWallModel
             allocate(this%rbuffE(gpE%xsz(1), gpE%xsz(2), gpE%xsz(3),4))
@@ -49,7 +52,6 @@
         case(0)
             this%mconst = (this%deltaFilter*c_smag)**2
             call message(1,"SMAGORINSKY SGS model initialized")
-            this%useWallFunction = .false. 
         case(1)
             this%mconst = (this%deltaFilter*c_sigma)**2
             allocate(this%SIGMAbuffs(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),14))
@@ -57,9 +59,18 @@
                 call GracefulExit("The standard dynamic procedure is not &
                 & available with the SIGMA model.", 321)
             end if
-            this%useWallFunction = .false. 
             call message(1,"SIGMA SGS model initialized")
         case(2)
+            this%mconst = (this%deltaFilter*c_smag)**2
+            allocate(this%SSI_xbuff1(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+            allocate(this%SSI_xbuff2(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+
+            call message(1,"SHEAR-IMPROVED SMAGORINSKY SGS model initialized")
+        case default 
+            call GracefulExit("Invalid choice for SGS model.",2013)
+        end select
+
+        if (this%useWallFunction) then
             this%cSMAG_WALL => this%rbuff(:,:,:,8)
             if (this%UseDynamicProcedure) then
                 call GracefulExit("Dynamic Procedure cannot be used if damping &
@@ -70,14 +81,11 @@
                 & Procedure is used. If you intend to use the Wall model, use &
                 & igridWallM instead of igrid.", 43)
             end if 
-            this%cSMAG_WALL = ( c_smag**(-real(ncWall,rkind)) + (kappa*(zMesh/this%deltaFilter + &
+            this%cSMAG_WALL = ( Cs**(-real(ncWall,rkind)) + (kappa*(zMesh/this%deltaFilter + &
                 & z0/this%deltaFilter))**(-real(ncWall,rkind))  )**(-one/real(ncWall,rkind))
             this%cSMAG_WALL = (this%deltaFilter*this%cSMAG_WALL)**2    
-            this%useWallFunction = .true.
-            call message(1,"SMAGORINSKY (w/ Wall function) SGS model initialized")
-        case default 
-            call GracefulExit("Invalid choice for SGS model.",2013)
-        end select
+            call message(1,"Wall damping function for the SGS model initialized")
+        end if 
 
         this%nuSGS => this%rbuff(:,:,:,7)
         this%nuSGSfil => this%rbuff(:,:,:,8)
@@ -96,16 +104,23 @@
         
         allocate(this%ctmpCz2(this%sp_gp%zsz(1), this%sp_gp%zsz(2), this%sp_gp%zsz(3)))
 
-        if ((useCompactFD) .and. (.not. this%useWallModel)) then
-            allocate(this%derZ_EE, this%derZ_OO)
+        if (useCompactFD) then
+            allocate(this%derZ_EE, this%derZ_OO, this%derTAU33)
+            allocate(this%derOO)
+            call this%derTAU33%init( this%sp_gp%zsz(3), dz, isTopEven = .true., isBotEven = .true., & 
+                             isTopSided = .false., isBotSided = .true.) 
             call this%derZ_EE%init( this%sp_gp%zsz(3), dz, isTopEven = .true., isBotEven = .true., & 
                              isTopSided = .true., isBotSided = .true.) 
             call this%derZ_OO%init( this%sp_gp%zsz(3), dz, isTopEven = .false., isBotEven = .false., & 
                              isTopSided = .true., isBotSided = .true.) 
+            call this%derOO%init( this%sp_gp%zsz(3), dz, isTopEven = .false., isBotEven = .false., & 
+                             isTopSided = .false., isBotSided = .true.) 
         else
             allocate(this%Ops2ndOrder)
             call this%Ops2ndOrder%init(gpC,gpE,0,dx,dy,dz,spectC%spectdecomp,spectE%spectdecomp, .true., .true.)
         end if 
+        allocate(this%OpsNU)
+        call this%OpsNU%init(gpC,gpE,0,dx,dy,dz,spectC%spectdecomp,spectE%spectdecomp, .true., .true.)
         
         allocate(this%Lij(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
         allocate(this%Mij(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))

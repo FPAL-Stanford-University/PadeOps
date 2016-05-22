@@ -204,3 +204,25 @@
         call transpose_y_to_x(this%rtmpY,f,this%gpC)
 
     end subroutine
+
+
+    subroutine planarAverage_oop(this,f, fout)
+        class(sgs), intent(inout) :: this
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: f
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(out) :: fout
+        integer :: k
+        real(rkind) :: mnVal
+
+        call transpose_x_to_y(f,this%rtmpY,this%gpC)
+        call transpose_y_to_z(this%rtmpY,this%rtmpZ,this%gpC)
+
+        do k = 1,this%gpC%zsz(3)
+            mnVal = P_SUM(sum(this%rtmpZ(:,:,k)))*this%meanFact
+            this%rtmpZ(:,:,k) = mnVal
+        end do
+
+        call transpose_z_to_y(this%rtmpZ,this%rtmpY,this%gpC)
+        call transpose_y_to_x(this%rtmpY,fout,this%gpC)
+
+    end subroutine
+
