@@ -88,7 +88,7 @@ module IncompressibleGridWallM
 
         integer :: nxZ, nyZ
         
-        integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump
+        integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
         logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false. 
         logical :: useExtraForcing = .false., useGeostrophicForcing = .false. 
         logical :: useSGS = .false. 
@@ -112,7 +112,7 @@ module IncompressibleGridWallM
         real(rkind), dimension(:), pointer :: S11_mean, S12_mean, S13_mean, S22_mean, S23_mean, S33_mean
         real(rkind), dimension(:), pointer :: viscdissp, sgsdissp, sgscoeff_mean, PhiM
         integer :: tidSUM, tid_StatsDump, tid_compStats,tSimStartStats
-
+        logical :: normByustar
 
         ! Pointers linked to SGS stuff
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
@@ -165,9 +165,9 @@ contains
         character(len=clen) :: outputdir, inputdir
         integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, topWall = slip, SGSModelID = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
-        integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999, t_stop_planeDump = 1, ncWall = 1
-        integer :: restartFile_TID = 1, ioType = 0, restartFile_RID = 1, t_start_planeDump = 1, botBC_Temp = 0
-        real(rkind) :: dt = -one,tstop=one,CFL =-one,tSimStartStats = 10000.d0,dpfdy=zero,dPfdz=zero,ztop
+        integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999, t_stop_planeDump = 1
+        integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1, botBC_Temp = 0
+        real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop,ncWall=1.d0
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, z0 = 1.d-4, Cs = 0.17d0
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0,Gx=0.d0,Gy=0.d0,Gz=0.d0
         logical :: useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true. 
@@ -175,21 +175,22 @@ contains
         logical :: useSGS = .true., useDynamicProcedure = .false., useSpongeLayer=.false.
         logical :: useGeostrophicForcing = .false., useVerticalTfilter = .false., useWallDamping = .true. 
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
-        integer :: AdvectionTerm = 1, NumericalSchemeVert = 0
-        logical :: ComputeStokesPressure = .false., UseDealiasFilterVert = .false.
+        integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10
+        logical :: normStatsByUstar=.false., ComputeStokesPressure = .false., UseDealiasFilterVert = .false.
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, &
                         t_planeDump, t_stop_planeDump, t_start_planeDump 
-        namelist /STATS/ tid_StatsDump, tid_compStats, tSimStartStats
+        namelist /STATS/ tid_StatsDump, tid_compStats, tSimStartStats, normStatsByUstar
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, &
                           useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz
         namelist /BCs/ topWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp
         namelist /LES/ useSGS, useDynamicProcedure, useSGSclipping, SGSmodelID, useVerticalTfilter, &
                         useWallDamping, ncWall, Cs 
         namelist /WALLMODEL/ z0, wallMType 
-        namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, UseDealiasFilterVert
+        namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
+                            UseDealiasFilterVert, t_DivergenceCheck
 
 
         ! STEP 1: READ INPUT 
@@ -222,6 +223,7 @@ contains
         this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; this%gravity_nd = one/(this%Fr**2)
         this%t_start_planeDump = t_start_planeDump; this%t_stop_planeDump = t_stop_planeDump
         this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro
+        this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
         
 
 
@@ -974,10 +976,14 @@ contains
         ! Step 6: Pressure projection
         if (useCompactFD) then
             call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
-            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+            if (mod(this%step,this%t_DivergenceCheck) == 0) then
+                call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+            end if 
         else
             call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
-            call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+            if (mod(this%step,this%t_DivergenceCheck) == 0) then
+                call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+            end if 
         end if 
 
         ! Step 7: Take it back to physical fields
@@ -1456,51 +1462,62 @@ contains
         call transpose_x_to_y(this%u,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
         call this%compute_z_mean(rbuff3, this%u_mean)
+        if (this%normByustar) this%u_mean = this%u_mean/this%ustar
 
         ! Compute v - mean 
         call transpose_x_to_y(this%v,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff4,this%gpC)
         call this%compute_z_mean(rbuff4, this%v_mean)
+        if (this%normByustar)this%v_mean = this%v_mean/this%ustar
 
         ! Compute w - mean 
         call transpose_x_to_y(this%wC,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff5,this%gpC)
         call this%compute_z_mean(rbuff5, this%w_mean)
+        if (this%normByustar)this%w_mean = this%w_mean/this%ustar
 
         ! uu mean
         rbuff6 = rbuff3*rbuff3
         call this%compute_z_mean(rbuff6, this%uu_mean)
+        if (this%normByustar)this%uu_mean = this%uu_mean/(this%ustar**2)
 
         ! uv mean
         rbuff6 = rbuff3*rbuff4
         call this%compute_z_mean(rbuff6, this%uv_mean)
+        if (this%normByustar)this%uv_mean = this%uv_mean/(this%ustar**2)
 
         ! uw mean
         rbuff6 = rbuff3*rbuff5
         call this%compute_z_mean(rbuff6, this%uw_mean)
+        if (this%normByustar)this%uw_mean = this%uw_mean/(this%ustar**2)
 
         ! vv mean 
         rbuff6 = rbuff4*rbuff4
         call this%compute_z_mean(rbuff6, this%vv_mean)
+        if (this%normByustar)this%vv_mean = this%vv_mean/(this%ustar**2)
 
         ! vw mean 
         rbuff6 = rbuff4*rbuff5
         call this%compute_z_mean(rbuff6, this%vw_mean)
+        if (this%normByustar)this%vw_mean = this%vw_mean/(this%ustar**2)
 
         ! ww mean 
         rbuff6 = rbuff5*rbuff5
         call this%compute_z_mean(rbuff6, this%ww_mean)
+        if (this%normByustar)this%ww_mean = this%ww_mean/(this%ustar**2)
 
         if (this%useSGS) then
             ! tau_11
             call transpose_x_to_y(this%tauSGS_ij(:,:,:,1),rbuff2,this%gpC)
             call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
             call this%compute_z_mean(rbuff3, this%tau11_mean)
+            if (this%normByustar)this%tau11_mean = this%tau11_mean/(this%ustar**2)
 
             ! tau_12
             call transpose_x_to_y(this%tauSGS_ij(:,:,:,2),rbuff2,this%gpC)
             call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
             call this%compute_z_mean(rbuff3, this%tau12_mean)
+            if (this%normByustar)this%tau12_mean = this%tau12_mean/(this%ustar**2)
 
             ! tau_13
             call transpose_x_to_y(this%tau13,rbuff2E,this%gpE)
@@ -1508,11 +1525,13 @@ contains
             rbuff3E(:,:,1) = -(this%ustar**2)
             call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call this%compute_z_mean(rbuff3, this%tau13_mean)
+            if (this%normByustar)this%tau13_mean = this%tau13_mean/(this%ustar**2)
 
             ! tau_22
             call transpose_x_to_y(this%tauSGS_ij(:,:,:,4),rbuff2,this%gpC)
             call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
             call this%compute_z_mean(rbuff3, this%tau22_mean)
+            if (this%normByustar)this%tau22_mean = this%tau22_mean/(this%ustar**2)
 
             ! tau_23
             call transpose_x_to_y(this%tau23,rbuff2E,this%gpE)
@@ -1520,11 +1539,13 @@ contains
             rbuff3E(:,:,1) = -(this%ustar**2)*this%Vmn/this%Umn
             call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call this%compute_z_mean(rbuff3, this%tau23_mean)
+            if (this%normByustar)this%tau23_mean = this%tau23_mean/(this%ustar**2)
 
             ! tau_33
             call transpose_x_to_y(this%tauSGS_ij(:,:,:,6),rbuff2,this%gpC)
             call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
             call this%compute_z_mean(rbuff3, this%tau33_mean)
+            if (this%normByustar)this%tau33_mean = this%tau33_mean/(this%ustar**2)
 
 
             ! sgs dissipation

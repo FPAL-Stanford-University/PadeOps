@@ -5,9 +5,8 @@
         real(rkind), intent(in) :: dx, dy, dz
         logical, intent(in) :: useDynamicProcedure, useClipping
         integer, intent(in) :: modelID
-        integer, intent(in), optional :: nCwall
         real(rkind), dimension(:,:,:), intent(in), optional :: zMesh
-        real(rkind), intent(in), optional :: z0, Pr, Cs
+        real(rkind), intent(in), optional :: z0, Pr, Cs, nCWall
         integer, intent(in), optional :: wallMtype
         logical, intent(in), optional :: useWallModel, TfilterZ, CompStokesP, useWallDamping
         integer :: ierr
