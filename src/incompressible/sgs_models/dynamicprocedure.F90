@@ -1,11 +1,18 @@
     subroutine testFilter_ip(this, field)
         class(sgs), intent(inout), target :: this
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: field
-        complex(rkind), dimension(:,:,:), pointer :: ctmpY 
+        complex(rkind), dimension(:,:,:), pointer :: ctmpY, ctmpZ1, ctmpZ2
         
         ctmpY => this%cbuff(:,:,:,1)
+        ctmpZ1 => this%ctmpCz
+        ctmpZ2 => this%ctmpCz2
         call this%spectC%fft(field,ctmpY)
         call this%spectC%testFilter_ip(ctmpY)
+        if (useVerticalTfilter) then
+            call transpose_y_to_z(ctmpY,ctmpZ1,this%sp_gp)
+            call this%Gfilz%filter3(ctmpZ1,ctmpZ2,size(ctmpZ1,1),size(ctmpZ1,2))
+            call transpose_z_to_y(ctmpZ2,ctmpY,this%sp_gp)
+        end if 
         call this%spectC%ifft(ctmpY,field)
     end subroutine
    
@@ -13,11 +20,18 @@
         class(sgs), intent(inout), target :: this
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in)  :: fin
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(out) :: fout
-        complex(rkind), dimension(:,:,:), pointer :: ctmpY 
+        complex(rkind), dimension(:,:,:), pointer :: ctmpY, ctmpZ1, ctmpZ2
         
         ctmpY => this%cbuff(:,:,:,1)
+        ctmpZ1 => this%ctmpCz
+        ctmpZ2 => this%ctmpCz2
         call this%spectC%fft(fin,ctmpY)
         call this%spectC%testFilter_ip(ctmpY)
+        if (useVerticalTfilter) then
+            call transpose_y_to_z(ctmpY,ctmpZ1,this%sp_gp)
+            call this%Gfilz%filter3(ctmpZ1,ctmpZ2,size(ctmpZ1,1),size(ctmpZ1,2))
+            call transpose_z_to_y(ctmpZ2,ctmpY,this%sp_gp)
+        end if 
         call this%spectC%ifft(ctmpY,fout)
     end subroutine
    
@@ -26,10 +40,17 @@
         class(sgs), intent(in), target :: this
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: fhat 
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(out) :: fout
-        complex(rkind), dimension(:,:,:), pointer :: ctmpY 
+        complex(rkind), dimension(:,:,:), pointer :: ctmpY, ctmpZ1, ctmpZ2
 
         ctmpY => this%cbuff(:,:,:,1)
+        ctmpZ1 => this%ctmpCz
+        ctmpZ2 => this%ctmpCz2
         call this%spectC%TestFilter_oop(fhat, ctmpY)
+        if (useVerticalTfilter) then
+            call transpose_y_to_z(ctmpY,ctmpZ1,this%sp_gp)
+            call this%Gfilz%filter3(ctmpZ1,ctmpZ2,size(ctmpZ1,1),size(ctmpZ1,2))
+            call transpose_z_to_y(ctmpZ2,ctmpY,this%sp_gp)
+        end if 
         call this%spectC%ifft(ctmpY,fout)
 
     end subroutine
@@ -139,12 +160,27 @@
         
         ! STEP 8: Compute the SMAG constant and the nuSGS
         numerator = numerator/denominator
-        call this%spectC%fft(numerator,this%nuSGShat)
-        call this%spectC%dealias(this%nuSGShat)
-        call this%spectC%ifft(this%nuSGShat,numerator)
-        this%nuSGS =  numerator*(this%deltaFilter * this%deltaFilter) * this%nuSGS
+        !call this%spectC%fft(numerator,this%nuSGShat)
+        !call this%spectC%dealias(this%nuSGShat)
+        !call this%spectC%ifft(this%nuSGShat,numerator)
+        !call this%FiltCoeff(numerator)
+        !this%nuSGS =  numerator*(this%deltaFilter * this%deltaFilter) * this%nuSGS
     end subroutine
 
+    subroutine filtCoeff(this, csmag)
+        class(sgs), intent(inout) :: this
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: csmag
+
+
+        call transpose_x_to_y(csmag,this%rtmpY,this%gpC)
+        call transpose_y_to_z(this%rtmpY,this%rtmpZ,this%gpC)
+
+        call this%Gfilz%filter3(this%rtmpZ,this%rtmpZ2,size(this%rtmpZ,1),size(this%rtmpZ,2))
+
+        call transpose_z_to_y(this%rtmpZ2,this%rtmpY,this%gpC)
+        call transpose_y_to_x(this%rtmpY,csmag,this%gpC)
+
+    end subroutine
     subroutine planarAverage(this,f, useClipping)
         class(sgs), intent(inout) :: this
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: f
@@ -163,8 +199,30 @@
                 this%rtmpZ(:,:,k) = mnVal
             end if 
         end do 
-
+       
         call transpose_z_to_y(this%rtmpZ,this%rtmpY,this%gpC)
         call transpose_y_to_x(this%rtmpY,f,this%gpC)
 
     end subroutine
+
+
+    subroutine planarAverage_oop(this,f, fout)
+        class(sgs), intent(inout) :: this
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: f
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(out) :: fout
+        integer :: k
+        real(rkind) :: mnVal
+
+        call transpose_x_to_y(f,this%rtmpY,this%gpC)
+        call transpose_y_to_z(this%rtmpY,this%rtmpZ,this%gpC)
+
+        do k = 1,this%gpC%zsz(3)
+            mnVal = P_SUM(sum(this%rtmpZ(:,:,k)))*this%meanFact
+            this%rtmpZ(:,:,k) = mnVal
+        end do
+
+        call transpose_z_to_y(this%rtmpZ,this%rtmpY,this%gpC)
+        call transpose_y_to_x(this%rtmpY,fout,this%gpC)
+
+    end subroutine
+

@@ -5,12 +5,17 @@
         rhs(:,:,2:this%nE-1) = a06*(fC(:,:,2:this%n) - fC(:,:,1:this%n-1))
         rhs(:,:,3:this%nE-2) = rhs(:,:,3:this%nE-2) + b06*(fC(:,:,4:this%n) - fC(:,:,1:this%n-3))
 
-        if (this%isBotEven) then
-            rhs(:,:,1) = zero
-            rhs(:,:,2) = rhs(:,:,2) + b06*(fC(:,:,3) - fC(:,:,1))
+        if (this%isBotSided) then
+            rhs(:,:,1) = zero;
+            rhs(:,:,2) = (fC(:,:,2) - fC(:,:,1))*this%onebydx
         else
-            rhs(:,:,1) = two*b06*fC(:,:,2) + two*a06*fC(:,:,1)
-            rhs(:,:,2) = rhs(:,:,2) + b06*(fC(:,:,3) + fC(:,:,1))
+            if (this%isBotEven) then
+                rhs(:,:,1) = zero
+                rhs(:,:,2) = rhs(:,:,2) + b06*(fC(:,:,3) - fC(:,:,1))
+            else
+                rhs(:,:,1) = two*b06*fC(:,:,2) + two*a06*fC(:,:,1)
+                rhs(:,:,2) = rhs(:,:,2) + b06*(fC(:,:,3) + fC(:,:,1))
+            end if 
         end if 
 
         if (this%isTopEven) then

@@ -138,12 +138,6 @@ contains
         write(fid) fieldsPhys(:,:,:,3)
         close(fid)
         
-        write(tempname,"(A3,I2.2,A2,I4.4,A2,I6.6,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_nuSG",".out"
-        fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
-        open(fid,file=trim(fname),form='unformatted',status='replace')
-        write(fid) gp%nu_SGS(:,:,:)
-        close(fid)
-        
         if (nrank == 0) then
             write(headerfid,"(I8)") tid
         end if  

@@ -219,7 +219,7 @@ contains
         class(poisson), intent(inout), target :: this
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: uhat, vhat
         complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: what
-        complex(rkind), dimension(:,:), pointer :: dpdz0
+        complex(rkind), dimension(:,:), pointer :: dpdz0, dpdzN
 
         ! Compute dudx_hat and add dvdy_hat
         this%tmpbuff = this%spect%k1*uhat 
@@ -233,11 +233,12 @@ contains
         ! Compute dwdz_hat and add
         call this%Ops%ddz_E2C(this%tmpbuffz1E,this%tmpbuffz2C)
         this%tmpbuffz1C = this%tmpbuffz1C + this%tmpbuffz2C
-
+        
         ! Poisson Solver in z decomp
         if (this%usingWallModel) then
             dpdz0 => this%tmpbuffz1E(:,:,1)
-            call this%PoissonSolveZ_inPlace_WallM(this%tmpbuffz1C, dpdz0)
+            dpdzN => this%tmpbuffz1E(:,:,this%nz_inZ+1)
+            call this%PoissonSolveZ_inPlace_WallM(this%tmpbuffz1C, dpdz0, dpdzN)
         else
             call this%PoissonSolveZ_inPlace(this%tmpbuffz1C)
         end if
@@ -246,6 +247,7 @@ contains
         call this%Ops%ddz_C2E(this%tmpbuffz1C,this%tmpbuffz2E,.true.,.true.)
         if (this%usingWallModel) then
             this%tmpbuffz2E(:,:,1) = dpdz0
+            this%tmpbuffz2E(:,:,this%nz_inZ+1) = dpdzN
         end if 
         this%tmpbuffz1E = this%tmpbuffz1E - this%tmpbuffz2E
         this%tmpbuffz1E(:,:,1) = zeroC ! <- This should be zero either way
@@ -379,11 +381,11 @@ contains
     end subroutine    
 
 
-    subroutine PoissonSolveZ_InPlace_WallM(this,fhat,dpdz0)
+    subroutine PoissonSolveZ_InPlace_WallM(this,fhat,dpdz0, dpdzN)
         ! Assuming that everything is in z-decomp
         class(poisson), intent(in) :: this 
         complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)), intent(inout):: fhat
-        complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2)), intent(in):: dpdz0
+        complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2)), intent(in):: dpdz0, dpdzN
         real(rkind), dimension(this%nz_inZ) :: a, b, c
         integer :: i, j, ii, jj
         real(rkind) :: k1, k2, aa       
@@ -408,6 +410,7 @@ contains
                 else
                     aa = (-(k1*this%dz)**2 - (k2*this%dz)**2 - two)
                     rhs(1) = rhs(1) + this%dz*dpdz0(ii,jj)
+                    rhs(this%nz_inZ) = rhs(this%nz_inZ) + this%dz*dpdzN(ii,jj)
                     call solveTridiag_Poiss_InPlace_quick(aa,one,one,rhs,this%nz_inZ)
                     fhat(ii,jj,:) = rhs
                 end if 

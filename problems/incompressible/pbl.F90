@@ -40,9 +40,6 @@ program pbl
     do while (igp%tsim < igp%tstop) 
        
        call igp%AdamsBashforth()     !<-- Time stepping scheme + Pressure Proj. (see hit_grid.F90)
-      
-       igp%step = igp%step + 1 
-       igp%tsim = igp%tsim + igp%dt
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
     end do 
     

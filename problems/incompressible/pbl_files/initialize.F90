@@ -2,21 +2,20 @@ module pbl_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
-    
+    use constants, only: kappa 
     implicit none
-    real(rkind)  :: Lx, Ly, Lz, G = 15._rkind
-    real(rkind)  :: ustar = 0.45_rkind, H = 1000._rkind, z0 = 0.1_rkind
-    real(rkind)  :: f = 1.45d-4
     integer :: seedu = 321341
     integer :: seedv = 423424
     integer :: seedw = 131344
-    real(rkind), parameter :: kappa = 0.41d0
-    real(rkind) :: randomScaleFact = 0.005_rkind ! 5% of the mean value
+    real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
+    
+    real(rkind), parameter :: xdim = 1000._rkind, udim = 0.45_rkind
+    real(rkind), parameter :: timeDim = xdim/udim
 
 end module     
 
-subroutine meshgen(decomp, dx, dy, dz, mesh)
+subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     use pbl_parameters    
     use kind_parameters,  only: rkind
     use constants,        only: one, two, three, four, pi
@@ -26,10 +25,19 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     type(decomp_info),                                          intent(in)    :: decomp
     real(rkind),                                                intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
-    integer :: i,j,k
+    real(rkind) :: z0init
+    integer :: i,j,k, ioUnit
+    character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
+    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
 
-    Lx = three; Ly = three; Lz = one
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PBLINPUT)
+    close(ioUnit)    
+
+    !Lx = two*pi; Ly = two*pi; Lz = one
 
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
@@ -62,7 +70,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, fieldsC, fieldsE, u_g, Ro)
+subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use pbl_parameters
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, three, four, pi, half
@@ -75,33 +83,26 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
     character(len=*),                intent(in)    :: inputfile
-    real(rkind),                     intent(in)    :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
-    real(rkind), intent(out), optional :: Ro, u_g
     integer :: ioUnit, k
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
     real(rkind) :: mfactor, sig, dpdxF
     real(rkind), dimension(:,:,:), allocatable :: randArr
-    real(rkind) :: z0nd, epsnd = 0.1
+    real(rkind) :: z0init, epsnd = 0.1
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
-    real(rkind) :: delta_Ek = 0.08, Xperiods = 1, Yperiods = 1, Zperiods = 1
-    real(rkind) :: zpeak = 0.3
-    namelist /PBLINPUT/ H, z0, dpdxF 
-
+    real(rkind) :: delta_Ek = 0.08, Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
+    real(rkind) :: zpeak = 0.2d0
+    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PBLINPUT)
     close(ioUnit)    
 
-    ! No Coriolis right now
-    u_g = one
-    Ro = G/(H*f)
-    
-    z0nd = z0/H
 
     u  => fieldsC(:,:,:,1)
     v  => fieldsC(:,:,:,2)
@@ -112,14 +113,12 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    ustar = 0.45d0
-    epsnd = 0.0005d0*1000.d0
+    epsnd = 5.d0
 
-    u = (one/kappa)*log(z/z0nd) + (half/ustar)*Lx*epsnd*cos(two*pi*x*Xperiods/Lx)*sin(two*pi*y*Yperiods/Ly)*cos(two*pi*z*Zperiods/Lz)
-    v = (half*epsnd*Ly/ustar)*sin(two*pi*x*Xperiods/Lx)*cos(two*pi*y*Yperiods/Ly)*cos(two*pi*z*Zperiods/Lz)
-    wC= (epsnd*Lz/ustar)*sin(two*pi*x*Xperiods/Lx)*sin(two*pi*y*Yperiods/Ly)*sin(two*pi*z*Zperiods/Lz)
-    
-
+    u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    wC= zero  
+   
     ! Add random numbers
     !allocate(randArr(size(u,1),size(u,2),size(u,3)))
     !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
@@ -132,7 +131,7 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
     !allocate(randArr(size(v,1),size(v,2),size(v,3)))
     !call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
     !do k = 1,size(v,3)
-    !    sig = G*randomScaleFact*exp(-z(1,1,k)/delta_Ek)*sin(z(1,1,k)/delta_Ek)
+    !    sig = randomScaleFact*z(1,1,k)*exp(-half*(z(1,1,k)/zpeak/Lz)**2)
     !    v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
     !end do  
     !deallocate(randArr)
@@ -167,40 +166,29 @@ subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inputfile, mesh, field
 end subroutine
 
 
-subroutine getForcing(inputfile, dpdx)
-    use kind_parameters, only: rkind
-    use constants, only: zero, one 
-    use pbl_parameters    
-    implicit none
-    character(len=*), intent(in) :: inputfile 
-    real(rkind), intent(out) :: dpdx
-    integer :: ioUnit
-    real(rkind) :: dpdxF = 1.d0 
-    namelist /PBLINPUT/ H, z0, dpdxF 
-    
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PBLINPUT)
-    close(ioUnit)    
-    
-    dpdx = dpdxF
-    
-
-end subroutine
-
 subroutine set_planes_io(xplanes, yplanes, zplanes)
     implicit none
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 2
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
     xplanes = [64]
     yplanes = [64]
-    zplanes = [5 , 30]
+    zplanes = [30]
 
 end subroutine
 
 
+subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
+    use kind_parameters,    only: rkind
+    use constants,          only: zero
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), intent(out) :: Tsurf, dTsurf_dt
+
+    Tsurf = zero; dTsurf_dt = zero;
+
+    ! Do nothing really since this is an unstratified simulation
+end subroutine

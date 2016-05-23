@@ -428,8 +428,7 @@ contains
             call this%readRestartFile(restartfile_TID, restartfile_RID)
             this%step = restartfile_TID
         else 
-            call initfields_stagg(this%gpC, this%gpE, this%dx, this%dy, this%dz, &
-                inputfile, this%mesh, this%PfieldsC, this%PfieldsE, u_g, this%Ro)! <-- this procedure is part of user defined HOOKS
+            call initfields_stagg(this%gpC, this%gpE, inputfile, this%mesh, this%PfieldsC, this%PfieldsE, u_g, this%Ro)! <-- this procedure is part of user defined HOOKS
             this%step = 0
             this%tsim = zero
             call this%dumpRestartfile()
