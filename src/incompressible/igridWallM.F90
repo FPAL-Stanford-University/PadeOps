@@ -370,7 +370,7 @@ contains
 
         allocate(this%rbuffxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2))
         allocate(this%rbuffyE(this%gpE%ysz(1),this%gpE%ysz(2),this%gpE%ysz(3),2))
-        allocate(this%rbuffzE(this%gpE%zsz(1),this%gpE%zsz(2),this%gpE%zsz(3),2))
+        allocate(this%rbuffzE(this%gpE%zsz(1),this%gpE%zsz(2),this%gpE%zsz(3),4))
         allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
         this%nxZ = size(this%cbuffzE,1); this%nyZ = size(this%cbuffzE,2)
 
@@ -1445,13 +1445,13 @@ contains
     subroutine compute_stats(this)
         class(igridWallM), intent(inout), target :: this
         type(decomp_info), pointer :: gpC
-        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3E, rbuff2E, rbuff3, rbuff4, rbuff5, rbuff6
+        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3E, rbuff2E, rbuff3, rbuff4, rbuff5, rbuff5E, rbuff4E, rbuff6E, rbuff6
 
         rbuff1  => this%rbuffxC(:,:,:,1); rbuff2  => this%rbuffyC(:,:,:,1);
         rbuff2E => this%rbuffyE(:,:,:,1); rbuff3E => this%rbuffzE(:,:,:,1);
-        rbuff3 => this%rbuffzC(:,:,:,1); 
-        rbuff4 => this%rbuffzC(:,:,:,2); 
-        rbuff5 => this%rbuffzC(:,:,:,3); 
+        rbuff3 => this%rbuffzC(:,:,:,1); rbuff4E => this%rbuffzE(:,:,:,2);
+        rbuff4 => this%rbuffzC(:,:,:,2); rbuff5E => this%rbuffzE(:,:,:,3)
+        rbuff5 => this%rbuffzC(:,:,:,3); rbuff6E => this%rbuffzE(:,:,:,4)
         rbuff6 => this%rbuffzC(:,:,:,4); 
         !rbuff7 => this%rbuffzC(:,:,:,5); 
         gpC => this%gpC
@@ -1470,11 +1470,23 @@ contains
         call this%compute_z_mean(rbuff4, this%v_mean)
         if (this%normByustar)this%v_mean = this%v_mean/this%ustar
 
-        ! Compute w - mean 
+        ! Compute wC - mean 
         call transpose_x_to_y(this%wC,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff5,this%gpC)
         call this%compute_z_mean(rbuff5, this%w_mean)
         if (this%normByustar)this%w_mean = this%w_mean/this%ustar
+
+        ! take w from x -> z decomp
+        call transpose_x_to_y(this%w,rbuff2E,this%gpE)
+        call transpose_y_to_z(rbuff2E,rbuff5E,this%gpE)
+
+        ! take uE from x -> z decomp
+        call transpose_x_to_y(this%uE,rbuff2E,this%gpE)
+        call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+
+        ! take vE from x -> z decomp
+        call transpose_x_to_y(this%vE,rbuff2E,this%gpE)
+        call transpose_y_to_z(rbuff2E,rbuff4E,this%gpE)
 
         ! uu mean
         rbuff6 = rbuff3*rbuff3
@@ -1487,7 +1499,8 @@ contains
         if (this%normByustar)this%uv_mean = this%uv_mean/(this%ustar**2)
 
         ! uw mean
-        rbuff6 = rbuff3*rbuff5
+        rbuff6E = rbuff3E*rbuff5E
+        call this%OpsPP%InterpZ_Edge2Cell(rbuff6E,rbuff6)
         call this%compute_z_mean(rbuff6, this%uw_mean)
         if (this%normByustar)this%uw_mean = this%uw_mean/(this%ustar**2)
 
@@ -1497,7 +1510,8 @@ contains
         if (this%normByustar)this%vv_mean = this%vv_mean/(this%ustar**2)
 
         ! vw mean 
-        rbuff6 = rbuff4*rbuff5
+        rbuff6E = rbuff4E*rbuff5E
+        call this%OpsPP%InterpZ_Edge2Cell(rbuff6E,rbuff6)
         call this%compute_z_mean(rbuff6, this%vw_mean)
         if (this%normByustar)this%vw_mean = this%vw_mean/(this%ustar**2)
 
