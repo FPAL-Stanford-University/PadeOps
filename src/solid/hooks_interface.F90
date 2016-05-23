@@ -1,6 +1,7 @@
 module sgrid_hooks
     use kind_parameters, only: rkind
     use decomp_2d, only: decomp_info
+    use DerivativesMod, only: derivatives
     implicit none
 
     interface meshgen
@@ -47,15 +48,17 @@ module sgrid_hooks
     end interface
 
     interface hook_output
-        subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
+        subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
             import :: rkind
             import :: decomp_info
+            import :: derivatives
             character(len=*),                intent(in) :: outputdir
             type(decomp_info),               intent(in) :: decomp
             real(rkind),                     intent(in) :: dx,dy,dz,tsim
             integer,                         intent(in) :: vizcount
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(in) :: fields
+            type(derivatives),               intent(in) :: der
 
         end subroutine
     end interface
