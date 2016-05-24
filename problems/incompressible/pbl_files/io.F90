@@ -96,10 +96,9 @@ contains
 
         ! Now perform the initializing data dump
         !call dumpData4Matlab(gp)
-        call gp%dumpFullField(gp%u,'uVel')
-        call gp%dumpFullField(gp%v,'vVel')
-        call gp%dumpFullField(gp%wC,'wVel')
-        call gp%dumpFullField(gp%nu_SGS,'nuSG')
+        !call gp%dumpFullField(gp%u,'uVel')
+        !call gp%dumpFullField(gp%v,'vVel')
+        !call gp%dumpFullField(gp%wC,'wVel')
     end subroutine
 
     subroutine dumpData4Matlab(gp)
