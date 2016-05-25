@@ -1,1 +1,0 @@
-/share/apps/mvapich2/2.2b-intel-16/bin/mpicc     -v CMakeFiles/cmTryCompileExec755996483.dir/CMakeCCompilerABI.c.o  -o cmTryCompileExec755996483 -rdynamic  
