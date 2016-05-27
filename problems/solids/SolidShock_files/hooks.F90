@@ -269,7 +269,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
     integer                                     :: outputunit=229
 
-    character(len=clen) :: outputfile, str
+    character(len=500) :: outputfile, str
     integer :: i
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &

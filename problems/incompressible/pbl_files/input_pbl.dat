@@ -9,7 +9,7 @@ CFL                   = 0.10D0       ! CFL criterion for calculating the time st
 dt                    = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .TRUE.     ! Set to false if it's a fresh simulation 
+useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
 restartFile_TID       = 56000        ! TimeID of the restart file being used
 restartFile_RID       = 10          ! RunID of the restart file being used
 /
@@ -23,7 +23,7 @@ t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproj
 /
 /
 &IO
-RunID                 = 10          ! Run Label (All output files will be tagged with this nubber)
+RunID                 = 10          ! Run Label (All output files will be tagged with this number)
 t_restartDump         = 4000        ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump            = 4000        ! Data dumping frequency (# of timesteps)
 ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
@@ -68,10 +68,10 @@ SpongeTscale          = 50.d0       ! e-folding time to dt ratio (somewhere betw
 &LES
 useSGS                = .TRUE.      ! Use a subgrid scale model? 
 SGSModelID            = 0           ! 0: smagorinsky, 1: sigma, 2: Shear Improved Smagorinsky
-useDynamicProcedure   = .TRUE.     ! Use the standard dynamic procedure 
+useDynamicProcedure   = .FALSE.     ! Use the standard dynamic procedure 
 useSGSClipping        = .TRUE.      ! Clip the constant values when they are negative
 useVerticalTfilter    = .FALSE.     ! Test filter in the vertical direction? Used for Dynamic Procedure
-useWallDamping        = .FALSE.      ! Use the Wall Damping Function 
+useWallDamping        = .TRUE.      ! Use the Wall Damping Function 
 ncWall                = 1.d0      ! Wall Damping Function Exponent
 Cs                    = 0.14d0      ! Asymptotic model constant (wall damping function)
 /
@@ -80,6 +80,9 @@ Cs                    = 0.14d0      ! Asymptotic model constant (wall damping fu
 wallMType             = 1           ! 0: Moeng's original model, 1: Bou-Zeid's fully local model
 z0                    = 1.d-4       ! Roughness length scale (CAREFUL: This is a non-dimensionalized number)
 /
+&WINDTUBINES
+useWindTurbines       = .FALSE.
+TurbineInfoFile       = "Some Directory"
 /
 &PBLINPUT
 Lx                    = 12.5663706143591d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)

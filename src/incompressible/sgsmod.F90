@@ -18,6 +18,8 @@ module sgsmod
 
     real(rkind) :: c_sigma = 1.6_rkind
     real(rkind) :: c_smag = 0.17_rkind
+    real(rkind) :: c_mgm = 1.0_rkind
+    integer, parameter     :: mgm_option = 2
     real(rkind), parameter :: deltaRatio = 2.0_rkind
     complex(rkind), parameter :: zeroC = zero + imi*zero
     logical :: useVerticalTfilter = .false. 
@@ -27,7 +29,7 @@ module sgsmod
     type :: sgs
         private
         type(spectral), pointer :: spectC, spectE 
-        real(rkind), allocatable, dimension(:,:,:,:) :: rbuff, rbuffE, SIGMAbuffs, Lij, Mij
+        real(rkind), allocatable, dimension(:,:,:,:) :: rbuff, rbuffE, SIGMAbuffs, Lij, Mij, MGMbuffs, MGMbuffsE
         real(rkind), pointer, dimension(:,:,:) :: cSMAG_WALL, nuSGS, nuSGSfil,nuSGSE, nuSCA, nuSCAE
         real(rkind) :: deltaFilter, mconst, deltaTFilter 
         type(decomp_info), pointer :: sp_gp, gpC
@@ -47,11 +49,13 @@ module sgsmod
         logical :: useWallFunction = .false. 
         logical :: useDynamicProcedure = .false.
         logical :: useClipping = .false., CompStokesP = .false. 
+        logical :: eddyViscModel = .true.
         
         real(rkind) :: meanFact, Pr
 
         logical :: useWallModel = .false.  
-        real(rkind) :: z0, dz
+        real(rkind) :: z0, dz, dxsq, dysq, dzsq
+        integer :: nz
 
         type(gaussian) :: Gfilz 
         type(lstsq) :: Tfilz 
@@ -69,6 +73,7 @@ module sgsmod
             procedure, private :: get_SMAG_Op
             procedure, private :: get_ShearImpSMAG_Op
             procedure, private :: get_SIGMA_Op
+            procedure, private :: get_MGM_Op
             procedure, private :: testFilter_ip
             procedure, private :: testFilter_oop
             procedure, private :: testFilter_oop_C2R
@@ -84,6 +89,7 @@ contains
 
 #include "sgs_models/initialize.F90"
 #include "sgs_models/sigma_model_get_nuSGS.F90"
+#include "sgs_models/mgm_model.F90"
 
     subroutine link_pointers(this,nuSGS,c_SGS, tauSGS_ij, tau13, tau23)
         class(sgs), intent(in), target :: this
@@ -216,7 +222,7 @@ contains
 
         
         do k = 1,size(this%nuSGS,3)
-            print*, sum(this%nuSGS(:,:,k))/(size(this%nuSGS,1)*size(this%nuSGS,2))
+            !print*, sum(this%nuSGS(:,:,k))/(size(this%nuSGS,1)*size(this%nuSGS,2))
         end do 
 
         tau11 = -two*this%nuSGS*S11; tau12 = -two*this%nuSGS*S12; tau13 = -two*this%nuSGS*S13
@@ -289,21 +295,24 @@ contains
             call this%get_SIGMA_Op(this%nuSGS, dudx, dudy, dudzC, dvdx, dvdy, dvdzC, dwdxC, dwdyC, dwdz)
         case (2)
             call this%get_ShearImpSMAG_Op(this%nuSGS, S11,S22,S33,S12,S13C,S23C)
+        case (3)
+            call this%get_MGM_Op(duidxjC, duidxjE)!, maxDissp)
         end select
 
+        !print*, this%nuSGS(3,2,3)
         if (this%useDynamicProcedure) then
             if (mod(this%mstep,ApplyDynEvery) == 0) then
                 call this%DynamicProcedure(u,v,wC,uhat, vhat, wChat, duidxjC,duidxjChat) 
             end if
             this%nuSGS = this%Lij(:,:,:,1) * (this%deltafilter * this%deltafilter) * this%nuSGS  
-        else
+        elseif (this%eddyViscModel) then
             if (this%useWallFunction) then
+                !print*, this%deltaFIlter, this%cSMAG_WALL(3,2,3)
                 this%nuSGS = this%cSMAG_WALL*this%nuSGS
             else
                 this%nuSGS = this%mconst*this%nuSGS
             end if 
         end if
-
 
 
         this%mstep = this%mstep + 1
@@ -312,19 +321,33 @@ contains
         end if 
 
         ! STEP 3: Compute TAUij
-        this%nuSGS = -two*this%nuSGS
-        tau11 = this%nuSGS*S11; tau22 = this%nuSGS*S22; tau33 = this%nuSGS*S33
-        tau12 = this%nuSGS*S12
+        if(this%eddyViscModel) then
+          this%nuSGS = -two*this%nuSGS
+          tau11 = this%nuSGS*S11; tau22 = this%nuSGS*S22; tau33 = this%nuSGS*S33
+          tau12 = this%nuSGS*S12
 
-        call transpose_x_to_y(this%nuSGS,this%rtmpY,this%gpC)
-        call transpose_y_to_z(this%rtmpY,this%rtmpZ,this%gpC)
-        call this%OpsNU%InterpZ_Cell2Edge(this%rtmpZ,this%rtmpZE,zero,zero)
-        nz = size(this%rtmpz,3)
-        this%rtmpzE(:,:,nz+1) = two*this%rtmpZ(:,:,nz) - this%rtmpzE(:,:,nz)
-        call transpose_z_to_y(this%rtmpzE,this%rtmpYE,this%gpE)
-        call transpose_y_to_x(this%rtmpYE,this%nuSGSE,this%gpE)
-        tau13 = this%nuSGSE * S13
-        tau23 = this%nuSGSE * S23
+          call transpose_x_to_y(this%nuSGS,this%rtmpY,this%gpC)
+          call transpose_y_to_z(this%rtmpY,this%rtmpZ,this%gpC)
+          call this%OpsNU%InterpZ_Cell2Edge(this%rtmpZ,this%rtmpZE,zero,zero)
+          this%rtmpzE(:,:,this%nz+1) = two*this%rtmpZ(:,:,this%nz) - this%rtmpzE(:,:,this%nz)
+          call transpose_z_to_y(this%rtmpzE,this%rtmpYE,this%gpE)
+          call transpose_y_to_x(this%rtmpYE,this%nuSGSE,this%gpE)
+          tau13 = this%nuSGSE * S13
+          tau23 = this%nuSGSE * S23
+        endif
+      
+        !if(nrank==0) then
+        !  print *, "delta", this%deltaFilter, this%mconst
+        !  print*, "duidxj:", dudx(3,2,3), dudy(3,2,3), dudzC(3,2,3)
+        !  print*, "duidxj:", dvdx(3,2,3), dvdy(3,2,3), dvdzC(3,2,3)
+        !  print*, "duidxj:", dwdxC(3,2,3), dwdyC(3,2,3), dwdz(3,2,3)
+        !  print*, "tau11:", tau11(3,2,3)
+        !  print*, "tau22:", tau22(3,2,3)
+        !  print*, "tau33:", tau33(3,2,3)
+        !  print*, "tau13:", tau13(3,2,3)
+        !  print*, "tau23:", tau23(3,2,3)
+        !  print*, "tau12:", tau12(3,2,3)
+        !endif
 
         select case(this%wallModel) 
         case(0)
@@ -343,7 +366,7 @@ contains
             call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
             urhs = urhs - tauhat
             if (.not. this%CompStokesP) then
-                this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,nz+1) = zeroC
+                this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,this%nz+1) = zeroC
             end if 
             call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
             call this%spectE%mtimes_ik1_ip(this%ctmpEy)
@@ -363,7 +386,7 @@ contains
             call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
             vrhs = vrhs - tauhat
             if (.not. this%CompStokesP) then
-                this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,nz+1) = zeroC
+                this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,this%nz+1) = zeroC
             end if 
             call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
             call this%spectE%mtimes_ik2_ip(this%ctmpEy)
@@ -383,7 +406,7 @@ contains
             call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
             urhs = urhs - tauhat
             if (.not. this%CompStokesP) then
-                this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,nz+1) = zeroC
+                this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,this%nz+1) = zeroC
             end if 
             call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
             call this%spectE%mtimes_ik1_ip(this%ctmpEy)
@@ -401,7 +424,7 @@ contains
             call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
             vrhs = vrhs - tauhat
             if (.not. this%CompStokesP) then
-                this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,nz+1) = zeroC
+                this%ctmpEz(:,:,1) = zeroC; this%ctmpEz(:,:,this%nz+1) = zeroC
             end if 
             call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
             call this%spectE%mtimes_ik2_ip(this%ctmpEy)
@@ -438,7 +461,6 @@ contains
         wrhs = wrhs - this%ctmpEy
 
     end subroutine
-    
 
 #include "sgs_models/dynamicprocedure.F90"
 
