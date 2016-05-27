@@ -423,7 +423,7 @@ contains
         ! Pressure projection
         if (useCompactFD) then
             call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
-            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
         else
             call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
             call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
@@ -990,7 +990,7 @@ contains
         if (useCompactFD) then
             call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
             if (mod(this%step,this%t_DivergenceCheck) == 0) then
-                call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+                call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
             end if 
         else
             call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)

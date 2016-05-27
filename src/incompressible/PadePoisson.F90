@@ -249,7 +249,7 @@ contains
 
         real(rkind), dimension(this%sp_gp%xsz(1),this%sp_gp%xsz(2),this%sp_gp%xsz(3)), intent(out) :: divergence
 
-        real(rkind) :: maxDiv
+        real(rkind) :: maxDiv, myMaxDiv
         integer :: ii, jj, kk, ierr
         logical, optional, intent(in) :: fixDiv
         logical :: fixDivergence
@@ -277,10 +277,11 @@ contains
 
         ! Step 3: Take inverse Fourier Transform
         call this%sp%ifft(this%f2dy,divergence)
-
+        !divergence = abs(divergence)
 
         if (fixDivergence) then
-            maxDiv = p_maxval(abs(divergence))
+            myMaxDiv = maxval(divergence)
+            maxDiv = p_maxval(myMaxDiv)
 
             if (maxDiv > 1d-13) then
                 call this%PressureProjection(uhat,vhat,what)
@@ -299,7 +300,9 @@ contains
                 end do  
                 ! Step 3: Take inverse Fourier Transform
                 call this%sp%ifft(this%f2dy,divergence)
-                maxDiv = p_maxval(abs(divergence))
+                !divergence = abs(divergence)
+                myMaxDiv = maxval(divergence)
+                maxDiv = p_maxval(myMaxDiv)
                 
                 if (maxDiv > 1d-10) then
                     call this%PressureProjection(uhat,vhat,what)

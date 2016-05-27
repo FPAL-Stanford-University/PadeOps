@@ -13,7 +13,7 @@ module temporalHook
     integer :: nt_print2screen = 20
     integer :: tid_statsDump = 5000
     integer :: tid_compStats = 100
-    real(rkind) :: time_startDumping = 10.0_rkind
+    real(rkind) :: time_startDumping = 10.0_rkind, maxDiv, DomMaxDiv
     integer :: ierr 
     
     integer :: tid_start_planes = 1
@@ -26,10 +26,14 @@ contains
         class(igridWallM), intent(inout) :: gp 
       
         if (mod(gp%step,nt_print2screen) == 0) then
+            maxDiv = maxval(gp%divergence)
+            DomMaxDiv = p_maxval(maxDiv)
             call message(0,"Time",gp%tsim)
             call message(1,"Max KE:",gp%getMaxKE())
             call message(1,"Max nuSGS:",gp%max_nuSGS)
             call message(1,"u_star:",gp%ustar)
+            call message(1,"TIDX:",gp%step)
+            call message(1,"MaxDiv:", DomMaxDiv)
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 
