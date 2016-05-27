@@ -19,6 +19,7 @@ module IncompressibleGridWallM
     use cd06staggstuff, only: cd06stagg
     use cf90stuff, only: cf90
     use PadePoissonMod, only: Padepoisson 
+    use TurbineMod, only: TurbineArray 
 
     implicit none
 
@@ -95,7 +96,7 @@ module IncompressibleGridWallM
         logical :: UseDealiasFilterVert = .false.
         logical :: useDynamicProcedure 
         logical :: useCFL = .false.  
-        logical :: dumpPlanes = .false.
+        logical :: dumpPlanes = .false., useWindTurbines = .false. 
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
@@ -118,7 +119,10 @@ module IncompressibleGridWallM
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
         real(rkind), dimension(:,:,:)  , pointer :: nu_SGS, tau13, tau23
         real(rkind), dimension(:,:,:)  , pointer :: c_SGS 
-        
+       
+        ! Wind Turbine stuff 
+        type(turbineArray), allocatable :: WindTurbineArr
+
         integer, dimension(:), allocatable :: xplanes, yplanes, zplanes
         ! Note that c_SGS is linked to a variable that is constant along & 
         ! i, j but is still stored as a full 3 rank array. This is mostly done to
@@ -162,7 +166,7 @@ contains
     subroutine init(this,inputfile)
         class(igridWallM), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
-        character(len=clen) :: outputdir, inputdir
+        character(len=clen) :: outputdir, inputdir, turbineInfoFile
         integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, topWall = slip, SGSModelID = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999, t_stop_planeDump = 1
@@ -170,9 +174,9 @@ contains
         real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop,ncWall=1.d0
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, z0 = 1.d-4, Cs = 0.17d0
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0,Gx=0.d0,Gy=0.d0,Gz=0.d0
-        logical :: useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true. 
-        logical :: isStratified=.false.,dumpPlanes = .false., useSGSclipping = .true.,useExtraForcing = .false.
-        logical :: useSGS = .true., useDynamicProcedure = .false., useSpongeLayer=.false.
+        logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true. 
+        logical ::isStratified=.false.,dumpPlanes = .false., useSGSclipping = .true.,useExtraForcing = .false.
+        logical ::useSGS = .true.,useDynamicProcedure = .false.,useSpongeLayer=.false.,useWindTurbines = .false.
         logical :: useGeostrophicForcing = .false., useVerticalTfilter = .false., useWallDamping = .true. 
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10
@@ -188,7 +192,8 @@ contains
         namelist /BCs/ topWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp
         namelist /LES/ useSGS, useDynamicProcedure, useSGSclipping, SGSmodelID, useVerticalTfilter, &
                         useWallDamping, ncWall, Cs 
-        namelist /WALLMODEL/ z0, wallMType 
+        namelist /WALLMODEL/ z0, wallMType
+        namelist /WINDTURBINES/ useWindTurbines, turbineInfoFile  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck
 
@@ -204,6 +209,7 @@ contains
         read(unit=ioUnit, NML=BCs)
         read(unit=ioUnit, NML=LES)
         read(unit=ioUnit, NML=WALLMODEL)
+        read(unit=ioUnit, NML=WINDTURBINES)
         close(ioUnit)
       
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
@@ -216,8 +222,8 @@ contains
             call GracefulExit("Both CFL and dt cannot be negative. Have you &
             & specified either one of these in the input file?", 124)
         end if 
-        this%t_restartDump = t_restartDump; this%tid_statsDump = tid_statsDump
-        this%useCoriolis = useCoriolis; this%tSimStartStats = tSimStartStats
+        this%t_restartDump = t_restartDump; this%tid_statsDump = tid_statsDump; this%useCoriolis = useCoriolis; 
+        this%tSimStartStats = tSimStartStats; this%useWindTurbines = useWindTurbines
         this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS 
         this%useDynamicProcedure = useDynamicProcedure; this%UseDealiasFilterVert = UseDealiasFilterVert
         this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; this%gravity_nd = one/(this%Fr**2)
@@ -225,8 +231,6 @@ contains
         this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
         
-
-
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC); allocate(this%gpE)
         call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -419,7 +423,7 @@ contains
         ! Pressure projection
         if (useCompactFD) then
             call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
-            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
         else
             call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
             call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
@@ -494,6 +498,11 @@ contains
             call message(0,"Sponge Layer initialized successfully")
         end if 
 
+
+        if (this%useWindTurbines) then
+            allocate(this%WindTurbineArr)
+            call this%WindTurbineArr%init(turbineInfoFile, this%gpC, this%gpE, this%spectC, this%spectE)
+        end if 
 
         ! STEP 12: Set visualization planes for io
         call set_planes_io(this%xplanes, this%yplanes, this%zplanes)
@@ -899,7 +908,6 @@ contains
         ! Step 0: Compute TimeStep 
         call this%compute_deltaT
         this%dtRat = this%dt/this%dtOld
-
         ! Step 1: Non Linear Term 
         if (useSkewSymm) then
             call this%addNonLinearTerm_skewSymm()
@@ -915,6 +923,11 @@ contains
         ! Step 3: Extra Forcing 
         if (this%useExtraForcing) then
             call this%addExtraForcingTerm()
+        end if 
+
+        if (this%useWindTurbines) then
+            call this%WindTurbineArr%getForceRHS(this%u, this%v, this%wC,&
+                                    this%u_rhs, this%v_rhs, this%w_rhs)
         end if 
 
         ! Step 4: Buoyancy Term
@@ -977,7 +990,7 @@ contains
         if (useCompactFD) then
             call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
             if (mod(this%step,this%t_DivergenceCheck) == 0) then
-                call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+                call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
             end if 
         else
             call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
