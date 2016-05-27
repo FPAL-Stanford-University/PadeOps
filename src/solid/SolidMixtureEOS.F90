@@ -25,6 +25,8 @@ module SolidMixtureMod
         type(filters),     pointer :: fil
         type(ladobject),   pointer :: LAD
 
+        logical :: eqbModel = .FALSE.           ! is sound speed given by `equilibrium' model? Alternative is `frozen' model. Check Saurel et al., JCP 2009.
+
     contains
 
         procedure :: init
@@ -694,9 +696,19 @@ contains
             call this%material(i)%getSpeciesDensity(rho,rhom)
             call this%material(i)%hydro%get_sos(rhom,p,sosm)
             call this%material(i)%elastic%get_sos(rhom,sosm)
-            sos = sos + this%material(i)%VF/(rhom*sosm*sosm)
+            if(this%eqbModel) then
+                ! equilibrium model
+                sos = sos + this%material(i)%VF/(rhom*sosm*sosm)
+            else
+                ! frozen model (details in Saurel et al. 2009)
+                sos = sos + this%material(i)%Ys*sosm*sosm
+            endif
         end do
-        sos = one / (sqrt(rho*sos) + epssmall)
+        if(this%eqbModel) then
+            sos = one / (sqrt(rho*sos) + epssmall)
+        else
+            sos = sqrt(sos)
+        endif
 
     end subroutine
 

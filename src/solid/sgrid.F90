@@ -876,7 +876,9 @@ contains
 
         call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
         call this%mix%get_ehydro_from_p(this%rho,this%p,this%T)            ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
-        !write(*,'(a,4(e19.12,1x))') 'T-1', maxval(this%mix%material(1)%T), minval(this%mix%material(1)%T), maxval(this%mix%material(2)%T), minval(this%mix%material(2)%T)
+        !write(*,'(a,4(e19.12,1x))') 'rho,p,e,t  ', this%rho(71,1,1), this%p(71,1,1), this%e(71,1,1), this%T(71,1,1)
+        !write(*,'(a,4(e19.12,1x))') 'rho,p,e,t-1', this%mix%material(1)%Ys(71,1,1)*this%rho(71,1,1)/this%mix%material(1)%VF(71,1,1), this%mix%material(1)%p(71,1,1), this%mix%material(1)%eh(71,1,1), this%mix%material(1)%T(71,1,1)
+        !write(*,'(a,4(e19.12,1x))') 'rho,p,e,t-2', this%mix%material(2)%Ys(71,1,1)*this%rho(71,1,1)/this%mix%material(2)%VF(71,1,1), this%mix%material(2)%p(71,1,1), this%mix%material(2)%eh(71,1,1), this%mix%material(2)%T(71,1,1)
         !write(*,'(a,4(e19.12,1x))') 'Cv1', (this%mix%material(1)%hydro%Cv), (this%mix%material(1)%hydro%Cv), (this%mix%material(2)%hydro%Cv), (this%mix%material(2)%hydro%Cv)
         !write(*,'(a,4(e19.12,1x))') 'Pin', (this%mix%material(1)%hydro%PInf), (this%mix%material(1)%hydro%Pinf), (this%mix%material(2)%hydro%Pinf), (this%mix%material(2)%hydro%PInf)
         !write(*,'(a,4(e19.12,1x))') 'e-1', maxval(this%mix%material(1)%eh), minval(this%mix%material(1)%eh), maxval(this%mix%material(2)%eh), minval(this%mix%material(2)%eh)
