@@ -71,8 +71,6 @@ module SolidGrid
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
        
-        ! real(rkind) :: Cmu, Cbeta, Ckap, Cdiff, CY
-
         real(rkind) :: rho0
 
         real(rkind), dimension(:,:,:), pointer :: x 
@@ -115,7 +113,6 @@ module SolidGrid
             procedure, private :: getRHS_x
             procedure, private :: getRHS_y
             procedure, private :: getRHS_z
-            ! procedure          :: getLAD
             procedure          :: filter
             procedure          :: getPhysicalProperties
             procedure, private :: get_tau
@@ -169,9 +166,6 @@ contains
         logical     :: explPlast = .FALSE.
         real(rkind) :: tau0 = one
 
-        !real(rkind), dimension(:,:,:,:), allocatable :: finger, fingersq
-        !real(rkind), dimension(:,:,:),   allocatable :: trG, trG2, detG
-
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                              inputdir, outputdir, vizprefix, tviz, &
                                   periodicx, periodicy, periodicz, &
@@ -202,12 +196,6 @@ contains
         this%nsteps = nsteps
 
         this%rho0 = rho0
-
-        ! this%Cmu = Cmu
-        ! this%Cbeta = Cbeta
-        ! this%Ckap = Ckap
-        ! this%Cdiff = Cdiff
-        ! this%CY = CY
 
         this%plastic = plastic
         
@@ -547,7 +535,6 @@ contains
         deallocate( duidxj )
 
         ! compute species artificial conductivities and diffusivities
-        ! call this%mix%getSOS(this%rho,this%p,this%sos)
         call this%mix%getLAD(this%rho,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
         ! ------------------------------------------------
 
@@ -730,9 +717,6 @@ contains
 
         delta = min(this%dx, this%dy, this%dz)
 
-        ! call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
-        ! call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
-
         ! continuum
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
                + this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2) + one/(this%dz**2) ))
@@ -834,7 +818,6 @@ contains
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv), intent(out) :: rhs
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),     intent(out) :: divu
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),     intent(out) :: viscwork
-        !real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), intent(out) :: rhsg
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
@@ -853,7 +836,7 @@ contains
         call this%getPhysicalProperties()
         call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 
-        ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
+        ! Get tau tensor tensor. Put in off-diagonal components of duidxj (also get the viscous work term for energy equation)
         call this%get_tau( duidxj, viscwork )
         ! Now, associate the pointers to understand what's going on better
         tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
@@ -868,7 +851,8 @@ contains
         tauxx = tauxx + this%sxx; tauxy = tauxy + this%sxy; tauxz = tauxz + this%sxz
                                   tauyy = tauyy + this%syy; tauyz = tauyz + this%syz
                                                             tauzz = tauzz + this%szz
-        
+       
+        ! Get heat conduction vector (q). Stored in remaining 3 components of duidxj 
         qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
         call this%mix%get_qmix(qx, qy, qz)
 
@@ -901,24 +885,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
 
-        ! flux => this%ybuf(:,:,:,1:4)
         xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
-
-        ! flux(:,:,:,1) = this%Wcnsrv(:,:,:,2)   ! rho*u
-        ! flux(:,:,:,1) = this%Wcnsrv(:,:,:,1)*this%u + this%p - tauxx
-        ! flux(:,:,:,2) = this%Wcnsrv(:,:,:,1)*this%v          - tauxy
-        ! flux(:,:,:,3) = this%Wcnsrv(:,:,:,1)*this%w          - tauxz
-        ! flux(:,:,:,4) = (this%Wcnsrv(:,:,:,4) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz - qx
-
-        ! ! Now, get the x-derivative of the fluxes
-        ! do i=1,4
-        !     call transpose_y_to_x(flux(:,:,:,i),xtmp1,this%decomp)
-        !     call this%der%ddx(xtmp1,xtmp2)
-        !     call transpose_x_to_y(xtmp2,flux(:,:,:,i),this%decomp)
-        ! end do
-
-        ! ! Add to rhs
-        ! rhs = rhs - flux
 
         flux = this%Wcnsrv(:,:,:,mom_index  )*this%u + this%p - tauxx ! x-momentum
         call transpose_y_to_x(flux,xtmp1,this%decomp)
@@ -957,22 +924,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
         real(rkind), dimension(:,:,:), pointer :: ytmp1
 
-        ! flux => this%ybuf(:,:,:,1:5)
         ytmp1 => this%ybuf(:,:,:,6)
-
-        ! flux(:,:,:,1) = this%Wcnsrv(:,:,:,3)   ! rho*v
-        ! flux(:,:,:,2) = this%Wcnsrv(:,:,:,3)*this%u          - tauxy
-        ! flux(:,:,:,3) = this%Wcnsrv(:,:,:,3)*this%v + this%p - tauyy
-        ! flux(:,:,:,4) = this%Wcnsrv(:,:,:,3)*this%w          - tauyz
-        ! flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauyy)*this%v - this%u*tauxy - this%w*tauyz - qy
-
-        ! ! Now, get the x-derivative of the fluxes
-        ! do i=1,5
-        !     call this%der%ddy(flux(:,:,:,i),ytmp1)
-
-        !     ! Add to rhs
-        !     rhs(:,:,:,i) = rhs(:,:,:,i) - ytmp1
-        ! end do
 
         flux = this%Wcnsrv(:,:,:,mom_index+1)*this%u          - tauxy ! x-momentum
         call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
@@ -1004,24 +956,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
         real(rkind), dimension(:,:,:), pointer :: ztmp1,ztmp2
 
-        ! flux => this%ybuf(:,:,:,1:5)
         ztmp1 => this%zbuf(:,:,:,1); ztmp2 => this%zbuf(:,:,:,2)
-
-        ! flux(:,:,:,1) = this%Wcnsrv(:,:,:,4)   ! rho*w
-        ! flux(:,:,:,2) = this%Wcnsrv(:,:,:,4)*this%u          - tauxz
-        ! flux(:,:,:,3) = this%Wcnsrv(:,:,:,4)*this%v          - tauyz
-        ! flux(:,:,:,4) = this%Wcnsrv(:,:,:,4)*this%w + this%p - tauzz
-        ! flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauzz)*this%w - this%u*tauxz - this%v*tauyz - qz
-
-        ! ! Now, get the x-derivative of the fluxes
-        ! do i=1,5
-        !     call transpose_y_to_z(flux(:,:,:,i),ztmp1,this%decomp)
-        !     call this%der%ddz(ztmp1,ztmp2)
-        !     call transpose_z_to_y(ztmp2,flux(:,:,:,i),this%decomp)
-        ! end do
-
-        ! ! Add to rhs
-        ! rhs = rhs - flux
 
         flux = this%Wcnsrv(:,:,:,mom_index+2)*this%u          - tauxz ! x-momentum
         call transpose_y_to_z(flux,ztmp1,this%decomp)
