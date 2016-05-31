@@ -5,7 +5,7 @@ module MultSpecGauss_data
 
     real(rkind) :: p_infty   = one, Rgas   = one, gamma   = 1.4_rkind, mu   = 10._rkind, rho_0   = one, p_amb = 0.1_rkind
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one, p_amb_2 = 0.1_rkind
-    real(rkind) :: minVF = 0.2_rkind, thick = one, rho_ratio = two
+    real(rkind) :: minVF = 0.2_rkind, thick = one, rho_ratio = two, thickness = 0.001_rkind
     real(rkind) :: rhomax, rhomin, umax, umin, vmax, vmin, wmax, wmin, pmax, pmin, Tmax, Tmin, vfmax, vfmin
     real(rkind) :: Ys1max, Ys1min, eh1max, eh1min, g1max, g1min, Ys2max, Ys2min, eh2max, eh2min, g2max, g2min
     real(rkind) :: sigma_0 = one, lamL, lamL_2, cL, cL_2, cL_mix, cL_mix_2, crefl, ctran
@@ -137,8 +137,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         call mix%set_material(1,stiffgas(gamma,  Rgas,  p_infty  ), sep1solid(  rho_0,mu,  1.0D30,1.0D-10))
         call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2), sep1solid(rho_0_2,mu_2,1.0D30,1.0D-10))
 
-        tmp = half * ( erf( (x-half-0.0_rkind)/(thick*dx) ) - erf( (x-half-0.4_rkind)/(thick*dx) ) )
-        !tmp = half * ( one + erf( (x-0.5_rkind)/(thick*dx) ) )
+        if(thick<zero) then
+          tmp = half * ( erf( (x-half-0.0_rkind)/(thickness) ) - erf( (x-half-0.4_rkind)/(thickness) ) )
+        else
+          tmp = half * ( erf( (x-half-0.0_rkind)/(thick*dx) ) - erf( (x-half-0.4_rkind)/(thick*dx) ) )
+          !tmp = half * ( one + erf( (x-0.5_rkind)/(thick*dx) ) )
+        endif
 
         ! Set material 1 properties
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
