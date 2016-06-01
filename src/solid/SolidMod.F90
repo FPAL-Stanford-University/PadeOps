@@ -71,12 +71,8 @@ module SolidMod
         procedure :: init
         procedure :: getRHS_g
         procedure :: getRHS_Ys
-        !procedure :: getRHS_eh
-        !procedure :: getRHS_VF
         procedure :: update_g
         procedure :: update_Ys
-        !procedure :: update_eh
-        !procedure :: update_VF
         procedure :: getPhysicalProperties
         procedure :: getPlasticSources
         procedure :: get_p_from_ehydro
@@ -346,10 +342,8 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for g tensor equation
 
         call this%getRHS_g(rho,u,v,w,dt,rhsg)
-            !write(*,'(a,2(e21.14,1x))') '-rhsg-', maxval(rhsg(:,:,:,1)), minval(rhsg(:,:,:,1))
         call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
-        !rhsg = zero
         ! advance sub-step
         if(isub==1) this%Qtmpg = zero                   ! not really needed, since RK45_A(1) = 0
         this%Qtmpg  = dt*rhsg + RK45_A(isub)*this%Qtmpg
@@ -376,7 +370,6 @@ contains
 
         ! Get the species density = rho*Y/VF (additional terms to give correct limiting behaviour as Ys and VF tend to 0)
         tmp = (rho*this%Ys + this%elastic%rho0*detg*epssmall)/(this%VF + epssmall)   
-        ! tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
         penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
@@ -453,10 +446,8 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsYs  ! RHS for mass fraction equation
 
         call this%getRHS_Ys(rho,u,v,w,rhsYs)
-            !write(*,'(a,2(e21.14,1x))') '-rhsY-', maxval(rhsYs),  minval(rhsYs)
         call hook_material_mass_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsYs)
 
-        !rhsYs = zero
         ! advance sub-step
         if(isub==1) this%QtmpYs = zero                   ! not really needed, since RK45_A(1) = 0
         this%QtmpYs  = dt*rhsYs + RK45_A(isub)*this%QtmpYs
@@ -481,89 +472,6 @@ contains
 
     end subroutine
 
-    !subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
-    !    use RKCoeffs,   only: RK45_A,RK45_B
-    !    class(solid), intent(inout) :: this
-    !    integer, intent(in) :: isub
-    !    real(rkind), intent(in) :: dt,tsim
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,viscwork
-
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
-
-    !    call this%getRHS_eh(rho,u,v,w,divu,viscwork,rhseh)
-    !    call hook_material_energy_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhseh)
-
-    !    ! advance sub-step
-    !    if(isub==1) this%Qtmpeh = zero                   ! not really needed, since RK45_A(1) = 0
-    !    this%Qtmpeh  = dt*rhseh + RK45_A(isub)*this%Qtmpeh
-    !    this%consrv(:,:,:,2) = this%consrv(:,:,:,2) + RK45_B(isub)*this%Qtmpeh
-
-    !end subroutine
-
-    !subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,rhseh)
-    !    use operators, only: gradient, divergence
-    !    class(solid),                                       intent(in)  :: this
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu,viscwork
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhseh
-
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
-
-    !    ! artificial conductivity and inter-species enthalpy diffusion fluxes
-    !    tmp1 = -this%VF * this%qi(:,:,:,1)
-    !    tmp2 = -this%VF * this%qi(:,:,:,2)
-    !    tmp3 = -this%VF * this%qi(:,:,:,3)
-
-    !    ! add convective fluxes
-    !    rhseh = -rho*this%Ys*this%eh
-    !    tmp1 = tmp1 + rhseh*u
-    !    tmp2 = tmp2 + rhseh*v
-    !    tmp3 = tmp3 + rhseh*w
-
-    !    ! Take divergence of fluxes
-    !    call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh)
-
-    !    ! Add pressure and viscous work terms
-    !    rhseh = rhseh - this%VF * (this%p*divu + viscwork)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
-
-    !end subroutine
-
-    !subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim)
-    !    use RKCoeffs,   only: RK45_A,RK45_B
-    !    class(solid), intent(inout) :: this
-    !    integer, intent(in) :: isub
-    !    real(rkind), intent(in) :: dt,tsim
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: u,v,w
-
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
-
-    !    call this%getRHS_VF(u,v,w,rhsVF)
-    !    call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
-
-    !    ! advance sub-step
-    !    if(isub==1) this%QtmpVF = zero                   ! not really needed, since RK45_A(1) = 0
-    !    this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
-    !    this%VF = this%VF  + RK45_B(isub)*this%QtmpVF
-
-    !end subroutine
-
-    !subroutine getRHS_VF(this,u,v,w,rhsVF)
-    !    use operators, only: gradient
-    !    class(solid),                                       intent(in)  :: this
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: u,v,w
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
-
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
-
-    !    call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3)
-    !    rhsVF = u*tmp1 + v*tmp2 + w*tmp3
-
-    !    ! any penalty term to keep VF between 0 and 1???
-
-    !end subroutine
-
     subroutine filter(this, iflag)
         use operators, only: filter3D
         class(solid),  intent(inout) :: this
@@ -583,12 +491,6 @@ contains
 
         ! filter Ys
         call filter3D(this%decomp, this%fil, this%consrv(:,:,:,1), iflag)
-
-        !! filter eh
-        !call filter3D(this%decomp, this%fil, this%consrv(:,:,:,2), iflag)
-
-        !! filter VF
-        !call filter3D(this%decomp, this%fil, this%VF, iflag)
 
     end subroutine
 
@@ -615,7 +517,6 @@ contains
 
         call this%getSpeciesDensity(rho,rhom)
         call this%hydro%get_p( rhom, this%eh, this%p )
-        ! call this%hydro%get_p( this%Ys*rho/(this%VF+epssmall), this%eh, this%p )
 
     end subroutine
 
@@ -628,8 +529,6 @@ contains
         call this%getSpeciesDensity(rho,rhom)
         call this%hydro%get_e_from_p( rhom, this%p, this%eh )
         call this%hydro%get_T(this%eh, this%T, rhom)
-        ! call this%hydro%get_e_from_p( this%Ys*rho/(this%VF+epssmall), this%p, this%eh )
-        ! call this%hydro%get_T(this%eh, this%T, this%Ys*rho/(this%VF+epssmall))
 
     end subroutine
 
@@ -657,7 +556,6 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
 
         this%consrv(:,:,:,1) = rho * this%Ys
-        !this%consrv(:,:,:,2) = this%consrv(:,:,:,1) * this%eh
 
     end subroutine
 
@@ -668,11 +566,6 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
 
         this%Ys = this%consrv(:,:,:,1) / rho
-        !this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
-
-        !call this%getSpeciesDensity(rho,rhom)
-        !call this%hydro%get_T(this%eh, this%T, rhom)
-        ! call this%hydro%get_T(this%eh, this%T, this%consrv(:,:,:,1)/(this%VF+epssmall))
 
         ! Get gradients of Ys and put in Ji for subsequent use
         call gradient(this%decomp,this%der,this%Ys,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3))
@@ -704,92 +597,5 @@ contains
         end if
 
     end subroutine
-
-    !subroutine get_kap(this)
-    !    class(solid),                                         intent(in)    :: this
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: VFeh, tmp1, tmp2, tmp3
-
-    !    ! Step 0: Artificial conductivity based on this quantity
-    !    VFeh = this%VF*this%eh
-
-    !    ! Step 1: Get components of grad(e) squared individually
-    !    call this%gradient(VFeh,ytmp1,ytmp2,ytmp3) ! Does not use any Y buffers
-    !    ytmp1 = ytmp1*ytmp1
-    !    ytmp2 = ytmp2*ytmp2
-    !    ytmp3 = ytmp3*ytmp3
-
-    !    ! Step 2: Get 4th derivative in X
-    !    call transpose_y_to_x(VFeh,xtmp1,this%decomp)
-    !    call this%der%d2dx2(xtmp1,xtmp2)
-    !    call this%der%d2dx2(xtmp2,xtmp1)
-    !    xtmp2 = xtmp1*this%dx**6
-    !    call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-    !    kapstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3)
-
-    !    ! Step 3: Get 4th derivative in Z
-    !    call transpose_y_to_z(VFeh,ztmp1,this%decomp)
-    !    call this%der%d2dz2(ztmp1,ztmp2)
-    !    call this%der%d2dz2(ztmp2,ztmp1)
-    !    ztmp2 = ztmp1*this%dz**6
-    !    call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-    !    kapstar = kapstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3)
-
-    !    ! Step 4: Get 4th derivative in Y
-    !    call this%der%d2dy2(VFeh,ytmp4)
-    !    call this%der%d2dy2(ytmp4,ytmp5)
-    !    ytmp4 = ytmp5*this%dy**6
-    !    kapstar = kapstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3)
-
-    !    ! Now, all ytmps are free to use
-    !    call this%sgas%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound - hydrodynamic part
-    !    call this%elastic%get_sos(this%rho0,ytmp1)     ! Speed of sound - elastic part
-
-    !    kapstar = this%Ckap*this%rho*ytmp1*abs(kapstar)/this%T
-
-    !    ! Filter kapstar
-    !    call this%filter(kapstar, this%gfil, 2)
-
-    !    ! Now, add to physical fluid properties
-    !    this%mu   = this%mu   + mustar
-    !    this%bulk = this%bulk + bulkstar
-    !    this%kap  = this%kap  + kapstar
-
-    !end subroutine
-
-    !subroutine get_q(this,duidxj)
-    !    class(sgrid), target, intent(inout) :: this
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: duidxj
-
-    !    real(rkind), dimension(:,:,:), pointer :: tmp1_in_x, tmp2_in_x, tmp1_in_y, tmp1_in_z, tmp2_in_z
-    !    type(derivatives), pointer :: der
-
-    !    der => this%der
-
-    !    tmp1_in_x => this%xbuf(:,:,:,1)
-    !    tmp2_in_x => this%xbuf(:,:,:,2)
-
-    !    tmp1_in_z => this%zbuf(:,:,:,1)
-    !    tmp2_in_z => this%zbuf(:,:,:,2)
-
-    !    tmp1_in_y => this%ybuf(:,:,:,1)
-
-    !    ! Step 1: Get qy (dvdy is destroyed)
-    !    call der%ddy(this%T,tmp1_in_y)
-    !    duidxj(:,:,:,qyidx) = -this%kap*tmp1_in_y
-
-    !    ! Step 2: Get qx (dudx is destroyed)
-    !    call transpose_y_to_x(this%T,tmp1_in_x,this%decomp)
-    !    call der%ddx(tmp1_in_x,tmp2_in_x)
-    !    call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
-    !    duidxj(:,:,:,qxidx) = -this%kap*tmp1_in_y
-
-    !    ! Step 3: Get qz (dwdz is destroyed)
-    !    call transpose_y_to_z(this%T,tmp1_in_z,this%decomp)
-    !    call der%ddz(tmp1_in_z,tmp2_in_z)
-    !    call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
-    !    duidxj(:,:,:,qzidx) = -this%kap*tmp1_in_y
-
-    !    ! Done
-    !end subroutine
 
 end module

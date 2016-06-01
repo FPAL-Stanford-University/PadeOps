@@ -36,8 +36,6 @@ module SolidMixtureMod
         procedure :: getLAD
         procedure :: update_g
         procedure :: update_Ys
-        !procedure :: update_eh
-        !procedure :: update_VF
         procedure :: filter
         procedure :: get_rho
         procedure :: get_primitive
@@ -161,33 +159,9 @@ contains
             ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
         enddo
         
-        !! identical materials
-        !mixP = (this%material(1)%hydro%gam - one)*mixRho*ehmix - &
-        !        this%material(1)%hydro%gam * this%material(1)%hydro%PInf
-
-        !mixT = ehmix*(mixP + this%material(1)%hydro%PInf)/(this%material(1)%hydro%Cv *(mixP + this%material(1)%hydro%gam*this%material(1)%hydro%PInf))
-
-        ! non-identical materials
-
-        ! implement non-linear solve for mixP
-        !vf   => fparams(  1:this%ns)
-        !gam  => fparams(  this%ns+1:2*this%ns)
-        !psph => fparams(2*this%ns+1:3*this%ns)
-        !pinf => fparams(3*this%ns+1:4*this%ns)
-        !write(*,'(a,3(e19.12,1x))') '40-', this%material(1)%Ys(40,1,1), this%material(2)%Ys(40,1,1), ehmix(40,1,1)
-        !write(*,'(a,3(e19.12,1x))') '51-', this%material(1)%Ys(51,1,1), this%material(2)%Ys(51,1,1), ehmix(51,1,1)
-
         do k=1,this%nzp
          do j=1,this%nyp
           do i=1,this%nxp
-            !do imat=1,this%ns
-
-                !fparams(          imat) = this%material(imat)%VF(i,j,k)    ! volume fractions
-                !fparams(  this%ns+imat) = this%material(imat)%hydro%gam    ! gamma
-                !fparams(2*this%ns+imat) = this%material(imat)%p(i,j,k)     ! pressure before eqb
-                !fparams(3*this%ns+imat) = this%material(imat)%hydro%PInf   ! PInf
-            !end do
-
             ! set fparams
             fparams(1) = mixRho(i,j,k)*ehmix(i,j,k)
 
@@ -216,9 +190,6 @@ contains
           enddo
          enddo
         enddo
-        !write(*,'(a,3(e19.12,1x))') '40-', mixP(40,1,1)
-        !write(*,'(a,3(e19.12,1x))') '51-', mixP(51,1,1)
-
 
         mixT = zero
         do i = 1, this%ns
@@ -235,7 +206,6 @@ contains
             this%material(i)%eh = this%material(i)%hydro%Cv*mixT*(mixP + this%material(i)%hydro%gam*this%material(i)%hydro%PInf) / &
                                                                  (mixP + this%material(i)%hydro%PInf)
         end do      
-        !write(*,*) '--eh check--', maxval(abs(ehmix-(this%material(1)%Ys*this%material(1)%eh+this%material(2)%Ys*this%material(2)%eh)))
 
     end subroutine
 
@@ -258,8 +228,6 @@ contains
         ehmix = mixE
         do imat = 1, this%ns
             ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
-            !write(*,'(a,i4,1x,2(e21.14,1x))') '-e-b-', imat, maxval(this%material(imat)%eh), minval(this%material(imat)%eh)
-            !write(*,'(a,i4,1x,2(e21.14,1x))') '-p-b-', imat, maxval(this%material(imat)%p), minval(this%material(imat)%p)
         enddo
 
         ! equilibrate and reset species pressures, reset volume fractions
@@ -291,9 +259,9 @@ contains
             peqb = sum(fparams(1:this%ns)*fparams(2*this%ns+1:3*this%ns))
             pest = peqb
 
-            !! solve non-linear equation
-            !call this%rootfind_nr_1d(peqb,fparams,iparams)
-            !pdiffmax = max(dabs(pest-peqb),pdiffmax)
+            ! solve non-linear equation
+            call this%rootfind_nr_1d(peqb,fparams,iparams)
+            pdiffmax = max(dabs(pest-peqb),pdiffmax)
 
             ! rescale all pressures by maxp
             fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*maxp
@@ -302,7 +270,6 @@ contains
             ! update species VF, eh, ...
             fac = (psph + gam*pinf + (gam-one)*peqb)/(gam*(pinf+peqb))
             vf = vf*fac
-            !this%material(1:this%ns)%g = this%material(1:this%ns)%g*fac**third        !! --- not clear if this is needed or if it works
 
             peqb = (rho(i,j,k)*ehmix(i,j,k) - sum(vf*gam*pinf/(gam-one))) / sum(vf/(gam-one))
             psph = peqb
@@ -316,7 +283,6 @@ contains
           enddo
          enddo
         enddo
-            !write(*,*) '--pdiff--', pdiffmax
 
         ! get species energy from species pressure
         do imat = 1, this%ns
@@ -334,11 +300,9 @@ contains
 
         integer :: imat
 
-        !dtkap = one/epssmall; 
         dtDiff = one/epssmall; dtplast = dtDiff
 
         do imat = 1, this%ns
-          !dtkap =   min(dtkap,   one / ( (P_MAXVAL( this%material(imat)%kap*this%material(imat)%T/(rho* delta**4)))**(third) + eps))
           dtDiff =  min(dtDiff,  one / ( (P_MAXVAL( this%material(imat)%diff/delta**2) + eps)) )
           dtplast = min(dtplast, this%material(imat)%elastic%tau0)
         enddo
@@ -359,9 +323,6 @@ contains
         do i = 1,this%ns
             call this%material(i)%getPhysicalProperties()
 
-            !! Artificial conductivity
-            !call this%LAD%get_conductivity(rho, this%material(i)%eh, this%material(i)%T, sos, &
-            !                                    this%material(i)%kap, x_bc, y_bc, z_bc)
             this%material(i)%kap = zero
             ! Artificial diffusivity (grad(Ys) is stored in Ji at this stage)
             call this%LAD%get_diffusivity(this%material(i)%Ys, this%material(i)%Ji(:,:,:,1), &
@@ -479,10 +440,6 @@ contains
         if(this%ns == 1) then
           this%material(1)%eh = e - this%material(1)%eel
         endif
-        !call this%get_p_from_ehydro(rho)              ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
-        !call this%get_pmix(p)
-        !call this%getSOS(rho,p,sos)
-
 
     end subroutine
 
@@ -528,8 +485,6 @@ contains
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: tmp1_in_y
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: tmp1_in_z, tmp2_in_z
 
-            !write(*,'(a,2(e21.14,1x))') '-sumJ1- ', maxval(this%material(1)%Ji(:,:,:,1) + this%material(2)%Ji(:,:,:,1)),  &
-            !                                        minval(this%material(1)%Ji(:,:,:,1) + this%material(2)%Ji(:,:,:,1))
         do i = 1,this%ns
             ! Done in sgrid
             !! Step 1: Get qy
@@ -554,13 +509,9 @@ contains
             ! If multispecies, add the inter-species enthalpy flux
             if (this%ns .GT. 1) then
                 call this%material(i)%get_enthalpy(tmp1_in_y)
-            !write(*,'(a,2(e21.14,1x))') '-enth-', tmp1_in_y(45,1,1),  tmp1_in_y(51,1,1)!, maxval(tmp1_in_y),  minval(tmp1_in_y)
-            !write(*,'(a,2(e21.14,1x))') '-Ji1- ', maxval(this%material(i)%Ji(:,:,:,1)),  minval(this%material(i)%Ji(:,:,:,1))
-            !write(*,'(a,2(e21.14,1x))') '-Ji3- ', maxval(this%material(i)%Ji(:,:,:,3)),  minval(this%material(i)%Ji(:,:,:,3))
                 this%material(i)%qi(:,:,:,1) = this%material(i)%qi(:,:,:,1) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,1) )
                 this%material(i)%qi(:,:,:,2) = this%material(i)%qi(:,:,:,2) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,2) )
                 this%material(i)%qi(:,:,:,3) = this%material(i)%qi(:,:,:,3) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,3) )
-            !write(*,'(a,2(e21.14,1x))') '-qi1- ', maxval(this%material(i)%qi(:,:,:,1)),  minval(this%material(i)%qi(:,:,:,1))
             end if
         end do
 
@@ -576,9 +527,6 @@ contains
         qx = zero; qy = zero; qz = zero
 
         do i = 1,this%ns
-            !qx = qx + this%material(i)%VF * this%material(i)%qi(:,:,:,1)
-            !qy = qy + this%material(i)%VF * this%material(i)%qi(:,:,:,2)
-            !qz = qz + this%material(i)%VF * this%material(i)%qi(:,:,:,3)
             qx = qx + this%material(i)%qi(:,:,:,1)
             qy = qy + this%material(i)%qi(:,:,:,2)
             qz = qz + this%material(i)%qi(:,:,:,3)
@@ -654,22 +602,6 @@ contains
 
     end subroutine
 
-    !subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
-    !    class(solid_mixture), intent(inout) :: this
-    !    integer,              intent(in)    :: isub
-    !    real(rkind),          intent(in)    :: dt,tsim
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,viscwork
-
-    !    integer :: imat
-
-    !    do imat = 1, this%ns
-    !      call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
-    !      !write(*,'(a,i4,1x,2(e21.14,1x))') '--eh--', imat, maxval(this%material(imat)%eh), minval(this%material(imat)%eh)
-    !    end do
-
-    !end subroutine
-
     subroutine getSOS(this,rho,p,sos)
         use constants, only: fourthird
         class(solid_mixture), intent(in) :: this
@@ -677,17 +609,6 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: sos     ! Mixture speed of sound
 
         integer :: i
-
-        !real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: mixmu, mixgam, mixgamPinf
-
-        !mixmu = zero; mixgam = zero; mixgamPinf = zero
-        !do i = 1,this%ns
-        !    mixmu = mixmu + this%material(i)%VF * this%material(i)%elastic%mu
-        !    mixgam = mixgam + this%material(i)%VF * this%material(i)%hydro%gam
-        !    mixgamPinf = mixgamPinf + this%material(i)%VF * this%material(i)%hydro%gam * this%material(i)%hydro%Pinf
-        !end do
-
-        !sos = sqrt( (mixgam*p + mixgamPinf + fourthird*mixmu)/rho )
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhom, sosm
 
@@ -711,21 +632,6 @@ contains
         endif
 
     end subroutine
-
-    !subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim)
-    !    class(solid_mixture), intent(inout) :: this
-    !    integer,              intent(in)    :: isub
-    !    real(rkind),          intent(in)    :: dt,tsim
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
-    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: u,v,w
-
-    !    integer :: imat
-
-    !    do imat = 1, this%ns
-    !      call this%material(imat)%update_VF(isub,dt,u,v,w,x,y,z,tsim)
-    !    end do
-
-    !end subroutine
 
     subroutine checkNaN(this)
         class(solid_mixture), intent(in)   :: this
