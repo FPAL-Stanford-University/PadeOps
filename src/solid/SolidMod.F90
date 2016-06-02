@@ -16,6 +16,7 @@ module SolidMod
         integer :: nxp, nyp, nzp
 
         logical :: explPlast = .FALSE.
+        logical :: PTeqb = .TRUE.
 
         class(stiffgas ), allocatable :: hydro
         class(sep1solid), allocatable :: elastic
@@ -166,16 +167,19 @@ module SolidMod
 contains
 
     !function init(decomp,der,fil,hydro,elastic) result(this)
-    subroutine init(this,decomp,der,fil)
+    subroutine init(this,decomp,der,fil,PTeqb)
         class(solid), target, intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der
         type(filters),     target, intent(in) :: fil
+        logical, intent(in) :: PTeqb
 
         this%decomp => decomp
         this%der => der
         this%fil => fil
        
+        this%PTeqb = PTeqb
+
         ! Assume everything is in Y decomposition
         this%nxp = decomp%ysz(1)
         this%nyp = decomp%ysz(2)
@@ -252,7 +256,11 @@ contains
         
         ! Allocate material conserved variables
         if( allocated( this%consrv ) ) deallocate( this%consrv )
-        allocate( this%consrv(this%nxp,this%nyp,this%nzp,2) )
+        if(this%PTeqb) then
+            allocate( this%consrv(this%nxp,this%nyp,this%nzp,1) )
+        else
+            allocate( this%consrv(this%nxp,this%nyp,this%nzp,2) )
+        endif
 
         ! Allocate work arrays
         ! g tensor equation
@@ -263,14 +271,15 @@ contains
         if( allocated( this%QtmpYs ) ) deallocate( this%QtmpYs )
         allocate( this%QtmpYs(this%nxp,this%nyp,this%nzp) )
 
-        ! eh equation
-        if( allocated( this%Qtmpeh ) ) deallocate( this%Qtmpeh )
-        allocate( this%Qtmpeh(this%nxp,this%nyp,this%nzp) )
+        if(.NOT. this%PTeqb) then
+            ! eh equation
+            if( allocated( this%Qtmpeh ) ) deallocate( this%Qtmpeh )
+            allocate( this%Qtmpeh(this%nxp,this%nyp,this%nzp) )
 
-        ! VF equation
-        if( allocated( this%QtmpVF ) ) deallocate( this%QtmpVF )
-        allocate( this%QtmpVF(this%nxp,this%nyp,this%nzp) )
-
+            ! VF equation
+            if( allocated( this%QtmpVF ) ) deallocate( this%QtmpVF )
+            allocate( this%QtmpVF(this%nxp,this%nyp,this%nzp) )
+        endif
     !end function
     end subroutine
 
@@ -364,7 +373,7 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
-        real(rkind), parameter :: etafac = one/6._rkind
+        real(rkind), parameter :: etafac = zero!one/6._rkind
 
         rhsg = zero
 
@@ -487,6 +496,10 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
 
+        if(this%PTeqb) then
+            call GracefulExit("update_eh shouldn't be called with PTeqb. Exiting.",4809)
+        endif
+
         call this%getRHS_eh(rho,u,v,w,divu,viscwork,rhseh)
         call hook_material_energy_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhseh)
 
@@ -535,6 +548,10 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
 
+        if(this%PTeqb) then
+            call GracefulExit("update_VF shouldn't be called with PTeqb. Exiting.",4809)
+        endif
+
         call this%getRHS_VF(u,v,w,rhsVF)
         call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
 
@@ -579,11 +596,13 @@ contains
         ! filter Ys
         call filter3D(this%decomp, this%fil, this%consrv(:,:,:,1), iflag)
 
-        ! filter eh
-        call filter3D(this%decomp, this%fil, this%consrv(:,:,:,2), iflag)
+        if(.NOT. this%PTeqb) then
+            ! filter eh
+            call filter3D(this%decomp, this%fil, this%consrv(:,:,:,2), iflag)
 
-        ! filter VF
-        call filter3D(this%decomp, this%fil, this%VF, iflag)
+            ! filter VF
+            call filter3D(this%decomp, this%fil, this%VF, iflag)
+        endif
 
     end subroutine
 
@@ -652,7 +671,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
 
         this%consrv(:,:,:,1) = rho * this%Ys
-        this%consrv(:,:,:,2) = this%consrv(:,:,:,1) * this%eh
+        if(.NOT. this%PTeqb) this%consrv(:,:,:,2) = this%consrv(:,:,:,1) * this%eh
 
     end subroutine
 
@@ -663,11 +682,13 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
 
         this%Ys = this%consrv(:,:,:,1) / rho
-        this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
+        if(.NOT. this%PTeqb) then
+            this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
 
-        call this%getSpeciesDensity(rho,rhom)
-        call this%hydro%get_T(this%eh, this%T, rhom)
-        ! call this%hydro%get_T(this%eh, this%T, this%consrv(:,:,:,1)/(this%VF+epssmall))
+            call this%getSpeciesDensity(rho,rhom)
+            call this%hydro%get_T(this%eh, this%T, rhom)
+            ! call this%hydro%get_T(this%eh, this%T, this%consrv(:,:,:,1)/(this%VF+epssmall))
+        endif
 
         ! Get gradients of Ys and put in Ji for subsequent use
         call gradient(this%decomp,this%der,this%Ys,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3))

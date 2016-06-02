@@ -20,6 +20,7 @@ module Sep1SolidEOS
         procedure :: get_devstress
         procedure :: get_eelastic
         procedure :: get_sos
+        procedure :: get_sos2
         procedure :: plastic_deformation
 
     end type
@@ -112,11 +113,21 @@ contains
 
     end subroutine
 
-    pure subroutine get_sos(this,sos)
+    pure subroutine get_sos(this,rhom,sos)
         class(sep1solid), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in) :: rhom
         real(rkind), dimension(:,:,:), intent(inout) :: sos
 
-        sos = sqrt(sos**two + fourthird*this%mu/this%rho0)
+        sos = sqrt(sos**two + fourthird*this%mu/rhom)
+
+    end subroutine
+
+    pure subroutine get_sos2(this,rhom,sos2)
+        class(sep1solid), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in) :: rhom
+        real(rkind), dimension(:,:,:), intent(inout) :: sos2
+
+        sos2 = sos2 + fourthird*this%mu/rhom
 
     end subroutine
 

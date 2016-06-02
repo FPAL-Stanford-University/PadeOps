@@ -25,6 +25,7 @@ module StiffGasEOS
         procedure :: get_T
         procedure :: get_enthalpy
         procedure :: get_sos
+        procedure :: get_sos2
 
     end type
 
@@ -101,6 +102,15 @@ contains
         real(rkind), dimension(:,:,:), intent(out) :: sos
 
         sos = sqrt(this%gam*(p+this%PInf)/rho)
+
+    end subroutine
+
+    pure subroutine get_sos2(this,rho,p,sos)
+        class(stiffgas), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in)  :: rho,p
+        real(rkind), dimension(:,:,:), intent(out) :: sos
+
+        sos = this%gam*(p+this%PInf)/rho
 
     end subroutine
 
