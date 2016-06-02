@@ -501,7 +501,7 @@ contains
 
         if (this%useWindTurbines) then
             allocate(this%WindTurbineArr)
-            call this%WindTurbineArr%init(turbineInfoFile, this%gpC, this%gpE, this%spectC, this%spectE)
+            call this%WindTurbineArr%init(turbineInfoFile, this%gpC, this%gpE, this%spectC, this%spectE, this%mesh, this%dx, this%dy, this%dz)
         end if 
 
         ! STEP 12: Set visualization planes for io
@@ -926,7 +926,7 @@ contains
         end if 
 
         if (this%useWindTurbines) then
-            call this%WindTurbineArr%getForceRHS(this%u, this%v, this%wC,&
+            call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
                                     this%u_rhs, this%v_rhs, this%w_rhs)
         end if 
 
