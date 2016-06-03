@@ -14,6 +14,15 @@ module turbineMod
     private
     public :: TurbineArray
 
+    ! default initializations
+    integer :: num_turbines = 1, num_blades = 3, num_blade_points
+    real(rkind) :: initial_yaw = zero, initial_azimuth = zero, initial_rpm = 8.0_rkind
+    real(rkind) :: turb_xloc = pi, turb_yloc = pi, turb_zloc = 0.4_rkind
+    real(rkind) :: tip_radius = 0.1_rkind, hub_radius = 0.05_rkind, epsfactor = 1.5d0
+    real(rkind) :: nacelle_width = 0.1_rkind
+
+    integer :: ioUnit
+
     real(rkind) :: epsilon_sq, eps_pi_fac
     real(rkind), parameter :: degrees_to_radians = pi/180.0_rkind
 
@@ -30,7 +39,7 @@ module turbineMod
  
         integer, dimension(:),   allocatable :: num_cells_cloud                                     ! total number of cells in the cubic cloud around a turbine on this processor
         integer, dimension(:),   allocatable :: num_blades  ! number of blades
-        integer, dimension(:,:), allocatable :: num_blade_points  ! number of actuator points on each blade
+        integer, dimension(:), allocatable :: num_blade_points  ! number of actuator points on each blade
         real(rkind), dimension(:), allocatable :: yaw_angle, blade_azimuth, nacelle_width, hub_radius, tip_radius, turb_thrust, turb_torque, rotspeed
         real(rkind), dimension(:,:), allocatable :: rotor_center, turbLoc, rotor_shaft
         real(rkind), dimension(:,:,:,:), allocatable :: blade_points  ! number of actuator points on each blade
@@ -72,21 +81,27 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, mesh, dx, dy, dz)
     integer :: i, j, k
     real(rkind) :: element_length, radial_dist, projection_radius
     real(rkind) :: xmin, xmax, ymin, ymax, zmin, zmax 
+    integer :: mini, minj, mink, maxi, maxj, maxk
+    integer :: max_num_blades = 0, max_num_blade_points = 0
 
-    print*, inputFile
+    namelist /TURBDATA/ num_turbines, num_blades, num_blade_points, initial_yaw, initial_azimuth, &
+                        initial_rpm, turb_xloc, turb_yloc, turb_zloc, tip_radius, hub_radius,     &
+                        nacelle_width, epsfactor
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=TURBDATA)
+    close(ioUnit)
+
     this%gpC => gpC
-    this%spectC => this%spectC
+    this%spectC => spectC
     this%sp_gpC => this%spectC%spectdecomp
 
     this%gpE => gpE
-    this%spectE => this%spectE
+    this%spectE => spectE
     this%sp_gpE => this%spectE%spectdecomp
 
-    call GracefulExit("Wind Turbine stuff is incomplete", 423)
-
-    allocate(this%num_cells_cloud(this%nTurbines), this%num_blades(this%nTurbines))
-    allocate(ist(this%nTurbines), iend(this%nTurbines),  jst(this%nTurbines),  jend(this%nTurbines))
-    allocate(kst(this%nTurbines), kend(this%nTurbines), kstE(this%nTurbines), kendE(this%nTurbines))
+    !call GracefulExit("Wind Turbine stuff is incomplete", 423)
 
     allocate(this%cbuffC(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3), 1))
     allocate(this%cbuffE(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3), 1))
@@ -97,30 +112,69 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, mesh, dx, dy, dz)
     this%fx => this%rbuffC(:,:,:,1); this%fy => this%rbuffC(:,:,:,2); this%fz => this%rbuffE(:,:,:,1)
 
     ! set number of turbines
-    this%nTurbines = 1;
+    this%nTurbines = num_turbines;
 
-    allocate(this%num_blades(this%nTurbines),    this%yaw_angle(this%nTurbines))
-    allocate(this%blade_azimuth(this%nTurbines), this%rotor_center(3, this%nTurbines))
-    allocate(this%turbLoc(3, this%nTurbines),    this%nacelle_width(this%nTurbines))
+    allocate(this%num_cells_cloud(this%nTurbines), this%num_blades(this%nTurbines))
     allocate(this%tip_radius(this%nTurbines),    this%hub_radius(this%nTurbines))
-    allocate(this%turb_thrust(this%nTurbines),   this%turb_torque(this%nTurbines))
-    allocate(this%rotor_shaft(3, this%nTurbines), this%rotspeed(this%nTurbines))
+    allocate(this%yaw_angle(this%nTurbines))
+    allocate(this%blade_azimuth(this%nTurbines))
+    allocate(this%turbLoc(3, this%nTurbines),    this%nacelle_width(this%nTurbines))
+    allocate(this%rotspeed(this%nTurbines))
     allocate(this%clockwise_rotation(this%nTurbines))
+    allocate(this%num_blade_points(this%nTurbines))
 
     ! factor for distributing blade forces to grid points
-    epsilon_sq = (min(1.5d0*dx, 1.5d0*dy, 1.5d0*dz))**2 ! adjust this factor later
+    epsilon_sq = (epsfactor*min(dx, dy, dz))**2 ! adjust this factor later
     eps_pi_fac = (pi * epsilon_sq)**1.5d0
 
+    ! this block reads and uses all inputs. this can be moved to a hook for more i
+    ! flexibility with changing number and properties of turbines
     do i = 1, this%nTurbines
 
       ! set number of blades for each turbine (identical for now)
-      this%num_blades(i) = 3
+      this%num_blades(i) = num_blades
+      max_num_blades = max(max_num_blades, this%num_blades(i))
+
+      ! set tip radius
+      this%tip_radius(i) = tip_radius
+
+      ! set hub radius
+      this%hub_radius(i) = hub_radius
 
       ! initialize turbines with initial yaw zero (facing positive x direction)
-      this%yaw_angle(i) = zero * degrees_to_radians
+      this%yaw_angle(i) = initial_yaw * degrees_to_radians
 
       ! initialize first blade to zero azimuth; others are equally spaced in the 360 degree space
-      this%blade_azimuth(i) = zero * degrees_to_radians
+      this%blade_azimuth(i) = initial_azimuth * degrees_to_radians
+
+      ! set turbine location
+      this%turbLoc(1,i) = turb_xloc + real(i-1,rkind)*(3.0_rkind*tip_radius) ! move turbine 1.5 diamters away
+      this%turbLoc(2,i) = turb_yloc + real(i-1,rkind)*(3.0_rkind*tip_radius) ! move turbine 1.5 diamters away
+      this%turbLoc(3,i) = turb_zloc
+
+      ! set nacelle width 
+      this%nacelle_width(i) = nacelle_width
+
+      ! set initial rotation speed of the turbines
+      this%rotspeed(i) = initial_rpm*two*pi/60.0_rkind     ! 8 RPM
+
+      ! set rotation direction
+      this%clockwise_rotation(i) = .TRUE.
+
+      ! set number of actuator points along each blade (identical for now)
+      this%num_blade_points(i) = num_blade_points
+      max_num_blade_points = max(max_num_blade_points, this%num_blade_points(i))
+    enddo
+
+    allocate(this%rotor_shaft(3, this%nTurbines))
+    allocate(this%rotor_center(3, this%nTurbines))
+    allocate(ist(this%nTurbines), iend(this%nTurbines),  jst(this%nTurbines),  jend(this%nTurbines))
+    allocate(kst(this%nTurbines), kend(this%nTurbines), kstE(this%nTurbines), kendE(this%nTurbines))
+    allocate(this%turb_thrust(this%nTurbines),   this%turb_torque(this%nTurbines))
+    allocate(this%blade_points(3, max_num_blade_points, max_num_blades, this%nTurbines))
+    allocate(this%blade_forces(3, max_num_blade_points, max_num_blades, this%nTurbines))
+
+    do i = 1, this%nTurbines
 
       ! rotor center is offset from (xLoc, yLoc, zLoc) by Nacelle width
       this%rotor_center(1,i) = this%turbLoc(1,i) - this%nacelle_width(i)
@@ -128,22 +182,11 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, mesh, dx, dy, dz)
 
       this%rotor_shaft(:,i) = this%turbLoc(:,i) - this%rotor_center(:,i)
 
-      ! set initial rotation speed of the turbines
-      this%rotspeed(i) = 8.0d0*two*pi/60.0_rkind     ! 8 RPM
-
-      allocate(this%num_blade_points(this%num_blades(i), this%nTurbines))
+      ! length of each actuator line element
+      element_length = (this%tip_radius(i) - this%hub_radius(i)) / this%num_blade_points(i)
 
       do j = 1, this%num_blades(i)
-        ! set number of actuator points along each blade (identical for now)
-        this%num_blade_points(j,i) = 40
-
-        ! length of each actuator line element
-        element_length = (this%tip_radius(i) - this%hub_radius(i)) / this%num_blade_points(j,i)
-
-        allocate(this%blade_points(3, this%num_blade_points(j,i), this%num_blades(i), this%nTurbines))
-        allocate(this%blade_forces(3, this%num_blade_points(j,i), this%num_blades(i), this%nTurbines))
-
-        do k = 1, this%num_blade_points(j,i)
+        do k = 1, this%num_blade_points(i)
           ! set blade points beginning from the hub and going radially outward
           radial_dist = this%hub_radius(i) + element_length * (real(k-1, rkind) + half)
 
@@ -173,21 +216,38 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, mesh, dx, dy, dz)
       call this%get_extents(kstE(i), kendE(i), zmin, zmax, mesh(1,1,:,3))     ! this needs a zE or meshE array - not correct right now
 
       this%num_cells_cloud(i) = (iend(i)-ist(i)+1) * (jend(i)-jst(i)+1) * (kend(i)-kst(i)+1)
+    enddo
 
+    ! allocate memory corresponding to cloud of points over which turbine forces will be distributed
+    ! first determine max and min extents of required buffers
+    maxi = -1; mini = size(mesh,1)+1; maxj = -1; minj = size(mesh,2)+1; maxk = -1; mink = size(mesh,3)+1
+    do i = 1, this%nTurbines
       if(this%num_cells_cloud(i) > 0) then
-          allocate(dist_sq (ist(i):iend(i), jst(i):jend(i), kst(i):kend(i),   i))
-          allocate(distE_sq(ist(i):iend(i), jst(i):jend(i), kstE(i):kendE(i), i))
-          allocate( x_cloud(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i),   i))
-          allocate( y_cloud(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i),   i))
-          allocate(zC_cloud(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i),   i))
-          allocate(zE_cloud(ist(i):iend(i), jst(i):jend(i), kstE(i):kendE(i), i))
-    
-           x_cloud(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i),   i) = mesh(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i), 1)
-           y_cloud(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i),   i) = mesh(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i), 2)
-          zC_cloud(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i),   i) = mesh(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i), 3)
-          zE_cloud(ist(i):iend(i), jst(i):jend(i), kstE(i):kendE(i), i) = zero ! is there a zE array?
+          mini = min(mini, ist(i)); maxi = max(maxi, iend(i))
+          minj = min(minj, jst(i)); maxj = max(maxj, jend(i))
+          mink = min(mink, kst(i)); maxk = max(maxk, kend(i))
       endif
     enddo
+
+    ! allocate buffers ranging from min index to max index in each direction
+    allocate( dist_sq(mini:maxi, minj:maxj, mink:maxk, this%nTurbines))
+    allocate(distE_sq(mini:maxi, minj:maxj, mink:maxk, this%nTurbines))
+    allocate( x_cloud(mini:maxi, minj:maxj, mink:maxk, this%nTurbines))
+    allocate( y_cloud(mini:maxi, minj:maxj, mink:maxk, this%nTurbines))
+    allocate(zC_cloud(mini:maxi, minj:maxj, mink:maxk, this%nTurbines))
+    allocate(zE_cloud(mini:maxi, minj:maxj, mink:maxk, this%nTurbines))
+
+    ! now use correct extent for each turbine
+    do i = 1, this%nTurbines
+      if(this%num_cells_cloud(i) > 0) then
+        x_cloud(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i),   i) = mesh(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i), 1)
+        y_cloud(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i),   i) = mesh(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i), 2)
+        zC_cloud(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i),   i) = mesh(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i), 3)
+        zE_cloud(ist(i):iend(i), jst(i):jend(i), kstE(i):kendE(i), i) = zero ! is there a zE array?
+      endif
+    enddo
+
+    call message(1,"WIND TURBINE model initialized")
 
 end subroutine
 
@@ -282,7 +342,7 @@ subroutine yaw_turbine(this, turbID, angle)
 
     ! next rotate each blade
     do blID = 1, this%num_blades(turbID)
-      do ptID = 1, this%num_blade_points(blID, turbID)
+      do ptID = 1, this%num_blade_points(turbID)
          ! shift origin to turbLoc
          this%blade_points(:, ptID, blID, turbID) = this%blade_points(:, ptID, blID, turbID) - this%turbLoc(:,turbID)
 
@@ -316,7 +376,7 @@ subroutine rotate_one_blade(this, turbID, blID, angle)
     rot_matrix(2,2) = axis(2)**2*onemcosa+cosa;  rot_matrix(2,3) = axis(2)*axis(3)*onemcosa-axis(1)*sina;  rot_matrix(2,1) = axis(2)*axis(1)*onemcosa+axis(3)*sina
     rot_matrix(3,3) = axis(3)**2*onemcosa+cosa;  rot_matrix(3,1) = axis(3)*axis(1)*onemcosa-axis(2)*sina;  rot_matrix(3,2) = axis(3)*axis(2)*onemcosa+axis(1)*sina
 
-    do ptID = 1, this%num_blade_points(blID, turbID)
+    do ptID = 1, this%num_blade_points(turbID)
        ! shift origin to rotor_center
        this%blade_points(:, ptID, blID, turbID) = this%blade_points(:, ptID, blID, turbID) - this%rotor_center(:,turbID)
 
@@ -340,7 +400,7 @@ subroutine distribute_forces(this)
       if(this%num_cells_cloud(i) > 0) then
         ! for each blade
         do j = 1, this%num_blades(i)
-          do k = 1, this%num_blade_points(j,i)
+          do k = 1, this%num_blade_points(i)
             ! fx and fy first (C points)
             dist_sq(:,:,:,i) = (x_cloud(:,:,:,i)  - this%blade_points(1,k,j,i))**2 &
                              + (y_cloud(:,:,:,i)  - this%blade_points(2,k,j,i))**2 &
@@ -387,6 +447,8 @@ subroutine interp_clcd(this, i, j, AOA, cl, cd)
     real(rkind), intent(in) :: AOA
     real(rkind), intent(out) :: cl, cd
 
+    cl = zero; cd = zero
+
 end subroutine
 subroutine get_blade_forces(this)
     class(TurbineArray), intent(inout) :: this
@@ -404,10 +466,10 @@ subroutine get_blade_forces(this)
         ! for each blade
         do j = 1, this%num_blades(i)
 
-          element_length = (this%tip_radius(i) - this%hub_radius(i)) / this%num_blade_points(j,i)
+          element_length = (this%tip_radius(i) - this%hub_radius(i)) / this%num_blade_points(i)
 
           ! for each actuator point
-          do k = 1, this%num_blade_points(j,i)
+          do k = 1, this%num_blade_points(i)
 
             radial_dist = this%hub_radius(i) + element_length * (real(k-1, rkind) + half)
             call this%interp_airfoil_props(i, radial_dist, twistAng, chord, airfoilID)
@@ -537,11 +599,19 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs)
 
     fChat => this%cbuffC(:,:,:,1); fEhat => this%cbuffE(:,:,:,1)
 
-    call this%get_rotation_speed()          ! compute turbine rotation speed based on a torque controller
-    call this%update_turbines(dt)           ! update turbine point locations to account for nacelle yaw and blade rotation
-    call this%get_blade_forces()            ! compute forces at ALM actuator points
-    call this%distribute_forces()           ! distribute forces from ALM points to Cartesian grid
+    ! compute turbine rotation speed based on a torque controller
+    call this%get_rotation_speed()         
 
+    ! update turbine point locations to account for nacelle yaw and blade rotation
+    call this%update_turbines(dt)          
+
+    ! compute forces at ALM actuator points
+    call this%get_blade_forces()           
+
+    ! distribute forces from ALM points to Cartesian grid
+    call this%distribute_forces()          
+
+    ! add forces to rhs
     call this%spectC%fft(this%fx,fChat)
     urhs = urhs + fChat
 
