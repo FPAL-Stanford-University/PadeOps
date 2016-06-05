@@ -260,8 +260,6 @@ contains
             call message("WARNING: No Top BCs provided. Using defaults found in igridWallM.F90")
         end if 
 
-
-
         ! Set numerics
         select case(NumericalSchemeVert)
         case(0)
@@ -282,7 +280,6 @@ contains
         end select
 
         
-
         ! STEP 3: GENERATE MESH (CELL CENTERED) 
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         allocate(this%mesh(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),3))
@@ -507,7 +504,6 @@ contains
             end where
             call message(0,"Sponge Layer initialized successfully")
         end if 
-
 
         if (this%useWindTurbines) then
             allocate(this%WindTurbineArr)
@@ -1030,7 +1026,6 @@ contains
         if (this%isStratified) this%T_Orhs = this%T_rhs
         this%dtOld = this%dt
 
-
         ! STEP 11: Do logistical stuff
         if ((mod(this%step,this%tid_compStats)==0) .and. (this%tsim > this%tSimStartStats)) then
             call this%compute_stats()
@@ -1049,7 +1044,6 @@ contains
                  (this%step .ge. this%t_start_planeDump) .and. (this%step .le. this%t_stop_planeDump)) then
             call this%dump_planes()
         end if 
-
 
         ! STEP 12: Update Time and BCs
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
