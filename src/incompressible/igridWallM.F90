@@ -236,7 +236,17 @@ contains
         call decomp_2d_init(nx, ny, nz, prow, pcol)
         call get_decomp_info(this%gpC)
         call decomp_info_init(nx,ny,nz+1,this%gpE)
-       
+        
+        if (mod(nx,2) .ne. 0) then
+            call GracefulExit("Nx has to be an Even.", 423)
+        end if 
+        if (mod(ny,2) .ne. 0) then
+            call GracefulExit("Ny has to be an Even.", 423)
+        end if 
+        if (mod(nz,2) .ne. 0) then
+            call GracefulExit("The code hasn't been tested for odd values of Nz. Crazy shit could happen.", 423)
+        end if 
+
         ! Set Top and Bottom BCs
         if (topWall == slip) then
             topBC_u = .true.; topBC_v = .true.
