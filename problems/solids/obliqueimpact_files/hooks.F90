@@ -1,10 +1,11 @@
-module vorticitytest_data
+module obliqueimpact_data
     use kind_parameters,  only: rkind
     use constants,        only: one,eight
     implicit none
     
     real(rkind) :: omega = 1._rkind
     real(rkind) :: dxdyfixed = 1._rkind
+    real(rkind) :: uvel = 300._rkind, vvel = 100.0_rkind
     real(rkind) :: pinit   = real(1.0D5,rkind)
     real(rkind) :: rho_0
 
@@ -15,7 +16,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: half,one
     use decomp_2d,        only: decomp_info
 
-    use vorticitytest_data
+    use obliqueimpact_data
 
     implicit none
 
@@ -27,8 +28,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
     real(rkind) :: xa, xb, yc, yd
 
-    xa = -1.0D0; xb = 1.0D0
-    yc = -1.0D0; yd = 1.0D0
+    xa = 0.0D0; xb = 2.0D0
+    yc = 0.0D0; yd = 1.0D0
 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
@@ -66,7 +67,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
     
-    use vorticitytest_data
+    use obliqueimpact_data
 
     implicit none
     character(len=*),                                               intent(in)    :: inputfile
@@ -80,7 +81,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
     real(rkind) :: stp_x,bkstp_x,bkstp_y,phiang,u1,u2,v1,v2,rad,stp_r1,bkstp_r2,regfrac,dxdy
 
-    namelist /PROBINPUT/  omega, dxdyfixed
+    namelist /PROBINPUT/  uvel, vvel, dxdyfixed
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -99,43 +100,22 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
-        tmp = tanh( (x-half)/dx )
+        u1 = -uvel; u2 = uvel
+        v1 = -vvel; v2 = vvel
 
+        dxdy = sqrt(dx**2+dy**2)
+        if(dxdyfixed>zero) dxdy = dxdyfixed
+             
         do k=1,decomp%ysz(3)
          do j=1,decomp%ysz(2)
           do i=1,decomp%ysz(1)
 
-             stp_x = half*(tanh((x(i,j,k)-zero)/dx) + one)
-             bkstp_x = one - half*(tanh((x(i,j,k)-zero)/dx) + one)
-             bkstp_y = one - half*(tanh((y(i,j,k)-zero)/dx) + one)
-
-             !phiang = atan(y(i,j,k)/(x(i,j,k)+1.0D-32)) + pi*bkstp_x + two*pi*stp_x*bkstp_y
-             phiang = atan2(y(i,j,k), (x(i,j,k)+1.0D-32))
-
-             u1 = -omega*y(i,j,k); u2 = zero
-             v1 = omega*x(i,j,k); v2 = zero
-             
-             rad = sqrt(x(i,j,k)**2+y(i,j,k)**2); 
-             dxdy = sqrt(dx**2+dy**2)
-             if(dxdyfixed>zero) dxdy = dxdyfixed
-             stp_r1 = half*(tanh((rad-(0.05d0+two*dxdy))/dxdy) + one)
+             stp_r1 = half*(tanh(( x(i,j,k) - (1.0d0 + 0.1d0*cos(6.0d0*pi*y(i,j,k))))/dxdy) + one)
              regfrac = stp_r1
 
              u(i,j,k)   = (u1+regfrac*(u2-u1))
              v(i,j,k)   = (v1+regfrac*(v2-v1))
-             !if((i==20  .and. abs(y(i,j,k))<1.0d-10) .or. &
-             !   (i==30  .and. abs(y(i,j,k))<1.0d-10)) then
-             !  write(*,*) '----------'
-             !  write(*,*) i, j, k
-             !  write(*,*) x(i,j,k), y(i,j,k)
-             !  write(*,*) 'stpx=', stp_x, bkstp_x, bkstp_y
-             !  write(*,*) 'atan=', atan(y(i,j,k)/(x(i,j,k)+1.0D-32))
-             !  write(*,*) phiang, u1, v1
-             !  write(*,*)
-             !  write(*,*) rad, stp_r1, bkstp_r2, regfrac
-             !  write(*,*) u(i,j,k), v(i,j,k)
-             !  write(*,*) '----------'
-             !endif
+
           end do 
          end do 
         end do 
@@ -164,7 +144,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
     use DerivativesMod,   only: derivatives
     use operators,        only: curl
 
-    use vorticitytest_data
+    use obliqueimpact_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -177,7 +157,6 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
     integer                                     :: outputunit=229
 
     real(rkind), allocatable, dimension(:,:,:,:) :: curlg
-    real(rkind), allocatable, dimension(:,:,:) :: xtmp, xdum, ydum, vort
 
     character(len=clen) :: outputfile, velstr
     integer :: i,j,k
@@ -197,10 +176,6 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
 
         ! do post-processing stuff
         allocate(curlg(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3),9))
-        allocate(xtmp(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)))
-        allocate(xdum(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)))
-        allocate(ydum(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)))
-        allocate(vort(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)))
 
         call curl(decomp, der, g11, g12, g13, curlg(:,:,:,1:3))
         call curl(decomp, der, g21, g22, g23, curlg(:,:,:,4:6))
@@ -244,7 +219,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
           close(outputunit)
         endif
 
-        deallocate(curlg,xtmp,xdum,ydum,vort)
+        deallocate(curlg)
     end associate
 end subroutine
 
@@ -255,7 +230,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
 
-    use vorticitytest_data
+    use obliqueimpact_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -299,28 +274,6 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
         g21(nx,:,:) = zero; g22(nx,:,:) = one;  g23(nx,:,:) = zero
         g31(nx,:,:) = zero; g32(nx,:,:) = zero; g33(nx,:,:) = one
 
-        ! bottom y
-        rho( :,1,:) = rho_0
-        u  ( :,1,:) = zero
-        v  ( :,1,:) = zero
-        w  ( :,1,:) = zero
-        p  ( :,1,:) = pinit
-        
-        g11( :,1,:) = one;  g12( :,1,:) = zero; g13( :,1,:) = zero
-        g21( :,1,:) = zero; g22( :,1,:) = one;  g23( :,1,:) = zero
-        g31( :,1,:) = zero; g32( :,1,:) = zero; g33( :,1,:) = one
-
-        ! top y
-        rho( :,ny,:) = rho_0
-        u  ( :,ny,:) = zero
-        v  ( :,ny,:) = zero
-        w  ( :,ny,:) = zero
-        p  ( :,ny,:) = pinit
-        
-        g11( :,ny,:) = one;  g12( :,ny,:) = zero; g13( :,ny,:) = zero
-        g21( :,ny,:) = zero; g22( :,ny,:) = one;  g23( :,ny,:) = zero
-        g31( :,ny,:) = zero; g32( :,ny,:) = zero; g33( :,ny,:) = one
-
     end associate
 end subroutine
 
@@ -331,7 +284,7 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
     use exits,            only: message
     use reductions,       only: P_MAXVAL
 
-    use vorticitytest_data
+    use obliqueimpact_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
