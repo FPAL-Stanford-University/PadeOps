@@ -263,7 +263,6 @@ contains
         real(rkind), intent(in) :: ustar, Umn, Vmn, Uspmn, InvObLength
         real(rkind), intent(out), optional :: max_nuSGS
         complex(rkind), dimension(:,:,:), pointer :: tauhat, tauhat2    
-        integer :: nz
 
 
         dudx  => duidxjC(:,:,:,1); dudy  => duidxjC(:,:,:,2); dudzC => duidxjC(:,:,:,3); 

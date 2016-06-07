@@ -5,6 +5,8 @@ module kspreprocessing
     use gaussianstuff, only: gaussian
     use decomp_2d
     use decomp_2d_io
+    use staggOpsMod, only: staggops
+    use constants, only: two, eight
 
     implicit none
 
@@ -17,18 +19,23 @@ module kspreprocessing
         real(rkind), dimension(:,:,:), allocatable :: ffil,fdump, fxDnX, fxDnY, fxDnyDnY, fxDnyDnZ, fallDnZ, ztmp
         type(spectral), pointer :: spectE
         type(decomp_info), pointer :: gpE, sp_gpE
-        type(decomp_info) :: gp_xDn, gp_xDnyDn, gp_allDn
+        type(decomp_info) :: gp_xDn, gp_xDnyDn, gp_allDn, gp_Dump0, gp_xDn8, gp_xDn8yDn8
         integer, dimension(:), allocatable :: planes2dumpC, planes2dumpF
         integer :: nxF, nyF, nzF
         character(len=clen) :: outputDir
         integer :: RunID
-        complex(rkind), dimension(:,:,:), allocatable :: cbuffY
+        complex(rkind), dimension(:,:,:), allocatable :: cbuffY, fCtmp1, fCtmp2
+        real(rkind), dimension(:,:,:), allocatable :: fdumpFinal, fdump8, fdump8x1, fdump8x2, fdump8y
+        real(rkind), dimension(:,:,:), allocatable :: ztmp8, fxDn8X, fxDn8Y, fxDn8yDn8Y, fxDn8yDn8Z
         type(gaussian) :: zfil1, zfil2
+        type(spectral) :: spectSmall
+        type(staggops) :: OpsSmall
 
         contains 
             procedure :: init
             procedure :: destroy
             procedure :: LES_for_KS
+            procedure :: LES_to_KS
     end type
 
 
@@ -121,8 +128,9 @@ contains
 
 
 
-    subroutine init(this, nx, ny, nz, spectE, gpE, outputdir, RunID, planes2DumpC, planes2DumpF)
+    subroutine init(this, nx, ny, nz, spectE, gpE, outputdir, RunID, dx, dy, dz, planes2DumpC, planes2DumpF)
         class(ksprep), intent(inout) :: this
+        real(rkind), intent(in) :: dx, dy, dz
         integer, intent(in) :: runID, nx, ny, nz
         type(decomp_info), target, intent(in) :: gpE 
         type(spectral), target, intent(in) :: spectE
@@ -158,8 +166,191 @@ contains
         this%planes2dumpC = planes2dumpC
         this%planes2dumpF = planes2dumpF
 
+
+        call decomp_info_init(nx/8, ny/8, nz/2, this%gp_Dump0)
+        call decomp_info_init(nx/8, ny, nz+1, this%gp_xDn8)
+        call decomp_info_init(nx/8, ny/8, nz+1, this%gp_xDn8yDn8)
+
+
+        call this%spectSmall%init("x", nx/8, ny/8, nz/2, eight*dx, eight*dy, two*dz, "four", "2/3rd", 2, .false.)
+        call this%OpsSmall%init( this%gp_Dump0, this%gp_Dump0, 2 , dx*eight, dy*eight, dz*two, &
+                           this%spectSmall%spectdecomp, this%spectSmall%spectdecomp, .true., .true.)
+    
+        allocate(this%fdump8(this%gp_Dump0%zsz(1),this%gp_Dump0%zsz(2),this%gp_Dump0%zsz(3)))               
+        allocate(this%fdumpFinal(this%gp_Dump0%zsz(1),this%gp_Dump0%zsz(2),this%gp_Dump0%zsz(3)))               
+        allocate(this%fdump8x1(this%gp_Dump0%xsz(1),this%gp_Dump0%xsz(2),this%gp_Dump0%xsz(3)))               
+        allocate(this%fdump8x2(this%gp_Dump0%xsz(1),this%gp_Dump0%xsz(2),this%gp_Dump0%xsz(3)))               
+        allocate(this%fdump8y(this%gp_Dump0%ysz(1),this%gp_Dump0%ysz(2),this%gp_Dump0%ysz(3)))               
+        call this%spectSmall%alloc_r2c_out(this%fCtmp1)
+        call this%spectSmall%alloc_r2c_out(this%fCtmp2)
+
+        allocate(this%ztmp8(this%gp_Dump0%zsz(1),this%gp_Dump0%zsz(2),this%gp_Dump0%zsz(3)))
+        allocate(this%fxDn8X(this%gp_xDn8%xsz(1),this%gp_xDn8%xsz(2),this%gp_xDn8%xsz(3)))
+        allocate(this%fxDn8Y(this%gp_xDn8%ysz(1),this%gp_xDn8%ysz(2),this%gp_xDn8%ysz(3)))
+        allocate(this%fxDn8yDn8Y(this%gp_xDn8yDn8%ysz(1),this%gp_xDn8yDn8%ysz(2),this%gp_xDn8yDn8%ysz(3)))
+        allocate(this%fxDn8yDn8Z(this%gp_xDn8yDn8%zsz(1),this%gp_xDn8yDn8%zsz(2),this%gp_xDn8yDn8%zsz(3)))
+
     end subroutine
 
+    subroutine LES_to_KS(this, uE, vE, wE, tid)
+        class(ksprep), intent(inout) :: this
+        real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: uE, vE, wE
+        integer :: idx, pid, dirid = 3
+        integer, intent(in) :: tid
+        character(len=clen) :: fname, tempname
+        character(len=4) :: flabel
+
+
+        ! u field
+        call this%spectE%fft(uE,this%cbuffY)
+        call this%spectE%KSprepFilter2(this%cbuffY)
+        call this%spectE%ifft(this%cbuffY,this%ffil)
+        call DownsampleBy8_x(this%ffil,this%fxDn8X)
+        call transpose_x_to_y(this%fxDn8X,this%fxDn8Y,this%gp_xDn8)
+        call DownsampleBy8_y(this%fxDn8Y,this%fxDn8yDn8Y)
+        call transpose_y_to_z(this%fxDn8yDn8Y,this%fxDn8yDn8Z,this%gp_xDn8yDn8)
+        call this%zfil1%filter3(this%fxDn8yDn8Z, this%zTmp8, size(this%zTmp8,1),size(this%zTmp8,2))
+        call DownsampleBy2_z_E2C(this%zTmp8, this%fdump8)
+        call this%zfil2%filter3(this%fdump8,this%fdumpFinal,size(this%fdump8,1),size(this%fdump8,2))
+        flabel = ".usw"
+        do idx = 1,size(this%planes2dumpC)
+            pid = this%planes2dumpC(idx)
+            write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_C",pid,flabel
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(3,this%fdump8,dirid, pid,fname,this%gp_Dump0)
+        end do 
+        call transpose_z_to_y(this%fdumpFinal,this%fdump8y,this%gp_Dump0)
+        call transpose_y_to_x(this%fdump8y,this%fdump8x1,this%gp_Dump0)
+        call this%spectSmall%fft(this%fdump8x1,this%fCtmp1)
+        call this%spectSmall%mtimes_ik1_oop(this%fCtmp1,this%fCtmp2)
+        call this%spectSmall%ifft(this%fCtmp2,this%fdump8x1)
+        flabel = ".udx"
+        do idx = 1,size(this%planes2dumpC)
+            pid = this%planes2dumpC(idx)
+            write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_C",pid,flabel
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(1,this%fdump8x1,dirid, pid,fname,this%gp_Dump0)
+        end do 
+        call this%spectSmall%mtimes_ik2_ip(this%fCtmp1)
+        call this%spectSmall%ifft(this%fCtmp1,this%fdump8x1)
+        flabel = ".udy"
+        do idx = 1,size(this%planes2dumpC)
+            pid = this%planes2dumpC(idx)
+            write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_C",pid,flabel
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(1,this%fdump8x1,dirid, pid,fname,this%gp_Dump0)
+        end do 
+        call this%OpsSmall%ddz_C2C(this%fdumpFinal,this%fdump8,.true.,.false.)
+        flabel = ".udz"
+        do idx = 1,size(this%planes2dumpC)
+            pid = this%planes2dumpC(idx)
+            write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_C",pid,flabel
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(3,this%fdump8,dirid, pid,fname,this%gp_Dump0)
+        end do 
+
+
+        ! v field
+        call this%spectE%fft(vE,this%cbuffY)
+        call this%spectE%KSprepFilter2(this%cbuffY)
+        call this%spectE%ifft(this%cbuffY,this%ffil)
+        call DownsampleBy8_x(this%ffil,this%fxDn8X)
+        call transpose_x_to_y(this%fxDn8X,this%fxDn8Y,this%gp_xDn8)
+        call DownsampleBy8_y(this%fxDn8Y,this%fxDn8yDn8Y)
+        call transpose_y_to_z(this%fxDn8yDn8Y,this%fxDn8yDn8Z,this%gp_xDn8yDn8)
+        call this%zfil1%filter3(this%fxDn8yDn8Z, this%zTmp8, size(this%zTmp8,1),size(this%zTmp8,2))
+        call DownsampleBy2_z_E2C(this%zTmp8, this%fdump8)
+        call this%zfil2%filter3(this%fdump8,this%fdumpFinal,size(this%fdump8,1),size(this%fdump8,2))
+        flabel = ".vsw"
+        do idx = 1,size(this%planes2dumpC)
+            pid = this%planes2dumpC(idx)
+            write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_C",pid,flabel
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(3,this%fdump8,dirid, pid,fname,this%gp_Dump0)
+        end do 
+        call transpose_z_to_y(this%fdumpFinal,this%fdump8y,this%gp_Dump0)
+        call transpose_y_to_x(this%fdump8y,this%fdump8x1,this%gp_Dump0)
+        call this%spectSmall%fft(this%fdump8x1,this%fCtmp1)
+        call this%spectSmall%mtimes_ik1_oop(this%fCtmp1,this%fCtmp2)
+        call this%spectSmall%ifft(this%fCtmp2,this%fdump8x1)
+        flabel = ".vdx"
+        do idx = 1,size(this%planes2dumpC)
+            pid = this%planes2dumpC(idx)
+            write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_C",pid,flabel
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(1,this%fdump8x1,dirid, pid,fname,this%gp_Dump0)
+        end do 
+        call this%spectSmall%mtimes_ik2_ip(this%fCtmp1)
+        call this%spectSmall%ifft(this%fCtmp1,this%fdump8x1)
+        flabel = ".vdy"
+        do idx = 1,size(this%planes2dumpC)
+            pid = this%planes2dumpC(idx)
+            write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_C",pid,flabel
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(1,this%fdump8x1,dirid, pid,fname,this%gp_Dump0)
+        end do 
+        call this%OpsSmall%ddz_C2C(this%fdumpFinal,this%fdump8,.true.,.false.)
+        flabel = ".vdz"
+        do idx = 1,size(this%planes2dumpC)
+            pid = this%planes2dumpC(idx)
+            write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_C",pid,flabel
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(3,this%fdump8,dirid, pid,fname,this%gp_Dump0)
+        end do 
+
+        
+        ! w field
+        call this%spectE%fft(wE,this%cbuffY)
+        call this%spectE%KSprepFilter2(this%cbuffY)
+        call this%spectE%ifft(this%cbuffY,this%ffil)
+        call DownsampleBy8_x(this%ffil,this%fxDn8X)
+        call transpose_x_to_y(this%fxDn8X,this%fxDn8Y,this%gp_xDn8)
+        call DownsampleBy8_y(this%fxDn8Y,this%fxDn8yDn8Y)
+        call transpose_y_to_z(this%fxDn8yDn8Y,this%fxDn8yDn8Z,this%gp_xDn8yDn8)
+        call this%zfil1%filter3(this%fxDn8yDn8Z, this%zTmp8, size(this%zTmp8,1),size(this%zTmp8,2))
+        call DownsampleBy2_z_E2C(this%zTmp8, this%fdump8)
+        call this%zfil2%filter3(this%fdump8,this%fdumpFinal,size(this%fdump8,1),size(this%fdump8,2))
+        flabel = ".wsw"
+        do idx = 1,size(this%planes2dumpC)
+            pid = this%planes2dumpC(idx)
+            write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_C",pid,flabel
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(3,this%fdump8,dirid, pid,fname,this%gp_Dump0)
+        end do 
+        call transpose_z_to_y(this%fdumpFinal,this%fdump8y,this%gp_Dump0)
+        call transpose_y_to_x(this%fdump8y,this%fdump8x1,this%gp_Dump0)
+        call this%spectSmall%fft(this%fdump8x1,this%fCtmp1)
+        call this%spectSmall%mtimes_ik1_oop(this%fCtmp1,this%fCtmp2)
+        call this%spectSmall%ifft(this%fCtmp2,this%fdump8x1)
+        flabel = ".wdx"
+        do idx = 1,size(this%planes2dumpC)
+            pid = this%planes2dumpC(idx)
+            write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_C",pid,flabel
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(1,this%fdump8x1,dirid, pid,fname,this%gp_Dump0)
+        end do 
+        call this%spectSmall%mtimes_ik2_ip(this%fCtmp1)
+        call this%spectSmall%ifft(this%fCtmp1,this%fdump8x1)
+        flabel = ".wdy"
+        do idx = 1,size(this%planes2dumpC)
+            pid = this%planes2dumpC(idx)
+            write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_C",pid,flabel
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(1,this%fdump8x1,dirid, pid,fname,this%gp_Dump0)
+        end do 
+        call this%OpsSmall%ddz_C2C(this%fdumpFinal,this%fdump8,.true.,.false.)
+        flabel = ".wdz"
+        do idx = 1,size(this%planes2dumpC)
+            pid = this%planes2dumpC(idx)
+            write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_C",pid,flabel
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(3,this%fdump8,dirid, pid,fname,this%gp_Dump0)
+        end do 
+
+
+
+
+    end subroutine
 
     subroutine LES_for_KS(this,uE,vE,wE, tid)
         class(ksprep), intent(inout) :: this
@@ -216,7 +407,7 @@ contains
             pid = this%planes2dumpF(idx)
             write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_F",pid,flabel
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_plane(1,uE,dirid, pid, fname, this%gpE)
+            call decomp_2d_write_plane(1,vE,dirid, pid, fname, this%gpE)
         end do  
 
 
@@ -242,7 +433,7 @@ contains
             pid = this%planes2dumpF(idx)
             write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_F",pid,flabel
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_plane(1,uE,dirid, pid, fname, this%gpE)
+            call decomp_2d_write_plane(1,wE,dirid, pid, fname, this%gpE)
         end do  
      
 

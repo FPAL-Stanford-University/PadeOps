@@ -222,3 +222,12 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
 end subroutine
 
+subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
+    integer, dimension(:), allocatable,  intent(inout) :: planesFineGrid
+    integer, dimension(:), allocatable,  intent(inout) :: planesCoarseGrid
+    
+    allocate(planesCoarseGrid(1), planesFineGrid(1))
+    planesCoarseGrid = [8]
+    planesFineGrid = [16]
+
+end subroutine

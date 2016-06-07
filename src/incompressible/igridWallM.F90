@@ -3,7 +3,7 @@ module IncompressibleGridWallM
     use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa 
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
-    use igrid_hooks, only: meshgen_WallM, initfields_wallM, set_planes_io
+    use igrid_hooks, only: meshgen_WallM, initfields_wallM, set_planes_io, set_KS_planes_io 
     use decomp_2d
     use StaggOpsMod, only: staggOps  
     use exits, only: GracefulExit, message
@@ -20,6 +20,7 @@ module IncompressibleGridWallM
     use cf90stuff, only: cf90
     use PadePoissonMod, only: Padepoisson 
     use TurbineMod, only: TurbineArray 
+    use kspreprocessing, only: ksprep  
 
     implicit none
 
@@ -123,6 +124,14 @@ module IncompressibleGridWallM
         ! Wind Turbine stuff 
         type(turbineArray), allocatable :: WindTurbineArr
 
+        ! KS preprocessor 
+        type(ksprep), allocatable :: LES2KS
+        character(len=clen) :: KSoutputdir
+        logical :: PreProcessForKS
+        integer, dimension(:), allocatable :: planes2dumpC_KS, planes2dumpF_KS
+        integer :: t_dumpKSprep
+
+
         integer, dimension(:), allocatable :: xplanes, yplanes, zplanes
         ! Note that c_SGS is linked to a variable that is constant along & 
         ! i, j but is still stored as a full 3 rank array. This is mostly done to
@@ -166,20 +175,20 @@ contains
     subroutine init(this,inputfile)
         class(igridWallM), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
-        character(len=clen) :: outputdir, inputdir, turbineInfoFile
+        character(len=clen) :: outputdir, inputdir, turbineInfoFile, ksOutputDir
         integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, topWall = slip, SGSModelID = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
-        integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999, t_stop_planeDump = 1
+        integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1, botBC_Temp = 0
         real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop,ncWall=1.d0
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, z0 = 1.d-4, Cs = 0.17d0
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0,Gx=0.d0,Gy=0.d0,Gz=0.d0
-        logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true. 
+        logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
         logical ::isStratified=.false.,dumpPlanes = .false., useSGSclipping = .true.,useExtraForcing = .false.
         logical ::useSGS = .true.,useDynamicProcedure = .false.,useSpongeLayer=.false.,useWindTurbines = .false.
         logical :: useGeostrophicForcing = .false., useVerticalTfilter = .false., useWallDamping = .true. 
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
-        integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10
+        integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .false., UseDealiasFilterVert = .false.
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
@@ -196,7 +205,8 @@ contains
         namelist /WINDTURBINES/ useWindTurbines, turbineInfoFile  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck
-
+        namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep
+                            
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -210,6 +220,7 @@ contains
         read(unit=ioUnit, NML=LES)
         read(unit=ioUnit, NML=WALLMODEL)
         read(unit=ioUnit, NML=WINDTURBINES)
+        read(unit=ioUnit, NML=KSPREPROCESS)
         close(ioUnit)
       
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
@@ -228,7 +239,8 @@ contains
         this%useDynamicProcedure = useDynamicProcedure; this%UseDealiasFilterVert = UseDealiasFilterVert
         this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; this%gravity_nd = one/(this%Fr**2)
         this%t_start_planeDump = t_start_planeDump; this%t_stop_planeDump = t_stop_planeDump
-        this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro
+        this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro; 
+        this%PreProcessForKS = preprocessForKS; this%KSOutputDir = KSoutputDir;this%t_dumpKSprep = t_dumpKSprep 
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
         
         ! STEP 2: ALLOCATE DECOMPOSITIONS
@@ -518,6 +530,15 @@ contains
         call this%compute_deltaT()
         this%dtOld = this%dt
         this%dtRat = one 
+
+
+        ! STEP 14: Preprocessing for KS
+        if (this%PreprocessForKS) then
+            allocate(this%LES2KS)
+            call set_KS_planes_io(this%planes2dumpC_KS, this%planes2dumpF_KS) 
+            call this%LES2KS%init(nx,ny,nz,this%spectE, this%gpE, this%KSOutputDir, KSrunID, this%dx, this%dy, &
+               &         this%dz, this%planes2dumpC_KS, this%planes2dumpF_KS)
+        end if 
 
         ! Final Step: Safeguard against unfinished procedures
         if ((useCompactFD).and.(.not.useSkewSymm)) then
@@ -1043,6 +1064,11 @@ contains
         if ((this%dumpPlanes) .and. (mod(this%step,this%t_planeDump) == 0) .and. &
                  (this%step .ge. this%t_start_planeDump) .and. (this%step .le. this%t_stop_planeDump)) then
             call this%dump_planes()
+        end if 
+
+        if ((this%PreprocessForKS) .and. (mod(this%step,this%t_dumpKSprep) == 0)) then
+            call this%LES2KS%LES_TO_KS(this%uE,this%vE,this%w,this%step)
+            call this%LES2KS%LES_FOR_KS(this%uE,this%vE,this%w,this%step)
         end if 
 
         ! STEP 12: Update Time and BCs

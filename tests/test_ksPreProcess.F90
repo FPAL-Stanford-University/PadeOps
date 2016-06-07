@@ -64,10 +64,12 @@ program test_KSprep
     call transpose_z_to_y(buffzE,buffyE,gpE)
     call transpose_y_to_x(buffyE,vE,gpE)
 
+  
+    
+    call les2ks%init(nx,ny,nz,spectE, gpE, outputdir,10, dx, dy, dz, planes2dumpC, planes2dumpF)
 
-    call les2ks%init(nx,ny,nz,spectE, gpE, outputdir,10, planes2dumpC, planes2dumpF)
-
-    call les2ks%dumpKSprep(uE,vE,wE,0)
+    call les2ks%LES_to_KS(uE,vE,wE,0)
+    call les2ks%LES_for_KS(uE,vE,wE,0)
     call les2ks%destroy()
 
 
