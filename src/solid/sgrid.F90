@@ -63,8 +63,6 @@ module SolidGrid
         type(solid_mixture), allocatable :: mix
         type(ladobject),     allocatable :: LAD
 
-        logical     :: plastic
-        logical     :: explPlast
         logical     :: PTeqb                       ! Use pressure and temperature equilibrium formulation
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
@@ -156,11 +154,9 @@ contains
         real(rkind) :: Ckap = 0.01_rkind
         real(rkind) :: Cdiff = 0.003_rkind
         real(rkind) :: CY = 100._rkind
-        logical     :: plastic = .FALSE.
-        real(rkind) :: yield = real(1.D30,rkind)
-        logical     :: explPlast = .FALSE.
         logical     :: PTeqb = .TRUE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
+        integer     :: x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn    ! 0: general, 1: symmetric/anti-symmetric
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                              inputdir, outputdir, vizprefix, tviz, &
@@ -169,8 +165,9 @@ contains
                                      filter_x, filter_y, filter_z, &
                                                        prow, pcol, &
                                                          SkewSymm  
-        namelist /SINPUT/  gam, Rgas, PInf, shmod, plastic, yield, &
-                           explPlast, PTeqb, SOSmodel, ns, Cmu, Cbeta, Ckap, Cdiff, CY
+        namelist /SINPUT/  gam, Rgas, PInf, shmod, &
+                           PTeqb, SOSmodel, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
+                           x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -191,8 +188,6 @@ contains
         this%step = 0
         this%nsteps = nsteps
 
-        this%plastic = plastic 
-        this%explPlast = explPlast
         this%PTeqb = PTeqb
 
         ! Allocate decomp
@@ -209,6 +204,16 @@ contains
         this%periodicx = periodicx
         this%periodicy = periodicy
         this%periodicz = periodicz
+
+        if ( ((x_bc1 /= 0) .AND. (x_bc1 /= 1)) ) call GracefulExit("x_bc1 can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((x_bcn /= 0) .AND. (x_bcn /= 1)) ) call GracefulExit("x_bcn can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((y_bc1 /= 0) .AND. (y_bc1 /= 1)) ) call GracefulExit("y_bc1 can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((y_bcn /= 0) .AND. (y_bcn /= 1)) ) call GracefulExit("y_bcn can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((z_bc1 /= 0) .AND. (z_bc1 /= 1)) ) call GracefulExit("z_bc1 can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((z_bcn /= 0) .AND. (z_bcn /= 1)) ) call GracefulExit("z_bcn can be only 0 (general) or 1 (symmetric)",4634)
+        this%x_bc = [x_bc1, x_bcn]
+        this%y_bc = [y_bc1, y_bcn]
+        this%z_bc = [z_bc1, z_bcn]
 
         this%derivative_x = derivative_x    
         this%derivative_y = derivative_y    
@@ -414,12 +419,13 @@ contains
 
     end subroutine
 
-    subroutine gradient(this, f, dfdx, dfdy, dfdz)
+    subroutine gradient(this, f, dfdx, dfdy, dfdz, x_bc, y_bc, z_bc)
         class(sgrid),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdx
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdy
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdz
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
 
         type(derivatives), pointer :: der
         type(decomp_info), pointer :: decomp
@@ -433,25 +439,26 @@ contains
         zdum => this%zbuf(:,:,:,2)
 
         ! Get Y derivatives
-        call der%ddy(f,dfdy)
+        call der%ddy(f,dfdy,y_bc(1),y_bc(2))
 
         ! Get X derivatives
         call transpose_y_to_x(f,xtmp,decomp)
-        call der%ddx(xtmp,xdum)
+        call der%ddx(xtmp,xdum,x_bc(1),x_bc(2))
         call transpose_x_to_y(xdum,dfdx)
 
         ! Get Z derivatives
         call transpose_y_to_z(f,ztmp,decomp)
-        call der%ddz(ztmp,zdum)
+        call der%ddz(ztmp,zdum,z_bc(1),z_bc(2))
         call transpose_z_to_y(zdum,dfdz)
 
     end subroutine 
 
-    subroutine laplacian(this, f, lapf)
+    subroutine laplacian(this, f, lapf, x_bc, y_bc, z_bc)
         use timer
         class(sgrid),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         
         real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum, ytmp
         type(derivatives), pointer :: der
@@ -467,18 +474,18 @@ contains
         ytmp => this%ybuf(:,:,:,1)
 
         ! Get Y derivatives
-        call der%d2dy2(f,lapf)
+        call der%d2dy2(f,lapf,y_bc(1),y_bc(2))
         
         ! Get X derivatives
         call transpose_y_to_x(f,xtmp,this%decomp) 
-        call this%der%d2dx2(xtmp,xdum)
+        call this%der%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
         call transpose_x_to_y(xdum,ytmp,this%decomp)
 
         lapf = lapf + ytmp
 
         ! Get Z derivatives
         call transpose_y_to_z(f,ztmp,this%decomp)
-        call this%der%d2dz2(ztmp,zdum)
+        call this%der%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
         call transpose_z_to_y(zdum,ytmp,this%decomp)
         
         lapf = lapf + ytmp
@@ -505,13 +512,13 @@ contains
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
         
-        call this%gradient(this%u,dudx,dudy,dudz)
-        call this%gradient(this%v,dvdx,dvdy,dvdz)
-        call this%gradient(this%w,dwdx,dwdy,dwdz)
+        call this%gradient(this%u, dudx, dudy, dudz, -this%x_bc,  this%y_bc,  this%z_bc)
+        call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,  this%z_bc)
+        call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
 
         do i=1,this%mix%ns
             call this%gradient(this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),&
-                               this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3))
+                               this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3), this%x_bc,  this%y_bc, this%z_bc)
         end do
 
         ! compute artificial shear and bulk viscosities
@@ -627,7 +634,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: Qtmp      ! Temporary variable for RK45
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: divu      ! Velocity divergence for species energy eq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: viscwork  ! Viscous work term for species energy eq
-        integer :: isub,i,j,k,l
+        integer :: isub,i,j,k,l, x_bc(2), y_bc(2), z_bc(2)
 
         character(len=clen) :: charout
 
@@ -657,12 +664,12 @@ contains
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
             ! Now update all the individual species variables
-            call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim)               ! g tensor
-            call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim)               ! Volume Fraction
+            call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
+            call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
 
             if (.NOT. this%PTeqb) then
-                call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork) ! Hydrodynamic energy
-                call this%mix%update_VF(isub,this%dt,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim)                        ! Volume Fraction
+                call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
+                call this%mix%update_VF(isub,this%dt,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
             end if
 
             ! Integrate simulation time to keep it in sync with RK substep
@@ -671,11 +678,19 @@ contains
 
             ! Filter the conserved variables
             do i = 1,ncnsrv
-                call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1)
+                x_bc = this%x_bc; y_bc = this%y_bc; z_bc = this%z_bc
+                if(i == mom_index) then
+                  x_bc = -this%x_bc
+                else if(i == mom_index+1) then
+                  y_bc = -this%y_bc
+                else if(i == mom_index+2) then
+                  z_bc = -this%z_bc
+                end if
+                call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1, x_bc, y_bc, z_bc)
             end do
 
             ! Filter the individual species variables
-            call this%mix%filter(1)
+            call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
             
             call this%get_primitive()
 
@@ -703,7 +718,7 @@ contains
                 call this%mix%relaxPressure(this%rho, this%e, this%p)
             end if
             
-            call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
+            call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             call this%post_bc()
         end do
 
@@ -725,13 +740,14 @@ contains
         dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
 
+        ! species specific
+        call this%mix%get_dt(this%rho, delta, dtkap, dtdiff, dtplast)
+
         if (this%PTeqb) then
             !dtkap  = delta**2 / (P_MAXVAL( this%kap*this%T/(this%rho*this%sos**2)) + eps)   ! Cook (2007) formulation
             dtkap  = one / ( (P_MAXVAL(this%kap*this%T/(this%rho*delta**4)))**(third) + eps) ! Cook (2009) formulation
         end if
 
-        ! species specific
-        call this%mix%get_dt(this%rho, delta, dtkap, dtdiff, dtplast)
         dtkap = 0.2_rkind * dtkap
         dtdiff = 0.2_rkind * dtdiff
 
@@ -836,9 +852,9 @@ contains
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
         
-        call this%gradient(this%u,dudx,dudy,dudz)
-        call this%gradient(this%v,dvdx,dvdy,dvdz)
-        call this%gradient(this%w,dwdx,dwdy,dwdz)
+        call this%gradient(this%u, dudx, dudy, dudz, -this%x_bc,  this%y_bc,  this%z_bc)
+        call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,  this%z_bc)
+        call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
 
         divu = dudx + dvdy + dwdz
 
@@ -870,7 +886,7 @@ contains
        
         ! Get heat conduction vector (q). Stored in remaining 3 components of duidxj 
         qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
-        call this%mix%get_qmix(qx, qy, qz)                     ! Get only species diffusion fluxes if PTeqb, else, everythin
+        call this%mix%get_qmix(qx, qy, qz)                     ! Get only species diffusion fluxes if PTeqb, else, everything
         if (this%PTeqb) call this%get_q(qx, qy, qz)            ! add artificial thermal conduction fluxes
 
         rhs = zero
@@ -1001,11 +1017,13 @@ contains
 
     end subroutine
 
-    subroutine filter(this,arr,myfil,numtimes)
+    subroutine filter(this,arr,myfil,numtimes,x_bc_,y_bc_,z_bc_)
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
         type(filters), target, optional, intent(in) :: myfil
         integer, optional, intent(in) :: numtimes
+        integer, dimension(2), optional, intent(in) :: x_bc_, y_bc_, z_bc_
+        integer, dimension(2) :: x_bc, y_bc, z_bc
         
         type(filters), pointer :: fil2use
         integer :: times2fil
@@ -1038,25 +1056,28 @@ contains
         tmp_in_y => this%ybuf(:,:,:,lasty)
         tmp1_in_z => this%zbuf(:,:,:,lastz)
         tmp2_in_z => this%zbuf(:,:,:,lastz-1)
-       
+
+        x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
+        y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
+        z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
         
         ! First filter in y
-        call fil2use%filtery(arr,tmp_in_y)
+        call fil2use%filtery(arr,tmp_in_y,y_bc(1),y_bc(2))
         ! Subsequent refilters 
         do idx = 1,times2fil-1
             arr = tmp_in_y
-            call fil2use%filtery(arr,tmp_in_y)
+            call fil2use%filtery(arr,tmp_in_y,y_bc(1),y_bc(2))
         end do
         
         ! Then transpose to x
         call transpose_y_to_x(tmp_in_y,tmp1_in_x,this%decomp)
 
         ! First filter in x
-        call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+        call fil2use%filterx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
         ! Subsequent refilters
         do idx = 1,times2fil-1
             tmp1_in_x = tmp2_in_x
-            call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+            call fil2use%filterx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
         end do 
 
         ! Now transpose back to y
@@ -1066,11 +1087,11 @@ contains
         call transpose_y_to_z(tmp_in_y,tmp1_in_z,this%decomp)
 
         !First filter in z
-        call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+        call fil2use%filterz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
         ! Subsequent refilters
         do idx = 1,times2fil-1
             tmp1_in_z = tmp2_in_z
-            call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+            call fil2use%filterz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
         end do 
 
         ! Now transpose back to y

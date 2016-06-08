@@ -1,116 +1,14 @@
-module Multispecies_shock_data
+module MultSpecGauss_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,two,eight
+    use constants,        only: one,eight,two
     implicit none
 
-    real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
-    real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one
-    real(rkind) :: minVF = 0.2_rkind, thick = one
-    real(rkind) :: rhoRatio = one, pRatio = two
-    logical     :: sharp = .FALSE.
-    real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
-    real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR
-    real(rkind) :: yield = one, yield2 = one
-    logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
-    logical     :: plastic = .FALSE., plastic2 = .FALSE.
-
-contains
-
-SUBROUTINE fnumden(pf,fparams,iparams,num,den)
-
-  use constants, only: half,third,twothird
-  IMPLICIT NONE
-  REAL(rkind), INTENT(IN) :: pf
-  REAL(rkind), INTENT(IN), DIMENSION(:) :: fparams
-  INTEGER, INTENT(IN), DIMENSION(:) :: iparams
-  REAL(rkind), INTENT(OUT) :: num,den
-
-  INTEGER :: i, im
-  REAL(rkind) :: fac, rho1, u1, p1, p2, rho0, gam, pinf, mus, gm1, gp1, g11, frho1, grho1, Arho1, Brho1, frho2, grho2, fprho2, gprho2
-
-  real(rkind), parameter :: eleventhird = real(11.D0/3.D0,rkind), seventhird = real(7.D0/3.D0,rkind), sixth = real(one/6.D0,rkind), &
-                            sevensixth = real(7.D0/6.D0,rkind), eightthird = real(8.D0/3.D0,rkind), onetwone = real(121.D0, rkind), &
-                            thirstysix = real(36.D0,rkind), fortynine = real(49.D0,rkind), eighteen = real(18.D0,rkind),            &
-                            eighteenth = one/eighteen, ninth = real(one/9.0D0,rkind), threefourth = real(3.D0/4.D0,rkind),          &
-                            eleventwelfth = real(11.D0/12.D0,rkind), fourthird = real(4.D0/3.D0,rkind)
-
-  ! if (iparams(1)==PRESSRELAX) then
-  !   num = -one; den = zero;
-  !   i = iparams(2)
-  !   !do im = 1, NUMMAT
-  !   !  fac = vfm(i,im)/MAT_GAM(im)/(MAT_PINF(im)+pf)
-  !   !  num = num + fac*(psph(i,im)+MAT_GAM(im)*(MAT_PINF(im)+pf)-pf)
-  !   !  den = den - fac*(psph(i,im)+MAT_PINF(im))/(pf+MAT_PINF(im))
-  !   !enddo
-  ! elseif(iparams(1)==SOLIDSTATSHOCK) then
-    rho1 = fparams(1); u1 = fparams(2); p1 = fparams(3)
-    rho0 = fparams(4); gam = fparams(5); pinf = fparams(6); mus = fparams(7);
-    p2 = fparams(8)
-
-    gm1 = gam-one; gp1 = gam+one
-
-    g11 = rho1/rho0    ! g11_1
-    grho1 = g11**eleventhird - g11**(-third) - g11**seventhird + g11**third
-    frho1 = (eleventwelfth*g11**eleventhird - sixth*g11**(-third) - sevensixth*g11**seventhird -third*g11**third + threefourth*g11)
-
-    Arho1 = (half*u1**two + gam/gm1*(p1+pinf) + mus*frho1)/rho1
-    Brho1 = gam/gm1*(p1+pinf+rho1*u1**two+twothird*mus*grho1)
-
-    g11 = pf/rho0     ! g11_2
-    grho2 = g11**eleventhird - g11**(-third) - g11**seventhird + g11**third
-    frho2 = (eleventwelfth*g11**eleventhird - sixth*g11**(-third) - sevensixth*g11**seventhird -third*g11**third + threefourth*g11)
-    gprho2 = one/rho0*(eleventhird*g11**eightthird + third*g11**(-fourthird) &
-                     - seventhird*g11**fourthird + third*g11**(-twothird))
-    fprho2 = one/rho0*(onetwone/thirstysix*g11**eightthird - fortynine/eighteen*g11**fourthird &
-                     + eighteenth*g11**(-fourthird) - ninth*g11**(-twothird) + threefourth)
-
-    !! based on uL
-    !num = Arho1 - (Brho1 - half*gp1/gm1*(rho1*u1)**two/pf + mus*frho2 - twothird*gam/gm1*mus*grho2)/pf
-    !den = - one/pf*(half*gp1/gm1*(rho1*u1/pf)**two - twothird*mus*gam/gm1*gprho2 + mus*fprho2) &
-    !      + one/pf**two*(-half*gp1/gm1*(rho1*u1)**two/pf - twothird*mus*gam/gm1*grho2 + mus*frho2 + Brho1)
-
-    ! based on pR
-    num = (gam/gm1*(p1+pinf) + mus*frho1)/rho1 - half*(one/rho1+one/pf)*(p1-p2+twothird*mus*(grho1-grho2)) - mus*frho2/pf - gam/gm1/pf*(p2+pinf)
-    den = half/pf**two*(p1-p2+twothird*mus*(grho1-grho2)+two*gam/gm1*(p2+pinf)) + mus*(third*(one/rho1+one/pf)*gprho2 + frho2/pf**two - fprho2/pf)
-
-  ! endif
-
-END SUBROUTINE fnumden
-
-SUBROUTINE rootfind_nr_1d(pf,fparams,iparams)
-
-  IMPLICIT NONE
-  REAL(rkind), INTENT(INOUT) :: pf
-  REAL(rkind), INTENT(IN), DIMENSION(:) :: fparams
-  INTEGER, INTENT(IN), DIMENSION(:) :: iparams
-
-  INTEGER :: ii, itmax = 1000
-  REAL(rkind) :: tol = 1.0d-8
-  REAL(rkind) :: dpf, num, den, den_conv
-
-  !pfinitguess = pf
-  do ii = 1, itmax
-    call fnumden(pf,fparams,iparams,num,den)
-    if(dabs(den)>1.0d-12) then
-      dpf = num/den
-    else
-      write(*,*) 'den very small, please check.', num, num/den
-      stop
-    endif
-    pf = pf - dpf
-    ! check for convergence
-    if(dabs(pf)>1.0d-12) then
-      den_conv = dabs(pf)
-    else
-      den_conv = one
-    endif
-    if(dabs(dpf)/den_conv<1.0d-8) exit
-  enddo
-  if(ii==itmax+1) then
-    write(*,*) 'Newtons method for pf did not converge. Check details.', iparams(1)
-  endif
-
-END SUBROUTINE rootfind_nr_1d
+    real(rkind) :: p_infty   = one, Rgas   = one, gamma   = 1.4_rkind, mu   = 10._rkind, rho_0   = one, p_amb = 0.1_rkind
+    real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one, p_amb_2 = 0.1_rkind
+    real(rkind) :: minVF = 0.2_rkind, thick = one, rho_ratio = two, thickness = 0.001_rkind
+    real(rkind) :: rhomax, rhomin, umax, umin, vmax, vmin, wmax, wmin, pmax, pmin, Tmax, Tmin, vfmax, vfmin
+    real(rkind) :: Ys1max, Ys1min, eh1max, eh1min, g1max, g1min, Ys2max, Ys2min, eh2max, eh2min, g2max, g2min
+    real(rkind) :: sigma_0 = one, lamL, lamL_2, cL, cL_2, cL_mix, cL_mix_2, crefl, ctran
 
 end module
 
@@ -119,7 +17,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: one
     use decomp_2d,        only: decomp_info
 
-    use Multispecies_shock_data
+    use MultSpecGauss_data
 
     implicit none
 
@@ -141,7 +39,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = one/real(nx-1,rkind)
+        dx = one/real(nx,rkind)
         dy = dx
         dz = dx
 
@@ -161,7 +59,7 @@ end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
-    use constants,        only: zero,third,half,twothird,one,two,seven
+    use constants,        only: zero,half,one,two,three,four
     use SolidGrid,        only: u_index,v_index,w_index
     use decomp_2d,        only: decomp_info
     use exits,            only: GracefulExit
@@ -169,7 +67,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
     
-    use Multispecies_shock_data
+    use MultSpecGauss_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -180,14 +78,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind),                     intent(inout) :: tstop, dt, tviz
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
-    integer :: ioUnit
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
-    real(rkind), dimension(8) :: fparams
-    integer, dimension(2) :: iparams
+    integer :: ioUnit, indwv, indwv2
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, sig11, eps11
+    real(rkind) :: p_star, rho_star, c_star
+    logical :: SOSmodel
 
-    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
-                          p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
-                          plastic2, explPlast2, yield2
+    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rho_ratio, &
+                          p_infty_2, gamma_2, mu_2, rho_0_2, p_amb_2, sigma_0, SOSmodel
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -201,105 +98,118 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
         end if
 
-        if(rhoRatio > 0) then
-          ! if rhoRatio is positive, only rho_0 is different. Rgas is set such
-          ! that Temperature equilibrium condition is satisfied
-          gamma_2 = gamma; Rgas_2 = Rgas/rhoRatio; p_infty_2 = p_infty; 
-          rho_0_2 = rho_0*rhoRatio; mu_2 = mu
-        else
-          ! if rhoRatio is negative, all quantities except Rgas need to be
-          ! specified in input file. Rgas is then set such
-          ! that Temperature equilibrium condition is satisfied
-          Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
-        endif
+        mix%SOSmodel = SOSmodel
 
-        ! write material properties
-        write(*,*) '---Material 1---'
-        write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0, ', gam  = ', gamma, ', p_infty = ', p_infty
-        write(*,'(3(a,e12.5))') 'mu    = ', mu,    ', Rgas = ', Rgas
-        write(*,*) '---Material 2---'
-        write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0_2, ', gam  = ', gamma_2, ', p_infty = ', p_infty_2
-        write(*,'(3(a,e12.5))') 'mu    = ', mu_2,    ', Rgas = ', Rgas_2
+        p_star = gamma*p_infty + (four/three)*mu
+        rho_star = rho_0
+        c_star = sqrt(p_star/rho_star)
+        sigma_0 = sigma_0 / p_star
+        tstop = tstop * c_star
+        dt = dt * c_star
+        tviz = tviz * c_star
+
+        !dtprob = dt
+        !print*, "p_star = ", p_star
+        !print*, "rho_star = ", rho_star
+        !print*, "c_star = ", c_star
+        !print*, "sigma_0 = ", sigma_0
+        !print*, "tstop = ", tstop
+        !print*, "dt = ", dt
+        !print*, "tviz = ", tviz
+
+        ! Non-dimensionalize problem parameters
+        rho_0 = rho_0 / rho_star;     rho_0_2 = rho_0_2 / rho_star
+        mu = mu / p_star;             mu_2 = mu / p_star
+        p_infty = p_infty / p_star;   p_infty_2 = p_infty_2 / p_star
 
         ! Set materials
-        call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10))
-        call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2),sep1solid(rho_0_2,mu_2,yield2,1.0D-10))
+        if(rho_ratio > zero) then
+          ! if rho_ratio > 0, (both have same gamma here)
+          p_amb_2 = p_amb
+          p_infty_2 = p_infty!rho_ratio*p_infty + p_amb/gamma*(rho_ratio-one)
+          Rgas_2 = Rgas/rho_ratio*(p_amb_2+p_infty_2)/(p_amb+p_infty)
+          mu_2 = mu
+          rho_0_2 = rho_ratio*rho_0
+          gamma_2 = gamma
+        else
+          Rgas_2 = Rgas*rho_0/rho_0_2*(p_amb_2+p_infty_2)/(p_amb+p_infty)
+        endif
+        call mix%set_material(1,stiffgas(gamma,  Rgas,  p_infty  ), sep1solid(  rho_0,mu,  1.0D30,1.0D-10))
+        call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2), sep1solid(rho_0_2,mu_2,1.0D30,1.0D-10))
 
-        ! set logicals for plasticity
-        mix%material(1)%plast = plastic; mix%material(1)%explPlast = explPlast
-        mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
+        if(thick<zero) then
+          tmp = half * ( erf( (x-half-0.0_rkind)/(thickness) ) - erf( (x-half-0.4_rkind)/(thickness) ) )
+        else
+          tmp = half * ( erf( (x-half-0.0_rkind)/(thick*dx) ) - erf( (x-half-0.4_rkind)/(thick*dx) ) )
+          !tmp = half * ( one + erf( (x-0.5_rkind)/(thick*dx) ) )
+        endif
+        write(*,*) 'thickness = ', thickness
+        write(*,*) tmp(48:52,1,1)
 
-        p1 = p_amb
-        rho1 = (one-minVF)*rho_0 + minVF*rho_0_2
-        p2 = p1 * pRatio
-        rho2 = (one-minVF)*rho_0 + minVF*rho_0_2
-        u1 = zero
-        fparams(1) = rho1; fparams(2) = u1; fparams(3) = p1
-        ! fparams(4) = rho_0; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = zero;
-        fparams(4) = rho1; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = mu;
-        fparams(8) = p2
-        rho2 = rho1*min(one + p1/p_infty, one) ! Init guess
-        call rootfind_nr_1d(rho2,fparams,iparams)
-        write(*,*) 'After root finding: ', rho2
-        g11_1 = fparams(1)/fparams(4);   grho1 = g11_1**real(11.D0/3.D0,rkind) - g11_1**(-third) - g11_1**(seven*third) + g11_1**third
-        g11_2 = rho2/fparams(4);         grho2 = g11_2**real(11.D0/3.D0,rkind) - g11_2**(-third) - g11_2**(seven*third) + g11_2**third
-        ! u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*zero*(grho1-grho2)))
-        u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*mu*(grho1-grho2)))
-        u1 = rho2*u2/rho1
-
-        ! speed of sound
-        a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
-        a2 = sqrt((gamma*(p2+p_infty) + 4.0d0/3.0d0*mu)/rho2)
-
-        write(*,*) '----Shock Initialization-----'
-        print*, "Mass flux: ", rho1*u1, rho2*u2
-        print*, "Momentum flux: ", rho1*u1*u1+p1, rho2*u2*u2+p2
-        print*, "g flux: ", g11_1*u1, g11_2*u2
-        
-        print*, "rho1, rho2 = ", rho1, rho2
-        print*, "u1, u2 = ", u1, u2
-        print*, "p1, p2 = ", p1, p2
-        print*, "a1, a2 = ", a1, a2
-        print*, "M1, M2 = ", u1/a1, u2/a2
-        print*, "p_infty = ", p_infty
-        print*, "rhoRatio = ", rhoRatio
-
-        dum = half * ( one - erf( (x-0.6_rkind)/(dx) ) )
-
-        u   = (u2-u1)*dum
-        v   = zero
-        w   = zero
-
-        tmp = half * ( one - erf( (x-0.75_rkind)/(thick*dx) ) )
-
+        ! Set material 1 properties
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
         mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
-        
-        mix%material(1)%g11 = (rho2*dum + rho1*(one-dum))/rho1
 
+        mix%material(1)%p  = p_amb
+        mix%material(1)%VF = minVF + (one-two*minVF)*tmp
+        tmp = rho_0*(mix%material(1)%VF + (one-mix%material(1)%VF)*rho_0_2)      ! mixture density
+        mix%material(1)%Ys = mix%material(1)%VF*rho_0/tmp
+
+        ! Set material 2 properties
         mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
         mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
         mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
-        mix%material(2)%g11 = mix%material(1)%g11
-
-        mix%material(1)%p  = p2*dum + p1*(one-dum)
-        mix%material(2)%p  = mix%material(1)%p
-
-        mix%material(1)%VF = minVF + (one-two*minVF)*tmp
-        mix%material(2)%VF = one - mix%material(1)%VF
-
-        tmp = rho_0*mix%material(1)%VF*mix%material(1)%g11 + rho_0_2*mix%material(2)%g11*(one-mix%material(1)%VF) ! Mixture density
-        mix%material(1)%Ys = mix%material(1)%VF * rho_0 / tmp
+        mix%material(2)%p  = p_amb_2
+        mix%material(2)%VF = one - mix%material(1)%VF ! Enforce sum to unity
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
-        rhoL = tmp(1,1,1)
-        rhoR = tmp(decomp%ysz(1),1,1)
-        YsL  = mix%material(1)%Ys(1,1,1)
-        YsR  = mix%material(1)%Ys(decomp%ysz(1),1,1)
-        VFL  = mix%material(1)%VF(1,1,1)
-        VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
+        ! set linear wave speeds
+        lamL = gamma * p_infty - (two/three)*mu
+        cL = sqrt( (lamL + two*mu)/ rho_0 )
+
+        lamL_2 = gamma_2 * p_infty_2 - (two/three)*mu_2
+        cL_2 = sqrt( (lamL_2 + two*mu_2)/ rho_0_2 )
+
+        ! mixture wave speed
+        indwv = nint(0.35_rkind/1.0_rkind*decomp%ysz(1)); write(*,*) 'indwv = ', indwv
+        if(mix%SOSmodel) then
+            cL_mix = sqrt(one / tmp(indwv,1,1) / (mix%material(1)%VF(indwv,1,1)/rho_0/cL**2 + &
+                                                  mix%material(2)%VF(indwv,1,1)/rho_0_2/cL_2**2) )
+        else
+            cL_mix = sqrt(mix%material(1)%Ys(indwv,1,1)*cL**2 + mix%material(2)%Ys(indwv,1,1)*cL_2**2)
+        endif  
+        write(*,*) 'eqbmodel = ', mix%SOSmodel
+        write(*,*) 'wave speeds', cL, cL_2, cL_mix
+        write(*,*) 'Ys', mix%material(1)%Ys(indwv,1,1), mix%material(2)%Ys(indwv,1,1)
+        write(*,*) 'VF', mix%material(1)%VF(indwv,1,1), mix%material(2)%VF(indwv,1,1)
+        ! mixture wave speed
+        indwv2 = nint(0.80_rkind/1.0_rkind*decomp%ysz(1)); write(*,*) 'indwv2 = ', indwv2
+        if(mix%SOSmodel) then
+            cL_mix_2 = sqrt(one / tmp(indwv2,1,1) / (mix%material(1)%VF(indwv2,1,1)/rho_0/cL**2 + &
+                                                  mix%material(2)%VF(indwv2,1,1)/rho_0_2/cL_2**2) )
+        else
+            cL_mix_2 = sqrt(mix%material(1)%Ys(indwv2,1,1)*cL**2 + mix%material(2)%Ys(indwv2,1,1)*cL_2**2)
+        endif  
+        ! also compute reflection and transmission coefficients
+        crefl = ((tmp(indwv2,1,1)*cL_mix_2)/(tmp(indwv,1,1)*cL_mix) - one) / ((tmp(indwv2,1,1)*cL_mix_2)/(tmp(indwv,1,1)*cL_mix) + one)
+        ctran = ((tmp(indwv2,1,1)*cL_mix_2)/(tmp(indwv,1,1)*cL_mix) * two) / ((tmp(indwv2,1,1)*cL_mix_2)/(tmp(indwv,1,1)*cL_mix) + one)
+        write(*,*) 'cr, ct', crefl, ctran, ctran-crefl
+
+        ! correct fields for initial wave
+        sig11 = -sigma_0 * exp( -((x - cL_mix*zero - 0.35_rkind)/(0.03_rkind))**2 )
+        eps11 = sig11 / (lamL + two*mu)
+
+        u   = - (cL_mix * sig11) / (lamL + two*mu)
+        v   = zero
+        w   = zero
+
+        mix%material(1)%g11 = one / (one + eps11)
+        mix%material(1)%p = p_infty*(mix%material(1)%g11**gamma - one)
+
+        mix%material(2)%g11 = one / (one + eps11)
+        mix%material(2)%p = p_infty_2*(mix%material(2)%g11**gamma_2 - one)
 
     end associate
 
@@ -313,7 +223,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_shock_data
+    use MultSpecGauss_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -327,6 +237,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
 
     character(len=clen) :: outputfile, str
     integer :: i, j, k
+    real(rkind) :: pinc, prefl, ptra
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -339,25 +250,20 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3),       &
                  sos  => fields(:,:,:,sos_index) )
 
-        if (rhoRatio > 0) then
-            write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2)') decomp%ysz(1), "_", minVF, "_", rhoRatio
-        else
-            write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2)') decomp%ysz(1), "_", minVF, "_", rho_0_2/rho_0
-        end if
-
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_shock_"//trim(str)//"_", vizcount, ".dat"
+        write(str,'(I4.4)') decomp%ysz(1)
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/MultSpecGauss_"//trim(str)//"_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
-        write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rhoRatio
+        write(outputunit,'(1ES27.16E3)') tsim
         do i=1,decomp%ysz(1)
-            write(outputunit,'(23ES27.16E3)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
+            write(outputunit,'(24ES27.16E3)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), sos(i,1,1), &
                                            mix%material(1)%p (i,1,1), mix%material(2)%p (i,1,1), &
                                            mix%material(1)%Ys(i,1,1), mix%material(2)%Ys(i,1,1), &
                                            mix%material(1)%VF(i,1,1), mix%material(2)%VF(i,1,1), &
                                            mix%material(1)%eh(i,1,1), mix%material(2)%eh(i,1,1), &
                                            mix%material(1)%T (i,1,1), mix%material(2)%T (i,1,1), &
                                            mix%material(1)%g11(i,1,1), mix%material(2)%g11(i,1,1), &
-                                           mu(i,1,1), bulk(i,1,1), mix%material(1)%kap(i,1,1), mix%material(2)%kap(i,1,1), &
+                                           mu(i,1,1), bulk(i,1,1), kap(i,1,1), kap(i,1,1), &
                                            mix%material(1)%diff(i,1,1), mix%material(2)%diff(i,1,1)
         end do
         close(outputunit)
@@ -412,17 +318,67 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
           close(outputunit)
         endif
 
+        write(outputfile,'(4A)') trim(outputdir),"/tec_ExactGauss_"//trim(str),".dat"
+        if(vizcount==0) then
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='replace')
+          write(outputunit,'(330a)') 'VARIABLES="x","y","z","pincident","preflected","ptransmitted"'
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                pinc =  sigma_0 * exp( -((x(i,j,k) - cL_mix*tsim - 0.35_rkind)/(0.03_rkind))**2 )
+                prefl = sigma_0 * exp( -((-x(i,j,k) - cL_mix*tsim - 0.35_rkind + half + half)/(0.03_rkind))**2 ) * crefl
+                ptra =  sigma_0 * exp( -(cL_mix*(x(i,j,k)/cL_mix_2 - tsim - 0.35_rkind/cL_mix + half/cL_mix - half/cL_mix_2)/(0.03_rkind))**2 ) * ctran
+                write(outputunit,'(6ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), pinc, prefl, ptra
+            end do
+           end do
+          end do
+          close(outputunit)
+        else
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='old', action='write', position='append')
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                pinc =  sigma_0 * exp( -((x(i,j,k) - cL_mix*tsim - 0.35_rkind)/(0.03_rkind))**2 )
+                prefl =  sigma_0 * exp( -((-x(i,j,k) - cL_mix*tsim - 0.35_rkind + half + half)/(0.03_rkind))**2 ) * crefl
+                ptra =  sigma_0 * exp( -(cL_mix*(x(i,j,k)/cL_mix_2 - tsim - 0.35_rkind/cL_mix + half/cL_mix - half/cL_mix_2)/(0.03_rkind))**2 ) * ctran
+                write(outputunit,'(3ES26.16)') pinc, prefl, ptra
+            end do
+           end do
+          end do
+          close(outputunit)
+        endif
+
+        if(vizcount==0) then
+          ! set max and min for later use
+          rhomax = maxval(rho); rhomin = minval(rho); umax = half; umin = half; vmax = zero; vmin = zero; wmax = zero; wmin = zero
+          vfmax = one-two*minVF; vfmin = minVF; pmax = max(p_amb_2, p_amb); pmin = min(p_amb_2, p_amb);
+          Ys1max = maxval(mix%material(1)%Ys); Ys1min = minval(mix%material(1)%Ys);  g1max = maxval(mix%material(1)%g11); g1min = minval(mix%material(1)%g11); 
+          Ys2max = maxval(mix%material(2)%Ys); Ys2min = minval(mix%material(2)%Ys);  g2max = maxval(mix%material(2)%g11); g2min = minval(mix%material(2)%g11);
+
+          Tmax = max(maxval(mix%material(1)%T), maxval(mix%material(1)%T)); Tmin = min(minval(mix%material(1)%T), minval(mix%material(1)%T));
+          eh1max = maxval(mix%material(1)%eh); eh1min = minval(mix%material(1)%eh);  eh2max = maxval(mix%material(2)%eh); eh2min = minval(mix%material(2)%eh);
+
+          ! open file
+          open(unit=11, file='timeevol.dat', status='replace')
+          close(11)
+        endif
+ 
     end associate
 end subroutine
 
-subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim)
     use kind_parameters,  only: rkind
     use constants,        only: zero
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_shock_data
+    use MultSpecGauss_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -430,10 +386,6 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     type(solid_mixture),             intent(inout) :: mix
-    integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
-    integer :: nx
-
-    nx = decomp%ysz(1)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -441,61 +393,6 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-
-        rho( 1,:,:) = rhoL
-        u  ( 1,:,:) = (u2-u1)
-        v  ( 1,:,:) = zero
-        w  ( 1,:,:) = zero
-        mix%material(1)%p  ( 1,:,:) = p2
-        mix%material(2)%p  ( 1,:,:) = p2
-        
-        mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
-        mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
-        mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = one
-
-        mix%material(2)%g11( 1,:,:) = rho2/rho_0;  mix%material(2)%g12( 1,:,:) = zero; mix%material(2)%g13( 1,:,:) = zero
-        mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
-        mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
-        
-        ! mix%material(1)%Ys ( 1,:,:) = YsL
-        ! mix%material(2)%Ys ( 1,:,:) = one - YsL
-
-        mix%material(1)%VF ( 1,:,:) = VFL
-        mix%material(2)%VF ( 1,:,:) = one - VFL
-
-        if(x_bc(2)==0) then
-          rho(nx,:,:) = rhoR
-          u  (nx,:,:) = zero
-          v  (nx,:,:) = zero
-          w  (nx,:,:) = zero
-          mix%material(1)%p  (nx,:,:) = p1
-          mix%material(2)%p  (nx,:,:) = p1
-          
-          mix%material(1)%g11(nx,:,:) = one;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
-          mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:) = one;  mix%material(1)%g23(nx,:,:) = zero
-          mix%material(1)%g31(nx,:,:) = zero; mix%material(1)%g32(nx,:,:) = zero; mix%material(1)%g33(nx,:,:) = one
-
-          mix%material(2)%g11(nx,:,:) = one;  mix%material(2)%g12(nx,:,:) = zero; mix%material(2)%g13(nx,:,:) = zero
-          mix%material(2)%g21(nx,:,:) = zero; mix%material(2)%g22(nx,:,:) = one;  mix%material(2)%g23(nx,:,:) = zero
-          mix%material(2)%g31(nx,:,:) = zero; mix%material(2)%g32(nx,:,:) = zero; mix%material(2)%g33(nx,:,:) = one
-
-          ! mix%material(1)%Ys (nx,:,:) = YsR
-          ! mix%material(2)%Ys (nx,:,:) = one - YsR
-
-          mix%material(1)%VF (nx,:,:) = VFR
-          mix%material(2)%VF (nx,:,:) = one - VFR
-        else if(x_bc(2)==1) then
-          u(nx,:,:) = zero
-
-          mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
-          mix%material(1)%g21(nx,:,:) = zero
-          mix%material(1)%g31(nx,:,:) = zero
-
-          mix%material(2)%g11(nx,:,:) = one;  mix%material(2)%g12(nx,:,:) = zero; mix%material(2)%g13(nx,:,:) = zero
-          mix%material(2)%g21(nx,:,:) = zero; mix%material(2)%g22(nx,:,:) = one;  mix%material(2)%g23(nx,:,:) = zero
-          mix%material(2)%g31(nx,:,:) = zero; mix%material(2)%g32(nx,:,:) = zero; mix%material(2)%g33(nx,:,:) = one
-        endif
-
     end associate
 end subroutine
 
@@ -507,7 +404,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use reductions,       only: P_MAXVAL
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_shock_data
+    use MultSpecGauss_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -523,6 +420,19 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+
+      if(mod(step,40)==0) then
+        open(unit=11, file='timeevol.dat', status='old',action='write',position='append')
+        write(11,'(45ES26.16)') tsim, maxval(rho)-rhomax, minval(rho)-rhomin, maxval(u)-umax, minval(u)-umin, maxval(v)-vmax, minval(v)-vmin, & 
+                                      maxval(w)-wmax, minval(w)-wmin, maxval(p)-pmax, minval(p)-pmin, maxval(T)-Tmax, minval(T)-Tmin,     &
+                                      maxval(mix%material(1)%VF)-vfmax, minval(mix%material(1)%VF)-vfmin, maxval(mix%material(1)%Ys)-Ys1max,  minval(mix%material(1)%Ys)-Ys1min, &
+                                      maxval(mix%material(1)%eh)-eh1max, minval(mix%material(1)%eh)-eh1min, maxval(mix%material(1)%g11)-g1max, minval(mix%material(1)%g11)-g1min,&
+                                      maxval(mix%material(2)%VF)-vfmax, minval(mix%material(2)%VF)-vfmin, maxval(mix%material(2)%Ys)-Ys2max,  minval(mix%material(2)%Ys)-Ys2min, &
+                                      maxval(mix%material(2)%eh)-eh2max, minval(mix%material(2)%eh)-eh2min, maxval(mix%material(2)%g11)-g2max, minval(mix%material(2)%g11)-g2min
+        close(11)
+      endif
+
     end associate
 end subroutine
 
@@ -534,7 +444,7 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_shock_data
+    use MultSpecGauss_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -560,7 +470,7 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_shock_data
+    use MultSpecGauss_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -580,7 +490,7 @@ subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Y
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_shock_data
+    use MultSpecGauss_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -600,7 +510,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_shock_data
+    use MultSpecGauss_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -620,7 +530,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_shock_data
+    use MultSpecGauss_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp

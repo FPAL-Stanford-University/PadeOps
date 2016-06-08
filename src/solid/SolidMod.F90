@@ -15,6 +15,7 @@ module SolidMod
     type :: solid
         integer :: nxp, nyp, nzp
 
+        logical :: plast = .FALSE.
         logical :: explPlast = .FALSE.
         logical :: PTeqb = .TRUE.
 
@@ -67,6 +68,7 @@ module SolidMod
         real(rkind), dimension(:,:,:),   allocatable :: Qtmpeh
         real(rkind), dimension(:,:,:),   allocatable :: QtmpVF
 
+        real(rkind), dimension(:,:,:), allocatable :: modDevSigma
     contains
 
         procedure :: init
@@ -230,6 +232,10 @@ contains
         this%syz  => this%devstress(:,:,:,5)   
         this%szz  => this%devstress(:,:,:,6)   
         
+        ! Allocate mrray to store contraction of deviatoric stress
+        if( allocated( this%modDevSigma ) ) deallocate( this%modDevSigma )
+        allocate( this%modDevSigma(this%nxp,this%nyp,this%nzp) )
+        
         ! Allocate material pressure array
         if( allocated( this%p ) ) deallocate( this%p )
         allocate( this%p(this%nxp,this%nyp,this%nzp) )
@@ -298,6 +304,7 @@ contains
         if( allocated( this%kap )  ) deallocate( this%kap )
         if( allocated( this%T )    ) deallocate( this%T )
         if( allocated( this%p )    ) deallocate( this%p )
+        if( allocated( this%modDevSigma ) ) deallocate( this%modDevSigma )
 
         nullify( this%sxx ); nullify( this%sxy ); nullify( this%sxz )
                              nullify( this%syy ); nullify( this%syz )
@@ -344,17 +351,19 @@ contains
 
     end subroutine
 
-    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,tsim)
+    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for g tensor equation
+        real(rkind) :: max_modDevSigma
 
-        call this%getRHS_g(rho,u,v,w,dt,rhsg)
+        call this%getRHS_g(rho,u,v,w,dt,rhsg,x_bc,y_bc,z_bc)
         call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
         ! advance sub-step
@@ -362,18 +371,47 @@ contains
         this%Qtmpg  = dt*rhsg + RK45_A(isub)*this%Qtmpg
         this%g = this%g  + RK45_B(isub)*this%Qtmpg
 
+        if(this%plast) then
+            if (.NOT. this%explPlast) then
+                ! Effect plastic deformations
+                call this%get_eelastic_devstress()
+                this%modDevSigma = this%sxx*this%sxx + this%syy*this%syy + this%szz*this%szz + &
+                        two*( this%sxy*this%sxy + this%sxz*this%sxz + this%syz*this%syz )
+                max_modDevSigma = sqrt(3.0d0/2.0d0*maxval(this%modDevSigma))
+                if(max_modDevSigma > this%elastic%yield) then
+                  write(*,'(a,2(e19.12,1x))') 'Entering plasticity. Stresses = ', max_modDevSigma, this%elastic%yield
+                endif
+
+                call this%elastic%plastic_deformation(this%g)
+
+                call this%get_eelastic_devstress()
+                this%modDevSigma = this%sxx*this%sxx + this%syy*this%syy + this%szz*this%szz + &
+                        two*( this%sxy*this%sxy + this%sxz*this%sxz + this%syz*this%syz )
+                max_modDevSigma = sqrt(3.0d0/2.0d0*maxval(this%modDevSigma))
+                if(max_modDevSigma > this%elastic%yield) then
+                  write(*,'(a,2(e19.12,1x))') 'Exiting plasticity. Stresses = ', max_modDevSigma, this%elastic%yield
+                endif
+            end if
+        end if
+
     end subroutine
 
-    subroutine getRHS_g(this,rho,u,v,w,dt,rhsg)
+    subroutine getRHS_g(this,rho,u,v,w,dt,rhsg,x_bc,y_bc,z_bc)
         use operators, only: gradient, curl
         class(solid),                                         intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
         real(rkind),                                          intent(in)  :: dt
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
         real(rkind), parameter :: etafac = zero!one/6._rkind
+
+        ! Symmetry and anti-symmetry properties of g are assumed as below
+        ! In x g_{ij}: [S A A; A S S; A S S]
+        ! In y g_{ij}: [S A S; A S A; S A S]
+        ! In z g_{ij}: [S S A; S S A; A A S]
 
         rhsg = zero
 
@@ -387,31 +425,33 @@ contains
         penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
-        call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3))
+        call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-x_bc, y_bc, z_bc)
         
-        call curl(this%decomp, this%der, this%g11, this%g12, this%g13, curlg)
+        call curl(this%decomp, this%der, this%g11, this%g12, this%g13, curlg, -x_bc, y_bc, z_bc)
         rhsg(:,:,:,1) = rhsg(:,:,:,1) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g11
         rhsg(:,:,:,2) = rhsg(:,:,:,2) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g12
         rhsg(:,:,:,3) = rhsg(:,:,:,3) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g13
  
         tmp = -u*this%g21-v*this%g22-w*this%g23
-        call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6))
+        call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6), x_bc,-y_bc, z_bc)   
         
-        call curl(this%decomp, this%der, this%g21, this%g22, this%g23, curlg)
+        call curl(this%decomp, this%der, this%g21, this%g22, this%g23, curlg, x_bc, -y_bc, z_bc)
         rhsg(:,:,:,4) = rhsg(:,:,:,4) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g21
         rhsg(:,:,:,5) = rhsg(:,:,:,5) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g22
         rhsg(:,:,:,6) = rhsg(:,:,:,6) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g23
  
         tmp = -u*this%g31-v*this%g32-w*this%g33
-        call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,7),rhsg(:,:,:,8),rhsg(:,:,:,9))
+        call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,7),rhsg(:,:,:,8),rhsg(:,:,:,9), x_bc, y_bc,-z_bc)
 
-        call curl(this%decomp, this%der, this%g31, this%g32, this%g33, curlg)
+        call curl(this%decomp, this%der, this%g31, this%g32, this%g33, curlg, x_bc, y_bc, -z_bc)
         rhsg(:,:,:,7) = rhsg(:,:,:,7) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g31
         rhsg(:,:,:,8) = rhsg(:,:,:,8) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g32
         rhsg(:,:,:,9) = rhsg(:,:,:,9) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g33
 
-        if (this%explPlast) then
-            call this%getPlasticSources(detg,rhsg)
+        if (this%plast) then
+            if(this%explPlast) then
+                call this%getPlasticSources(detg,rhsg)
+            end if
         end if
 
     end subroutine
@@ -449,17 +489,18 @@ contains
         rhsg(:,:,:,9) = rhsg(:,:,:,9) + invtaurel * ( this%g31*this%sxz + this%g32*this%syz + this%g33*this%szz ) ! g33 
     end subroutine
 
-    subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim)
+    subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsYs  ! RHS for mass fraction equation
 
-        call this%getRHS_Ys(rho,u,v,w,rhsYs)
+        call this%getRHS_Ys(rho,u,v,w,rhsYs,x_bc,y_bc,z_bc)
         call hook_material_mass_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsYs)
 
         ! advance sub-step
@@ -469,11 +510,12 @@ contains
 
     end subroutine
 
-    subroutine getRHS_Ys(this,rho,u,v,w,rhsYs)
+    subroutine getRHS_Ys(this,rho,u,v,w,rhsYs,x_bc,y_bc,z_bc)
         use operators, only: divergence
         class(solid),                                         intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: rhsYs
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
@@ -482,17 +524,18 @@ contains
         tmp2 = rhsYs*v - this%Ji(:,:,:,2)
         tmp3 = rhsYs*w - this%Ji(:,:,:,3)
 
-        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs)
+        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs,x_bc,y_bc,z_bc)    ! mass fraction equation is anti-symmetric (- sign included in operators.F90)
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,x_bc,y_bc,z_bc)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,viscwork
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
 
@@ -500,7 +543,7 @@ contains
             call GracefulExit("update_eh shouldn't be called with PTeqb. Exiting.",4809)
         endif
 
-        call this%getRHS_eh(rho,u,v,w,divu,viscwork,rhseh)
+        call this%getRHS_eh(rho,u,v,w,divu,viscwork,rhseh,x_bc,y_bc,z_bc)
         call hook_material_energy_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhseh)
 
         ! advance sub-step
@@ -510,12 +553,13 @@ contains
 
     end subroutine
 
-    subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,rhseh)
+    subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,rhseh,x_bc,y_bc,z_bc)
         use operators, only: gradient, divergence
         class(solid),                                       intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu,viscwork
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhseh
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
@@ -531,20 +575,21 @@ contains
         tmp3 = tmp3 + rhseh*w
 
         ! Take divergence of fluxes
-        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh)
+        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh,x_bc,y_bc,z_bc)     ! energy has to be anti-symmetric (- sign included in operators.F90)
 
         ! Add pressure and viscous work terms
         rhseh = rhseh - this%VF * (this%p*divu + viscwork)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
 
     end subroutine
 
-    subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim)
+    subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: u,v,w
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
 
@@ -552,7 +597,7 @@ contains
             call GracefulExit("update_VF shouldn't be called with PTeqb. Exiting.",4809)
         endif
 
-        call this%getRHS_VF(u,v,w,rhsVF)
+        call this%getRHS_VF(u,v,w,rhsVF,x_bc,y_bc,z_bc)
         call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
 
         ! advance sub-step
@@ -562,46 +607,48 @@ contains
 
     end subroutine
 
-    subroutine getRHS_VF(this,u,v,w,rhsVF)
+    subroutine getRHS_VF(this,u,v,w,rhsVF,x_bc,y_bc,z_bc)
         use operators, only: gradient
         class(solid),                                       intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: u,v,w
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
-        call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3)
+        call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
         rhsVF = u*tmp1 + v*tmp2 + w*tmp3
 
         ! any penalty term to keep VF between 0 and 1???
 
     end subroutine
 
-    subroutine filter(this, iflag)
+    subroutine filter(this, iflag, x_bc, y_bc, z_bc)
         use operators, only: filter3D
         class(solid),  intent(inout) :: this
         integer,       intent(in)    :: iflag
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         ! filter g
-        call filter3D(this%decomp, this%fil, this%g11, iflag)
-        call filter3D(this%decomp, this%fil, this%g12, iflag)
-        call filter3D(this%decomp, this%fil, this%g13, iflag)
-        call filter3D(this%decomp, this%fil, this%g21, iflag)
-        call filter3D(this%decomp, this%fil, this%g22, iflag)
-        call filter3D(this%decomp, this%fil, this%g23, iflag)
-        call filter3D(this%decomp, this%fil, this%g31, iflag)
-        call filter3D(this%decomp, this%fil, this%g32, iflag)
-        call filter3D(this%decomp, this%fil, this%g33, iflag)
+        call filter3D(this%decomp, this%fil, this%g11, iflag, x_bc, y_bc, z_bc)
+        call filter3D(this%decomp, this%fil, this%g12, iflag,-x_bc,-y_bc, z_bc)
+        call filter3D(this%decomp, this%fil, this%g13, iflag,-x_bc, y_bc,-z_bc)
+        call filter3D(this%decomp, this%fil, this%g21, iflag,-x_bc,-y_bc, z_bc)
+        call filter3D(this%decomp, this%fil, this%g22, iflag, x_bc, y_bc, z_bc)
+        call filter3D(this%decomp, this%fil, this%g23, iflag, x_bc,-y_bc,-z_bc)
+        call filter3D(this%decomp, this%fil, this%g31, iflag,-x_bc, y_bc,-z_bc)
+        call filter3D(this%decomp, this%fil, this%g32, iflag, x_bc,-y_bc,-z_bc)
+        call filter3D(this%decomp, this%fil, this%g33, iflag, x_bc, y_bc, z_bc)
 
         ! filter Ys
-        call filter3D(this%decomp, this%fil, this%consrv(:,:,:,1), iflag)
+        call filter3D(this%decomp, this%fil, this%consrv(:,:,:,1), iflag, x_bc, y_bc, z_bc)
 
         if(.NOT. this%PTeqb) then
             ! filter eh
-            call filter3D(this%decomp, this%fil, this%consrv(:,:,:,2), iflag)
+            call filter3D(this%decomp, this%fil, this%consrv(:,:,:,2), iflag,x_bc, y_bc, z_bc)
 
             ! filter VF
-            call filter3D(this%decomp, this%fil, this%VF, iflag)
+            call filter3D(this%decomp, this%fil, this%VF, iflag, x_bc, y_bc,z_bc)
         endif
 
     end subroutine

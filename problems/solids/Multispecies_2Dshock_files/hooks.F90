@@ -1,4 +1,4 @@
-module Multispecies_shock_data
+module Multispecies_2Dshock_data
     use kind_parameters,  only: rkind
     use constants,        only: one,two,eight
     implicit none
@@ -9,10 +9,7 @@ module Multispecies_shock_data
     real(rkind) :: rhoRatio = one, pRatio = two
     logical     :: sharp = .FALSE.
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
-    real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR
-    real(rkind) :: yield = one, yield2 = one
-    logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
-    logical     :: plastic = .FALSE., plastic2 = .FALSE.
+    real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR, eta0k = 0.4_rkind
 
 contains
 
@@ -116,10 +113,10 @@ end module
 
 subroutine meshgen(decomp, dx, dy, dz, mesh)
     use kind_parameters,  only: rkind
-    use constants,        only: one
+    use constants,        only: one, half
     use decomp_2d,        only: decomp_info
 
-    use Multispecies_shock_data
+    use Multispecies_2Dshock_data
 
     implicit none
 
@@ -142,7 +139,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         dx = one/real(nx-1,rkind)
-        dy = dx
+        dy = half/real(ny-1,rkind)
         dz = dx
 
         do k=1,size(mesh,3)
@@ -161,7 +158,7 @@ end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
-    use constants,        only: zero,third,half,twothird,one,two,seven
+    use constants,        only: zero,third,half,twothird,one,two,seven,pi
     use SolidGrid,        only: u_index,v_index,w_index
     use decomp_2d,        only: decomp_info
     use exits,            only: GracefulExit
@@ -169,7 +166,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
     
-    use Multispecies_shock_data
+    use Multispecies_2Dshock_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -186,8 +183,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     integer, dimension(2) :: iparams
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
-                          p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
-                          plastic2, explPlast2, yield2
+                          p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, eta0k
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -222,21 +218,17 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         write(*,'(3(a,e12.5))') 'mu    = ', mu_2,    ', Rgas = ', Rgas_2
 
         ! Set materials
-        call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10))
-        call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2),sep1solid(rho_0_2,mu_2,yield2,1.0D-10))
-
-        ! set logicals for plasticity
-        mix%material(1)%plast = plastic; mix%material(1)%explPlast = explPlast
-        mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
+        call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,1.0D30,1.0D-10))
+        call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2),sep1solid(rho_0_2,mu_2,1.0D30,1.0D-10))
 
         p1 = p_amb
-        rho1 = (one-minVF)*rho_0 + minVF*rho_0_2
+        rho1 = rho_0
         p2 = p1 * pRatio
-        rho2 = (one-minVF)*rho_0 + minVF*rho_0_2
+        rho2 = rho_0
         u1 = zero
         fparams(1) = rho1; fparams(2) = u1; fparams(3) = p1
         ! fparams(4) = rho_0; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = zero;
-        fparams(4) = rho1; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = mu;
+        fparams(4) = rho_0; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = mu;
         fparams(8) = p2
         rho2 = rho1*min(one + p1/p_infty, one) ! Init guess
         call rootfind_nr_1d(rho2,fparams,iparams)
@@ -270,7 +262,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         v   = zero
         w   = zero
 
-        tmp = half * ( one - erf( (x-0.75_rkind)/(thick*dx) ) )
+        tmp = half * ( one - erf( ( x - (0.75_rkind+eta0k/(8.0_rkind*pi)*cos(8.0_rkind*pi*y)) )/(thick*dx) ) )
 
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
@@ -313,7 +305,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_shock_data
+    use Multispecies_2Dshock_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -345,7 +337,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
             write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2)') decomp%ysz(1), "_", minVF, "_", rho_0_2/rho_0
         end if
 
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_shock_"//trim(str)//"_", vizcount, ".dat"
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_2Dshock_"//trim(str)//"_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
         write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rhoRatio
@@ -362,7 +354,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
         end do
         close(outputunit)
 
-        write(outputfile,'(4A)') trim(outputdir),"/tec_MultSpecGauss_"//trim(str),".dat"
+        write(outputfile,'(4A)') trim(outputdir),"/tec_Multi2DShock_"//trim(str),".dat"
         if(vizcount==0) then
           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='replace')
           write(outputunit,'(330a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p", &
@@ -422,7 +414,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_shock_data
+    use Multispecies_2Dshock_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -463,6 +455,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         mix%material(1)%VF ( 1,:,:) = VFL
         mix%material(2)%VF ( 1,:,:) = one - VFL
 
+
         if(x_bc(2)==0) then
           rho(nx,:,:) = rhoR
           u  (nx,:,:) = zero
@@ -470,7 +463,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
           w  (nx,:,:) = zero
           mix%material(1)%p  (nx,:,:) = p1
           mix%material(2)%p  (nx,:,:) = p1
-          
+
           mix%material(1)%g11(nx,:,:) = one;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
           mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:) = one;  mix%material(1)%g23(nx,:,:) = zero
           mix%material(1)%g31(nx,:,:) = zero; mix%material(1)%g32(nx,:,:) = zero; mix%material(1)%g33(nx,:,:) = one
@@ -507,7 +500,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use reductions,       only: P_MAXVAL
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_shock_data
+    use Multispecies_2Dshock_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -534,7 +527,7 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_shock_data
+    use Multispecies_2Dshock_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -560,7 +553,7 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_shock_data
+    use Multispecies_2Dshock_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -580,7 +573,7 @@ subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Y
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_shock_data
+    use Multispecies_2Dshock_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -600,7 +593,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_shock_data
+    use Multispecies_2Dshock_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -620,7 +613,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_shock_data
+    use Multispecies_2Dshock_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp

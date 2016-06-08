@@ -333,7 +333,7 @@ contains
         do i = 1,this%ns
             call this%material(i)%getPhysicalProperties()
 
-            if (this%PTeqb) then
+            if (.NOT. this%PTeqb) then
                 ! Artificial conductivity
                 call this%LAD%get_conductivity(rho, this%material(i)%eh, this%material(i)%T, sos, &
                                                     this%material(i)%kap, x_bc, y_bc, z_bc)
@@ -560,44 +560,47 @@ contains
 
     end subroutine
 
-    subroutine filter(this, iflag)
+    subroutine filter(this, iflag,x_bc,y_bc,z_bc)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: iflag
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%filter(iflag)
+          call this%material(imat)%filter(iflag,x_bc,y_bc,z_bc)
         end do
 
     end subroutine
 
-    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,tsim)
+    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,tsim)
+          call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
         end do
 
     end subroutine
 
-    subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim)
+    subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_Ys(isub,dt,rho,u,v,w,x,y,z,tsim)
+          call this%material(imat)%update_Ys(isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
         end do
 
     end subroutine
@@ -628,17 +631,18 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,x_bc,y_bc,z_bc)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,viscwork
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork)
+          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,x_bc,y_bc,z_bc)
         end do
 
     end subroutine
@@ -672,17 +676,18 @@ contains
 
     end subroutine
 
-    subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim)
+    subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: u,v,w
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_VF(isub,dt,u,v,w,x,y,z,tsim)
+          call this%material(imat)%update_VF(isub,dt,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
         end do
 
     end subroutine
