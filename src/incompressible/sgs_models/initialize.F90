@@ -21,7 +21,11 @@
         this%spectE => spectE
         this%deltaFilter = ((1.5*dx)*(1.5*dy)*dz)**(one/three)
         this%deltaTFilter = deltaRatio*this%deltaFilter
+        this%dxsq = dx**2
+        this%dysq = dy**2
+        this%dzsq = dz**2
         this%dz = dz
+        this%nz = gpC%zsz(3)
         if (present(TfilterZ))  useVerticalTfilter = TfilterZ
         if (present(Pr)) this%Pr = Pr
         if (present(CompStokesP)) this%CompStokesP = CompStokesP
@@ -50,6 +54,7 @@
         select case (this%SGSmodel)
         case(0)
             this%mconst = (this%deltaFilter*c_smag)**2
+            this%eddyViscModel = .true.
             call message(1,"SMAGORINSKY SGS model initialized")
         case(1)
             this%mconst = (this%deltaFilter*c_sigma)**2
@@ -58,13 +63,24 @@
                 call GracefulExit("The standard dynamic procedure is not &
                 & available with the SIGMA model.", 321)
             end if
+            this%eddyViscModel = .true.
             call message(1,"SIGMA SGS model initialized")
         case(2)
             this%mconst = (this%deltaFilter*c_smag)**2
             allocate(this%SSI_xbuff1(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
             allocate(this%SSI_xbuff2(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
 
+            this%eddyViscModel = .true.
             call message(1,"SHEAR-IMPROVED SMAGORINSKY SGS model initialized")
+        case(3)
+            this%mconst = eight*(this%deltaFilter/c_mgm)**2
+            allocate(this%MGMbuffsE(gpE%xsz(1), gpE%xsz(2), gpE%xsz(3),6))
+            if (this%useDynamicProcedure) then
+                call GracefulExit("The standard dynamic procedure is not &
+                & available with the MGM model for now.", 321)
+            end if
+            this%eddyViscModel = .false.
+            call message(1,"MGM SGS model initialized")
         case default 
             call GracefulExit("Invalid choice for SGS model.",2013)
         end select
@@ -153,6 +169,7 @@
         end if   
          
         if (allocated(this%SIGMAbuffs)) deallocate(this%SIGMAbuffs) 
+        if (allocated(this%MGMbuffsE)) deallocate(this%MGMbuffsE)
         nullify( this%nuSGS)
         if(this%useDynamicProcedure) deallocate(this%Lij, this%Mij)
         nullify(this%sp_gp, this%gpC, this%spectC)

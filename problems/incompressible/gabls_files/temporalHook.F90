@@ -29,6 +29,12 @@ contains
             call message(0,"Time",gp%tsim)
             call message(1,"Max KE:",gp%getMaxKE())
             call message(1,"Max nuSGS:",gp%max_nuSGS)
+            call message(1,"u_star:",gp%ustar)
+            call message(1,"Inv. Ob. Length:",gp%InvObLength)
+            call message(1,"Max u:", p_maxval(maxval(gp%u)))
+            call message(1,"Max v:", p_maxval(maxval(gp%v)))
+            call message(1,"Max w:", p_maxval(maxval(gp%w)))
+            call message(1,"Max T:", p_maxval(maxval(gp%T)))
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 
