@@ -93,7 +93,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
     real(rkind) :: delta_Ek = 0.08d0, Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
-    real(rkind) :: zpeak = 0.2d0, Tsurf0 = zero, dTsurf_dt = zero
+    real(rkind) :: zpeak = 0.15d0, Tsurf0 = zero, dTsurf_dt = zero
     real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero
     namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt, Tref 
 
@@ -116,18 +116,18 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
  
     !epsnd = 1.d-2
 
-    !u = one !+ epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2.d0)
-    !v = zero!epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2.d0)
-    !wC= zero 
-    epsnd = 5.d0
+    epsnd = 5.d-2
 
-    u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    u = one !+ epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    v = zero!epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     wC= zero  
-    
-    u = u /( (one/kappa) * log(one/z0init))
-    v = v /( (one/kappa) * log(one/z0init))
+    !
+    !u = u /( (one/kappa) * log(one/z0init))
+    !v = v /( (one/kappa) * log(one/z0init))
 
+    !u = one
+    !v = zero
+    !wC = zero 
 
     allocate(ztmp(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
@@ -136,23 +136,29 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     where(ztmp < 100.d0)
         T = 265.d0
     end where
-    !T = T + 0.0001d0*ztmp
+    T = T + 0.0001d0*ztmp
     !Tpurt = 0.1d0*cos(2.d0*two*pi*x)*sin(12.d0*two*pi*y)*sin(2.d0*two*pi*(z - 50.d0/xDim))
     !where (ztmp>50)
     !    Tpurt = zero
     !end where
     !T = T + Tpurt
-    deallocate(ztmp, Tpurt)
     !T = T/Tref
 
     ! Add random numbers
-    !allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
-    !do k = 1,size(u,3)
-    !    sig = randomScaleFact*(one/kappa)*log(z(1,1,k)/z0nd)
-    !    u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
-    !end do  
-    !deallocate(randArr)
+    allocate(randArr(size(T,1),size(T,2),size(T,3)))
+    call gaussian_random(randArr,zero,one,seedu + 10*nrank)
+    do k = 1,size(u,3)
+        sig = 0.05
+        Tpurt(:,:,k) = sig*randArr(:,:,k)
+    end do  
+    deallocate(randArr)
+    
+    where (ztmp > 50.d0)
+        Tpurt = zero
+    end where
+    T = T + Tpurt
+   
+    deallocate(ztmp, Tpurt)
     !
     !allocate(randArr(size(v,1),size(v,2),size(v,3)))
     !call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
