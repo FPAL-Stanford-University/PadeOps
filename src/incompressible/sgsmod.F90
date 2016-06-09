@@ -17,7 +17,7 @@ module sgsmod
     public :: sgs
 
     real(rkind) :: c_sigma = 1.4_rkind
-    real(rkind) :: c_smag = 0.17_rkind
+    real(rkind) :: c_smag = 0.14_rkind
     real(rkind), parameter :: deltaRatio = 2.0_rkind
     complex(rkind), parameter :: zeroC = zero + imi*zero
     logical :: useVerticalTfilter = .false. 
