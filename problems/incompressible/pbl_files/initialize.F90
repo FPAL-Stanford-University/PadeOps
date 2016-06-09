@@ -192,13 +192,13 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 end subroutine
 
 
-subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
+subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt, ThetaRef)
     use kind_parameters,    only: rkind
-    use constants,          only: zero
+    use constants,          only: zero, one
     character(len=*),                intent(in)    :: inputfile
-    real(rkind), intent(out) :: Tsurf, dTsurf_dt
+    real(rkind), intent(out) :: Tsurf, dTsurf_dt, ThetaRef
 
-    Tsurf = zero; dTsurf_dt = zero;
+    Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
 
     ! Do nothing really since this is an unstratified simulation
 end subroutine

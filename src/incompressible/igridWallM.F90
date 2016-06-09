@@ -69,7 +69,7 @@ module IncompressibleGridWallM
         complex(rkind), dimension(:,:,:), pointer :: That, TEhat, T_rhs, T_Orhs
 
         complex(rkind), dimension(:,:,:), allocatable :: uBase, Tbase, dTdxH, dTdyH, dTdzH
-        real(rkind), dimension(:,:,:), allocatable :: dTdxC, dTdyC, dTdzE
+        real(rkind), dimension(:,:,:), allocatable :: dTdxC, dTdyC, dTdzE, dTdzC
 
         real(rkind), dimension(:,:,:,:), allocatable, public :: rbuffxC, rbuffyC, rbuffzC
         real(rkind), dimension(:,:,:,:), allocatable :: rbuffxE, rbuffyE, rbuffzE
@@ -86,7 +86,7 @@ module IncompressibleGridWallM
         real(rkind), dimension(:,:,:), allocatable :: rDampC, rDampE         
         real(rkind) :: Re, Gx, Gy, Gz, dtby2, meanfact, Tref
         complex(rkind), dimension(:,:,:), allocatable :: GxHat 
-        real(rkind) :: Ro = 1.d5, gravity_nd = 9.8d0, Fr = 1000.d0
+        real(rkind) :: Ro = 1.d5, Fr = 1000.d0
 
         integer :: nxZ, nyZ
         
@@ -101,7 +101,7 @@ module IncompressibleGridWallM
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
-        real(rkind) :: max_nuSGS, invObLength, Tsurf, dTsurf_dt
+        real(rkind) :: max_nuSGS, invObLength, Tsurf, dTsurf_dt, ThetaRef
 
         real(rkind) :: z0, ustar = zero, Umn, Vmn, Uspmn, dtOld, dtRat, Tmn, wTh_surf
         real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
@@ -237,7 +237,7 @@ contains
         this%tSimStartStats = tSimStartStats; this%useWindTurbines = useWindTurbines
         this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS 
         this%useDynamicProcedure = useDynamicProcedure; this%UseDealiasFilterVert = UseDealiasFilterVert
-        this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; this%gravity_nd = one/(this%Fr**2)
+        this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; 
         this%t_start_planeDump = t_start_planeDump; this%t_stop_planeDump = t_stop_planeDump
         this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro; 
         this%PreProcessForKS = preprocessForKS; this%KSOutputDir = KSoutputDir;this%t_dumpKSprep = t_dumpKSprep 
@@ -342,6 +342,7 @@ contains
             allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),7))
             allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4))
             allocate(this%dTdzE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+            allocate(this%dTdzC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             allocate(this%dTdxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             allocate(this%dTdyC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             call this%spectC%alloc_r2c_out(this%SfieldsC,4)
@@ -418,7 +419,7 @@ contains
         end if 
        
         if (botBC_Temp == 0) then
-            call setDirichletBC_Temp(inputfile, this%Tsurf, this%dTsurf_dt)
+            call setDirichletBC_Temp(inputfile, this%Tsurf, this%dTsurf_dt, this%ThetaRef)
         else
             call GraceFulExit("Only Dirichlet BC supported for Temperature at &
                 & this time. Set botBC_Temp = 0",341)        
@@ -514,6 +515,12 @@ contains
             where (zinY < zstSponge) 
                 this%RdampC = zero
             end where
+            call this%spectC%alloc_r2c_out(this%uBase)
+            call this%spectC%alloc_r2c_out(this%TBase)
+            this%rbuffxC(:,:,:,1) = this%Gx
+            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%uBase)
+            this%rbuffxC(:,:,:,1) = this%T
+            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%TBase)
             call message(0,"Sponge Layer initialized successfully")
         end if 
 
@@ -642,7 +649,11 @@ contains
         if (this%isStratified) then
             call transpose_y_to_z(this%That,zbuffC,this%sp_gpC)
             call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
-            zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
+            !zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
+            zbuffE(:,:,1) = zero 
+            if (nrank == 0) then
+                zbuffE(1,1,1) = this%Tsurf*real(this%nx,rkind)*real(this%ny,rkind)
+            end if 
             zbuffE(:,:,this%nz + 1) = two*zbuffC(:,:,this%nz) - zbuffE(:,:,this%nz)
             call transpose_z_to_y(zbuffE,this%TEhat,this%sp_gpE)
             call this%spectE%ifft(this%TEhat,this%TE)
@@ -881,6 +892,25 @@ contains
         this%v_rhs = -half*this%v_rhs
         this%w_rhs = -half*this%w_rhs
 
+
+        if (this%isStratified) then
+            T1C = -this%u*this%dTdxC 
+            call this%spectC%fft(T1C,this%T_rhs) 
+            T1C = -this%v*this%dTdyC
+            call this%spectC%fft(T1C,fT1C) 
+            this%T_rhs = this%T_rhs + fT1C
+        
+            T1E = -this%w * this%dTdzE    
+            call this%spectC%fft(T1E,fT1E)
+            call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
+            call this%Ops%InterpZ_edge2cell(tzE,tzC)
+            call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
+            !T1C = -this%wC*this%dTdzC
+            !call this%spectC%fft(T1C,fT1C)
+            this%T_rhs = this%T_rhs + fT1C
+        
+        end if 
+
     end subroutine
 
     subroutine addCoriolisTerm(this)
@@ -921,7 +951,7 @@ contains
         complex(rkind), dimension(:,:,:), pointer :: fT1E 
    
         fT1E => this%cbuffyE(:,:,:,1)
-        fT1E = this%TEhat/(this%Fr*this%Fr)
+        fT1E = this%TEhat/(this%ThetaRef*this%Fr*this%Fr)
         if (this%spectE%carryingZeroK) then
             fT1E(1,1,:) = zero
         end if 
@@ -1034,6 +1064,9 @@ contains
     
         ! STEP 8: Interpolate the cell center values of w
         call this%compute_and_bcast_surface_Mn()
+        if (this%isStratified) then
+            this%Tsurf = this%Tsurf + this%dTsurf_dt*this%dt
+        end if  
         call this%interp_PrimitiveVars()
 
         ! STEP 9: Compute duidxjC 
@@ -1073,9 +1106,6 @@ contains
 
         ! STEP 12: Update Time and BCs
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
-        if (this%isStratified) then
-            this%Tsurf = this%Tsurf + this%dTsurf_dt*this%dt
-        end if  
 
     end subroutine
 
@@ -1194,10 +1224,11 @@ contains
         dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
 
         ! Correct derivative at the z = dz (see Porte Agel, JFM (appendix))
-        if (nrank == 0) then
-            ctmpz2(1,1,2) = ctmpz2(1,1,2) + (0.08976d0/(kappa*this%dz))*real(this%nx,rkind)*real(this%ny,rkind)
+        if (.not. this%isStratified) then
+            if (nrank == 0) then
+                ctmpz2(1,1,2) = ctmpz2(1,1,2) + (0.08976d0/(kappa*this%dz))*real(this%nx,rkind)*real(this%ny,rkind)
+            end if 
         end if 
-
 
         ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
@@ -1237,9 +1268,11 @@ contains
     subroutine compute_dTdxi(this)
         class(igridWallM), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
-        
+        complex(rkind), dimension(:,:,:), pointer :: ctmpy1
+
         ctmpz1 => this%cbuffzC(:,:,:,1); ctmpz2 => this%cbuffzE(:,:,:,1); 
-        
+        ctmpy1 => this%cbuffyC(:,:,:,1)
+
         call this%spectC%mtimes_ik1_oop(this%That,this%dTdxH)
         call this%spectC%ifft(this%dTdxH,this%dTdxC)
 
@@ -1247,11 +1280,17 @@ contains
         call this%spectC%ifft(this%dTdyH,this%dTdyC)
    
         call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
+        
         call this%OpsPP%ddz_C2E(ctmpz1,ctmpz2,.true.,.true.)
         ctmpz2(:,:,this%nz+1) = ctmpz2(:,:,this%nz)
         ctmpz2(:,:,1) = two*ctmpz2(:,:,2) - ctmpz2(:,:,3) 
+        call this%OpsPP%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
+
         call transpose_z_to_y(ctmpz2, this%dTdzH, this%sp_gpE)
         call this%spectE%ifft(this%dTdzH,this%dTdzE)
+        
+        call transpose_z_to_y(ctmpz1,ctmpy1,this%sp_gpC)
+        call this%spectC%ifft(ctmpy1,this%dTdzC)
 
     end subroutine
     
@@ -1324,21 +1363,21 @@ contains
         integer :: idx
         integer, parameter :: itermax = 100 
         real(rkind) :: ustarNew, ustarDiff, dTheta, ustar
-        real(rkind) :: a, b, c, PsiH, PsiM, wTh, z, u, Linv, g
+        real(rkind) :: a, b, c, PsiH, PsiM, wTh, z, u, Linv
         real(rkind), parameter :: beta_h = 7.8_rkind, beta_m = 4.8_rkind
        
         dTheta = this%Tsurf - this%Tmn
-        z = this%dz/two ; ustarDiff = one; g = this%gravity_nd
+        z = this%dz/two ; ustarDiff = one; 
         a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
         PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
-        
+       
         ! Inside the do loop all the used variables are on the stored on the stack
         ! After the while loop these variables are copied to their counterparts
         ! on the heap (variables part of the derived type)
         do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
             ustarNew = u*kappa/(a - PsiM)
             wTh = dTheta*ustarNew*kappa/(a - PsiH) 
-            Linv = -kappa*g*wTh/(ustarNew**3)
+            Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
             PsiM = -c*Linv; PsiH = -b*Linv;
             ustarDiff = abs((ustarNew - ustar)/ustarNew)
             ustar = ustarNew; idx = idx + 1

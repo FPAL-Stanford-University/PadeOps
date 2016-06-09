@@ -10,7 +10,7 @@ module gabls_parameters
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
 
-    real(rkind), parameter :: xdim = 400._rkind, udim = 8._rkind, Tref = 263.5_rkind
+    real(rkind), parameter :: xdim = 400._rkind, udim = 8._rkind
     real(rkind), parameter :: timeDim = xdim/udim
 end module     
 
@@ -28,8 +28,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tsurf0 = zero, dTsurf_dt = zero
-    namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt 
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tsurf0 = zero, dTsurf_dt = zero, Tref = zero
+    namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt, Tref 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -94,9 +94,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     integer :: nz, nzE
     real(rkind) :: delta_Ek = 0.08d0, Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
     real(rkind) :: zpeak = 0.2d0, Tsurf0 = zero, dTsurf_dt = zero
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt 
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero
+    namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt, Tref 
 
+    !z0init = 1.D-4
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=GABLSINPUT)
@@ -113,11 +114,20 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    epsnd = 1.d-2
+    !epsnd = 1.d-2
 
-    u = one !+ epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2.d0)
-    v = zero!epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2.d0)
-    wC= zero 
+    !u = one !+ epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2.d0)
+    !v = zero!epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2.d0)
+    !wC= zero 
+    epsnd = 5.d0
+
+    u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    wC= zero  
+    
+    u = u /( (one/kappa) * log(one/z0init))
+    v = v /( (one/kappa) * log(one/z0init))
+
 
     allocate(ztmp(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
@@ -126,14 +136,14 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     where(ztmp < 100.d0)
         T = 265.d0
     end where
-    T = T + 0.0001d0*ztmp
-    Tpurt = 0.1d0*cos(12.d0*two*pi*x)*sin(12.d0*two*pi*y)*sin(12.d0*two*pi*(z - 50.d0/xDim))
-    where (ztmp>50)
-        Tpurt = zero
-    end where
-    T = T + Tpurt
+    !T = T + 0.0001d0*ztmp
+    !Tpurt = 0.1d0*cos(2.d0*two*pi*x)*sin(12.d0*two*pi*y)*sin(2.d0*two*pi*(z - 50.d0/xDim))
+    !where (ztmp>50)
+    !    Tpurt = zero
+    !end where
+    !T = T + Tpurt
     deallocate(ztmp, Tpurt)
-    T = T/Tref
+    !T = T/Tref
 
     ! Add random numbers
     !allocate(randArr(size(u,1),size(u,2),size(u,3)))
@@ -197,16 +207,16 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
 end subroutine
 
-subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
+subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt, ThetaRef)
     use kind_parameters,    only: rkind
     use constants,          only: zero
     use gabls_parameters
     implicit none
-    real(rkind), intent(out) :: Tsurf, dTsurf_dt
+    real(rkind), intent(out) :: Tsurf, dTsurf_dt, ThetaRef
     character(len=*),                intent(in)    :: inputfile
-    real(rkind) :: Lx, Ly, Lz, z0init = zero, Tsurf0 = zero
+    real(rkind) :: Lx, Ly, Lz, z0init = zero, Tsurf0 = zero, Tref = zero
     integer :: ioUnit 
-    namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt 
+    namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt, Tref 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -217,8 +227,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     dTsurf_dt = dTsurf_dt / 3600._rkind
     
     ! Now Normalize: 
-    dTsurf_dt = dTsurf_dt * timeDim / Tref 
-    Tsurf = Tsurf0 / Tref
+    dTsurf_dt = dTsurf_dt * timeDim !/ Tref 
+    Tsurf = Tsurf0 !/ Tref
+    ThetaRef = Tref
 
 end subroutine
 

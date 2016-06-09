@@ -49,7 +49,7 @@
         alpha1sqrt = sqrt(alpha1)    
         alpha1tmp => this%SIGMAbuffs(:,:,:,5) 
         alpha1tmp = alpha1*alpha1sqrt
-        alpha1tmp = alpha2/(alpha1tmp)
+        alpha1tmp = alpha2/(alpha1tmp + 1d-13)
         alpha1tmp = min(alpha1tmp,one)
         alpha1tmp = max(alpha1tmp,-one)
         alpha1tmp = acos(alpha1tmp)
