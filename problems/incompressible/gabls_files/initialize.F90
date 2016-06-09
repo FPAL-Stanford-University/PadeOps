@@ -118,12 +118,16 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
 
     epsnd = 5.d-2
 
-    u = one !+ epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    v = zero!epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    !u = one !+ epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    !v = zero!epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    !wC= zero  
+    
+    u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     wC= zero  
-    !
-    !u = u /( (one/kappa) * log(one/z0init))
-    !v = v /( (one/kappa) * log(one/z0init))
+   
+    u = u /( (one/kappa) * log(one/z0init))
+    v = v /( (one/kappa) * log(one/z0init))
 
     !u = one
     !v = zero
@@ -156,7 +160,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     where (ztmp > 50.d0)
         Tpurt = zero
     end where
-    T = T + Tpurt
+    !T = T + Tpurt
    
     deallocate(ztmp, Tpurt)
     !

@@ -420,6 +420,7 @@ contains
        
         if (botBC_Temp == 0) then
             call setDirichletBC_Temp(inputfile, this%Tsurf, this%dTsurf_dt, this%ThetaRef)
+            this%Tsurf = this%Tsurf + this%dTsurf_dt*this%tsim
         else
             call GraceFulExit("Only Dirichlet BC supported for Temperature at &
                 & this time. Set botBC_Temp = 0",341)        
@@ -956,6 +957,10 @@ contains
             fT1E(1,1,:) = zero
         end if 
         this%w_rhs = this%w_rhs + fT1E 
+        
+        if (this%useSponge) then
+            call this%addSponge
+        end if 
     end subroutine
 
     subroutine AdamsBashforth(this)
