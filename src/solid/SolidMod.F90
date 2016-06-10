@@ -1,7 +1,7 @@
 module SolidMod
 
     use kind_parameters, only: rkind,clen
-    use constants,       only: zero,one,two,epssmall
+    use constants,       only: zero,one,two,epssmall,three
     use decomp_2d,       only: decomp_info
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
@@ -378,9 +378,10 @@ contains
                 this%modDevSigma = this%sxx*this%sxx + this%syy*this%syy + this%szz*this%szz + &
                         two*( this%sxy*this%sxy + this%sxz*this%sxz + this%syz*this%syz )
                 max_modDevSigma = sqrt(3.0d0/2.0d0*maxval(this%modDevSigma))
-                if(max_modDevSigma > this%elastic%yield) then
-                  write(*,'(a,2(e19.12,1x))') 'Entering plasticity. Stresses = ', max_modDevSigma, this%elastic%yield
-                endif
+                !if(max_modDevSigma > this%elastic%yield) then
+                !  write(*,'(a,2(e19.12,1x))') 'Entering plasticity. Stresses = ', max_modDevSigma, this%elastic%yield
+                !endif
+                if(this%PTeqb) this%kap = sqrt(two/three*this%modDevSigma)
 
                 call this%elastic%plastic_deformation(this%g)
 
@@ -388,9 +389,10 @@ contains
                 this%modDevSigma = this%sxx*this%sxx + this%syy*this%syy + this%szz*this%szz + &
                         two*( this%sxy*this%sxy + this%sxz*this%sxz + this%syz*this%syz )
                 max_modDevSigma = sqrt(3.0d0/2.0d0*maxval(this%modDevSigma))
-                if(max_modDevSigma > this%elastic%yield) then
-                  write(*,'(a,2(e19.12,1x))') 'Exiting plasticity. Stresses = ', max_modDevSigma, this%elastic%yield
-                endif
+                !if(max_modDevSigma > this%elastic%yield) then
+                !  write(*,'(a,2(e19.12,1x))') 'Exiting plasticity. Stresses = ', max_modDevSigma, this%elastic%yield
+                !endif
+                
             end if
         end if
 

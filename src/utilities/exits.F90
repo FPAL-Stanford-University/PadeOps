@@ -6,7 +6,7 @@ module exits
     
     implicit none
     private
-    public :: GracefulExit, message, warning, newline, nancheck
+    public :: GracefulExit, message, warning, newline, nancheck, check_exit
         
     interface message
         module procedure message_char, message_char_double, message_level_char, message_level_char_double, message_level_char_int
@@ -183,6 +183,21 @@ contains
             if (nancheck) exit
         end do
 
+    end function
+
+    logical function check_exit(dir)
+         character(len=*), intent(in) :: dir
+
+         integer :: ierr
+
+         open(777,file=trim(dir)//"/exitpdo",status='old',iostat=ierr)
+         if(ierr==0) then
+             check_exit = .TRUE.
+         else
+             check_exit = .FALSE.
+         endif
+         close(777)
+ 
     end function
     
 end module 

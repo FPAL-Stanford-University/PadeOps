@@ -495,7 +495,7 @@ contains
     subroutine simulate(this)
         use reductions, only: P_MEAN
         use timer,      only: tic, toc
-        use exits,      only: GracefulExit, message
+        use exits,      only: GracefulExit, message, check_exit
         class(sgrid), target, intent(inout) :: this
 
         logical :: tcond, vizcond, stepcond
@@ -618,6 +618,13 @@ contains
             else
                 stepcond = .FALSE.
             end if
+
+            ! Check for exitpdo file
+            if(check_exit(this%outputdir)) then
+                call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+                call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+                call GracefulExit("Found exitpdo file in working directory",1234)
+            endif
 
         end do
 

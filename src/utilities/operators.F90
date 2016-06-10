@@ -184,7 +184,9 @@ contains
         integer, dimension(2) :: x_bc, y_bc, z_bc
 
         integer :: times2fil, idx
-        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: tmp_in_y, tmp1_in_x, tmp1_in_z, tmp2_in_x, tmp2_in_z
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: tmp_in_y
+        real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) :: tmp1_in_x, tmp2_in_x
+        real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) :: tmp1_in_z, tmp2_in_z
 
 
         if (present(numtimes)) then
