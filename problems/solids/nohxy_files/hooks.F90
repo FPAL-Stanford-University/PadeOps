@@ -163,7 +163,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     use noh_data
 
     implicit none
-    character(len=*),                intent(in) :: outputdir
+    character(len=clen),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
