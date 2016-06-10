@@ -524,7 +524,7 @@ contains
         tmp2 = rhsYs*v - this%Ji(:,:,:,2)
         tmp3 = rhsYs*w - this%Ji(:,:,:,3)
 
-        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs,x_bc,y_bc,z_bc)    ! mass fraction equation is anti-symmetric (- sign included in operators.F90)
+        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
 
     end subroutine
 
@@ -575,7 +575,7 @@ contains
         tmp3 = tmp3 + rhseh*w
 
         ! Take divergence of fluxes
-        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh,x_bc,y_bc,z_bc)     ! energy has to be anti-symmetric (- sign included in operators.F90)
+        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh,-x_bc,-y_bc,-z_bc)     ! energy has to be anti-symmetric
 
         ! Add pressure and viscous work terms
         rhseh = rhseh - this%VF * (this%p*divu + viscwork)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit

@@ -634,7 +634,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: Qtmp      ! Temporary variable for RK45
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: divu      ! Velocity divergence for species energy eq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: viscwork  ! Viscous work term for species energy eq
-        integer :: isub,i,j,k,l, x_bc(2), y_bc(2), z_bc(2)
+        integer :: isub,i,j,k,l
 
         character(len=clen) :: charout
 
@@ -677,17 +677,10 @@ contains
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
             ! Filter the conserved variables
-            do i = 1,ncnsrv
-                x_bc = this%x_bc; y_bc = this%y_bc; z_bc = this%z_bc
-                if(i == mom_index) then
-                  x_bc = -this%x_bc
-                else if(i == mom_index+1) then
-                  y_bc = -this%y_bc
-                else if(i == mom_index+2) then
-                  z_bc = -this%z_bc
-                end if
-                call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1, x_bc, y_bc, z_bc)
-            end do
+            call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
+            call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
+            call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
+            call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
 
             ! Filter the individual species variables
             call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)

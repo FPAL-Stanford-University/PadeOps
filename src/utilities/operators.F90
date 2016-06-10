@@ -137,18 +137,18 @@ contains
         z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
 
         ! Get Y derivatives
-        call der%ddy(v,div,-y_bc(1),-y_bc(2))
+        call der%ddy(v,div,y_bc(1),y_bc(2))
 
         ! Get X derivatives
         call transpose_y_to_x(u,xtmp,decomp)
-        call der%ddx(xtmp,xdum,-x_bc(1),-x_bc(2))
+        call der%ddx(xtmp,xdum,x_bc(1),x_bc(2))
         call transpose_x_to_y(xdum,ytmp)
 
         div = div + ytmp
 
         ! Get Z derivatives
         call transpose_y_to_z(w,ztmp,decomp)
-        call der%ddz(ztmp,zdum,-z_bc(1),-z_bc(2))
+        call der%ddz(ztmp,zdum,z_bc(1),z_bc(2))
         call transpose_z_to_y(zdum,ytmp)
 
         div = div + ytmp
