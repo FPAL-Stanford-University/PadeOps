@@ -417,13 +417,15 @@ contains
             this%tsim = zero
             call this%dumpRestartfile()
         end if 
-       
-        if (botBC_Temp == 0) then
-            call setDirichletBC_Temp(inputfile, this%Tsurf, this%dTsurf_dt, this%ThetaRef)
-            this%Tsurf = this%Tsurf + this%dTsurf_dt*this%tsim
-        else
-            call GraceFulExit("Only Dirichlet BC supported for Temperature at &
-                & this time. Set botBC_Temp = 0",341)        
+      
+        if (this%isStratified) then 
+            if (botBC_Temp == 0) then
+                call setDirichletBC_Temp(inputfile, this%Tsurf, this%dTsurf_dt, this%ThetaRef)
+                this%Tsurf = this%Tsurf + this%dTsurf_dt*this%tsim
+            else
+                call GraceFulExit("Only Dirichlet BC supported for Temperature at &
+                    & this time. Set botBC_Temp = 0",341)        
+            end if 
         end if 
 
         call this%spectC%fft(this%u,this%uhat)   
@@ -567,23 +569,36 @@ contains
 
 
     subroutine compute_deltaT(this)
-        use reductions, only: p_minval
+        use reductions, only: p_maxval
         class(igridWallM), intent(inout), target :: this
-        real(rkind) :: t1, t2, t3, tmin
+        real(rkind) :: TSmax  
+        real(rkind), dimension(:,:,:), pointer :: rb1, rb2
 
+        rb1 => this%rbuffxC(:,:,:,1)
+        rb2 => this%rbuffxC(:,:,:,2)
 
         if (this%useCFL) then
-            t1 = p_maxval(maxval(this%u))
-            t1 = this%dx/(t1 + 1d-13)
+            rb1 = (one/this%dx)*this%u
+            rb2 = (one/this%dy)*this%v 
+            rb1 = abs(rb1) 
+            rb2 = abs(rb2)
+            rb1 = rb1 + rb2
+            rb2 = (one/this%dz)*this%wC
+            rb2 = abs(rb2)
+            rb1 = rb1 + rb2
+            TSmax = p_maxval(rb1)
+            this%dt = this%CFL/TSmax
+            !t1 = p_maxval(maxval(this%u))
+            !t1 = this%dx/(t1 + 1d-13)
 
-            t2 = p_maxval(maxval(this%v))
-            t2 = this%dy/(t2 + 1d-13)
-            
-            t3 = p_maxval(maxval(this%w))
-            t3 = this%dz/(t3 + 1d-13)
-            
-            tmin = min(t1,t2,t3)
-            this%dt = this%CFL*tmin
+            !t2 = p_maxval(maxval(this%v))
+            !t2 = this%dy/(t2 + 1d-13)
+            !
+            !t3 = p_maxval(maxval(this%w))
+            !t3 = this%dz/(t3 + 1d-13)
+            !
+            !tmin = min(t1,t2,t3)
+            !this%dt = this%CFL*tmin
         end if 
 
 

@@ -114,24 +114,16 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    !epsnd = 1.d-2
-
-    epsnd = 5.d-2
-
-    !u = one !+ epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    !v = zero!epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    !epsnd = 5.d0
+    !u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    !v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     !wC= zero  
-    
-    u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-    wC= zero  
-   
-    u = u /( (one/kappa) * log(one/z0init))
-    v = v /( (one/kappa) * log(one/z0init))
+    !u = u /( (one/kappa) * log(one/z0init))
+    !v = v /( (one/kappa) * log(one/z0init))
 
-    !u = one
-    !v = zero
-    !wC = zero 
+    u = one
+    v = zero
+    wC = zero 
 
     allocate(ztmp(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
@@ -141,18 +133,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
         T = 265.d0
     end where
     T = T + 0.0001d0*ztmp
-    !Tpurt = 0.1d0*cos(2.d0*two*pi*x)*sin(12.d0*two*pi*y)*sin(2.d0*two*pi*(z - 50.d0/xDim))
-    !where (ztmp>50)
-    !    Tpurt = zero
-    !end where
-    !T = T + Tpurt
-    !T = T/Tref
 
     ! Add random numbers
     allocate(randArr(size(T,1),size(T,2),size(T,3)))
     call gaussian_random(randArr,zero,one,seedu + 10*nrank)
     do k = 1,size(u,3)
-        sig = 0.05
+        sig = 0.08
         Tpurt(:,:,k) = sig*randArr(:,:,k)
     end do  
     deallocate(randArr)
@@ -160,18 +146,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     where (ztmp > 50.d0)
         Tpurt = zero
     end where
-    !T = T + Tpurt
+    T = T + Tpurt
    
     deallocate(ztmp, Tpurt)
-    !
-    !allocate(randArr(size(v,1),size(v,2),size(v,3)))
-    !call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
-    !do k = 1,size(v,3)
-    !    sig = randomScaleFact*z(1,1,k)*exp(-half*(z(1,1,k)/zpeak/Lz)**2)
-    !    v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
-    !end do  
-    !deallocate(randArr)
-
 
     ! Interpolate wC to w
     allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
@@ -207,13 +184,13 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 2
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
     xplanes = [64]
     yplanes = [64]
-    zplanes = [30]
+    zplanes = [2,10]
 
 end subroutine
 
