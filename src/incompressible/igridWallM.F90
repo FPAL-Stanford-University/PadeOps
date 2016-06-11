@@ -923,24 +923,36 @@ contains
             !call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
             !this%T_rhs = this%T_rhs + fT1C
             
-            T1C = -this%u*this%T
-            call this%spectC%fft(T1C,this%T_rhs) 
-            call this%spectC%mtimes_ik1_ip(this%T_rhs)
+            T1C = -this%u*this%dTdxC 
+            T2C = -this%v*this%dTdyC
+            T1C = T1C + T2C
+            call this%spectC%fft(T1c,fT1C)
+            T1E = -this%w*this%dTdzE
+            call this%spectE%fft(T1E,fT1E)
+            call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
+            call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+            call transpose_z_to_y(tzC,this%T_rhs, this%sp_gpC)
+            this%T_rhs = this%T_rhs + fT1C
+            
+            this%T_rhs = half*this%T_rhs
+            
+            T1C = -half*this%u*this%T
+            call this%spectC%fft(T1C,fT1C) 
+            call this%spectC%mtimes_ik1_ip(fT1C)
+            this%T_rhs = this%T_rhs + fT1C
 
-            T1C = -this%v*this%T
+            T1C = -half*this%v*this%T
             call this%spectC%fft(T1C,fT1C) 
             call this%spectC%mtimes_ik2_ip(fT1C)
             this%T_rhs = this%T_rhs + fT1C
 
-            T1E = -this%w*this%TE
+            T1E = -half*this%w*this%TE
             call this%spectE%fft(T1E,fT1E)
             call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
             call this%Ops%ddz_E2C(tzE,tzC)
             call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
             this%T_rhs = this%T_rhs + fT1C
             
-
-        
         end if 
 
     end subroutine
