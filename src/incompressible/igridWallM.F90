@@ -910,20 +910,36 @@ contains
 
 
         if (this%isStratified) then
-            T1C = -this%u*this%dTdxC 
+            !T1C = -this%u*this%dTdxC 
+            !call this%spectC%fft(T1C,this%T_rhs) 
+            !T1C = -this%v*this%dTdyC
+            !call this%spectC%fft(T1C,fT1C) 
+            !this%T_rhs = this%T_rhs + fT1C
+       
+            !T1E = -this%w * this%dTdzE    
+            !call this%spectC%fft(T1E,fT1E)
+            !call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
+            !call this%Ops%InterpZ_edge2cell(tzE,tzC)
+            !call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
+            !this%T_rhs = this%T_rhs + fT1C
+            
+            T1C = -this%u*this%T
             call this%spectC%fft(T1C,this%T_rhs) 
-            T1C = -this%v*this%dTdyC
+            call this%spectC%mtimes_ik1_ip(this%T_rhs)
+
+            T1C = -this%v*this%T
             call this%spectC%fft(T1C,fT1C) 
+            call this%spectC%mtimes_ik2_ip(fT1C)
             this%T_rhs = this%T_rhs + fT1C
-        
-            T1E = -this%w * this%dTdzE    
-            call this%spectC%fft(T1E,fT1E)
+
+            T1E = -this%w*this%TE
+            call this%spectE%fft(T1E,fT1E)
             call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
-            call this%Ops%InterpZ_edge2cell(tzE,tzC)
+            call this%Ops%ddz_E2C(tzE,tzC)
             call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
-            !T1C = -this%wC*this%dTdzC
-            !call this%spectC%fft(T1C,fT1C)
             this%T_rhs = this%T_rhs + fT1C
+            
+
         
         end if 
 

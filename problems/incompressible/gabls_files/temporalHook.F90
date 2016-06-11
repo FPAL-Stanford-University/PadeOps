@@ -30,6 +30,7 @@ contains
             call message(0,"Time Step",gp%step)
             call message(0,"Time",gp%tsim)
             call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
+            call message_min_max(1,"Bounds for T:", p_minval(minval(gp%T)), p_maxval(maxval(gp%T)))
             call message(1,"T_surf:", gp%Tsurf)
             call message(1,"u_star:",gp%ustar)
             call message(1,"Inv. Ob. Length:",gp%InvObLength)
