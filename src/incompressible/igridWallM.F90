@@ -112,14 +112,15 @@ module IncompressibleGridWallM
         real(rkind), dimension(:), pointer :: u_mean, v_mean, w_mean, uu_mean, uv_mean, uw_mean, vv_mean, vw_mean, ww_mean
         real(rkind), dimension(:), pointer :: tau11_mean, tau12_mean, tau13_mean, tau22_mean, tau23_mean, tau33_mean
         real(rkind), dimension(:), pointer :: S11_mean, S12_mean, S13_mean, S22_mean, S23_mean, S33_mean
-        real(rkind), dimension(:), pointer :: viscdissp, sgsdissp, sgscoeff_mean, PhiM
+        real(rkind), dimension(:), pointer :: viscdissp, sgsdissp, sgscoeff_mean, PhiM, q1_mean, q2_mean, q3_mean
+        real(rkind), dimension(:), pointer :: TT_mean, wT_mean, vT_mean, uT_mean, T_mean
         integer :: tidSUM, tid_StatsDump, tid_compStats,tSimStartStats
         logical :: normByustar
 
         ! Pointers linked to SGS stuff
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
         real(rkind), dimension(:,:,:)  , pointer :: nu_SGS, tau13, tau23
-        real(rkind), dimension(:,:,:)  , pointer :: c_SGS 
+        real(rkind), dimension(:,:,:)  , pointer :: c_SGS, q1, q2, q3 
        
         ! Wind Turbine stuff 
         type(turbineArray), allocatable :: WindTurbineArr
@@ -491,8 +492,10 @@ contains
             allocate(this%SGSmodel)
             call this%SGSmodel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
                 this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3), this%z0, &
-                .true., WallMType, useVerticalTfilter, Pr, useWallDamping, nCWall, Cs, ComputeStokesPressure )
-            call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23)
+                .true., WallMType, useVerticalTfilter, Pr, useWallDamping, nCWall, Cs, ComputeStokesPressure, &
+                this%isStratified )
+            call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23, &
+                                this%q1, this%q2, this%q3)
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -922,36 +925,37 @@ contains
             !call this%Ops%InterpZ_edge2cell(tzE,tzC)
             !call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
             !this%T_rhs = this%T_rhs + fT1C
-            
+           
+
             T1C = -this%u*this%dTdxC 
             T2C = -this%v*this%dTdyC
             T1C = T1C + T2C
-            call this%spectC%fft(T1c,fT1C)
-            T1E = -this%w*this%dTdzE
-            call this%spectE%fft(T1E,fT1E)
-            call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
-            call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
-            call transpose_z_to_y(tzC,this%T_rhs, this%sp_gpC)
-            this%T_rhs = this%T_rhs + fT1C
-            
-            this%T_rhs = half*this%T_rhs
-            
-            T1C = -half*this%u*this%T
-            call this%spectC%fft(T1C,fT1C) 
-            call this%spectC%mtimes_ik1_ip(fT1C)
-            this%T_rhs = this%T_rhs + fT1C
-
-            T1C = -half*this%v*this%T
-            call this%spectC%fft(T1C,fT1C) 
-            call this%spectC%mtimes_ik2_ip(fT1C)
-            this%T_rhs = this%T_rhs + fT1C
-
-            T1E = -half*this%w*this%TE
-            call this%spectE%fft(T1E,fT1E)
+            call this%spectC%fft(T1C,this%T_rhs) 
+       
+            T1E = -this%w * this%dTdzE    
+            call this%spectC%fft(T1E,fT1E)
             call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
-            call this%Ops%ddz_E2C(tzE,tzC)
+            call this%Ops%InterpZ_edge2cell(tzE,tzC)
             call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
             this%T_rhs = this%T_rhs + fT1C
+
+
+
+            !T1C = -this%u*this%T
+            !call this%spectC%fft(T1C,this%T_rhs) 
+            !call this%spectC%mtimes_ik1_ip(this%T_rhs)
+
+            !T1C = -this%v*this%T
+            !call this%spectC%fft(T1C,fT1C) 
+            !call this%spectC%mtimes_ik2_ip(fT1C)
+            !this%T_rhs = this%T_rhs + fT1C
+
+            !T1E = -this%w*this%TE
+            !call this%spectE%fft(T1E,fT1E)
+            !call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
+            !call this%Ops%ddz_E2C(tzE,tzC)
+            !call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
+            !this%T_rhs = this%T_rhs + fT1C
             
         end if 
 
@@ -1536,9 +1540,15 @@ contains
         gpC => this%gpC
         this%tidSUM = 0
 
-        allocate(this%zStats2dump(this%nz,25))
-        allocate(this%runningSum(this%nz,25))
-        allocate(this%TemporalMnNOW(this%nz,25))
+        if (this%isStratified) then
+            allocate(this%zStats2dump(this%nz,33))
+            allocate(this%runningSum(this%nz,33))
+            allocate(this%TemporalMnNOW(this%nz,33))
+        else
+            allocate(this%zStats2dump(this%nz,25))
+            allocate(this%runningSum(this%nz,25))
+            allocate(this%TemporalMnNOW(this%nz,25))
+        end if 
 
         ! mean velocities
         this%u_mean => this%zStats2dump(:,1);  this%v_mean  => this%zStats2dump(:,2);  this%w_mean => this%zStats2dump(:,3) 
@@ -1568,6 +1578,12 @@ contains
         this%sgscoeff_mean => this%zStats2dump(:,24)
 
         this%PhiM => this%zStats2dump(:,25)
+        
+        if (this%isStratified) then
+            this%TT_mean => this%zStats2dump(:,30);  this%wT_mean => this%zStats2Dump(:,29);  this%vT_mean => this%zStats2Dump(:,28)
+            this%uT_mean => this%zStats2dump(:,27);  this%T_mean => this%zStats2Dump(:,26); this%q1_mean => this%zStats2Dump(:,31)
+            this%q2_mean => this%zStats2dump(:,32);  this%q3_mean => this%zStats2Dump(:,33)
+        end if 
         this%runningSum = zero
         nullify(gpC)
     end subroutine
@@ -1575,15 +1591,14 @@ contains
     subroutine compute_stats(this)
         class(igridWallM), intent(inout), target :: this
         type(decomp_info), pointer :: gpC
-        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3E, rbuff2E, rbuff3, rbuff4, rbuff5, rbuff5E, rbuff4E, rbuff6E, rbuff6
+        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3E, rbuff2E, rbuff3, rbuff4, rbuff5, rbuff5E, rbuff4E, rbuff6E, rbuff6!, rbuff7
 
         rbuff1  => this%rbuffxC(:,:,:,1); rbuff2  => this%rbuffyC(:,:,:,1);
         rbuff2E => this%rbuffyE(:,:,:,1); rbuff3E => this%rbuffzE(:,:,:,1);
         rbuff3 => this%rbuffzC(:,:,:,1); rbuff4E => this%rbuffzE(:,:,:,2);
         rbuff4 => this%rbuffzC(:,:,:,2); rbuff5E => this%rbuffzE(:,:,:,3)
         rbuff5 => this%rbuffzC(:,:,:,3); rbuff6E => this%rbuffzE(:,:,:,4)
-        rbuff6 => this%rbuffzC(:,:,:,4); 
-        !rbuff7 => this%rbuffzC(:,:,:,5); 
+        rbuff6 => this%rbuffzC(:,:,:,4); !rbuff7 => this%rbuffzC(:,:,:,5); 
         gpC => this%gpC
 
         this%tidSUM = this%tidSUM + 1
@@ -1649,6 +1664,31 @@ contains
         rbuff6 = rbuff5*rbuff5
         call this%compute_z_mean(rbuff6, this%ww_mean)
         if (this%normByustar)this%ww_mean = this%ww_mean/(this%ustar**2)
+
+        ! Statified Stuff
+        if (this%isStratified) then
+            ! T mean
+            call transpose_x_to_y(this%T,rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff6,this%gpC)
+            call this%compute_z_mean(rbuff6, this%T_mean)
+
+            ! uT mean
+            rbuff3 = rbuff3*rbuff6
+            call this%compute_z_mean(rbuff3, this%uT_mean)
+            
+            ! vT mean
+            rbuff4 = rbuff4*rbuff6
+            call this%compute_z_mean(rbuff4, this%vT_mean)
+            
+            ! wT mean
+            rbuff5 = rbuff5*rbuff6
+            call this%compute_z_mean(rbuff5, this%vT_mean)
+            
+            ! TT mean
+            rbuff6 = rbuff6*rbuff6
+            call this%compute_z_mean(rbuff6, this%TT_mean)
+        end if 
+
 
         if (this%useSGS) then
             ! tau_11
@@ -1753,7 +1793,25 @@ contains
             call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
             !call this%compute_z_mean(rbuff3, this%sgscoeff_mean)    ! -- averaging not needed
             this%sgscoeff_mean(:) = rbuff3(1,1,:)
-        
+       
+            
+            if (this%isStratified) then
+                ! q1
+                call transpose_x_to_y(this%q1,rbuff2,this%gpC)
+                call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+                call this%compute_z_mean(rbuff3, this%q1_mean)    
+
+                ! q2
+                call transpose_x_to_y(this%q2,rbuff2,this%gpC)
+                call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+                call this%compute_z_mean(rbuff3, this%q2_mean)    
+
+                ! q2
+                call transpose_x_to_y(this%q3,rbuff2E,this%gpE)
+                call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+                call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+                call this%compute_z_mean(rbuff3, this%q3_mean)    
+            end if 
         end if
 
         rbuff1 = this%duidxjC(:,:,:,3)*this%mesh(:,:,:,3)
@@ -1791,6 +1849,13 @@ contains
         this%TemporalMnNOW(:,7) = this%TemporalMnNOW(:,7) - this%TemporalMnNOW(:,2)*this%TemporalMnNOW(:,2)
         this%TemporalMnNOW(:,8) = this%TemporalMnNOW(:,8) - this%TemporalMnNOW(:,2)*this%TemporalMnNOW(:,3)
         this%TemporalMnNOW(:,9) = this%TemporalMnNOW(:,9) - this%TemporalMnNOW(:,3)*this%TemporalMnNOW(:,3)
+
+        if (this%isStratified) then
+            this%TemporalMnNOW(:,27) = this%TemporalMnNOW(:,27) - this%TemporalMnNOW(:,1)*this%TemporalMnNOW(:,26)
+            this%TemporalMnNOW(:,28) = this%TemporalMnNOW(:,28) - this%TemporalMnNOW(:,2)*this%TemporalMnNOW(:,26)
+            this%TemporalMnNOW(:,29) = this%TemporalMnNOW(:,29) - this%TemporalMnNOW(:,3)*this%TemporalMnNOW(:,26)
+            this%TemporalMnNOW(:,30) = this%TemporalMnNOW(:,30) - this%TemporalMnNOW(:,26)*this%TemporalMnNOW(:,26)
+        end if 
 
         ! compute sgs dissipation
         this%TemporalMnNOW(:,16) = half*this%TemporalMnNOW(:,16)
