@@ -60,7 +60,15 @@ module cf90stuff
         logical     :: periodic=.TRUE.
 
         real(rkind), allocatable, dimension(:,:) :: LU
-        real(rkind), allocatable, dimension(:,:) :: penta
+        real(rkind), allocatable, dimension(:,:) :: penta_nn
+        real(rkind), allocatable, dimension(:,:) :: penta_ns
+        real(rkind), allocatable, dimension(:,:) :: penta_na
+        real(rkind), allocatable, dimension(:,:) :: penta_sn
+        real(rkind), allocatable, dimension(:,:) :: penta_ss
+        real(rkind), allocatable, dimension(:,:) :: penta_sa
+        real(rkind), allocatable, dimension(:,:) :: penta_an
+        real(rkind), allocatable, dimension(:,:) :: penta_as
+        real(rkind), allocatable, dimension(:,:) :: penta_aa
 
         contains
 
@@ -69,7 +77,8 @@ module cf90stuff
 
         procedure, private :: ComputeXRHS
         procedure, private :: ComputeYRHS
-        procedure, private :: ComputeZRHS
+        procedure, private :: ComputeZRHS_REAL
+        procedure, private :: ComputeZRHS_CMPLX
         
         procedure, private :: SolveXLU
         procedure, private :: SolveYLU
@@ -80,11 +89,14 @@ module cf90stuff
 
         procedure, private :: SolveXPenta
         procedure, private :: SolveYPenta
-        procedure, private :: SolveZPenta
+        procedure, private :: SolveZPenta_REAL
+        procedure, private :: SolveZPenta_CMPLX
         
         procedure :: filter1
         procedure :: filter2
-        procedure :: filter3
+        procedure, private :: filter3_REAL
+        procedure, private :: filter3_CMPLX
+        generic :: filter3 => filter3_REAL, filter3_CMPLX 
         
     end type
 
@@ -120,12 +132,36 @@ contains
         else 
 
             ! Allocate Penta matrix
-            if(allocated( this%penta )) deallocate( this%penta ); allocate( this%penta(n_,11) )
+            if(allocated( this%penta_nn )) deallocate( this%penta_nn ); allocate( this%penta_nn(n_,11) )
+            if(allocated( this%penta_ns )) deallocate( this%penta_ns ); allocate( this%penta_ns(n_,11) )
+            if(allocated( this%penta_na )) deallocate( this%penta_na ); allocate( this%penta_na(n_,11) )
+            if(allocated( this%penta_sn )) deallocate( this%penta_sn ); allocate( this%penta_sn(n_,11) )
+            if(allocated( this%penta_ss )) deallocate( this%penta_ss ); allocate( this%penta_ss(n_,11) )
+            if(allocated( this%penta_sa )) deallocate( this%penta_sa ); allocate( this%penta_sa(n_,11) )
+            if(allocated( this%penta_an )) deallocate( this%penta_an ); allocate( this%penta_an(n_,11) )
+            if(allocated( this%penta_as )) deallocate( this%penta_as ); allocate( this%penta_as(n_,11) )
+            if(allocated( this%penta_aa )) deallocate( this%penta_aa ); allocate( this%penta_aa(n_,11) )
   
             if (n_ .GE. 10) then             
-                call this%ComputePenta()
+                call this%ComputePenta(this%penta_nn, 0, 0)
+                call this%ComputePenta(this%penta_ns, 0, 1)
+                call this%ComputePenta(this%penta_na, 0,-1)
+                call this%ComputePenta(this%penta_sn, 1, 0)
+                call this%ComputePenta(this%penta_ss, 1, 1)
+                call this%ComputePenta(this%penta_sa, 1,-1)
+                call this%ComputePenta(this%penta_an,-1, 0)
+                call this%ComputePenta(this%penta_as,-1, 1)
+                call this%ComputePenta(this%penta_aa,-1,-1)
             else if (n_ .EQ. 1) then
-                this%Penta = one
+                this%penta_nn = one
+                this%penta_ns = one
+                this%penta_na = one
+                this%penta_sn = one
+                this%penta_ss = one
+                this%penta_sa = one
+                this%penta_an = one
+                this%penta_as = one
+                this%penta_aa = one
             else
                 ierr = 7
                 return 
@@ -146,7 +182,15 @@ contains
         if(allocated( this%LU )) deallocate( this%LU )
     
         ! Dellocate penta matrix.
-        if(allocated( this%penta )) deallocate( this%penta )
+        if(allocated( this%penta_nn )) deallocate( this%penta_nn )
+        if(allocated( this%penta_ns )) deallocate( this%penta_ns )
+        if(allocated( this%penta_na )) deallocate( this%penta_na )
+        if(allocated( this%penta_sn )) deallocate( this%penta_sn )
+        if(allocated( this%penta_ss )) deallocate( this%penta_ss )
+        if(allocated( this%penta_sa )) deallocate( this%penta_sa )
+        if(allocated( this%penta_an )) deallocate( this%penta_an )
+        if(allocated( this%penta_as )) deallocate( this%penta_as )
+        if(allocated( this%penta_aa )) deallocate( this%penta_aa )
     
     end subroutine
 
@@ -229,15 +273,17 @@ contains
     
     end subroutine
 
-    subroutine ComputePenta(this)
+    subroutine ComputePenta(this,penta,bc1,bcn)
         class (cf90), intent(inout) :: this
+        real(rkind), dimension(this%n,11), intent(inout) :: penta
+        integer, intent(in) :: bc1,bcn
         integer             :: i
     
-        associate (bt   => this%penta(:,1), b   => this%penta(:,2), d => this%penta(:,3),  &
-                   a    => this%penta(:,4), at  => this%penta(:,5),                         &
-                   e    => this%penta(:,6), obc => this%penta(:,7),                         &
-                   f    => this%penta(:,8), g   => this%penta(:,9),                         &
-                   eobc => this%penta(:,10)                                                  )
+        associate (bt   => penta(:,1), b   => penta(:,2), d => penta(:,3),  &
+                   a    => penta(:,4), at  => penta(:,5),                   &
+                   e    => penta(:,6), obc => penta(:,7),                   &
+                   f    => penta(:,8), g   => penta(:,9),                   &
+                   eobc => penta(:,10)                                      )
     
             at = beta90 
             bt = beta90
@@ -246,54 +292,108 @@ contains
             d  = one
 
             ! BC at 1
-            bt(1) = zero
-            b (1) = zero
-            d (1) = one
-            a (1) = zero 
-            at(1) = zero
+            select case(bc1)
+            case(0)
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one
+                a (1) = zero 
+                at(1) = zero
 
-            bt(2) = zero
-            b (2) = b2_alpha90
-            d (2) = one
-            a (2) = b2_alpha90
-            at(2) = zero
+                bt(2) = zero
+                b (2) = b2_alpha90
+                d (2) = one
+                a (2) = b2_alpha90
+                at(2) = zero
 
-            bt(3) = b3_beta90
-            b (3) = b3_alpha90
-            d (3) = one
-            a (3) = b3_alpha90
-            at(3) = b3_beta90
+                bt(3) = b3_beta90
+                b (3) = b3_alpha90
+                d (3) = one
+                a (3) = b3_alpha90
+                at(3) = b3_beta90
 
-            bt(4) = b4_beta90
-            b (4) = b4_alpha90
-            d (4) = one
-            a (4) = b4_alpha90
-            at(4) = b4_beta90
+                bt(4) = b4_beta90
+                b (4) = b4_alpha90
+                d (4) = one
+                a (4) = b4_alpha90
+                at(4) = b4_beta90
+            case(1)
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one
+                a (1) = two*alpha90 
+                at(1) = two*beta90
+
+                bt(2) = zero
+                b (2) = alpha90
+                d (2) = one + beta90
+                a (2) = alpha90
+                at(2) = beta90
+            case(-1)
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one
+                a (1) = zero
+                at(1) = zero
+
+                bt(2) = zero
+                b (2) = alpha90
+                d (2) = one - beta90
+                a (2) = alpha90
+                at(2) = beta90
+            end select
             
             ! BC at n    
-            bt(this%n  ) = zero
-            b (this%n  ) = zero
-            d (this%n  ) = one
-            a (this%n  ) = zero 
-            at(this%n  ) = zero
+            select case(bcn)
+            case(0)
+                bt(this%n  ) = zero
+                b (this%n  ) = zero
+                d (this%n  ) = one
+                a (this%n  ) = zero 
+                at(this%n  ) = zero
 
-            bt(this%n-1) = zero
-            b (this%n-1) = b2_alpha90
-            d (this%n-1) = one
-            a (this%n-1) = b2_alpha90
-            at(this%n-1) = zero
+                bt(this%n-1) = zero
+                b (this%n-1) = b2_alpha90
+                d (this%n-1) = one
+                a (this%n-1) = b2_alpha90
+                at(this%n-1) = zero
 
-            bt(this%n-2) = b3_beta90
-            b (this%n-2) = b3_alpha90
-            d (this%n-2) = one
-            a (this%n-2) = b3_alpha90
-            at(this%n-2) = b3_beta90
+                bt(this%n-2) = b3_beta90
+                b (this%n-2) = b3_alpha90
+                d (this%n-2) = one
+                a (this%n-2) = b3_alpha90
+                at(this%n-2) = b3_beta90
 
-            bt(this%n-3) = b4_beta90
-            b (this%n-3) = b4_alpha90
-            d (this%n-3) = one
-            a (this%n-3) = b4_alpha90
-            at(this%n-3) = b4_beta90
+                bt(this%n-3) = b4_beta90
+                b (this%n-3) = b4_alpha90
+                d (this%n-3) = one
+                a (this%n-3) = b4_alpha90
+                at(this%n-3) = b4_beta90
+            case(1)
+                bt(this%n  ) = two*beta90
+                b (this%n  ) = two*alpha90
+                d (this%n  ) = one
+                a (this%n  ) = zero 
+                at(this%n  ) = zero
+
+                bt(this%n-1) = beta90
+                b (this%n-1) = alpha90
+                d (this%n-1) = one + beta90
+                a (this%n-1) = alpha90
+                at(this%n-1) = zero
+            case(-1)
+                bt(this%n  ) = zero
+                b (this%n  ) = zero
+                d (this%n  ) = one
+                a (this%n  ) = zero 
+                at(this%n  ) = zero
+
+                bt(this%n-1) = beta90
+                b (this%n-1) = alpha90
+                d (this%n-1) = one - beta90
+                a (this%n-1) = alpha90
+                at(this%n-1) = zero
+            end select
             
             ! Step 1
             obc(1) = one/d(1)
@@ -429,9 +529,10 @@ contains
     
     end subroutine
     
-    subroutine SolveXPenta(this,y,n2,n3)
+    subroutine SolveXPenta(this,penta,y,n2,n3)
 
         class( cf90 ), intent(in) :: this
+        real(rkind), dimension(this%n,11), intent(in) :: penta
         integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y
         integer :: i, j, k
@@ -439,81 +540,82 @@ contains
         do k = 1,n3
             do j = 1,n2
                 ! Step 1
-                y(2,j,k) = y(2,j,k) - this%penta(2,8)*y(1,j,k)
+                y(2,j,k) = y(2,j,k) - penta(2,8)*y(1,j,k)
                 do i = 3,this%n
-                    y(i,j,k) = y(i,j,k) - this%penta(i,9)*y(i-2,j,k) - this%penta(i,8)*y(i-1,j,k)
+                    y(i,j,k) = y(i,j,k) - penta(i,9)*y(i-2,j,k) - penta(i,8)*y(i-1,j,k)
                 end do 
 
                 ! Step 2
-                y(this%n,j,k) = y(this%n,j,k)*this%penta(this%n,7)
+                y(this%n,j,k) = y(this%n,j,k)*penta(this%n,7)
                 
-                y(this%n-1,j,k) = y(this%n-1,j,k)*this%penta(this%n-1,7) - this%penta(this%n-1,10)*y(this%n,j,k)
+                y(this%n-1,j,k) = y(this%n-1,j,k)*penta(this%n-1,7) - penta(this%n-1,10)*y(this%n,j,k)
                 do i = this%n-2,1,-1
-                    y(i,j,k) = y(i,j,k)*this%penta(i,7) - y(i+2,j,k)*this%penta(i,5)*this%penta(i,7) - y(i+1,j,k)*this%penta(i,10)
+                    y(i,j,k) = y(i,j,k)*penta(i,7) - y(i+2,j,k)*penta(i,5)*penta(i,7) - y(i+1,j,k)*penta(i,10)
                 end do 
             end do 
         end do 
 
     end subroutine
 
-    subroutine SolveYPenta(this,y,n1,n3)
+    subroutine SolveYPenta(this,penta,y,n1,n3)
 
         class( cf90 ), intent(in) :: this
+        real(rkind), dimension(this%n,11), intent(in) :: penta
         integer, intent(in) :: n1,n3
         real(rkind), dimension(n1,this%n,n3), intent(inout) :: y
         integer :: j, k
 
         do k = 1,n3
             ! Step 1
-            y(:,2,k) = y(:,2,k) - this%penta(2,8)*y(:,1,k)
+            y(:,2,k) = y(:,2,k) - penta(2,8)*y(:,1,k)
             do j = 3,this%n
-                y(:,j,k) = y(:,j,k) - this%penta(j,9)*y(:,j-2,k) - this%penta(j,8)*y(:,j-1,k)
+                y(:,j,k) = y(:,j,k) - penta(j,9)*y(:,j-2,k) - penta(j,8)*y(:,j-1,k)
             end do 
 
             ! Step 2
-            y(:,this%n,k) = y(:,this%n,k)*this%penta(this%n,7)
+            y(:,this%n,k) = y(:,this%n,k)*penta(this%n,7)
             
-            y(:,this%n-1,k) = y(:,this%n-1,k)*this%penta(this%n-1,7) - this%penta(this%n-1,10)*y(:,this%n,k)
+            y(:,this%n-1,k) = y(:,this%n-1,k)*penta(this%n-1,7) - penta(this%n-1,10)*y(:,this%n,k)
             do j = this%n-2,1,-1
-                y(:,j,k) = y(:,j,k)*this%penta(j,7) - y(:,j+2,k)*this%penta(j,5)*this%penta(j,7) - y(:,j+1,k)*this%penta(j,10)
+                y(:,j,k) = y(:,j,k)*penta(j,7) - y(:,j+2,k)*penta(j,5)*penta(j,7) - y(:,j+1,k)*penta(j,10)
             end do 
         end do 
 
     end subroutine
 
-    subroutine SolveZPenta(this,y,n1,n2)
+    subroutine SolveZPenta_REAL(this,penta,y,n1,n2)
 
         class( cf90 ), intent(in) :: this
+        real(rkind), dimension(this%n,11), intent(in) :: penta
         integer, intent(in) :: n1,n2
         real(rkind), dimension(n1,n2,this%n), intent(inout) :: y
         integer :: k
 
-        ! Step 1
-        y(:,:,2) = y(:,:,2) - this%penta(2,8)*y(:,:,1)
-        do k = 3,this%n
-            y(:,:,k) = y(:,:,k) - this%penta(k,9)*y(:,:,k-2) - this%penta(k,8)*y(:,:,k-1)
-        end do 
-
-        ! Step 2
-        y(:,:,this%n) = y(:,:,this%n)*this%penta(this%n,7)
-        
-        y(:,:,this%n-1) = y(:,:,this%n-1)*this%penta(this%n-1,7) - this%penta(this%n-1,10)*y(:,:,this%n)
-        do k = this%n-2,1,-1
-            y(:,:,k) = y(:,:,k)*this%penta(k,7) - y(:,:,k+2)*this%penta(k,5)*this%penta(k,7) - y(:,:,k+1)*this%penta(k,10)
-        end do 
+#include "CF90_files/SolveZPenta_common.F90"        
 
     end subroutine
 
-    pure subroutine ComputeXRHS(this, f, RHS, n2, n3)
+    subroutine SolveZPenta_CMPLX(this,penta,y,n1,n2)
+
+        class( cf90 ), intent(in) :: this
+        real(rkind), dimension(this%n,11), intent(in) :: penta
+        integer, intent(in) :: n1,n2
+        complex(rkind), dimension(n1,n2,this%n), intent(inout) :: y
+        integer :: k
+
+#include "CF90_files/SolveZPenta_common.F90"        
+
+    end subroutine
+
+    pure subroutine ComputeXRHS(this, f, RHS, n2, n3, bc1, bcn)
     
         class( cf90 ), intent(in) :: this
         integer, intent(in) :: n2, n3
         real(rkind), dimension(this%n,n2,n3), intent(in) :: f
         real(rkind), dimension(this%n,n2,n3), intent(out) :: RHS
+        integer, intent(in) :: bc1, bcn
         integer :: j,k
 
-
-    
         select case (this%periodic)
         case (.TRUE.)
             do k=1,n3
@@ -571,19 +673,64 @@ contains
             do k = 1,n3
                 do j = 1,n2
                     
-                    RHS(         1,j,k) =    one * ( f(         1,j,k) )                     
+                    select case(bc1)
+                    case(0)
+                        RHS(         1,j,k) =    one * ( f(         1,j,k) )                     
 
-                    RHS(         2,j,k) = b2_a90 * ( f(         2,j,k) )                     &
-                                        + b2_b90 * ( f(         3,j,k) + f(         1,j,k) ) 
-                    
-                    RHS(         3,j,k) = b3_a90 * ( f(         3,j,k) )                     &
-                                        + b3_b90 * ( f(         4,j,k) + f(         2,j,k) ) &
-                                        + b3_c90 * ( f(         5,j,k) + f(         1,j,k) )
+                        RHS(         2,j,k) = b2_a90 * ( f(         2,j,k) )                     &
+                                            + b2_b90 * ( f(         3,j,k) + f(         1,j,k) ) 
+                        
+                        RHS(         3,j,k) = b3_a90 * ( f(         3,j,k) )                     &
+                                            + b3_b90 * ( f(         4,j,k) + f(         2,j,k) ) &
+                                            + b3_c90 * ( f(         5,j,k) + f(         1,j,k) )
 
-                    RHS(         4,j,k) = b4_a90 * ( f(         4,j,k) )                     &
-                                        + b4_b90 * ( f(         5,j,k) + f(         3,j,k) ) &
-                                        + b4_c90 * ( f(         6,j,k) + f(         2,j,k) ) &
-                                        + b4_d90 * ( f(         7,j,k) + f(         1,j,k) ) 
+                        RHS(         4,j,k) = b4_a90 * ( f(         4,j,k) )                     &
+                                            + b4_b90 * ( f(         5,j,k) + f(         3,j,k) ) &
+                                            + b4_c90 * ( f(         6,j,k) + f(         2,j,k) ) &
+                                            + b4_d90 * ( f(         7,j,k) + f(         1,j,k) ) 
+                    case(1)
+                        RHS(1,j,k) =    a90 * ( f(1,j,k) )            &
+                                   +    b90 * ( f(2,j,k) + f(2,j,k) ) &
+                                   +    c90 * ( f(3,j,k) + f(3,j,k) ) &
+                                   +    d90 * ( f(4,j,k) + f(4,j,k) ) &
+                                   +    e90 * ( f(5,j,k) + f(5,j,k) )
+                        RHS(2,j,k) =    a90 * ( f(2,j,k) )            &
+                                   +    b90 * ( f(3,j,k) + f(1,j,k) ) &
+                                   +    c90 * ( f(4,j,k) + f(2,j,k) ) &
+                                   +    d90 * ( f(5,j,k) + f(3,j,k) ) &
+                                   +    e90 * ( f(6,j,k) + f(4,j,k) )
+                        RHS(3,j,k) =    a90 * ( f(3,j,k) )            &
+                                   +    b90 * ( f(4,j,k) + f(2,j,k) ) &
+                                   +    c90 * ( f(5,j,k) + f(1,j,k) ) &
+                                   +    d90 * ( f(6,j,k) + f(2,j,k) ) &
+                                   +    e90 * ( f(7,j,k) + f(3,j,k) )
+                        RHS(4,j,k) =    a90 * ( f(4,j,k) )            &
+                                   +    b90 * ( f(5,j,k) + f(3,j,k) ) &
+                                   +    c90 * ( f(6,j,k) + f(2,j,k) ) &
+                                   +    d90 * ( f(7,j,k) + f(1,j,k) ) &
+                                   +    e90 * ( f(8,j,k) + f(2,j,k) )
+                    case(-1)
+                        RHS(1,j,k) =    a90 * ( f(1,j,k) )            &
+                                   +    b90 * ( f(2,j,k) - f(2,j,k) ) &
+                                   +    c90 * ( f(3,j,k) - f(3,j,k) ) &
+                                   +    d90 * ( f(4,j,k) - f(4,j,k) ) &
+                                   +    e90 * ( f(5,j,k) - f(5,j,k) )
+                        RHS(2,j,k) =    a90 * ( f(2,j,k) )            &
+                                   +    b90 * ( f(3,j,k) + f(1,j,k) ) &
+                                   +    c90 * ( f(4,j,k) - f(2,j,k) ) &
+                                   +    d90 * ( f(5,j,k) - f(3,j,k) ) &
+                                   +    e90 * ( f(6,j,k) - f(4,j,k) )
+                        RHS(3,j,k) =    a90 * ( f(3,j,k) )            &
+                                   +    b90 * ( f(4,j,k) + f(2,j,k) ) &
+                                   +    c90 * ( f(5,j,k) + f(1,j,k) ) &
+                                   +    d90 * ( f(6,j,k) - f(2,j,k) ) &
+                                   +    e90 * ( f(7,j,k) - f(3,j,k) )
+                        RHS(4,j,k) =    a90 * ( f(4,j,k) )            &
+                                   +    b90 * ( f(5,j,k) + f(3,j,k) ) &
+                                   +    c90 * ( f(6,j,k) + f(2,j,k) ) &
+                                   +    d90 * ( f(7,j,k) + f(1,j,k) ) &
+                                   +    e90 * ( f(8,j,k) - f(2,j,k) )
+                    end select
 
                     RHS(5:this%n-4,j,k) =    a90 * ( f(5:this%n-4,j,k) )                     &
                                         +    b90 * ( f(6:this%n-3,j,k) + f(4:this%n-5,j,k) ) &
@@ -591,19 +738,64 @@ contains
                                         +    d90 * ( f(8:this%n-1,j,k) + f(2:this%n-7,j,k) ) &
                                         +    e90 * ( f(9:this%n  ,j,k) + f(1:this%n-8,j,k) )
 
-                    RHS(  this%n-3,j,k) = b4_a90 * ( f(  this%n-3,j,k) )                     &
-                                        + b4_b90 * ( f(  this%n-2,j,k) + f(  this%n-4,j,k) ) &
-                                        + b4_c90 * ( f(  this%n-1,j,k) + f(  this%n-5,j,k) ) &
-                                        + b4_d90 * ( f(    this%n,j,k) + f(  this%n-6,j,k) ) 
+                    select case(bcn)
+                    case(0)
+                        RHS(  this%n-3,j,k) = b4_a90 * ( f(  this%n-3,j,k) )                     &
+                                            + b4_b90 * ( f(  this%n-2,j,k) + f(  this%n-4,j,k) ) &
+                                            + b4_c90 * ( f(  this%n-1,j,k) + f(  this%n-5,j,k) ) &
+                                            + b4_d90 * ( f(    this%n,j,k) + f(  this%n-6,j,k) ) 
 
-                    RHS(  this%n-2,j,k) = b3_a90 * ( f(  this%n-2,j,k) )                     &
-                                        + b3_b90 * ( f(  this%n-1,j,k) + f(  this%n-3,j,k) ) &
-                                        + b3_c90 * ( f(    this%n,j,k) + f(  this%n-4,j,k) ) 
+                        RHS(  this%n-2,j,k) = b3_a90 * ( f(  this%n-2,j,k) )                     &
+                                            + b3_b90 * ( f(  this%n-1,j,k) + f(  this%n-3,j,k) ) &
+                                            + b3_c90 * ( f(    this%n,j,k) + f(  this%n-4,j,k) ) 
 
-                    RHS(  this%n-1,j,k) = b2_a90 * ( f(  this%n-1,j,k) )                     &
-                                        + b2_b90 * ( f(    this%n,j,k) + f(  this%n-2,j,k) ) 
+                        RHS(  this%n-1,j,k) = b2_a90 * ( f(  this%n-1,j,k) )                     &
+                                            + b2_b90 * ( f(    this%n,j,k) + f(  this%n-2,j,k) ) 
 
-                    RHS(    this%n,j,k) =    one * ( f(    this%n,j,k) )                     
+                        RHS(    this%n,j,k) =    one * ( f(    this%n,j,k) )                     
+                    case(1)
+                        RHS(this%n-3,j,k) =    a90 * ( f(this%n-3,j,k) )                   &
+                                          +    b90 * ( f(this%n-2,j,k) + f(this%n-4,j,k) ) &
+                                          +    c90 * ( f(this%n-1,j,k) + f(this%n-5,j,k) ) &
+                                          +    d90 * ( f(this%n  ,j,k) + f(this%n-6,j,k) ) &
+                                          +    e90 * ( f(this%n-1,j,k) + f(this%n-7,j,k) )
+                        RHS(this%n-2,j,k) =    a90 * ( f(this%n-2,j,k) )                   &
+                                          +    b90 * ( f(this%n-1,j,k) + f(this%n-3,j,k) ) &
+                                          +    c90 * ( f(this%n  ,j,k) + f(this%n-4,j,k) ) &
+                                          +    d90 * ( f(this%n-1,j,k) + f(this%n-5,j,k) ) &
+                                          +    e90 * ( f(this%n-2,j,k) + f(this%n-6,j,k) )
+                        RHS(this%n-1,j,k) =    a90 * ( f(this%n-1,j,k) )                   &
+                                          +    b90 * ( f(this%n  ,j,k) + f(this%n-2,j,k) ) &
+                                          +    c90 * ( f(this%n-1,j,k) + f(this%n-3,j,k) ) &
+                                          +    d90 * ( f(this%n-2,j,k) + f(this%n-4,j,k) ) &
+                                          +    e90 * ( f(this%n-3,j,k) + f(this%n-5,j,k) )
+                        RHS(this%n  ,j,k) =    a90 * ( f(this%n  ,j,k) )                   &
+                                          +    b90 * ( f(this%n-1,j,k) + f(this%n-1,j,k) ) &
+                                          +    c90 * ( f(this%n-2,j,k) + f(this%n-2,j,k) ) &
+                                          +    d90 * ( f(this%n-3,j,k) + f(this%n-3,j,k) ) &
+                                          +    e90 * ( f(this%n-4,j,k) + f(this%n-4,j,k) )
+                    case(-1)
+                        RHS(this%n-3,j,k) =    a90 * ( f(this%n-3,j,k) )                   &
+                                          +    b90 * ( f(this%n-2,j,k) + f(this%n-4,j,k) ) &
+                                          +    c90 * ( f(this%n-1,j,k) + f(this%n-5,j,k) ) &
+                                          +    d90 * ( f(this%n  ,j,k) + f(this%n-6,j,k) ) &
+                                          +    e90 * (-f(this%n-1,j,k) + f(this%n-7,j,k) )
+                        RHS(this%n-2,j,k) =    a90 * ( f(this%n-2,j,k) )                   &
+                                          +    b90 * ( f(this%n-1,j,k) + f(this%n-3,j,k) ) &
+                                          +    c90 * ( f(this%n  ,j,k) + f(this%n-4,j,k) ) &
+                                          +    d90 * (-f(this%n-1,j,k) + f(this%n-5,j,k) ) &
+                                          +    e90 * (-f(this%n-2,j,k) + f(this%n-6,j,k) )
+                        RHS(this%n-1,j,k) =    a90 * ( f(this%n-1,j,k) )                   &
+                                          +    b90 * ( f(this%n  ,j,k) + f(this%n-2,j,k) ) &
+                                          +    c90 * (-f(this%n-1,j,k) + f(this%n-3,j,k) ) &
+                                          +    d90 * (-f(this%n-2,j,k) + f(this%n-4,j,k) ) &
+                                          +    e90 * (-f(this%n-3,j,k) + f(this%n-5,j,k) )
+                        RHS(this%n  ,j,k) =    a90 * ( f(this%n  ,j,k) )                   &
+                                          +    b90 * (-f(this%n-1,j,k) + f(this%n-1,j,k) ) &
+                                          +    c90 * (-f(this%n-2,j,k) + f(this%n-2,j,k) ) &
+                                          +    d90 * (-f(this%n-3,j,k) + f(this%n-3,j,k) ) &
+                                          +    e90 * (-f(this%n-4,j,k) + f(this%n-4,j,k) )
+                    end select
                 
                end do 
             end do 
@@ -611,15 +803,15 @@ contains
     
     end subroutine
     
-    pure subroutine ComputeYRHS(this, f, RHS, n1, n3) 
+    pure subroutine ComputeYRHS(this, f, RHS, n1, n3, bc1, bcn) 
     
         class( cf90 ), intent(in) :: this
         integer, intent(in) :: n1, n3
         real(rkind), dimension(n1,this%n,n3), intent(in) :: f
         real(rkind), dimension(n1,this%n,n3), intent(out) :: RHS
+        integer, intent(in) :: bc1, bcn
         integer :: k
 
-    
         select case (this%periodic)
         case (.TRUE.)
             do k=1,n3
@@ -672,19 +864,64 @@ contains
         case (.FALSE.)
 
             do k = 1,n3
-                RHS(:,         1,k) =    one * ( f(:,         1,k) )                     
+                select case(bc1)
+                case(0)
+                    RHS(:,         1,k) =    one * ( f(:,         1,k) )                     
 
-                RHS(:,         2,k) = b2_a90 * ( f(:,         2,k) )                     &
-                                    + b2_b90 * ( f(:,         3,k) + f(:,         1,k) ) 
-                
-                RHS(:,         3,k) = b3_a90 * ( f(:,         3,k) )                     &
-                                    + b3_b90 * ( f(:,         4,k) + f(:,         2,k) ) &
-                                    + b3_c90 * ( f(:,         5,k) + f(:,         1,k) )
+                    RHS(:,         2,k) = b2_a90 * ( f(:,         2,k) )                     &
+                                        + b2_b90 * ( f(:,         3,k) + f(:,         1,k) ) 
+                    
+                    RHS(:,         3,k) = b3_a90 * ( f(:,         3,k) )                     &
+                                        + b3_b90 * ( f(:,         4,k) + f(:,         2,k) ) &
+                                        + b3_c90 * ( f(:,         5,k) + f(:,         1,k) )
 
-                RHS(:,         4,k) = b4_a90 * ( f(:,         4,k) )                     &
-                                    + b4_b90 * ( f(:,         5,k) + f(:,         3,k) ) &
-                                    + b4_c90 * ( f(:,         6,k) + f(:,         2,k) ) &
-                                    + b4_d90 * ( f(:,         7,k) + f(:,         1,k) ) 
+                    RHS(:,         4,k) = b4_a90 * ( f(:,         4,k) )                     &
+                                        + b4_b90 * ( f(:,         5,k) + f(:,         3,k) ) &
+                                        + b4_c90 * ( f(:,         6,k) + f(:,         2,k) ) &
+                                        + b4_d90 * ( f(:,         7,k) + f(:,         1,k) ) 
+                case(1)
+                    RHS(:,1,k) =    a90 * ( f(:,1,k) )            &
+                               +    b90 * ( f(:,2,k) + f(:,2,k) ) &
+                               +    c90 * ( f(:,3,k) + f(:,3,k) ) &
+                               +    d90 * ( f(:,4,k) + f(:,4,k) ) &
+                               +    e90 * ( f(:,5,k) + f(:,5,k) )
+                    RHS(:,2,k) =    a90 * ( f(:,2,k) )            &
+                               +    b90 * ( f(:,3,k) + f(:,1,k) ) &
+                               +    c90 * ( f(:,4,k) + f(:,2,k) ) &
+                               +    d90 * ( f(:,5,k) + f(:,3,k) ) &
+                               +    e90 * ( f(:,6,k) + f(:,4,k) )
+                    RHS(:,3,k) =    a90 * ( f(:,3,k) )            &
+                               +    b90 * ( f(:,4,k) + f(:,2,k) ) &
+                               +    c90 * ( f(:,5,k) + f(:,1,k) ) &
+                               +    d90 * ( f(:,6,k) + f(:,2,k) ) &
+                               +    e90 * ( f(:,7,k) + f(:,3,k) )
+                    RHS(:,4,k) =    a90 * ( f(:,4,k) )            &
+                               +    b90 * ( f(:,5,k) + f(:,3,k) ) &
+                               +    c90 * ( f(:,6,k) + f(:,2,k) ) &
+                               +    d90 * ( f(:,7,k) + f(:,1,k) ) &
+                               +    e90 * ( f(:,8,k) + f(:,2,k) )
+                case(-1)  
+                    RHS(:,1,k) =    a90 * ( f(:,1,k) )            &
+                               +    b90 * ( f(:,2,k) - f(:,2,k) ) &
+                               +    c90 * ( f(:,3,k) - f(:,3,k) ) &
+                               +    d90 * ( f(:,4,k) - f(:,4,k) ) &
+                               +    e90 * ( f(:,5,k) - f(:,5,k) )
+                    RHS(:,2,k) =    a90 * ( f(:,2,k) )            &
+                               +    b90 * ( f(:,3,k) + f(:,1,k) ) &
+                               +    c90 * ( f(:,4,k) - f(:,2,k) ) &
+                               +    d90 * ( f(:,5,k) - f(:,3,k) ) &
+                               +    e90 * ( f(:,6,k) - f(:,4,k) )
+                    RHS(:,3,k) =    a90 * ( f(:,3,k) )            &
+                               +    b90 * ( f(:,4,k) + f(:,2,k) ) &
+                               +    c90 * ( f(:,5,k) + f(:,1,k) ) &
+                               +    d90 * ( f(:,6,k) - f(:,2,k) ) &
+                               +    e90 * ( f(:,7,k) - f(:,3,k) )
+                    RHS(:,4,k) =    a90 * ( f(:,4,k) )            &
+                               +    b90 * ( f(:,5,k) + f(:,3,k) ) &
+                               +    c90 * ( f(:,6,k) + f(:,2,k) ) &
+                               +    d90 * ( f(:,7,k) + f(:,1,k) ) &
+                               +    e90 * ( f(:,8,k) - f(:,2,k) )
+                end select
 
                 RHS(:,5:this%n-4,k) =    a90 * ( f(:,5:this%n-4,k) )                     &
                                     +    b90 * ( f(:,6:this%n-3,k) + f(:,4:this%n-5,k) ) &
@@ -692,182 +929,324 @@ contains
                                     +    d90 * ( f(:,8:this%n-1,k) + f(:,2:this%n-7,k) ) &
                                     +    e90 * ( f(:,9:this%n  ,k) + f(:,1:this%n-8,k) )
 
-                RHS(:,  this%n-3,k) = b4_a90 * ( f(:,  this%n-3,k) )                     &
-                                    + b4_b90 * ( f(:,  this%n-2,k) + f(:,  this%n-4,k) ) &
-                                    + b4_c90 * ( f(:,  this%n-1,k) + f(:,  this%n-5,k) ) &
-                                    + b4_d90 * ( f(:,    this%n,k) + f(:,  this%n-6,k) ) 
+                select case(bcn)
+                case(0)
+                    RHS(:,  this%n-3,k) = b4_a90 * ( f(:,  this%n-3,k) )                     &
+                                        + b4_b90 * ( f(:,  this%n-2,k) + f(:,  this%n-4,k) ) &
+                                        + b4_c90 * ( f(:,  this%n-1,k) + f(:,  this%n-5,k) ) &
+                                        + b4_d90 * ( f(:,    this%n,k) + f(:,  this%n-6,k) ) 
 
-                RHS(:,  this%n-2,k) = b3_a90 * ( f(:,  this%n-2,k) )                     &
-                                    + b3_b90 * ( f(:,  this%n-1,k) + f(:,  this%n-3,k) ) &
-                                    + b3_c90 * ( f(:,    this%n,k) + f(:,  this%n-4,k) ) 
+                    RHS(:,  this%n-2,k) = b3_a90 * ( f(:,  this%n-2,k) )                     &
+                                        + b3_b90 * ( f(:,  this%n-1,k) + f(:,  this%n-3,k) ) &
+                                        + b3_c90 * ( f(:,    this%n,k) + f(:,  this%n-4,k) ) 
 
-                RHS(:,  this%n-1,k) = b2_a90 * ( f(:,  this%n-1,k) )                     &
-                                    + b2_b90 * ( f(:,    this%n,k) + f(:,  this%n-2,k) ) 
+                    RHS(:,  this%n-1,k) = b2_a90 * ( f(:,  this%n-1,k) )                     &
+                                        + b2_b90 * ( f(:,    this%n,k) + f(:,  this%n-2,k) ) 
 
-                RHS(:,    this%n,k) =    one * ( f(:,    this%n,k) )                     
+                    RHS(:,    this%n,k) =    one * ( f(:,    this%n,k) )                     
+                case(1)
+                    RHS(:,this%n-3,k) =    a90 * ( f(:,this%n-3,k) )                   &
+                                      +    b90 * ( f(:,this%n-2,k) + f(:,this%n-4,k) ) &
+                                      +    c90 * ( f(:,this%n-1,k) + f(:,this%n-5,k) ) &
+                                      +    d90 * ( f(:,this%n  ,k) + f(:,this%n-6,k) ) &
+                                      +    e90 * ( f(:,this%n-1,k) + f(:,this%n-7,k) )
+                    RHS(:,this%n-2,k) =    a90 * ( f(:,this%n-2,k) )                   &
+                                      +    b90 * ( f(:,this%n-1,k) + f(:,this%n-3,k) ) &
+                                      +    c90 * ( f(:,this%n  ,k) + f(:,this%n-4,k) ) &
+                                      +    d90 * ( f(:,this%n-1,k) + f(:,this%n-5,k) ) &
+                                      +    e90 * ( f(:,this%n-2,k) + f(:,this%n-6,k) )
+                    RHS(:,this%n-1,k) =    a90 * ( f(:,this%n-1,k) )                   &
+                                      +    b90 * ( f(:,this%n  ,k) + f(:,this%n-2,k) ) &
+                                      +    c90 * ( f(:,this%n-1,k) + f(:,this%n-3,k) ) &
+                                      +    d90 * ( f(:,this%n-2,k) + f(:,this%n-4,k) ) &
+                                      +    e90 * ( f(:,this%n-3,k) + f(:,this%n-5,k) )
+                    RHS(:,this%n  ,k) =    a90 * ( f(:,this%n  ,k) )                   &
+                                      +    b90 * ( f(:,this%n-1,k) + f(:,this%n-1,k) ) &
+                                      +    c90 * ( f(:,this%n-2,k) + f(:,this%n-2,k) ) &
+                                      +    d90 * ( f(:,this%n-3,k) + f(:,this%n-3,k) ) &
+                                      +    e90 * ( f(:,this%n-4,k) + f(:,this%n-4,k) )
+                case(-1)  
+                    RHS(:,this%n-3,k) =    a90 * ( f(:,this%n-3,k) )                   &
+                                      +    b90 * ( f(:,this%n-2,k) + f(:,this%n-4,k) ) &
+                                      +    c90 * ( f(:,this%n-1,k) + f(:,this%n-5,k) ) &
+                                      +    d90 * ( f(:,this%n  ,k) + f(:,this%n-6,k) ) &
+                                      +    e90 * (-f(:,this%n-1,k) + f(:,this%n-7,k) )
+                    RHS(:,this%n-2,k) =    a90 * ( f(:,this%n-2,k) )                   &
+                                      +    b90 * ( f(:,this%n-1,k) + f(:,this%n-3,k) ) &
+                                      +    c90 * ( f(:,this%n  ,k) + f(:,this%n-4,k) ) &
+                                      +    d90 * (-f(:,this%n-1,k) + f(:,this%n-5,k) ) &
+                                      +    e90 * (-f(:,this%n-2,k) + f(:,this%n-6,k) )
+                    RHS(:,this%n-1,k) =    a90 * ( f(:,this%n-1,k) )                   &
+                                      +    b90 * ( f(:,this%n  ,k) + f(:,this%n-2,k) ) &
+                                      +    c90 * (-f(:,this%n-1,k) + f(:,this%n-3,k) ) &
+                                      +    d90 * (-f(:,this%n-2,k) + f(:,this%n-4,k) ) &
+                                      +    e90 * (-f(:,this%n-3,k) + f(:,this%n-5,k) )
+                    RHS(:,this%n  ,k) =    a90 * ( f(:,this%n  ,k) )                   &
+                                      +    b90 * (-f(:,this%n-1,k) + f(:,this%n-1,k) ) &
+                                      +    c90 * (-f(:,this%n-2,k) + f(:,this%n-2,k) ) &
+                                      +    d90 * (-f(:,this%n-3,k) + f(:,this%n-3,k) ) &
+                                      +    e90 * (-f(:,this%n-4,k) + f(:,this%n-4,k) )
+                end select
                 
             end do 
         end select
     
     end subroutine
 
-    pure subroutine ComputeZRHS(this, f, RHS, n1, n2)
+    pure subroutine ComputeZRHS_REAL(this, f, RHS, n1, n2, bc1, bcn)
     
         class( cf90 ), intent(in) :: this
         integer, intent(in) :: n1, n2
         real(rkind), dimension(n1,n2,this%n), intent(in) :: f
         real(rkind), dimension(n1,n2,this%n), intent(out) :: RHS
-    
-        select case (this%periodic)
-        case (.TRUE.)
-                RHS(:,:,         1) = a90 * ( f(:,:,         1) )                     &
-                                    + b90 * ( f(:,:,         2) + f(:,:,    this%n) ) &
-                                    + c90 * ( f(:,:,         3) + f(:,:,  this%n-1) ) &
-                                    + d90 * ( f(:,:,         4) + f(:,:,  this%n-2) ) &
-                                    + e90 * ( f(:,:,         5) + f(:,:,  this%n-3) )
-                RHS(:,:,         2) = a90 * ( f(:,:,         2) )                     &
-                                    + b90 * ( f(:,:,         3) + f(:,:,         1) ) &
-                                    + c90 * ( f(:,:,         4) + f(:,:,    this%n) ) &
-                                    + d90 * ( f(:,:,         5) + f(:,:,  this%n-1) ) &
-                                    + e90 * ( f(:,:,         6) + f(:,:,  this%n-2) )
-                RHS(:,:,         3) = a90 * ( f(:,:,         3) )                     &
-                                    + b90 * ( f(:,:,         4) + f(:,:,         2) ) &
-                                    + c90 * ( f(:,:,         5) + f(:,:,         1) ) &
-                                    + d90 * ( f(:,:,         6) + f(:,:,    this%n) ) &
-                                    + e90 * ( f(:,:,         7) + f(:,:,  this%n-1) )
-                RHS(:,:,         4) = a90 * ( f(:,:,         4) )                     &
-                                    + b90 * ( f(:,:,         5) + f(:,:,         3) ) &
-                                    + c90 * ( f(:,:,         6) + f(:,:,         2) ) &
-                                    + d90 * ( f(:,:,         7) + f(:,:,         1) ) &
-                                    + e90 * ( f(:,:,         8) + f(:,:,    this%n) )
-                RHS(:,:,5:this%n-4) = a90 * ( f(:,:,5:this%n-4) )                     &
-                                    + b90 * ( f(:,:,6:this%n-3) + f(:,:,4:this%n-5) ) &
-                                    + c90 * ( f(:,:,7:this%n-2) + f(:,:,3:this%n-6) ) &
-                                    + d90 * ( f(:,:,8:this%n-1) + f(:,:,2:this%n-7) ) &
-                                    + e90 * ( f(:,:,9:this%n  ) + f(:,:,1:this%n-8) )
-                RHS(:,:,  this%n-3) = a90 * ( f(:,:,  this%n-3) )                     &
-                                    + b90 * ( f(:,:,  this%n-2) + f(:,:,  this%n-4) ) &
-                                    + c90 * ( f(:,:,  this%n-1) + f(:,:,  this%n-5) ) &
-                                    + d90 * ( f(:,:,    this%n) + f(:,:,  this%n-6) ) &
-                                    + e90 * ( f(:,:,         1) + f(:,:,  this%n-7) )
-                RHS(:,:,  this%n-2) = a90 * ( f(:,:,  this%n-2) )                     &
-                                    + b90 * ( f(:,:,  this%n-1) + f(:,:,  this%n-3) ) &
-                                    + c90 * ( f(:,:,    this%n) + f(:,:,  this%n-4) ) &
-                                    + d90 * ( f(:,:,         1) + f(:,:,  this%n-5) ) &
-                                    + e90 * ( f(:,:,         2) + f(:,:,  this%n-6) )
-                RHS(:,:,  this%n-1) = a90 * ( f(:,:,  this%n-1) )                     &
-                                    + b90 * ( f(:,:,    this%n) + f(:,:,  this%n-2) ) &
-                                    + c90 * ( f(:,:,         1) + f(:,:,  this%n-3) ) &
-                                    + d90 * ( f(:,:,         2) + f(:,:,  this%n-4) ) &
-                                    + e90 * ( f(:,:,         3) + f(:,:,  this%n-5) )
-                RHS(:,:,    this%n) = a90 * ( f(:,:,    this%n) )                     &
-                                    + b90 * ( f(:,:,         1) + f(:,:,  this%n-1) ) &
-                                    + c90 * ( f(:,:,         2) + f(:,:,  this%n-2) ) &
-                                    + d90 * ( f(:,:,         3) + f(:,:,  this%n-3) ) &
-                                    + e90 * ( f(:,:,         4) + f(:,:,  this%n-4) )
-        case (.FALSE.)
-                    
-            RHS(:,:,         1) =    one * ( f(:,:,         1) )                     
+        integer, intent(in) :: bc1, bcn
 
-            RHS(:,:,         2) = b2_a90 * ( f(:,:,         2) )                     &
-                                + b2_b90 * ( f(:,:,         3) + f(:,:,         1) ) 
-            
-            RHS(:,:,         3) = b3_a90 * ( f(:,:,         3) )                     &
-                                + b3_b90 * ( f(:,:,         4) + f(:,:,         2) ) &
-                                + b3_c90 * ( f(:,:,         5) + f(:,:,         1) )
-
-            RHS(:,:,         4) = b4_a90 * ( f(:,:,         4) )                     &
-                                + b4_b90 * ( f(:,:,         5) + f(:,:,         3) ) &
-                                + b4_c90 * ( f(:,:,         6) + f(:,:,         2) ) &
-                                + b4_d90 * ( f(:,:,         7) + f(:,:,         1) ) 
-
-            RHS(:,:,5:this%n-4) =    a90 * ( f(:,:,5:this%n-4) )                     &
-                                +    b90 * ( f(:,:,6:this%n-3) + f(:,:,4:this%n-5) ) &
-                                +    c90 * ( f(:,:,7:this%n-2) + f(:,:,3:this%n-6) ) &
-                                +    d90 * ( f(:,:,8:this%n-1) + f(:,:,2:this%n-7) ) &
-                                +    e90 * ( f(:,:,9:this%n  ) + f(:,:,1:this%n-8) )
-
-            RHS(:,:,  this%n-3) = b4_a90 * ( f(:,:,  this%n-3) )                     &
-                                + b4_b90 * ( f(:,:,  this%n-2) + f(:,:,  this%n-4) ) &
-                                + b4_c90 * ( f(:,:,  this%n-1) + f(:,:,  this%n-5) ) &
-                                + b4_d90 * ( f(:,:,    this%n) + f(:,:,  this%n-6) ) 
-
-            RHS(:,:,  this%n-2) = b3_a90 * ( f(:,:,  this%n-2) )                     &
-                                + b3_b90 * ( f(:,:,  this%n-1) + f(:,:,  this%n-3) ) &
-                                + b3_c90 * ( f(:,:,    this%n) + f(:,:,  this%n-4) ) 
-
-            RHS(:,:,  this%n-1) = b2_a90 * ( f(:,:,  this%n-1) )                     &
-                                + b2_b90 * ( f(:,:,    this%n) + f(:,:,  this%n-2) ) 
-
-            RHS(:,:,    this%n) =    one * ( f(:,:,    this%n) )                     
-
-        end select
+#include "CF90_files/ComputeZRHS_common.F90"    
     
     end subroutine
     
-    subroutine filter1(this, f, df, na, nb)
+    pure subroutine ComputeZRHS_CMPLX(this, f, RHS, n1, n2, bc1, bcn)
+    
+        class( cf90 ), intent(in) :: this
+        integer, intent(in) :: n1, n2
+        complex(rkind), dimension(n1,n2,this%n), intent(in) :: f
+        complex(rkind), dimension(n1,n2,this%n), intent(out) :: RHS
+        integer, intent(in) :: bc1, bcn
+
+#include "CF90_files/ComputeZRHS_common.F90"    
+    
+    end subroutine
+
+    subroutine filter1(this, f, df, na, nb, bc1_, bcn_)
         class( cf90 ), intent(in) :: this
         integer, intent(in) :: na, nb
         real(rkind), dimension(this%n,na,nb), intent(in) :: f
         real(rkind), dimension(this%n,na,nb), intent(out) :: df
+        integer, optional, intent(in) :: bc1_, bcn_
+        integer :: bc1, bcn
 
         if(this%n == 1) then
             df = f
             return
         end if
         
-        call this%ComputeXRHS(f, df, na, nb)
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
+
+        call this%ComputeXRHS(f, df, na, nb, bc1, bcn)
 
         select case (this%periodic)
         case(.TRUE.)
             call this%SolveXLU(df, na, nb)
         case(.FALSE.)
-            call this%SolveXPenta(df, na, nb)
+            select case(bc1)
+            case(0) ! Normal non-periodic left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveXPenta(this%penta_nn, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveXPenta(this%penta_ns, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveXPenta(this%penta_na, df, na, nb)
+                end select
+            case(1) ! Symmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveXPenta(this%penta_sn, df, na, nb)
+                case(1)  ! Symmetric right boundary
+                    call this%SolveXPenta(this%penta_ss, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveXPenta(this%penta_sa, df, na, nb)
+                end select
+            case(-1) ! Antisymmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveXPenta(this%penta_an, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveXPenta(this%penta_as, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveXPenta(this%penta_aa, df, na, nb)
+                end select
+            end select
         end select
     
     end subroutine
 
-    subroutine filter2(this, f, df, na, nb)
+    subroutine filter2(this, f, df, na, nb, bc1_, bcn_)
         class( cf90 ), intent(in) :: this
         integer, intent(in) :: na, nb
         real(rkind), dimension(na,this%n,nb), intent(in) :: f
         real(rkind), dimension(na,this%n,nb), intent(out) :: df
+        integer, optional, intent(in) :: bc1_, bcn_
+        integer :: bc1, bcn
 
         if(this%n == 1) then
             df = f
             return
         end if
         
-        call this%ComputeYRHS(f, df, na, nb)
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
+
+        call this%ComputeYRHS(f, df, na, nb, bc1, bcn)
 
         select case (this%periodic)
         case(.TRUE.)
             call this%SolveYLU(df, na, nb)
         case(.FALSE.)
-            call this%SolveYPenta(df, na, nb)
+            select case(bc1)
+            case(0) ! Normal non-periodic left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveYPenta(this%penta_nn, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveYPenta(this%penta_ns, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveYPenta(this%penta_na, df, na, nb)
+                end select
+            case(1) ! Symmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveYPenta(this%penta_sn, df, na, nb)
+                case(1)  ! Symmetric right boundary
+                    call this%SolveYPenta(this%penta_ss, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveYPenta(this%penta_sa, df, na, nb)
+                end select
+            case(-1) ! Antisymmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveYPenta(this%penta_an, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveYPenta(this%penta_as, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveYPenta(this%penta_aa, df, na, nb)
+                end select
+            end select
         end select
     
     end subroutine
 
-    subroutine filter3(this, f, df, na, nb)
+    subroutine filter3_REAL(this, f, df, na, nb, bc1_, bcn_)
         class( cf90 ), intent(in) :: this
         integer, intent(in) :: na, nb
         real(rkind), dimension(na,nb,this%n), intent(in) :: f
         real(rkind), dimension(na,nb,this%n), intent(out) :: df
+        integer, optional, intent(in) :: bc1_, bcn_
+        integer :: bc1, bcn
 
         if(this%n == 1) then
             df = f
             return
         end if
         
-        call this%ComputeZRHS(f, df, na, nb)
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
+
+        call this%ComputeZRHS_REAL(f, df, na, nb, bc1, bcn)
 
         select case (this%periodic)
         case(.TRUE.)
             call this%SolveZLU(df, na, nb)
         case(.FALSE.)
-            call this%SolveZPenta(df, na, nb)
+            select case(bc1)
+            case(0) ! Normal non-periodic left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveZPenta_REAL(this%penta_nn, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveZPenta_REAL(this%penta_ns, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveZPenta_REAL(this%penta_na, df, na, nb)
+                end select
+            case(1) ! Symmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveZPenta_REAL(this%penta_sn, df, na, nb)
+                case(1)  ! Symmetric right boundary
+                    call this%SolveZPenta_REAL(this%penta_ss, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveZPenta_REAL(this%penta_sa, df, na, nb)
+                end select
+            case(-1) ! Antisymmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveZPenta_REAL(this%penta_an, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveZPenta_REAL(this%penta_as, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveZPenta_REAL(this%penta_aa, df, na, nb)
+                end select
+            end select
         end select
+    
+    end subroutine
+
+    subroutine filter3_CMPLX(this, f, df, na, nb, bc1_, bcn_)
+        class( cf90 ), intent(in) :: this
+        integer, intent(in) :: na, nb
+        complex(rkind), dimension(na,nb,this%n), intent(in) :: f
+        complex(rkind), dimension(na,nb,this%n), intent(out) :: df
+        integer, optional, intent(in) :: bc1_, bcn_
+        integer :: bc1, bcn
+
+        if(this%n == 1) then
+            df = f
+            return
+        end if
+        if (present(bcn_)) then
+            bc1 = bc1_; bcn = bcn_
+        else 
+            bc1 = 0; bcn = 0
+        end if 
+
+        call this%ComputeZRHS_CMPLX(f, df, na, nb, bc1, bcn)
+        call this%SolveZPenta_CMPLX(this%penta_nn, df, na, nb)
     
     end subroutine
 

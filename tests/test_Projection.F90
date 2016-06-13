@@ -119,8 +119,9 @@ program test_projection
     call spectE%fft(wE,what)
  
     !! Call Poisson Projection
+    call tic()
     call poiss%PressureProjNP(uhat,vhat,what) 
-   
+    call toc()
 
     !! Divergence Check 
     call poiss%DivergenceCheck(uhat,vhat,what,divergence) 

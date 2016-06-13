@@ -20,6 +20,8 @@ module staggOpsMod
         type(decomp_info), pointer :: edgeDecomp
         integer :: stagg_scheme
         real(rkind) :: dx, dy, dz
+        logical :: isBotSided = .false. 
+        logical :: isTopSided = .false. 
         contains
             procedure :: init
             procedure :: destroy
@@ -160,17 +162,28 @@ contains
         dfdzC(:,:,2:this%nzC-1) =  fC(:,:,3:this%nzC) - fC(:,:,1:this%nzC-2) 
         dfdzC(:,:,2:this%nzC-1) = OneBy2Dz*dfdzC(:,:,2:this%nzC-1)
 
-        if (isBotEven) then
-            dfdzC(:,:,1) = OneBy2Dz*(fC(:,:,2) - fC(:,:,1))
-        else 
-            dfdzC(:,:,1) = OneBy2Dz*(fC(:,:,2) + fC(:,:,1))
-        end if
+        if (this%isBotSided) then
+            dfdzC(:,:,1) = (-half*fC(:,:,3) + two*fC(:,:,2) - three/two*fC(:,:,1))/this%dz 
+            !dfdzC(:,:,1) = (fC(:,:,2) - fC(:,:,1))/this%dz 
+        else
+            if (isBotEven) then
+                dfdzC(:,:,1) = OneBy2Dz*(fC(:,:,2) - fC(:,:,1))
+            else 
+                dfdzC(:,:,1) = OneBy2Dz*(fC(:,:,2) + fC(:,:,1))
+            end if
+        end if 
 
-        if (isTopEven) then
-            dfdzC(:,:,this%nzC) = OneBy2Dz*(fC(:,:,this%nzC) - fC(:,:,this%nzC-1))
-        else 
-            dfdzC(:,:,this%nzC) = -OneBy2Dz*(fC(:,:,this%nzC) + fC(:,:,this%nzC-1))
-        end if
+        if (this%isTopSided) then
+            dfdzC(:,:,this%nzC) = (half*fC(:,:,this%nzC-2) - two*fC(:,:,this%nzC-1) &
+                        + three/two*fC(:,:,this%nzC))/this%dz 
+            !dfdzC(:,:,this%nzC) = (fC(:,:,this%nzC) - fC(:,:,this%nzC-1))/this%dz 
+        else
+            if (isTopEven) then
+                dfdzC(:,:,this%nzC) = OneBy2Dz*(fC(:,:,this%nzC) - fC(:,:,this%nzC-1))
+            else 
+                dfdzC(:,:,this%nzC) = -OneBy2Dz*(fC(:,:,this%nzC) + fC(:,:,this%nzC-1))
+            end if
+        end if 
 
     end subroutine
 
@@ -282,13 +295,17 @@ contains
     end subroutine
 
 
-    subroutine init(this, gpC, gpE, stagg_scheme , dx, dy, dz, gpCspect, gpEspect)
+    subroutine init(this, gpC, gpE, stagg_scheme , dx, dy, dz, gpCspect, gpEspect, isTopSided, isBotSided)
         class(staggOps), intent(inout) :: this
         class(decomp_info), intent(in), target:: gpC, gpE
         integer, intent(in) :: stagg_scheme
         real(rkind), intent(in) :: dx, dy, dz
         class(decomp_info), intent(in), optional, target:: gpCspect, gpEspect
+        logical, intent(in), optional :: isTopSided, isBotSided
 
+        if ((present(isTopSided)) .and. (present(isBotSided))) then
+            this%isTopSided = isTopSided; this%isBotSided = isBotSided
+        end if 
         this%nxC = gpC%zsz(1)
         this%nyC = gpC%zsz(2)
         this%nzC = gpC%zsz(3)

@@ -14,7 +14,6 @@ program EkmanBL
     use constants, only: half 
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
-    use allStatistics, only: init_stats, finalize_stats
 
     implicit none
 
@@ -34,7 +33,7 @@ program EkmanBL
 
     call igp%printDivergence()
   
-    call init_stats(igp)  
+    call igp%init_stats()  
 
     call tic() 
     do while (igp%tsim < igp%tstop) 
@@ -49,9 +48,9 @@ program EkmanBL
     
     call finalize_io                  !<-- Close the header file (wrap up i/o)
 
+    call igp%finalize_stats()
+    
     call igp%destroy()                !<-- Destroy the IGRID derived type 
-   
-    call finalize_stats()
 
     deallocate(igp)                   !<-- Deallocate all the memory associated with scalar defaults
     

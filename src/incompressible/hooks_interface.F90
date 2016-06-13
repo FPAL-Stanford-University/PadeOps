@@ -1,4 +1,4 @@
-module hooks
+module igrid_hooks
     use kind_parameters, only: rkind
     use decomp_2d, only: decomp_info
     implicit none
@@ -13,6 +13,18 @@ module hooks
 
         end subroutine 
     end interface
+    
+    interface meshgen_WallM
+        subroutine meshgen_WallM(decomp, dx, dy, dz, mesh, inputfile)
+            import :: rkind
+            import :: decomp_info
+            type(decomp_info), intent(in) :: decomp
+            real(rkind), intent(inout) :: dx, dy, dz
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            character(len=*), intent(in) :: inputfile
+
+        end subroutine 
+    end interface 
 
     interface initfields
         subroutine initfields(decomp, dx, dy, dz, inpDirectory, mesh, fields, rho0, mu, gam, PInf, tstop, dt, tviz)
@@ -28,22 +40,61 @@ module hooks
         end subroutine 
     end interface
 
+    interface getForcing
+        subroutine getForcing(inputfile, dpdx)
+            import :: rkind
+            real(rkind), intent(out) :: dpdx 
+            character(len=*), intent(in) :: inputfile
+        end subroutine
+    end interface
 
     interface initfields_stagg
-        subroutine initfields_stagg(decompC, decompE, dx, dy, dz, inpDirectory, mesh, fieldsC, fieldsE, u_g, fcorr)
+        subroutine initfields_stagg(decompC, decompE, inpDirectory, mesh, fieldsC, fieldsE, u_g, Ro)
             import :: rkind
             import :: decomp_info
             type(decomp_info), intent(in) :: decompC
             type(decomp_info), intent(in) :: decompE
-            real(rkind), intent(inout) :: dx, dy, dz
             character(len=*), intent(in) :: inpDirectory
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(inout) :: fieldsC
             real(rkind), dimension(:,:,:,:), intent(inout) :: fieldsE
-            real(rkind), intent(out) :: u_g, fcorr
+            real(rkind), intent(out) :: u_g, Ro
 
         end subroutine 
     end interface
+
+    interface setDirichletBC_Temp
+        subroutine setDirichletBC_Temp(inpDirectory, Tsurf, dTsurfdt)
+            import :: rkind
+            character(len=*), intent(in) :: inpDirectory
+            real(rkind), intent(out) :: Tsurf, dTsurfdt
+
+        end subroutine 
+    end interface
+
+
+    interface initfields_wallM
+        subroutine initfields_wallM(decompC, decompE, inpDirectory, mesh, fieldsC, fieldsE)
+            import :: rkind
+            import :: decomp_info
+            type(decomp_info), intent(in) :: decompC
+            type(decomp_info), intent(in) :: decompE
+            character(len=*), intent(in) :: inpDirectory
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            real(rkind), dimension(:,:,:,:), intent(inout) :: fieldsC
+            real(rkind), dimension(:,:,:,:), intent(inout) :: fieldsE
+
+        end subroutine 
+    end interface
+    
+    interface set_planes_io
+        subroutine set_planes_io(xplanes, yplanes, zplanes)
+            integer, dimension(:), allocatable,  intent(inout) :: xplanes
+            integer, dimension(:), allocatable,  intent(inout) :: yplanes
+            integer, dimension(:), allocatable,  intent(inout) :: zplanes
+        end subroutine
+    end interface
+
 
     interface hook_output
         subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)

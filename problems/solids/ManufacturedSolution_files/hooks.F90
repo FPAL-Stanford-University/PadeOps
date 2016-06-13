@@ -6,6 +6,7 @@ module ManufacturedSolution_data
     real(rkind) :: sigma_0 = one
     real(rkind) :: gamma, p_infty, rho_0
     real(rkind) :: muL, lamL, cL
+    real(rkind) :: dtprob
 
 contains
 
@@ -524,7 +525,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,gam,PInf,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PInf,tau0,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,one,two,three,pi,four,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
@@ -539,7 +540,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,gam,PInf,tst
     character(len=*),                                               intent(in)    :: inputfile
     type(decomp_info),                                              intent(in)    :: decomp
     real(rkind),                                                    intent(in)    :: dx,dy,dz
-    real(rkind),                                          optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz
+    real(rkind),                                          optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz, yield, tau0
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
@@ -564,7 +565,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,gam,PInf,tst
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
-
         p_star = gam*PInf + (four/three)*mu
         rho_star = rho0
         c_star = sqrt(p_star/rho_star)
@@ -572,6 +572,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,gam,PInf,tst
         tstop = tstop * c_star
         dt = dt * c_star
         tviz = tviz * c_star
+
+        dtprob = dt
 
         print*, "p_star = ", p_star
         print*, "rho_star = ", rho_star
@@ -648,7 +650,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        write(str,'(ES7.1E2,A1,I4.4)') sigma_0, "_", decomp%ysz(1)
+        write(str,'(ES7.1E2,A1,I4.4,A1,ES7.1E2)') sigma_0, "_", decomp%ysz(1), "_", dtprob
         write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ManufacturedSolution_"//trim(str)//"_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
@@ -689,7 +691,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,tsim)
+subroutine hook_timestep(decomp,mesh,fields,step,tsim)
     use kind_parameters,  only: rkind
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
@@ -700,6 +702,7 @@ subroutine hook_timestep(decomp,mesh,fields,tsim)
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
+    integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields

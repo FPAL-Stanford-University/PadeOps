@@ -217,48 +217,51 @@ contains
     end subroutine
 
 
-    subroutine filterx(this, f, ff)
+    subroutine filterx(this, f, ff, bc1, bcn)
         class (filters), intent(in) :: this
         real(rkind), dimension(this%xsz(1),this%xsz(2), this%xsz(3)), intent(in)  :: f
         real(rkind), dimension(this%xsz(1),this%xsz(2), this%xsz(3)), intent(out) :: ff
+        integer, optional, intent(in) :: bc1, bcn
 
         select case (this%xmethod)
         case (1)
-            call this%xcf90%filter1( f, ff, this%xsz(2), this%xsz(3))
+            call this%xcf90%filter1( f, ff, this%xsz(2), this%xsz(3), bc1, bcn)
         case (2)
-            call this%xgauf%filter1( f, ff, this%xsz(2), this%xsz(3))
+            call this%xgauf%filter1( f, ff, this%xsz(2), this%xsz(3), bc1, bcn)
         case (3)
             call this%xlsqf%filter1( f, ff, this%xsz(2), this%xsz(3))
         end select
 
     end subroutine
 
-    subroutine filtery(this, f, ff)
+    subroutine filtery(this, f, ff, bc1, bcn)
         class (filters), intent(in) :: this
         real(rkind), dimension(this%ysz(1),this%ysz(2), this%ysz(3)), intent(in)  :: f
         real(rkind), dimension(this%ysz(1),this%ysz(2), this%ysz(3)), intent(out) :: ff
+        integer, optional, intent(in) :: bc1, bcn
 
         select case (this%ymethod)
         case (1)
-            call this%ycf90%filter2( f, ff, this%ysz(1), this%ysz(3))
+            call this%ycf90%filter2( f, ff, this%ysz(1), this%ysz(3), bc1, bcn)
         case (2)
-            call this%ygauf%filter2( f, ff, this%ysz(1), this%ysz(3))
+            call this%ygauf%filter2( f, ff, this%ysz(1), this%ysz(3), bc1, bcn)
         case (3)
             call this%ylsqf%filter2( f, ff, this%ysz(1), this%ysz(3))
         end select
 
     end subroutine
 
-    subroutine filterz(this, f, ff)
+    subroutine filterz(this, f, ff, bc1, bcn)
         class (filters), intent(in) :: this
         real(rkind), dimension(this%zsz(1),this%zsz(2), this%zsz(3)), intent(in)  :: f
         real(rkind), dimension(this%zsz(1),this%zsz(2), this%zsz(3)), intent(out) :: ff
+        integer, optional, intent(in) :: bc1, bcn
 
         select case (this%zmethod)
         case (1)
-            call this%zcf90%filter3( f, ff, this%zsz(1), this%zsz(2))
+            call this%zcf90%filter3( f, ff, this%zsz(1), this%zsz(2), bc1, bcn)
         case (2)
-            call this%zgauf%filter3( f, ff, this%zsz(1), this%zsz(2))
+            call this%zgauf%filter3( f, ff, this%zsz(1), this%zsz(2), bc1, bcn)
         case (3)
             call this%zlsqf%filter3( f, ff, this%zsz(1), this%zsz(2))
         end select

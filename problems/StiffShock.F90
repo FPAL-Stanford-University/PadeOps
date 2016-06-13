@@ -11,12 +11,12 @@ module StiffShockMod
 
     ! EOS parameters
     real(rkind) :: Rgas = one           ! Gas constant non-dimensionalized to one
-    real(rkind) :: gam = 1.4_rkind      ! Ratio of specific heats for the gas
+    real(rkind) :: gam = 2.84_rkind     ! Ratio of specific heats for the gas
     real(rkind) :: pInf                 ! P_infty for the stiffened gas
     
     ! Problem parameters
-    real(rkind) :: pRatio = 100._rkind   ! Pressure ratio P2/P1
-    real(rkind) :: pInfbyP1 = 10._rkind ! P_infty/P1 ratio for the stiffened gas
+    real(rkind) :: pRatio = 4.5_rkind   ! Pressure ratio P2/P1
+    real(rkind) :: pInfbyP1 = 1000._rkind ! P_infty/P1 ratio for the stiffened gas
     
     real(rkind) :: rho1 = one           ! Right density
     real(rkind) :: rho2                 ! Left density
@@ -36,7 +36,7 @@ module StiffShockMod
     real(rkind) :: CFL   = half         ! CFL number to use for the simulation
     real(rkind) :: t     = zero         ! Simulation time
     
-    integer :: nx = 101, ny = 1, nz = 1 ! Number of points to use for the simulation (ny and nz have to be 1)
+    integer :: nx = 201, ny = 1, nz = 1 ! Number of points to use for the simulation (ny and nz have to be 1)
     real(rkind) :: dx                   ! Grid spacing
 
     character(len=*), parameter :: dermethod = "cd10"    ! Use 10th order Pade for derivatives
@@ -45,11 +45,11 @@ module StiffShockMod
     type( filters ) :: gfil
    
     ! Parameters to control LAD method
-    logical, parameter :: UseExpl4thDer = .TRUE.
-    logical, parameter :: conservative = .FALSE. 
+    logical, parameter :: UseExpl4thDer = .FALSE.
+    logical, parameter :: conservative = .TRUE. 
     real(rkind) :: Cmu = 0.002_rkind
-    real(rkind) :: Cbeta = 0.5_rkind
-    real(rkind) :: Ckap = 0.01_rkind
+    real(rkind) :: Cbeta = 1.75_rkind
+    real(rkind) :: Ckap = 0.00_rkind
 
 contains
 
@@ -149,6 +149,10 @@ contains
         end if
         tmp = Cmu*u(:,:,:,1)*abs(mu*dx**6)
         call gfil%filterx(tmp,mu)
+        if (.NOT. UseExpl4thDer) then
+            call gfil%filterx(mu,tmp)
+            mu = tmp
+        end if
 
         ! Get artificial bulk viscosity
         if (.NOT. UseExpl4thDer) then
@@ -159,6 +163,10 @@ contains
         end if
         tmp = Cbeta*u(:,:,:,1)*abs(bulk*dx**6) * (MIN(dudx,zero)/(dudx+1.0D-30))
         call gfil%filterx(tmp,bulk)
+        if (.NOT. UseExpl4thDer) then
+            call gfil%filterx(bulk,tmp)
+            bulk = tmp
+        end if
 
         ! Get artificial conductivity
         if (.NOT. UseExpl4thDer) then
@@ -169,6 +177,10 @@ contains
         end if
         tmp = Ckap * (u(:,:,:,1)*cs/T) * abs(kap*dx**5)
         call gfil%filterx(tmp,kap)
+        if (.NOT. UseExpl4thDer) then
+            call gfil%filterx(kap,tmp)
+            kap = tmp
+        end if
 
     end subroutine
 

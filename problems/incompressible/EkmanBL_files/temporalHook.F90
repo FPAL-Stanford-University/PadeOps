@@ -7,12 +7,19 @@ module temporalHook
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
-    use AllStatistics 
-    integer :: nt_print2screen = 10
-    integer :: nt_getMaxKE = 10
-    integer :: tid_statsDump = 10000
-    real(rkind) :: time_startDumping = 15000._rkind
+
+    implicit none 
+
+    integer :: nt_print2screen = 20
+    integer :: nt_getMaxKE = 20
+    integer :: tid_statsDump = 2000
+    integer :: tid_compStats = 20
+    real(rkind) :: time_startDumping = 75._rkind
     integer :: ierr 
+    
+    integer :: tid_start_planes = 1
+    integer :: tid_dump_plane_every = 40
+
 contains
 
     subroutine doTemporalStuff(gp)
@@ -23,7 +30,11 @@ contains
         end if
 
         if (mod(gp%step,nt_getMaxKE) == 0) then
-            call message(1,"Max KE:",P_MAXVAL(half*(gp%u**2 + gp%v**2 + gp%wC**2)))
+            call message(1,"Max KE:",gp%getMaxKE())
+            call message(1,"Max nuSGS:",gp%max_nuSGS)
+            if ((gp%useDynamicProcedure) .and. (gp%useSGS)) then
+                call message(1,"Max cSGS:",p_maxval(maxval(gp%c_SGS(1,1,:))))
+            end if 
             call toc()
             call tic()
         end if 
@@ -33,15 +44,22 @@ contains
            call dumpData4Matlab(gp) 
         end if 
 
-        if ((mod(gp%step,tid_statsDump) == 0) .and. (gp%tsim > time_startDumping)) then
-            call dump_stats(gp)
+        if ((mod(gp%step,tid_compStats)==0) .and. (gp%tsim > time_startDumping)) then
+            call gp%compute_stats()
         end if 
 
-        call mpi_barrier(mpi_comm_world,ierr)
-        !if (mod(gp%step,gp%t_restartDump) == 0) then
-        !    ! Incomplete 
-        !end if 
+        if ((mod(gp%step,tid_statsDump) == 0) .and. (gp%tsim > time_startDumping)) then
+            call gp%compute_stats()
+            call gp%dump_stats()
+        end if 
+        
+        if (mod(gp%step,gp%t_restartDump) == 0) then
+            call gp%dumpRestartfile()
+        end if
 
+        if ((mod(gp%step,tid_dump_plane_every) == 0) .and. (gp%step .ge. tid_start_planes)) then
+            call gp%dump_planes()
+        end if 
     end subroutine
 
 

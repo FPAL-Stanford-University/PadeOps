@@ -5,6 +5,7 @@ module cd10stuff
 
     use kind_parameters, only: rkind
     use constants,       only: zero,one,two
+    use exits,           only: GracefulExit
     
     implicit none
 
@@ -119,8 +120,25 @@ module cd10stuff
 
         real(rkind), allocatable, dimension(:,:) :: LU1
         real(rkind), allocatable, dimension(:,:) :: LU2
-        real(rkind), allocatable, dimension(:,:) :: penta1
-        real(rkind), allocatable, dimension(:,:) :: penta2
+        real(rkind), allocatable, dimension(:,:) :: penta1_nn
+        real(rkind), allocatable, dimension(:,:) :: penta1_ns
+        real(rkind), allocatable, dimension(:,:) :: penta1_na
+        real(rkind), allocatable, dimension(:,:) :: penta1_sn
+        real(rkind), allocatable, dimension(:,:) :: penta1_ss
+        real(rkind), allocatable, dimension(:,:) :: penta1_sa
+        real(rkind), allocatable, dimension(:,:) :: penta1_an
+        real(rkind), allocatable, dimension(:,:) :: penta1_as
+        real(rkind), allocatable, dimension(:,:) :: penta1_aa
+        
+        real(rkind), allocatable, dimension(:,:) :: penta2_nn
+        real(rkind), allocatable, dimension(:,:) :: penta2_ns
+        real(rkind), allocatable, dimension(:,:) :: penta2_na
+        real(rkind), allocatable, dimension(:,:) :: penta2_sn
+        real(rkind), allocatable, dimension(:,:) :: penta2_ss
+        real(rkind), allocatable, dimension(:,:) :: penta2_sa
+        real(rkind), allocatable, dimension(:,:) :: penta2_an
+        real(rkind), allocatable, dimension(:,:) :: penta2_as
+        real(rkind), allocatable, dimension(:,:) :: penta2_aa
 
         contains
 
@@ -218,12 +236,36 @@ contains
             end if
         else 
             ! Allocate 1st derivative Penta matrices.
-            if(allocated( this%penta1 )) deallocate( this%penta1 ); allocate( this%penta1(n_,11) )
+            if(allocated( this%penta1_nn )) deallocate( this%penta1_nn ); allocate( this%penta1_nn(n_,11) )
+            if(allocated( this%penta1_ns )) deallocate( this%penta1_ns ); allocate( this%penta1_ns(n_,11) )
+            if(allocated( this%penta1_na )) deallocate( this%penta1_na ); allocate( this%penta1_na(n_,11) )
+            if(allocated( this%penta1_sn )) deallocate( this%penta1_sn ); allocate( this%penta1_sn(n_,11) )
+            if(allocated( this%penta1_ss )) deallocate( this%penta1_ss ); allocate( this%penta1_ss(n_,11) )
+            if(allocated( this%penta1_sa )) deallocate( this%penta1_sa ); allocate( this%penta1_sa(n_,11) )
+            if(allocated( this%penta1_an )) deallocate( this%penta1_an ); allocate( this%penta1_an(n_,11) )
+            if(allocated( this%penta1_as )) deallocate( this%penta1_as ); allocate( this%penta1_as(n_,11) )
+            if(allocated( this%penta1_aa )) deallocate( this%penta1_aa ); allocate( this%penta1_aa(n_,11) )
   
             if (n_ .GE. 8) then             
-                call this%ComputePenta1(bc1_,bcn_)
+                call this%ComputePenta1(this%penta1_nn, 0, 0)    ! Standard
+                call this%ComputePenta1(this%penta1_ns, 0, 1)    ! Standard-Symm
+                call this%ComputePenta1(this%penta1_na, 0,-1)    ! Standard-Asym
+                call this%ComputePenta1(this%penta1_sn, 1, 0)    ! Symm-Standard
+                call this%ComputePenta1(this%penta1_ss, 1, 1)    ! Symm-Symm
+                call this%ComputePenta1(this%penta1_sa, 1,-1)    ! Symm-Asym
+                call this%ComputePenta1(this%penta1_an,-1, 0)    ! Asym-Standard
+                call this%ComputePenta1(this%penta1_as,-1, 1)    ! Asym-Symm
+                call this%ComputePenta1(this%penta1_aa,-1,-1)    ! Asym-Asym
             else if (n_ .EQ. 1) then
-                this%Penta1 = one
+                this%penta1_nn = one
+                this%penta1_ns = one
+                this%penta1_na = one
+                this%penta1_sn = one
+                this%penta1_ss = one
+                this%penta1_sa = one
+                this%penta1_an = one
+                this%penta1_as = one
+                this%penta1_aa = one
             else
                 ierr = 2
                 return 
@@ -231,12 +273,36 @@ contains
 
             
             ! Allocate 2nd derivative Penta matrices.
-            if(allocated( this%penta2 )) deallocate( this%penta2 ); allocate( this%penta2(n_,11) )
+            if(allocated( this%penta2_nn )) deallocate( this%penta2_nn ); allocate( this%penta2_nn(n_,11) )
+            if(allocated( this%penta2_ns )) deallocate( this%penta2_ns ); allocate( this%penta2_ns(n_,11) )
+            if(allocated( this%penta2_na )) deallocate( this%penta2_na ); allocate( this%penta2_na(n_,11) )
+            if(allocated( this%penta2_sn )) deallocate( this%penta2_sn ); allocate( this%penta2_sn(n_,11) )
+            if(allocated( this%penta2_ss )) deallocate( this%penta2_ss ); allocate( this%penta2_ss(n_,11) )
+            if(allocated( this%penta2_sa )) deallocate( this%penta2_sa ); allocate( this%penta2_sa(n_,11) )
+            if(allocated( this%penta2_an )) deallocate( this%penta2_an ); allocate( this%penta2_an(n_,11) )
+            if(allocated( this%penta2_as )) deallocate( this%penta2_as ); allocate( this%penta2_as(n_,11) )
+            if(allocated( this%penta2_aa )) deallocate( this%penta2_aa ); allocate( this%penta2_aa(n_,11) )
        
             if (n_ .GE. 8) then             
-                call this%ComputePenta2
+                call this%ComputePenta2(this%penta2_nn, 0, 0)    ! Standard
+                call this%ComputePenta2(this%penta2_ns, 0, 1)    ! Standard-Symm
+                call this%ComputePenta2(this%penta2_na, 0,-1)    ! Standard-Asym
+                call this%ComputePenta2(this%penta2_sn, 1, 0)    ! Symm-Standard
+                call this%ComputePenta2(this%penta2_ss, 1, 1)    ! Symm-Symm
+                call this%ComputePenta2(this%penta2_sa, 1,-1)    ! Symm-Asym
+                call this%ComputePenta2(this%penta2_an,-1, 0)    ! Asym-Standard
+                call this%ComputePenta2(this%penta2_as,-1, 1)    ! Asym-Symm
+                call this%ComputePenta2(this%penta2_aa,-1,-1)    ! Asym-Asym
             else if (n_ .EQ. 1) then
-                this%Penta1 = one
+                this%penta2_nn = one
+                this%penta2_ns = one
+                this%penta2_na = one
+                this%penta2_sn = one
+                this%penta2_ss = one
+                this%penta2_sa = one
+                this%penta2_an = one
+                this%penta2_as = one
+                this%penta2_aa = one
             else
                 ierr = 2
                 return 
@@ -259,10 +325,26 @@ contains
         if(allocated( this%LU2 )) deallocate( this%LU2 )
     
         ! Dellocate 1st derivative penta matrix.
-        if(allocated( this%penta1 )) deallocate( this%penta1 )
+        if(allocated( this%penta1_nn )) deallocate( this%penta1_nn )
+        if(allocated( this%penta1_ns )) deallocate( this%penta1_ns )
+        if(allocated( this%penta1_na )) deallocate( this%penta1_na )
+        if(allocated( this%penta1_sn )) deallocate( this%penta1_sn )
+        if(allocated( this%penta1_ss )) deallocate( this%penta1_ss )
+        if(allocated( this%penta1_sa )) deallocate( this%penta1_sa )
+        if(allocated( this%penta1_an )) deallocate( this%penta1_an )
+        if(allocated( this%penta1_as )) deallocate( this%penta1_as )
+        if(allocated( this%penta1_aa )) deallocate( this%penta1_aa )
     
         ! Dellocate 2nd derivative penta matrix.
-        if(allocated( this%penta2 )) deallocate( this%penta2 )
+        if(allocated( this%penta2_nn )) deallocate( this%penta2_nn )
+        if(allocated( this%penta2_ns )) deallocate( this%penta2_ns )
+        if(allocated( this%penta2_na )) deallocate( this%penta2_na )
+        if(allocated( this%penta2_sn )) deallocate( this%penta2_sn )
+        if(allocated( this%penta2_ss )) deallocate( this%penta2_ss )
+        if(allocated( this%penta2_sa )) deallocate( this%penta2_sa )
+        if(allocated( this%penta2_an )) deallocate( this%penta2_an )
+        if(allocated( this%penta2_as )) deallocate( this%penta2_as )
+        if(allocated( this%penta2_aa )) deallocate( this%penta2_aa )
     
     end subroutine
 
@@ -344,16 +426,17 @@ contains
     
     end subroutine
 
-    subroutine ComputePenta1(this,bc1,bcn)
-        class (cd10), intent(inout) :: this
+    subroutine ComputePenta1(this,penta1,bc1,bcn)
+        class(cd10), intent(inout) :: this
+        real(rkind), dimension(this%n,11), intent(inout) :: penta1
         integer, intent(in) :: bc1, bcn
         integer             :: i
     
-        associate (bt   => this%penta1(:,1), b   => this%penta1(:,2), d => this%penta1(:,3),  &
-                   a    => this%penta1(:,4), at  => this%penta1(:,5),                         &
-                   e    => this%penta1(:,6), obc => this%penta1(:,7),                         &
-                   f    => this%penta1(:,8), g   => this%penta1(:,9),                         &
-                   eobc => this%penta1(:,10)                                                  )
+        associate (bt   => penta1(:,1), b   => penta1(:,2), d => penta1(:,3),  &
+                   a    => penta1(:,4), at  => penta1(:,5),                    &
+                   e    => penta1(:,6), obc => penta1(:,7),                    &
+                   f    => penta1(:,8), g   => penta1(:,9),                    &
+                   eobc => penta1(:,10)                                        )
     
             at = beta_hat 
             bt = beta_hat
@@ -387,9 +470,32 @@ contains
                 a (4) = w4*alpha_ppp
                 at(4) = w4*beta_ppp
             case(1)
-                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
-                ! Incomplete
-                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one
+                a (1) = zero
+                at(1) = zero
+
+                bt(2) = zero
+                b (2) = alpha_hat
+                d (2) = one - beta_hat
+                a (2) = alpha_hat
+                at(2) = beta_hat
+
+            case(-1)
+
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one
+                a (1) = two*alpha_hat
+                at(1) = two*beta_hat
+
+                bt(2) = zero
+                b (2) = alpha_hat
+                d (2) = one + beta_hat
+                a (2) = alpha_hat
+                at(2) = beta_hat
 
             end select
             
@@ -420,9 +526,32 @@ contains
                 at(this%n-3) = w4*beta_ppp
             
             case(1)
-                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
-                ! Incomplete
-                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+                bt(this%n  ) = zero
+                b (this%n  ) = zero
+                d (this%n  ) = one
+                a (this%n  ) = zero
+                at(this%n  ) = zero
+
+                bt(this%n-1) = beta_hat
+                b (this%n-1) = alpha_hat
+                d (this%n-1) = one - beta_hat
+                a (this%n-1) = alpha_hat
+                at(this%n-1) = zero
+
+            case(-1)
+
+                bt(this%n  ) = two*beta_hat
+                b (this%n  ) = two*alpha_hat
+                d (this%n  ) = one
+                a (this%n  ) = zero
+                at(this%n  ) = zero
+                           
+                bt(this%n-1) = beta_hat
+                b (this%n-1) = alpha_hat
+                d (this%n-1) = one + beta_hat
+                a (this%n-1) = alpha_hat
+                at(this%n-1) = zero
 
             end select
 
@@ -448,15 +577,17 @@ contains
            
     end subroutine
     
-    subroutine ComputePenta2(this)
+    subroutine ComputePenta2(this,penta2,bc1,bcn)
         class (cd10), intent(inout) :: this
+        real(rkind), dimension(this%n,11), intent(inout) :: penta2
+        integer, intent(in) :: bc1, bcn
         integer :: i
 
-        associate (bt   => this%penta2(:,1), b   => this%penta2(:,2), d => this%penta2(:,3),  &
-                   a    => this%penta2(:,4), at  => this%penta2(:,5),                         &
-                   e    => this%penta2(:,6), obc => this%penta2(:,7),                         &
-                   f    => this%penta2(:,8), g   => this%penta2(:,9),                         &
-                   eobc => this%penta2(:,10)                                                  )
+        associate (bt   => penta2(:,1), b   => penta2(:,2), d => penta2(:,3),  &
+                   a    => penta2(:,4), at  => penta2(:,5),                    &
+                   e    => penta2(:,6), obc => penta2(:,7),                    &
+                   f    => penta2(:,8), g   => penta2(:,9),                    &
+                   eobc => penta2(:,10)                                        )
 
             at = beta10d2 
             bt = beta10d2
@@ -464,41 +595,95 @@ contains
             a  = alpha10d2
             b  = alpha10d2
 
-            bt(1) = zero
-            b (1) = zero
-            d (1) = one
-            a (1) = b1_alpha10d2
-            at(1) = zero
+            select case(bc1)
+            case(0)
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one
+                a (1) = b1_alpha10d2
+                at(1) = zero
 
-            bt(2) = zero
-            b (2) = b2_alpha10d2
-            d (2) = one
-            a (2) = b2_alpha10d2
-            at(2) = zero
+                bt(2) = zero
+                b (2) = b2_alpha10d2
+                d (2) = one
+                a (2) = b2_alpha10d2
+                at(2) = zero
 
-            bt(3) = b3_beta10d2
-            b (3) = b3_alpha10d2
-            d (3) = one
-            a (3) = b3_alpha10d2
-            at(3) = b3_beta10d2
+                bt(3) = b3_beta10d2
+                b (3) = b3_alpha10d2
+                d (3) = one
+                a (3) = b3_alpha10d2
+                at(3) = b3_beta10d2
+            case(1)
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one
+                a (1) = two*alpha10d2
+                at(1) = two*beta10d2
 
-            bt(this%n - 2) = b3_beta10d2
-            b (this%n - 2) = b3_alpha10d2
-            d (this%n - 2) = one
-            a (this%n - 2) = b3_alpha10d2
-            at(this%n - 2) = b3_beta10d2
+                bt(2) = zero
+                b (2) = alpha10d2
+                d (2) = one + beta10d2
+                a (2) = alpha10d2
+                at(2) = beta10d2
+            case(-1)
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one
+                a (1) = zero
+                at(1) = zero
 
-            bt(this%n - 1) = zero
-            b (this%n - 1) = b2_alpha10d2
-            d (this%n - 1) = one
-            a (this%n - 1) = b2_alpha10d2
-            at(this%n - 1) = zero
+                bt(2) = zero
+                b (2) = alpha10d2
+                d (2) = one - beta10d2
+                a (2) = alpha10d2
+                at(2) = beta10d2
+            end select
 
-            bt(this%n) = zero
-            b (this%n) = b1_alpha10d2 
-            d (this%n) = one
-            a (this%n) = zero
-            at(this%n) = zero
+            select case(bcn)
+            case(0)
+                bt(this%n - 2) = b3_beta10d2
+                b (this%n - 2) = b3_alpha10d2
+                d (this%n - 2) = one
+                a (this%n - 2) = b3_alpha10d2
+                at(this%n - 2) = b3_beta10d2
+
+                bt(this%n - 1) = zero
+                b (this%n - 1) = b2_alpha10d2
+                d (this%n - 1) = one
+                a (this%n - 1) = b2_alpha10d2
+                at(this%n - 1) = zero
+
+                bt(this%n) = zero
+                b (this%n) = b1_alpha10d2 
+                d (this%n) = one
+                a (this%n) = zero
+                at(this%n) = zero
+            case(1)
+                bt(this%n - 1) = beta10d2
+                b (this%n - 1) = alpha10d2
+                d (this%n - 1) = one + beta10d2
+                a (this%n - 1) = alpha10d2
+                at(this%n - 1) = zero
+
+                bt(this%n) = two*beta10d2
+                b (this%n) = two*alpha10d2 
+                d (this%n) = one
+                a (this%n) = zero
+                at(this%n) = zero
+            case(-1)
+                bt(this%n - 1) = beta10d2
+                b (this%n - 1) = alpha10d2
+                d (this%n - 1) = one - beta10d2
+                a (this%n - 1) = alpha10d2
+                at(this%n - 1) = zero
+
+                bt(this%n) = zero
+                b (this%n) = zero
+                d (this%n) = one
+                a (this%n) = zero
+                at(this%n) = zero
+            end select
 
 
             ! Step 1
@@ -635,9 +820,10 @@ contains
     
     end subroutine
     
-    subroutine SolveXPenta1(this,y,n2,n3)
+    subroutine SolveXPenta1(this,penta1,y,n2,n3)
 
         class( cd10 ), intent(in) :: this
+        real(rkind), dimension(this%n,11), intent(in) :: penta1
         integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y
         integer :: i, j, k
@@ -645,69 +831,71 @@ contains
         do k = 1,n3
             do j = 1,n2
                 ! Step 1
-                y(2,j,k) = y(2,j,k) - this%penta1(2,8)*y(1,j,k)
+                y(2,j,k) = y(2,j,k) - penta1(2,8)*y(1,j,k)
                 do i = 3,this%n
-                    y(i,j,k) = y(i,j,k) - this%penta1(i,9)*y(i-2,j,k) - this%penta1(i,8)*y(i-1,j,k)
+                    y(i,j,k) = y(i,j,k) - penta1(i,9)*y(i-2,j,k) - penta1(i,8)*y(i-1,j,k)
                 end do 
 
                 ! Step 2
-                y(this%n,j,k) = y(this%n,j,k)*this%penta1(this%n,7)
+                y(this%n,j,k) = y(this%n,j,k)*penta1(this%n,7)
                 
-                !y(this%n-1,j,k) = (y(this%n-1,j,k) - this%penta1(this%n-1,6)*y(this%n,j,k))*this%penta1(this%n-1,7)
-                y(this%n-1,j,k) = y(this%n-1,j,k)*this%penta1(this%n-1,7) - this%penta1(this%n-1,10)*y(this%n,j,k)!*this%penta1(this%n-1,7)
+                !y(this%n-1,j,k) = (y(this%n-1,j,k) - penta1(this%n-1,6)*y(this%n,j,k))*penta1(this%n-1,7)
+                y(this%n-1,j,k) = y(this%n-1,j,k)*penta1(this%n-1,7) - penta1(this%n-1,10)*y(this%n,j,k)!*penta1(this%n-1,7)
                 do i = this%n-2,1,-1
-                    !y(i,j,k) = (y(i,j,k) - this%penta1(i,5)*y(i+2,j,k) - this%penta1(i,6)*y(i+1,j,k))*this%penta1(i,7)
-                    y(i,j,k) = y(i,j,k)*this%penta1(i,7) - y(i+2,j,k)*this%penta1(i,5)*this%penta1(i,7) - y(i+1,j,k)*this%penta1(i,10)
+                    !y(i,j,k) = (y(i,j,k) - penta1(i,5)*y(i+2,j,k) - penta1(i,6)*y(i+1,j,k))*penta1(i,7)
+                    y(i,j,k) = y(i,j,k)*penta1(i,7) - y(i+2,j,k)*penta1(i,5)*penta1(i,7) - y(i+1,j,k)*penta1(i,10)
                 end do 
             end do 
         end do 
 
     end subroutine
 
-    subroutine SolveYPenta1(this,y,n1,n3)
+    subroutine SolveYPenta1(this,penta1,y,n1,n3)
 
         class( cd10 ), intent(in) :: this
+        real(rkind), dimension(this%n,11), intent(in) :: penta1
         integer, intent(in) :: n1,n3
         real(rkind), dimension(n1,this%n,n3), intent(inout) :: y
         integer :: j, k
 
         do k = 1,n3
             ! Step 1
-            y(:,2,k) = y(:,2,k) - this%penta1(2,8)*y(:,1,k)
+            y(:,2,k) = y(:,2,k) - penta1(2,8)*y(:,1,k)
             do j = 3,this%n
-                y(:,j,k) = y(:,j,k) - this%penta1(j,9)*y(:,j-2,k) - this%penta1(j,8)*y(:,j-1,k)
+                y(:,j,k) = y(:,j,k) - penta1(j,9)*y(:,j-2,k) - penta1(j,8)*y(:,j-1,k)
             end do 
 
             ! Step 2
-            y(:,this%n,k) = y(:,this%n,k)*this%penta1(this%n,7)
+            y(:,this%n,k) = y(:,this%n,k)*penta1(this%n,7)
             
-            y(:,this%n-1,k) = y(:,this%n-1,k)*this%penta1(this%n-1,7) - this%penta1(this%n-1,10)*y(:,this%n,k)
+            y(:,this%n-1,k) = y(:,this%n-1,k)*penta1(this%n-1,7) - penta1(this%n-1,10)*y(:,this%n,k)
             do j = this%n-2,1,-1
-                y(:,j,k) = y(:,j,k)*this%penta1(j,7) - y(:,j+2,k)*this%penta1(j,5)*this%penta1(j,7) - y(:,j+1,k)*this%penta1(j,10)
+                y(:,j,k) = y(:,j,k)*penta1(j,7) - y(:,j+2,k)*penta1(j,5)*penta1(j,7) - y(:,j+1,k)*penta1(j,10)
             end do 
         end do 
 
     end subroutine
 
-    subroutine SolveZPenta1(this,y,n1,n2)
+    subroutine SolveZPenta1(this,penta1,y,n1,n2)
 
         class( cd10 ), intent(in) :: this
+        real(rkind), dimension(this%n,11), intent(in) :: penta1
         integer, intent(in) :: n1,n2
         real(rkind), dimension(n1,n2,this%n), intent(inout) :: y
         integer :: k
 
         ! Step 1
-        y(:,:,2) = y(:,:,2) - this%penta1(2,8)*y(:,:,1)
+        y(:,:,2) = y(:,:,2) - penta1(2,8)*y(:,:,1)
         do k = 3,this%n
-            y(:,:,k) = y(:,:,k) - this%penta1(k,9)*y(:,:,k-2) - this%penta1(k,8)*y(:,:,k-1)
+            y(:,:,k) = y(:,:,k) - penta1(k,9)*y(:,:,k-2) - penta1(k,8)*y(:,:,k-1)
         end do 
 
         ! Step 2
-        y(:,:,this%n) = y(:,:,this%n)*this%penta1(this%n,7)
+        y(:,:,this%n) = y(:,:,this%n)*penta1(this%n,7)
         
-        y(:,:,this%n-1) = y(:,:,this%n-1)*this%penta1(this%n-1,7) - this%penta1(this%n-1,10)*y(:,:,this%n)
+        y(:,:,this%n-1) = y(:,:,this%n-1)*penta1(this%n-1,7) - penta1(this%n-1,10)*y(:,:,this%n)
         do k = this%n-2,1,-1
-            y(:,:,k) = y(:,:,k)*this%penta1(k,7) - y(:,:,k+2)*this%penta1(k,5)*this%penta1(k,7) - y(:,:,k+1)*this%penta1(k,10)
+            y(:,:,k) = y(:,:,k)*penta1(k,7) - y(:,:,k+2)*penta1(k,5)*penta1(k,7) - y(:,:,k+1)*penta1(k,10)
         end do 
 
     end subroutine
@@ -825,9 +1013,10 @@ contains
    end subroutine 
    
 
-    subroutine SolveXPenta2(this,y,n2,n3)
+    subroutine SolveXPenta2(this,penta2,y,n2,n3)
 
         class( cd10 ), intent(in) :: this
+        real(rkind), dimension(this%n,11), intent(in) :: penta2
         integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y
         integer :: i, j, k
@@ -836,80 +1025,83 @@ contains
         do k = 1,n3
             do j = 1,n2
                 ! Step 1
-                y(2,j,k) = y(2,j,k) - this%penta2(2,8)*y(1,j,k)
+                y(2,j,k) = y(2,j,k) - penta2(2,8)*y(1,j,k)
                 do i = 3,this%n
-                    y(i,j,k) = y(i,j,k) - this%penta2(i,9)*y(i-2,j,k) - this%penta2(i,8)*y(i-1,j,k)
+                    y(i,j,k) = y(i,j,k) - penta2(i,9)*y(i-2,j,k) - penta2(i,8)*y(i-1,j,k)
                 end do 
 
                 ! Step 2
-                y(this%n,j,k) = y(this%n,j,k)*this%penta2(this%n,7)
+                y(this%n,j,k) = y(this%n,j,k)*penta2(this%n,7)
                 
-                !y(this%n-1,j,k) = (y(this%n-1,j,k) - this%penta2(this%n-1,6)*y(this%n,j,k))*this%penta2(this%n-1,7)
-                y(this%n-1,j,k) = y(this%n-1,j,k)*this%penta2(this%n-1,7) - this%penta2(this%n-1,10)*y(this%n,j,k)!*this%penta2(this%n-1,7)
+                !y(this%n-1,j,k) = (y(this%n-1,j,k) - penta2(this%n-1,6)*y(this%n,j,k))*penta2(this%n-1,7)
+                y(this%n-1,j,k) = y(this%n-1,j,k)*penta2(this%n-1,7) - penta2(this%n-1,10)*y(this%n,j,k)!*penta2(this%n-1,7)
                 do i = this%n-2,1,-1
-                    !y(i,j,k) = (y(i,j,k) - this%penta2(i,5)*y(i+2,j,k) - this%penta2(i,6)*y(i+1,j,k))*this%penta2(i,7)
-                    y(i,j,k) = y(i,j,k)*this%penta2(i,7) - y(i+2,j,k)*this%penta2(i,5)*this%penta2(i,7) - y(i+1,j,k)*this%penta2(i,10)
+                    !y(i,j,k) = (y(i,j,k) - penta2(i,5)*y(i+2,j,k) - penta2(i,6)*y(i+1,j,k))*penta2(i,7)
+                    y(i,j,k) = y(i,j,k)*penta2(i,7) - y(i+2,j,k)*penta2(i,5)*penta2(i,7) - y(i+1,j,k)*penta2(i,10)
                 end do 
             end do 
         end do 
 
     end subroutine
 
-    subroutine SolveYPenta2(this,y,n1,n3)
+    subroutine SolveYPenta2(this,penta2,y,n1,n3)
 
         class( cd10 ), intent(in) :: this
+        real(rkind), dimension(this%n,11), intent(in) :: penta2
         integer, intent(in) :: n1,n3
         real(rkind), dimension(n1,this%n,n3), intent(inout) :: y
         integer :: j, k
 
         do k = 1,n3
             ! Step 1
-            y(:,2,k) = y(:,2,k) - this%penta2(2,8)*y(:,1,k)
+            y(:,2,k) = y(:,2,k) - penta2(2,8)*y(:,1,k)
             do j = 3,this%n
-                y(:,j,k) = y(:,j,k) - this%penta2(j,9)*y(:,j-2,k) - this%penta2(j,8)*y(:,j-1,k)
+                y(:,j,k) = y(:,j,k) - penta2(j,9)*y(:,j-2,k) - penta2(j,8)*y(:,j-1,k)
             end do 
 
             ! Step 2
-            y(:,this%n,k) = y(:,this%n,k)*this%penta2(this%n,7)
+            y(:,this%n,k) = y(:,this%n,k)*penta2(this%n,7)
             
-            y(:,this%n-1,k) = y(:,this%n-1,k)*this%penta2(this%n-1,7) - this%penta2(this%n-1,10)*y(:,this%n,k)
+            y(:,this%n-1,k) = y(:,this%n-1,k)*penta2(this%n-1,7) - penta2(this%n-1,10)*y(:,this%n,k)
             do j = this%n-2,1,-1
-                y(:,j,k) = y(:,j,k)*this%penta2(j,7) - y(:,j+2,k)*this%penta2(j,5)*this%penta2(j,7) - y(:,j+1,k)*this%penta2(j,10)
+                y(:,j,k) = y(:,j,k)*penta2(j,7) - y(:,j+2,k)*penta2(j,5)*penta2(j,7) - y(:,j+1,k)*penta2(j,10)
             end do 
         end do 
 
     end subroutine
 
-    subroutine SolveZPenta2(this,y,n1,n2)
+    subroutine SolveZPenta2(this,penta2,y,n1,n2)
 
         class( cd10 ), intent(in) :: this
+        real(rkind), dimension(this%n,11), intent(in) :: penta2
         integer, intent(in) :: n1,n2
         real(rkind), dimension(n1,n2,this%n), intent(inout) :: y
         integer :: k
 
         ! Step 1
-        y(:,:,2) = y(:,:,2) - this%penta2(2,8)*y(:,:,1)
+        y(:,:,2) = y(:,:,2) - penta2(2,8)*y(:,:,1)
         do k = 3,this%n
-            y(:,:,k) = y(:,:,k) - this%penta2(k,9)*y(:,:,k-2) - this%penta2(k,8)*y(:,:,k-1)
+            y(:,:,k) = y(:,:,k) - penta2(k,9)*y(:,:,k-2) - penta2(k,8)*y(:,:,k-1)
         end do 
 
         ! Step 2
-        y(:,:,this%n) = y(:,:,this%n)*this%penta2(this%n,7)
+        y(:,:,this%n) = y(:,:,this%n)*penta2(this%n,7)
         
-        y(:,:,this%n-1) = y(:,:,this%n-1)*this%penta2(this%n-1,7) - this%penta2(this%n-1,10)*y(:,:,this%n)
+        y(:,:,this%n-1) = y(:,:,this%n-1)*penta2(this%n-1,7) - penta2(this%n-1,10)*y(:,:,this%n)
         do k = this%n-2,1,-1
-            y(:,:,k) = y(:,:,k)*this%penta2(k,7) - y(:,:,k+2)*this%penta2(k,5)*this%penta2(k,7) - y(:,:,k+1)*this%penta2(k,10)
+            y(:,:,k) = y(:,:,k)*penta2(k,7) - y(:,:,k+2)*penta2(k,5)*penta2(k,7) - y(:,:,k+1)*penta2(k,10)
         end do 
 
     end subroutine
 
 
-    pure subroutine ComputeXD1RHS(this, f, RHS, n2, n3)
+    pure subroutine ComputeXD1RHS(this, f, RHS, n2, n3, bc1, bcn)
     
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: n2, n3
         real(rkind), dimension(this%n,n2,n3), intent(in) :: f
         real(rkind), dimension(this%n,n2,n3), intent(out) :: RHS
+        integer, intent(in) :: bc1, bcn
         real(rkind) :: a10,b10,c10
         integer :: j,k
         ! Non-periodic boundary a, b and c
@@ -917,7 +1109,6 @@ contains
         real(rkind) :: a_np_3, b_np_3   
         real(rkind) :: a_np_2
         real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
-
 
         select case (this%periodic)
         case (.TRUE.)
@@ -970,47 +1161,114 @@ contains
 
             do k = 1,n3
                 do j = 1,n2
-                    
-                    RHS(1         ,j,k) =   a_np_1* f(1         ,j,k) +  b_np_1*f(2         ,j,k)   &
-                                        +   c_np_1* f(3         ,j,k) +  d_np_1*f(4         ,j,k) 
+                    select case(bc1)
+                    case(0)
+                        RHS(1         ,j,k) =   a_np_1* f(1         ,j,k) +  b_np_1*f(2         ,j,k)   &
+                                            +   c_np_1* f(3         ,j,k) +  d_np_1*f(4         ,j,k) 
                    
-                    RHS(2         ,j,k) =   a_np_2*(f(3         ,j,k) -         f(1         ,j,k))
+                        RHS(2         ,j,k) =   a_np_2*(f(3         ,j,k) -         f(1         ,j,k))
+                        
+                        RHS(3         ,j,k) =   a_np_3*(f(4         ,j,k) -         f(2         ,j,k)) &
+                                            +   b_np_3*(f(5         ,j,k) -         f(1         ,j,k)) 
+                        
+                        RHS(4         ,j,k) =   a_np_4*(f(5         ,j,k) -         f(3         ,j,k)) &
+                                            +   b_np_4*(f(6         ,j,k) -         f(2         ,j,k)) &
+                                            +   c_np_4*(f(7         ,j,k) -         f(1         ,j,k))
+                    case(1)
+                        RHS(1,j,k) =   zero
+                   
+                        RHS(2,j,k) =   a10   *(f(3,j,k) - f(1,j,k)) &
+                                   +   b10   *(f(4,j,k) - f(2,j,k)) &
+                                   +   c10   *(f(5,j,k) - f(3,j,k)) 
+                        
+                        RHS(3,j,k) =   a10   *(f(4,j,k) - f(2,j,k)) &
+                                   +   b10   *(f(5,j,k) - f(1,j,k)) &
+                                   +   c10   *(f(6,j,k) - f(2,j,k)) 
                     
-                    RHS(3         ,j,k) =   a_np_3*(f(4         ,j,k) -         f(2         ,j,k)) &
-                                        +   b_np_3*(f(5         ,j,k) -         f(1         ,j,k)) 
+                        RHS(4,j,k) =   a10   *(f(5,j,k) - f(3,j,k)) &
+                                   +   b10   *(f(6,j,k) - f(2,j,k)) &
+                                   +   c10   *(f(7,j,k) - f(1,j,k)) 
+                    case(-1)
+                        RHS(1,j,k) =   a10   *(f(2,j,k) + f(2,j,k)) &
+                                   +   b10   *(f(3,j,k) + f(3,j,k)) &
+                                   +   c10   *(f(4,j,k) + f(4,j,k)) 
+                        
+                        RHS(2,j,k) =   a10   *(f(3,j,k) - f(1,j,k)) &
+                                   +   b10   *(f(4,j,k) + f(2,j,k)) &
+                                   +   c10   *(f(5,j,k) + f(3,j,k)) 
+                        
+                        RHS(3,j,k) =   a10   *(f(4,j,k) - f(2,j,k)) &
+                                   +   b10   *(f(5,j,k) - f(1,j,k)) &
+                                   +   c10   *(f(6,j,k) + f(2,j,k)) 
                     
-                    RHS(4         ,j,k) =   a_np_4*(f(5         ,j,k) -         f(3         ,j,k)) &
-                                        +   b_np_4*(f(6         ,j,k) -         f(2         ,j,k)) &
-                                        +   c_np_4*(f(7         ,j,k) -         f(1         ,j,k)) 
+                        RHS(4,j,k) =   a10   *(f(5,j,k) - f(3,j,k)) &
+                                   +   b10   *(f(6,j,k) - f(2,j,k)) &
+                                   +   c10   *(f(7,j,k) - f(1,j,k)) 
+                    end select
                     
                     RHS(5:this%n-4,j,k) =   a10   *(f(6:this%n-3,j,k) -         f(4:this%n-5,j,k)) &
                                         +   b10   *(f(7:this%n-2,j,k) -         f(3:this%n-6,j,k)) &
                                         +   c10   *(f(8:this%n-1,j,k) -         f(2:this%n-7,j,k)) 
                     
-                    RHS(this%n-3  ,j,k) =   a_np_4*(f(this%n-2  ,j,k) -         f(this%n-4  ,j,k)) &
-                                        +   b_np_4*(f(this%n-1  ,j,k) -         f(this%n-5  ,j,k)) &
-                                        +   c_np_4*(f(this%n    ,j,k) -         f(this%n-6  ,j,k))  
+                    select case(bcn)
+                    case(0)
+                        RHS(this%n-3  ,j,k) =   a_np_4*(f(this%n-2  ,j,k) -         f(this%n-4  ,j,k)) &
+                                            +   b_np_4*(f(this%n-1  ,j,k) -         f(this%n-5  ,j,k)) &
+                                            +   c_np_4*(f(this%n    ,j,k) -         f(this%n-6  ,j,k))  
         
-                    RHS(this%n-2  ,j,k) =   a_np_3*(f(this%n-1  ,j,k) -         f(this%n-3  ,j,k)) &
-                                        +   b_np_3*(f(this%n    ,j,k) -         f(this%n-4  ,j,k)) 
-                    
-                    RHS(this%n-1  ,j,k) =   a_np_2*(f(this%n    ,j,k) -         f(this%n-2  ,j,k))
+                        RHS(this%n-2  ,j,k) =   a_np_3*(f(this%n-1  ,j,k) -         f(this%n-3  ,j,k)) &
+                                            +   b_np_3*(f(this%n    ,j,k) -         f(this%n-4  ,j,k)) 
+                        
+                        RHS(this%n-1  ,j,k) =   a_np_2*(f(this%n    ,j,k) -         f(this%n-2  ,j,k))
 
-                    RHS(this%n    ,j,k) =  -a_np_1* f(this%n    ,j,k) -  b_np_1*f(this%n-1  ,j,k)   &
-                                        -   c_np_1* f(this%n-2  ,j,k) -  d_np_1*f(this%n-3  ,j,k)
-                
+                        RHS(this%n    ,j,k) =  -a_np_1* f(this%n    ,j,k) -  b_np_1*f(this%n-1  ,j,k)   &
+                                            -   c_np_1* f(this%n-2  ,j,k) -  d_np_1*f(this%n-3  ,j,k)
+                    case(1)
+                        RHS(this%n-3,j,k) =   a10   *( f(this%n-2,j,k) - f(this%n-4,j,k)) &
+                                          +   b10   *( f(this%n-1,j,k) - f(this%n-5,j,k)) &
+                                          +   c10   *( f(this%n  ,j,k) - f(this%n-6,j,k)) 
+
+                        RHS(this%n-2,j,k) =   a10   *( f(this%n-1,j,k) - f(this%n-3,j,k)) &
+                                          +   b10   *( f(this%n  ,j,k) - f(this%n-4,j,k)) &
+                                          +   c10   *( f(this%n-1,j,k) - f(this%n-5,j,k)) 
+
+                        RHS(this%n-1,j,k) =   a10   *( f(this%n  ,j,k) - f(this%n-2,j,k)) &
+                                          +   b10   *( f(this%n-1,j,k) - f(this%n-3,j,k)) &
+                                          +   c10   *( f(this%n-2,j,k) - f(this%n-4,j,k)) 
+
+                        RHS(this%n  ,j,k) =   zero
+
+                    case(-1)
+                        RHS(this%n-3,j,k) =   a10   *( f(this%n-2,j,k) - f(this%n-4,j,k)) &
+                                          +   b10   *( f(this%n-1,j,k) - f(this%n-5,j,k)) &
+                                          +   c10   *( f(this%n  ,j,k) - f(this%n-6,j,k)) 
+
+                        RHS(this%n-2,j,k) =   a10   *( f(this%n-1,j,k) - f(this%n-3,j,k)) &
+                                          +   b10   *( f(this%n  ,j,k) - f(this%n-4,j,k)) &
+                                          +   c10   *(-f(this%n-1,j,k) - f(this%n-5,j,k)) 
+
+                        RHS(this%n-1,j,k) =   a10   *( f(this%n  ,j,k) - f(this%n-2,j,k)) &
+                                          +   b10   *(-f(this%n-1,j,k) - f(this%n-3,j,k)) &
+                                          +   c10   *(-f(this%n-2,j,k) - f(this%n-4,j,k)) 
+
+                        RHS(this%n  ,j,k) =   a10   *(-f(this%n-1,j,k) - f(this%n-1,j,k)) &
+                                          +   b10   *(-f(this%n-2,j,k) - f(this%n-2,j,k)) &
+                                          +   c10   *(-f(this%n-3,j,k) - f(this%n-3,j,k)) 
+
+                    end select
                end do 
             end do 
         end select
     
     end subroutine
     
-    pure subroutine ComputeYD1RHS(this, f, RHS, n1, n3) 
+    pure subroutine ComputeYD1RHS(this, f, RHS, n1, n3, bc1, bcn) 
     
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: n1, n3
         real(rkind), dimension(n1,this%n,n3), intent(in) :: f
         real(rkind), dimension(n1,this%n,n3), intent(out) :: RHS
+        integer, intent(in) :: bc1, bcn
         real(rkind) :: a10,b10,c10
         integer :: k
         ! Non-periodic boundary a, b and c
@@ -1020,7 +1278,6 @@ contains
         real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
 
 
-    
         select case (this%periodic)
         case (.TRUE.)
             a10 = a10d1 * this%onebydx
@@ -1069,46 +1326,112 @@ contains
             d_np_1 = w1*( s * this%onebydx)
 
             do k = 1,n3
+
+                select case(bc1)
+                case(0)    
+                    RHS(:,1         ,k) =   a_np_1* f(:,1         ,k) +  b_np_1*f(:,2         ,k)   &
+                                        +   c_np_1* f(:,3         ,k) +  d_np_1*f(:,4         ,k) 
                     
-                RHS(:,1         ,k) =   a_np_1* f(:,1         ,k) +  b_np_1*f(:,2         ,k)   &
-                                    +   c_np_1* f(:,3         ,k) +  d_np_1*f(:,4         ,k) 
-                
-                RHS(:,2         ,k) =   a_np_2*(f(:,3         ,k) -         f(:,1         ,k))
-                
-                RHS(:,3         ,k) =   a_np_3*(f(:,4         ,k) -         f(:,2         ,k)) &
-                                    +   b_np_3*(f(:,5         ,k) -         f(:,1         ,k)) 
-                
-                RHS(:,4         ,k) =   a_np_4*(f(:,5         ,k) -         f(:,3         ,k)) &
-                                    +   b_np_4*(f(:,6         ,k) -         f(:,2         ,k)) &
-                                    +   c_np_4*(f(:,7         ,k) -         f(:,1         ,k)) 
+                    RHS(:,2         ,k) =   a_np_2*(f(:,3         ,k) -         f(:,1         ,k))
+                    
+                    RHS(:,3         ,k) =   a_np_3*(f(:,4         ,k) -         f(:,2         ,k)) &
+                                        +   b_np_3*(f(:,5         ,k) -         f(:,1         ,k)) 
+                    
+                    RHS(:,4         ,k) =   a_np_4*(f(:,5         ,k) -         f(:,3         ,k)) &
+                                        +   b_np_4*(f(:,6         ,k) -         f(:,2         ,k)) &
+                                        +   c_np_4*(f(:,7         ,k) -         f(:,1         ,k)) 
+                case(1)
+                    RHS(:,1,k) =   zero
+                   
+                    RHS(:,2,k) =   a10   *(f(:,3,k) - f(:,1,k)) &
+                               +   b10   *(f(:,4,k) - f(:,2,k)) &
+                               +   c10   *(f(:,5,k) - f(:,3,k)) 
+                    
+                    RHS(:,3,k) =   a10   *(f(:,4,k) - f(:,2,k)) &
+                               +   b10   *(f(:,5,k) - f(:,1,k)) &
+                               +   c10   *(f(:,6,k) - f(:,2,k)) 
+                    
+                    RHS(:,4,k) =   a10   *(f(:,5,k) - f(:,3,k)) &
+                               +   b10   *(f(:,6,k) - f(:,2,k)) &
+                               +   c10   *(f(:,7,k) - f(:,1,k)) 
+                case(-1)
+                    RHS(:,1,k) =   a10   *(f(:,2,k) + f(:,2,k)) &
+                               +   b10   *(f(:,3,k) + f(:,3,k)) &
+                               +   c10   *(f(:,4,k) + f(:,4,k)) 
+                    
+                    RHS(:,2,k) =   a10   *(f(:,3,k) - f(:,1,k)) &
+                               +   b10   *(f(:,4,k) + f(:,2,k)) &
+                               +   c10   *(f(:,5,k) + f(:,3,k)) 
+                    
+                    RHS(:,3,k) =   a10   *(f(:,4,k) - f(:,2,k)) &
+                               +   b10   *(f(:,5,k) - f(:,1,k)) &
+                               +   c10   *(f(:,6,k) + f(:,2,k)) 
+                    
+                    RHS(:,4,k) =   a10   *(f(:,5,k) - f(:,3,k)) &
+                               +   b10   *(f(:,6,k) - f(:,2,k)) &
+                               +   c10   *(f(:,7,k) - f(:,1,k)) 
+                end select
                 
                 RHS(:,5:this%n-4,k) =   a10   *(f(:,6:this%n-3,k) -         f(:,4:this%n-5,k)) &
                                     +   b10   *(f(:,7:this%n-2,k) -         f(:,3:this%n-6,k)) &
                                     +   c10   *(f(:,8:this%n-1,k) -         f(:,2:this%n-7,k)) 
                 
-                RHS(:,this%n-3  ,k) =   a_np_4*(f(:,this%n-2  ,k) -         f(:,this%n-4  ,k)) &
-                                    +   b_np_4*(f(:,this%n-1  ,k) -         f(:,this%n-5  ,k)) &
-                                    +   c_np_4*(f(:,this%n    ,k) -         f(:,this%n-6  ,k))  
+                select case(bcn)
+                case(0)    
+                    RHS(:,this%n-3  ,k) =   a_np_4*(f(:,this%n-2  ,k) -         f(:,this%n-4  ,k)) &
+                                        +   b_np_4*(f(:,this%n-1  ,k) -         f(:,this%n-5  ,k)) &
+                                        +   c_np_4*(f(:,this%n    ,k) -         f(:,this%n-6  ,k))  
         
-                RHS(:,this%n-2  ,k) =   a_np_3*(f(:,this%n-1  ,k) -         f(:,this%n-3  ,k)) &
-                                    +   b_np_3*(f(:,this%n    ,k) -         f(:,this%n-4  ,k)) 
-                
-                RHS(:,this%n-1  ,k) =   a_np_2*(f(:,this%n    ,k) -         f(:,this%n-2  ,k))
+                    RHS(:,this%n-2  ,k) =   a_np_3*(f(:,this%n-1  ,k) -         f(:,this%n-3  ,k)) &
+                                        +   b_np_3*(f(:,this%n    ,k) -         f(:,this%n-4  ,k)) 
+                    
+                    RHS(:,this%n-1  ,k) =   a_np_2*(f(:,this%n    ,k) -         f(:,this%n-2  ,k))
 
-                RHS(:,this%n    ,k) =  -a_np_1* f(:,this%n    ,k) -  b_np_1*f(:,this%n-1  ,k)   &
-                                    -   c_np_1* f(:,this%n-2  ,k) -  d_np_1*f(:,this%n-3  ,k)
-            
+                    RHS(:,this%n    ,k) =  -a_np_1* f(:,this%n    ,k) -  b_np_1*f(:,this%n-1  ,k)   &
+                                        -   c_np_1* f(:,this%n-2  ,k) -  d_np_1*f(:,this%n-3  ,k)
+                case(1)
+                    RHS(:,this%n-3,k) =   a10   *( f(:,this%n-2,k) - f(:,this%n-4,k)) &
+                                      +   b10   *( f(:,this%n-1,k) - f(:,this%n-5,k)) &
+                                      +   c10   *( f(:,this%n  ,k) - f(:,this%n-6,k)) 
+
+                    RHS(:,this%n-2,k) =   a10   *( f(:,this%n-1,k) - f(:,this%n-3,k)) &
+                                      +   b10   *( f(:,this%n  ,k) - f(:,this%n-4,k)) &
+                                      +   c10   *( f(:,this%n-1,k) - f(:,this%n-5,k)) 
+
+                    RHS(:,this%n-1,k) =   a10   *( f(:,this%n  ,k) - f(:,this%n-2,k)) &
+                                      +   b10   *( f(:,this%n-1,k) - f(:,this%n-3,k)) &
+                                      +   c10   *( f(:,this%n-2,k) - f(:,this%n-4,k)) 
+
+                    RHS(:,this%n  ,k) =   zero
+                case(-1)
+                    RHS(:,this%n-3,k) =   a10   *( f(:,this%n-2,k) - f(:,this%n-4,k)) &
+                                      +   b10   *( f(:,this%n-1,k) - f(:,this%n-5,k)) &
+                                      +   c10   *( f(:,this%n  ,k) - f(:,this%n-6,k)) 
+
+                    RHS(:,this%n-2,k) =   a10   *( f(:,this%n-1,k) - f(:,this%n-3,k)) &
+                                      +   b10   *( f(:,this%n  ,k) - f(:,this%n-4,k)) &
+                                      +   c10   *(-f(:,this%n-1,k) - f(:,this%n-5,k)) 
+
+                    RHS(:,this%n-1,k) =   a10   *( f(:,this%n  ,k) - f(:,this%n-2,k)) &
+                                      +   b10   *(-f(:,this%n-1,k) - f(:,this%n-3,k)) &
+                                      +   c10   *(-f(:,this%n-2,k) - f(:,this%n-4,k)) 
+
+                    RHS(:,this%n  ,k) =   a10   *(-f(:,this%n-1,k) - f(:,this%n-1,k)) &
+                                      +   b10   *(-f(:,this%n-2,k) - f(:,this%n-2,k)) &
+                                      +   c10   *(-f(:,this%n-3,k) - f(:,this%n-3,k)) 
+                end select
             end do 
         end select
     
     end subroutine
 
-    pure subroutine ComputeZD1RHS(this, f, RHS, n1, n2)
+    pure subroutine ComputeZD1RHS(this, f, RHS, n1, n2, bc1, bcn)
     
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: n1, n2
         real(rkind), dimension(n1,n2,this%n), intent(in) :: f
         real(rkind), dimension(n1,n2,this%n), intent(out) :: RHS
+        integer, intent(in) :: bc1, bcn
         real(rkind) :: a10,b10,c10
         ! Non-periodic boundary a, b and c
         real(rkind) :: a_np_4, b_np_4, c_np_4    
@@ -1117,7 +1440,6 @@ contains
         real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
 
 
-    
         select case (this%periodic)
         case (.TRUE.)
             a10 = a10d1 * this%onebydx
@@ -1164,43 +1486,110 @@ contains
             d_np_1 = w1*( s * this%onebydx)
 
                     
-            RHS(:,:,1         ) =   a_np_1* f(:,:,1         ) +  b_np_1*f(:,:,2         )   &
-                                +   c_np_1* f(:,:,3         ) +  d_np_1*f(:,:,4         ) 
-            
-            RHS(:,:,2         ) =   a_np_2*(f(:,:,3         ) -         f(:,:,1         ))
-            
-            RHS(:,:,3         ) =   a_np_3*(f(:,:,4         ) -         f(:,:,2         )) &
-                                +   b_np_3*(f(:,:,5         ) -         f(:,:,1         )) 
-            
-            RHS(:,:,4         ) =   a_np_4*(f(:,:,5         ) -         f(:,:,3         )) &
-                                +   b_np_4*(f(:,:,6         ) -         f(:,:,2         )) &
-                                +   c_np_4*(f(:,:,7         ) -         f(:,:,1         )) 
+            select case(bc1)
+            case(0)    
+                RHS(:,:,1         ) =   a_np_1* f(:,:,1         ) +  b_np_1*f(:,:,2         )   &
+                                    +   c_np_1* f(:,:,3         ) +  d_np_1*f(:,:,4         ) 
+                
+                RHS(:,:,2         ) =   a_np_2*(f(:,:,3         ) -         f(:,:,1         ))
+                
+                RHS(:,:,3         ) =   a_np_3*(f(:,:,4         ) -         f(:,:,2         )) &
+                                    +   b_np_3*(f(:,:,5         ) -         f(:,:,1         )) 
+                
+                RHS(:,:,4         ) =   a_np_4*(f(:,:,5         ) -         f(:,:,3         )) &
+                                    +   b_np_4*(f(:,:,6         ) -         f(:,:,2         )) &
+                                    +   c_np_4*(f(:,:,7         ) -         f(:,:,1         )) 
+            case(1)
+                RHS(:,:,1) =   zero
+                
+                RHS(:,:,2) =   a10   *(f(:,:,3) - f(:,:,1)) &
+                           +   b10   *(f(:,:,4) - f(:,:,2)) &
+                           +   c10   *(f(:,:,5) - f(:,:,3)) 
+                
+                RHS(:,:,3) =   a10   *(f(:,:,4) - f(:,:,2)) &
+                           +   b10   *(f(:,:,5) - f(:,:,1)) &
+                           +   c10   *(f(:,:,6) - f(:,:,2)) 
+                
+                RHS(:,:,4) =   a10   *(f(:,:,5) - f(:,:,3)) &
+                           +   b10   *(f(:,:,6) - f(:,:,2)) &
+                           +   c10   *(f(:,:,7) - f(:,:,1)) 
+            case(-1)
+                RHS(:,:,1) =   a10   *(f(:,:,2) + f(:,:,2)) &
+                           +   b10   *(f(:,:,3) + f(:,:,3)) &
+                           +   c10   *(f(:,:,4) + f(:,:,4)) 
+                
+                RHS(:,:,2) =   a10   *(f(:,:,3) - f(:,:,1)) &
+                           +   b10   *(f(:,:,4) + f(:,:,2)) &
+                           +   c10   *(f(:,:,5) + f(:,:,3)) 
+                
+                RHS(:,:,3) =   a10   *(f(:,:,4) - f(:,:,2)) &
+                           +   b10   *(f(:,:,5) - f(:,:,1)) &
+                           +   c10   *(f(:,:,6) + f(:,:,2)) 
+                
+                RHS(:,:,4) =   a10   *(f(:,:,5) - f(:,:,3)) &
+                           +   b10   *(f(:,:,6) - f(:,:,2)) &
+                           +   c10   *(f(:,:,7) - f(:,:,1)) 
+            end select
             
             RHS(:,:,5:this%n-4) =   a10   *(f(:,:,6:this%n-3) -         f(:,:,4:this%n-5)) &
                                 +   b10   *(f(:,:,7:this%n-2) -         f(:,:,3:this%n-6)) &
                                 +   c10   *(f(:,:,8:this%n-1) -         f(:,:,2:this%n-7)) 
             
-            RHS(:,:,this%n-3  ) =   a_np_4*(f(:,:,this%n-2  ) -         f(:,:,this%n-4  )) &
-                                +   b_np_4*(f(:,:,this%n-1  ) -         f(:,:,this%n-5  )) &
-                                +   c_np_4*(f(:,:,this%n    ) -         f(:,:,this%n-6  ))  
+            select case(bcn)
+            case(0)    
+                RHS(:,:,this%n-3  ) =   a_np_4*(f(:,:,this%n-2  ) -         f(:,:,this%n-4  )) &
+                                    +   b_np_4*(f(:,:,this%n-1  ) -         f(:,:,this%n-5  )) &
+                                    +   c_np_4*(f(:,:,this%n    ) -         f(:,:,this%n-6  ))  
         
-            RHS(:,:,this%n-2  ) =   a_np_3*(f(:,:,this%n-1  ) -         f(:,:,this%n-3  )) &
-                                +   b_np_3*(f(:,:,this%n    ) -         f(:,:,this%n-4  )) 
-            
-            RHS(:,:,this%n-1  ) =   a_np_2*(f(:,:,this%n    ) -         f(:,:,this%n-2  ))
+                RHS(:,:,this%n-2  ) =   a_np_3*(f(:,:,this%n-1  ) -         f(:,:,this%n-3  )) &
+                                    +   b_np_3*(f(:,:,this%n    ) -         f(:,:,this%n-4  )) 
+                
+                RHS(:,:,this%n-1  ) =   a_np_2*(f(:,:,this%n    ) -         f(:,:,this%n-2  ))
 
-            RHS(:,:,this%n    ) =  -a_np_1* f(:,:,this%n    ) -  b_np_1*f(:,:,this%n-1  )   &
-                                -   c_np_1* f(:,:,this%n-2  ) -  d_np_1*f(:,:,this%n-3  )
+                RHS(:,:,this%n    ) =  -a_np_1* f(:,:,this%n    ) -  b_np_1*f(:,:,this%n-1  )   &
+                                    -   c_np_1* f(:,:,this%n-2  ) -  d_np_1*f(:,:,this%n-3  )
+            case(1)
+                RHS(:,:,this%n-3) =   a10   *( f(:,:,this%n-2) - f(:,:,this%n-4)) &
+                                  +   b10   *( f(:,:,this%n-1) - f(:,:,this%n-5)) &
+                                  +   c10   *( f(:,:,this%n  ) - f(:,:,this%n-6)) 
+
+                RHS(:,:,this%n-2) =   a10   *( f(:,:,this%n-1) - f(:,:,this%n-3)) &
+                                  +   b10   *( f(:,:,this%n  ) - f(:,:,this%n-4)) &
+                                  +   c10   *( f(:,:,this%n-1) - f(:,:,this%n-5)) 
+
+                RHS(:,:,this%n-1) =   a10   *( f(:,:,this%n  ) - f(:,:,this%n-2)) &
+                                  +   b10   *( f(:,:,this%n-1) - f(:,:,this%n-3)) &
+                                  +   c10   *( f(:,:,this%n-2) - f(:,:,this%n-4)) 
+
+                RHS(:,:,this%n  ) =   zero
+            case(-1)
+                RHS(:,:,this%n-3) =   a10   *( f(:,:,this%n-2) - f(:,:,this%n-4)) &
+                                  +   b10   *( f(:,:,this%n-1) - f(:,:,this%n-5)) &
+                                  +   c10   *( f(:,:,this%n  ) - f(:,:,this%n-6)) 
+
+                RHS(:,:,this%n-2) =   a10   *( f(:,:,this%n-1) - f(:,:,this%n-3)) &
+                                  +   b10   *( f(:,:,this%n  ) - f(:,:,this%n-4)) &
+                                  +   c10   *(-f(:,:,this%n-1) - f(:,:,this%n-5)) 
+
+                RHS(:,:,this%n-1) =   a10   *( f(:,:,this%n  ) - f(:,:,this%n-2)) &
+                                  +   b10   *(-f(:,:,this%n-1) - f(:,:,this%n-3)) &
+                                  +   c10   *(-f(:,:,this%n-2) - f(:,:,this%n-4)) 
+
+                RHS(:,:,this%n  ) =   a10   *(-f(:,:,this%n-1) - f(:,:,this%n-1)) &
+                                  +   b10   *(-f(:,:,this%n-2) - f(:,:,this%n-2)) &
+                                  +   c10   *(-f(:,:,this%n-3) - f(:,:,this%n-3)) 
+            end select
             
         end select
     
     end subroutine
     
-   pure subroutine ComputeXD2RHS(this, f, RHS, n2, n3)
+   pure subroutine ComputeXD2RHS(this, f, RHS, n2, n3, bc1, bcn)
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: n2, n3
         real(rkind), dimension(this%n,n2,n3), intent(in) :: f
         real(rkind), dimension(this%n,n2,n3), intent(out) :: RHS
+        integer, intent(in) :: bc1, bcn
         real(rkind) :: a10, b10, c10
         real(rkind) :: a_np_3, b_np_3   
         real(rkind) :: a_np_2
@@ -1215,34 +1604,33 @@ contains
 
             do k = 1,n3
                 do j = 1,n2
-                    RHS(1         ,j,k) = a10 * ( f(2          ,j,k)   - two*f(1            ,j,k) + f(this%n    ,j,k)) &
-                                        + b10 * ( f(3          ,j,k)   - two*f(1            ,j,k) + f(this%n-1  ,j,k)) &
-                                        + c10 * ( f(4          ,j,k)   - two*f(1            ,j,k) + f(this%n-2  ,j,k))
-                    
-                    RHS(2         ,j,k) = a10 * ( f(3          ,j,k)   - two*f(2            ,j,k) + f(1         ,j,k)) &
-                                        + b10 * ( f(4          ,j,k)   - two*f(2            ,j,k) + f(this%n    ,j,k)) &
-                                        + c10 * ( f(5          ,j,k)   - two*f(2            ,j,k) + f(this%n-1  ,j,k))
-                    
-                    RHS(3         ,j,k) = a10 * ( f(4          ,j,k)   - two*f(3            ,j,k) + f(2         ,j,k)) &
-                                        + b10 * ( f(5          ,j,k)   - two*f(3            ,j,k) + f(1         ,j,k)) &
-                                        + c10 * ( f(6          ,j,k)   - two*f(3            ,j,k) + f(this%n    ,j,k))
+                        RHS(1         ,j,k) = a10 * ( f(2          ,j,k)   - two*f(1            ,j,k) + f(this%n    ,j,k)) &
+                                            + b10 * ( f(3          ,j,k)   - two*f(1            ,j,k) + f(this%n-1  ,j,k)) &
+                                            + c10 * ( f(4          ,j,k)   - two*f(1            ,j,k) + f(this%n-2  ,j,k))
+                        
+                        RHS(2         ,j,k) = a10 * ( f(3          ,j,k)   - two*f(2            ,j,k) + f(1         ,j,k)) &
+                                            + b10 * ( f(4          ,j,k)   - two*f(2            ,j,k) + f(this%n    ,j,k)) &
+                                            + c10 * ( f(5          ,j,k)   - two*f(2            ,j,k) + f(this%n-1  ,j,k))
+                        
+                        RHS(3         ,j,k) = a10 * ( f(4          ,j,k)   - two*f(3            ,j,k) + f(2         ,j,k)) &
+                                            + b10 * ( f(5          ,j,k)   - two*f(3            ,j,k) + f(1         ,j,k)) &
+                                            + c10 * ( f(6          ,j,k)   - two*f(3            ,j,k) + f(this%n    ,j,k))
                     
                     RHS(4:this%n-3,j,k) = a10 * ( f(5:this%n-2 ,j,k)   - two*f(4:this%n-3   ,j,k) + f(3:this%n-4,j,k)) &
                                         + b10 * ( f(6:this%n-1 ,j,k)   - two*f(4:this%n-3   ,j,k) + f(2:this%n-5,j,k)) &
                                         + c10 * ( f(7:this%n   ,j,k)   - two*f(4:this%n-3   ,j,k) + f(1:this%n-6,j,k))
-                    
-                    RHS(this%n-2  ,j,k) = a10 * ( f(this%n-1   ,j,k)   - two*f(this%n-2     ,j,k) + f(this%n-3  ,j,k)) &
-                                        + b10 * ( f(this%n     ,j,k)   - two*f(this%n-2     ,j,k) + f(this%n-4  ,j,k)) &
-                                        + c10 * ( f(1          ,j,k)   - two*f(this%n-2     ,j,k) + f(this%n-5  ,j,k))
-                    
-                    RHS(this%n-1  ,j,k) = a10 * ( f(this%n     ,j,k)   - two*f(this%n-1     ,j,k) + f(this%n-2  ,j,k)) &
-                                        + b10 * ( f(1          ,j,k)   - two*f(this%n-1     ,j,k) + f(this%n-3  ,j,k)) &
-                                        + c10 * ( f(2          ,j,k)   - two*f(this%n-1     ,j,k) + f(this%n-4  ,j,k))
-                    
-                    RHS(this%n    ,j,k) = a10 * ( f(1          ,j,k)   - two*f(this%n       ,j,k) + f(this%n-1  ,j,k)) &
-                                        + b10 * ( f(2          ,j,k)   - two*f(this%n       ,j,k) + f(this%n-2  ,j,k)) &
-                                        + c10 * ( f(3          ,j,k)   - two*f(this%n       ,j,k) + f(this%n-3  ,j,k))
-
+                   
+                        RHS(this%n-2  ,j,k) = a10 * ( f(this%n-1   ,j,k)   - two*f(this%n-2     ,j,k) + f(this%n-3  ,j,k)) &
+                                            + b10 * ( f(this%n     ,j,k)   - two*f(this%n-2     ,j,k) + f(this%n-4  ,j,k)) &
+                                            + c10 * ( f(1          ,j,k)   - two*f(this%n-2     ,j,k) + f(this%n-5  ,j,k))
+                        
+                        RHS(this%n-1  ,j,k) = a10 * ( f(this%n     ,j,k)   - two*f(this%n-1     ,j,k) + f(this%n-2  ,j,k)) &
+                                            + b10 * ( f(1          ,j,k)   - two*f(this%n-1     ,j,k) + f(this%n-3  ,j,k)) &
+                                            + c10 * ( f(2          ,j,k)   - two*f(this%n-1     ,j,k) + f(this%n-4  ,j,k))
+                        
+                        RHS(this%n    ,j,k) = a10 * ( f(1          ,j,k)   - two*f(this%n       ,j,k) + f(this%n-1  ,j,k)) &
+                                            + b10 * ( f(2          ,j,k)   - two*f(this%n       ,j,k) + f(this%n-2  ,j,k)) &
+                                            + c10 * ( f(3          ,j,k)   - two*f(this%n       ,j,k) + f(this%n-3  ,j,k))
                 end do 
             end do 
 
@@ -1265,27 +1653,81 @@ contains
 
             do k = 1,n3
                 do j = 1,n2
-                    RHS(1         ,j,k) = a_np_1*f(1,j,k) + b_np_1*f(2,j,k) + &
-                                        & c_np_1*f(3,j,k) + d_np_1*f(4,j,k) + &
-                                        & e_np_1*f(5,j,k)
-                    
-                    RHS(2         ,j,k) = a_np_2 * ( f(3          ,j,k)   - two*f(2            ,j,k) + f(1         ,j,k)) 
-                    
-                    RHS(3         ,j,k) = a_np_3 * ( f(4          ,j,k)   - two*f(3            ,j,k) + f(2         ,j,k)) &
-                                        + b_np_3 * ( f(5          ,j,k)   - two*f(3            ,j,k) + f(1         ,j,k)) 
+                    select case(bc1)
+                    case(0)
+                        RHS(1         ,j,k) = a_np_1*f(1,j,k) + b_np_1*f(2,j,k) + &
+                                            & c_np_1*f(3,j,k) + d_np_1*f(4,j,k) + &
+                                            & e_np_1*f(5,j,k)
+                        
+                        RHS(2         ,j,k) = a_np_2 * ( f(3          ,j,k)   - two*f(2            ,j,k) + f(1         ,j,k)) 
+                        
+                        RHS(3         ,j,k) = a_np_3 * ( f(4          ,j,k)   - two*f(3            ,j,k) + f(2         ,j,k)) &
+                                            + b_np_3 * ( f(5          ,j,k)   - two*f(3            ,j,k) + f(1         ,j,k)) 
+                    case(1)
+                        RHS(1,j,k) = a10 * ( f(2,j,k)   - two*f(1,j,k) + f(2,j,k)) &
+                                   + b10 * ( f(3,j,k)   - two*f(1,j,k) + f(3,j,k)) &
+                                   + c10 * ( f(4,j,k)   - two*f(1,j,k) + f(4,j,k))
+                        
+                        RHS(2,j,k) = a10 * ( f(3,j,k)   - two*f(2,j,k) + f(1,j,k)) &
+                                   + b10 * ( f(4,j,k)   - two*f(2,j,k) + f(2,j,k)) &
+                                   + c10 * ( f(5,j,k)   - two*f(2,j,k) + f(3,j,k))
+                        
+                        RHS(3,j,k) = a10 * ( f(4,j,k)   - two*f(3,j,k) + f(2,j,k)) &
+                                   + b10 * ( f(5,j,k)   - two*f(3,j,k) + f(1,j,k)) &
+                                   + c10 * ( f(6,j,k)   - two*f(3,j,k) + f(2,j,k))
+                    case(-1)
+                        RHS(1,j,k) = a10 * ( f(2,j,k)   - two*f(1,j,k) - f(2,j,k)) &
+                                   + b10 * ( f(3,j,k)   - two*f(1,j,k) - f(3,j,k)) &
+                                   + c10 * ( f(4,j,k)   - two*f(1,j,k) - f(4,j,k))
+                        
+                        RHS(2,j,k) = a10 * ( f(3,j,k)   - two*f(2,j,k) + f(1,j,k)) &
+                                   + b10 * ( f(4,j,k)   - two*f(2,j,k) - f(2,j,k)) &
+                                   + c10 * ( f(5,j,k)   - two*f(2,j,k) - f(3,j,k))
+                        
+                        RHS(3,j,k) = a10 * ( f(4,j,k)   - two*f(3,j,k) + f(2,j,k)) &
+                                   + b10 * ( f(5,j,k)   - two*f(3,j,k) + f(1,j,k)) &
+                                   + c10 * ( f(6,j,k)   - two*f(3,j,k) - f(2,j,k))
+                    end select
                     
                     RHS(4:this%n-3,j,k) = a10 * ( f(5:this%n-2 ,j,k)   - two*f(4:this%n-3   ,j,k) + f(3:this%n-4,j,k)) &
                                         + b10 * ( f(6:this%n-1 ,j,k)   - two*f(4:this%n-3   ,j,k) + f(2:this%n-5,j,k)) &
                                         + c10 * ( f(7:this%n   ,j,k)   - two*f(4:this%n-3   ,j,k) + f(1:this%n-6,j,k))
                     
-                    RHS(this%n-2  ,j,k) = a_np_3 * ( f(this%n-1   ,j,k)   - two*f(this%n-2     ,j,k) + f(this%n-3  ,j,k)) &
-                                        + b_np_3 * ( f(this%n     ,j,k)   - two*f(this%n-2     ,j,k) + f(this%n-4  ,j,k)) 
-                    
-                    RHS(this%n-1  ,j,k) = a_np_2 * ( f(this%n     ,j,k)   - two*f(this%n-1     ,j,k) + f(this%n-2  ,j,k)) 
-                    
-                    RHS(this%n    ,j,k) =  a_np_1*f(this%n  ,j,k) + b_np_1*f(this%n-1,j,k) + &
-                                        &  c_np_1*f(this%n-2,j,k) + d_np_1*f(this%n-3,j,k) + &
-                                        &  e_np_1*f(this%n-4,j,k)
+                    select case(bcn)
+                    case(0) 
+                        RHS(this%n-2  ,j,k) = a_np_3 * ( f(this%n-1   ,j,k)   - two*f(this%n-2     ,j,k) + f(this%n-3  ,j,k)) &
+                                            + b_np_3 * ( f(this%n     ,j,k)   - two*f(this%n-2     ,j,k) + f(this%n-4  ,j,k)) 
+                        
+                        RHS(this%n-1  ,j,k) = a_np_2 * ( f(this%n     ,j,k)   - two*f(this%n-1     ,j,k) + f(this%n-2  ,j,k)) 
+                        
+                        RHS(this%n    ,j,k) =  a_np_1*f(this%n  ,j,k) + b_np_1*f(this%n-1,j,k) + &
+                                            &  c_np_1*f(this%n-2,j,k) + d_np_1*f(this%n-3,j,k) + &
+                                            &  e_np_1*f(this%n-4,j,k)
+                    case(1)
+                        RHS(this%n-2,j,k) = a10 * ( f(this%n-1,j,k)   - two*f(this%n-2,j,k) + f(this%n-3,j,k)) &
+                                          + b10 * ( f(this%n  ,j,k)   - two*f(this%n-2,j,k) + f(this%n-4,j,k)) &
+                                          + c10 * ( f(this%n-1,j,k)   - two*f(this%n-2,j,k) + f(this%n-5,j,k))
+                        
+                        RHS(this%n-1,j,k) = a10 * ( f(this%n  ,j,k)   - two*f(this%n-1,j,k) + f(this%n-2,j,k)) &
+                                          + b10 * ( f(this%n-1,j,k)   - two*f(this%n-1,j,k) + f(this%n-3,j,k)) &
+                                          + c10 * ( f(this%n-2,j,k)   - two*f(this%n-1,j,k) + f(this%n-4,j,k))
+                        
+                        RHS(this%n  ,j,k) = a10 * ( f(this%n-1,j,k)   - two*f(this%n  ,j,k) + f(this%n-1,j,k)) &
+                                          + b10 * ( f(this%n-2,j,k)   - two*f(this%n  ,j,k) + f(this%n-2,j,k)) &
+                                          + c10 * ( f(this%n-3,j,k)   - two*f(this%n  ,j,k) + f(this%n-3,j,k))
+                    case(-1)
+                        RHS(this%n-2,j,k) = a10 * ( f(this%n-1,j,k)   - two*f(this%n-2,j,k) + f(this%n-3,j,k)) &
+                                          + b10 * ( f(this%n  ,j,k)   - two*f(this%n-2,j,k) + f(this%n-4,j,k)) &
+                                          + c10 * (-f(this%n-1,j,k)   - two*f(this%n-2,j,k) + f(this%n-5,j,k))
+                        
+                        RHS(this%n-1,j,k) = a10 * ( f(this%n  ,j,k)   - two*f(this%n-1,j,k) + f(this%n-2,j,k)) &
+                                          + b10 * (-f(this%n-1,j,k)   - two*f(this%n-1,j,k) + f(this%n-3,j,k)) &
+                                          + c10 * (-f(this%n-2,j,k)   - two*f(this%n-1,j,k) + f(this%n-4,j,k))
+                        
+                        RHS(this%n  ,j,k) = a10 * (-f(this%n-1,j,k)   - two*f(this%n  ,j,k) + f(this%n-1,j,k)) &
+                                          + b10 * (-f(this%n-2,j,k)   - two*f(this%n  ,j,k) + f(this%n-2,j,k)) &
+                                          + c10 * (-f(this%n-3,j,k)   - two*f(this%n  ,j,k) + f(this%n-3,j,k))
+                    end select
 
                 end do 
             end do 
@@ -1294,11 +1736,12 @@ contains
     end subroutine  
 
 
-   pure subroutine ComputeYD2RHS(this, f, RHS, n2, n3)
+   pure subroutine ComputeYD2RHS(this, f, RHS, n2, n3, bc1, bcn)
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: n2, n3
         real(rkind), dimension(n2,this%n,n3), intent(in) :: f
         real(rkind), dimension(n2,this%n,n3), intent(out) :: RHS
+        integer, intent(in) :: bc1, bcn
         real(rkind) :: a10, b10, c10
         real(rkind) :: a_np_3, b_np_3   
         real(rkind) :: a_np_2
@@ -1360,6 +1803,8 @@ contains
 
 
             do k = 1,n3
+                select case(bc1)
+                case(0)
                     RHS(:,1         ,k) = a_np_1*f(:,1,k) + b_np_1*f(:,2,k) + &
                                         & c_np_1*f(:,3,k) + d_np_1*f(:,4,k) + &
                                         & e_np_1*f(:,5,k)
@@ -1368,11 +1813,38 @@ contains
                     
                     RHS(:,3         ,k) = a_np_3 * ( f(:,4          ,k)   - two*f(:,3            ,k) + f(:,2         ,k)) &
                                         + b_np_3 * ( f(:,5          ,k)   - two*f(:,3            ,k) + f(:,1         ,k)) 
+                case(1)
+                    RHS(:,1,k) = a10 * ( f(:,2,k)   - two*f(:,1,k) + f(:,2,k)) &
+                               + b10 * ( f(:,3,k)   - two*f(:,1,k) + f(:,3,k)) &
+                               + c10 * ( f(:,4,k)   - two*f(:,1,k) + f(:,4,k))
+                    
+                    RHS(:,2,k) = a10 * ( f(:,3,k)   - two*f(:,2,k) + f(:,1,k)) &
+                               + b10 * ( f(:,4,k)   - two*f(:,2,k) + f(:,2,k)) &
+                               + c10 * ( f(:,5,k)   - two*f(:,2,k) + f(:,3,k))
+                    
+                    RHS(:,3,k) = a10 * ( f(:,4,k)   - two*f(:,3,k) + f(:,2,k)) &
+                               + b10 * ( f(:,5,k)   - two*f(:,3,k) + f(:,1,k)) &
+                               + c10 * ( f(:,6,k)   - two*f(:,3,k) + f(:,2,k))
+                case(-1)
+                    RHS(:,1,k) = a10 * ( f(:,2,k)   - two*f(:,1,k) - f(:,2,k)) &
+                               + b10 * ( f(:,3,k)   - two*f(:,1,k) - f(:,3,k)) &
+                               + c10 * ( f(:,4,k)   - two*f(:,1,k) - f(:,4,k))
+                    
+                    RHS(:,2,k) = a10 * ( f(:,3,k)   - two*f(:,2,k) + f(:,1,k)) &
+                               + b10 * ( f(:,4,k)   - two*f(:,2,k) - f(:,2,k)) &
+                               + c10 * ( f(:,5,k)   - two*f(:,2,k) - f(:,3,k))
+                    
+                    RHS(:,3,k) = a10 * ( f(:,4,k)   - two*f(:,3,k) + f(:,2,k)) &
+                               + b10 * ( f(:,5,k)   - two*f(:,3,k) + f(:,1,k)) &
+                               + c10 * ( f(:,6,k)   - two*f(:,3,k) - f(:,2,k))
+                end select
                     
                     RHS(:,4:this%n-3,k) = a10 * ( f(:,5:this%n-2 ,k)   - two*f(:,4:this%n-3   ,k) + f(:,3:this%n-4,k)) &
                                         + b10 * ( f(:,6:this%n-1 ,k)   - two*f(:,4:this%n-3   ,k) + f(:,2:this%n-5,k)) &
                                         + c10 * ( f(:,7:this%n   ,k)   - two*f(:,4:this%n-3   ,k) + f(:,1:this%n-6,k))
                     
+                select case(bcn)
+                case(0) 
                     RHS(:,this%n-2  ,k) = a_np_3 * ( f(:,this%n-1   ,k)   - two*f(:,this%n-2     ,k) + f(:,this%n-3  ,k)) &
                                         + b_np_3 * ( f(:,this%n     ,k)   - two*f(:,this%n-2     ,k) + f(:,this%n-4  ,k)) 
                     
@@ -1381,6 +1853,31 @@ contains
                     RHS(:,this%n    ,k) =  a_np_1*f(:,this%n  ,k) + b_np_1*f(:,this%n-1,k) + &
                                         &  c_np_1*f(:,this%n-2,k) + d_np_1*f(:,this%n-3,k) + &
                                         &  e_np_1*f(:,this%n-4,k)
+                case(1)
+                    RHS(:,this%n-2,k) = a10 * ( f(:,this%n-1,k)   - two*f(:,this%n-2,k) + f(:,this%n-3,k)) &
+                                      + b10 * ( f(:,this%n  ,k)   - two*f(:,this%n-2,k) + f(:,this%n-4,k)) &
+                                      + c10 * ( f(:,this%n-1,k)   - two*f(:,this%n-2,k) + f(:,this%n-5,k))
+                    
+                    RHS(:,this%n-1,k) = a10 * ( f(:,this%n  ,k)   - two*f(:,this%n-1,k) + f(:,this%n-2,k)) &
+                                      + b10 * ( f(:,this%n-1,k)   - two*f(:,this%n-1,k) + f(:,this%n-3,k)) &
+                                      + c10 * ( f(:,this%n-2,k)   - two*f(:,this%n-1,k) + f(:,this%n-4,k))
+                    
+                    RHS(:,this%n  ,k) = a10 * ( f(:,this%n-1,k)   - two*f(:,this%n  ,k) + f(:,this%n-1,k)) &
+                                      + b10 * ( f(:,this%n-2,k)   - two*f(:,this%n  ,k) + f(:,this%n-2,k)) &
+                                      + c10 * ( f(:,this%n-3,k)   - two*f(:,this%n  ,k) + f(:,this%n-3,k))
+                case(-1)
+                    RHS(:,this%n-2,k) = a10 * ( f(:,this%n-1,k)   - two*f(:,this%n-2,k) + f(:,this%n-3,k)) &
+                                      + b10 * ( f(:,this%n  ,k)   - two*f(:,this%n-2,k) + f(:,this%n-4,k)) &
+                                      + c10 * (-f(:,this%n-1,k)   - two*f(:,this%n-2,k) + f(:,this%n-5,k))
+                    
+                    RHS(:,this%n-1,k) = a10 * ( f(:,this%n  ,k)   - two*f(:,this%n-1,k) + f(:,this%n-2,k)) &
+                                      + b10 * (-f(:,this%n-1,k)   - two*f(:,this%n-1,k) + f(:,this%n-3,k)) &
+                                      + c10 * (-f(:,this%n-2,k)   - two*f(:,this%n-1,k) + f(:,this%n-4,k))
+                    
+                    RHS(:,this%n  ,k) = a10 * (-f(:,this%n-1,k)   - two*f(:,this%n  ,k) + f(:,this%n-1,k)) &
+                                      + b10 * (-f(:,this%n-2,k)   - two*f(:,this%n  ,k) + f(:,this%n-2,k)) &
+                                      + c10 * (-f(:,this%n-3,k)   - two*f(:,this%n  ,k) + f(:,this%n-3,k))
+                end select
 
             end do 
         
@@ -1388,17 +1885,17 @@ contains
    
     end subroutine  
 
-    pure subroutine ComputeZD2RHS(this, f, RHS, n2, n3)
+    pure subroutine ComputeZD2RHS(this, f, RHS, n2, n3, bc1, bcn)
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: n2, n3
         real(rkind), dimension(n2,n3,this%n), intent(in) :: f
         real(rkind), dimension(n2,n3,this%n), intent(out) :: RHS
+        integer, intent(in) :: bc1, bcn
         real(rkind) :: a10, b10, c10
         real(rkind) :: a_np_3, b_np_3   
         real(rkind) :: a_np_2
         real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1, e_np_1
-    
-    
+   
         select case (this%periodic)
         case (.TRUE.)
             a10 = a10d2 * this%onebydx2
@@ -1449,6 +1946,8 @@ contains
             d_np_1 = b1_d10d2 * this%onebydx2
             e_np_1 = b1_e10d2 * this%onebydx2
                     
+            select case(bc1)
+            case(0)
             RHS(:,:,1         ) = a_np_1*f(:,:,1) + b_np_1*f(:,:,2) + &
                                 & c_np_1*f(:,:,3) + d_np_1*f(:,:,4) + &
                                 & e_np_1*f(:,:,5)
@@ -1457,11 +1956,38 @@ contains
             
             RHS(:,:,3         ) = a_np_3 * ( f(:,:,4          )   - two*f(:,:,3            ) + f(:,:,2         )) &
                                 + b_np_3 * ( f(:,:,5          )   - two*f(:,:,3            ) + f(:,:,1         )) 
+            case(1)
+                RHS(:,:,1) = a10 * ( f(:,:,2)   - two*f(:,:,1) + f(:,:,2)) &
+                           + b10 * ( f(:,:,3)   - two*f(:,:,1) + f(:,:,3)) &
+                           + c10 * ( f(:,:,4)   - two*f(:,:,1) + f(:,:,4))
+                
+                RHS(:,:,2) = a10 * ( f(:,:,3)   - two*f(:,:,2) + f(:,:,1)) &
+                           + b10 * ( f(:,:,4)   - two*f(:,:,2) + f(:,:,2)) &
+                           + c10 * ( f(:,:,5)   - two*f(:,:,2) + f(:,:,3))
+                
+                RHS(:,:,3) = a10 * ( f(:,:,4)   - two*f(:,:,3) + f(:,:,2)) &
+                           + b10 * ( f(:,:,5)   - two*f(:,:,3) + f(:,:,1)) &
+                           + c10 * ( f(:,:,6)   - two*f(:,:,3) + f(:,:,2))
+            case(-1)
+                RHS(:,:,1) = a10 * ( f(:,:,2)   - two*f(:,:,1) - f(:,:,2)) &
+                           + b10 * ( f(:,:,3)   - two*f(:,:,1) - f(:,:,3)) &
+                           + c10 * ( f(:,:,4)   - two*f(:,:,1) - f(:,:,4))
+                
+                RHS(:,:,2) = a10 * ( f(:,:,3)   - two*f(:,:,2) + f(:,:,1)) &
+                           + b10 * ( f(:,:,4)   - two*f(:,:,2) - f(:,:,2)) &
+                           + c10 * ( f(:,:,5)   - two*f(:,:,2) - f(:,:,3))
+                
+                RHS(:,:,3) = a10 * ( f(:,:,4)   - two*f(:,:,3) + f(:,:,2)) &
+                           + b10 * ( f(:,:,5)   - two*f(:,:,3) + f(:,:,1)) &
+                           + c10 * ( f(:,:,6)   - two*f(:,:,3) - f(:,:,2))
+            end select
             
             RHS(:,:,4:this%n-3) = a10 * ( f(:,:,5:this%n-2 )   - two*f(:,:,4:this%n-3   ) + f(:,:,3:this%n-4)) &
                                 + b10 * ( f(:,:,6:this%n-1 )   - two*f(:,:,4:this%n-3   ) + f(:,:,2:this%n-5)) &
                                 + c10 * ( f(:,:,7:this%n   )   - two*f(:,:,4:this%n-3   ) + f(:,:,1:this%n-6))
             
+            select case(bcn)
+            case(0)
             RHS(:,:,this%n-2  ) = a_np_3 * ( f(:,:,this%n-1   )   - two*f(:,:,this%n-2     ) + f(:,:,this%n-3  )) &
                                 + b_np_3 * ( f(:,:,this%n     )   - two*f(:,:,this%n-2     ) + f(:,:,this%n-4  )) 
             
@@ -1470,16 +1996,41 @@ contains
             RHS(:,:,this%n    ) =  a_np_1*f(:,:,this%n  ) + b_np_1*f(:,:,this%n-1) + &
                                 &  c_np_1*f(:,:,this%n-2) + d_np_1*f(:,:,this%n-3) + &
                                 &  e_np_1*f(:,:,this%n-4)
-
-
+            case(1)
+                RHS(:,:,this%n-2) = a10 * ( f(:,:,this%n-1)   - two*f(:,:,this%n-2) + f(:,:,this%n-3)) &
+                                  + b10 * ( f(:,:,this%n  )   - two*f(:,:,this%n-2) + f(:,:,this%n-4)) &
+                                  + c10 * ( f(:,:,this%n-1)   - two*f(:,:,this%n-2) + f(:,:,this%n-5))
+                
+                RHS(:,:,this%n-1) = a10 * ( f(:,:,this%n  )   - two*f(:,:,this%n-1) + f(:,:,this%n-2)) &
+                                  + b10 * ( f(:,:,this%n-1)   - two*f(:,:,this%n-1) + f(:,:,this%n-3)) &
+                                  + c10 * ( f(:,:,this%n-2)   - two*f(:,:,this%n-1) + f(:,:,this%n-4))
+                
+                RHS(:,:,this%n  ) = a10 * ( f(:,:,this%n-1)   - two*f(:,:,this%n  ) + f(:,:,this%n-1)) &
+                                  + b10 * ( f(:,:,this%n-2)   - two*f(:,:,this%n  ) + f(:,:,this%n-2)) &
+                                  + c10 * ( f(:,:,this%n-3)   - two*f(:,:,this%n  ) + f(:,:,this%n-3))
+            case(-1)
+                RHS(:,:,this%n-2) = a10 * ( f(:,:,this%n-1)   - two*f(:,:,this%n-2) + f(:,:,this%n-3)) &
+                                  + b10 * ( f(:,:,this%n  )   - two*f(:,:,this%n-2) + f(:,:,this%n-4)) &
+                                  + c10 * (-f(:,:,this%n-1)   - two*f(:,:,this%n-2) + f(:,:,this%n-5))
+                
+                RHS(:,:,this%n-1) = a10 * ( f(:,:,this%n  )   - two*f(:,:,this%n-1) + f(:,:,this%n-2)) &
+                                  + b10 * (-f(:,:,this%n-1)   - two*f(:,:,this%n-1) + f(:,:,this%n-3)) &
+                                  + c10 * (-f(:,:,this%n-2)   - two*f(:,:,this%n-1) + f(:,:,this%n-4))
+                
+                RHS(:,:,this%n  ) = a10 * (-f(:,:,this%n-1)   - two*f(:,:,this%n  ) + f(:,:,this%n-1)) &
+                                  + b10 * (-f(:,:,this%n-2)   - two*f(:,:,this%n  ) + f(:,:,this%n-2)) &
+                                  + c10 * (-f(:,:,this%n-3)   - two*f(:,:,this%n  ) + f(:,:,this%n-3))
+            end select
 
         end select
    
     end subroutine  
     
-    subroutine dd1(this, f, df, na, nb)
+    subroutine dd1(this, f, df, na, nb, bc1_, bcn_)
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: na, nb
+        integer, optional, intent(in) :: bc1_, bcn_
+        integer :: bc1, bcn
         real(rkind), dimension(this%n,na,nb), intent(in)  :: f
         real(rkind), dimension(this%n,na,nb), intent(out) :: df
 
@@ -1488,20 +2039,68 @@ contains
             return
         end if
         
-        call this%ComputeXD1RHS(f, df, na, nb)
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
+
+        call this%ComputeXD1RHS(f, df, na, nb, bc1, bcn)
 
         select case (this%periodic)
         case(.TRUE.)
             call this%SolveXLU1(df, na, nb)
         case(.FALSE.)
-            call this%SolveXPenta1(df, na, nb)
+            select case(bc1)
+            case(0) ! Normal non-periodic left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveXPenta1(this%penta1_nn, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveXPenta1(this%penta1_ns, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveXPenta1(this%penta1_na, df, na, nb)
+                end select
+            case(1) ! Symmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveXPenta1(this%penta1_sn, df, na, nb)
+                case(1)  ! Symmetric right boundary
+                    call this%SolveXPenta1(this%penta1_ss, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveXPenta1(this%penta1_sa, df, na, nb)
+                end select
+            case(-1) ! Antisymmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveXPenta1(this%penta1_an, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveXPenta1(this%penta1_as, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveXPenta1(this%penta1_aa, df, na, nb)
+                end select
+            end select
         end select
-    
+        
     end subroutine
 
-    subroutine dd2(this, f, df, na, nb)
+    subroutine dd2(this, f, df, na, nb, bc1_, bcn_)
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: na, nb
+        integer, optional, intent(in) :: bc1_, bcn_
+        integer :: bc1, bcn
         real(rkind), dimension(na,this%n,nb), intent(in) :: f
         real(rkind), dimension(na,this%n,nb), intent(out) :: df
 
@@ -1510,20 +2109,68 @@ contains
             return
         end if
         
-        call this%ComputeYD1RHS(f, df, na, nb)
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
+
+        call this%ComputeYD1RHS(f, df, na, nb, bc1, bcn)
 
         select case (this%periodic)
         case(.TRUE.)
             call this%SolveYLU1(df, na, nb)
         case(.FALSE.)
-            call this%SolveYPenta1(df, na, nb)
+            select case(bc1)
+            case(0) ! Normal non-periodic left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveYPenta1(this%penta1_nn, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveYPenta1(this%penta1_ns, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveYPenta1(this%penta1_na, df, na, nb)
+                end select
+            case(1) ! Symmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveYPenta1(this%penta1_sn, df, na, nb)
+                case(1)  ! Symmetric right boundary
+                    call this%SolveYPenta1(this%penta1_ss, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveYPenta1(this%penta1_sa, df, na, nb)
+                end select
+            case(-1) ! Antisymmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveYPenta1(this%penta1_an, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveYPenta1(this%penta1_as, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveYPenta1(this%penta1_aa, df, na, nb)
+                end select
+            end select
         end select
     
     end subroutine
 
-    subroutine dd3(this, f, df, na, nb)
+    subroutine dd3(this, f, df, na, nb, bc1_, bcn_)
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: na, nb
+        integer, optional, intent(in) :: bc1_, bcn_
+        integer :: bc1, bcn
         real(rkind), dimension(na,nb,this%n), intent(in) :: f
         real(rkind), dimension(na,nb,this%n), intent(out) :: df
 
@@ -1532,78 +2179,269 @@ contains
             return
         end if
         
-        call this%ComputeZD1RHS(f, df, na, nb)
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
+
+        call this%ComputeZD1RHS(f, df, na, nb, bc1, bcn)
 
         select case (this%periodic)
         case(.TRUE.)
             call this%SolveZLU1(df, na, nb)
         case(.FALSE.)
-            call this%SolveZPenta1(df, na, nb)
+            select case(bc1)
+            case(0) ! Normal non-periodic left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveZPenta1(this%penta1_nn, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveZPenta1(this%penta1_ns, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveZPenta1(this%penta1_na, df, na, nb)
+                end select
+            case(1) ! Symmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveZPenta1(this%penta1_sn, df, na, nb)
+                case(1)  ! Symmetric right boundary
+                    call this%SolveZPenta1(this%penta1_ss, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveZPenta1(this%penta1_sa, df, na, nb)
+                end select
+            case(-1) ! Antisymmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveZPenta1(this%penta1_an, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveZPenta1(this%penta1_as, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveZPenta1(this%penta1_aa, df, na, nb)
+                end select
+            end select
         end select
     
     end subroutine
 
-    subroutine d2d1(this, f, df, na, nb)
+    subroutine d2d1(this, f, df, na, nb, bc1_, bcn_)
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: na, nb
         real(rkind), dimension(this%n,na,nb), intent(in) :: f
         real(rkind), dimension(this%n,na,nb), intent(out) :: df
+        integer, optional, intent(in) :: bc1_, bcn_
+        integer :: bc1, bcn
 
         if(this%n == 1) then
             df = zero
             return
         end if
         
-        call this%ComputeXD2RHS(f, df, na, nb)
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
+
+        call this%ComputeXD2RHS(f, df, na, nb, bc1, bcn)
+
         select case (this%periodic)
         case(.TRUE.)
             call this%SolveXLU2(df, na, nb)
         case(.FALSE.)
-            call this%SolveXPenta2(df, na, nb)
+            select case(bc1)
+            case(0) ! Normal non-periodic left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveXPenta2(this%penta2_nn, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveXPenta2(this%penta2_ns, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveXPenta2(this%penta2_na, df, na, nb)
+                end select
+            case(1) ! Symmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveXPenta2(this%penta2_sn, df, na, nb)
+                case(1)  ! Symmetric right boundary
+                    call this%SolveXPenta2(this%penta2_ss, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveXPenta2(this%penta2_sa, df, na, nb)
+                end select
+            case(-1) ! Antisymmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveXPenta2(this%penta2_an, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveXPenta2(this%penta2_as, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveXPenta2(this%penta2_aa, df, na, nb)
+                end select
+            end select
         end select
     
     end subroutine
 
-    subroutine d2d2(this, f, df, na, nb)
+    subroutine d2d2(this, f, df, na, nb, bc1_, bcn_)
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: na, nb
         real(rkind), dimension(na,this%n,nb), intent(in) :: f
         real(rkind), dimension(na,this%n,nb), intent(out) :: df
+        integer, optional, intent(in) :: bc1_, bcn_
+        integer :: bc1, bcn
 
         if(this%n == 1) then
             df = zero
             return
         end if
         
-        call this%ComputeYD2RHS(f, df, na, nb)
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
+
+        call this%ComputeYD2RHS(f, df, na, nb, bc1, bcn)
 
         select case (this%periodic)
         case(.TRUE.)
             call this%SolveYLU2(df, na, nb)
         case(.FALSE.)
-            call this%SolveYPenta2(df, na, nb)
+            select case(bc1)
+            case(0) ! Normal non-periodic left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveYPenta2(this%penta2_nn, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveYPenta2(this%penta2_ns, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveYPenta2(this%penta2_na, df, na, nb)
+                end select
+            case(1) ! Symmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveYPenta2(this%penta2_sn, df, na, nb)
+                case(1)  ! Symmetric right boundary
+                    call this%SolveYPenta2(this%penta2_ss, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveYPenta2(this%penta2_sa, df, na, nb)
+                end select
+            case(-1) ! Antisymmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveYPenta2(this%penta2_an, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveYPenta2(this%penta2_as, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveYPenta2(this%penta2_aa, df, na, nb)
+                end select
+            end select
         end select
     
     end subroutine
 
-    subroutine d2d3(this, f, df, na, nb)
+    subroutine d2d3(this, f, df, na, nb, bc1_, bcn_)
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: na, nb
         real(rkind), dimension(na,nb,this%n), intent(in) :: f
         real(rkind), dimension(na,nb,this%n), intent(out) :: df
+        integer, optional, intent(in) :: bc1_, bcn_
+        integer :: bc1, bcn
 
         if(this%n == 1) then
             df = zero
             return
         end if
         
-        call this%ComputeZD2RHS(f, df, na, nb)
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
+
+        call this%ComputeZD2RHS(f, df, na, nb, bc1, bcn)
 
         select case (this%periodic)
         case(.TRUE.)
             call this%SolveZLU2(df, na, nb)
         case(.FALSE.)
-            call this%SolveZPenta2(df, na, nb)
+            select case(bc1)
+            case(0) ! Normal non-periodic left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveZPenta2(this%penta2_nn, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveZPenta2(this%penta2_ns, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveZPenta2(this%penta2_na, df, na, nb)
+                end select
+            case(1) ! Symmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveZPenta2(this%penta2_sn, df, na, nb)
+                case(1)  ! Symmetric right boundary
+                    call this%SolveZPenta2(this%penta2_ss, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveZPenta2(this%penta2_sa, df, na, nb)
+                end select
+            case(-1) ! Antisymmetric left boundary
+                select case(bcn)
+                case(0)  ! Normal non-periodic right boundary
+                    call this%SolveZPenta2(this%penta2_an, df, na, nb)
+                case(1) ! Symmetric right boundary
+                    call this%SolveZPenta2(this%penta2_as, df, na, nb)
+                case(-1) ! Antisymmetric right boundary
+                    call this%SolveZPenta2(this%penta2_aa, df, na, nb)
+                end select
+            end select
         end select
     
     end subroutine
