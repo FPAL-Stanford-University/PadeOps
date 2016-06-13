@@ -2,7 +2,7 @@
 
 CWD=`pwd`
 export COMPILER_ID=Intel
-export FC="mpiifort -I/usr/local/tools/mvapich-intel/include/f90base"
+export FC="mpiifort -I/usr/local/tools/mvapich-intel/include/f90base -L/opt/intel-14.0/mkl/lib/intel64"
 export CC=mpiicc
 export CXX=mpiicpc
 export FFTW_PATH=${CWD}/dependencies/fftw-3.3.4

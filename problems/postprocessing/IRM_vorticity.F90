@@ -68,12 +68,12 @@ contains
 
     subroutine write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
                             R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi, &
-                            pdil, meandiss, production, dissipation, pdil_fluct)
+                            pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport)
         integer, intent(in) :: step
         real(rkind), dimension(:,:,:), intent(in) :: vort_avgz
         real(rkind), dimension(:,:),   intent(in) :: TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation
         real(rkind), dimension(:,:),   intent(in) :: R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi
-        real(rkind), dimension(:,:),   intent(in) :: pdil, meandiss, production, dissipation, pdil_fluct
+        real(rkind), dimension(:,:),   intent(in) :: pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport
 
         character(len=clen) :: post2d_file
         integer :: i, ierr, iounit2d=91
@@ -118,6 +118,7 @@ contains
                     write(iounit2d) production
                     write(iounit2d) dissipation
                     write(iounit2d) pdil_fluct
+                    write(iounit2d) tke_visc_transport
                     close(iounit2d)
                 end if
             end if
@@ -667,11 +668,11 @@ contains
         end do
     end subroutine
 
-    subroutine get_dissipation(upp,vpp,wpp,tauij,dissipation,pdil_fluct)
-        use operators, only: gradient
+    subroutine get_dissipation(upp,vpp,wpp,tauij,dissipation,pdil_fluct, tke_visc_transport)
+        use operators, only: gradient, divergence
         real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)   ),         intent(in)  :: upp,vpp,wpp
         real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 6), target, intent(in)  :: tauij
-        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)),                           intent(out) :: dissipation, pdil_fluct
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)),                           intent(out) :: dissipation, pdil_fluct, tke_visc_transport
         
         real(rkind), dimension(:,:,:), pointer :: tauxx, tauxy, tauxz, tauyy, tauyz, tauzz
         real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) :: ytmp1,ytmp2,ytmp3,diss,pdil
@@ -679,6 +680,12 @@ contains
         tauxx => tauij(:,:,:,1); tauxy => tauij(:,:,:,2); tauxz => tauij(:,:,:,3);
                                  tauyy => tauij(:,:,:,4); tauyz => tauij(:,:,:,5);
                                                           tauzz => tauij(:,:,:,6);
+
+        ytmp1 = tauxx*upp + tauxy*vpp + tauxz*wpp
+        ytmp2 = tauxy*upp + tauyy*vpp + tauyz*wpp
+        ytmp3 = tauxz*upp + tauyz*vpp + tauzz*wpp
+        call divergence( mir%gp, der, ytmp1, ytmp2, ytmp3, diss )
+        call P_AVGZ( mir%gp, diss, tke_visc_transport )
 
         ! Dissipation = <tau_ij dupp_i/dx_j>
         call gradient(mir%gp,der,upp,ytmp1,ytmp2,ytmp3)
@@ -775,7 +782,7 @@ program IRM_vorticity
     real(rkind), dimension(:,:), pointer :: rho_avg, u_avg, v_avg, w_avg, CO2_avg, TKE_avg, div_avg, chi_avg, MMF_avg, density_self_correlation
     real(rkind), dimension(:,:), pointer :: R11, R12, R13, R22, R23, R33
     real(rkind), dimension(:,:), pointer :: a_x, a_y, a_z, rhop_sq, eta, xi
-    real(rkind), dimension(:,:), pointer :: p_avg, pdil, meandiss, production, dissipation, pdil_fluct
+    real(rkind), dimension(:,:), pointer :: p_avg, pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport
 
     real(rkind), dimension(:,:,:,:), allocatable :: duidxj, tauij
     real(rkind), dimension(:,:,:),   allocatable :: duidxj2D, tauij_avg
@@ -875,7 +882,7 @@ program IRM_vorticity
     Rij    => buffer(:,:,:,i)
 
     ! Allocate 2D buffer and associate pointers for convenience
-    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 31 ) )
+    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 32 ) )
     vort_avgz                => buffer2d(:,:,1:3)
     rho_avg                  => buffer2d(:,:,4 )
     u_avg                    => buffer2d(:,:,5 )
@@ -905,6 +912,7 @@ program IRM_vorticity
     production               => buffer2d(:,:,29)
     dissipation              => buffer2d(:,:,30)
     pdil_fluct               => buffer2d(:,:,31)
+    tke_visc_transport       => buffer2d(:,:,32)
     
     allocate( xtmp1( mir%gp%xsz(1), mir%gp%xsz(2), 1 ) )
     allocate( xtmp2( mir%gp%xsz(1), mir%gp%xsz(2), 1 ) )
@@ -1173,7 +1181,8 @@ program IRM_vorticity
         call get_production(R11,R12,R13,R22,R23,R33,duidxj2D,rho_avg,production)
 
         ! Turbulent dissipation and fluctuation pressure-dilatation
-        call get_dissipation(upp,vpp,wpp,tauij,dissipation,pdil_fluct)
+        call get_dissipation(upp,vpp,wpp,tauij,dissipation,pdil_fluct, tke_visc_transport)
+
 
         !!!! Energetics ----------------------------------
         !!!! =============================================
@@ -1192,7 +1201,7 @@ program IRM_vorticity
         ! Write out 2D postprocessing file
         call write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
                           R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi, &
-                          pdil, meandiss, production, dissipation, pdil_fluct)
+                          pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport)
 
         write(time_message,'(A,I4,A)') "Time to postprocess step ", step, " :"
         call toc(trim(time_message))
