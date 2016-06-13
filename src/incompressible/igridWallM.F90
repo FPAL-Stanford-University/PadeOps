@@ -1585,6 +1585,8 @@ contains
             this%q2_mean => this%zStats2dump(:,32);  this%q3_mean => this%zStats2Dump(:,33)
         end if 
         this%runningSum = zero
+        this%TemporalMnNOW = zero
+        this%zStats2dump = zero
         nullify(gpC)
     end subroutine
 
@@ -1682,7 +1684,7 @@ contains
             
             ! wT mean
             rbuff5 = rbuff5*rbuff6
-            call this%compute_z_mean(rbuff5, this%vT_mean)
+            call this%compute_z_mean(rbuff5, this%wT_mean)
             
             ! TT mean
             rbuff6 = rbuff6*rbuff6
