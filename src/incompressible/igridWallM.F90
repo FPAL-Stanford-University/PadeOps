@@ -1809,6 +1809,7 @@ contains
                 ! q2
                 call transpose_x_to_y(this%q3,rbuff2E,this%gpE)
                 call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+                rbuff3E(:,:,1) = this%wTh_surf
                 call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
                 call this%compute_z_mean(rbuff3, this%q3_mean)    
             end if 
