@@ -235,12 +235,6 @@ program upsampleFields
     else
         deallocate(fxyup_inX)    
     end if 
-    deallocate(f, fxup_inX, fxup_inY, fxyup_inY)
-    if (UpsampleInZ) then
-        deallocate(fxyup_inZ, fxyzup_inX, fxyzup_inY, fxyzup_inZ)
-    else
-        deallocate(fxyup_inX)    
-    end if 
 
     !!!!!!!!!!!!! EDGE FIELDS !!!!!!!!!!!!!!!
     allocate(f(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
