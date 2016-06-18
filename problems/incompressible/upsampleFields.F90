@@ -64,7 +64,11 @@ module RoutinesUpsampling
         do k = 2,2*nz-1,2
             arrOut(:,:,k) = arrIn(:,:,idx) + (arrIn(:,:,idx + 1) - arrIn(:,:,idx))*ratEven
             idx = idx + 1
-        end do 
+        end do
+   
+        arrOut(:,:,1) = 2.d0*arrOut(:,:,2) - arrOut(:,:,3)
+        arrOut(:,:,2*nz) = arrOut(:,:,2*nz - 1) 
+
     end subroutine
 
 
@@ -84,6 +88,8 @@ module RoutinesUpsampling
             arrOut(:,:,2*k) = 0.5d0*(arrOut(:,:,2*k-1) + arrOut(:,:,2*k+1))
         end do 
 
+        arrOut(:,:,2*nz+1) = 0.d0
+        arrOut(:,:,1) = 0.d0
     end subroutine
 
 end module
@@ -264,7 +270,7 @@ program upsampleFields
 
     if (UpsampleInZ) then
         call transpose_y_to_z(fxyup_inY,fxyup_inZ,gpE_upXY)
-        call upsampleZ_cells(fxyup_inZ,fxyzup_inZ)
+        call upsampleZ_edges(fxyup_inZ,fxyzup_inZ)
         call transpose_z_to_y(fxyzup_inZ,fxyzup_inY,gpE_upXYZ)
         call transpose_y_to_x(fxyzup_inY,fxyzup_inX,gpE_upXYZ)
         call decomp_2d_write_one(1,fxyzup_inX,fname, gpE_upXYZ)
