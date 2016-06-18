@@ -16,7 +16,7 @@ module sgsmod
     private
     public :: sgs
 
-    real(rkind) :: c_sigma = 1.2_rkind
+    real(rkind) :: c_sigma = 1.5_rkind
     real(rkind) :: c_smag = 0.17_rkind
     real(rkind) :: c_mgm = 1.0_rkind
     integer, parameter     :: mgm_option = 2
