@@ -6,6 +6,7 @@ module impact_data
     real(rkind) :: uimpact = 100._rkind
     real(rkind) :: pinit   = real(1.0D5,rkind)
     real(rkind) :: rho_0
+    real(rkind) :: thick = 1.1_rkind
 
 end module
 
@@ -74,7 +75,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
 
-    namelist /PROBINPUT/  uimpact
+    namelist /PROBINPUT/  uimpact, thick
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -93,7 +94,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
-        tmp = tanh( (x-half)/dx )
+        !tmp = tanh( (x-half)/(thick*dx) )
+        tmp = tanh( (x-half)/(0.01d0) )
 
         u   = -uimpact*tmp
         v   = zero
@@ -112,12 +114,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
 
 end subroutine
 
-subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
+subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
-                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
+                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index, &
+                                sxx_index,sxy_index,sxz_index,syy_index,syz_index,szz_index
     use decomp_2d,        only: decomp_info
+    use DerivativesMod,   only: derivatives
 
     use impact_data
 
@@ -128,10 +132,11 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    type(derivatives),               intent(in) :: der
     integer                                     :: outputunit=229
 
     character(len=clen) :: outputfile, velstr
-    integer :: i
+    integer :: i,j,k
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -141,18 +146,47 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
                g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
                g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
                g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
-                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3),       &
+               sxx => fields(:,:,:, sxx_index), sxy => fields(:,:,:, sxy_index), sxz => fields(:,:,:, sxz_index), &
+               syy => fields(:,:,:, syy_index), syz => fields(:,:,:, syz_index), szz => fields(:,:,:, szz_index)  )
+
 
         write(velstr,'(I3.3)') int(uimpact)
         write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/impact_"//trim(velstr)//"_", vizcount, ".dat"
 
-        open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
-        do i=1,decomp%ysz(1)
-            write(outputunit,'(10ES26.16)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
-                                           g11(i,1,1), g21(i,1,1), mu(i,1,1), bulk(i,1,1), kap(i,1,1)
-        
-        end do
-        close(outputunit)
+        if(vizcount==0) then
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
+          write(outputunit,'(200a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar"'
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                write(outputunit,'(27ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                                               g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
+                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k)
+          
+            end do
+           end do
+          end do
+          close(outputunit)
+        else
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                write(outputunit,'(24ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                                               g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
+                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k)
+          
+            end do
+           end do
+          end do
+          close(outputunit)
+        endif
 
     end associate
 end subroutine

@@ -11,6 +11,7 @@ module poissonMod
     private
     public :: poisson
 
+    complex(rkind), parameter :: zeroC = zero + imi*zero 
     type :: poisson
         private
         integer :: nx_in, ny_in, nz_in
@@ -31,6 +32,7 @@ module poissonMod
         type(staggOps), pointer :: Ops    
         complex(rkind), dimension(:,:,:), allocatable :: tmpbuff, tmpbuffz1C, tmpbuffz2C, tmpbuffz1E, tmpbuffz2E 
 
+        logical :: usingWallModel = .false. 
 
         contains
             procedure :: init
@@ -38,6 +40,7 @@ module poissonMod
             procedure :: PressureProj
             procedure :: PoissonSolveZ    
             procedure, private :: PoissonSolveZ_InPlace   
+            procedure, private :: PoissonSolveZ_InPlace_WallM 
             procedure :: allocArrZ   
             procedure :: PressureProjNP
             procedure :: DivergenceCheck 
@@ -79,7 +82,7 @@ contains
         this%tmpbuff(:,this%sp_gp%ysz(2)/2+1,:) = zero
         call this%spect%ifft(this%tmpbuff,divergence,.true.)
 
-        maxDiv = p_maxval(maxval(abs(divergence)))
+        maxDiv = p_maxval(maxval(divergence))
         
         if (maxDiv>1D-12) then
             !call message(3,"Divergence not zero, repeating projection")
@@ -105,11 +108,11 @@ contains
             ! Compute IFFT to go back from y -> x
             this%tmpbuff(:,this%sp_gp%ysz(2)/2+1,:) = zero
             call this%spect%ifft(this%tmpbuff,divergence,.true.)
-            maxDiv = p_maxval(maxval(abs(divergence)))
-            if (maxDiv > 1D-12) then
-                    call GracefulExit("Divergence is not zero. Terminating run.",4324)
-            end if 
-            !call message(0,"Divergence is now:", p_maxval(maxval(abs(divergence))))
+            maxDiv = p_maxval(maxval(divergence))
+            !if (maxDiv > 1D-12) then
+            !        call GracefulExit("Divergence is not zero. Terminating run.",4324)
+            !end if 
+            call message(0,"WARNING: Divergence is now:", p_maxval(maxval(abs(divergence))))
         end if 
 
 
@@ -126,13 +129,20 @@ contains
     end subroutine
 
 
-    subroutine init(this,spect,PeriodicVertical,dx,dy,dz,Ops,spectE)
+    subroutine init(this,spect,PeriodicVertical,dx,dy,dz,Ops,spectE, usingWallModel)
         class(poisson), intent(inout) :: this
         class(spectral), intent(in), target :: spect
         class(spectral), intent(in), target, optional :: spectE
         logical, intent(in), optional :: PeriodicVertical
         real(rkind), optional :: dx, dy, dz
         type(staggOps), optional, target :: Ops
+        logical, intent(in), optional :: usingWallModel
+
+        if(present(usingWallModel)) then
+            this%usingWallModel = usingWallModel
+        else
+            this%usingWallModel = .false. 
+        end if  
        
         if (present(PeriodicVertical)) then
             this%zperiodic = PeriodicVertical
@@ -206,10 +216,10 @@ contains
     end subroutine
 
     subroutine PressureProjNP(this,uhat,vhat,what)
-        class(poisson), intent(inout) :: this
+        class(poisson), intent(inout), target :: this
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: uhat, vhat
         complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: what
-
+        complex(rkind), dimension(:,:), pointer :: dpdz0, dpdzN
 
         ! Compute dudx_hat and add dvdy_hat
         this%tmpbuff = this%spect%k1*uhat 
@@ -223,16 +233,25 @@ contains
         ! Compute dwdz_hat and add
         call this%Ops%ddz_E2C(this%tmpbuffz1E,this%tmpbuffz2C)
         this%tmpbuffz1C = this%tmpbuffz1C + this%tmpbuffz2C
-
+        
         ! Poisson Solver in z decomp
-        call this%PoissonSolveZ_inPlace(this%tmpbuffz1C)
-
+        if (this%usingWallModel) then
+            dpdz0 => this%tmpbuffz1E(:,:,1)
+            dpdzN => this%tmpbuffz1E(:,:,this%nz_inZ+1)
+            call this%PoissonSolveZ_inPlace_WallM(this%tmpbuffz1C, dpdz0, dpdzN)
+        else
+            call this%PoissonSolveZ_inPlace(this%tmpbuffz1C)
+        end if
 
         ! Compute dpdz_hat and project out what
         call this%Ops%ddz_C2E(this%tmpbuffz1C,this%tmpbuffz2E,.true.,.true.)
+        if (this%usingWallModel) then
+            this%tmpbuffz2E(:,:,1) = dpdz0
+            this%tmpbuffz2E(:,:,this%nz_inZ+1) = dpdzN
+        end if 
         this%tmpbuffz1E = this%tmpbuffz1E - this%tmpbuffz2E
-        this%tmpbuffz1E(:,:,1) = zero
-        this%tmpbuffz1E(:,:,this%sp_gpE%zsz(3)) = zero
+        this%tmpbuffz1E(:,:,1) = zeroC ! <- This should be zero either way
+        this%tmpbuffz1E(:,:,this%sp_gpE%zsz(3)) = zeroC
 
         ! Transpose z -> y
         call transpose_z_to_y(this%tmpbuffz1E,what,this%sp_gpE)
@@ -360,6 +379,50 @@ contains
         end do 
 
     end subroutine    
+
+
+    subroutine PoissonSolveZ_InPlace_WallM(this,fhat,dpdz0, dpdzN)
+        ! Assuming that everything is in z-decomp
+        class(poisson), intent(in) :: this 
+        complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)), intent(inout):: fhat
+        complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2)), intent(in):: dpdz0, dpdzN
+        real(rkind), dimension(this%nz_inZ) :: a, b, c
+        integer :: i, j, ii, jj
+        real(rkind) :: k1, k2, aa       
+        complex(rkind), dimension(this%nz_inZ) :: y, rhs
+       
+
+        jj = 1
+        do j = this%sp_gp%zst(2),this%sp_gp%zen(2)
+            ii = 1
+            do i = this%sp_gp%zst(1),this%sp_gp%zen(1)
+                k1 = this%k1_inZ(i)
+                k2 = this%k2_inZ(j)
+                
+                rhs = this%dzsq*fhat(ii,jj,:)
+                
+                if ((i == 1).and. (j == 1)) then
+                    call genTridiag2ndOrder(k1,k2,this%dz,this%nz_inZ,a,b,c)
+                    a(1) = one; b(1) = zero; c(1) = zero
+                    rhs(1) = zero
+                    call solveTridiag_Poiss(a,b,c,rhs,y,this%nz_inZ)
+                    fhat(ii,jj,:) = y
+                else
+                    aa = (-(k1*this%dz)**2 - (k2*this%dz)**2 - two)
+                    rhs(1) = rhs(1) + this%dz*dpdz0(ii,jj)
+                    rhs(this%nz_inZ) = rhs(this%nz_inZ) + this%dz*dpdzN(ii,jj)
+                    call solveTridiag_Poiss_InPlace_quick(aa,one,one,rhs,this%nz_inZ)
+                    fhat(ii,jj,:) = rhs
+                end if 
+                ii = ii + 1
+            end do
+            jj = jj + 1 
+        end do 
+
+    end subroutine    
+
+
+
 
     pure subroutine genTridiag2ndOrder(k1,k2,dz,n,a,b,c)
         real(rkind), intent(in) :: k1, k2, dz

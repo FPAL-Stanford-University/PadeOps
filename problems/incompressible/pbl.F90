@@ -9,7 +9,7 @@
 program pbl
     use mpi
     use kind_parameters,  only: rkind,clen,stdout,stderr
-    use IncompressibleGridNP, only: igrid
+    use IncompressibleGridWallM, only: igridWallM
     use pbl_IO, only: start_io, finalize_io
     use constants, only: half 
     use temporalhook, only: doTemporalStuff
@@ -18,7 +18,7 @@ program pbl
 
     implicit none
 
-    type(igrid), allocatable, target :: igp
+    type(igridWallM), allocatable, target :: igp
     character(len=clen) :: inputfile
     integer :: ierr
 
@@ -40,9 +40,6 @@ program pbl
     do while (igp%tsim < igp%tstop) 
        
        call igp%AdamsBashforth()     !<-- Time stepping scheme + Pressure Proj. (see hit_grid.F90)
-      
-       igp%step = igp%step + 1 
-       igp%tsim = igp%tsim + igp%dt
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
     end do 
     

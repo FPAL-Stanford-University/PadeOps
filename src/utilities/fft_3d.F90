@@ -50,6 +50,19 @@ module fft_3d_stuff
 
         logical :: fixOddball = .false. 
         logical :: initialized = .false.
+        logical :: dodealiasing = .true. 
+
+
+        !!!!!! Dealiasing stuff !!!!!!!!!
+        ! Upsampling
+        integer :: nxF, nyF 
+        complex(rkind), dimension(:,:,:), allocatable :: d11x, d11y, d21y, d21x, d31x, d31y
+        type(decomp_info) :: D1, D2, PhysicalUP, D3
+        integer(kind=8) :: plan_bwd_d21x, plan_bwd_d21y, plan_fwd_d11y, plan_fwd_d21x, plan_fwd_d31y
+        
+        type(decomp_info), pointer :: D4
+        complex(rkind), dimension(:,:,:), allocatable :: d41y, d41x
+        real(rkind) :: dealiasNormFact
 
         integer :: fft_plan = FFTW_MEASURE
         contains
@@ -64,23 +77,27 @@ module fft_3d_stuff
             procedure :: fft2_x2y
             procedure :: destroy
             procedure :: alloc_input
+            procedure :: upsample
+            procedure :: downsample
+            procedure :: alloc_upsampledArr
             procedure, private :: alloc_3d_real
             procedure, private :: alloc_3d_cmplx
-            procedure, private :: alloc_4d 
+            procedure, private :: alloc_4d
+            procedure, private :: init_dealiasing_stuff 
             generic   :: alloc_output => alloc_3d_real, alloc_3d_cmplx, alloc_4d
     end type 
 
 
 contains
 
-    function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, exhaustive, fixOddball_, allocK) result(ierr)
+function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, exhaustive, fixOddball_, allocK, dodealiasing) result(ierr)
         class(fft_3d), intent(inout) :: this
         integer, intent(in) :: nx_global, ny_global, nz_global
         character(len=1), intent(in) :: base_pencil_
         real(rkind), intent(in) :: dx, dy,dz
         logical, optional :: exhaustive
         logical, optional :: fixOddball_
-        logical, optional :: allocK
+        logical, optional :: allocK, dodealiasing
         integer :: ierr, i, j, k
         integer, dimension(2) :: dims, dummy_periods, dummy_coords
         real(rkind), dimension(:,:), allocatable :: real_arr_2d
@@ -99,6 +116,9 @@ contains
                 dims, dummy_periods, dummy_coords, ierr) 
 
 
+        if (present(dodealiasing)) then
+            this%dodealiasing = dodealiasing 
+        end if 
         if ((base_pencil_ == "y") .or. (base_pencil_ == "z")) then
             if ( (mod(ny_global,2) .ne. 0) .or. (mod(nx_global,2) .ne. 0) .or. (mod(nz_global,2) .ne. 0) ) then
                 call decomp_2d_abort(301,"Only even number of data are supported &
@@ -324,7 +344,10 @@ contains
          this%normfactor   = 1._rkind/(real(nx_global*ny_global*nz_global,rkind))
          this%normfactor2d = 1._rkind/(real(nx_global*ny_global,rkind))
 
-       
+         if (this%dodealiasing) then
+            call this%init_dealiasing_stuff(nx_global, ny_global, nz_global)
+         end if 
+
          if (this%allocK) then 
             ! Make wavenumbers
             allocate (k1_in_x(nx_global           ,this%spectral%xsz(2),this%spectral%xsz(3)))
@@ -573,25 +596,6 @@ contains
         ! Done 
     end subroutine
 
-    subroutine fft2_x2y(this,input,output)
-        class(fft_3d), intent(inout) :: this
-        real(rkind), dimension(this%physical%xsz(1),this%physical%xsz(2),this%physical%xsz(3)), intent(in) :: input
-        complex(rkind), dimension(size(this%f_xyhat_in_yD,1),size(this%f_xyhat_in_yD,2),size(this%f_xyhat_in_yD,3)), intent(out) :: output
-       
-        integer :: k
-
-        ! First get the x tranform (r2c)
-        call dfftw_execute_dft_r2c(this%plan_r2c_x, input, this%f_xhat_in_xD)  
-
-        ! Now transpose from x-> y
-        call transpose_x_to_y(this%f_xhat_in_xD,output,this%spectral)
-       
-        ! The take fwd transform in y (c2c, inplace)
-        do k = 1,this%spectral%ysz(3)
-            call dfftw_execute_dft(this%plan_c2c_fwd_y, output(:,:,k), output(:,:,k))  
-        end do 
-
-    end subroutine
 
     subroutine ifft2_y2x(this,input,output,setOddBall)
         class(fft_3d), intent(inout) :: this
@@ -622,7 +626,31 @@ contains
 
     end subroutine        
    
- 
+    subroutine fft2_x2y(this,input,output)
+        class(fft_3d), intent(inout) :: this
+        real(rkind), dimension(this%physical%xsz(1),this%physical%xsz(2),this%physical%xsz(3)), intent(in) :: input
+        complex(rkind), dimension(size(this%f_xyhat_in_yD,1),size(this%f_xyhat_in_yD,2),size(this%f_xyhat_in_yD,3)), intent(out) :: output
+       
+        integer :: k
+
+        ! First get the x tranform (r2c)
+        call dfftw_execute_dft_r2c(this%plan_r2c_x, input, this%f_xhat_in_xD)  
+
+        ! Now transpose from x-> y
+        call transpose_x_to_y(this%f_xhat_in_xD,output,this%spectral)
+       
+        ! The take fwd transform in y (c2c, inplace)
+        do k = 1,this%spectral%ysz(3)
+            call dfftw_execute_dft(this%plan_c2c_fwd_y, output(:,:,k), output(:,:,k))  
+        end do 
+
+    end subroutine
+
+#include "dealiasing_files/DealiasingInit.F90"
+#include "dealiasing_files/UpDnSamplingStuff.F90"
+
+
+
     subroutine ifft3_z2x(this,input,output)
         class(fft_3d), intent(inout) :: this
         complex(rkind), dimension(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)), intent(in) :: input
@@ -677,7 +705,7 @@ contains
 
     subroutine ifft3_x2z(this,input,output)
         class(fft_3d), intent(inout) :: this
-        complex(rkind), dimension(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)), intent(out) :: input
+        complex(rkind), dimension(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)), intent(in) :: input
         real(rkind), dimension(this%physical%zsz(1),this%physical%zsz(2),this%physical%zsz(3)), intent(out) :: output
         integer :: k 
 

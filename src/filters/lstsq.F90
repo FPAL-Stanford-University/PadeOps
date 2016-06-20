@@ -61,7 +61,9 @@ module lstsqstuff
 
         procedure :: filter1
         procedure :: filter2
-        procedure :: filter3
+        procedure :: filter3_real
+        procedure :: filter3_cmplx
+        generic :: filter3 => filter3_real, filter3_cmplx
         
     end type
 
@@ -317,7 +319,7 @@ contains
     
     end subroutine
 
-    pure subroutine filter3(this, f, fil, n1, n2)
+    pure subroutine filter3_real(this, f, fil, n1, n2)
     
         class( lstsq ), intent(in) :: this
         integer, intent(in) :: n1, n2
@@ -418,4 +420,104 @@ contains
     
     end subroutine
     
+    pure subroutine filter3_cmplx(this, f, fil, n1, n2)
+    
+        class( lstsq ), intent(in) :: this
+        integer, intent(in) :: n1, n2
+        complex(rkind), dimension(n1,n2,this%n), intent(in) :: f
+        complex(rkind), dimension(n1,n2,this%n), intent(out) :: fil
+    
+        if(this%n == 1) then
+            fil = f
+            return
+        end if
+    
+        select case (this%periodic)
+        case (.TRUE.)
+                fil(:,:,         1) = als * ( f(:,:,         1) )                     &
+                                    + bls * ( f(:,:,         2) + f(:,:,    this%n) ) &
+                                    + cls * ( f(:,:,         3) + f(:,:,  this%n-1) ) &
+                                    + dls * ( f(:,:,         4) + f(:,:,  this%n-2) ) &
+                                    + els * ( f(:,:,         5) + f(:,:,  this%n-3) )
+                fil(:,:,         2) = als * ( f(:,:,         2) )                     &
+                                    + bls * ( f(:,:,         3) + f(:,:,         1) ) &
+                                    + cls * ( f(:,:,         4) + f(:,:,    this%n) ) &
+                                    + dls * ( f(:,:,         5) + f(:,:,  this%n-1) ) &
+                                    + els * ( f(:,:,         6) + f(:,:,  this%n-2) )
+                fil(:,:,         3) = als * ( f(:,:,         3) )                     &
+                                    + bls * ( f(:,:,         4) + f(:,:,         2) ) &
+                                    + cls * ( f(:,:,         5) + f(:,:,         1) ) &
+                                    + dls * ( f(:,:,         6) + f(:,:,    this%n) ) &
+                                    + els * ( f(:,:,         7) + f(:,:,  this%n-1) )
+                fil(:,:,         4) = als * ( f(:,:,         4) )                     &
+                                    + bls * ( f(:,:,         5) + f(:,:,         3) ) &
+                                    + cls * ( f(:,:,         6) + f(:,:,         2) ) &
+                                    + dls * ( f(:,:,         7) + f(:,:,         1) ) &
+                                    + els * ( f(:,:,         8) + f(:,:,    this%n) )
+                fil(:,:,5:this%n-4) = als * ( f(:,:,5:this%n-4) )                     &
+                                    + bls * ( f(:,:,6:this%n-3) + f(:,:,4:this%n-5) ) &
+                                    + cls * ( f(:,:,7:this%n-2) + f(:,:,3:this%n-6) ) &
+                                    + dls * ( f(:,:,8:this%n-1) + f(:,:,2:this%n-7) ) &
+                                    + els * ( f(:,:,9:this%n  ) + f(:,:,1:this%n-8) )
+                fil(:,:,  this%n-3) = als * ( f(:,:,  this%n-3) )                     &
+                                    + bls * ( f(:,:,  this%n-2) + f(:,:,  this%n-4) ) &
+                                    + cls * ( f(:,:,  this%n-1) + f(:,:,  this%n-5) ) &
+                                    + dls * ( f(:,:,    this%n) + f(:,:,  this%n-6) ) &
+                                    + els * ( f(:,:,         1) + f(:,:,  this%n-7) )
+                fil(:,:,  this%n-2) = als * ( f(:,:,  this%n-2) )                     &
+                                    + bls * ( f(:,:,  this%n-1) + f(:,:,  this%n-3) ) &
+                                    + cls * ( f(:,:,    this%n) + f(:,:,  this%n-4) ) &
+                                    + dls * ( f(:,:,         1) + f(:,:,  this%n-5) ) &
+                                    + els * ( f(:,:,         2) + f(:,:,  this%n-6) )
+                fil(:,:,  this%n-1) = als * ( f(:,:,  this%n-1) )                     &
+                                    + bls * ( f(:,:,    this%n) + f(:,:,  this%n-2) ) &
+                                    + cls * ( f(:,:,         1) + f(:,:,  this%n-3) ) &
+                                    + dls * ( f(:,:,         2) + f(:,:,  this%n-4) ) &
+                                    + els * ( f(:,:,         3) + f(:,:,  this%n-5) )
+                fil(:,:,    this%n) = als * ( f(:,:,    this%n) )                     &
+                                    + bls * ( f(:,:,         1) + f(:,:,  this%n-1) ) &
+                                    + cls * ( f(:,:,         2) + f(:,:,  this%n-2) ) &
+                                    + dls * ( f(:,:,         3) + f(:,:,  this%n-3) ) &
+                                    + els * ( f(:,:,         4) + f(:,:,  this%n-4) )
+        case (.FALSE.)
+                    
+            fil(:,:,         1) = b1_als * ( f(:,:,         1) )                     &
+                                + b1_bls * ( f(:,:,         2) ) 
+
+            fil(:,:,         2) = b2_als * ( f(:,:,         2) )                     &
+                                + b2_bls * ( f(:,:,         3) + f(:,:,         1) ) 
+            
+            fil(:,:,         3) = b3_als * ( f(:,:,         3) )                     &
+                                + b3_bls * ( f(:,:,         4) + f(:,:,         2) ) &
+                                + b3_cls * ( f(:,:,         5) + f(:,:,         1) )
+
+            fil(:,:,         4) = b4_als * ( f(:,:,         4) )                     &
+                                + b4_bls * ( f(:,:,         5) + f(:,:,         3) ) &
+                                + b4_cls * ( f(:,:,         6) + f(:,:,         2) ) &
+                                + b4_dls * ( f(:,:,         7) + f(:,:,         1) ) 
+
+            fil(:,:,5:this%n-4) =    als * ( f(:,:,5:this%n-4) )                     &
+                                +    bls * ( f(:,:,6:this%n-3) + f(:,:,4:this%n-5) ) &
+                                +    cls * ( f(:,:,7:this%n-2) + f(:,:,3:this%n-6) ) &
+                                +    dls * ( f(:,:,8:this%n-1) + f(:,:,2:this%n-7) ) &
+                                +    els * ( f(:,:,9:this%n  ) + f(:,:,1:this%n-8) )
+
+            fil(:,:,  this%n-3) = b4_als * ( f(:,:,  this%n-3) )                     &
+                                + b4_bls * ( f(:,:,  this%n-2) + f(:,:,  this%n-4) ) &
+                                + b4_cls * ( f(:,:,  this%n-1) + f(:,:,  this%n-5) ) &
+                                + b4_dls * ( f(:,:,    this%n) + f(:,:,  this%n-6) ) 
+
+            fil(:,:,  this%n-2) = b3_als * ( f(:,:,  this%n-2) )                     &
+                                + b3_bls * ( f(:,:,  this%n-1) + f(:,:,  this%n-3) ) &
+                                + b3_cls * ( f(:,:,    this%n) + f(:,:,  this%n-4) ) 
+
+            fil(:,:,  this%n-1) = b2_als * ( f(:,:,  this%n-1) )                     &
+                                + b2_bls * ( f(:,:,    this%n) + f(:,:,  this%n-2) ) 
+
+            fil(:,:,    this%n) = b1_als * ( f(:,:,    this%n) )                     &
+                                + b1_bls * ( f(:,:,  this%n-1) ) 
+
+        end select
+    
+    end subroutine
 end module

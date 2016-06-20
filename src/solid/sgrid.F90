@@ -589,7 +589,7 @@ contains
         call this%get_dt(stability)
 
         ! Write out initial conditions
-        call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
+        call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount, this%der)
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
         vizcond = .FALSE.
         
@@ -602,7 +602,7 @@ contains
 
         tcond = .TRUE.
         ! Check tstop condition
-        if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop) ) then
+        if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop*(one-eps)) ) then
             tcond = .FALSE.
         else if ( (this%tstop > zero) .AND. (this%tsim + this%dt >= this%tstop) ) then
             this%dt = this%tstop - this%tsim
@@ -625,7 +625,6 @@ contains
             call tic()
             call this%advance_RK45()
             call toc(cputime)
-           
             if (hookcond) stability = "hook"
             call message(1,"Time",this%tsim)
             call message(2,"Time step",this%dt)
@@ -635,7 +634,7 @@ contains
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
-                call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
+                call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount, this%der)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
                 vizcond = .FALSE.
             end if
@@ -650,9 +649,9 @@ contains
             end if
 
             ! Check tstop condition
-            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop - eps) ) then
+            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop*(one - eps) ) ) then
                 tcond = .FALSE.
-            else if ( (this%tstop > zero) .AND. (this%tsim + this%dt + eps >= this%tstop) ) then
+            else if ( (this%tstop > zero) .AND. (this%tsim + this%dt >= this%tstop) ) then
                 this%dt = this%tstop - this%tsim
                 stability = 'stop'
                 vizcond = .TRUE.

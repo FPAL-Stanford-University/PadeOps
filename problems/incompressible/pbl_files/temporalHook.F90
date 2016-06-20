@@ -1,6 +1,6 @@
 module temporalHook
     use kind_parameters,    only: rkind
-    use IncompressibleGridNP, only: igrid
+    use IncompressibleGridWallM, only: igridWallM
     use reductions,         only: P_MAXVAL
     use exits,              only: message
     use pbl_IO,           only: dumpData4Matlab 
@@ -11,23 +11,32 @@ module temporalHook
     implicit none 
 
     integer :: nt_print2screen = 20
-    integer :: nt_getMaxKE = 20
     integer :: tid_statsDump = 5000
-    integer :: tid_compStats = 20
-    real(rkind) :: time_startDumping = 200._rkind
+    integer :: tid_compStats = 100
+    real(rkind) :: time_startDumping = 10.0_rkind, maxDiv, DomMaxDiv
     integer :: ierr 
+    
+    integer :: tid_start_planes = 1
+    integer :: tid_stop_planes = 100000
+    integer :: tid_dump_plane_every = 100
+
 contains
 
     subroutine doTemporalStuff(gp)
-        class(igrid), intent(inout) :: gp 
+        class(igridWallM), intent(inout) :: gp 
       
         if (mod(gp%step,nt_print2screen) == 0) then
+            maxDiv = maxval(gp%divergence)
+            DomMaxDiv = p_maxval(maxDiv)
             call message(0,"Time",gp%tsim)
-        end if
-
-        if (mod(gp%step,nt_getMaxKE) == 0) then
             call message(1,"Max KE:",gp%getMaxKE())
             call message(1,"Max nuSGS:",gp%max_nuSGS)
+            call message(1,"u_star:",gp%ustar)
+            call message(1,"TIDX:",gp%step)
+            call message(1,"MaxDiv:", DomMaxDiv)
+            if (gp%useCFL) then
+                call message(1,"Current dt:",gp%dt)
+            end if 
             if ((gp%useDynamicProcedure) .and. (gp%useSGS)) then
                 call message(1,"Max cSGS:",p_maxval(maxval(gp%c_SGS(1,1,:))))
             end if 
@@ -36,22 +45,11 @@ contains
         end if 
 
         if (mod(gp%step,gp%t_dataDump)==0) then
-           call message("Data dump!")
-           call dumpData4Matlab(gp) 
+           call message(0,"Data dump!")
+           call gp%dumpFullField(gp%u,'uVel')
+           call gp%dumpFullField(gp%v,'vVel')
+           call gp%dumpFullField(gp%wC,'wVel')
         end if 
-
-        if ((mod(gp%step,tid_compStats)==0) .and. (gp%tsim > time_startDumping)) then
-            call gp%compute_stats()
-        end if 
-
-        if ((mod(gp%step,tid_statsDump) == 0) .and. (gp%tsim > time_startDumping)) then
-            call gp%compute_stats()
-            call gp%dump_stats()
-        end if 
-        
-        if (mod(gp%step,gp%t_restartDump) == 0) then
-            call gp%dumpRestartfile()
-        end if
 
     end subroutine
 

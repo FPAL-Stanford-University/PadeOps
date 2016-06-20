@@ -93,4 +93,19 @@ contains
 
     end subroutine
 
+    pure subroutine upsample_Periodic_1d(vecin, vecout, nx)
+        integer, intent(in) :: nx
+        real(rkind), intent(in) , dimension(nx) :: vecin
+        real(rkind), intent(out), dimension(2*nx) :: vecout
+        integer :: i
+
+        do i = 1,nx
+            vecout(2*i - 1) = vecin(i)
+        end do 
+
+        do i = 2,2*nx-2,2
+            vecout(i) = 0.5d0*(vecout(i-1) + vecout(i+1))
+        end do 
+        vecout(2*nx) = 0.5d0*(vecout(2*nx-1) + vecout(1))
+    end subroutine
 end module 

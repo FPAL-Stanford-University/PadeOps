@@ -15,22 +15,35 @@ module wallmodelMod
         real(rkind) :: meanSpeed 
         logical :: isInitialized = .false. 
         real(rkind), dimension(:,:,:), pointer :: xbuff, ybuff, zbuff1, zbuff2
-        type(decomp_info), pointer :: decomp
+        type(decomp_info), pointer :: decomp, decompSP
+        complex(rkind), dimension(:,:,:), pointer :: czbuff
         integer :: nxX, nyX, nzX
+        real(rkind) :: z0nd
     contains
         procedure :: init
         procedure :: destroy
         procedure :: updateWallStress       
+        procedure :: updateTAU_i3  
+        procedure :: getz0 
     end type
 
 contains
 
-    subroutine init(this,dz,inputfile, decompC, xbuff, ybuff, zbuff)
+    pure function getz0(this) result(val)
+        class(wallmodel), intent(in) :: this
+        real(rkind) :: val
+
+        val = this%z0nd
+
+    end function
+
+    subroutine init(this,dz,inputfile, decompC, decompCsp, xbuff, ybuff, zbuff, czbuff)
         class(wallmodel), intent(inout) :: this
         real(rkind), intent(in) :: dz
         character(len=*), intent(in) :: inputfile
         real(rkind), dimension(:,:,:,:), intent(in), target :: xbuff, ybuff, zbuff
-        type(decomp_info), target, intent(in) :: decompC
+        complex(rkind), dimension(:,:,:,:), intent(in), target :: czbuff
+        type(decomp_info), target, intent(in) :: decompC, decompCsp
         real(rkind) :: z0 = 0.1_rkind, H = 1000._rkind, G = 15._rkind, f = 1.454d-4
         integer :: iounit
 
@@ -46,16 +59,18 @@ contains
         this%mfactor = (kappa/log((dz/two)/z0))**2
     
         this%decomp => decompC   
+        this%decompSP => decompCsp
         this%xbuff => xbuff(:,:,:,1) 
         this%ybuff => ybuff(:,:,:,1) 
         this%zbuff1 => zbuff(:,:,:,1) 
         this%zbuff2 => zbuff(:,:,:,2) 
-        
+        this%czbuff => czbuff(:,:,:,1)
         this%nxX = decompC%xsz(1)
         this%nyX = decompC%xsz(2)
         this%nzX = decompC%xsz(3)
 
-        this%IsInitialized = .true. 
+        this%IsInitialized = .true.
+        this%z0nd = z0 
     end subroutine
    
     subroutine destroy(this)
@@ -105,6 +120,16 @@ contains
         !print*, "============================"
 
     end subroutine
-     
+    
+    subroutine updateTAU_i3(this, taui3HAT, umn, ui_hat)
+        class(wallmodel), intent(inout) :: this
+        complex(rkind), dimension(this%decompSP%zsz(1),this%decompSP%zsz(2),this%decompSP%zsz(3)), intent(inout) :: taui3HAT
+        complex(rkind), dimension(this%decompSP%ysz(1),this%decompSP%ysz(2),this%decompSP%ysz(3)), intent(in) :: ui_hat
+        real(rkind), intent(in) :: umn
+        
+        call transpose_y_to_z(ui_hat,this%czbuff,this%decompSP)
+        taui3HAT(:,:,1) = -this%czbuff(:,:,1)*this%mfactor*umn
+
+    end subroutine
 
 end module 

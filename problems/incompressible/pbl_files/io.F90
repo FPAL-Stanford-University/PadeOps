@@ -12,10 +12,10 @@ module pbl_IO
 contains
 
     subroutine start_io(gp)
-        use IncompressibleGridNP, only: igrid
+        use IncompressibleGridWallM, only: igridWallM
         use mpi 
         
-        class(igrid), target, intent(in) :: gp 
+        class(igridWallM), target, intent(in) :: gp 
         character(len=clen) :: fname
         character(len=clen) :: tempname
         !character(len=clen) :: command
@@ -95,15 +95,18 @@ contains
         call mpi_barrier(mpi_comm_world,ierr)
 
         ! Now perform the initializing data dump
-        call dumpData4Matlab(gp)
+        !call dumpData4Matlab(gp)
+        !call gp%dumpFullField(gp%u,'uVel')
+        !call gp%dumpFullField(gp%v,'vVel')
+        !call gp%dumpFullField(gp%wC,'wVel')
     end subroutine
 
     subroutine dumpData4Matlab(gp)
-        use IncompressibleGridNP, only: igrid
+        use IncompressibleGridWallM, only: igridWallM
         use gridtools,          only: alloc_buffs
         use decomp_2d,        only: transpose_y_to_x
         
-        class(igrid), target, intent(in) :: gp 
+        class(igridWallM), target, intent(in) :: gp 
         integer :: tid, runIDX
         character(len=clen) :: fname
         character(len=clen) :: tempname

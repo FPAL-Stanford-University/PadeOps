@@ -10,7 +10,7 @@ program testSTAGGcd06
         
     real(rkind), dimension(:,:,:), allocatable :: zE, zC
     complex(rkind), dimension(:,:,:), allocatable :: fE, fC, dfEt, dfE, dfCt, dfC
-    integer :: nx = 1, ny = 1, nz = 64
+    integer :: nx = 1, ny = 1, nz = 16
     real(rkind) :: omega = 1._rkind, dz
     logical :: isTopEven, isBotEven
     type(cd06stagg), allocatable :: der
@@ -47,41 +47,40 @@ program testSTAGGcd06
 
     zC = 0.5_rkind*(zE(:,:,2:nz+1) + zE(:,:,1:nz))
 
-    !fE = cos(two*pi*omega*zE) + imi*cos(two*pi*omega*zE)
+    fE = cos(two*pi*omega*zE) + imi*cos(two*pi*omega*zE)
     fC = cos(two*pi*omega*zC) + imi*cos(two*pi*omega*zC)
 
     allocate(der)
-    call der%init(nz, dz, isTopEven, isBotEven,.true.,.true.)
-    allocate(der2)
-    i =  der2%init(nz,dz, .false., 0, 0)
+    call der%init(nz, dz, isTopEven, isBotEven,.false.,.true.)
+    !allocate(der2)
+    !i =  der2%init(nz,dz, .false., 0, 0)
 
 
-    call ops%init(gp, gpE, 0, 1._rkind, 1._rkind, dz, sp_gp, sp_gpE, .true., .true.) 
+    !call ops%init(gp, gpE, 0, 1._rkind, 1._rkind, dz, sp_gp, sp_gpE, .true., .true.) 
 
-    call der%ddz_C2C(fC,dfC,nx,ny)
-
+    call der%InterpZ_E2C(fE,dfC,nx,ny)
     print*, dfC(1,1,:)
 
     !dfEt = -omega*two*pi*sin(two*pi*omega*zE) + imi*(-omega*two*pi*sin(two*pi*omega*zE))
     dfCt = -omega*two*pi*sin(two*pi*omega*zC) + imi*(-omega*two*pi*sin(two*pi*omega*zC))
 
-    print*, "==================================================="
-    print*, dfCt(1,1,:)
-    print*, "==================================================="
-    print*, dfCt(1,1,:) - dfC(1,1,:)
-    print*, "==================================================="
-    print*, "Second order" 
-    call ops%ddz_C2C(fC, dfC, .true., .true.)
+    !print*, "==================================================="
+    !print*, dfCt(1,1,:)
+    !print*, "==================================================="
+    !print*, dfCt(1,1,:) - dfC(1,1,:)
+    !print*, "==================================================="
+    !print*, "Second order" 
+    !call ops%ddz_C2C(fC, dfC, .true., .true.)
 
-    print*, dfC(1,1,:)
-    print*, "==================================================="
-    print*, dfCt(1,1,:)
-    print*, "==================================================="
-    print*, dfCt(1,1,:) - dfC(1,1,:)
-    !print*, dfC
-    !print*, maxval(abs(real(dfCt,rkind) - real(dfC,rkind)))
+    !print*, dfC(1,1,:)
+    !print*, "==================================================="
+    !print*, dfCt(1,1,:)
+    !print*, "==================================================="
+    !print*, dfCt(1,1,:) - dfC(1,1,:)
+    !!print*, dfC
+    !!print*, maxval(abs(real(dfCt,rkind) - real(dfC,rkind)))
 
-    print*, "============================="
+    !print*, "============================="
     !call der2%dd3(real(fC,rkind), zC, nx, ny)
     !print*, zC(1,1,1:5)
     !print*, zC
