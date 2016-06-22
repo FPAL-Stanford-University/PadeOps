@@ -604,9 +604,9 @@ contains
             end if
 
             ! Check tstop condition
-            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop - eps) ) then
+            if ( (this%tstop > zero) .AND. (this%tsim >= this%tstop*(one - eps)) ) then
                 tcond = .FALSE.
-            else if ( (this%tstop > zero) .AND. (this%tsim + this%dt + eps >= this%tstop) ) then
+            else if ( (this%tstop > zero) .AND. (this%tsim + this%dt >= this%tstop*(one - eps)) ) then
                 this%dt = this%tstop - this%tsim
                 stability = 'stop'
                 vizcond = .TRUE.
@@ -1172,7 +1172,7 @@ contains
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(inout) :: qx,qy,qz
 
-        integer :: i
+        ! integer :: i
         real(rkind), dimension(:,:,:), pointer :: tmp1_in_x, tmp2_in_x, tmp1_in_y, tmp1_in_z, tmp2_in_z
         type(derivatives), pointer :: der
 
