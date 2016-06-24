@@ -50,6 +50,14 @@ elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
         set(CMAKE_Fortran_FLAGS "-Og -g -pg -llapack -ffree-form -ffree-line-length-none -fcheck=all -fbounds-check -ffpe-trap=zero,overflow,underflow -Wall -Wconversion -Wextra -Waliasing -Wsurprising -fbacktrace")
     endif()
+
+# PGI compilers
+elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "PGI")
+    if ( CMAKE_BUILD_TYPE MATCHES "Release" )
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -Minform=warn -Mfreeform -fastsse -O2 -Mipa=fast -Munroll -Mdalign -Mllalign -llapack")
+    elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
+        set(CMAKE_Fortran_FLAGS "-g -Minform=warn -Mfreeform -fcheck=all -Mbounds -Mchkfpstk -Mchkptr -Mchkstk -Ktrap=fp -traceback -llapack")
+    endif()
 endif()
 
 # Add source file directories
