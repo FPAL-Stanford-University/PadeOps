@@ -6,12 +6,15 @@ module exits
     
     implicit none
     private
-    public :: GracefulExit, message, warning, newline, nancheck
+    public :: GracefulExit, message, message_min_max, warning, newline, nancheck
         
     interface message
         module procedure message_char, message_char_double, message_level_char, message_level_char_double, message_level_char_int
     end interface
 
+    interface message_min_max
+        module procedure message_minmax_int, message_minmax_real
+    end interface
     interface warning
         module procedure warning_char
     end interface
@@ -66,7 +69,7 @@ contains
         if (nrank == 0) write(stdout,*) full_message
 
     end subroutine
-    
+   
     subroutine message_level_char_double(level,mess,val)
         integer, intent(in) :: level
         character(len=*), intent(in) :: mess
@@ -98,6 +101,40 @@ contains
         full_message = full_message // "> " // mess
         if (nrank == 0) write(stdout,*) full_message, " = ", val
     end subroutine
+
+    subroutine message_minmax_int(level,mess,valmin, valmax)
+        integer, intent(in) :: level
+        character(len=*), intent(in) :: mess
+        integer, intent(in) :: valmin, valmax
+        character(:), allocatable :: full_message
+        integer :: i
+        
+        full_message = ""
+        do i=1,level
+            full_message = full_message // "    "
+        end do
+
+        full_message = full_message // "> " // mess
+        if (nrank == 0) write(stdout,*) full_message, " = (", valmin,",",valmax,")"
+    end subroutine
+
+
+    subroutine message_minmax_real(level,mess,valmin, valmax)
+        integer, intent(in) :: level
+        character(len=*), intent(in) :: mess
+        real(rkind), intent(in) :: valmin, valmax
+        character(:), allocatable :: full_message
+        integer :: i
+        
+        full_message = ""
+        do i=1,level
+            full_message = full_message // "    "
+        end do
+
+        full_message = full_message // "> " // mess
+        if (nrank == 0) write(stdout,*) full_message, " = (", valmin,",",valmax,")"
+    end subroutine
+
 
     logical function nancheck_std(f) result(nancheck)
         real(rkind), dimension(:,:,:,:), intent(in) :: f

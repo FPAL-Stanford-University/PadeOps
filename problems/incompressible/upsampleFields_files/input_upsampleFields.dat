@@ -9,4 +9,5 @@ inputFile_RID         = 10          ! RunID of the restart file for the original
 outputFile_TID        = 12000       ! TimeID of the restart file with upsampled data
 outputFile_RID        = 12          ! RunID of the restart file with the upsampled data
 upsampleInZ           = .TRUE.
+isStratified          = .FALSE.     ! Is there a restart file for potential temperature?
 /

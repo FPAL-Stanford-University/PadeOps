@@ -1,11 +1,12 @@
 module temporalHook
     use kind_parameters,    only: rkind
     use IncompressibleGridWallM, only: igridWallM
-    use reductions,         only: P_MAXVAL
-    use exits,              only: message
+    use reductions,         only: P_MAXVAL, p_minval
+    use exits,              only: message, message_min_max
     use gabls_IO,           only: dumpData4Matlab 
     use constants,          only: half
     use timer,              only: tic, toc 
+    use decomp_2d,          only: nrank
     use mpi
 
     implicit none 
@@ -26,21 +27,25 @@ contains
         class(igridWallM), intent(inout) :: gp 
       
         if (mod(gp%step,nt_print2screen) == 0) then
+            call message(0,"Time Step",gp%step)
             call message(0,"Time",gp%tsim)
-            call message(1,"Max KE:",gp%getMaxKE())
-            call message(1,"Max nuSGS:",gp%max_nuSGS)
+            call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
+            call message_min_max(1,"Bounds for T:", p_minval(minval(gp%T)), p_maxval(maxval(gp%T)))
+            call message(1,"T_surf:", gp%Tsurf)
+            call message(1,"u_star:",gp%ustar)
+            call message(1,"Inv. Ob. Length:",gp%InvObLength)
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 
-            if ((gp%useDynamicProcedure) .and. (gp%useSGS)) then
-                call message(1,"Max cSGS:",p_maxval(maxval(gp%c_SGS(1,1,:))))
+            if (nrank == 0) then
+                print*, "==================================="
             end if 
             call toc()
             call tic()
         end if 
 
         if (mod(gp%step,gp%t_dataDump)==0) then
-           call message(0,"Data dump!")
+           call message(0,"NOW PERFORMING DATA DUMP")
            call gp%dumpFullField(gp%u,'uVel')
            call gp%dumpFullField(gp%v,'vVel')
            call gp%dumpFullField(gp%wC,'wVel')

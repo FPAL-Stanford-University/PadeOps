@@ -95,6 +95,14 @@ module igrid_hooks
         end subroutine
     end interface
 
+    interface set_KS_planes_io
+        subroutine set_KS_planes_io(planesCourseGrid, planesFineGrid)
+            integer, dimension(:), allocatable,  intent(inout) :: planesFineGrid
+            integer, dimension(:), allocatable,  intent(inout) :: planesCourseGrid
+        end subroutine
+    end interface
+
+
 
     interface hook_output
         subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)

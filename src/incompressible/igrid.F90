@@ -503,7 +503,7 @@ contains
             allocate(this%SGSmodel)
             call this%sgsModel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
                 this%dy, this%dz, useDynamicProcedure, useSGSclipping)
-            call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij)
+            !call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij)
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero

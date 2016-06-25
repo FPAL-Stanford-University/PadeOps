@@ -1,4 +1,4 @@
-    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, zmesh,  z0, useWallModel, wallMtype,  TfilterZ, Pr, useWallDamping, nCWall, Cs, CompStokesP )
+    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, zmesh,  z0, useWallModel, wallMtype,  TfilterZ, Pr, useWallDamping, nCWall, Cs, CompStokesP , isStratified)
         class(sgs), intent(inout), target :: this
         type(spectral), intent(in), target :: spectC, spectE
         type(decomp_info), intent(in), target :: gpC, gpE
@@ -8,7 +8,7 @@
         real(rkind), dimension(:,:,:), intent(in), optional :: zMesh
         real(rkind), intent(in), optional :: z0, Pr, Cs, nCWall
         integer, intent(in), optional :: wallMtype
-        logical, intent(in), optional :: useWallModel, TfilterZ, CompStokesP, useWallDamping
+        logical, intent(in), optional :: useWallModel, TfilterZ, CompStokesP, useWallDamping, isStratified
         integer :: ierr
 
         this%SGSmodel = modelID 
@@ -30,7 +30,8 @@
         if (present(Pr)) this%Pr = Pr
         if (present(CompStokesP)) this%CompStokesP = CompStokesP
         if (present(useWallDamping)) this%useWallFunction = useWallDamping   
- 
+        if (present(isStratified)) this%isStratified = isStratified
+
         if (present(useWallmodel)) then
             this%useWallModel = useWallModel
             allocate(this%rbuffE(gpE%xsz(1), gpE%xsz(2), gpE%xsz(3),4))
@@ -151,6 +152,12 @@
         allocate(this%rtmpYE(gpE%ysz(1),gpE%ysz(2),gpE%ysz(3)))
         allocate(this%rtmpZE(gpE%zsz(1),gpE%zsz(2),gpE%zsz(3)))
         allocate(this%rtmpZE2(gpE%zsz(1),gpE%zsz(2),gpE%zsz(3)))
+        
+        if (this%isStratified) then
+            allocate(this%q1(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+            allocate(this%q2(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+            allocate(this%q3(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+        end if 
 
         ierr = this%Tfilz%init(this%sp_gp%zsz(3),.false.)
         ierr = this%Gfilz%init(this%sp_gp%zsz(3),.false.)
