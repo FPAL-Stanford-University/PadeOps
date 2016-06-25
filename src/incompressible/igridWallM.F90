@@ -62,11 +62,14 @@ module IncompressibleGridWallM
         type(padepoisson), allocatable :: padepoiss
         real(rkind), dimension(:,:,:), allocatable :: divergence
 
-        real(rkind), dimension(:,:,:), pointer :: u, v, wC, w, uE, vE
+        real(rkind), dimension(:,:,:), pointer :: u, v, wC, w, uE, vE, T, TE
+        complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what, That, TEhat
+        
+        complex(rkind), dimension(:,:,:), pointer :: uhat1, vhat1, what1, That1
+        complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC2, SfieldsE2
+
         real(rkind), dimension(:,:,:), pointer :: ox,oy,oz
-        complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what
-        real(rkind), dimension(:,:,:), pointer :: T, TE
-        complex(rkind), dimension(:,:,:), pointer :: That, TEhat, T_rhs, T_Orhs
+        complex(rkind), dimension(:,:,:), pointer :: T_rhs, T_Orhs
 
         complex(rkind), dimension(:,:,:), allocatable :: uBase, Tbase, dTdxH, dTdyH, dTdzH
         real(rkind), dimension(:,:,:), allocatable :: dTdxC, dTdyC, dTdzE, dTdzC
@@ -89,7 +92,8 @@ module IncompressibleGridWallM
         real(rkind) :: Ro = 1.d5, Fr = 1000.d0
 
         integer :: nxZ, nyZ
-        
+       
+        integer :: timeSteppingScheme = 0 
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
         logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false. 
         logical :: useExtraForcing = .false., useGeostrophicForcing = .false. 
@@ -144,8 +148,10 @@ module IncompressibleGridWallM
             procedure :: init_stats
             procedure :: destroy
             procedure :: printDivergence 
-            procedure :: AdamsBashforth
             procedure :: getMaxKE
+            procedure :: timeAdvance
+            procedure, private :: AdamsBashforth
+            procedure, private :: TVD_RK3
             procedure, private :: interp_primitiveVars
             procedure, private :: compute_duidxj
             procedure, private :: compute_dTdxi
@@ -169,6 +175,7 @@ module IncompressibleGridWallM
             procedure, private :: populate_rhs
             procedure, private :: project_and_prep
             procedure, private :: wrapup_timestep
+            procedure, private :: reset_pointers
             procedure          :: finalize_stats
             procedure, private :: dump_planes
             procedure          :: dumpFullField 
@@ -193,6 +200,7 @@ contains
         logical :: useGeostrophicForcing = .false., useVerticalTfilter = .false., useWallDamping = .true. 
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
+        integer :: timeSteppingScheme = 0
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .false., UseDealiasFilterVert = .false.
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
@@ -208,7 +216,7 @@ contains
         namelist /WALLMODEL/ z0, wallMType
         namelist /WINDTURBINES/ useWindTurbines, turbineInfoFile  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
-                            UseDealiasFilterVert, t_DivergenceCheck
+                            UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep
                             
 
@@ -232,6 +240,7 @@ contains
         this%outputdir = outputdir; this%inputdir = inputdir; this%isStratified = isStratified 
         this%WallMtype = WallMType; this%runID = runID; this%tstop = tstop; this%t_dataDump = t_dataDump
         this%CFL = CFL; this%dumpPlanes = dumpPlanes; this%useGeostrophicForcing = useGeostrophicForcing
+        this%timeSteppingScheme = timeSteppingScheme
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
             call GracefulExit("Both CFL and dt cannot be negative. Have you &
@@ -556,6 +565,27 @@ contains
                &         this%dz, this%planes2dumpC_KS, this%planes2dumpF_KS)
         end if 
 
+        ! STEP 15: Set up extra buffers for RK3
+        if (timeSteppingScheme == 1) then
+            if (this%isStratified) then
+                call this%spectC%alloc_r2c_out(this%SfieldsC2,3)
+                call this%spectE%alloc_r2c_out(this%SfieldsE2,2)
+            else
+                call this%spectC%alloc_r2c_out(this%SfieldsC2,2)
+                call this%spectE%alloc_r2c_out(this%SfieldsE2,1)
+            end if 
+            this%uhat1 => this%SfieldsC2(:,:,:,1); 
+            this%vhat1 => this%SfieldsC2(:,:,:,2); 
+            this%what1 => this%SfieldsE2(:,:,:,1); 
+            if (this%isStratified) then
+                this%That1 => this%SfieldsC2(:,:,:,3); 
+            end if 
+        end if 
+
+        if ((timeSteppingScheme .ne. 0) .and. (timeSteppingScheme .ne. 1)) then
+            call GracefulExit("Invalid choice of TIMESTEPPINGSCHEME.",5235)
+        end if 
+
         ! Final Step: Safeguard against unfinished procedures
         if ((useCompactFD).and.(.not.useSkewSymm)) then
             call GracefulExit("You must solve in skew symmetric form if you use CD06",54)
@@ -572,6 +602,84 @@ contains
 
 
     end subroutine
+
+    subroutine timeAdvance(this)
+        class(igridWallM), intent(inout) :: this
+
+        select case (this%timeSteppingScheme)
+        case(0)
+            call this%AdamsBashforth()
+        case(1)
+            call this%TVD_rk3()
+        end select
+
+    end subroutine
+
+    subroutine reset_pointers(this)
+        class(igridWallM), intent(inout), target :: this
+
+        this%uhat => this%SfieldsC(:,:,:,1); 
+        this%vhat => this%SfieldsC(:,:,:,2); 
+        this%what => this%SfieldsE(:,:,:,1)
+        if (this%isStratified) then
+            this%That => this%SfieldsC(:,:,:,4)
+        end if
+    end subroutine
+
+    
+    subroutine TVD_RK3(this)
+        class(igridWallM), intent(inout), target :: this
+
+        ! Step 0: Compute TimeStep 
+        call this%compute_deltaT
+
+        !!! STAGE 1
+        ! First stage - everything is where it's supposed to be
+        call this%populate_rhs()
+        this%uhat1 = this%uhat + this%dt*this%u_rhs 
+        this%vhat1 = this%vhat + this%dt*this%v_rhs 
+        this%what1 = this%what + this%dt*this%w_rhs 
+        if (this%isStratified) this%That1 = this%That + this%dt*this%T_rhs
+        ! Now set pointers so that things operate on uhat1, vhat1, etc.
+        this%uhat => this%SfieldsC2(:,:,:,1); this%vhat => this%SfieldsC2(:,:,:,2); this%what => this%SfieldsE2(:,:,:,1); 
+        if (this%isStratified) this%That => this%SfieldsC2(:,:,:,3)
+        ! Now perform the projection and prep for next stage
+        call this%project_and_prep()
+
+        !!! STAGE 2
+        ! Second stage - u, v, w are really pointing to u1, v1, w1 (which is
+        ! what we want. 
+        call this%populate_rhs()
+        ! reset u, v, w pointers
+        call this%reset_pointers()
+        this%uhat1 = (3.d0/4.d0)*this%uhat + (1.d0/4.d0)*this%uhat1 + (1.d0/4.d0)*this%dt*this%u_rhs
+        this%vhat1 = (3.d0/4.d0)*this%vhat + (1.d0/4.d0)*this%vhat1 + (1.d0/4.d0)*this%dt*this%v_rhs
+        this%what1 = (3.d0/4.d0)*this%what + (1.d0/4.d0)*this%what1 + (1.d0/4.d0)*this%dt*this%w_rhs
+        if (this%isStratified) this%That1 = (3.d0/4.d0)*this%That + (1.d0/4.d0)*this%That1 + (1.d0/4.d0)*this%dt*this%T_rhs
+        ! now set the u, v, w, pointers to u1, v1, w1
+        this%uhat => this%SfieldsC2(:,:,:,1); this%vhat => this%SfieldsC2(:,:,:,2); this%what => this%SfieldsE2(:,:,:,1); 
+        if (this%isStratified) this%That => this%SfieldsC2(:,:,:,3)
+        ! Now perform the projection and prep for next stage
+        call this%project_and_prep()
+
+        !!! STAGE 3 (Final Stage)
+        ! Third stage - u, v, w are really pointing to u2, v2, w2 (which is what
+        ! we really want. 
+        call this%populate_rhs()
+        ! reset u, v, w pointers
+        call this%reset_pointers()
+        this%uhat = (1.d0/3.d0)*this%uhat + (2.d0/3.d0)*this%uhat1 + (2.d0/3.d0)*this%dt*this%u_rhs
+        this%vhat = (1.d0/3.d0)*this%vhat + (2.d0/3.d0)*this%vhat1 + (2.d0/3.d0)*this%dt*this%v_rhs
+        this%what = (1.d0/3.d0)*this%what + (2.d0/3.d0)*this%what1 + (2.d0/3.d0)*this%dt*this%w_rhs
+        if (this%isStratified) this%That = (1.d0/3.d0)*this%That + (2.d0/3.d0)*this%That1 + (2.d0/3.d0)*this%dt*this%T_rhs
+        ! Now perform the projection and prep for next time step
+        call this%project_and_prep()
+
+        ! Wrap up this time step 
+        call this%wrapup_timestep() 
+
+    end subroutine
+
 
 
     subroutine compute_deltaT(this)
