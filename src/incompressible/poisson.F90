@@ -109,10 +109,9 @@ contains
             this%tmpbuff(:,this%sp_gp%ysz(2)/2+1,:) = zero
             call this%spect%ifft(this%tmpbuff,divergence,.true.)
             maxDiv = p_maxval(maxval(divergence))
-            !if (maxDiv > 1D-12) then
-            !        call GracefulExit("Divergence is not zero. Terminating run.",4324)
-            !end if 
-            call message(0,"WARNING: Divergence is now:", p_maxval(maxval(abs(divergence))))
+            if (maxDiv > 1D-12) then 
+                call message(0,"WARNING: Divergence is now:", p_maxval(maxval(abs(divergence))))
+            end if 
         end if 
 
 

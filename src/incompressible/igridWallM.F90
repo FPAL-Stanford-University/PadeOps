@@ -702,17 +702,6 @@ contains
             rb1 = rb1 + rb2
             TSmax = p_maxval(rb1)
             this%dt = this%CFL/TSmax
-            !t1 = p_maxval(maxval(this%u))
-            !t1 = this%dx/(t1 + 1d-13)
-
-            !t2 = p_maxval(maxval(this%v))
-            !t2 = this%dy/(t2 + 1d-13)
-            !
-            !t3 = p_maxval(maxval(this%w))
-            !t3 = this%dz/(t3 + 1d-13)
-            !
-            !tmin = min(t1,t2,t3)
-            !this%dt = this%CFL*tmin
         end if 
 
 
