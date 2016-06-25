@@ -166,6 +166,9 @@ module IncompressibleGridWallM
             procedure, private :: getSurfaceQuantities 
             procedure, private :: ApplyCompactFilter 
             procedure, private :: addNonLinearTerm_skewSymm
+            procedure, private :: populate_rhs
+            procedure, private :: project_and_prep
+            procedure, private :: wrapup_timestep
             procedure          :: finalize_stats
             procedure, private :: dump_planes
             procedure          :: dumpFullField 
@@ -913,20 +916,6 @@ contains
 
 
         if (this%isStratified) then
-            !T1C = -this%u*this%dTdxC 
-            !call this%spectC%fft(T1C,this%T_rhs) 
-            !T1C = -this%v*this%dTdyC
-            !call this%spectC%fft(T1C,fT1C) 
-            !this%T_rhs = this%T_rhs + fT1C
-       
-            !T1E = -this%w * this%dTdzE    
-            !call this%spectC%fft(T1E,fT1E)
-            !call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
-            !call this%Ops%InterpZ_edge2cell(tzE,tzC)
-            !call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
-            !this%T_rhs = this%T_rhs + fT1C
-           
-
             T1C = -this%u*this%dTdxC 
             T2C = -this%v*this%dTdyC
             T1C = T1C + T2C
@@ -938,25 +927,6 @@ contains
             call this%Ops%InterpZ_edge2cell(tzE,tzC)
             call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
             this%T_rhs = this%T_rhs + fT1C
-
-
-
-            !T1C = -this%u*this%T
-            !call this%spectC%fft(T1C,this%T_rhs) 
-            !call this%spectC%mtimes_ik1_ip(this%T_rhs)
-
-            !T1C = -this%v*this%T
-            !call this%spectC%fft(T1C,fT1C) 
-            !call this%spectC%mtimes_ik2_ip(fT1C)
-            !this%T_rhs = this%T_rhs + fT1C
-
-            !T1E = -this%w*this%TE
-            !call this%spectE%fft(T1E,fT1E)
-            !call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
-            !call this%Ops%ddz_E2C(tzE,tzC)
-            !call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
-            !this%T_rhs = this%T_rhs + fT1C
-            
         end if 
 
     end subroutine
@@ -1010,13 +980,9 @@ contains
         end if 
     end subroutine
 
-    subroutine AdamsBashforth(this)
+    subroutine populate_rhs(this)
         class(igridWallM), intent(inout) :: this
-        real(rkind) :: abf1, abf2
 
-        ! Step 0: Compute TimeStep 
-        call this%compute_deltaT
-        this%dtRat = this%dt/this%dtOld
         ! Step 1: Non Linear Term 
         if (useSkewSymm) then
             call this%addNonLinearTerm_skewSymm()
@@ -1039,12 +1005,6 @@ contains
                                     this%u_rhs, this%v_rhs, this%w_rhs)
         end if 
 
-        ! Step 4: Buoyancy Term
-        if (this%isStratified) then
-            call this%addBuoyancyTerm()
-        end if 
-
-        
         ! Step 4: SGS Viscous Term
         if (this%useSGS) then
             call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
@@ -1054,39 +1014,18 @@ contains
                                                 this%ustar  , this%Umn            , this%Vmn        ,&
                                                 this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
                                                 this%max_nuSGS)
-
-            !! IMPORTANT: duidxjC, u, v and wC are all corrupted if SGS was initialized to use the
-            !! Dynamic Procedure. DON'T USE duidxjC again within this time step.
-            !! Make the SGS call at the very end, just before the time
-            !! advancement.
-            
             if (this%isStratified) then
                 call this%SGSmodel%getRHS_SGS_Scalar_WallM(this%dTdxC, this%dTdyC, this%dTdzE, &
                                                            this%T_rhs, this%wTh_surf           )
             end if 
         end if 
         
-        ! Step 5: Time Step 
-        if (this%step == 0) then
-            this%uhat = this%uhat + this%dt*this%u_rhs 
-            this%vhat = this%vhat + this%dt*this%v_rhs 
-            this%what = this%what + this%dt*this%w_rhs 
-            if (this%isStratified) then
-                this%That = this%That + this%dt*this%T_rhs
-            end if 
-        else
-            abf1 = (one + half*this%dtRat)*this%dt
-            abf2 = -half*this%dtRat*this%dt
-            this%uhat = this%uhat + abf1*this%u_rhs + abf2*this%u_Orhs
-            this%vhat = this%vhat + abf1*this%v_rhs + abf2*this%v_Orhs
-            this%what = this%what + abf1*this%w_rhs + abf2*this%w_Orhs
-            if (this%isStratified) then
-                this%That = this%That + abf1*this%T_rhs + abf2*this%T_Orhs
-            end if 
-        end if 
-       
-        
-        ! Step 5: Dealias
+    end subroutine
+
+    subroutine project_and_prep(this)
+        class(igridWallM), intent(inout) :: this
+
+        ! Step 1: Dealias
         call this%spectC%dealias(this%uhat)
         call this%spectC%dealias(this%vhat)
         call this%spectE%dealias(this%what)
@@ -1095,7 +1034,7 @@ contains
             call this%ApplyCompactFilter()
         end if
        
-        ! Step 6: Pressure projection
+        ! Step 2: Pressure projection
         if (useCompactFD) then
             call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
             if (mod(this%step,this%t_DivergenceCheck) == 0) then
@@ -1108,31 +1047,29 @@ contains
             end if 
         end if 
 
-        ! Step 7: Take it back to physical fields
+        ! Step 3: Take it back to physical fields
         call this%spectC%ifft(this%uhat,this%u)
         call this%spectC%ifft(this%vhat,this%v)
         call this%spectE%ifft(this%what,this%w)
         if (this%isStratified) call this%spectC%ifft(this%That,this%T)
     
-        ! STEP 8: Interpolate the cell center values of w
+        ! STEP 4: Interpolate the cell center values of w
         call this%compute_and_bcast_surface_Mn()
         if (this%isStratified) then
             this%Tsurf = this%Tsurf + this%dTsurf_dt*this%dt
         end if  
         call this%interp_PrimitiveVars()
 
-        ! STEP 9: Compute duidxjC 
+        ! STEP 5: Compute duidxjC 
         call this%compute_duidxj()
         if (this%isStratified) call this%compute_dTdxi() 
-        
-        ! STEP 10: Copy the RHS for using during next time step 
-        this%u_Orhs = this%u_rhs
-        this%v_Orhs = this%v_rhs
-        this%w_Orhs = this%w_rhs
-        if (this%isStratified) this%T_Orhs = this%T_rhs
-        this%dtOld = this%dt
 
-        ! STEP 11: Do logistical stuff
+    end subroutine
+
+    subroutine wrapup_timestep(this)
+        class(igridWallM), intent(inout) :: this
+
+        ! STEP 1: Do logistical stuff
         if ((mod(this%step,this%tid_compStats)==0) .and. (this%tsim > this%tSimStartStats)) then
             call this%compute_stats()
         end if 
@@ -1156,9 +1093,51 @@ contains
             call this%LES2KS%LES_FOR_KS(this%uE,this%vE,this%w,this%step)
         end if 
 
-        ! STEP 12: Update Time and BCs
+        ! STEP 2: Update Time and BCs
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
 
+    end subroutine
+
+    subroutine AdamsBashforth(this)
+        class(igridWallM), intent(inout) :: this
+        real(rkind) :: abf1, abf2
+
+        ! Step 0: Compute TimeStep 
+        call this%compute_deltaT
+        this%dtRat = this%dt/this%dtOld
+
+        ! Step 1: Get the RHS
+        call this%populate_rhs()
+
+        ! Step 2: Time Advance
+        if (this%step == 0) then
+            this%uhat = this%uhat + this%dt*this%u_rhs 
+            this%vhat = this%vhat + this%dt*this%v_rhs 
+            this%what = this%what + this%dt*this%w_rhs 
+            if (this%isStratified) then
+                this%That = this%That + this%dt*this%T_rhs
+            end if 
+        else
+            abf1 = (one + half*this%dtRat)*this%dt
+            abf2 = -half*this%dtRat*this%dt
+            this%uhat = this%uhat + abf1*this%u_rhs + abf2*this%u_Orhs
+            this%vhat = this%vhat + abf1*this%v_rhs + abf2*this%v_Orhs
+            this%what = this%what + abf1*this%w_rhs + abf2*this%w_Orhs
+            if (this%isStratified) then
+                this%That = this%That + abf1*this%T_rhs + abf2*this%T_Orhs
+            end if 
+        end if 
+
+        ! Step 3: Pressure Project and prep for the next step
+        call this%project_and_prep()
+
+        ! Step 4: Store the RHS values for the next use
+        this%u_Orhs = this%u_rhs; this%v_Orhs = this%v_rhs; this%w_Orhs = this%w_rhs
+        if (this%isStratified) this%T_Orhs = this%T_rhs
+        this%dtOld = this%dt
+
+        ! Step 5: Do end of time step operations (I/O, stats, etc.)
+        call this%wrapup_timestep()
     end subroutine
 
     subroutine ApplyCompactFilter(this)
