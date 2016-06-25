@@ -1092,17 +1092,23 @@ contains
             call this%AddCoriolisTerm()
         end if 
       
-        ! Step 3: Extra Forcing 
+        ! Step 3a: Extra Forcing 
         if (this%useExtraForcing) then
             call this%addExtraForcingTerm()
         end if 
 
+        ! Step 3b: Wind Turbines
         if (this%useWindTurbines) then
             call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
                                     this%u_rhs, this%v_rhs, this%w_rhs)
         end if 
 
-        ! Step 4: SGS Viscous Term
+        ! Step 4: Buoyance + Sponge (inside Buoyancy)
+        if (this%isStratified) then
+            call this%addBuoyancyTerm()
+        end if 
+
+        ! Step 5: SGS Viscous Term
         if (this%useSGS) then
             call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
                                                 this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
