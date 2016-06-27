@@ -72,6 +72,7 @@ contains
         logical, intent(in), optional :: computeStokesPressure
         real(rkind), intent(in), optional :: Lz 
         integer :: i, j, k
+        real(rkind), dimension(:,:), allocatable :: temp 
 
         call  message("=========================================")
         call  message(0,"Initializing PADEPOISSON derived type")
@@ -155,6 +156,7 @@ contains
             allocate(this%phat(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
             allocate(this%dpdzhat(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
             allocate(this%denFact(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
+            allocate(temp(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
             
             allocate(this%sinh_top(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)+1))
             allocate(this%cosh_top(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
@@ -176,20 +178,49 @@ contains
                 end do 
             end do
             this%lambda = sqrt(this%k1inZ**2 + this%k2inZ**2)
-            this%denFact = 1.d0/(this%lambda*sinh(this%lambda*Lz) + 1d-13)
+            temp = this%lambda*Lz
+            where (temp < 500.d0) 
+                this%denFact = 1.d0/(this%lambda*sinh(this%lambda*Lz) + 1.d-13)
+            elsewhere
+                this%denFact = zero
+            end where
+            where(this%denFact<1d-16)
+                this%denFact = 0.d0
+            end where
             if (nrank == 0) this%denFact(1,1) = 0.d0
 
             do k = 1,this%sp_gp%zsz(3)
-                this%cosh_bot(:,:,k) =  cosh(this%lambda*(Lz - this%zCell(k)))
-                this%cosh_top(:,:,k) =  cosh(this%lambda*(this%zCell(k)))
+                temp = this%lambda*(Lz - this%zCell(k))
+                where (temp < 32.d0)
+                    this%cosh_bot(:,:,k) =  cosh(temp)
+                elsewhere
+                    this%cosh_bot(:,:,k) = 4.d13
+                end where
+                temp = this%lambda*this%zCell(k)
+                where (temp < 32.d0) 
+                    this%cosh_top(:,:,k) =  cosh(temp)
+                elsewhere
+                    this%cosh_top(:,:,k) = 1.d13
+                end where
             end do 
 
             do k = 1,this%sp_gp%zsz(3)+1
-                this%sinh_bot(:,:,k) = -this%lambda*sinh(this%lambda*(Lz - this%zEdge(k)))
-                this%sinh_top(:,:,k) =  this%lambda*sinh(this%lambda*(this%zEdge(k)))
+                temp = this%lambda*(Lz - this%zEdge(k))
+                where(temp<32.d0)
+                    this%sinh_bot(:,:,k) = -this%lambda*sinh(temp)
+                elsewhere
+                    this%sinh_bot(:,:,k) = -4.d13
+                end where
+                temp = this%lambda*(this%zEdge(k))
+                where(temp<32.d0) 
+                    this%sinh_top(:,:,k) =  this%lambda*sinh(temp)
+                elsewhere
+                    this%sinh_top(:,:,k) = 4.d13
+                end where
             end do 
             allocate(this%uhatinZ(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
             allocate(this%vhatinZ(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+            deallocate(temp)
             call message(1,"STOKES PRESSURE calculation enabled with the CD06 Poisson solver")
         end if 
 

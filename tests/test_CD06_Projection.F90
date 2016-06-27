@@ -121,8 +121,8 @@ program test_projection
 
     ! Step 2: Interpolate onto rtmp1zE
     call der%InterpZ_C2E(rtmp1z,rtmp1zE,size(rtmp1z,1),size(rtmp1z,2))
-    rtmp1zE(:,:,1) = 2.d0*rtmp1z(:,:,1) - rtmp1zE(:,:,2)
-    rtmp1zE(:,:,nz+1) = 2.d0*rtmp1z(:,:,nz) - rtmp1zE(:,:,nz)
+    rtmp1zE(:,:,1) = 0.d0!2.d0*rtmp1z(:,:,1) - rtmp1zE(:,:,2)
+    rtmp1zE(:,:,nz+1) = 0.d0!2.d0*rtmp1z(:,:,nz) - rtmp1zE(:,:,nz)
 
     ! Step 3: Transpose back from z -> x
     call transpose_z_to_y(rtmp1zE,rtmp1yE,gpE)
