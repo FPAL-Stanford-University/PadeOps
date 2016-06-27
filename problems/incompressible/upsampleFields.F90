@@ -67,7 +67,7 @@ module RoutinesUpsampling
         end do
    
         arrOut(:,:,1) = 2.d0*arrOut(:,:,2) - arrOut(:,:,3)
-        arrOut(:,:,2*nz) = arrOut(:,:,2*nz - 1) 
+        arrOut(:,:,2*nz) = 2.d0*arrOut(:,:,2*nz - 1) - arrOut(:,:,2*nz - 2)
 
     end subroutine
 
