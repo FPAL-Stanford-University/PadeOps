@@ -52,6 +52,9 @@ module cd06staggstuff
     real(rkind), parameter                   :: w3 = (4*(alpha_hat + 2)*q + 2*(1 - 4*alpha_hat)*s) &
                                                    / (9*(q + s))
 
+    ! Step 5: Weights for stagerred sided scheme
+    real(rkind), parameter                   :: w0s = 223.d0/186.d0, w1s = 61.d0/62.d0    
+
 
     type cd06stagg
 

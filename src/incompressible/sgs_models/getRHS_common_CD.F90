@@ -3,11 +3,11 @@
         call transpose_y_to_z(tauhat,this%ctmpCz,this%sp_gp)
         !if (this%useWallModel) call this%moengWall%updateTAU_i3(this%ctmpCz,this%UmeanAtWall,uhat)
         
-        call this%derZ_OO%ddz_C2C(this%ctmpCz,this%ctmpCz2,size(this%ctmpCz,1),size(this%ctmpCz,2))
+        call this%derZ_SS%ddz_C2C(this%ctmpCz,this%ctmpCz2,size(this%ctmpCz,1),size(this%ctmpCz,2))
         call transpose_z_to_y(this%ctmpCz2,tauhat,this%sp_gp)
         urhs = urhs - tauhat
 
-        call this%derZ_OO%InterpZ_C2E(this%ctmpCz,this%ctmpEz,size(this%ctmpCz,1),size(this%ctmpCz,2))
+        call this%derZ_SS%InterpZ_C2E(this%ctmpCz,this%ctmpEz,size(this%ctmpCz,1),size(this%ctmpCz,2))
         call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
         call this%spectE%mtimes_ik1_ip(this%ctmpEy)
         wrhs = wrhs - this%ctmpEy
@@ -18,11 +18,11 @@
         call transpose_y_to_z(tauhat,this%ctmpCz,this%sp_gp)
         !if (this%useWallModel) call this%moengWall%updateTAU_i3(this%ctmpCz,this%UmeanAtWall,vhat)
     
-        call this%derZ_OO%ddz_C2C(this%ctmpCz,this%ctmpCz2,size(this%ctmpCz,1),size(this%ctmpCz,2))
+        call this%derZ_SS%ddz_C2C(this%ctmpCz,this%ctmpCz2,size(this%ctmpCz,1),size(this%ctmpCz,2))
         call transpose_z_to_y(this%ctmpCz2,tauhat,this%sp_gp)
         vrhs = vrhs - tauhat
 
-        call this%derZ_OO%InterpZ_C2E(this%ctmpCz,this%ctmpEz,size(this%ctmpCz,1),size(this%ctmpCz,2))
+        call this%derZ_SS%InterpZ_C2E(this%ctmpCz,this%ctmpEz,size(this%ctmpCz,1),size(this%ctmpCz,2))
         call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
         call this%spectE%mtimes_ik2_ip(this%ctmpEy)
         wrhs = wrhs - this%ctmpEy
@@ -50,6 +50,6 @@
         ! STEP 8: Update wrhs using ddz(wrhs)
         call this%spectC%fft(tau33,tauhat)
         call transpose_y_to_z(tauhat,this%ctmpCz,this%sp_gp)
-        call this%derZ_EE%ddz_C2E(this%ctmpCz,this%ctmpEz,size(this%ctmpCz,1),size(this%ctmpCz,2))
+        call this%dertau33%ddz_C2E(this%ctmpCz,this%ctmpEz,size(this%ctmpCz,1),size(this%ctmpCz,2))
         call transpose_z_to_y(this%ctmpEz,this%ctmpEy,this%sp_gpE)
         wrhs = wrhs - this%ctmpEy

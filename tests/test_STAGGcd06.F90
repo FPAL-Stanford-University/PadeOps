@@ -16,7 +16,7 @@ program testSTAGGcd06
     type(cd06stagg), allocatable :: der
     type(cd06     ), allocatable :: der2
     integer :: i, j, k, ierr
-    real(rkind) :: zzst = 0.1_rkind, zzend = 1._rkind
+    real(rkind) :: zzst = 0.1_rkind, zzend = 0.9_rkind
     type(staggops) :: ops
     type(decomp_info) :: gp, gpE, sp_gp, sp_gpE
 
@@ -50,19 +50,15 @@ program testSTAGGcd06
     fE = cos(two*pi*omega*zE) + imi*cos(two*pi*omega*zE)
     fC = cos(two*pi*omega*zC) + imi*cos(two*pi*omega*zC)
 
+    dfEt = -omega*two*pi*sin(two*pi*omega*zE) + imi*(-omega*two*pi*sin(two*pi*omega*zE))
+    dfCt = -omega*two*pi*sin(two*pi*omega*zC) + imi*(-omega*two*pi*sin(two*pi*omega*zC))
+    
     allocate(der)
-    call der%init(nz, dz, isTopEven, isBotEven,.false.,.true.)
-    !allocate(der2)
-    !i =  der2%init(nz,dz, .false., 0, 0)
-
-
-    !call ops%init(gp, gpE, 0, 1._rkind, 1._rkind, dz, sp_gp, sp_gpE, .true., .true.) 
+    call der%init(nz, dz, isTopEven, isBotEven,.true.,.true.)
 
     call der%InterpZ_E2C(fE,dfC,nx,ny)
-    print*, dfC(1,1,:)
+    print*, dfC(1,1,:) - fC(1,1,:)
 
-    !dfEt = -omega*two*pi*sin(two*pi*omega*zE) + imi*(-omega*two*pi*sin(two*pi*omega*zE))
-    dfCt = -omega*two*pi*sin(two*pi*omega*zC) + imi*(-omega*two*pi*sin(two*pi*omega*zC))
 
     !print*, "==================================================="
     !print*, dfCt(1,1,:)
