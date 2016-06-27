@@ -12,6 +12,7 @@ program test_projection
     use cf90stuff, only: cf90
     use basic_io, only: write_binary
     use gaussianstuff, only: gaussian 
+    use staggOpsMod
     implicit none
    
     real(rkind), dimension(:,:,:), allocatable :: x, y, z, u, v, w, wE
@@ -19,7 +20,7 @@ program test_projection
     type(decomp_info) :: gpC, gpE
     integer :: nx = 100, ny = 100, nz = 60
     integer :: ierr, prow = 0, pcol = 0
-    real(rkind) :: dx, dy, dz
+    real(rkind) :: dx, dy, dz, Lz
     integer :: dimTransform = 2
     character(len=clen) :: filename = "/home/aditya90/Codes/PadeOps/data/OpenFoam_AllData.txt" 
     real(rkind), dimension(:,:), allocatable :: temp 
@@ -30,8 +31,11 @@ program test_projection
     complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what
     type(cd06stagg), allocatable :: der
     complex(rkind), dimension(:,:,:), allocatable :: ctmp1, ctmp2, ctmp3, ctmp4
+    complex(rkind), dimension(:,:,:,:), allocatable :: cbuffzC, cbuffzE
     type(cf90) :: filzC, filzE
     type(gaussian) :: testFiltC, testFiltE
+    type(staggops) :: der2nd
+    logical :: computeStokesPressure = .true. 
 
     call MPI_Init(ierr)
     
@@ -52,7 +56,7 @@ program test_projection
     allocate( divergence ( gpC%xsz(1), gpC%xsz(2), gpC%xsz(3) ) )
     
    
-
+    Lz = 400.d0
     ! Set x values
     tmp = reshape(temp(:,1),[nx,ny,nz])
     x = tmp(gpC%xst(1):gpC%xen(1),gpC%xst(2):gpC%xen(2),gpC%xst(3):gpC%xen(3))
@@ -89,17 +93,16 @@ program test_projection
     allocate(poiss)
     allocate(der)
 
-    call der%init(nz + 1, dz, .false., .false.) 
-    call spect%init("x", nx, ny, nz, dx, dy, dz, "four", "2/3rd", dimTransform,.false.)
-    call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", "2/3rd", dimTransform,.false.,.false.,.false.,.false.)
-    call poiss%init(dx, dy, dz, spect, spectE, der)
-    ierr = filzC%init(nz,.false.)
-    ierr = TestFiltC%init(nz,.false.)
-    print*, ierr
-    ierr = filzE%init(nz,.false.)
-    ierr = TestFiltE%init(nz,.false.)
-    print*, ierr
+    call der%init(nz, dz, .false., .false., .false. ,.false.) 
+    call spect%init("x", nx, ny, nz, dx, dy, dz, "four", "2/3rd", 2,.false.)
+    call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", "2/3rd", 2,.false.)
+    call der2nd%init( gpC, gpE, 1 , dx, dy, dz, spect%spectdecomp, spectE%spectdecomp, .false., .false.)
 
+    allocate(cbuffzC(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3),2))
+    allocate(cbuffzE(spectE%spectdecomp%zsz(1),spectE%spectdecomp%zsz(2),spectE%spectdecomp%zsz(3),1))
+    
+    call poiss%init(dx, dy, dz, spect, spectE, der, computeStokesPressure, Lz)
+    
     allocate(ctmp1(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3)))
     allocate(ctmp2(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3)))
     allocate(ctmp3(spectE%spectdecomp%zsz(1),spectE%spectdecomp%zsz(2),spectE%spectdecomp%zsz(3)))
@@ -118,20 +121,18 @@ program test_projection
 
     ! Step 2: Interpolate onto rtmp1zE
     call der%InterpZ_C2E(rtmp1z,rtmp1zE,size(rtmp1z,1),size(rtmp1z,2))
+    rtmp1zE(:,:,1) = 2.d0*rtmp1z(:,:,1) - rtmp1zE(:,:,2)
+    rtmp1zE(:,:,nz+1) = 2.d0*rtmp1z(:,:,nz) - rtmp1zE(:,:,nz)
 
     ! Step 3: Transpose back from z -> x
     call transpose_z_to_y(rtmp1zE,rtmp1yE,gpE)
     call transpose_y_to_x(rtmp1yE,wE,gpE)
 
-    
-    deallocate(rtmp1y,rtmp1z,rtmp1zE,rtmp1yE)
-
-
     !! Allocate storage for ffts
     call spect%alloc_r2c_out(uhat)
     call spect%alloc_r2c_out(vhat)
     call spectE%alloc_r2c_out(what)
-    
+
     !! Take FFTs
     call spect%fft(u,uhat)
     call spect%fft(v,vhat)
@@ -144,34 +145,11 @@ program test_projection
     call spectE%ifft(what, wE, .true.) 
     call spect%ifft(uhat, u, .true.) 
     call spect%ifft(vhat, v, .true.) 
+    
     call spect%fft(u,uhat)
     call spect%fft(v,vhat)
     call spectE%fft(wE,what)
 
-    call write_binary(u,"u_preF.dat")
-    call write_binary(v,"v_preF.dat")
-    call write_binary(wE,"w_preF.dat")
-
-    !! Filter in z
-    call tic()
-    call transpose_y_to_z(uhat,ctmp1,spect%spectdecomp)
-    call filzC%filter3(ctmp1,ctmp2,size(ctmp1,1),size(ctmp1,2))
-    call transpose_z_to_y(ctmp2,uhat,spect%spectdecomp)
-    call transpose_y_to_z(vhat,ctmp1,spect%spectdecomp)
-    call filzC%filter3(ctmp1,ctmp2,size(ctmp1,1),size(ctmp1,2))
-    call transpose_z_to_y(ctmp2,vhat,spect%spectdecomp)
-    call transpose_y_to_z(what,ctmp3,spectE%spectdecomp)
-    call filzE%filter3(ctmp3,ctmp4,size(ctmp3,1),size(ctmp3,2))
-    call transpose_z_to_y(ctmp4,what,spectE%spectdecomp)
-    call toc()
-    call spect%ifft(uhat,u)
-    call spect%ifft(vhat,v)
-    call spect%ifft(what,wE)
-    call write_binary(u,"u_postF.dat")
-    call write_binary(v,"v_postF.dat")
-    call write_binary(wE,"w_postF.dat")
-    
-    
     !! Divergence Check 
     call poiss%DivergenceCheck(uhat,vhat,what,divergence) 
     call message(1,"Max Divergence before projection:", p_maxval(divergence))
@@ -180,7 +158,6 @@ program test_projection
     !! Call Poisson Projection
     call poiss%PressureProjection(uhat,vhat,what) 
     call toc()   
-
 
     !! Divergence Check 
     call poiss%DivergenceCheck(uhat,vhat,what,divergence) 
@@ -191,32 +168,8 @@ program test_projection
     call spect%ifft(vhat,v)
     call spect%ifft(what,wE)
     
-    call write_binary(u,"u_postP.dat")
-    call write_binary(v,"v_postP.dat")
-    call write_binary(wE,"w_postP.dat")
 
-    call tic()
-    call transpose_y_to_z(uhat,ctmp1,spect%spectdecomp)
-    call testFiltC%filter3(ctmp1,ctmp2,size(ctmp1,1),size(ctmp1,2),0,0)
-    call transpose_z_to_y(ctmp2,uhat,spect%spectdecomp)
-    call transpose_y_to_z(vhat,ctmp1,spect%spectdecomp)
-    call testFiltC%filter3(ctmp1,ctmp2,size(ctmp1,1),size(ctmp1,2),0,0)
-    call transpose_z_to_y(ctmp2,vhat,spect%spectdecomp)
-    call transpose_y_to_z(what,ctmp3,spectE%spectdecomp)
-    call testFiltE%filter3(ctmp3,ctmp4,size(ctmp3,1),size(ctmp3,2),0,0)
-    call transpose_z_to_y(ctmp4,what,spectE%spectdecomp)
-    call toc()
-    call spect%ifft(uhat,u)
-    call spect%ifft(vhat,v)
-    call spect%ifft(what,wE)
-    call write_binary(u,"u_postGF.dat")
-    call write_binary(v,"v_postGF.dat")
-    call write_binary(wE,"w_postGF.dat")
-    
-    
-    !! Deallocate storage
     deallocate(uhat, vhat, what)
-
     deallocate(wE,w,u,v, divergence)
 
     !! Destroy classes

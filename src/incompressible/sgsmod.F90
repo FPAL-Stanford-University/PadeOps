@@ -42,8 +42,7 @@ module sgsmod
         real(rkind), dimension(:,:,:), allocatable :: rtmpY, rtmpZ, rtmpZ2, rtmpZE2, rtmpYE, rtmpZE
         real(rkind), dimension(:,:,:), allocatable :: SSI_xbuff1, SSI_xbuff2, q1, q2, q3
 
-        type(cd06stagg), allocatable :: derZ_EE, derZ_OO, derTAU33
-        type(cd06stagg), allocatable :: derOO
+        type(cd06stagg), allocatable :: derZ_SS, derTAU33
         type(staggOps), allocatable :: Ops2ndOrder, OpsNU
 
         logical :: useWallFunction = .false. 
@@ -332,8 +331,12 @@ contains
 
           call transpose_x_to_y(this%nuSGS,this%rtmpY,this%gpC)
           call transpose_y_to_z(this%rtmpY,this%rtmpZ,this%gpC)
-          call this%OpsNU%InterpZ_Cell2Edge(this%rtmpZ,this%rtmpZE,zero,zero)
-          this%rtmpzE(:,:,this%nz+1) = two*this%rtmpZ(:,:,this%nz) - this%rtmpzE(:,:,this%nz)
+          if (useCompactFD) then
+            call this%derZ_SS%InterpZ_C2E(this%rtmpZ,this%rtmpZE,size(this%rtmpZ,1),size(this%rtmpZ,2))
+          else
+            call this%OpsNU%InterpZ_Cell2Edge(this%rtmpZ,this%rtmpZE,zero,zero)
+            this%rtmpzE(:,:,this%nz+1) = two*this%rtmpZ(:,:,this%nz) - this%rtmpzE(:,:,this%nz)
+          end if
           call transpose_z_to_y(this%rtmpzE,this%rtmpYE,this%gpE)
           call transpose_y_to_x(this%rtmpYE,this%nuSGSE,this%gpE)
           tau13 = this%nuSGSE * S13
@@ -363,7 +366,7 @@ contains
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1) 
             if(useCompactFD) then
-                call this%derOO%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
+                call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
                 call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
             end if 
@@ -383,7 +386,7 @@ contains
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1)
             if(useCompactFD) then
-                call this%derOO%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
+                call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
                 call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
             end if 
@@ -403,7 +406,7 @@ contains
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = (this%WallMFactor*Umn/Uspmn)*this%ctmpCz(:,:,1) 
             if(useCompactFD) then
-                call this%derOO%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
+                call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
                 call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
             end if 
@@ -421,7 +424,7 @@ contains
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = (this%WallMFactor*Vmn/Uspmn)*this%ctmpCz(:,:,1) 
             if(useCompactFD) then
-                call this%derOO%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
+                call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
                 call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
             end if 
@@ -479,33 +482,31 @@ contains
         
         tauhat => this%cbuff(:,:,:,1); tauhat2 => this%cbuff(:,:,:,2)       
 
-        !wallMfactor = ustar*kappa/(log(this%dz/two/this%z0) + bh*this%dz*InvObLength/two)
         this%nuSCA = this%nuSGS/(two*this%Pr); this%nuSCAE = this%nuSGSE/(two*this%Pr)
        
-        !dTdxC = this%nuSCA  * dTdxC
         this%q1 = this%nuSCA  * dTdxC
-        !dTdyC = this%nuSCA  * dTdyC
         this%q2 = this%nuSCA  * dTdyC
-        !dTdzE = this%nuSCAE * dTdzE
         this%q3 = this%nuSCAE * dTdzE
         
-        !call this%spectC%fft(dTdxC,tauhat)
         call this%spectC%fft(this%q1,tauhat)
         call this%spectC%mtimes_ik1_ip(tauhat)
         T_rhs = T_rhs - tauhat 
 
-        !call this%spectC%fft(dTdyC,tauhat)
         call this%spectC%fft(this%q2,tauhat)
         call this%spectC%mtimes_ik2_ip(tauhat)
         T_rhs = T_rhs - tauhat 
 
-        !call this%spectE%fft(dTdzE,this%ctmpEy)
         call this%spectE%fft(this%q3,this%ctmpEy)
         call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
+        this%ctmpEz(:,:,1) = zeroC
         if (nrank == 0) then
             this%ctmpEz(1,1,1) = cmplx(wTh_surf/this%MeanFact,zero)
+        end if
+        if (useCompactFD) then
+            call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpCz,1),size(this%ctmpCz,2))
+        else 
+            call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
         end if 
-        call this%Ops2ndOrder%ddz_E2C(this%ctmpEz,this%ctmpCz)
         call transpose_z_to_y(this%ctmpCz,tauhat,this%sp_gp)
         T_rhs = T_rhs - tauhat
 

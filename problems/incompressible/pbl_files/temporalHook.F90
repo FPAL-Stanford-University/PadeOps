@@ -31,6 +31,7 @@ contains
             call message(0,"Time",gp%tsim)
             call message(1,"u_star:",gp%ustar)
             call message(1,"TIDX:",gp%step)
+            call message(1,"MaxDiv:",DomMaxDiv)
             call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)

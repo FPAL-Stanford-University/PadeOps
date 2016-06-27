@@ -39,6 +39,27 @@ contains
 
     end subroutine 
 
+    pure function linspace(x_min,x_max,n) result(x)
+        integer, intent(in) :: n
+        real(rkind), dimension(n) :: x
+        real(rkind), intent(in) :: x_min, x_max
+        
+        real(rkind) :: step
+        integer :: i
+
+        if (n .le. 1) then
+            x = x_min
+            return
+        end if 
+        step = (x_max - x_min)/(real(n,rkind) - one)
+        
+        x(1) = x_min
+        do i = 2,n
+            x(i) = x(i-1) + step
+        end do 
+
+    end function
+    
     subroutine destroy_buffs_real(buff)
         real(rkind), dimension(:,:,:,:),allocatable, intent(inout) :: buff
 

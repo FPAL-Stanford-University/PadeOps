@@ -51,7 +51,7 @@ module IncompressibleGridWallM
 
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsC
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsE
-        type(cd06stagg), allocatable :: derW, derWW, derOO, derEE
+        type(cd06stagg), allocatable :: derW, derWW, derSO, derSE, derT
         type(cf90),      allocatable :: filzE, filzC
 
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC
@@ -202,7 +202,7 @@ contains
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .false., UseDealiasFilterVert = .false.
-
+        real(rkind) :: Lz = 1.d0
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, &
@@ -310,7 +310,14 @@ contains
         allocate(this%mesh(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),3))
         call meshgen_WallM(this%gpC, this%dx, this%dy, &
             this%dz, this%mesh,inputfile) ! <-- this procedure is part of user defined HOOKS
-        
+        Lz = p_maxval(this%mesh(:,:,:,3)) + this%dz/2.d0
+        call message(0,"Mesh generated:")
+        call message(1,"dx:", this%dx)
+        call message(1,"dy:", this%dy)
+        call message(1,"dz:", this%dz)
+        call message(1,"Lz:", Lz)
+
+
         ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
         allocate(this%spectC)
         call this%spectC%init("x", nx, ny, nz, this%dx, this%dy, this%dz, &
@@ -324,15 +331,17 @@ contains
 
         ! STEP 5: ALLOCATE/INITIALIZE THE OPERATORS DERIVED TYPE
         if (useCompactFD) then
-            allocate(this%derEE, this%derOO, this%derW, this%derWW) 
-            call this%derEE%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
+            allocate(this%derSE, this%derSO, this%derW, this%derWW, this%derT) 
+            call this%derSE%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
                              isTopSided = .false., isBotSided = .true.) 
-            call this%derOO%init( this%gpC%zsz(3), this%dz, isTopEven = .false., isBotEven = .false., & 
+            call this%derSO%init( this%gpC%zsz(3), this%dz, isTopEven = .false., isBotEven = .false., & 
                              isTopSided = .false., isBotSided = .true.) 
             call this%derW%init( this%gpC%zsz(3),  this%dz, isTopEven = .false., isBotEven = .false., & 
                              isTopSided = .false., isBotSided = .false.) 
             call this%derWW%init( this%gpC%zsz(3),  this%dz, isTopEven = .true., isBotEven = .true., & 
                              isTopSided = .false., isBotSided = .false.) 
+            call this%derT%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
+                             isTopSided = .true., isBotSided = .true.) 
         else
             allocate(this%Ops)
             call this%Ops%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp, &
@@ -349,7 +358,6 @@ contains
         end if
 
 
- 
         ! STEP 6: ALLOCATE MEMORY FOR FIELD ARRAYS
         if (this%isStratified) then
             allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),7))
@@ -414,7 +422,7 @@ contains
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
         if (useCompactFD) then
             allocate(this%padepoiss)
-            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, this%derW) 
+            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, this%derW, computeStokesPressure, Lz) 
         else    
             allocate(this%poiss)
             call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE, .true.)  
@@ -590,12 +598,6 @@ contains
         if ((useCompactFD).and.(.not.useSkewSymm)) then
             call GracefulExit("You must solve in skew symmetric form if you use CD06",54)
         end if 
-        if ((useCompactFD).and.(ComputeStokesPressure)) then
-            call GracefulExit("You cannot compute Stokes Pressure if you use CD06",54)
-        end if 
-        if ((useCompactFD).and.(this%isStratified)) then
-            call GracefulExit("Stratified case is not currently supported using CD06",54)
-        end if 
 
         call message("IGRID initialized successfully!")
         call message("===========================================================")
@@ -740,7 +742,7 @@ contains
         ! Step 2: Interpolate u -> uE
         call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
         if (useCompactFD) then
-            call this%derEE%InterpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+            call this%derSE%InterpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
         else
             call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
             zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
@@ -753,7 +755,7 @@ contains
         ! Step 3: Interpolate v -> vE
         call transpose_y_to_z(this%vhat,zbuffC,this%sp_gpC)
         if (useCompactFD) then
-            call this%derEE%InterpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+            call this%derSE%InterpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
         else
             call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
             zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
@@ -767,13 +769,16 @@ contains
         ! Step 4: Interpolate T
         if (this%isStratified) then
             call transpose_y_to_z(this%That,zbuffC,this%sp_gpC)
-            call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
-            !zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
+            if (useCompactFD) then
+                call this%derT%InterpZ_C2E(zbuffC,zbuffE,size(zbuffE,1),size(zbuffE,2))
+            else
+                call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
+                zbuffE(:,:,this%nz + 1) = two*zbuffC(:,:,this%nz) - zbuffE(:,:,this%nz)
+            end if 
             zbuffE(:,:,1) = zero 
             if (nrank == 0) then
                 zbuffE(1,1,1) = this%Tsurf*real(this%nx,rkind)*real(this%ny,rkind)
             end if 
-            zbuffE(:,:,this%nz + 1) = two*zbuffC(:,:,this%nz) - zbuffE(:,:,this%nz)
             call transpose_z_to_y(zbuffE,this%TEhat,this%sp_gpE)
             call this%spectE%ifft(this%TEhat,this%TE)
         end if 
@@ -1017,11 +1022,14 @@ contains
             T2C = -this%v*this%dTdyC
             T1C = T1C + T2C
             call this%spectC%fft(T1C,this%T_rhs) 
-       
             T1E = -this%w * this%dTdzE    
             call this%spectC%fft(T1E,fT1E)
             call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
-            call this%Ops%InterpZ_edge2cell(tzE,tzC)
+            if (useCompactFD) then
+                call this%derW%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+            else
+                call this%Ops%InterpZ_edge2cell(tzE,tzC)
+            end if 
             call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
             this%T_rhs = this%T_rhs + fT1C
         end if 
@@ -1345,54 +1353,56 @@ contains
         call this%spectC%ifft(dwdzH,dwdz)
 
 
-        ! Compute dudz, dvdz 
+        ! Compute dudz
         call transpose_y_to_z(this%uhat,ctmpz1,this%sp_gpC)
         if (useCompactFD) then
-            call this%derEE%ddz_C2E(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+            call this%derSE%ddz_C2E(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
         else    
             call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_u,.true.)
+            dudz_dzby2 = ctmpz1(:,:,1)/((this%dz/two)*log(this%dz/two/this%z0))
+            call this%spectE%SurfaceFilter_ip(dudz_dzby2)
+            dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
         end if     
 
-        dudz_dzby2 = ctmpz1(:,:,1)/((this%dz/two)*log(this%dz/two/this%z0))
-        call this%spectE%SurfaceFilter_ip(dudz_dzby2)
-        dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
 
         ! Correct derivative at the z = dz (see Porte Agel, JFM (appendix))
-        if (.not. this%isStratified) then
+        if ((.not. this%isStratified) .and. (.not. useCompactFD)) then
             if (nrank == 0) then
                 ctmpz2(1,1,2) = ctmpz2(1,1,2) + (0.08976d0/(kappa*this%dz))*real(this%nx,rkind)*real(this%ny,rkind)
             end if 
+            ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
         end if 
 
-        ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dudz)
         if (useCompactFD) then
-            call this%derOO%InterpZ_E2C(ctmpz2,ctmpz1,size(ctmpz2,1),size(ctmpz2,2))
+            call this%derSO%InterpZ_E2C(ctmpz2,ctmpz1,size(ctmpz2,1),size(ctmpz2,2))
         else
             call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
+            ctmpz1(:,:,1) = dudz_dzby2 
         end if 
-        ctmpz1(:,:,1) = dudz_dzby2 
         call transpose_z_to_y(ctmpz1,dudzH,this%sp_gpC)
         call this%spectC%ifft(dudzH,dudzC)
 
+
+        ! Compute dvdz 
         call transpose_y_to_z(this%vhat,ctmpz1,this%sp_gpC)
         if (useCompactFD) then
-            call this%derEE%ddz_C2E(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+            call this%derSE%ddz_C2E(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
         else
             call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_v,.true.)
+            dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
+            ctmpz2(:,:,1) = two*dvdz_dzby2 - ctmpz2(:,:,2)
         end if 
 
-        dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
-        ctmpz2(:,:,1) = two*dvdz_dzby2 - ctmpz2(:,:,2)
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dvdz)
         if (useCompactFD) then
-            call this%derOO%InterpZ_E2C(ctmpz2,ctmpz1,size(ctmpz2,1),size(ctmpz2,2))
+            call this%derSO%InterpZ_E2C(ctmpz2,ctmpz1,size(ctmpz2,1),size(ctmpz2,2))
         else
             call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
+            ctmpz1(:,:,1) = dvdz_dzby2
         end if 
-        ctmpz1(:,:,1) = dvdz_dzby2
         call transpose_z_to_y(ctmpz1,dvdzH,this%sp_gpC)
         call this%spectC%ifft(dvdzH,dvdzC)
 
@@ -1414,11 +1424,16 @@ contains
         call this%spectC%ifft(this%dTdyH,this%dTdyC)
    
         call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
-        
-        call this%OpsPP%ddz_C2E(ctmpz1,ctmpz2,.true.,.true.)
-        ctmpz2(:,:,this%nz+1) = ctmpz2(:,:,this%nz)
-        ctmpz2(:,:,1) = two*ctmpz2(:,:,2) - ctmpz2(:,:,3) 
-        call this%OpsPP%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
+       
+        if (useCompactFD) then
+            call this%derT%ddz_C2E(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+            call this%derT%InterpZ_E2C(ctmpz2,ctmpz1,size(ctmpz1,1),size(ctmpz1,2))
+        else 
+            call this%OpsPP%ddz_C2E(ctmpz1,ctmpz2,.true.,.true.)
+            ctmpz2(:,:,this%nz+1) = ctmpz2(:,:,this%nz)
+            ctmpz2(:,:,1) = two*ctmpz2(:,:,2) - ctmpz2(:,:,3) 
+            call this%OpsPP%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
+        end if 
 
         call transpose_z_to_y(ctmpz2, this%dTdzH, this%sp_gpE)
         call this%spectE%ifft(this%dTdzH,this%dTdzE)
