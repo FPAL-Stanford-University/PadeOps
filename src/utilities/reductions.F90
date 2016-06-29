@@ -18,7 +18,7 @@ module reductions
     end interface
 
     interface P_SUM
-        module procedure P_SUM_arr3, P_SUM_arr2, P_SUM_arr1, P_SUM_sca, P_SUM_sca_INT
+        module procedure P_SUM_ARR2_locComm,P_SUM_ARR1_locComm,P_SUM_sca_locComm, P_SUM_ARR3_locComm, P_SUM_arr3, P_SUM_arr2, P_SUM_arr1, P_SUM_sca, P_SUM_sca_INT
     end interface
 
     interface P_MEAN
@@ -143,6 +143,45 @@ contains
         mysum = SUM(x)
         call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
 
+    end function
+
+    function P_SUM_sca_locComm(x,locCommWorld) result(summation)
+        real(rkind), intent(in) :: x
+        integer, intent(in) :: locCommWorld
+        real(rkind) :: summation
+        integer :: ierr
+
+        call MPI_Allreduce(x, summation, 1, mpirkind, MPI_SUM, locCommWorld, ierr)
+    end function
+    function P_SUM_arr1_locComm(x,locCommWorld) result(summation)
+        real(rkind), dimension(:), intent(in) :: x
+        integer, intent(in) :: locCommWorld
+        real(rkind) :: summation
+        real(rkind) :: mysum
+        integer :: ierr
+
+        mysum = SUM(x)
+        call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_SUM, locCommWorld, ierr)
+    end function
+    function P_SUM_arr2_locComm(x,locCommWorld) result(summation)
+        real(rkind), dimension(:,:), intent(in) :: x
+        integer, intent(in) :: locCommWorld
+        real(rkind) :: summation
+        real(rkind) :: mysum
+        integer :: ierr
+
+        mysum = SUM(x)
+        call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_SUM, locCommWorld, ierr)
+    end function
+    function P_SUM_arr3_locComm(x,locCommWorld) result(summation)
+        real(rkind), dimension(:,:,:), intent(in) :: x
+        integer, intent(in) :: locCommWorld
+        real(rkind) :: summation
+        real(rkind) :: mysum
+        integer :: ierr
+
+        mysum = SUM(x)
+        call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_SUM, locCommWorld, ierr)
     end function
 
     function P_SUM_arr2(x) result(summation)
