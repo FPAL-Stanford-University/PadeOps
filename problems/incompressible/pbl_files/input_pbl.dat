@@ -83,8 +83,8 @@ z0                    = 1.d-4       ! Roughness length scale (CAREFUL: This is a
 /
 /
 &WINDTURBINES
-useWindTurbines       = .FALSE.             ! Do you want to use Wind turbines ?
-turbineInfoFile       = "SomeFileLocation"  ! Wind Turbine Input file for actuator lines
+num_turbines          = 1
+ADM                   = .TRUE.
 /
 /
 &KSPREPROCESS
@@ -100,3 +100,5 @@ Ly                    = 6.28318530717959d0 ! Domain Width (appropriate dimesnion
 Lz                    = 1.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
 z0init                = 1.d-4               ! Roughness scale used to initialize the profile
 /
+useWindTurbines       = .TRUE.             ! Do you want to use Wind turbines ?
+turbineInfoFile       = "SomeFileLocation"  ! Wind Turbine Input file for actuator lines

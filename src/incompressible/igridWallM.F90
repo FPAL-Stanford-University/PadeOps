@@ -552,7 +552,7 @@ contains
 
         if (this%useWindTurbines) then
             allocate(this%WindTurbineArr)
-            call this%WindTurbineArr%init(turbineInfoFile, this%gpC, this%gpE, this%spectC, this%spectE, this%mesh, this%dx, this%dy, this%dz)
+            call this%WindTurbineArr%init(turbineInfoFile, this%gpC, this%gpE, this%sp_gpC, this%sp_GPE, this%spectC, this%spectE, this%rbuffxC, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
         end if 
 
         ! STEP 12: Set visualization planes for io

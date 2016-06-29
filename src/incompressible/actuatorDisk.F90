@@ -183,6 +183,7 @@ subroutine getMeanU(this, u, v, w)
             tmpSum = p_sum(sum(this%rbuff),this%myComm) 
             umn = tmpSum/real(this%totPointsOnFace,rkind)
         else
+            write(*,*) this%totPointsOnFace
             umn = sum(this%rbuff)/real(this%totPointsOnFace,rkind)
         end if
 
@@ -214,9 +215,9 @@ subroutine getMeanU(this, u, v, w)
 
 end subroutine
 
-subroutine get_RHS(this, u, v, w, rhsvals)
+subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals)
     class(actuatordisk), intent(inout) :: this
-    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsvals
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in) :: u, v, w
     integer :: i, j, ierr
     real(rkind) :: usp_sq, force
@@ -226,9 +227,10 @@ subroutine get_RHS(this, u, v, w, rhsvals)
     force = this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
     do j = 1,size(this%xP,2)
         do i = 1,size(this%xP,1)
-            call this%smear_this_source(rhsvals,this%xp(i,j),this%yp(i,j),this%zp(i,j), force)
+            call this%smear_this_source(rhsxvals,this%xp(i,j),this%yp(i,j),this%zp(i,j), force)
         end do  
     end do 
+    rhsyvals = zero; rhszvals = zero
 end subroutine
 
 subroutine smear_this_source(this,rhsfield, xC, yC, zC, valSource)
