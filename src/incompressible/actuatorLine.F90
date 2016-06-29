@@ -84,7 +84,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, mesh, dx, dy, dz)
     integer :: mini, minj, mink, maxi, maxj, maxk
     integer :: max_num_blades = 0, max_num_blade_points = 0
 
-    namelist /TURBDATA/ num_turbines, ADMnum_blades, num_blade_points, initial_yaw, initial_azimuth, &
+    namelist /TURBDATA/ num_turbines, num_blades, num_blade_points, initial_yaw, initial_azimuth, &
                         initial_rpm, turb_xloc, turb_yloc, turb_zloc, tip_radius, hub_radius,     &
                         nacelle_width, epsfactor
 

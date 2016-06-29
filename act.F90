@@ -22,7 +22,7 @@ module actuatorDiskmod
         integer(rkind), dimension(:,:), allocatable :: tag_face 
         real(rkind) :: yaw, tilt
         real(rkind) :: xLoc, yLoc, zLoc
-        real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq
+        real(rkind) :: diam, cT, pfactor, normfactor, deltaSq
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
         integer :: totPointsOnFace
         real(rkind), dimension(:,:,:), allocatable :: eta_delta, dsq
@@ -83,7 +83,6 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
     this%nxLoc = size(xG,1); this%nyLoc = size(xG,2); this%nzLoc = size(xG,3)
 
     this%delta = epsFact * (dx*dy*dz)**(1.d0/3.d0)
-    this%OneByDelSq = 1.d0/(this%delta**2)
 
     allocate(tmp(size(xG,2),size(xG,3)))
     allocate(tmp_tag(size(xG,2),size(xG,3)))

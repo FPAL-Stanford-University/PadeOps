@@ -55,7 +55,7 @@ program test_actuatorDisk
     end do 
     rhs = 0.d0
     call tic()
-    do idx = 1,2
+    do idx = 1,6
         call hawts(idx)%get_RHS(u, v, w, rhs)
     end do 
     call toc()
