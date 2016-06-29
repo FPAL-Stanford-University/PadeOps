@@ -15,6 +15,7 @@ module actuatorDiskmod
     
     real(rkind), parameter :: alpha_Smooth = 0.9d0 ! Exonential smoothing constant
     integer, parameter :: xReg = 8, yReg = 8, zReg = 8
+    integer, parameter :: ntry = 15
 
     type :: actuatorDisk
         ! Actuator Disk Info
@@ -27,14 +28,17 @@ module actuatorDiskmod
         integer :: totPointsOnFace
         real(rkind), dimension(:,:,:), allocatable :: eta_delta, dsq
         real(rkind), dimension(:,:), allocatable :: xp, yp, zp
-    
+        real(rkind), dimension(:), allocatable :: xs, ys, zs
+        integer, dimension(:,:), allocatable :: startEnds
+
         ! Grid Info
         integer :: nxLoc, nyLoc, nzLoc 
         real(rkind) :: delta ! Smearing size
         real(rkind) :: alpha_tau = 1.d0! Smoothing parameter (set to 1 for initialization) 
         real(rkind), dimension(:,:), allocatable :: rbuff
-        real(rkind), dimension(:), allocatable :: xline, yline, zline
+        real(rkind), dimension(:), allocatable :: dline, xline, yline, zline
         real(rkind), dimension(:,:,:), pointer :: xG, yG, zG
+
 
         ! MPI communicator stuff
         logical :: Am_I_Active, Am_I_Split
@@ -57,16 +61,14 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
     integer, intent(in) :: ActuatorDiskID
     character(len=*), intent(in) :: inputDir
     character(len=clen) :: tempname, fname
-    integer :: ioUnit, tmpSum, totSum, ierr
-    integer :: n_rad = 10, n_theta = 20
+    integer :: ioUnit, tmpSum, totSum
     real(rkind) :: xLoc=1.d0, yLoc=1.d0, zLoc=0.1d0, diam=0.08d0, cT=0.65d0
     real(rkind) :: yaw=0.d0, tilt=0.d0, epsFact = 1.5d0, dx, dy, dz
     real(rkind), dimension(:,:), allocatable :: tmp
     integer, dimension(:,:), allocatable :: tmp_tag
-    real(rkind), dimension(:), allocatable :: rEdge, rCell
     integer :: i, j, locator(1)
-    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt, epsFact, &
-                             & n_rad, n_theta
+    integer :: xLc(1), yLc(1), zLc(1), xst, xen, yst, yen, zst, zen, ierr, xlen, ylen, zlen
+    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
     ! Read input file for this turbine    
     write(tempname,"(A13,I3.3,A10)") "ActuatorDisk_", ActuatorDiskID, "_input.inp"
@@ -92,6 +94,7 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
     allocate(this%yLine(size(xG,2)))
     allocate(this%zLine(size(xG,3)))
     allocate(this%dsq(2*xReg+1,2*yReg+1,2*zReg+1))
+    allocate(this%dline(2*xReg+1))
     this%dsq = 0.d0
     this%xG => xG; this%yG => yG; this%zG => zG
     
@@ -141,19 +144,29 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
     
     if (this%Am_I_Active) then
         allocate(this%rbuff(size(xG,2),size(xG,3)))
-        allocate(rEdge(n_rad+1), rCell(n_rad))
-        rEdge = linspace(0.d0,diam/2.d0,n_rad+1)
-        rCell = 0.5d0*(rEdge(1:n_rad) + rEdge(2:n_rad+1))
-        allocate(this%xp(n_rad, n_theta), this%yp(n_rad, n_theta), this%zp(n_rad, n_theta))
 
-        do j = 1,n_theta
-            do i = 1,n_rad
-                this%xp(i,j) = xLoc
-                this%yp(i,j) = yLoc + rCell(i)*cos((j-1)*2.d0*pi/real(n_theta))
-                this%zp(i,j) = zLoc + rCell(i)*sin((j-1)*2.d0*pi/real(n_theta))
-            end do 
-        end do
-        this%normfactor = 1.d0/(real(n_theta)*real(n_rad)) 
+        call sample_on_circle(diam/2.d0,yLoc,zLoc, this%ys,this%zs,ntry)
+        allocate(this%xs(size(this%ys)))
+        this%xs = xLoc
+        allocate(this%startEnds(7,size(this%xs)))
+        this%startEnds = 0
+        do j = 1,size(this%xs)
+                xLc = minloc(abs(this%xs(j) - this%xline)); 
+                yLc = minloc(abs(this%ys(j) - this%yline)); 
+                zLc = minloc(abs(this%zs(j) - this%zline))
+
+                xst = max(1, xLc(1) - xReg)
+                yst = max(1, yLc(1) - yreg) 
+                zst = max(1, zLc(1) - zreg)
+                xen = min(this%nxLoc,xLc(1) + xReg) 
+                yen = min(this%nyLoc,yLc(1) + yreg) 
+                zen = min(this%nzLoc,zLc(1) + zreg)
+                xlen = xen - xst + 1; !ylen = yen - yst + 1; zlen = zen - zst + 1
+                this%startEnds(1,j) = xst; this%startEnds(2,j) = xen; this%startEnds(3,j) = yst
+                this%startEnds(4,j) = yen; this%startEnds(5,j) = zst; this%startEnds(6,j) = zen
+                this%startEnds(7,j) = xlen
+        end do  
+        this%normfactor = 1.d0/(real(size(this%xs),rkind))
     else
         deallocate(this%dsq, this%tag_face)
     end if 
@@ -218,49 +231,82 @@ subroutine get_RHS(this, u, v, w, rhsvals)
     class(actuatordisk), intent(inout) :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in) :: u, v, w
-    integer :: i, j, ierr
+    integer :: j
     real(rkind) :: usp_sq, force
 
     call this%getMeanU(u,v,w)
     usp_sq = this%uface**2 + this%vface**2 + this%wface**2
-    force = this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
-    do j = 1,size(this%xP,2)
-        do i = 1,size(this%xP,1)
-            call this%smear_this_source(rhsvals,this%xp(i,j),this%yp(i,j),this%zp(i,j), force)
-        end do  
+    force = this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
+    do j = 1,size(this%xs)
+            call this%smear_this_source(rhsvals,this%xs(j),this%ys(j),this%zs(j), force, this%startEnds(1,j), &
+                                this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
+                                this%startEnds(5,j),this%startEnds(6,j),this%startEnds(7,j))
     end do 
 end subroutine
 
-subroutine smear_this_source(this,rhsfield, xC, yC, zC, valSource)
+subroutine smear_this_source(this,rhsfield, xC, yC, zC, valSource, xst, xen, yst, yen, zst, zen, xlen)
     class(actuatordisk), intent(inout) :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsfield
     real(rkind), intent(in) :: xC, yC, zC, valSource
-    integer :: xLoc(1), yLoc(1), zLoc(1), xst, xen, yst, yen, zst, zen, ierr, xlen, ylen, zlen
+    integer, intent(in) :: xst, xen, yst, yen, zst, zen, xlen!, ylen, zlen
+    integer :: jj, kk
 
     if (this%Am_I_Active) then
-        xLoc = minloc(abs(xC - this%xline)); 
-        yLoc = minloc(abs(yC - this%yline)); 
-        zLoc = minloc(abs(zC - this%zline))
+        do concurrent (kk = zst:zen)
+            do jj = yst,yen
+                this%dline(1:xlen) = (this%xG(xst:xen,jj,kk) - xC)**2 &
+                                   + (this%yG(xst:xen,jj,kk) - yC)**2 & 
+                                   + (this%zG(xst:xen,jj,kk) - zC)**2
+                this%dline(1:xlen) = -this%dline(1:xlen)*this%oneBydelSq
+                rhsfield(xst:xen,jj,kk) = rhsfield(xst:xen,jj,kk) + &
+                                          valSource*exp(this%dline)
 
-        xst = max(1, xLoc(1) - xReg)
-        yst = max(1, yLoc(1) - yreg) 
-        zst = max(1, zLoc(1) - zreg)
-        xen = min(this%nxLoc,xLoc(1) + xReg) 
-        yen = min(this%nyLoc,yLoc(1) + yreg) 
-        zen = min(this%nzLoc,zLoc(1) + zreg)
-        xlen = xen - xst + 1; ylen = yen - yst + 1; zlen = zen - zst + 1
-
-        this%dsq(1:xlen,1:ylen,1:zlen) = (this%xG(xst:xen,yst:yen,zst:zen) - xC)**2  &
-                                       + (this%yG(xst:xen,yst:yen,zst:zen) - yC)**2  &
-                                       + (this%zG(xst:xen,yst:yen,zst:zen) - zC)**2
-
-        this%dsq = -this%dsq/(this%delta**2)
-        rhsfield(xst:xen,yst:yen,zst:zen) = rhsfield(xst:xen,yst:yen,zst:zen) + &
-                                            (this%pfactor*valSource)*exp(this%dsq(1:xlen,1:ylen,1:zlen))
-      
-
+            end do 
+        end do  
     end if 
 
 end subroutine 
+
+subroutine sample_on_circle(R,xcen, ycen, xloc,yloc,np)
+    use gridtools, only: linspace
+    real(rkind), intent(in) :: R
+    integer, intent(in) :: np
+    real(rkind), intent(in) :: xcen, ycen
+    integer, dimension(:), allocatable :: tag
+    real(rkind), dimension(:), allocatable :: xline, yline
+    real(rkind), dimension(:), allocatable, intent(out) :: xloc, yloc
+    real(rkind), dimension(:), allocatable :: xtmp, ytmp, rtmp
+    integer :: idx, i, j, nsz, iidx
+
+    allocate(xline(np),yline(np))
+    allocate(xtmp(np**2),ytmp(np**2), rtmp(np**2), tag(np**2))
+    
+    xline = linspace(-R,R,np+1)
+    yline = linspace(-R,R,np+1)
+    idx = 1
+    do j = 1,np
+        do i = 1,np
+            xtmp(idx) = xline(i); ytmp(idx) = yline(j)
+            idx = idx + 1
+        end do 
+    end do
+    rtmp = sqrt(xtmp**2 + ytmp**2) 
+    tag = 0
+    where (rtmp < R) 
+        tag = 1
+    end where
+    nsz = sum(tag)
+    allocate(xloc(nsz), yloc(nsz))
+    iidx = 1
+    do idx = 1,size(tag)
+        if (tag(idx) == 1) then
+            xloc(iidx) = xtmp(idx)
+            yloc(iidx) = ytmp(idx)
+            iidx = iidx + 1
+        end if
+    end do
+
+    xloc = xloc + xcen; yloc = yloc + ycen 
+end subroutine
 
 end module 

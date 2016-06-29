@@ -54,6 +54,7 @@ program test_actuatorDisk
         call hawts(idx)%init(inputDir, idx, xG, yG, zG)
     end do 
     rhs = 0.d0
+    call mpi_barrier(mpi_comm_world, ierr)
     call tic()
     do idx = 1,6
         call hawts(idx)%get_RHS(u, v, w, rhs)
