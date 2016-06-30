@@ -227,9 +227,10 @@ subroutine getMeanU(this, u, v, w)
 
 end subroutine
 
-subroutine get_RHS(this, u, v, w, rhsvals)
+subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals)
+!subroutine get_RHS(this, u, v, w, rhsvals)
     class(actuatordisk_T2), intent(inout) :: this
-    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsvals
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in) :: u, v, w
     integer :: j
     real(rkind) :: usp_sq, force
@@ -238,10 +239,11 @@ subroutine get_RHS(this, u, v, w, rhsvals)
     usp_sq = this%uface**2 + this%vface**2 + this%wface**2
     force = this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
     do j = 1,size(this%xs)
-            call this%smear_this_source(rhsvals,this%xs(j),this%ys(j),this%zs(j), force, this%startEnds(1,j), &
+            call this%smear_this_source(rhsxvals,this%xs(j),this%ys(j),this%zs(j), force, this%startEnds(1,j), &
                                 this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
                                 this%startEnds(5,j),this%startEnds(6,j),this%startEnds(7,j))
     end do 
+
 end subroutine
 
 subroutine smear_this_source(this,rhsfield, xC, yC, zC, valSource, xst, xen, yst, yen, zst, zen, xlen)

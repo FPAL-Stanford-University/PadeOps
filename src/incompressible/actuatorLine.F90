@@ -1,4 +1,4 @@
-module turbineMod
+module actuatorLineMod
     use kind_parameters, only: rkind, clen
     use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa
     use decomp_2d
@@ -12,7 +12,7 @@ module turbineMod
     implicit none
 
     private
-    public :: TurbineArray
+    public :: turbArrayALM
 
     ! default initializations
     integer :: num_turbines = 1, num_blades = 3, num_blade_points
@@ -29,7 +29,7 @@ module turbineMod
     integer, dimension(:), allocatable :: ist, iend, jst, jend, kst, kend, kstE, kendE  ! start and end indices for cube of cells that can be potentially affected by each turbine
     real(rkind), dimension(:,:,:,:), allocatable :: dist_sq, distE_sq, x_cloud, y_cloud, zC_cloud, zE_cloud
 
-    type :: TurbineArray
+    type :: turbArrayALM
         integer :: myProc
         integer, dimension(:), allocatable  :: xst, xen, yst, yen
         integer :: nTurbines
@@ -71,7 +71,7 @@ module turbineMod
 contains
 
 subroutine init(this, inputFile, gpC, gpE, spectC, spectE, mesh, dx, dy, dz)
-    class(TurbineArray), intent(inout), target :: this
+    class(turbArrayALM), intent(inout), target :: this
     character(len=*), intent(in) :: inputFile
     type(spectral), target :: spectC, spectE
     type(decomp_info), target :: gpC, gpE
@@ -253,7 +253,7 @@ end subroutine
 
 
 subroutine destroy(this)
-    class(TurbineArray), intent(inout) :: this
+    class(turbArrayALM), intent(inout) :: this
     nullify(this%gpC, this%gpE, this%spectC, this%sp_gpC, this%fx, this%fy, this%fz)
     deallocate(kst, kend, jst, jend, ist, iend, kstE, kendE, this%num_cells_cloud)
     deallocate(this%cbuffC, this%cbuffE, this%num_cells_cloud, x_cloud, y_cloud, zC_cloud, zE_cloud)
@@ -261,7 +261,7 @@ subroutine destroy(this)
 end subroutine
 
 subroutine get_extents(this, ist, iend, xmin, xmax, procmesh)
-    class(TurbineArray), intent(in) :: this
+    class(turbArrayALM), intent(in) :: this
     integer, intent(out) :: ist, iend
     real(rkind), intent(in) :: xmin, xmax
     real(rkind), dimension(:), intent(in) :: procmesh
@@ -313,7 +313,7 @@ subroutine get_extents(this, ist, iend, xmin, xmax, procmesh)
 end subroutine
 
 subroutine yaw_turbine(this, turbID, angle)
-    class(TurbineArray), intent(inout) :: this
+    class(turbArrayALM), intent(inout) :: this
     integer, intent(in) :: turbID
     real(rkind), intent(in) :: angle
 
@@ -356,7 +356,7 @@ subroutine yaw_turbine(this, turbID, angle)
 end subroutine
 
 subroutine rotate_one_blade(this, turbID, blID, angle)
-    class(TurbineArray), intent(inout) :: this
+    class(turbArrayALM), intent(inout) :: this
     integer, intent(in) :: turbID, blID
     real(rkind), intent(in) :: angle
 
@@ -389,7 +389,7 @@ subroutine rotate_one_blade(this, turbID, blID, angle)
 end subroutine
 
 subroutine distribute_forces(this)
-    class(TurbineArray), intent(inout) :: this
+    class(turbArrayALM), intent(inout) :: this
 
     integer :: i, j, k
 
@@ -426,7 +426,7 @@ subroutine distribute_forces(this)
 end subroutine
 
 subroutine interp_airfoil_props(this, i, radial_dist, twistAng, chord, airfoilID)
-    class(TurbineArray), intent(inout) :: this
+    class(turbArrayALM), intent(inout) :: this
     integer, intent(in) :: i
     real(rkind), intent(in) :: radial_dist
     real(rkind), intent(out) :: twistAng, chord
@@ -435,14 +435,14 @@ subroutine interp_airfoil_props(this, i, radial_dist, twistAng, chord, airfoilID
 end subroutine
 
 subroutine interp_velocity(this, uloc, blPoint)
-    class(TurbineArray), intent(inout) :: this
+    class(turbArrayALM), intent(inout) :: this
     real(rkind), dimension(3), intent(out) :: uloc
     real(rkind), dimension(3), intent(in) :: blPoint
 
 end subroutine
 
 subroutine interp_clcd(this, i, j, AOA, cl, cd)
-    class(TurbineArray), intent(inout) :: this
+    class(turbArrayALM), intent(inout) :: this
     integer, intent(in) :: i, j
     real(rkind), intent(in) :: AOA
     real(rkind), intent(out) :: cl, cd
@@ -451,7 +451,7 @@ subroutine interp_clcd(this, i, j, AOA, cl, cd)
 
 end subroutine
 subroutine get_blade_forces(this)
-    class(TurbineArray), intent(inout) :: this
+    class(turbArrayALM), intent(inout) :: this
 
     integer :: i, j, k, airfoilID
     real(rkind) :: element_length, radial_dist, twistAng, chord, uloc(3), lift, drag
@@ -528,7 +528,7 @@ subroutine get_blade_forces(this)
 end subroutine
 
 subroutine get_rotation_speed(this)
-    class(TurbineArray), intent(inout), target :: this
+    class(turbArrayALM), intent(inout), target :: this
 
     integer :: i
 
@@ -542,7 +542,7 @@ subroutine get_rotation_speed(this)
 end subroutine
 
 subroutine update_turbines(this, dt)
-    class(TurbineArray), intent(inout), target :: this
+    class(turbArrayALM), intent(inout), target :: this
     real(rkind), intent(in) :: dt
 
     integer :: i, j
@@ -589,7 +589,7 @@ subroutine update_turbines(this, dt)
 end subroutine
 
 subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs)
-    class(TurbineArray), intent(inout), target :: this
+    class(turbArrayALM), intent(inout), target :: this
     real(rkind),                                                                         intent(in) :: dt
     real(rkind),    dimension(this%gpC%xsz(1),   this%gpC%xsz(2),   this%gpC%xsz(3)),    intent(in) :: u, v, wC
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs

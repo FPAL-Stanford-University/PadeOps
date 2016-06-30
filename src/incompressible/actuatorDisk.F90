@@ -125,7 +125,7 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
 
     tmpSum = sum(this%tag_face)
     this%totPointsOnface = p_sum(tmpSum)
-
+        
     this%pfactor = one/((this%delta**3)*(pi**(3.d0/2.d0)))
     if (this%Am_I_Split) then
         call MPI_COMM_SPLIT(mpi_comm_world, this%color, nrank, this%mycomm, ierr)
@@ -218,9 +218,9 @@ subroutine getMeanU(this, u, v, w)
 
 end subroutine
 
-subroutine get_RHS(this, u, v, w, rhsvals)
+subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals)
     class(actuatordisk), intent(inout) :: this
-    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsvals
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in) :: u, v, w
     integer :: j
     real(rkind) :: usp_sq, force
@@ -236,7 +236,9 @@ subroutine get_RHS(this, u, v, w, rhsvals)
             this%eta_delta = (force) * this%dsq
             this%source = this%source + this%eta_delta
         end do
-        rhsvals(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen) = this%source
+        rhsxvals(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen) = this%source
+        rhsyvals(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen) = 0.d0
+        rhszvals(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen) = 0.d0
     end if 
 end subroutine
 

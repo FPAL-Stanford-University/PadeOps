@@ -186,7 +186,7 @@ contains
     subroutine init(this,inputfile)
         class(igridWallM), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
-        character(len=clen) :: outputdir, inputdir, turbineInfoFile, ksOutputDir
+        character(len=clen) :: outputdir, inputdir, turbInfoDir, ksOutputDir
         integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, topWall = slip, SGSModelID = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
@@ -200,9 +200,11 @@ contains
         logical :: useGeostrophicForcing = .false., useVerticalTfilter = .false., useWallDamping = .true. 
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
-        integer :: timeSteppingScheme = 0
+        integer :: timeSteppingScheme = 0, num_turbines
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .false., UseDealiasFilterVert = .false.
         real(rkind) :: Lz = 1.d0
+        logical :: ADM
+        
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, &
@@ -214,7 +216,7 @@ contains
         namelist /LES/ useSGS, useDynamicProcedure, useSGSclipping, SGSmodelID, useVerticalTfilter, &
                         useWallDamping, ncWall, Cs 
         namelist /WALLMODEL/ z0, wallMType
-        namelist /WINDTURBINES/ useWindTurbines, turbineInfoFile  
+        namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep
@@ -552,7 +554,7 @@ contains
 
         if (this%useWindTurbines) then
             allocate(this%WindTurbineArr)
-            call this%WindTurbineArr%init(turbineInfoFile, this%gpC, this%gpE, this%spectC, this%spectE, this%mesh, this%dx, this%dy, this%dz)
+            call this%WindTurbineArr%init(inputFile, this%gpC, this%gpE, this%sp_gpC, this%sp_GPE, this%spectC, this%spectE, this%rbuffxC, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
         end if 
 
         ! STEP 12: Set visualization planes for io
@@ -1094,17 +1096,14 @@ contains
         else
             call this%AddNonLinearTerm_Rot()
         end if 
-
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
         end if 
-      
         ! Step 3a: Extra Forcing 
         if (this%useExtraForcing) then
             call this%addExtraForcingTerm()
         end if 
-
         ! Step 3b: Wind Turbines
         if (this%useWindTurbines) then
             call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
@@ -1130,7 +1129,6 @@ contains
                                                            this%T_rhs, this%wTh_surf           )
             end if 
         end if 
-        
     end subroutine
 
     subroutine project_and_prep(this)
