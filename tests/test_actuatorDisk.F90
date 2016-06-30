@@ -13,9 +13,9 @@ program test_actuatorDisk
 
     type(actuatorDisk), dimension(:), allocatable :: hawts
     integer, parameter :: nx = 192, ny = 192, nz = 128
-    character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/ActuatorDisk/"
+    character(len=clen) :: inputDir = "/home/nghaisas/ActuatorDisk/"
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
-    real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs
+    real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs, rhsv, rhsw
     real(rkind), parameter :: Lx = pi, Ly = pi, Lz = one
     real(rkind) :: dx, dy, dz
     type(decomp_info) :: gp 
@@ -30,6 +30,8 @@ program test_actuatorDisk
     allocate(zG(gp%xsz(1),gp%xsz(2),gp%xsz(3))); allocate(u(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
     allocate(v(gp%xsz(1),gp%xsz(2),gp%xsz(3))); allocate(w(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
     allocate(rhs(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(rhsv(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(rhsw(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
 
     dx = Lx/real(nx,rkind); dy = Ly/real(ny,rkind); dz = Lz/real(nz,rkind)
     ix1 = gp%xst(1); iy1 = gp%xst(2); iz1 = gp%xst(3)
@@ -54,9 +56,10 @@ program test_actuatorDisk
         call hawts(idx)%init(inputDir, idx, xG, yG, zG)
     end do 
     rhs = 0.d0
+    call mpi_barrier(mpi_comm_world, ierr)
     call tic()
     do idx = 1,6
-        call hawts(idx)%get_RHS(u, v, w, rhs)
+        call hawts(idx)%get_RHS(u, v, w, rhs, rhsv, rhsw)
     end do 
     call toc()
     call mpi_barrier(mpi_comm_world, ierr)

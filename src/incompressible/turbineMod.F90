@@ -18,7 +18,8 @@ module turbineMod
     ! default initializations
     integer :: num_turbines = 1
     logical :: ADM = .TRUE. ! .FALSE. implies ALM
-    character(len=clen) :: inputDir = "/home/nghaisas/ActuatorDisk/"
+    logical :: useWindTurbines = .TRUE. ! .FALSE. implies ALM
+    character(len=clen) :: turbInfoDir
 
     integer :: ioUnit
 
@@ -73,7 +74,7 @@ subroutine init(this, inputFile, gpC, gpE, sp_gpC, sp_gpE, spectC, spectE, rbuff
 
     integer :: i, j, k
 
-    namelist /WINDTURBINES/ num_turbines, ADM
+    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -108,7 +109,7 @@ subroutine init(this, inputFile, gpC, gpE, sp_gpC, sp_gpE, spectC, spectE, rbuff
     if(ADM) then
       allocate (this%turbArrayADM(this%nTurbines))
       do i = 1, this%nTurbines
-        call this%turbArrayADM(i)%init(inputDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
+        call this%turbArrayADM(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
       end do
       call message(1,"WIND TURBINE ADM model initialized")
     else

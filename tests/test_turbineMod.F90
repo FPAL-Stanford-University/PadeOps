@@ -13,7 +13,7 @@ program test_actuatorDisk
     implicit none 
 
     type(turbineArray), allocatable :: turbArray
-    integer, parameter :: nx = 24, ny = 24, nz = 24
+    integer, parameter :: nx = 192, ny = 192, nz = 128
     character(len=clen) :: inputDir = "/home/nghaisas/ActuatorDisk/"
     character(len=clen) :: inputFile = "/home/nghaisas/PadeOps/problems/incompressible/pbl_files/input_pbl.dat"
     real(rkind), dimension(:,:,:,:), allocatable :: mesh
@@ -28,13 +28,17 @@ program test_actuatorDisk
     real(rkind) :: xPeriods = 2.d0, yPeriods = 2.d0, zpeak = 0.3d0, epsnd = 5.d0, z0init = 1.d-4 
     real(rkind), dimension(:,:,:,:), allocatable :: rbuffxC
     complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
+    real(rkind), dimension(:,:,:), allocatable :: rhs_real
+    complex(rkind) :: zeroc = 0.d0 + imi*0.0d0
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, 0, 0)
     call get_decomp_info(gpC)
+    call decomp_info_init(nx,ny,nz+1,gpE)
 
     allocate(mesh(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),3))
     allocate(u(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+    allocate(rhs_real(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
     allocate(v(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3))); allocate(w(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
     allocate(rhsx(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3))) 
     allocate(rhsy(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3))) 
@@ -77,9 +81,13 @@ program test_actuatorDisk
     call turbArray%init(inputFile, gpC, gpE, sp_gpC, sp_gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
 
     dt = 0.1_rkind
+    urhs = zeroc; vrhs = zeroc; wrhs = zeroc
+    call tic()
     call turbArray%getForceRHS(dt, u, v, w, urhs, vrhs, wrhs)
-    write(*,*) maxval(abs(urhs))
-
+    call toc()
+    call spectC%ifft(urhs,rhs_real) 
+    call decomp_2d_write_one(1,rhs_real,"ArrayRHS.bin", gpC)
+         
     call turbArray%destroy()
     deallocate(turbArray)
     deallocate(mesh, u, v, w, rhsx, rhsy, rhsz)
