@@ -1,4 +1,4 @@
-module actuatorDiskmod
+module actuatorDisk_T2mod
     use kind_parameters, only: rkind, clen
     use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa
     use decomp_2d
@@ -11,30 +11,33 @@ module actuatorDiskmod
     implicit none
 
     private
-    public :: actuatorDisk
+    public :: actuatorDisk_T2
     
     real(rkind), parameter :: alpha_Smooth = 0.9d0 ! Exonential smoothing constant
-    integer, parameter :: xReg = 4, yReg = 7, zReg = 7
+    integer, parameter :: xReg = 5, yReg = 8, zReg = 8
     integer, parameter :: ntry = 10
 
-    type :: actuatorDisk
-        ! Actuator Disk Info
-        integer :: xLoc_idx, ActutorDiskID
+    type :: actuatorDisk_T2
+        ! Actuator Disk_T2 Info
+        integer :: xLoc_idx, ActutorDisk_T2ID
         integer(rkind), dimension(:,:), allocatable :: tag_face 
         real(rkind) :: yaw, tilt
         real(rkind) :: xLoc, yLoc, zLoc
         real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
         integer :: totPointsOnFace
-        real(rkind), dimension(:,:,:), allocatable :: eta_delta, dsq, xSmall, ySmall, zSmall, source
+        real(rkind), dimension(:,:,:), allocatable :: eta_delta, dsq
+        real(rkind), dimension(:,:), allocatable :: xp, yp, zp
         real(rkind), dimension(:), allocatable :: xs, ys, zs
-        integer :: xst, xen, yst, yen, zst, zen, xlen, ylen, zlen
+        integer, dimension(:,:), allocatable :: startEnds
+
         ! Grid Info
         integer :: nxLoc, nyLoc, nzLoc 
         real(rkind) :: delta ! Smearing size
         real(rkind) :: alpha_tau = 1.d0! Smoothing parameter (set to 1 for initialization) 
         real(rkind), dimension(:,:), allocatable :: rbuff
-        real(rkind), dimension(:), allocatable ::  xline, yline, zline
+        real(rkind), dimension(:), allocatable :: dline, xline, yline, zline
+        real(rkind), dimension(:,:,:), pointer :: xG, yG, zG
 
 
         ! MPI communicator stuff
@@ -52,10 +55,10 @@ module actuatorDiskmod
 
 contains
 
-subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
-    class(actuatorDisk), intent(inout) :: this
+subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
+    class(actuatorDisk_T2), intent(inout) :: this
     real(rkind), intent(in), dimension(:,:,:), target :: xG, yG, zG
-    integer, intent(in) :: ActuatorDiskID
+    integer, intent(in) :: ActuatorDisk_T2ID
     character(len=*), intent(in) :: inputDir
     character(len=clen) :: tempname, fname
     integer :: ioUnit, tmpSum, totSum
@@ -63,12 +66,12 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
     real(rkind) :: yaw=0.d0, tilt=0.d0, epsFact = 1.5d0, dx, dy, dz
     real(rkind), dimension(:,:), allocatable :: tmp
     integer, dimension(:,:), allocatable :: tmp_tag
-    integer :: locator(1), ierr
-    integer :: xLc(1), yLc(1), zLc(1)
+    integer :: i, j, locator(1)
+    integer :: xLc(1), yLc(1), zLc(1), xst, xen, yst, yen, zst, zen, ierr, xlen, ylen, zlen
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
     ! Read input file for this turbine    
-    write(tempname,"(A13,I3.3,A10)") "ActuatorDisk_", ActuatorDiskID, "_input.inp"
+    write(tempname,"(A13,I3.3,A10)") "ActuatorDisk_T2_", ActuatorDisk_T2ID, "_input.inp"
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
 
     ioUnit = 55
@@ -90,6 +93,10 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
     allocate(this%xLine(size(xG,1)))
     allocate(this%yLine(size(xG,2)))
     allocate(this%zLine(size(xG,3)))
+    allocate(this%dsq(2*xReg+1,2*yReg+1,2*zReg+1))
+    allocate(this%dline(2*xReg+1))
+    this%dsq = 0.d0
+    this%xG => xG; this%yG => yG; this%zG => zG
     
     this%xLine = xG(:,1,1); this%yLine = yG(1,:,1); this%zLine = zG(1,1,:)
     locator = minloc(abs(this%xLine - xLoc)); this%xLoc_idx = locator(1)
@@ -97,7 +104,7 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
     tmp = sqrt((yG(1,:,:) - yLoc)**2 + (zG(1,:,:) - zLoc)**2)
     this%tag_face = 0
     tmp_tag = 0
-    where(tmp < (diam/2.d0 + diam/2.d0))
+    where(tmp < (diam/2.d0 + 8.d0*max(dz,dy,dz)))
         !this%tag_face = 1
         tmp_tag = 1
     end where
@@ -107,11 +114,11 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
 
     if (sum(tmp_tag) > 0) then
         this%Am_I_Active = .true.
-        this%color = ActuatorDiskID
+        this%color = ActuatorDisk_T2ID
         tmpSum = 1
     else
         this%Am_I_Active = .false.
-        this%color = ActuatorDiskID*1000 
+        this%color = ActuatorDisk_T2ID*1000 
         tmpSum = 0
     end if 
     totSum = p_sum(tmpSum)
@@ -127,6 +134,7 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
     this%totPointsOnface = p_sum(tmpSum)
 
     this%pfactor = one/((this%delta**3)*(pi**(3.d0/2.d0)))
+
     if (this%Am_I_Split) then
         call MPI_COMM_SPLIT(mpi_comm_world, this%color, nrank, this%mycomm, ierr)
         call MPI_COMM_RANK( this%mycomm, this%myComm_nrank, ierr ) 
@@ -136,118 +144,126 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
     
     if (this%Am_I_Active) then
         allocate(this%rbuff(size(xG,2),size(xG,3)))
+
         call sample_on_circle(diam/2.d0,yLoc,zLoc, this%ys,this%zs,ntry)
         allocate(this%xs(size(this%ys)))
         this%xs = xLoc
-        this%normfactor = (1.d0/(real(size(this%xs),rkind)))*this%pfactor
-        xLc = minloc(abs(xLoc - 1.5d0*diam/2.d0 - this%xline)); this%xst = max(1,xLc(1))
-        yLc = minloc(abs(yLoc - diam - this%yline)); this%yst = max(1,yLc(1))
-        zLc = minloc(abs(zLoc - diam - this%zline)); this%zst = max(1,zLc(1))
+        allocate(this%startEnds(7,size(this%xs)))
+        this%startEnds = 0
+        do j = 1,size(this%xs)
+                xLc = minloc(abs(this%xs(j) - this%xline)); 
+                yLc = minloc(abs(this%ys(j) - this%yline)); 
+                zLc = minloc(abs(this%zs(j) - this%zline))
 
-        xLc = minloc(abs(xLoc + 1.5d0*diam/2.d0 - this%xline)); this%xen = min(this%nxLoc,xLc(1))
-        yLc = minloc(abs(yLoc + diam - this%yline)); this%yen = min(this%nyLoc,yLc(1))
-        zLc = minloc(abs(zLoc + diam - this%zline)); this%zen = min(this%nzLoc,zLc(1))
-        
-        this%xlen=this%xen-this%xst+1
-        this%ylen=this%yen-this%yst+1
-        this%zlen=this%zen-this%zst+1
-        
-        allocate(this%dsq(this%xlen,this%ylen,this%zlen))    
-        allocate(this%source(this%xlen,this%ylen,this%zlen))    
-        allocate(this%eta_delta(this%xlen,this%ylen,this%zlen))    
-        allocate(this%xSmall(this%xlen,this%ylen,this%zlen))    
-        allocate(this%ySmall(this%xlen,this%ylen,this%zlen))    
-        allocate(this%zSmall(this%xlen,this%ylen,this%zlen))    
-        this%xSmall = xG(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen)
-        this%ySmall = yG(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen)
-        this%zSmall = zG(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen)
+                xst = max(1, xLc(1) - xReg)
+                yst = max(1, yLc(1) - yReg) 
+                zst = max(1, zLc(1) - zReg)
+                xen = min(this%nxLoc,xLc(1) + xReg) 
+                yen = min(this%nyLoc,yLc(1) + yreg) 
+                zen = min(this%nzLoc,zLc(1) + zreg)
+                xlen = xen - xst + 1; !ylen = yen - yst + 1; zlen = zen - zst + 1
+                this%startEnds(1,j) = xst; this%startEnds(2,j) = xen; this%startEnds(3,j) = yst
+                this%startEnds(4,j) = yen; this%startEnds(5,j) = zst; this%startEnds(6,j) = zen
+                this%startEnds(7,j) = xlen
+        end do  
+        this%normfactor = 1.d0/(real(size(this%xs),rkind))
     else
-        deallocate(this%tag_face)
+        deallocate(this%dsq, this%tag_face)
     end if 
 
     deallocate(tmp)
 end subroutine 
 
 subroutine destroy(this)
-    class(actuatordisk), intent(inout) :: this
+    class(actuatordisk_T2), intent(inout) :: this
 
     if (Allocated(this%rbuff))  deallocate(this%rbuff)
     if (Allocated(this%tag_face))  deallocate(this%tag_face)
     
+    nullify(this%xG, this%yG, this%zG)
 end subroutine 
 
 subroutine getMeanU(this, u, v, w) 
-    class(actuatordisk), intent(inout) :: this
+    class(actuatordisk_T2), intent(inout) :: this
     real(rkind), dimension(this%nxLoc,this%nyLoc,this%nzLoc), intent(in) :: u, v, w
     real(rkind) :: tmpSum, umn, vmn, wmn
     
-    ! Get u face
-    this%rbuff = u(this%xLoc_idx,:,:)
-    this%rbuff = this%rbuff*this%tag_face
-    if (this%AM_I_Split) then
-        tmpSum = p_sum(sum(this%rbuff),this%myComm) 
-        umn = tmpSum/real(this%totPointsOnFace,rkind)
-    else
-        umn = sum(this%rbuff)/real(this%totPointsOnFace,rkind)
-    end if
+    if (this%AM_I_ACTIVE) then
+        ! Get u face
+        this%rbuff = u(this%xLoc_idx,:,:)
+        this%rbuff = this%rbuff*this%tag_face
+        if (this%AM_I_Split) then
+            tmpSum = p_sum(sum(this%rbuff),this%myComm) 
+            umn = tmpSum/real(this%totPointsOnFace,rkind)
+        else
+            umn = sum(this%rbuff)/real(this%totPointsOnFace,rkind)
+        end if
 
-    ! Get v face
-    this%rbuff = v(this%xLoc_idx,:,:)
-    this%rbuff = this%rbuff*this%tag_face
-    if (this%AM_I_Split) then
-        tmpSum = p_sum(sum(this%rbuff),this%myComm) 
-        vmn = (tmpSum)/real(this%totPointsOnFace,rkind)
-    else
-        vmn = sum(this%rbuff)/real(this%totPointsOnFace,rkind)
-    end if
-    
-    ! Get w face
-    this%rbuff = w(this%xLoc_idx,:,:)
-    this%rbuff = this%rbuff*this%tag_face
-    if (this%AM_I_Split) then
-        tmpSum = p_sum(sum(this%rbuff),this%myComm) 
-        wmn = (tmpSum)/real(this%totPointsOnFace,rkind)
-    else
-        wmn = sum(this%rbuff)/real(this%totPointsOnFace,rkind)
-    end if
+        ! Get v face
+        this%rbuff = v(this%xLoc_idx,:,:)
+        this%rbuff = this%rbuff*this%tag_face
+        if (this%AM_I_Split) then
+            tmpSum = p_sum(sum(this%rbuff),this%myComm) 
+            vmn = (tmpSum)/real(this%totPointsOnFace,rkind)
+        else
+            vmn = sum(this%rbuff)/real(this%totPointsOnFace,rkind)
+        end if
+        
+        ! Get w face
+        this%rbuff = w(this%xLoc_idx,:,:)
+        this%rbuff = this%rbuff*this%tag_face
+        if (this%AM_I_Split) then
+            tmpSum = p_sum(sum(this%rbuff),this%myComm) 
+            wmn = (tmpSum)/real(this%totPointsOnFace,rkind)
+        else
+            wmn = sum(this%rbuff)/real(this%totPointsOnFace,rkind)
+        end if
 
-    this%uface = this%alpha_tau*umn + (1.d0 - this%alpha_tau)*this%uface
-    this%vface = this%alpha_tau*vmn + (1.d0 - this%alpha_tau)*this%vface
-    this%wface = this%alpha_tau*wmn + (1.d0 - this%alpha_tau)*this%wface
+        this%uface = this%alpha_tau*umn + (1.d0 - this%alpha_tau)*this%uface
+        this%vface = this%alpha_tau*vmn + (1.d0 - this%alpha_tau)*this%vface
+        this%wface = this%alpha_tau*wmn + (1.d0 - this%alpha_tau)*this%wface
+    end if 
     this%alpha_tau = alpha_smooth
 
 end subroutine
 
 subroutine get_RHS(this, u, v, w, rhsvals)
-    class(actuatordisk), intent(inout) :: this
+    class(actuatordisk_T2), intent(inout) :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in) :: u, v, w
     integer :: j
     real(rkind) :: usp_sq, force
 
-    if (this%Am_I_Active) then
-        call this%getMeanU(u,v,w)
-        usp_sq = this%uface**2 + this%vface**2 + this%wface**2
-        force = this%normfactor * 0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
-        this%source = 0.d0
-        do j =1,size(this%xs)
-            this%dsq = (this%xSmall - this%xs(j))**2 + (this%ySmall - this%ys(j))**2 + (this%zSmall - this%zs(j))**2 
-            this%dsq = exp(-this%dsq*this%oneByDelSq)
-            this%eta_delta = (force) * this%dsq
-            this%source = this%source + this%eta_delta
-        end do
-        rhsvals(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen) = this%source
-    end if 
+    call this%getMeanU(u,v,w)
+    usp_sq = this%uface**2 + this%vface**2 + this%wface**2
+    force = this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
+    do j = 1,size(this%xs)
+            call this%smear_this_source(rhsvals,this%xs(j),this%ys(j),this%zs(j), force, this%startEnds(1,j), &
+                                this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
+                                this%startEnds(5,j),this%startEnds(6,j),this%startEnds(7,j))
+    end do 
 end subroutine
 
-subroutine smear_this_source(this, xC, yC, zC, valSource)
-    class(actuatordisk), intent(inout) :: this
+subroutine smear_this_source(this,rhsfield, xC, yC, zC, valSource, xst, xen, yst, yen, zst, zen, xlen)
+    class(actuatordisk_T2), intent(inout) :: this
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsfield
     real(rkind), intent(in) :: xC, yC, zC, valSource
+    integer, intent(in) :: xst, xen, yst, yen, zst, zen, xlen!, ylen, zlen
+    integer :: jj, kk
 
-    this%dsq = (this%xSmall - xC)**2 + (this%ySmall - yC)**2 + (this%zSmall - zC)**2 
-    this%dsq = -this%dsq*this%oneByDelSq
-    this%eta_delta = (valSource*this%normfactor) * exp(this%dsq)
-    this%source = this%source + this%eta_delta
+    if (this%Am_I_Active) then
+        do concurrent (kk = zst:zen)
+            do jj = yst,yen
+                this%dline(1:xlen) = (this%xG(xst:xen,jj,kk) - xC)**2 &
+                                   + (this%yG(xst:xen,jj,kk) - yC)**2 & 
+                                   + (this%zG(xst:xen,jj,kk) - zC)**2
+                this%dline(1:xlen) = -this%dline(1:xlen)*this%oneBydelSq
+                rhsfield(xst:xen,jj,kk) = rhsfield(xst:xen,jj,kk) + &
+                                          valSource*exp(this%dline)
+
+            end do 
+        end do  
+    end if 
 
 end subroutine 
 

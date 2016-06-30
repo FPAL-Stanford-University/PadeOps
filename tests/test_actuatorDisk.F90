@@ -5,12 +5,14 @@ program test_actuatorDisk
     use timer, only: tic, toc
     use decomp_2d
     use decomp_2d_io
+    use actuatorDisk_T2Mod, only: actuatorDisk_T2
     use actuatorDiskMod, only: actuatorDisk
     use exits, only: message
     use mpi
 
     implicit none 
 
+    type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
     type(actuatorDisk), dimension(:), allocatable :: hawts
     integer, parameter :: nx = 192, ny = 192, nz = 128
     character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/ActuatorDisk/"
@@ -59,12 +61,13 @@ program test_actuatorDisk
     do idx = 1,6
         call hawts(idx)%get_RHS(u, v, w, rhs)
     end do 
-    call toc()
     call mpi_barrier(mpi_comm_world, ierr)
+    call toc()
    
     call decomp_2d_write_one(1,rhs,"temp.bin", gp)
     
-    print*, p_sum(sum(rhs))
+    print*, p_sum(sum(rhs)) * dx*dy*dz
+    print*, "error:", 100.d0*abs(p_sum(sum(rhs)) * dx*dy*dz - 6.d0*0.5d0*(pi/4.d0)*(0.08d0**2)*0.65d0) / (6.d0*0.5d0*(pi/4.d0)*(0.08d0**2)*0.65d0)
     do idx = 1,6
     call hawts(idx)%destroy()
     end do 
