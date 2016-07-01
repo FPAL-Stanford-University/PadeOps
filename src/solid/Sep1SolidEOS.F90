@@ -13,6 +13,8 @@ module Sep1SolidEOS
         real(rkind) :: yield = one                   ! Yield Stress
         real(rkind) :: tau0 = 1.0d-10                ! Plastic relaxation time scale
 
+        real(rkind), dimension(:), allocatable :: svdwork     ! Work array for SVD stuff
+
     contains
 
         ! procedure :: init
@@ -22,6 +24,8 @@ module Sep1SolidEOS
         procedure :: get_sos
         procedure :: get_sos2
         procedure :: plastic_deformation
+        procedure :: make_tensor_SPD
+        final     :: destroy
 
     end type
 
@@ -35,12 +39,31 @@ contains
         type(sep1solid) :: this
         real(rkind), intent(in) :: rho0_,mu_, yield_, tau0_
 
+        integer :: info, lwork
+        real(rkind), dimension(3,3) :: g, u, vt
+        real(rkind), dimension(3)   :: sval
+
         this%rho0 = rho0_
         this%mu = mu_
         this%yield = yield_
         this%tau0 = tau0_
 
+        if (allocated(this%svdwork)) deallocate(this%svdwork); allocate(this%svdwork(1))
+
+        ! Get optimal lwork
+        lwork = -1
+        call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
+        lwork = this%svdwork(1)
+
+        deallocate(this%svdwork); allocate(this%svdwork(lwork))
+
     end function
+
+    pure elemental subroutine destroy(this)
+        type(sep1solid), intent(inout) :: this
+
+        if (allocated(this%svdwork)) deallocate(this%svdwork)
+    end subroutine
 
     subroutine get_finger(this,g,finger,fingersq,trG,trG2,detG)
         class(sep1solid), intent(in) :: this
@@ -132,27 +155,37 @@ contains
     end subroutine
 
     subroutine plastic_deformation(this, gfull)
-        use constants, only: twothird
-        use decomp_2d, only: nrank
-        class(sep1solid), target, intent(in) :: this
+        use kind_parameters, only: clen
+        use constants,       only: eps, twothird
+        use decomp_2d,       only: nrank
+        use exits,           only: GracefulExit, nancheck, message
+        class(sep1solid), target, intent(inout) :: this
         real(rkind), dimension(:,:,:,:), intent(inout) :: gfull
-        real(rkind), dimension(3,3) :: g, u, vt, gradf
-        real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new
-        real(rkind), dimension(15)  :: work
+        real(rkind), dimension(3,3) :: g, u, vt, gradf, gradf_new
+        real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new, dbeta_new
         real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t
-        real(rkind) :: tol = real(1.D-12,rkind), residual
+        real(rkind) :: tol = real(1.D-12,rkind), residual, residual_new
         integer :: i,j,k
-        integer :: iters, niters = 500
+        integer :: iters
+        integer, parameter :: niters = 500
         integer :: lwork, info
         integer, dimension(3) :: ipiv
         integer :: nxp, nyp, nzp
+        character(len=clen) :: charout
 
         nxp = size(gfull,1); nyp = size(gfull,2); nzp = size(gfull,3);
 
         ! Get optimal lwork
         lwork = -1
-        call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, work, lwork, info)
-        lwork = work(1)
+        call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
+        lwork = this%svdwork(1)
+        if (lwork .GT. size(this%svdwork)) then
+            deallocate(this%svdwork); allocate(this%svdwork(lwork))
+        end if
+
+        if ( nancheck(gfull) ) then
+            call message("NaN found in g during plastic relaxation.")
+        end if
 
         do k = 1,nzp
             do j = 1,nyp
@@ -162,8 +195,11 @@ contains
                     g(3,1) = gfull(i,j,k,7); g(3,2) = gfull(i,j,k,8); g(3,3) = gfull(i,j,k,9)
 
                     ! Get SVD of g
-                    call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, work, lwork, info)
-                    if(info .ne. 0) print '(A,I6,A)', 'proc ', nrank, ': Problem with SVD. Please check.'
+                    call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
+                    if(info .ne. 0) then
+                        write(charout, '(A,I0,A)') 'proc ', nrank, ': Problem with SVD. Please check.'
+                        call GracefulExit(charout,3475)
+                    end if
 
                     sqrt_om = sval(1)*sval(2)*sval(3)
                     beta = sval**two / sqrt_om**(two/three)
@@ -187,37 +223,97 @@ contains
                     
                     betasum = sum( beta*(beta-one) ) / three
                     f1 = -( beta*(beta-one) - betasum ); f1(3) = beta(1)*beta(2)*beta(3)   ! Original function value
-                    residual = sqrt(sum( (f1-f)**two ))                                    ! Norm of the residual
-                    iters = 0
-                    do while ( (iters < niters) .AND. (residual .GT. tol) )
-                        ! Get newton step
-                        gradf(1,1) = -twothird*(two*beta(1)-one); gradf(1,2) =     third*(two*beta(2)-one); gradf(1,3) = third*(two*beta(3)-one)
-                        gradf(2,1) =     third*(two*beta(1)-one); gradf(2,2) = -twothird*(two*beta(2)-one); gradf(2,3) = third*(two*beta(3)-one)
-                        gradf(3,1) = beta(2)*beta(3);             gradf(3,2) = beta(3)*beta(1);             gradf(3,3) = beta(1)*beta(2)
 
-                        dbeta = (f-f1)
-                        call dgesv(3, 3, gradf, 3, ipiv, dbeta, 3, info)
-                        
+                    ! Get newton step
+                    gradf(1,1) = -twothird*(two*beta(1)-one); gradf(1,2) =     third*(two*beta(2)-one); gradf(1,3) = third*(two*beta(3)-one)
+                    gradf(2,1) =     third*(two*beta(1)-one); gradf(2,2) = -twothird*(two*beta(2)-one); gradf(2,3) = third*(two*beta(3)-one)
+                    gradf(3,1) = beta(2)*beta(3);             gradf(3,2) = beta(3)*beta(1);             gradf(3,3) = beta(1)*beta(2)
+
+                    dbeta = (f-f1)
+                    call dgesv(3, 1, gradf, 3, ipiv, dbeta, 3, info)
+                   
+                    ! Compute residual
+                    residual = -sum( (f1-f)*dbeta )                                    ! lambda**2
+                    iters = 0
+                    do while ( (iters < niters) .AND. (abs(residual) .GT. tol) )
                         ! Backtracking line search
-                        t = 1.
+                        t = 1._rkind
                         beta_new = beta + t * dbeta
+
+                        ! Get new residual
+                        gradf_new(1,1) = -twothird*(two*beta_new(1)-one);
+                        gradf_new(1,2) =     third*(two*beta_new(2)-one);
+                        gradf_new(1,3) = third*(two*beta_new(3)-one)
+
+                        gradf_new(2,1) =     third*(two*beta_new(1)-one);
+                        gradf_new(2,2) = -twothird*(two*beta_new(2)-one);
+                        gradf_new(2,3) = third*(two*beta_new(3)-one)
+
+                        gradf_new(3,1) = beta_new(2)*beta_new(3);
+                        gradf_new(3,2) = beta_new(3)*beta_new(1);
+                        gradf_new(3,3) = beta_new(1)*beta_new(2)
+
                         betasum = sum( beta_new*(beta_new-one) ) / three
                         f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
-                        do while ( sqrt(sum( (f2-f)**two )) .GE. residual )
+                        dbeta_new = (f-f2)
+                        call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
+                        residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
+
+                        do while ( (abs(residual_new) .GE. abs(residual)) .AND. (t > eps) )
+                            if (iters .GT. (niters - 10)) then
+                                print '(A,I0,3(A,ES15.5))', 'iters = ', iters, ', t = ', t, ', residual_new = ', residual_new, ', residual = ', residual
+                            end if
+
                             t = half*t
                             beta_new = beta + t * dbeta
+
+                            gradf_new(1,1) = -twothird*(two*beta_new(1)-one);
+                            gradf_new(1,2) =     third*(two*beta_new(2)-one);
+                            gradf_new(1,3) = third*(two*beta_new(3)-one)
+
+                            gradf_new(2,1) =     third*(two*beta_new(1)-one);
+                            gradf_new(2,2) = -twothird*(two*beta_new(2)-one);
+                            gradf_new(2,3) = third*(two*beta_new(3)-one)
+
+                            gradf_new(3,1) = beta_new(2)*beta_new(3);
+                            gradf_new(3,2) = beta_new(3)*beta_new(1);
+                            gradf_new(3,3) = beta_new(1)*beta_new(2)
+
                             betasum = sum( beta_new*(beta_new-one) ) / three
                             f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
+
+                            dbeta_new = (f-f2)
+                            call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
+                            residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
                         end do
                         beta = beta_new
                         f1 = f2
-                        residual = sqrt(sum( (f1-f)**two ))                                    ! Norm of the residual
+                        dbeta = dbeta_new
+                        residual = residual_new
+
+                        iters = iters + 1
+                        if (t <= eps) then
+                            print '(A)', 'Newton solve in plastic_deformation did not converge'
+                            exit
+                        end if
                     end do
-                    if (iters >= niters) print '(A)', 'Newton solve in plastic_deformation did not converge'
-                    
+                    if ((iters >= niters) .OR. (t <= eps)) then
+                        write(charout,'(4(A,I0))') 'Newton solve in plastic_deformation did not converge at index ',i,',',j,',',k,' of process ',nrank
+                        print '(A)', charout
+                        print '(A)', 'g = '
+                        print '(4X,3(ES15.5))', gfull(i,j,k,1), gfull(i,j,k,2), gfull(i,j,k,3)
+                        print '(4X,3(ES15.5))', gfull(i,j,k,4), gfull(i,j,k,5), gfull(i,j,k,6)
+                        print '(4X,3(ES15.5))', gfull(i,j,k,7), gfull(i,j,k,8), gfull(i,j,k,9)
+                        print '(A,ES15.5)', '( ||S||^2 - (2/3) sigma_Y^2 )/mu^2 = ', ycrit
+
+                        print '(A,ES15.5)', 'Relaxation, t = ', t
+                        print '(A,ES15.5)', 'Residual = ', residual
+                        call GracefulExit(charout,6382)
+                    end if
+
                     ! Then get new svals
                     sval = sqrt(beta) * sqrt_om**(one/three)
-                    
+
                     ! Get g = u*sval*vt
                     vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! sval*vt
                     g = MATMUL(u,vt) ! u*sval*vt
@@ -228,6 +324,53 @@ contains
                 end do
             end do
         end do
+    end subroutine
+
+    subroutine make_tensor_SPD(this,gfull)
+        use exits, only: GracefulExit
+        class(sep1solid), intent(inout) :: this
+        real(rkind), dimension(:,:,:,:), intent(inout) :: gfull
+
+        real(rkind), dimension(3,3) :: g, u, vt
+        real(rkind), dimension(3)   :: sval
+        integer :: nx, ny, nz
+        integer :: i, j, k
+        integer :: info, lwork
+
+        if (size(gfull,4) .NE. 9) call GracefulExit("Incorrect dimension for tensor in make_tensor_SPD.",2384)
+
+        nx = size(gfull,1); ny = size(gfull,2); nz = size(gfull,3)
+
+        ! Get optimal lwork
+        lwork = -1
+        call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
+        lwork = this%svdwork(1)
+        if (lwork .GT. size(this%svdwork)) then
+            deallocate(this%svdwork); allocate(this%svdwork(lwork))
+        end if
+
+        do k = 1,nz
+            do j = 1,ny
+                do i = 1,nx
+                    g(1,1) = gfull(i,j,k,1); g(1,2) = gfull(i,j,k,2); g(1,3) = gfull(i,j,k,3)
+                    g(2,1) = gfull(i,j,k,4); g(2,2) = gfull(i,j,k,5); g(2,3) = gfull(i,j,k,6)
+                    g(3,1) = gfull(i,j,k,7); g(3,2) = gfull(i,j,k,8); g(3,3) = gfull(i,j,k,9)
+        
+                    ! Get SVD of g
+                    call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
+
+                    ! Get projection (V * Sigma * V^T)
+                    u = transpose(vt)
+                    vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! sval*vt
+                    g = MATMUL(u,vt) ! u*sval*vt
+
+                    gfull(i,j,k,1) = g(1,1); gfull(i,j,k,2) = g(1,2); gfull(i,j,k,3) = g(1,3)
+                    gfull(i,j,k,4) = g(2,1); gfull(i,j,k,5) = g(2,2); gfull(i,j,k,6) = g(2,3)
+                    gfull(i,j,k,7) = g(3,1); gfull(i,j,k,8) = g(3,2); gfull(i,j,k,9) = g(3,3)
+                end do
+            end do
+        end do
+
     end subroutine
 
 end module

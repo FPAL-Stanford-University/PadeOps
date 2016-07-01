@@ -371,6 +371,9 @@ contains
         this%Qtmpg  = dt*rhsg + RK45_A(isub)*this%Qtmpg
         this%g = this%g  + RK45_B(isub)*this%Qtmpg
 
+        ! Now project g tensor to SPD space
+        call this%elastic%make_tensor_SPD(this%g)
+
         if(this%plast) then
             if (.NOT. this%explPlast) then
                 ! Effect plastic deformations

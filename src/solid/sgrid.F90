@@ -156,7 +156,7 @@ contains
         real(rkind) :: CY = 100._rkind
         logical     :: PTeqb = .TRUE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
-        integer     :: x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn    ! 0: general, 1: symmetric/anti-symmetric
+        integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                              inputdir, outputdir, vizprefix, tviz, &
@@ -517,6 +517,9 @@ contains
         call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
 
         do i=1,this%mix%ns
+            ! Project g tensor to SPD space
+            call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g)
+            ! Get massfraction gradients in Ji
             call this%gradient(this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),&
                                this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3), this%x_bc,  this%y_bc, this%z_bc)
         end do
@@ -582,6 +585,7 @@ contains
             call toc(cputime)
             
             call message(1,"Time",this%tsim)
+            call message(1,"Step",this%step)
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)

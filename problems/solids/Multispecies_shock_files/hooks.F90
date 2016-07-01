@@ -173,7 +173,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi
     use SolidGrid,        only: u_index,v_index,w_index
-    use decomp_2d,        only: decomp_info
+    use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
@@ -229,12 +229,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         endif
 
         ! write material properties
-        write(*,*) '---Material 1---'
-        write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0, ', gam  = ', gamma, ', p_infty = ', p_infty
-        write(*,'(3(a,e12.5))') 'mu    = ', mu,    ', Rgas = ', Rgas
-        write(*,*) '---Material 2---'
-        write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0_2, ', gam  = ', gamma_2, ', p_infty = ', p_infty_2
-        write(*,'(3(a,e12.5))') 'mu    = ', mu_2,    ', Rgas = ', Rgas_2
+        if (nrank == 0) then
+            print *, '---Material 1---'
+            write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0, ', gam  = ', gamma, ', p_infty = ', p_infty
+            write(*,'(3(a,e12.5))') 'mu    = ', mu,    ', Rgas = ', Rgas
+            print *, '---Material 2---'
+            write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0_2, ', gam  = ', gamma_2, ', p_infty = ', p_infty_2
+            write(*,'(3(a,e12.5))') 'mu    = ', mu_2,    ', Rgas = ', Rgas_2
+        end if
 
         ! Set materials
         call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10))
@@ -255,7 +257,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         fparams(8) = p2
         rho2 = rho1*min(one + p1/p_infty, one) ! Init guess
         call rootfind_nr_1d(rho2,fparams,iparams)
-        write(*,*) 'After root finding: ', rho2
+        ! print *, 'After root finding: ', rho2
         g11_1 = fparams(1)/fparams(4);   grho1 = g11_1**real(11.D0/3.D0,rkind) - g11_1**(-third) - g11_1**(seven*third) + g11_1**third
         g11_2 = rho2/fparams(4);         grho2 = g11_2**real(11.D0/3.D0,rkind) - g11_2**(-third) - g11_2**(seven*third) + g11_2**third
         ! u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*zero*(grho1-grho2)))
@@ -266,18 +268,20 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
         a2 = sqrt((gamma*(p2+p_infty) + 4.0d0/3.0d0*mu)/rho2)
 
-        write(*,*) '----Shock Initialization-----'
-        print*, "Mass flux: ", rho1*u1, rho2*u2
-        print*, "Momentum flux: ", rho1*u1*u1+p1, rho2*u2*u2+p2
-        print*, "g flux: ", g11_1*u1, g11_2*u2
-        
-        print*, "rho1, rho2 = ", rho1, rho2
-        print*, "u1, u2 = ", u1, u2
-        print*, "p1, p2 = ", p1, p2
-        print*, "a1, a2 = ", a1, a2
-        print*, "M1, M2 = ", u1/a1, u2/a2
-        print*, "p_infty = ", p_infty
-        print*, "rhoRatio = ", rhoRatio
+        if (nrank == 0) then
+            print*, '----Shock Initialization-----'
+            print*, "Mass flux: ", rho1*u1, rho2*u2
+            print*, "Momentum flux: ", rho1*u1*u1+p1, rho2*u2*u2+p2
+            print*, "g flux: ", g11_1*u1, g11_2*u2
+            
+            print*, "rho1, rho2 = ", rho1, rho2
+            print*, "u1, u2 = ", u1, u2
+            print*, "p1, p2 = ", p1, p2
+            print*, "a1, a2 = ", a1, a2
+            print*, "M1, M2 = ", u1/a1, u2/a2
+            print*, "p_infty = ", p_infty
+            print*, "rhoRatio = ", rhoRatio
+        end if
 
         ! determine jump conditions for material 2
         p1 = p_amb
@@ -290,7 +294,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         fparams(8) = p2
         rho2_2 = rho1_2*min(one + p1/p_infty_2, one) ! Init guess
         call rootfind_nr_1d(rho2_2,fparams,iparams)
-        write(*,*) 'After root finding: ', rho2_2
+        ! print *, 'After root finding: ', rho2_2
         g11_1_2 = fparams(1)/fparams(4);   grho1_2 = g11_1_2**real(11.D0/3.D0,rkind) - g11_1_2**(-third) - g11_1_2**(seven*third) + g11_1_2**third
         g11_2_2 = rho2_2/fparams(4);         grho2_2 = g11_2_2**real(11.D0/3.D0,rkind) - g11_2_2**(-third) - g11_2_2**(seven*third) + g11_2_2**third
         u2_2 = -sqrt(rho1_2/rho2_2/(rho1_2-rho2_2)*(p1-p2+twothird*mu_2*(grho1_2-grho2_2)))
@@ -300,18 +304,20 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         a1_2 = sqrt((gamma_2*(p1+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho1_2)
         a2_2 = sqrt((gamma_2*(p2+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho2_2)
 
-        write(*,*) '----Shock Initialization-----'
-        print*, "Mass flux: ", rho1_2*u1_2, rho2_2*u2_2
-        print*, "Momentum flux: ", rho1_2*u1_2*u1_2+p1, rho2_2*u2_2*u2_2+p2
-        print*, "g flux: ", g11_1_2*u1_2, g11_2_2*u2_2
-        
-        print*, "rho1, rho2 = ", rho1_2, rho2_2
-        print*, "u1, u2 = ", u1_2, u2_2
-        print*, "p1, p2 = ", p1, p2
-        print*, "a1, a2 = ", a1_2, a2_2
-        print*, "M1, M2 = ", u1_2/a1_2, u2_2/a2_2
-        print*, "p_infty = ", p_infty_2
-        print*, "rhoRatio = ", rhoRatio
+        if (nrank == 0) then
+            print*, '----Shock Initialization-----'
+            print*, "Mass flux: ", rho1_2*u1_2, rho2_2*u2_2
+            print*, "Momentum flux: ", rho1_2*u1_2*u1_2+p1, rho2_2*u2_2*u2_2+p2
+            print*, "g flux: ", g11_1_2*u1_2, g11_2_2*u2_2
+            
+            print*, "rho1, rho2 = ", rho1_2, rho2_2
+            print*, "u1, u2 = ", u1_2, u2_2
+            print*, "p1, p2 = ", p1, p2
+            print*, "a1, a2 = ", a1_2, a2_2
+            print*, "M1, M2 = ", u1_2/a1_2, u2_2/a2_2
+            print*, "p_infty = ", p_infty_2
+            print*, "rhoRatio = ", rhoRatio
+        end if
 
         ! Get mixture momentum (put in u1 and u2)
         u1 = (one-minVF)*rho1*u1 + minVF*rho1_2*u1_2
