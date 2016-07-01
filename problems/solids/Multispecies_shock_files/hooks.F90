@@ -1,6 +1,7 @@
 module Multispecies_shock_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,two,eight,three
+    use constants,        only: one,two,eight,three, four
+    use FiltersMod,       only: filters
     implicit none
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
@@ -14,7 +15,9 @@ module Multispecies_shock_data
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = one, Lx = three, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    real(rkind) :: Ly = one, Lx = four, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+
+    type(filters) :: mygfil
 
 contains
 
@@ -144,7 +147,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = Lx/real(nx-1,rkind)
+        dx = Lx/real(nx,rkind)
         dy = Ly/real(ny,rkind)
         dz = dx
 
@@ -155,7 +158,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx
+                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -170,7 +173,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi
     use SolidGrid,        only: u_index,v_index,w_index
-    use decomp_2d,        only: decomp_info
+    use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
@@ -201,6 +204,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
 
+    ! Initialize mygfil
+    call mygfil%init(                        decomp, &
+                     .FALSE.,     .TRUE.,    .TRUE., &
+                  "gaussian", "gaussian", "gaussian" )
+
     associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
@@ -221,12 +229,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         endif
 
         ! write material properties
-        write(*,*) '---Material 1---'
-        write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0, ', gam  = ', gamma, ', p_infty = ', p_infty
-        write(*,'(3(a,e12.5))') 'mu    = ', mu,    ', Rgas = ', Rgas
-        write(*,*) '---Material 2---'
-        write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0_2, ', gam  = ', gamma_2, ', p_infty = ', p_infty_2
-        write(*,'(3(a,e12.5))') 'mu    = ', mu_2,    ', Rgas = ', Rgas_2
+        if (nrank == 0) then
+            print *, '---Material 1---'
+            write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0, ', gam  = ', gamma, ', p_infty = ', p_infty
+            write(*,'(3(a,e12.5))') 'mu    = ', mu,    ', Rgas = ', Rgas
+            print *, '---Material 2---'
+            write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0_2, ', gam  = ', gamma_2, ', p_infty = ', p_infty_2
+            write(*,'(3(a,e12.5))') 'mu    = ', mu_2,    ', Rgas = ', Rgas_2
+        end if
 
         ! Set materials
         call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10))
@@ -247,7 +257,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         fparams(8) = p2
         rho2 = rho1*min(one + p1/p_infty, one) ! Init guess
         call rootfind_nr_1d(rho2,fparams,iparams)
-        write(*,*) 'After root finding: ', rho2
+        ! print *, 'After root finding: ', rho2
         g11_1 = fparams(1)/fparams(4);   grho1 = g11_1**real(11.D0/3.D0,rkind) - g11_1**(-third) - g11_1**(seven*third) + g11_1**third
         g11_2 = rho2/fparams(4);         grho2 = g11_2**real(11.D0/3.D0,rkind) - g11_2**(-third) - g11_2**(seven*third) + g11_2**third
         ! u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*zero*(grho1-grho2)))
@@ -258,18 +268,20 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
         a2 = sqrt((gamma*(p2+p_infty) + 4.0d0/3.0d0*mu)/rho2)
 
-        write(*,*) '----Shock Initialization-----'
-        print*, "Mass flux: ", rho1*u1, rho2*u2
-        print*, "Momentum flux: ", rho1*u1*u1+p1, rho2*u2*u2+p2
-        print*, "g flux: ", g11_1*u1, g11_2*u2
-        
-        print*, "rho1, rho2 = ", rho1, rho2
-        print*, "u1, u2 = ", u1, u2
-        print*, "p1, p2 = ", p1, p2
-        print*, "a1, a2 = ", a1, a2
-        print*, "M1, M2 = ", u1/a1, u2/a2
-        print*, "p_infty = ", p_infty
-        print*, "rhoRatio = ", rhoRatio
+        if (nrank == 0) then
+            print*, '----Shock Initialization-----'
+            print*, "Mass flux: ", rho1*u1, rho2*u2
+            print*, "Momentum flux: ", rho1*u1*u1+p1, rho2*u2*u2+p2
+            print*, "g flux: ", g11_1*u1, g11_2*u2
+            
+            print*, "rho1, rho2 = ", rho1, rho2
+            print*, "u1, u2 = ", u1, u2
+            print*, "p1, p2 = ", p1, p2
+            print*, "a1, a2 = ", a1, a2
+            print*, "M1, M2 = ", u1/a1, u2/a2
+            print*, "p_infty = ", p_infty
+            print*, "rhoRatio = ", rhoRatio
+        end if
 
         ! determine jump conditions for material 2
         p1 = p_amb
@@ -282,7 +294,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         fparams(8) = p2
         rho2_2 = rho1_2*min(one + p1/p_infty_2, one) ! Init guess
         call rootfind_nr_1d(rho2_2,fparams,iparams)
-        write(*,*) 'After root finding: ', rho2_2
+        ! print *, 'After root finding: ', rho2_2
         g11_1_2 = fparams(1)/fparams(4);   grho1_2 = g11_1_2**real(11.D0/3.D0,rkind) - g11_1_2**(-third) - g11_1_2**(seven*third) + g11_1_2**third
         g11_2_2 = rho2_2/fparams(4);         grho2_2 = g11_2_2**real(11.D0/3.D0,rkind) - g11_2_2**(-third) - g11_2_2**(seven*third) + g11_2_2**third
         u2_2 = -sqrt(rho1_2/rho2_2/(rho1_2-rho2_2)*(p1-p2+twothird*mu_2*(grho1_2-grho2_2)))
@@ -292,18 +304,20 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         a1_2 = sqrt((gamma_2*(p1+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho1_2)
         a2_2 = sqrt((gamma_2*(p2+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho2_2)
 
-        write(*,*) '----Shock Initialization-----'
-        print*, "Mass flux: ", rho1_2*u1_2, rho2_2*u2_2
-        print*, "Momentum flux: ", rho1_2*u1_2*u1_2+p1, rho2_2*u2_2*u2_2+p2
-        print*, "g flux: ", g11_1_2*u1_2, g11_2_2*u2_2
-        
-        print*, "rho1, rho2 = ", rho1_2, rho2_2
-        print*, "u1, u2 = ", u1_2, u2_2
-        print*, "p1, p2 = ", p1, p2
-        print*, "a1, a2 = ", a1_2, a2_2
-        print*, "M1, M2 = ", u1_2/a1_2, u2_2/a2_2
-        print*, "p_infty = ", p_infty_2
-        print*, "rhoRatio = ", rhoRatio
+        if (nrank == 0) then
+            print*, '----Shock Initialization-----'
+            print*, "Mass flux: ", rho1_2*u1_2, rho2_2*u2_2
+            print*, "Momentum flux: ", rho1_2*u1_2*u1_2+p1, rho2_2*u2_2*u2_2+p2
+            print*, "g flux: ", g11_1_2*u1_2, g11_2_2*u2_2
+            
+            print*, "rho1, rho2 = ", rho1_2, rho2_2
+            print*, "u1, u2 = ", u1_2, u2_2
+            print*, "p1, p2 = ", p1, p2
+            print*, "a1, a2 = ", a1_2, a2_2
+            print*, "M1, M2 = ", u1_2/a1_2, u2_2/a2_2
+            print*, "p_infty = ", p_infty_2
+            print*, "rhoRatio = ", rhoRatio
+        end if
 
         ! Get mixture momentum (put in u1 and u2)
         u1 = (one-minVF)*rho1*u1 + minVF*rho1_2*u1_2
@@ -471,10 +485,11 @@ end subroutine
 
 subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
-    use constants,        only: zero
+    use constants,        only: zero, half, one
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
+    use operators,        only: filter3D
 
     use Multispecies_shock_data
 
@@ -485,8 +500,11 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     type(solid_mixture),             intent(inout) :: mix
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
-    integer :: nx
-
+    
+    integer :: nx, i, j
+    real(rkind) :: dx, xspng, tspng
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
+    
     nx = decomp%ysz(1)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
@@ -498,20 +516,20 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
         if(decomp%yst(1)==1) then
           if(x_bc(1)==0) then
-              rho( 1,:,:) = rhoL
-              u  ( 1,:,:) = (u2-u1)
+              ! rho( 1,:,:) = rhoL
+              ! u  ( 1,:,:) = (u2-u1)
               v  ( 1,:,:) = zero
               w  ( 1,:,:) = zero
-              mix%material(1)%p  ( 1,:,:) = p2
-              mix%material(2)%p  ( 1,:,:) = p2
+              ! mix%material(1)%p  ( 1,:,:) = p2
+              ! mix%material(2)%p  ( 1,:,:) = p2
               
-              mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
-              mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
-              mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = one
+              ! mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
+              ! mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
+              ! mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = one
   
-              mix%material(2)%g11( 1,:,:) = rho2/rho_0;  mix%material(2)%g12( 1,:,:) = zero; mix%material(2)%g13( 1,:,:) = zero
-              mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
-              mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
+              ! mix%material(2)%g11( 1,:,:) = rho2/rho_0;  mix%material(2)%g12( 1,:,:) = zero; mix%material(2)%g13( 1,:,:) = zero
+              ! mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
+              ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
               
               ! mix%material(1)%Ys ( 1,:,:) = YsL
               ! mix%material(2)%Ys ( 1,:,:) = one - YsL
@@ -520,6 +538,51 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               mix%material(2)%VF ( 1,:,:) = one - VFL
           end if
         endif
+
+        xspng = half
+        tspng = 5.0_rkind
+        dx = x(2,1,1) - x(1,1,1)
+        dum = half*(one - tanh( (x-xspng)/(tspng*dx) ))
+
+        do i=1,4
+            tmp = u
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            u = u + dum*(tmp - u)
+
+            tmp = v
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            v = v + dum*(tmp - v)
+
+            tmp = w
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            w = w + dum*(tmp - w)
+
+            tmp = e
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            e = e + dum*(tmp - e)
+
+            tmp = rho
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            rho = rho + dum*(tmp - rho)
+
+            tmp = mix%material(1)%p
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
+
+            tmp = mix%material(2)%p
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
+
+            do j = 1,9
+                tmp = mix%material(1)%g(:,:,:,j)
+                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+                mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dum*(tmp - mix%material(1)%g(:,:,:,j))
+
+                tmp = mix%material(2)%g(:,:,:,j)
+                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+                mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dum*(tmp - mix%material(2)%g(:,:,:,j))
+            end do
+        end do
 
         if(decomp%yen(1)==decomp%xsz(1)) then
           if(x_bc(2)==0) then
