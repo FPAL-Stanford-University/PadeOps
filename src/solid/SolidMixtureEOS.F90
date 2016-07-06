@@ -745,6 +745,7 @@ contains
     end subroutine
 
     subroutine rootfind_nr_1d(this,pf,fparams,iparams)
+        use decomp_2d, only: nrank
         class(solid_mixture), intent(inout)   :: this
         real(rkind), intent(inout)            :: pf
         real(rkind), intent(in), dimension(:) :: fparams
@@ -762,6 +763,7 @@ contains
             dpf = num/den
           else
             write(*,*) 'den very small, please check.', num, num/den
+            write(*,*) 'failure at proc ', nrank, ' at index ', iparams(2:4)
             stop
           endif
           pf = pf - dpf

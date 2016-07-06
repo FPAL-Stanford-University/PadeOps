@@ -551,7 +551,8 @@ contains
         call this%get_dt(stability)
 
         ! Write out initial conditions
-        call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+        ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+        call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
         vizcond = .FALSE.
         
@@ -598,7 +599,8 @@ contains
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
-                call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+                ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
                 vizcond = .FALSE.
             end if
@@ -630,7 +632,8 @@ contains
 
             ! Check for exitpdo file
             if(check_exit(this%outputdir)) then
-                call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+                ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
                 call GracefulExit("Found exitpdo file in working directory",1234)
             endif
