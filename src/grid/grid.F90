@@ -51,7 +51,7 @@ module GridMod
         logical                                              :: SkewSymm 
         logical                                              :: ViscConsrv         ! Is the viscous term being computed using the conservative formulation? 
         
-        type( io_VTK ), allocatable                          :: viz
+        ! type( io_VTK ), allocatable                          :: viz
         real(rkind)                                          :: tviz
 
     contains

@@ -12,6 +12,7 @@ module SolidGrid
     use StiffGasEOS,     only: stiffgas
     use Sep1SolidEOS,    only: sep1solid
     use SolidMixtureMod, only: solid_mixture
+    use IOsgridMod,      only: IOsgrid
    
     implicit none
 
@@ -62,6 +63,8 @@ module SolidGrid
         type(filters),       allocatable :: gfil
         type(solid_mixture), allocatable :: mix
         type(ladobject),     allocatable :: LAD
+        
+        type( IOsgrid ),     allocatable :: viz
 
         logical     :: PTeqb                       ! Use pressure and temperature equilibrium formulation
 
@@ -548,7 +551,7 @@ contains
 
         ! Write out initial conditions
         call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-        call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+        call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
         vizcond = .FALSE.
         
         ! Check for visualization condition and adjust time step
@@ -594,7 +597,7 @@ contains
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
                 call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+                call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
                 vizcond = .FALSE.
             end if
             
@@ -626,7 +629,7 @@ contains
             ! Check for exitpdo file
             if(check_exit(this%outputdir)) then
                 call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+                call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
                 call GracefulExit("Found exitpdo file in working directory",1234)
             endif
 
