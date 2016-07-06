@@ -235,6 +235,7 @@ contains
                     ! Compute residual
                     residual = -sum( (f1-f)*dbeta )                                    ! lambda**2
                     iters = 0
+                    t = 1._rkind
                     do while ( (iters < niters) .AND. (abs(residual) .GT. tol) )
                         ! Backtracking line search
                         t = 1._rkind
