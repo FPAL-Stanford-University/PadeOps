@@ -1,10 +1,9 @@
-#include "Multispecies_shock_files/hooks.F90"
+#include "Multispecies_shocktube_files/hooks.F90"
 
-program Multispecies_shock
+program Multispecies_shocktube
 
     use kind_parameters,  only: clen
     use SolidGrid,        only: sgrid
-    use decomp_2d,        only: nrank
     implicit none
 
     type(sgrid) :: sgp
@@ -19,11 +18,9 @@ program Multispecies_shock
     
     ! Initialize the grid object
     call sgp%init(inputfile)
-    if(nrank==0) write (*,*) 'Done init'
 
     ! Time advance
     call sgp%simulate()
-    if(nrank==0) write (*,*) 'Done simulate'
         
     ! Destroy everythin before ending
     call sgp%destroy()

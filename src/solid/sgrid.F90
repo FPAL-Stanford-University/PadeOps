@@ -499,6 +499,7 @@ contains
         use reductions, only: P_MEAN
         use timer,      only: tic, toc
         use exits,      only: GracefulExit, message, check_exit
+        use decomp_2d,  only: nrank
         class(sgrid), target, intent(inout) :: this
 
         logical :: tcond, vizcond, stepcond
@@ -581,6 +582,7 @@ contains
         end if
 
         ! Start the simulation while loop
+        if(nrank==0) write(*,*) 'Starting time loop'
         do while ( tcond .AND. stepcond )
             ! Advance time
             call tic()
