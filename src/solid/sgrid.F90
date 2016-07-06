@@ -4,7 +4,7 @@ module SolidGrid
     use FiltersMod,      only: filters
     use GridMod,         only: grid
     use gridtools,       only: alloc_buffs, destroy_buffs
-    use sgrid_hooks,     only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_mixture_source
+    use sgrid_hooks,     only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_mixture_source, hook_postproc
     use decomp_2d,       only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                                transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
@@ -100,6 +100,7 @@ module SolidGrid
             procedure          :: gradient 
             procedure          :: advance_RK45
             procedure          :: simulate
+            procedure          :: postproc
             procedure, private :: get_dt
             procedure, private :: get_primitive
             procedure, private :: get_conserved
@@ -489,6 +490,15 @@ contains
         call transpose_z_to_y(zdum,ytmp,this%decomp)
         
         lapf = lapf + ytmp
+
+    end subroutine
+
+    subroutine postproc(this)
+        use decomp_2d,  only: nrank
+        class(sgrid), target, intent(inout) :: this
+
+        if(nrank==0) write(*,*) 'Calling hook_postproc'
+        call hook_postproc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
 
     end subroutine
 

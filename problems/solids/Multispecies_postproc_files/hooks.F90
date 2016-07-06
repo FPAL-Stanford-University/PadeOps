@@ -1,4 +1,4 @@
-module Multispecies_shock_data
+module Multispecies_postproc_data
     use kind_parameters,  only: rkind
     use constants,        only: one,two,eight,three, four, five
     use FiltersMod,       only: filters
@@ -125,7 +125,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use decomp_2d,        only: decomp_info
     use exits,            only: warning
 
-    use Multispecies_shock_data
+    use Multispecies_postproc_data
 
     implicit none
 
@@ -179,7 +179,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
     
-    use Multispecies_shock_data
+    use Multispecies_postproc_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -381,7 +381,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     use decomp_2d,        only: decomp_info, nrank
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_shock_data
+    use Multispecies_postproc_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -484,6 +484,101 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     end associate
 end subroutine
 
+subroutine hook_postproc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
+    use kind_parameters,  only: rkind
+    use constants,        only: zero, half, one
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+    use decomp_2d,        only: decomp_info
+    use SolidMixtureMod,  only: solid_mixture
+    use operators,        only: filter3D
+
+    use Multispecies_postproc_data
+    use decomp_2d,        only: nrank
+    
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(in)    :: tsim
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    type(solid_mixture),             intent(inout) :: mix
+    integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
+    
+    integer :: nx, i, j
+    real(rkind) :: dx, xspng, tspng
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
+    
+    nx = decomp%ysz(1)
+
+    associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
+                 v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
+                 p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
+                 e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
+                 bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+
+        if(nrank==0) write(*,*) 'In hook_postproc'
+        if (rhoRatio > 0) then
+            write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2)') nrank, "_", minVF, "_", rhoRatio
+        else
+            write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2)') nrank, "_", minVF, "_", rho_0_2/rho_0
+        end if
+
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_shock_"//trim(str)//"_", vizcount, ".dat"
+        write(outputfile,'(4A)') trim(outputdir),"/tec_MultSpecShock_"//trim(str),".dat"
+        if(vizcount==0) then
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='replace')
+          write(outputunit,'(350a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p", &
+                                     "sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar", &
+                                     "p-1","Ys-1","VF-1","eh-1","T-1","g11-1","g12-1","g13-1","g21-1","g22-1","g23-1","g31-1","g32-1","g33-1","Dstar-1","kap-1",&
+                                     "p-2","Ys-2","VF-2","eh-2","T-2","g11-2","g12-2","g13-2","g21-2","g22-2","g23-2","g31-2","g32-2","g33-2","Dstar-2","kap-2"'
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                write(outputunit,'(50ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                      ! continuum (9)
+                                                sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), &      ! continuum (9)
+                                                mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% eh(i,j,k), &  ! material 1 (14)
+                                                mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
+                                                mix%material(1)%g21(i,j,k), mix%material(1)%g22(i,j,k), mix%material(1)%g23(i,j,k), mix%material(1)%g31(i,j,k), &  ! material 1 
+                                                mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), mix%material(1)%kap(i,j,k),&  ! material 1 
+                                                mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% eh(i,j,k), &  ! material 2 (14)
+                                                mix%material(2)% T(i,j,k),  mix%material(2)%g11(i,j,k), mix%material(2)%g12(i,j,k), mix%material(2)%g13(i,j,k), &  ! material 2
+                                                mix%material(2)%g21(i,j,k), mix%material(2)%g22(i,j,k), mix%material(2)%g23(i,j,k), mix%material(2)%g31(i,j,k), &  ! material 2
+                                                mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k), mix%material(2)%kap(i,j,k)    ! material 2
+            end do
+           end do
+          end do
+          close(outputunit)
+        else
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='old', action='write', position='append')
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                write(outputunit,'(47ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                                                    ! continuum (6)
+                                                sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), &      ! continuum (9)
+                                                mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% eh(i,j,k), &  ! material 1 (14)
+                                                mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
+                                                mix%material(1)%g21(i,j,k), mix%material(1)%g22(i,j,k), mix%material(1)%g23(i,j,k), mix%material(1)%g31(i,j,k), &  ! material 1 
+                                                mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), mix%material(1)%kap(i,j,k),&  ! material 1 
+                                                mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% eh(i,j,k), &  ! material 2 (14)
+                                                mix%material(2)% T(i,j,k),  mix%material(2)%g11(i,j,k), mix%material(2)%g12(i,j,k), mix%material(2)%g13(i,j,k), &  ! material 2
+                                                mix%material(2)%g21(i,j,k), mix%material(2)%g22(i,j,k), mix%material(2)%g23(i,j,k), mix%material(2)%g31(i,j,k), &  ! material 2
+                                                mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k), mix%material(2)%kap(i,j,k)    ! material 2
+            end do
+           end do
+          end do
+          close(outputunit)
+        endif
+
+
+    end associate
+end subroutine
+
 subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero, half, one
@@ -492,7 +587,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use SolidMixtureMod,  only: solid_mixture
     use operators,        only: filter3D
 
-    use Multispecies_shock_data
+    use Multispecies_postproc_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -519,10 +614,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
           if(x_bc(1)==0) then
               ! rho( 1,:,:) = rhoL
               ! u  ( 1,:,:) = (u2-u1)
-              v  ( 1,:,:) = zero
-              w  ( 1,:,:) = zero
-              ! mix%material(1)%p( 1,:,:) = two * mix%material(1)%p(2,:,:) - mix%material(1)%p(3,:,:)
-              ! mix%material(2)%p( 1,:,:) = two * mix%material(2)%p(2,:,:) - mix%material(2)%p(3,:,:)
+              !v  ( 1,:,:) = zero
+              !w  ( 1,:,:) = zero
+              mix%material(1)%p( 1,:,:) = two * mix%material(1)%p(2,:,:) - mix%material(1)%p(3,:,:)
+              mix%material(2)%p( 1,:,:) = two * mix%material(2)%p(2,:,:) - mix%material(2)%p(3,:,:)
               
               ! mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
               ! mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
@@ -568,12 +663,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
             tmp = mix%material(1)%p
             call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            if(decomp%yst(1)==1) tmp(1,:,:) = tmp(2,:,:)
             mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
 
             tmp = mix%material(2)%p
             call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            if(decomp%yst(1)==1) tmp(1,:,:) = tmp(2,:,:)
             mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
 
             do j = 1,9
@@ -623,7 +716,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use reductions,       only: P_MAXVAL
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_shock_data
+    use Multispecies_postproc_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -661,7 +754,7 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_shock_data
+    use Multispecies_postproc_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -687,7 +780,7 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_shock_data
+    use Multispecies_postproc_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -707,7 +800,7 @@ subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Y
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_shock_data
+    use Multispecies_postproc_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -727,7 +820,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_shock_data
+    use Multispecies_postproc_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -747,7 +840,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_shock_data
+    use Multispecies_postproc_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
