@@ -10,6 +10,7 @@ module CompressibleGrid
     use DerivativesMod,  only: derivatives
     use IdealGasEOS,     only: idealgas
     use MixtureEOSMod,   only: mixture
+    use io_VTK_stuff,    only: io_VTK
    
     implicit none
 
@@ -54,6 +55,8 @@ module CompressibleGrid
        
         type(filters), allocatable :: gfil
         type(mixture), allocatable :: mix
+        
+        type( io_VTK ), allocatable                          :: viz
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers

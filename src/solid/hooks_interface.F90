@@ -1,6 +1,7 @@
 module sgrid_hooks
     use kind_parameters, only: rkind
     use decomp_2d,       only: decomp_info
+    use DerivativesMod,  only: derivatives
     use SolidMixtureMod, only: solid_mixture
     use StiffGasEOS,     only: stiffgas
     use Sep1SolidEOS,    only: sep1solid
@@ -33,17 +34,21 @@ module sgrid_hooks
 
 
     interface hook_output
-        subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
+        ! subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
+        subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,x_bc,y_bc,z_bc)
             import :: rkind
             import :: decomp_info
+            import :: derivatives
             import :: solid_mixture
             character(len=*),                intent(in) :: outputdir
             type(decomp_info),               intent(in) :: decomp
+            type(derivatives),               intent(in) :: der
             type(solid_mixture),             intent(in) :: mix
             real(rkind),                     intent(in) :: dx,dy,dz,tsim
             integer,                         intent(in) :: vizcount
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(in) :: fields
+            integer, dimension(2),           intent(in) :: x_bc,y_bc,z_bc
         end subroutine
     end interface
 
@@ -81,11 +86,11 @@ module sgrid_hooks
             import :: decomp_info
             import :: solid_mixture
             type(decomp_info),               intent(in) :: decomp
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            real(rkind), dimension(:,:,:,:), intent(in) :: fields
             type(solid_mixture),             intent(in) :: mix
             integer,                         intent(in) :: step
             real(rkind),                     intent(in) :: tsim
-            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
-            real(rkind), dimension(:,:,:,:), intent(in) :: fields
         end subroutine
     end interface
 

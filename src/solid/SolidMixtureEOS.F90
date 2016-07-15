@@ -763,7 +763,7 @@ contains
             dpf = num/den
           else
             write(*,*) 'den very small, please check.', num, num/den
-            write(*,*) 'Failure at', nrank, iparams(2:4)
+            write(*,*) 'failure at proc ', nrank, ' at index ', iparams(2:4)
             stop
           endif
           pf = pf - dpf
