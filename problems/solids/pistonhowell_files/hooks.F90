@@ -1,4 +1,4 @@
-module impact_data
+module pistonhowell_data
     use kind_parameters,  only: rkind
     use constants,        only: one,eight
     implicit none
@@ -15,7 +15,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: half,one
     use decomp_2d,        only: decomp_info
 
-    use impact_data
+    use pistonhowell_data
 
     implicit none
 
@@ -62,7 +62,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
     
-    use impact_data
+    use pistonhowell_data
 
     implicit none
     character(len=*),                                               intent(in)    :: inputfile
@@ -97,7 +97,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         !tmp = tanh( (x-half)/(thick*dx) )
         tmp = tanh( (x-half)/(0.01d0) )
 
-        u   = -uimpact*tmp
+        u   = uimpact*half*(one-tmp)
         v   = zero
         w   = zero
         p   = pinit
@@ -123,7 +123,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
     use decomp_2d,        only: decomp_info
     use DerivativesMod,   only: derivatives
 
-    use impact_data
+    use pistonhowell_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -137,9 +137,6 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
 
     character(len=clen) :: outputfile, velstr
     integer :: i,j,k
-    integer :: indx(1), nx, indhalf, numshocks
-    real(rkind) :: xshock(2), betmax
-    real(rkind), allocatable, dimension(:) :: bettmp(:)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -155,7 +152,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
 
 
         write(velstr,'(I4.4)') int(uimpact)
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/impact_"//trim(velstr)//"_", vizcount, ".dat"
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/pistonhowell_"//trim(velstr)//"_", vizcount, ".dat"
 
         if(vizcount==0) then
           open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
@@ -191,25 +188,6 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
           close(outputunit)
         endif
 
-        ! determine shock speeds
-        nx = decomp%ysz(1); indhalf = nx/2
-        allocate(bettmp(nx))
-        bettmp = bulk(:,1,1)
-        betmax = maxval(bettmp(indhalf:nx));  
-        do i = nx, nx/2, -1
-          if(bettmp(i)<0.01d0*betmax) bettmp(i) = zero
-        enddo
-        numshocks = 0; xshock = 0.5d0
-        do i = nx/2+1, nx-1
-          if((bettmp(i-1) < bettmp(i)) .and. (bettmp(i)>bettmp(i+1))) then
-            numshocks = numshocks+1
-            xshock(numshocks) = x(i,1,1)
-            if(numshocks>2) write(*,*) 'More than 2 shocks detected. Check details.'
-          endif
-        enddo
-        write(111,*) tsim, xshock(1), xshock(2)
-        deallocate(bettmp)
-
     end associate
 end subroutine
 
@@ -220,7 +198,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
 
-    use impact_data
+    use pistonhowell_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -253,7 +231,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
         g31( 1,:,:) = zero; g32( 1,:,:) = zero; g33( 1,:,:) = one
 
         rho(nx,:,:) = rho_0
-        u  (nx,:,:) = -uimpact
+        u  (nx,:,:) = zero
         v  (nx,:,:) = zero
         w  (nx,:,:) = zero
         p  (nx,:,:) = pinit
@@ -272,7 +250,7 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
     use exits,            only: message
     use reductions,       only: P_MAXVAL
 
-    use impact_data
+    use pistonhowell_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
