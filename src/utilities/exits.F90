@@ -26,14 +26,25 @@ module exits
 contains
 
     subroutine GracefulExit(message, errcode)
-        
+        use kind_parameters, only: stderr, stdout
+        integer, intent(in) :: errCode
         character(len=*), intent(in) :: message
-        integer, intent(in) :: errcode
+        integer :: rank, ierr
 
-        call decomp_2d_abort(errcode, message)
-    
+        call mpi_comm_rank(mpi_comm_world, rank, ierr)
+        if (rank == 0) then
+            write(stderr,'(A)') message
+            write(stdout,'(A)') message
+        end if 
+        call mpi_barrier(mpi_comm_world, ierr)
+        call mpi_abort(mpi_comm_world, errCode, ierr)
+        if (ierr /= 0) then
+            print*, "SHIT! It won't abort!"
+        end if 
+
     end subroutine
-
+    
+        
     subroutine newline()
         if (nrank == 0) write(stdout,*)
     end subroutine
