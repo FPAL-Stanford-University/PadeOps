@@ -1,5 +1,5 @@
 module exits
-
+    use mpi
     use kind_parameters, only: rkind,clen,stdout,stderr
     use constants, only: one
     use decomp_2d, only: nrank, decomp_2d_abort

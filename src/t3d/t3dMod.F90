@@ -5,7 +5,7 @@ module t3dMod
 
     implicit none
     private
-    public :: t3d, Abort
+    public :: t3d
 
     type :: t3d
         private
