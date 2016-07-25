@@ -26,6 +26,7 @@ module exits
 contains
 
     subroutine GracefulExit(message, errcode)
+        use mpi
         use kind_parameters, only: stderr, stdout
         integer, intent(in) :: errCode
         character(len=*), intent(in) :: message
@@ -33,8 +34,9 @@ contains
 
         call mpi_comm_rank(mpi_comm_world, rank, ierr)
         if (rank == 0) then
+            write(stderr,'(A)') '========== ERROR =========='
             write(stderr,'(A)') message
-            write(stdout,'(A)') message
+            write(stderr,'(A)') '==========================='
         end if 
         call mpi_barrier(mpi_comm_world, ierr)
         call mpi_abort(mpi_comm_world, errCode, ierr)
