@@ -7,7 +7,7 @@ module reductions
     implicit none
 
     private
-    public :: P_MAXVAL, P_MINVAL, P_SUM, P_MEAN, P_AVGZ
+    public :: P_MAXVAL, P_MINVAL, P_SUM, P_MEAN, P_AVGZ, P_OR
 
     interface P_MAXVAL
         module procedure P_MAXVAL_arr4, P_MAXVAL_arr3, P_MAXVAL_arr2, P_MAXVAL_sca
@@ -71,6 +71,19 @@ contains
         call MPI_Allreduce(mymax, maximum, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
 
     end function
+
+    function P_OR(x, comm) result(maximum)
+        logical, intent(in) :: x
+        integer, intent(in), optional :: comm
+        logical :: maximum 
+        integer :: ierr
+
+        if (present(comm)) then
+            call MPI_Allreduce(x,maximum, 1, MPI_LOGICAL,MPI_LOR, comm, ierr)
+        else
+            call MPI_Allreduce(x,maximum, 1, MPI_LOGICAL,MPI_LOR, MPI_COMM_WORLD, ierr)
+        end if 
+    end function 
 
     function P_MAXVAL_arr2(x) result(maximum)
         real(rkind), dimension(:,:), intent(in) :: x
