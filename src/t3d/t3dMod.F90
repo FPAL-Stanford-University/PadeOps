@@ -796,13 +796,13 @@ contains
                     siters = siters + 1
                     t = this%timed_transpose()
                     if (rank == 0) then
-                        write(stdout,'(A,3(I5,A),ES10.2E3,A)') "Processor decomposition: ", &
+                        write(stdout,'(A,3(I5,A),ES12.3E3,A)') "Processor decomposition: ", &
                                         px, " x", py, " x", pz, ". Time = ", t, " seconds"
                     end if
                     if (t < topt) then
                         topt = t; pxopt = px; pyopt = py; pzopt = pz;
                         if (rank == 0) then
-                            write(stdout,'(A,3(I0,A),ES10.2E3,A)') " >>>> Found a better processor decomposition ", &
+                            write(stdout,'(A,3(I0,A),ES12.3E3,A)') " >>>> Found a better processor decomposition ", &
                                             pxopt, " x ", pyopt, " x ", pzopt, " with time ", topt, " seconds"
                         end if
                     end if

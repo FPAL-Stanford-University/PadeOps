@@ -11,6 +11,7 @@ program test_t3d
     type(t3d) :: gp
     type(cd10) :: xcd10, ycd10, zcd10
     real(rkind), dimension(:,:,:), allocatable :: input, output, ninput, der, exder, eyder, ezder
+    real(rkind), dimension(:,:,:), allocatable :: buffx, buffy, buffz, buff3d 
     integer :: nx = 512, ny = 512, nz = 512
     integer :: px = 4, py = 4, pz = 4
     integer :: i, j, k, ierr
@@ -131,6 +132,26 @@ program test_t3d
     deallocate(  exder )
     deallocate(  eyder )
     deallocate(  ezder )
+
+    
+    allocate( buff3d(gp%sz3D(1), gp%sz3D(2), gp%sz3D(3)) )
+    allocate( buffx (gp%szX (1), gp%szX (2), gp%szX (3)) )
+    allocate( buffy (gp%szY (1), gp%szY (2), gp%szY (3)) )
+    allocate( buffz (gp%szZ (1), gp%szZ (2), gp%szZ (3)) )
+
+    buff3d = 0.5_rkind
+    if (gp%rank3d == 0) print*, "Now just testing transposes"
+    call mpi_barrier(mpi_comm_world, ierr)
+    start = gp%time(barrier=.false.)
+    call gp%transpose_3D_to_x(buff3d,buffx )
+    call gp%transpose_x_to_3D(buffx ,buff3d)
+    call gp%transpose_3D_to_y(buff3d,buffy )
+    call gp%transpose_y_to_3D(buffy ,buff3d)
+    call gp%transpose_3D_to_z(buff3d,buffz )
+    call gp%transpose_z_to_3D(buffz ,buff3d)
+    t3dz = gp%time(start,reduce=.true., barrier=.false.)
+    if (gp%rank3d == 0) print*, "Time for just transposing", t3dz
+
 
     call MPI_Finalize(ierr)
 contains
