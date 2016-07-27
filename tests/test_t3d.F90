@@ -12,13 +12,13 @@ program test_t3d
     type(cd10) :: xcd10, ycd10, zcd10
     real(rkind), dimension(:,:,:), allocatable :: input, output, ninput, der, exder, eyder, ezder
     real(rkind), dimension(:,:,:), allocatable :: buffx, buffy, buffz, buff3d 
-    integer :: nx = 512, ny = 512, nz = 512
+    integer :: nx = 1024, ny = 1024, nz = 1024
     integer :: px = 4, py = 4, pz = 4
     integer :: i, j, k, ierr
     logical :: fail
     real(rkind) :: dererr, omega = 1._rkind, dx, dy, dz
     real(rkind) :: start, tx, txd, t3dx, ty, tyd, t3dy, tz, tzd, t3dz
-    logical :: optimize = .true.
+    logical :: optimize = .false.
 
     call MPI_Init(ierr)
 
@@ -61,19 +61,19 @@ program test_t3d
     end do
 
     ! X transpose and derivative
-    start = gp%time(barrier=.false.)
+    start = gp%time(barrier=.true.)
     call gp%transpose_3D_to_x(input,output)
-    tx = gp%time(start,reduce=.false.)
+    tx = gp%time(start,reduce=.true.)
     if (gp%rank3d == 0) print*, "Time for 3D to X transpose = ", tx
 
-    start = gp%time(barrier=.false.)
+    start = gp%time(barrier=.true.)
     call xcd10%dd1(output, der, size(der,2), size(der,3))
-    txd = gp%time(start,reduce=.false.)
+    txd = gp%time(start,reduce=.true.)
     if (gp%rank3d == 0) print*, "Time for X derivative      = ", txd
     
-    start = gp%time(barrier=.false.)
+    start = gp%time(barrier=.true.)
     call gp%transpose_x_to_3D(der,ninput)
-    t3dx = gp%time(start,reduce=.false.)
+    t3dx = gp%time(start,reduce=.true.)
     if (gp%rank3d == 0) print*, "Time for X to 3D transpose = ", t3dx
 
     dererr = P_MAXVAL(maxval(abs(ninput-exder)))
@@ -84,7 +84,7 @@ program test_t3d
     allocate(    der(gp%szY (1), gp%szY (2), gp%szY (3)) )
 
     ! Y transpose and derivative
-    start = gp%time(barrier=.false.)
+    start = gp%time(barrier=.true.)
     call gp%transpose_3D_to_y(input,output)
     ty = gp%time(start,reduce=.false.)
     if (gp%rank3d == 0) print*, "Time for 3D to Y transpose = ", ty
@@ -107,7 +107,7 @@ program test_t3d
     allocate(    der(gp%szZ (1), gp%szZ (2), gp%szZ (3)) )
 
     ! Z transpose and derivative
-    start = gp%time(barrier=.false.)
+    start = gp%time(barrier=.true.)
     call gp%transpose_3D_to_z(input,output)
     tz = gp%time(start,reduce=.false.)
     if (gp%rank3d == 0) print*, "Time for 3D to Z transpose = ", tz

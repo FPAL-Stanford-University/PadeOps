@@ -49,10 +49,16 @@ module t3dMod
     contains
         procedure :: transpose_3d_to_x
         procedure :: transpose_x_to_3d
+
         procedure :: transpose_3d_to_y
         procedure :: transpose_y_to_3d
+
         procedure :: transpose_3d_to_z
         procedure :: transpose_z_to_3d
+
+        procedure :: initiate_transpose_3d_to_x
+        procedure :: wait_transpose_3d_to_x
+
         procedure :: print_summary
         procedure, private :: timed_transpose
         procedure :: time
@@ -719,6 +725,71 @@ contains
 
     end subroutine 
 
+    subroutine initiate_transpose_3d_to_x(this, input, buffer3D, bufferX, request)
+        class(t3d), intent(in) :: this
+        real(rkind), dimension(this%sz3d(1),this%sz3d(2),this%sz3d(3)), intent(in)  :: input
+        real(rkind), dimension(this%sz3d(1)*this%sz3d(2)*this%sz3d(3)), intent(out) :: buffer3D
+        real(rkind), dimension(this%szX (1)*this%szX (2)*this%szX (3)), intent(out) :: bufferX
+        integer,                                                        intent(out) :: request
+        integer :: proc, i, j, k, pos, ierr
+        ! real(rkind) :: start, endt
+
+        ! start = this%time(barrier=.false.)
+        do proc = 0,this%px-1
+            do k = this%stXall(3,proc),this%enXall(3,proc)
+                do j = this%stXall(2,proc),this%enXall(2,proc)
+                    do i = 1,this%sz3D(1)
+                        pos = ( 1 + (i-1) + this%sz3D(1)*(j-this%stXall(2,proc)) + &
+                              this%sz3D(1)*this%szXall(2,proc)*(k-this%stXall(3,proc)) ) + this%disp3DX(proc)
+                        buffer3D(pos) = input(i,j,k)
+                    end do
+                end do
+            end do
+        end do
+        ! endt = this%time(start,reduce=.false.)
+        ! if (this%rank3d == 0) print*, "Do 1", endt
+
+        ! start = this%time(barrier=.false.)
+        select case(this%unequalX)
+        case (.true.)
+            call mpi_Ialltoallv(buffer3D,this%count3DX,this%disp3DX,mpirkind, &
+                               bufferX, this%countX,  this%dispX,  mpirkind, this%commX, request, ierr)
+        case (.false.)
+            call mpi_Ialltoall (buffer3D,this%count3DX(0), mpirkind, &
+                               bufferX, this%countX  (0), mpirkind, this%commX, request, ierr)
+        end select
+        ! endt = this%time(start,reduce=.false.)
+        ! if (this%rank3d == 0) print*, "2", endt
+    end subroutine 
+
+    subroutine wait_transpose_3d_to_x(this, output, bufferX, request, status)
+        class(t3d), intent(in) :: this
+        real(rkind), dimension(this%szX (1),this%szX (2),this%szX (3)), intent(out) :: output
+        real(rkind), dimension(this%szX (1)*this%szX (2)*this%szX (3)), intent(in)  :: bufferX
+        integer,                                                        intent(in)  :: request
+        integer, dimension(mpi_status_size),                            intent(out) :: status
+        integer :: proc, i, j, k, pos, ierr
+
+        call mpi_wait(request, status, ierr)
+
+        ! start = this%time(barrier=.false.)
+        do proc = 0,this%px-1
+            do k = this%stX(3),this%enX(3)
+                do j = this%stX(2),this%enX(2)
+                    do i = this%st3DX(1,proc),this%en3DX(1,proc)
+                        pos = ( 1 + (i-this%st3DX(1,proc)) + &
+                               this%sz3DX(1,proc)*(j-this%stX(2)) + & 
+                               this%sz3DX(1,proc)*this%szX(2)*(k-this%stX(3)) ) + this%dispX(proc)
+                        output(i,j-this%stX(2)+1,k-this%stX(3)+1) = bufferX(pos)
+                    end do
+                end do
+            end do
+        end do
+        ! endt = this%time(start,reduce=.false.)
+        ! if (this%rank3d == 0) print*, "Do 3", endt
+
+    end subroutine 
+
     logical function square_factor(nprocs,nrow,ncol,prow,pcol) result(fail)
         use constants, only: eps
         integer, intent(in) :: nprocs, nrow, ncol
@@ -872,13 +943,13 @@ contains
         barrier_ = .false.
         if ( present(barrier) ) barrier_ = barrier
 
-        reduce_ = .false.
-        if ( present(reduce) ) reduce_ = reduce
-
         if (barrier_) call mpi_barrier(this%comm3d,ierr)
 
         ptime = mpi_wtime()
         if ( present(start) ) ptime = ptime - start
+
+        reduce_ = .false.
+        if ( present(reduce) ) reduce_ = reduce
 
         select case (reduce_)
         case(.true.)
