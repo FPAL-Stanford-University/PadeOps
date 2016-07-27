@@ -2,6 +2,7 @@ module sgrid_hooks
     use kind_parameters, only: rkind
     use decomp_2d, only: decomp_info
     use DerivativesMod, only: derivatives
+    use FiltersMod, only: filters
     implicit none
 
     interface meshgen
@@ -48,43 +49,52 @@ module sgrid_hooks
     end interface
 
     interface hook_output
-        subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
+        subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x_bc,y_bc,z_bc)
             import :: rkind
             import :: decomp_info
             import :: derivatives
-            character(len=*),                intent(in) :: outputdir
+            import :: filters
             type(decomp_info),               intent(in) :: decomp
+            type(derivatives),               intent(in) :: der
+            type(filters),                   intent(in) :: fil
             real(rkind),                     intent(in) :: dx,dy,dz,tsim
-            integer,                         intent(in) :: vizcount
+            character(len=*),                intent(in) :: outputdir
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(in) :: fields
-            type(derivatives),               intent(in) :: der
+            integer,                         intent(in) :: vizcount
+            integer, dimension(2),       intent(in) :: x_bc, y_bc, z_bc
 
         end subroutine
     end interface
 
     interface hook_bc
-        subroutine hook_bc(decomp,mesh,fields,tsim)
+        subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
             import :: rkind
             import :: decomp_info
             type(decomp_info),               intent(in)    :: decomp
             real(rkind),                     intent(in)    :: tsim
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+            integer, dimension(2),       intent(in)    :: x_bc, y_bc, z_bc
 
         end subroutine
     end interface
 
+
     interface hook_timestep
-        subroutine hook_timestep(decomp,mesh,fields,step,tsim,hookcond)
+        subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc,hookcond)
             import :: rkind
             import :: decomp_info
+            import :: derivatives
             type(decomp_info),               intent(in)    :: decomp
+            type(derivatives),               intent(in)    :: der
             integer,                         intent(in)    :: step
             real(rkind),                     intent(in)    :: tsim
-            logical,               optional, intent(inout) :: hookcond
+            real(rkind),                     intent(in)    :: dt
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(in)    :: fields
+            integer,     dimension(2),       intent(in)    :: x_bc, y_bc, z_bc
+            logical,               optional, intent(inout) :: hookcond
 
         end subroutine
     end interface
@@ -100,6 +110,11 @@ module sgrid_hooks
             real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
             real(rkind), dimension(:,:,:,:), optional, intent(inout) ::rhsg
 
+        end subroutine
+    end interface
+
+    interface hook_finalize
+        subroutine hook_finalize()
         end subroutine
     end interface
 
