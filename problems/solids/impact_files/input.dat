@@ -1,7 +1,7 @@
 &INPUT
 
-inputdir  =  "/home/akshays/Data/PadeOps/impact_elastic"      ! Directory for input files
-outputdir  = "/home/akshays/Data/PadeOps/impact_elastic"      ! Directory for output files
+inputdir  =  "/home/akshays/Data/PadeOps/impact_gTg"      ! Directory for input files
+outputdir  = "/home/akshays/Data/PadeOps/impact_gTg"      ! Directory for output files
 
 nx = 201                  ! Number of points in X
 ny = 1                    ! Number of points in Y
