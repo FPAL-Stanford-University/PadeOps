@@ -40,16 +40,17 @@ program test_t3d_NB
     type(cd10) :: xcd10, ycd10, zcd10
     real(rkind), dimension(:,:,:), allocatable :: input, output, ninput, der, exder, eyder, ezder
     real(rkind), dimension(:), allocatable :: buffx, buffy, buffz, buff3d 
-    integer :: nx = 1024, ny = 1024, nz = 1024
+    integer :: nx = 128, ny = 128, nz = 128
     integer :: px = 4, py = 4, pz = 4
     integer :: i, j, k, ierr
     logical :: fail
     real(rkind) :: dererr, omega = 1._rkind, dx, dy, dz
     real(rkind) :: start, tx, txd, t3dx, ty, tyd, t3dy, tz, tzd, t3dz
-    logical :: optimize = .false.
+    logical :: optimize = .true.
     integer :: request
     integer, dimension(mpi_status_size) :: status
 
+    integer :: warmupid
     interface 
         subroutine dowork(xinput, xoutput)
             import :: rkind
@@ -104,82 +105,165 @@ program test_t3d_NB
     end do
 
     ! Warm-up dowork
-    call dowork(input, eyder)
-    call dowork(exder, ezder)
+    !call dowork(input, eyder)
+    !call dowork(exder, ezder)
     
-    start = gp%time(barrier=.false.)
-    call dowork(input, eyder)
-    tx = gp%time(start,reduce=.false.); if (gp%rank3d == 0) print*, "Time for dowork = ", tx
+    !start = gp%time(barrier=.false.)
+    !call dowork(input, eyder)
+    !tx = gp%time(start,reduce=.false.); if (gp%rank3d == 0) print*, "Time for dowork = ", tx
 
-    start = gp%time(barrier=.true.)
-    call gp%transpose_3D_to_x( input, output )
-    tx = gp%time(start,reduce=.true.); if (gp%rank3d == 0) print*, "Time for blocking 3D to X transpose = ", tx
+    do warmupid = 1,4
+        if (gp%rank3d == 0) print*, "===================================================="
+        if (gp%rank3d == 0) print*, " RUN NUMBER: ", warmupid
+        if (gp%rank3d == 0) print*, "===================================================="
+        
+        deallocate(output, der);
+        allocate( output(gp%szX (1), gp%szX (2), gp%szX (3)) )
+        allocate(    der(gp%szX (1), gp%szX (2), gp%szX (3)) )
+        
+        if (gp%rank3d == 0) print*, "===================================================="
+        if (gp%rank3d == 0) print*, "---------- BLOCKING TRANSPOSE (3d <> X) ----------- "
+        start = gp%time(barrier=.true.)
+        call gp%transpose_3D_to_x( input, output )
+        tx = gp%time(start,reduce=.true.); if (gp%rank3d == 0) print*, "Time for 3D to X transpose = ", tx
+        
+        start = gp%time(barrier=.true.)
+        call xcd10%dd1(output, der, size(der,2), size(der,3))
+        txd = gp%time(start,reduce=.true.)
+        if (gp%rank3d == 0) print*, "Time for X derivative      = ", txd
+        
+        start = gp%time(barrier=.true.)
+        call gp%transpose_x_to_3D(der,ninput)
+        t3dx = gp%time(start,reduce=.true.)
+        if (gp%rank3d == 0) print*, "Time for X to 3D transpose = ", t3dx
+        dererr = P_MAXVAL(maxval(abs(ninput-exder)))
+        if(gp%rank3d == 0) print*, " >>>> Error in x derivative = ", dererr
+        if (gp%rank3d == 0) print*, "===================================================="
 
-    ! X transpose and derivative
-    start = gp%time(barrier=.true.)
-    call gp%initiate_transpose_3D_to_x( input, buff3d, buffx, request)
-    call dowork(exder, ezder)
-    call gp%wait_transpose_3D_to_x( output, buffx, request, status)
-    tx = gp%time(start,reduce=.true.); if (gp%rank3d == 0) print*, "Time for 3D to X transpose = ", tx
+        if (gp%rank3d == 0) print*, "===================================================="
+        if (gp%rank3d == 0) print*, "-------- NON-BLOCKING TRANSPOSE (3d <> X) --------- "
+        ! X transpose and derivative
+        start = gp%time(barrier=.true.)
+        call gp%initiate_transpose_3D_to_x( input, buff3d, buffx, request)
+        !call dowork(exder, ezder)
+        call gp%wait_transpose_3D_to_x( output, buffx, request, status)
+        tx = gp%time(start,reduce=.true.); if (gp%rank3d == 0) print*, "Time for 3D to X transpose = ", tx
+        
+        start = gp%time(barrier=.true.)
+        call xcd10%dd1(output, der, size(der,2), size(der,3))
+        txd = gp%time(start,reduce=.true.)
+        if (gp%rank3d == 0) print*, "Time for X derivative      = ", txd
 
-    start = gp%time(barrier=.true.)
-    call xcd10%dd1(output, der, size(der,2), size(der,3))
-    txd = gp%time(start,reduce=.true.)
-    if (gp%rank3d == 0) print*, "Time for X derivative      = ", txd
+        start = gp%time(barrier=.true.)
+        call gp%initiate_transpose_x_to_3D( der, buff3d, buffx, request)
+        !call dowork(exder, eyder)
+        call gp%wait_transpose_x_to_3D( ninput, buff3D, request, status)
+        tx = gp%time(start,reduce=.true.); if (gp%rank3d == 0) print*, "Time for X to 3D transpose = ", tx
+        
+        dererr = P_MAXVAL(maxval(abs(ninput-exder)))
+        if(gp%rank3d == 0) print*, " >>>> Error in x derivative = ", dererr
+        if (gp%rank3d == 0) print*, "===================================================="
+        
+        deallocate(output, der);
+        allocate( output(gp%szY (1), gp%szY (2), gp%szY (3)) )
+        allocate(    der(gp%szY (1), gp%szY (2), gp%szY (3)) )
+
+        if (gp%rank3d == 0) print*, "===================================================="
+        if (gp%rank3d == 0) print*, "---------- BLOCKING TRANSPOSE (3d <> Y) ----------- "
+        ! Y transpose and derivative
+        start = gp%time(barrier=.true.)
+        call gp%transpose_3D_to_y(input,output)
+        ty = gp%time(start,reduce=.false.)
+        if (gp%rank3d == 0) print*, "Time for 3D to Y transpose = ", ty
+
+        start = gp%time(barrier=.false.)
+        call ycd10%dd2(output, der, size(der,1), size(der,3))
+        tyd = gp%time(start,reduce=.false.)
+        if (gp%rank3d == 0) print*, "Time for Y derivative      = ", tyd
+        
+        start = gp%time(barrier=.false.)
+        call gp%transpose_y_to_3D(der,ninput)
+        t3dy = gp%time(start,reduce=.false.)
+        if (gp%rank3d == 0) print*, "Time for Y to 3D transpose = ", t3dy
+
+        dererr = P_MAXVAL(maxval(abs(ninput-eyder)))
+        if(gp%rank3d == 0) print*, ">>>> Error in y derivative  = ", dererr
+        if (gp%rank3d == 0) print*, "===================================================="
+
+        if (gp%rank3d == 0) print*, "===================================================="
+        if (gp%rank3d == 0) print*, "-------- NON-BLOCKING TRANSPOSE (3d <> Y) --------- "
+        start = gp%time(barrier=.true.)
+        call gp%initiate_transpose_3D_to_y( input, buff3d, buffy, request)
+        !call dowork(exder, ezder)
+        call gp%wait_transpose_3D_to_y( output, buffy, request, status)
+        tx = gp%time(start,reduce=.true.); if (gp%rank3d == 0) print*, "Time for 3D to Y transpose = ", tx
+        
+        start = gp%time(barrier=.false.)
+        call ycd10%dd2(output, der, size(der,1), size(der,3))
+        tyd = gp%time(start,reduce=.false.)
+        if (gp%rank3d == 0) print*, "Time for Y derivative      = ", tyd
+        
+        start = gp%time(barrier=.true.)
+        call gp%initiate_transpose_y_to_3D( der, buff3d, buffy, request)
+        !call dowork(exder, eyder)
+        call gp%wait_transpose_y_to_3D( ninput, buff3D, request, status)
+        tx = gp%time(start,reduce=.true.); if (gp%rank3d == 0) print*, "Time for Y to 3D transpose = ", tx
+        
+        dererr = P_MAXVAL(maxval(abs(ninput-eyder)))
+        if(gp%rank3d == 0) print*, ">>>> Error in y derivative  = ", dererr
+        if (gp%rank3d == 0) print*, "===================================================="
+        
+        deallocate(output, der);
+        allocate( output(gp%szZ (1), gp%szZ (2), gp%szZ (3)) )
+        allocate(    der(gp%szZ (1), gp%szZ (2), gp%szZ (3)) )
+
+        if (gp%rank3d == 0) print*, "===================================================="
+        if (gp%rank3d == 0) print*, "---------- BLOCKING TRANSPOSE (3d <> Z) ----------- "
+        ! Z transpose and derivative
+        start = gp%time(barrier=.true.)
+        call gp%transpose_3D_to_z(input,output)
+        tz = gp%time(start,reduce=.false.)
+        if (gp%rank3d == 0) print*, "Time for 3D to Z transpose = ", tz
+
+        start = gp%time(barrier=.false.)
+        call zcd10%dd3(output, der, size(der,1), size(der,2))
+        tzd = gp%time(start,reduce=.false.)
+        if (gp%rank3d == 0) print*, "Time for Z derivative      = ", tzd
+        
+        start = gp%time(barrier=.false.)
+        call gp%transpose_z_to_3D(der,ninput)
+        t3dz = gp%time(start,reduce=.false.)
+        if (gp%rank3d == 0) print*, "Time for Z to 3D transpose = ", t3dz
+
+        dererr = P_MAXVAL(maxval(abs(ninput-ezder)))
+        if(gp%rank3d == 0) print*, ">>>> Error in z derivative  = ", dererr
+        if (gp%rank3d == 0) print*, "===================================================="
+
+        
+        if (gp%rank3d == 0) print*, "===================================================="
+        if (gp%rank3d == 0) print*, "-------- NON-BLOCKING TRANSPOSE (3d <> Z) --------- "
+        start = gp%time(barrier=.true.)
+        call gp%initiate_transpose_3D_to_z( input, buff3d, buffz, request)
+        !call dowork(exder, ezder)
+        call gp%wait_transpose_3D_to_z( output, buffz, request, status)
+        tx = gp%time(start,reduce=.true.); if (gp%rank3d == 0) print*, "Time for 3D to Z transpose = ", tx
+        
+        start = gp%time(barrier=.false.)
+        call zcd10%dd3(output, der, size(der,1), size(der,2))
+        tzd = gp%time(start,reduce=.false.)
+        if (gp%rank3d == 0) print*, "Time for Z derivative      = ", tzd
+
+        start = gp%time(barrier=.true.)
+        call gp%initiate_transpose_z_to_3D( der, buff3d, buffz, request)
+        !call dowork(exder, eyder)
+        call gp%wait_transpose_z_to_3D( ninput, buff3D, request, status)
+        tx = gp%time(start,reduce=.true.); if (gp%rank3d == 0) print*, "Time for Z to 3D transpose = ", tx
+
+        dererr = P_MAXVAL(maxval(abs(ninput-ezder)))
+        if(gp%rank3d == 0) print*, ">>>> Error in z derivative  = ", dererr
+        if (gp%rank3d == 0) print*, "===================================================="
     
-    start = gp%time(barrier=.true.)
-    call gp%transpose_x_to_3D(der,ninput)
-    t3dx = gp%time(start,reduce=.true.)
-    if (gp%rank3d == 0) print*, "Time for X to 3D transpose = ", t3dx
-
-    dererr = P_MAXVAL(maxval(abs(ninput-exder)))
-    if(gp%rank3d == 0) print*, " >>>> Error in x derivative = ", dererr
-
-    deallocate(output, der);
-    allocate( output(gp%szY (1), gp%szY (2), gp%szY (3)) )
-    allocate(    der(gp%szY (1), gp%szY (2), gp%szY (3)) )
-
-    ! ! Y transpose and derivative
-    ! start = gp%time(barrier=.true.)
-    ! call gp%transpose_3D_to_y(input,output)
-    ! ty = gp%time(start,reduce=.false.)
-    ! if (gp%rank3d == 0) print*, "Time for 3D to Y transpose = ", ty
-
-    ! start = gp%time(barrier=.false.)
-    ! call ycd10%dd2(output, der, size(der,1), size(der,3))
-    ! tyd = gp%time(start,reduce=.false.)
-    ! if (gp%rank3d == 0) print*, "Time for Y derivative      = ", tyd
-    ! 
-    ! start = gp%time(barrier=.false.)
-    ! call gp%transpose_y_to_3D(der,ninput)
-    ! t3dy = gp%time(start,reduce=.false.)
-    ! if (gp%rank3d == 0) print*, "Time for X to 3D transpose = ", t3dy
-
-    ! dererr = P_MAXVAL(maxval(abs(ninput-eyder)))
-    ! if(gp%rank3d == 0) print*, ">>>> Error in y derivative  = ", dererr
-
-    ! deallocate(output, der);
-    ! allocate( output(gp%szZ (1), gp%szZ (2), gp%szZ (3)) )
-    ! allocate(    der(gp%szZ (1), gp%szZ (2), gp%szZ (3)) )
-
-    ! ! Z transpose and derivative
-    ! start = gp%time(barrier=.true.)
-    ! call gp%transpose_3D_to_z(input,output)
-    ! tz = gp%time(start,reduce=.false.)
-    ! if (gp%rank3d == 0) print*, "Time for 3D to Z transpose = ", tz
-
-    ! start = gp%time(barrier=.false.)
-    ! call zcd10%dd3(output, der, size(der,1), size(der,2))
-    ! tzd = gp%time(start,reduce=.false.)
-    ! if (gp%rank3d == 0) print*, "Time for Z derivative      = ", tzd
-    ! 
-    ! start = gp%time(barrier=.false.)
-    ! call gp%transpose_z_to_3D(der,ninput)
-    ! t3dz = gp%time(start,reduce=.false.)
-    ! if (gp%rank3d == 0) print*, "Time for Z to 3D transpose = ", t3dz
-
-    ! dererr = P_MAXVAL(maxval(abs(ninput-ezder)))
-    ! if(gp%rank3d == 0) print*, ">>>> Error in z derivative  = ", dererr
+    end do 
 
     deallocate(  input )
     deallocate( ninput )

@@ -58,7 +58,19 @@ module t3dMod
 
         procedure :: initiate_transpose_3d_to_x
         procedure :: wait_transpose_3d_to_x
+        procedure :: initiate_transpose_x_to_3d
+        procedure :: wait_transpose_x_to_3d
 
+        procedure :: initiate_transpose_3d_to_y
+        procedure :: wait_transpose_3d_to_y
+        procedure :: initiate_transpose_y_to_3d
+        procedure :: wait_transpose_y_to_3d
+        
+        procedure :: initiate_transpose_3d_to_z
+        procedure :: wait_transpose_3d_to_z
+        procedure :: initiate_transpose_z_to_3d
+        procedure :: wait_transpose_z_to_3d
+        
         procedure :: print_summary
         procedure, private :: timed_transpose
         procedure :: time
@@ -787,6 +799,287 @@ contains
         end do
         ! endt = this%time(start,reduce=.false.)
         ! if (this%rank3d == 0) print*, "Do 3", endt
+
+    end subroutine 
+
+    subroutine initiate_transpose_x_to_3d(this, input, buffer3D, bufferX, request)
+        class(t3d), intent(in) :: this
+        real(rkind), dimension(this%szX (1),this%szX (2),this%szX (3)), intent(in)  :: input
+        real(rkind), dimension(this%sz3d(1)*this%sz3d(2)*this%sz3d(3)), intent(out) :: buffer3D
+        real(rkind), dimension(this%szX (1)*this%szX (2)*this%szX (3)), intent(out) :: bufferX
+        integer,                                                        intent(out) :: request
+        integer :: proc, i, j, k, pos, ierr
+
+        do proc = 0,this%px-1
+            do k = this%stX(3),this%enX(3)
+                do j = this%stX(2),this%enX(2)
+                    do i = this%st3DX(1,proc),this%en3DX(1,proc)
+                        pos = ( 1 + (i-this%st3DX(1,proc)) + this%sz3DX(1,proc)*(j-this%stX(2)) + &
+                              this%sz3DX(1,proc)*this%szX(2)*(k-this%stX(3)) ) + this%dispX(proc)
+                        bufferX(pos) = input(i,j-this%stX(2)+1,k-this%stX(3)+1)
+                    end do
+                end do
+            end do
+        end do
+
+        select case(this%unequalX)
+        case (.true.)
+            call mpi_Ialltoallv(bufferX, this%countX,  this%dispX,  mpirkind, &
+                               buffer3D,this%count3DX,this%disp3DX,mpirkind, this%commX, ierr)
+        case (.false.)
+            call mpi_Ialltoall (bufferX ,this%countX  (0), mpirkind, &
+                               buffer3D,this%count3DX(0), mpirkind, this%commX, request, ierr)
+        end select
+
+    end subroutine
+    
+    subroutine wait_transpose_x_to_3d(this, output, buffer3D, request, status)
+        class(t3d), intent(in) :: this
+        real(rkind), dimension(this%sz3D(1),this%sz3D(2),this%sz3D(3)), intent(out) :: output
+        real(rkind), dimension(this%sz3D(1)*this%sz3D(2)*this%sz3D(3)), intent(in)  :: buffer3D
+        integer,                                                        intent(in)  :: request
+        integer, dimension(mpi_status_size),                            intent(out) :: status
+        integer :: proc, i, j, k, pos, ierr
+
+        call mpi_wait(request, status, ierr)
+        
+        do proc = 0,this%px-1
+            do k = this%stXall(3,proc),this%enXall(3,proc)
+                do j = this%stXall(2,proc),this%enXall(2,proc)
+                    do i = 1,this%sz3D(1)
+                        pos = ( 1 + (i-1) + this%sz3D(1)*(j-this%stXall(2,proc)) + &
+                              this%sz3D(1)*this%szXall(2,proc)*(k-this%stXall(3,proc)) ) + this%disp3DX(proc)
+                        output(i,j,k) = buffer3D(pos)
+                    end do
+                end do
+            end do
+        end do
+
+    end subroutine 
+
+    subroutine initiate_transpose_3d_to_y(this, input, buffer3D, bufferY, request)
+        class(t3d), intent(in) :: this
+        real(rkind), dimension(this%sz3d(1),this%sz3d(2),this%sz3d(3)), intent(in)  :: input
+        real(rkind), dimension(this%sz3d(1)*this%sz3d(2)*this%sz3d(3)), intent(out) :: buffer3D
+        real(rkind), dimension(this%szY (1)*this%szY (2)*this%szY (3)), intent(out) :: bufferY
+        integer,                                                        intent(out) :: request
+        integer :: proc, i, j, k, pos, ierr
+
+        do proc = 0,this%py-1
+            do k = this%stYall(3,proc),this%enYall(3,proc)
+                do j = 1,this%sz3D(2)
+                    do i = this%stYall(1,proc),this%enYall(1,proc)
+                        pos = ( 1 + (i-this%stYall(1,proc)) + this%szYall(1,proc)*(j-1) + &
+                              this%szYall(1,proc)*this%sz3D(2)*(k-this%stYall(3,proc)) ) + this%disp3DY(proc)
+                        buffer3D(pos) = input(i,j,k)
+                    end do
+                end do
+            end do
+        end do
+        
+        select case(this%unequalY)
+        case (.true.)
+            call mpi_Ialltoallv(buffer3D,this%count3DY,this%disp3DY,mpirkind, &
+                               bufferY, this%countY,  this%dispY,  mpirkind, this%commY, request, ierr)
+        case (.false.)
+            call mpi_Ialltoall (buffer3D,this%count3DY(0), mpirkind, &
+                               bufferY, this%countY  (0), mpirkind, this%commY, request, ierr)
+        end select
+
+    end subroutine
+
+
+    subroutine wait_transpose_3d_to_y(this, output, bufferY, request, status)
+        class(t3d), intent(in) :: this
+        real(rkind), dimension(this%szY(1)*this%szY(2)*this%szY(3)), intent(in)  :: bufferY
+        real(rkind), dimension(this%szY(1),this%szY(2),this%szY(3)), intent(out) :: output
+        integer,                                                     intent(in)  :: request
+        integer, dimension(mpi_status_size),                         intent(out) :: status
+        integer :: proc, i, j, k, pos, ierr
+        
+        call mpi_wait(request, status, ierr)
+        
+        do proc = 0,this%py-1
+            do k = this%stY(3),this%enY(3)
+                do j = this%st3DY(2,proc),this%en3DY(2,proc)
+                    do i = this%stY(1),this%enY(1)
+                        pos = ( 1 + (i-this%stY(1)) + &
+                               this%szY(1)*(j-this%st3DY(2,proc)) + & 
+                               this%szY(1)*this%sz3DY(2,proc)*(k-this%stY(3)) ) + this%dispY(proc)
+                        output(i-this%stY(1)+1,j,k-this%stY(3)+1) = bufferY(pos)
+                    end do
+                end do
+            end do
+        end do
+
+    end subroutine 
+
+    subroutine initiate_transpose_y_to_3d(this, input, buffer3D, bufferY, request)
+        class(t3d), intent(in) :: this
+        real(rkind), dimension(this%szY (1),this%szY (2),this%szY (3)), intent(in)  :: input
+        real(rkind), dimension(this%sz3d(1)*this%sz3d(2)*this%sz3d(3)), intent(out) :: buffer3D
+        real(rkind), dimension(this%szY (1)*this%szY (2)*this%szY (3)), intent(out) :: bufferY
+        integer,                                                        intent(out) :: request
+        integer :: proc, i, j, k, pos, ierr
+
+        do proc = 0,this%py-1
+            do k = this%stY(3),this%enY(3)
+                do j = this%st3DY(2,proc),this%en3DY(2,proc)
+                    do i = this%stY(1),this%enY(1)
+                        pos = ( 1 + (i-this%stY(1)) + &
+                               this%szY(1)*(j-this%st3DY(2,proc)) + & 
+                               this%szY(1)*this%sz3DY(2,proc)*(k-this%stY(3)) ) + this%dispY(proc)
+                        bufferY(pos) = input(i-this%stY(1)+1,j,k-this%stY(3)+1)
+                    end do
+                end do
+            end do
+        end do
+
+        select case(this%unequalY)
+        case (.true.)
+            call mpi_Ialltoallv(bufferY, this%countY,  this%dispY,  mpirkind, &
+                               buffer3D,this%count3DY,this%disp3DY,mpirkind, this%commY, request, ierr)
+        case (.false.)
+            call mpi_Ialltoall (bufferY, this%countY  (0), mpirkind, &
+                               buffer3D,this%count3DY(0), mpirkind, this%commY, request, ierr)
+        end select
+    
+    end subroutine
+    
+    subroutine wait_transpose_y_to_3d(this, output, buffer3D, request, status)
+        class(t3d), intent(in) :: this
+        real(rkind), dimension(this%sz3D(1)*this%sz3D(2)*this%sz3D(3)), intent(in)  :: buffer3D
+        real(rkind), dimension(this%sz3D(1),this%sz3D(2),this%sz3D(3)), intent(out) :: output
+        integer,                                                        intent(in)  :: request
+        integer, dimension(mpi_status_size),                            intent(out) :: status
+        integer :: proc, i, j, k, pos, ierr
+
+        call mpi_wait(request, status, ierr)
+        
+        do proc = 0,this%py-1
+            do k = this%stYall(3,proc),this%enYall(3,proc)
+                do j = 1,this%sz3D(2)
+                    do i = this%stYall(1,proc),this%enYall(1,proc)
+                        pos = ( 1 + (i-this%stYall(1,proc)) + this%szYall(1,proc)*(j-1) + &
+                              this%szYall(1,proc)*this%sz3D(2)*(k-this%stYall(3,proc)) ) + this%disp3DY(proc)
+                        output(i,j,k) = buffer3D(pos) 
+                    end do
+                end do
+            end do
+        end do
+
+    end subroutine 
+
+
+    subroutine initiate_transpose_3d_to_z(this, input, buffer3D, bufferZ, request)
+        class(t3d), intent(in) :: this
+        real(rkind), dimension(this%sz3d(1),this%sz3d(2),this%sz3d(3)), intent(in)  :: input
+        real(rkind), dimension(this%sz3d(1)*this%sz3d(2)*this%sz3d(3)), intent(out) :: buffer3D
+        real(rkind), dimension(this%szZ (1)*this%szZ (2)*this%szZ (3)), intent(out) :: bufferZ
+        integer,                                                        intent(out) :: request
+        integer :: proc, i, j, k, pos, ierr
+
+        do proc = 0,this%pz-1
+            do k = 1,this%sz3D(3)
+                do j = this%stZall(2,proc),this%enZall(2,proc)
+                    do i = this%stZall(1,proc),this%enZall(1,proc)
+                        pos = ( 1 + (i-this%stZall(1,proc)) + this%szZall(1,proc)*(j-this%stZall(2,proc)) + &
+                              this%szZall(1,proc)*this%szZall(2,proc)*(k-1) ) + this%disp3DZ(proc)
+                        buffer3D(pos) = input(i,j,k)
+                    end do
+                end do
+            end do
+        end do
+
+        select case(this%unequalZ)
+        case (.true.)
+            call mpi_Ialltoallv(buffer3D,this%count3DZ,this%disp3DZ,mpirkind, &
+                               bufferZ, this%countZ,  this%dispZ,  mpirkind, this%commZ, request, ierr)
+        case (.false.)
+            call mpi_Ialltoall (buffer3D,this%count3DZ(0), mpirkind, &
+                               bufferZ, this%countZ  (0), mpirkind, this%commZ, request, ierr)
+        end select
+        
+    end subroutine
+        
+    subroutine wait_transpose_3d_to_z(this, output, bufferZ, request, status)
+        class(t3d), intent(in) :: this
+        real(rkind), dimension(this%szZ(1)*this%szZ(2)*this%szZ(3)), intent(in)  :: bufferZ
+        real(rkind), dimension(this%szZ(1),this%szZ(2),this%szZ(3)), intent(out) :: output
+        integer,                                                     intent(in)  :: request
+        integer, dimension(mpi_status_size),                            intent(out) :: status
+        integer :: proc, i, j, k, pos, ierr
+        
+        call mpi_wait(request, status, ierr)
+        
+        do proc = 0,this%pz-1
+            do k = this%st3DZ(3,proc),this%en3DZ(3,proc)
+                do j = this%stZ(2),this%enZ(2)
+                    do i = this%stZ(1),this%enZ(1)
+                        pos = ( 1 + (i-this%stZ(1)) + &
+                               this%szZ(1)*(j-this%stZ(2)) + & 
+                               this%szZ(1)*this%szZ(2)*(k-this%st3DZ(3,proc)) ) + this%dispZ(proc)
+                        output(i-this%stZ(1)+1,j-this%stZ(2)+1,k) = bufferZ(pos)
+                    end do
+                end do
+            end do
+        end do
+
+    end subroutine 
+
+
+    subroutine initiate_transpose_z_to_3d(this, input, buffer3D, bufferZ, request)
+        class(t3d), intent(in) :: this
+        real(rkind), dimension(this%szZ (1),this%szZ (2),this%szZ (3)), intent(in)  :: input
+        real(rkind), dimension(this%sz3d(1)*this%sz3d(2)*this%sz3d(3)), intent(out) :: buffer3D
+        real(rkind), dimension(this%szZ (1)*this%szZ (2)*this%szZ (3)), intent(out) :: bufferZ
+        integer,                                                        intent(out) :: request
+        integer :: proc, i, j, k, pos, ierr
+
+        do proc = 0,this%pz-1
+            do k = this%st3DZ(3,proc),this%en3DZ(3,proc)
+                do j = this%stZ(2),this%enZ(2)
+                    do i = this%stZ(1),this%enZ(1)
+                        pos = ( 1 + (i-this%stZ(1)) + &
+                               this%szZ(1)*(j-this%stZ(2)) + & 
+                               this%szZ(1)*this%szZ(2)*(k-this%st3DZ(3,proc)) ) + this%dispZ(proc)
+                        bufferZ(pos) = input(i-this%stZ(1)+1,j-this%stZ(2)+1,k)
+                    end do
+                end do
+            end do
+        end do
+
+        select case(this%unequalZ)
+        case (.true.)
+            call mpi_Ialltoallv(bufferZ, this%countZ,  this%dispZ,  mpirkind, &
+                               buffer3D,this%count3DZ,this%disp3DZ,mpirkind, this%commZ, request, ierr)
+        case (.false.)
+            call mpi_Ialltoall (bufferZ, this%countZ  (0), mpirkind, &
+                               buffer3D,this%count3DZ(0), mpirkind, this%commZ, request, ierr)
+        end select
+    end subroutine
+
+    subroutine wait_transpose_z_to_3d(this, output, buffer3D, request, status)
+        class(t3d), intent(in) :: this
+        real(rkind), dimension(this%sz3D(1)*this%sz3D(2)*this%sz3D(3)), intent(in)  :: buffer3D
+        real(rkind), dimension(this%sz3D(1),this%sz3D(2),this%sz3D(3)), intent(out) :: output
+        integer,                                                        intent(in)  :: request
+        integer, dimension(mpi_status_size),                            intent(out) :: status
+        integer :: proc, i, j, k, pos, ierr
+
+        call mpi_wait(request, status, ierr)
+
+        do proc = 0,this%pz-1
+            do k = 1,this%sz3D(3)
+                do j = this%stZall(2,proc),this%enZall(2,proc)
+                    do i = this%stZall(1,proc),this%enZall(1,proc)
+                        pos = ( 1 + (i-this%stZall(1,proc)) + this%szZall(1,proc)*(j-this%stZall(2,proc)) + &
+                              this%szZall(1,proc)*this%szZall(2,proc)*(k-1) ) + this%disp3DZ(proc)
+                        output(i,j,k) = buffer3D(pos)
+                    end do
+                end do
+            end do
+        end do
 
     end subroutine 
 
