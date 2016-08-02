@@ -113,7 +113,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    epsnd = 0.d0
+    epsnd = 5.0d0
 
     u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
