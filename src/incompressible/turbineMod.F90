@@ -142,18 +142,19 @@ subroutine destroy(this)
 
 end subroutine
 
-subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs)
+subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, inst_horz_avg)
     class(TurbineArray), intent(inout), target :: this
     real(rkind),                                                                         intent(in) :: dt
     real(rkind),    dimension(this%gpC%xsz(1),   this%gpC%xsz(2),   this%gpC%xsz(3)),    intent(in) :: u, v, wC
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs 
+    real(rkind),    dimension(:),                                                        intent(out)   :: inst_horz_avg
     integer :: i
 
     this%fx = zero; this%fy = zero; this%fz = zero
     if(ADM) then
       do i = 1, this%nTurbines
-        call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
+        call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz,inst_horz_avg(2*i-1:2*i))
       end do
     else
       !call this%turbArrayALM%get_RHS(dt, u, v, wC, this%fx, this%fy, this%fz)

@@ -112,6 +112,7 @@ module IncompressibleGridWallM
         integer :: wallMType, botBC_Temp 
 
         ! Statistics to compute 
+        real(rkind), dimension(:), allocatable :: runningSum_sc, inst_horz_avg, runningSum_sc_turb, inst_horz_avg_turb
         real(rkind), dimension(:,:), allocatable :: zStats2dump, runningSum, TemporalMnNOW
         real(rkind), dimension(:), pointer :: u_mean, v_mean, w_mean, uu_mean, uv_mean, uw_mean, vv_mean, vw_mean, ww_mean
         real(rkind), dimension(:), pointer :: tau11_mean, tau12_mean, tau13_mean, tau22_mean, tau23_mean, tau33_mean
@@ -1107,7 +1108,7 @@ contains
         ! Step 3b: Wind Turbines
         if (this%useWindTurbines) then
             call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
-                                    this%u_rhs, this%v_rhs, this%w_rhs)
+                                    this%u_rhs, this%v_rhs, this%w_rhs, this%inst_horz_avg_turb)
         end if 
 
         ! Step 4: Buoyance + Sponge (inside Buoyancy)
@@ -1123,7 +1124,7 @@ contains
                                                 this%u      , this%v              , this%wC         ,&
                                                 this%ustar  , this%Umn            , this%Vmn        ,&
                                                 this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
-                                                this%max_nuSGS)
+                                                this%max_nuSGS, this%inst_horz_avg)
             if (this%isStratified) then
                 call this%SGSmodel%getRHS_SGS_Scalar_WallM(this%dTdxC, this%dTdyC, this%dTdzE, &
                                                            this%T_rhs, this%wTh_surf           )
@@ -1178,32 +1179,32 @@ contains
     subroutine wrapup_timestep(this)
         class(igridWallM), intent(inout) :: this
 
-        ! STEP 1: Do logistical stuff
-        if ((mod(this%step,this%tid_compStats)==0) .and. (this%tsim > this%tSimStartStats)) then
+        ! STEP 1: Update Time and BCs
+        this%step = this%step + 1; this%tsim = this%tsim + this%dt
+
+        ! STEP 2: Do logistical stuff
+        if ((this%tsim > this%tstop) .or. ((mod(this%step,this%tid_compStats)==0) .and. (this%tsim > this%tSimStartStats))) then
             call this%compute_stats()
         end if 
 
-        if ((mod(this%step,this%tid_statsDump) == 0) .and. (this%tsim > this%tSimStartStats)) then
+        if ((this%tsim > this%tstop) .or. ((mod(this%step,this%tid_statsDump) == 0) .and. (this%tsim > this%tSimStartStats))) then
             call this%compute_stats()
             call this%dump_stats()
         end if 
         
-        if (mod(this%step,this%t_restartDump) == 0) then
+        if ((this%tsim > this%tstop) .or. (mod(this%step,this%t_restartDump) == 0)) then
             call this%dumpRestartfile()
         end if
         
-        if ((this%dumpPlanes) .and. (mod(this%step,this%t_planeDump) == 0) .and. &
+        if ((this%tsim > this%tstop) .or. ((this%dumpPlanes) .and. (mod(this%step,this%t_planeDump) == 0)) .and. &
                  (this%step .ge. this%t_start_planeDump) .and. (this%step .le. this%t_stop_planeDump)) then
             call this%dump_planes()
         end if 
 
-        if ((this%PreprocessForKS) .and. (mod(this%step,this%t_dumpKSprep) == 0)) then
+        if ((this%tsim > this%tstop) .or. ((this%PreprocessForKS) .and. (mod(this%step,this%t_dumpKSprep) == 0))) then
             call this%LES2KS%LES_TO_KS(this%uE,this%vE,this%w,this%step)
             call this%LES2KS%LES_FOR_KS(this%uE,this%vE,this%w,this%step)
         end if 
-
-        ! STEP 2: Update Time and BCs
-        this%step = this%step + 1; this%tsim = this%tsim + this%dt
 
     end subroutine
 
@@ -1639,11 +1640,20 @@ contains
             allocate(this%zStats2dump(this%nz,33))
             allocate(this%runningSum(this%nz,33))
             allocate(this%TemporalMnNOW(this%nz,33))
+            allocate(this%runningSum_sc(5))
+            allocate(this%inst_horz_avg(5))
         else
             allocate(this%zStats2dump(this%nz,25))
             allocate(this%runningSum(this%nz,25))
             allocate(this%TemporalMnNOW(this%nz,25))
+            allocate(this%runningSum_sc(3))
+            allocate(this%inst_horz_avg(3))
         end if 
+
+        if(this%useWindTurbines) then
+            allocate(this%inst_horz_avg_turb(2*this%WindTurbineArr%nTurbines))
+            allocate(this%runningSum_sc_turb(2*this%WindTurbineArr%nTurbines))
+        endif
 
         ! mean velocities
         this%u_mean => this%zStats2dump(:,1);  this%v_mean  => this%zStats2dump(:,2);  this%w_mean => this%zStats2dump(:,3) 
@@ -1679,6 +1689,7 @@ contains
             this%uT_mean => this%zStats2dump(:,27);  this%T_mean => this%zStats2Dump(:,26); this%q1_mean => this%zStats2Dump(:,31)
             this%q2_mean => this%zStats2dump(:,32);  this%q3_mean => this%zStats2Dump(:,33)
         end if 
+        this%runningSum_sc = zero
         this%runningSum = zero
         this%TemporalMnNOW = zero
         this%zStats2dump = zero
@@ -1925,17 +1936,29 @@ contains
         !write(*,*) 'vmean', maxval(this%v_mean), minval(this%v_mean)
         !write(*,*) 'wmean', maxval(this%w_mean), minval(this%w_mean)
 
+        ! instantaneous horizontal averages of some quantities
+        this%inst_horz_avg(1) = this%ustar
+        ! this%inst_horz(2) and (3) are computed in getRHS_SGS_WallM
+        if(this%isStratified) then
+            this%inst_horz_avg(4) = this%invObLength
+            this%inst_horz_avg(5) = this%wTh_surf
+        endif
+        ! this%inst_horz_avg_turb(1:2*this%WindTurbineArr%nTurbines) is computed in this%WindTurbineArr%getForceRHS
+        this%runningSum_sc = this%runningSum_sc + this%inst_horz_avg
+        this%runningSum_sc_turb = this%runningSum_sc_turb + this%inst_horz_avg_turb
+
     end subroutine 
 
     subroutine dump_stats(this)
         use basic_io, only: write_2d_ascii, write_2D_binary
         use exits, only: message
-        use kind_parameters, only: clen
+        use kind_parameters, only: clen, mpirkind
         use mpi
         class(igridWallM), intent(inout), target :: this
         character(len=clen) :: fname
         character(len=clen) :: tempname
-        integer :: tid
+        integer :: tid, ierr
+        real(rkind), dimension(2*this%WindTurbineArr%nTurbines) :: runningSum_turb
 
         this%TemporalMnNOW = this%runningSum/real(this%tidSUM,rkind)
         tid = this%step
@@ -1968,11 +1991,24 @@ contains
                                    this%TemporalMnNOW(:,22)*this%TemporalMnNOW(:,22)))
         this%TemporalMnNOW(:,17) = half*this%TemporalMnNOW(:,17)/this%Re     ! note: this is actually 2/Re*(..)/4
 
+
+        call MPI_reduce(this%runningSum_sc_turb, runningSum_turb, 2*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
+
         if (nrank == 0) then
             write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%RunID,"_t",tid,".stt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
             call write_2d_ascii(this%TemporalMnNOW,fname)
             !call write_2D_binary(TemporalMnNOW,fname)
+
+            write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%RunID,"_t",tid,".sth"   ! time and horz averages of scalars
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            open(unit=771,file=fname,status='unknown')
+            if(this%useWindTurbines) then
+                write(771,'(e19.12,1x,i7,1x,2005(e19.12,1x))') this%tsim, this%tidSUM, this%runningSum_sc/real(this%tidSUM,rkind), runningSum_turb/real(this%tidSUM,rkind) ! change if using more than 1000 turbines
+            else
+                write(771,'(e19.12,1x,i7,1x,5(e19.12,1x))') this%tsim, this%tidSUM, this%runningSum_sc/real(this%tidSUM,rkind)
+            endif
+            close(771)
         end if
         call message(1, "Just dumped a .stt file")
         call message(2, "Number ot tsteps averaged:",this%tidSUM)
@@ -2012,7 +2048,7 @@ contains
         nullify(this%tau11_mean, this%tau12_mean, this%tau13_mean, this%tau22_mean, this%tau23_mean, this%tau33_mean)
         nullify(this%S11_mean, this%S12_mean, this%S13_mean, this%S22_mean, this%S23_mean, this%S33_mean)
         nullify(this%sgsdissp, this%viscdissp, this%sgscoeff_mean)
-        deallocate(this%zStats2dump, this%runningSum, this%TemporalMnNOW)
+        deallocate(this%zStats2dump, this%runningSum, this%TemporalMnNOW, this%runningSum_sc)
     end subroutine 
 
     subroutine dump_planes(this)

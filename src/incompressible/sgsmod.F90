@@ -248,7 +248,7 @@ contains
     end subroutine
 
 
-    subroutine getRHS_SGS_WallM(this, duidxjC, duidxjE, duidxjChat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, ustar, Umn, Vmn, Uspmn, filteredSpeedSq, InvObLength, max_nuSGS)    
+    subroutine getRHS_SGS_WallM(this, duidxjC, duidxjE, duidxjChat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, ustar, Umn, Vmn, Uspmn, filteredSpeedSq, InvObLength, max_nuSGS, inst_horz_avg)    
         class(sgs), intent(inout), target :: this
         real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(inout), target :: duidxjC
         real(rkind)   , dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4), intent(inout), target :: duidxjE
@@ -257,6 +257,7 @@ contains
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat, wChat
         complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: u, v, wC, filteredSpeedSq
+        real(rkind), dimension(5), intent(out) :: inst_horz_avg
         real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
         real(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
         real(rkind), dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
@@ -364,7 +365,8 @@ contains
             call transpose_y_to_z(uhat,this%ctmpCz,this%sp_gp) ! <- send uhat to z decomp (wallmodel)
             call this%spectE%fft(tau13,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
-            this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1) 
+            this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1)
+            inst_horz_avg(2) = real(this%ctmpEz(1,1,1), rkind)
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
@@ -385,6 +387,7 @@ contains
             call this%spectE%fft(tau23,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1)
+            inst_horz_avg(3) = real(this%ctmpEz(1,1,1), rkind)
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
@@ -405,6 +408,7 @@ contains
             call this%spectE%fft(tau13,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = (this%WallMFactor*Umn/Uspmn)*this%ctmpCz(:,:,1) 
+            inst_horz_avg(2) = real(this%ctmpEz(1,1,1), rkind)
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
@@ -423,6 +427,7 @@ contains
             call this%spectE%fft(tau23,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = (this%WallMFactor*Vmn/Uspmn)*this%ctmpCz(:,:,1) 
+            inst_horz_avg(3) = real(this%ctmpEz(1,1,1), rkind)
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
