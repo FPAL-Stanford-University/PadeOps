@@ -20,7 +20,8 @@ program test_Miranda_reader
 
     call MPI_Init(ierr)
 
-    if( iargc() .LT. 1 ) then
+    ! if( iargc() .LT. 1 ) then
+    if( COMMAND_ARGUMENT_COUNT() .LT. 1 ) then
         call GracefulExit("Usage: "//NEW_LINE('A')//"    mpiexec -n 8 ./test_Miranda_reader <jobdir>", 1729)
     end if
 

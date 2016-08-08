@@ -117,7 +117,7 @@ module SolidGrid
          
         contains
             procedure          :: init
-            procedure          :: destroy
+            procedure          :: destroy_grid
             procedure          :: laplacian
             procedure          :: gradient 
             procedure          :: advance_RK45
@@ -453,7 +453,7 @@ contains
     end subroutine
 
 
-    subroutine destroy(this)
+    subroutine destroy_grid(this)
         class(sgrid), intent(inout) :: this
 
         if (allocated(this%mesh)) deallocate(this%mesh) 

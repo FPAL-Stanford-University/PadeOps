@@ -1,12 +1,13 @@
 module exits
 
+    use iso_c_binding
     use kind_parameters, only: rkind,clen,stdout,stderr
     use constants, only: one
     use decomp_2d, only: nrank, decomp_2d_abort
     
     implicit none
     private
-    public :: GracefulExit, message, message_min_max, warning, newline, nancheck
+    public :: GracefulExit, message, message_min_max, warning, newline, nancheck, mkdir, mkdir_p, strip
         
     interface message
         module procedure message_char, message_char_double, message_level_char, message_level_char_double, message_level_char_int
@@ -23,6 +24,15 @@ module exits
         module procedure nancheck_std, nancheck_ind, nancheck_std_arr3
     end interface
      
+    interface
+      function mkdir(path,mode) bind(c,name="mkdir")
+        use iso_c_binding
+        integer(c_int) :: mkdir
+        character(kind=c_char,len=1) :: path(*)
+        integer(c_int16_t), value :: mode
+      end function mkdir
+    end interface
+
 contains
 
     subroutine GracefulExit(message, errcode)
@@ -201,5 +211,38 @@ contains
         end do
 
     end function
-    
+   
+#ifdef __xlc__
+    logical function isnan(a) 
+        real(rkind) :: a
+        if (a /= a) then
+            isnan = .true.
+        else
+            isnan = .false.
+        end if
+        return
+    end function
+#endif
+
+    subroutine mkdir_p(path, exitStatus)
+      use kind_parameters, only: stderr
+      character(len = *) path
+      integer, intent(out), optional:: exitStatus
+      integer:: exitStatus_
+      call execute_command_line("mkdir -p " // strip(path), exitstat = exitStatus_)
+
+      if(present(exitStatus))then
+        exitStatus = exitStatus_
+      elseif(exitStatus_ /= 0)then
+        write(stderr, *) __FILE__, __LINE__, "Failed: mkdir -p " // strip(path)
+        stop 1
+      end if
+    end subroutine mkdir_p
+
+    pure function strip(str) result(answer)
+       character(len=*), intent(in):: str
+       character(len=len_trim(adjustl(str))):: answer
+       answer = trim(adjustl(str))
+    end function
+
 end module 

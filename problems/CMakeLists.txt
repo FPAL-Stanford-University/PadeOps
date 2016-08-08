@@ -6,7 +6,7 @@ file(GLOB iproblems_source_files incompressible/*.F90)
 include_directories( ${FFTW_INCLUDE_PATH} ${DECOMP_INCLUDE_PATH} ${PadeOps_BINARY_DIR}/src  )
 
 # Link directories
-link_directories( ${FFTW_LIBRARY_PATH} ${DECOMP_LIBRARY_PATH} ${PadeOps_BINARY_DIR}/src )
+link_directories( ${FFTW_LIBRARY_PATH} ${DECOMP_LIBRARY_PATH} ${PadeOps_BINARY_DIR}/src "/soft/libraries/alcf/current/xl/LAPACK64/lib" )
 
 # Create the problem executables
 foreach ( problemfile ${problems_source_files} )
@@ -15,7 +15,7 @@ foreach ( problemfile ${problems_source_files} )
   
     add_executable( ${problemexec} ${problemfile} )
     
-    target_link_libraries( ${problemexec} PadeOps )
+    target_link_libraries( ${problemexec} PadeOps lapack )
 
     if (MPI_Fortran_COMPILER_FLAGS)
         set_target_properties(${problemexec} PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")

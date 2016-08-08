@@ -86,7 +86,7 @@ module IncompressibleGrid
         logical :: use2DecompFFT
         contains
             procedure :: init
-            procedure :: destroy
+            procedure :: destroy_grid
             procedure :: laplacian
             procedure :: gradient
             procedure,private :: CnsrvFrm 
@@ -328,7 +328,7 @@ contains
     end subroutine
 
 
-    subroutine destroy(this)
+    subroutine destroy_grid(this)
         class(hit_grid), intent(inout) :: this
         call this%der%destroy()
         call this%spect%destroy()

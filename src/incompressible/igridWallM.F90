@@ -142,7 +142,7 @@ module IncompressibleGridWallM
         contains
             procedure :: init
             procedure :: init_stats
-            procedure :: destroy
+            procedure :: destroy_grid
             procedure :: printDivergence 
             procedure :: AdamsBashforth
             procedure :: getMaxKE
@@ -690,7 +690,7 @@ contains
     end subroutine 
 
 
-    subroutine destroy(this)
+    subroutine destroy_grid(this)
         class(igridWallM), intent(inout) :: this
         
         nullify(this%u, this%uhat, this%v, this%vhat, this%w, this%what, this%wC)

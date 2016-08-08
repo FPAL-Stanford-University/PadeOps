@@ -3,6 +3,19 @@ module ifport
 end module ifport
 #endif
 
+#ifdef __xlc__
+module ifport
+    use, intrinsic :: iso_c_binding
+    implicit none
+
+    interface
+        pure function getpid() bind(c, name="getpid")
+            integer(4) getpid
+        end function
+    end interface
+end module ifport
+#endif
+
 module random
     use kind_parameters, only: rkind
     use constants, only: zero, one, two, pi

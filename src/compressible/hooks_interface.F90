@@ -81,7 +81,7 @@ module cgrid_hooks
     end interface
 
     interface hook_source
-        subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
+        subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
             import :: rkind
             import :: decomp_info
             import :: mixture
@@ -91,7 +91,6 @@ module cgrid_hooks
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(in)    :: fields
             real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-            real(rkind), dimension(:,:,:,:), optional, intent(inout) ::rhsg
 
         end subroutine
     end interface

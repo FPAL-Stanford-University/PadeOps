@@ -26,11 +26,14 @@ module io_VTK_stuff
 contains
 
     subroutine init(this, vizdir_, file_prefix_, nprimary_, primary_names_)
+        use iso_c_binding
+        use exits, only: mkdir
         class(io_VTK),                             intent(inout) :: this
         character(len=*),                          intent(in)    :: vizdir_
         character(len=*),                          intent(in)    :: file_prefix_
         integer,                                   intent(in)    :: nprimary_
         character(len=*), dimension(nprimary_), intent(in)    :: primary_names_
+        character(len=clen) :: dirname
 
         integer :: i
 
@@ -38,8 +41,12 @@ contains
         this%vizdir = vizdir_
 
         ! Create vizdir if it does not exist
-        ! call execute_command_line('mkdir -p ' // adjustl(trim(this%vizdir)))
-        call system('mkdir -p ' // adjustl(trim(this%vizdir)))
+        ! if (nrank == 0) call execute_command_line('mkdir -p ' // adjustl(trim(this%vizdir)))
+        ! if (nrank == 0) call system('mkdir -p ' // adjustl(trim(this%vizdir)))
+        dirname = ""
+        write(dirname, '(A)') adjustl(trim(this%vizdir))
+        if (nrank == 0) i = mkdir( trim(dirname), int(o'772',c_int16_t) )
+        call MPI_Barrier(MPI_COMM_WORLD, i)
 
         this%file_prefix = ''
         if (trim(file_prefix_) .NE. '') then
@@ -73,10 +80,12 @@ contains
     end subroutine
 
     subroutine WriteViz(this, gp, mesh, primary, tsim, secondary, secondary_names)
+        use iso_c_binding
+        use exits, only: mkdir, strip
         class(io_VTK), intent(inout) :: this
         class(decomp_info), intent(in) :: gp
-        real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),3), intent(in) :: mesh
-        real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),this%nprimary), intent(in) :: primary
+        real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+        real(rkind), dimension(:,:,:,:), intent(in) :: primary
         real(rkind), intent(in), optional :: tsim
         real(rkind), dimension(:,:,:,:), intent(in), optional :: secondary
         character(len=*), dimension(:), intent(in), optional :: secondary_names
@@ -86,12 +95,20 @@ contains
         integer :: nx,ny,nz
         integer, dimension(MPI_STATUS_SIZE) :: mpistatus
         integer :: i,ierr,E_IO
+        integer(4) :: ioerr
 
         character(len=clen) :: dummy
+        character(len=clen) :: dirname
 
-        call system('mkdir -p ' // adjustl(trim(this%vizdir)//'/'//trim(strz(4,this%vizcount))))
-        write(dummy,'(I4)') this%vizcount
-        call message("Writing viz dump "//trim(dummy)//" to " //trim(this%vizdir)//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'.pvts')
+        dirname = ""
+        dummy = ""
+        ! if(nrank == 0) print '(A,I0,A)', "Writing viz dump "//trim(dirname), this%vizcount, " to " //trim(this%vizdir)//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'.pvts'
+        write(dirname,'(A,A1,I4.4)') trim(this%vizdir), '/', this%vizcount
+        ! if(nrank == 0) print '(A,I0,A)', "Writing viz dump ", this%vizcount, " to "//trim(dirname)
+        ! if(nrank == 0) ierr = mkdir( trim(dirname), int(o'772',c_int16_t) )
+        ! if(nrank == 0) call system("mkdir -p "//trim(dirname), ioerr)
+        ! if(nrank == 0) call mkdir_p( dirname )
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
 
         if (present(secondary)) then
             if (.not. present(secondary_names)) then

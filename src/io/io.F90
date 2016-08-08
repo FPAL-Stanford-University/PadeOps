@@ -45,8 +45,8 @@ module io_stuff
             import :: clen
             class(io), intent(inout) :: this
             class(decomp_info), intent(in) :: gp
-            real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),3), intent(in) :: mesh
-            real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),this%nprimary), intent(in) :: primary
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            real(rkind), dimension(:,:,:,:), intent(in) :: primary
             real(rkind), intent(in), optional :: tsim
             real(rkind), dimension(:,:,:,:), intent(in), optional :: secondary
             character(len=*), dimension(:), intent(in), optional :: secondary_names

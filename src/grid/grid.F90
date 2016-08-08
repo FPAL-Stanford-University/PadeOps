@@ -53,7 +53,7 @@ module GridMod
     contains
 
         procedure(init_interface),    deferred :: init
-        procedure(destroy_interface), deferred :: destroy
+        procedure(destroy_interface), deferred :: destroy_grid
         ! procedure(laplacian_interface), deferred :: laplacian
         ! procedure(gradient_interface), deferred :: gradient
 

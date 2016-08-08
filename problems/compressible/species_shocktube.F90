@@ -23,7 +23,7 @@ program species_shocktube
     call cgp%simulate()
         
     ! Destroy everythin before ending
-    call cgp%destroy()
+    call cgp%destroy_grid()
 
     ! End the run
     call MPI_Finalize(ierr)

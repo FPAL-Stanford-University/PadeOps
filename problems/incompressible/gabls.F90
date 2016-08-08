@@ -45,7 +45,7 @@ program gabls
 
     call igp%finalize_stats()
     
-    call igp%destroy()                !<-- Destroy the IGRID derived type 
+    call igp%destroy_grid()                !<-- Destroy the IGRID derived type 
    
 
     deallocate(igp)                   !<-- Deallocate all the memory associated with scalar defaults

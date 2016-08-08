@@ -49,10 +49,15 @@ contains
         subroutine toc4(val) 
             real(rkind), intent(out) :: val
             real(rkind) :: myval
+            logical, parameter :: barrier = .FALSE.
 
             finish = MPI_WTIME()
             myval = real(finish - start,rkind)
-            val = P_MAXVAL(myval)
+            if (barrier) then
+                val = P_MAXVAL(myval)
+            else
+                val = myval
+            end if
         end subroutine 
 
 end module timer

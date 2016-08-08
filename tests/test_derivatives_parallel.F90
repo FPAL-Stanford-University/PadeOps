@@ -59,15 +59,15 @@ program test_derivatives_parallel
  
     ! Initialize everything 
 
-    !call method1%init(                         gp, &
-    !                            dx,     dy,    dz, &
-    !                        .TRUE., .TRUE., .TRUE., &
-    !                        "cd10", "cd10", "cd10" )
-
     call method1%init(                         gp, &
                                 dx,     dy,    dz, &
-                            .FALSE., .FALSE., .FALSE., &
+                            .TRUE., .TRUE., .TRUE., &
                             "cd10", "cd10", "cd10" )
+
+    !call method1%init(                         gp, &
+    !                            dx,     dy,    dz, &
+    !                        .FALSE., .FALSE., .FALSE., &
+    !                        "cd10", "cd10", "cd10" )
 
     call method2%init(                         gp, &
                                 dx,     dy,    dz, &

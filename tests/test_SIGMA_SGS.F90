@@ -100,7 +100,7 @@ program test_SIGMA_SGS
 
         u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
                 + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-        v = exp(-z/delta_Ek)*sin(z/delta_Ek) + &
+        v = exp(-z/delta_Ek)*sin(z/delta_Ek) &
                 + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
         w = zero 
 
