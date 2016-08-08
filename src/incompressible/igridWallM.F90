@@ -1992,7 +1992,7 @@ contains
         this%TemporalMnNOW(:,17) = half*this%TemporalMnNOW(:,17)/this%Re     ! note: this is actually 2/Re*(..)/4
 
 
-        call MPI_reduce(this%runningSum_sc_turb, runningSum_turb, 2*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
+        call MPI_reduce(this%runningSum_sc_turb, runningSum_turb, 2*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
 
         if (nrank == 0) then
             write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%RunID,"_t",tid,".stt"
