@@ -6,7 +6,7 @@ module IncompressibleGridWallM
     use igrid_hooks, only: meshgen_WallM, initfields_wallM, set_planes_io, set_KS_planes_io 
     use decomp_2d
     use StaggOpsMod, only: staggOps  
-    use exits, only: GracefulExit, message
+    use exits, only: GracefulExit, message, check_exit
     use spectralMod, only: spectral  
     use PoissonMod, only: poisson
     use mpi 
@@ -1179,32 +1179,65 @@ contains
     subroutine wrapup_timestep(this)
         class(igridWallM), intent(inout) :: this
 
+        logical :: forceWrite = .FALSE.
+        integer :: ierr = -1
+
         ! STEP 1: Update Time and BCs
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
 
+        ierr = -1; forceWrite = .FALSE.
+        if(this%tsim > this%tstop .or. check_exit(this%outputdir)) then
+          forceWrite = .TRUE.
+        endif
+
+        open(777,file=trim(this%outputdir)//"/dumppdo",status='old',iostat=ierr)
+        if(ierr==0) then
+            forceWrite = .TRUE.
+            call message(1, "Forced Dump because found file dumppdo")
+            if(nrank==0) then
+              close(777, status='delete')
+            else
+              close(777)
+            endif
+        else
+            close(777)
+        endif
+ 
         ! STEP 2: Do logistical stuff
-        if ((this%tsim > this%tstop) .or. ((mod(this%step,this%tid_compStats)==0) .and. (this%tsim > this%tSimStartStats))) then
+        if ( (forceWrite .or. (mod(this%step,this%tid_compStats)==0)) .and. (this%tsim > this%tSimStartStats) ) then
             call this%compute_stats()
         end if 
 
-        if ((this%tsim > this%tstop) .or. ((mod(this%step,this%tid_statsDump) == 0) .and. (this%tsim > this%tSimStartStats))) then
+        if ( (forceWrite .or. (mod(this%step,this%tid_statsDump) == 0)) .and. (this%tsim > this%tSimStartStats) ) then
             call this%compute_stats()
             call this%dump_stats()
         end if 
         
-        if ((this%tsim > this%tstop) .or. (mod(this%step,this%t_restartDump) == 0)) then
+        if ( forceWrite .or. (mod(this%step,this%t_restartDump) == 0) ) then
             call this%dumpRestartfile()
         end if
         
-        if ((this%tsim > this%tstop) .or. ((this%dumpPlanes) .and. (mod(this%step,this%t_planeDump) == 0)) .and. &
-                 (this%step .ge. this%t_start_planeDump) .and. (this%step .le. this%t_stop_planeDump)) then
+        if ( (forceWrite .or. ((mod(this%step,this%t_planeDump) == 0) .and. &
+                 (this%step .ge. this%t_start_planeDump) .and. (this%step .le. this%t_stop_planeDump))) .and. (this%dumpPlanes)) then
             call this%dump_planes()
         end if 
 
-        if ((this%tsim > this%tstop) .or. ((this%PreprocessForKS) .and. (mod(this%step,this%t_dumpKSprep) == 0))) then
+        if ( (forceWrite .or. (mod(this%step,this%t_dumpKSprep) == 0)) .and. this%PreprocessForKS ) then
             call this%LES2KS%LES_TO_KS(this%uE,this%vE,this%w,this%step)
             call this%LES2KS%LES_FOR_KS(this%uE,this%vE,this%w,this%step)
         end if 
+
+        if (forceWrite) then
+           call this%dumpFullField(this%u,'uVel')
+           call this%dumpFullField(this%v,'vVel')
+           call this%dumpFullField(this%wC,'wVel')
+           !call output_tecplot(gp)
+        end if
+
+        ! Check for exitpdo file
+        if(check_exit(this%outputdir)) then
+            call GracefulExit("Found exitpdo file in working directory",1234)
+        endif
 
     end subroutine
 
