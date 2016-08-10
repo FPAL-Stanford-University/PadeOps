@@ -37,7 +37,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         dx = two*pi/real(nx,rkind)
         dy = two*pi/real(ny,rkind)
         dz = two*pi/real(nz,rkind)
-
+        
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
@@ -56,7 +56,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,half,one,two,pi
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
-    use decomp_2d,        only: decomp_info
+    use decomp_2d,        only: decomp_info, nrank
     use MixtureEOSMod,    only: mixture
     
     use taylorgreen_data
@@ -71,6 +71,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind),                     intent(inout) :: tstop,dt,tviz
     
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),3) :: vorticity
+    real(rkind) :: test
 
     associate( rho => fields(:,:,:,rho_index), u => fields(:,:,:,u_index), &
                  v => fields(:,:,:,  v_index), w => fields(:,:,:,w_index), &
@@ -136,6 +137,9 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
             enstrophy0 = P_MEAN( vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2 )
             
             if (nrank == 0) then
+                print*, ""
+                print*, "Initial TKE = ", tke0
+                print*, "Initial enstrophy = ", enstrophy0
                 open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
                 write(outputunit,'(3A26)') "Time", "TKE", "Enstrophy"
             end if
@@ -227,7 +231,8 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
         call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
         call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
         call message(2,"Maximum conductivity",P_MAXVAL(kap))
-        call message(2,"TKE",tke/tke0)
+        call message(2,"TKE",tke)
+        call message(2,"TKE ratio",tke/tke0)
 
     end associate
 end subroutine

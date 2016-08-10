@@ -46,7 +46,8 @@ contains
 
         mysum = sum(x)
         call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
-        mean = summation/( real(size(x,1)*size(x,2)*size(x,3)*nproc,rkind))
+        ! mean = summation/( real(size(x,1)*size(x,2)*size(x,3)*nproc,rkind))
+        mean = summation/( real(size(x,1),rkind) * real(size(x,2),rkind) * real(size(x,3),rkind) * real(nproc,rkind) )
 
     end function
 

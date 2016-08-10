@@ -541,6 +541,7 @@ contains
         ! Write out initial conditions
         call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
         ! call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+        this%viz%vizcount = this%viz%vizcount + 1
         vizcond = .FALSE.
         
         ! Check for visualization condition and adjust time step
@@ -585,6 +586,7 @@ contains
             if (vizcond) then
                 call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
                 ! call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+                this%viz%vizcount = this%viz%vizcount + 1
                 vizcond = .FALSE.
             end if
             
@@ -675,6 +677,7 @@ contains
     end subroutine
 
     subroutine get_dt(this,stability)
+        use decomp_2d,  only: nrank
         use reductions, only : P_MAXVAL
         class(cgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
