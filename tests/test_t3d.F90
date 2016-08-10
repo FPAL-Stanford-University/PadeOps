@@ -18,7 +18,7 @@ program test_t3d
     logical :: fail
     real(rkind) :: dererr, omega = 1._rkind, dx, dy, dz
     real(rkind) :: start, tx, txd, t3dx, ty, tyd, t3dy, tz, tzd, t3dz
-    logical :: optimize = .false.
+    logical :: optimize = .true.
 
     call MPI_Init(ierr)
 

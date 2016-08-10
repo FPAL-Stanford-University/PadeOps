@@ -83,7 +83,7 @@ module CompressibleGrid
 
         contains
             procedure          :: init
-            procedure          :: destroy
+            procedure          :: destroy_grid
             procedure          :: laplacian
             procedure          :: gradient 
             procedure          :: advance_RK45
@@ -378,7 +378,7 @@ contains
     end subroutine
 
 
-    subroutine destroy(this)
+    subroutine destroy_grid(this)
         class(cgrid), intent(inout) :: this
 
         if (allocated(this%mesh)) deallocate(this%mesh) 
@@ -497,6 +497,8 @@ contains
         real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
         integer :: i
 
+        call message(">>>> Starting the simulation")
+
         call this%get_dt(stability)
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
@@ -538,7 +540,8 @@ contains
 
         ! Write out initial conditions
         call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-        call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+        ! call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+        this%viz%vizcount = this%viz%vizcount + 1
         vizcond = .FALSE.
         
         ! Check for visualization condition and adjust time step
@@ -582,7 +585,8 @@ contains
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
                 call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+                ! call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+                this%viz%vizcount = this%viz%vizcount + 1
                 vizcond = .FALSE.
             end if
             
@@ -673,6 +677,7 @@ contains
     end subroutine
 
     subroutine get_dt(this,stability)
+        use decomp_2d,  only: nrank
         use reductions, only : P_MAXVAL
         class(cgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability

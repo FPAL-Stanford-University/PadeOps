@@ -764,11 +764,11 @@ contains
         ! start = this%time(barrier=.false.)
         select case(this%unequalX)
         case (.true.)
-            call mpi_Ialltoallv(buffer3D,this%count3DX,this%disp3DX,mpirkind, &
-                               bufferX, this%countX,  this%dispX,  mpirkind, this%commX, request, ierr)
+            ! call mpi_Ialltoallv(buffer3D,this%count3DX,this%disp3DX,mpirkind, &
+            !                    bufferX, this%countX,  this%dispX,  mpirkind, this%commX, request, ierr)
         case (.false.)
-            call mpi_Ialltoall (buffer3D,this%count3DX(0), mpirkind, &
-                               bufferX, this%countX  (0), mpirkind, this%commX, request, ierr)
+            ! call mpi_Ialltoall (buffer3D,this%count3DX(0), mpirkind, &
+            !                    bufferX, this%countX  (0), mpirkind, this%commX, request, ierr)
         end select
         ! endt = this%time(start,reduce=.false.)
         ! if (this%rank3d == 0) print*, "2", endt
@@ -824,11 +824,11 @@ contains
 
         select case(this%unequalX)
         case (.true.)
-            call mpi_Ialltoallv(bufferX, this%countX,  this%dispX,  mpirkind, &
-                               buffer3D,this%count3DX,this%disp3DX,mpirkind, this%commX, ierr)
+            ! call mpi_Ialltoallv(bufferX, this%countX,  this%dispX,  mpirkind, &
+            !                    buffer3D,this%count3DX,this%disp3DX,mpirkind, this%commX, ierr)
         case (.false.)
-            call mpi_Ialltoall (bufferX ,this%countX  (0), mpirkind, &
-                               buffer3D,this%count3DX(0), mpirkind, this%commX, request, ierr)
+            ! call mpi_Ialltoall (bufferX ,this%countX  (0), mpirkind, &
+            !                    buffer3D,this%count3DX(0), mpirkind, this%commX, request, ierr)
         end select
 
     end subroutine
@@ -879,11 +879,11 @@ contains
         
         select case(this%unequalY)
         case (.true.)
-            call mpi_Ialltoallv(buffer3D,this%count3DY,this%disp3DY,mpirkind, &
-                               bufferY, this%countY,  this%dispY,  mpirkind, this%commY, request, ierr)
+            ! call mpi_Ialltoallv(buffer3D,this%count3DY,this%disp3DY,mpirkind, &
+            !                    bufferY, this%countY,  this%dispY,  mpirkind, this%commY, request, ierr)
         case (.false.)
-            call mpi_Ialltoall (buffer3D,this%count3DY(0), mpirkind, &
-                               bufferY, this%countY  (0), mpirkind, this%commY, request, ierr)
+            ! call mpi_Ialltoall (buffer3D,this%count3DY(0), mpirkind, &
+            !                    bufferY, this%countY  (0), mpirkind, this%commY, request, ierr)
         end select
 
     end subroutine
@@ -937,11 +937,11 @@ contains
 
         select case(this%unequalY)
         case (.true.)
-            call mpi_Ialltoallv(bufferY, this%countY,  this%dispY,  mpirkind, &
-                               buffer3D,this%count3DY,this%disp3DY,mpirkind, this%commY, request, ierr)
+            ! call mpi_Ialltoallv(bufferY, this%countY,  this%dispY,  mpirkind, &
+            !                    buffer3D,this%count3DY,this%disp3DY,mpirkind, this%commY, request, ierr)
         case (.false.)
-            call mpi_Ialltoall (bufferY, this%countY  (0), mpirkind, &
-                               buffer3D,this%count3DY(0), mpirkind, this%commY, request, ierr)
+            ! call mpi_Ialltoall (bufferY, this%countY  (0), mpirkind, &
+            !                    buffer3D,this%count3DY(0), mpirkind, this%commY, request, ierr)
         end select
     
     end subroutine
@@ -993,11 +993,11 @@ contains
 
         select case(this%unequalZ)
         case (.true.)
-            call mpi_Ialltoallv(buffer3D,this%count3DZ,this%disp3DZ,mpirkind, &
-                               bufferZ, this%countZ,  this%dispZ,  mpirkind, this%commZ, request, ierr)
+            ! call mpi_Ialltoallv(buffer3D,this%count3DZ,this%disp3DZ,mpirkind, &
+            !                    bufferZ, this%countZ,  this%dispZ,  mpirkind, this%commZ, request, ierr)
         case (.false.)
-            call mpi_Ialltoall (buffer3D,this%count3DZ(0), mpirkind, &
-                               bufferZ, this%countZ  (0), mpirkind, this%commZ, request, ierr)
+            ! call mpi_Ialltoall (buffer3D,this%count3DZ(0), mpirkind, &
+            !                    bufferZ, this%countZ  (0), mpirkind, this%commZ, request, ierr)
         end select
         
     end subroutine
@@ -1051,11 +1051,11 @@ contains
 
         select case(this%unequalZ)
         case (.true.)
-            call mpi_Ialltoallv(bufferZ, this%countZ,  this%dispZ,  mpirkind, &
-                               buffer3D,this%count3DZ,this%disp3DZ,mpirkind, this%commZ, request, ierr)
+            ! call mpi_Ialltoallv(bufferZ, this%countZ,  this%dispZ,  mpirkind, &
+            !                    buffer3D,this%count3DZ,this%disp3DZ,mpirkind, this%commZ, request, ierr)
         case (.false.)
-            call mpi_Ialltoall (bufferZ, this%countZ  (0), mpirkind, &
-                               buffer3D,this%count3DZ(0), mpirkind, this%commZ, request, ierr)
+            ! call mpi_Ialltoall (bufferZ, this%countZ  (0), mpirkind, &
+            !                    buffer3D,this%count3DZ(0), mpirkind, this%commZ, request, ierr)
         end select
     end subroutine
 

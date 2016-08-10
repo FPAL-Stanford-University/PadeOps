@@ -96,7 +96,7 @@ contains
         myxst = this%sp_gp%zst(1); myyst = this%sp_gp%zst(2)
         if ((myxst .ne. this%sp_gpE%zst(1)).or.(myyst .ne. this%sp_gpE%zst(2))) then
             call GracefulExit("Failed at initializing Padepoisson. sp_gp and sp_gpE &
-                        have different x and y starts in z-decomp",423)
+                        & have different x and y starts in z-decomp",423)
         end if 
         
         do kk = 1,nzExt
