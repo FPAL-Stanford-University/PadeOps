@@ -1,6 +1,6 @@
 program test_derivatives_parallel
     use mpi
-    use kind_parameters, only : rkind
+    use kind_parameters, only : rkind, mpirkind
     use decomp_2d
     use constants, only: zero, pi, two
     use DerivativesMod, only: derivatives
@@ -12,7 +12,7 @@ program test_derivatives_parallel
     type(derivatives) :: method1, method2, method3
     type(decomp_info) :: gp
 
-    integer :: nx = 128, ny = 128, nz = 128
+    integer :: nx = 1024, ny = 1024, nz = 1024
     integer :: prow = 0, pcol = 0
     integer :: ierr, i, j, k
     real(rkind) :: maxerr, mymaxerr
@@ -94,7 +94,9 @@ program test_derivatives_parallel
         call method1 % ddx(f_in_x,df_in_x)
         call transpose_x_to_y(df_in_x,df,gp)
         t1 = MPI_WTIME()
-        if (i > 2) dt = dt + (t1 - t0)
+        t0 = t1 - t0
+        call MPI_Allreduce(t0, t1, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
+        if (i > 2) dt = dt + (t1)
     end do
     dt = dt / 8._rkind
     mymaxerr = MAXVAL(ABS(df - dfdx))
@@ -110,7 +112,9 @@ program test_derivatives_parallel
         t0 = MPI_WTIME()
         call method1 % ddy(f,df)
         t1 = MPI_WTIME()
-        if (i > 2) dt = dt + (t1 - t0)
+        t0 = t1 - t0
+        call MPI_Allreduce(t0, t1, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
+        if (i > 2) dt = dt + (t1)
     end do
     dt = dt / 8._rkind
     mymaxerr = MAXVAL(ABS(df - dfdy))
@@ -129,7 +133,9 @@ program test_derivatives_parallel
         call method1 % ddz(f_in_z,df_in_z)
         call transpose_z_to_y(df_in_z,df,gp)
         t1 = MPI_WTIME()
-        if (i > 2) dt = dt + (t1 - t0)
+        t0 = t1 - t0
+        call MPI_Allreduce(t0, t1, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
+        if (i > 2) dt = dt + (t1)
     end do
     dt = dt / 8._rkind
     mymaxerr = MAXVAL(ABS(df - dfdz))
