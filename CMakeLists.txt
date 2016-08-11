@@ -52,13 +52,16 @@ elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
     endif()
 
 # IBM-XL compilers for Mira/Cetus/Vesta
-elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "XL")
+elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "IBM")
     if ( CMAKE_BUILD_TYPE MATCHES "Release" )
         set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -O3 -qarch=qp -qtune=qp -qhot=level=1 -qprefetch -qunroll=yes -qreport -qnoipa -qlibposix -L/soft/libraries/alcf/current/xl/LAPACK64/lib -llapack")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
         set(CMAKE_Fortran_FLAGS "-Og -g -traceback -pg -llapack -ffree-form -ffree-line-length-none -fcheck=all -fbounds-check -ffpe-trap=zero,overflow,underflow -Wall -Wconversion -Wextra -Waliasing -Wsurprising -fbacktrace")
     endif()
 endif()
+
+MESSAGE( ${CMAKE_Fortran_COMPILER_ID} )
+MESSAGE( ${CMAKE_Fortran_FLAGS} )
 
 # Add source file directories
 add_subdirectory(src)

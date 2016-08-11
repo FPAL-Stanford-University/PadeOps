@@ -4,6 +4,7 @@ build*
 *.mod
 *.F90.swp
 *.F90~
+*.tau.inc~
 dependencies/*[^gz]
 data/*
 tags
