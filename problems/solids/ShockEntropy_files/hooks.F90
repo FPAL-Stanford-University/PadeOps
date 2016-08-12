@@ -219,6 +219,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         print*, "Mass flux: ", rho1*u1, rho2*u2
         print*, "Momentum flux: ", rho1*u1*u1+p1, rho2*u2*u2+p2
         print*, "g flux: ", g11_1*u1, g11_2*u2
+        print*, "M1 = ", u1/sqrt((gam*(p1+Pinf)+4.0_rkind/3.0_rkind*mu)/rho1)
+        print*, "M2 = ", u2/sqrt((gam*(p2+Pinf)+4.0_rkind/3.0_rkind*mu)/rho2)
 
         ! initialize shock at xs
         tmp = half * ( one + erf( (x-xs)/(thick*dx) ) )
@@ -242,6 +244,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         g21 = zero;     g22 = one;  g23 = zero
         g31 = zero;     g32 = zero; g33 = one
 
+        ! set pressure fluctutations to get constant sig11 - naturally reduces
+        ! to constant pressure for gases and liquids since shear modulus is zero
+        p = p - tmp*twothird*mu*(g11**(-third)*(g11**4-one) - g11**third*(g11**2-one))
+  
         ! Get rho compatible with det(g) and rho0
         tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
         rho = rho0 * tmp
@@ -261,6 +267,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         print*, "u2 = ", u2
         print*, "p1 = ", p1
         print*, "p2 = ", p2
+        print*, "a1 = ", sqrt((gam*(p1+Pinf)+4.0_rkind/3.0_rkind*mu)/rho1)
+        print*, "a2 = ", sqrt((gam*(p2+Pinf)+4.0_rkind/3.0_rkind*mu)/rho2)
         print*, "Pinf = ", PInf
 
         print*, "rho diff: ", (rho(1,1,1) - rho2)/rho2
@@ -476,22 +484,26 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,step,tsim)
+subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind, clen
     use constants,        only: zero, half, one, two
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use exits,            only: message
     use reductions,       only: P_MAXVAL
+    use DerivativesMod,   only: derivatives
 
     use ShockEntropy_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
     integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
+    real(rkind),                     intent(in) :: dt
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    integer,     dimension(2),       intent(in) :: x_bc, y_bc, z_bc
 
     integer :: nx, istart, iend
     real(rkind), dimension(decomp%ysz(1)) :: p_exact, dpdx
@@ -570,5 +582,9 @@ subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
     end associate
+end subroutine
+
+subroutine hook_finalize()
+
 end subroutine
 
