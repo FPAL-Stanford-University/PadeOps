@@ -17,7 +17,7 @@ module sgrid_hooks
     end interface
 
     interface initfields
-        subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PInf,tau0,tstop,dt,tviz)
+        subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rho0,tstop,dt,tviz)
             import :: rkind
             import :: decomp_info
             type(decomp_info), intent(in) :: decomp
@@ -25,8 +25,9 @@ module sgrid_hooks
             character(len=*), intent(in) :: inputfile
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-            real(rkind),           optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz
-            real(rkind),           optional, intent(inout) :: yield, tau0
+            integer,                         intent(in)    :: eostype
+            real(rkind), dimension(:),       intent(inout) :: eosparams
+            real(rkind),           optional, intent(inout) :: rho0, tstop, dt, tviz
 
         end subroutine 
     end interface

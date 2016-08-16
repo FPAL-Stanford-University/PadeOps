@@ -10,6 +10,7 @@ module SolidGrid
     use DerivativesMod,  only: derivatives
     use StiffGasEOS,     only: stiffgas
     use Sep1SolidEOS,    only: sep1solid
+    use GeneralMatEOS,   only: generaleos
    
     implicit none
 
@@ -66,6 +67,9 @@ module SolidGrid
 
         type(stiffgas),  allocatable :: sgas
         type(sep1solid), allocatable :: elastic
+
+        type(generaleos),  allocatable :: geneos
+        integer                        :: eostype
 
         logical     :: plastic
         logical     :: explPlast
@@ -166,10 +170,15 @@ contains
         integer :: prow = 0, pcol = 0 
         integer :: i, j, k, l 
         integer :: ioUnit
-        real(rkind) :: gam = 1.4_rkind
+        real(rkind) :: gam = 1.4_rkind  !--- replace this block by eosparams
         real(rkind) :: Rgas = one
         real(rkind) :: PInf = zero
         real(rkind) :: shmod = zero
+        real(rkind) :: yield = real(1.D30,rkind)
+        real(rkind) :: tau0 = one       !--- since these are specific to separable EOS
+        integer     :: eostype = 1
+        real(rkind) :: eosparams(20)
+        logical     :: explPlast = .FALSE.
         real(rkind) :: rho0 = one
         integer :: nsteps = -1
         real(rkind) :: dt = -one
@@ -180,9 +189,6 @@ contains
         real(rkind) :: Cbeta = 1.75_rkind
         real(rkind) :: Ckap = 0.01_rkind
         logical     :: plastic = .FALSE.
-        real(rkind) :: yield = real(1.D30,rkind)
-        logical     :: explPlast = .FALSE.
-        real(rkind) :: tau0 = one
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
         real(rkind) :: etafac = zero
         logical     :: gfilttimes = .TRUE.
@@ -198,10 +204,17 @@ contains
                                      filter_x, filter_y, filter_z, &
                                                        prow, pcol, &
                                                          SkewSymm  
-        namelist /SINPUT/  gam, Rgas, PInf, shmod, rho0, plastic, yield, &
-                           explPlast, tau0, Cmu, Cbeta, Ckap,            &
+        !namelist /SINPUT/  gam, Rgas, PInf, shmod, rho0, plastic, yield, &
+        !                   explPlast, tau0, Cmu, Cbeta, Ckap,            &
+        !                   x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn,     &
+        !                   gfilttimes, etafac
+        namelist /SINPUT/  rho0, eostype, eosparams, plastic, &
+                           explPlast, Cmu, Cbeta, Ckap,            &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn,     &
                            gfilttimes, etafac
+
+        this%eostype = eostype
+
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -231,7 +244,6 @@ contains
         this%plastic = plastic
         
         this%explPlast = explPlast
-        this%tau0 = tau0
 
         this%gfilttimes = gfilttimes
         this%etafac = etafac
@@ -267,17 +279,28 @@ contains
                     this%mesh(i,j,k,3) = -one + (this%decomp%yst(3) - 1 + k - 1)*this%dz           
                 end do 
             end do 
-        end do  
+        end do
 
         ! Allocate sgas
-        if ( allocated(this%sgas) ) deallocate(this%sgas)
-        allocate(this%sgas)
-        call this%sgas%init(gam,Rgas,PInf)
+        if(this%eostype == 1) then
+            ! separable eos
+            gam   = eosparams(1);   Rgas  = eosparams(2);   PInf = eosparams(3);
+            shmod = eosparams(4);    yield = eosparams(5);   tau0 = eosparams(6);
+            this%tau0 = tau0    ! maybe move this to elastic or geneos
+            if ( allocated(this%sgas) ) deallocate(this%sgas)
+            allocate(this%sgas)
+            call this%sgas%init(gam,Rgas,PInf)
 
-        ! Allocate elastic
-        if ( allocated(this%elastic) ) deallocate(this%elastic)
-        allocate(this%elastic)
-        call this%elastic%init(shmod,yield)
+            ! Allocate elastic
+            if ( allocated(this%elastic) ) deallocate(this%elastic)
+            allocate(this%elastic)
+            call this%elastic%init(shmod,yield)
+        else
+            ! general eos
+            if ( allocated(this%geneos) ) deallocate(this%geneos)
+            allocate(this%geneos)
+            call this%geneos%init(eosparams)
+        endif
 
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
@@ -324,47 +347,70 @@ contains
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired 
+        !call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
+        !                rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf, &
+        !                tstop=this%tstop, dt=this%dtfixed, tviz=tviz, yield=this%elastic%yield, &
+        !                tau0=this%tau0)
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
-                        rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf, &
-                        tstop=this%tstop, dt=this%dtfixed, tviz=tviz, yield=this%elastic%yield, &
-                        tau0=this%tau0)
+                        this%eostype, eosparams, rho0=this%rho0,&
+                        tstop=this%tstop, dt=this%dtfixed, tviz=tviz)
        
         ! Get hydrodynamic and elastic energies 
-        call this%sgas%get_e_from_p(this%rho,this%p,this%e)
+        if(this%eostype == 1) then
+            call this%sgas%get_e_from_p(this%rho,this%p,this%e)
+        else
+            ! energy already specified - not specifying primitive variables, so
+            ! energy does not have to be computed from primitive variables
+        endif
         
         ! Check if the initialization was okay
         if ( nancheck(this%e) ) then
             call GracefulExit("NaN encountered at initialization in the hydrodynamic energy", 999)
         end if
 
-        call alloc_buffs(finger,  6,"y",this%decomp)
-        call alloc_buffs(fingersq,6,"y",this%decomp)
-        allocate( trG (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
-        allocate( trG2(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
-        allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+        if(this%eostype == 1) then
+            call alloc_buffs(finger,  6,"y",this%decomp)
+            call alloc_buffs(fingersq,6,"y",this%decomp)
+            allocate( trG (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+            allocate( trG2(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+            allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
 
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel) 
-        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+            call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+            call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel) 
+            call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+        else
+            call this%geneos%get_p_devstress(this%rho0, this%g, this%rho, this%p, this%devstress)
+        endif
         
         ! Check if the initialization was okay
         if ( nancheck(this%eel) ) then
             call GracefulExit("NaN encountered at initialization in the elastic energy", 999)
         end if
+        if ( nancheck(this%p) ) then
+            call GracefulExit("NaN encountered at initialization in the pressure", 999)
+        end if
+        if ( nancheck(this%devstress) ) then
+            call GracefulExit("NaN encountered at initialization in the deviatoric stress", 999)
+        end if
 
-
-        this%e = this%e + this%eel
-        call this%sgas%get_T(this%e,this%T)
+        if(this%eostype == 1) then
+            this%e = this%e + this%eel
+            call this%sgas%get_T(this%e,this%T)
+        else
+            call this%geneos%get_T(this%e, this%T)
+        endif
 
         if (P_MAXVAL(abs( this%rho/this%rho0/(detG)**half - one )) > 10._rkind*eps) then
             call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
         end if
 
-        deallocate( finger   )
-        deallocate( fingersq )
-        deallocate( trG      )
-        deallocate( trG2     )
-        deallocate( detG     )
+        if(this%eostype == 1) then
+            deallocate( finger   )
+            deallocate( fingersq )
+            deallocate( trG      )
+            deallocate( trG2     )
+            deallocate( detG     )
+        endif
 
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
@@ -495,6 +541,7 @@ contains
 
         if (allocated(this%sgas)) deallocate(this%sgas) 
         if (allocated(this%elastic)) deallocate(this%elastic) 
+        if (allocated(this%geneos))  deallocate(this%geneos) 
         
         if (allocated(this%Wcnsrv)) deallocate(this%Wcnsrv) 
         
@@ -759,7 +806,7 @@ contains
             if (.NOT. this%explPlast) then
                 if (this%plastic) then
                     ! Effect plastic deformations
-                    call this%elastic%plastic_deformation(this%g)
+                    if(this%eostype == 1) call this%elastic%plastic_deformation(this%g)
                     call this%get_primitive()
 
                     !! Filter the conserved variables
@@ -809,8 +856,12 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
         real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtplast
 
-        call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
-        call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
+        if(this%eostype == 1) then
+            call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
+            call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
+        else
+            call this%geneos%get_sos(this%rho0,this%rho,this%devstress,cs)     ! Speed of sound
+        endif
 
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
                + cs*sqrt( one/(this%dx**two) + one/(this%dy**two) + one/(this%dz**two) ))
@@ -870,14 +921,19 @@ contains
         this%v = rhov * onebyrho
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
+       
+        if(this%eostype == 1) then 
+            call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+            call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
         
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
-        
-        call this%sgas%get_T(this%e,this%T)
-        call this%sgas%get_p(this%rho,(this%e-this%eel),this%p)
+            call this%sgas%get_T(this%e,this%T)
+            call this%sgas%get_p(this%rho,(this%e-this%eel),this%p)
 
-        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+            call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+        else
+            call this%geneos%get_p_devstress(this%rho0, this%g, this%rho, this%p, this%devstress)
+            call this%geneos%get_T(this%e, this%T)
+        endif
 
     end subroutine
 
@@ -897,16 +953,20 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6) :: finger, fingersq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: trG, trG2, detG
 
-        this%e = this%e - this%eel ! Get only hydrodynamic part
+        if(this%eostype == 1) then 
+            this%e = this%e - this%eel ! Get only hydrodynamic part
 
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)  ! Update elastic energy
-        
-        call this%sgas%get_e_from_p(this%rho,this%p,this%e)  ! Update hydrodynamic energy
-        this%e = this%e + this%eel ! Combine both energies
-        call this%sgas%get_T(this%e,this%T)  ! Get updated temperature
+            call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+            call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)  ! Update elastic energy
+            
+            call this%sgas%get_e_from_p(this%rho,this%p,this%e)  ! Update hydrodynamic energy
+            this%e = this%e + this%eel ! Combine both energies
+            call this%sgas%get_T(this%e,this%T)  ! Get updated temperature
 
-        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)  ! Get updated stress
+            call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)  ! Get updated stress
+        else
+            ! passive boundaries for now
+        endif
 
     end subroutine
 
@@ -1267,9 +1327,13 @@ contains
         ytmp4 = ytmp5*this%dy**4
         kapstar = kapstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
-        ! Now, all ytmps are free to use
-        call this%sgas%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound - hydrodynamic part
-        call this%elastic%get_sos(this%rho0,ytmp1)     ! Speed of sound - elastic part
+        ! Now, all ytmps are free to us
+        if(this%eostype == 1) then
+            call this%sgas%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound - hydrodynamic part
+            call this%elastic%get_sos(this%rho0,ytmp1)     ! Speed of sound - elastic part
+        else
+            call this%geneos%get_sos(this%rho0,this%rho,this%devstress,ytmp1)     ! Speed of sound
+        endif
 
         kapstar = this%Ckap*this%rho*ytmp1*abs(kapstar)/this%T
 

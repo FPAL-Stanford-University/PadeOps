@@ -155,7 +155,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PInf,tau0,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,eostype,eosparams,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,eps,third,half,one,two,pi
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
@@ -168,7 +168,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     character(len=*),                                               intent(in)    :: inputfile
     type(decomp_info),                                              intent(in)    :: decomp
     real(rkind),                                                    intent(in)    :: dx,dy,dz
-    real(rkind),                                          optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz, yield, tau0
+    integer,                                                        intent(in)    :: eostype
+    real(rkind), dimension(:),                                      intent(inout) :: eosparams
+    real(rkind),                                          optional, intent(inout) :: rho0, tstop, dt, tviz
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
@@ -178,6 +180,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     integer, dimension(2) :: iparams
     real(rkind), dimension(8) :: fparams
     integer :: nx
+    real(rkind) :: mu, gam, PInf, yield, tau0
 
     namelist /PROBINPUT/  pRatio, p1, thick, Cbeta, xs, xe
     
@@ -185,6 +188,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
+
+    if(eostype==1) then
+        gam   = eosparams(1);                           PInf = eosparams(3);
+        shmod = eosparams(4);   yield = eosparams(5);   tau0 = eosparams(6);
+    else
+    endif
 
     associate( rho => fields(:,:,:,rho_index),   u => fields(:,:,:,  u_index), &
                  v => fields(:,:,:,  v_index),   w => fields(:,:,:,  w_index), &
