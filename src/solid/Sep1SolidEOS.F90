@@ -118,15 +118,17 @@ contains
 
     end subroutine
 
-    subroutine plastic_deformation(this, gfull)
+    subroutine plastic_deformation(this, devstress, dt, invtau0, gfull)
         use constants, only: twothird
         use decomp_2d, only: nrank
         class(sep1solid), target, intent(in) :: this
+        real(rkind), dimension(:,:,:,:), intent(in) ::    devstress
         real(rkind), dimension(:,:,:,:), intent(inout) :: gfull
-        real(rkind), dimension(3,3) :: g, u, vt, gradf
-        real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new
+        real(rkind),                     intent(in) ::    dt, invtau0
+        real(rkind), dimension(3,3) :: G, u, vt, gradf
+        real(rkind), dimension(3)   :: sval, eigval, beta, Sa, f, f1, f2, dbeta, beta_new
         real(rkind), dimension(15)  :: work
-        real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t
+        real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t, ycrit_first, expfac
         real(rkind) :: tol = real(1.D-12,rkind), residual
         integer :: i,j,k
         integer :: iters, niters = 500
@@ -138,19 +140,33 @@ contains
 
         ! Get optimal lwork
         lwork = -1
-        call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, work, lwork, info)
+        call dsyev('V', 'U', 3, G, 3, eigval, work, lwork, info)
         lwork = work(1)
 
         do k = 1,nzp
             do j = 1,nyp
                 do i = 1,nxp
-                    g(1,1) = gfull(i,j,k,1); g(1,2) = gfull(i,j,k,2); g(1,3) = gfull(i,j,k,3)
-                    g(2,1) = gfull(i,j,k,4); g(2,2) = gfull(i,j,k,5); g(2,3) = gfull(i,j,k,6)
-                    g(3,1) = gfull(i,j,k,7); g(3,2) = gfull(i,j,k,8); g(3,3) = gfull(i,j,k,9)
 
-                    ! Get SVD of g
-                    call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, work, lwork, info)
+                    ! determine if plastic update is necessary
+                    expfac = (two/three)*(this%yield/this%mu)**2
+                    ycrit_first = devstress(i,j,k,1)**2 + devstress(i,j,k,4)**2 + devstress(i,j,k,6)**2 + &
+                           two * (devstress(i,j,k,2)**2 + devstress(i,j,k,3)**2 + devstress(i,j,k,5)**2)
+                    ycrit_first = ycrit_first/this%mu**2 - expfac
+
+                    if (ycrit_first .LE. zero) then
+                        ! print '(A)', 'Inconsistency in plastic algorithm, ycrit_first < 0!'
+                        cycle
+                    end if
+
+                    G(1,1) = gfull(i,j,k,1); G(1,2) = gfull(i,j,k,2); G(1,3) = gfull(i,j,k,3)
+                                             G(2,2) = gfull(i,j,k,5); G(2,3) = gfull(i,j,k,6)
+                                                                      G(3,3) = gfull(i,j,k,9)
+
+                    ! Get eigenvalues and eigenvectors of G
+                    call dsyev('V', 'U', 3, G, 3, eigval, work, lwork, info)
                     if(info .ne. 0) print '(A,I6,A)', 'proc ', nrank, ': Problem with SVD. Please check.'
+
+                    sval = sqrt(eigval)
 
                     sqrt_om = sval(1)*sval(2)*sval(3)
                     beta = sval**two / sqrt_om**(two/three)
@@ -160,14 +176,10 @@ contains
 
                     Sabymu_sq = sum(Sa**two) / this%mu**two
                     ycrit = Sabymu_sq - (two/three)*(this%yield/this%mu)**two
-
-                    if (ycrit .LE. zero) then
-                        ! print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
-                        cycle
-                    end if
+                    !if(dabs(ycrit-ycrit_first) > 1.0d-14) write(*,*) 'devstress inconsistent with stress from svd'
 
                     C0 = Sabymu_sq / ycrit
-                    Sa = Sa*( sqrt(C0 - one)/sqrt(C0) )
+                    Sa = Sa*( sqrt(C0 - one)/sqrt(C0 - exp(-two*expfac*dt*invtau0)) )
 
                     ! Now get new beta
                     f = Sa / (this%mu*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
@@ -204,14 +216,17 @@ contains
                     
                     ! Then get new svals
                     sval = sqrt(beta) * sqrt_om**(one/three)
+
+                    eigval = sval*sval
                     
                     ! Get g = u*sval*vt
-                    vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! sval*vt
-                    g = MATMUL(u,vt) ! u*sval*vt
+                    u = G; vt = transpose(u)
+                    vt(1,:) = vt(1,:)*eigval(1); vt(2,:) = vt(2,:)*eigval(2); vt(3,:) = vt(3,:)*eigval(3)  ! eigval*vt
+                    G = MATMUL(u,vt) ! u*eigval*vt
 
-                    gfull(i,j,k,1) = g(1,1); gfull(i,j,k,2) = g(1,2); gfull(i,j,k,3) = g(1,3)
-                    gfull(i,j,k,4) = g(2,1); gfull(i,j,k,5) = g(2,2); gfull(i,j,k,6) = g(2,3)
-                    gfull(i,j,k,7) = g(3,1); gfull(i,j,k,8) = g(3,2); gfull(i,j,k,9) = g(3,3)
+                    gfull(i,j,k,1) = G(1,1); gfull(i,j,k,2) = G(1,2); gfull(i,j,k,3) = G(1,3)
+                                             gfull(i,j,k,5) = G(2,2); gfull(i,j,k,6) = G(2,3)
+                                                                      gfull(i,j,k,9) = G(3,3)
                 end do
             end do
         end do

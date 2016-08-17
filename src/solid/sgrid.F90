@@ -589,7 +589,7 @@ contains
         call this%get_dt(stability)
 
         ! Write out initial conditions
-        call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
+        call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount, this%der)
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
         vizcond = .FALSE.
         
@@ -634,7 +634,7 @@ contains
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
-                call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount)
+                call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount, this%der)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
                 vizcond = .FALSE.
             end if
@@ -723,7 +723,7 @@ contains
             if (.NOT. this%explPlast) then
                 if (this%plastic) then
                     ! Effect plastic deformations
-                    call this%elastic%plastic_deformation(this%G)
+                    call this%elastic%plastic_deformation(this%devstress, this%dt, this%invtau0, this%G)
                     call this%get_primitive()
 
                     ! Filter the conserved variables
@@ -931,7 +931,7 @@ contains
                         - (this%G31*dudz + this%G32*dvdz + this%G33*dwdz) + penalty*this%G33
 
         if (this%explPlast) then
-            call this%getPlasticSources(detg,rhsg)
+            call this%getPlasticSources(detG,rhsg)
         end if
 
         ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
@@ -1385,10 +1385,10 @@ contains
         ! Done
     end subroutine
 
-    subroutine getPlasticSources(this, detg, rhsg)
+    subroutine getPlasticSources(this, detG, rhsg)
         use constants, only: twothird
         class(sgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)    :: detg
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)    :: detG
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: rhsg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: invtaurel
 
@@ -1402,20 +1402,20 @@ contains
         where (invtaurel .LE. zero)
             invtaurel = zero
         end where
-        invtaurel = invtaurel / (two * this%elastic%mu * detg)
+        invtaurel = invtaurel / (this%elastic%mu * sqrt(detG))     ! factor of two cancelled between num and den
 
         ! Add (1/tau_rel)*g*S to the rhsg (explicit plastic source terms)
         rhsg(:,:,:,1) = rhsg(:,:,:,1) + invtaurel * ( this%g11*this%sxx + this%g12*this%sxy + this%g13*this%sxz ) ! g11 
         rhsg(:,:,:,2) = rhsg(:,:,:,2) + invtaurel * ( this%g11*this%sxy + this%g12*this%syy + this%g13*this%syz ) ! g12 
         rhsg(:,:,:,3) = rhsg(:,:,:,3) + invtaurel * ( this%g11*this%sxz + this%g12*this%syz + this%g13*this%szz ) ! g13 
  
-        rhsg(:,:,:,4) = rhsg(:,:,:,4) + invtaurel * ( this%g21*this%sxx + this%g22*this%sxy + this%g23*this%sxz ) ! g21 
-        rhsg(:,:,:,5) = rhsg(:,:,:,5) + invtaurel * ( this%g21*this%sxy + this%g22*this%syy + this%g23*this%syz ) ! g22 
-        rhsg(:,:,:,6) = rhsg(:,:,:,6) + invtaurel * ( this%g21*this%sxz + this%g22*this%syz + this%g23*this%szz ) ! g23 
+        rhsg(:,:,:,4) = rhsg(:,:,:,2)
+        rhsg(:,:,:,5) = rhsg(:,:,:,5) + invtaurel * ( this%g12*this%sxy + this%g22*this%syy + this%g23*this%syz ) ! g22 
+        rhsg(:,:,:,6) = rhsg(:,:,:,6) + invtaurel * ( this%g12*this%sxz + this%g22*this%syz + this%g23*this%szz ) ! g23 
 
-        rhsg(:,:,:,7) = rhsg(:,:,:,7) + invtaurel * ( this%g31*this%sxx + this%g32*this%sxy + this%g33*this%sxz ) ! g31 
-        rhsg(:,:,:,8) = rhsg(:,:,:,8) + invtaurel * ( this%g31*this%sxy + this%g32*this%syy + this%g33*this%syz ) ! g32 
-        rhsg(:,:,:,9) = rhsg(:,:,:,9) + invtaurel * ( this%g31*this%sxz + this%g32*this%syz + this%g33*this%szz ) ! g33 
+        rhsg(:,:,:,7) = rhsg(:,:,:,3)
+        rhsg(:,:,:,8) = rhsg(:,:,:,6)
+        rhsg(:,:,:,9) = rhsg(:,:,:,9) + invtaurel * ( this%g13*this%sxz + this%g23*this%syz + this%g33*this%szz ) ! g33 
 
     end subroutine
 end module 
