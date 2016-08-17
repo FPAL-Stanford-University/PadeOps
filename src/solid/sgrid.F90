@@ -40,8 +40,9 @@ module SolidGrid
     integer, parameter :: syy_index    = 24
     integer, parameter :: syz_index    = 25
     integer, parameter :: szz_index    = 26
+    integer, parameter :: ent_index    = 27
 
-    integer, parameter :: nfields = 26
+    integer, parameter :: nfields = 27
 
     ! These indices are for data management, do not change if you're not sure of what you're doing
     integer, parameter :: tauxyidx = 2
@@ -118,6 +119,7 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: szz
         
         real(rkind), dimension(:,:,:), pointer :: eel
+        real(rkind), dimension(:,:,:), pointer :: ent
          
         logical     :: gfilttimes
         real(rkind) :: etafac
@@ -299,7 +301,7 @@ contains
             ! general eos
             if ( allocated(this%geneos) ) deallocate(this%geneos)
             allocate(this%geneos)
-            call this%geneos%init(eosparams)
+            call this%geneos%init(this%decomp,eosparams)
         endif
 
         ! Go to hooks if a different mesh is desired 
@@ -342,6 +344,7 @@ contains
         this%szz  => this%fields(:,:,:, szz_index)   
         
         this%eel  => this%fields(:,:,:, eel_index)   
+        this%ent  => this%fields(:,:,:, ent_index)   
        
         ! Initialize everything to a constant Zero
         this%fields = zero  
@@ -379,7 +382,7 @@ contains
             call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel) 
             call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
         else
-            call this%geneos%get_p_devstress(this%rho0, this%g, this%rho, this%p, this%devstress)
+            call this%geneos%get_p_devstress(this%rho0, this%g, this%rho, this%ent, this%p, this%devstress)
         endif
         
         ! Check if the initialization was okay
@@ -502,6 +505,7 @@ contains
         varnames(24) = 'Syy'
         varnames(25) = 'Syz'
         varnames(26) = 'Szz'
+        varnames(27) = 'entr'
 
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
@@ -511,7 +515,7 @@ contains
         this%invtau0 = one/this%tau0
 
         ! Check if the initialization was okay
-        if ( nancheck(this%fields(:,:,:,8:26),i,j,k,l) ) then
+        if ( nancheck(this%fields(:,:,:,8:27),i,j,k,l) ) then
             call message("fields: ",this%fields(i,j,k,l))
             write(charout,'(A,4(I5,A))') "NaN encountered in initialization ("//trim(varnames(l+7))//")  at (",i,", ",j,", ",k,", ",l,") of fields"
             call GracefulExit(trim(charout), 999)
@@ -522,6 +526,11 @@ contains
 
     subroutine destroy(this)
         class(sgrid), intent(inout) :: this
+
+        if(this%eostype == 1) then
+        else
+            call this%geneos%destroy()
+        endif
 
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
@@ -931,9 +940,11 @@ contains
 
             call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
         else
-            call this%geneos%get_p_devstress(this%rho0, this%g, this%rho, this%p, this%devstress)
+            call this%geneos%get_p_devstress(this%rho0, this%g, this%rho, this%ent, this%p, this%devstress)
             call this%geneos%get_T(this%e, this%T)
         endif
+
+        this%ent = zero
 
     end subroutine
 

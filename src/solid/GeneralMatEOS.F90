@@ -1,8 +1,9 @@
 module GeneralMatEOS
 
     use kind_parameters, only: rkind
-    use constants,       only: half,one,zero
+    use constants,       only: half,one,zero,third,twothird,sixth,three,two
     use EOSMod,          only: eos
+    use decomp_2d,       only: decomp_info
 
     implicit none
 
@@ -21,20 +22,26 @@ module GeneralMatEOS
         
         real(rkind) :: invCv
 
+        real(rkind), allocatable, dimension(:,:,:,:) :: finger
+        real(rkind), allocatable, dimension(:,:,:,:) :: fingersq
+        real(rkind), allocatable, dimension(:,:,:)   :: Inv1,Inv2,Inv3,dedI1fac,dedI2fac,dedI3fac,GI3,GpI3
+
     contains
 
         procedure :: init
         procedure :: get_p_devstress
         procedure :: get_T
         procedure :: get_sos
+        procedure :: destroy
 
     end type
 
 contains
 
-    subroutine init(this,eosparams)
-        class(generaleos), intent(inout) :: this
-        real(rkind), dimension(:) :: eosparams
+    subroutine init(this,decomp,eosparams)
+        class(generaleos),         intent(inout) :: this
+        type(decomp_info),         intent(in)    :: decomp
+        real(rkind), dimension(:), intent(in)    :: eosparams
 
         this%K0   = eosparams(1);     this%Kp   = eosparams(2)
         this%G0   = eosparams(3);     this%Gp   = eosparams(4)
@@ -44,73 +51,110 @@ contains
 
         this%invCv = one/this%Cv
 
+        allocate( this%finger  (decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),6) )
+        allocate( this%fingersq(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),6) )
+        allocate( this%Inv1    (decomp%ysz(1),decomp%ysz(2),decomp%ysz(3))   )
+        allocate( this%Inv2    (decomp%ysz(1),decomp%ysz(2),decomp%ysz(3))   )
+        allocate( this%Inv3    (decomp%ysz(1),decomp%ysz(2),decomp%ysz(3))   )
+        allocate( this%dedI1fac(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3))   )
+        allocate( this%dedI2fac(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3))   )
+        allocate( this%dedI3fac(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3))   )
+        allocate( this%GI3     (decomp%ysz(1),decomp%ysz(2),decomp%ysz(3))   )
+        allocate( this%GpI3    (decomp%ysz(1),decomp%ysz(2),decomp%ysz(3))   )
+
+    end subroutine
+
+    subroutine destroy(this)
+        class(generaleos),         intent(inout) :: this
+ 
+        deallocate(this%finger,this%fingersq,this%Inv1,this%Inv2,this%Inv3,this%dedI1fac,this%dedI2fac,this%dedI3fac,this%GI3,this%GpI3)
     end subroutine
 
     pure subroutine get_p_devstress(this,rho0,g,rho,entr,p,devstress)
-        class(generaleos), intent(in) :: this
+        class(generaleos), intent(inout) :: this
         real(rkind),                     intent(in)  :: rho0
         real(rkind), dimension(:,:,:,:), intent(in)  :: g
         real(rkind), dimension(:,:,:),   intent(in)  :: rho, entr
         real(rkind), dimension(:,:,:),   intent(out) :: p
         real(rkind), dimension(:,:,:,:), intent(out) :: devstress
 
+        integer :: ii
+
         p = zero!(this%gam-one)*rho*e - this%gam*this%PInf
         devstress = zero!(this%gam-one)*rho*e - this%gam*this%PInf
-
-        real(rkind), dimension(:,:,:,:), intent(in)  :: g
-        real(rkind), dimension(:,:,:,:), intent(out) :: finger
-        real(rkind), dimension(:,:,:,:), intent(out), optional :: fingersq
-        real(rkind), dimension(:,:,:),   intent(out), optional :: trG, trG2, detG
 
         associate ( g11 => g(:,:,:,1), g12 => g(:,:,:,2), g13 => g(:,:,:,3), &
                     g21 => g(:,:,:,4), g22 => g(:,:,:,5), g23 => g(:,:,:,6), &
                     g31 => g(:,:,:,7), g32 => g(:,:,:,8), g33 => g(:,:,:,9)  )
-            finger(:,:,:,1) = g11*g11 + g21*g21 + g31*g31
-            finger(:,:,:,2) = g11*g12 + g21*g22 + g31*g32
-            finger(:,:,:,3) = g11*g13 + g21*g23 + g31*g33
-            finger(:,:,:,4) = g12*g12 + g22*g22 + g32*g32
-            finger(:,:,:,5) = g12*g13 + g22*g23 + g32*g33
-            finger(:,:,:,6) = g13*g13 + g23*g23 + g33*g33
+
+            ! compute g*gT first
+            this%finger(:,:,:,1) = g11*g11 + g12*g12 + g13*g13
+            this%finger(:,:,:,2) = g11*g21 + g12*g22 + g13*g23
+            this%finger(:,:,:,3) = g11*g31 + g12*g32 + g13*g33
+            this%finger(:,:,:,4) = g21*g21 + g22*g22 + g23*g23
+            this%finger(:,:,:,5) = g21*g31 + g22*g32 + g23*g33
+            this%finger(:,:,:,6) = g31*g31 + g32*g32 + g33*g33
+
+            ! store tr(finger) in Inv2
+            this%Inv2 = this%finger(:,:,:,1) + this%finger(:,:,:,4) + this%finger(:,:,:,6)
+            
+
+            ! compute inverse of (g*gT) and store in finger. This is right Cauchy-Green tensor, C ( = g^(-T)*g^(-1) = FT*F) )
+
+            ! compute invariants of C
+            this%Inv1 = this%finger(:,:,:,1) + this%finger(:,:,:,4) + this%finger(:,:,:,6)
+
+            this%Inv3 = this%finger(:,:,:,1) * (this%finger(:,:,:,4)*this%finger(:,:,:,6) - this%finger(:,:,:,5)*this%finger(:,:,:,5)) &
+                      + this%finger(:,:,:,2) * (this%finger(:,:,:,3)*this%finger(:,:,:,5) - this%finger(:,:,:,6)*this%finger(:,:,:,2)) &
+                      + this%finger(:,:,:,3) * (this%finger(:,:,:,5)*this%finger(:,:,:,2) - this%finger(:,:,:,3)*this%finger(:,:,:,4)) 
+
+            this%Inv2 = this%Inv2*this%Inv3
+
+            ! compute gT*g first
+            this%finger(:,:,:,1) = g11*g11 + g21*g21 + g31*g31
+            this%finger(:,:,:,2) = g11*g12 + g21*g22 + g31*g32
+            this%finger(:,:,:,3) = g11*g13 + g21*g23 + g31*g33
+            this%finger(:,:,:,4) = g12*g12 + g22*g22 + g32*g32
+            this%finger(:,:,:,5) = g12*g13 + g22*g23 + g32*g33
+            this%finger(:,:,:,6) = g13*g13 + g23*g23 + g33*g33
+
         end associate
 
-        associate ( GG11 => finger(:,:,:,1), GG12 => finger(:,:,:,2), GG13 => finger(:,:,:,3), &
-                    GG21 => finger(:,:,:,2), GG22 => finger(:,:,:,4), GG23 => finger(:,:,:,5), &
-                    GG31 => finger(:,:,:,3), GG32 => finger(:,:,:,5), GG33 => finger(:,:,:,6)  )
-            if(present(detG)) then
-                detG = GG11*(GG22*GG33-GG23*GG32) - GG12*(GG21*GG33-GG31*GG23) + GG13*(GG21*GG32-GG31*GG22)
-            endif
-            if(present(fingersq)) then
-                fingersq(:,:,:,1) = GG11*GG11 + GG12*GG21 + GG13*GG31
-                fingersq(:,:,:,2) = GG11*GG12 + GG12*GG22 + GG13*GG32
-                fingersq(:,:,:,3) = GG11*GG13 + GG12*GG23 + GG13*GG33
-                fingersq(:,:,:,4) = GG21*GG12 + GG22*GG22 + GG23*GG32
-                fingersq(:,:,:,5) = GG21*GG13 + GG22*GG23 + GG23*GG33
-                fingersq(:,:,:,6) = GG31*GG13 + GG32*GG23 + GG33*GG33
-            endif
+        ! compute inverse of (gT*g) and store in finger. This is left Cauchy-Green tensor, b ( = g^(-1)*g^(-T) = F*FT)
+            
+
+        associate ( GG11 => this%finger(:,:,:,1), GG12 => this%finger(:,:,:,2), GG13 => this%finger(:,:,:,3), &
+                    GG21 => this%finger(:,:,:,2), GG22 => this%finger(:,:,:,4), GG23 => this%finger(:,:,:,5), &
+                    GG31 => this%finger(:,:,:,3), GG32 => this%finger(:,:,:,5), GG33 => this%finger(:,:,:,6)  )
+
+                ! compute square of b and store in fingersq
+                this%fingersq(:,:,:,1) = GG11*GG11 + GG12*GG21 + GG13*GG31
+                this%fingersq(:,:,:,2) = GG11*GG12 + GG12*GG22 + GG13*GG32
+                this%fingersq(:,:,:,3) = GG11*GG13 + GG12*GG23 + GG13*GG33
+                this%fingersq(:,:,:,4) = GG21*GG12 + GG22*GG22 + GG23*GG32
+                this%fingersq(:,:,:,5) = GG21*GG13 + GG22*GG23 + GG23*GG33
+                this%fingersq(:,:,:,6) = GG31*GG13 + GG32*GG23 + GG33*GG33
         end associate
 
-        ! compute inverse of finger
-        ! compute inverse of fingersq
-
-        Inv1 = finger(:,:,:,1) + finger(:,:,:,4) + finger(:,:,:,6)
-        Inv3 = 
-        dedI1fac = this%beta * GI3 * Inv3**(-third)
-        dedI2fac = (one-this%beta) * GI3 * Inv3**(-twothird)
+        this%dedI1fac = this%beta * this%GI3 * this%Inv3**(-third)
+        this%dedI2fac = (one-this%beta) * this%GI3 * this%Inv3**(-twothird)
 
         ! 2*rho*dedI3*I3
-        dedI3fac = three*this%K0*exp(-1.5D0*(this%Kp-one)*(Inv3**(sixth)-one))*(Inv3**(-sixth)-Inv3**(-third)) &
-                 - (two*this%rho0*this%Cv*this%T0*this%gam0**2/this%qpar) * Inv3**(half*(one-this%qpar)) * (one - Inv3**this%qpar) * &
-                   (exp(entr)-one) * exp(this%gam0/this%qpar*(one-Inv3**this%qpar))      &
-                 + GpI3 * (this%beta*Inv1*Inv3**(-third) + (one-this%beta)*Inv2*Inv3**(-twothird) - three) &
-                 + GI3/Inv3 * (this%beta*sixth*Inv1*Inv3**(-third) - 1.5_rkind*(one-this%beta)*Inv2*Inv3**(-twothird)-three)
+        this%dedI3fac = three*this%K0*exp(-1.5D0*(this%Kp-one)*(this%Inv3**(sixth)-one))*(this%Inv3**(-sixth)-this%Inv3**(-third)) &
+                 - (two*rho0*this%Cv*this%T0*this%gam0**2/this%qpar) * this%Inv3**(half*(one-this%qpar)) * (one - this%Inv3**this%qpar) * &
+                   (exp(entr)-one) * exp(this%gam0/this%qpar*(one-this%Inv3**this%qpar))      &
+                 + this%GpI3 * (this%beta*this%Inv1*this%Inv3**(-third) + (one-this%beta)*this%Inv2*this%Inv3**(-twothird) - three) &
+                 + this%GI3/this%Inv3 * (this%beta*sixth*this%Inv1*this%Inv3**(-third) - 1.5_rkind*(one-this%beta)*this%Inv2*this%Inv3**(-twothird)-three)
 
-        devstress = -dedI2fac * fingersq + (dedI1fac + Inv11*dedI2fac)*finger
+        do ii = 1, 6
+            devstress(:,:,:,ii) = -this%dedI2fac * this%fingersq(:,:,:,ii) + (this%dedI1fac + this%Inv1*this%dedI2fac)*this%finger(:,:,:,ii)
+        enddo
         p = -third*(devstress(:,:,:,1) + devstress(:,:,:,4) + devstress(:,:,:,6))
         devstress(:,:,:,1) = devstress(:,:,:,1) + p 
         devstress(:,:,:,4) = devstress(:,:,:,4) + p 
         devstress(:,:,:,6) = devstress(:,:,:,6) + p 
 
-        p = p + Inv3*dedI3fac
+        p = p + this%Inv3*this%dedI3fac
 
     end subroutine
 
