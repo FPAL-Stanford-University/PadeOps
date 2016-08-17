@@ -451,9 +451,9 @@ contains
         real(rkind), dimension(this%sz3d(1)*this%sz3d(2)*this%sz3d(3))              :: buffer3D
         real(rkind), dimension(this%szX (1)*this%szX (2)*this%szX (3))              :: bufferX
         integer :: proc, i, j, k, pos, ierr
-        ! real(rkind) :: start, endt
+         real(rkind) :: start, endt
 
-        ! start = this%time(barrier=.false.)
+         start = this%time(barrier=.false.)
         do proc = 0,this%px-1
             do k = this%stXall(3,proc),this%enXall(3,proc)
                 do j = this%stXall(2,proc),this%enXall(2,proc)
@@ -465,10 +465,10 @@ contains
                 end do
             end do
         end do
-        ! endt = this%time(start,reduce=.false.)
-        ! if (this%rank3d == 0) print*, "Do 1", endt
+        endt = this%time(start,reduce=.false.)
+        if (this%rank3d == 0) print*, "Do 1", endt
 
-        ! start = this%time(barrier=.false.)
+        start = this%time(barrier=.false.)
         select case(this%unequalX)
         case (.true.)
             call mpi_alltoallv(buffer3D,this%count3DX,this%disp3DX,mpirkind, &
@@ -477,10 +477,10 @@ contains
             call mpi_alltoall (buffer3D,this%count3DX(0), mpirkind, &
                                bufferX, this%countX  (0), mpirkind, this%commX, ierr)
         end select
-        ! endt = this%time(start,reduce=.false.)
-        ! if (this%rank3d == 0) print*, "2", endt
+        endt = this%time(start,reduce=.false.)
+        if (this%rank3d == 0) print*, "2", endt
 
-        ! start = this%time(barrier=.false.)
+        start = this%time(barrier=.false.)
         do proc = 0,this%px-1
             do k = this%stX(3),this%enX(3)
                 do j = this%stX(2),this%enX(2)
@@ -493,8 +493,8 @@ contains
                 end do
             end do
         end do
-        ! endt = this%time(start,reduce=.false.)
-        ! if (this%rank3d == 0) print*, "Do 3", endt
+        endt = this%time(start,reduce=.false.)
+        if (this%rank3d == 0) print*, "Do 3", endt
 
     end subroutine 
 
