@@ -93,9 +93,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
                g23 => fields(:,:,:,g23_index), g31 => fields(:,:,:,g31_index), & 
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-        
-        !tmp = tanh( (x-half)/(thick*dx) )
-        tmp = tanh( (x-half)/(0.01d0) )
+       
+        if(thick<zero) then 
+            tmp = tanh( (x-half)/(abs(thick)) )
+        else
+            tmp = tanh( (x-half)/(thick*dx) )
+        endif
 
         u   = -uimpact*tmp
         v   = zero
@@ -155,10 +158,10 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
 
 
         write(velstr,'(I4.4)') int(uimpact)
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/impact_"//trim(velstr)//"_", vizcount, ".dat"
+        write(outputfile,'(2A)') trim(outputdir),"/tec_impact_"//trim(velstr)//".dat"
 
         if(vizcount==0) then
-          open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='unknown')
           write(outputunit,'(200a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar"'
           write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
           write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
@@ -174,7 +177,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
           end do
           close(outputunit)
         else
-          open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='old', action='write', position='append')
           write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
           write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
           write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'

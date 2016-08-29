@@ -114,19 +114,21 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
 
 end subroutine
 
-subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
+subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index, &
                                 sxx_index,sxy_index,sxz_index,syy_index,syz_index,szz_index
     use decomp_2d,        only: decomp_info
+    use DerivativesMod,  only: derivatives
 
     use normal_and_shear_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
