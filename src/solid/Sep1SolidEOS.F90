@@ -151,12 +151,14 @@ contains
                     expfac = (two/three)*(this%yield/this%mu)**2
                     ycrit_first = devstress(i,j,k,1)**2 + devstress(i,j,k,4)**2 + devstress(i,j,k,6)**2 + &
                            two * (devstress(i,j,k,2)**2 + devstress(i,j,k,3)**2 + devstress(i,j,k,5)**2)
+                    !write(*,*) i, ycrit_first
                     ycrit_first = ycrit_first/this%mu**2 - expfac
 
                     if (ycrit_first .LE. zero) then
                         ! print '(A)', 'Inconsistency in plastic algorithm, ycrit_first < 0!'
                         cycle
                     end if
+                    write(*,*) 'In plastic update'
 
                     G(1,1) = gfull(i,j,k,1); G(1,2) = gfull(i,j,k,2); G(1,3) = gfull(i,j,k,3)
                                              G(2,2) = gfull(i,j,k,5); G(2,3) = gfull(i,j,k,6)

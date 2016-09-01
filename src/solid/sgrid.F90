@@ -201,6 +201,7 @@ contains
         read(unit=ioUnit, NML=SINPUT)
         close(ioUnit)
 
+
         this%nx = nx
         this%ny = ny
         this%nz = nz
@@ -356,7 +357,7 @@ contains
         deallocate( detG     )
 
         ! Set all the attributes of the abstract grid type         
-        this%outputdir = outputdir 
+        this%outputdir = trim(outputdir)
         
         this%periodicx = periodicx
         this%periodicy = periodicy
@@ -559,7 +560,7 @@ contains
     subroutine simulate(this)
         use reductions, only: P_MEAN
         use timer,      only: tic, toc
-        use exits,      only: GracefulExit, message
+        use exits,      only: GracefulExit, message, nancheck
         class(sgrid), target, intent(inout) :: this
 
         logical :: tcond, vizcond, stepcond
@@ -1073,7 +1074,7 @@ contains
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: mustar,bulkstar,kapstar,func
-        
+ 
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
         real(rkind), dimension(:,:,:), pointer :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5
         real(rkind), dimension(:,:,:), pointer :: ztmp1,ztmp2
@@ -1181,7 +1182,7 @@ contains
         call this%der%d2dx2(xtmp2,xtmp1)
         xtmp2 = xtmp1*this%dx**6
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        kapstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3)
+        kapstar = ytmp4 * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(this%e,ztmp1,this%decomp)
@@ -1189,13 +1190,13 @@ contains
         call this%der%d2dz2(ztmp2,ztmp1)
         ztmp2 = ztmp1*this%dz**6
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        kapstar = kapstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3)
+        kapstar = kapstar + ytmp4 * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(this%e,ytmp4)
         call this%der%d2dy2(ytmp4,ytmp5)
         ytmp4 = ytmp5*this%dy**6
-        kapstar = kapstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3)
+        kapstar = kapstar + ytmp4 * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))
 
         ! Now, all ytmps are free to use
         call this%sgas%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound - hydrodynamic part

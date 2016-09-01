@@ -1,0 +1,2 @@
+/usr/bin/ar cr libSolidOps.a  CMakeFiles/SolidOps.dir/grid/grid.F90.o CMakeFiles/SolidOps.dir/solid/ElasticEOS.F90.o CMakeFiles/SolidOps.dir/solid/StiffGasEOS.F90.o CMakeFiles/SolidOps.dir/solid/Sep1SolidEOS.F90.o CMakeFiles/SolidOps.dir/solid/hooks_interface.F90.o CMakeFiles/SolidOps.dir/solid/sgrid.F90.o
+/usr/bin/ranlib libSolidOps.a
