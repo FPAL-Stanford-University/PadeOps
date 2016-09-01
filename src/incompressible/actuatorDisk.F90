@@ -140,6 +140,7 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
         allocate(this%xs(size(this%ys)))
         this%xs = xLoc
         this%normfactor = (1.d0/(real(size(this%xs),rkind)))*this%pfactor
+        !write(*,'(a,i3.3,1x,2(e19.12,1x),i5.5,1x,e19.12)') '----Turbine No.---', ActuatorDiskID, this%normfactor, this%pfactor, size(this%xs), this%delta
         xLc = minloc(abs(xLoc - 1.5d0*diam/2.d0 - this%xline)); this%xst = max(1,xLc(1))
         yLc = minloc(abs(yLoc - diam - this%yline)); this%yst = max(1,yLc(1))
         zLc = minloc(abs(zLoc - diam - this%zline)); this%zst = max(1,zLc(1))
