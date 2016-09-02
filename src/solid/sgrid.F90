@@ -1116,7 +1116,7 @@ contains
         call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2))
         call transpose_x_to_y(xtmp2,flux(:,:,:,4),this%decomp)
 
-        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz - qx
+        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz + qx
         call transpose_y_to_x(flux(:,:,:,5),xtmp1,this%decomp)
         call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2))
         call transpose_x_to_y(xtmp2,flux(:,:,:,5),this%decomp)
@@ -1156,7 +1156,7 @@ contains
         call this%der%ddy(flux(:,:,:,4),ytmp1,-this%y_bc(1),-this%y_bc(2))
         rhs(:,:,:,4) = rhs(:,:,:,4) - ytmp1
 
-        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauyy)*this%v - this%u*tauxy - this%w*tauyz - qy
+        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauyy)*this%v - this%u*tauxy - this%w*tauyz + qy
         call this%der%ddy(flux(:,:,:,5),ytmp1,-this%y_bc(1),-this%y_bc(2))
         rhs(:,:,:,5) = rhs(:,:,:,5) - ytmp1
 
@@ -1196,7 +1196,7 @@ contains
         call this%der%ddz(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
         call transpose_z_to_y(ztmp2,flux(:,:,:,4),this%decomp)
 
-        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauzz)*this%w - this%u*tauxz - this%v*tauyz - qz
+        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauzz)*this%w - this%u*tauxz - this%v*tauyz + qz
         call transpose_y_to_z(flux(:,:,:,5),ztmp1,this%decomp)
         call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2))
         call transpose_z_to_y(ztmp2,flux(:,:,:,5),this%decomp)

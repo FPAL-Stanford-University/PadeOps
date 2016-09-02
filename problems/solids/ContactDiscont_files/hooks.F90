@@ -6,8 +6,10 @@ module ContactDiscont_data
     real(rkind) :: kparam = real(0.1D0,rkind)
     real(rkind) :: thick = one
     real(rkind) :: p1 = real(1.D5,rkind), p2, rho1, rho2, u1, u2, g11_1, g11_2
-    real(rkind) :: Ckap
     real(rkind) :: rho_0
+
+    real(rkind), parameter :: eleventhird = real(11.D0/3.D0,rkind), seventhird = real(7.D0/3.D0,rkind)
+
 contains
 
 SUBROUTINE fnumden(rho1,fparams,iparams,num,den)
@@ -20,25 +22,34 @@ SUBROUTINE fnumden(rho1,fparams,iparams,num,den)
 
   REAL(rkind) :: g11, grho1, gprho1, grho2, fac, p2, rho0, gam, pinf, mus, onebygam
 
-  real(rkind), parameter :: eleventhird = real(11.D0/3.D0,rkind), seventhird = real(7.D0/3.D0,rkind), &
-                            eightthird = real(8.D0/3.D0,rkind), fourthird = real(4.D0/3.D0,rkind), &
+  real(rkind), parameter :: eightthird = real(8.D0/3.D0,rkind), fourthird = real(4.D0/3.D0,rkind), &
                             eleven = 11.0_rkind
 
+    write(*,*) '-1-'
     rho0 = fparams(1); gam = fparams(2); pinf = fparams(3); mus = fparams(4);
     rho2 = fparams(5); p2  = fparams(6); kparam = fparams(7)
 
     onebygam = one/gam
+    write(*,*) '-2-', rho0
 
     g11 = rho1/rho0    ! g11_1
+    write(*,*) '--', rho1
     grho1 = twothird*(g11**eleventhird - g11**(-third) - g11**seventhird + g11**third)
+    write(*,*) '--', g11, grho1
     gprho1 = third*twothird/rho0*(eleven*g11**eightthird - seven*g11**fourthird + g11**(-fourthird) + g11**(-twothird))
+    write(*,*) '-3-'
 
     g11 = rho2/rho0     ! g11_2
     grho2 = twothird*(g11**eleventhird - g11**(-third) - g11**seventhird + g11**third)
+    write(*,*) '-4-'
 
     fac = (one + mus*(grho2 - grho1)/(p2 + pinf))
+    write(*,*) '-5-'
+    
     num =  fac**onebygam*rho2/rho1 - kparam
     den = -fac**onebygam*rho2/rho1 * (one/rho1 + mus*onebygam*gprho1/((p2 + pinf)*fac))
+
+    write(*,'(a,8(e19.12,1x))') '--', rho0, rho1, rho2, grho1, grho2, fac, num, den
 
 END SUBROUTINE fnumden
 
@@ -106,7 +117,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = real(20.D0,rkind)/real(nx-1,rkind)
+        dx = real(1.D0,rkind)/real(nx-1,rkind)
         dy = dx
         dz = dx
 
@@ -124,7 +135,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,eostype,eosparams,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rho0,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,eps,third,half,one,two,pi
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
@@ -145,19 +156,20 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,eostype,eospara
 
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
-    real(rkind) :: p_star, rhoRatio, tfactor, h1, grho1, grho2
     integer, dimension(2) :: iparams
     real(rkind), dimension(8) :: fparams
     integer :: nx
-    real(rkind) :: mu, gam, PInf, yield, tau0
+    real(rkind) :: mu, gam, PInf, yield, tau0, grho1, grho2
 
-    namelist /PROBINPUT/  kparam, p2, thick, Ckap
+    namelist /PROBINPUT/  kparam, p2, thick
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
 
+    write(*,*) 'eostype = ', eostype
+    write(*,*) 'eosparams = ', eosparams
     if(eostype==1) then
         gam   = eosparams(1);                           PInf = eosparams(3);
         mu = eosparams(4);   yield = eosparams(5);   tau0 = eosparams(6);
@@ -173,12 +185,19 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,eostype,eospara
                g23 => fields(:,:,:,g23_index), g31 => fields(:,:,:,g31_index), & 
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+        rho2 = rho0
         
         fparams(1) = rho0; fparams(2) = gam; fparams(3) = PInf; fparams(4) = mu;
         fparams(5) = rho2; fparams(6) = p2;  fparams(7) = kparam;
         rho1 = rho2/kparam ! Init guess
+        write(*,*) 'Before root finding: ', fparams(1:7)
         call rootfind_nr_1d(rho1,fparams,iparams)
         write(*,*) 'After root finding: ', rho1
+
+        grho1 = twothird*((rho1/rho0)**eleventhird - (rho1/rho0)**(-third) - (rho1/rho0)**seventhird + (rho1/rho0)**third)
+        grho2 = twothird*((rho1/rho0)**eleventhird - (rho1/rho0)**(-third) - (rho1/rho0)**seventhird + (rho1/rho0)**third)
+        p1 = p2 + mu*(grho2-grho1)
 
         ! initialize contact discontinuity at 0.5
         tmp = half * ( one + erf( (x-half)/(thick*dx) ) )
@@ -189,9 +208,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,eostype,eospara
         rho = (one-tmp)*rho1 + tmp*rho2
         p   = (one-tmp)*  p1 + tmp*  p2
 
-        rho1 = rho(decomp%yen(1),1,1)
-        u1   = u  (decomp%yen(1),1,1)
-        u2   = u  (            1,1,1)
+        !rho1 = rho(decomp%yen(1),1,1)
+        !u1   = u  (decomp%yen(1),1,1)
+        !u2   = u  (            1,1,1)
 
         g11 = rho/rho0; g12 = zero; g13 = zero
         g21 = zero;     g22 = one;  g23 = zero
@@ -263,7 +282,7 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
                sxx => fields(:,:,:, sxx_index), sxy => fields(:,:,:, sxy_index), sxz => fields(:,:,:, sxz_index), &
                syy => fields(:,:,:, syy_index), syz => fields(:,:,:, syz_index), szz => fields(:,:,:, szz_index)  )
 
-        write(str,'(ES7.1E2,A,ES7.1E2)') kparam, "_", Ckap
+        write(str,'(ES7.1E2)') kparam
         write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ContactDiscont_"//trim(str)//"_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
@@ -348,7 +367,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
         w  ( 1,:,:) = zero
         p  ( 1,:,:) = p2
         
-        g11( 1,:,:) = rho2; g12( 1,:,:) = zero; g13( 1,:,:) = zero
+        g11( 1,:,:) = rho2/rho_0; g12( 1,:,:) = zero; g13( 1,:,:) = zero
         g21( 1,:,:) = zero; g22( 1,:,:) = one;  g23( 1,:,:) = zero
         g31( 1,:,:) = zero; g32( 1,:,:) = zero; g33( 1,:,:) = one
 
@@ -358,7 +377,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
         w  (nx,:,:) = zero
         p  (nx,:,:) = p1
         
-        g11(nx,:,:) = rho1; g12(nx,:,:) = zero; g13(nx,:,:) = zero
+        g11(nx,:,:) = rho1/rho_0; g12(nx,:,:) = zero; g13(nx,:,:) = zero
         g21(nx,:,:) = zero; g22(nx,:,:) = one;  g23(nx,:,:) = zero
         g31(nx,:,:) = zero; g32(nx,:,:) = zero; g33(nx,:,:) = one
 
@@ -387,8 +406,8 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
     integer,     dimension(2),       intent(in) :: x_bc, y_bc, z_bc
 
     integer :: nx, istart, iend
-    real(rkind), dimension(decomp%ysz(1)) :: p_exact, dpdx
-    real(rkind) :: dx, sthick, mwa
+    real(rkind), dimension(decomp%ysz(1)) :: e_exact, dedx
+    real(rkind) :: dx, sthick, mwa,e1,e2
     integer :: iounit = 229
     character(len=clen) :: outputfile
 
@@ -403,14 +422,16 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
 
         dx = x(2,1,1) - x(1,1,1)
 
-        p_exact = p2
+        e2 = e(1,1,1); e1 = e(nx,1,1)
+
+        e_exact = e2
         where (x(:,1,1) .GT. half)
-            p_exact = p1
+            e_exact = e1
         end where
 
-        dpdx = zero
-        dpdx(2:nx-1) = ( p(3:nx,1,1)-p(1:nx-2,1,1) ) / (two*dx)
-        sthick = abs(p2-p1)/maxval(dx*abs(dpdx))
+        dedx = zero
+        dedx(2:nx-1) = ( e(3:nx,1,1)-e(1:nx-2,1,1) ) / (two*dx)
+        sthick = abs(e2-e1)/max(maxval(dx*abs(dedx)), 1.0d-32)
 
         istart = 1
         do while ( x(istart,1,1) .LT. half-sthick*dx )
@@ -425,14 +446,14 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
         ! mwa = maxval(abs(p(1:istart,1,1)-p_exact(1:istart)))/abs(p2-p1)
         ! mwa = max(mwa,maxval(abs(p(1:istart,1,1)-p_exact(1:istart)))/abs(p2-p1))
 
-        mwa = maxval(p(:,1,1)-p2)
-        mwa = max(mwa,maxval(p1-p(:,1,1)))
-        mwa = mwa / abs(p2-p1)
+        mwa = maxval(e(:,1,1)-e2)
+        mwa = max(mwa,maxval(e1-e(:,1,1)))
+        mwa = mwa / max(abs(e2-e1), 1.0D-32)
 
         call message(2,"Shock thickness", sthick)
         call message(2,"Maximum Wiggles Amplitude", mwa)
 
-        write(outputfile,'(A,ES8.2E2,A)') "ContactDiscont_stats_", Ckap,".dat"
+        write(outputfile,'(A)') "ContactDiscont_stats.dat"
         if (step == 1) then
             open(unit=iounit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
             write(iounit,'(3A26)') "Time", "Shock thickness", "MWA"
