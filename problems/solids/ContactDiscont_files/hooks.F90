@@ -196,7 +196,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         write(*,*) 'After root finding: ', rho1
 
         grho1 = twothird*((rho1/rho0)**eleventhird - (rho1/rho0)**(-third) - (rho1/rho0)**seventhird + (rho1/rho0)**third)
-        grho2 = twothird*((rho1/rho0)**eleventhird - (rho1/rho0)**(-third) - (rho1/rho0)**seventhird + (rho1/rho0)**third)
+        grho2 = twothird*((rho2/rho0)**eleventhird - (rho2/rho0)**(-third) - (rho2/rho0)**seventhird + (rho2/rho0)**third)
         p1 = p2 + mu*(grho2-grho1)
 
         ! initialize contact discontinuity at 0.5
@@ -405,9 +405,9 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
     integer,     dimension(2),       intent(in) :: x_bc, y_bc, z_bc
 
-    integer :: nx, istart, iend
-    real(rkind), dimension(decomp%ysz(1)) :: e_exact, dedx
-    real(rkind) :: dx, sthick, mwa,e1,e2
+    integer :: nx, istart, iend, i
+    real(rkind), dimension(decomp%ysz(1)) :: dedx, drdx
+    real(rkind) :: dx, sthick, mwa, e_lo, e_hi, sthick_r, mwa_r, rho_hi, rho_lo
     integer :: iounit = 229
     character(len=clen) :: outputfile
 
@@ -422,45 +422,43 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
 
         dx = x(2,1,1) - x(1,1,1)
 
-        e2 = e(1,1,1); e1 = e(nx,1,1)
-
-        e_exact = e2
-        where (x(:,1,1) .GT. half)
-            e_exact = e1
-        end where
+        e_hi = max(e(1,1,1), e(nx,1,1))
+        e_lo = min(e(1,1,1), e(nx,1,1))
+        
 
         dedx = zero
         dedx(2:nx-1) = ( e(3:nx,1,1)-e(1:nx-2,1,1) ) / (two*dx)
-        sthick = abs(e2-e1)/max(maxval(dx*abs(dedx)), 1.0d-32)
+        sthick = (e_hi-e_lo)/max(maxval(dx*abs(dedx)), 1.0d-32)
 
-        istart = 1
-        do while ( x(istart,1,1) .LT. half-sthick*dx )
-            istart = istart + 1
-        end do
-
-        iend = nx
-        do while ( x(iend,1,1) .GT. half+sthick*dx )
-            iend = iend - 1
-        end do
-
-        ! mwa = maxval(abs(p(1:istart,1,1)-p_exact(1:istart)))/abs(p2-p1)
-        ! mwa = max(mwa,maxval(abs(p(1:istart,1,1)-p_exact(1:istart)))/abs(p2-p1))
-
-        mwa = maxval(e(:,1,1)-e2)
-        mwa = max(mwa,maxval(e1-e(:,1,1)))
-        mwa = mwa / max(abs(e2-e1), 1.0D-32)
+        mwa = maxval(e(:,1,1)-e_hi)
+        mwa = max(mwa, maxval(e_lo-e(:,1,1)))
+        mwa = mwa / max(e_hi-e_lo, 1.0D-32)
 
         call message(2,"Shock thickness", sthick)
         call message(2,"Maximum Wiggles Amplitude", mwa)
 
+        ! ----- rho oscillations -----
+
+          rho_hi = max(rho(1,1,1), rho(nx,1,1))
+          rho_lo = min(rho(1,1,1), rho(nx,1,1))
+
+          drdx = zero
+          drdx(2:nx-1) = ( rho(3:nx,1,1)-rho(1:nx-2,1,1) ) / (two*dx)
+          sthick_r = abs(rho2-rho1)/max(maxval(dx*abs(drdx)), 1.0d-32)
+
+          mwa_r = maxval(rho(:,1,1)-rho_hi)
+          mwa_r = max(mwa_r, maxval(rho_lo-rho(:,1,1)))
+          mwa_r = mwa_r / max(rho_hi-rho_lo, 1.0D-32)
+        ! ----- rho oscillations -----
+
         write(outputfile,'(A)') "ContactDiscont_stats.dat"
         if (step == 1) then
             open(unit=iounit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-            write(iounit,'(3A26)') "Time", "Shock thickness", "MWA"
+            write(iounit,'(5A26)') '"Time", "E thickness", "MWA", "R thickness", "R MWA"'
         else
             open(unit=iounit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
         end if
-        write(iounit,'(3ES26.16)') tsim, sthick, mwa
+        write(iounit,'(5ES26.16)') tsim, sthick, mwa,sthick_r,mwa_r
         close(iounit)
 
     end associate
