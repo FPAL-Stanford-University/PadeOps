@@ -10,6 +10,7 @@ module SolidGrid
     use DerivativesMod,  only: derivatives
     use StiffGasEOS,     only: stiffgas
     use Sep1SolidEOS,    only: sep1solid
+    use GeneralMatEOS,   only: generaleos
    
     implicit none
 
@@ -39,8 +40,9 @@ module SolidGrid
     integer, parameter :: syy_index    = 24
     integer, parameter :: syz_index    = 25
     integer, parameter :: szz_index    = 26
+    integer, parameter :: ent_index    = 27
 
-    integer, parameter :: nfields = 26
+    integer, parameter :: nfields = 27
 
     ! These indices are for data management, do not change if you're not sure of what you're doing
     integer, parameter :: tauxyidx = 2
@@ -66,6 +68,9 @@ module SolidGrid
 
         type(stiffgas),  allocatable :: sgas
         type(sep1solid), allocatable :: elastic
+
+        type(generaleos),  allocatable :: geneos
+        integer                        :: eostype
 
         logical     :: plastic
         logical     :: explPlast
@@ -114,6 +119,10 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: szz
         
         real(rkind), dimension(:,:,:), pointer :: eel
+        real(rkind), dimension(:,:,:), pointer :: ent
+         
+        logical     :: gfilttimes
+        real(rkind) :: etafac
          
         contains
             procedure          :: init
@@ -163,10 +172,15 @@ contains
         integer :: prow = 0, pcol = 0 
         integer :: i, j, k, l 
         integer :: ioUnit
-        real(rkind) :: gam = 1.4_rkind
+        real(rkind) :: gam = 1.4_rkind  !--- replace this block by eosparams
         real(rkind) :: Rgas = one
         real(rkind) :: PInf = zero
         real(rkind) :: shmod = zero
+        real(rkind) :: yield = real(1.D30,rkind)
+        real(rkind) :: tau0 = one       !--- since these are specific to separable EOS
+        integer     :: eostype = 1
+        real(rkind) :: eosparams(20)
+        logical     :: explPlast = .FALSE.
         real(rkind) :: rho0 = one
         integer :: nsteps = -1
         real(rkind) :: dt = -one
@@ -177,9 +191,9 @@ contains
         real(rkind) :: Cbeta = 1.75_rkind
         real(rkind) :: Ckap = 0.01_rkind
         logical     :: plastic = .FALSE.
-        real(rkind) :: yield = real(1.D30,rkind)
-        logical     :: explPlast = .FALSE.
-        real(rkind) :: tau0 = one
+        integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
+        real(rkind) :: etafac = zero
+        logical     :: gfilttimes = .TRUE.
 
         character(len=clen) :: charout
         real(rkind), dimension(:,:,:,:), allocatable :: finger, fingersq
@@ -192,8 +206,17 @@ contains
                                      filter_x, filter_y, filter_z, &
                                                        prow, pcol, &
                                                          SkewSymm  
-        namelist /SINPUT/  gam, Rgas, PInf, shmod, rho0, plastic, yield, &
-                           explPlast, tau0, Cmu, Cbeta, Ckap
+        !namelist /SINPUT/  gam, Rgas, PInf, shmod, rho0, plastic, yield, &
+        !                   explPlast, tau0, Cmu, Cbeta, Ckap,            &
+        !                   x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn,     &
+        !                   gfilttimes, etafac
+        namelist /SINPUT/  rho0, eostype, eosparams, plastic, &
+                           explPlast, Cmu, Cbeta, Ckap,            &
+                           x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn,     &
+                           gfilttimes, etafac
+
+        this%eostype = eostype
+
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -223,7 +246,9 @@ contains
         this%plastic = plastic
         
         this%explPlast = explPlast
-        this%tau0 = tau0
+
+        this%gfilttimes = gfilttimes
+        this%etafac = etafac
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -256,17 +281,28 @@ contains
                     this%mesh(i,j,k,3) = -one + (this%decomp%yst(3) - 1 + k - 1)*this%dz           
                 end do 
             end do 
-        end do  
+        end do
 
         ! Allocate sgas
-        if ( allocated(this%sgas) ) deallocate(this%sgas)
-        allocate(this%sgas)
-        call this%sgas%init(gam,Rgas,PInf)
+        if(this%eostype == 1) then
+            ! separable eos
+            gam   = eosparams(1);   Rgas  = eosparams(2);   PInf = eosparams(3);
+            shmod = eosparams(4);    yield = eosparams(5);   tau0 = eosparams(6);
+            this%tau0 = tau0    ! maybe move this to elastic or geneos
+            if ( allocated(this%sgas) ) deallocate(this%sgas)
+            allocate(this%sgas)
+            call this%sgas%init(gam,Rgas,PInf)
 
-        ! Allocate elastic
-        if ( allocated(this%elastic) ) deallocate(this%elastic)
-        allocate(this%elastic)
-        call this%elastic%init(shmod,yield)
+            ! Allocate elastic
+            if ( allocated(this%elastic) ) deallocate(this%elastic)
+            allocate(this%elastic)
+            call this%elastic%init(shmod,yield)
+        else
+            ! general eos
+            if ( allocated(this%geneos) ) deallocate(this%geneos)
+            allocate(this%geneos)
+            call this%geneos%init(this%decomp,eosparams)
+        endif
 
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
@@ -308,52 +344,76 @@ contains
         this%szz  => this%fields(:,:,:, szz_index)   
         
         this%eel  => this%fields(:,:,:, eel_index)   
+        this%ent  => this%fields(:,:,:, ent_index)   
        
         ! Initialize everything to a constant Zero
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired 
+        !call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
+        !                rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf, &
+        !                tstop=this%tstop, dt=this%dtfixed, tviz=tviz, yield=this%elastic%yield, &
+        !                tau0=this%tau0)
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
-                        rho0=this%rho0, mu=this%elastic%mu, gam=this%sgas%gam, PInf=this%sgas%PInf, &
-                        tstop=this%tstop, dt=this%dtfixed, tviz=tviz, yield=this%elastic%yield, &
-                        tau0=this%tau0)
+                        this%eostype, eosparams, rho0=this%rho0,&
+                        tstop=this%tstop, dt=this%dtfixed, tviz=tviz)
        
         ! Get hydrodynamic and elastic energies 
-        call this%sgas%get_e_from_p(this%rho,this%p,this%e)
+        if(this%eostype == 1) then
+            call this%sgas%get_e_from_p(this%rho,this%p,this%e)
+        else
+            ! energy already specified - not specifying primitive variables, so
+            ! energy does not have to be computed from primitive variables
+        endif
         
         ! Check if the initialization was okay
         if ( nancheck(this%e) ) then
             call GracefulExit("NaN encountered at initialization in the hydrodynamic energy", 999)
         end if
 
-        call alloc_buffs(finger,  6,"y",this%decomp)
-        call alloc_buffs(fingersq,6,"y",this%decomp)
-        allocate( trG (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
-        allocate( trG2(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
-        allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+        if(this%eostype == 1) then
+            call alloc_buffs(finger,  6,"y",this%decomp)
+            call alloc_buffs(fingersq,6,"y",this%decomp)
+            allocate( trG (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+            allocate( trG2(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+            allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
 
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel) 
-        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+            call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+            call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel) 
+            call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+        else
+            call this%geneos%get_p_devstress(this%rho0, this%g, this%rho, this%ent, this%p, this%devstress)
+        endif
         
         ! Check if the initialization was okay
         if ( nancheck(this%eel) ) then
             call GracefulExit("NaN encountered at initialization in the elastic energy", 999)
         end if
+        if ( nancheck(this%p) ) then
+            call GracefulExit("NaN encountered at initialization in the pressure", 999)
+        end if
+        if ( nancheck(this%devstress) ) then
+            call GracefulExit("NaN encountered at initialization in the deviatoric stress", 999)
+        end if
 
-
-        this%e = this%e + this%eel
-        call this%sgas%get_T(this%e,this%T)
+        if(this%eostype == 1) then
+            this%e = this%e + this%eel
+            call this%sgas%get_T(this%e,this%T)
+        else
+            call this%geneos%get_T(this%e, this%T)
+        endif
 
         if (P_MAXVAL(abs( this%rho/this%rho0/(detG)**half - one )) > 10._rkind*eps) then
             call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
         end if
 
-        deallocate( finger   )
-        deallocate( fingersq )
-        deallocate( trG      )
-        deallocate( trG2     )
-        deallocate( detG     )
+        if(this%eostype == 1) then
+            deallocate( finger   )
+            deallocate( fingersq )
+            deallocate( trG      )
+            deallocate( trG2     )
+            deallocate( detG     )
+        endif
 
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
@@ -361,6 +421,16 @@ contains
         this%periodicx = periodicx
         this%periodicy = periodicy
         this%periodicz = periodicz
+
+        if ( ((x_bc1 /= 0) .AND. (x_bc1 /= 1)) ) call GracefulExit("x_bc1 can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((x_bcn /= 0) .AND. (x_bcn /= 1)) ) call GracefulExit("x_bcn can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((y_bc1 /= 0) .AND. (y_bc1 /= 1)) ) call GracefulExit("y_bc1 can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((y_bcn /= 0) .AND. (y_bcn /= 1)) ) call GracefulExit("y_bcn can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((z_bc1 /= 0) .AND. (z_bc1 /= 1)) ) call GracefulExit("z_bc1 can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((z_bcn /= 0) .AND. (z_bcn /= 1)) ) call GracefulExit("z_bcn can be only 0 (general) or 1 (symmetric)",4634)
+        this%x_bc = [x_bc1, x_bcn]
+        this%y_bc = [y_bc1, y_bcn]
+        this%z_bc = [z_bc1, z_bcn]
 
         this%derivative_x = derivative_x    
         this%derivative_y = derivative_y    
@@ -435,6 +505,7 @@ contains
         varnames(24) = 'Syy'
         varnames(25) = 'Syz'
         varnames(26) = 'Szz'
+        varnames(27) = 'entr'
 
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
@@ -444,7 +515,7 @@ contains
         this%invtau0 = one/this%tau0
 
         ! Check if the initialization was okay
-        if ( nancheck(this%fields(:,:,:,8:26),i,j,k,l) ) then
+        if ( nancheck(this%fields(:,:,:,8:27),i,j,k,l) ) then
             call message("fields: ",this%fields(i,j,k,l))
             write(charout,'(A,4(I5,A))') "NaN encountered in initialization ("//trim(varnames(l+7))//")  at (",i,", ",j,", ",k,", ",l,") of fields"
             call GracefulExit(trim(charout), 999)
@@ -455,6 +526,11 @@ contains
 
     subroutine destroy(this)
         class(sgrid), intent(inout) :: this
+
+        if(this%eostype == 1) then
+        else
+            call this%geneos%destroy()
+        endif
 
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
@@ -474,6 +550,7 @@ contains
 
         if (allocated(this%sgas)) deallocate(this%sgas) 
         if (allocated(this%elastic)) deallocate(this%elastic) 
+        if (allocated(this%geneos))  deallocate(this%geneos) 
         
         if (allocated(this%Wcnsrv)) deallocate(this%Wcnsrv) 
         
@@ -483,14 +560,17 @@ contains
         call decomp_2d_finalize
         if (allocated(this%decomp)) deallocate(this%decomp) 
 
+        call hook_finalize()
+
     end subroutine
 
-    subroutine gradient(this, f, dfdx, dfdy, dfdz)
+    subroutine gradient(this, f, dfdx, dfdy, dfdz, x_bc, y_bc, z_bc)
         class(sgrid),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdx
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdy
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdz
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
 
         type(derivatives), pointer :: der
         type(decomp_info), pointer :: decomp
@@ -504,25 +584,26 @@ contains
         zdum => this%zbuf(:,:,:,2)
 
         ! Get Y derivatives
-        call der%ddy(f,dfdy)
+        call der%ddy(f,dfdy,y_bc(1),y_bc(2))
 
         ! Get X derivatives
         call transpose_y_to_x(f,xtmp,decomp)
-        call der%ddx(xtmp,xdum)
+        call der%ddx(xtmp,xdum,x_bc(1),x_bc(2))
         call transpose_x_to_y(xdum,dfdx)
 
         ! Get Z derivatives
         call transpose_y_to_z(f,ztmp,decomp)
-        call der%ddz(ztmp,zdum)
+        call der%ddz(ztmp,zdum,z_bc(1),z_bc(2))
         call transpose_z_to_y(zdum,dfdz)
 
     end subroutine 
 
-    subroutine laplacian(this, f, lapf)
+    subroutine laplacian(this, f, lapf, x_bc, y_bc, z_bc)
         use timer
         class(sgrid),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         
         real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum, ytmp
         type(derivatives), pointer :: der
@@ -538,18 +619,18 @@ contains
         ytmp => this%ybuf(:,:,:,1)
 
         ! Get Y derivatives
-        call der%d2dy2(f,lapf)
+        call der%d2dy2(f,lapf,y_bc(1),y_bc(2))
         
         ! Get X derivatives
         call transpose_y_to_x(f,xtmp,this%decomp) 
-        call this%der%d2dx2(xtmp,xdum)
+        call this%der%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
         call transpose_x_to_y(xdum,ytmp,this%decomp)
 
         lapf = lapf + ytmp
 
         ! Get Z derivatives
         call transpose_y_to_z(f,ztmp,this%decomp)
-        call this%der%d2dz2(ztmp,zdum)
+        call this%der%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
         call transpose_z_to_y(zdum,ytmp,this%decomp)
         
         lapf = lapf + ytmp
@@ -574,9 +655,9 @@ contains
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
         
-        call this%gradient(this%u,dudx,dudy,dudz)
-        call this%gradient(this%v,dvdx,dvdy,dvdz)
-        call this%gradient(this%w,dwdx,dwdy,dwdz)
+        call this%gradient(this%u,dudx,dudy,dudz,-this%x_bc, this%y_bc, this%z_bc)
+        call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
+        call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
         call this%getPhysicalProperties()
 
@@ -589,7 +670,7 @@ contains
         call this%get_dt(stability)
 
         ! Write out initial conditions
-        call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount, this%der)
+        call hook_output(this%decomp, this%der, this%fil, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount, this%x_bc, this%y_bc, this%z_bc)
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
         vizcond = .FALSE.
         
@@ -630,11 +711,11 @@ contains
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
-            call hook_timestep(this%decomp, this%mesh, this%fields, this%step, this%tsim, hookcond)
+            call hook_timestep(this%decomp, this%der, this%mesh, this%fields, this%step, this%tsim, this%dt, this%x_bc, this%y_bc, this%z_bc, hookcond)
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
-                call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount, this%der)
+                call hook_output(this%decomp, this%der, this%fil, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount, this%x_bc, this%y_bc, this%z_bc)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
                 vizcond = .FALSE.
             end if
@@ -711,34 +792,65 @@ contains
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
             ! Filter the conserved variables
-            do i = 1,5
-                call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1)
-            end do
+            call this%filter(this%Wcnsrv(:,:,:,1), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)   ! continuity
+            call this%filter(this%Wcnsrv(:,:,:,2), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)   ! x_mom
+            call this%filter(this%Wcnsrv(:,:,:,3), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)   ! y_mom
+            call this%filter(this%Wcnsrv(:,:,:,4), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)   ! z_mom
+            call this%filter(this%Wcnsrv(:,:,:,5), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)   ! tot_energy
+
             ! Filter the g tensor
-            do i = 1,9
-                call this%filter(this%g(:,:,:,i), this%fil, 1)
-            end do
+            if(this%gfilttimes) then
+                call this%filter(this%g11(:,:,:), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+                call this%filter(this%g12(:,:,:), this%fil, 1,-this%x_bc,-this%y_bc, this%z_bc)
+                call this%filter(this%g13(:,:,:), this%fil, 1,-this%x_bc, this%y_bc,-this%z_bc)
+                call this%filter(this%g21(:,:,:), this%fil, 1,-this%x_bc,-this%y_bc, this%z_bc)
+                call this%filter(this%g22(:,:,:), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+                call this%filter(this%g23(:,:,:), this%fil, 1, this%x_bc,-this%y_bc,-this%z_bc)
+                call this%filter(this%g31(:,:,:), this%fil, 1,-this%x_bc, this%y_bc,-this%z_bc)
+                call this%filter(this%g32(:,:,:), this%fil, 1, this%x_bc,-this%y_bc,-this%z_bc)
+                call this%filter(this%g33(:,:,:), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+            end if
             
             call this%get_primitive()
 
             if (.NOT. this%explPlast .and. isub==RK45_steps) then
                 if (this%plastic) then
                     ! Effect plastic deformations
-                    call this%elastic%plastic_deformation(this%devstress, this%dt, this%invtau0, this%g)
+                    if(this%eostype == 1) call this%elastic%plastic_deformation(this%g)
                     call this%get_primitive()
 
+                    !! Filter the conserved variables
+                    !do i = 1,5
+                    !    call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1)
+                    !end do
+                    !! Filter the g tensor
+                    !do i = 1,9
+                    !    call this%filter(this%g(:,:,:,i), this%fil, 1)
+                    !end do
+
                     ! Filter the conserved variables
-                    do i = 1,5
-                        call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1)
-                    end do
+                    call this%filter(this%Wcnsrv(:,:,:,1), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)   ! continuity
+                    call this%filter(this%Wcnsrv(:,:,:,2), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)   ! x_mom
+                    call this%filter(this%Wcnsrv(:,:,:,3), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)   ! y_mom
+                    call this%filter(this%Wcnsrv(:,:,:,4), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)   ! z_mom
+                    call this%filter(this%Wcnsrv(:,:,:,5), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)   ! tot_energy
+
                     ! Filter the g tensor
-                    do i = 1,9
-                        call this%filter(this%g(:,:,:,i), this%fil, 1)
-                    end do
+                    if(this%gfilttimes) then
+                        call this%filter(this%g11(:,:,:), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+                        call this%filter(this%g12(:,:,:), this%fil, 1,-this%x_bc,-this%y_bc, this%z_bc)
+                        call this%filter(this%g13(:,:,:), this%fil, 1,-this%x_bc, this%y_bc,-this%z_bc)
+                        call this%filter(this%g21(:,:,:), this%fil, 1,-this%x_bc,-this%y_bc, this%z_bc)
+                        call this%filter(this%g22(:,:,:), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+                        call this%filter(this%g23(:,:,:), this%fil, 1, this%x_bc,-this%y_bc,-this%z_bc)
+                        call this%filter(this%g31(:,:,:), this%fil, 1,-this%x_bc, this%y_bc,-this%z_bc)
+                        call this%filter(this%g32(:,:,:), this%fil, 1, this%x_bc,-this%y_bc,-this%z_bc)
+                        call this%filter(this%g33(:,:,:), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+                    end if
                 end if
             end if
             
-            call hook_bc(this%decomp, this%mesh, this%fields, this%tsim)
+            call hook_bc(this%decomp, this%mesh, this%fields, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             call this%post_bc()
         end do
 
@@ -754,8 +866,12 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
         real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtplast
 
-        call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
-        call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
+        if(this%eostype == 1) then
+            call this%sgas%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
+            call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
+        else
+            call this%geneos%get_sos(this%rho0,this%rho,this%devstress,cs)     ! Speed of sound
+        endif
 
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
                + cs*sqrt( one/(this%dx**two) + one/(this%dy**two) + one/(this%dz**two) ))
@@ -815,14 +931,21 @@ contains
         this%v = rhov * onebyrho
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
+       
+        if(this%eostype == 1) then 
+            call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+            call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
         
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)
-        
-        call this%sgas%get_T(this%e,this%T)
-        call this%sgas%get_p(this%rho,(this%e-this%eel),this%p)
+            call this%sgas%get_T(this%e,this%T)
+            call this%sgas%get_p(this%rho,(this%e-this%eel),this%p)
 
-        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+            call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+        else
+            call this%geneos%get_p_devstress(this%rho0, this%g, this%rho, this%ent, this%p, this%devstress)
+            call this%geneos%get_T(this%e, this%T)
+        endif
+
+        this%ent = zero
 
     end subroutine
 
@@ -842,16 +965,20 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6) :: finger, fingersq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: trG, trG2, detG
 
-        this%e = this%e - this%eel ! Get only hydrodynamic part
+        if(this%eostype == 1) then 
+            this%e = this%e - this%eel ! Get only hydrodynamic part
 
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
-        call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)  ! Update elastic energy
-        
-        call this%sgas%get_e_from_p(this%rho,this%p,this%e)  ! Update hydrodynamic energy
-        this%e = this%e + this%eel ! Combine both energies
-        call this%sgas%get_T(this%e,this%T)  ! Get updated temperature
+            call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+            call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel)  ! Update elastic energy
+            
+            call this%sgas%get_e_from_p(this%rho,this%p,this%e)  ! Update hydrodynamic energy
+            this%e = this%e + this%eel ! Combine both energies
+            call this%sgas%get_T(this%e,this%T)  ! Get updated temperature
 
-        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)  ! Get updated stress
+            call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)  ! Get updated stress
+        else
+            ! passive boundaries for now
+        endif
 
     end subroutine
 
@@ -866,15 +993,15 @@ contains
         real(rkind), dimension(:,:,:), pointer :: qx,qy,qz
         real(rkind), dimension(:,:,:), pointer :: penalty, tmp, detg
         real(rkind), dimension(:,:,:,:), pointer :: curlg
-        real(rkind), parameter :: etafac = one/32._rkind
+        !real(rkind) :: etafac = one/6._rkind
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
         
-        call this%gradient(this%u,dudx,dudy,dudz)
-        call this%gradient(this%v,dvdx,dvdy,dvdz)
-        call this%gradient(this%w,dwdx,dwdy,dwdz)
+        call this%gradient(this%u,dudx,dudy,dudz,-this%x_bc, this%y_bc, this%z_bc)
+        call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
+        call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
         call this%getPhysicalProperties()
 
@@ -921,28 +1048,28 @@ contains
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
-        penalty = etafac*(this%rho/detg/this%rho0-one)
+        penalty = (this%etafac/this%dt)*(this%rho/detg/this%rho0-one)
 
         tmp = -this%u*this%g11-this%v*this%g12-this%w*this%g13
-        call this%gradient(tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3))
+        call this%gradient(tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-this%x_bc,this%y_bc,this%z_bc)
         
-        call curl(this%decomp, this%der, this%g11, this%g12, this%g13, curlg)
+        call curl(this%decomp, this%der, this%g11, this%g12, this%g13, curlg,-this%x_bc,this%y_bc,this%z_bc)
         rhsg(:,:,:,1) = rhsg(:,:,:,1) + this%v*curlg(:,:,:,3) - this%w*curlg(:,:,:,2) + penalty*this%g11
         rhsg(:,:,:,2) = rhsg(:,:,:,2) + this%w*curlg(:,:,:,1) - this%u*curlg(:,:,:,3) + penalty*this%g12
         rhsg(:,:,:,3) = rhsg(:,:,:,3) + this%u*curlg(:,:,:,2) - this%v*curlg(:,:,:,1) + penalty*this%g13
  
         tmp = -this%u*this%g21-this%v*this%g22-this%w*this%g23
-        call this%gradient(tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6))
+        call this%gradient(tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6),this%x_bc,-this%y_bc,this%z_bc)
         
-        call curl(this%decomp, this%der, this%g21, this%g22, this%g23, curlg)
+        call curl(this%decomp, this%der, this%g21, this%g22, this%g23, curlg,this%x_bc,-this%y_bc,this%z_bc)
         rhsg(:,:,:,4) = rhsg(:,:,:,4) + this%v*curlg(:,:,:,3) - this%w*curlg(:,:,:,2) + penalty*this%g21
         rhsg(:,:,:,5) = rhsg(:,:,:,5) + this%w*curlg(:,:,:,1) - this%u*curlg(:,:,:,3) + penalty*this%g22
         rhsg(:,:,:,6) = rhsg(:,:,:,6) + this%u*curlg(:,:,:,2) - this%v*curlg(:,:,:,1) + penalty*this%g23
  
         tmp = -this%u*this%g31-this%v*this%g32-this%w*this%g33
-        call this%gradient(tmp,rhsg(:,:,:,7),rhsg(:,:,:,8),rhsg(:,:,:,9))
+        call this%gradient(tmp,rhsg(:,:,:,7),rhsg(:,:,:,8),rhsg(:,:,:,9),this%x_bc,this%y_bc,-this%z_bc)
 
-        call curl(this%decomp, this%der, this%g31, this%g32, this%g33, curlg)
+        call curl(this%decomp, this%der, this%g31, this%g32, this%g33, curlg,this%x_bc,this%y_bc,-this%z_bc)
         rhsg(:,:,:,7) = rhsg(:,:,:,7) + this%v*curlg(:,:,:,3) - this%w*curlg(:,:,:,2) + penalty*this%g31
         rhsg(:,:,:,8) = rhsg(:,:,:,8) + this%w*curlg(:,:,:,1) - this%u*curlg(:,:,:,3) + penalty*this%g32
         rhsg(:,:,:,9) = rhsg(:,:,:,9) + this%u*curlg(:,:,:,2) - this%v*curlg(:,:,:,1) + penalty*this%g33
@@ -966,23 +1093,34 @@ contains
 
         real(rkind), dimension(:,:,:,:), pointer :: flux
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
-        integer :: i
 
         flux => this%ybuf(:,:,:,1:5)
         xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
 
         flux(:,:,:,1) = this%Wcnsrv(:,:,:,2)   ! rho*u
-        flux(:,:,:,2) = this%Wcnsrv(:,:,:,2)*this%u + this%p - tauxx
-        flux(:,:,:,3) = this%Wcnsrv(:,:,:,2)*this%v          - tauxy
-        flux(:,:,:,4) = this%Wcnsrv(:,:,:,2)*this%w          - tauxz
-        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz - qx
+        call transpose_y_to_x(flux(:,:,:,1),xtmp1,this%decomp)
+        call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2))
+        call transpose_x_to_y(xtmp2,flux(:,:,:,1),this%decomp)
 
-        ! Now, get the x-derivative of the fluxes
-        do i=1,5
-            call transpose_y_to_x(flux(:,:,:,i),xtmp1,this%decomp)
-            call this%der%ddx(xtmp1,xtmp2)
-            call transpose_x_to_y(xtmp2,flux(:,:,:,i),this%decomp)
-        end do
+        flux(:,:,:,2) = this%Wcnsrv(:,:,:,2)*this%u + this%p - tauxx
+        call transpose_y_to_x(flux(:,:,:,2),xtmp1,this%decomp)
+        call this%der%ddx(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+        call transpose_x_to_y(xtmp2,flux(:,:,:,2),this%decomp)
+
+        flux(:,:,:,3) = this%Wcnsrv(:,:,:,2)*this%v          - tauxy
+        call transpose_y_to_x(flux(:,:,:,3),xtmp1,this%decomp)
+        call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2))
+        call transpose_x_to_y(xtmp2,flux(:,:,:,3),this%decomp)
+
+        flux(:,:,:,4) = this%Wcnsrv(:,:,:,2)*this%w          - tauxz
+        call transpose_y_to_x(flux(:,:,:,4),xtmp1,this%decomp)
+        call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2))
+        call transpose_x_to_y(xtmp2,flux(:,:,:,4),this%decomp)
+
+        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz + qx
+        call transpose_y_to_x(flux(:,:,:,5),xtmp1,this%decomp)
+        call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2))
+        call transpose_x_to_y(xtmp2,flux(:,:,:,5),this%decomp)
 
         ! Add to rhs
         rhs = rhs - flux
@@ -999,24 +1137,29 @@ contains
 
         real(rkind), dimension(:,:,:,:), pointer :: flux
         real(rkind), dimension(:,:,:), pointer :: ytmp1
-        integer :: i
 
         flux => this%ybuf(:,:,:,1:5)
         ytmp1 => this%ybuf(:,:,:,6)
 
         flux(:,:,:,1) = this%Wcnsrv(:,:,:,3)   ! rho*v
+        call this%der%ddy(flux(:,:,:,1),ytmp1,-this%y_bc(1),-this%y_bc(2))
+        rhs(:,:,:,1) = rhs(:,:,:,1) - ytmp1
+
         flux(:,:,:,2) = this%Wcnsrv(:,:,:,3)*this%u          - tauxy
+        call this%der%ddy(flux(:,:,:,2),ytmp1,-this%y_bc(1),-this%y_bc(2))
+        rhs(:,:,:,2) = rhs(:,:,:,2) - ytmp1
+
         flux(:,:,:,3) = this%Wcnsrv(:,:,:,3)*this%v + this%p - tauyy
+        call this%der%ddy(flux(:,:,:,3),ytmp1,this%y_bc(1),this%y_bc(2))
+        rhs(:,:,:,3) = rhs(:,:,:,3) - ytmp1
+
         flux(:,:,:,4) = this%Wcnsrv(:,:,:,3)*this%w          - tauyz
-        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauyy)*this%v - this%u*tauxy - this%w*tauyz - qy
+        call this%der%ddy(flux(:,:,:,4),ytmp1,-this%y_bc(1),-this%y_bc(2))
+        rhs(:,:,:,4) = rhs(:,:,:,4) - ytmp1
 
-        ! Now, get the x-derivative of the fluxes
-        do i=1,5
-            call this%der%ddy(flux(:,:,:,i),ytmp1)
-
-            ! Add to rhs
-            rhs(:,:,:,i) = rhs(:,:,:,i) - ytmp1
-        end do
+        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauyy)*this%v - this%u*tauxy - this%w*tauyz + qy
+        call this%der%ddy(flux(:,:,:,5),ytmp1,-this%y_bc(1),-this%y_bc(2))
+        rhs(:,:,:,5) = rhs(:,:,:,5) - ytmp1
 
     end subroutine
 
@@ -1030,23 +1173,34 @@ contains
 
         real(rkind), dimension(:,:,:,:), pointer :: flux
         real(rkind), dimension(:,:,:), pointer :: ztmp1,ztmp2
-        integer :: i
 
         flux => this%ybuf(:,:,:,1:5)
         ztmp1 => this%zbuf(:,:,:,1); ztmp2 => this%zbuf(:,:,:,2)
 
         flux(:,:,:,1) = this%Wcnsrv(:,:,:,4)   ! rho*w
-        flux(:,:,:,2) = this%Wcnsrv(:,:,:,4)*this%u          - tauxz
-        flux(:,:,:,3) = this%Wcnsrv(:,:,:,4)*this%v          - tauyz
-        flux(:,:,:,4) = this%Wcnsrv(:,:,:,4)*this%w + this%p - tauzz
-        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauzz)*this%w - this%u*tauxz - this%v*tauyz - qz
+        call transpose_y_to_z(flux(:,:,:,1),ztmp1,this%decomp)
+        call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2))
+        call transpose_z_to_y(ztmp2,flux(:,:,:,1),this%decomp)
 
-        ! Now, get the x-derivative of the fluxes
-        do i=1,5
-            call transpose_y_to_z(flux(:,:,:,i),ztmp1,this%decomp)
-            call this%der%ddz(ztmp1,ztmp2)
-            call transpose_z_to_y(ztmp2,flux(:,:,:,i),this%decomp)
-        end do
+        flux(:,:,:,2) = this%Wcnsrv(:,:,:,4)*this%u          - tauxz
+        call transpose_y_to_z(flux(:,:,:,2),ztmp1,this%decomp)
+        call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2))
+        call transpose_z_to_y(ztmp2,flux(:,:,:,2),this%decomp)
+
+        flux(:,:,:,3) = this%Wcnsrv(:,:,:,4)*this%v          - tauyz
+        call transpose_y_to_z(flux(:,:,:,3),ztmp1,this%decomp)
+        call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2))
+        call transpose_z_to_y(ztmp2,flux(:,:,:,3),this%decomp)
+
+        flux(:,:,:,4) = this%Wcnsrv(:,:,:,4)*this%w + this%p - tauzz
+        call transpose_y_to_z(flux(:,:,:,4),ztmp1,this%decomp)
+        call this%der%ddz(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+        call transpose_z_to_y(ztmp2,flux(:,:,:,4),this%decomp)
+
+        flux(:,:,:,5) = (this%Wcnsrv(:,:,:,5) + this%p - tauzz)*this%w - this%u*tauxz - this%v*tauyz + qz
+        call transpose_y_to_z(flux(:,:,:,5),ztmp1,this%decomp)
+        call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2))
+        call transpose_z_to_y(ztmp2,flux(:,:,:,5),this%decomp)
 
         ! Add to rhs
         rhs = rhs - flux
@@ -1083,59 +1237,59 @@ contains
         
         ! Get 4th derivative in X
         call transpose_y_to_x(func,xtmp1,this%decomp)
-        call this%der%d2dx2(xtmp1,xtmp2)
-        call this%der%d2dx2(xtmp2,xtmp1)
+        call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+        call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
         xtmp2 = xtmp1*this%dx**6
         call transpose_x_to_y(xtmp2,mustar,this%decomp)
         
         ! Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
-        call this%der%d2dz2(ztmp1,ztmp2)
-        call this%der%d2dz2(ztmp2,ztmp1)
+        call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+        call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
         ztmp2 = ztmp1*this%dz**6
         call transpose_z_to_y(ztmp2,ytmp1,this%decomp)
         mustar = mustar + ytmp1
         
         ! Get 4th derivative in Y
-        call this%der%d2dy2(func,ytmp1)
-        call this%der%d2dy2(ytmp1,ytmp2)
+        call this%der%d2dy2(func,ytmp1,this%y_bc(1),this%y_bc(2))
+        call this%der%d2dy2(ytmp1,ytmp2,this%y_bc(1),this%y_bc(2))
         ytmp1 = ytmp2*this%dy**6
         mustar = mustar + ytmp1
 
         mustar = this%Cmu*this%rho*abs(mustar)
         
         ! Filter mustar
-        call this%filter(mustar, this%gfil, 2)
+        call this%filter(mustar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
         
         ! -------- Artificial Bulk Viscosity --------
         
         func = dudx + dvdy + dwdz      ! dilatation
         
         ! Step 1: Get components of grad(rho) squared individually
-        call this%gradient(this%rho,ytmp1,ytmp2,ytmp3) ! Does not use any Y buffers
+        call this%gradient(this%rho,ytmp1,ytmp2,ytmp3,this%x_bc,this%y_bc,this%z_bc) ! Does not use any Y buffers
         ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
 
         ! Step 2: Get 4th derivative in X
         call transpose_y_to_x(func,xtmp1,this%decomp)
-        call this%der%d2dx2(xtmp1,xtmp2)
-        call this%der%d2dx2(xtmp2,xtmp1)
+        call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+        call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
         xtmp2 = xtmp1*this%dx**4
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         bulkstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
-        call this%der%d2dz2(ztmp1,ztmp2)
-        call this%der%d2dz2(ztmp2,ztmp1)
+        call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+        call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
         ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
         bulkstar = bulkstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
         ! Step 4: Get 4th derivative in Y
-        call this%der%d2dy2(func,ytmp4)
-        call this%der%d2dy2(ytmp4,ytmp5)
+        call this%der%d2dy2(func,ytmp4,this%y_bc(1),this%y_bc(2))
+        call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
         ytmp4 = ytmp5*this%dy**4
         bulkstar = bulkstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
@@ -1153,46 +1307,50 @@ contains
         bulkstar = this%Cbeta*this%rho*ytmp1*abs(bulkstar)
 
         ! Filter bulkstar
-        call this%filter(bulkstar, this%gfil, 2)
+        call this%filter(bulkstar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
 
         ! -------- Artificial Conductivity --------
 
         ! Step 1: Get components of grad(e) squared individually
-        call this%gradient(this%e,ytmp1,ytmp2,ytmp3) ! Does not use any Y buffers
+        call this%gradient(this%e,ytmp1,ytmp2,ytmp3,this%x_bc,this%y_bc,this%z_bc) ! Does not use any Y buffers
         ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
 
         ! Step 2: Get 4th derivative in X
         call transpose_y_to_x(this%e,xtmp1,this%decomp)
-        call this%der%d2dx2(xtmp1,xtmp2)
-        call this%der%d2dx2(xtmp2,xtmp1)
+        call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+        call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
         xtmp2 = xtmp1*this%dx**4
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         kapstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(this%e,ztmp1,this%decomp)
-        call this%der%d2dz2(ztmp1,ztmp2)
-        call this%der%d2dz2(ztmp2,ztmp1)
+        call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+        call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
         ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
         kapstar = kapstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
-        call this%der%d2dy2(this%e,ytmp4)
-        call this%der%d2dy2(ytmp4,ytmp5)
+        call this%der%d2dy2(this%e,ytmp4,this%y_bc(1),this%y_bc(2))
+        call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
         ytmp4 = ytmp5*this%dy**4
         kapstar = kapstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
-        ! Now, all ytmps are free to use
-        call this%sgas%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound - hydrodynamic part
-        call this%elastic%get_sos(this%rho0,ytmp1)     ! Speed of sound - elastic part
+        ! Now, all ytmps are free to us
+        if(this%eostype == 1) then
+            call this%sgas%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound - hydrodynamic part
+            call this%elastic%get_sos(this%rho0,ytmp1)     ! Speed of sound - elastic part
+        else
+            call this%geneos%get_sos(this%rho0,this%rho,this%devstress,ytmp1)     ! Speed of sound
+        endif
 
         kapstar = this%Ckap*this%rho*ytmp1*abs(kapstar)/this%T
 
         ! Filter kapstar
-        call this%filter(kapstar, this%gfil, 2)
+        call this%filter(kapstar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
 
         ! Now, add to physical fluid properties
         this%mu   = this%mu   + mustar
@@ -1201,11 +1359,13 @@ contains
 
     end subroutine
 
-    subroutine filter(this,arr,myfil,numtimes)
+    subroutine filter(this,arr,myfil,numtimes,x_bc_,y_bc_,z_bc_)
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
         type(filters), target, optional, intent(in) :: myfil
         integer, optional, intent(in) :: numtimes
+        integer, dimension(2), optional, intent(in) :: x_bc_, y_bc_, z_bc_
+        integer, dimension(2) :: x_bc, y_bc, z_bc
         
         type(filters), pointer :: fil2use
         integer :: times2fil
@@ -1239,24 +1399,27 @@ contains
         tmp1_in_z => this%zbuf(:,:,:,lastz)
         tmp2_in_z => this%zbuf(:,:,:,lastz-1)
        
+        x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
+        y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
+        z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
         
         ! First filter in y
-        call fil2use%filtery(arr,tmp_in_y)
+        call fil2use%filtery(arr,tmp_in_y,y_bc(1),y_bc(2))
         ! Subsequent refilters 
         do idx = 1,times2fil-1
             arr = tmp_in_y
-            call fil2use%filtery(arr,tmp_in_y)
+            call fil2use%filtery(arr,tmp_in_y,y_bc(1),y_bc(2))
         end do
         
         ! Then transpose to x
         call transpose_y_to_x(tmp_in_y,tmp1_in_x,this%decomp)
 
         ! First filter in x
-        call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+        call fil2use%filterx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
         ! Subsequent refilters
         do idx = 1,times2fil-1
             tmp1_in_x = tmp2_in_x
-            call fil2use%filterx(tmp1_in_x,tmp2_in_x)
+            call fil2use%filterx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
         end do 
 
         ! Now transpose back to y
@@ -1266,11 +1429,11 @@ contains
         call transpose_y_to_z(tmp_in_y,tmp1_in_z,this%decomp)
 
         !First filter in z
-        call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+        call fil2use%filterz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
         ! Subsequent refilters
         do idx = 1,times2fil-1
             tmp1_in_z = tmp2_in_z
-            call fil2use%filterz(tmp1_in_z,tmp2_in_z)
+            call fil2use%filterz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
         end do 
 
         ! Now transpose back to y
@@ -1355,18 +1518,18 @@ contains
         tmp1_in_y => this%ybuf(:,:,:,1)
         
         ! Step 1: Get qy (dvdy is destroyed)
-        call der%ddy(this%T,tmp1_in_y)
+        call der%ddy(this%T,tmp1_in_y,this%y_bc(1),this%y_bc(2))
         duidxj(:,:,:,qyidx) = -this%kap*tmp1_in_y
 
         ! Step 2: Get qx (dudx is destroyed)
         call transpose_y_to_x(this%T,tmp1_in_x,this%decomp)
-        call der%ddx(tmp1_in_x,tmp2_in_x)
+        call der%ddx(tmp1_in_x,tmp2_in_x,this%x_bc(1),this%x_bc(2))
         call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
         duidxj(:,:,:,qxidx) = -this%kap*tmp1_in_y
 
         ! Step 3: Get qz (dwdz is destroyed)
         call transpose_y_to_z(this%T,tmp1_in_z,this%decomp)
-        call der%ddz(tmp1_in_z,tmp2_in_z)
+        call der%ddz(tmp1_in_z,tmp2_in_z,this%z_bc(1),this%z_bc(2))
         call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
         duidxj(:,:,:,qzidx) = -this%kap*tmp1_in_y
 
