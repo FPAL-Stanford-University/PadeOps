@@ -155,7 +155,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,eostype,eosparams,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rho0,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,eps,third,half,one,two,pi
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
@@ -191,7 +191,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,eostype,eospara
 
     if(eostype==1) then
         gam   = eosparams(1);                           PInf = eosparams(3);
-        shmod = eosparams(4);   yield = eosparams(5);   tau0 = eosparams(6);
+        mu = eosparams(4);   yield = eosparams(5);   tau0 = eosparams(6);
     else
     endif
 
