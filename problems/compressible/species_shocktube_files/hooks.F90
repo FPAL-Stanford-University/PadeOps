@@ -111,6 +111,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         call mix%update(Ys)
         rho = p / (mix%Rgas * T)
 
+        print*, "Max rho = ", maxval(rho), ", Min rho = ", minval(rho)
+
         u   = zero
         v   = zero
         w   = zero
