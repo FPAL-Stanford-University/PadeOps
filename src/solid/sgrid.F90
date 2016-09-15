@@ -722,6 +722,7 @@ contains
             
             ! Get the new time step
             call this%get_dt(stability)
+            call message(2,"Stability limit: "//trim(stability))
             
             ! Check for visualization condition and adjust time step
             if ( (this%tviz > zero) .AND. (this%tsim + this%dt >= this%tviz * this%viz%vizcount) ) then
@@ -812,7 +813,7 @@ contains
             
             call this%get_primitive()
 
-            if (.NOT. this%explPlast) then
+            if (.NOT. this%explPlast .and. isub==RK45_steps) then
                 if (this%plastic) then
                     ! Effect plastic deformations
                     if(this%eostype == 1) call this%elastic%plastic_deformation(this%g)
@@ -861,7 +862,7 @@ contains
     subroutine get_dt(this,stability)
         use reductions, only : P_MAXVAL
         class(sgrid), target, intent(inout) :: this
-        character(len=*), intent(out) :: stability
+        character(len=clen), intent(out) :: stability
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
         real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtplast
 
@@ -895,7 +896,7 @@ contains
             else if ( this%dt > dtkap ) then
                 this%dt = dtkap
                 stability = 'conductive'
-            else if ( this%dt > dtplast .AND. this%plastic) then
+            else if ( this%dt > dtplast .and. this%explPlast .and. this%plastic) then
                 this%dt = dtplast
                 stability = 'plastic'
             end if

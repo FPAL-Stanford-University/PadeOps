@@ -1,4 +1,4 @@
-module impact_data
+module pistonhowell_data
     use kind_parameters,  only: rkind
     use constants,        only: one,eight
     implicit none
@@ -15,7 +15,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: half,one
     use decomp_2d,        only: decomp_info
 
-    use impact_data
+    use pistonhowell_data
 
     implicit none
 
@@ -55,28 +55,25 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,eostype,eosparams,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PInf,tau0,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
     
-    use impact_data
+    use pistonhowell_data
 
     implicit none
     character(len=*),                                               intent(in)    :: inputfile
     type(decomp_info),                                              intent(in)    :: decomp
     real(rkind),                                                    intent(in)    :: dx,dy,dz
-    integer,                                                        intent(in)    :: eostype
-    real(rkind), dimension(:),                                      intent(inout) :: eosparams
-    real(rkind),                                          optional, intent(inout) :: rho0, tstop, dt, tviz
+    real(rkind),                                          optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz, yield, tau0
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
-    real(rkind) :: mu, gam, PInf, yield, tau0
 
     namelist /PROBINPUT/  uimpact, pinit, thick
     
@@ -96,14 +93,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,eostype,eospara
                g23 => fields(:,:,:,g23_index), g31 => fields(:,:,:,g31_index), & 
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-       
-        if(thick<zero) then 
-            tmp = tanh( (x-half)/(abs(thick)) )
-        else
-            tmp = tanh( (x-half)/(thick*dx) )
-        endif
+        
+        !tmp = tanh( (x-half)/(thick*dx) )
+        tmp = tanh( (x-half)/(0.01d0) )
 
-        u   = -uimpact*tmp
+        u   = uimpact*half*(one-tmp)
         v   = zero
         w   = zero
         p   = pinit
@@ -120,7 +114,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,eostype,eospara
 
 end subroutine
 
-subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x_bc,y_bc,z_bc)
+subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,der)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
@@ -129,7 +123,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x
     use decomp_2d,        only: decomp_info
     use DerivativesMod,   only: derivatives
 
-    use impact_data
+    use pistonhowell_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -139,14 +133,10 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
     type(derivatives),               intent(in) :: der
-    real(rkind), dimension(2),       intent(in) :: x_bc,y_bc,z_bc
     integer                                     :: outputunit=229
 
     character(len=clen) :: outputfile, velstr
     integer :: i,j,k
-    integer :: indx(1), nx, indhalf, numshocks
-    real(rkind) :: xshock(2), betmax
-    real(rkind), allocatable, dimension(:) :: bettmp(:)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -161,11 +151,11 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x
                syy => fields(:,:,:, syy_index), syz => fields(:,:,:, syz_index), szz => fields(:,:,:, szz_index)  )
 
 
-        write(velstr,'(I3.3)') int(uimpact)
-        write(outputfile,'(2A)') trim(outputdir),"/tec_impact_"//trim(velstr)//".dat"
+        write(velstr,'(I4.4)') int(uimpact)
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/pistonhowell_"//trim(velstr)//"_", vizcount, ".dat"
 
         if(vizcount==0) then
-          open(unit=outputunit, file=trim(outputfile), form='formatted', status='unknown')
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
           write(outputunit,'(200a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar"'
           write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
           write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
@@ -181,7 +171,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x
           end do
           close(outputunit)
         else
-          open(unit=outputunit, file=trim(outputfile), form='formatted', status='old', action='write',position='append')
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
           write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
           write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
           write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
@@ -198,43 +188,23 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x
           close(outputunit)
         endif
 
-        ! determine shock speeds
-        nx = decomp%ysz(1); indhalf = nx/2
-        allocate(bettmp(nx))
-        bettmp = bulk(:,1,1)
-        betmax = maxval(bettmp(indhalf:nx));  
-        do i = nx, nx/2, -1
-          if(bettmp(i)<0.01d0*betmax) bettmp(i) = zero
-        enddo
-        numshocks = 0; xshock = 0.5d0
-        do i = nx/2+1, nx-1
-          if((bettmp(i-1) < bettmp(i)) .and. (bettmp(i)>bettmp(i+1))) then
-            numshocks = numshocks+1
-            xshock(numshocks) = x(i,1,1)
-            if(numshocks>2) write(*,*) 'More than 2 shocks detected. Check details.'
-          endif
-        enddo
-        write(111,*) tsim, xshock(1), xshock(2)
-        deallocate(bettmp)
-
     end associate
 end subroutine
 
-subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
+subroutine hook_bc(decomp,mesh,fields,tsim)
     use kind_parameters,  only: rkind
     use constants,        only: zero, one
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
 
-    use impact_data
+    use pistonhowell_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-    real(rkind), dimension(2),       intent(in)    :: x_bc,y_bc,z_bc
 
     integer :: nx
 
@@ -261,7 +231,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
         g31( 1,:,:) = zero; g32( 1,:,:) = zero; g33( 1,:,:) = one
 
         rho(nx,:,:) = rho_0
-        u  (nx,:,:) = -uimpact
+        u  (nx,:,:) = zero
         v  (nx,:,:) = zero
         w  (nx,:,:) = zero
         p  (nx,:,:) = pinit
@@ -280,7 +250,7 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
     use exits,            only: message
     use reductions,       only: P_MAXVAL
 
-    use impact_data
+    use pistonhowell_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -321,9 +291,5 @@ subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
     end associate
-end subroutine
-
-subroutine hook_finalize()
-
 end subroutine
 
