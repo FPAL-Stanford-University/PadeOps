@@ -10,7 +10,7 @@ os=`uname`
 case "$os" in
     Linux)
         cd dependencies
-        if [[ ! -d "fftw-3.3.4" ]]; then
+        if [ ! -d "fftw-3.3.4" ]; then
             tar -zxf fftw-3.3.4.tar.gz
         fi
         cd fftw-3.3.4
