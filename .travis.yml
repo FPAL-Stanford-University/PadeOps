@@ -1,0 +1,35 @@
+language: generic
+
+sudo: required
+
+dist: trusty
+os:
+  - linux
+
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - gfortran-6
+
+env:
+  - MPI_IMPL=mpich
+
+before_install:
+  - sh ./travis/install-mpi.sh $MPI_IMPL
+  - export PATH="$HOME/MPICH/bin:$HOME/OpenMPI/bin:$PATH"
+  - sh ./travis/install-fftw.sh
+  - sh ./travis/install-2decomp.sh
+  - sh ./travis/install-Lib_VTK_IO.sh
+
+install:
+  - |
+    if [[ ! -d "build" ]]; then
+      mkdir build
+    fi
+  - source setup/SetupEnv_Travis_GNU.sh
+  - $CC -show
+  - $CXX -show
+  - $FC -show
+  - cd build; cmake ..; make
