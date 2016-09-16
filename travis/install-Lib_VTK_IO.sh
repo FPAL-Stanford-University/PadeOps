@@ -10,11 +10,11 @@ os=`uname`
 case "$os" in
     Linux)
         cd dependencies
-        if [[ ! -d "Lib_VTK_IO" ]]; then
+        if [ ! -d "Lib_VTK_IO" ]; then
             tar -zxf Lib_VTK_IO.tar.gz
         fi
         cd Lib_VTK_IO
-        if [[ ! -d "build" ]]; then
+        if [ ! -d "build" ]; then
             mkdir build
         fi
         cd build

@@ -10,7 +10,7 @@ os=`uname`
 case "$os" in
     Linux)
         cd dependencies
-        if [[ ! -d "2decomp_fft" ]]; then
+        if [ ! -d "2decomp_fft" ]; then
             tar -zxf 2decomp_fft-1.5.847.tar.gz
         fi
         cd 2decomp_fft
