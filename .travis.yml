@@ -1,5 +1,10 @@
 language: generic
 
+notifications:
+  slack:
+    rooms:
+      - padeops:zeGgsFLaMHZ140ZhrABTQvLf#travis
+
 sudo: required
 
 dist: trusty
