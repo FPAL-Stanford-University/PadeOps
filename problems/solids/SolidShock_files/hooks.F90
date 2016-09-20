@@ -251,23 +251,28 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
 
 end subroutine
 
-subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x_bc,y_bc,z_bc)
+subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
+    use DerivativesMod,   only: derivatives
+    use FiltersMod,       only: filters
+    
 
     use SolidShock_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
+    type(filters),                   intent(in) :: fil
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
-    real(rkind), dimension(2),       intent(in)    :: x_bc, y_bc, z_bc
+    real(rkind), dimension(2),       intent(in) :: x_bc, y_bc, z_bc
     integer                                     :: outputunit=229
 
     character(len=500) :: outputfile, str
@@ -446,3 +451,6 @@ subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
     end associate
 end subroutine
 
+subroutine hook_finalize
+
+end subroutine

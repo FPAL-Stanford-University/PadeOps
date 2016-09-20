@@ -720,3 +720,6 @@ subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
     end associate
 end subroutine
 
+subroutine hook_finalize
+
+end subroutine 
