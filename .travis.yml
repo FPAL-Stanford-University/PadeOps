@@ -18,16 +18,9 @@ addons:
       - ubuntu-toolchain-r-test
     packages:
         - gfortran-6
+        - build-essential
         - libblas-dev
         - liblapack-dev
-        - liblapack-doc-man
-        - liblapack-doc
-        - liblapack-pic
-        - liblapack3
-        - liblapack-test
-        - liblapack3gf
-        - liblapacke
-        - liblapacke-dev
 
 env:
   - MPI_IMPL=mpich
