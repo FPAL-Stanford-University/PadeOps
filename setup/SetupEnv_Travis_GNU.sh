@@ -2,7 +2,7 @@
 
 CWD=`pwd`
 export COMPILER_ID=GNU
-export FC=mpif90
+export FC="mpif90 -L/usr/lib"
 export CC=mpicc
 export CXX=mpicxx
 export FFTW_PATH=${HOME}/FFTW
