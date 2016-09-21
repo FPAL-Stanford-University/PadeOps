@@ -1,6 +1,7 @@
 language: generic
 
 notifications:
+  email: false
   slack:
     rooms:
       - padeops:zeGgsFLaMHZ140ZhrABTQvLf#travis
@@ -32,6 +33,8 @@ env:
   - MPI_IMPL=mpich
 
 before_install:
+  - ls /usr/lib
+  - nm /usr/lib/liblapack.a | grep dgesvd
   - sh ./travis/install-mpi.sh $MPI_IMPL
   - export PATH="$HOME/MPICH/bin:$HOME/OpenMPI/bin:$PATH"
   - sh ./travis/install-fftw.sh
@@ -47,4 +50,4 @@ install:
   - $CC -show
   - $CXX -show
   - $FC -show
-  - cd build; cmake ..; make
+  - cd build; cmake ..; make VERBOSE=1
