@@ -28,6 +28,8 @@ env:
 before_install:
   - ls /usr/lib
   - nm /usr/lib/liblapack.a | grep dgesvd
+  - ls /usr/local/lib
+  - nm /usr/local/lib/liblapack.a | grep dgesvd
   - echo $LD_LIBRARY_PATH
   - sh ./travis/install-mpi.sh $MPI_IMPL
   - export PATH="$HOME/MPICH/bin:$HOME/OpenMPI/bin:$PATH"
