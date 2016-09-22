@@ -1726,6 +1726,11 @@ contains
         this%runningSum = zero
         this%TemporalMnNOW = zero
         this%zStats2dump = zero
+        this%inst_horz_avg = zero
+        if(this%useWindTurbines) then
+            this%inst_horz_avg_turb = zero
+            this%runningSum_sc_turb = zero
+        endif
         nullify(gpC)
     end subroutine
 
@@ -1849,6 +1854,8 @@ contains
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
             rbuff3E(:,:,1) = -(this%ustar**2)
             call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
+            call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,3),this%gpC)
             call this%compute_z_mean(rbuff3, this%tau13_mean)
             if (this%normByustar)this%tau13_mean = this%tau13_mean/(this%ustar**2)
 
@@ -1863,6 +1870,8 @@ contains
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
             rbuff3E(:,:,1) = -(this%ustar**2)*this%Vmn/this%Umn
             call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
+            call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,5),this%gpC)
             call this%compute_z_mean(rbuff3, this%tau23_mean)
             if (this%normByustar)this%tau23_mean = this%tau23_mean/(this%ustar**2)
 
