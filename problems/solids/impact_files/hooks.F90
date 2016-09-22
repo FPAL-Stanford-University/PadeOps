@@ -116,6 +116,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
         rho = rho0 * tmp
 
+        if(eostype==3) then
+          T = pinit/(eosparams(7)*rho0*eosparams(5)) + eosparams(6) ! = pinit/(gamma*rho0*CV) + T0
+        endif
+
     end associate
 
 end subroutine
@@ -171,15 +175,15 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
 
         if(vizcount==0) then
           open(unit=outputunit, file=trim(outputfile), form='formatted', status='unknown')
-          write(outputunit,'(200a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar"'
+          write(outputunit,'(200a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar","T"'
           write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
           write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
           do k=1,decomp%ysz(3)
            do j=1,decomp%ysz(2)
             do i=1,decomp%ysz(1)
-                write(outputunit,'(27ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                write(outputunit,'(28ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
                                                g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
-                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k)
+                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), T(i,j,k)
           
             end do
            end do
@@ -193,9 +197,9 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
           do k=1,decomp%ysz(3)
            do j=1,decomp%ysz(2)
             do i=1,decomp%ysz(1)
-                write(outputunit,'(24ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                write(outputunit,'(25ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
                                                g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
-                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k)
+                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), T(i,j,k)
           
             end do
            end do
@@ -203,24 +207,24 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
           close(outputunit)
         endif
 
-        ! determine shock speeds
-        nx = decomp%ysz(1); indhalf = nx/2
-        allocate(bettmp(nx))
-        bettmp = bulk(:,1,1)
-        betmax = maxval(bettmp(indhalf:nx));  
-        do i = nx, nx/2, -1
-          if(bettmp(i)<0.01d0*betmax) bettmp(i) = zero
-        enddo
-        numshocks = 0; xshock = 0.5d0
-        do i = nx/2+1, nx-1
-          if((bettmp(i-1) < bettmp(i)) .and. (bettmp(i)>bettmp(i+1))) then
-            numshocks = numshocks+1
-            xshock(numshocks) = x(i,1,1)
-            if(numshocks>2) write(*,*) 'More than 2 shocks detected. Check details.'
-          endif
-        enddo
-        write(111,*) tsim, xshock(1), xshock(2)
-        deallocate(bettmp)
+        !! determine shock speeds
+        !nx = decomp%ysz(1); indhalf = nx/2
+        !allocate(bettmp(nx))
+        !bettmp = bulk(:,1,1)
+        !betmax = maxval(bettmp(indhalf:nx));  
+        !do i = nx, nx/2, -1
+        !  if(bettmp(i)<0.01d0*betmax) bettmp(i) = zero
+        !enddo
+        !numshocks = 0; xshock = 0.5d0
+        !do i = nx/2+1, nx-1
+        !  if((bettmp(i-1) < bettmp(i)) .and. (bettmp(i)>bettmp(i+1))) then
+        !    numshocks = numshocks+1
+        !    xshock(numshocks) = x(i,1,1)
+        !    if(numshocks>2) write(*,*) 'More than 2 shocks detected. Check details.'
+        !  endif
+        !enddo
+        !write(111,*) tsim, xshock(1), xshock(2)
+        !deallocate(bettmp)
 
     end associate
 end subroutine
@@ -278,10 +282,11 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,step,tsim)
+subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc,hookcond)
     use kind_parameters,  only: rkind
     use SolidGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use DerivativesMod,   only: derivatives
     use exits,            only: message
     use reductions,       only: P_MAXVAL
 
@@ -289,10 +294,13 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
-    integer,                         intent(in) :: step
-    real(rkind),                     intent(in) :: tsim
+    type(derivatives),               intent(in) :: der
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    integer,                         intent(in) :: step
+    real(rkind),                     intent(in) :: tsim, dt
+    real(rkind), dimension(2),       intent(in) :: x_bc,y_bc,z_bc
+    logical,            optional, intent(inout) :: hookcond
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -301,12 +309,9 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
        
-       !write(*,*) 'mu = ', mu
-       !write(*,*) 'bet = ', bulk
- 
-        !call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
-        !call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
-        !call message(2,"Maximum conductivity",P_MAXVAL(kap))
+        call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
+        call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
+        call message(2,"Maximum conductivity",P_MAXVAL(kap))
 
     end associate
 end subroutine

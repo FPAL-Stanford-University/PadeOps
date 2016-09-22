@@ -217,9 +217,6 @@ contains
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn,     &
                            gfilttimes, etafac
 
-        this%eostype = eostype
-
-
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
         read(unit=ioUnit, NML=INPUT)
@@ -240,6 +237,9 @@ contains
         this%nsteps = nsteps
 
         this%rho0 = rho0
+
+        this%eostype = eostype
+        write(*,*) 'eostype=', this%eostype
 
         this%Cmu = Cmu
         this%Cbeta = Cbeta
@@ -301,6 +301,7 @@ contains
             call this%elastic%init(shmod,yield)
         else
             ! general eos
+            this%tau0 = eosparams(9)    ! maybe move this to elastic or geneos
             if ( allocated(this%geneos) ) deallocate(this%geneos)
             allocate(this%geneos)
             call this%geneos%init(this%decomp,this%eostype,eosparams)
@@ -367,6 +368,7 @@ contains
         else
             ! energy already specified - not specifying primitive variables, so
             ! energy does not have to be computed from primitive variables
+            call this%geneos%get_e_from_rhoT(this%rho0, this%g, this%rho, this%T, this%e)
         endif
         
         ! Check if the initialization was okay
@@ -385,6 +387,12 @@ contains
             call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel) 
             call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
         else
+            allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+
+            detG = this%g11*(this%g22*this%g33-this%g23*this%g32) &
+                 - this%g12*(this%g21*this%g33-this%g31*this%g23) &
+                 + this%g13*(this%g21*this%g32-this%g31*this%g22)
+
             call this%geneos%get_p_devstress_T_sos(this%rho0, this%g, this%rho, this%e, this%Ent, this%p, this%T, this%devstress, this%sos)
         endif
         
@@ -415,6 +423,8 @@ contains
             deallocate( fingersq )
             deallocate( trG      )
             deallocate( trG2     )
+            deallocate( detG     )
+        elseif(this%eostype == 3) then
             deallocate( detG     )
         endif
 
@@ -671,6 +681,7 @@ contains
         ! ------------------------------------------------
 
         call this%get_dt(stability)
+        write(*,*) 'dt = ', this%dt, stability
 
         ! Write out initial conditions
         call hook_output(this%decomp, this%der, this%fil, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount, this%x_bc, this%y_bc, this%z_bc)
@@ -702,8 +713,6 @@ contains
         if ( (this%tstop <= zero) .AND. (this%nsteps <= 0) ) then
             call GracefulExit('No stopping criterion set. Set either tstop or nsteps to be positive.', 345)
         end if
-        write(*,*) this%dt
-        write(*,*) stability
 
         ! Start the simulation while loop
         do while ( tcond .AND. stepcond .AND. (.NOT. hookcond) )
@@ -727,9 +736,7 @@ contains
             
             ! Get the new time step
             call this%get_dt(stability)
-        write(*,*) this%dt
-        write(*,*) stability
-            call message(2,"Stability limit: "//trim(stability))
+            write(*,*) 'dt = ', this%dt, stability
             
             ! Check for visualization condition and adjust time step
             if ( (this%tviz > zero) .AND. ((this%tsim + this%dt)*(one + eps) >= this%tviz * this%viz%vizcount) ) then
@@ -753,11 +760,6 @@ contains
                 stepcond = .FALSE.
             end if
 
-        write(*,*) '---At end of time loop---'
-        write(*,*) this%dt
-        write(*,*) stability
-        write(*,*) vizcond
-        write(*,*) '---At end of time loop---'
         end do
 
     end subroutine
@@ -782,6 +784,7 @@ contains
         Qtmpt = zero
 
         do isub = 1,RK45_steps
+            write(*,*) 'RKsubstep = ', isub
             call this%get_conserved()
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
@@ -883,6 +886,8 @@ contains
             call this%elastic%get_sos(this%rho0,cs)     ! Speed of sound - elastic part
         else
             !call this%geneos%get_sos(this%rho0,this%rho,this%devstress,cs)     ! Speed of sound -- all clubbed together in get_p_devstress_T_sos
+            cs = this%sos
+            write(*,*) maxval(cs), minval(cs)
         endif
 
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
@@ -1058,14 +1063,8 @@ contains
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
-        write(*,*) '--------' 
-        write(*,*) this%etafac, this%dt, this%rho0
-        write(*,*) maxval(this%rho), minval(this%rho)
-        write(*,*) maxval(detg), minval(detg)
-        write(*,*) '--------' 
         penalty = (this%etafac/this%dt)*(this%rho/detg/this%rho0-one)
         !write(*,*) this%rho/detg
-        write(*,*) '--------' 
 
         tmp = -this%u*this%g11-this%v*this%g12-this%w*this%g13
         call this%gradient(tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-this%x_bc,this%y_bc,this%z_bc)
@@ -1321,10 +1320,10 @@ contains
             ytmp1 = zero
         end where
 
-        bulkstar = this%Cbeta*this%rho*ytmp1*abs(bulkstar)
-
         ! Filter bulkstar
         call this%filter(bulkstar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
+
+        bulkstar = this%Cbeta*this%rho*ytmp1*abs(bulkstar)
 
         ! -------- Artificial Conductivity --------
 

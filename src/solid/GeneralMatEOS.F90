@@ -3,7 +3,7 @@ module GeneralMatEOS
     use kind_parameters, only: rkind
     use constants,       only: half,one,zero,third,twothird,sixth,three,two,six
     use EOSMod,          only: eos
-    use decomp_2d,       only: decomp_info
+    use decomp_2d,       only: decomp_info, nrank
 
     implicit none
 
@@ -47,10 +47,11 @@ module GeneralMatEOS
 
         procedure :: init
         procedure :: get_p_devstress_T_sos
+        procedure :: get_e_from_rhoT
         !procedure :: get_T
         !procedure :: get_sos
         procedure :: destroy
-
+ 
     end type
 
 contains
@@ -125,7 +126,6 @@ contains
     end subroutine
 
     subroutine get_p_devstress_T_sos(this,rho0,g,rho,e,entr,p,T,devstress,sos)
-        use decomp_2d, only: nrank
         class(generaleos), intent(inout) :: this
         real(rkind),                     intent(in)  :: rho0
         real(rkind), dimension(:,:,:,:), intent(in)  :: g
@@ -133,9 +133,9 @@ contains
         real(rkind), dimension(:,:,:),   intent(out) :: entr, p, T, sos
         real(rkind), dimension(:,:,:,:), intent(out) :: devstress
 
-        integer :: i, j, k, nxp, nyp, nzp, info
-        real(rkind) :: gloc(3,3), eigval(3), lam(3,3), hencky(3,3)
-        real(rkind) :: KbyAlp, Kby2Alp2, CvT0, gamsq,  ploc, I1He, expmI1He, mu, eshear, ethermal, dehdI1He, expmI1Healp, expmI1Hegam
+        integer :: i, j, k, nxp, nyp, nzp, info, idebug = 0
+        real(rkind) :: gloc(3,3), eigval(3), lam(3,3), hencky(3,3), mu0Byrho0, OneByAlpP2, OneByAlpP1, BetP1
+        real(rkind) :: KbyAlp, Kby2Alp2, CvT0, gamFac,  ploc, I1He, expmI1He, cs2, mu, eshear, ethermal, dehdI1He, expmI1Healp, expmI1Hegam
 
         if(this%eostype==2) then
           !p = zero!(this%gam-one)*rho*e - this%gam*this%PInf
@@ -236,7 +236,11 @@ contains
             KbyAlp = this%Kp/this%alp
             Kby2Alp2 = half*this%Kp/this%alp**2
             CvT0 = this%Cv*this%T0
-            gamsq = this%gams**2
+            mu0Byrho0 = this%mu0/rho0
+            OneByAlpP2 = one/this%alp + two
+            OneByAlpP1 = one/this%alp + one
+            gamFac = this%gams * (this%gams + one)
+            BetP1 = this%beta + one
 
             do k = 1,nzp
               do j = 1,nyp
@@ -252,28 +256,64 @@ contains
                         print '(A,I6,A)', 'proc ', nrank, ': Matrix not SPD. Please check.'
                     endif
 
-                    ! compute Hencky strain matrix: log(F*FT) = log((gT*g)^(-1)) = P*(Lam^(-1))*PT
-                    lam = zero; lam(1,1) = one/eigval(1); lam(2,2) = one/eigval(2); lam(3,3) = one/eigval(3)
+
+                    if(idebug==1) write(*,*) '---eigval---'
+                    if(idebug==1) write(*,'(3(e19.12,1x))') eigval(1:3)
+                    if(idebug==1) write(*,*) '---eigvev---'
+                    if(idebug==1) write(*,'(3(e19.12,1x))') gloc(1,1:3)
+                    if(idebug==1) write(*,'(3(e19.12,1x))') gloc(2,1:3)
+                    if(idebug==1) write(*,'(3(e19.12,1x))') gloc(3,1:3)
+
+                    ! compute Hencky strain matrix: log(F*FT) = log((gT*g)^(-1)) = P*(-log(Lam^))*PT
+                    lam = zero; lam(1,1) = -log(eigval(1)); lam(2,2) = -log(eigval(2)); lam(3,3) = -log(eigval(3))
                     hencky = matmul(gloc,lam)
+                    if(idebug==1) write(*,*) '---hencky1---'
+                    if(idebug==1) write(*,'(3(e19.12,1x))') hencky(1,1:3)
+                    if(idebug==1) write(*,'(3(e19.12,1x))') hencky(2,1:3)
+                    if(idebug==1) write(*,'(3(e19.12,1x))') hencky(3,1:3)
                     hencky = matmul(hencky,transpose(gloc))
+                    hencky = half*hencky
+                    if(idebug==1) write(*,*) '---hencky ---'
+                    if(idebug==1) write(*,'(3(e19.12,1x))') hencky(1,1:3)
+                    if(idebug==1) write(*,'(3(e19.12,1x))') hencky(2,1:3)
+                    if(idebug==1) write(*,'(3(e19.12,1x))') hencky(3,1:3)
 
                     ! make this traceless
                     ploc = third*(hencky(1,1)+hencky(2,2)+hencky(3,3))
                     hencky(1,1) = hencky(1,1) - ploc
                     hencky(2,2) = hencky(2,2) - ploc
                     hencky(3,3) = hencky(3,3) - ploc
+                    if(idebug==1) write(*,*) '---traceless hencky ---'
+                    if(idebug==1) write(*,'(3(e19.12,1x))') hencky(1,1:3)
+                    if(idebug==1) write(*,'(3(e19.12,1x))') hencky(2,1:3)
+                    if(idebug==1) write(*,'(3(e19.12,1x))') hencky(3,1:3)
 
                     ! compute entropy from energy
                     expmI1He = rho(i,j,k)/rho0
                     I1He = -log(expmI1He)
+                    !I1He = three*ploc
+                    !expmI1He = exp(-I1He)
                     expmI1Healp = expmI1He**this%alp
                     expmI1Hegam = expmI1He**this%gams
-                    mu = this%mu0*expmI1He**this%beta
+                    cs2 = mu0Byrho0*expmI1He**this%beta
+                    mu = rho(i,j,k)*cs2
+                    if(idebug==1) write(*,'(a,1x,e19.12)') 'expmI1He   :', expmI1He
+                    if(idebug==1) write(*,'(a,1x,e19.12)') 'I1He       :', I1He
+                    if(idebug==1) write(*,'(a,1x,e19.12)') 'expmI1Healp:', expmI1Healp
+                    if(idebug==1) write(*,'(a,1x,e19.12)') 'expmI1Hegam:', expmI1Hegam
+                    if(idebug==1) write(*,'(a,1x,e19.12)') 'cs2         :', cs2
+                    if(idebug==1) write(*,'(a,1x,e19.12)') 'mu          :', mu
 
-                    eshear = two*mu*sum(hencky**2)
+                    eshear = cs2*sum(hencky**2)
+                    if(idebug==1) write(*,'(a,1x,e19.12)') 'eshear     :', eshear
                     ethermal = e(i,j,k) - eshear - Kby2Alp2*(expmI1Healp-one)**2
-                    entr(i,j,k) = this%Cv*log(ethermal/(CvT0*expmI1Hegam) + one)
+                    if(idebug==1) write(*,'(a,1x,e19.12)') 'ethermal   :', ethermal
+                    if(idebug==1) write(*,'(a,1x,e19.12)') 'ehydro     :', Kby2Alp2*(expmI1Healp-one)**2
+                    if(idebug==1) write(*,'(a,1x,e19.12)') 'etotal     :', e(i,j,k)                     
+                    !entr(i,j,k) = this%Cv*log(ethermal/(CvT0*expmI1Hegam) + one)
+                    if(idebug==1) write(*,'(a,1x,e19.12)') 'entr       :', entr(i,j,k)
                     dehdI1He = -KbyAlp*expmI1Healp*(expmI1Healp - one) - this%gams * ethermal
+                    if(idebug==1) write(*,'(a,1x,e19.12)') 'dehdI1He   :', dehdI1He
 
                     devstress(i,j,k,1) = two*mu*hencky(1,1)
                     devstress(i,j,k,2) = two*mu*hencky(1,2)
@@ -282,12 +322,102 @@ contains
                     devstress(i,j,k,5) = two*mu*hencky(2,3)
                     devstress(i,j,k,6) = two*mu*hencky(3,3)
 
-                    p(i,j,k) = two*mu*ploc + rho(i,j,k) * dehdI1He - twothird*mu*I1He
+                    !p(i,j,k) = -(two*mu*ploc + rho(i,j,k) * dehdI1He - twothird*mu*I1He)
+                    p(i,j,k) = -rho(i,j,k) * dehdI1He
                     T(i,j,k) = ethermal/this%Cv + this%T0*expmI1Hegam
-                    sos(i,j,k) = sqrt(this%Kp*expmI1Healp*(two*expmI1Healp-one) + gamsq*ethermal + two*mu/rho(i,j,k))
+                    sos(i,j,k) = this%Kp*expmI1Healp*(OneByAlpP2*expmI1Healp-OneByAlpP1) + &
+                                      gamFac*ethermal + two*cs2*(one-BetP1*I1He)
+                    if(sos(i,j,k) < 1.0d-14) then
+                      write(*,*) 'sos2 = ', sos(i,j,k), i, j, k
+                      write(*,*) 'terms = ', this%Kp*expmI1Healp*(OneByAlpP2*expmI1Healp-OneByAlpP1), gamFac*ethermal, two*cs2*(one-BetP1*I1He)
+                    else
+                      sos(i,j,k) = sqrt(sos(i,j,k))
+                    endif
+                    if(idebug==1) write(*,'(a,1x,e19.12)') 'p      :', p(i,j,k)
                 enddo
               enddo
             enddo
+        endif
+
+    end subroutine
+
+    subroutine get_e_from_rhoT(this,rho0,g,rho,T,e)
+        class(generaleos), intent(inout) :: this
+        real(rkind),                     intent(in)   :: rho0
+        real(rkind), dimension(:,:,:,:), intent(in)   :: g
+        real(rkind), dimension(:,:,:),   intent(in)   :: T, rho
+        real(rkind), dimension(:,:,:),   intent(out)  :: e
+
+        integer :: i, j, k, nxp, nyp, nzp, info, idebug = 0
+        real(rkind) :: I1He, expmI1He, expmI1Healp, expmI1Hegam, cs2, ehydro, ethermal, eshear
+        real(rkind) :: Kby2Alp2, gloc(3,3), eigval(3), lam(3,3), hencky(3,3), ploc, mu0Byrho0
+
+        nxp = size(g,1); nyp = size(g,2); nzp = size(g,3);
+
+        if(this%eostype==2) then
+        elseif(this%eostype==3) then
+          
+          associate ( g11 => g(:,:,:,1), g12 => g(:,:,:,2), g13 => g(:,:,:,3), &
+                      g21 => g(:,:,:,4), g22 => g(:,:,:,5), g23 => g(:,:,:,6), &
+                      g31 => g(:,:,:,7), g32 => g(:,:,:,8), g33 => g(:,:,:,9)  )
+
+              ! compute gT*g first
+              this%finger(:,:,:,1) = g11*g11 + g21*g21 + g31*g31
+              this%finger(:,:,:,2) = g11*g12 + g21*g22 + g31*g32
+              this%finger(:,:,:,3) = g11*g13 + g21*g23 + g31*g33
+              this%finger(:,:,:,4) = g12*g12 + g22*g22 + g32*g32
+              this%finger(:,:,:,5) = g12*g13 + g22*g23 + g32*g33
+              this%finger(:,:,:,6) = g13*g13 + g23*g23 + g33*g33
+
+          end associate
+
+          Kby2Alp2 = half*this%Kp/this%alp**2
+          mu0Byrho0 = this%mu0/rho0
+
+          do k = 1,nzp
+            do j = 1,nyp
+              do i = 1,nxp
+
+                  ! Get eigenvalues and eigenvectors of (gT*g)
+                  gloc(1,1) = this%finger(i,j,k,1); gloc(1,2) = this%finger(i,j,k,2); gloc(1,3) = this%finger(i,j,k,3)
+                                                    gloc(2,2) = this%finger(i,j,k,4); gloc(2,3) = this%finger(i,j,k,5)
+                                                                                      gloc(3,3) = this%finger(i,j,k,6)
+                  call dsyev('V', 'U', 3, gloc, 3, eigval, this%work, this%lwork, info)
+                  if(info .ne. 0) print '(A,I6,A)', 'proc ', nrank, ': Problem with EV. Please check.'
+                  if(minval(eigval)<1.0d-12) then
+                      print '(A,I6,A)', 'proc ', nrank, ': Matrix not SPD. Please check.'
+                  endif
+
+                  ! compute Hencky strain matrix: log(F*FT) = log((gT*g)^(-1)) = P*(Lam^(-1))*PT
+                  lam = zero; lam(1,1) = -log(eigval(1)); lam(2,2) = -log(eigval(2)); lam(3,3) = -log(eigval(3))
+                  hencky = matmul(gloc,lam)
+                  hencky = matmul(hencky,transpose(gloc))
+                  hencky = half*hencky
+
+                  ! make this traceless
+                  ploc = third*(hencky(1,1)+hencky(2,2)+hencky(3,3))
+                  hencky(1,1) = hencky(1,1) - ploc
+                  hencky(2,2) = hencky(2,2) - ploc
+                  hencky(3,3) = hencky(3,3) - ploc
+
+                  !I1He = three*ploc
+                  !expmI1He = exp(-I1He)
+                  expmI1He = rho(i,j,k)/rho0
+                  I1He = -log(expmI1He)
+                  expmI1Healp = expmI1He**this%alp
+                  expmI1Hegam = expmI1He**this%gams
+                  cs2 = mu0Byrho0*expmI1He**this%beta
+
+                  ehydro = Kby2Alp2*(expmI1Healp-one)**2
+                  ethermal = this%Cv*(T(i,j,k) - this%T0*expmI1Hegam)
+                  eshear = cs2*sum(hencky**2)
+                  e(i,j,k) = ehydro + ethermal + eshear
+                  if(idebug==1) write(*,'(a,1x,e19.12)') 'eshear     :', eshear
+                  if(idebug==1) write(*,'(a,1x,e19.12)') 'ethermal   :', ethermal
+                  if(idebug==1) write(*,'(a,1x,e19.12)') 'ehydro     :', ehydro
+              enddo
+            enddo
+          enddo
         endif
 
     end subroutine
