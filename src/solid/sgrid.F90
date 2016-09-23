@@ -1320,10 +1320,10 @@ contains
             ytmp1 = zero
         end where
 
+        bulkstar = this%Cbeta*this%rho*ytmp1*abs(bulkstar)
+
         ! Filter bulkstar
         call this%filter(bulkstar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
-
-        bulkstar = this%Cbeta*this%rho*ytmp1*abs(bulkstar)
 
         ! -------- Artificial Conductivity --------
 
