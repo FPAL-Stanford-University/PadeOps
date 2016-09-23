@@ -15,6 +15,7 @@ module Multispecies_shock_data
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
+    logical     :: x1spng = .TRUE., x2spng = .FALSE.
     real(rkind) :: Ly = one, Lx = six, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
 
     type(filters) :: mygfil
@@ -197,7 +198,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
-                          plastic2, explPlast2, yield2, interface_init, kwave, eta0k
+                          plastic2, explPlast2, yield2, interface_init, kwave, eta0k, x1spng, x2spng
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -487,55 +488,55 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
            close(outputunit)
        endif
 
-        ! write(outputfile,'(4A)') trim(outputdir),"/tec_MultSpecShock_"//trim(str),".dat"
-        ! if(vizcount==0) then
-        !   open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='replace')
-        !   write(outputunit,'(350a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p", &
-        !                              "sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar", &
-        !                              "p-1","Ys-1","VF-1","eh-1","T-1","g11-1","g12-1","g13-1","g21-1","g22-1","g23-1","g31-1","g32-1","g33-1","Dstar-1","kap-1",&
-        !                              "p-2","Ys-2","VF-2","eh-2","T-2","g11-2","g12-2","g13-2","g21-2","g22-2","g23-2","g31-2","g32-2","g33-2","Dstar-2","kap-2"'
-        !   write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
-        !   write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
-        !   do k=1,decomp%ysz(3)
-        !    do j=1,decomp%ysz(2)
-        !     do i=1,decomp%ysz(1)
-        !         write(outputunit,'(50ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                      ! continuum (9)
-        !                                         sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), &      ! continuum (9)
-        !                                         mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% eh(i,j,k), &  ! material 1 (14)
-        !                                         mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
-        !                                         mix%material(1)%g21(i,j,k), mix%material(1)%g22(i,j,k), mix%material(1)%g23(i,j,k), mix%material(1)%g31(i,j,k), &  ! material 1 
-        !                                         mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), mix%material(1)%kap(i,j,k),&  ! material 1 
-        !                                         mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% eh(i,j,k), &  ! material 2 (14)
-        !                                         mix%material(2)% T(i,j,k),  mix%material(2)%g11(i,j,k), mix%material(2)%g12(i,j,k), mix%material(2)%g13(i,j,k), &  ! material 2
-        !                                         mix%material(2)%g21(i,j,k), mix%material(2)%g22(i,j,k), mix%material(2)%g23(i,j,k), mix%material(2)%g31(i,j,k), &  ! material 2
-        !                                         mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k), mix%material(2)%kap(i,j,k)    ! material 2
-        !     end do
-        !    end do
-        !   end do
-        !   close(outputunit)
-        ! else
-        !   open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='old', action='write', position='append')
-        !   write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
-        !   write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
-        !   write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
-        !   do k=1,decomp%ysz(3)
-        !    do j=1,decomp%ysz(2)
-        !     do i=1,decomp%ysz(1)
-        !         write(outputunit,'(47ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                                                    ! continuum (6)
-        !                                         sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), &      ! continuum (9)
-        !                                         mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% eh(i,j,k), &  ! material 1 (14)
-        !                                         mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
-        !                                         mix%material(1)%g21(i,j,k), mix%material(1)%g22(i,j,k), mix%material(1)%g23(i,j,k), mix%material(1)%g31(i,j,k), &  ! material 1 
-        !                                         mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), mix%material(1)%kap(i,j,k),&  ! material 1 
-        !                                         mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% eh(i,j,k), &  ! material 2 (14)
-        !                                         mix%material(2)% T(i,j,k),  mix%material(2)%g11(i,j,k), mix%material(2)%g12(i,j,k), mix%material(2)%g13(i,j,k), &  ! material 2
-        !                                         mix%material(2)%g21(i,j,k), mix%material(2)%g22(i,j,k), mix%material(2)%g23(i,j,k), mix%material(2)%g31(i,j,k), &  ! material 2
-        !                                         mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k), mix%material(2)%kap(i,j,k)    ! material 2
-        !     end do
-        !    end do
-        !   end do
-        !   close(outputunit)
-        ! endif
+         write(outputfile,'(4A)') trim(outputdir),"/tec_MultSpecShock_"//trim(str),".dat"
+         if(vizcount==0) then
+           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='replace')
+           write(outputunit,'(350a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p", &
+                                      "sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar", &
+                                      "p-1","Ys-1","VF-1","eh-1","T-1","g11-1","g12-1","g13-1","g21-1","g22-1","g23-1","g31-1","g32-1","g33-1","Dstar-1","kap-1",&
+                                      "p-2","Ys-2","VF-2","eh-2","T-2","g11-2","g12-2","g13-2","g21-2","g22-2","g23-2","g31-2","g32-2","g33-2","Dstar-2","kap-2"'
+           write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+           write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+           do k=1,decomp%ysz(3)
+            do j=1,decomp%ysz(2)
+             do i=1,decomp%ysz(1)
+                 write(outputunit,'(50ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                      ! continuum (9)
+                                                 sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), &      ! continuum (9)
+                                                 mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% eh(i,j,k), &  ! material 1 (14)
+                                                 mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
+                                                 mix%material(1)%g21(i,j,k), mix%material(1)%g22(i,j,k), mix%material(1)%g23(i,j,k), mix%material(1)%g31(i,j,k), &  ! material 1 
+                                                 mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), mix%material(1)%kap(i,j,k),&  ! material 1 
+                                                 mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% eh(i,j,k), &  ! material 2 (14)
+                                                 mix%material(2)% T(i,j,k),  mix%material(2)%g11(i,j,k), mix%material(2)%g12(i,j,k), mix%material(2)%g13(i,j,k), &  ! material 2
+                                                 mix%material(2)%g21(i,j,k), mix%material(2)%g22(i,j,k), mix%material(2)%g23(i,j,k), mix%material(2)%g31(i,j,k), &  ! material 2
+                                                 mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k), mix%material(2)%kap(i,j,k)    ! material 2
+             end do
+            end do
+           end do
+           close(outputunit)
+         else
+           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='old', action='write', position='append')
+           write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+           write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+           write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
+           do k=1,decomp%ysz(3)
+            do j=1,decomp%ysz(2)
+             do i=1,decomp%ysz(1)
+                 write(outputunit,'(47ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                                                    ! continuum (6)
+                                                 sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), &      ! continuum (9)
+                                                 mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% eh(i,j,k), &  ! material 1 (14)
+                                                 mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
+                                                 mix%material(1)%g21(i,j,k), mix%material(1)%g22(i,j,k), mix%material(1)%g23(i,j,k), mix%material(1)%g31(i,j,k), &  ! material 1 
+                                                 mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), mix%material(1)%kap(i,j,k),&  ! material 1 
+                                                 mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% eh(i,j,k), &  ! material 2 (14)
+                                                 mix%material(2)% T(i,j,k),  mix%material(2)%g11(i,j,k), mix%material(2)%g12(i,j,k), mix%material(2)%g13(i,j,k), &  ! material 2
+                                                 mix%material(2)%g21(i,j,k), mix%material(2)%g22(i,j,k), mix%material(2)%g23(i,j,k), mix%material(2)%g31(i,j,k), &  ! material 2
+                                                 mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k), mix%material(2)%kap(i,j,k)    ! material 2
+             end do
+            end do
+           end do
+           close(outputunit)
+         endif
 
 
     end associate
@@ -582,7 +583,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
     integer :: nx, i, j
-    real(rkind) :: dx, xspng, tspng
+    real(rkind) :: dx, tspng, x1spngloc, x2spngloc
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
     
     nx = decomp%ysz(1)
@@ -595,25 +596,21 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         if(decomp%yst(1)==1) then
-          if(x_bc(1)==0) then
-              ! rho( 1,:,:) = rhoL
-              ! u  ( 1,:,:) = (u2-u1)
+          if(x_bc(1)==0 .and. (.not. x1spng)) then
+              rho( 1,:,:) = rhoL
+              u  ( 1,:,:) = (u2-u1)
               v  ( 1,:,:) = zero
               w  ( 1,:,:) = zero
-              ! mix%material(1)%p( 1,:,:) = two * mix%material(1)%p(2,:,:) - mix%material(1)%p(3,:,:)
-              ! mix%material(2)%p( 1,:,:) = two * mix%material(2)%p(2,:,:) - mix%material(2)%p(3,:,:)
-              do i=1,5
-                  mix%material(1)%p( i,:,:) = mix%material(1)%p(6,:,:)
-                  mix%material(2)%p( i,:,:) = mix%material(2)%p(6,:,:)
-              end do
+              mix%material(1)%p( 1,:,:) = two * mix%material(1)%p(2,:,:) - mix%material(1)%p(3,:,:)
+              mix%material(2)%p( 1,:,:) = two * mix%material(2)%p(2,:,:) - mix%material(2)%p(3,:,:)
               
-              ! mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
-              ! mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
-              ! mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = one
+              mix%material(1)%g11( 1,:,:) = one;  mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
+              mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
+              mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = one
   
-              ! mix%material(2)%g11( 1,:,:) = rho2/rho_0;  mix%material(2)%g12( 1,:,:) = zero; mix%material(2)%g13( 1,:,:) = zero
-              ! mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
-              ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
+              mix%material(2)%g11( 1,:,:) = one;  mix%material(2)%g12( 1,:,:) = zero; mix%material(2)%g13( 1,:,:) = zero
+              mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
+              mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
               
               ! mix%material(1)%Ys ( 1,:,:) = YsL
               ! mix%material(2)%Ys ( 1,:,:) = one - YsL
@@ -623,55 +620,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
           end if
         endif
 
-        xspng = -two + half
-        tspng = 0.2_rkind
-        dx = x(2,1,1) - x(1,1,1)
-        dum = half*(one - tanh( (x-xspng)/(tspng) ))
-
-        do i=1,4
-            tmp = u
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            u = u + dum*(tmp - u)
-
-            tmp = v
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            v = v + dum*(tmp - v)
-
-            tmp = w
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            w = w + dum*(tmp - w)
-
-            tmp = e
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            e = e + dum*(tmp - e)
-
-            tmp = rho
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            rho = rho + dum*(tmp - rho)
-
-            tmp = mix%material(1)%p
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            if(decomp%yst(1)==1) tmp(1,:,:) = tmp(2,:,:)
-            mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
-
-            tmp = mix%material(2)%p
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            if(decomp%yst(1)==1) tmp(1,:,:) = tmp(2,:,:)
-            mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
-
-            do j = 1,9
-                tmp = mix%material(1)%g(:,:,:,j)
-                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-                mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dum*(tmp - mix%material(1)%g(:,:,:,j))
-
-                tmp = mix%material(2)%g(:,:,:,j)
-                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-                mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dum*(tmp - mix%material(2)%g(:,:,:,j))
-            end do
-        end do
-
         if(decomp%yen(1)==decomp%xsz(1)) then
-          if(x_bc(2)==0) then
+          if(x_bc(2)==0 .and. (.not. x2spng)) then
             rho(nx,:,:) = rhoR ! rho(nx-1,:,:)
             u  (nx,:,:) = zero ! zero
             v  (nx,:,:) = zero ! v(nx-1,:,:)
@@ -693,6 +643,89 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             mix%material(1)%VF (nx,:,:) = VFR
             mix%material(2)%VF (nx,:,:) = one - VFR
           endif
+        endif
+
+        if(x1spng .or. x2spng) then
+
+          x1spngloc = -two + half
+          x2spngloc =  four - half
+          tspng = 0.2_rkind
+          dx = x(2,1,1) - x(1,1,1)
+
+          if(x1spng) then
+            if(decomp%yst(1)==1) then
+                v  ( 1,:,:) = zero
+                w  ( 1,:,:) = zero
+                do i=1,5
+                    mix%material(1)%p( i,:,:) = mix%material(1)%p(6,:,:)
+                    mix%material(2)%p( i,:,:) = mix%material(2)%p(6,:,:)
+                end do
+                mix%material(1)%VF ( 1,:,:) = VFL
+                mix%material(2)%VF ( 1,:,:) = one - VFL
+            endif
+            dum = half*(one - tanh( (x-x1spngloc)/(tspng) ))     ! backstep at x1spngloc
+          endif
+          if(x2spng) then
+            if(decomp%yen(1)==decomp%xsz(1)) then
+                v  (nx,:,:) = zero
+                w  (nx,:,:) = zero
+                do i=0,4
+                    mix%material(1)%p(nx-i,:,:) = mix%material(1)%p(nx-5,:,:)
+                    mix%material(2)%p(nx-i,:,:) = mix%material(2)%p(nx-5,:,:)
+                end do
+                mix%material(1)%VF (nx,:,:) = VFR
+                mix%material(2)%VF (nx,:,:) = one - VFR
+            endif
+            dum = half*(one + tanh( (x-x2spngloc)/(tspng) ))     ! step at x2spngloc
+          endif
+          if(x1spng .and. x2spng) then
+            !     one -         step(x1spngloc)                      *              backstep(x2spngloc)
+            dum = one - (half*(one + tanh( (x-x1spngloc)/(tspng) ))) * (half*(one - tanh( (x-x2spngloc)/(tspng) )))
+          endif
+
+          do i=1,4
+              tmp = u
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              u = u + dum*(tmp - u)
+
+              tmp = v
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              v = v + dum*(tmp - v)
+
+              tmp = w
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              w = w + dum*(tmp - w)
+
+              tmp = e
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              e = e + dum*(tmp - e)
+
+              tmp = rho
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              rho = rho + dum*(tmp - rho)
+
+              tmp = mix%material(1)%p
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              if(decomp%yst(1)==1)              tmp(1,:,:) = tmp(2,:,:)
+              if(decomp%yen(1)==decomp%xsz(1)) tmp(nx,:,:) = tmp(nx-1,:,:)
+              mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
+
+              tmp = mix%material(2)%p
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              if(decomp%yst(1)==1)              tmp(1,:,:) = tmp(2,:,:)
+              if(decomp%yen(1)==decomp%xsz(1)) tmp(nx,:,:) = tmp(nx-1,:,:)
+              mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
+
+              do j = 1,9
+                  tmp = mix%material(1)%g(:,:,:,j)
+                  call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+                  mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dum*(tmp - mix%material(1)%g(:,:,:,j))
+
+                  tmp = mix%material(2)%g(:,:,:,j)
+                  call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+                  mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dum*(tmp - mix%material(2)%g(:,:,:,j))
+              end do
+          end do
         endif
 
     end associate
