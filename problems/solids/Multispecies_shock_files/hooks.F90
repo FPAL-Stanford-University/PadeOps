@@ -16,7 +16,8 @@ module Multispecies_shock_data
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
     logical     :: x1spng = .TRUE., x2spng = .FALSE.
-    real(rkind) :: Ly = one, Lx = six, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    real(rkind) :: Ly = one, Lx = eight, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    real(rkind) :: xleft = -two
 
     type(filters) :: mygfil
 
@@ -159,7 +160,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx - two  ! x \in (-2,4]
+                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx + xleft  ! x \in (-2,4]
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -402,9 +403,9 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),3) :: vort
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)  ) :: tmp
     real(rkind), dimension(decomp%ysz(1)) :: Ys1_mean, Ys2_mean
-    real(rkind) :: vort_pos, vort_neg, mixwidth, Al_mass, xspike, xbubbl, xspike_proc, xbubbl_proc
+    real(rkind) :: vort_pos, vort_neg, mixwidth, Al_mass, xspike, xbubbl, xspike_proc, xbubbl_proc, xinterf, x0p1, x0p9
     character(len=clen) :: outputfile, str
-    integer :: i, j, k
+    integer :: i, j, k, iloc(1), nyp, nzp
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -464,8 +465,8 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 
        Al_mass = P_MEAN(rho*mix%material(2)%Ys)*six*one
 
-       xspike_proc = -two
-       xbubbl_proc = four
+       xspike_proc = xleft
+       xbubbl_proc = xleft + Lx
        do j = 1,decomp%ysz(2)
            do i = 1,decomp%ysz(1)
                if (mix%material(1)%Ys(i,j,1) .GE. half) xspike_proc = max(xspike_proc,x(i,j,1))
@@ -474,17 +475,35 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        end do
        xspike = P_MAXVAL(xspike_proc)
        xbubbl = P_MINVAL(xbubbl_proc)
-           
+
+       nyp = (decomp%ysz(2)+1)/2;    nzp = (decomp%ysz(3)+1)/2; 
+
+       ! location where Ys = 0.5 on the centerline in y direction
+       iloc = minloc(abs(mix%material(1)%Ys(:,nyp,nzp)-0.5_rkind))
+       xinterf = x(iloc(1),1,1) + (0.5_rkind-mix%material(1)%Ys(iloc(1),nyp,nzp))*(x(iloc(1)+1,1,1)-x(iloc(1),1,1))/& 
+                           (mix%material(1)%Ys(iloc(1)+1,nyp,nzp)-mix%material(1)%Ys(iloc(1),nyp,nzp))
+       ! location where Ys = 0.5 on the centerline in y direction
+       iloc = minloc(abs(mix%material(1)%Ys(:,nyp,nzp)-0.9_rkind))
+       x0p9 = x(iloc(1),1,1) + (0.9_rkind-mix%material(1)%Ys(iloc(1),nyp,nzp))*(x(iloc(1)+1,1,1)-x(iloc(1),1,1))/& 
+                           (mix%material(1)%Ys(iloc(1)+1,nyp,nzp)-mix%material(1)%Ys(iloc(1),nyp,nzp))
+       ! location where Ys = 0.5 on the centerline in y direction
+       iloc = minloc(abs(mix%material(1)%Ys(:,nyp,nzp)-0.1_rkind))
+       x0p1 = x(iloc(1),1,1) + (0.1_rkind-mix%material(1)%Ys(iloc(1),nyp,nzp))*(x(iloc(1)+1,1,1)-x(iloc(1),1,1))/& 
+                           (mix%material(1)%Ys(iloc(1)+1,nyp,nzp)-mix%material(1)%Ys(iloc(1),nyp,nzp))
+       !write(*,'(i4,1x,4(e19.12,1x))') iloc, x(iloc(1),1,1), mix%material(1)%Ys(iloc(1),1,1), mix%material(1)%Ys(iloc(1)+1,1,1)
+
+
+    
        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_shock_statistics.dat"
 
        if(nrank==0) then
            if (vizcount == 0) then
                open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-               write(outputunit,'(7A27)') 'tsim', 'mixwidth', 'vort_pos', 'vort_neg', 'Al_mass', 'xspike', 'xbubbl'
+               write(outputunit,'(10A27)') 'tsim', 'mixwidth', 'vort_pos', 'vort_neg', 'Al_mass', 'xspike', 'xbubbl', 'xinterf', 'x0p9', 'x0p1'
            else
                open(unit=outputunit, file=trim(outputfile), form='FORMATTED', action='WRITE', status='OLD', position='APPEND')
            end if
-           write(outputunit,'(7ES27.16E3)') tsim, mixwidth, vort_pos, vort_neg, Al_mass, xspike, xbubbl
+           write(outputunit,'(10ES27.16E3)') tsim, mixwidth, vort_pos, vort_neg, Al_mass, xspike, xbubbl, xinterf, x0p9, x0p1
            close(outputunit)
        endif
 
@@ -647,8 +666,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
         if(x1spng .or. x2spng) then
 
-          x1spngloc = -two + half
-          x2spngloc =  four - half
+          x1spngloc = xleft + half
+          x2spngloc = (xleft+Lx)  - half
           tspng = 0.2_rkind
           dx = x(2,1,1) - x(1,1,1)
 
@@ -656,10 +675,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             if(decomp%yst(1)==1) then
                 v  ( 1,:,:) = zero
                 w  ( 1,:,:) = zero
-                do i=1,5
-                    mix%material(1)%p( i,:,:) = mix%material(1)%p(6,:,:)
-                    mix%material(2)%p( i,:,:) = mix%material(2)%p(6,:,:)
-                end do
+                !do i=1,5
+                !    mix%material(1)%p( i,:,:) = mix%material(1)%p(6,:,:)
+                !    mix%material(2)%p( i,:,:) = mix%material(2)%p(6,:,:)
+                !end do
                 mix%material(1)%VF ( 1,:,:) = VFL
                 mix%material(2)%VF ( 1,:,:) = one - VFL
             endif
@@ -669,10 +688,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             if(decomp%yen(1)==decomp%xsz(1)) then
                 v  (nx,:,:) = zero
                 w  (nx,:,:) = zero
-                do i=0,4
-                    mix%material(1)%p(nx-i,:,:) = mix%material(1)%p(nx-5,:,:)
-                    mix%material(2)%p(nx-i,:,:) = mix%material(2)%p(nx-5,:,:)
-                end do
+                !do i=0,4
+                !    mix%material(1)%p(nx-i,:,:) = mix%material(1)%p(nx-5,:,:)
+                !    mix%material(2)%p(nx-i,:,:) = mix%material(2)%p(nx-5,:,:)
+                !end do
                 mix%material(1)%VF (nx,:,:) = VFR
                 mix%material(2)%VF (nx,:,:) = one - VFR
             endif
@@ -696,9 +715,9 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
               w = w + dum*(tmp - w)
 
-              tmp = e
-              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-              e = e + dum*(tmp - e)
+              !tmp = e
+              !call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              !e = e + dum*(tmp - e)
 
               tmp = rho
               call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
@@ -706,14 +725,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
               tmp = mix%material(1)%p
               call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-              if(decomp%yst(1)==1)              tmp(1,:,:) = tmp(2,:,:)
-              if(decomp%yen(1)==decomp%xsz(1)) tmp(nx,:,:) = tmp(nx-1,:,:)
+              !if(decomp%yst(1)==1)              tmp(1,:,:) = tmp(2,:,:)
+              !if(decomp%yen(1)==decomp%xsz(1)) tmp(nx,:,:) = tmp(nx-1,:,:)
               mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
 
               tmp = mix%material(2)%p
               call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-              if(decomp%yst(1)==1)              tmp(1,:,:) = tmp(2,:,:)
-              if(decomp%yen(1)==decomp%xsz(1)) tmp(nx,:,:) = tmp(nx-1,:,:)
+              !if(decomp%yst(1)==1)              tmp(1,:,:) = tmp(2,:,:)
+              !if(decomp%yen(1)==decomp%xsz(1)) tmp(nx,:,:) = tmp(nx-1,:,:)
               mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
 
               do j = 1,9
@@ -725,6 +744,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                   call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
                   mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dum*(tmp - mix%material(2)%g(:,:,:,j))
               end do
+
           end do
         endif
 
