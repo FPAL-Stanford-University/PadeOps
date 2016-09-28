@@ -404,8 +404,9 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)  ) :: tmp
     real(rkind), dimension(decomp%ysz(1)) :: Ys1_mean, Ys2_mean
     real(rkind) :: vort_pos, vort_neg, mixwidth, Al_mass, xspike, xbubbl, xspike_proc, xbubbl_proc, xinterf, x0p1, x0p9
+    real(rkind) :: x0p1_proc, x0p9_proc, xinterf_proc, uinterf_proc, uinterf
     character(len=clen) :: outputfile, str
-    integer :: i, j, k, iloc(1), nyp, nzp
+    integer :: i, j, k, iloc(1), nyp, nzp, iindex, iindexp1
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -479,31 +480,70 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        nyp = (decomp%ysz(2)+1)/2;    nzp = (decomp%ysz(3)+1)/2; 
 
        ! location where Ys = 0.5 on the centerline in y direction
-       iloc = minloc(abs(mix%material(1)%Ys(:,nyp,nzp)-0.5_rkind))
-       xinterf = x(iloc(1),1,1) + (0.5_rkind-mix%material(1)%Ys(iloc(1),nyp,nzp))*(x(iloc(1)+1,1,1)-x(iloc(1),1,1))/& 
-                           (mix%material(1)%Ys(iloc(1)+1,nyp,nzp)-mix%material(1)%Ys(iloc(1),nyp,nzp))
-       ! location where Ys = 0.5 on the centerline in y direction
-       iloc = minloc(abs(mix%material(1)%Ys(:,nyp,nzp)-0.9_rkind))
-       x0p9 = x(iloc(1),1,1) + (0.9_rkind-mix%material(1)%Ys(iloc(1),nyp,nzp))*(x(iloc(1)+1,1,1)-x(iloc(1),1,1))/& 
-                           (mix%material(1)%Ys(iloc(1)+1,nyp,nzp)-mix%material(1)%Ys(iloc(1),nyp,nzp))
-       ! location where Ys = 0.5 on the centerline in y direction
-       iloc = minloc(abs(mix%material(1)%Ys(:,nyp,nzp)-0.1_rkind))
-       x0p1 = x(iloc(1),1,1) + (0.1_rkind-mix%material(1)%Ys(iloc(1),nyp,nzp))*(x(iloc(1)+1,1,1)-x(iloc(1),1,1))/& 
-                           (mix%material(1)%Ys(iloc(1)+1,nyp,nzp)-mix%material(1)%Ys(iloc(1),nyp,nzp))
-       !write(*,'(i4,1x,4(e19.12,1x))') iloc, x(iloc(1),1,1), mix%material(1)%Ys(iloc(1),1,1), mix%material(1)%Ys(iloc(1)+1,1,1)
+       xinterf_proc = minval(abs(mix%material(1)%Ys(:,nyp,nzp)-0.5_rkind))
+       xinterf = P_MINVAL(xinterf_proc)
+       if(abs(xinterf-xinterf_proc) < real(1.0d-13,rkind)) then
+           ! xinterf is most likely on this processor. 
+           iloc  = minloc(abs(mix%material(1)%Ys(:,nyp,nzp)-0.5_rkind))
+           iindex = iloc(1) + decomp%yst(1)
+           iindexp1 = iindex + 1
+           if(iindexp1 > decomp%yen(1)) iindexp1 = iindex - 1
+           xinterf_proc = x(iindex,1,1) + (0.5_rkind-mix%material(1)%Ys(iindex,nyp,nzp))*(x(iindexp1,1,1)-x(iindex,1,1))/& 
+                           (mix%material(1)%Ys(iindexp1,nyp,nzp)-mix%material(1)%Ys(iindex,nyp,nzp))
+           !write(*,*) nrank, xinterf, xinterf_proc
+           uinterf_proc = u(iindex,1,1) + (0.5_rkind-mix%material(1)%Ys(iindex,nyp,nzp))*(u(iindexp1,1,1)-u(iindex,1,1))/& 
+                           (mix%material(1)%Ys(iindexp1,nyp,nzp)-mix%material(1)%Ys(iindex,nyp,nzp))
+           
+       else
+           xinterf_proc = xleft-two
+           uinterf_proc = zero
+       endif
+       xinterf = P_MAXVAL(xinterf_proc)
+       uinterf = P_MAXVAL(uinterf_proc)
 
 
-    
+       ! location where Ys = 0.9 on the centerline in y direction
+       x0p9_proc = minval(abs(mix%material(1)%Ys(:,nyp,nzp)-0.9_rkind))
+       x0p9 = P_MINVAL(x0p9_proc)
+       if(abs(x0p9-x0p9_proc) < real(1.0d-13,rkind)) then
+           ! x0p9 is most likely on this processor. 
+           iloc  = minloc(abs(mix%material(1)%Ys(:,nyp,nzp)-0.9_rkind))
+           iindex = iloc(1) + decomp%yst(1)
+           iindexp1 = iindex + 1
+           if(iindexp1 > decomp%yen(1)) iindexp1 = iindex - 1
+           x0p9_proc = x(iindex,1,1) + (0.9_rkind-mix%material(1)%Ys(iindex,nyp,nzp))*(x(iindexp1,1,1)-x(iindex,1,1))/& 
+                           (mix%material(1)%Ys(iindexp1,nyp,nzp)-mix%material(1)%Ys(iindex,nyp,nzp))
+       else
+           x0p9_proc = xleft-two
+       endif
+       x0p9 = P_MAXVAL(x0p9_proc)
+
+       ! location where Ys = 0.1 on the centerline in y direction
+       x0p1_proc = minval(abs(mix%material(1)%Ys(:,nyp,nzp)-0.1_rkind))
+       x0p1 = P_MINVAL(x0p1_proc)
+       if(abs(x0p1-x0p1_proc) < real(1.0d-13,rkind)) then
+           ! x0p1 is most likely on this processor. 
+           iloc  = minloc(abs(mix%material(1)%Ys(:,nyp,nzp)-0.1_rkind))
+           iindex = iloc(1) + decomp%yst(1)
+           iindexp1 = iindex + 1
+           if(iindexp1 > decomp%yen(1)) iindexp1 = iindex - 1
+           x0p1_proc = x(iindex,1,1) + (0.1_rkind-mix%material(1)%Ys(iindex,nyp,nzp))*(x(iindexp1,1,1)-x(iindex,1,1))/& 
+                           (mix%material(1)%Ys(iindexp1,nyp,nzp)-mix%material(1)%Ys(iindex,nyp,nzp))
+       else
+           x0p1_proc = xleft-two
+       endif
+       x0p1 = P_MAXVAL(x0p1_proc)
+
        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_shock_statistics.dat"
 
        if(nrank==0) then
            if (vizcount == 0) then
                open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-               write(outputunit,'(10A27)') 'tsim', 'mixwidth', 'vort_pos', 'vort_neg', 'Al_mass', 'xspike', 'xbubbl', 'xinterf', 'x0p9', 'x0p1'
+               write(outputunit,'(11A27)') 'tsim', 'mixwidth', 'vort_pos', 'vort_neg', 'Al_mass', 'xspike', 'xbubbl', 'xinterf', 'x0p9', 'x0p1', 'uinterf'
            else
                open(unit=outputunit, file=trim(outputfile), form='FORMATTED', action='WRITE', status='OLD', position='APPEND')
            end if
-           write(outputunit,'(10ES27.16E3)') tsim, mixwidth, vort_pos, vort_neg, Al_mass, xspike, xbubbl, xinterf, x0p9, x0p1
+           write(outputunit,'(11ES27.16E3)') tsim, mixwidth, vort_pos, vort_neg, Al_mass, xspike, xbubbl, xinterf, x0p9, x0p1, uinterf
            close(outputunit)
        endif
 
