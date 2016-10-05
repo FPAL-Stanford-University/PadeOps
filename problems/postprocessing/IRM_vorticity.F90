@@ -68,15 +68,17 @@ contains
 
     subroutine write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
                             R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi, &
-                            pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport)
+                            pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport, mix_pdil, mix_pdil_fluct, &
+                            duidxj2D, gradp2D, PSij, diss_tensor)
         integer, intent(in) :: step
         real(rkind), dimension(:,:,:), intent(in) :: vort_avgz
         real(rkind), dimension(:,:),   intent(in) :: TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation
         real(rkind), dimension(:,:),   intent(in) :: R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi
-        real(rkind), dimension(:,:),   intent(in) :: pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport
+        real(rkind), dimension(:,:),   intent(in) :: pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport, mix_pdil, mix_pdil_fluct
+        real(rkind), dimension(:,:,:), intent(in) :: duidxj2D, gradp2D, PSij, diss_tensor
 
         character(len=clen) :: post2d_file
-        integer :: i, ierr, iounit2d=91
+        integer :: i, idx, ierr, iounit2d=91
 
         write(post2d_file,'(2A,I4.4,A)') trim(outputdir), "/post2d_", step, ".dat"
         call message(1,"Writing 2D vorticity file to "//trim(post2d_file))
@@ -119,6 +121,23 @@ contains
                     write(iounit2d) dissipation
                     write(iounit2d) pdil_fluct
                     write(iounit2d) tke_visc_transport
+                    write(iounit2d) mix_pdil
+                    write(iounit2d) mix_pdil_fluct
+
+                    do idx = 1,9
+                        write(iounit2d) duidxj2D(:,:,idx)
+                    end do
+
+                    do idx = 1,3
+                        write(iounit2d) gradp2D(:,:,idx)
+                    end do
+
+                    do idx=1,6
+                        write(iounit2d) PSij(:,:,idx)
+                    end do
+                    do idx=1,6
+                        write(iounit2d) diss_tensor(:,:,idx)
+                    end do
                     close(iounit2d)
                 end if
             end if
@@ -186,6 +205,59 @@ contains
 
             close(iounit)
         end if
+
+    end subroutine
+
+    subroutine get_conditional_zfft(input,Ys,nbins,step)
+        real(rkind), dimension(:,:,:), intent(in)  :: input
+        real(rkind), dimension(:,:,:), intent(in)  :: Ys
+        integer,                       intent(in)  :: nbins, step
+
+        complex(rkind), dimension(mir%gp%zsz(3)/2+1) :: output
+        real(rkind), dimension(mir%gp%zsz(1),mir%gp%zsz(2),mir%gp%zsz(3)) :: zbuffer
+        complex(rkind), dimension(mir%gp%zsz(1),mir%gp%zsz(2),mir%gp%zsz(3)/2+1) :: zfft
+        complex(rkind), dimension(mir%gp%zsz(3)/2+1) :: proc_output
+
+        real(rkind), dimension(mir%gp%zsz(1),mir%gp%zsz(2)) :: Ysavg
+        real(rkind) :: Yssum, proc_Yssum, Ysmin, Ysmax, dYs, Ysbin
+        integer :: i,j,ierr,bin
+        character(len=clen) :: varname
+
+        Ysmin = zero; Ysmax = one; dYs = (Ysmax - Ysmin) / (nbins - 1)
+
+        ! Get FFT of input
+        call transpose_y_to_z(input, zbuffer, mir%gp)
+        call fftz%fftz(zbuffer, zfft)
+
+        ! Transpose Ys to Z to average the FFT
+        call transpose_y_to_z( Ys, zbuffer, mir%gp)
+        Ysavg = sum(zbuffer,3) / mir%gp%zsz(3) ! Ys average
+        
+        Ysbin = zero
+        
+        do bin = 1,nbins
+            proc_output = zero
+            proc_Yssum = zero
+
+            do j = 1,mir%gp%zsz(2)
+                do i = 1,mir%gp%zsz(1)
+                    if ( (Ysavg(i,j) .LE. Ysbin+half*dYs) .AND. (Ysavg(i,j) .GE. Ysbin-half*dYs) ) then
+                        proc_output  = proc_output + zfft(i,j,:)
+                        proc_Yssum = proc_Yssum + one
+                    end if
+                end do
+            end do
+
+            call MPI_ALLREDUCE(proc_output, output, mir%gp%zsz(3)/2+1, mpickind, MPI_SUM, MPI_COMM_WORLD, ierr) ! Add proc_output  across processors
+            call MPI_ALLREDUCE(proc_Yssum,   Yssum,                 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr) ! Add proc_Yssum across processors
+
+            output = ( output / Yssum ) / mir%nz ! Divide by nz to get physical FFT
+
+            write(varname,'(A,F3.1)') "TKE_Ys", Ysbin
+            call write_spectrum(step, varname, output)
+
+            Ysbin = Ysbin + dYs
+        end do
 
     end subroutine
 
@@ -598,7 +670,6 @@ contains
     end subroutine
 
     subroutine get_duidxj2D(u,v,w,duidxj2D)
-        use operators, only: gradient
         real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)),            intent(in)  :: u, v, w
         real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), 9), target, intent(out) :: duidxj2D
 
@@ -630,6 +701,27 @@ contains
         call der2D%ddy(u,dudy)
         call der2D%ddy(v,dvdy)
         call der2D%ddy(w,dwdy)
+        
+    end subroutine
+
+    subroutine get_gradp2D(p_avg,gradp2D)
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)),            intent(in)  :: p_avg
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), 3), target, intent(out) :: gradp2D
+
+        real(rkind), dimension(mir%gp%xsz(1),mir%gp%xsz(2),1) :: xbuf1, xbuf2
+        real(rkind), dimension(:,:), pointer :: dpdx, dpdy, dpdz
+
+        dpdx => gradp2D(:,:,1); dpdy => gradp2D(:,:,2); dpdz => gradp2D(:,:,3);
+
+        ! Set Z derivatives to zero
+        dpdz = zero
+
+        ! dpdx
+        call gp2D%transpose_y_to_x(p_avg,xbuf1)
+        call der2D%ddx(xbuf1,xbuf2)
+        call gp2D%transpose_x_to_y(xbuf2,dpdx)
+        
+        call der2D%ddy(p_avg,dpdy)
         
     end subroutine
 
@@ -747,6 +839,142 @@ contains
 
     end subroutine
 
+    subroutine get_mix_dilatation(Diff,mix_pdil,mix_pdil_fluct)
+        use operators, only: gradient, divergence
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 2), intent(in)  :: Diff
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)                  ), intent(out) :: mix_pdil,mix_pdil_fluct
+
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)   )  :: mix_dilatation
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 2)  :: art_Diff
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)   )  :: ytmp1, ytmp2, ytmp3
+        
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)   ) :: p_avg, dil_avg
+       
+        integer :: i
+
+        call sgs_diffusivity(mir%Ys(:,:,:,1),art_Diff(:,:,:,1))
+        call sgs_diffusivity(mir%Ys(:,:,:,2),art_Diff(:,:,:,2))
+
+        art_Diff = art_Diff + Diff
+        art_Diff(:,:,:,1) = mir%Ys(:,:,:,2)*art_Diff(:,:,:,1) + mir%Ys(:,:,:,1)*art_Diff(:,:,:,2)  ! Put D_mix in art_Diff(:,:,:,1)
+
+        call gradient(mir%gp,der,mir%rho,ytmp1,ytmp2,ytmp3)
+        ytmp1 = -art_Diff(:,:,:,1) * ytmp1 / mir%rho ! - (D_mix / rho) * grad(rho)
+        ytmp2 = -art_Diff(:,:,:,1) * ytmp2 / mir%rho ! - (D_mix / rho) * grad(rho)
+        ytmp3 = -art_Diff(:,:,:,1) * ytmp3 / mir%rho ! - (D_mix / rho) * grad(rho)
+        
+        call divergence( mir%gp, der, ytmp1, ytmp2, ytmp3, mix_dilatation ) ! -div( (D_mix/rho) * grad(rho) )
+        
+        ! Get average pressure and dilatation
+        call P_AVGZ( mir%gp, mir%p, p_avg )
+        call P_AVGZ( mir%gp, mix_dilatation, dil_avg )
+
+        mix_pdil = p_avg * dil_avg
+
+        ! Get fluctuation dilatation
+        do i = 1,mir%gp%ysz(3)
+            mix_dilatation(:,:,i) = mix_dilatation(:,:,i) - dil_avg ! Get fluctuation dilatation
+        end do
+
+        call P_AVGZ( mir%gp, mir%p * mix_dilatation, mix_pdil_fluct )
+
+    end subroutine
+
+    subroutine get_PS_diss(upp,vpp,wpp,p,p_avg,tauij,rho,rho_avg,PSij,diss)
+        use operators, only: gradient, divergence
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)   ),         intent(in)  :: upp,vpp,wpp,p,rho
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 6),         intent(in)  :: tauij
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)),                           intent(in)  :: p_avg,rho_avg
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), 6), target,                intent(out) :: PSij, diss
+        
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) :: p_prime, ytmp1
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) :: tauxx_pp, tauxy_pp, tauxz_pp, tauyy_pp, tauyz_pp, tauzz_pp
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 6), target :: duidxj
+        real(rkind), dimension(:,:), pointer :: PSxx, PSxy, PSxz, PSyy, PSyz, PSzz
+        real(rkind), dimension(:,:), pointer :: Dxx, Dxy, Dxz, Dyy, Dyz, Dzz
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+
+        integer :: i
+
+        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+
+        PSxx => PSij(:,:,1); PSxy => PSij(:,:,2); PSxz => PSij(:,:,3);
+                             PSyy => PSij(:,:,4); PSyz => PSij(:,:,5);
+                                                  PSzz => PSij(:,:,6);
+
+        Dxx => diss(:,:,1); Dxy => diss(:,:,2); Dxz => diss(:,:,3);
+                            Dyy => diss(:,:,4); Dyz => diss(:,:,5);
+                                                Dzz => diss(:,:,6);
+
+        call get_duidxj(upp,vpp,wpp,duidxj)
+
+        do i = 1,mir%gp%ysz(3)
+            p_prime(:,:,i) = p(:,:,i) - p_avg
+        end do
+
+        ytmp1 = p_prime * ( dudx + dudx )
+        call P_AVGZ( mir%gp, ytmp1, PSxx )
+
+        ytmp1 = p_prime * ( dudy + dvdx )
+        call P_AVGZ( mir%gp, ytmp1, PSxy )
+
+        ytmp1 = p_prime * ( dudz + dwdx )
+        call P_AVGZ( mir%gp, ytmp1, PSxz )
+
+        ytmp1 = p_prime * ( dvdy + dvdy )
+        call P_AVGZ( mir%gp, ytmp1, PSyy )
+
+        ytmp1 = p_prime * ( dvdz + dwdy )
+        call P_AVGZ( mir%gp, ytmp1, PSyz )
+
+        ytmp1 = p_prime * ( dwdz + dwdz )
+        call P_AVGZ( mir%gp, ytmp1, PSzz )
+
+        ! Get favre( tauij )
+        call P_AVGZ( mir%gp, rho*tauij(:,:,:,1), Dxx )
+        call P_AVGZ( mir%gp, rho*tauij(:,:,:,2), Dxy )
+        call P_AVGZ( mir%gp, rho*tauij(:,:,:,3), Dxz )
+        call P_AVGZ( mir%gp, rho*tauij(:,:,:,4), Dyy )
+        call P_AVGZ( mir%gp, rho*tauij(:,:,:,5), Dyz )
+        call P_AVGZ( mir%gp, rho*tauij(:,:,:,6), Dzz )
+
+        do i = 1,mir%gp%ysz(3)
+            tauxx_pp(:,:,i) = tauij(:,:,i,1) - Dxx/rho_avg
+            tauxy_pp(:,:,i) = tauij(:,:,i,2) - Dxy/rho_avg
+            tauxz_pp(:,:,i) = tauij(:,:,i,3) - Dxz/rho_avg
+            tauyy_pp(:,:,i) = tauij(:,:,i,4) - Dyy/rho_avg
+            tauyz_pp(:,:,i) = tauij(:,:,i,5) - Dyz/rho_avg
+            tauzz_pp(:,:,i) = tauij(:,:,i,6) - Dzz/rho_avg
+        end do
+
+        ! Dxx
+        ytmp1 = -(tauxx_pp*dudx + tauxy_pp*dudy + tauxz_pp*dudz) - (tauxx_pp*dudx + tauxy_pp*dudy + tauxz_pp*dudz)
+        call P_AVGZ( mir%gp, ytmp1, Dxx )
+
+        ! Dxy
+        ytmp1 = -(tauxy_pp*dudx + tauyy_pp*dudy + tauyz_pp*dudz) - (tauxx_pp*dvdx + tauxy_pp*dvdy + tauxz_pp*dvdz)
+        call P_AVGZ( mir%gp, ytmp1, Dxy )
+
+        ! Dxz
+        ytmp1 = -(tauxz_pp*dudx + tauyz_pp*dudy + tauzz_pp*dudz) - (tauxx_pp*dwdx + tauxy_pp*dwdy + tauxz_pp*dwdz)
+        call P_AVGZ( mir%gp, ytmp1, Dxz )
+
+        ! Dyy
+        ytmp1 = -(tauxy_pp*dvdx + tauyy_pp*dvdy + tauyz_pp*dvdz) - (tauxy_pp*dvdx + tauyy_pp*dvdy + tauyz_pp*dvdz)
+        call P_AVGZ( mir%gp, ytmp1, Dyy )
+
+        ! Dyz
+        ytmp1 = -(tauxz_pp*dvdx + tauyz_pp*dvdy + tauzz_pp*dvdz) - (tauxy_pp*dwdx + tauyy_pp*dwdy + tauyz_pp*dwdz)
+        call P_AVGZ( mir%gp, ytmp1, Dyz )
+
+        ! Dzz
+        ytmp1 = -(tauxz_pp*dwdx + tauyz_pp*dwdy + tauzz_pp*dwdz) - (tauxz_pp*dwdx + tauyz_pp*dwdy + tauzz_pp*dwdz)
+        call P_AVGZ( mir%gp, ytmp1, Dzz )
+
+    end subroutine
+
 end module
 
 program IRM_vorticity
@@ -782,10 +1010,10 @@ program IRM_vorticity
     real(rkind), dimension(:,:), pointer :: rho_avg, u_avg, v_avg, w_avg, CO2_avg, TKE_avg, div_avg, chi_avg, MMF_avg, density_self_correlation
     real(rkind), dimension(:,:), pointer :: R11, R12, R13, R22, R23, R33
     real(rkind), dimension(:,:), pointer :: a_x, a_y, a_z, rhop_sq, eta, xi
-    real(rkind), dimension(:,:), pointer :: p_avg, pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport
+    real(rkind), dimension(:,:), pointer :: p_avg, pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport, mix_pdil, mix_pdil_fluct
 
     real(rkind), dimension(:,:,:,:), allocatable :: duidxj, tauij
-    real(rkind), dimension(:,:,:),   allocatable :: duidxj2D, tauij_avg
+    real(rkind), dimension(:,:,:),   allocatable :: duidxj2D, tauij_avg, gradp2D, PSij, diss_tensor
 
     real(rkind), dimension(:,:,:), allocatable :: xtmp1, xtmp2, ytmp1
 
@@ -882,7 +1110,7 @@ program IRM_vorticity
     Rij    => buffer(:,:,:,i)
 
     ! Allocate 2D buffer and associate pointers for convenience
-    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 32 ) )
+    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 34 ) )
     vort_avgz                => buffer2d(:,:,1:3)
     rho_avg                  => buffer2d(:,:,4 )
     u_avg                    => buffer2d(:,:,5 )
@@ -913,6 +1141,8 @@ program IRM_vorticity
     dissipation              => buffer2d(:,:,30)
     pdil_fluct               => buffer2d(:,:,31)
     tke_visc_transport       => buffer2d(:,:,32)
+    mix_pdil                 => buffer2d(:,:,33)
+    mix_pdil_fluct           => buffer2d(:,:,34)
     
     allocate( xtmp1( mir%gp%xsz(1), mir%gp%xsz(2), 1 ) )
     allocate( xtmp2( mir%gp%xsz(1), mir%gp%xsz(2), 1 ) )
@@ -932,6 +1162,9 @@ program IRM_vorticity
     allocate( tauij (mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 6) )
     allocate( duidxj2D (mir%gp%ysz(1), mir%gp%ysz(2), 9) )
     allocate( tauij_avg(mir%gp%ysz(1), mir%gp%ysz(2), 6) )
+    allocate( gradp2D (mir%gp%ysz(1), mir%gp%ysz(2), 3) )
+    allocate( PSij(mir%gp%ysz(1), mir%gp%ysz(2), 6) )
+    allocate( diss_tensor(mir%gp%ysz(1), mir%gp%ysz(2), 6) )
 
 
     ! Initialize visualization stuff
@@ -1080,6 +1313,11 @@ program IRM_vorticity
             call P_AVGZ( mir%gp, chi, chi_avg )
         end associate
         
+        ! Recompute physical Diff
+        call prob_properties(mu,ktc,Diff)
+        ! Get dilatation due to mixing
+        call get_mix_dilatation(Diff,mix_pdil,mix_pdil_fluct)
+
         ! Get Favre averaged velocities
         upp = mir%rho * mir%u
         vpp = mir%rho * mir%v
@@ -1101,26 +1339,32 @@ program IRM_vorticity
         ! Get Reynolds stress R11
         Rij = mir%rho*upp*upp
         call P_AVGZ( mir%gp, Rij, R11 )
+        R11 = R11 / rho_avg
 
         ! Get Reynolds stress R12
         Rij = mir%rho*upp*vpp
         call P_AVGZ( mir%gp, Rij, R12 )
+        R12 = R12 / rho_avg
 
         ! Get Reynolds stress R13
         Rij = mir%rho*upp*wpp
         call P_AVGZ( mir%gp, Rij, R13 )
+        R13 = R13 / rho_avg
 
         ! Get Reynolds stress R22
         Rij = mir%rho*vpp*vpp
         call P_AVGZ( mir%gp, Rij, R22 )
+        R22 = R22 / rho_avg
 
         ! Get Reynolds stress R23
         Rij = mir%rho*vpp*wpp
         call P_AVGZ( mir%gp, Rij, R23 )
+        R23 = R23 / rho_avg
 
         ! Get Reynolds stress R33
         Rij = mir%rho*wpp*wpp
         call P_AVGZ( mir%gp, Rij, R33 )
+        R33 = R33 / rho_avg
 
         ! Get Reynolds stress anisotropy invariants
         call  invariants(R11,R12,R13,R22,R23,R33,eta,xi)
@@ -1133,8 +1377,11 @@ program IRM_vorticity
         call P_AVGZ( mir%gp, wpp, a_z )
         a_z = -a_z ! a_z = -<wpp>
 
-        ! Get TKE = rho*u_i*u_i/2
+        ! Get TKE = (1/2) * (rho*u_i*u_i)/<rho>
         TKE = half * mir%rho * ( upp*upp + vpp*vpp + wpp*wpp )
+        ! do i = 1,mir%gp%ysz(3)
+        !     TKE(:,:,i) = TKE(:,:,i) / rho_avg
+        ! end do
         
         ! Get integrated TKE
         TKE_int = P_SUM(TKE)*mir%dx*mir%dy*mir%dz
@@ -1143,6 +1390,7 @@ program IRM_vorticity
         ! Get TKE spectrum
         call get_zfft(TKE,TKEfft,region)
         call write_spectrum(step, "TKE", TKEfft)
+        call get_conditional_zfft(TKE,mir%Ys(:,:,:,2),11,step)
         
         ! Get TKE average
         call P_AVGZ( mir%gp, TKE, TKE_avg )
@@ -1173,6 +1421,8 @@ program IRM_vorticity
         ! Pressure-dilatation correlation
         call P_AVGZ( mir%gp, mir%p, p_avg )
         pdil = p_avg*(duidxj2D(:,:,1) + duidxj2D(:,:,5))
+        
+        call get_gradp2D(p_avg,gradp2D)
 
         ! Mean-dissipation
         call get_meandiss(tauij_avg,duidxj2D,meandiss)
@@ -1183,6 +1433,8 @@ program IRM_vorticity
         ! Turbulent dissipation and fluctuation pressure-dilatation
         call get_dissipation(upp,vpp,wpp,tauij,dissipation,pdil_fluct, tke_visc_transport)
 
+        ! Get model form of pressure-strain tensor and dissipation tensor
+        call get_PS_diss(upp,vpp,wpp,mir%p,p_avg,tauij,mir%rho,rho_avg,PSij,diss_tensor)
 
         !!!! Energetics ----------------------------------
         !!!! =============================================
@@ -1201,7 +1453,8 @@ program IRM_vorticity
         ! Write out 2D postprocessing file
         call write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
                           R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi, &
-                          pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport)
+                          pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport, mix_pdil, mix_pdil_fluct, &
+                          duidxj2D, gradp2D, PSij, diss_tensor)
 
         write(time_message,'(A,I4,A)') "Time to postprocess step ", step, " :"
         call toc(trim(time_message))
@@ -1226,6 +1479,9 @@ program IRM_vorticity
     if (allocated( tauij )) deallocate( tauij )
     if (allocated( duidxj2D )) deallocate( duidxj2D )
     if (allocated( tauij_avg )) deallocate( tauij_avg )
+    if (allocated( gradp2D )) deallocate( gradp2D )
+    if (allocated( PSij )) deallocate( PSij )
+    if (allocated( diss_tensor )) deallocate( diss_tensor )
 
     call der%destroy()
     call gfil%destroy()
