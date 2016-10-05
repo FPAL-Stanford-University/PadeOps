@@ -55,7 +55,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,eostype,eosparams,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rho0,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
@@ -120,7 +120,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,eostype,eospara
 
 end subroutine
 
-subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x_bc,y_bc,z_bc)
+subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
@@ -128,6 +128,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x
                                 sxx_index,sxy_index,sxz_index,syy_index,syz_index,szz_index
     use decomp_2d,        only: decomp_info
     use DerivativesMod,   only: derivatives
+    use FiltersMod,       only: filters
 
     use impact_data
 
@@ -139,6 +140,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
     type(derivatives),               intent(in) :: der
+    type(filters),                   intent(in) :: fil
     real(rkind), dimension(2),       intent(in) :: x_bc,y_bc,z_bc
     integer                                     :: outputunit=229
 
@@ -162,6 +164,9 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x
 
 
         write(velstr,'(I3.3)') int(uimpact)
+        write(*,*) uimpact
+        write(*,*) trim(outputdir)
+        write(*,*) "/tec_impact_"//trim(velstr)//".dat"
         write(outputfile,'(2A)') trim(outputdir),"/tec_impact_"//trim(velstr)//".dat"
 
         if(vizcount==0) then
@@ -295,10 +300,13 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-        
-        call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
-        call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
-        call message(2,"Maximum conductivity",P_MAXVAL(kap))
+       
+       !write(*,*) 'mu = ', mu
+       !write(*,*) 'bet = ', bulk
+ 
+        !call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
+        !call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
+        !call message(2,"Maximum conductivity",P_MAXVAL(kap))
 
     end associate
 end subroutine

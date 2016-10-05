@@ -20,7 +20,7 @@ link_directories(${FFTW_LIBRARY_PATH} ${DECOMP_LIBRARY_PATH} ${VTK_IO_LIBRARY_PA
 
 # Create a library called PadeOps
 add_library(PadeOps STATIC ${utilities_source_files} ${derivatives_source_files} ${filters_source_files} ${io_source_files} )
-target_link_libraries(PadeOps fftw3 2decomp_fft ${VTK_IO_LIBRARY_PATH}/libVTK_IO.a ${MPI_LIBRARIES})
+target_link_libraries(PadeOps fftw3 2decomp_fft blas lapack ${VTK_IO_LIBRARY_PATH}/libVTK_IO.a ${MPI_LIBRARIES})
 
 if (MPI_Fortran_COMPILER_FLAGS)
     set_target_properties(PadeOps PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")

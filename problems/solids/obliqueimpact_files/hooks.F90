@@ -134,7 +134,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
 
 end subroutine
 
-subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x_bc,y_bc,z_bc)
+subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
@@ -143,18 +143,20 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x
     use decomp_2d,        only: decomp_info, transpose_x_to_y, transpose_y_to_x
     use DerivativesMod,   only: derivatives
     use operators,        only: curl
+    use FiltersMod,       only: filters
 
     use obliqueimpact_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
+    type(filters),                   intent(in) :: fil
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
-    type(derivatives),               intent(in) :: der
-    real(rkind), dimension(2),       intent(in)    :: x_bc, y_bc, z_bc
+    real(rkind), dimension(2),       intent(in) :: x_bc, y_bc, z_bc
     integer                                     :: outputunit=229
 
     real(rkind), allocatable, dimension(:,:,:,:) :: curlg
@@ -329,3 +331,6 @@ subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
     end associate
 end subroutine
 
+subroutine hook_finalize
+
+end subroutine 
