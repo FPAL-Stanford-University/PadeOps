@@ -3,7 +3,7 @@ module temporalHook
     use IncompressibleGridWallM, only: igridWallM
     use reductions,         only: P_MAXVAL
     use exits,              only: message
-    use pbl_IO,           only: dumpData4Matlab 
+    use pbl_IO,           only: output_tecplot!dumpData4Matlab 
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
@@ -18,7 +18,7 @@ module temporalHook
     
     integer :: tid_start_planes = 1
     integer :: tid_stop_planes = 100000
-    integer :: tid_dump_plane_every = 100
+    integer :: tid_dump_plane_every = 10000
 
 contains
 
@@ -49,6 +49,7 @@ contains
            call gp%dumpFullField(gp%u,'uVel')
            call gp%dumpFullField(gp%v,'vVel')
            call gp%dumpFullField(gp%wC,'wVel')
+           call output_tecplot(gp)
         end if 
 
     end subroutine

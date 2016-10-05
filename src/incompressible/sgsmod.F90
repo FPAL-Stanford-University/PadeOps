@@ -16,7 +16,7 @@ module sgsmod
     private
     public :: sgs
 
-    real(rkind) :: c_sigma = 1.4_rkind
+    real(rkind) :: c_sigma = 1.40_rkind
     real(rkind) :: c_smag = 0.17_rkind
     real(rkind) :: c_mgm = 1.0_rkind
     integer, parameter     :: mgm_option = 2
@@ -40,7 +40,7 @@ module sgsmod
         complex(rkind), pointer, dimension(:,:,:) :: nuSGShat
         
         real(rkind), dimension(:,:,:), allocatable :: rtmpY, rtmpZ, rtmpZ2, rtmpZE2, rtmpYE, rtmpZE
-        real(rkind), dimension(:,:,:), allocatable :: SSI_xbuff1, SSI_xbuff2
+        real(rkind), dimension(:,:,:), allocatable :: SSI_xbuff1, SSI_xbuff2, q1, q2, q3
 
         type(cd06stagg), allocatable :: derZ_EE, derZ_OO, derTAU33
         type(cd06stagg), allocatable :: derOO
@@ -49,7 +49,7 @@ module sgsmod
         logical :: useWallFunction = .false. 
         logical :: useDynamicProcedure = .false.
         logical :: useClipping = .false., CompStokesP = .false. 
-        logical :: eddyViscModel = .true.
+        logical :: eddyViscModel = .true., isStratified = .false. 
         
         real(rkind) :: meanFact, Pr
 
@@ -91,11 +91,12 @@ contains
 #include "sgs_models/sigma_model_get_nuSGS.F90"
 #include "sgs_models/mgm_model.F90"
 
-    subroutine link_pointers(this,nuSGS,c_SGS, tauSGS_ij, tau13, tau23)
+    subroutine link_pointers(this,nuSGS,c_SGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
         class(sgs), intent(in), target :: this
         real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: c_SGS, nuSGS
         real(rkind), dimension(:,:,:)  , pointer, intent(inout), optional :: tau13, tau23
         real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: tauSGS_ij
+        real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: q1, q2, q3
 
         if (allocated(this%rbuff)) then
             if (this%useDynamicProcedure) then
@@ -114,10 +115,14 @@ contains
                     tau23 => this%rbuff(:,:,:,5)
                 end if 
             end if 
+            if (this%isStratified) then
+                q1 => this%q1; q2 => this%q2; q3 => this%q3
+            end if 
         else
             call gracefulExit("You have called SGS%LINK_POINTERS before &
                 & initializing SGS",324)
         end if 
+
 
     end subroutine
 
@@ -263,7 +268,6 @@ contains
         real(rkind), intent(in) :: ustar, Umn, Vmn, Uspmn, InvObLength
         real(rkind), intent(out), optional :: max_nuSGS
         complex(rkind), dimension(:,:,:), pointer :: tauhat, tauhat2    
-        integer :: nz
 
 
         dudx  => duidxjC(:,:,:,1); dudy  => duidxjC(:,:,:,2); dudzC => duidxjC(:,:,:,3); 
@@ -478,19 +482,25 @@ contains
         !wallMfactor = ustar*kappa/(log(this%dz/two/this%z0) + bh*this%dz*InvObLength/two)
         this%nuSCA = this%nuSGS/(two*this%Pr); this%nuSCAE = this%nuSGSE/(two*this%Pr)
        
-        dTdxC = this%nuSCA  * dTdxC
-        dTdyC = this%nuSCA  * dTdyC
-        dTdzE = this%nuSCAE * dTdzE
+        !dTdxC = this%nuSCA  * dTdxC
+        this%q1 = this%nuSCA  * dTdxC
+        !dTdyC = this%nuSCA  * dTdyC
+        this%q2 = this%nuSCA  * dTdyC
+        !dTdzE = this%nuSCAE * dTdzE
+        this%q3 = this%nuSCAE * dTdzE
         
-        call this%spectC%fft(dTdxC,tauhat)
+        !call this%spectC%fft(dTdxC,tauhat)
+        call this%spectC%fft(this%q1,tauhat)
         call this%spectC%mtimes_ik1_ip(tauhat)
         T_rhs = T_rhs - tauhat 
 
-        call this%spectC%fft(dTdyC,tauhat)
+        !call this%spectC%fft(dTdyC,tauhat)
+        call this%spectC%fft(this%q2,tauhat)
         call this%spectC%mtimes_ik2_ip(tauhat)
         T_rhs = T_rhs - tauhat 
 
-        call this%spectE%fft(dTdzE,this%ctmpEy)
+        !call this%spectE%fft(dTdzE,this%ctmpEy)
+        call this%spectE%fft(this%q3,this%ctmpEy)
         call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
         if (nrank == 0) then
             this%ctmpEz(1,1,1) = cmplx(wTh_surf/this%MeanFact,zero)

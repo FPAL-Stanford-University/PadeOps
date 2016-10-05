@@ -3,7 +3,7 @@ module IncompressibleGridWallM
     use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa 
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
-    use igrid_hooks, only: meshgen_WallM, initfields_wallM, set_planes_io
+    use igrid_hooks, only: meshgen_WallM, initfields_wallM, set_planes_io, set_KS_planes_io 
     use decomp_2d
     use StaggOpsMod, only: staggOps  
     use exits, only: GracefulExit, message
@@ -20,6 +20,7 @@ module IncompressibleGridWallM
     use cf90stuff, only: cf90
     use PadePoissonMod, only: Padepoisson 
     use TurbineMod, only: TurbineArray 
+    use kspreprocessing, only: ksprep  
 
     implicit none
 
@@ -68,7 +69,7 @@ module IncompressibleGridWallM
         complex(rkind), dimension(:,:,:), pointer :: That, TEhat, T_rhs, T_Orhs
 
         complex(rkind), dimension(:,:,:), allocatable :: uBase, Tbase, dTdxH, dTdyH, dTdzH
-        real(rkind), dimension(:,:,:), allocatable :: dTdxC, dTdyC, dTdzE
+        real(rkind), dimension(:,:,:), allocatable :: dTdxC, dTdyC, dTdzE, dTdzC
 
         real(rkind), dimension(:,:,:,:), allocatable, public :: rbuffxC, rbuffyC, rbuffzC
         real(rkind), dimension(:,:,:,:), allocatable :: rbuffxE, rbuffyE, rbuffzE
@@ -85,7 +86,7 @@ module IncompressibleGridWallM
         real(rkind), dimension(:,:,:), allocatable :: rDampC, rDampE         
         real(rkind) :: Re, Gx, Gy, Gz, dtby2, meanfact, Tref
         complex(rkind), dimension(:,:,:), allocatable :: GxHat 
-        real(rkind) :: Ro = 1.d5, gravity_nd = 9.8d0, Fr = 1000.d0
+        real(rkind) :: Ro = 1.d5, Fr = 1000.d0
 
         integer :: nxZ, nyZ
         
@@ -100,7 +101,7 @@ module IncompressibleGridWallM
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
-        real(rkind) :: max_nuSGS, invObLength, Tsurf, dTsurf_dt
+        real(rkind) :: max_nuSGS, invObLength, Tsurf, dTsurf_dt, ThetaRef
 
         real(rkind) :: z0, ustar = zero, Umn, Vmn, Uspmn, dtOld, dtRat, Tmn, wTh_surf
         real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
@@ -111,17 +112,26 @@ module IncompressibleGridWallM
         real(rkind), dimension(:), pointer :: u_mean, v_mean, w_mean, uu_mean, uv_mean, uw_mean, vv_mean, vw_mean, ww_mean
         real(rkind), dimension(:), pointer :: tau11_mean, tau12_mean, tau13_mean, tau22_mean, tau23_mean, tau33_mean
         real(rkind), dimension(:), pointer :: S11_mean, S12_mean, S13_mean, S22_mean, S23_mean, S33_mean
-        real(rkind), dimension(:), pointer :: viscdissp, sgsdissp, sgscoeff_mean, PhiM
+        real(rkind), dimension(:), pointer :: viscdissp, sgsdissp, sgscoeff_mean, PhiM, q1_mean, q2_mean, q3_mean
+        real(rkind), dimension(:), pointer :: TT_mean, wT_mean, vT_mean, uT_mean, T_mean
         integer :: tidSUM, tid_StatsDump, tid_compStats,tSimStartStats
         logical :: normByustar
 
         ! Pointers linked to SGS stuff
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
         real(rkind), dimension(:,:,:)  , pointer :: nu_SGS, tau13, tau23
-        real(rkind), dimension(:,:,:)  , pointer :: c_SGS 
+        real(rkind), dimension(:,:,:)  , pointer :: c_SGS, q1, q2, q3 
        
         ! Wind Turbine stuff 
         type(turbineArray), allocatable :: WindTurbineArr
+
+        ! KS preprocessor 
+        type(ksprep), allocatable :: LES2KS
+        character(len=clen) :: KSoutputdir
+        logical :: PreProcessForKS
+        integer, dimension(:), allocatable :: planes2dumpC_KS, planes2dumpF_KS
+        integer :: t_dumpKSprep
+
 
         integer, dimension(:), allocatable :: xplanes, yplanes, zplanes
         ! Note that c_SGS is linked to a variable that is constant along & 
@@ -166,20 +176,20 @@ contains
     subroutine init(this,inputfile)
         class(igridWallM), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
-        character(len=clen) :: outputdir, inputdir, turbineInfoFile
+        character(len=clen) :: outputdir, inputdir, turbineInfoFile, ksOutputDir
         integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, topWall = slip, SGSModelID = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
-        integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999, t_stop_planeDump = 1
+        integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1, botBC_Temp = 0
         real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop,ncWall=1.d0
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, z0 = 1.d-4, Cs = 0.17d0
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0,Gx=0.d0,Gy=0.d0,Gz=0.d0
-        logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true. 
+        logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
         logical ::isStratified=.false.,dumpPlanes = .false., useSGSclipping = .true.,useExtraForcing = .false.
         logical ::useSGS = .true.,useDynamicProcedure = .false.,useSpongeLayer=.false.,useWindTurbines = .false.
         logical :: useGeostrophicForcing = .false., useVerticalTfilter = .false., useWallDamping = .true. 
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
-        integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10
+        integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .false., UseDealiasFilterVert = .false.
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
@@ -196,7 +206,8 @@ contains
         namelist /WINDTURBINES/ useWindTurbines, turbineInfoFile  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck
-
+        namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep
+                            
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -210,6 +221,7 @@ contains
         read(unit=ioUnit, NML=LES)
         read(unit=ioUnit, NML=WALLMODEL)
         read(unit=ioUnit, NML=WINDTURBINES)
+        read(unit=ioUnit, NML=KSPREPROCESS)
         close(ioUnit)
       
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
@@ -226,9 +238,10 @@ contains
         this%tSimStartStats = tSimStartStats; this%useWindTurbines = useWindTurbines
         this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS 
         this%useDynamicProcedure = useDynamicProcedure; this%UseDealiasFilterVert = UseDealiasFilterVert
-        this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; this%gravity_nd = one/(this%Fr**2)
+        this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; 
         this%t_start_planeDump = t_start_planeDump; this%t_stop_planeDump = t_stop_planeDump
-        this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro
+        this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro; 
+        this%PreProcessForKS = preprocessForKS; this%KSOutputDir = KSoutputDir;this%t_dumpKSprep = t_dumpKSprep 
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
         
         ! STEP 2: ALLOCATE DECOMPOSITIONS
@@ -236,7 +249,17 @@ contains
         call decomp_2d_init(nx, ny, nz, prow, pcol)
         call get_decomp_info(this%gpC)
         call decomp_info_init(nx,ny,nz+1,this%gpE)
-       
+        
+        if (mod(nx,2) .ne. 0) then
+            call GracefulExit("Nx has to be an Even.", 423)
+        end if 
+        if (mod(ny,2) .ne. 0) then
+            call GracefulExit("Ny has to be an Even.", 423)
+        end if 
+        if (mod(nz,2) .ne. 0) then
+            call GracefulExit("The code hasn't been tested for odd values of Nz. Crazy shit could happen.", 423)
+        end if 
+
         ! Set Top and Bottom BCs
         if (topWall == slip) then
             topBC_u = .true.; topBC_v = .true.
@@ -249,8 +272,6 @@ contains
         else
             call message("WARNING: No Top BCs provided. Using defaults found in igridWallM.F90")
         end if 
-
-
 
         ! Set numerics
         select case(NumericalSchemeVert)
@@ -272,7 +293,6 @@ contains
         end select
 
         
-
         ! STEP 3: GENERATE MESH (CELL CENTERED) 
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         allocate(this%mesh(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),3))
@@ -323,6 +343,7 @@ contains
             allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),7))
             allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4))
             allocate(this%dTdzE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+            allocate(this%dTdzC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             allocate(this%dTdxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             allocate(this%dTdyC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             call this%spectC%alloc_r2c_out(this%SfieldsC,4)
@@ -397,12 +418,15 @@ contains
             this%tsim = zero
             call this%dumpRestartfile()
         end if 
-       
-        if (botBC_Temp == 0) then
-            call setDirichletBC_Temp(inputfile, this%Tsurf, this%dTsurf_dt)
-        else
-            call GraceFulExit("Only Dirichlet BC supported for Temperature at &
-                & this time. Set botBC_Temp = 0",341)        
+      
+        if (this%isStratified) then 
+            if (botBC_Temp == 0) then
+                call setDirichletBC_Temp(inputfile, this%Tsurf, this%dTsurf_dt, this%ThetaRef)
+                this%Tsurf = this%Tsurf + this%dTsurf_dt*this%tsim
+            else
+                call GraceFulExit("Only Dirichlet BC supported for Temperature at &
+                    & this time. Set botBC_Temp = 0",341)        
+            end if 
         end if 
 
         call this%spectC%fft(this%u,this%uhat)   
@@ -468,8 +492,10 @@ contains
             allocate(this%SGSmodel)
             call this%SGSmodel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
                 this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3), this%z0, &
-                .true., WallMType, useVerticalTfilter, Pr, useWallDamping, nCWall, Cs, ComputeStokesPressure )
-            call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23)
+                .true., WallMType, useVerticalTfilter, Pr, useWallDamping, nCWall, Cs, ComputeStokesPressure, &
+                this%isStratified )
+            call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23, &
+                                this%q1, this%q2, this%q3)
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -495,13 +521,18 @@ contains
             where (zinY < zstSponge) 
                 this%RdampC = zero
             end where
+            call this%spectC%alloc_r2c_out(this%uBase)
+            call this%spectC%alloc_r2c_out(this%TBase)
+            this%rbuffxC(:,:,:,1) = this%Gx
+            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%uBase)
+            this%rbuffxC(:,:,:,1) = this%T
+            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%TBase)
             call message(0,"Sponge Layer initialized successfully")
         end if 
 
-
         if (this%useWindTurbines) then
             allocate(this%WindTurbineArr)
-            call this%WindTurbineArr%init(turbineInfoFile, this%gpC, this%gpE, this%spectC, this%spectE)
+            call this%WindTurbineArr%init(turbineInfoFile, this%gpC, this%gpE, this%spectC, this%spectE, this%mesh, this%dx, this%dy, this%dz)
         end if 
 
         ! STEP 12: Set visualization planes for io
@@ -512,6 +543,15 @@ contains
         call this%compute_deltaT()
         this%dtOld = this%dt
         this%dtRat = one 
+
+
+        ! STEP 14: Preprocessing for KS
+        if (this%PreprocessForKS) then
+            allocate(this%LES2KS)
+            call set_KS_planes_io(this%planes2dumpC_KS, this%planes2dumpF_KS) 
+            call this%LES2KS%init(nx,ny,nz,this%spectE, this%gpE, this%KSOutputDir, KSrunID, this%dx, this%dy, &
+               &         this%dz, this%planes2dumpC_KS, this%planes2dumpF_KS)
+        end if 
 
         ! Final Step: Safeguard against unfinished procedures
         if ((useCompactFD).and.(.not.useSkewSymm)) then
@@ -532,23 +572,36 @@ contains
 
 
     subroutine compute_deltaT(this)
-        use reductions, only: p_minval
+        use reductions, only: p_maxval
         class(igridWallM), intent(inout), target :: this
-        real(rkind) :: t1, t2, t3, tmin
+        real(rkind) :: TSmax  
+        real(rkind), dimension(:,:,:), pointer :: rb1, rb2
 
+        rb1 => this%rbuffxC(:,:,:,1)
+        rb2 => this%rbuffxC(:,:,:,2)
 
         if (this%useCFL) then
-            t1 = p_maxval(maxval(this%u))
-            t1 = this%dx/(t1 + 1d-13)
+            rb1 = (one/this%dx)*this%u
+            rb2 = (one/this%dy)*this%v 
+            rb1 = abs(rb1) 
+            rb2 = abs(rb2)
+            rb1 = rb1 + rb2
+            rb2 = (one/this%dz)*this%wC
+            rb2 = abs(rb2)
+            rb1 = rb1 + rb2
+            TSmax = p_maxval(rb1)
+            this%dt = this%CFL/TSmax
+            !t1 = p_maxval(maxval(this%u))
+            !t1 = this%dx/(t1 + 1d-13)
 
-            t2 = p_maxval(maxval(this%v))
-            t2 = this%dy/(t2 + 1d-13)
-            
-            t3 = p_maxval(maxval(this%w))
-            t3 = this%dz/(t3 + 1d-13)
-            
-            tmin = min(t1,t2,t3)
-            this%dt = this%CFL*tmin
+            !t2 = p_maxval(maxval(this%v))
+            !t2 = this%dy/(t2 + 1d-13)
+            !
+            !t3 = p_maxval(maxval(this%w))
+            !t3 = this%dz/(t3 + 1d-13)
+            !
+            !tmin = min(t1,t2,t3)
+            !this%dt = this%CFL*tmin
         end if 
 
 
@@ -615,7 +668,11 @@ contains
         if (this%isStratified) then
             call transpose_y_to_z(this%That,zbuffC,this%sp_gpC)
             call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
-            zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
+            !zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
+            zbuffE(:,:,1) = zero 
+            if (nrank == 0) then
+                zbuffE(1,1,1) = this%Tsurf*real(this%nx,rkind)*real(this%ny,rkind)
+            end if 
             zbuffE(:,:,this%nz + 1) = two*zbuffC(:,:,this%nz) - zbuffE(:,:,this%nz)
             call transpose_z_to_y(zbuffE,this%TEhat,this%sp_gpE)
             call this%spectE%ifft(this%TEhat,this%TE)
@@ -854,6 +911,54 @@ contains
         this%v_rhs = -half*this%v_rhs
         this%w_rhs = -half*this%w_rhs
 
+
+        if (this%isStratified) then
+            !T1C = -this%u*this%dTdxC 
+            !call this%spectC%fft(T1C,this%T_rhs) 
+            !T1C = -this%v*this%dTdyC
+            !call this%spectC%fft(T1C,fT1C) 
+            !this%T_rhs = this%T_rhs + fT1C
+       
+            !T1E = -this%w * this%dTdzE    
+            !call this%spectC%fft(T1E,fT1E)
+            !call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
+            !call this%Ops%InterpZ_edge2cell(tzE,tzC)
+            !call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
+            !this%T_rhs = this%T_rhs + fT1C
+           
+
+            T1C = -this%u*this%dTdxC 
+            T2C = -this%v*this%dTdyC
+            T1C = T1C + T2C
+            call this%spectC%fft(T1C,this%T_rhs) 
+       
+            T1E = -this%w * this%dTdzE    
+            call this%spectC%fft(T1E,fT1E)
+            call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
+            call this%Ops%InterpZ_edge2cell(tzE,tzC)
+            call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
+            this%T_rhs = this%T_rhs + fT1C
+
+
+
+            !T1C = -this%u*this%T
+            !call this%spectC%fft(T1C,this%T_rhs) 
+            !call this%spectC%mtimes_ik1_ip(this%T_rhs)
+
+            !T1C = -this%v*this%T
+            !call this%spectC%fft(T1C,fT1C) 
+            !call this%spectC%mtimes_ik2_ip(fT1C)
+            !this%T_rhs = this%T_rhs + fT1C
+
+            !T1E = -this%w*this%TE
+            !call this%spectE%fft(T1E,fT1E)
+            !call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
+            !call this%Ops%ddz_E2C(tzE,tzC)
+            !call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
+            !this%T_rhs = this%T_rhs + fT1C
+            
+        end if 
+
     end subroutine
 
     subroutine addCoriolisTerm(this)
@@ -894,11 +999,15 @@ contains
         complex(rkind), dimension(:,:,:), pointer :: fT1E 
    
         fT1E => this%cbuffyE(:,:,:,1)
-        fT1E = this%TEhat/(this%Fr*this%Fr)
+        fT1E = this%TEhat/(this%ThetaRef*this%Fr*this%Fr)
         if (this%spectE%carryingZeroK) then
             fT1E(1,1,:) = zero
         end if 
         this%w_rhs = this%w_rhs + fT1E 
+        
+        if (this%useSponge) then
+            call this%addSponge
+        end if 
     end subroutine
 
     subroutine AdamsBashforth(this)
@@ -926,7 +1035,7 @@ contains
         end if 
 
         if (this%useWindTurbines) then
-            call this%WindTurbineArr%getForceRHS(this%u, this%v, this%wC,&
+            call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
                                     this%u_rhs, this%v_rhs, this%w_rhs)
         end if 
 
@@ -1007,6 +1116,9 @@ contains
     
         ! STEP 8: Interpolate the cell center values of w
         call this%compute_and_bcast_surface_Mn()
+        if (this%isStratified) then
+            this%Tsurf = this%Tsurf + this%dTsurf_dt*this%dt
+        end if  
         call this%interp_PrimitiveVars()
 
         ! STEP 9: Compute duidxjC 
@@ -1019,7 +1131,6 @@ contains
         this%w_Orhs = this%w_rhs
         if (this%isStratified) this%T_Orhs = this%T_rhs
         this%dtOld = this%dt
-
 
         ! STEP 11: Do logistical stuff
         if ((mod(this%step,this%tid_compStats)==0) .and. (this%tsim > this%tSimStartStats)) then
@@ -1040,12 +1151,13 @@ contains
             call this%dump_planes()
         end if 
 
+        if ((this%PreprocessForKS) .and. (mod(this%step,this%t_dumpKSprep) == 0)) then
+            call this%LES2KS%LES_TO_KS(this%uE,this%vE,this%w,this%step)
+            call this%LES2KS%LES_FOR_KS(this%uE,this%vE,this%w,this%step)
+        end if 
 
         ! STEP 12: Update Time and BCs
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
-        if (this%isStratified) then
-            this%Tsurf = this%Tsurf + this%dTsurf_dt*this%dt
-        end if  
 
     end subroutine
 
@@ -1164,10 +1276,11 @@ contains
         dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
 
         ! Correct derivative at the z = dz (see Porte Agel, JFM (appendix))
-        if (nrank == 0) then
-            ctmpz2(1,1,2) = ctmpz2(1,1,2) + (0.08976d0/(kappa*this%dz))*real(this%nx,rkind)*real(this%ny,rkind)
+        if (.not. this%isStratified) then
+            if (nrank == 0) then
+                ctmpz2(1,1,2) = ctmpz2(1,1,2) + (0.08976d0/(kappa*this%dz))*real(this%nx,rkind)*real(this%ny,rkind)
+            end if 
         end if 
-
 
         ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
@@ -1207,9 +1320,11 @@ contains
     subroutine compute_dTdxi(this)
         class(igridWallM), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
-        
+        complex(rkind), dimension(:,:,:), pointer :: ctmpy1
+
         ctmpz1 => this%cbuffzC(:,:,:,1); ctmpz2 => this%cbuffzE(:,:,:,1); 
-        
+        ctmpy1 => this%cbuffyC(:,:,:,1)
+
         call this%spectC%mtimes_ik1_oop(this%That,this%dTdxH)
         call this%spectC%ifft(this%dTdxH,this%dTdxC)
 
@@ -1217,11 +1332,17 @@ contains
         call this%spectC%ifft(this%dTdyH,this%dTdyC)
    
         call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
+        
         call this%OpsPP%ddz_C2E(ctmpz1,ctmpz2,.true.,.true.)
         ctmpz2(:,:,this%nz+1) = ctmpz2(:,:,this%nz)
         ctmpz2(:,:,1) = two*ctmpz2(:,:,2) - ctmpz2(:,:,3) 
+        call this%OpsPP%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
+
         call transpose_z_to_y(ctmpz2, this%dTdzH, this%sp_gpE)
         call this%spectE%ifft(this%dTdzH,this%dTdzE)
+        
+        call transpose_z_to_y(ctmpz1,ctmpy1,this%sp_gpC)
+        call this%spectC%ifft(ctmpy1,this%dTdzC)
 
     end subroutine
     
@@ -1294,21 +1415,21 @@ contains
         integer :: idx
         integer, parameter :: itermax = 100 
         real(rkind) :: ustarNew, ustarDiff, dTheta, ustar
-        real(rkind) :: a, b, c, PsiH, PsiM, wTh, z, u, Linv, g
+        real(rkind) :: a, b, c, PsiH, PsiM, wTh, z, u, Linv
         real(rkind), parameter :: beta_h = 7.8_rkind, beta_m = 4.8_rkind
        
         dTheta = this%Tsurf - this%Tmn
-        z = this%dz/two ; ustarDiff = one; g = this%gravity_nd
+        z = this%dz/two ; ustarDiff = one; 
         a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
         PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
-        
+       
         ! Inside the do loop all the used variables are on the stored on the stack
         ! After the while loop these variables are copied to their counterparts
         ! on the heap (variables part of the derived type)
         do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
             ustarNew = u*kappa/(a - PsiM)
             wTh = dTheta*ustarNew*kappa/(a - PsiH) 
-            Linv = -kappa*g*wTh/(ustarNew**3)
+            Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
             PsiM = -c*Linv; PsiH = -b*Linv;
             ustarDiff = abs((ustarNew - ustar)/ustarNew)
             ustar = ustarNew; idx = idx + 1
@@ -1419,9 +1540,15 @@ contains
         gpC => this%gpC
         this%tidSUM = 0
 
-        allocate(this%zStats2dump(this%nz,25))
-        allocate(this%runningSum(this%nz,25))
-        allocate(this%TemporalMnNOW(this%nz,25))
+        if (this%isStratified) then
+            allocate(this%zStats2dump(this%nz,33))
+            allocate(this%runningSum(this%nz,33))
+            allocate(this%TemporalMnNOW(this%nz,33))
+        else
+            allocate(this%zStats2dump(this%nz,25))
+            allocate(this%runningSum(this%nz,25))
+            allocate(this%TemporalMnNOW(this%nz,25))
+        end if 
 
         ! mean velocities
         this%u_mean => this%zStats2dump(:,1);  this%v_mean  => this%zStats2dump(:,2);  this%w_mean => this%zStats2dump(:,3) 
@@ -1451,22 +1578,29 @@ contains
         this%sgscoeff_mean => this%zStats2dump(:,24)
 
         this%PhiM => this%zStats2dump(:,25)
+        
+        if (this%isStratified) then
+            this%TT_mean => this%zStats2dump(:,30);  this%wT_mean => this%zStats2Dump(:,29);  this%vT_mean => this%zStats2Dump(:,28)
+            this%uT_mean => this%zStats2dump(:,27);  this%T_mean => this%zStats2Dump(:,26); this%q1_mean => this%zStats2Dump(:,31)
+            this%q2_mean => this%zStats2dump(:,32);  this%q3_mean => this%zStats2Dump(:,33)
+        end if 
         this%runningSum = zero
+        this%TemporalMnNOW = zero
+        this%zStats2dump = zero
         nullify(gpC)
     end subroutine
 
     subroutine compute_stats(this)
         class(igridWallM), intent(inout), target :: this
         type(decomp_info), pointer :: gpC
-        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3E, rbuff2E, rbuff3, rbuff4, rbuff5, rbuff5E, rbuff4E, rbuff6E, rbuff6
+        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3E, rbuff2E, rbuff3, rbuff4, rbuff5, rbuff5E, rbuff4E, rbuff6E, rbuff6!, rbuff7
 
         rbuff1  => this%rbuffxC(:,:,:,1); rbuff2  => this%rbuffyC(:,:,:,1);
         rbuff2E => this%rbuffyE(:,:,:,1); rbuff3E => this%rbuffzE(:,:,:,1);
         rbuff3 => this%rbuffzC(:,:,:,1); rbuff4E => this%rbuffzE(:,:,:,2);
         rbuff4 => this%rbuffzC(:,:,:,2); rbuff5E => this%rbuffzE(:,:,:,3)
         rbuff5 => this%rbuffzC(:,:,:,3); rbuff6E => this%rbuffzE(:,:,:,4)
-        rbuff6 => this%rbuffzC(:,:,:,4); 
-        !rbuff7 => this%rbuffzC(:,:,:,5); 
+        rbuff6 => this%rbuffzC(:,:,:,4); !rbuff7 => this%rbuffzC(:,:,:,5); 
         gpC => this%gpC
 
         this%tidSUM = this%tidSUM + 1
@@ -1532,6 +1666,31 @@ contains
         rbuff6 = rbuff5*rbuff5
         call this%compute_z_mean(rbuff6, this%ww_mean)
         if (this%normByustar)this%ww_mean = this%ww_mean/(this%ustar**2)
+
+        ! Statified Stuff
+        if (this%isStratified) then
+            ! T mean
+            call transpose_x_to_y(this%T,rbuff2,this%gpC)
+            call transpose_y_to_z(rbuff2,rbuff6,this%gpC)
+            call this%compute_z_mean(rbuff6, this%T_mean)
+
+            ! uT mean
+            rbuff3 = rbuff3*rbuff6
+            call this%compute_z_mean(rbuff3, this%uT_mean)
+            
+            ! vT mean
+            rbuff4 = rbuff4*rbuff6
+            call this%compute_z_mean(rbuff4, this%vT_mean)
+            
+            ! wT mean
+            rbuff5 = rbuff5*rbuff6
+            call this%compute_z_mean(rbuff5, this%wT_mean)
+            
+            ! TT mean
+            rbuff6 = rbuff6*rbuff6
+            call this%compute_z_mean(rbuff6, this%TT_mean)
+        end if 
+
 
         if (this%useSGS) then
             ! tau_11
@@ -1636,7 +1795,26 @@ contains
             call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
             !call this%compute_z_mean(rbuff3, this%sgscoeff_mean)    ! -- averaging not needed
             this%sgscoeff_mean(:) = rbuff3(1,1,:)
-        
+       
+            
+            if (this%isStratified) then
+                ! q1
+                call transpose_x_to_y(this%q1,rbuff2,this%gpC)
+                call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+                call this%compute_z_mean(rbuff3, this%q1_mean)    
+
+                ! q2
+                call transpose_x_to_y(this%q2,rbuff2,this%gpC)
+                call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
+                call this%compute_z_mean(rbuff3, this%q2_mean)    
+
+                ! q2
+                call transpose_x_to_y(this%q3,rbuff2E,this%gpE)
+                call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+                rbuff3E(:,:,1) = this%wTh_surf
+                call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+                call this%compute_z_mean(rbuff3, this%q3_mean)    
+            end if 
         end if
 
         rbuff1 = this%duidxjC(:,:,:,3)*this%mesh(:,:,:,3)
@@ -1674,6 +1852,13 @@ contains
         this%TemporalMnNOW(:,7) = this%TemporalMnNOW(:,7) - this%TemporalMnNOW(:,2)*this%TemporalMnNOW(:,2)
         this%TemporalMnNOW(:,8) = this%TemporalMnNOW(:,8) - this%TemporalMnNOW(:,2)*this%TemporalMnNOW(:,3)
         this%TemporalMnNOW(:,9) = this%TemporalMnNOW(:,9) - this%TemporalMnNOW(:,3)*this%TemporalMnNOW(:,3)
+
+        if (this%isStratified) then
+            this%TemporalMnNOW(:,27) = this%TemporalMnNOW(:,27) - this%TemporalMnNOW(:,1)*this%TemporalMnNOW(:,26)
+            this%TemporalMnNOW(:,28) = this%TemporalMnNOW(:,28) - this%TemporalMnNOW(:,2)*this%TemporalMnNOW(:,26)
+            this%TemporalMnNOW(:,29) = this%TemporalMnNOW(:,29) - this%TemporalMnNOW(:,3)*this%TemporalMnNOW(:,26)
+            this%TemporalMnNOW(:,30) = this%TemporalMnNOW(:,30) - this%TemporalMnNOW(:,26)*this%TemporalMnNOW(:,26)
+        end if 
 
         ! compute sgs dissipation
         this%TemporalMnNOW(:,16) = half*this%TemporalMnNOW(:,16)

@@ -77,10 +77,6 @@ module CompressibleGrid
         real(rkind), dimension(:,:,:,:), pointer :: Ys
         real(rkind), dimension(:,:,:,:), pointer :: diff
          
-        integer, dimension(2)                                :: x_bc = [0,0]       ! X boundary (0=standard, 1=symmetric,-1=antisymmetric)
-        integer, dimension(2)                                :: y_bc = [0,0]       ! Y boundary (0=standard, 1=symmetric,-1=antisymmetric)
-        integer, dimension(2)                                :: z_bc = [0,0]       ! Z boundary (0=standard, 1=symmetric,-1=antisymmetric)
-
         contains
             procedure          :: init
             procedure          :: destroy
@@ -224,7 +220,9 @@ contains
 
         ! Allocate mixture
         if (allocated(this%mix)) deallocate(this%mix)
-        allocate(this%mix , source=mixture(this%decomp,ns))
+        allocate(this%mix)
+        call this%mix%init(this%decomp,ns)
+        ! allocate(this%mix , source=mixture(this%decomp,ns))
 
         ! Set default materials with the same gam and Rgas
         do i = 1,ns
@@ -509,6 +507,8 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
+        call this%getPhysicalProperties()
+
         if (this%mix%ns .GT. 1) then
             dYsdx => gradYs(:,:,:,              1:  this%mix%ns)
             dYsdy => gradYs(:,:,:,  this%mix%ns+1:2*this%mix%ns)
@@ -517,14 +517,17 @@ contains
             do i = 1,this%mix%ns
                 call this%gradient(this%Ys(:,:,:,i),dYsdx(:,:,:,i),dYsdy(:,:,:,i),dYsdz(:,:,:,i), this%x_bc, this%y_bc, this%z_bc)
             end do
-        end if
         
-        call this%getPhysicalProperties()
+            call this%getLAD(dudx, dudy, dudz,&
+                             dvdx, dvdy, dvdz,&
+                             dwdx, dwdy, dwdz,&
+                            dYsdx,dYsdy,dYsdz )
+        else
+            call this%getLAD(dudx, dudy, dudz,&
+                             dvdx, dvdy, dvdz,&
+                             dwdx, dwdy, dwdz )
+        end if
 
-        call this%getLAD(dudx, dudy, dudz,&
-                         dvdx, dvdy, dvdz,&
-                         dwdx, dwdy, dwdz,&
-                        dYsdx,dYsdy,dYsdz )
         deallocate( gradYs )
         deallocate( duidxj )
         ! ------------------------------------------------
@@ -586,6 +589,7 @@ contains
             if ( (this%tviz > zero) .AND. (this%tsim + this%dt >= this%tviz * this%viz%vizcount) ) then
                 this%dt = this%tviz * this%viz%vizcount - this%tsim
                 vizcond = .TRUE.
+                stability = 'viz dump'
             end if
 
             ! Check tstop condition
@@ -594,6 +598,7 @@ contains
             else if ( (this%tstop > zero) .AND. (this%tsim + this%dt >= this%tstop) ) then
                 this%dt = this%tstop - this%tsim
                 vizcond = .TRUE.
+                stability = 'final'
             end if
 
             ! Check nsteps condition
@@ -786,19 +791,23 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
+        call this%getPhysicalProperties()
+
         if (this%mix%ns .GT. 1) then
             dYsdx => gradYs(:,:,:,1:this%mix%ns); dYsdy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns); dYsdz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);
             do i = 1,this%mix%ns
                 call this%gradient(this%Ys(:,:,:,i),dYsdx(:,:,:,i),dYsdy(:,:,:,i),dYsdz(:,:,:,i), this%x_bc, this%y_bc, this%z_bc)
             end do
+            call this%getLAD(dudx, dudy, dudz,&
+                             dvdx, dvdy, dvdz,&
+                             dwdx, dwdy, dwdz,&
+                            dYsdx,dYsdy,dYsdz )
+        else
+            call this%getLAD(dudx, dudy, dudz,&
+                             dvdx, dvdy, dvdz,&
+                             dwdx, dwdy, dwdz )
         end if
         
-        call this%getPhysicalProperties()
-
-        call this%getLAD(dudx, dudy, dudz,&
-                         dvdx, dvdy, dvdz,&
-                         dwdx, dwdy, dwdz,&
-                        dYsdx,dYsdy,dYsdz )
 
         ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
         call this%get_tau( duidxj )
@@ -1003,8 +1012,8 @@ contains
                            dYsdx,dYsdy,dYsdz )
         use reductions, only: P_MAXVAL
         class(cgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp),              intent(in) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp, this%mix%ns), intent(in) :: dYsdx,dYsdy,dYsdz
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp, this%mix%ns), optional, intent(in) :: dYsdx,dYsdy,dYsdz
         
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: mustar,bulkstar,kapstar,diffstar,func
         integer :: i
@@ -1141,52 +1150,54 @@ contains
         call this%filter(kapstar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
 
         ! -------- Artificial Diffusivity ---------
-        if (this%mix%ns .GT. 1) then
-            do i = 1,this%mix%ns
-                ! Step 1: Get components of grad(Ys) squared individually
-                ytmp1 = dYsdx(:,:,:,i)*dYsdx(:,:,:,i)
-                ytmp2 = dYsdy(:,:,:,i)*dYsdy(:,:,:,i)
-                ytmp3 = dYsdz(:,:,:,i)*dYsdz(:,:,:,i)
+        if (present(dYsdx) .AND. present(dYsdy) .AND. present(dYsdz)) then
+            if (this%mix%ns .GT. 1) then
+                do i = 1,this%mix%ns
+                    ! Step 1: Get components of grad(Ys) squared individually
+                    ytmp1 = dYsdx(:,:,:,i)*dYsdx(:,:,:,i)
+                    ytmp2 = dYsdy(:,:,:,i)*dYsdy(:,:,:,i)
+                    ytmp3 = dYsdz(:,:,:,i)*dYsdz(:,:,:,i)
 
-                call this%mix%get_sos(this%rho,this%p,ytmp6)  ! Speed of sound
+                    call this%mix%get_sos(this%rho,this%p,ytmp6)  ! Speed of sound
 
-                ! Step 2: Get 4th derivative in X
-                call transpose_y_to_x(this%Ys(:,:,:,i),xtmp1,this%decomp)
-                call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
-                call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
-                xtmp2 = xtmp1*this%dx**4
-                call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-                diffstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+                    ! Step 2: Get 4th derivative in X
+                    call transpose_y_to_x(this%Ys(:,:,:,i),xtmp1,this%decomp)
+                    call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+                    call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
+                    xtmp2 = xtmp1*this%dx**4
+                    call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+                    diffstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
-                ! Step 3: Get 4th derivative in Z
-                call transpose_y_to_z(this%Ys(:,:,:,i),ztmp1,this%decomp)
-                call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
-                call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
-                ztmp2 = ztmp1*this%dz**4
-                call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-                diffstar = diffstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+                    ! Step 3: Get 4th derivative in Z
+                    call transpose_y_to_z(this%Ys(:,:,:,i),ztmp1,this%decomp)
+                    call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+                    call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
+                    ztmp2 = ztmp1*this%dz**4
+                    call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
+                    diffstar = diffstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
-                ! Step 4: Get 4th derivative in Y
-                call this%der%d2dy2(this%Ys(:,:,:,i),ytmp4,this%y_bc(1),this%y_bc(2))
-                call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
-                ytmp4 = ytmp5*this%dy**4
-                diffstar = diffstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+                    ! Step 4: Get 4th derivative in Y
+                    call this%der%d2dy2(this%Ys(:,:,:,i),ytmp4,this%y_bc(1),this%y_bc(2))
+                    call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
+                    ytmp4 = ytmp5*this%dy**4
+                    diffstar = diffstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
 
-                diffstar = this%Cdiff*ytmp6*abs(diffstar) ! CD part of diff
+                    diffstar = this%Cdiff*ytmp6*abs(diffstar) ! CD part of diff
 
-                ytmp4 = (sqrt(ytmp1)*this%dx + sqrt(ytmp2)*this%dy + sqrt(ytmp3)*this%dz) &
-                                / ( sqrt(ytmp1+ytmp2+ytmp3) + real(1.0D-32,rkind) ) ! grid scale
-                ytmp5 = this%CY*ytmp6*( half*(abs(this%Ys(:,:,:,i))-one + abs(this%Ys(:,:,:,i)-one)) )*ytmp4 ! CY part of diff
+                    ytmp4 = (sqrt(ytmp1)*this%dx + sqrt(ytmp2)*this%dy + sqrt(ytmp3)*this%dz) &
+                                    / ( sqrt(ytmp1+ytmp2+ytmp3) + real(1.0D-32,rkind) ) ! grid scale
+                    ytmp5 = this%CY*ytmp6*( half*(abs(this%Ys(:,:,:,i))-one + abs(this%Ys(:,:,:,i)-one)) )*ytmp4 ! CY part of diff
 
-                diffstar = max(diffstar, ytmp5) ! Take max of both terms instead of add to minimize the dissipation
+                    diffstar = max(diffstar, ytmp5) ! Take max of both terms instead of add to minimize the dissipation
 
-                ! Filter diffstar
-                call this%filter(diffstar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
+                    ! Filter diffstar
+                    call this%filter(diffstar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
 
-                ! Add to physical diffusivity
-                this%diff(:,:,:,i) = this%diff(:,:,:,i) + diffstar
-            end do
+                    ! Add to physical diffusivity
+                    this%diff(:,:,:,i) = this%diff(:,:,:,i) + diffstar
+                end do
+            end if
         end if
 
         ! Now, add to physical fluid properties

@@ -14,7 +14,8 @@
         real(rkind), dimension(:,:,:), pointer :: trG, dissp, disspE    ! Cell quantities
         real(rkind), dimension(:,:,:), pointer :: G13E, G23E, dudxE, dvdyE, dwdzE ! Edge quantities
 
-        real(rkind) :: rdum1,rdum2,rdum3,rdum4,rdum5,rdum6,rdum7,rdum8,rdum9,rdum10,rdum11,rdum12
+        real(rkind) :: rdum3
+        !real(rkind) :: rdum1,rdum2,rdum3,rdum4,rdum5,rdum6,rdum7,rdum8,rdum9,rdum10,rdum11,rdum12
 
         dudx  => duidxjC(:,:,:,1); dudy  => duidxjC(:,:,:,2); dudzC => duidxjC(:,:,:,3);
         dvdx  => duidxjC(:,:,:,4); dvdy  => duidxjC(:,:,:,5); dvdzC => duidxjC(:,:,:,6);

@@ -5,7 +5,7 @@ module spectralMod
                     transpose_y_to_z, transpose_z_to_y, nrank 
     use decomp_2d_fft, only: decomp_2d_fft_init, decomp_2d_fft_finalize, decomp_2d_fft_get_size
     use exits, only: GracefulExit, message 
-    use constants, only: pi, one, zero, two, three, four 
+    use constants, only: pi, one, zero, two, three, four, eight 
     use fft_3d_stuff, only: fft_3d
     use mpi
     use reductions, only: p_sum 
@@ -21,7 +21,7 @@ module spectralMod
         private
         real(rkind), dimension(:,:,:), allocatable, public :: k1, k2, k3, kabs_sq, k1_der2, k2_der2, k3_der2, one_by_kabs_sq
         integer, dimension(3) :: fft_start, fft_end, fft_size
-        real(rkind), dimension(:,:,:), allocatable, public :: Gdealias, GtestFilt, arr1Up, arr2Up
+        real(rkind), dimension(:,:,:), allocatable, public :: Gdealias, GtestFilt, arr1Up, arr2Up, GksPrep1, GksPrep2
         integer :: rPencil ! Pencil dimension for the real input
         logical :: is3dFFT = .true. ! use 3d FFTs
         logical :: isInitialized = .false.
@@ -63,12 +63,27 @@ module spectralMod
             procedure           :: dealiasedDiv_oop
             procedure           :: dealiasedSquare_ip
             procedure           :: dealiasedSquare_oop
+            procedure           :: KSprepFilter2
+            procedure           :: KSprepFilter1
             !procedure, private  :: upsample_Fhat
             !procedure, private  :: downsample_Fhat
 
     end type
 
 contains
+    subroutine KSprepFilter1(this, finout)
+        class(spectral),  intent(in)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: finout
+
+        finout = this%GksPrep1*finout
+    end subroutine
+
+    subroutine KSprepFilter2(this, finout)
+        class(spectral),  intent(in)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: finout
+
+        finout = this%GksPrep2*finout
+    end subroutine
     pure subroutine mTimes_ik1_oop(this, fin, fout)
         class(spectral),  intent(in)         :: this
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(in) :: fin
@@ -618,15 +633,42 @@ contains
                 end if
             end do 
         end do 
-      
-
-
-        ! STEP 13: Allocate 3/2s rule arrays
+     
+        ! STEP 14: Prep filter for KS  
+        allocate(this%GksPrep1(this%spectdecomp%ysz(1), this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)))
+        kdealiasx = (one/four)*pi/dx
+        kdealiasy = (one/four)*pi/dy
+        do k = 1,this%spectdecomp%ysz(3)
+            do j = 1,this%spectdecomp%ysz(2)
+                do i = 1,this%spectdecomp%ysz(1)
+                    if ((abs(this%k1(i,j,k)) < kdealiasx) .and. (abs(this%k2(i,j,k))< kdealiasy)) then
+                        this%GksPrep1(i,j,k) = one
+                    else
+                        this%GksPrep1(i,j,k) = zero
+                    end if
+                end do 
+            end do 
+        end do 
+        allocate(this%GksPrep2(this%spectdecomp%ysz(1), this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)))
+        kdealiasx = (one/eight)*pi/dx
+        kdealiasy = (one/eight)*pi/dy
+        do k = 1,this%spectdecomp%ysz(3)
+            do j = 1,this%spectdecomp%ysz(2)
+                do i = 1,this%spectdecomp%ysz(1)
+                    if ((abs(this%k1(i,j,k)) < kdealiasx) .and. (abs(this%k2(i,j,k))< kdealiasy)) then
+                        this%GksPrep2(i,j,k) = one
+                    else
+                        this%GksPrep2(i,j,k) = zero
+                    end if
+                end do 
+            end do 
+        end do 
+        ! STEP 15: Allocate 3/2s rule arrays
         call this%FT%alloc_upsampledArr(this%arr1Up)
         call this%FT%alloc_upsampledArr(this%arr2Up)
 
 
-        ! STEP 12: Print completion message 
+        ! STEP 16: Print completion message 
         call message("SPECTRAL - Derived Type for the problem generated successfully.")
         call message("===============================================================")
         ! Finished !

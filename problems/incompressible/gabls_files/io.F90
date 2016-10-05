@@ -99,7 +99,7 @@ contains
         call gp%dumpFullField(gp%u,'uVel')
         call gp%dumpFullField(gp%v,'vVel')
         call gp%dumpFullField(gp%wC,'wVel')
-        call gp%dumpFullField(gp%nu_SGS,'nuSG')
+        call gp%dumpFullField(gp%T,'potT')
     end subroutine
 
     subroutine dumpData4Matlab(gp)

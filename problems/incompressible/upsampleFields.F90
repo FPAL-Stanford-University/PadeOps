@@ -64,7 +64,11 @@ module RoutinesUpsampling
         do k = 2,2*nz-1,2
             arrOut(:,:,k) = arrIn(:,:,idx) + (arrIn(:,:,idx + 1) - arrIn(:,:,idx))*ratEven
             idx = idx + 1
-        end do 
+        end do
+   
+        arrOut(:,:,1) = 2.d0*arrOut(:,:,2) - arrOut(:,:,3)
+        arrOut(:,:,2*nz) = arrOut(:,:,2*nz - 1) 
+
     end subroutine
 
 
@@ -84,6 +88,8 @@ module RoutinesUpsampling
             arrOut(:,:,2*k) = 0.5d0*(arrOut(:,:,2*k-1) + arrOut(:,:,2*k+1))
         end do 
 
+        arrOut(:,:,2*nz+1) = 0.d0
+        arrOut(:,:,1) = 0.d0
     end subroutine
 
 end module
@@ -106,7 +112,7 @@ program upsampleFields
     character(len=clen) :: inputfile 
     character(len=clen) :: outputdir, inputdir
     integer :: ioUnit, nx, ny, nz, ierr, inputFile_TID, inputFile_RID, outputFile_TID, outputFile_RID
-    logical :: upsampleInZ = .false.
+    logical :: upsampleInZ = .false., isStratified = .false. 
     type(decomp_info) :: gpC, gpE, gpC_upX, gpC_upXY, gpC_upXYZ, gpE_upX, gpE_upXY, gpE_upXYZ 
     real(rkind), dimension(:,:,:), allocatable :: f
     real(rkind), dimension(:,:,:), allocatable :: fxup_inX, fxup_inY, fxyup_inY 
@@ -114,7 +120,7 @@ program upsampleFields
     character(len=clen) :: tempname, fname
     real(rkind) :: tsim 
     namelist /INPUT/ nx, ny, nz, inputdir, outputdir, inputFile_TID, inputFile_RID, &
-    outputFile_TID, outputFile_RID, UpsampleInZ 
+    outputFile_TID, outputFile_RID, UpsampleInZ, isStratified 
 
     call MPI_Init(ierr)               !<-- Begin MPI
     call GETARG(1,inputfile)          !<-- Get the location of the input file
@@ -204,6 +210,30 @@ program upsampleFields
         call decomp_2d_write_one(1,fxyup_inX,fname, gpC_upXY)
     end if 
     
+    if (isStratified) then
+        ! Read and Write T - field
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",inputFile_RID, "_T.",inputFile_TID
+        fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
+        call decomp_2d_read_one(1,f,fname, gpC)
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",outputFile_RID, "_T.",outputFile_TID
+        fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+
+        call upsampleX(f,fxup_inX)
+        call transpose_x_to_y(fxup_inX,fxup_inY,gpC_upX)
+        call upsampleY(fxup_inY,fxyup_inY)
+
+        if (UpsampleInZ) then
+            call transpose_y_to_z(fxyup_inY,fxyup_inZ,gpC_upXY)
+            call upsampleZ_cells(fxyup_inZ,fxyzup_inZ)
+            call transpose_z_to_y(fxyzup_inZ,fxyzup_inY,gpC_upXYZ)
+            call transpose_y_to_x(fxyzup_inY,fxyzup_inX,gpC_upXYZ)
+            call decomp_2d_write_one(1,fxyzup_inX,fname, gpC_upXYZ)
+        else
+            call transpose_y_to_x(fxyup_inY,fxyup_inX,gpC_upXY)
+            call decomp_2d_write_one(1,fxyup_inX,fname, gpC_upXY)
+        end if 
+    end if 
+    
     ! < SCALARS GO HERE >
     deallocate(f, fxup_inX, fxup_inY, fxyup_inY)
     if (UpsampleInZ) then
@@ -212,7 +242,6 @@ program upsampleFields
         deallocate(fxyup_inX)    
     end if 
 
-  
     !!!!!!!!!!!!! EDGE FIELDS !!!!!!!!!!!!!!!
     allocate(f(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
     allocate(fxup_inX(gpE_upX%xsz(1),gpE_upX%xsz(2),gpE_upX%xsz(3))) 
@@ -241,7 +270,7 @@ program upsampleFields
 
     if (UpsampleInZ) then
         call transpose_y_to_z(fxyup_inY,fxyup_inZ,gpE_upXY)
-        call upsampleZ_cells(fxyup_inZ,fxyzup_inZ)
+        call upsampleZ_edges(fxyup_inZ,fxyzup_inZ)
         call transpose_z_to_y(fxyzup_inZ,fxyzup_inY,gpE_upXYZ)
         call transpose_y_to_x(fxyzup_inY,fxyzup_inX,gpE_upXYZ)
         call decomp_2d_write_one(1,fxyzup_inX,fname, gpE_upXYZ)
