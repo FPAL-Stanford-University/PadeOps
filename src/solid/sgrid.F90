@@ -572,7 +572,7 @@ contains
         vizcond = .FALSE.
         
         ! Check for visualization condition and adjust time step
-        if ( (this%tviz > zero) .AND. (this%tsim + this%dt > this%tviz * this%viz%vizcount) ) then
+        if ( (this%tviz > zero) .AND. (this%tsim + this%dt >= this%tviz * this%viz%vizcount) ) then
             this%dt = this%tviz * this%viz%vizcount - this%tsim
             vizcond = .TRUE.
             stability = 'vizdump'
@@ -612,6 +612,15 @@ contains
             call message(2,"CPU time (in seconds)",cputime)
             call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
  
+            ! Write out statistics if dtstats exceeds tstats or if stats is deactivated, when vizcond is true
+            dtstats = dtstats + this%dt
+            if ( ((this%tstats > zero) .and. (dtstats > this%tstats)) .or. ((this%tstats < zero) .and. vizcond) ) then
+                dtstats = zero
+                statscount = statscount + 1
+                ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,statscount,this%x_bc,this%y_bc,this%z_bc)
+            end if
+            
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
                 !! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
@@ -620,15 +629,6 @@ contains
                 vizcond = .FALSE.
             end if
 
-            ! Write out statistics if dtstats exceeds tstats
-            dtstats = dtstats + this%dt
-            if ((this%tstats > zero) .and. (dtstats > this%tstats)) then
-                dtstats = zero
-                statscount = statscount + 1
-                ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,statscount,this%x_bc,this%y_bc,this%z_bc)
-            end if
-            
             ! Get the new time step
             call this%get_dt(stability)
             
