@@ -239,7 +239,6 @@ contains
         this%rho0 = rho0
 
         this%eostype = eostype
-        write(*,*) 'eostype=', this%eostype
 
         this%Cmu = Cmu
         this%Cbeta = Cbeta
@@ -681,7 +680,6 @@ contains
         ! ------------------------------------------------
 
         call this%get_dt(stability)
-        write(*,*) 'dt = ', this%dt, stability
 
         ! Write out initial conditions
         call hook_output(this%decomp, this%der, this%fil, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%tsim, this%viz%vizcount, this%x_bc, this%y_bc, this%z_bc)
@@ -736,7 +734,6 @@ contains
             
             ! Get the new time step
             call this%get_dt(stability)
-            write(*,*) 'dt = ', this%dt, stability
             
             ! Check for visualization condition and adjust time step
             if ( (this%tviz > zero) .AND. ((this%tsim + this%dt)*(one + eps) >= this%tviz * this%viz%vizcount) ) then
@@ -784,7 +781,6 @@ contains
         Qtmpt = zero
 
         do isub = 1,RK45_steps
-            write(*,*) 'RKsubstep = ', isub
             call this%get_conserved()
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
@@ -887,7 +883,6 @@ contains
         else
             !call this%geneos%get_sos(this%rho0,this%rho,this%devstress,cs)     ! Speed of sound -- all clubbed together in get_p_devstress_T_sos
             cs = this%sos
-            write(*,*) maxval(cs), minval(cs)
         endif
 
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
@@ -1064,7 +1059,6 @@ contains
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
         penalty = (this%etafac/this%dt)*(this%rho/detg/this%rho0-one)
-        !write(*,*) this%rho/detg
 
         tmp = -this%u*this%g11-this%v*this%g12-this%w*this%g13
         call this%gradient(tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-this%x_bc,this%y_bc,this%z_bc)

@@ -11,6 +11,8 @@ module ShockEntropy_data
     real(rkind) :: xs = real(-9.50D0,rkind)
     real(rkind) :: xe = real(-8.85D0,rkind)
     real(rkind) :: rho_0
+    real(rkind) :: ximp = real(-3.85D0,rkind)
+    real(rkind) :: uimpact = real(300.0D0,rkind)
 contains
 
 SUBROUTINE fnumden(pf,fparams,iparams,num,den)
@@ -182,7 +184,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
     integer :: nx
     real(rkind) :: mu, gam, PInf, yield, tau0
 
-    namelist /PROBINPUT/  pRatio, p1, thick, Cbeta, xs, xe
+    namelist /PROBINPUT/  pRatio, p1, thick, Cbeta, xs, xe, ximp, uimpact
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -239,6 +241,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         v   = zero
         w   = zero
         p   = (one-tmp)*  p2 + tmp*  p1
+
+        ! set location of impact if this is to be used instead of normal shock
+        tmp = half * ( one + erf( (x-ximp)/(thick*dx) ) )
+        u = (one-tmp)*two*uimpact
 
         ! add vorticity/entropy fluctuations starting from xe
         tmp = half * ( one + erf( (x-xe)/(eps*dx) ) )
