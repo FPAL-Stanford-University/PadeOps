@@ -1684,8 +1684,8 @@ contains
         end if 
 
         if(this%useWindTurbines) then
-            allocate(this%inst_horz_avg_turb(2*this%WindTurbineArr%nTurbines))
-            allocate(this%runningSum_sc_turb(2*this%WindTurbineArr%nTurbines))
+            allocate(this%inst_horz_avg_turb(5*this%WindTurbineArr%nTurbines))
+            allocate(this%runningSum_sc_turb(5*this%WindTurbineArr%nTurbines))
         endif
 
         ! mean velocities
@@ -1985,7 +1985,7 @@ contains
             this%inst_horz_avg(4) = this%invObLength
             this%inst_horz_avg(5) = this%wTh_surf
         endif
-        ! this%inst_horz_avg_turb(1:2*this%WindTurbineArr%nTurbines) is computed in this%WindTurbineArr%getForceRHS
+        ! this%inst_horz_avg_turb(1:5*this%WindTurbineArr%nTurbines) is computed in this%WindTurbineArr%getForceRHS
         this%runningSum_sc = this%runningSum_sc + this%inst_horz_avg
         this%runningSum_sc_turb = this%runningSum_sc_turb + this%inst_horz_avg_turb
 
@@ -2000,7 +2000,7 @@ contains
         character(len=clen) :: fname
         character(len=clen) :: tempname
         integer :: tid, ierr
-        real(rkind), dimension(2*this%WindTurbineArr%nTurbines) :: runningSum_turb
+        real(rkind), dimension(5*this%WindTurbineArr%nTurbines) :: runningSum_turb
 
         this%TemporalMnNOW = this%runningSum/real(this%tidSUM,rkind)
         tid = this%step
@@ -2034,7 +2034,7 @@ contains
         this%TemporalMnNOW(:,17) = half*this%TemporalMnNOW(:,17)/this%Re     ! note: this is actually 2/Re*(..)/4
 
 
-        call MPI_reduce(this%runningSum_sc_turb, runningSum_turb, 2*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+        call MPI_reduce(this%runningSum_sc_turb, runningSum_turb, 5*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
 
         if (nrank == 0) then
             write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%RunID,"_t",tid,".stt"
@@ -2046,7 +2046,7 @@ contains
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
             open(unit=771,file=fname,status='unknown')
             if(this%useWindTurbines) then
-                write(771,'(e19.12,1x,i7,1x,2005(e19.12,1x))') this%tsim, this%tidSUM, this%runningSum_sc/real(this%tidSUM,rkind), runningSum_turb/real(this%tidSUM,rkind) ! change if using more than 1000 turbines
+                write(771,'(e19.12,1x,i7,1x,5005(e19.12,1x))') this%tsim, this%tidSUM, this%runningSum_sc/real(this%tidSUM,rkind), runningSum_turb/real(this%tidSUM,rkind) ! change if using more than 1000 turbines
             else
                 write(771,'(e19.12,1x,i7,1x,5(e19.12,1x))') this%tsim, this%tidSUM, this%runningSum_sc/real(this%tidSUM,rkind)
             endif
