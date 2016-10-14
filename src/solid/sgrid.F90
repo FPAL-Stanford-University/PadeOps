@@ -363,10 +363,10 @@ contains
        
         ! Get hydrodynamic and elastic energies 
         if(this%eostype == 1) then
+            ! get hydrodynamic energy from rho, p
             call this%sgas%get_e_from_p(this%rho,this%p,this%e)
         else
-            ! energy already specified - not specifying primitive variables, so
-            ! energy does not have to be computed from primitive variables
+            ! get energy from rho, g, T
             call this%geneos%get_e_from_rhoT(this%rho0, this%g, this%rho, this%T, this%e)
         endif
         
@@ -382,6 +382,7 @@ contains
             allocate( trG2(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
             allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
 
+            ! get elastic energy and devstress from rho0, g
             call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
             call this%elastic%get_eelastic(this%rho0,trG,trG2,detG,this%eel) 
             call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
@@ -390,6 +391,7 @@ contains
             detG = this%g11*(this%g22*this%g33-this%g23*this%g32) &
                  - this%g12*(this%g21*this%g33-this%g31*this%g23) &
                  + this%g13*(this%g21*this%g32-this%g31*this%g22)
+            ! get pressure, devstress, temperature, entropy and speed of sound from rho0, g, rho and e
             call this%geneos%get_p_devstress_T_sos(this%rho0, this%g, this%rho, this%e, this%Ent, this%p, this%T, this%devstress, this%sos)
         endif
         
@@ -994,7 +996,12 @@ contains
 
             call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)  ! Get updated stress
         else
-            ! passive boundaries for now
+            ! --For efficiency, these should be called only if boundary rho, g, T have been updated. 
+            ! --Also, only boundary values of energy, pressure, devstress, entropy should be updated.
+            ! get energy from rho, g, T
+            call this%geneos%get_e_from_rhoT(this%rho0, this%g, this%rho, this%T, this%e)
+            ! get pressure, devstress, temperature, entropy and speed of sound from rho0, g, rho and e
+            call this%geneos%get_p_devstress_T_sos(this%rho0, this%g, this%rho, this%e, this%Ent, this%p, this%T, this%devstress, this%sos)
         endif
 
     end subroutine
