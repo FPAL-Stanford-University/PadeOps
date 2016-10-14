@@ -413,7 +413,7 @@ contains
             !call this%geneos%get_T(this%e, this%T) -- all clubbed together in get_p_devstress_T_sos
         endif
 
-        if (P_MAXVAL(abs( this%rho/this%rho0/(detG)**half - one )) > 10._rkind*eps) then
+        if (P_MAXVAL(abs( this%rho/this%rho0/(detG) - one )) > 10._rkind*eps) then
             call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
         end if
 
@@ -531,6 +531,8 @@ contains
             call message("fields: ",this%fields(i,j,k,l))
             write(charout,'(A,4(I5,A))') "NaN encountered in initialization ("//trim(varnames(l+7))//")  at (",i,", ",j,", ",k,", ",l,") of fields"
             call GracefulExit(trim(charout), 999)
+        else
+            call message("Initialization successful")
         end if
         
     end subroutine
@@ -666,7 +668,6 @@ contains
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
-        
         call this%gradient(this%u,dudx,dudy,dudz,-this%x_bc, this%y_bc, this%z_bc)
         call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)

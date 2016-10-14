@@ -58,7 +58,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PInf,tau0,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rho0,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
@@ -71,13 +71,16 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     character(len=*),                                               intent(in)    :: inputfile
     type(decomp_info),                                              intent(in)    :: decomp
     real(rkind),                                                    intent(in)    :: dx,dy,dz
-    real(rkind),                                          optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz, yield, tau0
+    integer,                                                        intent(in)    :: eostype
+    real(rkind), dimension(:),                                      intent(inout) :: eosparams
+    real(rkind),                                          optional, intent(inout) :: rho0, tstop, dt, tviz
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit, i, j, k
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
     real(rkind) :: stp_x,bkstp_x,bkstp_y,phiang,u1,u2,v1,v2,rad,stp_r1,bkstp_r2,regfrac,dxdy
+    !real(rkind) :: mu, gam, PInf, yield, tau0
 
     namelist /PROBINPUT/  uradinit
     
@@ -309,10 +312,11 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,step,tsim)
+subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc,hookcond)
     use kind_parameters,  only: rkind
     use SolidGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use DerivativesMod,   only: derivatives
     use exits,            only: message
     use reductions,       only: P_MAXVAL
 
@@ -320,10 +324,13 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
-    integer,                         intent(in) :: step
-    real(rkind),                     intent(in) :: tsim
+    type(derivatives),               intent(in) :: der
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    integer,                         intent(in) :: step
+    real(rkind),                     intent(in) :: tsim, dt
+    real(rkind), dimension(2),       intent(in) :: x_bc,y_bc,z_bc
+    logical,            optional, intent(inout) :: hookcond
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
