@@ -790,32 +790,60 @@ contains
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: n1,n2
         real(rkind), dimension(n1,n2,this%n), intent(inout) :: y  ! Take in RHS and put solution into it
-        integer :: k
-        real(rkind), dimension(n1,n2) :: sum1, sum2
+        ! integer :: k
+        integer :: j, k
+        ! real(rkind), dimension(n1,n2) :: sum1, sum2
+        real(rkind), dimension(n1) :: sum1, sum2
  
         
-        ! Step 8 ( update y instead of creating z )
-        y(:,:,2) = y(:,:,2) - this%LU1(2,1)*y(:,:,1) 
-        sum1 = this%LU1(1,3)*y(:,:,1) + this%LU1(2,3)*y(:,:,2)
-        sum2 = this%LU1(1,4)*y(:,:,1) + this%LU1(2,4)*y(:,:,2)
+        ! ! Step 8 ( update y instead of creating z )
+        ! y(:,:,2) = y(:,:,2) - this%LU1(2,1)*y(:,:,1) 
+        ! sum1 = this%LU1(1,3)*y(:,:,1) + this%LU1(2,3)*y(:,:,2)
+        ! sum2 = this%LU1(1,4)*y(:,:,1) + this%LU1(2,4)*y(:,:,2)
 
-        ! Step 9
-        do k = 3,this%n-2
-            y(:,:,k) = y(:,:,k) - this%LU1(k,1)*y(:,:,k-1) - this%LU1(k,2)*y(:,:,k-2)
-            sum1 = sum1 + this%LU1(k,3)*y(:,:,k)
-            sum2 = sum2 + this%LU1(k,4)*y(:,:,k)
-        end do
+        ! ! Step 9
+        ! do k = 3,this%n-2
+        !     y(:,:,k) = y(:,:,k) - this%LU1(k,1)*y(:,:,k-1) - this%LU1(k,2)*y(:,:,k-2)
+        !     sum1 = sum1 + this%LU1(k,3)*y(:,:,k)
+        !     sum2 = sum2 + this%LU1(k,4)*y(:,:,k)
+        ! end do
     
-        ! Step 10
-        y(:,:,this%n-1) = y(:,:,this%n-1) - sum1
-        y(:,:,this%n)   = ( y(:,:,this%n)   - sum2 - this%LU1(this%n-1,4)*y(:,:,this%n-1) ) * this%LU1(this%n,5)
+        ! ! Step 10
+        ! y(:,:,this%n-1) = y(:,:,this%n-1) - sum1
+        ! y(:,:,this%n)   = ( y(:,:,this%n)   - sum2 - this%LU1(this%n-1,4)*y(:,:,this%n-1) ) * this%LU1(this%n,5)
     
-        ! Step 11
-        y(:,:,this%n-1) = ( y(:,:,this%n-1) - this%LU1(this%n-1,9)*y(:,:,this%n) ) * this%LU1(this%n-1,5)
-        y(:,:,this%n-2) = ( y(:,:,this%n-2) - this%LU1(this%n-2,8)*y(:,:,this%n-1) - this%LU1(this%n-2,9)*y(:,:,this%n) ) * this%LU1(this%n-2,5)
-        y(:,:,this%n-3) = ( y(:,:,this%n-3) - this%LU1(this%n-3,6)*y(:,:,this%n-2) - this%LU1(this%n-3,8)*y(:,:,this%n-1) - this%LU1(this%n-3,9)*y(:,:,this%n) ) * this%LU1(this%n-3,5)
-        do k = this%n-4,1,-1
-            y(:,:,k) = ( y(:,:,k) - this%LU1(k,6)*y(:,:,k+1) - this%LU1(k,7)*y(:,:,k+2) - this%LU1(k,8)*y(:,:,this%n-1) - this%LU1(k,9)*y(:,:,this%n) ) * this%LU1(k,5)
+        ! ! Step 11
+        ! y(:,:,this%n-1) = ( y(:,:,this%n-1) - this%LU1(this%n-1,9)*y(:,:,this%n) ) * this%LU1(this%n-1,5)
+        ! y(:,:,this%n-2) = ( y(:,:,this%n-2) - this%LU1(this%n-2,8)*y(:,:,this%n-1) - this%LU1(this%n-2,9)*y(:,:,this%n) ) * this%LU1(this%n-2,5)
+        ! y(:,:,this%n-3) = ( y(:,:,this%n-3) - this%LU1(this%n-3,6)*y(:,:,this%n-2) - this%LU1(this%n-3,8)*y(:,:,this%n-1) - this%LU1(this%n-3,9)*y(:,:,this%n) ) * this%LU1(this%n-3,5)
+        ! do k = this%n-4,1,-1
+        !     y(:,:,k) = ( y(:,:,k) - this%LU1(k,6)*y(:,:,k+1) - this%LU1(k,7)*y(:,:,k+2) - this%LU1(k,8)*y(:,:,this%n-1) - this%LU1(k,9)*y(:,:,this%n) ) * this%LU1(k,5)
+        ! end do
+    
+        do j=1,n2
+            ! Step 8 ( update y instead of creating z )
+            y(:,j,2) = y(:,j,2) - this%LU1(2,1)*y(:,j,1) 
+            sum1 = this%LU1(1,3)*y(:,j,1) + this%LU1(2,3)*y(:,j,2)
+            sum2 = this%LU1(1,4)*y(:,j,1) + this%LU1(2,4)*y(:,j,2)
+
+            ! Step 9
+            do k = 3,this%n-2
+                y(:,j,k) = y(:,j,k) - this%LU1(k,1)*y(:,j,k-1) - this%LU1(k,2)*y(:,j,k-2)
+                sum1 = sum1 + this%LU1(k,3)*y(:,j,k)
+                sum2 = sum2 + this%LU1(k,4)*y(:,j,k)
+            end do
+    
+            ! Step 10
+            y(:,j,this%n-1) = y(:,j,this%n-1) - sum1
+            y(:,j,this%n)   = ( y(:,j,this%n)   - sum2 - this%LU1(this%n-1,4)*y(:,j,this%n-1) ) * this%LU1(this%n,5)
+    
+            ! Step 11
+            y(:,j,this%n-1) = ( y(:,j,this%n-1) - this%LU1(this%n-1,9)*y(:,j,this%n) ) * this%LU1(this%n-1,5)
+            y(:,j,this%n-2) = ( y(:,j,this%n-2) - this%LU1(this%n-2,8)*y(:,j,this%n-1) - this%LU1(this%n-2,9)*y(:,j,this%n) ) * this%LU1(this%n-2,5)
+            y(:,j,this%n-3) = ( y(:,j,this%n-3) - this%LU1(this%n-3,6)*y(:,j,this%n-2) - this%LU1(this%n-3,8)*y(:,j,this%n-1) - this%LU1(this%n-3,9)*y(:,j,this%n) ) * this%LU1(this%n-3,5)
+            do k = this%n-4,1,-1
+                y(:,j,k) = ( y(:,j,k) - this%LU1(k,6)*y(:,j,k+1) - this%LU1(k,7)*y(:,j,k+2) - this%LU1(k,8)*y(:,j,this%n-1) - this%LU1(k,9)*y(:,j,this%n) ) * this%LU1(k,5)
+            end do
         end do
     
     end subroutine
@@ -1438,6 +1466,7 @@ contains
         real(rkind) :: a_np_3, b_np_3   
         real(rkind) :: a_np_2
         real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
+        integer :: j
 
 
         select case (this%periodic)
@@ -1445,27 +1474,50 @@ contains
             a10 = a10d1 * this%onebydx
             b10 = b10d1 * this%onebydx
             c10 = c10d1 * this%onebydx
-            RHS(:,:,1) = a10 * ( f(:,:,2)   - f(:,:,this%n  ) ) &
-                               + b10 * ( f(:,:,3)   - f(:,:,this%n-1) ) &
-                               + c10 * ( f(:,:,4)   - f(:,:,this%n-2) )
-            RHS(:,:,2) = a10 * ( f(:,:,3)   - f(:,:,1       ) ) &
-                               + b10 * ( f(:,:,4)   - f(:,:,this%n  ) ) &
-                               + c10 * ( f(:,:,5)   - f(:,:,this%n-1) )
-            RHS(:,:,3) = a10 * ( f(:,:,4)   - f(:,:,2       ) ) &
-                               + b10 * ( f(:,:,5)   - f(:,:,1       ) ) &
-                               + c10 * ( f(:,:,6)   - f(:,:,this%n  ) )
-            RHS(:,:,4:this%n-3) = a10 * ( f(:,:,5:this%n-2) - f(:,:,3:this%n-4) ) &
-                                        + b10 * ( f(:,:,6:this%n-1) - f(:,:,2:this%n-5) ) &
-                                        + c10 * ( f(:,:,7:this%n  ) - f(:,:,1:this%n-6) )
-            RHS(:,:,this%n-2) = a10 * ( f(:,:,this%n-1) - f(:,:,this%n-3) ) &
-                                      + b10 * ( f(:,:,this%n  ) - f(:,:,this%n-4) ) &
-                                      + c10 * ( f(:,:,1       ) - f(:,:,this%n-5) )
-            RHS(:,:,this%n-1) = a10 * ( f(:,:,this%n  ) - f(:,:,this%n-2) ) &
-                                      + b10 * ( f(:,:,1       ) - f(:,:,this%n-3) ) &
-                                      + c10 * ( f(:,:,2       ) - f(:,:,this%n-4) )
-            RHS(:,:,this%n  ) = a10 * ( f(:,:,1       ) - f(:,:,this%n-1) ) &
-                                              + b10 * ( f(:,:,2       ) - f(:,:,this%n-2) ) &
-                                              + c10 * ( f(:,:,3       ) - f(:,:,this%n-3) )
+            ! RHS(:,:,1) = a10 * ( f(:,:,2)   - f(:,:,this%n  ) ) &
+            !                    + b10 * ( f(:,:,3)   - f(:,:,this%n-1) ) &
+            !                    + c10 * ( f(:,:,4)   - f(:,:,this%n-2) )
+            ! RHS(:,:,2) = a10 * ( f(:,:,3)   - f(:,:,1       ) ) &
+            !                    + b10 * ( f(:,:,4)   - f(:,:,this%n  ) ) &
+            !                    + c10 * ( f(:,:,5)   - f(:,:,this%n-1) )
+            ! RHS(:,:,3) = a10 * ( f(:,:,4)   - f(:,:,2       ) ) &
+            !                    + b10 * ( f(:,:,5)   - f(:,:,1       ) ) &
+            !                    + c10 * ( f(:,:,6)   - f(:,:,this%n  ) )
+            ! RHS(:,:,4:this%n-3) = a10 * ( f(:,:,5:this%n-2) - f(:,:,3:this%n-4) ) &
+            !                             + b10 * ( f(:,:,6:this%n-1) - f(:,:,2:this%n-5) ) &
+            !                             + c10 * ( f(:,:,7:this%n  ) - f(:,:,1:this%n-6) )
+            ! RHS(:,:,this%n-2) = a10 * ( f(:,:,this%n-1) - f(:,:,this%n-3) ) &
+            !                           + b10 * ( f(:,:,this%n  ) - f(:,:,this%n-4) ) &
+            !                           + c10 * ( f(:,:,1       ) - f(:,:,this%n-5) )
+            ! RHS(:,:,this%n-1) = a10 * ( f(:,:,this%n  ) - f(:,:,this%n-2) ) &
+            !                           + b10 * ( f(:,:,1       ) - f(:,:,this%n-3) ) &
+            !                           + c10 * ( f(:,:,2       ) - f(:,:,this%n-4) )
+            ! RHS(:,:,this%n  ) = a10 * ( f(:,:,1       ) - f(:,:,this%n-1) ) &
+            !                                   + b10 * ( f(:,:,2       ) - f(:,:,this%n-2) ) &
+            !                                   + c10 * ( f(:,:,3       ) - f(:,:,this%n-3) )
+            do j=1,n2
+                RHS(:,j,1) = a10 * ( f(:,j,2)   - f(:,j,this%n  ) ) &
+                                   + b10 * ( f(:,j,3)   - f(:,j,this%n-1) ) &
+                                   + c10 * ( f(:,j,4)   - f(:,j,this%n-2) )
+                RHS(:,j,2) = a10 * ( f(:,j,3)   - f(:,j,1       ) ) &
+                                   + b10 * ( f(:,j,4)   - f(:,j,this%n  ) ) &
+                                   + c10 * ( f(:,j,5)   - f(:,j,this%n-1) )
+                RHS(:,j,3) = a10 * ( f(:,j,4)   - f(:,j,2       ) ) &
+                                   + b10 * ( f(:,j,5)   - f(:,j,1       ) ) &
+                                   + c10 * ( f(:,j,6)   - f(:,j,this%n  ) )
+                RHS(:,j,4:this%n-3) = a10 * ( f(:,j,5:this%n-2) - f(:,j,3:this%n-4) ) &
+                                            + b10 * ( f(:,j,6:this%n-1) - f(:,j,2:this%n-5) ) &
+                                            + c10 * ( f(:,j,7:this%n  ) - f(:,j,1:this%n-6) )
+                RHS(:,j,this%n-2) = a10 * ( f(:,j,this%n-1) - f(:,j,this%n-3) ) &
+                                          + b10 * ( f(:,j,this%n  ) - f(:,j,this%n-4) ) &
+                                          + c10 * ( f(:,j,1       ) - f(:,j,this%n-5) )
+                RHS(:,j,this%n-1) = a10 * ( f(:,j,this%n  ) - f(:,j,this%n-2) ) &
+                                          + b10 * ( f(:,j,1       ) - f(:,j,this%n-3) ) &
+                                          + c10 * ( f(:,j,2       ) - f(:,j,this%n-4) )
+                RHS(:,j,this%n  ) = a10 * ( f(:,j,1       ) - f(:,j,this%n-1) ) &
+                                                  + b10 * ( f(:,j,2       ) - f(:,j,this%n-2) ) &
+                                                  + c10 * ( f(:,j,3       ) - f(:,j,this%n-3) )
+            end do
         case (.FALSE.)
             a10    = q_hat * this%onebydx  
             b10    = r_hat * this%onebydx 

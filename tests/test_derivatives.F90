@@ -6,7 +6,7 @@ program test_derivatives
     use DerivativesMod,  only: derivatives
     implicit none
 
-    integer :: nx = 64, ny=64, nz=64
+    integer :: nx =256, ny=256, nz=256
 
 
     type( derivatives ) :: method1, method2, method3
