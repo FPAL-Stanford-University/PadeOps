@@ -135,7 +135,6 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
-    type(derivatives),               intent(in) :: der
     integer                                     :: outputunit=229
 
     character(len=clen) :: outputfile, velstr

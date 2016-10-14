@@ -126,6 +126,7 @@ contains
     end subroutine
 
     subroutine get_p_devstress_T_sos(this,rho0,g,rho,e,entr,p,T,devstress,sos)
+        use decomp_2d, only: nrank
         class(generaleos), intent(inout) :: this
         real(rkind),                     intent(in)  :: rho0
         real(rkind), dimension(:,:,:,:), intent(in)  :: g
@@ -255,7 +256,6 @@ contains
                     if(minval(eigval)<1.0d-12) then
                         print '(A,I6,A)', 'proc ', nrank, ': Matrix not SPD. Please check.'
                     endif
-
 
                     if(idebug==1) write(*,*) '---eigval---'
                     if(idebug==1) write(*,'(3(e19.12,1x))') eigval(1:3)

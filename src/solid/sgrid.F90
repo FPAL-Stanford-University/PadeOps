@@ -387,11 +387,9 @@ contains
             call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
         else
             allocate( detG(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
-
             detG = this%g11*(this%g22*this%g33-this%g23*this%g32) &
                  - this%g12*(this%g21*this%g33-this%g31*this%g23) &
                  + this%g13*(this%g21*this%g32-this%g31*this%g22)
-
             call this%geneos%get_p_devstress_T_sos(this%rho0, this%g, this%rho, this%e, this%Ent, this%p, this%T, this%devstress, this%sos)
         endif
         
@@ -712,6 +710,8 @@ contains
         if ( (this%tstop <= zero) .AND. (this%nsteps <= 0) ) then
             call GracefulExit('No stopping criterion set. Set either tstop or nsteps to be positive.', 345)
         end if
+        write(*,*) this%dt
+        write(*,*) stability
 
         ! Start the simulation while loop
         do while ( tcond .AND. stepcond .AND. (.NOT. hookcond) )
@@ -735,6 +735,7 @@ contains
             
             ! Get the new time step
             call this%get_dt(stability)
+            call message(2,"Stability limit: "//trim(stability))
             
             ! Check for visualization condition and adjust time step
             if ( (this%tviz > zero) .AND. ((this%tsim + this%dt)*(one + eps) >= this%tviz * this%viz%vizcount) ) then
@@ -758,6 +759,11 @@ contains
                 stepcond = .FALSE.
             end if
 
+        write(*,*) '---At end of time loop---'
+        write(*,*) this%dt
+        write(*,*) stability
+        write(*,*) vizcond
+        write(*,*) '---At end of time loop---'
         end do
 
     end subroutine
@@ -1059,7 +1065,14 @@ contains
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
+        write(*,*) '--------' 
+        write(*,*) this%etafac, this%dt, this%rho0
+        write(*,*) maxval(this%rho), minval(this%rho)
+        write(*,*) maxval(detg), minval(detg)
+        write(*,*) '--------' 
         penalty = (this%etafac/this%dt)*(this%rho/detg/this%rho0-one)
+        !write(*,*) this%rho/detg
+        write(*,*) '--------' 
 
         tmp = -this%u*this%g11-this%v*this%g12-this%w*this%g13
         call this%gradient(tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-this%x_bc,this%y_bc,this%z_bc)
