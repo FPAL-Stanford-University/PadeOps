@@ -32,11 +32,23 @@ module GeneralMatEOS
         !real(rkind) :: T0    != 300.0_rkind
         real(rkind) :: gams  != 2.0_rkind
 
+        ! EOS (2.83)-(2.84) in Barton PhD Thesis (2010)
+        ! Default values given in Table (2.1) in Barton PhD Thesis (2010)
+        real(rkind) :: B0 = 2.1d3**2
+        !real(rkind) :: beta  != 3.0_rkind
+        !real(rkind) :: Kp    != c0^2-(4/3)B0^2 = 15.28d6
+        !real(rkind) :: alp   != 1.0_rkind
+        !real(rkind) :: Cv    != 390.0_rkind
+        !real(rkind) :: T0    != 300.0_rkind
+        !real(rkind) :: gams  != 2.0_rkind
+        
+
         real(rkind) :: invCv
 
         real(rkind), allocatable, dimension(:,:,:,:) :: finger
         real(rkind), allocatable, dimension(:,:,:,:) :: fingersq
         real(rkind), allocatable, dimension(:,:,:)   :: Inv1,Inv2,Inv3,dedI1fac,dedI2fac,dedI3fac,GI3,GpI3
+        real(rkind), allocatable, dimension(:,:,:)   :: Inv1G,Inv2Gfac,Inv3G
 
         real(rkind), allocatable, dimension(:) :: work
         integer :: lwork
@@ -110,6 +122,27 @@ contains
             deallocate(this%work); allocate(this%work(this%lwork))
 
             allocate( this%finger  (decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),6) )
+
+        elseif(this%eostype==4) then
+
+            ! EOS (2.82)-(2.83), in Barton PhD Thesis.
+
+            this%b0   = eosparams(1);     this%beta = eosparams(2); 
+            this%Kp   = eosparams(3);     this%alp  = eosparams(4);
+            this%Cv   = eosparams(5);     this%T0   = eosparams(6);
+            this%gams = eosparams(7);
+
+            !! Get optimal lwork for eigenvalue computation
+            !this%lwork = -1;         allocate(this%work(100))   ! arbitrary large size
+            !call dsyev('V', 'U', 3, gloc, 3, eigval, this%work, this%lwork, info)
+            !this%lwork = this%work(1)
+            !deallocate(this%work); allocate(this%work(this%lwork))
+
+            allocate( this%finger  (decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),6) )
+            allocate( this%fingersq(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),6) )
+            allocate( this%Inv1G   (decomp%ysz(1),decomp%ysz(2),decomp%ysz(3))   )
+            allocate( this%Inv2Gfac(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3))   )
+            allocate( this%Inv3G   (decomp%ysz(1),decomp%ysz(2),decomp%ysz(3))   )
         endif
 
     end subroutine
@@ -122,6 +155,8 @@ contains
             deallocate(this%finger,this%fingersq,this%Inv1,this%Inv2,this%Inv3,this%dedI1fac,this%dedI2fac,this%dedI3fac,this%GI3,this%GpI3)
         elseif(this%eostype==3) then
             deallocate(this%finger, this%work)
+        elseif(this%eostype==4) then
+            deallocate(this%Inv3G,this%Inv2Gfac,this%Inv1G,this%fingersq,this%finger)
         endif
     end subroutine
 
@@ -137,6 +172,7 @@ contains
         integer :: i, j, k, nxp, nyp, nzp, info, idebug = 0
         real(rkind) :: gloc(3,3), eigval(3), lam(3,3), hencky(3,3), mu0Byrho0, OneByAlpP2, OneByAlpP1, BetP1
         real(rkind) :: KbyAlp, Kby2Alp2, CvT0, gamFac,  ploc, I1He, expmI1He, cs2, mu, eshear, ethermal, dehdI1He, expmI1Healp, expmI1Hegam
+        real(rkind) :: Alpby2, Betby2, Gamby2, B0by2, invT0, gamCv, B0fac, betFac, betFac2
 
         if(this%eostype==2) then
           !p = zero!(this%gam-one)*rho*e - this%gam*this%PInf
@@ -337,6 +373,61 @@ contains
                 enddo
               enddo
             enddo
+        elseif(this%eostype==4) then
+
+          associate ( g11 => g(:,:,:,1), g12 => g(:,:,:,2), g13 => g(:,:,:,3), &
+                      g21 => g(:,:,:,4), g22 => g(:,:,:,5), g23 => g(:,:,:,6), &
+                      g31 => g(:,:,:,7), g32 => g(:,:,:,8), g33 => g(:,:,:,9)  )
+  
+              this%finger(:,:,:,1) = g11*g11 + g21*g21 + g31*g31
+              this%finger(:,:,:,2) = g11*g12 + g21*g22 + g31*g32
+              this%finger(:,:,:,3) = g11*g13 + g21*g23 + g31*g33
+              this%finger(:,:,:,4) = g12*g12 + g22*g22 + g32*g32
+              this%finger(:,:,:,5) = g12*g13 + g22*g23 + g32*g33
+              this%finger(:,:,:,6) = g13*g13 + g23*g23 + g33*g33
+  
+          end associate
+  
+          associate ( GG11 => this%finger(:,:,:,1), GG12 => this%finger(:,:,:,2), GG13 => this%finger(:,:,:,3), &
+                      GG21 => this%finger(:,:,:,2), GG22 => this%finger(:,:,:,4), GG23 => this%finger(:,:,:,5), &
+                      GG31 => this%finger(:,:,:,3), GG32 => this%finger(:,:,:,5), GG33 => this%finger(:,:,:,6)  )
+  
+              this%fingersq(:,:,:,1) = GG11*GG11 + GG12*GG21 + GG13*GG31
+              this%fingersq(:,:,:,2) = GG11*GG12 + GG12*GG22 + GG13*GG32
+              this%fingersq(:,:,:,3) = GG11*GG13 + GG12*GG23 + GG13*GG33
+              this%fingersq(:,:,:,4) = GG21*GG12 + GG22*GG22 + GG23*GG32
+              this%fingersq(:,:,:,5) = GG21*GG13 + GG22*GG23 + GG23*GG33
+              this%fingersq(:,:,:,6) = GG31*GG13 + GG32*GG23 + GG33*GG33
+  
+              this%Inv1G = GG11 + GG22 + GG33
+              this%Inv3G = GG11*(GG22*GG33-GG23*GG32) - GG12*(GG21*GG33-GG31*GG23) + GG13*(GG21*GG32-GG31*GG22)
+              this%Inv2Gfac = -sixth*this%Inv1G*this%Inv1G + half*(this%fingersq(:,:,:,1) + this%fingersq(:,:,:,4) + this%fingersq(:,:,:,6))
+          end associate
+  
+          Kby2Alp2 = half*this%Kp/this%alp**2
+          Alpby2 = half*this%alp
+          Gamby2 = half*this%gams
+          B0by2  = half*this%B0
+          Betby2 = half*this%beta
+          invT0  = one/this%T0
+          gamCv  = this%gams*this%Cv
+          B0fac  = (half*this%beta + twothird)*this%B0 
+          gamFac = this%gams**2*this%Cv
+          betFac = half*this%beta+twothird
+          betFac2 = this%beta*betfac
+
+          T = (e - (Kby2Alp2 * (this%Inv3G**Alpby2 - one)**2 + B0by2*this%Inv3G**Betby2*this%Inv2Gfac)) / this%Cv + this%T0*this%Inv3G**Gamby2
+          entr = this%Cv*log(invT0*T/this%Inv3G**Gamby2)
+          p = KbyAlp * (this%Inv3G**Alpby2 - one)*this%Inv3G**Alpby2 + gamCv*(T - this%T0*this%Inv3G**Gamby2) + B0fac*this%Inv3G**Betby2*this%Inv2Gfac
+          devstress(:,:,:,1) = -p + two*this%B0*rho*this%Inv3G**Betby2 * (third*this%Inv2Gfac + sixth*this%Inv1G*this%finger(:,:,:,1) - half*this%fingersq(:,:,:,1))
+          devstress(:,:,:,2) =      two*this%B0*rho*this%Inv3G**Betby2 * (                 sixth*this%Inv1G*this%finger(:,:,:,2) - half*this%fingersq(:,:,:,2))
+          devstress(:,:,:,3) =      two*this%B0*rho*this%Inv3G**Betby2 * (                 sixth*this%Inv1G*this%finger(:,:,:,3) - half*this%fingersq(:,:,:,3))
+          devstress(:,:,:,4) = -p + two*this%B0*rho*this%Inv3G**Betby2 * (third*this%Inv2Gfac + sixth*this%Inv1G*this%finger(:,:,:,4) - half*this%fingersq(:,:,:,4))
+          devstress(:,:,:,5) =      two*this%B0*rho*this%Inv3G**Betby2 * (                 sixth*this%Inv1G*this%finger(:,:,:,5) - half*this%fingersq(:,:,:,5))
+          devstress(:,:,:,6) = -p + two*this%B0*rho*this%Inv3G**Betby2 * (third*this%Inv2Gfac + sixth*this%Inv1G*this%finger(:,:,:,6) - half*this%fingersq(:,:,:,6))
+
+          sos = (p+devstress(:,:,:,1))/rho + this%Kp*this%Inv3G**Alpby2*(two*this%Inv3G**Alpby2 - one) + gamFac*(T - this%T0*this%Inv3G**Gamby2) + &
+                third*this%B0*this%Inv3G**Betby2 * (betFac2*(this%Inv3G - one)**2 - two*(this%Inv3G - one) + 4*this%Inv3G*(betFac*sqrt(this%Inv3G) - two))
         endif
 
     end subroutine
@@ -351,6 +442,7 @@ contains
         integer :: i, j, k, nxp, nyp, nzp, info, idebug = 0
         real(rkind) :: I1He, expmI1He, expmI1Healp, expmI1Hegam, cs2, ehydro, ethermal, eshear
         real(rkind) :: Kby2Alp2, gloc(3,3), eigval(3), lam(3,3), hencky(3,3), ploc, mu0Byrho0
+        real(rkind) :: Alpby2, Betby2, Gamby2, B0by2
 
         nxp = size(g,1); nyp = size(g,2); nzp = size(g,3);
 
@@ -418,6 +510,44 @@ contains
               enddo
             enddo
           enddo
+        elseif(this%eostype==4) then
+
+          associate ( g11 => g(:,:,:,1), g12 => g(:,:,:,2), g13 => g(:,:,:,3), &
+                      g21 => g(:,:,:,4), g22 => g(:,:,:,5), g23 => g(:,:,:,6), &
+                      g31 => g(:,:,:,7), g32 => g(:,:,:,8), g33 => g(:,:,:,9)  )
+  
+              this%finger(:,:,:,1) = g11*g11 + g21*g21 + g31*g31
+              this%finger(:,:,:,2) = g11*g12 + g21*g22 + g31*g32
+              this%finger(:,:,:,3) = g11*g13 + g21*g23 + g31*g33
+              this%finger(:,:,:,4) = g12*g12 + g22*g22 + g32*g32
+              this%finger(:,:,:,5) = g12*g13 + g22*g23 + g32*g33
+              this%finger(:,:,:,6) = g13*g13 + g23*g23 + g33*g33
+  
+          end associate
+  
+          associate ( GG11 => this%finger(:,:,:,1), GG12 => this%finger(:,:,:,2), GG13 => this%finger(:,:,:,3), &
+                      GG21 => this%finger(:,:,:,2), GG22 => this%finger(:,:,:,4), GG23 => this%finger(:,:,:,5), &
+                      GG31 => this%finger(:,:,:,3), GG32 => this%finger(:,:,:,5), GG33 => this%finger(:,:,:,6)  )
+  
+              this%fingersq(:,:,:,1) = GG11*GG11 + GG12*GG21 + GG13*GG31
+              this%fingersq(:,:,:,2) = GG11*GG12 + GG12*GG22 + GG13*GG32
+              this%fingersq(:,:,:,3) = GG11*GG13 + GG12*GG23 + GG13*GG33
+              this%fingersq(:,:,:,4) = GG21*GG12 + GG22*GG22 + GG23*GG32
+              this%fingersq(:,:,:,5) = GG21*GG13 + GG22*GG23 + GG23*GG33
+              this%fingersq(:,:,:,6) = GG31*GG13 + GG32*GG23 + GG33*GG33
+  
+              this%Inv1G = GG11 + GG22 + GG33
+              this%Inv3G = GG11*(GG22*GG33-GG23*GG32) - GG12*(GG21*GG33-GG31*GG23) + GG13*(GG21*GG32-GG31*GG22)
+              this%Inv2Gfac = -sixth*this%Inv1G*this%Inv1G + half*(this%fingersq(:,:,:,1) + this%fingersq(:,:,:,4) + this%fingersq(:,:,:,6))
+          end associate
+  
+          Kby2Alp2 = half*this%Kp/this%alp**2
+          Alpby2 = half*this%alp
+          Gamby2 = half*this%gams
+          B0by2  = half*this%B0
+          Betby2 = half*this%beta
+  
+          e = Kby2Alp2 * (this%Inv3G**Alpby2 - one)**2 + this%Cv*(T - this%T0*this%Inv3G**Gamby2) + B0by2*this%Inv3G**Betby2*this%Inv2Gfac
         endif
 
     end subroutine
