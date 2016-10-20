@@ -127,7 +127,7 @@ contains
 
             ! EOS (2.82)-(2.83), in Barton PhD Thesis.
 
-            this%b0   = eosparams(1);     this%beta = eosparams(2); 
+            this%B0   = eosparams(1);     this%beta = eosparams(2); 
             this%Kp   = eosparams(3);     this%alp  = eosparams(4);
             this%Cv   = eosparams(5);     this%T0   = eosparams(6);
             this%gams = eosparams(7);
@@ -415,6 +415,7 @@ contains
           gamFac = this%gams**2*this%Cv
           betFac = half*this%beta+twothird
           betFac2 = this%beta*betfac
+          KbyAlp = this%Kp/this%alp
 
           T = (e - (Kby2Alp2 * (this%Inv3G**Alpby2 - one)**2 + B0by2*this%Inv3G**Betby2*this%Inv2Gfac)) / this%Cv + this%T0*this%Inv3G**Gamby2
           entr = this%Cv*log(invT0*T/this%Inv3G**Gamby2)
