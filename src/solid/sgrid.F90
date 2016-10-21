@@ -80,6 +80,7 @@ module SolidGrid
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
+        integer    , dimension(:,:,:),   allocatable :: penaltmask
        
         real(rkind) :: Cmu, Cbeta, Ckap
 
@@ -489,6 +490,10 @@ contains
         call alloc_buffs(this%ybuf,nbufsy,"y",this%decomp)
         call alloc_buffs(this%zbuf,nbufsz,"z",this%decomp)
 
+        if(allocated(this%penaltmask)) deallocate(this%penaltmask)
+        allocate(this%penaltmask(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)))
+        this%penaltmask = 0
+
         this%SkewSymm = SkewSymm
 
         varnames( 1) = 'density'
@@ -561,6 +566,8 @@ contains
         call destroy_buffs(this%xbuf)
         call destroy_buffs(this%ybuf)
         call destroy_buffs(this%zbuf)
+
+        if(allocated(this%penaltmask)) deallocate(this%penaltmask)
 
         if (allocated(this%sgas)) deallocate(this%sgas) 
         if (allocated(this%elastic)) deallocate(this%elastic) 
@@ -782,6 +789,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for g tensor equation
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: Qtmpg ! Temporary variable for RK45
         integer :: isub,i,j,k,l
+        real(rkind) :: expfac, ycrit_first
 
         character(len=clen) :: charout
 
@@ -837,6 +845,23 @@ contains
                 if (this%plastic) then
                     ! Effect plastic deformations
                     if(this%eostype == 1) call this%elastic%plastic_deformation(this%devstress, this%dt, this%invtau0, this%g)
+
+                    !! determine mask for penalty term
+                    !do k = 1,this%decomp%ysz(3)
+                    !  do j = 1,this%decomp%ysz(2)
+                    !    do i = 1,this%decomp%ysz(1)
+                    !        expfac = (two/three)*(this%elastic%yield/this%elastic%mu)**2
+                    !        ycrit_first = this%devstress(i,j,k,1)**2 + this%devstress(i,j,k,4)**2 + this%devstress(i,j,k,6)**2 + &
+                    !               two * (this%devstress(i,j,k,2)**2 + this%devstress(i,j,k,3)**2 + this%devstress(i,j,k,5)**2)
+                    !        if(ycrit_first/this%elastic%mu**2 - expfac > zero) then
+                    !            this%penaltmask(i,j,k) = 1
+                    !        else
+                    !            this%penaltmask(i,j,k) = 0
+                    !        endif
+                    !    enddo
+                    !  enddo
+                    !enddo
+
                     call this%get_primitive()      ! --- shouldn't this be after filtering?
 
                     !! Filter the conserved variables
@@ -1072,14 +1097,17 @@ contains
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
-        write(*,*) '--------' 
-        write(*,*) this%etafac, this%dt, this%rho0
-        write(*,*) maxval(this%rho), minval(this%rho)
-        write(*,*) maxval(detg), minval(detg)
-        write(*,*) '--------' 
+        !write(*,*) '--------' 
+        !write(*,*) this%etafac, this%dt, this%rho0
+        !write(*,*) maxval(this%rho), minval(this%rho)
+        !write(*,*) maxval(detg), minval(detg)
+        !write(*,*) '--------' 
         penalty = (this%etafac/this%dt)*(this%rho/detg/this%rho0-one)
-        !write(*,*) this%rho/detg
-        write(*,*) '--------' 
+        !penalty = penalty * this%penaltmask
+        !write(*,*) maxval(penalty), minval(penalty)
+        !write(*,*) maxval(this%penaltmask), minval(this%penaltmask)
+        !!write(*,*) this%rho/detg
+        !write(*,*) '--------' 
 
         tmp = -this%u*this%g11-this%v*this%g12-this%w*this%g13
         call this%gradient(tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-this%x_bc,this%y_bc,this%z_bc)
