@@ -63,7 +63,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = one/real(nx-1,rkind)
+        dx = 0.01d0*one/real(nx-1,rkind)
         dy = dx
         dz = dx
 
@@ -124,12 +124,32 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
        
         if(thick<zero) then 
-            tmp = half*(one + tanh( (x-half)/(abs(thick)) ))
+            tmp = half*(one + tanh( (x-0.01d0*half)/(abs(thick)) ))
         else
-            tmp = half*(one + tanh( (x-half)/(thick*dx) ))
+            tmp = half*(one + tanh( (x-0.01d0*half)/(thick*dx) ))
         endif
 
-        if(ivpflag==1) then
+        if(ivpflag==0) then
+
+          uL = 1000.0D0;   uR = -1000.0D0
+          vL = 0.0D0;   vR = 0.0D0
+          wL = 0.0D0;  wR = 0.0D0
+          gL = 0.0D0; gL(1,1) = 1.0D0; gL(2,2) = 1.0D0; gL(3,3) = 1.0D0
+          gR = 0.0D0; gR(1,1) = 1.0D0; gR(2,2) = 1.0D0; gR(3,3) = 1.0D0
+          !rhoL = 8.9D3; rhoR = 8.9D3
+          
+          rhoL = gL(1,1)*(gL(2,2)*gL(3,3) - gL(2,3)*gL(3,2)) - &
+                 gL(1,2)*(gL(2,1)*gL(3,3) - gL(3,1)*gL(2,3)) + &
+                 gL(1,3)*(gL(2,1)*gL(3,2) - gL(3,1)*gL(2,2))
+
+          rhoR = gR(1,1)*(gR(2,2)*gR(3,3) - gR(2,3)*gR(3,2)) - &
+                 gR(1,2)*(gR(2,1)*gR(3,3) - gR(3,1)*gR(2,3)) + &
+                 gR(1,3)*(gR(2,1)*gR(3,2) - gR(3,1)*gR(2,2))
+
+          !    p/(gamma*Cv*rho) + T0*(rho/rho0)**(gamma/2)
+          TL = pinit/(eosparams(7)*eosparams(5)*rhoL*rho_0) + eosparams(6)*rhoR**(half*eosparams(7));  TR = TL
+
+        elseif(ivpflag==1) then
 
           finit(1,1) = 0.98d0; finit(1,2) = 0.0d0; finit(1,3) = 0.0d0
           finit(2,1) = 0.02d0; finit(2,2) = 1.0d0; finit(2,3) = 0.1d0
@@ -155,6 +175,33 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
 
           TL = eosparams(6)*rhoL**eosparams(7)*exp(1.0D3/eosparams(5))   ! T0*(rho/rho0)**gamma*exp(entr/Cv)
           TR = eosparams(6)*rhoR**eosparams(7)
+
+        elseif(ivpflag==2) then
+
+          finit(1,1) = 1.00d0;   finit(1,2) = 0.0d0;  finit(1,3) = 0.0d0
+          finit(2,1) = -0.01d0;  finit(2,2) = 0.95d0; finit(2,3) = 0.02d0
+          finit(3,1) = -0.015d0; finit(3,2) = 0.0d0;  finit(3,3) = 0.9d0
+          call inv(finit, gL)
+
+          finit(1,1) = 1.00d0;  finit(1,2) = 0.0d0;  finit(1,3) = 0.0d0
+          finit(2,1) = 0.015d0; finit(2,2) = 0.95d0; finit(2,3) = 0.0d0
+          finit(3,1) = -0.01d0; finit(3,2) = 0.0d0;  finit(3,3) = 0.9d0
+          call inv(finit, gR)
+
+          rhoL = gL(1,1)*(gL(2,2)*gL(3,3) - gL(2,3)*gL(3,2)) - &
+                 gL(1,2)*(gL(2,1)*gL(3,3) - gL(3,1)*gL(2,3)) + &
+                 gL(1,3)*(gL(2,1)*gL(3,2) - gL(3,1)*gL(2,2))
+
+          rhoR = gR(1,1)*(gR(2,2)*gR(3,3) - gR(2,3)*gR(3,2)) - &
+                 gR(1,2)*(gR(2,1)*gR(3,3) - gR(3,1)*gR(2,3)) + &
+                 gR(1,3)*(gR(2,1)*gR(3,2) - gR(3,1)*gR(2,2))
+
+          uL = 2000.0d0; uR = zero
+          vL =  00.0d0;  vR = -30.0d0
+          wL = 100.0d0;  wR = -10.0d0
+
+          TL = eosparams(6)*rhoL**eosparams(7)   ! T0*(rho/rho0)**gamma
+          TR = TL
         endif
 
         u = uL + tmp * (uR - uL)
@@ -178,12 +225,27 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         ! Get rho compatible with det(g) and rho0
         tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
         rho = rho0 * tmp
+        rhoL = rho0 * rhoL
+        rhoR = rho0 * rhoR
 
         !if(eostype==3) then
         !  T = pinit/(eosparams(7)*rho0*eosparams(5)) + eosparams(6) ! = pinit/(gamma*rho0*CV) + T0
         !endif
 
+        write(*,*) 'uL uR = ', uL, uR
+        write(*,*) 'vL vR = ', vL, vR
+        write(*,*) 'wL wR = ', wL, wR
         write(*,*) 'TL TR = ', TL, TR
+        write(*,*) 'rL rR = ', rhoL, rhoR
+        write(*,*) 'gL gR 11= ', gL(1,1), gR(1,1)
+        write(*,*) 'gL gR 12= ', gL(1,2), gR(1,2)
+        write(*,*) 'gL gR 13= ', gL(1,3), gR(1,3)
+        write(*,*) 'gL gR 21= ', gL(2,1), gR(2,1)
+        write(*,*) 'gL gR 22= ', gL(2,2), gR(2,2)
+        write(*,*) 'gL gR 23= ', gL(2,3), gR(2,3)
+        write(*,*) 'gL gR 31= ', gL(3,1), gR(3,1)
+        write(*,*) 'gL gR 32= ', gL(3,2), gR(3,2)
+        write(*,*) 'gL gR 33= ', gL(3,3), gR(3,3)
 
     end associate
 
@@ -326,23 +388,23 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
         u  ( 1,:,:) = uL
         v  ( 1,:,:) = vL
         w  ( 1,:,:) = wL
-        p  ( 1,:,:) = pL
+        !p  ( 1,:,:) = pL
         T  ( 1,:,:) = TL
         
         g11( 1,:,:) = gL(1,1);  g12( 1,:,:) = gL(1,2);  g13( 1,:,:) = gL(1,3)
         g21( 1,:,:) = gL(2,1);  g22( 1,:,:) = gL(2,2);  g23( 1,:,:) = gL(2,3)
-        g31( 1,:,:) = gL(3,1);  g32( 1,:,:) = gL(3,2);  g33( 1,:,:) = gL(2,3)
+        g31( 1,:,:) = gL(3,1);  g32( 1,:,:) = gL(3,2);  g33( 1,:,:) = gL(3,3)
 
         rho(nx,:,:) = rhoR
         u  (nx,:,:) = uR
         v  (nx,:,:) = vR
         w  (nx,:,:) = wR
-        p  (nx,:,:) = pR
+        !p  (nx,:,:) = pR
         T  (nx,:,:) = TR
 
         g11(nx,:,:) = gR(1,1);  g12(nx,:,:) = gR(1,2);  g13(nx,:,:) = gR(1,3)
         g21(nx,:,:) = gR(2,1);  g22(nx,:,:) = gR(2,2);  g23(nx,:,:) = gR(2,3)
-        g31(nx,:,:) = gR(3,1);  g32(nx,:,:) = gR(3,2);  g33(nx,:,:) = gR(2,3)
+        g31(nx,:,:) = gR(3,1);  g32(nx,:,:) = gR(3,2);  g33(nx,:,:) = gR(3,3)
 
     end associate
 end subroutine

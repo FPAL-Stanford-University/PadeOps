@@ -364,8 +364,6 @@ contains
                     sos(i,j,k) = this%Kp*expmI1Healp*(OneByAlpP2*expmI1Healp-OneByAlpP1) + &
                                       gamFac*ethermal + two*cs2*(one-BetP1*I1He)
                     if(sos(i,j,k) < 1.0d-14) then
-                      write(*,*) 'sos2 = ', sos(i,j,k), i, j, k
-                      write(*,*) 'terms = ', this%Kp*expmI1Healp*(OneByAlpP2*expmI1Healp-OneByAlpP1), gamFac*ethermal, two*cs2*(one-BetP1*I1He)
                     else
                       sos(i,j,k) = sqrt(sos(i,j,k))
                     endif
@@ -419,16 +417,19 @@ contains
 
           T = (e - (Kby2Alp2 * (this%Inv3G**Alpby2 - one)**2 + B0by2*this%Inv3G**Betby2*this%Inv2Gfac)) / this%Cv + this%T0*this%Inv3G**Gamby2
           entr = this%Cv*log(invT0*T/this%Inv3G**Gamby2)
-          p = KbyAlp * (this%Inv3G**Alpby2 - one)*this%Inv3G**Alpby2 + gamCv*(T - this%T0*this%Inv3G**Gamby2) + B0fac*this%Inv3G**Betby2*this%Inv2Gfac
-          devstress(:,:,:,1) = -p + two*this%B0*rho*this%Inv3G**Betby2 * (third*this%Inv2Gfac + sixth*this%Inv1G*this%finger(:,:,:,1) - half*this%fingersq(:,:,:,1))
-          devstress(:,:,:,2) =      two*this%B0*rho*this%Inv3G**Betby2 * (                 sixth*this%Inv1G*this%finger(:,:,:,2) - half*this%fingersq(:,:,:,2))
-          devstress(:,:,:,3) =      two*this%B0*rho*this%Inv3G**Betby2 * (                 sixth*this%Inv1G*this%finger(:,:,:,3) - half*this%fingersq(:,:,:,3))
-          devstress(:,:,:,4) = -p + two*this%B0*rho*this%Inv3G**Betby2 * (third*this%Inv2Gfac + sixth*this%Inv1G*this%finger(:,:,:,4) - half*this%fingersq(:,:,:,4))
-          devstress(:,:,:,5) =      two*this%B0*rho*this%Inv3G**Betby2 * (                 sixth*this%Inv1G*this%finger(:,:,:,5) - half*this%fingersq(:,:,:,5))
-          devstress(:,:,:,6) = -p + two*this%B0*rho*this%Inv3G**Betby2 * (third*this%Inv2Gfac + sixth*this%Inv1G*this%finger(:,:,:,6) - half*this%fingersq(:,:,:,6))
-
-          sos = (p+devstress(:,:,:,1))/rho + this%Kp*this%Inv3G**Alpby2*(two*this%Inv3G**Alpby2 - one) + gamFac*(T - this%T0*this%Inv3G**Gamby2) + &
+          p = rho * (KbyAlp * (this%Inv3G**Alpby2 - one)*this%Inv3G**Alpby2 + gamCv*(T - this%T0*this%Inv3G**Gamby2) + B0fac*this%Inv3G**Betby2*this%Inv2Gfac)
+          devstress(:,:,:,1) = two*this%B0*rho*this%Inv3G**Betby2 * (third*this%Inv2Gfac + sixth*this%Inv1G*this%finger(:,:,:,1) - half*this%fingersq(:,:,:,1))
+          devstress(:,:,:,2) = two*this%B0*rho*this%Inv3G**Betby2 * (                      sixth*this%Inv1G*this%finger(:,:,:,2) - half*this%fingersq(:,:,:,2))
+          devstress(:,:,:,3) = two*this%B0*rho*this%Inv3G**Betby2 * (                      sixth*this%Inv1G*this%finger(:,:,:,3) - half*this%fingersq(:,:,:,3))
+          devstress(:,:,:,4) = two*this%B0*rho*this%Inv3G**Betby2 * (third*this%Inv2Gfac + sixth*this%Inv1G*this%finger(:,:,:,4) - half*this%fingersq(:,:,:,4))
+          devstress(:,:,:,5) = two*this%B0*rho*this%Inv3G**Betby2 * (                      sixth*this%Inv1G*this%finger(:,:,:,5) - half*this%fingersq(:,:,:,5))
+          devstress(:,:,:,6) = two*this%B0*rho*this%Inv3G**Betby2 * (third*this%Inv2Gfac + sixth*this%Inv1G*this%finger(:,:,:,6) - half*this%fingersq(:,:,:,6))
+          sos = (p-devstress(:,:,:,1))/rho + this%Kp*this%Inv3G**Alpby2*(two*this%Inv3G**Alpby2 - one) + gamFac*(T - this%T0*this%Inv3G**Gamby2) + &
                 third*this%B0*this%Inv3G**Betby2 * (betFac2*(this%Inv3G - one)**2 - two*(this%Inv3G - one) + 4*this%Inv3G*(betFac*sqrt(this%Inv3G) - two))
+          if(minval(sos) < 1.0d-14) then
+          else
+            sos = sqrt(sos)
+          endif
         endif
 
     end subroutine
