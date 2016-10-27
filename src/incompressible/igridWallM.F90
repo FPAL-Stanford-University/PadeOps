@@ -112,7 +112,7 @@ module IncompressibleGridWallM
         integer :: wallMType, botBC_Temp 
 
         ! Statistics to compute 
-        real(rkind), dimension(:), allocatable :: runningSum_sc, inst_horz_avg, runningSum_sc_turb, inst_horz_avg_turb
+        real(rkind), dimension(:), allocatable :: runningSum_sc, inst_horz_avg, runningSum_sc_turb, runningSum_turb, inst_horz_avg_turb
         real(rkind), dimension(:,:), allocatable :: zStats2dump, runningSum, TemporalMnNOW
         real(rkind), dimension(:), pointer :: u_mean, v_mean, w_mean, uu_mean, uv_mean, uw_mean, vv_mean, vw_mean, ww_mean
         real(rkind), dimension(:), pointer :: tau11_mean, tau12_mean, tau13_mean, tau22_mean, tau23_mean, tau33_mean
@@ -1686,6 +1686,7 @@ contains
         if(this%useWindTurbines) then
             allocate(this%inst_horz_avg_turb(5*this%WindTurbineArr%nTurbines))
             allocate(this%runningSum_sc_turb(5*this%WindTurbineArr%nTurbines))
+            allocate(this%runningSum_turb   (5*this%WindTurbineArr%nTurbines))
         endif
 
         ! mean velocities
@@ -1730,6 +1731,7 @@ contains
         if(this%useWindTurbines) then
             this%inst_horz_avg_turb = zero
             this%runningSum_sc_turb = zero
+            this%runningSum_turb    = zero
         endif
         nullify(gpC)
     end subroutine
@@ -1987,7 +1989,7 @@ contains
         endif
         ! this%inst_horz_avg_turb(1:5*this%WindTurbineArr%nTurbines) is computed in this%WindTurbineArr%getForceRHS
         this%runningSum_sc = this%runningSum_sc + this%inst_horz_avg
-        this%runningSum_sc_turb = this%runningSum_sc_turb + this%inst_horz_avg_turb
+        if(this%useWindTurbines) this%runningSum_sc_turb = this%runningSum_sc_turb + this%inst_horz_avg_turb
 
     end subroutine 
 
@@ -2000,7 +2002,6 @@ contains
         character(len=clen) :: fname
         character(len=clen) :: tempname
         integer :: tid, ierr
-        real(rkind), dimension(5*this%WindTurbineArr%nTurbines) :: runningSum_turb
 
         this%TemporalMnNOW = this%runningSum/real(this%tidSUM,rkind)
         tid = this%step
@@ -2033,9 +2034,10 @@ contains
                                    this%TemporalMnNOW(:,22)*this%TemporalMnNOW(:,22)))
         this%TemporalMnNOW(:,17) = half*this%TemporalMnNOW(:,17)/this%Re     ! note: this is actually 2/Re*(..)/4
 
-
-        call MPI_reduce(this%runningSum_sc_turb, runningSum_turb, 5*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
-
+        if(this%useWindTurbines) then
+            this%runningSum_turb = zero
+            call MPI_reduce(this%runningSum_sc_turb, this%runningSum_turb, 5*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+        endif
         if (nrank == 0) then
             write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%RunID,"_t",tid,".stt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
@@ -2046,7 +2048,7 @@ contains
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
             open(unit=771,file=fname,status='unknown')
             if(this%useWindTurbines) then
-                write(771,'(e19.12,1x,i7,1x,5005(e19.12,1x))') this%tsim, this%tidSUM, this%runningSum_sc/real(this%tidSUM,rkind), runningSum_turb/real(this%tidSUM,rkind) ! change if using more than 1000 turbines
+                write(771,'(e19.12,1x,i7,1x,5005(e19.12,1x))') this%tsim, this%tidSUM, this%runningSum_sc/real(this%tidSUM,rkind), this%runningSum_turb/real(this%tidSUM,rkind) ! change if using more than 1000 turbines
             else
                 write(771,'(e19.12,1x,i7,1x,5(e19.12,1x))') this%tsim, this%tidSUM, this%runningSum_sc/real(this%tidSUM,rkind)
             endif
@@ -2091,6 +2093,7 @@ contains
         nullify(this%S11_mean, this%S12_mean, this%S13_mean, this%S22_mean, this%S23_mean, this%S33_mean)
         nullify(this%sgsdissp, this%viscdissp, this%sgscoeff_mean)
         deallocate(this%zStats2dump, this%runningSum, this%TemporalMnNOW, this%runningSum_sc)
+        if(this%useWindTurbines) deallocate(this%inst_horz_avg_turb, this%runningSum_sc_turb, this%runningSum_turb)
     end subroutine 
 
     subroutine dump_planes(this)
