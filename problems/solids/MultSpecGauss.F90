@@ -18,6 +18,7 @@ program MultSpecGauss
     
     ! Initialize the grid object
     call sgp%init(inputfile)
+    write(*,*) 'Done init'
 
     ! Time advance
     call sgp%simulate()
