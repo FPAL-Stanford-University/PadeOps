@@ -130,23 +130,26 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
 end subroutine
 
-subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
+subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,eps,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
+    use DerivativesMod,   only: derivatives
 
     use Multispecies_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
     type(solid_mixture),             intent(in) :: mix
+    integer, dimension(2),           intent(in) :: x_bc, y_bc, z_bc
     integer                                     :: outputunit=229
 
     character(len=clen) :: outputfile, str
@@ -163,6 +166,12 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
             write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2,A)') decomp%ysz(1), "_", minVF, "_", rhoRatio, "_sharp"
         else
             write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2,A)') decomp%ysz(1), "_", minVF, "_", rhoRatio, "_smooth"
+        end if
+
+        if (mix%use_gTg) then
+            str = trim(str)//'_gTg'
+        else
+            str = trim(str)//'_g'
         end if
 
         write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_"//trim(str)//"_", vizcount, ".dat"

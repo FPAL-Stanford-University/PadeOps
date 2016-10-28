@@ -18,6 +18,7 @@ module SolidMod
         logical :: plast = .FALSE.
         logical :: explPlast = .FALSE.
         logical :: PTeqb = .TRUE.
+        logical :: use_gTg = .FALSE.
 
         class(stiffgas ), allocatable :: hydro
         class(sep1solid), allocatable :: elastic
@@ -73,10 +74,12 @@ module SolidMod
 
         procedure :: init
         procedure :: getRHS_g
+        procedure :: getRHS_gTg
         procedure :: getRHS_Ys
         procedure :: getRHS_eh
         procedure :: getRHS_VF
         procedure :: update_g
+        procedure :: update_gTg
         procedure :: update_Ys
         procedure :: update_eh
         procedure :: update_VF
@@ -169,18 +172,21 @@ module SolidMod
 contains
 
     !function init(decomp,der,fil,hydro,elastic) result(this)
-    subroutine init(this,decomp,der,fil,PTeqb)
+    subroutine init(this,decomp,der,fil,PTeqb,use_gTg)
         class(solid), target, intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der
         type(filters),     target, intent(in) :: fil
         logical, intent(in) :: PTeqb
+        logical, intent(in) :: use_gTg
 
         this%decomp => decomp
         this%der => der
         this%fil => fil
        
         this%PTeqb = PTeqb
+
+        this%use_gTg = use_gTg
 
         ! Assume everything is in Y decomposition
         this%nxp = decomp%ysz(1)
@@ -347,6 +353,10 @@ contains
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
+        if (this%use_gTg) then
+            detg = sqrt(detg)
+        end if
+
         rho = detg*this%elastic%rho0
 
     end subroutine
@@ -386,7 +396,7 @@ contains
                 !endif
                 if(this%PTeqb) this%kap = sqrt(two/three*this%modDevSigma)
 
-                call this%elastic%plastic_deformation(this%g)
+                call this%elastic%plastic_deformation(this%g, this%use_gTg)
 
                 call this%get_eelastic_devstress()
                 this%modDevSigma = this%sxx*this%sxx + this%syy*this%syy + this%szz*this%szz + &
@@ -411,7 +421,7 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
-        real(rkind), parameter :: etafac = zero!one/6._rkind
+        real(rkind), parameter :: etafac = one/6._rkind
 
         ! Symmetry and anti-symmetry properties of g are assumed as below
         ! In x g_{ij}: [S A A; A S S; A S S]
@@ -461,6 +471,116 @@ contains
 
     end subroutine
 
+    subroutine update_gTg(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+        use RKCoeffs,   only: RK45_A,RK45_B
+        class(solid), intent(inout) :: this
+        integer, intent(in) :: isub
+        real(rkind), intent(in) :: dt,tsim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for gTg tensor equation
+
+        call this%getRHS_gTg(rho,u,v,w,dt,rhsg,x_bc,y_bc,z_bc)
+        call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
+
+        ! advance sub-step
+        if(isub==1) this%Qtmpg = zero                   ! not really needed, since RK45_A(1) = 0
+        this%Qtmpg  = dt*rhsg + RK45_A(isub)*this%Qtmpg
+        this%g = this%g  + RK45_B(isub)*this%Qtmpg
+
+        if(this%plast) then
+            if (.NOT. this%explPlast) then
+                call this%elastic%plastic_deformation(this%g, this%use_gTg)
+            end if
+        end if
+
+    end subroutine
+
+    subroutine getRHS_gTg(this,rho,u,v,w,dt,rhsg,x_bc,y_bc,z_bc)
+        use operators, only: gradient, curl
+        class(solid),                                         intent(in)  :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        real(rkind),                                          intent(in)  :: dt
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradG
+        real(rkind), parameter :: etafac = one/6._rkind
+
+        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+        
+        call gradient(this%decomp, this%der, u, dudx, dudy, dudz, -x_bc,  y_bc,  z_bc)
+        call gradient(this%decomp, this%der, v, dvdx, dvdy, dvdz,  x_bc, -y_bc,  z_bc)
+        call gradient(this%decomp, this%der, w, dwdx, dwdy, dwdz,  x_bc,  y_bc, -z_bc)
+
+        ! Symmetry and anti-symmetry properties of gTg are assumed as below (same as g)
+        ! In x gTg_{ij}: [S A A; A S S; A S S]
+        ! In y gTg_{ij}: [S A S; A S A; S A S]
+        ! In z gTg_{ij}: [S S A; S S A; A A S]
+
+        rhsg = zero
+
+        detG = this%G11*(this%G22*this%G33-this%G23*this%G32) &
+             - this%G12*(this%G21*this%G33-this%G31*this%G23) &
+             + this%G13*(this%G21*this%G32-this%G31*this%G22)
+
+        ! penalty = etafac*(this%rho/sqrt(detG)/this%rho0-one)
+        
+        detg = sqrt(detg)
+        tmp = (rho*this%Ys + this%elastic%rho0*detg*epssmall)/(this%VF + epssmall) ! species density 
+        penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
+
+        call gradient(this%decomp, this%der, this%G11, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc, y_bc, z_bc)
+        rhsg(:,:,:,1) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
+                        - (dudx*this%G11 + dvdx*this%G21 + dwdx*this%G31) &
+                        - (this%G11*dudx + this%G12*dvdx + this%G13*dwdx) + penalty*this%G11
+
+        call gradient(this%decomp, this%der, this%G12, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3),-x_bc,-y_bc, z_bc)
+        rhsg(:,:,:,2) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
+                        - (dudx*this%G12 + dvdx*this%G22 + dwdx*this%G32) &
+                        - (this%G11*dudy + this%G12*dvdy + this%G13*dwdy) + penalty*this%G12
+
+        call gradient(this%decomp, this%der, this%G13, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3),-x_bc, y_bc,-z_bc)
+        rhsg(:,:,:,3) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
+                        - (dudx*this%G13 + dvdx*this%G23 + dwdx*this%G33) &
+                        - (this%G11*dudz + this%G12*dvdz + this%G13*dwdz) + penalty*this%G13
+
+        rhsg(:,:,:,4) = rhsg(:,:,:,2)  ! Since symmetric
+
+        call gradient(this%decomp, this%der, this%G22, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc, y_bc, z_bc)
+        rhsg(:,:,:,5) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
+                        - (dudy*this%G12 + dvdy*this%G22 + dwdy*this%G32) &
+                        - (this%G21*dudy + this%G22*dvdy + this%G23*dwdy) + penalty*this%G22
+
+        call gradient(this%decomp, this%der, this%G23, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc,-y_bc,-z_bc)
+        rhsg(:,:,:,6) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
+                        - (dudy*this%G13 + dvdy*this%G23 + dwdy*this%G33) &
+                        - (this%G21*dudz + this%G22*dvdz + this%G23*dwdz) + penalty*this%G23
+
+        rhsg(:,:,:,7) = rhsg(:,:,:,3)  ! Since symmetric
+        rhsg(:,:,:,8) = rhsg(:,:,:,6)  ! Since symmetric
+
+        call gradient(this%decomp, this%der, this%G33, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc, y_bc, z_bc)
+        rhsg(:,:,:,9) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
+                        - (dudz*this%G13 + dvdz*this%G23 + dwdz*this%G33) &
+                        - (this%G31*dudz + this%G32*dvdz + this%G33*dwdz) + penalty*this%G33
+
+        if (this%plast) then
+            if (this%explPlast) then
+                call this%getPlasticSources(detg,rhsg)
+            end if
+        end if
+
+    end subroutine
+
     subroutine getPlasticSources(this,detg,rhsg)
         use constants, only: twothird
         class(solid),                                         intent(in)    :: this
@@ -480,6 +600,10 @@ contains
         end where
         invtaurel = invtaurel / (two * this%elastic%mu * detg)
 
+        if (this%use_gTg) then
+            invtaurel = two*invtaurel  ! Factor of 2 for gTg implementation
+        end if
+
         ! Add (1/tau_rel)*g*S to the rhsg (explicit plastic source terms)
         rhsg(:,:,:,1) = rhsg(:,:,:,1) + invtaurel * ( this%g11*this%sxx + this%g12*this%sxy + this%g13*this%sxz ) ! g11 
         rhsg(:,:,:,2) = rhsg(:,:,:,2) + invtaurel * ( this%g11*this%sxy + this%g12*this%syy + this%g13*this%syz ) ! g12 
@@ -492,6 +616,7 @@ contains
         rhsg(:,:,:,7) = rhsg(:,:,:,7) + invtaurel * ( this%g31*this%sxx + this%g32*this%sxy + this%g33*this%sxz ) ! g31 
         rhsg(:,:,:,8) = rhsg(:,:,:,8) + invtaurel * ( this%g31*this%sxy + this%g32*this%syy + this%g33*this%syz ) ! g32 
         rhsg(:,:,:,9) = rhsg(:,:,:,9) + invtaurel * ( this%g31*this%sxz + this%g32*this%syz + this%g33*this%szz ) ! g33 
+
     end subroutine
 
     subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
@@ -668,6 +793,10 @@ contains
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
+        if (this%use_gTg) then
+            rhom = sqrt(rhom)
+        end if
+
         ! Get rhom = rho*Ys/VF (Additional terms to give correct limiting behaviour when Ys and VF tend to 0)
         rhom = (rho*this%Ys + this%elastic%rho0*rhom*epssmall)/(this%VF + epssmall)   
 
@@ -712,7 +841,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6)  :: finger,fingersq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: trG, trG2, detG
 
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG)
+        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG,this%use_gTg)
         call this%elastic%get_eelastic(trG,trG2,detG,this%eel)
         call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
 

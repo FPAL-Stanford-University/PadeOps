@@ -27,6 +27,7 @@ module SolidMixtureMod
 
         logical :: SOSmodel = .FALSE.           ! is sound speed given by `equilibrium' model? Alternative is `frozen' model. Check Saurel et al., JCP 2009.
         logical :: PTeqb = .TRUE.
+        logical :: use_gTg = .FALSE.
 
     contains
 
@@ -69,7 +70,7 @@ module SolidMixtureMod
 contains
 
     !function init(decomp,der,fil,LAD,ns) result(this)
-    subroutine init(this,decomp,der,fil,LAD,ns,PTeqb,SOSmodel)
+    subroutine init(this,decomp,der,fil,LAD,ns,PTeqb,SOSmodel,use_gTg)
         !type(solid_mixture)      , intent(inout) :: this
         class(solid_mixture)      , intent(inout) :: this
         type(decomp_info), target, intent(in)    :: decomp
@@ -79,15 +80,19 @@ contains
         integer,                   intent(in)    :: ns
         logical,                   intent(in)    :: PTeqb
         logical,                   intent(in)    :: SOSmodel
+        logical,                   intent(in)    :: use_gTg
 
         type(solid), allocatable :: dummy
         integer :: i
 
         if (ns < 1) call GracefulExit("Must have at least 1 species in the problem. Check input file for errors",3457)
 
-        this%PTeqb = PTeqb
+        this%PTeqb    = PTeqb
         this%SOSmodel = SOSmodel
+        this%use_gTg  = use_gTg
+
         this%ns = ns
+
         this%nxp = decomp%ysz(1)
         this%nyp = decomp%ysz(2)
         this%nzp = decomp%ysz(3)
@@ -99,12 +104,12 @@ contains
 
         ! Allocate array of solid objects (Use a dummy to avoid memory leaks)
         allocate(dummy)
-        call dummy%init(decomp,der,fil,this%PTeqb)
+        call dummy%init(decomp,der,fil,this%PTeqb,this%use_gTg)
 
         if (allocated(this%material)) deallocate(this%material)
         allocate(this%material(this%ns))!, source=dummy)
         do i=1,this%ns
-            call this%material(i)%init(decomp,der,fil,this%PTeqb)
+            call this%material(i)%init(decomp,der,fil,this%PTeqb,this%use_gTg)
         end do
         deallocate(dummy)
 
@@ -234,10 +239,10 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix
         real(rkind), dimension(4*this%ns), target :: fparams
         integer, dimension(4)             :: iparams
-        real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
+        ! real(rkind), dimension(:), pointer :: vf, psph, pinf
 
         integer :: i,j,k,imat
-        real(rkind) :: maxp, peqb, pest, pdiffmax
+        real(rkind) :: maxp, peqb !, pest, pdiffmax
 
         ! subtract elastic energy to determine hydrostatic energy. Temperature
         ! is assumed a function of only hydrostatic energy. Not sure if this is
@@ -460,12 +465,14 @@ contains
   
         call this%get_eelastic_devstress(devstress)   ! Get species elastic energies, and mixture and species devstress
         if(this%ns == 1) then
-          this%material(1)%eh = e - this%material(1)%eel
+          this%material(1)%eh = e - this%material(1)%eel ! Since eh equation is not exact and this is a better alternative for 1 species
         endif
         if(this%PTeqb) then
             call this%get_p_from_ehydro(rho)   ! Get species pressures from species hydrodynamic energy 
             call this%get_pmix(p)              ! Get mixture pressure from species pressures
         endif
+        
+        call this%getSOS(rho,p,sos)
 
     end subroutine
 
@@ -584,7 +591,11 @@ contains
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+            if (this%use_gTg) then
+                call this%material(imat)%update_gTg(isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+            else
+                call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+            end if
         end do
 
     end subroutine

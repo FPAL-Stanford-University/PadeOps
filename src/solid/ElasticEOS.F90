@@ -6,6 +6,8 @@ module ElasticEOSMod
     use FiltersMod,      only: filters
     use exits,           only: GracefulExit
 
+    implicit none
+
     type, abstract :: elasticeos
 
     contains
@@ -19,7 +21,7 @@ module ElasticEOSMod
 
     abstract interface
 
-        subroutine get_finger_interface(this,g,finger,fingersq,trG,trG2,detG)
+        subroutine get_finger_interface(this,g,finger,fingersq,trG,trG2,detG,use_gTg)
             import :: elasticeos
             import :: rkind
             class(elasticeos), intent(in) :: this
@@ -27,6 +29,7 @@ module ElasticEOSMod
             real(rkind), dimension(:,:,:,:), intent(out) :: finger
             real(rkind), dimension(:,:,:,:), intent(out) :: fingersq
             real(rkind), dimension(:,:,:),   intent(out) :: trG, trG2, detG
+            logical,                         intent(in), optional :: use_gTg
         end subroutine
 
         pure subroutine get_devstress_interface(this,finger,fingersq,trG,trG2,detG,devstress)
