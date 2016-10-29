@@ -138,6 +138,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use decomp_2d,        only: decomp_info, nrank
     use DerivativesMod,   only: derivatives
     use SolidMixtureMod,  only: solid_mixture
+    use DerivativesMod,   only: derivatives
 
     use Multispecies_data
 
@@ -172,6 +173,12 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
             write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2,A)') decomp%ysz(1), "_", minVF, "_", rhoRatio, "_sharp"
         else
             write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2,A)') decomp%ysz(1), "_", minVF, "_", rhoRatio, "_smooth"
+        end if
+
+        if (mix%use_gTg) then
+            str = trim(str)//'_gTg'
+        else
+            str = trim(str)//'_g'
         end if
 
         write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_"//trim(str)//"_", vizcount, ".dat"

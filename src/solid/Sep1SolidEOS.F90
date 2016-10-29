@@ -65,23 +65,33 @@ contains
         if (allocated(this%svdwork)) deallocate(this%svdwork)
     end subroutine
 
-    subroutine get_finger(this,g,finger,fingersq,trG,trG2,detG)
+    subroutine get_finger(this,g,finger,fingersq,trG,trG2,detG,use_gTg)
         class(sep1solid), intent(in) :: this
         real(rkind), dimension(:,:,:,:), intent(in)  :: g
         real(rkind), dimension(:,:,:,:), intent(out) :: finger
         real(rkind), dimension(:,:,:,:), intent(out) :: fingersq
         real(rkind), dimension(:,:,:),   intent(out) :: trG, trG2, detG
+        logical,                         intent(in), optional :: use_gTg
 
         associate ( g11 => g(:,:,:,1), g12 => g(:,:,:,2), g13 => g(:,:,:,3), &
                     g21 => g(:,:,:,4), g22 => g(:,:,:,5), g23 => g(:,:,:,6), &
                     g31 => g(:,:,:,7), g32 => g(:,:,:,8), g33 => g(:,:,:,9)  )
 
-            finger(:,:,:,1) = g11*g11 + g21*g21 + g31*g31
-            finger(:,:,:,2) = g11*g12 + g21*g22 + g31*g32
-            finger(:,:,:,3) = g11*g13 + g21*g23 + g31*g33
-            finger(:,:,:,4) = g12*g12 + g22*g22 + g32*g32
-            finger(:,:,:,5) = g12*g13 + g22*g23 + g32*g33
-            finger(:,:,:,6) = g13*g13 + g23*g23 + g33*g33
+            if ( present(use_gTg) .and. use_gTg ) then
+                finger(:,:,:,1) = g11
+                finger(:,:,:,2) = g12
+                finger(:,:,:,3) = g13
+                finger(:,:,:,4) = g22
+                finger(:,:,:,5) = g23
+                finger(:,:,:,6) = g33
+            else
+                finger(:,:,:,1) = g11*g11 + g21*g21 + g31*g31
+                finger(:,:,:,2) = g11*g12 + g21*g22 + g31*g32
+                finger(:,:,:,3) = g11*g13 + g21*g23 + g31*g33
+                finger(:,:,:,4) = g12*g12 + g22*g22 + g32*g32
+                finger(:,:,:,5) = g12*g13 + g22*g23 + g32*g33
+                finger(:,:,:,6) = g13*g13 + g23*g23 + g33*g33
+            end if
 
         end associate
 
@@ -154,13 +164,15 @@ contains
 
     end subroutine
 
-    subroutine plastic_deformation(this, gfull)
+    subroutine plastic_deformation(this, gfull, use_gTg)
         use kind_parameters, only: clen
         use constants,       only: eps, twothird
         use decomp_2d,       only: nrank
         use exits,           only: GracefulExit, nancheck, message
         class(sep1solid), target, intent(inout) :: this
         real(rkind), dimension(:,:,:,:), intent(inout) :: gfull
+        logical, intent(in) :: use_gTg
+
         real(rkind), dimension(3,3) :: g, u, vt, gradf, gradf_new
         real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new, dbeta_new
         real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t
@@ -175,10 +187,18 @@ contains
 
         nxp = size(gfull,1); nyp = size(gfull,2); nzp = size(gfull,3);
 
-        ! Get optimal lwork
-        lwork = -1
-        call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
-        lwork = this%svdwork(1)
+        if (use_gTg) then
+            ! Get optimal lwork
+            lwork = -1
+            call dsyev('V', 'U', 3, G, 3, sval, this%svdwork, lwork, info)
+            lwork = this%svdwork(1)
+        else
+            ! Get optimal lwork
+            lwork = -1
+            call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
+            lwork = this%svdwork(1)
+        end if
+
         if (lwork .GT. size(this%svdwork)) then
             deallocate(this%svdwork); allocate(this%svdwork(lwork))
         end if
@@ -194,11 +214,18 @@ contains
                     g(2,1) = gfull(i,j,k,4); g(2,2) = gfull(i,j,k,5); g(2,3) = gfull(i,j,k,6)
                     g(3,1) = gfull(i,j,k,7); g(3,2) = gfull(i,j,k,8); g(3,3) = gfull(i,j,k,9)
 
-                    ! Get SVD of g
-                    call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
-                    if(info .ne. 0) then
-                        write(charout, '(A,I0,A)') 'proc ', nrank, ': Problem with SVD. Please check.'
-                        call GracefulExit(charout,3475)
+                    if (use_gTg) then
+                        ! Get eigenvalues and eigenvectors of G
+                        call dsyev('V', 'U', 3, G, 3, sval, this%svdwork, lwork, info)
+                        if(info .ne. 0) print '(A,I6,A)', 'proc ', nrank, ': Problem with DSYEV. Please check.'
+                        sval = sqrt(sval)  ! Get singular values of g
+                    else
+                        ! Get SVD of g
+                        call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
+                        if(info .ne. 0) then
+                            write(charout, '(A,I0,A)') 'proc ', nrank, ': Problem with SVD. Please check.'
+                            call GracefulExit(charout,3475)
+                        end if
                     end if
 
                     sqrt_om = sval(1)*sval(2)*sval(3)
@@ -315,9 +342,19 @@ contains
                     ! Then get new svals
                     sval = sqrt(beta) * sqrt_om**(one/three)
 
-                    ! Get g = u*sval*vt
-                    vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! sval*vt
-                    g = MATMUL(u,vt) ! u*sval*vt
+                    if (use_gTg) then
+                        sval = sval*sval ! New eigenvalues of G
+                        
+                        ! Get g = v*sval*vt
+                        u = G; vt = transpose(u)
+                        vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! eigval*vt
+                        G = MATMUL(u,vt) ! v*eigval*vt
+                    else
+                        ! Get g = u*sval*vt
+                        vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! sval*vt
+                        g = MATMUL(u,vt) ! u*sval*vt
+                    end if
+
 
                     gfull(i,j,k,1) = g(1,1); gfull(i,j,k,2) = g(1,2); gfull(i,j,k,3) = g(1,3)
                     gfull(i,j,k,4) = g(2,1); gfull(i,j,k,5) = g(2,2); gfull(i,j,k,6) = g(2,3)

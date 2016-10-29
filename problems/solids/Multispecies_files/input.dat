@@ -1,7 +1,7 @@
 &INPUT
 
-inputdir  =  "/home/akshays/Data/PadeOps/Multispecies_nopenalty"      ! Directory for input files
-outputdir  = "/home/akshays/Data/PadeOps/Multispecies_nopenalty"      ! Directory for output files
+inputdir  =  "/home/akshays/Data/PadeOps/Multispecies_gTg"      ! Directory for input files
+outputdir  = "/home/akshays/Data/PadeOps/Multispecies_gTg"      ! Directory for output files
 
 nx = 201                  ! Number of points in X
 ny = 1                    ! Number of points in Y
@@ -42,17 +42,19 @@ nu = 0.02D0               ! Kinematic viscosity
 /
 
 &SINPUT
-gam     = 1.4D0           ! Ratio of specific heats
-Rgas    = 1.D0            ! Gas constant
-PInf    = 1.D0            ! P_infinity, material stiffness
-shmod   = 1.D1            ! Shear modulus
-rho0    = 1.D0            ! No deformation density
-Cmu     = 2.D-3           ! Coefficient for artificial shear viscosity
-Cbeta   = 1.D0            ! Coefficient for artificial bulk viscosity
-Ckap    = 1.D-2           ! Coefficient for artificial thermal conductivity
-plastic = .FALSE.         ! Logical to turn on plasticity
-yield   = 2.49D9          ! Yield strength of material
-ns      = 2               ! Number of species
+gam      = 1.4D0           ! Ratio of specific heats
+Rgas     = 1.D0            ! Gas constant
+PInf     = 1.D0            ! P_infinity, material stiffness
+shmod    = 1.D1            ! Shear modulus
+Cmu      = 2.D-3           ! Coefficient for artificial shear viscosity
+Cbeta    = 1.D0            ! Coefficient for artificial bulk viscosity
+Ckap     = 1.D-2           ! Coefficient for artificial thermal conductivity
+Cdiff    = 3.D-3           ! Coefficient for artificial diffusivity
+CY       = 1.D2            ! Coefficient for artificial diffusivity (bounds control)
+ns       = 2               ! Number of species
+use_gTg  = .FALSE.         ! Use the symmetric Finger tensor formulation?
+PTeqb    = .TRUE.          ! Enforce pressure and temperature equilibrium between species
+SOSmodel = .FALSE.        ! TRUE => equilibrium model, FALSE => frozen model [Saurel et. al. 2009]
 /
 
 &PROBINPUT
@@ -62,7 +64,7 @@ p_infty  = 1.D0           ! P_infinity, material stiffness
 mu       = 1.D1           ! Shear modulus
 rho_0    = 1.D0           ! No deformation density
 p_amb    = 1.D-1          ! Ambient pressure
-minVF    = 1.0D-3         ! Minimum mass fraction at initialization
+minVF    = 1.0D-6         ! Minimum mass fraction at initialization
 rhoRatio = 1.0D1          ! Density ratio
 sharp    = .TRUE.         ! Use sharp interface initializaion
 thick    = 3.0D0          ! Initial thickness in grid units for interface

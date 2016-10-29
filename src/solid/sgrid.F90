@@ -68,6 +68,7 @@ module SolidGrid
 
         logical     :: PTeqb                       ! Use pressure and temperature equilibrium formulation
         real(rkind) :: tstats                      ! Interval between stats outputs
+        logical     :: use_gTg                     ! Use formulation with the Finger tensor g^T.g instead of the full g tensor
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -161,6 +162,7 @@ contains
         real(rkind) :: Cdiff = 0.003_rkind
         real(rkind) :: CY = 100._rkind
         logical     :: PTeqb = .TRUE.
+        logical     :: use_gTg = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
 
@@ -172,7 +174,7 @@ contains
                                                           prow, pcol, &
                                                             SkewSymm  
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
-                           PTeqb, SOSmodel, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
+                           PTeqb, SOSmodel, use_gTg, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
         ioUnit = 11
@@ -195,6 +197,7 @@ contains
         this%nsteps = nsteps
 
         this%PTeqb = PTeqb
+        this%use_gTg = use_gTg
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -296,7 +299,7 @@ contains
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
         allocate(this%mix)
-        call this%mix%init(this%decomp,this%der,this%fil,this%LAD,ns,this%PTeqb,SOSmodel)
+        call this%mix%init(this%decomp,this%der,this%fil,this%LAD,ns,this%PTeqb,SOSmodel,this%use_gTg)
         !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields
@@ -535,8 +538,10 @@ contains
         call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
 
         do i=1,this%mix%ns
-            ! Project g tensor to SPD space
-            call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g)
+            if (this%use_gTg) then
+                ! Project g tensor to SPD space
+                call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g)
+            end if
             ! Get massfraction gradients in Ji
             call this%gradient(this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),&
                                this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3), this%x_bc,  this%y_bc, this%z_bc)

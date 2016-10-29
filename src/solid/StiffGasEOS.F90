@@ -22,6 +22,7 @@ module StiffGasEOS
         ! procedure :: init
         procedure :: get_p
         procedure :: get_e_from_p
+        procedure :: get_e_from_T
         procedure :: get_T
         procedure :: get_enthalpy
         procedure :: get_sos
@@ -67,6 +68,15 @@ contains
         real(rkind), dimension(:,:,:), intent(out) :: e
 
         e = (p + this%gam*this%PInf) * this%onebygam_m1 / rho
+
+    end subroutine
+
+    pure subroutine get_e_from_T(this,rho,T,e)
+        class(stiffgas), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in)  :: rho,T
+        real(rkind), dimension(:,:,:), intent(out) :: e
+
+        e = this%Cv * T + this%PInf/rho
 
     end subroutine
 
