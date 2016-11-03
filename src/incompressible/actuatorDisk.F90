@@ -223,13 +223,13 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     class(actuatordisk), intent(inout) :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
-    real(rkind), dimension(5),                                  intent(out)   :: inst_val
+    real(rkind), dimension(8),                                  intent(out)   :: inst_val
     integer :: j
     real(rkind) :: usp_sq, force
 
     if (this%Am_I_Active) then
         call this%getMeanU(u,v,w)
-        usp_sq = this%uface**2 + this%vface**2 + this%wface**2
+        usp_sq = this%uface**2 !+ this%vface**2 + this%wface**2
         force = this%normfactor * 0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
         this%source = 0.d0
         do j =1,size(this%xs)
@@ -246,6 +246,9 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
         inst_val(3) = sqrt(usp_sq)
         inst_val(4) = usp_sq
         inst_val(5) = usp_sq*inst_val(3)
+        inst_val(6) = this%uface
+        inst_val(7) = this%vface
+        inst_val(8) = this%wface
     end if 
 end subroutine
 
