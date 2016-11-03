@@ -29,6 +29,7 @@ program test_actuatorDisk
     complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
     real(rkind), dimension(:,:,:), allocatable :: rhs_real
     complex(rkind) :: zeroc = 0.d0 + imi*0.0d0
+    real(rkind), dimension(:), allocatable :: inst_turb_avg
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, 0, 0)
@@ -79,14 +80,22 @@ program test_actuatorDisk
     allocate(turbArray)
     call turbArray%init(inputFile, gpC, gpE, sp_gpC, sp_gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
 
+    !namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir
+    !ioUnit = 11
+    !open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    !read(unit=ioUnit, NML=WINDTURBINES)
+    !close(ioUnit)
+    allocate(inst_turb_avg(8*turbArray%nTurbines))
+
     dt = 0.1_rkind
     urhs = zeroc; vrhs = zeroc; wrhs = zeroc
     call tic()
-    call turbArray%getForceRHS(dt, u, v, w, urhs, vrhs, wrhs)
+    call turbArray%getForceRHS(dt, u, v, w, urhs, vrhs, wrhs, inst_turb_avg)
     call toc()
     call spectC%ifft(urhs,rhs_real) 
     call decomp_2d_write_one(1,rhs_real,"ArrayRHS.bin", gpC)
          
+    deallocate(inst_turb_avg)
     call turbArray%destroy()
     deallocate(turbArray)
     deallocate(mesh, u, v, w, rhsx, rhsy, rhsz)
