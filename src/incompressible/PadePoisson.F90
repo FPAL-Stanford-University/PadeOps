@@ -463,13 +463,12 @@ contains
         
     end subroutine
 
-
     subroutine getPressure(this, uhat, vhat, what, pressure)
         !! NOTE :: uhat is really urhshat, vhat is really vrhshat, ...
         class(PadePoisson), intent(inout) :: this
         complex(rkind), dimension(this%nx_in, this%ny_in, this%nz_in), intent(in) :: uhat, vhat
         complex(rkind), dimension(this%nxE_in, this%nyE_in, this%nzE_in), intent(in) :: what
-        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(out) :: pressure
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: pressure
         integer :: ii, jj, kk
 
         ! Step 0: compute the stokes pressure which will fix the wall BCs

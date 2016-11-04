@@ -293,14 +293,6 @@ contains
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
         this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; this%t_pointProbe = t_pointProbe
 
-        if (this%useSystemInteractions) then
-            if ((trim(controlDir) .eq. "null") .or.(trim(ControlDir) .eq. "NULL")) then
-                this%controlDir = this%outputDir
-                call message(1,"WARNING: No directory specified for OS_CONTROL instructions. Default is set to OUTPUT Directory")
-            else
-                this%controlDir = controlDir
-            end if
-        end if 
 
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
@@ -308,6 +300,15 @@ contains
         call decomp_2d_init(nx, ny, nz, prow, pcol)
         call get_decomp_info(this%gpC)
         call decomp_info_init(nx,ny,nz+1,this%gpE)
+        
+        if (this%useSystemInteractions) then
+            if ((trim(controlDir) .eq. "null") .or.(trim(ControlDir) .eq. "NULL")) then
+                this%controlDir = this%outputDir
+                call message(0,"WARNING: No directory specified for OS_CONTROL instructions. Default is set to OUTPUT Directory")
+            else
+                this%controlDir = controlDir
+            end if
+        end if 
         
         if (mod(nx,2) .ne. 0) then
             call GracefulExit("The code hasn't been tested for odd values of Nx. Crazy shit could happen.", 423)
@@ -470,10 +471,10 @@ contains
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
         if (useCompactFD) then
             allocate(this%padepoiss)
-            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, this%derW, computeStokesPressure, Lz) 
+            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, this%derW, computeStokesPressure, Lz, this%storePressure, this%gpC) 
         else    
             allocate(this%poiss)
-            call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE, .true.)  
+            call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE, computeStokesPressure, this%gpC)  
         end if 
                
         ! STEP 7: INITIALIZE THE FIELDS
@@ -642,8 +643,10 @@ contains
             call GracefulExit("Invalid choice of TIMESTEPPINGSCHEME.",5235)
         end if 
 
-        
-        ! STEP 16: Set up storage for Pressure
+        ! STEP 16: Initialize Statistics
+        call this%init_stats()
+
+        ! STEP 17: Set up storage for Pressure
         if (this%storePressure) then
             allocate(this%Pressure(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             call this%ComputePressure()
@@ -805,7 +808,6 @@ contains
         zbuffC => this%cbuffzC(:,:,:,1)
         ybuffC => this%cbuffyC(:,:,:,1)
 
-
         ! Step 1: Interpolate w -> wC
         call transpose_y_to_z(this%what,zbuffE,this%sp_gpE)
         if (useCompactFD) then
@@ -861,7 +863,6 @@ contains
         end if 
     end subroutine
 
-
     subroutine printDivergence(this)
         class(igridWallM), intent(inout) :: this
         if (useCompactFD) then
@@ -870,7 +871,6 @@ contains
             call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
         end if 
     end subroutine 
-
 
     subroutine destroy(this)
         class(igridWallM), intent(inout) :: this
