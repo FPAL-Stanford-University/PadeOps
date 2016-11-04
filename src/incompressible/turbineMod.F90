@@ -154,6 +154,8 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, inst_horz_avg)
     this%fx = zero; this%fy = zero; this%fz = zero
     if(ADM) then
       do i = 1, this%nTurbines
+        ! CHANGED to allow avoiding inst_horz_avg calculations - useful for
+        ! testing/debugging
         if (present(inst_horz_avg)) then
             call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz,inst_horz_avg(8*i-7:8*i))
         else
