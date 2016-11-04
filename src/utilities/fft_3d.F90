@@ -75,6 +75,7 @@ module fft_3d_stuff
             procedure :: ifft3_x2z
             procedure :: ifft2_y2x
             procedure :: fft2_x2y
+            procedure :: fft1_x2y
             procedure :: destroy
             procedure :: alloc_input
             procedure :: upsample
@@ -813,6 +814,17 @@ function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, exhaus
 
     end subroutine
     
+    subroutine fft1_x2y(this,input,output)
+        class(fft_3d), intent(inout) :: this
+        real(rkind), dimension(this%physical%xsz(1),this%physical%xsz(2),this%physical%xsz(3)), intent(in) :: input
+        complex(rkind), dimension(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)), intent(out) :: output
+
+        ! Get the x tranform (r2c)
+        call dfftw_execute_dft_r2c(this%plan_r2c_x, input, this%f_xhat_in_xD)  
+
+        ! Now transpose from x-> y
+        call transpose_x_to_y(this%f_xhat_in_xD,output,this%spectral)
+    end subroutine
     
     pure function GetWaveNums(nx,dx) result(k)
         use constants, only: pi, two

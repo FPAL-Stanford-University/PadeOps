@@ -121,16 +121,11 @@
         allocate(this%ctmpCz2(this%sp_gp%zsz(1), this%sp_gp%zsz(2), this%sp_gp%zsz(3)))
 
         if (useCompactFD) then
-            allocate(this%derZ_EE, this%derZ_OO, this%derTAU33)
-            allocate(this%derOO)
+            allocate(this%derZ_SS, this%derTAU33)
             call this%derTAU33%init( this%sp_gp%zsz(3), dz, isTopEven = .true., isBotEven = .true., & 
                              isTopSided = .false., isBotSided = .true.) 
-            call this%derZ_EE%init( this%sp_gp%zsz(3), dz, isTopEven = .true., isBotEven = .true., & 
+            call this%derZ_SS%init( this%sp_gp%zsz(3), dz, isTopEven = .false., isBotEven = .false., & 
                              isTopSided = .true., isBotSided = .true.) 
-            call this%derZ_OO%init( this%sp_gp%zsz(3), dz, isTopEven = .false., isBotEven = .false., & 
-                             isTopSided = .true., isBotSided = .true.) 
-            call this%derOO%init( this%sp_gp%zsz(3), dz, isTopEven = .false., isBotEven = .false., & 
-                             isTopSided = .false., isBotSided = .true.) 
         else
             allocate(this%Ops2ndOrder)
             call this%Ops2ndOrder%init(gpC,gpE,0,dx,dy,dz,spectC%spectdecomp,spectE%spectdecomp, .true., .true.)
@@ -167,9 +162,8 @@
         class(sgs), intent(inout) :: this
 
         if ((useCompactFD) .and. (.not. this%useWallModel)) then
-            call this%derZ_OO%destroy()
-            call this%derZ_EE%destroy()
-            deallocate(this%derZ_OO, this%derZ_EE)
+            call this%derZ_SS%destroy()
+            deallocate(this%derZ_SS)
         else
             call this%Ops2ndOrder%destroy()
             deallocate(this%Ops2ndOrder)

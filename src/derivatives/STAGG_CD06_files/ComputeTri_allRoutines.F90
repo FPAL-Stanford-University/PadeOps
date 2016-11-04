@@ -3,20 +3,27 @@
         integer             :: i, n 
         real(rkind), dimension(:), allocatable :: ddn, dg, dup, cp, den
         real(rkind), parameter :: alpha = 9._rkind/62._rkind
+        real(rkind), parameter :: alpha1 = 37.d0/183.d0, alpha0 = -1.d0
 
         n = this%n
 
         allocate(ddn(n));  allocate(dg(n)); allocate(dup(n)); allocate(cp(n)); allocate(den(n))
         ddn  = alpha; dg = one; dup = alpha 
 
-        if (this%isTopEven) then
-            dup(n) = zero; dg(n) = (one - alpha)
+        if (this%isTopSided) then
+            ddn(n) = w0s*alpha0; dg(n) = w0s
+            ddn(n-1) = w1s*alpha1; dup(n-1) = w1s*alpha1; dg(n-1) = w1s
         else
-            dg(n) = (one + alpha); dup(n) = zero
+            if (this%isTopEven) then
+                dup(n) = zero; dg(n) = (one - alpha)
+            else
+                dg(n) = (one + alpha); dup(n) = zero
+            end if 
         end if 
 
         if (this%isBotSided) then
-            ddn(1) = zero; dup(1) = zero;  
+            dup(1) = w0s*alpha0; dg(1) = w0s
+            ddn(2) = w1s*alpha1; dup(2) = w1s*alpha1; dg(2) = w1s
         else
             if (this%isBotEven) then
                 ddn(1) = zero; dg(1) = (one - alpha)
@@ -50,15 +57,20 @@
         allocate(ddn(n));  allocate(dg(n)); allocate(dup(n)); allocate(cp(n)); allocate(den(n))
         ddn  = alpha; dg = one; dup = alpha 
 
-
-        if (this%isTopEven) then
-            dup(n) = zero; ddn(n) = zero
+        if (this%isTopSided) then
+            ddn(n) = zero; dup(n) = zero;
+            ddn(n-1) = 1.d0/22.d0; dup(n-1) = 1.d0/22.d0;
         else
-            ddn(n) = two*alpha; dup(n) = zero 
+            if (this%isTopEven) then
+                dup(n) = zero; ddn(n) = zero
+            else
+                ddn(n) = two*alpha; dup(n) = zero 
+            end if 
         end if 
 
         if (this%isBotSided) then
-            dup(1) = zero; dup(2) = zero; ddn(2) = zero
+            dup(1) = zero; ddn(1) = zero 
+            dup(2) = 1.d0/22.d0; ddn(2) = 1.d0/22.d0
         else
             if (this%isBotEven) then
                 ddn(1) = zero; dup(1) = zero
@@ -188,22 +200,27 @@
         class (cd06stagg), intent(inout) :: this
         integer             :: i, n 
         real(rkind), dimension(:), allocatable :: ddn, dg, dup, cp, den
-        real(rkind), parameter :: alpha = 3._rkind/10._rkind
-
+        real(rkind), parameter :: alpha  = 3._rkind/10._rkind
+        real(rkind), parameter :: alpha1 = 1.d0/6.d0
         n = this%nE
 
         allocate(ddn(n));  allocate(dg(n)); allocate(dup(n)); allocate(cp(n)); allocate(den(n))
         ddn  = alpha; dg = one; dup = alpha 
 
-        if (this%isTopEven) then
-            ddn(n) = two*alpha; dg(n) = one
+        if (this%isTopSided) then
+            dup(n) = zero; ddn(n) = zero
+            dup(n-1) = alpha1; ddn(n-1) = alpha1     
         else
-            ddn(n) = zero; dg(n) = one 
+            if (this%isTopEven) then
+                ddn(n) = two*alpha; dg(n) = one
+            else
+                ddn(n) = zero; dg(n) = one 
+            end if 
         end if 
 
         if (this%isBotSided) then
             dup(1) = zero; ddn(1) = zero; dg(1) = one;
-            dup(2) = zero; ddn(2) = zero; dg(2) = one;
+            dup(2) = alpha1; ddn(2) = alpha1; dg(2) = one;
         else
             if (this%isBotEven) then
                 dup(1) = two*alpha; dg(1) = one
@@ -232,20 +249,25 @@
         integer             :: i, n 
         real(rkind), dimension(:), allocatable :: ddn, dg, dup, cp, den
         real(rkind), parameter :: alpha = 3._rkind/10._rkind
+        real(rkind), parameter :: alpha0 = 1.d0 
 
         n = this%n
 
         allocate(ddn(n));  allocate(dg(n)); allocate(dup(n)); allocate(cp(n)); allocate(den(n))
         ddn  = alpha; dg = one; dup = alpha 
 
-        if (this%isTopEven) then
-            dg(n) = (one + alpha)
+        if (this%isTopSided) then
+            ddn(n) = alpha0; dup(n) = 0.d0
         else
-            dg(n) = (one - alpha)
+            if (this%isTopEven) then
+                dg(n) = (one + alpha)
+            else
+                dg(n) = (one - alpha)
+            end if 
         end if 
 
         if (this%isBotSided) then
-            dup(1) = zero; ddn(1) = zero; dg(1) = one;
+            dup(1) = alpha0; ddn(1) = zero;
         else
             if (this%isBotEven) then
                 dg(1) = (one + alpha)

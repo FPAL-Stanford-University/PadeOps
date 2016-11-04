@@ -33,11 +33,14 @@ module poissonMod
         complex(rkind), dimension(:,:,:), allocatable :: tmpbuff, tmpbuffz1C, tmpbuffz2C, tmpbuffz1E, tmpbuffz2E 
 
         logical :: usingWallModel = .false. 
+        type(decomp_info), pointer :: gpC
+        real(rkind) :: meanNorm
 
         contains
             procedure :: init
             procedure :: destroy
             procedure :: PressureProj
+            procedure :: getPressure
             procedure :: PoissonSolveZ    
             procedure, private :: PoissonSolveZ_InPlace   
             procedure, private :: PoissonSolveZ_InPlace_WallM 
@@ -109,10 +112,9 @@ contains
             this%tmpbuff(:,this%sp_gp%ysz(2)/2+1,:) = zero
             call this%spect%ifft(this%tmpbuff,divergence,.true.)
             maxDiv = p_maxval(maxval(divergence))
-            !if (maxDiv > 1D-12) then
-            !        call GracefulExit("Divergence is not zero. Terminating run.",4324)
-            !end if 
-            call message(0,"WARNING: Divergence is now:", p_maxval(maxval(abs(divergence))))
+            if (maxDiv > 1D-12) then 
+                call message(0,"WARNING: Divergence is now:", p_maxval(maxval(abs(divergence))))
+            end if 
         end if 
 
 
@@ -129,7 +131,7 @@ contains
     end subroutine
 
 
-    subroutine init(this,spect,PeriodicVertical,dx,dy,dz,Ops,spectE, usingWallModel)
+    subroutine init(this,spect,PeriodicVertical,dx,dy,dz,Ops,spectE, usingWallModel, gpC)
         class(poisson), intent(inout) :: this
         class(spectral), intent(in), target :: spect
         class(spectral), intent(in), target, optional :: spectE
@@ -137,6 +139,7 @@ contains
         real(rkind), optional :: dx, dy, dz
         type(staggOps), optional, target :: Ops
         logical, intent(in), optional :: usingWallModel
+        type(decomp_info), optional, target :: gpC
 
         if(present(usingWallModel)) then
             this%usingWallModel = usingWallModel
@@ -165,6 +168,7 @@ contains
             if (.not.present(dz)) call GracefulExit("Need to send in dz as input to poisson init",31)
             if (.not.present(Ops)) call GracefulExit("Need to send in STAGGOPS as input to poisson init",31)
             if (.not.present(SpectE)) call GracefulExit("Need to send in spectE as input to poisson init",31)
+            if (present(gpC)) this%gpC => gpC
             this%dz = dz 
             this%dzsq = dz**2
             this%nz_inZ = spect%nz_g
@@ -189,7 +193,9 @@ contains
             allocate(this%tmpbuffz2C(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
             allocate(this%tmpbuffz1E(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
             allocate(this%tmpbuffz2E(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
-
+            if (present(gpC)) then
+                this%meanNorm = 1._rkind/(real(gpC%xsz(1),rkind) * real(gpC%ysz(2),rkind) * real(gpC%zsz(3),rkind))
+            end if 
         end if 
 
     end subroutine
@@ -264,6 +270,48 @@ contains
         ! Check if divergence is exactly zero
 
     end subroutine 
+
+    subroutine getPressure(this,urhs,vrhs,wrhs,pressure)
+        use reductions, only: p_sum
+
+        class(poisson), intent(inout), target :: this
+        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: urhs, vrhs
+        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
+        complex(rkind), dimension(:,:), pointer :: dpdz0, dpdzN
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(out) :: pressure
+        real(rkind) :: pmean
+
+        ! Compute dudx_rhs and add dvdy_rhs
+        this%tmpbuff = this%spect%k1*urhs 
+        this%tmpbuff = this%tmpbuff + this%spect%k2*vrhs 
+        this%tmpbuff = imi*this%tmpbuff
+
+        ! Transpose y -> z
+        call transpose_y_to_z(this%tmpbuff,this%tmpbuffz1C,this%sp_gp)
+        call transpose_y_to_z(wrhs,this%tmpbuffz1E,this%sp_gpE)
+
+        ! Compute dwdz_rhs and add
+        call this%Ops%ddz_E2C(this%tmpbuffz1E,this%tmpbuffz2C)
+        this%tmpbuffz1C = this%tmpbuffz1C + this%tmpbuffz2C
+        
+        ! Poisson Solver in z decomp
+        if (this%usingWallModel) then
+            dpdz0 => this%tmpbuffz1E(:,:,1)
+            dpdzN => this%tmpbuffz1E(:,:,this%nz_inZ+1)
+            call this%PoissonSolveZ_inPlace_WallM(this%tmpbuffz1C, dpdz0, dpdzN)
+        else
+            call this%PoissonSolveZ_inPlace(this%tmpbuffz1C)
+        end if
+        
+        call transpose_z_to_y(this%tmpbuffz1C,this%tmpbuff,this%sp_gp)
+        call this%spect%ifft(this%tmpbuff,pressure)  
+
+        ! Set the domain mean to be zero
+        pmean = p_sum(pressure)*this%meanNorm
+        pressure = pressure - pmean
+
+    end subroutine 
+
 
     subroutine PressureProj(this,Sfields,spect)
         class(poisson), target, intent(inout) :: this

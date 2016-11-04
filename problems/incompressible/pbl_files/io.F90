@@ -99,7 +99,7 @@ contains
         !call gp%dumpFullField(gp%u,'uVel')
         !call gp%dumpFullField(gp%v,'vVel')
         !call gp%dumpFullField(gp%wC,'wVel')
-        call output_tecplot(gp)
+        !call output_tecplot(gp)
     end subroutine
 
     subroutine dumpData4Matlab(gp)
@@ -146,92 +146,92 @@ contains
         nullify(fieldsPhys)
     end subroutine 
 
-    subroutine output_tecplot(gp)
-        use IncompressibleGridWallM, only: igridWallM
-        use gridtools,          only: alloc_buffs
-        use decomp_2d,        only: transpose_y_to_x
-        use turbineMod, only: turbineArray
+    !subroutine output_tecplot(gp)
+    !    use IncompressibleGridWallM, only: igridWallM
+    !    use gridtools,          only: alloc_buffs
+    !    use decomp_2d,        only: transpose_y_to_x
+    !    use turbineMod, only: turbineArray
  
-        class(igridWallM), target, intent(in) :: gp 
-        integer :: tid, runIDX
-        character(len=clen) :: fname
-        character(len=clen) :: tempname
-        character(len=clen) :: OutputDir
-        real(rkind), dimension(:,:,:,:), pointer :: fieldsPhys, xyz
-        type(turbineArray), pointer :: turbarr
-        integer :: fid = 1234, turbID, blID, ptID, i, j, k, T_indx
+    !    class(igridWallM), target, intent(in) :: gp 
+    !    integer :: tid, runIDX
+    !    character(len=clen) :: fname
+    !    character(len=clen) :: tempname
+    !    character(len=clen) :: OutputDir
+    !    real(rkind), dimension(:,:,:,:), pointer :: fieldsPhys, xyz
+    !    type(turbineArray), pointer :: turbarr
+    !    integer :: fid = 1234, turbID, blID, ptID, i, j, k, T_indx
 
-        OutputDir = gp%outputdir
-        fieldsPhys => gp%PfieldsC
-        xyz => gp%mesh
-        runIDX = gp%runID
-        tid = gp%step 
+    !    OutputDir = gp%outputdir
+    !    fieldsPhys => gp%PfieldsC
+    !    xyz => gp%mesh
+    !    runIDX = gp%runID
+    !    tid = gp%step 
 
-        ! output field variables
-        if(gp%isStratified) then
-          T_indx = 7
-        else
-          T_indx = 3
-        endif
-        write(tempname,"(A4,I2.2,A2,I4.4,A4)") "tec_", RunIDX, "_p",nrank,".dat"
-        fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
-        if(tid==0) then
-          open(fid,file=trim(fname),status='replace')
-          write(fid,'(75a)') 'VARIABLES="x","y","z","u","v","wC","T"'
-          write(fid,'(6(a,i7),a)') 'ZONE I=', gp%gpC%xsz(1), ' J=', gp%gpC%xsz(2), ' K=', gp%gpC%xsz(3), ' ZONETYPE=ORDERED'
-          write(fid,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', gp%tsim
-          do k = 1, gp%gpC%xsz(3)
-           do j = 1, gp%gpC%xsz(2)
-            do i = 1, gp%gpC%xsz(1)
-                write(fid,'(7ES26.16)') xyz(i,j,k,1:3), fieldsPhys(i,j,k,1:3), fieldsPhys(i,j,k,T_indx)
-            enddo
-           enddo
-          enddo
-          close(fid)
-        else
-          open(fid,file=trim(fname),status='old',action='write',position='append')
-          write(fid,'(6(a,i7),a)') 'ZONE I=', gp%gpC%xsz(1), ' J=', gp%gpC%xsz(2), ' K=', gp%gpC%xsz(3), ' ZONETYPE=ORDERED'
-          write(fid,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', gp%tsim
-          write(fid,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
-          do k = 1, gp%gpC%xsz(3)
-           do j = 1, gp%gpC%xsz(2)
-            do i = 1, gp%gpC%xsz(1)
-                write(fid,'(4ES26.16)') fieldsPhys(i,j,k,1:3), fieldsPhys(i,j,k,T_indx)
-            enddo
-           enddo
-          enddo
-          close(fid)
-        endif
+    !    ! output field variables
+    !    if(gp%isStratified) then
+    !      T_indx = 7
+    !    else
+    !      T_indx = 3
+    !    endif
+    !    write(tempname,"(A4,I2.2,A2,I4.4,A4)") "tec_", RunIDX, "_p",nrank,".dat"
+    !    fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+    !    if(tid==0) then
+    !      open(fid,file=trim(fname),status='replace')
+    !      write(fid,'(75a)') 'VARIABLES="x","y","z","u","v","wC","T"'
+    !      write(fid,'(6(a,i7),a)') 'ZONE I=', gp%gpC%xsz(1), ' J=', gp%gpC%xsz(2), ' K=', gp%gpC%xsz(3), ' ZONETYPE=ORDERED'
+    !      write(fid,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', gp%tsim
+    !      do k = 1, gp%gpC%xsz(3)
+    !       do j = 1, gp%gpC%xsz(2)
+    !        do i = 1, gp%gpC%xsz(1)
+    !            write(fid,'(7ES26.16)') xyz(i,j,k,1:3), fieldsPhys(i,j,k,1:3), fieldsPhys(i,j,k,T_indx)
+    !        enddo
+    !       enddo
+    !      enddo
+    !      close(fid)
+    !    else
+    !      open(fid,file=trim(fname),status='old',action='write',position='append')
+    !      write(fid,'(6(a,i7),a)') 'ZONE I=', gp%gpC%xsz(1), ' J=', gp%gpC%xsz(2), ' K=', gp%gpC%xsz(3), ' ZONETYPE=ORDERED'
+    !      write(fid,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', gp%tsim
+    !      write(fid,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
+    !      do k = 1, gp%gpC%xsz(3)
+    !       do j = 1, gp%gpC%xsz(2)
+    !        do i = 1, gp%gpC%xsz(1)
+    !            write(fid,'(4ES26.16)') fieldsPhys(i,j,k,1:3), fieldsPhys(i,j,k,T_indx)
+    !        enddo
+    !       enddo
+    !      enddo
+    !      close(fid)
+    !    endif
 
-        ! output field variables
-        if(gp%useWindTurbines) then
-          turbarr => gp%WindTurbineArr
-          do turbID = 1, turbarr%nTurbines
-            if(turbarr%num_cells_cloud(turbID) > 0) then
-              write(tempname,"(A4,I2.2,A2,I4.4,A3,I2.2,A4)") "tec_", RunIDX,"_p",nrank,"_wt",turbID,".dat"
-              fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
-              if(tid==0) then
-                open(fid,file=trim(fname),status='replace')
-                write(fid,'(110a)') 'VARIABLES="x","y","z","blade_forcex", "blade_forcey" "blade_forcez"'
-              else
-                open(fid,file=trim(fname),status='old',action='write',position='append')
-              endif
-              write(fid,'(6(a,i7),a)') 'ZONE I=', turbarr%num_blades(turbID)*turbarr%num_blade_points(turbID), ' J=', 1, ' K=', 1, ' ZONETYPE=ORDERED'
-              write(fid,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', gp%tsim
-              do blID = 1, turbarr%num_blades(turbID)
-                do ptID = 1, turbarr%num_blade_points(turbID)
-                   write(fid,'(7ES26.16)') turbarr%blade_points(:, ptID, blID, turbID), turbarr%blade_forces(:, ptID, blID, turbID)
-                enddo
-              enddo
-              close(fid)
-            endif
-          enddo
-          nullify(turbarr)
-        endif
+    !    ! output field variables
+    !    if(gp%useWindTurbines) then
+    !      turbarr => gp%WindTurbineArr
+    !      do turbID = 1, turbarr%nTurbines
+    !        if(turbarr%num_cells_cloud(turbID) > 0) then
+    !          write(tempname,"(A4,I2.2,A2,I4.4,A3,I2.2,A4)") "tec_", RunIDX,"_p",nrank,"_wt",turbID,".dat"
+    !          fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+    !          if(tid==0) then
+    !            open(fid,file=trim(fname),status='replace')
+    !            write(fid,'(110a)') 'VARIABLES="x","y","z","blade_forcex", "blade_forcey" "blade_forcez"'
+    !          else
+    !            open(fid,file=trim(fname),status='old',action='write',position='append')
+    !          endif
+    !          write(fid,'(6(a,i7),a)') 'ZONE I=', turbarr%num_blades(turbID)*turbarr%num_blade_points(turbID), ' J=', 1, ' K=', 1, ' ZONETYPE=ORDERED'
+    !          write(fid,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', gp%tsim
+    !          do blID = 1, turbarr%num_blades(turbID)
+    !            do ptID = 1, turbarr%num_blade_points(turbID)
+    !               write(fid,'(7ES26.16)') turbarr%blade_points(:, ptID, blID, turbID), turbarr%blade_forces(:, ptID, blID, turbID)
+    !            enddo
+    !          enddo
+    !          close(fid)
+    !        endif
+    !      enddo
+    !      nullify(turbarr)
+    !    endif
 
-        nullify(fieldsPhys,xyz)
+    !    nullify(fieldsPhys,xyz)
 
-    end subroutine
+    !end subroutine
 
     subroutine finalize_io
         if (nrank == 0) then

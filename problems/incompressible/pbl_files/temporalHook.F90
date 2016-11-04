@@ -1,9 +1,9 @@
 module temporalHook
     use kind_parameters,    only: rkind
     use IncompressibleGridWallM, only: igridWallM
-    use reductions,         only: P_MAXVAL
-    use exits,              only: message
-    use pbl_IO,           only: output_tecplot!dumpData4Matlab 
+    use reductions,         only: P_MAXVAL, p_minval
+    use exits,              only: message, message_min_max
+    !use pbl_IO,           only: output_tecplot!dumpData4Matlab 
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
@@ -29,16 +29,12 @@ contains
             maxDiv = maxval(gp%divergence)
             DomMaxDiv = p_maxval(maxDiv)
             call message(0,"Time",gp%tsim)
-            call message(1,"Max KE:",gp%getMaxKE())
-            call message(1,"Max nuSGS:",gp%max_nuSGS)
             call message(1,"u_star:",gp%ustar)
             call message(1,"TIDX:",gp%step)
-            call message(1,"MaxDiv:", DomMaxDiv)
+            call message(1,"MaxDiv:",DomMaxDiv)
+            call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
-            end if 
-            if ((gp%useDynamicProcedure) .and. (gp%useSGS)) then
-                call message(1,"Max cSGS:",p_maxval(maxval(gp%c_SGS(1,1,:))))
             end if 
             call toc()
             call tic()
@@ -49,7 +45,7 @@ contains
            call gp%dumpFullField(gp%u,'uVel')
            call gp%dumpFullField(gp%v,'vVel')
            call gp%dumpFullField(gp%wC,'wVel')
-           call output_tecplot(gp)
+           !call output_tecplot(gp)
         end if 
 
     end subroutine

@@ -39,8 +39,9 @@ program pbl
     call tic() 
     do while (igp%tsim < igp%tstop) 
        
-       call igp%AdamsBashforth()     !<-- Time stepping scheme + Pressure Proj. (see hit_grid.F90)
+       call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
+       
     end do 
  
     call finalize_io                  !<-- Close the header file (wrap up i/o)
