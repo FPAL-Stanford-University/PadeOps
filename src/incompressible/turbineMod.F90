@@ -72,7 +72,7 @@ subroutine init(this, inputFile, gpC, gpE, sp_gpC, sp_gpE, spectC, spectE, rbuff
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), intent(in) :: dx, dy, dz
 
-    integer :: i, j, k
+    integer :: i
 
     namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir
 
@@ -148,16 +148,21 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, inst_horz_avg)
     real(rkind),    dimension(this%gpC%xsz(1),   this%gpC%xsz(2),   this%gpC%xsz(3)),    intent(in) :: u, v, wC
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs 
-    real(rkind),    dimension(:),                                                        intent(out)   :: inst_horz_avg
+    real(rkind),    dimension(:),                                                        intent(out), optional   :: inst_horz_avg
     integer :: i
 
     this%fx = zero; this%fy = zero; this%fz = zero
     if(ADM) then
       do i = 1, this%nTurbines
-        call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz,inst_horz_avg(2*i-1:2*i))
+        if (present(inst_horz_avg)) then
+            call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz,inst_horz_avg(2*i-1:2*i))
+        else
+            call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)   
+        end if 
       end do
     else
       !call this%turbArrayALM%get_RHS(dt, u, v, wC, this%fx, this%fy, this%fz)
+        print*, dt ! Temporary placeholder to avoid REMARK messages
     endif
 
     ! add forces to rhs

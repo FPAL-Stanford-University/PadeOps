@@ -25,7 +25,7 @@ program test_actuatorDisk
     real(rkind) :: xPeriods = 2.d0, yPeriods = 2.d0, zpeak = 0.3d0, epsnd = 5.d0, z0init = 1.d-4 
 
     call MPI_Init(ierr)
-    call decomp_2d_init(nx, ny, nz, 0, 0)
+    call decomp_2d_init(nx, ny, nz, prow, pcol)
     call get_decomp_info(gp)
 
     allocate(xG(gp%xsz(1),gp%xsz(2),gp%xsz(3))); allocate(yG(gp%xsz(1),gp%xsz(2),gp%xsz(3)))

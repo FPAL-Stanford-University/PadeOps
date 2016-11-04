@@ -223,7 +223,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     class(actuatordisk), intent(inout) :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
-    real(rkind), dimension(2),                                  intent(out)   :: inst_val
+    real(rkind), dimension(2),                                  intent(out), optional  :: inst_val
     integer :: j
     real(rkind) :: usp_sq, force
 
@@ -241,8 +241,10 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
         rhsxvals(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen) = this%source
         rhsyvals(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen) = 0.d0
         rhszvals(this%xst:this%xen,this%yst:this%yen,this%zst:this%zen) = 0.d0
-        inst_val(1) = force
-        inst_val(2) = force*sqrt(usp_sq)
+        if (present(inst_val)) then
+            inst_val(1) = force
+            inst_val(2) = force*sqrt(usp_sq)
+        end if 
     end if 
 end subroutine
 

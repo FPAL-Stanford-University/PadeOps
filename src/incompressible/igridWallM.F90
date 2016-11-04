@@ -18,7 +18,6 @@ module IncompressibleGridWallM
     use numerics
     use cd06staggstuff, only: cd06stagg
     use cf90stuff, only: cf90
-    use PadePoissonMod, only: Padepoisson 
     use TurbineMod, only: TurbineArray 
     use kspreprocessing, only: ksprep  
 
@@ -137,6 +136,14 @@ module IncompressibleGridWallM
         integer, dimension(:), allocatable :: planes2dumpC_KS, planes2dumpF_KS
         integer :: t_dumpKSprep
 
+        
+        ! Pressure Solver
+        logical :: StorePressure = .false.
+        integer :: P_dumpFreq = 10
+        logical :: AlreadyHaveRHS = .false.
+        real(rkind), dimension(:,:,:), allocatable :: pressure  
+
+
 
         integer, dimension(:), allocatable :: xplanes, yplanes, zplanes
         ! Note that c_SGS is linked to a variable that is constant along & 
@@ -153,6 +160,7 @@ module IncompressibleGridWallM
             procedure :: timeAdvance
             procedure, private :: AdamsBashforth
             procedure, private :: TVD_RK3
+            procedure, private :: ComputePressure
             procedure, private :: interp_primitiveVars
             procedure, private :: compute_duidxj
             procedure, private :: compute_dTdxi
@@ -201,10 +209,10 @@ contains
         logical :: useGeostrophicForcing = .false., useVerticalTfilter = .false., useWallDamping = .true. 
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
-        integer :: timeSteppingScheme = 0, num_turbines
+        integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .false., UseDealiasFilterVert = .false.
         real(rkind) :: Lz = 1.d0
-        logical :: ADM
+        logical :: ADM = .false., storePressure = .false. 
         
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -221,7 +229,8 @@ contains
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep
-                            
+        namelist /PRESSURE/ storePressure, P_dumpFreq                    
+
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -236,6 +245,7 @@ contains
         read(unit=ioUnit, NML=WALLMODEL)
         read(unit=ioUnit, NML=WINDTURBINES)
         read(unit=ioUnit, NML=KSPREPROCESS)
+        read(unit=ioUnit, NML=PRESSURE)
         close(ioUnit)
       
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
@@ -597,6 +607,14 @@ contains
             call GracefulExit("Invalid choice of TIMESTEPPINGSCHEME.",5235)
         end if 
 
+        
+        ! STEP 16: Set up storage for Pressure
+        if (this%storePressure) then
+            allocate(this%Pressure(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+            call this%ComputePressure()
+        end if 
+
+
         ! Final Step: Safeguard against unfinished procedures
         if ((useCompactFD).and.(.not.useSkewSymm)) then
             call GracefulExit("You must solve in skew symmetric form if you use CD06",54)
@@ -640,7 +658,11 @@ contains
 
         !!! STAGE 1
         ! First stage - everything is where it's supposed to be
-        call this%populate_rhs()
+        if (this%AlreadyHaveRHS) then
+            this%AlreadyHaveRHS = .false.
+        else
+            call this%populate_rhs()
+        end if
         this%uhat1 = this%uhat + this%dt*this%u_rhs 
         this%vhat1 = this%vhat + this%dt*this%v_rhs 
         this%what1 = this%what + this%dt*this%w_rhs 
@@ -686,6 +708,23 @@ contains
     end subroutine
 
 
+    subroutine computePressure(this)
+        class(igridWallM), intent(inout) :: this
+      
+        ! STEP 1: Populate RHS 
+        call this%populate_rhs()
+
+        ! STEP 2: Compute pressure
+        if (useCompactFD) then
+            call this%padepoiss%getPressure(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
+        else
+            call this%poiss%getPressure(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
+        end if 
+
+        ! STEP 3: Inform the other subroutines that you already have RHS
+        this%AlreadyHaveRHS = .true. 
+
+    end subroutine
 
     subroutine compute_deltaT(this)
         use reductions, only: p_maxval
@@ -1204,6 +1243,12 @@ contains
         endif
  
         ! STEP 2: Do logistical stuff
+
+        if ( mod(this%step,this%P_dumpFreq) == 0) then
+            call this%computePressure()
+            call this%dumpFullField(this%pressure,"prss")
+        end if 
+
         if ( (forceWrite .or. (mod(this%step,this%tid_compStats)==0)) .and. (this%tsim > this%tSimStartStats) ) then
             call this%compute_stats()
         end if 
@@ -1250,7 +1295,11 @@ contains
         this%dtRat = this%dt/this%dtOld
 
         ! Step 1: Get the RHS
-        call this%populate_rhs()
+        if (this%AlreadyHaveRHS) then
+            this%AlreadyHaveRHS = .false.
+        else
+            call this%populate_rhs()
+        end if 
 
         ! Step 2: Time Advance
         if (this%step == 0) then
