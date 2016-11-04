@@ -144,14 +144,17 @@ module IncompressibleGridWallM
         integer, dimension(:), allocatable :: planes2dumpC_KS, planes2dumpF_KS
         integer :: t_dumpKSprep
 
-        
         ! Pressure Solver
         logical :: StorePressure = .false.
-        integer :: P_dumpFreq = 10
+        integer :: P_dumpFreq = 10, P_compFreq = 10
         logical :: AlreadyHaveRHS = .false.
         real(rkind), dimension(:,:,:), allocatable :: pressure  
 
 
+        ! System Interactions 
+        logical :: useSystemInteractions = .false. 
+        integer :: tSystemInteractions = 10
+        character(len=clen) :: controlDir = "null"
 
         integer, dimension(:), allocatable :: xplanes, yplanes, zplanes
         ! Note that c_SGS is linked to a variable that is constant along & 
@@ -209,10 +212,10 @@ contains
     subroutine init(this,inputfile)
         class(igridWallM), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
-        character(len=clen) :: outputdir, inputdir, turbInfoDir, ksOutputDir
+        character(len=clen) :: outputdir, inputdir, turbInfoDir, ksOutputDir, controlDir = "null"
         integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, topWall = slip, SGSModelID = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
-        integer :: t_pointProbe = 1, t_start_pointProbe = 1, t_stop_pointProbe = 1
+        integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1, botBC_Temp = 0
         real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop,ncWall=1.d0
@@ -224,11 +227,12 @@ contains
         logical :: useGeostrophicForcing = .false., useVerticalTfilter = .false., useWallDamping = .true. 
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
-        integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10
+        integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .false., UseDealiasFilterVert = .false.
         real(rkind) :: Lz = 1.d0
-        logical :: ADM = .false., storePressure = .false. 
-        
+        logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true.
+        integer :: tSystemInteractions = 1
+
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, &
@@ -244,8 +248,8 @@ contains
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep
-        namelist /PRESSURE/ storePressure, P_dumpFreq                    
-
+        namelist /PRESSURE_CALC/ storePressure, P_dumpFreq, P_compFreq            
+        namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -254,13 +258,14 @@ contains
         read(unit=ioUnit, NML=NUMERICS)
         read(unit=ioUnit, NML=IO)
         read(unit=ioUnit, NML=STATS)
+        read(unit=ioUnit, NML=OS_INTERACTIONS)
         read(unit=ioUnit, NML=PHYSICS)
+        read(unit=ioUnit, NML=PRESSURE_CALC)
         read(unit=ioUnit, NML=BCs)
         read(unit=ioUnit, NML=LES)
         read(unit=ioUnit, NML=WALLMODEL)
         read(unit=ioUnit, NML=WINDTURBINES)
         read(unit=ioUnit, NML=KSPREPROCESS)
-        read(unit=ioUnit, NML=PRESSURE)
         close(ioUnit)
       
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
@@ -268,7 +273,10 @@ contains
         this%outputdir = outputdir; this%inputdir = inputdir; this%isStratified = isStratified 
         this%WallMtype = WallMType; this%runID = runID; this%tstop = tstop; this%t_dataDump = t_dataDump
         this%CFL = CFL; this%dumpPlanes = dumpPlanes; this%useGeostrophicForcing = useGeostrophicForcing
-        this%timeSteppingScheme = timeSteppingScheme
+        this%timeSteppingScheme = timeSteppingScheme; this%useSystemInteractions = useSystemInteractions
+        this%tSystemInteractions = tSystemInteractions; this%storePressure = storePressure
+        this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq
+
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
             call GracefulExit("Both CFL and dt cannot be negative. Have you &
@@ -284,7 +292,17 @@ contains
         this%PreProcessForKS = preprocessForKS; this%KSOutputDir = KSoutputDir;this%t_dumpKSprep = t_dumpKSprep 
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
         this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; this%t_pointProbe = t_pointProbe
-        
+
+        if (this%useSystemInteractions) then
+            if ((trim(controlDir) .eq. "null") .or.(trim(ControlDir) .eq. "NULL")) then
+                this%controlDir = this%outputDir
+                call message(1,"WARNING: No directory specified for OS_CONTROL instructions. Default is set to OUTPUT Directory")
+            else
+                this%controlDir = controlDir
+            end if
+        end if 
+
+
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC); allocate(this%gpE)
         call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -292,10 +310,10 @@ contains
         call decomp_info_init(nx,ny,nz+1,this%gpE)
         
         if (mod(nx,2) .ne. 0) then
-            call GracefulExit("Nx has to be an Even.", 423)
+            call GracefulExit("The code hasn't been tested for odd values of Nx. Crazy shit could happen.", 423)
         end if 
         if (mod(ny,2) .ne. 0) then
-            call GracefulExit("Ny has to be an Even.", 423)
+            call GracefulExit("The code hasn't been tested for odd values of Ny. Crazy shit could happen.", 423)
         end if 
         if (mod(nz,2) .ne. 0) then
             call GracefulExit("The code hasn't been tested for odd values of Nz. Crazy shit could happen.", 423)
@@ -1235,35 +1253,55 @@ contains
     subroutine wrapup_timestep(this)
         class(igridWallM), intent(inout) :: this
 
-        logical :: forceWrite = .FALSE.
+        logical :: forceWrite, exitStat, forceDumpPressure
         integer :: ierr = -1
 
         ! STEP 1: Update Time and BCs
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
 
-        ierr = -1; forceWrite = .FALSE.
-        if(this%tsim > this%tstop .or. check_exit(this%outputdir)) then
+        ierr = -1; forceWrite = .FALSE.; exitstat = .FALSE.; forceDumpPressure = .FALSE.
+        if(this%tsim > this%tstop) then
           forceWrite = .TRUE.
         endif
 
-        open(777,file=trim(this%outputdir)//"/dumppdo",status='old',iostat=ierr)
-        if(ierr==0) then
-            forceWrite = .TRUE.
-            call message(1, "Forced Dump because found file dumppdo")
-            if(nrank==0) then
-              close(777, status='delete')
-            else
-              close(777)
-            endif
-        else
-            close(777)
-        endif
- 
-        ! STEP 2: Do logistical stuff
+        if (this%useSystemInteractions) then
+            if (mod(this%step,this%tSystemInteractions) == 0) then
+                exitStat = check_exit(this%controlDir)
+                if (exitStat) forceWrite = .true.
+                open(777,file=trim(this%controlDir)//"/dumppdo",status='old',iostat=ierr)
+                if(ierr==0) then
+                    forceWrite = .TRUE.
+                    call message(1, "Forced Dump because found file dumppdo")
+                    call message(2, "Current Time Step is:", this%step)
+                    if(nrank==0) then
+                      close(777, status='delete')
+                    else
+                      close(777)
+                    endif
+                else
+                    close(777)
+                endif
+           
+                if (this%storePressure) then 
+                    open(777,file=trim(this%controlDir)//"/prsspdo",status='old',iostat=ierr)
+                    if (ierr == 0) then
+                        forceDumpPressure = .true.
+                        call message(1,"Force Dump for pressure reqested; file prsspdo found.")
+                    else
+                        close(777)
+                    end if
+                end if 
+            end if 
+        end if 
 
-        if ( mod(this%step,this%P_dumpFreq) == 0) then
-            call this%computePressure()
-            call this%dumpFullField(this%pressure,"prss")
+        ! STEP 2: Do logistical stuff
+        if (this%storePressure) then
+            if ((mod(this%step,this%P_compFreq)==0) .or. (forceDumpPressure)) then
+                call this%computePressure()
+            end if 
+            if ( (mod(this%step,this%P_dumpFreq) == 0).or. (forceDumpPressure)) then
+                call this%dumpFullField(this%pressure,"prss")
+            end if 
         end if 
 
         if ( (forceWrite .or. (mod(this%step,this%tid_compStats)==0)) .and. (this%tsim > this%tSimStartStats) ) then
@@ -1304,10 +1342,9 @@ contains
            !call output_tecplot(gp)
         end if
 
-        ! Check for exitpdo file
-        if(check_exit(this%outputdir)) then
-            call GracefulExit("Found exitpdo file in working directory",1234)
-        endif
+        ! Exit if the exitpdo file was detected earlier at the beginning of this
+        ! subroutine
+        if(exitstat) call GracefulExit("Found exitpdo file in control directory",1234)
 
     end subroutine
 
@@ -3044,15 +3081,15 @@ contains
         if(this%useWindTurbines) then
             this%runningSum_turb = zero
             call MPI_reduce(this%inst_horz_avg_turb, this%runningSum_turb, 8*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+            if(nrank == 0) then
+                write(tempname,"(A3,I2.2,A15)") "Run", this%RunID,"_timeseries.prb"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                open(unit=10,file=fname,status='old',action='write',position='append',iostat=ierr)
+                if(ierr .ne. 0) open(unit=10,file=fname,status='replace')
+                write(10,'(1000(e19.12,1x))') this%tsim, this%inst_horz_avg, this%runningSum_turb
+                close(10)
+            end if
         endif
-        if(nrank == 0) then
-            write(tempname,"(A3,I2.2,A15)") "Run", this%RunID,"_timeseries.prb"
-            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            open(unit=10,file=fname,status='old',action='write',position='append',iostat=ierr)
-            if(ierr .ne. 0) open(unit=10,file=fname,status='replace')
-            write(10,'(1000(e19.12,1x))') this%tsim, this%inst_horz_avg, this%runningSum_turb
-            close(10)
-        end if
 
     end subroutine 
 
