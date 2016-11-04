@@ -47,6 +47,7 @@ module spectralMod
             generic             :: alloc_r2c_out => alloc_r2c_out_Rank4, alloc_r2c_out_Rank3
             procedure           :: fft
             procedure           :: ifft
+            procedure           :: fft1_x2y
             procedure, private  :: initializeEverything
             procedure           :: dealias
             procedure           :: mTimes_ik1_oop
@@ -704,6 +705,16 @@ contains
         if (allocated(this%spectdecomp)) deallocate(this%spectdecomp)
         this%isInitialized = .false. 
    
+
+    end subroutine 
+
+    subroutine fft1_x2y(this,arr_in,arr_out)  !this%u,this%cbuffC(:,:,:,1))
+        !use decomp_2d_fft, only: decomp_2d_fft_3d
+        class(spectral), intent(inout) :: this
+        real(rkind), dimension(:,:,:), intent(in) :: arr_in
+        complex(rkind), dimension(:,:,:), intent(out) :: arr_out
+
+        call this%FT%fft1_x2y(arr_in,arr_out)
 
     end subroutine 
 

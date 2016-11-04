@@ -76,7 +76,7 @@ module IncompressibleGridWallM
         real(rkind), dimension(:,:,:,:), allocatable, public :: rbuffxC, rbuffyC, rbuffzC
         real(rkind), dimension(:,:,:,:), allocatable :: rbuffxE, rbuffyE, rbuffzE
         
-        complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffzC
+        complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffzC!, cbuffxC
         complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyE, cbuffzE
 
         complex(rkind), dimension(:,:,:,:), allocatable :: rhsC, rhsE, OrhsC, OrhsE 
@@ -94,6 +94,7 @@ module IncompressibleGridWallM
        
         integer :: timeSteppingScheme = 0 
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
+        integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false. 
         logical :: useExtraForcing = .false., useGeostrophicForcing = .false. 
         logical :: useSGS = .false. 
@@ -111,14 +112,21 @@ module IncompressibleGridWallM
         integer :: wallMType, botBC_Temp 
 
         ! Statistics to compute 
-        real(rkind), dimension(:), allocatable :: runningSum_sc, inst_horz_avg, runningSum_sc_turb, inst_horz_avg_turb
-        real(rkind), dimension(:,:), allocatable :: zStats2dump, runningSum, TemporalMnNOW
+        real(rkind), dimension(:), allocatable :: runningSum_sc, inst_horz_avg, runningSum_sc_turb, runningSum_turb, inst_horz_avg_turb
+        real(rkind), dimension(:,:), allocatable :: zStats2dump, runningSum, TemporalMnNOW, horzavgstats
+        real(rkind), dimension(:,:,:,:), allocatable :: stats3D
+        real(rkind), dimension(:,:,:),   allocatable :: xspectra_mean
         real(rkind), dimension(:), pointer :: u_mean, v_mean, w_mean, uu_mean, uv_mean, uw_mean, vv_mean, vw_mean, ww_mean
         real(rkind), dimension(:), pointer :: tau11_mean, tau12_mean, tau13_mean, tau22_mean, tau23_mean, tau33_mean
         real(rkind), dimension(:), pointer :: S11_mean, S12_mean, S13_mean, S22_mean, S23_mean, S33_mean
-        real(rkind), dimension(:), pointer :: viscdissp, sgsdissp, sgscoeff_mean, PhiM, q1_mean, q2_mean, q3_mean
-        real(rkind), dimension(:), pointer :: TT_mean, wT_mean, vT_mean, uT_mean, T_mean
-        integer :: tidSUM, tid_StatsDump, tid_compStats,tSimStartStats
+        real(rkind), dimension(:), pointer :: viscdisp_mean, sgsdissp_mean, sgscoeff_mean, PhiM, q1_mean, q2_mean, q3_mean
+        real(rkind), dimension(:), pointer :: TT_mean, wT_mean, vT_mean, uT_mean, T_mean, disperuw_mean, dispervw_mean
+        real(rkind), dimension(:,:,:), pointer :: u_mean3D, v_mean3D, w_mean3D, uu_mean3D, uv_mean3D, uw_mean3D, vv_mean3D, vw_mean3D, ww_mean3D
+        real(rkind), dimension(:,:,:), pointer :: tau11_mean3D, tau12_mean3D, tau13_mean3D, tau22_mean3D, tau23_mean3D, tau33_mean3D
+        real(rkind), dimension(:,:,:), pointer :: S11_mean3D, S12_mean3D, S13_mean3D, S22_mean3D, S23_mean3D, S33_mean3D
+        real(rkind), dimension(:,:,:), pointer :: viscdisp_mean3D, sgsdissp_mean3D, q1_mean3D, q2_mean3D, q3_mean3D
+        real(rkind), dimension(:,:,:), pointer :: TT_mean3D, wT_mean3D, vT_mean3D, uT_mean3D, T_mean3D
+        integer :: tidSUM, tid_StatsDump, tid_compStats,tSimStartStats, tprev2, tprev1
         logical :: normByustar
 
         ! Pointers linked to SGS stuff
@@ -154,6 +162,7 @@ module IncompressibleGridWallM
         contains
             procedure :: init
             procedure :: init_stats
+            procedure :: init_stats3D
             procedure :: destroy
             procedure :: printDivergence 
             procedure :: getMaxKE
@@ -176,8 +185,11 @@ module IncompressibleGridWallM
             procedure, private :: compute_z_fluct
             procedure, private :: compute_deltaT
             procedure, private :: getfilteredSpeedSqAtWall
+            procedure, private :: dump_pointProbes
             procedure, private :: dump_stats
             procedure, private :: compute_stats 
+            procedure, private :: dump_stats3D
+            procedure, private :: compute_stats3D 
             procedure, private :: getSurfaceQuantities 
             procedure, private :: ApplyCompactFilter 
             procedure, private :: addNonLinearTerm_skewSymm
@@ -186,8 +198,10 @@ module IncompressibleGridWallM
             procedure, private :: wrapup_timestep
             procedure, private :: reset_pointers
             procedure          :: finalize_stats
+            procedure          :: finalize_stats3D
             procedure, private :: dump_planes
             procedure          :: dumpFullField 
+            procedure, private :: DeletePrevStats3DFiles
     end type
 
 contains 
@@ -198,6 +212,7 @@ contains
         character(len=clen) :: outputdir, inputdir, turbInfoDir, ksOutputDir
         integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, topWall = slip, SGSModelID = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
+        integer :: t_pointProbe = 1, t_start_pointProbe = 1, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1, botBC_Temp = 0
         real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop,ncWall=1.d0
@@ -217,7 +232,7 @@ contains
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, &
-                        t_planeDump, t_stop_planeDump, t_start_planeDump 
+                        t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/ tid_StatsDump, tid_compStats, tSimStartStats, normStatsByUstar
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, &
                           useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz
@@ -268,6 +283,7 @@ contains
         this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro; 
         this%PreProcessForKS = preprocessForKS; this%KSOutputDir = KSoutputDir;this%t_dumpKSprep = t_dumpKSprep 
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
+        this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; this%t_pointProbe = t_pointProbe
         
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC); allocate(this%gpE)
@@ -416,6 +432,7 @@ contains
             this%T_Orhs => this%OrhsC(:,:,:,3); this%TEhat => this%SfieldsE(:,:,:,2)
         end if
 
+        !allocate(this%cbuffxC(this%sp_gpC%xsz(1),this%sp_gpC%xsz(2),this%sp_gpC%xsz(3),2))
         allocate(this%cbuffyC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),2))
         allocate(this%cbuffyE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3),2))
         
@@ -1250,12 +1267,15 @@ contains
         end if 
 
         if ( (forceWrite .or. (mod(this%step,this%tid_compStats)==0)) .and. (this%tsim > this%tSimStartStats) ) then
-            call this%compute_stats()
+            !call this%compute_stats()
+            call this%compute_stats3D()
         end if 
 
         if ( (forceWrite .or. (mod(this%step,this%tid_statsDump) == 0)) .and. (this%tsim > this%tSimStartStats) ) then
-            call this%compute_stats()
-            call this%dump_stats()
+            !call this%compute_stats()
+            !call this%dump_stats()
+            call this%compute_stats3D()
+            call this%dump_stats3D()
         end if 
         
         if ( forceWrite .or. (mod(this%step,this%t_restartDump) == 0) ) then
@@ -1270,6 +1290,11 @@ contains
         if ( (forceWrite .or. (mod(this%step,this%t_dumpKSprep) == 0)) .and. this%PreprocessForKS ) then
             call this%LES2KS%LES_TO_KS(this%uE,this%vE,this%w,this%step)
             call this%LES2KS%LES_FOR_KS(this%uE,this%vE,this%w,this%step)
+        end if 
+
+        if ( (forceWrite .or. ((mod(this%step,this%t_pointProbe) == 0) .and. &
+                 (this%step .ge. this%t_start_pointProbe) .and. (this%step .le. this%t_stop_pointProbe))) .and. (this%t_pointProbe > 0)) then
+            call this%dump_pointProbes()
         end if 
 
         if (forceWrite) then
@@ -1711,6 +1736,854 @@ contains
 
     !! STATISTICS !!
 
+    !--------------------------------Beginning 3D Statistics----------------------------------------------
+    subroutine init_stats3D(this)
+        use exits, only: message
+        class(igridWallM), intent(inout), target :: this
+
+        if (this%isStratified) then
+            allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),31))
+            allocate(this%horzavgstats(this%nz,33))
+            allocate(this%inst_horz_avg(5))
+            allocate(this%runningSum_sc(5))
+        else
+            allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),23))
+            allocate(this%horzavgstats(this%nz,25))
+            allocate(this%inst_horz_avg(3))
+            allocate(this%runningSum_sc(3))
+        end if 
+
+        if(this%useWindTurbines) then
+            allocate(this%inst_horz_avg_turb(8*this%WindTurbineArr%nTurbines))
+            allocate(this%runningSum_sc_turb(8*this%WindTurbineArr%nTurbines))
+            allocate(this%runningSum_turb   (8*this%WindTurbineArr%nTurbines))
+        endif
+
+        allocate(this%xspectra_mean(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))   ! ensure that number of variables for which spectrum is to be computed is smaller than nyg
+
+        ! mean velocities
+        this%u_mean3D => this%stats3D(:,:,:,1);  this%v_mean3D  => this%stats3D(:,:,:,2);  this%w_mean3D => this%stats3D(:,:,:,3) 
+        ! mean squared velocities
+        this%uu_mean3D => this%stats3D(:,:,:,4); this%uv_mean3D => this%stats3D(:,:,:,5); this%uw_mean3D => this%stats3D(:,:,:,6)
+                                                 this%vv_mean3D => this%stats3D(:,:,:,7); this%vw_mean3D => this%stats3D(:,:,:,8) 
+                                                                                          this%ww_mean3D => this%stats3D(:,:,:,9)
+        ! SGS stresses
+        this%tau11_mean3D => this%stats3D(:,:,:,10); this%tau12_mean3D => this%stats3D(:,:,:,11); this%tau13_mean3D => this%stats3D(:,:,:,12)
+                                                     this%tau22_mean3D => this%stats3D(:,:,:,13); this%tau23_mean3D => this%stats3D(:,:,:,14) 
+                                                                                                  this%tau33_mean3D => this%stats3D(:,:,:,15)
+        ! SGS dissipation
+        this%sgsdissp_mean3D => this%stats3D(:,:,:,16)
+        ! velocity derivative products - for viscous dissipation
+        this%viscdisp_mean3D => this%stats3D(:,:,:,17)
+        ! means of velocity derivatives
+        this%S11_mean3D => this%stats3D(:,:,:,18); this%S12_mean3D => this%stats3D(:,:,:,19); this%S13_mean3D => this%stats3D(:,:,:,20)
+                                                   this%S22_mean3D => this%stats3D(:,:,:,21); this%S23_mean3D => this%stats3D(:,:,:,22)
+                                                                                              this%S33_mean3D => this%stats3D(:,:,:,23)
+        !! SGS model coefficient
+        !this%sgscoeff_mean => this%stats3D(:,:,:,24)
+        !this%PhiM => this%stats3D(:,:,:,25)
+        if (this%isStratified) then
+            this%TT_mean3D => this%stats3D(:,:,:,28);  this%wT_mean3D => this%stats3D(:,:,:,27);  this%vT_mean3D => this%stats3D(:,:,:,26)
+            this%uT_mean3D => this%stats3D(:,:,:,25);  this%T_mean3D => this%stats3D(:,:,:,24);   this%q1_mean3D => this%stats3D(:,:,:,29)
+            this%q2_mean3D => this%stats3D(:,:,:,30);  this%q3_mean3D => this%stats3D(:,:,:,31)
+        end if 
+
+        ! horizontal averages
+        ! mean velocities
+        this%u_mean   => this%horzavgstats(:,1);  this%v_mean    => this%horzavgstats(:,2);  this%w_mean   => this%horzavgstats(:,3) 
+        ! mean squared velocities
+        this%uu_mean => this%horzavgstats(:,4); this%uv_mean => this%horzavgstats(:,5); this%uw_mean => this%horzavgstats(:,6)
+                                                this%vv_mean => this%horzavgstats(:,7); this%vw_mean => this%horzavgstats(:,8) 
+                                                                                        this%ww_mean => this%horzavgstats(:,9)
+        ! SGS stresses
+        this%tau11_mean => this%horzavgstats(:,10); this%tau12_mean => this%horzavgstats(:,11); this%tau13_mean => this%horzavgstats(:,12)
+                                                    this%tau22_mean => this%horzavgstats(:,13); this%tau23_mean => this%horzavgstats(:,14) 
+                                                                                                this%tau33_mean => this%horzavgstats(:,15)
+        ! SGS dissipation
+        this%sgsdissp_mean => this%horzavgstats(:,16)
+        ! velocity derivative products - for viscous dissipation
+        this%viscdisp_mean => this%horzavgstats(:,17)
+        ! means of velocity derivatives
+        this%S11_mean => this%horzavgstats(:,18); this%S12_mean => this%horzavgstats(:,19); this%S13_mean => this%horzavgstats(:,20)
+                                                  this%S22_mean => this%horzavgstats(:,21); this%S23_mean => this%horzavgstats(:,22)
+                                                                                            this%S33_mean => this%horzavgstats(:,23)
+        ! Dispersive stresses
+        this%disperuw_mean => this%horzavgstats(:,24)
+        this%dispervw_mean => this%horzavgstats(:,25)
+        if (this%isStratified) then
+            this%T_mean  => this%horzavgstats(:,26);  this%uT_mean => this%horzavgstats(:,27);  this%vT_mean => this%horzavgstats(:,28)
+            this%wT_mean => this%horzavgstats(:,29);  this%TT_mean => this%horzavgstats(:,30);  this%q1_mean => this%horzavgstats(:,31)
+            this%q2_mean => this%horzavgstats(:,32);  this%q3_mean => this%horzavgstats(:,33)
+        end if 
+
+        this%tidSUM = 0
+        this%tprev2 = -1; this%tprev1 = -1;
+        this%stats3D = zero
+        this%horzavgstats = zero
+        this%inst_horz_avg = zero
+        this%runningSum_sc = zero
+        if(this%useWindTurbines) then
+            this%inst_horz_avg_turb = zero
+            this%runningSum_sc_turb = zero
+            this%runningSum_turb    = zero
+        endif
+        call message("Done init_stats3D")
+    end subroutine
+
+    subroutine compute_stats3D(this)
+        class(igridWallM), intent(inout), target :: this
+        real(rkind), dimension(:,:,:), pointer :: rbuff0, rbuff1, rbuff2, rbuff2E, rbuff3E, rbuff3, rbuff1E, rbuff4
+        integer :: i, k, jindx
+
+        rbuff0  => this%rbuffxC(:,:,:,1); rbuff1  => this%rbuffxC(:,:,:,2);
+        rbuff2  => this%rbuffyC(:,:,:,1);
+        rbuff2E => this%rbuffyE(:,:,:,1); rbuff3E => this%rbuffzE(:,:,:,1);
+        rbuff3 => this%rbuffzC(:,:,:,1);  rbuff1E => this%rbuffxE(:,:,:,1)
+        rbuff4 => this%rbuffzC(:,:,:,2);
+
+        this%tidSUM = this%tidSUM + 1
+
+        ! compute u*w on E, interpolate to C
+        rbuff1E = this%uE * this%w
+        call transpose_x_to_y(rbuff1E,rbuff2E,this%gpE)
+        call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+        call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+        call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
+        call transpose_y_to_x(rbuff2,rbuff1,this%gpC)
+
+        ! compute v*w on E, interpolate to C
+        rbuff1E = this%vE * this%w
+        call transpose_x_to_y(rbuff1E,rbuff2E,this%gpE)
+        call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+        call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff4)
+        call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
+        call transpose_y_to_x(rbuff2,rbuff0,this%gpC)
+
+        ! Compute u,v,wC - mean
+        if(this%normByUstar) then
+            this%u_mean3D = this%u_mean3D + this%u/this%ustar
+            this%v_mean3D = this%v_mean3D + this%v/this%ustar
+            this%w_mean3D = this%w_mean3D + this%wC/this%ustar
+
+            this%uu_mean3D = this%uu_mean3D + this%u * this%u /this%ustar
+            this%uv_mean3D = this%uv_mean3D + this%u * this%v /this%ustar
+            this%uw_mean3D = this%uw_mean3D + rbuff1          /this%ustar
+            this%vv_mean3D = this%vv_mean3D + this%v * this%v /this%ustar
+            this%vw_mean3D = this%vw_mean3D + rbuff0          /this%ustar
+            this%ww_mean3D = this%ww_mean3D + this%wC* this%wC/this%ustar
+
+            if(this%isStratified) then
+                this%T_mean3D = this%T_mean3D + this%T*this%ustar/this%wTh_surf
+                this%uT_mean3D = this%uT_mean3D + this%T * this%u /this%wTh_surf
+                this%vT_mean3D = this%vT_mean3D + this%T * this%v /this%wTh_surf
+                this%wT_mean3D = this%wT_mean3D + this%T * this%wC/this%wTh_surf
+                this%TT_mean3D = this%TT_mean3D + this%T * this%T*(this%ustar/this%wTh_surf)**2
+            endif
+        else
+            this%u_mean3D = this%u_mean3D + this%u
+            this%v_mean3D = this%v_mean3D + this%v
+            this%w_mean3D = this%w_mean3D + this%wC
+
+            this%uu_mean3D = this%uu_mean3D + this%u * this%u
+            this%uv_mean3D = this%uv_mean3D + this%u * this%v
+            this%uw_mean3D = this%uw_mean3D + this%u * this%wC
+            this%vv_mean3D = this%vv_mean3D + this%v * this%v
+            this%vw_mean3D = this%vw_mean3D + this%v * this%wC
+            this%ww_mean3D = this%ww_mean3D + this%wC* this%wC
+
+            if(this%isStratified) then
+                this%T_mean3D = this%T_mean3D + this%T
+                this%uT_mean3D = this%uT_mean3D + this%T * this%u
+                this%vT_mean3D = this%vT_mean3D + this%T * this%v
+                this%wT_mean3D = this%wT_mean3D + this%T * this%wC
+                this%TT_mean3D = this%TT_mean3D + this%T * this%T
+            endif
+        endif
+
+        if(this%useSGS) then
+            ! interpolate tau13 from E to C
+            call transpose_x_to_y(this%tau13,rbuff2E,this%gpE)
+            call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+            rbuff3E(:,:,1) = -(this%ustar**2)
+            call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
+            call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,3),this%gpC)
+
+            ! interpolate tau13 from E to C
+            call transpose_x_to_y(this%tau23,rbuff2E,this%gpE)
+            call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+            rbuff3E(:,:,1) = -(this%ustar**2)*this%Vmn/this%Umn
+            call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
+            call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,5),this%gpC)
+
+            ! sgs dissipation
+            rbuff1 = this%tauSGS_ij(:,:,:,1)*this%tauSGS_ij(:,:,:,1) + &
+                     this%tauSGS_ij(:,:,:,2)*this%tauSGS_ij(:,:,:,2) + &
+                     this%tauSGS_ij(:,:,:,3)*this%tauSGS_ij(:,:,:,3)
+            rbuff1 = rbuff1 + two*(this%tauSGS_ij(:,:,:,4)*this%tauSGS_ij(:,:,:,4) + &
+                                   this%tauSGS_ij(:,:,:,5)*this%tauSGS_ij(:,:,:,5) + &
+                                   this%tauSGS_ij(:,:,:,6)*this%tauSGS_ij(:,:,:,6) )
+            rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)         ! note: factor of half is in dump_stats
+
+            if(this%normByUstar) then
+                this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%ustar**2)
+                this%tau12_mean3D = this%tau12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%ustar**2)
+                this%tau13_mean3D = this%tau13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%ustar**2)
+                this%tau22_mean3D = this%tau22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%ustar**2)
+                this%tau23_mean3D = this%tau23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%ustar**2)
+                this%tau33_mean3D = this%tau33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%ustar**2)
+
+                ! factor of H in normalization is missing from all statistics below
+                this%sgsdissp_mean3D = this%sgsdissp_mean3D + rbuff1/(this%ustar**3)
+
+                rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)
+                this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff1/(this%ustar**3)
+
+                this%S11_mean3D = this%S11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%nu_SGS+1.0d-14)/this%ustar
+                this%S12_mean3D = this%S12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%nu_SGS+1.0d-14)/this%ustar
+                this%S13_mean3D = this%S13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%nu_SGS+1.0d-14)/this%ustar
+                this%S22_mean3D = this%S22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%nu_SGS+1.0d-14)/this%ustar
+                this%S23_mean3D = this%S23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%nu_SGS+1.0d-14)/this%ustar
+                this%S33_mean3D = this%S33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%nu_SGS+1.0d-14)/this%ustar
+            else
+                this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)
+                this%tau12_mean3D = this%tau12_mean3D + this%tauSGS_ij(:,:,:,2)
+                this%tau13_mean3D = this%tau13_mean3D + this%tauSGS_ij(:,:,:,3)
+                this%tau22_mean3D = this%tau22_mean3D + this%tauSGS_ij(:,:,:,4)
+                this%tau23_mean3D = this%tau23_mean3D + this%tauSGS_ij(:,:,:,5)
+                this%tau33_mean3D = this%tau33_mean3D + this%tauSGS_ij(:,:,:,6)
+
+                this%sgsdissp_mean3D = this%sgsdissp_mean3D + rbuff1
+
+                rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)
+                this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff1
+
+                this%S11_mean3D = this%S11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%nu_SGS+1.0d-14)
+                this%S12_mean3D = this%S12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%nu_SGS+1.0d-14)
+                this%S13_mean3D = this%S13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%nu_SGS+1.0d-14)
+                this%S22_mean3D = this%S22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%nu_SGS+1.0d-14)
+                this%S23_mean3D = this%S23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%nu_SGS+1.0d-14)
+                this%S33_mean3D = this%S33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%nu_SGS+1.0d-14)
+            endif
+
+            if(this%isStratified) then
+                ! interpolate q3 from C to E
+                call transpose_x_to_y(this%q3,rbuff2E,this%gpE)
+                call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+                rbuff3E(:,:,1) = this%wTh_surf
+                call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+                call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
+                call transpose_y_to_x(rbuff2,rbuff1,this%gpC)
+
+                if(this%normByUstar) then
+                    this%q1_mean3D = this%q1_mean3D + this%q1/this%wTh_surf
+                    this%q2_mean3D = this%q2_mean3D + this%q2/this%wTh_surf
+                    this%q3_mean3D = this%q3_mean3D + rbuff1/this%wTh_surf
+                else
+                    this%q1_mean3D = this%q1_mean3D + this%q1
+                    this%q2_mean3D = this%q2_mean3D + this%q2
+                    this%q3_mean3D = this%q3_mean3D + rbuff1
+                endif
+            endif
+
+        endif
+
+        ! compute 1D spectra ---- make sure that number of variables for which spectra are computed is smaller than nyg
+        ! For each variable, at each y, z, location, x-spectrum is computed first, and then averaged over time and y-direction
+        jindx = 1    ! u
+        call this%spectC%fft1_x2y(this%u,this%cbuffyC(:,:,:,1))
+        do k = 1, size(this%cbuffyC, 3)
+          do i = 1, size(this%cbuffyC, 1)
+            this%xspectra_mean(i,jindx,k) = this%xspectra_mean(i,jindx,k) + sum(abs(this%cbuffyC(i,:,k,1)))
+          end do
+        end do
+        
+        jindx = 2    ! v
+        call this%spectC%fft1_x2y(this%v,this%cbuffyC(:,:,:,1))
+        do k = 1, size(this%cbuffyC, 3)
+          do i = 1, size(this%cbuffyC, 1)
+            this%xspectra_mean(i,jindx,k) = this%xspectra_mean(i,jindx,k) + sum(abs(this%cbuffyC(i,:,k,1)))
+          end do
+        end do
+        
+        jindx = 3    ! w
+        call this%spectC%fft1_x2y(this%wC,this%cbuffyC(:,:,:,1))
+        do k = 1, size(this%cbuffyC, 3)
+          do i = 1, size(this%cbuffyC, 1)
+            this%xspectra_mean(i,jindx,k) = this%xspectra_mean(i,jindx,k) + sum(abs(this%cbuffyC(i,:,k,1)))
+          end do
+        end do
+        
+        jindx = 4    ! KE
+        call this%spectC%fft1_x2y(half*(this%u**2+this%v**2+this%wC**2),this%cbuffyC(:,:,:,1))
+        do k = 1, size(this%cbuffyC, 3)
+          do i = 1, size(this%cbuffyC, 1)
+            this%xspectra_mean(i,jindx,k) = this%xspectra_mean(i,jindx,k) + sum(abs(this%cbuffyC(i,:,k,1)))
+          end do
+        end do
+        
+        if(this%isStratified) then
+            jindx = 5    ! T
+            call this%spectC%fft1_x2y(this%T,this%cbuffyC(:,:,:,1))
+            do k = 1, size(this%cbuffyC, 3)
+              do i = 1, size(this%cbuffyC, 1)
+                this%xspectra_mean(i,jindx,k) = this%xspectra_mean(i,jindx,k) + sum(abs(this%cbuffyC(i,:,k,1)))
+              end do
+            end do
+        endif
+        
+        ! instantaneous horizontal averages of some quantities
+        this%inst_horz_avg(1) = this%ustar
+        ! this%inst_horz(2) and (3) are computed in getRHS_SGS_WallM
+        if(this%isStratified) then
+            this%inst_horz_avg(4) = this%invObLength
+            this%inst_horz_avg(5) = this%wTh_surf
+        endif
+        ! this%inst_horz_avg_turb(1:5*this%WindTurbineArr%nTurbines) is computed in this%WindTurbineArr%getForceRHS
+        this%runningSum_sc = this%runningSum_sc + this%inst_horz_avg
+        if(this%useWindTurbines) this%runningSum_sc_turb = this%runningSum_sc_turb + this%inst_horz_avg_turb
+
+        nullify(rbuff0,rbuff1,rbuff2,rbuff3,rbuff2E,rbuff3E,rbuff4,rbuff1E)
+
+    end subroutine
+
+    subroutine DeletePrevStats3DFiles(this)
+        class(igridWallM), intent(inout) :: this
+        character(len=clen) :: tempname, fname
+
+        if(nrank==0) then
+          ! delete stats files corresponding to tprev2
+          ! -- u
+          write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_um_t",this%tprev2,".3Dstt"
+          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+          open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+          ! -- v 
+          write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_vm_t",this%tprev2,".3Dstt"
+          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+          open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+          ! -- w
+          write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_wm_t",this%tprev2,".3Dstt"
+          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+          open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+          ! -- uu
+          write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_uum_t",this%tprev2,".3Dstt"
+          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+          open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+          ! -- uv
+          write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_uvm_t",this%tprev2,".3Dstt"
+          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+          open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+          ! -- uw
+          write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_uwm_t",this%tprev2,".3Dstt"
+          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+          open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+          ! -- vv
+          write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_vvm_t",this%tprev2,".3Dstt"
+          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+          open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+          ! -- vw
+          write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_vwm_t",this%tprev2,".3Dstt"
+          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+          open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+          ! -- ww
+          write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_wwm_t",this%tprev2,".3Dstt"
+          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+          open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+          if(this%isStratified) then
+              ! -- T
+              write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_Tm_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- uT
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_uTm_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- vT
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_vTm_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- wT
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_wTm_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- TT
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_TTm_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+          endif
+          if(this%useSGS) then
+              ! -- tau11SGS
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t11_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- tau12SGS
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t12_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- tau13SGS
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t13_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- tau22SGS
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t22_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- tau23SGS
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t23_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- tau33SGS
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t33_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- SGS dissiptaion
+              write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_sgsd_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- viscous dissipation
+              write(tempname,"(A3,I2.2,A8,I6.6,A6)") "Run",this%runID, "_viscd_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- S11
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s11_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- S12
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s12_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- S13
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s13_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- S22
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s22_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- S23
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s23_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- S33
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s33_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              if(this%isStratified) then
+                ! -- q1
+                write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_q1_t",this%tprev2,".3Dstt"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+                ! -- q2
+                write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_q2_t",this%tprev2,".3Dstt"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+                ! -- q3
+                write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_q3_t",this%tprev2,".3Dstt"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              endif
+          endif
+        endif
+    end subroutine
+
+    subroutine dump_stats3D(this)
+        use basic_io, only: write_2d_ascii
+        use decomp_2d_io
+        use kind_parameters, only: mpirkind
+        class(igridWallM), intent(inout), target :: this
+      ! compute horizontal averages and dump .stt files
+      ! overwrite previously written out 3D stats dump
+        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3, rbuff4, rbuff5, rbuff6
+        character(len=clen) :: tempname, fname
+        real(rkind) :: tidSUMreal, normfac
+        integer :: tid, dirid, decompdir, jindx
+
+        tid = this%step
+
+        ! Ensure only two sets of 3Dstats files are kept
+        if(this%tprev2 > 0) then
+          call this%DeletePrevStats3DFiles()
+        endif
+        ! Now update tprev2 and tprev1 
+        this%tprev2 = this%tprev1
+        this%tprev1 = this%step
+
+        rbuff1 => this%rbuffxC(:,:,:,1);  rbuff2 => this%rbuffyC(:,:,:,1)
+        rbuff3 => this%rbuffzC(:,:,:,1);  rbuff4 => this%rbuffzC(:,:,:,2)
+        rbuff5 => this%rbuffzC(:,:,:,3);  rbuff6 => this%rbuffzC(:,:,:,4)
+
+        tidSUMreal = real(this%tidSUM, rkind)
+
+        ! u_avg
+        call transpose_x_to_y(this%u_mean3D/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,                   rbuff3, this%gpC)
+        call this%compute_z_mean(rbuff3, this%u_mean)
+        write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_um_t",this%step,".3Dstt"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1, rbuff3, fname)
+
+        ! v_avg
+        call transpose_x_to_y(this%v_mean3D/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,                   rbuff4, this%gpC)
+        call this%compute_z_mean(rbuff4, this%v_mean)
+        write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_vm_t",this%step,".3Dstt"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1, rbuff4, fname)
+      
+        ! w_avg
+        call transpose_x_to_y(this%w_mean3D/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,                   rbuff5, this%gpC)
+        call this%compute_z_mean(rbuff5, this%w_mean)
+        write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_wm_t",this%step,".3Dstt"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1, rbuff5, fname)
+      
+        ! uu_avg - u_avg*u_avg - Total (1D) and Reynolds (3D)
+        call transpose_x_to_y(this%uu_mean3D/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,                    rbuff6, this%gpC)
+        call this%compute_z_mean(rbuff6, this%uu_mean)
+        this%uu_mean = this%uu_mean - this%u_mean*this%u_mean    !--Total
+        rbuff6 = rbuff6 - rbuff3 * rbuff3                        !--Reynolds
+        write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_uum_t",this%step,".3Dstt"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1, rbuff6, fname)
+      
+        ! uv_avg - u_avg*v_avg - Total (1D) and Reynolds (3D)
+        call transpose_x_to_y(this%uv_mean3D/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,                    rbuff6, this%gpC)
+        call this%compute_z_mean(rbuff6, this%uv_mean)
+        this%uv_mean = this%uv_mean - this%u_mean*this%v_mean    !--Total
+        rbuff6 = rbuff6 - rbuff3 * rbuff4                        !--Reynolds
+        write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_uvm_t",this%step,".3Dstt"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1, rbuff6, fname)
+      
+        ! uw_avg - u_avg*w_avg - Reynolds
+        call transpose_x_to_y(this%uw_mean3D/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,                    rbuff6, this%gpC)
+        rbuff6 = rbuff6 - rbuff3*rbuff5
+        call this%compute_z_mean(rbuff6, this%uw_mean)
+        write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_uwm_t",this%step,".3Dstt"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1, rbuff6, fname)
+      
+        ! uw_avg - u_avg*w_avg - Dispersive
+        rbuff6 = rbuff3*rbuff5
+        call this%compute_z_mean(rbuff6, this%disperuw_mean)
+        this%disperuw_mean = this%disperuw_mean - this%u_mean*this%w_mean
+      
+        ! vv_avg - v_avg*v_avg - Total (1D) and Reynolds (3D)
+        call transpose_x_to_y(this%vv_mean3D/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,                    rbuff6, this%gpC)
+        call this%compute_z_mean(rbuff6, this%vv_mean)
+        this%vv_mean = this%vv_mean - this%v_mean*this%v_mean    !--Total
+        rbuff6 = rbuff6 - rbuff4 * rbuff4                        !--Reynolds
+        write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_vvm_t",this%step,".3Dstt"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1, rbuff6, fname)
+      
+        ! vw_avg - v_avg*w_avg - Reynolds
+        call transpose_x_to_y(this%vw_mean3D/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,                    rbuff6, this%gpC)
+        rbuff6 = rbuff6 - rbuff4*rbuff5
+        call this%compute_z_mean(rbuff6, this%vw_mean)
+        write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_vwm_t",this%step,".3Dstt"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1, rbuff6, fname)
+      
+        ! vw_avg - v_avg*w_avg - Dispersive
+        rbuff6 = rbuff4*rbuff5
+        call this%compute_z_mean(rbuff6, this%dispervw_mean)
+        this%dispervw_mean = this%dispervw_mean - this%v_mean*this%w_mean
+      
+        ! ww_avg - w_avg*w_avg - Total (1D) and Reynolds (3D)
+        call transpose_x_to_y(this%ww_mean3D/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,                    rbuff6, this%gpC)
+        call this%compute_z_mean(rbuff6, this%ww_mean)
+        this%ww_mean = this%ww_mean - this%w_mean*this%w_mean    !--Total
+        rbuff6 = rbuff6 - rbuff5 * rbuff5                        !--Reynolds
+        write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_wwm_t",this%step,".3Dstt"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1, rbuff6, fname)
+      
+        if(this%isStratified) then
+            ! T_avg
+            call transpose_x_to_y(this%T_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                   rbuff6, this%gpC)
+            call this%compute_z_mean(rbuff6, this%T_mean)
+            write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_Tm_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff6, fname)
+      
+            ! uT_avg - u_avg*T_avg - Reynolds only
+            rbuff1 = this%uT_mean3D/tidSUMreal - this%u_mean3D * this%T_mean3D / tidSUMreal**2
+            call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%uT_mean)       !--Reynolds
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_uTm_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! vT_avg - v_avg*T_avg - Reynolds only
+            rbuff1 = this%vT_mean3D/tidSUMreal - this%v_mean3D * this%T_mean3D / tidSUMreal**2
+            call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%vT_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_vTm_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! wT_avg - w_avg*T_avg - Reynolds only
+            rbuff1 = this%wT_mean3D/tidSUMreal - this%w_mean3D * this%T_mean3D / tidSUMreal**2
+            call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%wT_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_wTm_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! TT_avg - T_avg*T_avg - Reynolds only
+            rbuff1 = this%TT_mean3D/tidSUMreal - this%T_mean3D * this%T_mean3D / tidSUMreal**2
+            call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%TT_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_TTm_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+        endif
+
+        if(this%useSGS) then
+            ! tau11SGS_avg
+            call transpose_x_to_y(this%tau11_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                       rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%tau11_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t11_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! tau12SGS_avg
+            call transpose_x_to_y(this%tau12_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                       rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%tau12_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t12_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! tau13SGS_avg
+            call transpose_x_to_y(this%tau13_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                       rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%tau13_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t13_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! tau22SGS_avg
+            call transpose_x_to_y(this%tau22_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                       rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%tau22_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t22_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! tau23SGS_avg
+            call transpose_x_to_y(this%tau23_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                       rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%tau23_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t23_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! tau33SGS_avg
+            call transpose_x_to_y(this%tau33_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                       rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%tau33_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t33_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! SGSdissp_avg
+            call transpose_x_to_y(this%sgsdissp_mean3D/(two*tidSUMreal), rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                                rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%sgsdissp_mean)
+            write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_sgsd_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! viscdissp_avg -- after all derivative averages
+            rbuff1 = this%viscdisp_mean3D/tidSumreal     - &
+                     (     this%S11_mean3D**2 + this%S12_mean3D**2 + this%S13_mean3D**2 + &
+                      two*(this%S22_mean3D**2 + this%S23_mean3D**2 + this%S33_mean3D**2)  ) / tidSumreal**2 
+            rbuff1 = half*rbuff1/this%Re     ! note: this is actually 2/Re*(..)/4
+            call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%viscdisp_mean)
+            write(tempname,"(A3,I2.2,A8,I6.6,A6)") "Run",this%runID, "_viscd_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+
+            ! S11_avg
+            call transpose_x_to_y(this%S11_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                     rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%S11_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s11_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! S12_avg
+            call transpose_x_to_y(this%S12_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                     rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%S12_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s12_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! S13_avg
+            call transpose_x_to_y(this%S13_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                     rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%S13_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s13_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! S22_avg
+            call transpose_x_to_y(this%S22_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                     rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%S22_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s22_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! S23_avg
+            call transpose_x_to_y(this%S23_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                     rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%S23_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s23_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! S33_avg
+            call transpose_x_to_y(this%S33_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                     rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%S33_mean)
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s33_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+     
+            ! SGS Coeff and PhiM -- not written for now
+            !this%sgscoeff_mean(:) = zero
+            !this%PhiM(:) = zero
+
+            if(this%isStratified) then
+                ! q1_mean
+                call transpose_x_to_y(this%q1_mean3D/tidSUMreal, rbuff2, this%gpC)
+                call transpose_y_to_z(rbuff2,                    rbuff3, this%gpC)
+                call this%compute_z_mean(rbuff3, this%q1_mean)
+                write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_q1_t",this%step,".3Dstt"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_one(1, rbuff3, fname)
+     
+                ! q2_mean
+                call transpose_x_to_y(this%q2_mean3D/tidSUMreal, rbuff2, this%gpC)
+                call transpose_y_to_z(rbuff2,                    rbuff3, this%gpC)
+                call this%compute_z_mean(rbuff3, this%q2_mean)
+                write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_q2_t",this%step,".3Dstt"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_one(1, rbuff3, fname)
+     
+                ! q3_mean
+                call transpose_x_to_y(this%q3_mean3D/tidSUMreal, rbuff2, this%gpC)
+                call transpose_y_to_z(rbuff2,                    rbuff3, this%gpC)
+                call this%compute_z_mean(rbuff3, this%q3_mean)
+                write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_q3_t",this%step,".3Dstt"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_one(1, rbuff3, fname)
+            endif
+        endif
+        call message(1, "Dumped 3D stats files")
+
+        nullify(rbuff1,rbuff2,rbuff3,rbuff4,rbuff5,rbuff6)
+
+        ! dump horizontal averages
+        if(this%useWindTurbines) then
+            this%runningSum_turb = zero
+            call MPI_reduce(this%runningSum_sc_turb, this%runningSum_turb, 8*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+        endif
+        if (nrank == 0) then
+            write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%RunID,"_t",tid,".stt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call write_2d_ascii(this%horzavgstats,fname)
+
+            write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%RunID,"_t",tid,".sth"   ! time and horz averages of scalars
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            open(unit=771,file=fname,status='unknown')
+            if(this%useWindTurbines) then
+                write(771,'(e19.12,1x,i7,1x,8008(e19.12,1x))') this%tsim, this%tidSUM, this%runningSum_sc/tidSUMreal, this%runningSum_turb/tidSUMreal ! change if using more than 1000 turbines
+            else
+                write(771,'(e19.12,1x,i7,1x,5(e19.12,1x))') this%tsim, this%tidSUM, this%runningSum_sc/tidSUMreal
+            endif
+            close(771)
+        end if
+        call message(1, "Just dumped a .stt file")
+        call message(2, "Number ot tsteps averaged:",this%tidSUM)
+
+        ! Dump horizontally averaged x-spectra
+        dirid = 2; decompdir = 2
+
+        normfac = one/real(size(this%cbuffyC(:,:,:,1),2),rkind)/tidSUMreal
+        jindx = 1 ! u
+        write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specu_t",tid,".out"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_plane(decompdir, normfac*this%xspectra_mean, dirid, jindx, fname)
+
+        jindx = 2 ! v
+        write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specv_t",tid,".out"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_plane(decompdir, normfac*this%xspectra_mean, dirid, jindx, fname)
+
+        jindx = 3 ! w
+        write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specw_t",tid,".out"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_plane(decompdir, normfac*this%xspectra_mean, dirid, jindx, fname)
+
+        jindx = 4 ! KE
+        write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_speck_t",tid,".out"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_plane(decompdir, normfac*this%xspectra_mean, dirid, jindx, fname)
+
+        if(this%isStratified) then
+            jindx = 5 ! T
+            write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specT_t",tid,".out"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(decompdir, normfac*this%xspectra_mean, dirid, jindx, fname)
+        endif
+
+    end subroutine
+
+    subroutine finalize_stats3D(this)
+        class(igridWallM), intent(inout) :: this
+        nullify(this%u_mean, this%v_mean, this%w_mean, this%uu_mean, this%uv_mean, this%uw_mean, this%vv_mean, this%vw_mean, this%ww_mean)
+        nullify(this%tau11_mean, this%tau12_mean, this%tau13_mean, this%tau22_mean, this%tau23_mean, this%tau33_mean)
+        nullify(this%S11_mean, this%S12_mean, this%S13_mean, this%S22_mean, this%S23_mean, this%S33_mean)
+        nullify(this%sgsdissp_mean, this%viscdisp_mean, this%disperuw_mean, this%dispervw_mean)
+
+        nullify(this%u_mean3D, this%v_mean3D, this%w_mean3D, this%uu_mean3D, this%uv_mean3D, this%uw_mean3D, this%vv_mean3D, this%vw_mean3D, this%ww_mean3D)
+        nullify(this%tau11_mean3D, this%tau12_mean3D, this%tau13_mean3D, this%tau22_mean3D, this%tau23_mean3D, this%tau33_mean3D)
+        nullify(this%S11_mean3D, this%S12_mean3D, this%S13_mean3D, this%S22_mean3D, this%S23_mean3D, this%S33_mean3D)
+        nullify(this%sgsdissp_mean3D, this%viscdisp_mean3D)
+
+        if(this%isStratified) then
+            nullify(this%T_mean, this%uT_mean, this%vT_mean, this%wT_mean, this%TT_mean, this%q1_mean, this%q2_mean, this%q3_mean)
+            nullify(this%T_mean3D, this%uT_mean3D, this%vT_mean3D, this%wT_mean3D, this%TT_mean3D, this%q1_mean3D, this%q2_mean3D, this%q3_mean3D)
+        endif
+
+        deallocate(this%stats3D, this%horzavgstats, this%inst_horz_avg, this%runningSum_sc, this%xspectra_mean)
+        if(this%useWindTurbines) deallocate(this%inst_horz_avg_turb, this%runningSum_sc_turb, this%runningSum_turb)
+    end subroutine
+
+    !--------------------------------Done 3D Statistics----------------------------------------------
+
+    !--------------------------------Beginning 1D Statistics----------------------------------------------
     subroutine init_stats( this)
         class(igridWallM), intent(inout), target :: this
         type(decomp_info), pointer  :: gpC
@@ -1733,8 +2606,9 @@ contains
         end if 
 
         if(this%useWindTurbines) then
-            allocate(this%inst_horz_avg_turb(2*this%WindTurbineArr%nTurbines))
-            allocate(this%runningSum_sc_turb(2*this%WindTurbineArr%nTurbines))
+            allocate(this%inst_horz_avg_turb(8*this%WindTurbineArr%nTurbines))
+            allocate(this%runningSum_sc_turb(8*this%WindTurbineArr%nTurbines))
+            allocate(this%runningSum_turb   (8*this%WindTurbineArr%nTurbines))
         endif
 
         ! mean velocities
@@ -1751,10 +2625,10 @@ contains
                                                                                               this%tau33_mean => this%zStats2dump(:,15)
 
         ! SGS dissipation
-        this%sgsdissp => this%zStats2dump(:,16)
+        this%sgsdissp_mean => this%zStats2dump(:,16)
 
         ! velocity derivative products - for viscous dissipation
-        this%viscdissp => this%zStats2dump(:,17)
+        this%viscdisp_mean => this%zStats2dump(:,17)
 
         ! means of velocity derivatives
         this%S11_mean => this%zStats2dump(:,18); this%S12_mean => this%zStats2dump(:,19); this%S13_mean => this%zStats2dump(:,20)
@@ -1775,6 +2649,12 @@ contains
         this%runningSum = zero
         this%TemporalMnNOW = zero
         this%zStats2dump = zero
+        this%inst_horz_avg = zero
+        if(this%useWindTurbines) then
+            this%inst_horz_avg_turb = zero
+            this%runningSum_sc_turb = zero
+            this%runningSum_turb    = zero
+        endif
         nullify(gpC)
     end subroutine
 
@@ -1898,6 +2778,8 @@ contains
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
             rbuff3E(:,:,1) = -(this%ustar**2)
             call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
+            call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,3),this%gpC)
             call this%compute_z_mean(rbuff3, this%tau13_mean)
             if (this%normByustar)this%tau13_mean = this%tau13_mean/(this%ustar**2)
 
@@ -1912,6 +2794,8 @@ contains
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
             rbuff3E(:,:,1) = -(this%ustar**2)*this%Vmn/this%Umn
             call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
+            call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,5),this%gpC)
             call this%compute_z_mean(rbuff3, this%tau23_mean)
             if (this%normByustar)this%tau23_mean = this%tau23_mean/(this%ustar**2)
 
@@ -1933,13 +2817,13 @@ contains
 
             call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
             call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-            call this%compute_z_mean(rbuff3, this%sgsdissp)
+            call this%compute_z_mean(rbuff3, this%sgsdissp_mean)
 
             ! viscous dissipation- *****????? Is rbuff1 contaminated after transpose_x_to_y? *****?????
             rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)        ! note: factor of fourth is in dump_stats
             call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
             call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
-            call this%compute_z_mean(rbuff3, this%viscdissp)
+            call this%compute_z_mean(rbuff3, this%viscdisp_mean)
 
             ! note: factor of half in all S_** is in dump_stats
             ! S_11
@@ -1996,7 +2880,7 @@ contains
                 call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
                 call this%compute_z_mean(rbuff3, this%q2_mean)    
 
-                ! q2
+                ! q3
                 call transpose_x_to_y(this%q3,rbuff2E,this%gpE)
                 call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
                 rbuff3E(:,:,1) = this%wTh_surf
@@ -2025,9 +2909,9 @@ contains
             this%inst_horz_avg(4) = this%invObLength
             this%inst_horz_avg(5) = this%wTh_surf
         endif
-        ! this%inst_horz_avg_turb(1:2*this%WindTurbineArr%nTurbines) is computed in this%WindTurbineArr%getForceRHS
+        ! this%inst_horz_avg_turb(1:5*this%WindTurbineArr%nTurbines) is computed in this%WindTurbineArr%getForceRHS
         this%runningSum_sc = this%runningSum_sc + this%inst_horz_avg
-        this%runningSum_sc_turb = this%runningSum_sc_turb + this%inst_horz_avg_turb
+        if(this%useWindTurbines) this%runningSum_sc_turb = this%runningSum_sc_turb + this%inst_horz_avg_turb
 
     end subroutine 
 
@@ -2040,7 +2924,6 @@ contains
         character(len=clen) :: fname
         character(len=clen) :: tempname
         integer :: tid, ierr
-        real(rkind), dimension(2*this%WindTurbineArr%nTurbines) :: runningSum_turb
 
         this%TemporalMnNOW = this%runningSum/real(this%tidSUM,rkind)
         tid = this%step
@@ -2073,9 +2956,10 @@ contains
                                    this%TemporalMnNOW(:,22)*this%TemporalMnNOW(:,22)))
         this%TemporalMnNOW(:,17) = half*this%TemporalMnNOW(:,17)/this%Re     ! note: this is actually 2/Re*(..)/4
 
-
-        call MPI_reduce(this%runningSum_sc_turb, runningSum_turb, 2*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
-
+        if(this%useWindTurbines) then
+            this%runningSum_turb = zero
+            call MPI_reduce(this%runningSum_sc_turb, this%runningSum_turb, 8*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+        endif
         if (nrank == 0) then
             write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%RunID,"_t",tid,".stt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
@@ -2086,7 +2970,7 @@ contains
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
             open(unit=771,file=fname,status='unknown')
             if(this%useWindTurbines) then
-                write(771,'(e19.12,1x,i7,1x,2005(e19.12,1x))') this%tsim, this%tidSUM, this%runningSum_sc/real(this%tidSUM,rkind), runningSum_turb/real(this%tidSUM,rkind) ! change if using more than 1000 turbines
+                write(771,'(e19.12,1x,i7,1x,8008(e19.12,1x))') this%tsim, this%tidSUM, this%runningSum_sc/real(this%tidSUM,rkind), this%runningSum_turb/real(this%tidSUM,rkind) ! change if using more than 1000 turbines
             else
                 write(771,'(e19.12,1x,i7,1x,5(e19.12,1x))') this%tsim, this%tidSUM, this%runningSum_sc/real(this%tidSUM,rkind)
             endif
@@ -2111,6 +2995,20 @@ contains
 
     end subroutine
 
+    !subroutine compute_y_mean(this, arr_in, arr_out)
+    !    use reductions, only: P_SUM
+    !    class(igridWallM), intent(in), target :: this
+    !    real(rkind), dimension(:,:,:), intent(in) :: arr_in
+    !    real(rkind), dimension(:,:), intent(out) :: arr_out
+    !    integer :: k, i
+
+    !    do k = 1,size(arr_in,3)
+    !      do i = 1,size(arr_in,1)
+    !        arr_out(i,k) = P_SUM(sum(arr_in(:,:,k)))/(real(this%nx,rkind)*real(this%ny,rkind))
+    !    end do 
+
+    !end subroutine
+
     subroutine compute_z_mean(this, arr_in, vec_out)
         use reductions, only: P_SUM
         class(igridWallM), intent(in), target :: this
@@ -2129,8 +3027,33 @@ contains
         nullify(this%u_mean, this%v_mean, this%w_mean, this%uu_mean, this%uv_mean, this%uw_mean, this%vv_mean, this%vw_mean, this%ww_mean)
         nullify(this%tau11_mean, this%tau12_mean, this%tau13_mean, this%tau22_mean, this%tau23_mean, this%tau33_mean)
         nullify(this%S11_mean, this%S12_mean, this%S13_mean, this%S22_mean, this%S23_mean, this%S33_mean)
-        nullify(this%sgsdissp, this%viscdissp, this%sgscoeff_mean)
+        nullify(this%sgsdissp_mean, this%viscdisp_mean, this%sgscoeff_mean)
         deallocate(this%zStats2dump, this%runningSum, this%TemporalMnNOW, this%runningSum_sc)
+        if(this%useWindTurbines) deallocate(this%inst_horz_avg_turb, this%runningSum_sc_turb, this%runningSum_turb)
+    end subroutine 
+
+    !--------------------------------Done 1D Statistics----------------------------------------------
+
+    subroutine dump_pointProbes(this)
+        use kind_parameters, only: mpirkind
+        class(igridWallM), intent(inout) :: this
+        character(len=clen) :: fname
+        character(len=clen) :: tempname
+        integer :: ierr
+
+        if(this%useWindTurbines) then
+            this%runningSum_turb = zero
+            call MPI_reduce(this%inst_horz_avg_turb, this%runningSum_turb, 8*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+        endif
+        if(nrank == 0) then
+            write(tempname,"(A3,I2.2,A15)") "Run", this%RunID,"_timeseries.prb"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            open(unit=10,file=fname,status='old',action='write',position='append',iostat=ierr)
+            if(ierr .ne. 0) open(unit=10,file=fname,status='replace')
+            write(10,'(1000(e19.12,1x))') this%tsim, this%inst_horz_avg, this%runningSum_turb
+            close(10)
+        end if
+
     end subroutine 
 
     subroutine dump_planes(this)

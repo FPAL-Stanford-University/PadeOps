@@ -34,7 +34,8 @@ program pblwt
 
     call igp%printDivergence()
   
-    call igp%init_stats()  
+    !call igp%init_stats()  
+    call igp%init_stats3D()  
 
     call tic() 
     do while (igp%tsim < igp%tstop) 
@@ -46,7 +47,8 @@ program pblwt
  
     call finalize_io                  !<-- Close the header file (wrap up i/o)
 
-    call igp%finalize_stats()
+    !call igp%finalize_stats()
+    call igp%finalize_stats3D()
     
     call igp%destroy()                !<-- Destroy the IGRID derived type 
    

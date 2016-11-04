@@ -23,6 +23,7 @@ program test_actuatorDisk
     type(decomp_info) :: gp 
     integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0 
     real(rkind) :: xPeriods = 2.d0, yPeriods = 2.d0, zpeak = 0.3d0, epsnd = 5.d0, z0init = 1.d-4 
+    real(rkind) :: inst_val(8)
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -61,7 +62,7 @@ program test_actuatorDisk
     call mpi_barrier(mpi_comm_world, ierr)
     call tic()
     do idx = 1,6
-        call hawts(idx)%get_RHS(u, v, w, rhs, rhsv, rhsw)
+        call hawts(idx)%get_RHS(u, v, w, rhs, rhsv, rhsw, inst_val)
     end do 
     call mpi_barrier(mpi_comm_world, ierr)
     call toc()
