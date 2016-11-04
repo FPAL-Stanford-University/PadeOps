@@ -8,9 +8,10 @@ module SolidMixtureMod
     use LADMod,          only: ladobject
     use exits,           only: GracefulExit
     use EOSMod,          only: eos
-    use StiffGasEOS,     only: stiffgas
-    use Sep1SolidEOS,    only: sep1solid
+    ! use StiffGasEOS,     only: stiffgas
+    ! use Sep1SolidEOS,    only: sep1solid
     use SolidMod,        only: solid
+    use AbstractEOSMod,  only: abstracteos
 
     implicit none
 
@@ -33,8 +34,8 @@ module SolidMixtureMod
 
         procedure :: init
         procedure :: set_material
-        procedure :: relaxPressure
-        procedure :: equilibratePressureTemperature
+        ! procedure :: relaxPressure
+        ! procedure :: equilibratePressureTemperature
         procedure :: getLAD
         procedure :: update_g
         procedure :: update_Ys
@@ -44,21 +45,23 @@ module SolidMixtureMod
         procedure :: get_rho
         procedure :: get_primitive
         procedure :: get_conserved
-        procedure :: get_ehydro_from_p
-        procedure :: get_p_from_ehydro
+        ! procedure :: get_ehydro_from_p
+        ! procedure :: get_p_from_ehydro
+        procedure :: post_bc
+
         procedure :: get_rhoYs_from_gVF
         procedure :: get_emix
         procedure :: get_pmix
         procedure :: get_Tmix
-        procedure :: getSOS
+        ! procedure :: getSOS
         procedure :: get_J
         procedure :: get_q
         procedure :: get_qmix
         procedure :: get_dt
-        procedure :: get_eelastic_devstress
+        ! procedure :: get_eelastic_devstress
         procedure :: checkNaN
-        procedure :: fnumden
-        procedure :: rootfind_nr_1d
+        ! procedure :: fnumden
+        ! procedure :: rootfind_nr_1d
         final     :: destroy
 
     end type
@@ -136,172 +139,177 @@ contains
 
     end subroutine
 
-    subroutine set_material(this, imat, hydro, elastic)
+    subroutine set_material(this, imat, eos)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: imat
-        class(stiffgas ),     intent(in)    :: hydro
-        class(sep1solid),     intent(in)    :: elastic
+        class(abstracteos),   intent(in)    :: eos
 
         if ((imat .GT. this%ns) .OR. (imat .LE. 0)) call GracefulExit("Cannot set material with index greater than the number of species.",4534)
 
-        if (allocated(this%material(imat)%hydro)) deallocate(this%material(imat)%hydro)
-        allocate( this%material(imat)%hydro, source=hydro )
+        ! if (allocated(this%material(imat)%hydro)) deallocate(this%material(imat)%hydro)
+        ! allocate( this%material(imat)%hydro, source=hydro )
+        ! 
+        ! if (allocated(this%material(imat)%elastic)) deallocate(this%material(imat)%elastic)
+        ! allocate( this%material(imat)%elastic, source=elastic )
         
-        if (allocated(this%material(imat)%elastic)) deallocate(this%material(imat)%elastic)
-        allocate( this%material(imat)%elastic, source=elastic )
+        print*, "In set_material"
+        if (allocated(this%material(imat)%eos)) deallocate(this%material(imat)%eos)
+        print*, "Deallocated old eos"
+        allocate( this%material(imat)%eos, source=eos )
+        print*, "Allocated new eos"
     end subroutine
 
-    subroutine relaxPressure(this,rho,mixE,mixP)
-        class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho, mixE
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP
+    !ADD! subroutine relaxPressure(this,rho,mixE,mixP)
+    !ADD!     class(solid_mixture), intent(inout) :: this
+    !ADD!     real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho, mixE
+    !ADD!     real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix
-        real(rkind), dimension(4*this%ns), target :: fparams
-        integer, dimension(1)             :: iparams
-        real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
+    !ADD!     real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix
+    !ADD!     real(rkind), dimension(4*this%ns), target :: fparams
+    !ADD!     integer, dimension(1)             :: iparams
+    !ADD!     real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
 
-        integer :: i,j,k,imat
-        real(rkind) :: maxp, peqb
+    !ADD!     integer :: i,j,k,imat
+    !ADD!     real(rkind) :: maxp, peqb
 
-        real(rkind), dimension(1:this%ns) :: fac
+    !ADD!     real(rkind), dimension(1:this%ns) :: fac
 
-        ehmix = mixE
-        do imat = 1, this%ns
-            ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
-        enddo
+    !ADD!     ehmix = mixE
+    !ADD!     do imat = 1, this%ns
+    !ADD!         ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
+    !ADD!     enddo
 
-        ! equilibrate and reset species pressures, reset volume fractions
+    !ADD!     ! equilibrate and reset species pressures, reset volume fractions
 
-        vf   => fparams(  1:this%ns)
-        gam  => fparams(  this%ns+1:2*this%ns)
-        psph => fparams(2*this%ns+1:3*this%ns)
-        pinf => fparams(3*this%ns+1:4*this%ns)
-        
-        do k=1,this%nzp
-         do j=1,this%nyp
-          do i=1,this%nxp
-            do imat=1,this%ns
-                ! set fparams
-                fparams(          imat) = this%material(imat)%VF(i,j,k)    ! volume fractions
-                fparams(  this%ns+imat) = this%material(imat)%hydro%gam    ! gamma
-                fparams(2*this%ns+imat) = this%material(imat)%p(i,j,k)     ! pressure before eqb
-                fparams(3*this%ns+imat) = this%material(imat)%hydro%PInf   ! PInf
-            end do
+    !ADD!     vf   => fparams(  1:this%ns)
+    !ADD!     gam  => fparams(  this%ns+1:2*this%ns)
+    !ADD!     psph => fparams(2*this%ns+1:3*this%ns)
+    !ADD!     pinf => fparams(3*this%ns+1:4*this%ns)
+    !ADD!     
+    !ADD!     do k=1,this%nzp
+    !ADD!      do j=1,this%nyp
+    !ADD!       do i=1,this%nxp
+    !ADD!         do imat=1,this%ns
+    !ADD!             ! set fparams
+    !ADD!             fparams(          imat) = this%material(imat)%VF(i,j,k)    ! volume fractions
+    !ADD!             fparams(  this%ns+imat) = this%material(imat)%hydro%gam    ! gamma
+    !ADD!             fparams(2*this%ns+imat) = this%material(imat)%p(i,j,k)     ! pressure before eqb
+    !ADD!             fparams(3*this%ns+imat) = this%material(imat)%hydro%PInf   ! PInf
+    !ADD!         end do
 
-            ! set iparams
-            iparams(1) = 1     !   used in fnumden; 2 for PTeqb 
+    !ADD!         ! set iparams
+    !ADD!         iparams(1) = 1     !   used in fnumden; 2 for PTeqb 
 
-            ! scale all pressures by max over all PInfs
-            maxp = maxval(fparams(3*this%ns+1:4*this%ns))
-            fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)/maxp
+    !ADD!         ! scale all pressures by max over all PInfs
+    !ADD!         maxp = maxval(fparams(3*this%ns+1:4*this%ns))
+    !ADD!         fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)/maxp
 
-            ! set initial guess
-            peqb = sum(fparams(1:this%ns)*fparams(2*this%ns+1:3*this%ns))
+    !ADD!         ! set initial guess
+    !ADD!         peqb = sum(fparams(1:this%ns)*fparams(2*this%ns+1:3*this%ns))
 
-            ! solve non-linear equation
-            call this%rootfind_nr_1d(peqb,fparams,iparams)
+    !ADD!         ! solve non-linear equation
+    !ADD!         call this%rootfind_nr_1d(peqb,fparams,iparams)
 
-            ! rescale all pressures by maxp
-            fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*maxp
-            peqb = peqb*maxp
+    !ADD!         ! rescale all pressures by maxp
+    !ADD!         fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*maxp
+    !ADD!         peqb = peqb*maxp
 
-            ! update species VF, eh, ...
-            fac = (psph + gam*pinf + (gam-one)*peqb)/(gam*(pinf+peqb))
-            vf = vf*fac
-            !this%material(1:this%ns)%g = this%material(1:this%ns)%g*fac**third        !! --- not clear if this is needed or if it works
+    !ADD!         ! update species VF, eh, ...
+    !ADD!         fac = (psph + gam*pinf + (gam-one)*peqb)/(gam*(pinf+peqb))
+    !ADD!         vf = vf*fac
+    !ADD!         !this%material(1:this%ns)%g = this%material(1:this%ns)%g*fac**third        !! --- not clear if this is needed or if it works
 
-            peqb = (rho(i,j,k)*ehmix(i,j,k) - sum(vf*gam*pinf/(gam-one))) / sum(vf/(gam-one))
-            psph = peqb
+    !ADD!         peqb = (rho(i,j,k)*ehmix(i,j,k) - sum(vf*gam*pinf/(gam-one))) / sum(vf/(gam-one))
+    !ADD!         psph = peqb
 
-            mixP(i,j,k) = peqb
-            do imat=1,this%ns
-              this%material(imat)%VF(i,j,k) = vf(imat)
-              this%material(imat)%p(i,j,k) = psph(imat)
-            enddo
+    !ADD!         mixP(i,j,k) = peqb
+    !ADD!         do imat=1,this%ns
+    !ADD!           this%material(imat)%VF(i,j,k) = vf(imat)
+    !ADD!           this%material(imat)%p(i,j,k) = psph(imat)
+    !ADD!         enddo
 
-          enddo
-         enddo
-        enddo
+    !ADD!       enddo
+    !ADD!      enddo
+    !ADD!     enddo
 
-        ! get species energy from species pressure
-        do imat = 1, this%ns
-            call this%material(imat)%get_ehydroT_from_p(rho)
-        end do
+    !ADD!     ! get species energy from species pressure
+    !ADD!     do imat = 1, this%ns
+    !ADD!         call this%material(imat)%get_ehydroT_from_p(rho)
+    !ADD!     end do
 
-    end subroutine
+    !ADD! end subroutine
 
-    subroutine equilibratePressureTemperature(this,mixRho,mixE,mixP,mixT)
-        class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixRho, mixE
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP, mixT
+    !ADD! subroutine equilibratePressureTemperature(this,mixRho,mixE,mixP,mixT)
+    !ADD!     class(solid_mixture), intent(inout) :: this
+    !ADD!     real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixRho, mixE
+    !ADD!     real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP, mixT
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix
-        real(rkind), dimension(4*this%ns), target :: fparams
-        integer, dimension(4)             :: iparams
-        ! real(rkind), dimension(:), pointer :: vf, psph, pinf
+    !ADD!     real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix
+    !ADD!     real(rkind), dimension(4*this%ns), target :: fparams
+    !ADD!     integer, dimension(4)             :: iparams
+    !ADD!     ! real(rkind), dimension(:), pointer :: vf, psph, pinf
 
-        integer :: i,j,k,imat
-        real(rkind) :: maxp, peqb !, pest, pdiffmax
+    !ADD!     integer :: i,j,k,imat
+    !ADD!     real(rkind) :: maxp, peqb !, pest, pdiffmax
 
-        ! subtract elastic energy to determine hydrostatic energy. Temperature
-        ! is assumed a function of only hydrostatic energy. Not sure if this is
-        ! correct.
-        ehmix = mixE
-        do imat = 1, this%ns
-            ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
-        enddo
+    !ADD!     ! subtract elastic energy to determine hydrostatic energy. Temperature
+    !ADD!     ! is assumed a function of only hydrostatic energy. Not sure if this is
+    !ADD!     ! correct.
+    !ADD!     ehmix = mixE
+    !ADD!     do imat = 1, this%ns
+    !ADD!         ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
+    !ADD!     enddo
 
-        do k=1,this%nzp
-         do j=1,this%nyp
-          do i=1,this%nxp
-            ! set fparams
-            fparams(1) = mixRho(i,j,k)*ehmix(i,j,k)
+    !ADD!     do k=1,this%nzp
+    !ADD!      do j=1,this%nyp
+    !ADD!       do i=1,this%nxp
+    !ADD!         ! set fparams
+    !ADD!         fparams(1) = mixRho(i,j,k)*ehmix(i,j,k)
 
-            ! set iparams
-            iparams(1) = 2
-            iparams(2) = i; iparams(3) = j; iparams(4) = k;
+    !ADD!         ! set iparams
+    !ADD!         iparams(1) = 2
+    !ADD!         iparams(2) = i; iparams(3) = j; iparams(4) = k;
 
-            maxp = zero; peqb = zero
-            do imat=1,this%ns
-              !! determine max over all PInfs
-              !maxp = maxval(maxp, this%material(imat)%hydro%PInf)
+    !ADD!         maxp = zero; peqb = zero
+    !ADD!         do imat=1,this%ns
+    !ADD!           !! determine max over all PInfs
+    !ADD!           !maxp = maxval(maxp, this%material(imat)%hydro%PInf)
 
-              ! set initial guess
-              peqb = peqb + this%material(imat)%VF(i,j,k)*this%material(imat)%p(i,j,k)
-            end do
-            !pest = peqb
+    !ADD!           ! set initial guess
+    !ADD!           peqb = peqb + this%material(imat)%VF(i,j,k)*this%material(imat)%p(i,j,k)
+    !ADD!         end do
+    !ADD!         !pest = peqb
 
-            ! solve non-linear equation
-            call this%rootfind_nr_1d(peqb,fparams,iparams)
-            !pdiffmax = max(dabs(pest-peqb),pdiffmax)
+    !ADD!         ! solve non-linear equation
+    !ADD!         call this%rootfind_nr_1d(peqb,fparams,iparams)
+    !ADD!         !pdiffmax = max(dabs(pest-peqb),pdiffmax)
 
-            !! rescale all pressures by maxp
-            !fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*maxp
-            mixP(i,j,k) = peqb !*maxp
+    !ADD!         !! rescale all pressures by maxp
+    !ADD!         !fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*maxp
+    !ADD!         mixP(i,j,k) = peqb !*maxp
 
-          enddo
-         enddo
-        enddo
+    !ADD!       enddo
+    !ADD!      enddo
+    !ADD!     enddo
 
-        mixT = zero
-        do i = 1, this%ns
-          mixT = mixT + this%material(i)%Ys*this%material(i)%hydro%Cv * &
-                (mixP + this%material(i)%hydro%gam*this%material(i)%hydro%PInf)/(mixP + this%material(i)%hydro%PInf)
-        enddo
-        mixT = ehmix/mixT
+    !ADD!     mixT = zero
+    !ADD!     do i = 1, this%ns
+    !ADD!       mixT = mixT + this%material(i)%Ys*this%material(i)%hydro%Cv * &
+    !ADD!             (mixP + this%material(i)%hydro%gam*this%material(i)%hydro%PInf)/(mixP + this%material(i)%hydro%PInf)
+    !ADD!     enddo
+    !ADD!     mixT = ehmix/mixT
 
-        do i = 1, this%ns
-            this%material(i)%T = mixT
-            this%material(i)%p = mixP
-            this%material(i)%VF = mixRho*this%material(i)%Ys*(this%material(i)%hydro%gam-one)* &
-                                         this%material(i)%hydro%Cv*mixT/(mixP + this%material(i)%hydro%PInf)
+    !ADD!     do i = 1, this%ns
+    !ADD!         this%material(i)%T = mixT
+    !ADD!         this%material(i)%p = mixP
+    !ADD!         this%material(i)%VF = mixRho*this%material(i)%Ys*(this%material(i)%hydro%gam-one)* &
+    !ADD!                                      this%material(i)%hydro%Cv*mixT/(mixP + this%material(i)%hydro%PInf)
 
-            this%material(i)%eh = this%material(i)%hydro%Cv*mixT*(mixP + this%material(i)%hydro%gam*this%material(i)%hydro%PInf) / &
-                                                                 (mixP + this%material(i)%hydro%PInf)
-        end do
+    !ADD!         this%material(i)%eh = this%material(i)%hydro%Cv*mixT*(mixP + this%material(i)%hydro%gam*this%material(i)%hydro%PInf) / &
+    !ADD!                                                              (mixP + this%material(i)%hydro%PInf)
+    !ADD!     end do
 
-    end subroutine
+    !ADD! end subroutine
 
     subroutine get_dt(this, rho, delta, dtkap, dtDiff, dtplast)
         use reductions, only: P_MAXVAL
@@ -319,7 +327,7 @@ contains
               dtkap =   min(dtkap,   one / ( (P_MAXVAL( this%material(imat)%kap*this%material(imat)%T/(rho* delta**4)))**(third) + eps))
           end if
           dtDiff =  min(dtDiff,  one / ( (P_MAXVAL( this%material(imat)%diff/delta**2) + eps)) )
-          dtplast = min(dtplast, this%material(imat)%elastic%tau0)
+          !ADD! dtplast = min(dtplast, this%material(imat)%elastic%tau0)
         enddo
 
         ! For now disable plastic time step limit by setting a large value
@@ -352,31 +360,31 @@ contains
 
     end subroutine
 
-    subroutine get_p_from_ehydro(this, rho)
-        class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho
+    ! subroutine get_p_from_ehydro(this, rho)
+    !     class(solid_mixture), intent(inout) :: this
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho
 
-        integer :: imat
+    !     integer :: imat
 
-        ! get species pressure from species energy
-        do imat = 1, this%ns
-            call this%material(imat)%get_p_from_ehydro(rho)
-        enddo
+    !     ! get species pressure from species energy
+    !     do imat = 1, this%ns
+    !         call this%material(imat)%get_p_from_ehydro(rho)
+    !     enddo
 
-    end subroutine
+    ! end subroutine
 
-    subroutine get_ehydro_from_p(this,rho)
-        class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
+    ! subroutine get_ehydro_from_p(this,rho)
+    !     class(solid_mixture), intent(inout) :: this
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
 
-        integer :: imat
+    !     integer :: imat
 
-        ! get species energy from species pressure
-        do imat = 1, this%ns
-            call this%material(imat)%get_ehydroT_from_p(rho)             ! computes species ehydro and T from species p
-        enddo
+    !     ! get species energy from species pressure
+    !     do imat = 1, this%ns
+    !         call this%material(imat)%get_ehydroT_from_p(rho)             ! computes species ehydro and T from species p
+    !     enddo
 
-    end subroutine
+    ! end subroutine
 
     subroutine get_Tmix(this,T)
         class(solid_mixture), intent(in) :: this
@@ -390,25 +398,25 @@ contains
         end do
     end subroutine
 
-    subroutine get_eelastic_devstress(this,devstress)
-        class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(out) :: devstress
+    ! subroutine get_eelastic_devstress(this,devstress)
+    !     class(solid_mixture), intent(inout) :: this
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(out) :: devstress
 
-        integer :: imat
+    !     integer :: imat
 
-        devstress = zero
+    !     devstress = zero
 
-        do imat = 1, this%ns
-          call this%material(imat)%get_eelastic_devstress()
-          devstress(:,:,:,1) = devstress(:,:,:,1) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,1)
-          devstress(:,:,:,2) = devstress(:,:,:,2) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,2)
-          devstress(:,:,:,3) = devstress(:,:,:,3) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,3)
-          devstress(:,:,:,4) = devstress(:,:,:,4) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,4)
-          devstress(:,:,:,5) = devstress(:,:,:,5) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,5)
-          devstress(:,:,:,6) = devstress(:,:,:,6) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,6)
-        end do
+    !     do imat = 1, this%ns
+    !       call this%material(imat)%get_eelastic_devstress()
+    !       devstress(:,:,:,1) = devstress(:,:,:,1) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,1)
+    !       devstress(:,:,:,2) = devstress(:,:,:,2) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,2)
+    !       devstress(:,:,:,3) = devstress(:,:,:,3) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,3)
+    !       devstress(:,:,:,4) = devstress(:,:,:,4) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,4)
+    !       devstress(:,:,:,5) = devstress(:,:,:,5) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,5)
+    !       devstress(:,:,:,6) = devstress(:,:,:,6) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,6)
+    !     end do
 
-    end subroutine
+    ! end subroutine
 
     subroutine get_J(this,rho)
         class(solid_mixture), intent(inout) :: this
@@ -453,26 +461,118 @@ contains
 
     subroutine get_primitive(this,rho,devstress,p,sos,e)
         class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho, e
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho, e
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(out) :: devstress
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: p, sos
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: p, sos
+        
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhom, sosm
 
         integer :: imat
 
+        p = zero
+        sos = zero
+         
         do imat = 1, this%ns
-          call this%material(imat)%get_primitive(rho)
+          call this%material(imat)%get_primitive(rho,e,sosm) !ADD! This is only for single species. Need to fix for multi-species
+          
+          ! Add contribution to mixture pressure
+          p = p + this%material(imat)%VF * this%material(imat)%p
+         
+          ! Add contribution to mixture devstress
+          devstress(:,:,:,1) = devstress(:,:,:,1) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,1)
+          devstress(:,:,:,2) = devstress(:,:,:,2) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,2)
+          devstress(:,:,:,3) = devstress(:,:,:,3) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,3)
+          devstress(:,:,:,4) = devstress(:,:,:,4) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,4)
+          devstress(:,:,:,5) = devstress(:,:,:,5) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,5)
+          devstress(:,:,:,6) = devstress(:,:,:,6) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,6)
+
+          ! Add contribution to mixture speed of sound
+          sos = sos + sosm
+          if(this%SOSmodel) then
+              ! equilibrium model
+              call this%material(imat)%getSpeciesDensity(rho,rhom)
+              sos = sos + this%material(imat)%VF/(rhom*sosm)
+          else
+              ! frozen model (details in Saurel et al. 2009)
+              sos = sos + this%material(imat)%Ys*sosm
+          endif
+
         end do
-  
-        call this%get_eelastic_devstress(devstress)   ! Get species elastic energies, and mixture and species devstress
-        if(this%ns == 1) then
-          this%material(1)%eh = e - this%material(1)%eel ! Since eh equation is not exact and this is a better alternative for 1 species
+
+        if(this%SOSmodel) then
+            sos = one / (sqrt(rho*sos) + epssmall)
+        else
+            sos = sqrt(sos)
         endif
-        if(this%PTeqb) then
-            call this%get_p_from_ehydro(rho)   ! Get species pressures from species hydrodynamic energy 
-            call this%get_pmix(p)              ! Get mixture pressure from species pressures
-        endif
+
+        !ADD! call this%get_eelastic_devstress(devstress)   ! Get species elastic energies, and mixture and species devstress
+        !ADD! if(this%ns == 1) then
+        !ADD!   this%material(1)%eh = e - this%material(1)%eel ! Since eh equation is not exact and this is a better alternative for 1 species
+        !ADD! endif
+        !ADD! if(this%PTeqb) then
+        !ADD!     call this%get_p_from_ehydro(rho)   ! Get species pressures from species hydrodynamic energy 
+        !ADD!     call this%get_pmix(p)              ! Get mixture pressure from species pressures
+        !ADD! endif
         
-        call this%getSOS(rho,p,sos)
+        ! call this%getSOS(rho,p,sos)
+
+    end subroutine
+
+    subroutine post_bc(this, rho, e, p, devstress, T, sos)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(out) :: devstress
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: e, p, T, sos
+        
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: em, sosm
+
+        integer :: imat
+
+        e = zero
+        p = zero
+        T = zero
+        sos = zero
+        devstress = zero
+         
+        do imat = 1, this%ns
+          call this%material(imat)%get_energy(rho,em) ! Get updated internal energy
+          call this%material(imat)%get_primitive(rho,em,sosm) !ADD! Material density is being calculated multiple times. Add as a field to SolidMod to avoid this
+        
+          ! Add contribution to mixture internal energy
+          e = e + this%material(imat)%Ys * em
+          
+          ! Add contribution to mixture pressure
+          p = p + this%material(imat)%VF * this%material(imat)%p
+
+          ! Add contribution to mixture temperature
+          T = T + this%material(imat)%Ys * this%material(imat)%T
+
+          ! Add contribution to mixture devstress
+          devstress(:,:,:,1) = devstress(:,:,:,1) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,1)
+          devstress(:,:,:,2) = devstress(:,:,:,2) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,2)
+          devstress(:,:,:,3) = devstress(:,:,:,3) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,3)
+          devstress(:,:,:,4) = devstress(:,:,:,4) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,4)
+          devstress(:,:,:,5) = devstress(:,:,:,5) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,5)
+          devstress(:,:,:,6) = devstress(:,:,:,6) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,6)
+
+          ! Add contribution to mixture speed of sound
+          sos = sos + sosm
+          if(this%SOSmodel) then
+              ! equilibrium model
+              call this%material(imat)%getSpeciesDensity(rho,em) ! em contains species density now
+              sos = sos + this%material(imat)%VF/(em*sosm)
+          else
+              ! frozen model (details in Saurel et al. 2009)
+              sos = sos + this%material(imat)%Ys*sosm
+          endif
+
+        end do
+
+        if(this%SOSmodel) then
+            sos = one / (sqrt(rho*sos) + epssmall)
+        else
+            sos = sqrt(sos)
+        endif
 
     end subroutine
 
@@ -658,34 +758,34 @@ contains
 
     end subroutine
 
-    subroutine getSOS(this,rho,p,sos)
-        class(solid_mixture), intent(in) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho, p  ! Mixture density and pressure
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: sos     ! Mixture speed of sound
+    ! subroutine getSOS(this,rho,p,sos)
+    !     class(solid_mixture), intent(in) :: this
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho, p  ! Mixture density and pressure
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: sos     ! Mixture speed of sound
 
-        integer :: i
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhom, sosm
+    !     integer :: i
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhom, sosm
 
-        sos = zero
-        do i = 1,this%ns
-            call this%material(i)%getSpeciesDensity(rho,rhom)
-            call this%material(i)%hydro%get_sos2(rhom,p,sosm)
-            call this%material(i)%elastic%get_sos2(rhom,sosm)
-            if(this%SOSmodel) then
-                ! equilibrium model
-                sos = sos + this%material(i)%VF/(rhom*sosm)
-            else
-                ! frozen model (details in Saurel et al. 2009)
-                sos = sos + this%material(i)%Ys*sosm
-            endif
-        end do
-        if(this%SOSmodel) then
-            sos = one / (sqrt(rho*sos) + epssmall)
-        else
-            sos = sqrt(sos)
-        endif
+    !     sos = zero
+    !     do i = 1,this%ns
+    !         call this%material(i)%getSpeciesDensity(rho,rhom)
+    !         call this%material(i)%hydro%get_sos2(rhom,p,sosm)
+    !         call this%material(i)%elastic%get_sos2(rhom,sosm)
+    !         if(this%SOSmodel) then
+    !             ! equilibrium model
+    !             sos = sos + this%material(i)%VF/(rhom*sosm)
+    !         else
+    !             ! frozen model (details in Saurel et al. 2009)
+    !             sos = sos + this%material(i)%Ys*sosm
+    !         endif
+    !     end do
+    !     if(this%SOSmodel) then
+    !         sos = one / (sqrt(rho*sos) + epssmall)
+    !     else
+    !         sos = sqrt(sos)
+    !     endif
 
-    end subroutine
+    ! end subroutine
 
     subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
         class(solid_mixture), intent(inout) :: this
@@ -713,84 +813,84 @@ contains
 
     end subroutine
 
-    subroutine fnumden(this,pf,fparams,iparams,num,den)
-        class(solid_mixture), intent(inout)   :: this
-        real(rkind), intent(in)               :: pf
-        real(rkind), intent(in), dimension(:), target :: fparams
-        integer, intent(in), dimension(:)     :: iparams
-        real(rkind), intent(out)              :: num, den
+    !ADD! subroutine fnumden(this,pf,fparams,iparams,num,den)
+    !ADD!     class(solid_mixture), intent(inout)   :: this
+    !ADD!     real(rkind), intent(in)               :: pf
+    !ADD!     real(rkind), intent(in), dimension(:), target :: fparams
+    !ADD!     integer, intent(in), dimension(:)     :: iparams
+    !ADD!     real(rkind), intent(out)              :: num, den
 
-        integer :: im, i, j, k
-        real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
-        real(rkind) :: fac, gm1, YCv, pinfloc, rhoE
+    !ADD!     integer :: im, i, j, k
+    !ADD!     real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
+    !ADD!     real(rkind) :: fac, gm1, YCv, pinfloc, rhoE
 
-        if(iparams(1) == 1) then
-            ! relaxPressure
-            vf   => fparams(  1:this%ns)
-            gam  => fparams(  this%ns+1:2*this%ns)
-            psph => fparams(2*this%ns+1:3*this%ns)
-            pinf => fparams(3*this%ns+1:4*this%ns)
-            
-            num = zero; den = zero;
-            do im = 1, this%ns
-              fac = vf(im)/gam(im)/(pinf(im)+pf)
-              num = num + fac*(psph(im)-pf)
-              den = den + fac*(psph(im)-pinf(im)-two*pf)/(pinf(im)+pf)
-            enddo
-            nullify(vf,gam,psph,pinf)
-        elseif(iparams(1)==2) then
-            ! equilibratePressureTemperature
-            i = iparams(2); j = iparams(3); k = iparams(4)
-            num = zero; den = zero
-            do im = 1, this%ns
-              gm1 = this%material(im)%hydro%gam-one
-              YCv = this%material(im)%Ys(i,j,k) * this%material(im)%hydro%Cv
-              pinfloc = this%material(im)%hydro%PInf
-              rhoE = fparams(1)
+    !ADD!     if(iparams(1) == 1) then
+    !ADD!         ! relaxPressure
+    !ADD!         vf   => fparams(  1:this%ns)
+    !ADD!         gam  => fparams(  this%ns+1:2*this%ns)
+    !ADD!         psph => fparams(2*this%ns+1:3*this%ns)
+    !ADD!         pinf => fparams(3*this%ns+1:4*this%ns)
+    !ADD!         
+    !ADD!         num = zero; den = zero;
+    !ADD!         do im = 1, this%ns
+    !ADD!           fac = vf(im)/gam(im)/(pinf(im)+pf)
+    !ADD!           num = num + fac*(psph(im)-pf)
+    !ADD!           den = den + fac*(psph(im)-pinf(im)-two*pf)/(pinf(im)+pf)
+    !ADD!         enddo
+    !ADD!         nullify(vf,gam,psph,pinf)
+    !ADD!     elseif(iparams(1)==2) then
+    !ADD!         ! equilibratePressureTemperature
+    !ADD!         i = iparams(2); j = iparams(3); k = iparams(4)
+    !ADD!         num = zero; den = zero
+    !ADD!         do im = 1, this%ns
+    !ADD!           gm1 = this%material(im)%hydro%gam-one
+    !ADD!           YCv = this%material(im)%Ys(i,j,k) * this%material(im)%hydro%Cv
+    !ADD!           pinfloc = this%material(im)%hydro%PInf
+    !ADD!           rhoE = fparams(1)
 
-              num = num + YCv*(gm1*rhoE-(pf+this%material(im)%hydro%gam*pinfloc))/(pf+pinfloc)
-              den = den + YCv*gm1*(pinfloc-rhoE) / (pf+pinfloc)**2
-            enddo
-        endif
+    !ADD!           num = num + YCv*(gm1*rhoE-(pf+this%material(im)%hydro%gam*pinfloc))/(pf+pinfloc)
+    !ADD!           den = den + YCv*gm1*(pinfloc-rhoE) / (pf+pinfloc)**2
+    !ADD!         enddo
+    !ADD!     endif
 
-    end subroutine
+    !ADD! end subroutine
 
-    subroutine rootfind_nr_1d(this,pf,fparams,iparams)
-        use decomp_2d, only: nrank
-        class(solid_mixture), intent(inout)   :: this
-        real(rkind), intent(inout)            :: pf
-        real(rkind), intent(in), dimension(:) :: fparams
-        integer, intent(in), dimension(:)     :: iparams
-    
-        integer     :: ii, itmax = 1000
-        !real(rkind) :: tol = 1.0d-8
-        real(rkind) :: dpf, num, den, den_conv
-    
-        !pfinitguess = pf
-        do ii = 1, itmax
-          call this%fnumden(pf,fparams,iparams,num,den)
-          ! if(dabs(den)>1.0d-12) then
-          if(dabs(den)>1.0d-15) then
-            dpf = num/den
-          else
-            write(*,*) 'den very small, please check.', num, num/den
-            write(*,*) 'failure at proc ', nrank, ' at index ', iparams(2:4)
-            stop
-          endif
-          pf = pf - dpf
-          ! check for convergence
-          if(dabs(pf)>1.0d-12) then
-            den_conv = dabs(pf)
-          else
-            den_conv = one
-          endif
-          if(dabs(dpf)/den_conv<1.0d-8) exit
-        enddo
-        if(ii==itmax+1) then
-          write(*,*) 'Newtons method for pf did not converge. Check details.', iparams(1)
-        endif
-    
-    end subroutine rootfind_nr_1d
+    !ADD! subroutine rootfind_nr_1d(this,pf,fparams,iparams)
+    !ADD!     use decomp_2d, only: nrank
+    !ADD!     class(solid_mixture), intent(inout)   :: this
+    !ADD!     real(rkind), intent(inout)            :: pf
+    !ADD!     real(rkind), intent(in), dimension(:) :: fparams
+    !ADD!     integer, intent(in), dimension(:)     :: iparams
+    !ADD! 
+    !ADD!     integer     :: ii, itmax = 1000
+    !ADD!     !real(rkind) :: tol = 1.0d-8
+    !ADD!     real(rkind) :: dpf, num, den, den_conv
+    !ADD! 
+    !ADD!     !pfinitguess = pf
+    !ADD!     do ii = 1, itmax
+    !ADD!       call this%fnumden(pf,fparams,iparams,num,den)
+    !ADD!       ! if(dabs(den)>1.0d-12) then
+    !ADD!       if(dabs(den)>1.0d-15) then
+    !ADD!         dpf = num/den
+    !ADD!       else
+    !ADD!         write(*,*) 'den very small, please check.', num, num/den
+    !ADD!         write(*,*) 'failure at proc ', nrank, ' at index ', iparams(2:4)
+    !ADD!         stop
+    !ADD!       endif
+    !ADD!       pf = pf - dpf
+    !ADD!       ! check for convergence
+    !ADD!       if(dabs(pf)>1.0d-12) then
+    !ADD!         den_conv = dabs(pf)
+    !ADD!       else
+    !ADD!         den_conv = one
+    !ADD!       endif
+    !ADD!       if(dabs(dpf)/den_conv<1.0d-8) exit
+    !ADD!     enddo
+    !ADD!     if(ii==itmax+1) then
+    !ADD!       write(*,*) 'Newtons method for pf did not converge. Check details.', iparams(1)
+    !ADD!     endif
+    !ADD! 
+    !ADD! end subroutine rootfind_nr_1d
 
 
 end module

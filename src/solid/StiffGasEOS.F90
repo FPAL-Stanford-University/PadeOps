@@ -51,6 +51,9 @@ contains
         this%PInf = PInf_
         this%Cv = this%Rgas/(this%gam-one)
 
+        print*, "Cv   = ", this%Cv
+        print*, "PInf = ", this%PInf
+
     end function
 
     pure subroutine get_p(this,rho,e,p)

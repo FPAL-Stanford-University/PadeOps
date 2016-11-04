@@ -3,8 +3,6 @@ module sgrid_hooks
     use decomp_2d,       only: decomp_info
     use DerivativesMod,  only: derivatives
     use SolidMixtureMod, only: solid_mixture
-    use StiffGasEOS,     only: stiffgas
-    use Sep1SolidEOS,    only: sep1solid
     implicit none
 
     interface meshgen

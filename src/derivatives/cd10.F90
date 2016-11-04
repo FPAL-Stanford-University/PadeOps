@@ -214,6 +214,7 @@ contains
         if (periodic_) then 
             ! Allocate 1st derivative LU matrix.
             if(allocated( this%LU1 )) deallocate( this%LU1 ); allocate( this%LU1(n_,9) )
+            this%LU1 = zero  ! Initialize to zero to avoid floating point errors in debug mode
     
             ! Compute 1st derivative LU matrix
             if (n_ .GE. 8) then
@@ -227,6 +228,7 @@ contains
     
             ! Allocate 2nd derivative LU matrices.
             if(allocated( this%LU2 )) deallocate( this%LU2 ); allocate( this%LU2(n_,9) )
+            this%LU2 = zero  ! Initialize to zero to avoid floating point errors in debug mode
     
             ! Compute 2nd derivative LU matrix
             if (n_ .GE. 8) then
@@ -236,15 +238,15 @@ contains
             end if
         else 
             ! Allocate 1st derivative Penta matrices.
-            if(allocated( this%penta1_nn )) deallocate( this%penta1_nn ); allocate( this%penta1_nn(n_,11) )
-            if(allocated( this%penta1_ns )) deallocate( this%penta1_ns ); allocate( this%penta1_ns(n_,11) )
-            if(allocated( this%penta1_na )) deallocate( this%penta1_na ); allocate( this%penta1_na(n_,11) )
-            if(allocated( this%penta1_sn )) deallocate( this%penta1_sn ); allocate( this%penta1_sn(n_,11) )
-            if(allocated( this%penta1_ss )) deallocate( this%penta1_ss ); allocate( this%penta1_ss(n_,11) )
-            if(allocated( this%penta1_sa )) deallocate( this%penta1_sa ); allocate( this%penta1_sa(n_,11) )
-            if(allocated( this%penta1_an )) deallocate( this%penta1_an ); allocate( this%penta1_an(n_,11) )
-            if(allocated( this%penta1_as )) deallocate( this%penta1_as ); allocate( this%penta1_as(n_,11) )
-            if(allocated( this%penta1_aa )) deallocate( this%penta1_aa ); allocate( this%penta1_aa(n_,11) )
+            if(allocated( this%penta1_nn )) deallocate( this%penta1_nn ); allocate( this%penta1_nn(n_,11) ); this%penta1_nn = zero
+            if(allocated( this%penta1_ns )) deallocate( this%penta1_ns ); allocate( this%penta1_ns(n_,11) ); this%penta1_ns = zero
+            if(allocated( this%penta1_na )) deallocate( this%penta1_na ); allocate( this%penta1_na(n_,11) ); this%penta1_na = zero
+            if(allocated( this%penta1_sn )) deallocate( this%penta1_sn ); allocate( this%penta1_sn(n_,11) ); this%penta1_sn = zero
+            if(allocated( this%penta1_ss )) deallocate( this%penta1_ss ); allocate( this%penta1_ss(n_,11) ); this%penta1_ss = zero
+            if(allocated( this%penta1_sa )) deallocate( this%penta1_sa ); allocate( this%penta1_sa(n_,11) ); this%penta1_sa = zero
+            if(allocated( this%penta1_an )) deallocate( this%penta1_an ); allocate( this%penta1_an(n_,11) ); this%penta1_an = zero
+            if(allocated( this%penta1_as )) deallocate( this%penta1_as ); allocate( this%penta1_as(n_,11) ); this%penta1_as = zero
+            if(allocated( this%penta1_aa )) deallocate( this%penta1_aa ); allocate( this%penta1_aa(n_,11) ); this%penta1_aa = zero
   
             if (n_ .GE. 8) then             
                 call this%ComputePenta1(this%penta1_nn, 0, 0)    ! Standard
@@ -273,15 +275,15 @@ contains
 
             
             ! Allocate 2nd derivative Penta matrices.
-            if(allocated( this%penta2_nn )) deallocate( this%penta2_nn ); allocate( this%penta2_nn(n_,11) )
-            if(allocated( this%penta2_ns )) deallocate( this%penta2_ns ); allocate( this%penta2_ns(n_,11) )
-            if(allocated( this%penta2_na )) deallocate( this%penta2_na ); allocate( this%penta2_na(n_,11) )
-            if(allocated( this%penta2_sn )) deallocate( this%penta2_sn ); allocate( this%penta2_sn(n_,11) )
-            if(allocated( this%penta2_ss )) deallocate( this%penta2_ss ); allocate( this%penta2_ss(n_,11) )
-            if(allocated( this%penta2_sa )) deallocate( this%penta2_sa ); allocate( this%penta2_sa(n_,11) )
-            if(allocated( this%penta2_an )) deallocate( this%penta2_an ); allocate( this%penta2_an(n_,11) )
-            if(allocated( this%penta2_as )) deallocate( this%penta2_as ); allocate( this%penta2_as(n_,11) )
-            if(allocated( this%penta2_aa )) deallocate( this%penta2_aa ); allocate( this%penta2_aa(n_,11) )
+            if(allocated( this%penta2_nn )) deallocate( this%penta2_nn ); allocate( this%penta2_nn(n_,11) ); this%penta2_nn = zero
+            if(allocated( this%penta2_ns )) deallocate( this%penta2_ns ); allocate( this%penta2_ns(n_,11) ); this%penta2_ns = zero
+            if(allocated( this%penta2_na )) deallocate( this%penta2_na ); allocate( this%penta2_na(n_,11) ); this%penta2_na = zero
+            if(allocated( this%penta2_sn )) deallocate( this%penta2_sn ); allocate( this%penta2_sn(n_,11) ); this%penta2_sn = zero
+            if(allocated( this%penta2_ss )) deallocate( this%penta2_ss ); allocate( this%penta2_ss(n_,11) ); this%penta2_ss = zero
+            if(allocated( this%penta2_sa )) deallocate( this%penta2_sa ); allocate( this%penta2_sa(n_,11) ); this%penta2_sa = zero
+            if(allocated( this%penta2_an )) deallocate( this%penta2_an ); allocate( this%penta2_an(n_,11) ); this%penta2_an = zero
+            if(allocated( this%penta2_as )) deallocate( this%penta2_as ); allocate( this%penta2_as(n_,11) ); this%penta2_as = zero
+            if(allocated( this%penta2_aa )) deallocate( this%penta2_aa ); allocate( this%penta2_aa(n_,11) ); this%penta2_aa = zero
        
             if (n_ .GE. 8) then             
                 call this%ComputePenta2(this%penta2_nn, 0, 0)    ! Standard

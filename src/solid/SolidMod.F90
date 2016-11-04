@@ -1,14 +1,16 @@
 module SolidMod
 
-    use kind_parameters, only: rkind,clen
-    use constants,       only: zero,one,two,epssmall,three
-    use decomp_2d,       only: decomp_info
-    use DerivativesMod,  only: derivatives
-    use FiltersMod,      only: filters
-    use exits,           only: GracefulExit
-    use EOSMod,          only: eos
-    use StiffGasEOS,     only: stiffgas
-    use Sep1SolidEOS,    only: sep1solid
+    use kind_parameters,      only: rkind,clen
+    use constants,            only: zero,one,two,epssmall,three
+    use decomp_2d,            only: decomp_info
+    use DerivativesMod,       only: derivatives
+    use FiltersMod,           only: filters
+    use exits,                only: GracefulExit
+    use EOSMod,               only: eos
+    ! use StiffGasEOS,          only: stiffgas
+    ! use Sep1Solid_elasticMod, only: sep1solid_elastic
+    use AbstractEOSMod,       only: abstracteos
+    use Sep1SolidEOSMod,      only: sep1solideos
 
     implicit none
 
@@ -20,8 +22,10 @@ module SolidMod
         logical :: PTeqb = .TRUE.
         logical :: use_gTg = .FALSE.
 
-        class(stiffgas ), allocatable :: hydro
-        class(sep1solid), allocatable :: elastic
+        ! class(stiffgas ), allocatable :: hydro
+        ! class(sep1solid_elastic), allocatable :: elastic
+
+        class(abstracteos), allocatable :: eos
 
         type(decomp_info), pointer :: decomp
         type(derivatives), pointer :: der
@@ -84,10 +88,12 @@ module SolidMod
         procedure :: update_eh
         procedure :: update_VF
         procedure :: getPhysicalProperties
-        procedure :: getPlasticSources
-        procedure :: get_p_from_ehydro
-        procedure :: get_ehydroT_from_p
-        procedure :: get_eelastic_devstress
+        ! procedure :: getPlasticSources
+        ! procedure :: get_p_from_ehydro
+        ! procedure :: get_ehydroT_from_p
+        ! procedure :: get_eelastic_devstress
+        procedure :: get_energy
+
         procedure :: get_conserved
         procedure :: get_primitive
         procedure :: getSpeciesDensity
@@ -106,14 +112,12 @@ module SolidMod
     ! hooks for sources
 
     interface hook_material_g_source
-        subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+        subroutine hook_material_g_source(decomp,eos,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
             import :: rkind
             import :: decomp_info
-            import :: stiffgas
-            import :: sep1solid
+            import :: abstracteos
             type(decomp_info),               intent(in)    :: decomp
-            type(stiffgas),                  intent(in)    :: hydro
-            type(sep1solid),                 intent(in)    :: elastic
+            class(abstracteos),              intent(in)    :: eos
             real(rkind),                     intent(in)    :: tsim
             real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
             real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
@@ -122,14 +126,12 @@ module SolidMod
     end interface
 
     interface hook_material_mass_source
-        subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+        subroutine hook_material_mass_source(decomp,eos,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
             import :: rkind
             import :: decomp_info
-            import :: stiffgas
-            import :: sep1solid
+            import :: abstracteos
             type(decomp_info),               intent(in)    :: decomp
-            type(stiffgas),                  intent(in)    :: hydro
-            type(sep1solid),                 intent(in)    :: elastic
+            class(abstracteos),              intent(in)    :: eos
             real(rkind),                     intent(in)    :: tsim
             real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
             real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
@@ -138,14 +140,12 @@ module SolidMod
     end interface
 
     interface hook_material_VF_source
-        subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p,rhs)
+        subroutine hook_material_VF_source(decomp,eos,x,y,z,tsim,u,v,w,Ys,VF,p,rhs)
             import :: rkind
             import :: decomp_info
-            import :: stiffgas
-            import :: sep1solid
+            import :: abstracteos
             type(decomp_info),               intent(in)    :: decomp
-            type(stiffgas),                  intent(in)    :: hydro
-            type(sep1solid),                 intent(in)    :: elastic
+            class(abstracteos),              intent(in)    :: eos
             real(rkind),                     intent(in)    :: tsim
             real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
             real(rkind), dimension(:,:,:),   intent(in)    :: u,v,w,Ys,VF,p
@@ -154,14 +154,12 @@ module SolidMod
     end interface
 
     interface hook_material_energy_source
-        subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+        subroutine hook_material_energy_source(decomp,eos,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
             import :: rkind
             import :: decomp_info
-            import :: stiffgas
-            import :: sep1solid
+            import :: abstracteos
             type(decomp_info),               intent(in)    :: decomp
-            type(stiffgas),                  intent(in)    :: hydro
-            type(sep1solid),                 intent(in)    :: elastic
+            class(abstracteos),              intent(in)    :: eos
             real(rkind),                     intent(in)    :: tsim
             real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
             real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
@@ -193,11 +191,13 @@ contains
         this%nyp = decomp%ysz(2)
         this%nzp = decomp%ysz(3)
 
-        if (allocated(this%hydro)) deallocate(this%hydro)
-        allocate( this%hydro )
-        
-        if (allocated(this%elastic)) deallocate(this%elastic)
-        allocate( this%elastic )
+        ! if (allocated(this%hydro)) deallocate(this%hydro)
+        ! allocate( this%hydro )
+        ! 
+        ! if (allocated(this%elastic)) deallocate(this%elastic)
+        ! allocate( this%elastic )
+        if (allocated(this%eos)) deallocate(this%eos)
+        allocate( sep1solideos::this%eos )  ! By default, initialize as the separable EOS
         
         ! Allocate material massfraction
         if( allocated( this%Ys ) ) deallocate( this%Ys )
@@ -328,8 +328,9 @@ contains
         if( allocated( this%Ys )  ) deallocate( this%Ys )
 
         ! Now deallocate the EOS objects
-        if ( allocated(this%hydro)   ) deallocate(this%hydro)
-        if ( allocated(this%elastic) ) deallocate(this%elastic)
+        ! if ( allocated(this%hydro)   ) deallocate(this%hydro)
+        ! if ( allocated(this%elastic) ) deallocate(this%elastic)
+        if ( allocated(this%eos)  ) deallocate(this%eos)
 
         nullify( this%fil    )
         nullify( this%der    )
@@ -357,7 +358,7 @@ contains
             detg = sqrt(detg)
         end if
 
-        rho = detg*this%elastic%rho0
+        rho = detg*this%eos%rho0
 
     end subroutine
 
@@ -371,10 +372,10 @@ contains
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for g tensor equation
-        real(rkind) :: max_modDevSigma
+        ! real(rkind) :: max_modDevSigma
 
         call this%getRHS_g(rho,u,v,w,dt,rhsg,x_bc,y_bc,z_bc)
-        call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
+        call hook_material_g_source(this%decomp,this%eos,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
         ! advance sub-step
         if(isub==1) this%Qtmpg = zero                   ! not really needed, since RK45_A(1) = 0
@@ -382,32 +383,26 @@ contains
         this%g = this%g  + RK45_B(isub)*this%Qtmpg
 
         ! Now project g tensor to SPD space
-        call this%elastic%make_tensor_SPD(this%g)
+        !ADD! call this%elastic%make_tensor_SPD(this%g)
 
-        if(this%plast) then
-            if (.NOT. this%explPlast) then
-                ! Effect plastic deformations
-                call this%get_eelastic_devstress()
-                this%modDevSigma = this%sxx*this%sxx + this%syy*this%syy + this%szz*this%szz + &
-                        two*( this%sxy*this%sxy + this%sxz*this%sxz + this%syz*this%syz )
-                max_modDevSigma = sqrt(3.0d0/2.0d0*maxval(this%modDevSigma))
-                !if(max_modDevSigma > this%elastic%yield) then
-                !  write(*,'(a,2(e19.12,1x))') 'Entering plasticity. Stresses = ', max_modDevSigma, this%elastic%yield
-                !endif
-                if(this%PTeqb) this%kap = sqrt(two/three*this%modDevSigma)
+        !ADD! if(this%plast) then
+        !ADD!     if (.NOT. this%explPlast) then
+        !ADD!         ! Effect plastic deformations
+        !ADD!         call this%get_eelastic_devstress()
+        !ADD!         this%modDevSigma = this%sxx*this%sxx + this%syy*this%syy + this%szz*this%szz + &
+        !ADD!                 two*( this%sxy*this%sxy + this%sxz*this%sxz + this%syz*this%syz )
+        !ADD!         max_modDevSigma = sqrt(3.0d0/2.0d0*maxval(this%modDevSigma))
+        !ADD!         
+        !ADD!         if(this%PTeqb) this%kap = sqrt(two/three*this%modDevSigma)
 
-                call this%elastic%plastic_deformation(this%g, this%use_gTg)
+        !ADD!         call this%elastic%plastic_deformation(this%g, this%use_gTg)
 
-                call this%get_eelastic_devstress()
-                this%modDevSigma = this%sxx*this%sxx + this%syy*this%syy + this%szz*this%szz + &
-                        two*( this%sxy*this%sxy + this%sxz*this%sxz + this%syz*this%syz )
-                max_modDevSigma = sqrt(3.0d0/2.0d0*maxval(this%modDevSigma))
-                !if(max_modDevSigma > this%elastic%yield) then
-                !  write(*,'(a,2(e19.12,1x))') 'Exiting plasticity. Stresses = ', max_modDevSigma, this%elastic%yield
-                !endif
-                
-            end if
-        end if
+        !ADD!         call this%get_eelastic_devstress()
+        !ADD!         this%modDevSigma = this%sxx*this%sxx + this%syy*this%syy + this%szz*this%szz + &
+        !ADD!                 two*( this%sxy*this%sxy + this%sxz*this%sxz + this%syz*this%syz )
+        !ADD!         max_modDevSigma = sqrt(3.0d0/2.0d0*maxval(this%modDevSigma))
+        !ADD!     end if
+        !ADD! end if
 
     end subroutine
 
@@ -435,9 +430,10 @@ contains
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
         ! Get the species density = rho*Y/VF (additional terms to give correct limiting behaviour as Ys and VF tend to 0)
-        tmp = (rho*this%Ys + this%elastic%rho0*detg*epssmall)/(this%VF + epssmall)   
+        ! tmp = (rho*this%Ys + this%eos%rho0*detg*epssmall)/(this%VF + epssmall)   
+        call this%getSpeciesDensity(rho,tmp)
         ! tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
-        penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
+        penalty = etafac*( tmp/detg/this%eos%rho0-one)/dt ! Penalty term to keep g consistent with species density
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-x_bc, y_bc, z_bc)
@@ -465,7 +461,7 @@ contains
 
         if (this%plast) then
             if(this%explPlast) then
-                call this%getPlasticSources(detg,rhsg)
+                !ADD! call this%getPlasticSources(detg,rhsg) !ADD!
             end if
         end if
 
@@ -483,7 +479,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for gTg tensor equation
 
         call this%getRHS_gTg(rho,u,v,w,dt,rhsg,x_bc,y_bc,z_bc)
-        call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
+        call hook_material_g_source(this%decomp,this%eos,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
         ! advance sub-step
         if(isub==1) this%Qtmpg = zero                   ! not really needed, since RK45_A(1) = 0
@@ -492,7 +488,7 @@ contains
 
         if(this%plast) then
             if (.NOT. this%explPlast) then
-                call this%elastic%plastic_deformation(this%g, this%use_gTg)
+                !ADD! call this%eos%plastic_deformation(this%g, this%use_gTg)
             end if
         end if
 
@@ -532,11 +528,10 @@ contains
              - this%G12*(this%G21*this%G33-this%G31*this%G23) &
              + this%G13*(this%G21*this%G32-this%G31*this%G22)
 
-        ! penalty = etafac*(this%rho/sqrt(detG)/this%rho0-one)
-        
         detg = sqrt(detg)
-        tmp = (rho*this%Ys + this%elastic%rho0*detg*epssmall)/(this%VF + epssmall) ! species density 
-        penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
+        ! tmp = (rho*this%Ys + this%eos%rho0*detg*epssmall)/(this%VF + epssmall) ! species density 
+        call this%getSpeciesDensity(rho,tmp)
+        penalty = etafac*( tmp/detg/this%eos%rho0-one)/dt ! Penalty term to keep g consistent with species density
 
         call gradient(this%decomp, this%der, this%G11, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc, y_bc, z_bc)
         rhsg(:,:,:,1) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
@@ -575,49 +570,49 @@ contains
 
         if (this%plast) then
             if (this%explPlast) then
-                call this%getPlasticSources(detg,rhsg)
+                !ADD! call this%getPlasticSources(detg,rhsg) 
             end if
         end if
 
     end subroutine
 
-    subroutine getPlasticSources(this,detg,rhsg)
-        use constants, only: twothird
-        class(solid),                                         intent(in)    :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)    :: detg
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: rhsg
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: invtaurel
+    ! subroutine getPlasticSources(this,detg,rhsg)
+    !     use constants, only: twothird
+    !     class(solid),                                         intent(in)    :: this
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)    :: detg
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: rhsg
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: invtaurel
 
-        ! Get S'S'
-        invtaurel = this%sxx*this%sxx + two*this%sxy*this%sxy + two*this%sxz*this%sxz &
-                                      +     this%syy*this%syy + two*this%syz*this%syz &
-                                                              +     this%szz*this%szz
+    !     ! Get S'S'
+    !     invtaurel = this%sxx*this%sxx + two*this%sxy*this%sxy + two*this%sxz*this%sxz &
+    !                                   +     this%syy*this%syy + two*this%syz*this%syz &
+    !                                                           +     this%szz*this%szz
 
-        ! 1/tau_rel
-        invtaurel = (one / this%elastic%tau0) * ( invtaurel - (twothird)*this%elastic%yield**2 ) / this%elastic%mu**2
-        where (invtaurel .LE. zero)
-            invtaurel = zero
-        end where
-        invtaurel = invtaurel / (two * this%elastic%mu * detg)
+    !     ! 1/tau_rel
+    !     invtaurel = (one / this%elastic%tau0) * ( invtaurel - (twothird)*this%elastic%yield**2 ) / this%elastic%mu**2
+    !     where (invtaurel .LE. zero)
+    !         invtaurel = zero
+    !     end where
+    !     invtaurel = invtaurel / (two * this%elastic%mu * detg)
 
-        if (this%use_gTg) then
-            invtaurel = two*invtaurel  ! Factor of 2 for gTg implementation
-        end if
+    !     if (this%use_gTg) then
+    !         invtaurel = two*invtaurel  ! Factor of 2 for gTg implementation
+    !     end if
 
-        ! Add (1/tau_rel)*g*S to the rhsg (explicit plastic source terms)
-        rhsg(:,:,:,1) = rhsg(:,:,:,1) + invtaurel * ( this%g11*this%sxx + this%g12*this%sxy + this%g13*this%sxz ) ! g11 
-        rhsg(:,:,:,2) = rhsg(:,:,:,2) + invtaurel * ( this%g11*this%sxy + this%g12*this%syy + this%g13*this%syz ) ! g12 
-        rhsg(:,:,:,3) = rhsg(:,:,:,3) + invtaurel * ( this%g11*this%sxz + this%g12*this%syz + this%g13*this%szz ) ! g13 
+    !     ! Add (1/tau_rel)*g*S to the rhsg (explicit plastic source terms)
+    !     rhsg(:,:,:,1) = rhsg(:,:,:,1) + invtaurel * ( this%g11*this%sxx + this%g12*this%sxy + this%g13*this%sxz ) ! g11 
+    !     rhsg(:,:,:,2) = rhsg(:,:,:,2) + invtaurel * ( this%g11*this%sxy + this%g12*this%syy + this%g13*this%syz ) ! g12 
+    !     rhsg(:,:,:,3) = rhsg(:,:,:,3) + invtaurel * ( this%g11*this%sxz + this%g12*this%syz + this%g13*this%szz ) ! g13 
  
-        rhsg(:,:,:,4) = rhsg(:,:,:,4) + invtaurel * ( this%g21*this%sxx + this%g22*this%sxy + this%g23*this%sxz ) ! g21 
-        rhsg(:,:,:,5) = rhsg(:,:,:,5) + invtaurel * ( this%g21*this%sxy + this%g22*this%syy + this%g23*this%syz ) ! g22 
-        rhsg(:,:,:,6) = rhsg(:,:,:,6) + invtaurel * ( this%g21*this%sxz + this%g22*this%syz + this%g23*this%szz ) ! g23 
+    !     rhsg(:,:,:,4) = rhsg(:,:,:,4) + invtaurel * ( this%g21*this%sxx + this%g22*this%sxy + this%g23*this%sxz ) ! g21 
+    !     rhsg(:,:,:,5) = rhsg(:,:,:,5) + invtaurel * ( this%g21*this%sxy + this%g22*this%syy + this%g23*this%syz ) ! g22 
+    !     rhsg(:,:,:,6) = rhsg(:,:,:,6) + invtaurel * ( this%g21*this%sxz + this%g22*this%syz + this%g23*this%szz ) ! g23 
 
-        rhsg(:,:,:,7) = rhsg(:,:,:,7) + invtaurel * ( this%g31*this%sxx + this%g32*this%sxy + this%g33*this%sxz ) ! g31 
-        rhsg(:,:,:,8) = rhsg(:,:,:,8) + invtaurel * ( this%g31*this%sxy + this%g32*this%syy + this%g33*this%syz ) ! g32 
-        rhsg(:,:,:,9) = rhsg(:,:,:,9) + invtaurel * ( this%g31*this%sxz + this%g32*this%syz + this%g33*this%szz ) ! g33 
+    !     rhsg(:,:,:,7) = rhsg(:,:,:,7) + invtaurel * ( this%g31*this%sxx + this%g32*this%sxy + this%g33*this%sxz ) ! g31 
+    !     rhsg(:,:,:,8) = rhsg(:,:,:,8) + invtaurel * ( this%g31*this%sxy + this%g32*this%syy + this%g33*this%syz ) ! g32 
+    !     rhsg(:,:,:,9) = rhsg(:,:,:,9) + invtaurel * ( this%g31*this%sxz + this%g32*this%syz + this%g33*this%szz ) ! g33 
 
-    end subroutine
+    ! end subroutine
 
     subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
         use RKCoeffs,   only: RK45_A,RK45_B
@@ -631,7 +626,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsYs  ! RHS for mass fraction equation
 
         call this%getRHS_Ys(rho,u,v,w,rhsYs,x_bc,y_bc,z_bc)
-        call hook_material_mass_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsYs)
+        call hook_material_mass_source(this%decomp,this%eos,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsYs)
 
         ! advance sub-step
         if(isub==1) this%QtmpYs = zero                   ! not really needed, since RK45_A(1) = 0
@@ -674,7 +669,7 @@ contains
         endif
 
         call this%getRHS_eh(rho,u,v,w,divu,viscwork,rhseh,x_bc,y_bc,z_bc)
-        call hook_material_energy_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhseh)
+        call hook_material_energy_source(this%decomp,this%eos,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhseh)
 
         ! advance sub-step
         if(isub==1) this%Qtmpeh = zero                   ! not really needed, since RK45_A(1) = 0
@@ -728,7 +723,7 @@ contains
         endif
 
         call this%getRHS_VF(u,v,w,rhsVF,x_bc,y_bc,z_bc)
-        call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
+        call hook_material_VF_source(this%decomp,this%eos,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
 
         ! advance sub-step
         if(isub==1) this%QtmpVF = zero                   ! not really needed, since RK45_A(1) = 0
@@ -798,54 +793,55 @@ contains
         end if
 
         ! Get rhom = rho*Ys/VF (Additional terms to give correct limiting behaviour when Ys and VF tend to 0)
-        rhom = (rho*this%Ys + this%elastic%rho0*rhom*epssmall)/(this%VF + epssmall)   
+        rhom = (rho*this%Ys + this%eos%rho0*rhom*epssmall)/(this%VF + epssmall)   
 
     end subroutine
 
     ! computes p from ehydro
-    subroutine get_p_from_ehydro(this, rho)
-        class(solid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)              :: rhom
+    ! subroutine get_p_from_ehydro(this, rho)
+    !     class(solid), intent(inout) :: this
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp)              :: rhom
 
-        call this%getSpeciesDensity(rho,rhom)
-        call this%hydro%get_p( rhom, this%eh, this%p )
-        ! call this%hydro%get_p( this%Ys*rho/(this%VF+epssmall), this%eh, this%p )
+    !     call this%getSpeciesDensity(rho,rhom)
+    !     call this%hydro%get_p( rhom, this%eh, this%p )
+    !     ! call this%hydro%get_p( this%Ys*rho/(this%VF+epssmall), this%eh, this%p )
 
-    end subroutine
+    ! end subroutine
 
     ! computes ehydro from p; and T from ehydro
-    subroutine get_ehydroT_from_p(this, rho)
-        class(solid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)              :: rhom
+    ! subroutine get_ehydroT_from_p(this, rho)
+    !     class(solid), intent(inout) :: this
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp)              :: rhom
 
-        call this%getSpeciesDensity(rho,rhom)
-        call this%hydro%get_e_from_p( rhom, this%p, this%eh )
-        call this%hydro%get_T(this%eh, this%T, rhom)
-        ! call this%hydro%get_e_from_p( this%Ys*rho/(this%VF+epssmall), this%p, this%eh )
-        ! call this%hydro%get_T(this%eh, this%T, this%Ys*rho/(this%VF+epssmall))
+    !     call this%getSpeciesDensity(rho,rhom)
+    !     call this%hydro%get_e_from_p( rhom, this%p, this%eh )
+    !     call this%hydro%get_T(this%eh, this%T, rhom)
+    !     ! call this%hydro%get_e_from_p( this%Ys*rho/(this%VF+epssmall), this%p, this%eh )
+    !     ! call this%hydro%get_T(this%eh, this%T, this%Ys*rho/(this%VF+epssmall))
 
-    end subroutine
+    ! end subroutine
 
     subroutine get_enthalpy(this,enthalpy)
         class(solid), intent(in) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: enthalpy
 
-        call this%hydro%get_enthalpy(this%T,enthalpy)
+        !ADD! call this%hydro%get_enthalpy(this%T,enthalpy)
+        enthalpy = zero
     end subroutine
 
-    subroutine get_eelastic_devstress(this)
-        class(solid), intent(inout) :: this
+    ! subroutine get_eelastic_devstress(this)
+    !     class(solid), intent(inout) :: this
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6)  :: finger,fingersq
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: trG, trG2, detG
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp,6)  :: finger,fingersq
+    !     real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: trG, trG2, detG
 
-        call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG,this%use_gTg)
-        call this%elastic%get_eelastic(trG,trG2,detG,this%eel)
-        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+    !     call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG,this%use_gTg)
+    !     call this%elastic%get_eelastic(trG,trG2,detG,this%eel)
+    !     call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
 
-    end subroutine
+    ! end subroutine
 
     pure subroutine get_conserved(this,rho)
         class(solid), intent(inout) :: this
@@ -856,24 +852,39 @@ contains
 
     end subroutine
 
-    subroutine get_primitive(this,rho)
+    subroutine get_primitive(this,rho,e,sos2)
         use operators, only : gradient
         class(solid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho, e
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: sos2
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
 
         this%Ys = this%consrv(:,:,:,1) / rho
+        call this%getSpeciesDensity(rho,rhom)
+
         if(.NOT. this%PTeqb) then
             this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
 
-            call this%getSpeciesDensity(rho,rhom)
-            call this%hydro%get_T(this%eh, this%T, rhom)
-            ! call this%hydro%get_T(this%eh, this%T, this%consrv(:,:,:,1)/(this%VF+epssmall))
+            !ADD! call this%hydro%get_T(this%eh, this%T, rhom)
         endif
 
         ! Get gradients of Ys and put in Ji for subsequent use
         call gradient(this%decomp,this%der,this%Ys,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3))
 
+        ! Get pressure, temperature, devstress and speed of sound squared
+        call this%eos%get_p_devstress_T_sos2(this%g,rhom,e,this%p,this%T,this%devstress,sos2)
+
+    end subroutine
+    
+    subroutine get_energy(this,rho,e)
+        class(solid), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: e
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
+
+        call this%getSpeciesDensity(rho, rhom)
+
+        call this%eos%get_e_from_rho_g_T(rhom,this%g,this%T,e)
     end subroutine
 
     subroutine checkNaN(this,imat)

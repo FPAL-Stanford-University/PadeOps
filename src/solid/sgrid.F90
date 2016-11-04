@@ -9,8 +9,6 @@ module SolidGrid
                                transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
     use LADMod,          only: ladobject
-    use StiffGasEOS,     only: stiffgas
-    use Sep1SolidEOS,    only: sep1solid
     use SolidMixtureMod, only: solid_mixture
     use IOsgridMod,      only: IOsgrid
    
@@ -511,7 +509,7 @@ contains
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: ehmix
-        integer :: i, imat
+        integer :: i
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
         ! Get artificial properties for initial conditions
@@ -526,24 +524,25 @@ contains
         do i=1,this%mix%ns
             if (this%use_gTg) then
                 ! Project g tensor to SPD space
-                call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g)
+                !ADD! call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g)
             end if
             ! Get massfraction gradients in Ji
             call this%gradient(this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),&
                                this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3), this%x_bc,  this%y_bc, this%z_bc)
         end do
 
-        ! compute artificial shear and bulk viscosities
+        ! compute physical and artificial shear and bulk viscosities
         call this%getPhysicalProperties()
         call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 
         if (this%PTeqb) then
-            ehmix => duidxj(:,:,:,4) ! use some storage space
-            ehmix = this%e
-            do imat = 1, this%mix%ns
-                ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
-            enddo
-            call this%LAD%get_conductivity(this%rho,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
+            ! ehmix => duidxj(:,:,:,4) ! use some storage space
+            ! ehmix = this%e
+            ! do imat = 1, this%mix%ns
+            !     ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
+            ! enddo
+            ! call this%LAD%get_conductivity(this%rho,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
+            call this%LAD%get_conductivity(this%rho,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
         end if
 
         nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz,ehmix)
@@ -729,11 +728,11 @@ contains
             !     end if
             ! end if
             
-            if (this%PTeqb) then
-                call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T)
-            else
-                call this%mix%relaxPressure(this%rho, this%e, this%p)
-            end if
+            !ADD! if (this%PTeqb) then
+            !ADD!     call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T)
+            !ADD! else
+            !ADD!     call this%mix%relaxPressure(this%rho, this%e, this%p)
+            !ADD! end if
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             call this%post_bc()
@@ -841,15 +840,25 @@ contains
     subroutine post_bc(this)
         class(sgrid), intent(inout) :: this
 
-        call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
-        call this%mix%get_ehydro_from_p(this%rho)              ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
-        call this%mix%get_pmix(this%p)                         ! Get mixture pressure
-        call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
-        call this%mix%getSOS(this%rho,this%p,this%sos)
+        ! For efficiency, these should be called only if boundary rho, g, T have been updated. 
+        ! Also, only boundary values of energy, pressure, devstress, entropy should be updated.
+        
+        ! Get mixture energy, pressure, deviatoric stress, temperature and speed of sound
+        call this%mix%post_bc(this%rho, this%e, this%p, this%devstress, this%T, this%sos)
+
+        ! call this%mix%get_e_from_rho_g_T(this%rho, this%e)
+        ! call this%mix%get_p_devstress_T_sos(this%rho, this%e, this%devstress, this%sos)
+
+
+        ! call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
+        ! call this%mix%get_ehydro_from_p(this%rho)              ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
+        ! call this%mix%get_pmix(this%p)                         ! Get mixture pressure
+        ! call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
+        ! call this%mix%getSOS(this%rho,this%p,this%sos)
 
         ! assuming pressures have relaxed and sum( (Ys*(ehydro + eelastic) ) over all
         ! materials equals e
-        call this%mix%get_emix(this%e)
+        ! call this%mix%get_emix(this%e)
        
     end subroutine
 
