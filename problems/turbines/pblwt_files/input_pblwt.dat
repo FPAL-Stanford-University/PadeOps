@@ -39,6 +39,14 @@ tid_StatsDump         = 20000        ! Dumping Frequency for Statistics file (# 
 tid_compStats         = 250         ! Frequency of Computing Statistics
 tSimStartStats        = 23.d0       ! Simulation time for starting stats calculations 
 normStatsByUstar      = .TRUE.      ! Normalize Statistics by ustar at each instant
+computeSpectra        = .FALSE.     ! Compute and time average x - spectra on the run
+timeAvgFullFields     = .FALSE.     ! Time average and store fields on the run
+/
+/
+&OS_INTERACTIONS
+useSystemInteractions = .TRUE.      ! Do you wish to interact with the program while its running
+tSystemInteractions   = 10          ! Check for interactions commands after these many time steps
+controlDir            = "null"          ! Check in this directory for command files (NULL = Check in output directory)
 /
 /
 &PHYSICS
@@ -57,6 +65,12 @@ Gz                    = 0.D0        ! Geostrophic wind in x; used if useGeostrop
 dPfdx                 = 1.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
+/
+/
+&PRESSURE_CALC
+storePressure         = .TRUE.     ! Would you like to compute and store pressure?
+P_dumpFreq            = 100         ! How often (timesteps) do you want to dump pressure?
+P_compFreq            = 10          ! How often (timesteps) do you want to compute pressure? 
 /
 /
 &BCs

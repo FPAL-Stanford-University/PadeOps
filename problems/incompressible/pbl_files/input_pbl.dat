@@ -36,9 +36,11 @@ t_stop_planeDump      = 5000        ! When do you want to stop dumping planes?
 /
 &STATS
 tid_StatsDump         = 20000        ! Dumping Frequency for Statistics file (# of time steps)
-tid_compStats         = 250         ! Frequency of Computing Statistics
-tSimStartStats        = 23.d0       ! Simulation time for starting stats calculations 
+tid_compStats         = 10         ! Frequency of Computing Statistics
+tSimStartStats        = 0.d0       ! Simulation time for starting stats calculations 
 normStatsByUstar      = .TRUE.      ! Normalize Statistics by ustar at each instant
+computeSpectra        = .FALSE.     ! Compute and time average x - spectra on the run
+timeAvgFullFields     = .FALSE.     ! Time average and store fields on the run
 /
 /
 &OS_INTERACTIONS
@@ -66,7 +68,7 @@ dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useE
 /
 /
 &PRESSURE_CALC
-storePressure         = .FALSE.     ! Would you like to compute and store pressure?
+storePressure         = .TRUE.     ! Would you like to compute and store pressure?
 P_dumpFreq            = 100         ! How often (timesteps) do you want to dump pressure?
 P_compFreq            = 10          ! How often (timesteps) do you want to compute pressure? 
 /
