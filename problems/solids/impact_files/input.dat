@@ -1,7 +1,7 @@
 &INPUT
 
-inputdir  =  "/home/akshays/Data/PadeOps/impact_elastic"      ! Directory for input files
-outputdir  = "/home/akshays/Data/PadeOps/impact_elastic"      ! Directory for output files
+inputdir  =  "/home/akshays/Data/PadeOps/impact_GEOS/elastic"      ! Directory for input files
+outputdir  = "/home/akshays/Data/PadeOps/impact_GEOS/elastic"      ! Directory for output files
 
 nx = 201                  ! Number of points in X
 ny = 1                    ! Number of points in Y
@@ -32,28 +32,23 @@ pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 
 
 /
 
-&CINPUT
-gam  = 1.4D0              ! Ratio of specific heats
-Rgas = 1.D0               ! Gas constant
-/
-
-&IINPUT
-nu = 0.02D0               ! Kinematic viscosity
-/
-
 &SINPUT
-gam     = 2.84D0          ! Ratio of specific heats
-Rgas    = 1.D0            ! Gas constant
-PInf    = 6.D8            ! P_infinity, material stiffness
-shmod   = 77.D9           ! Shear modulus
-rho0    = 7.85D3          ! No deformation density
-Cmu     = 2.D-3           ! Coefficient for artificial shear viscosity
-Cbeta   = 1.75D0          ! Coefficient for artificial bulk viscosity
-Ckap    = 1.D-2           ! Coefficient for artificial thermal conductivity
-plastic = .FALSE.         ! Logical to turn on plasticity
-yield   = 2.49D9          ! Yield strength of material
+Cmu      = 2.D-3          ! Coefficient for artificial shear viscosity
+Cbeta    = 5.00D0         ! Coefficient for artificial bulk viscosity
+Ckap     = 1.D-2          ! Coefficient for artificial thermal conductivity
+ns       = 1              ! Number of species
+PTeqb    = .TRUE.         ! Use pressure and temperature equilibrium?
+SOSmodel = .FALSE.        ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
+usegTg   = .FALSE.        ! Use the g^Tg formulation? (Finger tensor)
 /
 
 &PROBINPUT
 uimpact = 300.D0          ! Normal impact velocity
+gam     = 2.84D0          ! Ratio of specific heats
+Rgas    = 1.D0            ! Gas constant
+PInf    = 6.D8            ! P_infinity, material stiffness
+mu      = 77.D9           ! Shear modulus
+rho0    = 7.85D3          ! No deformation density
+yield   = 2.49D29         ! Yield strength of material
+tau0    = 1.0D-14         ! Plastic relaxation timescale
 /

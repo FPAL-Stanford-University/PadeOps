@@ -65,7 +65,7 @@ module SolidGrid
         type( IOsgrid ),     allocatable :: viz
 
         logical     :: PTeqb                       ! Use pressure and temperature equilibrium formulation
-        logical     :: use_gTg                     ! Use formulation with the Finger tensor g^T.g instead of the full g tensor
+        logical     :: usegTg                     ! Use formulation with the Finger tensor g^T.g instead of the full g tensor
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -157,7 +157,7 @@ contains
         real(rkind) :: Cdiff = 0.003_rkind
         real(rkind) :: CY = 100._rkind
         logical     :: PTeqb = .TRUE.
-        logical     :: use_gTg = .FALSE.
+        logical     :: usegTg = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
 
@@ -169,7 +169,7 @@ contains
                                                        prow, pcol, &
                                                          SkewSymm  
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
-                           PTeqb, SOSmodel, use_gTg, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
+                           PTeqb, SOSmodel, usegTg, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
         ioUnit = 11
@@ -192,7 +192,7 @@ contains
         this%nsteps = nsteps
 
         this%PTeqb = PTeqb
-        this%use_gTg = use_gTg
+        this%usegTg = usegTg
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -294,7 +294,7 @@ contains
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
         allocate(this%mix)
-        call this%mix%init(this%decomp,this%der,this%fil,this%LAD,ns,this%PTeqb,SOSmodel,this%use_gTg)
+        call this%mix%init(this%decomp,this%der,this%fil,this%LAD,ns,this%PTeqb,SOSmodel,this%usegTg)
         !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields
@@ -522,7 +522,7 @@ contains
         call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
 
         do i=1,this%mix%ns
-            if (this%use_gTg) then
+            if (this%usegTg) then
                 ! Project g tensor to SPD space
                 !ADD! call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g)
             end if
@@ -831,6 +831,7 @@ contains
         this%Wcnsrv(:,:,:,mom_index+1) = this%rho * this%v
         this%Wcnsrv(:,:,:,mom_index+2) = this%rho * this%w
         this%Wcnsrv(:,:,:, TE_index  ) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
+        
 
         ! add 2M (mass fraction and hydrodynamic energy) variables here
         call this%mix%get_conserved(this%rho)
@@ -890,12 +891,13 @@ contains
         if (this%PTeqb) then
             ! subtract elastic energies to determine mixture hydrostatic energy. conductivity 
             ! is assumed a function of only hydrostatic energy
-            ehmix => viscwork ! use some storage space
-            ehmix = this%e
-            do imat = 1, this%mix%ns
-                ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
-            enddo
-            call this%LAD%get_conductivity(this%rho,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
+            ! ehmix => viscwork ! use some storage space
+            ! ehmix = this%e
+            ! do imat = 1, this%mix%ns
+            !     ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
+            ! enddo
+            ! call this%LAD%get_conductivity(this%rho,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
+            call this%LAD%get_conductivity(this%rho,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
         end if
 
         ! Get tau tensor tensor. Put in off-diagonal components of duidxj (also get the viscous work term for energy equation)

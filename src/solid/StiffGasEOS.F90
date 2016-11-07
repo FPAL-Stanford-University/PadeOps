@@ -19,7 +19,7 @@ module StiffGasEOS
 
     contains
 
-        ! procedure :: init
+        procedure :: init
         procedure :: get_p
         procedure :: get_e_from_p
         procedure :: get_e_from_T
@@ -30,17 +30,18 @@ module StiffGasEOS
 
     end type
 
-    interface stiffgas
-        module procedure init
-    end interface
+    ! interface stiffgas
+    !     module procedure init
+    ! end interface
 
 contains
 
-    function init(gam_,Rgas_,PInf_) result(this)
-        type(stiffgas) :: this
-        real(rkind) :: gam_
-        real(rkind) :: Rgas_
-        real(rkind) :: PInf_
+    ! function init(gam_,Rgas_,PInf_) result(this)
+    subroutine init(this,gam_,Rgas_,PInf_)
+        class(stiffgas), intent(inout) :: this
+        real(rkind),     intent(in)    :: gam_
+        real(rkind),     intent(in)    :: Rgas_
+        real(rkind),     intent(in)    :: PInf_
 
         this%gam = gam_
         this%onebygam_m1 = one/(this%gam-one)
@@ -51,10 +52,8 @@ contains
         this%PInf = PInf_
         this%Cv = this%Rgas/(this%gam-one)
 
-        print*, "Cv   = ", this%Cv
-        print*, "PInf = ", this%PInf
-
-    end function
+    end subroutine
+    ! end function
 
     pure subroutine get_p(this,rho,e,p)
         class(stiffgas), intent(in) :: this

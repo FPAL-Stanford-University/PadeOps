@@ -61,6 +61,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
     use Sep1SolidEOSMod,  only: sep1solideos
+    use AbstractEOSMod,   only: abstracteos
     
     use impact_data
 
@@ -73,20 +74,17 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     type(solid_mixture),             intent(inout) :: mix
     real(rkind),                     intent(inout) :: tstop, dt, tviz
 
-    type(sep1solideos) :: eos
+    ! class(abstracteos), allocatable :: eos
+    type(sep1solideos), allocatable :: eos
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
 
     namelist /PROBINPUT/  uimpact, gam, Rgas, PInf, rho0, mu, yield, tau0
     
-    print*, "In initfields"
-
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
-
-    print*, "Finished reading PROBINPUT"
 
     ! Need to set mixture density and velocities and set material eos, g, VF and T (and material energy if not using PTeqb)
     associate( rho => fields(:,:,:,rho_index),   u => fields(:,:,:,  u_index), &
@@ -97,14 +95,15 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
                g21 => mix%material(1)%g21, g22 => mix%material(1)%g22, g23 => mix%material(1)%g23, &
                g31 => mix%material(1)%g31, g32 => mix%material(1)%g32, g33 => mix%material(1)%g33, & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-        
-        eos = sep1solideos(gam,Rgas,PInf,rho0,mu,yield,tau0,mix%use_gTg)
-
-        print*, "Set eos"
+      
+        print*, "In Initfields"
+        eos = sep1solideos(gam,Rgas,PInf,rho0,mu,yield,tau0,mix%usegTg)
+        !allocate( eos, source=sep1solideos(gam,Rgas,PInf,rho0,mu,yield,tau0,mix%usegTg) )
+        print*, "Allocated eos"
+        print*, "Cv = ", eos%hydro%Cv, "PInf = ", eos%hydro%PInf
 
         call mix%set_material(1, eos)
-
-        print*, "Set material eos"
+        print*, "Finished setting material eos"
 
         tmp = tanh( (x-half)/dx )
 
@@ -120,17 +119,23 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! Get rho compatible with det(g) and rho0
         tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
         rho = rho0 * tmp
-        
+       
+        print*, "rho:", minval(rho), maxval(rho)
+
+        print*, "Get T"
         ! Get temperature by first getting hydro energy
         call eos%hydro%get_e_from_p(rho,p,e)
-        print*, "rho: ", maxval(rho), minval(rho)
-        print*, "e: ", maxval(e), minval(e)
-        call eos%hydro%get_T(e,rho,T)
+        print*, "Got e"
+        print*, "e  :", minval(e  ), maxval(e  )
+        call eos%hydro%get_T(e,T,rho)
+        print*, "Got T"
+        print*, "T  :", minval(T  ), maxval(T  )
         Tinit = T(1,1,1)
 
         ! Set volume fraction to one since only 1 material is present
         mix%material(1)%VF = one
 
+        deallocate( eos )
     end associate
 
 end subroutine

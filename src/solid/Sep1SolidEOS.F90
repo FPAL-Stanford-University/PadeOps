@@ -14,8 +14,8 @@ module Sep1SolidEOSMod
 
     type, extends(abstracteos) :: sep1solideos
 
-        type(stiffgas),          allocatable :: hydro
-        type(sep1solid_elastic), allocatable :: elastic
+        type(stiffgas)          :: hydro
+        type(sep1solid_elastic) :: elastic
 
     contains
 
@@ -39,15 +39,15 @@ contains
         this%rho0 = rho0
         this%usegTg = usegTg
 
-        allocate(this%hydro,source=stiffgas(gam,Rgas,PInf))
-        allocate(this%elastic,source=sep1solid_elastic(this%rho0,mu,yield,tau0))
+        call this%hydro%init(gam,Rgas,PInf)
+        call this%elastic%init(this%rho0,mu,yield,tau0)
     end function
 
     pure elemental subroutine destroy(this)
         type(sep1solideos), intent(inout) :: this
 
-        if (allocated(this%hydro)  ) deallocate(this%hydro)
-        if (allocated(this%elastic)) deallocate(this%elastic)
+        ! if (allocated(this%hydro)  ) deallocate(this%hydro)
+        ! if (allocated(this%elastic)) deallocate(this%elastic)
     end subroutine
 
     ! Subroutine to get the internal energy from the material density, inverse deformation gradient tensor (of Finger tensor)

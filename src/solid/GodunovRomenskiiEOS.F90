@@ -20,6 +20,7 @@ module GodunovRomenskiiEOSMod
 
     contains
 
+        ! procedure :: init
         procedure :: get_energy_derivatives
         procedure :: get_e_from_rho_invariants_T
 
@@ -32,9 +33,10 @@ module GodunovRomenskiiEOSMod
 contains
 
     function init(rho0,K0,Cv,T0,B0,alpha,beta,gam,usegTg) result(this)
-        type(godromeos)           :: this
-        real(rkind),   intent(in) :: rho0, K0, Cv, T0, B0, alpha, beta, gam
-        logical,       intent(in) :: usegTg
+    ! subroutine init(this,rho0,K0,Cv,T0,B0,alpha,beta,gam,usegTg)
+        type(godromeos)                :: this
+        real(rkind),     intent(in)    :: rho0, K0, Cv, T0, B0, alpha, beta, gam
+        logical,         intent(in)    :: usegTg
 
         this%rho0 = rho0
         this%K0 = K0
@@ -46,6 +48,7 @@ contains
         this%gam = gam
         this%usegTg = usegTg
 
+    ! end subroutine
     end function
 
     ! Subroutine to compute the dervatives of the internal energy with respect to the invariants of the finger tensor and

@@ -28,7 +28,7 @@ module SolidMixtureMod
 
         logical :: SOSmodel = .FALSE.           ! is sound speed given by `equilibrium' model? Alternative is `frozen' model. Check Saurel et al., JCP 2009.
         logical :: PTeqb = .TRUE.
-        logical :: use_gTg = .FALSE.
+        logical :: usegTg = .FALSE.
 
     contains
 
@@ -73,7 +73,7 @@ module SolidMixtureMod
 contains
 
     !function init(decomp,der,fil,LAD,ns) result(this)
-    subroutine init(this,decomp,der,fil,LAD,ns,PTeqb,SOSmodel,use_gTg)
+    subroutine init(this,decomp,der,fil,LAD,ns,PTeqb,SOSmodel,usegTg)
         !type(solid_mixture)      , intent(inout) :: this
         class(solid_mixture)      , intent(inout) :: this
         type(decomp_info), target, intent(in)    :: decomp
@@ -83,7 +83,7 @@ contains
         integer,                   intent(in)    :: ns
         logical,                   intent(in)    :: PTeqb
         logical,                   intent(in)    :: SOSmodel
-        logical,                   intent(in)    :: use_gTg
+        logical,                   intent(in)    :: usegTg
 
         type(solid), allocatable :: dummy
         integer :: i
@@ -92,7 +92,7 @@ contains
 
         this%PTeqb    = PTeqb
         this%SOSmodel = SOSmodel
-        this%use_gTg  = use_gTg
+        this%usegTg  = usegTg
 
         this%ns = ns
 
@@ -107,12 +107,12 @@ contains
 
         ! Allocate array of solid objects (Use a dummy to avoid memory leaks)
         allocate(dummy)
-        call dummy%init(decomp,der,fil,this%PTeqb,this%use_gTg)
+        call dummy%init(decomp,der,fil,this%PTeqb,this%usegTg)
 
         if (allocated(this%material)) deallocate(this%material)
         allocate(this%material(this%ns))!, source=dummy)
         do i=1,this%ns
-            call this%material(i)%init(decomp,der,fil,this%PTeqb,this%use_gTg)
+            call this%material(i)%init(decomp,der,fil,this%PTeqb,this%usegTg)
         end do
         deallocate(dummy)
 
@@ -140,23 +140,15 @@ contains
     end subroutine
 
     subroutine set_material(this, imat, eos)
+        use Sep1SolidEOSMod, only: sep1solideos
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: imat
         class(abstracteos),   intent(in)    :: eos
 
         if ((imat .GT. this%ns) .OR. (imat .LE. 0)) call GracefulExit("Cannot set material with index greater than the number of species.",4534)
-
-        ! if (allocated(this%material(imat)%hydro)) deallocate(this%material(imat)%hydro)
-        ! allocate( this%material(imat)%hydro, source=hydro )
-        ! 
-        ! if (allocated(this%material(imat)%elastic)) deallocate(this%material(imat)%elastic)
-        ! allocate( this%material(imat)%elastic, source=elastic )
-        
-        print*, "In set_material"
+       
         if (allocated(this%material(imat)%eos)) deallocate(this%material(imat)%eos)
-        print*, "Deallocated old eos"
         allocate( this%material(imat)%eos, source=eos )
-        print*, "Allocated new eos"
     end subroutine
 
     !ADD! subroutine relaxPressure(this,rho,mixE,mixP)
@@ -535,36 +527,36 @@ contains
         devstress = zero
          
         do imat = 1, this%ns
-          call this%material(imat)%get_energy(rho,em) ! Get updated internal energy
-          call this%material(imat)%get_primitive(rho,em,sosm) !ADD! Material density is being calculated multiple times. Add as a field to SolidMod to avoid this
+            call this%material(imat)%get_energy(rho,em) ! Get updated internal energy
+            call this%material(imat)%get_primitive(rho,em,sosm) !ADD! Material density is being calculated multiple times. Add as a field to SolidMod to avoid this
         
-          ! Add contribution to mixture internal energy
-          e = e + this%material(imat)%Ys * em
-          
-          ! Add contribution to mixture pressure
-          p = p + this%material(imat)%VF * this%material(imat)%p
+            ! Add contribution to mixture internal energy
+            e = e + this%material(imat)%Ys * em
+            
+            ! Add contribution to mixture pressure
+            p = p + this%material(imat)%VF * this%material(imat)%p
 
-          ! Add contribution to mixture temperature
-          T = T + this%material(imat)%Ys * this%material(imat)%T
+            ! Add contribution to mixture temperature
+            T = T + this%material(imat)%Ys * this%material(imat)%T
 
-          ! Add contribution to mixture devstress
-          devstress(:,:,:,1) = devstress(:,:,:,1) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,1)
-          devstress(:,:,:,2) = devstress(:,:,:,2) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,2)
-          devstress(:,:,:,3) = devstress(:,:,:,3) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,3)
-          devstress(:,:,:,4) = devstress(:,:,:,4) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,4)
-          devstress(:,:,:,5) = devstress(:,:,:,5) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,5)
-          devstress(:,:,:,6) = devstress(:,:,:,6) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,6)
+            ! Add contribution to mixture devstress
+            devstress(:,:,:,1) = devstress(:,:,:,1) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,1)
+            devstress(:,:,:,2) = devstress(:,:,:,2) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,2)
+            devstress(:,:,:,3) = devstress(:,:,:,3) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,3)
+            devstress(:,:,:,4) = devstress(:,:,:,4) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,4)
+            devstress(:,:,:,5) = devstress(:,:,:,5) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,5)
+            devstress(:,:,:,6) = devstress(:,:,:,6) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,6)
 
-          ! Add contribution to mixture speed of sound
-          sos = sos + sosm
-          if(this%SOSmodel) then
-              ! equilibrium model
-              call this%material(imat)%getSpeciesDensity(rho,em) ! em contains species density now
-              sos = sos + this%material(imat)%VF/(em*sosm)
-          else
-              ! frozen model (details in Saurel et al. 2009)
-              sos = sos + this%material(imat)%Ys*sosm
-          endif
+            ! Add contribution to mixture speed of sound
+            sos = sos + sosm
+            if(this%SOSmodel) then
+                ! equilibrium model
+                call this%material(imat)%getSpeciesDensity(rho,em) ! em contains species density now
+                sos = sos + this%material(imat)%VF/(em*sosm)
+            else
+                ! frozen model (details in Saurel et al. 2009)
+                sos = sos + this%material(imat)%Ys*sosm
+            endif
 
         end do
 
@@ -598,13 +590,14 @@ contains
 
         rho = zero
         do imat = 1, this%ns
-          call this%material(imat)%getSpeciesDensity_from_g(rhom)
-          rho = rho + this%material(imat)%VF * rhom
+            call this%material(imat)%getSpeciesDensity_from_g(rhom)
+            rho = rho + this%material(imat)%VF * rhom
         end do
 
         do imat = 1,this%ns
             call this%material(imat)%getSpeciesDensity_from_g(rhom)
             this%material(imat)%Ys = this%material(imat)%VF * rhom / rho
+            call this%material(imat)%get_conserved(rho)
         end do
     end subroutine
 
@@ -691,7 +684,7 @@ contains
         integer :: imat
 
         do imat = 1, this%ns
-            if (this%use_gTg) then
+            if (this%usegTg) then
                 call this%material(imat)%update_gTg(isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
             else
                 call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)

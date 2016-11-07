@@ -20,7 +20,7 @@ module SolidMod
         logical :: plast = .FALSE.
         logical :: explPlast = .FALSE.
         logical :: PTeqb = .TRUE.
-        logical :: use_gTg = .FALSE.
+        logical :: usegTg = .FALSE.
 
         ! class(stiffgas ), allocatable :: hydro
         ! class(sep1solid_elastic), allocatable :: elastic
@@ -170,13 +170,13 @@ module SolidMod
 contains
 
     !function init(decomp,der,fil,hydro,elastic) result(this)
-    subroutine init(this,decomp,der,fil,PTeqb,use_gTg)
+    subroutine init(this,decomp,der,fil,PTeqb,usegTg)
         class(solid), target, intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der
         type(filters),     target, intent(in) :: fil
         logical, intent(in) :: PTeqb
-        logical, intent(in) :: use_gTg
+        logical, intent(in) :: usegTg
 
         this%decomp => decomp
         this%der => der
@@ -184,7 +184,7 @@ contains
        
         this%PTeqb = PTeqb
 
-        this%use_gTg = use_gTg
+        this%usegTg = usegTg
 
         ! Assume everything is in Y decomposition
         this%nxp = decomp%ysz(1)
@@ -354,7 +354,7 @@ contains
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
-        if (this%use_gTg) then
+        if (this%usegTg) then
             detg = sqrt(detg)
         end if
 
@@ -395,7 +395,7 @@ contains
         !ADD!         
         !ADD!         if(this%PTeqb) this%kap = sqrt(two/three*this%modDevSigma)
 
-        !ADD!         call this%elastic%plastic_deformation(this%g, this%use_gTg)
+        !ADD!         call this%elastic%plastic_deformation(this%g, this%usegTg)
 
         !ADD!         call this%get_eelastic_devstress()
         !ADD!         this%modDevSigma = this%sxx*this%sxx + this%syy*this%syy + this%szz*this%szz + &
@@ -488,7 +488,7 @@ contains
 
         if(this%plast) then
             if (.NOT. this%explPlast) then
-                !ADD! call this%eos%plastic_deformation(this%g, this%use_gTg)
+                !ADD! call this%eos%plastic_deformation(this%g, this%usegTg)
             end if
         end if
 
@@ -595,7 +595,7 @@ contains
     !     end where
     !     invtaurel = invtaurel / (two * this%elastic%mu * detg)
 
-    !     if (this%use_gTg) then
+    !     if (this%usegTg) then
     !         invtaurel = two*invtaurel  ! Factor of 2 for gTg implementation
     !     end if
 
@@ -788,7 +788,7 @@ contains
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
-        if (this%use_gTg) then
+        if (this%usegTg) then
             rhom = sqrt(rhom)
         end if
 
@@ -837,7 +837,7 @@ contains
     !     real(rkind), dimension(this%nxp,this%nyp,this%nzp,6)  :: finger,fingersq
     !     real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: trG, trG2, detG
 
-    !     call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG,this%use_gTg)
+    !     call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG,this%usegTg)
     !     call this%elastic%get_eelastic(trG,trG2,detG,this%eel)
     !     call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
 

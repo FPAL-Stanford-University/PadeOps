@@ -17,7 +17,7 @@ module Sep1Solid_elasticMod
 
     contains
 
-        ! procedure :: init
+        procedure :: init
         procedure :: get_finger
         procedure :: get_devstress
         procedure :: get_eelastic
@@ -29,15 +29,16 @@ module Sep1Solid_elasticMod
 
     end type
 
-    interface sep1solid_elastic
-        module procedure init
-    end interface
+    ! interface sep1solid_elastic
+    !     module procedure init
+    ! end interface
 
 contains
 
-    function init(rho0_,mu_,yield_,tau0_) result(this)
-        type(sep1solid_elastic) :: this
-        real(rkind), intent(in) :: rho0_,mu_, yield_, tau0_
+    ! function init(rho0_,mu_,yield_,tau0_) result(this)
+    subroutine init(this,rho0_,mu_,yield_,tau0_)
+        class(sep1solid_elastic), intent(inout) :: this
+        real(rkind),              intent(in)    :: rho0_,mu_, yield_, tau0_
 
         integer :: info, lwork
         real(rkind), dimension(3,3) :: g, u, vt
@@ -57,7 +58,8 @@ contains
 
         deallocate(this%svdwork); allocate(this%svdwork(lwork))
 
-    end function
+    end subroutine
+    ! end function
 
     pure elemental subroutine destroy(this)
         type(sep1solid_elastic), intent(inout) :: this
