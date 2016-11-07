@@ -51,17 +51,17 @@ end module
 
 program test_NewtonSolver
     use kind_parameters,  only: rkind
-    use constants,        only: zero,half,one
+    use constants,        only: zero,half,one,three
     use NewtonSolverProg, only: myfunction
     implicit none
 
     type(myfunction) :: f
-    real(rkind), dimension(1) :: x, y
+    real(rkind), dimension(2) :: x, y
 
     f = myfunction(one,zero,-one) ! x**2 - 1
 
     x = half    ! Initial guess
-    y = zero    ! Final function value
+    y = [zero, three]    ! Final function value
 
     print*, "Target value: ", y
     print*, "Initial x: ", x

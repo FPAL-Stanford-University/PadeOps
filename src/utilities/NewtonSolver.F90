@@ -41,7 +41,7 @@ contains
         real(rkind), dimension(size(x,1),size(x,1)) :: gradf
         integer,     dimension(size(x,1))           :: ipiv
 
-        real(rkind) :: residual, residual_new, alpha = half, t = one, tol = real(1.D-12,rkind)
+        real(rkind) :: residual, residual_new, alpha = half, t = one, tol = real(1.D-16,rkind)
         integer     :: n, iters, niters = 50
         
         n = size(x,1)
