@@ -3,44 +3,46 @@ module NewtonSolverMod
         implicit none
 
         ! Unary functor y = f(x) used in the Newton Solver
-        type, abstract :: unary_functor
+        type, abstract :: newton_functor
         contains
             procedure(evaluate_interface), deferred :: evaluate
             procedure(gradient_interface), deferred :: gradient
+            procedure                               :: get_residual
+            procedure                               :: newton_solve
         end type
 
         interface 
             subroutine evaluate_interface(this, x, y)
                 import :: rkind
-                import :: unary_functor
-                class(unary_functor),              intent(in)  :: this
+                import :: newton_functor
+                class(newton_functor),             intent(in)  :: this
                 real(rkind), dimension(:),         intent(in)  :: x
                 real(rkind), dimension(size(x,1)), intent(out) :: y
-            end function
+            end subroutine
 
             subroutine gradient_interface(this, x, grad)
                 import :: rkind
-                import :: unary_functor
-                class(unary_functor),                        intent(in)  :: this
+                import :: newton_functor
+                class(newton_functor),                       intent(in)  :: this
                 real(rkind), dimension(:),                   intent(in)  :: x
                 real(rkind), dimension(size(x,1),size(x,1)), intent(out) :: grad
-            end function
+            end subroutine
         end interface
 contains
 
-    subroutine newton_solve(f,x0,y)
+    subroutine newton_solve(f,x,y)
         use constants, only: eps, half, one
         use exits,     only: GracefulExit
-        class(unary_functor), intent(in) :: f
+        class(newton_functor),             intent(in)    :: f
         real(rkind), dimension(:),         intent(inout) :: x
         real(rkind), dimension(size(x,1)), intent(in)    :: y
         
-        real(rkind), dimension(size(x,1))           :: dx, f0
+        real(rkind), dimension(size(x,1))           :: dx, dx_new, x_new, f0
         real(rkind), dimension(size(x,1),size(x,1)) :: gradf
         integer,     dimension(size(x,1))           :: ipiv
 
-        real(rkind) :: residual, alpha = half, t = one, tol = real(1.D-12,rkind)
-        integer     :: n, info, iters, niters = 50
+        real(rkind) :: residual, residual_new, alpha = half, t = one, tol = real(1.D-12,rkind)
+        integer     :: n, iters, niters = 50
         
         n = size(x,1)
 
@@ -84,7 +86,7 @@ contains
 
     subroutine get_residual(f,x,y,ipiv,gradf,dx,f0,residual)
         use exits,     only: GracefulExit
-        class(unary_functor),                        intent(in)  :: f
+        class(newton_functor),                       intent(in)  :: f
         real(rkind), dimension(:),                   intent(in)  :: x
         real(rkind), dimension(size(x,1)),           intent(in)  :: y
         integer,     dimension(size(x,1)),           intent(out) :: ipiv
@@ -92,7 +94,7 @@ contains
         real(rkind), dimension(size(x,1),size(x,1)), intent(out) :: gradf
         real(rkind),                                 intent(out) :: residual
 
-        integer :: n
+        integer :: n, info
 
         n = size(x,1)
 
