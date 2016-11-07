@@ -22,6 +22,9 @@ contains
         this%a = a
         this%b = b
         this%c = c
+
+        this%niters = 10
+        this%tolerance = real(1.D-16,rkind)
     end function
 
     subroutine evaluate(this, x, y)

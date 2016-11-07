@@ -1,37 +1,41 @@
 module NewtonSolverMod
     use kind_parameters, only: rkind
-        implicit none
+    use constants,       only: half
+    implicit none
 
-        ! Unary functor y = f(x) used in the Newton Solver
-        type, abstract :: newton_functor
-        contains
-            procedure(evaluate_interface), deferred :: evaluate
-            procedure(gradient_interface), deferred :: gradient
-            procedure                               :: get_residual
-            procedure                               :: newton_solve
-        end type
+    ! Unary functor y = f(x) used in the Newton Solver
+    type, abstract :: newton_functor
+        real(rkind) :: alpha = half
+        real(rkind) :: tolerance = real(1.D-14,rkind)
+        integer     :: niters = 50
+    contains
+        procedure(evaluate_interface), deferred :: evaluate
+        procedure(gradient_interface), deferred :: gradient
+        procedure                               :: get_residual
+        procedure                               :: newton_solve
+    end type
 
-        interface 
-            subroutine evaluate_interface(this, x, y)
-                import :: rkind
-                import :: newton_functor
-                class(newton_functor),             intent(in)  :: this
-                real(rkind), dimension(:),         intent(in)  :: x
-                real(rkind), dimension(size(x,1)), intent(out) :: y
-            end subroutine
+    interface 
+        subroutine evaluate_interface(this, x, y)
+            import :: rkind
+            import :: newton_functor
+            class(newton_functor),             intent(in)  :: this
+            real(rkind), dimension(:),         intent(in)  :: x
+            real(rkind), dimension(size(x,1)), intent(out) :: y
+        end subroutine
 
-            subroutine gradient_interface(this, x, grad)
-                import :: rkind
-                import :: newton_functor
-                class(newton_functor),                       intent(in)  :: this
-                real(rkind), dimension(:),                   intent(in)  :: x
-                real(rkind), dimension(size(x,1),size(x,1)), intent(out) :: grad
-            end subroutine
-        end interface
+        subroutine gradient_interface(this, x, grad)
+            import :: rkind
+            import :: newton_functor
+            class(newton_functor),                       intent(in)  :: this
+            real(rkind), dimension(:),                   intent(in)  :: x
+            real(rkind), dimension(size(x,1),size(x,1)), intent(out) :: grad
+        end subroutine
+    end interface
 contains
 
     subroutine newton_solve(f,x,y)
-        use constants, only: eps, half, one
+        use constants, only: eps, one
         use exits,     only: GracefulExit
         class(newton_functor),             intent(in)    :: f
         real(rkind), dimension(:),         intent(inout) :: x
@@ -41,8 +45,8 @@ contains
         real(rkind), dimension(size(x,1),size(x,1)) :: gradf
         integer,     dimension(size(x,1))           :: ipiv
 
-        real(rkind) :: residual, residual_new, alpha = half, t = one, tol = real(1.D-16,rkind)
-        integer     :: n, iters, niters = 50
+        real(rkind) :: residual, residual_new, t = one
+        integer     :: n, iters
         
         n = size(x,1)
 
@@ -51,7 +55,7 @@ contains
 
         iters = 0
 
-        do while ( (iters < niters) .and. (abs(residual) > tol) )
+        do while ( (iters < f%niters) .and. (abs(residual) > f%tolerance) )
             ! Backtracking line search
             t = one
             x_new = x + t*dx
@@ -60,11 +64,11 @@ contains
             call f%get_residual(x_new,y,ipiv,gradf,dx_new,f0,residual_new)
 
             do while ( (abs(residual_new) >= abs(residual)) .and. (t > eps) )
-                if (iters > (niters-10)) then
+                if (iters > (f%niters-10)) then
                     print '(A,I0,3(A,ES15.5))', 'iters = ', iters, ', t = ', t, ', residual_new = ', residual_new, ', residual = ', residual
                 end if
 
-                t = alpha*t
+                t = f%alpha*t
                 x_new = x + t*dx
 
                 ! Get new residual
@@ -77,7 +81,7 @@ contains
 
             iters = iters + 1
 
-            if ((iters >= niters) .or. (t <= eps)) then
+            if ((iters >= f%niters) .or. (t <= eps)) then
                 call GracefulExit('Newton solve did not converge',6382)
             end if
         end do
