@@ -79,7 +79,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit, indwv, indwv2
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, sig11, eps11
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, sig11, eps11,lamLmix,mumix
     real(rkind) :: p_star, rho_star, c_star
     logical :: SOSmodel
 
@@ -119,7 +119,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         ! Non-dimensionalize problem parameters
         rho_0 = rho_0 / rho_star;     rho_0_2 = rho_0_2 / rho_star
-        mu = mu / p_star;             mu_2 = mu / p_star
+        mu = mu / p_star;             mu_2 = mu_2 / p_star
         p_infty = p_infty / p_star;   p_infty_2 = p_infty_2 / p_star
 
         ! Set materials
@@ -181,7 +181,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             cL_mix = sqrt(mix%material(1)%Ys(indwv,1,1)*cL**2 + mix%material(2)%Ys(indwv,1,1)*cL_2**2)
         endif  
         write(*,*) 'eqbmodel = ', mix%SOSmodel
-        write(*,*) 'wave speeds', cL, cL_2, cL_mix
+        write(*,*) 'wave speeds', cL, cL_2
         write(*,*) 'Ys', mix%material(1)%Ys(indwv,1,1), mix%material(2)%Ys(indwv,1,1)
         write(*,*) 'VF', mix%material(1)%VF(indwv,1,1), mix%material(2)%VF(indwv,1,1)
         ! mixture wave speed
@@ -196,12 +196,22 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         crefl = ((tmp(indwv2,1,1)*cL_mix_2)/(tmp(indwv,1,1)*cL_mix) - one) / ((tmp(indwv2,1,1)*cL_mix_2)/(tmp(indwv,1,1)*cL_mix) + one)
         ctran = ((tmp(indwv2,1,1)*cL_mix_2)/(tmp(indwv,1,1)*cL_mix) * two) / ((tmp(indwv2,1,1)*cL_mix_2)/(tmp(indwv,1,1)*cL_mix) + one)
         write(*,*) 'cr, ct', crefl, ctran, ctran-crefl
+        write(*,*) 'mix wave speeds', cL_mix, cL_mix_2
+
+        !! mixture lamL, muL
+        !lamLp2mu_mix = cL_mix**2*rho_0
+        !write(*,*) 'lamp2mu = ', cL_mix**2*rho_0, cL_mix_2**2*rho_0_2
+        !write(*,*) 'lam+2mu = ', lamL+two*mu, lamL_2+two*mu_2
+
+        lamLmix = lamL * mix%material(1)%VF + lamL_2 * mix%material(2)%VF
+        mumix   = mu   * mix%material(1)%VF + mu_2   * mix%material(2)%VF
 
         ! correct fields for initial wave
         sig11 = -sigma_0 * exp( -((x - cL_mix*zero - 0.35_rkind)/(0.03_rkind))**2 )
-        eps11 = sig11 / (lamL + two*mu)
+        eps11 = sig11 / (lamLmix + two*mumix)
+        write(*,'(a,3(e19.12,1x))') '--Init', maxval(sig11), minval(sig11), sigma_0
 
-        u   = - (cL_mix * sig11) / (lamL + two*mu)
+        u   = - (cL_mix * sig11) / (lamLmix + two*mumix)
         v   = zero
         w   = zero
 
@@ -210,17 +220,20 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         mix%material(2)%g11 = one / (one + eps11)
         mix%material(2)%p = p_infty_2*(mix%material(2)%g11**gamma_2 - one)
+        write(*,'(a,4(e19.12,1x))') '--Init p', maxval(mix%material(1)%p), minval(mix%material(1)%p), maxval(mix%material(2)%p), minval(mix%material(2)%p)
+
 
     end associate
 
 end subroutine
 
-subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
+subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind,clen
-    use constants,        only: zero,eps,half,one,two,pi,eight
+    use constants,        only: zero,eps,half,one,two,pi,eight,three
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
                                 sxx_index,syy_index,szz_index,sxy_index,sxz_index,syz_index,sos_index
     use decomp_2d,        only: decomp_info
+    use DerivativesMod,   only: derivatives
     use SolidMixtureMod,  only: solid_mixture
 
     use MultSpecGauss_data
@@ -228,21 +241,24 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     implicit none
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
     type(solid_mixture),             intent(in) :: mix
+    integer, dimension(2),           intent(in) :: x_bc, y_bc, z_bc
     integer                                     :: outputunit=229
 
     character(len=clen) :: outputfile, str
     integer :: i, j, k
     real(rkind) :: pinc, prefl, ptra
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: lamLmix,mumix
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
-                 e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
+                 e    => fields(:,:,:,   e_index), must=> fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  sxx  => fields(:,:,:, sxx_index), syy => fields(:,:,:,syy_index), &
                  szz  => fields(:,:,:, szz_index), sxy => fields(:,:,:,sxy_index), &
@@ -263,7 +279,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
                                            mix%material(1)%eh(i,1,1), mix%material(2)%eh(i,1,1), &
                                            mix%material(1)%T (i,1,1), mix%material(2)%T (i,1,1), &
                                            mix%material(1)%g11(i,1,1), mix%material(2)%g11(i,1,1), &
-                                           mu(i,1,1), bulk(i,1,1), kap(i,1,1), kap(i,1,1), &
+                                           must(i,1,1), bulk(i,1,1), kap(i,1,1), kap(i,1,1), &
                                            mix%material(1)%diff(i,1,1), mix%material(2)%diff(i,1,1)
         end do
         close(outputunit)
@@ -273,26 +289,27 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='replace')
           write(outputunit,'(330a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p", &
                                      "sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar", &
-                                     "p-1","Ys-1","VF-1","eh-1","T-1","g11-1","g12-1","g13-1","g21-1","g22-1","g23-1","g31-1","g32-1","g33-1","Dstar-1",&
-                                     "p-2","Ys-2","VF-2","eh-2","T-2","g11-2","g12-2","g13-2","g21-2","g22-2","g23-2","g31-2","g32-2","g33-2","Dstar-2"'
+                                     "p-1","Ys-1","VF-1","eh-1","T-1","g11-1","g12-1","g13-1","g21-1","g22-1","g23-1","g31-1","g32-1","g33-1","Dstar-1","kap-1",&
+                                     "p-2","Ys-2","VF-2","eh-2","T-2","g11-2","g12-2","g13-2","g21-2","g22-2","g23-2","g31-2","g32-2","g33-2","Dstar-2","kap-2"'
           write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
           write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
           do k=1,decomp%ysz(3)
            do j=1,decomp%ysz(2)
             do i=1,decomp%ysz(1)
                 write(outputunit,'(48ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                      ! continuum (9)
-                                                sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), &      ! continuum (9)
+                                                sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), must(i,j,k), bulk(i,j,k), kap(i,j,k), &    ! continuum (9)
                                                 mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% eh(i,j,k), &  ! material 1 (14)
                                                 mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
                                                 mix%material(1)%g21(i,j,k), mix%material(1)%g22(i,j,k), mix%material(1)%g23(i,j,k), mix%material(1)%g31(i,j,k), &  ! material 1 
-                                                mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), &                             ! material 1 
+                                                mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), mix%material(1)%kap(i,j,k),&  ! material 1 
                                                 mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% eh(i,j,k), &  ! material 2 (14)
                                                 mix%material(2)% T(i,j,k),  mix%material(2)%g11(i,j,k), mix%material(2)%g12(i,j,k), mix%material(2)%g13(i,j,k), &  ! material 2
                                                 mix%material(2)%g21(i,j,k), mix%material(2)%g22(i,j,k), mix%material(2)%g23(i,j,k), mix%material(2)%g31(i,j,k), &  ! material 2
-                                                mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k)                                ! material 2
+                                                mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k), mix%material(2)%kap(i,j,k)    ! material 2
             end do
            end do
           end do
+          write(*,'(a,4(e19.12,1x))') '--hook_output: ', maxval(p), minval(p), maxval(sxx), minval(sxx)
           close(outputunit)
         else
           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='old', action='write', position='append')
@@ -303,20 +320,23 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
            do j=1,decomp%ysz(2)
             do i=1,decomp%ysz(1)
                 write(outputunit,'(45ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                                                    ! continuum (6)
-                                                sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), &      ! continuum (9)
+                                                sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), must(i,j,k), bulk(i,j,k), kap(i,j,k), &    ! continuum (9)
                                                 mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% eh(i,j,k), &  ! material 1 (14)
                                                 mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
                                                 mix%material(1)%g21(i,j,k), mix%material(1)%g21(i,j,k), mix%material(1)%g23(i,j,k), mix%material(1)%g31(i,j,k), &  ! material 1 
-                                                mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), &                             ! material 1 
+                                                mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), mix%material(1)%kap(i,j,k),&  ! material 1 
                                                 mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% eh(i,j,k), &  ! material 2 (14)
                                                 mix%material(2)% T(i,j,k),  mix%material(2)%g11(i,j,k), mix%material(2)%g12(i,j,k), mix%material(2)%g13(i,j,k), &  ! material 2
                                                 mix%material(2)%g21(i,j,k), mix%material(2)%g21(i,j,k), mix%material(2)%g23(i,j,k), mix%material(2)%g31(i,j,k), &  ! material 2
-                                                mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k)                                ! material 2
+                                                mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k), mix%material(2)%kap(i,j,k)    ! material 2
             end do
            end do
           end do
           close(outputunit)
         endif
+
+        lamLmix = lamL * mix%material(1)%VF + lamL_2 * mix%material(2)%VF
+        mumix   = mu   * mix%material(1)%VF + mu_2   * mix%material(2)%VF
 
         write(outputfile,'(4A)') trim(outputdir),"/tec_ExactGauss_"//trim(str),".dat"
         if(vizcount==0) then
@@ -327,10 +347,12 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
           do k=1,decomp%ysz(3)
            do j=1,decomp%ysz(2)
             do i=1,decomp%ysz(1)
-                pinc =  sigma_0 * exp( -((x(i,j,k) - cL_mix*tsim - 0.35_rkind)/(0.03_rkind))**2 )
-                prefl = sigma_0 * exp( -((-x(i,j,k) - cL_mix*tsim - 0.35_rkind + half + half)/(0.03_rkind))**2 ) * crefl
-                ptra =  sigma_0 * exp( -(cL_mix*(x(i,j,k)/cL_mix_2 - tsim - 0.35_rkind/cL_mix + half/cL_mix - half/cL_mix_2)/(0.03_rkind))**2 ) * ctran
+                !sig11 = -sigma_0 * exp( -((x - cL_mix*zero - 0.35_rkind)/(0.03_rkind))**2 )
+                pinc =  sigma_0 * exp( -((x(i,j,k) - cL_mix*tsim - 0.35_rkind)/(0.03_rkind))**2 ) * (three*lamLmix(i,j,k) + two*mumix(i,j,k))/(three*(lamLmix(i,j,k) + two*mumix(i,j,k)))
+                prefl = sigma_0 * exp( -((-x(i,j,k) - cL_mix*tsim - 0.35_rkind + half + half)/(0.03_rkind))**2 ) * crefl * (three*lamLmix(i,j,k) + two*mumix(i,j,k))/(three*(lamLmix(i,j,k) + two*mumix(i,j,k)))
+                ptra =  sigma_0 * exp( -(cL_mix*(x(i,j,k)/cL_mix_2 - tsim - 0.35_rkind/cL_mix + half/cL_mix - half/cL_mix_2)/(0.03_rkind))**2 ) * ctran * (three*lamLmix(i,j,k) + two*mumix(i,j,k))/(three*(lamLmix(i,j,k) + two*mumix(i,j,k)))
                 write(outputunit,'(6ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), pinc, prefl, ptra
+                write(*,'(i5,1x,2(e19.12,1x))') i, sigma_0, pinc
             end do
            end do
           end do
@@ -343,9 +365,9 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
           do k=1,decomp%ysz(3)
            do j=1,decomp%ysz(2)
             do i=1,decomp%ysz(1)
-                pinc =  sigma_0 * exp( -((x(i,j,k) - cL_mix*tsim - 0.35_rkind)/(0.03_rkind))**2 )
-                prefl =  sigma_0 * exp( -((-x(i,j,k) - cL_mix*tsim - 0.35_rkind + half + half)/(0.03_rkind))**2 ) * crefl
-                ptra =  sigma_0 * exp( -(cL_mix*(x(i,j,k)/cL_mix_2 - tsim - 0.35_rkind/cL_mix + half/cL_mix - half/cL_mix_2)/(0.03_rkind))**2 ) * ctran
+                pinc =  sigma_0 * exp( -((x(i,j,k) - cL_mix*tsim - 0.35_rkind)/(0.03_rkind))**2 ) * (three*lamLmix(i,j,k) + two*mumix(i,j,k))/(three*(lamLmix(i,j,k) + two*mumix(i,j,k)))
+                prefl = sigma_0 * exp( -((-x(i,j,k) - cL_mix*tsim - 0.35_rkind + half + half)/(0.03_rkind))**2 ) * crefl * (three*lamLmix(i,j,k) + two*mumix(i,j,k))/(three*(lamLmix(i,j,k) + two*mumix(i,j,k)))
+                ptra =  sigma_0 * exp( -(cL_mix*(x(i,j,k)/cL_mix_2 - tsim - 0.35_rkind/cL_mix + half/cL_mix - half/cL_mix_2)/(0.03_rkind))**2 ) * ctran * (three*lamLmix(i,j,k) + two*mumix(i,j,k))/(three*(lamLmix(i,j,k) + two*mumix(i,j,k)))
                 write(outputunit,'(3ES26.16)') pinc, prefl, ptra
             end do
            end do
@@ -371,7 +393,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     end associate
 end subroutine
 
-subroutine hook_bc(decomp,mesh,fields,mix,tsim)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
@@ -386,6 +408,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     type(solid_mixture),             intent(inout) :: mix
+    integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &

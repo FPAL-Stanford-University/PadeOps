@@ -1,9 +1,10 @@
-#include "MultSpecGauss_files/hooks.F90"
+#include "Multispecies_postproc_files/hooks.F90"
 
-program MultSpecGauss
+program Multispecies_postproc
 
     use kind_parameters,  only: clen
     use SolidGrid,        only: sgrid
+    use decomp_2d,        only: nrank
     implicit none
 
     type(sgrid) :: sgp
@@ -18,18 +19,16 @@ program MultSpecGauss
     
     ! Initialize the grid object
     call sgp%init(inputfile)
-    write(*,*) 'Done init'
+    if(nrank==0) write (*,*) 'Done init'
 
-    ! Time advance
-    call sgp%simulate()
-    write(*,*) 'Done simulate'
+    ! postprocess
+    call sgp%postproc()
+    if(nrank==0) write (*,*) 'Done postproc'
         
     ! Destroy everythin before ending
     call sgp%destroy()
-    write(*,*) 'Done destroy'
 
     ! End the run
     call MPI_Finalize(ierr)
-    write(*,*) 'Done finalize'
 
 end program

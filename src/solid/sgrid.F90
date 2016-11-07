@@ -4,7 +4,7 @@ module SolidGrid
     use FiltersMod,      only: filters
     use GridMod,         only: grid
     use gridtools,       only: alloc_buffs, destroy_buffs
-    use sgrid_hooks,     only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_mixture_source
+    use sgrid_hooks,     only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_mixture_source!, hook_postproc
     use decomp_2d,       only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                                transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
@@ -65,7 +65,8 @@ module SolidGrid
         type( IOsgrid ),     allocatable :: viz
 
         logical     :: PTeqb                       ! Use pressure and temperature equilibrium formulation
-        logical     :: usegTg                     ! Use formulation with the Finger tensor g^T.g instead of the full g tensor
+        logical     :: usegTg                      ! Use formulation with the Finger tensor g^T.g instead of the full g tensor
+        real(rkind) :: tstats                      ! Interval between stats outputs
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -102,6 +103,7 @@ module SolidGrid
             procedure          :: gradient 
             procedure          :: advance_RK45
             procedure          :: simulate
+            procedure          :: postproc
             procedure, private :: get_dt
             procedure, private :: get_primitive
             procedure, private :: get_conserved
@@ -129,6 +131,7 @@ contains
         character(len=clen) :: inputdir
         character(len=clen) :: vizprefix = "sgrid"
         real(rkind) :: tviz = zero
+        real(rkind) :: tstats = zero
         character(len=clen), dimension(nfields) :: varnames
         logical :: periodicx = .true. 
         logical :: periodicy = .true. 
@@ -161,13 +164,13 @@ contains
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
 
-        namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
-                             inputdir, outputdir, vizprefix, tviz, &
-                                  periodicx, periodicy, periodicz, &
-                         derivative_x, derivative_y, derivative_z, &
-                                     filter_x, filter_y, filter_z, &
-                                                       prow, pcol, &
-                                                         SkewSymm  
+        namelist /INPUT/          nx, ny, nz, tstop, dt, CFL, nsteps, &
+                         inputdir, outputdir, vizprefix, tviz,tstats, &
+                                     periodicx, periodicy, periodicz, &
+                            derivative_x, derivative_y, derivative_z, &
+                                        filter_x, filter_y, filter_z, &
+                                                          prow, pcol, &
+                                                            SkewSymm  
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
                            PTeqb, SOSmodel, usegTg, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
@@ -364,6 +367,7 @@ contains
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
+        this%tstats = tstats
 
     end subroutine
 
@@ -496,6 +500,15 @@ contains
 
     end subroutine
 
+    subroutine postproc(this)
+        use decomp_2d,  only: nrank
+        class(sgrid), target, intent(inout) :: this
+
+        if(nrank==0) write(*,*) 'Calling hook_postproc'
+        !call hook_postproc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
+
+    end subroutine
+
     subroutine simulate(this)
         use reductions, only: P_MEAN
         use timer,      only: tic, toc
@@ -509,7 +522,8 @@ contains
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: ehmix
-        integer :: i
+        real(rkind) :: dtstats
+        integer :: i, statscount
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
         ! Get artificial properties for initial conditions
@@ -554,14 +568,15 @@ contains
 
         call this%get_dt(stability)
 
-        ! Write out initial conditions
+        ! Write out initial conditions and initial statistics
+        dtstats = zero; statscount = 0
         ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-        call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)
+        call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,statscount,this%x_bc,this%y_bc,this%z_bc)
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
         vizcond = .FALSE.
         
         ! Check for visualization condition and adjust time step
-        if ( (this%tviz > zero) .AND. (this%tsim + this%dt > this%tviz * this%viz%vizcount) ) then
+        if ( (this%tviz > zero) .AND. (this%tsim + this%dt >= this%tviz * this%viz%vizcount) ) then
             this%dt = this%tviz * this%viz%vizcount - this%tsim
             vizcond = .TRUE.
             stability = 'vizdump'
@@ -600,15 +615,24 @@ contains
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
             call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
-          
+ 
+            ! Write out statistics if dtstats exceeds tstats or if stats is deactivated, when vizcond is true
+            dtstats = dtstats + this%dt
+            if ( ((this%tstats > zero) .and. (dtstats > this%tstats)) .or. ((this%tstats < zero) .and. vizcond) ) then
+                dtstats = zero
+                statscount = statscount + 1
+                ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,statscount,this%x_bc,this%y_bc,this%z_bc)
+            end if
+            
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
-                ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)
+                !! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+                !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
                 vizcond = .FALSE.
             end if
-            
+
             ! Get the new time step
             call this%get_dt(stability)
             
@@ -637,7 +661,8 @@ contains
             ! Check for exitpdo file
             if(check_exit(this%outputdir)) then
                 ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)
+                statscount = statscount + 1
+                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,statscount,this%x_bc,this%y_bc,this%z_bc)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
                 call GracefulExit("Found exitpdo file in working directory",1234)
             endif
