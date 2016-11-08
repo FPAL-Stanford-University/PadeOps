@@ -9,8 +9,6 @@ module SolidGrid
                                transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
     use LADMod,          only: ladobject
-    use StiffGasEOS,     only: stiffgas
-    use Sep1SolidEOS,    only: sep1solid
     use SolidMixtureMod, only: solid_mixture
     use IOsgridMod,      only: IOsgrid
    
@@ -67,8 +65,8 @@ module SolidGrid
         type( IOsgrid ),     allocatable :: viz
 
         logical     :: PTeqb                       ! Use pressure and temperature equilibrium formulation
+        logical     :: usegTg                      ! Use formulation with the Finger tensor g^T.g instead of the full g tensor
         real(rkind) :: tstats                      ! Interval between stats outputs
-        logical     :: use_gTg                     ! Use formulation with the Finger tensor g^T.g instead of the full g tensor
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -162,7 +160,7 @@ contains
         real(rkind) :: Cdiff = 0.003_rkind
         real(rkind) :: CY = 100._rkind
         logical     :: PTeqb = .TRUE.
-        logical     :: use_gTg = .FALSE.
+        logical     :: usegTg = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
 
@@ -174,7 +172,7 @@ contains
                                                           prow, pcol, &
                                                             SkewSymm  
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
-                           PTeqb, SOSmodel, use_gTg, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
+                           PTeqb, SOSmodel, usegTg, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
         ioUnit = 11
@@ -197,7 +195,7 @@ contains
         this%nsteps = nsteps
 
         this%PTeqb = PTeqb
-        this%use_gTg = use_gTg
+        this%usegTg = usegTg
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -299,7 +297,7 @@ contains
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
         allocate(this%mix)
-        call this%mix%init(this%decomp,this%der,this%fil,this%LAD,ns,this%PTeqb,SOSmodel,this%use_gTg)
+        call this%mix%init(this%decomp,this%der,this%fil,this%LAD,ns,this%PTeqb,SOSmodel,this%usegTg)
         !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields
@@ -518,14 +516,13 @@ contains
         use decomp_2d,  only: nrank
         class(sgrid), target, intent(inout) :: this
 
-        logical :: tcond, vizcond, stepcond
+        logical :: tcond, vizcond, statscond, stepcond
         character(len=clen) :: stability
         real(rkind) :: cputime
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: ehmix
-        real(rkind) :: dtstats
-        integer :: i, imat, statscount
+        integer :: i, statscount
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
         ! Get artificial properties for initial conditions
@@ -538,26 +535,27 @@ contains
         call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
 
         do i=1,this%mix%ns
-            if (this%use_gTg) then
+            if (this%usegTg) then
                 ! Project g tensor to SPD space
-                call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g)
+                !ADD! call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g)
             end if
             ! Get massfraction gradients in Ji
             call this%gradient(this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),&
                                this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3), this%x_bc,  this%y_bc, this%z_bc)
         end do
 
-        ! compute artificial shear and bulk viscosities
+        ! compute physical and artificial shear and bulk viscosities
         call this%getPhysicalProperties()
         call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 
         if (this%PTeqb) then
-            ehmix => duidxj(:,:,:,4) ! use some storage space
-            ehmix = this%e
-            do imat = 1, this%mix%ns
-                ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
-            enddo
-            call this%LAD%get_conductivity(this%rho,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
+            ! ehmix => duidxj(:,:,:,4) ! use some storage space
+            ! ehmix = this%e
+            ! do imat = 1, this%mix%ns
+            !     ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
+            ! enddo
+            ! call this%LAD%get_conductivity(this%rho,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
+            call this%LAD%get_conductivity(this%rho,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
         end if
 
         nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz,ehmix)
@@ -570,9 +568,11 @@ contains
         call this%get_dt(stability)
 
         ! Write out initial conditions and initial statistics
-        dtstats = zero; statscount = 0
-        ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+        statscount = 0
         call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,statscount,this%x_bc,this%y_bc,this%z_bc)
+        statscount = statscount + 1
+        statscond = .FALSE.
+
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
         vizcond = .FALSE.
         
@@ -581,6 +581,13 @@ contains
             this%dt = this%tviz * this%viz%vizcount - this%tsim
             vizcond = .TRUE.
             stability = 'vizdump'
+        end if
+
+        ! Check for statistics condition and adjust time step
+        if ( (this%tstats > zero) .AND. (this%tsim + this%dt >= this%tstats * statscount) ) then
+            this%dt = this%tstats * statscount - this%tsim
+            statscond = .TRUE.
+            stability = 'statsdump'
         end if
 
         tcond = .TRUE.
@@ -617,19 +624,15 @@ contains
             call message(2,"CPU time (in seconds)",cputime)
             call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
  
-            ! Write out statistics if dtstats exceeds tstats or if stats is deactivated, when vizcond is true
-            dtstats = dtstats + this%dt
-            if ( ((this%tstats > zero) .and. (dtstats > this%tstats)) .or. ((this%tstats < zero) .and. vizcond) ) then
-                dtstats = zero
-                statscount = statscount + 1
-                ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+            ! Write out statistics if statscond is met or if stats is deactivated, when vizcond is true
+            if ( ((this%tstats > zero) .and. (statscond)) .or. ((this%tstats < zero) .and. vizcond) ) then
                 call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,statscount,this%x_bc,this%y_bc,this%z_bc)
+                statscount = statscount + 1
+                statscond = .FALSE.
             end if
             
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
-                !! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
                 vizcond = .FALSE.
             end if
@@ -641,6 +644,14 @@ contains
             if ( (this%tviz > zero) .AND. (this%tsim + this%dt >= this%tviz * this%viz%vizcount) ) then
                 this%dt = this%tviz * this%viz%vizcount - this%tsim
                 vizcond = .TRUE.
+                stability = 'vizdump'
+            end if
+
+            ! Check for statistics condition and adjust time step
+            if ( (this%tstats > zero) .AND. (this%tsim + this%dt >= this%tstats * statscount) ) then
+                this%dt = this%tstats * statscount - this%tsim
+                statscond = .TRUE.
+                stability = 'statsdump'
             end if
 
             ! Check tstop condition
@@ -754,11 +765,11 @@ contains
             !     end if
             ! end if
             
-            if (this%PTeqb) then
-                call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T)
-            else
-                call this%mix%relaxPressure(this%rho, this%e, this%p)
-            end if
+            !ADD! if (this%PTeqb) then
+            !ADD!     call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T)
+            !ADD! else
+            !ADD!     call this%mix%relaxPressure(this%rho, this%e, this%p)
+            !ADD! end if
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             call this%post_bc()
@@ -857,6 +868,7 @@ contains
         this%Wcnsrv(:,:,:,mom_index+1) = this%rho * this%v
         this%Wcnsrv(:,:,:,mom_index+2) = this%rho * this%w
         this%Wcnsrv(:,:,:, TE_index  ) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
+        
 
         ! add 2M (mass fraction and hydrodynamic energy) variables here
         call this%mix%get_conserved(this%rho)
@@ -866,15 +878,25 @@ contains
     subroutine post_bc(this)
         class(sgrid), intent(inout) :: this
 
-        call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
-        call this%mix%get_ehydro_from_p(this%rho)              ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
-        call this%mix%get_pmix(this%p)                         ! Get mixture pressure
-        call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
-        call this%mix%getSOS(this%rho,this%p,this%sos)
+        ! For efficiency, these should be called only if boundary rho, g, T have been updated. 
+        ! Also, only boundary values of energy, pressure, devstress, entropy should be updated.
+        
+        ! Get mixture energy, pressure, deviatoric stress, temperature and speed of sound
+        call this%mix%post_bc(this%rho, this%e, this%p, this%devstress, this%T, this%sos)
+
+        ! call this%mix%get_e_from_rho_g_T(this%rho, this%e)
+        ! call this%mix%get_p_devstress_T_sos(this%rho, this%e, this%devstress, this%sos)
+
+
+        ! call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
+        ! call this%mix%get_ehydro_from_p(this%rho)              ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
+        ! call this%mix%get_pmix(this%p)                         ! Get mixture pressure
+        ! call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
+        ! call this%mix%getSOS(this%rho,this%p,this%sos)
 
         ! assuming pressures have relaxed and sum( (Ys*(ehydro + eelastic) ) over all
         ! materials equals e
-        call this%mix%get_emix(this%e)
+        ! call this%mix%get_emix(this%e)
        
     end subroutine
 
@@ -906,12 +928,13 @@ contains
         if (this%PTeqb) then
             ! subtract elastic energies to determine mixture hydrostatic energy. conductivity 
             ! is assumed a function of only hydrostatic energy
-            ehmix => viscwork ! use some storage space
-            ehmix = this%e
-            do imat = 1, this%mix%ns
-                ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
-            enddo
-            call this%LAD%get_conductivity(this%rho,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
+            ! ehmix => viscwork ! use some storage space
+            ! ehmix = this%e
+            ! do imat = 1, this%mix%ns
+            !     ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
+            ! enddo
+            ! call this%LAD%get_conductivity(this%rho,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
+            call this%LAD%get_conductivity(this%rho,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
         end if
 
         ! Get tau tensor tensor. Put in off-diagonal components of duidxj (also get the viscous work term for energy equation)

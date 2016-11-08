@@ -1,7 +1,7 @@
 &INPUT
 
-inputdir  =  "/home/akshays/Data/PadeOps/impact_GEOS/elastic"      ! Directory for input files
-outputdir  = "/home/akshays/Data/PadeOps/impact_GEOS/elastic"      ! Directory for output files
+inputdir  =  "/home/akshays/Data/PadeOps/impact_GEOS/elastic_gTg"      ! Directory for input files
+outputdir  = "/home/akshays/Data/PadeOps/impact_GEOS/elastic_gTg"      ! Directory for output files
 
 nx = 201                  ! Number of points in X
 ny = 1                    ! Number of points in Y
@@ -39,11 +39,11 @@ Ckap     = 1.D-2          ! Coefficient for artificial thermal conductivity
 ns       = 1              ! Number of species
 PTeqb    = .TRUE.         ! Use pressure and temperature equilibrium?
 SOSmodel = .FALSE.        ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
-usegTg   = .FALSE.        ! Use the g^Tg formulation? (Finger tensor)
+usegTg   = .TRUE.         ! Use the g^Tg formulation? (Finger tensor)
 /
 
 &PROBINPUT
-uimpact = 300.D0          ! Normal impact velocity
+uimpact = 050.D0          ! Normal impact velocity
 gam     = 2.84D0          ! Ratio of specific heats
 Rgas    = 1.D0            ! Gas constant
 PInf    = 6.D8            ! P_infinity, material stiffness

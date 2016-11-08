@@ -1,6 +1,6 @@
 program test_derivatives_parallel
     use mpi
-    use kind_parameters, only : rkind
+    use kind_parameters, only : rkind, clen
     use decomp_2d
     use constants, only: pi, two
     use DerivativesMod, only: derivatives
@@ -17,12 +17,20 @@ program test_derivatives_parallel
     integer :: ierr, i, j, k
     real(rkind) :: maxerr, mymaxerr
     
+    character(len=clen) :: inputstring
     real(rkind) :: dx, dy, dz
 
     double precision :: t0, t1
 
     call MPI_Init(ierr)
-    
+   
+    if (IARGC() .GT. 1) then
+        print*, "Specify problem size as input argument!"
+        stop
+    end if
+    call GETARG(1,inputstring)
+    read(inputstring,*) nx; ny = nx; nz = nx
+
     call decomp_2d_init(nx, ny, nz, prow, pcol)
     call get_decomp_info(gp)
    

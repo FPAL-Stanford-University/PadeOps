@@ -4,8 +4,8 @@ module impact_data
     implicit none
     
     real(rkind) :: uimpact = 100._rkind
-    real(rkind) :: pinit   = real(1.0D5,rkind)
-    real(rkind) :: rho_0
+    real(rkind) :: pinit   = real(1.0D5,rkind), Tinit
+    real(rkind) :: rho0, gam, Rgas, PInf, mu, yield, tau0, K0, Cv, T0, B0, alpha, beta
 
 end module
 
@@ -54,45 +54,66 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PInf,tau0,tstop,dt,tviz)
-    use kind_parameters,  only: rkind
-    use constants,        only: zero,third,half,one,two,pi,eight
-    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
-                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
-    use decomp_2d,        only: decomp_info
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
+    use kind_parameters,        only: rkind
+    use constants,              only: zero,half,one
+    use exits,                  only: GracefulExit
+    use SolidGrid,              only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
+    use decomp_2d,              only: decomp_info
+    use SolidMixtureMod,        only: solid_mixture
+    use AbstractEOSMod,         only: abstracteos
+    use Sep1SolidEOSMod,        only: sep1solideos
+    use GodunovRomenskiiEOSMod, only: godromeos
     
     use impact_data
 
     implicit none
-    character(len=*),                                               intent(in)    :: inputfile
-    type(decomp_info),                                              intent(in)    :: decomp
-    real(rkind),                                                    intent(in)    :: dx,dy,dz
-    real(rkind),                                          optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz, yield, tau0
-    real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(in)    :: dx,dy,dz
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    type(solid_mixture),             intent(inout) :: mix
+    real(rkind),                     intent(inout) :: tstop, dt, tviz
 
-    integer :: ioUnit
+    ! class(abstracteos), allocatable :: eos
+    type(sep1solideos), allocatable :: eos
+    type(godromeos   ), allocatable :: eos2
+    integer :: eostype, ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
 
-    namelist /PROBINPUT/  uimpact
+    namelist /PROBINPUT/  eostype, uimpact, &
+                          gam, Rgas, PInf, rho0, mu, yield, tau0, &
+                          K0, Cv, T0, B0, alpha, beta
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
 
-    rho_0 = rho0
-
+    ! Need to set mixture density and velocities and set material eos, g, VF and T (and material energy if not using PTeqb)
     associate( rho => fields(:,:,:,rho_index),   u => fields(:,:,:,  u_index), &
                  v => fields(:,:,:,  v_index),   w => fields(:,:,:,  w_index), &
-                 p => fields(:,:,:,  p_index),   T => fields(:,:,:,  T_index), &
-                 e => fields(:,:,:,  e_index), g11 => fields(:,:,:,g11_index), &
-               g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
-               g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), & 
-               g23 => fields(:,:,:,g23_index), g31 => fields(:,:,:,g31_index), & 
-               g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
+                 e => fields(:,:,:,  e_index),                                 &
+                 p => mix%material(1)%p,         T => mix%material(1)%T,       &
+               g11 => mix%material(1)%g11, g12 => mix%material(1)%g12, g13 => mix%material(1)%g13, & 
+               g21 => mix%material(1)%g21, g22 => mix%material(1)%g22, g23 => mix%material(1)%g23, &
+               g31 => mix%material(1)%g31, g32 => mix%material(1)%g32, g33 => mix%material(1)%g33, & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-        
+     
+        select case(eostype)
+        case(1)
+            eos = sep1solideos(gam,Rgas,PInf,rho0,mu,yield,tau0,mix%usegTg)
+            call mix%set_material(1, eos)
+        case(2)
+            eos2 = godromeos(rho0,K0,Cv,T0,B0,alpha,beta,gam,mix%usegTg)
+            call mix%set_material(1, eos2)
+        case default
+            call GracefulExit("Only eostype = 1 (Sep1Solid) or 2 (GodunovRomenskii) are supported.",456)
+        end select
+        !allocate( eos, source=sep1solideos(gam,Rgas,PInf,rho0,mu,yield,tau0,mix%usegTg) )
+
+
         tmp = tanh( (x-half)/dx )
 
         u   = -uimpact*tmp
@@ -107,40 +128,59 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         ! Get rho compatible with det(g) and rho0
         tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
         rho = rho0 * tmp
+      
+        select case(eostype)
+        case(1)
+            ! Get temperature by first getting hydro energy
+            call eos%hydro%get_e_from_p(rho,p,e)
+            call eos%hydro%get_T(e,T,rho)
+        case(2)
+            T = T0
+        end select
+        Tinit = T(1,1,1)
 
+        ! Set volume fraction to one since only 1 material is present
+        mix%material(1)%VF = one
+
+        if(allocated(eos )) deallocate(eos )
+        if(allocated(eos2)) deallocate(eos2)
     end associate
 
 end subroutine
 
-subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
+subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
-    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
-                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use DerivativesMod,   only: derivatives
+    use SolidMixtureMod,  only: solid_mixture
 
     use impact_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
+    type(solid_mixture),             intent(in) :: mix
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
-    integer                                     :: outputunit=229
+    integer, dimension(2),           intent(in) :: x_bc,y_bc,z_bc
 
+    integer                                     :: outputunit=229
     character(len=clen) :: outputfile, velstr
     integer :: i
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
-                 p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
-                 e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
-                 bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
-               g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
-               g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
-               g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
+                 e => fields(:,:,:,  e_index),                                     &
+                 p => mix%material(1)%p,           T => mix%material(1)%T,         &
+                 mu  => fields(:,:,:, mu_index), bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+               g11 => mix%material(1)%g11, g12 => mix%material(1)%g12, g13 => mix%material(1)%g13, & 
+               g21 => mix%material(1)%g21, g22 => mix%material(1)%g22, g23 => mix%material(1)%g23, &
+               g31 => mix%material(1)%g31, g32 => mix%material(1)%g32, g33 => mix%material(1)%g33, & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         write(velstr,'(I3.3)') int(uimpact)
@@ -157,20 +197,22 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
     end associate
 end subroutine
 
-subroutine hook_bc(decomp,mesh,fields,tsim)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero, one
-    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
-                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use SolidMixtureMod,  only: solid_mixture
 
     use impact_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
-    real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    type(solid_mixture),             intent(inout) :: mix
+    real(rkind),                     intent(in)    :: tsim
+    integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
 
     integer :: nx
 
@@ -178,29 +220,31 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
-                 p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
-                 e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
-                 bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
-               g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
-               g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
-               g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
+                 e => fields(:,:,:,  e_index),                                     &
+                 p => mix%material(1)%p,           T => mix%material(1)%T,         &
+                 mu  => fields(:,:,:, mu_index), bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+               g11 => mix%material(1)%g11, g12 => mix%material(1)%g12, g13 => mix%material(1)%g13, & 
+               g21 => mix%material(1)%g21, g22 => mix%material(1)%g22, g23 => mix%material(1)%g23, &
+               g31 => mix%material(1)%g31, g32 => mix%material(1)%g32, g33 => mix%material(1)%g33, & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        rho( 1,:,:) = rho_0
+        rho( 1,:,:) = rho0
         u  ( 1,:,:) = uimpact
         v  ( 1,:,:) = zero
         w  ( 1,:,:) = zero
         p  ( 1,:,:) = pinit
+        T  ( 1,:,:) = Tinit
         
         g11( 1,:,:) = one;  g12( 1,:,:) = zero; g13( 1,:,:) = zero
         g21( 1,:,:) = zero; g22( 1,:,:) = one;  g23( 1,:,:) = zero
         g31( 1,:,:) = zero; g32( 1,:,:) = zero; g33( 1,:,:) = one
 
-        rho(nx,:,:) = rho_0
+        rho(nx,:,:) = rho0
         u  (nx,:,:) = -uimpact
         v  (nx,:,:) = zero
         w  (nx,:,:) = zero
         p  (nx,:,:) = pinit
+        T  (nx,:,:) = Tinit
         
         g11(nx,:,:) = one;  g12(nx,:,:) = zero; g13(nx,:,:) = zero
         g21(nx,:,:) = zero; g22(nx,:,:) = one;  g23(nx,:,:) = zero
@@ -209,10 +253,11 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,step,tsim)
+subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use kind_parameters,  only: rkind
-    use SolidGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use SolidMixtureMod,  only: solid_mixture
     use exits,            only: message
     use reductions,       only: P_MAXVAL
 
@@ -220,6 +265,7 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
+    type(solid_mixture),             intent(in) :: mix
     integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
@@ -227,9 +273,12 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
-                 p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
-                 e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
-                 bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+                 e => fields(:,:,:,  e_index),                                     &
+                 p => mix%material(1)%p,           T => mix%material(1)%T,         &
+                 mu  => fields(:,:,:, mu_index), bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+               g11 => mix%material(1)%g11, g12 => mix%material(1)%g12, g13 => mix%material(1)%g13, & 
+               g21 => mix%material(1)%g21, g22 => mix%material(1)%g22, g23 => mix%material(1)%g23, &
+               g31 => mix%material(1)%g31, g32 => mix%material(1)%g32, g33 => mix%material(1)%g33, & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
         call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
@@ -239,23 +288,72 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
     end associate
 end subroutine
 
-subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
+subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use kind_parameters,  only: rkind
-    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use SolidMixtureMod,  only: solid_mixture
+
+    implicit none
     type(decomp_info),               intent(in)    :: decomp
+    type(solid_mixture),             intent(in)    :: mix
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-    real(rkind), dimension(:,:,:,:), intent(inout) :: rhsg
-
-    associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
-                 v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
-                 p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
-                 e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
-                 bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
-                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-    end associate
 end subroutine
 
+subroutine hook_material_g_source(decomp,eos,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+    use kind_parameters,  only: rkind
+    use decomp_2d,        only: decomp_info
+    use AbstractEOSMod,   only: abstracteos
+
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    class(abstracteos),              intent(in)    :: eos
+    real(rkind),                     intent(in)    :: tsim
+    real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
+    real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
+    real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
+end subroutine
+
+subroutine hook_material_mass_source(decomp,eos,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+    use kind_parameters,  only: rkind
+    use decomp_2d,        only: decomp_info
+    use AbstractEOSMod,   only: abstracteos
+
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    class(abstracteos),              intent(in)    :: eos
+    real(rkind),                     intent(in)    :: tsim
+    real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
+    real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
+    real(rkind), dimension(:,:,:),   intent(inout) :: rhs
+end subroutine
+
+subroutine hook_material_VF_source(decomp,eos,x,y,z,tsim,u,v,w,Ys,VF,p,rhs)
+    use kind_parameters,  only: rkind
+    use decomp_2d,        only: decomp_info
+    use AbstractEOSMod,   only: abstracteos
+
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    class(abstracteos),              intent(in)    :: eos
+    real(rkind),                     intent(in)    :: tsim
+    real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
+    real(rkind), dimension(:,:,:),   intent(in)    :: u,v,w,Ys,VF,p
+    real(rkind), dimension(:,:,:),   intent(inout) :: rhs
+end subroutine
+
+subroutine hook_material_energy_source(decomp,eos,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+    use kind_parameters,  only: rkind
+    use decomp_2d,        only: decomp_info
+    use AbstractEOSMod,   only: abstracteos
+
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    class(abstracteos),              intent(in)    :: eos
+    real(rkind),                     intent(in)    :: tsim
+    real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
+    real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
+    real(rkind), dimension(:,:,:),   intent(inout) :: rhs
+end subroutine
