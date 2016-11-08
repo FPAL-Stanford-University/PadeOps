@@ -5,7 +5,7 @@ module impact_data
     
     real(rkind) :: uimpact = 100._rkind
     real(rkind) :: pinit   = real(1.0D5,rkind), Tinit
-    real(rkind) :: rho0, gam, Rgas, PInf, mu, yield, tau0
+    real(rkind) :: rho0, gam, Rgas, PInf, mu, yield, tau0, K0, Cv, T0, B0, alpha, beta
 
 end module
 
@@ -55,13 +55,15 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
-    use kind_parameters,  only: rkind
-    use constants,        only: zero,half,one
-    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
-    use decomp_2d,        only: decomp_info
-    use SolidMixtureMod,  only: solid_mixture
-    use Sep1SolidEOSMod,  only: sep1solideos
-    use AbstractEOSMod,   only: abstracteos
+    use kind_parameters,        only: rkind
+    use constants,              only: zero,half,one
+    use exits,                  only: GracefulExit
+    use SolidGrid,              only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
+    use decomp_2d,              only: decomp_info
+    use SolidMixtureMod,        only: solid_mixture
+    use AbstractEOSMod,         only: abstracteos
+    use Sep1SolidEOSMod,        only: sep1solideos
+    use GodunovRomenskiiEOSMod, only: godromeos
     
     use impact_data
 
@@ -76,10 +78,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     ! class(abstracteos), allocatable :: eos
     type(sep1solideos), allocatable :: eos
-    integer :: ioUnit
+    type(godromeos   ), allocatable :: eos2
+    integer :: eostype, ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
 
-    namelist /PROBINPUT/  uimpact, gam, Rgas, PInf, rho0, mu, yield, tau0
+    namelist /PROBINPUT/  eostype, uimpact, &
+                          gam, Rgas, PInf, rho0, mu, yield, tau0, &
+                          K0, Cv, T0, B0, alpha, beta
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -95,15 +100,19 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
                g21 => mix%material(1)%g21, g22 => mix%material(1)%g22, g23 => mix%material(1)%g23, &
                g31 => mix%material(1)%g31, g32 => mix%material(1)%g32, g33 => mix%material(1)%g33, & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-      
-        print*, "In Initfields"
-        eos = sep1solideos(gam,Rgas,PInf,rho0,mu,yield,tau0,mix%usegTg)
+     
+        select case(eostype)
+        case(1)
+            eos = sep1solideos(gam,Rgas,PInf,rho0,mu,yield,tau0,mix%usegTg)
+            call mix%set_material(1, eos)
+        case(2)
+            eos2 = godromeos(rho0,K0,Cv,T0,B0,alpha,beta,gam,mix%usegTg)
+            call mix%set_material(1, eos2)
+        case default
+            call GracefulExit("Only eostype = 1 (Sep1Solid) or 2 (GodunovRomenskii) are supported.",456)
+        end select
         !allocate( eos, source=sep1solideos(gam,Rgas,PInf,rho0,mu,yield,tau0,mix%usegTg) )
-        print*, "Allocated eos"
-        print*, "Cv = ", eos%hydro%Cv, "PInf = ", eos%hydro%PInf
 
-        call mix%set_material(1, eos)
-        print*, "Finished setting material eos"
 
         tmp = tanh( (x-half)/dx )
 
@@ -119,23 +128,22 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! Get rho compatible with det(g) and rho0
         tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
         rho = rho0 * tmp
-       
-        print*, "rho:", minval(rho), maxval(rho)
-
-        print*, "Get T"
-        ! Get temperature by first getting hydro energy
-        call eos%hydro%get_e_from_p(rho,p,e)
-        print*, "Got e"
-        print*, "e  :", minval(e  ), maxval(e  )
-        call eos%hydro%get_T(e,T,rho)
-        print*, "Got T"
-        print*, "T  :", minval(T  ), maxval(T  )
+      
+        select case(eostype)
+        case(1)
+            ! Get temperature by first getting hydro energy
+            call eos%hydro%get_e_from_p(rho,p,e)
+            call eos%hydro%get_T(e,T,rho)
+        case(2)
+            T = T0
+        end select
         Tinit = T(1,1,1)
 
         ! Set volume fraction to one since only 1 material is present
         mix%material(1)%VF = one
 
-        deallocate( eos )
+        if(allocated(eos )) deallocate(eos )
+        if(allocated(eos2)) deallocate(eos2)
     end associate
 
 end subroutine
