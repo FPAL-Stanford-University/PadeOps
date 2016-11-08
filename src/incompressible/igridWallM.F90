@@ -1314,6 +1314,8 @@ contains
             !call this%dump_stats()
             call this%compute_stats3D()
             call this%dump_stats3D()
+            call mpi_barrier(mpi_comm_world, ierr)
+            stop
         end if 
         
         if ( forceWrite .or. (mod(this%step,this%t_restartDump) == 0) ) then
@@ -1864,13 +1866,14 @@ contains
             this%runningSum_sc_turb = zero
             this%runningSum_turb    = zero
         endif
+        this%xspectra_mean = zero
         call message("Done init_stats3D")
     end subroutine
 
     subroutine compute_stats3D(this)
         class(igridWallM), intent(inout), target :: this
         real(rkind), dimension(:,:,:), pointer :: rbuff0, rbuff1, rbuff2, rbuff2E, rbuff3E, rbuff3, rbuff1E, rbuff4
-        integer :: i, k, jindx
+        integer :: j, k, jindx
 
         rbuff0  => this%rbuffxC(:,:,:,1); rbuff1  => this%rbuffxC(:,:,:,2);
         rbuff2  => this%rbuffyC(:,:,:,1);
@@ -2031,32 +2034,32 @@ contains
         jindx = 1    ! u
         call this%spectC%fft1_x2y(this%u,this%cbuffyC(:,:,:,1))
         do k = 1, size(this%cbuffyC, 3)
-          do i = 1, size(this%cbuffyC, 1)
-            this%xspectra_mean(i,jindx,k) = this%xspectra_mean(i,jindx,k) + sum(abs(this%cbuffyC(i,:,k,1)))
+          do j = 1, size(this%cbuffyC, 2)
+            this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
           end do
         end do
-        
+
         jindx = 2    ! v
         call this%spectC%fft1_x2y(this%v,this%cbuffyC(:,:,:,1))
         do k = 1, size(this%cbuffyC, 3)
-          do i = 1, size(this%cbuffyC, 1)
-            this%xspectra_mean(i,jindx,k) = this%xspectra_mean(i,jindx,k) + sum(abs(this%cbuffyC(i,:,k,1)))
+          do j = 1, size(this%cbuffyC, 2)
+            this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
           end do
         end do
         
         jindx = 3    ! w
         call this%spectC%fft1_x2y(this%wC,this%cbuffyC(:,:,:,1))
         do k = 1, size(this%cbuffyC, 3)
-          do i = 1, size(this%cbuffyC, 1)
-            this%xspectra_mean(i,jindx,k) = this%xspectra_mean(i,jindx,k) + sum(abs(this%cbuffyC(i,:,k,1)))
+          do j = 1, size(this%cbuffyC, 2)
+            this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
           end do
         end do
         
         jindx = 4    ! KE
         call this%spectC%fft1_x2y(half*(this%u**2+this%v**2+this%wC**2),this%cbuffyC(:,:,:,1))
         do k = 1, size(this%cbuffyC, 3)
-          do i = 1, size(this%cbuffyC, 1)
-            this%xspectra_mean(i,jindx,k) = this%xspectra_mean(i,jindx,k) + sum(abs(this%cbuffyC(i,:,k,1)))
+          do j = 1, size(this%cbuffyC, 2)
+            this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
           end do
         end do
         
@@ -2064,8 +2067,8 @@ contains
             jindx = 5    ! T
             call this%spectC%fft1_x2y(this%T,this%cbuffyC(:,:,:,1))
             do k = 1, size(this%cbuffyC, 3)
-              do i = 1, size(this%cbuffyC, 1)
-                this%xspectra_mean(i,jindx,k) = this%xspectra_mean(i,jindx,k) + sum(abs(this%cbuffyC(i,:,k,1)))
+              do j = 1, size(this%cbuffyC, 2)
+                this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
               end do
             end do
         endif
@@ -2232,9 +2235,10 @@ contains
       ! compute horizontal averages and dump .stt files
       ! overwrite previously written out 3D stats dump
         real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3, rbuff4, rbuff5, rbuff6
+        real(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)) :: tmpvar
         character(len=clen) :: tempname, fname
         real(rkind) :: tidSUMreal, normfac
-        integer :: tid, dirid, decompdir, jindx
+        integer :: tid, dirid, decompdir, jindx, nspectra
 
         tid = this%step
 
@@ -2567,32 +2571,46 @@ contains
         ! Dump horizontally averaged x-spectra
         dirid = 2; decompdir = 2
 
-        normfac = one/real(size(this%cbuffyC(:,:,:,1),2),rkind)/tidSUMreal
+
+        ! --- only 4 or 5 planes of xspextra_mean in y-direction are being used
+        if(this%isStratified) then
+           nspectra = 5
+        else
+           nspectra = 4
+        endif
+        ! --- for k1 = 1, multiplication factor is 1.0,
+        ! --- for k1 = 2:Nx/2+1, multiplication factor is 2.0
+        normfac = two/real(size(this%cbuffyC(:,:,:,1),2),rkind)/tidSUMreal
+        tmpvar(1:this%sp_gpC%ysz(1),1:nspectra,:) = normfac*this%xspectra_mean(1:this%sp_gpC%ysz(1),1:nspectra,:)
+        if(this%sp_gpC%yst(1)==1) then
+            tmpvar(1,1:nspectra,:) = half*tmpvar(1,1:nspectra,:)
+        endif
+
         jindx = 1 ! u
         write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specu_t",tid,".out"
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_plane(decompdir, normfac*this%xspectra_mean, dirid, jindx, fname)
+        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
 
         jindx = 2 ! v
         write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specv_t",tid,".out"
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_plane(decompdir, normfac*this%xspectra_mean, dirid, jindx, fname)
+        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
 
         jindx = 3 ! w
         write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specw_t",tid,".out"
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_plane(decompdir, normfac*this%xspectra_mean, dirid, jindx, fname)
+        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
 
         jindx = 4 ! KE
         write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_speck_t",tid,".out"
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_plane(decompdir, normfac*this%xspectra_mean, dirid, jindx, fname)
+        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
 
         if(this%isStratified) then
             jindx = 5 ! T
             write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specT_t",tid,".out"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_plane(decompdir, normfac*this%xspectra_mean, dirid, jindx, fname)
+            call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
         endif
 
     end subroutine
