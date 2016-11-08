@@ -234,7 +234,7 @@ contains
         real(rkind) :: Lz = 1.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true.
         integer :: tSystemInteractions = 1
-        logical :: computeSpectra = .false., timeAvgFullFields = .false. 
+        logical :: computeSpectra = .true., timeAvgFullFields = .true. 
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
