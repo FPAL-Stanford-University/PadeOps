@@ -118,15 +118,17 @@ contains
 
     end subroutine
 
-    subroutine plastic_deformation(this, gfull)
+    subroutine plastic_deformation(this, devstress, dt, invtau0, gfull)
         use constants, only: twothird
         use decomp_2d, only: nrank
         class(sep1solid), target, intent(in) :: this
+        real(rkind), dimension(:,:,:,:), intent(in) ::    devstress
         real(rkind), dimension(:,:,:,:), intent(inout) :: gfull
+        real(rkind),                     intent(in) ::    dt, invtau0
         real(rkind), dimension(3,3) :: g, u, vt, gradf
         real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new
         real(rkind), dimension(15)  :: work
-        real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t
+        real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t, ycrit_first, expfac
         real(rkind) :: tol = real(1.D-12,rkind), residual
         integer :: i,j,k
         integer :: iters, niters = 500
@@ -144,6 +146,18 @@ contains
         do k = 1,nzp
             do j = 1,nyp
                 do i = 1,nxp
+
+                    ! determine if plastic update is necessary
+                    expfac = (two/three)*(this%yield/this%mu)**2
+                    ycrit_first = devstress(i,j,k,1)**2 + devstress(i,j,k,4)**2 + devstress(i,j,k,6)**2 + &
+                           two * (devstress(i,j,k,2)**2 + devstress(i,j,k,3)**2 + devstress(i,j,k,5)**2)
+                    ycrit_first = ycrit_first/this%mu**2 - expfac
+                    
+                    if (ycrit_first .LE. zero) then
+                        ! print '(A)', 'Inconsistency in plastic algorithm, ycrit_first < 0!'
+                        cycle
+                    end if
+
                     g(1,1) = gfull(i,j,k,1); g(1,2) = gfull(i,j,k,2); g(1,3) = gfull(i,j,k,3)
                     g(2,1) = gfull(i,j,k,4); g(2,2) = gfull(i,j,k,5); g(2,3) = gfull(i,j,k,6)
                     g(3,1) = gfull(i,j,k,7); g(3,2) = gfull(i,j,k,8); g(3,3) = gfull(i,j,k,9)
@@ -160,14 +174,10 @@ contains
 
                     Sabymu_sq = sum(Sa**two) / this%mu**two
                     ycrit = Sabymu_sq - (two/three)*(this%yield/this%mu)**two
-
-                    if (ycrit .LE. zero) then
-                        ! print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
-                        cycle
-                    end if
+                    !if(dabs(ycrit-ycrit_first) > 1.0d-14) write(*,*) 'devstress inconsistent with stress from svd'
 
                     C0 = Sabymu_sq / ycrit
-                    Sa = Sa*( sqrt(C0 - one)/sqrt(C0) )
+                    Sa = Sa*( sqrt(C0 - one)/sqrt(C0 - exp(-two*expfac*dt*invtau0)) )
 
                     ! Now get new beta
                     f = Sa / (this%mu*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)

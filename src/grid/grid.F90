@@ -44,6 +44,10 @@ module GridMod
 
         integer                                              :: t_dataDump, t_restartDump
         
+        integer, dimension(2)                                :: x_bc = [0,0]       ! X boundary (0=standard, 1=symmetric,-1=antisymmetric)
+        integer, dimension(2)                                :: y_bc = [0,0]       ! Y boundary (0=standard, 1=symmetric,-1=antisymmetric)
+        integer, dimension(2)                                :: z_bc = [0,0]       ! Z boundary (0=standard, 1=symmetric,-1=antisymmetric)
+
         logical                                              :: SkewSymm 
         logical                                              :: ViscConsrv         ! Is the viscous term being computed using the conservative formulation? 
         

@@ -1,14 +1,22 @@
-module vorticitytest_data
+module ShockVortEntr_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,eight,third,half,two,twothird
+    use constants,        only: one,eight,third,half,two,twothird,pi
+    use FiltersMod,       only: filters
     implicit none
     
-    real(rkind) :: omega = 1._rkind
-    real(rkind) :: dxdyfixed = 1._rkind
     real(rkind) :: pinit   = real(1.0D5,rkind)
     real(rkind) :: rho_0
     real(rkind) :: p1 = real(1.D5,rkind), pRatio = 2.0_rkind, thick = one, xs = one
     real(rkind) :: rho1, rho2, u1, u2, g11_1, g11_2, p2
+    real(rkind) :: Av = 0.025_rkind, Ae = 0.025_rkind, psiang = 45.0_rkind*pi/180.0_rkind, k2wv = 1.0_rkind, k1wv = 1.0_rkind, sinpsi, cospsi
+    type(filters) :: mygfil
+
+    ! statistics
+    real(rkind), allocatable, dimension(:,:,:,:) :: vort
+    real(rkind), allocatable, dimension(:,:,:)   :: stats
+    real(rkind), allocatable, dimension(:,:)     :: umean
+    real(rkind)                                  :: tavg, tstatstart = 30.0_rkind
+    logical                                      :: istatstart = .FALSE., istatwritestart = .FALSE.
 
 contains
 
@@ -111,10 +119,10 @@ end module
 
 subroutine meshgen(decomp, dx, dy, dz, mesh)
     use kind_parameters,  only: rkind
-    use constants,        only: half,one
+    use constants,        only: half,one,pi
     use decomp_2d,        only: decomp_info
 
-    use vorticitytest_data
+    use ShockVortEntr_data
 
     implicit none
 
@@ -126,8 +134,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
     real(rkind) :: xa, xb, yc, yd
 
-    xa = -1.0D0; xb = 1.0D0
-    yc = -1.0D0; yd = 1.0D0
+    xa = 0.0D0; xb = 4.0D0*pi+1.0D0
+    yc = -pi; yd = pi
 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
@@ -141,7 +149,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         dx = (xb-xa)/real(nx-1,rkind)
-        dy = (yd-yc)/real(ny-1,rkind)
+        dy = (yd-yc)/real(ny,rkind)
         dz = dx
 
         do k=1,size(mesh,3)
@@ -163,9 +171,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     use constants,        only: zero,third,half,one,two,pi,eight,seven
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
-    use decomp_2d,        only: decomp_info
+    use decomp_2d,        only: decomp_info, nrank
     
-    use vorticitytest_data
+    use ShockVortEntr_data
 
     implicit none
     character(len=*),                                               intent(in)    :: inputfile
@@ -177,20 +185,31 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
 
     integer :: ioUnit, i, j, k, nx
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
-    real(rkind) :: stp_x,bkstp_x,bkstp_y,phiang,v1,v2,rad,stp_r1,bkstp_r2,regfrac,dxdy
-    real(rkind) :: p_star, grho1, grho2, u1vrt, u2vrt, v1vrt, v2vrt
+    real(rkind) :: stp_x,bkstp_x,bkstp_y,phiang,rad,stp_r1,bkstp_r2,regfrac,dxdy
+    real(rkind) :: p_star, grho1, grho2
     integer, dimension(2) :: iparams
     real(rkind), dimension(8) :: fparams
 
-    namelist /PROBINPUT/  omega, dxdyfixed, pRatio, p1, thick, xs
+    namelist /PROBINPUT/  pRatio, p1, thick, xs, Av, Ae, psiang, k1wv, k2wv, tstatstart
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
 
-    rho_0 = rho0
+    ! Initialize mygfil
+    call mygfil%init(                        decomp, &
+                     .FALSE.,     .TRUE.,    .TRUE., &
+                  "gaussian", "gaussian", "gaussian" )
 
+    ! Initialize arrays for statistics
+    allocate(vort(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),3))
+    allocate(stats(decomp%ysz(1),decomp%ysz(3),2))
+    allocate(umean(decomp%ysz(1),3))
+    tavg = zero
+    stats = zero
+
+    rho_0 = rho0
     associate( rho => fields(:,:,:,rho_index),   u => fields(:,:,:,  u_index), &
                  v => fields(:,:,:,  v_index),   w => fields(:,:,:,  w_index), &
                  p => fields(:,:,:,  p_index),   T => fields(:,:,:,  T_index), &
@@ -211,45 +230,45 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         fparams(1) = rho1; fparams(2) = u1; fparams(3) = p1
         fparams(4) = rho0; fparams(5) = gam; fparams(6) = PInf; fparams(7) = mu;
         fparams(8) = p2
-        rho2 = rho1*min(one + p1/PInf, one) ! Init guess
+        if(PInf<1.0d-10) then
+            rho2 = rho1 ! Init guess
+        else
+            rho2 = rho1*min(one + p1/PInf, one) ! Init guess
+        endif
         call rootfind_nr_1d(rho2,fparams,iparams)
-        write(*,*) 'After root finding: ', rho2
+        if(nrank==0) write(*,*) 'After root finding: ', rho2
         g11_1 = fparams(1)/fparams(4);   grho1 = g11_1**real(11.D0/3.D0,rkind) - g11_1**(-third) - g11_1**(seven*third) + g11_1**third
         g11_2 = rho2/fparams(4);         grho2 = g11_2**real(11.D0/3.D0,rkind) - g11_2**(-third) - g11_2**(seven*third) + g11_2**third
-        u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*mu*(grho1-grho2)))
+        u2 = sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*mu*(grho1-grho2)))
         u1 = rho2*u2/rho1
 
-        print*, "Mass flux: ", rho1*u1, rho2*u2
-        print*, "Momentum flux: ", rho1*u1*u1+p1, rho2*u2*u2+p2
-        print*, "g flux: ", g11_1*u1, g11_2*u2
-
-        ! write out solution of nonlinear problem, used to initialize the
-        ! simulation
-        print*, "rho1 = ", rho1
-        print*, "rho2 = ", rho2
-        print*, "u1 = ", u1
-        print*, "u2 = ", u2
-        print*, "p1 = ", p1
-        print*, "p2 = ", p2
-        print*, "a1 = ", sqrt((gam*(p1+Pinf)+4.0_rkind/3.0_rkind*mu)/rho1)
-        print*, "a2 = ", sqrt((gam*(p2+Pinf)+4.0_rkind/3.0_rkind*mu)/rho2)
-        print*, "M1 = ", u1/sqrt((gam*(p1+Pinf)+4.0_rkind/3.0_rkind*mu)/rho1)
-        print*, "M2 = ", u2/sqrt((gam*(p2+Pinf)+4.0_rkind/3.0_rkind*mu)/rho2)
-        print*, "Pinf = ", PInf
+        if(nrank==0) then
+          ! write out solution of nonlinear problem, used to initialize the
+          ! simulation
+          print*, "Mass flux: ", rho1*u1, rho2*u2
+          print*, "Momentum flux: ", rho1*u1*u1+p1, rho2*u2*u2+p2
+          print*, "g flux: ", g11_1*u1, g11_2*u2
+          print*, "rho1 = ", rho1
+          print*, "rho2 = ", rho2
+          print*, "u1 = ", u1
+          print*, "u2 = ", u2
+          print*, "p1 = ", p1
+          print*, "p2 = ", p2
+          print*, "a1 = ", sqrt((gam*(p1+Pinf)+4.0_rkind/3.0_rkind*mu)/rho1)
+          print*, "a2 = ", sqrt((gam*(p2+Pinf)+4.0_rkind/3.0_rkind*mu)/rho2)
+          print*, "M1 = ", u1/sqrt((gam*(p1+Pinf)+4.0_rkind/3.0_rkind*mu)/rho1)
+          print*, "M2 = ", u2/sqrt((gam*(p2+Pinf)+4.0_rkind/3.0_rkind*mu)/rho2)
+          print*, "Pinf = ", PInf
+        endif
 
         ! initialize shock at xs
         tmp = half * ( one + erf( (x-xs)/(thick*dx) ) )
 
-        u   = (one-tmp)*  (u2-u1) ! + tmp*  u1
-        rho = (one-tmp)*rho2 + tmp*rho1
+        u   = (one-tmp)*u1   + tmp*u2
+        rho = (one-tmp)*rho1 + tmp*rho2
         v   = zero
         w   = zero
-        p   = (one-tmp)*  p2 + tmp*  p1
-
-        !! add vorticity/entropy fluctuations starting from xe
-        !tmp = half * ( one + erf( (x-xe)/(eps*dx) ) )
-
-        !rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe)))
+        p   = (one-tmp)*p1   + tmp*p2
 
         rho1 = rho(decomp%yen(1),1,1)
         u1   = u  (decomp%yen(1),1,1)
@@ -265,78 +284,51 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
 
         rho_0 = rho0
 
-        ! tmp = sqrt( (gam*(p+pInf) + four/three * mu)/rho )    ! Speed of sound
-        ! tfactor = one / minval(tmp)
-        ! tstop = tstop * tfactor
-        ! tviz = tviz * tfactor
-
-        print*, "rho diff: ", (rho(1,1,1) - rho2)/rho2
-
-        print*, "tviz = ", tviz
-        print*, "tstop = ", tstop
+        if(nrank==0) then
+          print*, "tviz = ", tviz
+          print*, "tstop = ", tstop
+        endif
 
         ! store state variables at boundaries for use in hooks_bc
         nx = decomp%ysz(1)
-        rho1 = rho(nx,1,1); u1 = u(nx,1,1); p1 = p(nx,1,1); g11_1 = rho1/rho0
-        rho2 = rho( 1,1,1); u2 = u( 1,1,1); p2 = p( 1,1,1); g11_2 = rho2/rho0
+        rho2 = rho(nx,1,1); u2 = u(nx,1,1); p2 = p(nx,1,1); g11_2 = rho2/rho0
+        rho1 = rho( 1,1,1); u1 = u( 1,1,1); p1 = p( 1,1,1); g11_1 = rho2/rho0
+
+        ! store base state for computation of fluctuating ke
+        umean(:,1) = u(:,1,1);     umean(:,2) = v(:,1,1);     umean(:,3) = w(:,1,1)
 
 
-        tmp = tanh( (x-half)/dx )
+        ! Add vorticity/entropy fluctuations
+        psiang = psiang*pi/180.0_rkind
+        sinpsi = sin(psiang); cospsi = cos(psiang)
+        k1wv = k2wv/tan(psiang)
+        if(nrank==0) write(*,*) '(k1, k2): ', k1wv, k2wv
 
         do k=1,decomp%ysz(3)
          do j=1,decomp%ysz(2)
           do i=1,decomp%ysz(1)
 
-             stp_x = half*(tanh((x(i,j,k)-zero)/dx) + one)
-             bkstp_x = one - half*(tanh((x(i,j,k)-zero)/dx) + one)
-             bkstp_y = one - half*(tanh((y(i,j,k)-zero)/dx) + one)
-
-             !phiang = atan(y(i,j,k)/(x(i,j,k)+1.0D-32)) + pi*bkstp_x + two*pi*stp_x*bkstp_y
-             phiang = atan2(y(i,j,k), (x(i,j,k)+1.0D-32))
-
-             u1vrt = -omega*y(i,j,k); u2vrt = zero
-             v1vrt = omega*x(i,j,k); v2vrt = zero
-             
-             rad = sqrt(x(i,j,k)**2+y(i,j,k)**2); 
-             dxdy = sqrt(dx**2+dy**2)
-             if(dxdyfixed>zero) dxdy = dxdyfixed
-             stp_r1 = half*(tanh((rad-(0.05d0+two*dxdy))/dxdy) + one)
-             regfrac = stp_r1
-
-             u(i,j,k)   = u(i,j,k) + (u1vrt+regfrac*(u2vrt-u1vrt))
-             v(i,j,k)   = v(i,j,k) + (v1vrt+regfrac*(v2vrt-v1vrt))
-             !if((i==20  .and. abs(y(i,j,k))<1.0d-10) .or. &
-             !   (i==30  .and. abs(y(i,j,k))<1.0d-10)) then
-             !  write(*,*) '----------'
-             !  write(*,*) i, j, k
-             !  write(*,*) x(i,j,k), y(i,j,k)
-             !  write(*,*) 'stpx=', stp_x, bkstp_x, bkstp_y
-             !  write(*,*) 'atan=', atan(y(i,j,k)/(x(i,j,k)+1.0D-32))
-             !  write(*,*) phiang, u1vrt, v1vrt
-             !  write(*,*)
-             !  write(*,*) rad, stp_r1, bkstp_r2, regfrac
-             !  write(*,*) u(i,j,k), v(i,j,k)
-             !  write(*,*) '----------'
-             !endif
+             rho(i,j,k) = rho(i,j,k) + rho1 * Ae *          cos(k1wv*x(i,j,k) + k2wv*y(i,j,k))
+             u(i,j,k)   = u(i,j,k)   +   u1 * Av * sinpsi * cos(k1wv*x(i,j,k) + k2wv*y(i,j,k))
+             v(i,j,k)   =            -   u1 * Av * cospsi * cos(k1wv*x(i,j,k) + k2wv*y(i,j,k))
           end do 
          end do 
         end do 
-        !w   = zero
-        !p   = pinit
 
-        !g11 = one;  g12 = zero; g13 = zero
-        !g21 = zero; g22 = one;  g23 = zero
-        !g31 = zero; g32 = zero; g33 = one
+        !!g11 = one;  g12 = zero; g13 = zero
+        !!g21 = zero; g22 = one;  g23 = zero
+        !!g31 = zero; g32 = zero; g33 = one
 
-        !! Get rho compatible with det(g) and rho0
-        !tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
-        !rho = rho0 * tmp
+        !!! Get rho compatible with det(g) and rho0
+        !!tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
+        !!rho = rho0 * tmp
+        g11 = rho/rho0
 
     end associate
 
 end subroutine
 
-subroutine filter(decomp,arr,myfil,numtimes,x_bc_,y_bc_,z_bc_)
+subroutine filter(decomp,myfil,arr,numtimes,x_bc_,y_bc_,z_bc_)
     use kind_parameters,  only: rkind
     use decomp_2d,        only: decomp_info, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use FiltersMod,       only: filters
@@ -460,12 +452,12 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index, &
                                 sxx_index,sxy_index,sxz_index,syy_index,syz_index,szz_index
-    use decomp_2d,        only: decomp_info, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
+    use decomp_2d,        only: decomp_info, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y, nrank
     use DerivativesMod,   only: derivatives
     use FiltersMod,       only: filters
     use operators,        only: curl
 
-    use vorticitytest_data
+    use ShockVortEntr_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -504,12 +496,16 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
         allocate(curlg(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),9))
         allocate(detg(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)))
 
+        ! compute vorticity
+        call curl(decomp, der, u,   v,   w,   vort, x_bc, y_bc, z_bc)
+
+        ! compute curl of g
         call curl(decomp, der, g11, g12, g13, curlg(:,:,:,1:3),-x_bc, y_bc, z_bc)
         call curl(decomp, der, g21, g22, g23, curlg(:,:,:,4:6), x_bc,-y_bc, z_bc)
         call curl(decomp, der, g31, g32, g33, curlg(:,:,:,7:9), x_bc, y_bc,-z_bc)
 
 
-        write(velstr,'(I3.3)') int(1.0_rkind)
+        write(velstr,'(I3.3)') nrank
         write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/vort_"//trim(velstr)//"_", vizcount, ".dat"
 
         detg = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
@@ -554,39 +550,70 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
         !! ------debug block------
 
         if(vizcount==0) then
-          open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
-          write(outputunit,'(290a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar","curlg11","curlg12","curlg13","curlg21","curlg22","curlg23","curlg31","curlg32","curlg33","conterr"'
+          write(outputfile,'(2A)') trim(outputdir),"/tec_vort_"//trim(velstr)//".dat"
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='unknown')
+          write(outputunit,'(290a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar","curlg11","curlg12","curlg13","curlg21","curlg22","curlg23","curlg31","curlg32","curlg33","conterr","vort"'
           write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
           write(outputunit,'(a,ES27.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
           do k=1,decomp%ysz(3)
            do j=1,decomp%ysz(2)
             do i=1,decomp%ysz(1)
-                write(outputunit,'(37ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                write(outputunit,'(38ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
                                                g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
                                                sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), curlg(i,j,k,1:9), &
-                                               rho(i,j,k)-rho_0*detg(i,j,k)
+                                               rho(i,j,k)-rho_0*detg(i,j,k), vort(i,j,k,3)
           
             end do
            end do
           end do
           close(outputunit)
         else
-          open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
+          write(outputfile,'(2A)') trim(outputdir),"/tec_vort_"//trim(velstr)//".dat"
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED', STATUS='old', ACTION='write', POSITION='append')
           write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
           write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
           write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
           do k=1,decomp%ysz(3)
            do j=1,decomp%ysz(2)
             do i=1,decomp%ysz(1)
-                write(outputunit,'(34ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                write(outputunit,'(35ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
                                                g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
                                                sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), curlg(i,j,k,1:9), &
-                                               rho(i,j,k)-rho_0*detg(i,j,k)
+                                               rho(i,j,k)-rho_0*detg(i,j,k), vort(i,j,k,3)
           
             end do
            end do
           end do
           close(outputunit)
+        endif
+
+        ! write out statistics
+        if(tsim > tstatstart) then
+          write(outputfile,'(2A)') trim(outputdir),"/tec_stats_"//trim(velstr)//".dat"
+          if(.not. istatwritestart) then
+            istatwritestart = .TRUE.
+            open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='unknown')
+            write(outputunit,'(90a)') 'VARIABLES="x","z","vort_sq","ke","vort_sq_norm","ke_norm"'
+            write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+            write(outputunit,'(a,ES27.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+            do k=1,decomp%ysz(3)
+              do i=1,decomp%ysz(1)
+                  write(outputunit,'(38ES26.16)') x(i,1,k), z(i,1,k), stats(i,k,1)/tavg, stats(i,k,2)/tavg, stats(i,k,1)/stats(1,k,1), stats(i,k,2)/stats(1,k,2)
+              enddo
+            enddo
+          else
+            open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='old',ACTION='write',POSITION='append')
+            write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+            write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+            write(outputunit,'(a)') ' VARSHARELIST=([1, 2]=1)'
+            do k=1,decomp%ysz(3)
+              do i=1,decomp%ysz(1)
+                  write(outputunit,'(38ES26.16)') stats(i,k,1)/tavg, stats(i,k,2)/tavg, stats(i,k,1)/stats(1,k,1), stats(i,k,2)/stats(1,k,2)
+              enddo
+            enddo
+          endif
+          close(outputunit)
+          if(nrank==0) write(*,*) "Done writing statistics to "//trim(outputfile)
         endif
 
         deallocate(curlg,detg)
@@ -600,7 +627,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
 
-    use vorticitytest_data
+    use ShockVortEntr_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -609,9 +636,12 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     integer, dimension(2),       intent(in)    :: x_bc, y_bc, z_bc
 
-    integer :: nx, ny
+    integer :: nx, ny, ax, i, j, k
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
+    real(rkind) :: dx, xspng, tspng
 
-    nx = decomp%ysz(1); ny = decomp%ysz(2)
+    nx = decomp%xsz(1); ny = decomp%ysz(2)
+    ax = decomp%ysz(1)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -624,67 +654,132 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         ! left x
-        rho( 1,:,:) = rho2
-        u  ( 1,:,:) = u2
-        v  ( 1,:,:) = zero
-        w  ( 1,:,:) = zero
-        p  ( 1,:,:) = p2
-        
-        g11( 1,:,:) = g11_2;  g12( 1,:,:) = zero; g13( 1,:,:) = zero
-        g21( 1,:,:) = zero;   g22( 1,:,:) = one;  g23( 1,:,:) = zero
-        g31( 1,:,:) = zero;   g32( 1,:,:) = zero; g33( 1,:,:) = one
+        if(decomp%yst(1)==1) then
+         if(x_bc(1)==0) then
+            do k=1,decomp%ysz(3)
+             do j=1,decomp%ysz(2)
+               rho(1,j,k) = rho1 + rho1 * Ae *          cos(k2wv*y(1,j,k) - k1wv*u1*tsim)
+                 u(1,j,k) =   u1 +   u1 * Av * sinpsi * cos(k2wv*y(1,j,k) - k1wv*u1*tsim)
+                 v(1,j,k) =      -   u1 * Av * cospsi * cos(k2wv*y(1,j,k) - k1wv*u1*tsim)
+                 p(1,:,:) = p1
+             end do 
+            end do 
 
+            g11( 1,:,:) = g11_1;  g12( 1,:,:) = zero; g13( 1,:,:) = zero
+            g21( 1,:,:) = zero;   g22( 1,:,:) = one;  g23( 1,:,:) = zero
+            g31( 1,:,:) = zero;   g32( 1,:,:) = zero; g33( 1,:,:) = one
+
+         endif
+        endif
+        
         ! right x
-        rho(nx,:,:) = rho1
-        u  (nx,:,:) = u1
-        v  (nx,:,:) = zero
-        w  (nx,:,:) = zero
-        p  (nx,:,:) = p1
+        xspng = 4.0*pi+0.5_rkind
+        tspng = 0.5_rkind
+        dx = x(2,1,1)-x(1,1,1)
+        dum = half*(one + tanh((x-xspng)/tspng))
+        if(decomp%yen(1)==nx) then
+         if(x_bc(2)==0) then
+            rho(ax,:,:) = rho(ax-1,:,:)
+            u  (ax,:,:) = u(ax-1,:,:)
+            v  (ax,:,:) = zero
+            w  (ax,:,:) = zero
+            p  (ax,:,:) = p(ax-1,:,:)
+            
+            g11(ax,:,:) = g11_2;  g12(ax,:,:) = zero; g13(ax,:,:) = zero
+            g21(ax,:,:) = zero;   g22(ax,:,:) = one;  g23(ax,:,:) = zero
+            g31(ax,:,:) = zero;   g32(ax,:,:) = zero; g33(ax,:,:) = one
+
+         endif
+        endif
         
-        g11(nx,:,:) = g11_1;  g12(nx,:,:) = zero; g13(nx,:,:) = zero
-        g21(nx,:,:) = zero;   g22(nx,:,:) = one;  g23(nx,:,:) = zero
-        g31(nx,:,:) = zero;   g32(nx,:,:) = zero; g33(nx,:,:) = one
 
-        !! bottom y
-        !rho( :,1,:) = rho_0
-        !u  ( :,1,:) = zero
-        !v  ( :,1,:) = zero
-        !w  ( :,1,:) = zero
-        !p  ( :,1,:) = pinit
-        !
-        !g11( :,1,:) = one;  g12( :,1,:) = zero; g13( :,1,:) = zero
-        !g21( :,1,:) = zero; g22( :,1,:) = one;  g23( :,1,:) = zero
-        !g31( :,1,:) = zero; g32( :,1,:) = zero; g33( :,1,:) = one
+        do i=1,4
+            tmp = u
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            u = u + dum*(tmp - u)
 
-        !! top y
-        !rho( :,ny,:) = rho_0
-        !u  ( :,ny,:) = zero
-        !v  ( :,ny,:) = zero
-        !w  ( :,ny,:) = zero
-        !p  ( :,ny,:) = pinit
-        !
-        !g11( :,ny,:) = one;  g12( :,ny,:) = zero; g13( :,ny,:) = zero
-        !g21( :,ny,:) = zero; g22( :,ny,:) = one;  g23( :,ny,:) = zero
-        !g31( :,ny,:) = zero; g32( :,ny,:) = zero; g33( :,ny,:) = one
+            tmp = v
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            v = v + dum*(tmp - v)
+
+            tmp = w
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            w = w + dum*(tmp - w)
+
+            tmp = e
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            e = e + dum*(tmp - e)
+
+            tmp = rho
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            rho = rho + dum*(tmp - rho)
+
+            tmp = p
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            p = p + dum*(tmp - p)
+
+            tmp = g11(:,:,:)
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            g11(:,:,:) = g11(:,:,:) + dum*(tmp - g11(:,:,:))
+
+            tmp = g12(:,:,:)
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            g12(:,:,:) = g12(:,:,:) + dum*(tmp - g12(:,:,:))
+
+            tmp = g13(:,:,:)
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            g13(:,:,:) = g13(:,:,:) + dum*(tmp - g13(:,:,:))
+
+            tmp = g21(:,:,:)
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            g21(:,:,:) = g21(:,:,:) + dum*(tmp - g21(:,:,:))
+
+            tmp = g22(:,:,:)
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            g22(:,:,:) = g22(:,:,:) + dum*(tmp - g22(:,:,:))
+
+            tmp = g23(:,:,:)
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            g23(:,:,:) = g23(:,:,:) + dum*(tmp - g23(:,:,:))
+
+            tmp = g31(:,:,:)
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            g31(:,:,:) = g31(:,:,:) + dum*(tmp - g31(:,:,:))
+
+            tmp = g32(:,:,:)
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            g32(:,:,:) = g32(:,:,:) + dum*(tmp - g32(:,:,:))
+
+            tmp = g33(:,:,:)
+            call filter(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            g33(:,:,:) = g33(:,:,:) + dum*(tmp - g33(:,:,:))
+        end do
 
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,step,tsim)
+subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use SolidGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
-    use decomp_2d,        only: decomp_info
+    use decomp_2d,        only: decomp_info, nrank
     use exits,            only: message
     use reductions,       only: P_MAXVAL
+    use DerivativesMod,   only: derivatives
+    use operators,        only: curl
 
-    use vorticitytest_data
+    use ShockVortEntr_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
     integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
+    real(rkind),                     intent(in) :: dt
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    integer,     dimension(2),       intent(in) :: x_bc, y_bc, z_bc
+
+    integer :: i, k
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -696,6 +791,32 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
         call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
         call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
         call message(2,"Maximum conductivity",P_MAXVAL(kap))
+
+        if(tsim > tstatstart) then
+          write(*,*) '------'
+          write(*,*) 'vort3: ', maxval(vort(:,:,:,3)), minval(vort(:,:,:,3))
+          write(*,*) 'u    : ', maxval(u(:,:,:)), minval(u(:,:,:))
+          write(*,*) 'v    : ', maxval(v(:,:,:)), minval(v(:,:,:))
+          write(*,*) 'w    : ', maxval(w(:,:,:)), minval(w(:,:,:))
+          write(*,*) 'ke   : ', sum(u(i,:,k)*u(i,:,k) + v(i,:,k)*v(i,:,k) + w(i,:,k)*w(i,:,k))
+          if(.not. istatstart) then
+            if(nrank==0) write(*,*) "Started collecting statistics at t = ", tsim
+            istatstart = .TRUE.
+          endif
+          ! compute vorticity
+          call curl(decomp, der, u,   v,   w,   vort, x_bc, y_bc, z_bc)
+          do k = 1, decomp%ysz(3)
+            do i = 1, decomp%ysz(1)
+                stats(i,k,1) = stats(i,k,1) + dt * sum(vort(i,:,k,3)*vort(i,:,k,3))/real(decomp%ysz(2),rkind)
+                stats(i,k,2) = stats(i,k,2) + dt * sum((u(i,:,k)-umean(i,1))**2 + (v(i,:,k)-umean(i,2))**2 + (w(i,:,k)-umean(i,3))**2)/real(decomp%ysz(2),rkind)
+            enddo
+          enddo
+          tavg = tavg + dt
+          write(*,*) 'dtavg: ', dt, tavg
+          write(*,*) 'stat1: ', maxval(stats(:,:,1)), minval(stats(:,:,1))
+          write(*,*) 'stat2: ', maxval(stats(:,:,2)), minval(stats(:,:,2))
+          write(*,*) '------'
+        endif
 
     end associate
 end subroutine
@@ -720,6 +841,11 @@ subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
     end associate
 end subroutine
 
-subroutine hook_finalize
+subroutine hook_finalize()
 
-end subroutine 
+    use ShockVortEntr_data
+
+    deallocate(vort,stats,umean)
+
+end subroutine
+
