@@ -150,6 +150,8 @@ module IncompressibleGridWallM
         logical :: AlreadyHaveRHS = .false.
         real(rkind), dimension(:,:,:), allocatable :: pressure  
 
+        ! Stats
+        logical :: timeAvgFullFields, computeSpectra
 
         ! System Interactions 
         logical :: useSystemInteractions = .false. 
@@ -232,12 +234,13 @@ contains
         real(rkind) :: Lz = 1.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true.
         integer :: tSystemInteractions = 1
+        logical :: computeSpectra = .false., timeAvgFullFields = .false. 
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, &
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
-        namelist /STATS/ tid_StatsDump, tid_compStats, tSimStartStats, normStatsByUstar
+        namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, &
                           useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz
         namelist /BCs/ topWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp
@@ -275,7 +278,8 @@ contains
         this%CFL = CFL; this%dumpPlanes = dumpPlanes; this%useGeostrophicForcing = useGeostrophicForcing
         this%timeSteppingScheme = timeSteppingScheme; this%useSystemInteractions = useSystemInteractions
         this%tSystemInteractions = tSystemInteractions; this%storePressure = storePressure
-        this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq
+        this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq; this%timeAvgFullFields = timeAvgFullFields
+        this%computeSpectra = computeSpectra
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -293,14 +297,6 @@ contains
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
         this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; this%t_pointProbe = t_pointProbe
 
-        if (this%useSystemInteractions) then
-            if ((trim(controlDir) .eq. "null") .or.(trim(ControlDir) .eq. "NULL")) then
-                this%controlDir = this%outputDir
-                call message(1,"WARNING: No directory specified for OS_CONTROL instructions. Default is set to OUTPUT Directory")
-            else
-                this%controlDir = controlDir
-            end if
-        end if 
 
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
@@ -308,6 +304,15 @@ contains
         call decomp_2d_init(nx, ny, nz, prow, pcol)
         call get_decomp_info(this%gpC)
         call decomp_info_init(nx,ny,nz+1,this%gpE)
+        
+        if (this%useSystemInteractions) then
+            if ((trim(controlDir) .eq. "null") .or.(trim(ControlDir) .eq. "NULL")) then
+                this%controlDir = this%outputDir
+                call message(0,"WARNING: No directory specified for OS_CONTROL instructions. Default is set to OUTPUT Directory")
+            else
+                this%controlDir = controlDir
+            end if
+        end if 
         
         if (mod(nx,2) .ne. 0) then
             call GracefulExit("The code hasn't been tested for odd values of Nx. Crazy shit could happen.", 423)
@@ -470,10 +475,10 @@ contains
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
         if (useCompactFD) then
             allocate(this%padepoiss)
-            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, this%derW, computeStokesPressure, Lz) 
+            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, this%derW, computeStokesPressure, Lz, this%storePressure, this%gpC) 
         else    
             allocate(this%poiss)
-            call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE, .true.)  
+            call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE, computeStokesPressure, this%gpC)  
         end if 
                
         ! STEP 7: INITIALIZE THE FIELDS
@@ -642,8 +647,11 @@ contains
             call GracefulExit("Invalid choice of TIMESTEPPINGSCHEME.",5235)
         end if 
 
-        
-        ! STEP 16: Set up storage for Pressure
+        ! STEP 16: Initialize Statistics
+        !call this%init_stats()
+        call this%init_stats3D()
+
+        ! STEP 17: Set up storage for Pressure
         if (this%storePressure) then
             allocate(this%Pressure(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             call this%ComputePressure()
@@ -805,7 +813,6 @@ contains
         zbuffC => this%cbuffzC(:,:,:,1)
         ybuffC => this%cbuffyC(:,:,:,1)
 
-
         ! Step 1: Interpolate w -> wC
         call transpose_y_to_z(this%what,zbuffE,this%sp_gpE)
         if (useCompactFD) then
@@ -861,7 +868,6 @@ contains
         end if 
     end subroutine
 
-
     subroutine printDivergence(this)
         class(igridWallM), intent(inout) :: this
         if (useCompactFD) then
@@ -870,7 +876,6 @@ contains
             call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
         end if 
     end subroutine 
-
 
     subroutine destroy(this)
         class(igridWallM), intent(inout) :: this
@@ -1780,16 +1785,18 @@ contains
         use exits, only: message
         class(igridWallM), intent(inout), target :: this
 
-        if (this%isStratified) then
-            allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),31))
-            allocate(this%horzavgstats(this%nz,33))
-            allocate(this%inst_horz_avg(5))
-            allocate(this%runningSum_sc(5))
-        else
-            allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),23))
-            allocate(this%horzavgstats(this%nz,25))
-            allocate(this%inst_horz_avg(3))
-            allocate(this%runningSum_sc(3))
+        if (this%timeAvgFullFields) then
+            if (this%isStratified) then
+                allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),31))
+                allocate(this%horzavgstats(this%nz,33))
+                allocate(this%inst_horz_avg(5))
+                allocate(this%runningSum_sc(5))
+            else
+                allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),23))
+                allocate(this%horzavgstats(this%nz,25))
+                allocate(this%inst_horz_avg(3))
+                allocate(this%runningSum_sc(3))
+            end if 
         end if 
 
         if(this%useWindTurbines) then
@@ -1798,33 +1805,37 @@ contains
             allocate(this%runningSum_turb   (8*this%WindTurbineArr%nTurbines))
         endif
 
-        allocate(this%xspectra_mean(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))   ! ensure that number of variables for which spectrum is to be computed is smaller than nyg
+        if (this%computeSpectra) then
+            allocate(this%xspectra_mean(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))   ! ensure that number of variables for which spectrum is to be computed is smaller than nyg
+        end if 
 
-        ! mean velocities
-        this%u_mean3D => this%stats3D(:,:,:,1);  this%v_mean3D  => this%stats3D(:,:,:,2);  this%w_mean3D => this%stats3D(:,:,:,3) 
-        ! mean squared velocities
-        this%uu_mean3D => this%stats3D(:,:,:,4); this%uv_mean3D => this%stats3D(:,:,:,5); this%uw_mean3D => this%stats3D(:,:,:,6)
-                                                 this%vv_mean3D => this%stats3D(:,:,:,7); this%vw_mean3D => this%stats3D(:,:,:,8) 
-                                                                                          this%ww_mean3D => this%stats3D(:,:,:,9)
-        ! SGS stresses
-        this%tau11_mean3D => this%stats3D(:,:,:,10); this%tau12_mean3D => this%stats3D(:,:,:,11); this%tau13_mean3D => this%stats3D(:,:,:,12)
-                                                     this%tau22_mean3D => this%stats3D(:,:,:,13); this%tau23_mean3D => this%stats3D(:,:,:,14) 
-                                                                                                  this%tau33_mean3D => this%stats3D(:,:,:,15)
-        ! SGS dissipation
-        this%sgsdissp_mean3D => this%stats3D(:,:,:,16)
-        ! velocity derivative products - for viscous dissipation
-        this%viscdisp_mean3D => this%stats3D(:,:,:,17)
-        ! means of velocity derivatives
-        this%S11_mean3D => this%stats3D(:,:,:,18); this%S12_mean3D => this%stats3D(:,:,:,19); this%S13_mean3D => this%stats3D(:,:,:,20)
-                                                   this%S22_mean3D => this%stats3D(:,:,:,21); this%S23_mean3D => this%stats3D(:,:,:,22)
-                                                                                              this%S33_mean3D => this%stats3D(:,:,:,23)
-        !! SGS model coefficient
-        !this%sgscoeff_mean => this%stats3D(:,:,:,24)
-        !this%PhiM => this%stats3D(:,:,:,25)
-        if (this%isStratified) then
-            this%TT_mean3D => this%stats3D(:,:,:,28);  this%wT_mean3D => this%stats3D(:,:,:,27);  this%vT_mean3D => this%stats3D(:,:,:,26)
-            this%uT_mean3D => this%stats3D(:,:,:,25);  this%T_mean3D => this%stats3D(:,:,:,24);   this%q1_mean3D => this%stats3D(:,:,:,29)
-            this%q2_mean3D => this%stats3D(:,:,:,30);  this%q3_mean3D => this%stats3D(:,:,:,31)
+        if (this%timeAvgFullFields) then
+            ! mean velocities
+            this%u_mean3D => this%stats3D(:,:,:,1);  this%v_mean3D  => this%stats3D(:,:,:,2);  this%w_mean3D => this%stats3D(:,:,:,3) 
+            ! mean squared velocities
+            this%uu_mean3D => this%stats3D(:,:,:,4); this%uv_mean3D => this%stats3D(:,:,:,5); this%uw_mean3D => this%stats3D(:,:,:,6)
+                                                     this%vv_mean3D => this%stats3D(:,:,:,7); this%vw_mean3D => this%stats3D(:,:,:,8) 
+                                                                                              this%ww_mean3D => this%stats3D(:,:,:,9)
+            ! SGS stresses
+            this%tau11_mean3D => this%stats3D(:,:,:,10); this%tau12_mean3D => this%stats3D(:,:,:,11); this%tau13_mean3D => this%stats3D(:,:,:,12)
+                                                         this%tau22_mean3D => this%stats3D(:,:,:,13); this%tau23_mean3D => this%stats3D(:,:,:,14) 
+                                                                                                      this%tau33_mean3D => this%stats3D(:,:,:,15)
+            ! SGS dissipation
+            this%sgsdissp_mean3D => this%stats3D(:,:,:,16)
+            ! velocity derivative products - for viscous dissipation
+            this%viscdisp_mean3D => this%stats3D(:,:,:,17)
+            ! means of velocity derivatives
+            this%S11_mean3D => this%stats3D(:,:,:,18); this%S12_mean3D => this%stats3D(:,:,:,19); this%S13_mean3D => this%stats3D(:,:,:,20)
+                                                       this%S22_mean3D => this%stats3D(:,:,:,21); this%S23_mean3D => this%stats3D(:,:,:,22)
+                                                                                                  this%S33_mean3D => this%stats3D(:,:,:,23)
+            !! SGS model coefficient
+            !this%sgscoeff_mean => this%stats3D(:,:,:,24)
+            !this%PhiM => this%stats3D(:,:,:,25)
+            if (this%isStratified) then
+                this%TT_mean3D => this%stats3D(:,:,:,28);  this%wT_mean3D => this%stats3D(:,:,:,27);  this%vT_mean3D => this%stats3D(:,:,:,26)
+                this%uT_mean3D => this%stats3D(:,:,:,25);  this%T_mean3D => this%stats3D(:,:,:,24);   this%q1_mean3D => this%stats3D(:,:,:,29)
+                this%q2_mean3D => this%stats3D(:,:,:,30);  this%q3_mean3D => this%stats3D(:,:,:,31)
+            end if 
         end if 
 
         ! horizontal averages
@@ -1867,7 +1878,7 @@ contains
             this%runningSum_turb    = zero
         endif
         this%xspectra_mean = zero
-        call message("Done init_stats3D")
+        call message(0,"Done init_stats3D")
     end subroutine
 
     subroutine compute_stats3D(this)
@@ -1900,45 +1911,47 @@ contains
         call transpose_y_to_x(rbuff2,rbuff0,this%gpC)
 
         ! Compute u,v,wC - mean
-        if(this%normByUstar) then
-            this%u_mean3D = this%u_mean3D + this%u/this%ustar
-            this%v_mean3D = this%v_mean3D + this%v/this%ustar
-            this%w_mean3D = this%w_mean3D + this%wC/this%ustar
+        if (this%timeAvgFullFields) then
+            if(this%normByUstar) then
+                this%u_mean3D = this%u_mean3D + this%u/this%ustar
+                this%v_mean3D = this%v_mean3D + this%v/this%ustar
+                this%w_mean3D = this%w_mean3D + this%wC/this%ustar
 
-            this%uu_mean3D = this%uu_mean3D + this%u * this%u /this%ustar
-            this%uv_mean3D = this%uv_mean3D + this%u * this%v /this%ustar
-            this%uw_mean3D = this%uw_mean3D + rbuff1          /this%ustar
-            this%vv_mean3D = this%vv_mean3D + this%v * this%v /this%ustar
-            this%vw_mean3D = this%vw_mean3D + rbuff0          /this%ustar
-            this%ww_mean3D = this%ww_mean3D + this%wC* this%wC/this%ustar
+                this%uu_mean3D = this%uu_mean3D + this%u * this%u /this%ustar
+                this%uv_mean3D = this%uv_mean3D + this%u * this%v /this%ustar
+                this%uw_mean3D = this%uw_mean3D + rbuff1          /this%ustar
+                this%vv_mean3D = this%vv_mean3D + this%v * this%v /this%ustar
+                this%vw_mean3D = this%vw_mean3D + rbuff0          /this%ustar
+                this%ww_mean3D = this%ww_mean3D + this%wC* this%wC/this%ustar
 
-            if(this%isStratified) then
-                this%T_mean3D = this%T_mean3D + this%T*this%ustar/this%wTh_surf
-                this%uT_mean3D = this%uT_mean3D + this%T * this%u /this%wTh_surf
-                this%vT_mean3D = this%vT_mean3D + this%T * this%v /this%wTh_surf
-                this%wT_mean3D = this%wT_mean3D + this%T * this%wC/this%wTh_surf
-                this%TT_mean3D = this%TT_mean3D + this%T * this%T*(this%ustar/this%wTh_surf)**2
+                if(this%isStratified) then
+                    this%T_mean3D = this%T_mean3D + this%T*this%ustar/this%wTh_surf
+                    this%uT_mean3D = this%uT_mean3D + this%T * this%u /this%wTh_surf
+                    this%vT_mean3D = this%vT_mean3D + this%T * this%v /this%wTh_surf
+                    this%wT_mean3D = this%wT_mean3D + this%T * this%wC/this%wTh_surf
+                    this%TT_mean3D = this%TT_mean3D + this%T * this%T*(this%ustar/this%wTh_surf)**2
+                endif
+            else
+                this%u_mean3D = this%u_mean3D + this%u
+                this%v_mean3D = this%v_mean3D + this%v
+                this%w_mean3D = this%w_mean3D + this%wC
+
+                this%uu_mean3D = this%uu_mean3D + this%u * this%u
+                this%uv_mean3D = this%uv_mean3D + this%u * this%v
+                this%uw_mean3D = this%uw_mean3D + this%u * this%wC
+                this%vv_mean3D = this%vv_mean3D + this%v * this%v
+                this%vw_mean3D = this%vw_mean3D + this%v * this%wC
+                this%ww_mean3D = this%ww_mean3D + this%wC* this%wC
+
+                if(this%isStratified) then
+                    this%T_mean3D = this%T_mean3D + this%T
+                    this%uT_mean3D = this%uT_mean3D + this%T * this%u
+                    this%vT_mean3D = this%vT_mean3D + this%T * this%v
+                    this%wT_mean3D = this%wT_mean3D + this%T * this%wC
+                    this%TT_mean3D = this%TT_mean3D + this%T * this%T
+                endif
             endif
-        else
-            this%u_mean3D = this%u_mean3D + this%u
-            this%v_mean3D = this%v_mean3D + this%v
-            this%w_mean3D = this%w_mean3D + this%wC
-
-            this%uu_mean3D = this%uu_mean3D + this%u * this%u
-            this%uv_mean3D = this%uv_mean3D + this%u * this%v
-            this%uw_mean3D = this%uw_mean3D + this%u * this%wC
-            this%vv_mean3D = this%vv_mean3D + this%v * this%v
-            this%vw_mean3D = this%vw_mean3D + this%v * this%wC
-            this%ww_mean3D = this%ww_mean3D + this%wC* this%wC
-
-            if(this%isStratified) then
-                this%T_mean3D = this%T_mean3D + this%T
-                this%uT_mean3D = this%uT_mean3D + this%T * this%u
-                this%vT_mean3D = this%vT_mean3D + this%T * this%v
-                this%wT_mean3D = this%wT_mean3D + this%T * this%wC
-                this%TT_mean3D = this%TT_mean3D + this%T * this%T
-            endif
-        endif
+        end if 
 
         if(this%useSGS) then
             ! interpolate tau13 from E to C
@@ -1966,46 +1979,48 @@ contains
                                    this%tauSGS_ij(:,:,:,6)*this%tauSGS_ij(:,:,:,6) )
             rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)         ! note: factor of half is in dump_stats
 
-            if(this%normByUstar) then
-                this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%ustar**2)
-                this%tau12_mean3D = this%tau12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%ustar**2)
-                this%tau13_mean3D = this%tau13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%ustar**2)
-                this%tau22_mean3D = this%tau22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%ustar**2)
-                this%tau23_mean3D = this%tau23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%ustar**2)
-                this%tau33_mean3D = this%tau33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%ustar**2)
+            if (this%timeAvgFullFields) then
+                if(this%normByUstar) then
+                    this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%ustar**2)
+                    this%tau12_mean3D = this%tau12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%ustar**2)
+                    this%tau13_mean3D = this%tau13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%ustar**2)
+                    this%tau22_mean3D = this%tau22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%ustar**2)
+                    this%tau23_mean3D = this%tau23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%ustar**2)
+                    this%tau33_mean3D = this%tau33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%ustar**2)
 
-                ! factor of H in normalization is missing from all statistics below
-                this%sgsdissp_mean3D = this%sgsdissp_mean3D + rbuff1/(this%ustar**3)
+                    ! factor of H in normalization is missing from all statistics below
+                    this%sgsdissp_mean3D = this%sgsdissp_mean3D + rbuff1/(this%ustar**3)
 
-                rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)
-                this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff1/(this%ustar**3)
+                    rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)
+                    this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff1/(this%ustar**3)
 
-                this%S11_mean3D = this%S11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%nu_SGS+1.0d-14)/this%ustar
-                this%S12_mean3D = this%S12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%nu_SGS+1.0d-14)/this%ustar
-                this%S13_mean3D = this%S13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%nu_SGS+1.0d-14)/this%ustar
-                this%S22_mean3D = this%S22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%nu_SGS+1.0d-14)/this%ustar
-                this%S23_mean3D = this%S23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%nu_SGS+1.0d-14)/this%ustar
-                this%S33_mean3D = this%S33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%nu_SGS+1.0d-14)/this%ustar
-            else
-                this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)
-                this%tau12_mean3D = this%tau12_mean3D + this%tauSGS_ij(:,:,:,2)
-                this%tau13_mean3D = this%tau13_mean3D + this%tauSGS_ij(:,:,:,3)
-                this%tau22_mean3D = this%tau22_mean3D + this%tauSGS_ij(:,:,:,4)
-                this%tau23_mean3D = this%tau23_mean3D + this%tauSGS_ij(:,:,:,5)
-                this%tau33_mean3D = this%tau33_mean3D + this%tauSGS_ij(:,:,:,6)
+                    this%S11_mean3D = this%S11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%nu_SGS+1.0d-14)/this%ustar
+                    this%S12_mean3D = this%S12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%nu_SGS+1.0d-14)/this%ustar
+                    this%S13_mean3D = this%S13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%nu_SGS+1.0d-14)/this%ustar
+                    this%S22_mean3D = this%S22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%nu_SGS+1.0d-14)/this%ustar
+                    this%S23_mean3D = this%S23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%nu_SGS+1.0d-14)/this%ustar
+                    this%S33_mean3D = this%S33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%nu_SGS+1.0d-14)/this%ustar
+                else
+                    this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)
+                    this%tau12_mean3D = this%tau12_mean3D + this%tauSGS_ij(:,:,:,2)
+                    this%tau13_mean3D = this%tau13_mean3D + this%tauSGS_ij(:,:,:,3)
+                    this%tau22_mean3D = this%tau22_mean3D + this%tauSGS_ij(:,:,:,4)
+                    this%tau23_mean3D = this%tau23_mean3D + this%tauSGS_ij(:,:,:,5)
+                    this%tau33_mean3D = this%tau33_mean3D + this%tauSGS_ij(:,:,:,6)
 
-                this%sgsdissp_mean3D = this%sgsdissp_mean3D + rbuff1
+                    this%sgsdissp_mean3D = this%sgsdissp_mean3D + rbuff1
 
-                rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)
-                this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff1
+                    rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)
+                    this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff1
 
-                this%S11_mean3D = this%S11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%nu_SGS+1.0d-14)
-                this%S12_mean3D = this%S12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%nu_SGS+1.0d-14)
-                this%S13_mean3D = this%S13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%nu_SGS+1.0d-14)
-                this%S22_mean3D = this%S22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%nu_SGS+1.0d-14)
-                this%S23_mean3D = this%S23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%nu_SGS+1.0d-14)
-                this%S33_mean3D = this%S33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%nu_SGS+1.0d-14)
-            endif
+                    this%S11_mean3D = this%S11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%nu_SGS+1.0d-14)
+                    this%S12_mean3D = this%S12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%nu_SGS+1.0d-14)
+                    this%S13_mean3D = this%S13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%nu_SGS+1.0d-14)
+                    this%S22_mean3D = this%S22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%nu_SGS+1.0d-14)
+                    this%S23_mean3D = this%S23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%nu_SGS+1.0d-14)
+                    this%S33_mean3D = this%S33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%nu_SGS+1.0d-14)
+                endif
+            end if 
 
             if(this%isStratified) then
                 ! interpolate q3 from C to E
@@ -2016,63 +2031,67 @@ contains
                 call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
                 call transpose_y_to_x(rbuff2,rbuff1,this%gpC)
 
-                if(this%normByUstar) then
-                    this%q1_mean3D = this%q1_mean3D + this%q1/this%wTh_surf
-                    this%q2_mean3D = this%q2_mean3D + this%q2/this%wTh_surf
-                    this%q3_mean3D = this%q3_mean3D + rbuff1/this%wTh_surf
-                else
-                    this%q1_mean3D = this%q1_mean3D + this%q1
-                    this%q2_mean3D = this%q2_mean3D + this%q2
-                    this%q3_mean3D = this%q3_mean3D + rbuff1
-                endif
+                if (this%timeAvgFullFields) then
+                    if(this%normByUstar) then
+                        this%q1_mean3D = this%q1_mean3D + this%q1/this%wTh_surf
+                        this%q2_mean3D = this%q2_mean3D + this%q2/this%wTh_surf
+                        this%q3_mean3D = this%q3_mean3D + rbuff1/this%wTh_surf
+                    else
+                        this%q1_mean3D = this%q1_mean3D + this%q1
+                        this%q2_mean3D = this%q2_mean3D + this%q2
+                        this%q3_mean3D = this%q3_mean3D + rbuff1
+                    endif
+                end if 
             endif
 
         endif
 
-        ! compute 1D spectra ---- make sure that number of variables for which spectra are computed is smaller than nyg
-        ! For each variable, at each y, z, location, x-spectrum is computed first, and then averaged over time and y-direction
-        jindx = 1    ! u
-        call this%spectC%fft1_x2y(this%u,this%cbuffyC(:,:,:,1))
-        do k = 1, size(this%cbuffyC, 3)
-          do j = 1, size(this%cbuffyC, 2)
-            this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
-          end do
-        end do
-
-        jindx = 2    ! v
-        call this%spectC%fft1_x2y(this%v,this%cbuffyC(:,:,:,1))
-        do k = 1, size(this%cbuffyC, 3)
-          do j = 1, size(this%cbuffyC, 2)
-            this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
-          end do
-        end do
-        
-        jindx = 3    ! w
-        call this%spectC%fft1_x2y(this%wC,this%cbuffyC(:,:,:,1))
-        do k = 1, size(this%cbuffyC, 3)
-          do j = 1, size(this%cbuffyC, 2)
-            this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
-          end do
-        end do
-        
-        jindx = 4    ! KE
-        call this%spectC%fft1_x2y(half*(this%u**2+this%v**2+this%wC**2),this%cbuffyC(:,:,:,1))
-        do k = 1, size(this%cbuffyC, 3)
-          do j = 1, size(this%cbuffyC, 2)
-            this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
-          end do
-        end do
-        
-        if(this%isStratified) then
-            jindx = 5    ! T
-            call this%spectC%fft1_x2y(this%T,this%cbuffyC(:,:,:,1))
+        if (this%computeSpectra) then
+            ! compute 1D spectra ---- make sure that number of variables for which spectra are computed is smaller than nyg
+            ! For each variable, at each y, z, location, x-spectrum is computed first, and then averaged over time and y-direction
+            jindx = 1    ! u
+            call this%spectC%fft1_x2y(this%u,this%cbuffyC(:,:,:,1))
             do k = 1, size(this%cbuffyC, 3)
               do j = 1, size(this%cbuffyC, 2)
                 this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
               end do
             end do
-        endif
-        
+
+            jindx = 2    ! v
+            call this%spectC%fft1_x2y(this%v,this%cbuffyC(:,:,:,1))
+            do k = 1, size(this%cbuffyC, 3)
+              do j = 1, size(this%cbuffyC, 2)
+                this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
+              end do
+            end do
+            
+            jindx = 3    ! w
+            call this%spectC%fft1_x2y(this%wC,this%cbuffyC(:,:,:,1))
+            do k = 1, size(this%cbuffyC, 3)
+              do j = 1, size(this%cbuffyC, 2)
+                this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
+              end do
+            end do
+            
+            jindx = 4    ! KE
+            call this%spectC%fft1_x2y(half*(this%u**2+this%v**2+this%wC**2),this%cbuffyC(:,:,:,1))
+            do k = 1, size(this%cbuffyC, 3)
+              do j = 1, size(this%cbuffyC, 2)
+                this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
+              end do
+            end do
+            
+            if(this%isStratified) then
+                jindx = 5    ! T
+                call this%spectC%fft1_x2y(this%T,this%cbuffyC(:,:,:,1))
+                do k = 1, size(this%cbuffyC, 3)
+                  do j = 1, size(this%cbuffyC, 2)
+                    this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
+                  end do
+                end do
+            endif
+        end if 
+
         ! instantaneous horizontal averages of some quantities
         this%inst_horz_avg(1) = this%ustar
         ! this%inst_horz(2) and (3) are computed in getRHS_SGS_WallM

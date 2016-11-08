@@ -34,8 +34,6 @@ program pbl
 
     call igp%printDivergence()
   
-    call igp%init_stats()  
-
     call tic() 
     do while (igp%tsim < igp%tstop) 
        

@@ -34,9 +34,6 @@ program pblwt
 
     call igp%printDivergence()
   
-    !call igp%init_stats()  
-    call igp%init_stats3D()  
-
     call tic() 
     do while (igp%tsim < igp%tstop) 
        
