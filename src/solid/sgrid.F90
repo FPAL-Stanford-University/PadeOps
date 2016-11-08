@@ -516,13 +516,12 @@ contains
         use decomp_2d,  only: nrank
         class(sgrid), target, intent(inout) :: this
 
-        logical :: tcond, vizcond, stepcond
+        logical :: tcond, vizcond, statscond, stepcond
         character(len=clen) :: stability
         real(rkind) :: cputime
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: ehmix
-        real(rkind) :: dtstats
         integer :: i, statscount
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
@@ -569,9 +568,11 @@ contains
         call this%get_dt(stability)
 
         ! Write out initial conditions and initial statistics
-        dtstats = zero; statscount = 0
-        ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+        statscount = 0
         call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,statscount,this%x_bc,this%y_bc,this%z_bc)
+        statscount = statscount + 1
+        statscond = .FALSE.
+
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
         vizcond = .FALSE.
         
@@ -580,6 +581,13 @@ contains
             this%dt = this%tviz * this%viz%vizcount - this%tsim
             vizcond = .TRUE.
             stability = 'vizdump'
+        end if
+
+        ! Check for statistics condition and adjust time step
+        if ( (this%tstats > zero) .AND. (this%tsim + this%dt >= this%tstats * statscount) ) then
+            this%dt = this%tstats * statscount - this%tsim
+            statscond = .TRUE.
+            stability = 'statsdump'
         end if
 
         tcond = .TRUE.
@@ -616,19 +624,15 @@ contains
             call message(2,"CPU time (in seconds)",cputime)
             call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
  
-            ! Write out statistics if dtstats exceeds tstats or if stats is deactivated, when vizcond is true
-            dtstats = dtstats + this%dt
-            if ( ((this%tstats > zero) .and. (dtstats > this%tstats)) .or. ((this%tstats < zero) .and. vizcond) ) then
-                dtstats = zero
-                statscount = statscount + 1
-                ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+            ! Write out statistics if statscond is met or if stats is deactivated, when vizcond is true
+            if ( ((this%tstats > zero) .and. (statscond)) .or. ((this%tstats < zero) .and. vizcond) ) then
                 call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,statscount,this%x_bc,this%y_bc,this%z_bc)
+                statscount = statscount + 1
+                statscond = .FALSE.
             end if
             
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
-                !! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
                 vizcond = .FALSE.
             end if
@@ -640,6 +644,14 @@ contains
             if ( (this%tviz > zero) .AND. (this%tsim + this%dt >= this%tviz * this%viz%vizcount) ) then
                 this%dt = this%tviz * this%viz%vizcount - this%tsim
                 vizcond = .TRUE.
+                stability = 'vizdump'
+            end if
+
+            ! Check for statistics condition and adjust time step
+            if ( (this%tstats > zero) .AND. (this%tsim + this%dt >= this%tstats * statscount) ) then
+                this%dt = this%tstats * statscount - this%tsim
+                statscond = .TRUE.
+                stability = 'statsdump'
             end if
 
             ! Check tstop condition
