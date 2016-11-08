@@ -82,7 +82,7 @@ contains
     end subroutine
 
     subroutine get_p_devstress_T_sos2(this,g,rho,e,p,T,devstress,sos_sq)
-        use constants, only: zero, two, three
+        use constants, only: two, three, four
         class(fingereos),                                        intent(in)  :: this
         real(rkind), dimension(:,:,:,:),                         intent(in)  :: g
         real(rkind), dimension(size(g,1),size(g,2),size(g,3)),   intent(in)  :: rho, e
@@ -119,7 +119,7 @@ contains
         devstress(:,:,:,6) = devstress(:,:,:,6) + p
 
         ! NEED TO CHANGE THIS. CURRENTLY WRONG
-        sos_sq = zero
+        sos_sq = real(1.528D7,rkind) + (four/three)*real(4.41D6,rkind)  ! Hardcoded to linear speed for material in IVPs in Barton's thesis
 
     end subroutine
 
