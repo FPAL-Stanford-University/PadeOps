@@ -35,7 +35,7 @@ module SolidMixtureMod
         procedure :: init
         procedure :: set_material
         ! procedure :: relaxPressure
-        ! procedure :: equilibratePressureTemperature
+        procedure :: equilibratePressureTemperature
         procedure :: getLAD
         procedure :: update_g
         procedure :: update_Ys
@@ -302,6 +302,34 @@ contains
     !ADD!     end do
 
     !ADD! end subroutine
+
+    subroutine equilibratePressureTemperature(this,mixRho,mixE,mixP,mixT)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixRho, mixE
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP, mixT
+
+        !real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix
+        !real(rkind), dimension(4*this%ns), target :: fparams
+        !integer, dimension(4)             :: iparams
+
+        ! is this how you do it ??????
+        do k=1,this%nzp
+         do j=1,this%nyp
+          do i=1,this%nxp
+              ! create object that extends abstract class newton_functor
+              ! define evaluate and gradient subroutines
+              ! call newton_solve
+              ! store returned VFs, energies
+              ! destroy object
+          end do
+         end do
+        end do
+
+        ! now calculate mixP and mixT from any one of the species
+        mixP = 0.0D0
+        mixT = 0.0D0
+
+    end subroutine
 
     subroutine get_dt(this, rho, delta, dtkap, dtDiff, dtplast)
         use reductions, only: P_MAXVAL
