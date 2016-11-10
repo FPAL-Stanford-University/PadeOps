@@ -19,6 +19,7 @@ module Sep1Solid_elasticMod
 
         procedure :: init
         procedure :: get_finger
+        procedure :: get_invariants_elemental
         procedure :: get_devstress
         procedure :: get_eelastic
         procedure :: get_sos
@@ -116,6 +117,18 @@ contains
 
     end subroutine
 
+    pure elemental subroutine get_invariants_elemental(this,G11,G12,G13,G22,G23,G33,trG,trG2,detG)
+        class(sep1solid_elastic), intent(in)  :: this
+        real(rkind),              intent(in)  :: G11,G12,G13,G22,G23,G33
+        real(rkind),              intent(out) :: trG, trG2, detG
+
+        detG = G11*(G22*G33-G23*G23) - G12*(G12*G33-G13*G23) + G13*(G12*G23-G13*G22)
+
+        trG = G11 + G22 + G33
+        trG2 = (G11*G11 + G12*G12 + G13*G13) + (G12*G12 + G22*G22 + G23*G23) + (G13*G13 + G23*G23 + G33*G33)
+
+    end subroutine
+
     pure subroutine get_devstress(this,finger,fingersq,trG,trG2,detG,devstress)
         use exits, only: GracefulExit
         class(sep1solid_elastic), intent(in) :: this
@@ -139,10 +152,10 @@ contains
 
     end subroutine
 
-    subroutine get_eelastic(this,trG,trG2,detG,eelastic)
+    pure elemental subroutine get_eelastic(this,trG,trG2,detG,eelastic)
         class(sep1solid_elastic), intent(in) :: this
-        real(rkind), dimension(:,:,:), intent(in)  :: trG,trG2,detG
-        real(rkind), dimension(:,:,:), intent(out) :: eelastic
+        real(rkind), intent(in)  :: trG,trG2,detG
+        real(rkind), intent(out) :: eelastic
 
         eelastic = fourth*this%mu/this%rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
 

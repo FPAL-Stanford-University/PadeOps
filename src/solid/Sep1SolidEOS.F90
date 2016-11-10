@@ -21,6 +21,7 @@ module Sep1SolidEOSMod
 
         procedure :: get_e_from_rho_g_T
         procedure :: get_p_devstress_T_sos2
+        procedure :: get_pT_derivatives_wrt_energyVF
         final     :: destroy
 
     end type
@@ -91,6 +92,42 @@ contains
 
         call this%hydro%get_sos2(rho,p,sos_sq)
         call this%elastic%get_sos2(rho,sos_sq) ! Add elastic component to sos^2
+    end subroutine
+
+    subroutine get_pT_derivatives_wrt_energyVF(this, VF0, g0, energy, VF, dpde, dpdVF, dTde, dTdVF)
+        class(sep1solideos),       intent(in)  :: this
+        real(rkind), dimension(9), intent(in)  :: g0
+        real(rkind),               intent(in)  :: VF0, VF, energy
+        real(rkind),               intent(out) :: dpde, dpdVF, dTde, dTdVF
+        
+        real(rkind) :: trG, trG2, detG, eelastic
+        real(rkind) :: GG11, GG12, GG13, GG22, GG23, GG33
+        
+        if (this%usegTg) then
+            GG11 = g0(1); GG12 = g0(2); GG13 = g0(3);
+                          GG22 = g0(4); GG23 = g0(5);
+                                        GG33 = g0(6);
+        else
+            GG11 = g0(1)*g0(1) + g0(4)*g0(4) + g0(7)*g0(7)
+            GG12 = g0(1)*g0(2) + g0(4)*g0(5) + g0(7)*g0(8)
+            GG13 = g0(1)*g0(3) + g0(4)*g0(6) + g0(7)*g0(9)
+            GG22 = g0(2)*g0(2) + g0(5)*g0(5) + g0(8)*g0(8)
+            GG23 = g0(2)*g0(3) + g0(5)*g0(6) + g0(8)*g0(9)
+            GG33 = g0(3)*g0(3) + g0(6)*g0(6) + g0(9)*g0(9)
+        end if
+
+        call this%elastic%get_invariants_elemental(GG11,GG12,GG13,GG22,GG23,GG33,trG,trG2,detG)
+        call this%elastic%get_eelastic(trG,trG2,detG,eelastic)
+
+        detG = sqrt(detG) ! This is really det(g0) now
+
+        dpde = (this%hydro%gam - one)*this%rho0*VF0*detG / VF
+
+        dpdVF = - (this%hydro%gam - one)*this%rho0*VF0*detG*(energy - eelastic) / VF**2
+
+        dTde = one / this%hydro%Cv
+
+        dTdVF = -this%hydro%PInf / (this%hydro%Cv*this%rho0*VF0*detG)
     end subroutine
 
 end module

@@ -42,12 +42,12 @@ module ElasticEOSMod
             real(rkind), dimension(:,:,:,:), intent(out) :: devstress
         end subroutine
 
-        subroutine get_eelastic_interface(this,trG,trG2,detG,eelastic)
+        pure elemental subroutine get_eelastic_interface(this,trG,trG2,detG,eelastic)
             import :: elasticeos
             import :: rkind
             class(elasticeos), intent(in) :: this
-            real(rkind), dimension(:,:,:), intent(in)  :: trG,trG2,detG
-            real(rkind), dimension(:,:,:), intent(out) :: eelastic
+            real(rkind), intent(in)  :: trG,trG2,detG
+            real(rkind), intent(out) :: eelastic
         end subroutine
 
         pure subroutine get_sos_interface(this,rhom,sos)
