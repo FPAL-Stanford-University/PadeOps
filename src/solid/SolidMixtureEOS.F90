@@ -308,19 +308,36 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixRho, mixE
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP, mixT
 
-        !real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix
+        real(rkind), dimension(this%ns) :: VF0, Y
+        real(rkind), dimension(2*this%ns) :: xvar, fvar
+        real(rkind), dimension(9,this%ns) :: g0
+
         !real(rkind), dimension(4*this%ns), target :: fparams
-        !integer, dimension(4)             :: iparams
+        integer :: i, j, k, m
 
         ! is this how you do it ??????
         do k=1,this%nzp
          do j=1,this%nyp
           do i=1,this%nxp
               ! create object that extends abstract class newton_functor
-              ! define evaluate and gradient subroutines
+              do m = 1, this%ns
+                  VF0(m)  = this%material(m)%VF(i,j,k)
+                  Y(m)    = this%material(m)%Ys(i,j,k)
+                  g0(:,m) = this%material(m)%g(i,j,k,:)
+              end do
+              eqbfn = eqbPTFunction(this%ns, this%material, VF0, g0, Y, mixE(i,j,k))
+
               ! call newton_solve
-              ! store returned VFs, energies
-              ! destroy object
+              xvar(1:this%ns) = mixE(i,j,k)/this%ns
+              xvar(this%ns+1:2*this%ns) = VF0(:)
+              call eqbfn%newton_solve(xvar, fvar)
+
+              ! store returned VFs, gs and energies
+              do m = 1, this%ns
+                  this%material(m)%eh(i,j,k) = xvar(m)
+                  this%material(m)%VF(i,j,k)  = xvar(this%ns+m)
+                  this%material(m)%g(i,j,k,:) = g0(:,m)*xvar(this%ns+m)**third
+              end do
           end do
          end do
         end do
