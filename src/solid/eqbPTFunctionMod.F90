@@ -5,9 +5,9 @@ module eqbPTFunctionMod
     implicit none
 
     type, extends(newton_functor) :: eqbPTFunction    ! only 2 materials for now
-        integer :: ns
-        type(solid), dimension(2) :: material
-        real(rkind), dimension(2) :: VF0, Y
+        integer                     :: ns
+        type(solid), dimension(2)   :: material
+        real(rkind), dimension(2)   :: VF0, Y
         real(rkind), dimension(9,2) :: g0
         real(rkind)                 :: emix
     contains
@@ -22,11 +22,11 @@ contains
 
     function init(ns,material,VF0,g0,Y,emix) result(this)
         type(eqbpTFunction) :: this
-        integer      intent(in)              :: ns
-        type(solid), dimension(:)            :: material
-        real(rkind), dimension(:) intent(in) :: VF0, Y
-        real(rkind), dimension(:,:) intent(in) :: g0
-        real(rkind), intent(in)   :: emix
+        integer,                     intent(in) :: ns
+        type(solid), dimension(:),   intent(in) :: material
+        real(rkind), dimension(:),   intent(in) :: VF0, Y
+        real(rkind), dimension(:,:), intent(in) :: g0
+        real(rkind),                 intent(in) :: emix
 
         this%ns = ns
         this%material = material
@@ -40,9 +40,13 @@ contains
     end function
 
     subroutine evaluate(this, x, y)
+        use constants, only: one
         class(eqbpTFunction),              intent(in)  :: this
         real(rkind), dimension(:),         intent(in)  :: x
         real(rkind), dimension(size(x,1)), intent(out) :: y
+
+        real(rkind), dimension(this%ns) :: energy, VF, p, T
+        integer :: m
 
         do m = 1, this%ns
             energy(m) = x(m); VF(m) = x(this%ns+m)
@@ -57,7 +61,7 @@ contains
     end subroutine
 
     subroutine gradient(this, x, grad)
-        use constants, only: zero
+        use constants, only: zero, one
         class(eqbpTFunction),                        intent(in)  :: this
         real(rkind), dimension(:),                   intent(in)  :: x
         real(rkind), dimension(size(x,1),size(x,1)), intent(out) :: grad

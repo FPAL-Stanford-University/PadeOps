@@ -20,6 +20,7 @@ module AbstractEOSMod
         procedure(get_e_from_rho_g_T_interface),              deferred :: get_e_from_rho_g_T
         procedure(get_p_devstress_T_sos2_interface),          deferred :: get_p_devstress_T_sos2
         procedure(get_pT_derivatives_wrt_energyVF_interface), deferred :: get_pT_derivatives_wrt_energyVF
+        procedure(get_pT_from_energyVF_interface),            deferred :: get_pT_from_energyVF
 
     end type
 
@@ -53,6 +54,15 @@ module AbstractEOSMod
             real(rkind), dimension(9), intent(in)  :: g0
             real(rkind),               intent(in)  :: VF0, VF, energy
             real(rkind),               intent(out) :: dpde, dpdVF, dTde, dTdVF
+        end subroutine
+
+        subroutine get_pT_from_energyVF_interface(this, VF0, g0, energy, VF, p, T)
+            import :: abstracteos
+            import :: rkind
+            class(abstracteos),        intent(in)  :: this
+            real(rkind), dimension(9), intent(in)  :: g0
+            real(rkind),               intent(in)  :: VF0, VF, energy
+            real(rkind),               intent(out) :: p, T
         end subroutine
 
     end interface

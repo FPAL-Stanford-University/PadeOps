@@ -304,6 +304,7 @@ contains
     !ADD! end subroutine
 
     subroutine equilibratePressureTemperature(this,mixRho,mixE,mixP,mixT)
+        use eqbPTFunctionMod, only: eqbPTFunction
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixRho, mixE
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP, mixT
@@ -314,6 +315,7 @@ contains
 
         !real(rkind), dimension(4*this%ns), target :: fparams
         integer :: i, j, k, m
+        type(eqbPTFunction) :: eqbfn
 
         ! is this how you do it ??????
         do k=1,this%nzp
