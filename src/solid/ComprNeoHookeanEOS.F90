@@ -19,6 +19,7 @@ module ComprNeoHookeanEOSMod
 
         procedure :: get_energy_derivatives
         procedure :: get_e_from_rho_invariants_T
+        procedure :: get_pT_derivatives_wrt_energyVF
 
     end type
 
@@ -29,14 +30,14 @@ module ComprNeoHookeanEOSMod
 contains
 
     function init(rho0,Cv,T0,mu,gam,usegTg) result(this)
-        type(godromeos)           :: this
-        real(rkind),   intent(in) :: rho0, Cv, T0, mu, gam
-        logical,       intent(in) :: usegTg
+        type(comprneohookeos)   :: this
+        real(rkind), intent(in) :: rho0, Cv, T0, mu, gam
+        logical,     intent(in) :: usegTg
 
         this%rho0 = rho0
         this%Cv = Cv
         this%T0 = T0
-        this%B0 = mu
+        this%mu = mu
         this%gam = gam
         this%usegTg = usegTg
 
@@ -44,14 +45,16 @@ contains
 
     ! Subroutine to compute the dervatives of the internal energy with respect to the invariants of the cauchygreen tensor and
     ! entropy (in the form of the temperature)
-    subroutine get_energy_derivatives(this,rho,e,I1,I2,I3,dedI1,dedI2,dedI3,T,sos_sq)
-        use constants, only: half, one, two, three, four
-        class(godromeos),                                            intent(in)  :: this
+    subroutine get_energy_derivatives(this,rho,e,I1,I2,I3,dedI1,dedI2,dedI3,T)
+        use constants, only: zero, half, one
+        class(comprneohookeos),                                      intent(in)  :: this
         real(rkind), dimension(:,:,:),                               intent(in)  :: rho
         real(rkind), dimension(size(rho,1),size(rho,2),size(rho,3)), intent(in)  :: e, I1, I2, I3
-        real(rkind), dimension(size(rho,1),size(rho,2),size(rho,3)), intent(out) :: dedI1, dedI2, dedI3, T, sos_sq
+        real(rkind), dimension(size(rho,1),size(rho,2),size(rho,3)), intent(out) :: dedI1, dedI2, dedI3, T
         
         real(rkind) :: invCv, muBy2Rho0, OneMGamBy2Cv, GamGm1Cv, muByRho0
+
+        call unused(I2)
 
         invCv = one/this%Cv
         muBy2Rho0 = half*this%mu/this%rho0
@@ -65,23 +68,45 @@ contains
         dedI2 = zero
         dedI3 = OneMGamBy2Cv * T / I3
 
-        sos_sq = GamGm1Cv * T + muByRho0 * I3
+        ! sos_sq = GamGm1Cv * T + muByRho0 * I3
 
     end subroutine
 
     ! Subroutine to get the internal energy from the temperature and material density and invariants of the cauchygreen tensor
     subroutine get_e_from_rho_invariants_T(this,rho,I1,I2,I3,T,e)
-        use constants, only: half, two, three
-        class(godromeos),                                              intent(in)  :: this
+        use constants, only: half
+        use exits,     only: unused
+        class(comprneohookeos),                                        intent(in)  :: this
         real(rkind), dimension(:,:,:),                                 intent(in)  :: rho
         real(rkind), dimension(size(rho,1),size(rho,2),size(rho,3)),   intent(in)  :: I1,I2,I3,T
         real(rkind), dimension(size(rho,1),size(rho,2),size(rho,3)),   intent(out) :: e
 
         real(rkind) :: muBy2Rho0
 
+        call unused(I2); call unused(I3)
+
         muBy2Rho0 = half*this%mu/this%rho0
         e = muBy2Rho0 * I1 + this%Cv * T
 
+    end subroutine
+
+    subroutine get_pT_derivatives_wrt_energyVF(this, VF0, g0, energy, VF, dpde, dpdVF, dTde, dTdVF)
+        use constants, only: zero
+        use exits,     only: unused
+        class(comprneohookeos),    intent(in)  :: this
+        real(rkind), dimension(9), intent(in)  :: g0
+        real(rkind),               intent(in)  :: VF0, VF, energy
+        real(rkind),               intent(out) :: dpde, dpdVF, dTde, dTdVF
+        
+        call unused(this); call unused(VF0); call unused(g0); call unused(energy); call unused(VF);
+
+        dpde = zero
+
+        dpdVF = zero
+
+        dTde = zero
+
+        dTdVF = zero
     end subroutine
 
 end module

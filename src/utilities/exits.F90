@@ -6,7 +6,7 @@ module exits
     
     implicit none
     private
-    public :: GracefulExit, message, warning, newline, nancheck, check_exit
+    public :: GracefulExit, message, warning, newline, nancheck, check_exit, unused
         
     interface message
         module procedure message_char, message_char_double, message_level_char, message_level_char_double, message_level_char_int
@@ -199,5 +199,17 @@ contains
          close(777)
  
     end function
+
+    pure elemental subroutine unused(x)
+        class(*), intent(in) :: x
+        logical :: equal
+
+        if (.false.) then
+            select type(x)
+            type is (integer)
+              equal = (x == x) ! integer specific code
+            end select
+        end if
+    end subroutine
     
 end module 

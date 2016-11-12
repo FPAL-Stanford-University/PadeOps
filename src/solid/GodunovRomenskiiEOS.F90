@@ -23,6 +23,7 @@ module GodunovRomenskiiEOSMod
         ! procedure :: init
         procedure :: get_energy_derivatives
         procedure :: get_e_from_rho_invariants_T
+        procedure :: get_pT_derivatives_wrt_energyVF
 
     end type
 
@@ -89,6 +90,22 @@ contains
         e = ( this%K0/(two*this%alpha**2) ) * ( I3**(half*this%alpha) - one )**2 + this%Cv*this%T0 * I3**(half*this%gam) * (e-one) & ! U(I3,entropy)
           + half*this%B0 * I3**(half*this%beta) * ( I1**2/three - I2 )                                                               ! W(I1,I2,I3)
 
+    end subroutine
+
+    subroutine get_pT_derivatives_wrt_energyVF(this, VF0, g0, energy, VF, dpde, dpdVF, dTde, dTdVF)
+        use constants, only: zero
+        class(godromeos),          intent(in)  :: this
+        real(rkind), dimension(9), intent(in)  :: g0
+        real(rkind),               intent(in)  :: VF0, VF, energy
+        real(rkind),               intent(out) :: dpde, dpdVF, dTde, dTdVF
+        
+        dpde = zero
+
+        dpdVF = zero
+
+        dTde = zero
+
+        dTdVF = zero
     end subroutine
 
 end module

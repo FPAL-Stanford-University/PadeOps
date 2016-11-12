@@ -55,7 +55,7 @@ contains
         ! Get optimal lwork
         lwork = -1
         call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
-        lwork = this%svdwork(1)
+        lwork = int(this%svdwork(1))
 
         deallocate(this%svdwork); allocate(this%svdwork(lwork))
 
@@ -206,12 +206,12 @@ contains
             ! Get optimal lwork
             lwork = -1
             call dsyev('V', 'U', 3, G, 3, sval, this%svdwork, lwork, info)
-            lwork = this%svdwork(1)
+            lwork = int(this%svdwork(1))
         else
             ! Get optimal lwork
             lwork = -1
             call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
-            lwork = this%svdwork(1)
+            lwork = int(this%svdwork(1))
         end if
 
         if (lwork .GT. size(this%svdwork)) then
@@ -397,7 +397,7 @@ contains
         ! Get optimal lwork
         lwork = -1
         call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
-        lwork = this%svdwork(1)
+        lwork = int(this%svdwork(1))
         if (lwork .GT. size(this%svdwork)) then
             deallocate(this%svdwork); allocate(this%svdwork(lwork))
         end if

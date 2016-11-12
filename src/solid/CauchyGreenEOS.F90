@@ -35,7 +35,7 @@ module CauchyGreenEOSMod
             class(cauchygreeneos),                                       intent(in)  :: this
             real(rkind), dimension(:,:,:),                               intent(in)  :: rho
             real(rkind), dimension(size(rho,1),size(rho,2),size(rho,3)), intent(in)  :: e, I1, I2, I3
-            real(rkind), dimension(size(rho,1),size(rho,2),size(rho,3)), intent(out) :: dedI1, dedI2, dedI3, T, sos2
+            real(rkind), dimension(size(rho,1),size(rho,2),size(rho,3)), intent(out) :: dedI1, dedI2, dedI3, T
         end subroutine
 
         ! Subroutine to get the internal energy from the temperature and material density and invariants of the Cauchy-Green tensor
@@ -100,7 +100,7 @@ contains
         call get_invariants(cauchygreen,I1,I2,I3)
 
         ! Get the derivatives of the internal energy wrt invariants of the Cauchy-Green tensor
-        call this%get_energy_derivatives(rho,e,I1,I2,I3,dedI1,dedI2,dedI3,T,sos_sq)
+        call this%get_energy_derivatives(rho,e,I1,I2,I3,dedI1,dedI2,dedI3,T)!,sos_sq)
 
         ! Compute the Cauchy stress tensor
         devstress(:,:,:,1) = two*rho*( (dedI1 + I1*dedI2)*cauchygreen(:,:,:,1) - dedI2*cauchygreensq(:,:,:,1) + I3*dedI3 )
@@ -119,7 +119,7 @@ contains
         devstress(:,:,:,6) = devstress(:,:,:,6) + p
 
         ! NEED TO CHANGE THIS. CURRENTLY WRONG
-        !sos_sq = zero
+        sos_sq = zero
 
     end subroutine
 
