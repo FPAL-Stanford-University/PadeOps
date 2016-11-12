@@ -8,6 +8,7 @@ module NewtonSolverMod
         real(rkind) :: alpha = half
         real(rkind) :: tolerance = real(1.D-14,rkind)
         integer     :: niters = 50
+        logical     :: isGradPosDef = .false.
     contains
         procedure(evaluate_interface), deferred :: evaluate
         procedure(gradient_interface), deferred :: gradient
@@ -19,7 +20,7 @@ module NewtonSolverMod
         subroutine evaluate_interface(this, x, y)
             import :: rkind
             import :: newton_functor
-            class(newton_functor),             intent(in)  :: this
+            class(newton_functor),             intent(inout)  :: this
             real(rkind), dimension(:),         intent(in)  :: x
             real(rkind), dimension(size(x,1)), intent(out) :: y
         end subroutine
@@ -37,7 +38,7 @@ contains
     subroutine newton_solve(f,x,y)
         use constants, only: eps, one
         use exits,     only: GracefulExit
-        class(newton_functor),             intent(in)    :: f
+        class(newton_functor),             intent(inout)    :: f
         real(rkind), dimension(:),         intent(inout) :: x
         real(rkind), dimension(size(x,1)), intent(in)    :: y
         
@@ -82,15 +83,18 @@ contains
             iters = iters + 1
 
             if ((iters >= f%niters) .or. (t <= eps)) then
+                !print *, iters, t
                 call GracefulExit('Newton solve did not converge',6382)
             end if
         end do
+        !write(*,'(a,4(e19.12,1x))') '   residual = ', residual
+        !write(*,'(a,4(i4,1x))') 'no. iterons = ', iters
 
     end subroutine
 
     subroutine get_residual(f,x,y,ipiv,gradf,dx,f0,residual)
         use exits,     only: GracefulExit
-        class(newton_functor),                       intent(in)  :: f
+        class(newton_functor),                       intent(inout)  :: f
         real(rkind), dimension(:),                   intent(in)  :: x
         real(rkind), dimension(size(x,1)),           intent(in)  :: y
         integer,     dimension(size(x,1)),           intent(out) :: ipiv
@@ -108,11 +112,27 @@ contains
         ! Get Newton step dx
         call f%gradient(x, gradf)
         dx = y - f0
+        !write(*,*) '   y  = ', y
+        !write(*,'(a,4(e19.12,1x))') '   dx = ', dx
+        !write(*,*) '   f0 = ', f0
+        !write(*,'(a,4(e19.12,1x))') '   gradf = ', gradf(1,:)
+        !write(*,'(a,4(e19.12,1x))') '           ', gradf(2,:)
+        !write(*,'(a,4(e19.12,1x))') '           ', gradf(3,:)
+        !write(*,'(a,4(e19.12,1x))') '           ', gradf(4,:)
         call dgesv(n, 1, gradf, n, ipiv, dx, n, info)
         if (info /= 0) call GracefulExit("Error in getting Newton step (dgesv call)",54762)
 
         ! Compute residual
-        residual = sum( (y-f0)*dx )
+        if(f%isGradPosDef) then
+           residual = sum( (y-f0)*dx )
+        else
+           residual = sum( (y-f0)**2 )
+        endif
+        !write(*,'(a,4(e19.12,1x))') '   dx = ', dx
+        !write(*,'(a,4(e19.12,1x))') '   y  = ', y
+        !write(*,'(a,4(e19.12,1x))') '   dx = ', dx
+        !write(*,'(a,4(e19.12,1x))') '   f0 = ', f0
+        !write(*,'(a,4(e19.12,1x))') '   residual = ', residual
 
     end subroutine
 

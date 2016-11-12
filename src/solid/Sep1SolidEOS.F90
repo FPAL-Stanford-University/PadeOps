@@ -127,6 +127,13 @@ contains
         
         T = (energy - eelastic - this%hydro%PInf*VF/(this%rho0*VF0*detG))/this%hydro%Cv
 
+        !write(*,*) 'VF0 = ', VF0
+        !write(*,*) 'VF = ', VF
+        !write(*,'(a,9(e19.12,1x))') 'g0 = ', g0
+        !write(*,*) 'energy = ', energy
+        !write(*,*) 'p = ', p
+        !write(*,*) 'T = ', T
+
     end subroutine
 
     subroutine get_pT_derivatives_wrt_energyVF(this, VF0, g0, energy, VF, dpde, dpdVF, dTde, dTdVF)

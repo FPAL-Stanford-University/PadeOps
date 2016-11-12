@@ -60,11 +60,11 @@ end subroutine
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,half,one,two,three,four
-    use SolidGrid,        only: u_index,v_index,w_index
+    use SolidGrid,        only: u_index,v_index,w_index, e_index
     use decomp_2d,        only: decomp_info
     use exits,            only: GracefulExit
-    use StiffGasEOS,      only: stiffgas
-    use Sep1SolidEOS,     only: sep1solid
+    use AbstractEOSMod,   only: abstracteos
+    use Sep1SolidEOSMod,  only: sep1solideos
     use SolidMixtureMod,  only: solid_mixture
     
     use MultSpecGauss_data
@@ -77,6 +77,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     type(solid_mixture),             intent(inout) :: mix
     real(rkind),                     intent(inout) :: tstop, dt, tviz
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    type(sep1solideos), allocatable :: eos, eos2
 
     integer :: ioUnit, indwv, indwv2
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, sig11, eps11,lamLmix,mumix
@@ -92,7 +93,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     close(ioUnit)
 
     associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
-                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3), e => fields(:,:,:,e_index))
         
         if (mix%ns /= 2) then
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
@@ -134,8 +135,17 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         else
           Rgas_2 = Rgas*rho_0/rho_0_2*(p_amb_2+p_infty_2)/(p_amb+p_infty)
         endif
-        call mix%set_material(1,stiffgas(gamma,  Rgas,  p_infty  ), sep1solid(  rho_0,mu,  1.0D30,1.0D-10))
-        call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2), sep1solid(rho_0_2,mu_2,1.0D30,1.0D-10))
+        !call mix%set_material(1,stiffgas(gamma,  Rgas,  p_infty  ), sep1solid(  rho_0,mu,  1.0D30,1.0D-10))
+        !call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2), sep1solid(rho_0_2,mu_2,1.0D30,1.0D-10))
+
+        ! material 1
+        eos = sep1solideos(gamma,Rgas,p_infty,rho_0,mu,1.0D30,1.0D-10,mix%usegTg)
+        call mix%set_material(1, eos)
+
+        ! material 2
+        eos2 = sep1solideos(gamma_2,Rgas_2,p_infty_2,rho_0_2,mu_2,1.0D30,1.0D-10,mix%usegTg)
+        call mix%set_material(2, eos2)
+
 
         if(thick<zero) then
           tmp = half * ( erf( (x-half-0.0_rkind)/(thickness) ) - erf( (x-half-0.4_rkind)/(thickness) ) )
@@ -211,6 +221,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         eps11 = sig11 / (lamLmix + two*mumix)
         write(*,'(a,3(e19.12,1x))') '--Init', maxval(sig11), minval(sig11), sigma_0
 
+
         u   = - (cL_mix * sig11) / (lamLmix + two*mumix)
         v   = zero
         w   = zero
@@ -221,6 +232,20 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(2)%g11 = one / (one + eps11)
         mix%material(2)%p = p_infty_2*(mix%material(2)%g11**gamma_2 - one)
         write(*,'(a,4(e19.12,1x))') '--Init p', maxval(mix%material(1)%p), minval(mix%material(1)%p), maxval(mix%material(2)%p), minval(mix%material(2)%p)
+
+        !select case(eostype)
+        !case(1)
+            ! Get temperature by first getting hydro energy
+            call eos%hydro%get_e_from_p(rho_0*mix%material(1)%g11, mix%material(1)%p, e)
+            call eos%hydro%get_T(e,mix%material(1)%T,rho_0*mix%material(1)%g11)
+
+            ! Get temperature by first getting hydro energy
+            call eos2%hydro%get_e_from_p(rho_0_2*mix%material(2)%g11, mix%material(2)%p, e)
+            call eos2%hydro%get_T(e,mix%material(2)%T,rho_0_2*mix%material(2)%g11)
+        !case(2)
+        !    T = T0
+        !end select
+        !Tinit = T(1,1,1)
 
 
     end associate
@@ -276,7 +301,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
                                            mix%material(1)%p (i,1,1), mix%material(2)%p (i,1,1), &
                                            mix%material(1)%Ys(i,1,1), mix%material(2)%Ys(i,1,1), &
                                            mix%material(1)%VF(i,1,1), mix%material(2)%VF(i,1,1), &
-                                           mix%material(1)%eh(i,1,1), mix%material(2)%eh(i,1,1), &
+                                           mix%material(1)%energy(i,1,1), mix%material(2)%energy(i,1,1), &
                                            mix%material(1)%T (i,1,1), mix%material(2)%T (i,1,1), &
                                            mix%material(1)%g11(i,1,1), mix%material(2)%g11(i,1,1), &
                                            must(i,1,1), bulk(i,1,1), kap(i,1,1), kap(i,1,1), &
@@ -298,18 +323,18 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
             do i=1,decomp%ysz(1)
                 write(outputunit,'(48ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                      ! continuum (9)
                                                 sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), must(i,j,k), bulk(i,j,k), kap(i,j,k), &    ! continuum (9)
-                                                mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% eh(i,j,k), &  ! material 1 (14)
+                                                mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% energy(i,j,k), &  ! material 1 (14)
                                                 mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
                                                 mix%material(1)%g21(i,j,k), mix%material(1)%g22(i,j,k), mix%material(1)%g23(i,j,k), mix%material(1)%g31(i,j,k), &  ! material 1 
                                                 mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), mix%material(1)%kap(i,j,k),&  ! material 1 
-                                                mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% eh(i,j,k), &  ! material 2 (14)
+                                                mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% energy(i,j,k), &  ! material 2 (14)
                                                 mix%material(2)% T(i,j,k),  mix%material(2)%g11(i,j,k), mix%material(2)%g12(i,j,k), mix%material(2)%g13(i,j,k), &  ! material 2
                                                 mix%material(2)%g21(i,j,k), mix%material(2)%g22(i,j,k), mix%material(2)%g23(i,j,k), mix%material(2)%g31(i,j,k), &  ! material 2
                                                 mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k), mix%material(2)%kap(i,j,k)    ! material 2
             end do
            end do
           end do
-          write(*,'(a,4(e19.12,1x))') '--hook_output: ', maxval(p), minval(p), maxval(sxx), minval(sxx)
+          !write(*,'(a,4(e19.12,1x))') '--hook_output: ', maxval(p), minval(p), maxval(sxx), minval(sxx)
           close(outputunit)
         else
           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='old', action='write', position='append')
@@ -321,11 +346,11 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
             do i=1,decomp%ysz(1)
                 write(outputunit,'(45ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                                                    ! continuum (6)
                                                 sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), must(i,j,k), bulk(i,j,k), kap(i,j,k), &    ! continuum (9)
-                                                mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% eh(i,j,k), &  ! material 1 (14)
+                                                mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% energy(i,j,k), &  ! material 1 (14)
                                                 mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
                                                 mix%material(1)%g21(i,j,k), mix%material(1)%g21(i,j,k), mix%material(1)%g23(i,j,k), mix%material(1)%g31(i,j,k), &  ! material 1 
                                                 mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), mix%material(1)%kap(i,j,k),&  ! material 1 
-                                                mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% eh(i,j,k), &  ! material 2 (14)
+                                                mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% energy(i,j,k), &  ! material 2 (14)
                                                 mix%material(2)% T(i,j,k),  mix%material(2)%g11(i,j,k), mix%material(2)%g12(i,j,k), mix%material(2)%g13(i,j,k), &  ! material 2
                                                 mix%material(2)%g21(i,j,k), mix%material(2)%g21(i,j,k), mix%material(2)%g23(i,j,k), mix%material(2)%g31(i,j,k), &  ! material 2
                                                 mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k), mix%material(2)%kap(i,j,k)    ! material 2
@@ -383,7 +408,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
           Ys2max = maxval(mix%material(2)%Ys); Ys2min = minval(mix%material(2)%Ys);  g2max = maxval(mix%material(2)%g11); g2min = minval(mix%material(2)%g11);
 
           Tmax = max(maxval(mix%material(1)%T), maxval(mix%material(1)%T)); Tmin = min(minval(mix%material(1)%T), minval(mix%material(1)%T));
-          eh1max = maxval(mix%material(1)%eh); eh1min = minval(mix%material(1)%eh);  eh2max = maxval(mix%material(2)%eh); eh2min = minval(mix%material(2)%eh);
+          eh1max = maxval(mix%material(1)%energy); eh1min = minval(mix%material(1)%energy);  eh2max = maxval(mix%material(2)%energy); eh2min = minval(mix%material(2)%energy);
 
           ! open file
           open(unit=11, file='timeevol.dat', status='replace')
@@ -450,9 +475,9 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
         write(11,'(45ES26.16)') tsim, maxval(rho)-rhomax, minval(rho)-rhomin, maxval(u)-umax, minval(u)-umin, maxval(v)-vmax, minval(v)-vmin, & 
                                       maxval(w)-wmax, minval(w)-wmin, maxval(p)-pmax, minval(p)-pmin, maxval(T)-Tmax, minval(T)-Tmin,     &
                                       maxval(mix%material(1)%VF)-vfmax, minval(mix%material(1)%VF)-vfmin, maxval(mix%material(1)%Ys)-Ys1max,  minval(mix%material(1)%Ys)-Ys1min, &
-                                      maxval(mix%material(1)%eh)-eh1max, minval(mix%material(1)%eh)-eh1min, maxval(mix%material(1)%g11)-g1max, minval(mix%material(1)%g11)-g1min,&
+                                      maxval(mix%material(1)%energy)-eh1max, minval(mix%material(1)%energy)-eh1min, maxval(mix%material(1)%g11)-g1max, minval(mix%material(1)%g11)-g1min,&
                                       maxval(mix%material(2)%VF)-vfmax, minval(mix%material(2)%VF)-vfmin, maxval(mix%material(2)%Ys)-Ys2max,  minval(mix%material(2)%Ys)-Ys2min, &
-                                      maxval(mix%material(2)%eh)-eh2max, minval(mix%material(2)%eh)-eh2min, maxval(mix%material(2)%g11)-g2max, minval(mix%material(2)%g11)-g2min
+                                      maxval(mix%material(2)%energy)-eh2max, minval(mix%material(2)%energy)-eh2min, maxval(mix%material(2)%g11)-g2max, minval(mix%material(2)%g11)-g2min
         close(11)
       endif
 
