@@ -1785,17 +1785,21 @@ contains
         use exits, only: message
         class(igridWallM), intent(inout), target :: this
 
+        if (this%isStratified) then
+            allocate(this%inst_horz_avg(5))
+            allocate(this%runningSum_sc(5))
+        else
+            allocate(this%inst_horz_avg(3))
+            allocate(this%runningSum_sc(3))
+        end if 
+
         if (this%timeAvgFullFields) then
             if (this%isStratified) then
                 allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),31))
                 allocate(this%horzavgstats(this%nz,33))
-                allocate(this%inst_horz_avg(5))
-                allocate(this%runningSum_sc(5))
             else
                 allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),23))
                 allocate(this%horzavgstats(this%nz,25))
-                allocate(this%inst_horz_avg(3))
-                allocate(this%runningSum_sc(3))
             end if 
         end if 
 

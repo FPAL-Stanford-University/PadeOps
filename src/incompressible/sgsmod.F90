@@ -54,7 +54,7 @@ module sgsmod
 
         logical :: useWallModel = .false.  
         real(rkind) :: z0, dz, dxsq, dysq, dzsq
-        integer :: nz
+        integer :: nz, ntimeAvgQs = 3
 
         type(gaussian) :: Gfilz 
         type(lstsq) :: Tfilz 
@@ -257,7 +257,7 @@ contains
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat, wChat
         complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: u, v, wC, filteredSpeedSq
-        real(rkind), dimension(5), intent(out) :: inst_horz_avg
+        real(rkind), dimension(this%ntimeAvgQs), intent(out) :: inst_horz_avg
         real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
         real(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
         real(rkind), dimension(:,:,:), pointer :: dwdx, dwdy, dwdz

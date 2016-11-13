@@ -31,6 +31,7 @@
         if (present(CompStokesP)) this%CompStokesP = CompStokesP
         if (present(useWallDamping)) this%useWallFunction = useWallDamping   
         if (present(isStratified)) this%isStratified = isStratified
+        if (this%isStratified) this%ntimeAvgQs = 5 ! Update the size of the inst_horz_avg vector from 3 to 5
 
         if (present(useWallmodel)) then
             this%useWallModel = useWallModel
