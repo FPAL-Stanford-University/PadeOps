@@ -1,15 +1,13 @@
-module StiffgasShock_data
+module obliqueimpact_data
     use kind_parameters,  only: rkind
     use constants,        only: one,eight
     implicit none
     
-    real(rkind) :: pRatio = real(4.5,rkind)
-    real(rkind) :: pinfbyp1 = real(1.0D3,rkind)
-    real(rkind) :: gamma
-    real(rkind) :: thick = one
-    real(rkind) :: p1, p2, rho1, rho2, u1, u2
-    real(rkind) :: Cbeta
-    real(rkind) :: sthick_prev, mwa_prev, mwa_prev2
+    real(rkind) :: omega = 1._rkind
+    real(rkind) :: dxdyfixed = 1._rkind
+    real(rkind) :: uvel = 300._rkind, vvel = 100.0_rkind
+    real(rkind) :: pinit   = real(1.0D5,rkind)
+    real(rkind) :: rho_0
 
 end module
 
@@ -18,7 +16,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: half,one
     use decomp_2d,        only: decomp_info
 
-    use StiffgasShock_data
+    use obliqueimpact_data
 
     implicit none
 
@@ -28,6 +26,10 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     integer :: i,j,k
     integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
+    real(rkind) :: xa, xb, yc, yd
+
+    xa = 0.0D0; xb = 2.0D0
+    yc = 0.0D0; yd = 1.0D0
 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
@@ -40,15 +42,15 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = one/real(nx-1,rkind)
-        dy = dx
+        dx = (xb-xa)/real(nx-1,rkind)
+        dy = (yd-yc)/real(ny-1,rkind)
         dz = dx
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
+                    x(i,j,k) = xa + real( ix1 - 1 + i - 1, rkind ) * dx
+                    y(i,j,k) = yc + real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
@@ -65,7 +67,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
     
-    use StiffgasShock_data
+    use obliqueimpact_data
 
     implicit none
     character(len=*),                                               intent(in)    :: inputfile
@@ -75,16 +77,18 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
-    integer :: ioUnit
+    integer :: ioUnit, i, j, k
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
-    real(rkind) :: rhoRatio, tfactor, h1
+    real(rkind) :: stp_x,bkstp_x,bkstp_y,phiang,u1,u2,v1,v2,rad,stp_r1,bkstp_r2,regfrac,dxdy
 
-    namelist /PROBINPUT/  pRatio, pinfbyp1, thick, Cbeta
+    namelist /PROBINPUT/  uvel, vvel, dxdyfixed
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
+
+    rho_0 = rho0
 
     associate( rho => fields(:,:,:,rho_index),   u => fields(:,:,:,  u_index), &
                  v => fields(:,:,:,  v_index),   w => fields(:,:,:,  w_index), &
@@ -95,58 +99,37 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
                g23 => fields(:,:,:,g23_index), g31 => fields(:,:,:,g31_index), & 
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+        
+        u1 = -uvel; u2 = uvel
+        v1 = -vvel; v2 = vvel
 
-        gamma = gam
-        tmp = half * ( one + erf( (x-half)/(thick*dx) ) )
-        rhoRatio = ( (gam+one)*pRatio + (two*gam)*pinfbyp1 + (gam-one) ) / ( (gam-one)*pRatio + (two*gam)*pinfbyp1 + (gam+one) )
+        dxdy = sqrt(dx**2+dy**2)
+        if(dxdyfixed>zero) dxdy = dxdyfixed
+             
+        do k=1,decomp%ysz(3)
+         do j=1,decomp%ysz(2)
+          do i=1,decomp%ysz(1)
 
-        rho0 = one
-        rho1 = one
-        rho2 = rho1 * rhoRatio
-        p1 = one !(rho1 / gam) / (one + pinfbyp1)   ! Make speed of sound unity
-        p2 = pRatio * p1
-        u1 = -sqrt(rhoRatio * (p2-p1) / (rho2-rho1))
-        u2 = rho1 * u1 / rho2
+             stp_r1 = half*(tanh(( x(i,j,k) - (1.0d0 + 0.1d0*cos(6.0d0*pi*y(i,j,k))))/dxdy) + one)
+             regfrac = stp_r1
 
-        PInf = pinfbyp1 * p1
+             u(i,j,k)   = (u1+regfrac*(u2-u1))
+             v(i,j,k)   = (v1+regfrac*(v2-v1))
 
-        h1 = gam*(p1+PInf)/((gam-one)*rho1) + half*u1*u1
-
-        ! rho = (one-tmp)*rho2 + tmp*rho1
-        u   = (one-tmp)*  u2 + tmp*  u1
-        rho = rho1 * u1 / u
-        v   = zero
+          end do 
+         end do 
+        end do 
         w   = zero
+        p   = pinit
 
-        p   = (one-tmp)*  p2 + tmp*  p1
-        ! p = ( h1 - half*u*u ) * ((gam-one)*rho) / gam - PInf
-        ! print*, "p diff: ", (p2 - p(1,1,1))/p2
-        ! p2 = p(1,1,1)
-        ! print*, "p diff: ", (p1 - p(decomp%ysz(1),1,1))/p1
-        ! p1 = p(decomp%ysz(1),1,1)
-
-        g11 = rho/rho0; g12 = zero; g13 = zero
-        g21 = zero;     g22 = one;  g23 = zero
-        g31 = zero;     g32 = zero; g33 = one
+        g11 = one;  g12 = zero; g13 = zero
+        g21 = zero; g22 = one;  g23 = zero
+        g31 = zero; g32 = zero; g33 = one
 
         ! Get rho compatible with det(g) and rho0
         tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
         rho = rho0 * tmp
 
-        tmp = sqrt( gam*(p+pInf)/rho )    ! Speed of sound
-        tfactor = one / minval(tmp)
-        tstop = tstop * tfactor
-        tviz = tviz * tfactor
-
-        print*, "rho1 = ", rho1
-        print*, "rho2 = ", rho2
-        print*, "u1 = ", u1
-        print*, "u2 = ", u2
-        print*, "p1 = ", p1
-        print*, "p2 = ", p2
-        print*, "Pinf = ", PInf
-
-        print*, "rho diff: ", (rho(1,1,1) - rho2)/rho2
     end associate
 
 end subroutine
@@ -155,12 +138,14 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
-                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
-    use decomp_2d,        only: decomp_info
+                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index, &
+                                sxx_index,sxy_index,sxz_index,syy_index,syz_index,szz_index
+    use decomp_2d,        only: decomp_info, transpose_x_to_y, transpose_y_to_x
     use DerivativesMod,   only: derivatives
+    use operators,        only: curl
     use FiltersMod,       only: filters
 
-    use StiffgasShock_data
+    use obliqueimpact_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -174,8 +159,10 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
     real(rkind), dimension(2),       intent(in) :: x_bc, y_bc, z_bc
     integer                                     :: outputunit=229
 
-    character(len=clen) :: outputfile, str
-    integer :: i
+    real(rkind), allocatable, dimension(:,:,:,:) :: curlg
+
+    character(len=clen) :: outputfile, velstr
+    integer :: i,j,k
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -185,19 +172,57 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
                g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
                g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
                g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
-                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3),       &
+               sxx => fields(:,:,:, sxx_index), sxy => fields(:,:,:, sxy_index), sxz => fields(:,:,:, sxz_index), &
+               syy => fields(:,:,:, syy_index), syz => fields(:,:,:, syz_index), szz => fields(:,:,:, szz_index)  )
 
-        write(str,'(ES7.1E2,A1,ES7.1E2)') pRatio, "_", pinfbyp1
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/StiffgasShock_"//trim(str)//"_", vizcount, ".dat"
 
-        open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
-        do i=1,decomp%ysz(1)
-            write(outputunit,'(10ES26.16)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
-                                           g11(i,1,1), g21(i,1,1), mu(i,1,1), bulk(i,1,1), kap(i,1,1)
-        
-        end do
-        close(outputunit)
+        ! do post-processing stuff
+        allocate(curlg(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3),9))
 
+        call curl(decomp, der, g11, g12, g13, curlg(:,:,:,1:3))
+        call curl(decomp, der, g21, g22, g23, curlg(:,:,:,4:6))
+        call curl(decomp, der, g31, g32, g33, curlg(:,:,:,7:9))
+
+
+        write(velstr,'(I3.3)') int(1.0_rkind)
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/vort_"//trim(velstr)//"_", vizcount, ".dat"
+
+        if(vizcount==0) then
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
+          write(outputunit,'(290a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar","curlg11","curlg12","curlg13","curlg21","curlg22","curlg23","curlg31","curlg32","curlg33"'
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                write(outputunit,'(36ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                                               g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
+                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), curlg(i,j,k,1:9)
+          
+            end do
+           end do
+          end do
+          close(outputunit)
+        else
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                write(outputunit,'(33ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                                               g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
+                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), curlg(i,j,k,1:9)
+          
+            end do
+           end do
+          end do
+          close(outputunit)
+        endif
+
+        deallocate(curlg)
     end associate
 end subroutine
 
@@ -208,7 +233,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
 
-    use StiffgasShock_data
+    use obliqueimpact_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -217,9 +242,9 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind), dimension(2),       intent(in)    :: x_bc, y_bc, z_bc
 
-    integer :: nx
+    integer :: nx, ny
 
-    nx = decomp%ysz(1)
+    nx = decomp%ysz(1); ny = decomp%ysz(2)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -231,54 +256,46 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
                g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        rho( 1,:,:) = rho2
-        u  ( 1,:,:) = u2
+        ! left x
+        rho( 1,:,:) = rho_0
+        u  ( 1,:,:) = zero
         v  ( 1,:,:) = zero
         w  ( 1,:,:) = zero
-        p  ( 1,:,:) = p2
+        p  ( 1,:,:) = pinit
         
-        g11( 1,:,:) = rho2; g12( 1,:,:) = zero; g13( 1,:,:) = zero
+        g11( 1,:,:) = one;  g12( 1,:,:) = zero; g13( 1,:,:) = zero
         g21( 1,:,:) = zero; g22( 1,:,:) = one;  g23( 1,:,:) = zero
         g31( 1,:,:) = zero; g32( 1,:,:) = zero; g33( 1,:,:) = one
 
-        rho(nx,:,:) = rho1
-        u  (nx,:,:) = u1
+        ! right x
+        rho(nx,:,:) = rho_0
+        u  (nx,:,:) = zero
         v  (nx,:,:) = zero
         w  (nx,:,:) = zero
-        p  (nx,:,:) = p1
+        p  (nx,:,:) = pinit
         
-        g11(nx,:,:) = rho1; g12(nx,:,:) = zero; g13(nx,:,:) = zero
+        g11(nx,:,:) = one;  g12(nx,:,:) = zero; g13(nx,:,:) = zero
         g21(nx,:,:) = zero; g22(nx,:,:) = one;  g23(nx,:,:) = zero
         g31(nx,:,:) = zero; g32(nx,:,:) = zero; g33(nx,:,:) = one
 
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,step,tsim,hookcond)
-    use kind_parameters,  only: rkind, clen
-    use constants,        only: zero, eps, half, one, two
-    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+subroutine hook_timestep(decomp,mesh,fields,step,tsim)
+    use kind_parameters,  only: rkind
+    use SolidGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use exits,            only: message
     use reductions,       only: P_MAXVAL
 
-    use StiffgasShock_data
+    use obliqueimpact_data
 
     implicit none
-    type(decomp_info),               intent(in)    :: decomp
-    integer,                         intent(in)    :: step
-    real(rkind),                     intent(in)    :: tsim
-    logical,               optional, intent(inout) :: hookcond
-    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
-    real(rkind), dimension(:,:,:,:), intent(in)    :: fields
-
-    integer :: nx, istart, iend
-    real(rkind), dimension(decomp%ysz(1)) :: p_exact, dpdx
-    real(rkind) :: dx, sthick, mwa
-    integer :: iounit = 229
-    character(len=clen) :: outputfile
-
-    nx = decomp%ysz(1)
+    type(decomp_info),               intent(in) :: decomp
+    integer,                         intent(in) :: step
+    real(rkind),                     intent(in) :: tsim
+    real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+    real(rkind), dimension(:,:,:,:), intent(in) :: fields
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -286,53 +303,10 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim,hookcond)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-
-        dx = x(2,1,1) - x(1,1,1)
-
-        p_exact = p2
-        where (x(:,1,1) .GT. half)
-            p_exact = p1
-        end where
-
-        dpdx = zero
-        dpdx(2:nx-1) = ( p(3:nx,1,1)-p(1:nx-2,1,1) ) / (two*dx)
-        sthick = abs(p2-p1)/maxval(dx*abs(dpdx))
-
-        istart = 1
-        do while ( x(istart,1,1) .LT. half-sthick*dx )
-            istart = istart + 1
-        end do
-
-        iend = nx
-        do while ( x(iend,1,1) .GT. half+sthick*dx )
-            iend = iend - 1
-        end do
-
-        ! mwa = maxval(abs(p(1:istart,1,1)-p_exact(1:istart)))/abs(p2-p1)
-        ! mwa = max(mwa,maxval(abs(p(1:istart,1,1)-p_exact(1:istart)))/abs(p2-p1))
-
-        mwa = maxval(p(:,1,1)-p2)
-        mwa = max(mwa,maxval(p1-p(:,1,1)))
-        mwa = mwa / abs(p2-p1)
-
-        call message(2,"Shock thickness", sthick)
-        call message(2,"Maximum Wiggles Amplitude", mwa)
-
-        write(outputfile,'(3(A,ES8.2E2),A)') "StiffgasShock_stats_", Cbeta,"_", pRatio, "_", pinfbyp1, ".dat"
-        if (step == 1) then
-            open(unit=iounit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-            write(iounit,'(3A26)') "Time", "Shock thickness", "MWA"
-        else
-            open(unit=iounit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
-        end if
-        write(iounit,'(3ES26.16)') tsim, sthick, mwa
-        close(iounit)
-
-        if ( abs( mwa - mwa_prev )/(mwa+eps) .LT. real(1.D-6,rkind) .AND. abs( sthick - sthick_prev )/(sthick+eps) .LT. real(1.D-6,rkind)) hookcond = .TRUE.
-
-        sthick_prev = sthick
-        mwa_prev2 = mwa_prev
-        mwa_prev = mwa
+        
+        call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
+        call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
+        call message(2,"Maximum conductivity",P_MAXVAL(kap))
 
     end associate
 end subroutine
@@ -359,4 +333,4 @@ end subroutine
 
 subroutine hook_finalize
 
-end subroutine
+end subroutine 

@@ -10,6 +10,9 @@ module ShockEntropy_data
     real(rkind) :: shmod
     real(rkind) :: xs = real(-9.50D0,rkind)
     real(rkind) :: xe = real(-8.85D0,rkind)
+    real(rkind) :: rho_0
+    real(rkind) :: ximp = real(-3.85D0,rkind)
+    real(rkind) :: uimpact = real(300.0D0,rkind)
 contains
 
 SUBROUTINE fnumden(pf,fparams,iparams,num,den)
@@ -154,7 +157,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PInf,tau0,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rho0,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,eps,third,half,one,two,pi
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
@@ -167,7 +170,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     character(len=*),                                               intent(in)    :: inputfile
     type(decomp_info),                                              intent(in)    :: decomp
     real(rkind),                                                    intent(in)    :: dx,dy,dz
-    real(rkind),                                          optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz, yield, tau0
+    integer,                                                        intent(in)    :: eostype
+    real(rkind), dimension(:),                                      intent(inout) :: eosparams
+    real(rkind),                                          optional, intent(inout) :: rho0, tstop, dt, tviz
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
@@ -176,13 +181,21 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     real(rkind) :: p_star, rhoRatio, tfactor, h1, grho1, grho2
     integer, dimension(2) :: iparams
     real(rkind), dimension(8) :: fparams
+    integer :: nx
+    real(rkind) :: mu, gam, PInf, yield, tau0
 
-    namelist /PROBINPUT/  pRatio, p1, thick, Cbeta
+    namelist /PROBINPUT/  pRatio, p1, thick, Cbeta, xs, xe, ximp, uimpact
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
+
+    if(eostype==1) then
+        gam   = eosparams(1);                           PInf = eosparams(3);
+        mu = eosparams(4);   yield = eosparams(5);   tau0 = eosparams(6);
+    else
+    endif
 
     associate( rho => fields(:,:,:,rho_index),   u => fields(:,:,:,  u_index), &
                  v => fields(:,:,:,  v_index),   w => fields(:,:,:,  w_index), &
@@ -194,8 +207,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
-        tmp = half * ( one + erf( (x-xs)/(thick*dx) ) )
-
         p_star = p1
         PInf = PInf / p_star
         mu = mu / p_star
@@ -219,14 +230,23 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         print*, "Mass flux: ", rho1*u1, rho2*u2
         print*, "Momentum flux: ", rho1*u1*u1+p1, rho2*u2*u2+p2
         print*, "g flux: ", g11_1*u1, g11_2*u2
+        print*, "M1 = ", u1/sqrt((gam*(p1+Pinf)+4.0_rkind/3.0_rkind*mu)/rho1)
+        print*, "M2 = ", u2/sqrt((gam*(p2+Pinf)+4.0_rkind/3.0_rkind*mu)/rho2)
 
-        ! rho = (one-tmp)*rho2 + tmp*rho1
+        ! initialize shock at xs
+        tmp = half * ( one + erf( (x-xs)/(thick*dx) ) )
+
         u   = (one-tmp)*  (u2-u1) ! + tmp*  u1
         rho = (one-tmp)*rho2 + tmp*rho1
         v   = zero
         w   = zero
         p   = (one-tmp)*  p2 + tmp*  p1
 
+        ! set location of impact if this is to be used instead of normal shock
+        tmp = half * ( one + erf( (x-ximp)/(thick*dx) ) )
+        u = (one-tmp)*two*uimpact
+
+        ! add vorticity/entropy fluctuations starting from xe
         tmp = half * ( one + erf( (x-xe)/(eps*dx) ) )
 
         rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe)))
@@ -239,61 +259,89 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         g21 = zero;     g22 = one;  g23 = zero
         g31 = zero;     g32 = zero; g33 = one
 
+        ! set pressure fluctutations to get constant sig11 - naturally reduces
+        ! to constant pressure for gases and liquids since shear modulus is zero
+        p = p - tmp*twothird*mu*(g11**(-third)*(g11**4-one) - g11**third*(g11**2-one))
+  
         ! Get rho compatible with det(g) and rho0
         tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
         rho = rho0 * tmp
+
+        rho_0 = rho0
 
         ! tmp = sqrt( (gam*(p+pInf) + four/three * mu)/rho )    ! Speed of sound
         ! tfactor = one / minval(tmp)
         ! tstop = tstop * tfactor
         ! tviz = tviz * tfactor
 
+        ! write out solution of nonlinear problem, used to initialize the
+        ! simulation
         print*, "rho1 = ", rho1
         print*, "rho2 = ", rho2
         print*, "u1 = ", u1
         print*, "u2 = ", u2
         print*, "p1 = ", p1
         print*, "p2 = ", p2
+        print*, "a1 = ", sqrt((gam*(p1+Pinf)+4.0_rkind/3.0_rkind*mu)/rho1)
+        print*, "a2 = ", sqrt((gam*(p2+Pinf)+4.0_rkind/3.0_rkind*mu)/rho2)
         print*, "Pinf = ", PInf
 
         print*, "rho diff: ", (rho(1,1,1) - rho2)/rho2
 
         print*, "tviz = ", tviz
         print*, "tstop = ", tstop
+
+        ! store state variables at boundaries for use in hooks_bc
+        nx = decomp%ysz(1)
+        rho1 = rho(nx,1,1); u1 = u(nx,1,1); p1 = p(nx,1,1)
+        rho2 = rho( 1,1,1); u2 = u( 1,1,1); p2 = p( 1,1,1)
+
     end associate
 
 end subroutine
 
-subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
+subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
-                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
+                                g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index, &
+                                sxx_index, sxy_index, sxz_index, syy_index, syz_index, szz_index
     use decomp_2d,        only: decomp_info
+    use DerivativesMod,   only: derivatives
+    use FiltersMod,       only: filters
+    use operators,        only: curl
 
     use ShockEntropy_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
+    type(filters),                   intent(in) :: fil
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    integer, dimension(2),           intent(in) :: x_bc, y_bc, z_bc
     integer                                     :: outputunit=229
 
     character(len=clen) :: outputfile, str
-    integer :: i
+    integer :: i,j,k
+    real(rkind), allocatable, dimension(:,:,:,:) :: curlg
+    real(rkind), allocatable, dimension(:,:,:) :: detg
+
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
-               g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
-               g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
-               g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
-                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+               g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index),    & 
+               g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index),    &
+               g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index),    & 
+                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3),                                      &
+               sxx => fields(:,:,:, sxx_index), sxy => fields(:,:,:, sxy_index), sxz => fields(:,:,:, sxz_index), &
+               syy => fields(:,:,:, syy_index), syz => fields(:,:,:, syz_index), szz => fields(:,:,:, szz_index)  )
 
         write(str,'(ES7.1E2,A,ES7.1E2)') pRatio, "_", Cbeta
         write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShockEntropy_"//trim(str)//"_", vizcount, ".dat"
@@ -306,10 +354,99 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,tsim,vizcount)
         end do
         close(outputunit)
 
+        ! do post-processing stuff
+        allocate(curlg(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),9))
+        allocate(detg(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)))
+
+        call curl(decomp, der, g11, g12, g13, curlg(:,:,:,1:3),-x_bc, y_bc, z_bc)
+        call curl(decomp, der, g21, g22, g23, curlg(:,:,:,4:6), x_bc,-y_bc, z_bc)
+        call curl(decomp, der, g31, g32, g33, curlg(:,:,:,7:9), x_bc, y_bc,-z_bc)
+
+
+        detg = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
+
+        !! ------debug block------
+        !! check if curlg13 (actually (curl(g^T))_31) is being computed correctly
+        !! Get dv/dx
+        !call transpose_y_to_x( g12, xtmp, decomp)
+        !call der%ddx(xtmp,xdum,-x_bc(1),-x_bc(2))
+        !call transpose_x_to_y(xdum, curlg(:,:,:,1) )
+
+        !! Get du/dy
+        !call der%ddy( g11, curlg(:,:,:,2), y_bc(1), y_bc(2) )
+
+        !curlg(:,:,:,4) = curlg(:,:,:,1) - curlg(:,:,:,2) ! dv/dx - du/dy
+        !write(*,*) 'curlg 2 methods diff: ', maxval(curlg(:,:,:,4)-curlg(:,:,:,3)), minval(curlg(:,:,:,4)-curlg(:,:,:,3))
+
+        !! check commutation of filter and derivative
+        !!filter curlg1 -> curlg3; curlg3 contains filter(ddx(g12))
+        !curlg(:,:,:,3) = curlg(:,:,:,1)
+        !call filter(decomp,curlg(:,:,:,3),fil,1,x_bc,y_bc,z_bc)
+
+        !!filter curlg2 -> curlg4; curlg4 contains filter(ddy(g11))
+        !curlg(:,:,:,4) = curlg(:,:,:,2)
+        !call filter(decomp,curlg(:,:,:,4),fil,1,x_bc,y_bc,z_bc)
+
+        !!filter g12 -> curlg9;
+        !curlg(:,:,:,9) = g12
+        !call filter(decomp,curlg(:,:,:,9),fil,1,x_bc,y_bc,z_bc)
+        !! ddx curlg9 -> curlg5; curlg5 contains ddx(filter(g12))
+        !call transpose_y_to_x( curlg(:,:,:,9), xtmp, decomp)
+        !call der%ddx(xtmp,xdum,-x_bc(1),-x_bc(2))
+        !call transpose_x_to_y(xdum, curlg(:,:,:,5) )
+
+        !!filter g11 -> curlg9; ddy curlg9 -> curlg6; curlg6 contains ddy(filter(g11))
+        !curlg(:,:,:,9) = g11
+        !call filter(decomp,curlg(:,:,:,9),fil,1,x_bc,y_bc,z_bc)
+        !call der%ddy( curlg(:,:,:,9), curlg(:,:,:,6), y_bc(1), y_bc(2) )
+
+        !write(*,*) 'Filter commutation: F(ddx(g12)), ddx(F(g12)): ', maxval(curlg(:,:,:,3)-curlg(:,:,:,5)), minval(curlg(:,:,:,3)-curlg(:,:,:,5))
+        !write(*,*) 'Filter commutation: F(ddy(g11)), ddy(F(g11)): ', maxval(curlg(:,:,:,4)-curlg(:,:,:,6)), minval(curlg(:,:,:,4)-curlg(:,:,:,6))
+        !! ------debug block------
+
+        write(outputfile,'(2A)') trim(outputdir),"/tec_ShEn_"//trim(str)//".dat"
+        if(vizcount==0) then
+
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='unknown')
+          write(outputunit,'(290a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar","curlg11","curlg12","curlg13","curlg21","curlg22","curlg23","curlg31","curlg32","curlg33","conterr"'
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES27.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                write(outputunit,'(37ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                                               g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
+                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), curlg(i,j,k,1:9), &
+                                               rho(i,j,k)-rho_0*detg(i,j,k)
+          
+            end do
+           end do
+          end do
+          close(outputunit)
+        else
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='old',ACTION='write',POSITION='append')
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                write(outputunit,'(34ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                                               g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
+                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), curlg(i,j,k,1:9), &
+                                               rho(i,j,k)-rho_0*detg(i,j,k)
+          
+            end do
+           end do
+          end do
+          close(outputunit)
+        endif
+
+        deallocate(curlg,detg)
     end associate
 end subroutine
 
-subroutine hook_bc(decomp,mesh,fields,tsim)
+subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero, one
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
@@ -323,6 +460,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    real(rkind), dimension(2),       intent(in)    :: x_bc, y_bc, z_bc
 
     integer :: nx
 
@@ -361,22 +499,26 @@ subroutine hook_bc(decomp,mesh,fields,tsim)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,step,tsim)
+subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind, clen
     use constants,        only: zero, half, one, two
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use exits,            only: message
     use reductions,       only: P_MAXVAL
+    use DerivativesMod,   only: derivatives
 
     use ShockEntropy_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
     integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
+    real(rkind),                     intent(in) :: dt
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    integer,     dimension(2),       intent(in) :: x_bc, y_bc, z_bc
 
     integer :: nx, istart, iend
     real(rkind), dimension(decomp%ysz(1)) :: p_exact, dpdx
@@ -455,5 +597,9 @@ subroutine hook_source(decomp,mesh,fields,tsim,rhs,rhsg)
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
     end associate
+end subroutine
+
+subroutine hook_finalize()
+
 end subroutine
 
