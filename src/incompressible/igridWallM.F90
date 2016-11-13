@@ -233,7 +233,7 @@ contains
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .false., UseDealiasFilterVert = .false.
         real(rkind) :: Lz = 1.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true.
-        integer :: tSystemInteractions = 1
+        integer :: tSystemInteractions = 100
         logical :: computeSpectra = .false., timeAvgFullFields = .false. 
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
