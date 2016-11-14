@@ -159,6 +159,7 @@ contains
 
         eelastic = fourth*this%mu/this%rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
 
+
     end subroutine
 
     pure subroutine get_sos(this,rhom,sos)

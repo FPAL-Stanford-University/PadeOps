@@ -321,7 +321,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
           do k=1,decomp%ysz(3)
            do j=1,decomp%ysz(2)
             do i=1,decomp%ysz(1)
-                write(outputunit,'(48ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                      ! continuum (9)
+                write(outputunit,'(50ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                      ! continuum (9)
                                                 sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), must(i,j,k), bulk(i,j,k), kap(i,j,k), &    ! continuum (9)
                                                 mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% energy(i,j,k), &  ! material 1 (14)
                                                 mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
@@ -344,7 +344,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
           do k=1,decomp%ysz(3)
            do j=1,decomp%ysz(2)
             do i=1,decomp%ysz(1)
-                write(outputunit,'(45ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                                                    ! continuum (6)
+                write(outputunit,'(47ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                                                    ! continuum (6)
                                                 sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), must(i,j,k), bulk(i,j,k), kap(i,j,k), &    ! continuum (9)
                                                 mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% energy(i,j,k), &  ! material 1 (14)
                                                 mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
@@ -377,7 +377,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
                 prefl = sigma_0 * exp( -((-x(i,j,k) - cL_mix*tsim - 0.35_rkind + half + half)/(0.03_rkind))**2 ) * crefl * (three*lamLmix(i,j,k) + two*mumix(i,j,k))/(three*(lamLmix(i,j,k) + two*mumix(i,j,k)))
                 ptra =  sigma_0 * exp( -(cL_mix*(x(i,j,k)/cL_mix_2 - tsim - 0.35_rkind/cL_mix + half/cL_mix - half/cL_mix_2)/(0.03_rkind))**2 ) * ctran * (three*lamLmix(i,j,k) + two*mumix(i,j,k))/(three*(lamLmix(i,j,k) + two*mumix(i,j,k)))
                 write(outputunit,'(6ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), pinc, prefl, ptra
-                write(*,'(i5,1x,2(e19.12,1x))') i, sigma_0, pinc
+                !write(*,'(i5,1x,2(e19.12,1x))') i, sigma_0, pinc
             end do
            end do
           end do
@@ -511,82 +511,58 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     end associate
 end subroutine
 
-subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+subroutine hook_material_g_source(decomp,eos,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
     use kind_parameters,  only: rkind
-    use constants,        only: zero
     use decomp_2d,        only: decomp_info
-    use StiffGasEOS,      only: stiffgas
-    use Sep1SolidEOS,     only: sep1solid
-
-    use MultSpecGauss_data
+    use AbstractEOSMod,   only: abstracteos
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
-    type(stiffgas),                  intent(in)    :: hydro
-    type(sep1solid),                 intent(in)    :: elastic
+    class(abstracteos),              intent(in)    :: eos
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
     real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-
 end subroutine
 
-subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+subroutine hook_material_mass_source(decomp,eos,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
     use kind_parameters,  only: rkind
-    use constants,        only: zero
     use decomp_2d,        only: decomp_info
-    use StiffGasEOS,      only: stiffgas
-    use Sep1SolidEOS,     only: sep1solid
-
-    use MultSpecGauss_data
+    use AbstractEOSMod,   only: abstracteos
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
-    type(stiffgas),                  intent(in)    :: hydro
-    type(sep1solid),                 intent(in)    :: elastic
+    class(abstracteos),              intent(in)    :: eos
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
     real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
     real(rkind), dimension(:,:,:),   intent(inout) :: rhs
-
 end subroutine
 
-subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+subroutine hook_material_VF_source(decomp,eos,x,y,z,tsim,u,v,w,Ys,VF,p,rhs)
     use kind_parameters,  only: rkind
-    use constants,        only: zero
     use decomp_2d,        only: decomp_info
-    use StiffGasEOS,      only: stiffgas
-    use Sep1SolidEOS,     only: sep1solid
-
-    use MultSpecGauss_data
+    use AbstractEOSMod,   only: abstracteos
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
-    type(stiffgas),                  intent(in)    :: hydro
-    type(sep1solid),                 intent(in)    :: elastic
-    real(rkind),                     intent(in)    :: tsim
-    real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
-    real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
-    real(rkind), dimension(:,:,:),   intent(inout) :: rhs
-
-end subroutine
-
-subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p,rhs)
-    use kind_parameters,  only: rkind
-    use constants,        only: zero
-    use decomp_2d,        only: decomp_info
-    use StiffGasEOS,      only: stiffgas
-    use Sep1SolidEOS,     only: sep1solid
-
-    use MultSpecGauss_data
-
-    implicit none
-    type(decomp_info),               intent(in)    :: decomp
-    type(stiffgas),                  intent(in)    :: hydro
-    type(sep1solid),                 intent(in)    :: elastic
+    class(abstracteos),              intent(in)    :: eos
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
     real(rkind), dimension(:,:,:),   intent(in)    :: u,v,w,Ys,VF,p
     real(rkind), dimension(:,:,:),   intent(inout) :: rhs
+end subroutine
 
+subroutine hook_material_energy_source(decomp,eos,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
+    use kind_parameters,  only: rkind
+    use decomp_2d,        only: decomp_info
+    use AbstractEOSMod,   only: abstracteos
+
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    class(abstracteos),              intent(in)    :: eos
+    real(rkind),                     intent(in)    :: tsim
+    real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
+    real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
+    real(rkind), dimension(:,:,:),   intent(inout) :: rhs
 end subroutine

@@ -374,6 +374,12 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for g tensor equation
         ! real(rkind) :: max_modDevSigma
 
+        !write(*,*) 'Computing rhsg'
+        !write(*,*) 'rho:', maxval(rho), minval(rho)
+        !write(*,*) '  u:', maxval(u), minval(u)
+        !write(*,*) '  v:', maxval(v), minval(v)
+        !write(*,*) '  w:', maxval(w), minval(w)
+        !write(*,*) '  g:', maxval(this%g), minval(this%g)
         call this%getRHS_g(rho,u,v,w,dt,rhsg,x_bc,y_bc,z_bc)
         call hook_material_g_source(this%decomp,this%eos,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
@@ -381,6 +387,10 @@ contains
         if(isub==1) this%Qtmpg = zero                   ! not really needed, since RK45_A(1) = 0
         this%Qtmpg  = dt*rhsg + RK45_A(isub)*this%Qtmpg
         this%g = this%g  + RK45_B(isub)*this%Qtmpg
+
+        !write(*,*) 'Updating g'
+        !write(*,*) 'rhsg:', maxval(rhsg), minval(rhsg)
+        !write(*,*) '   g:', maxval(this%g), minval(this%g)
 
         ! Now project g tensor to SPD space
         !ADD! call this%elastic%make_tensor_SPD(this%g)
@@ -416,7 +426,7 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
-        real(rkind), parameter :: etafac = one/6._rkind
+        real(rkind), parameter :: etafac = zero!one/6._rkind
 
         ! Symmetry and anti-symmetry properties of g are assumed as below
         ! In x g_{ij}: [S A A; A S S; A S S]
@@ -424,40 +434,57 @@ contains
         ! In z g_{ij}: [S S A; S S A; A A S]
 
         rhsg = zero
+        !write(*,*) 'In getRHS_g'
+        !write(*,*) '   g:', maxval(this%g), minval(this%g)
 
         detg = this%g11*(this%g22*this%g33-this%g23*this%g32) &
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
+        !write(*,*) 'detg:', maxval(detg), minval(detg)
 
         ! Get the species density = rho*Y/VF (additional terms to give correct limiting behaviour as Ys and VF tend to 0)
         ! tmp = (rho*this%Ys + this%eos%rho0*detg*epssmall)/(this%VF + epssmall)   
         call this%getSpeciesDensity(rho,tmp)
+        !write(*,*) ' rho:', maxval(rho), minval(rho)
+        !write(*,*) '  Ys:', maxval(this%Ys), minval(this%Ys)
+        !write(*,*) '  VF:', maxval(this%VF), minval(this%VF)
+        !write(*,*) 'rhom:', maxval(tmp), minval(tmp)
         ! tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
         penalty = etafac*( tmp/detg/this%eos%rho0-one)/dt ! Penalty term to keep g consistent with species density
+        !write(*,*) 'penalt:', maxval(penalty), minval(penalty)
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
+        !write(*,*) 'u*g:', maxval(tmp), minval(tmp)
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-x_bc, y_bc, z_bc)
+        !write(*,*) 'grad(u*g):', maxval(rhsg(:,:,:,1:3)), minval(rhsg(:,:,:,1:3))
         
         call curl(this%decomp, this%der, this%g11, this%g12, this%g13, curlg, -x_bc, y_bc, z_bc)
         rhsg(:,:,:,1) = rhsg(:,:,:,1) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g11
         rhsg(:,:,:,2) = rhsg(:,:,:,2) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g12
         rhsg(:,:,:,3) = rhsg(:,:,:,3) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g13
+        !write(*,*) 'rhsg1-3:', maxval(rhsg(:,:,:,1:3)), minval(rhsg(:,:,:,1:3))
  
         tmp = -u*this%g21-v*this%g22-w*this%g23
+        !write(*,*) 'u*g:', maxval(tmp), minval(tmp)
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6), x_bc,-y_bc, z_bc)   
+        !write(*,*) 'grad(u*g):', maxval(rhsg(:,:,:,1:3)), minval(rhsg(:,:,:,1:3))
         
         call curl(this%decomp, this%der, this%g21, this%g22, this%g23, curlg, x_bc, -y_bc, z_bc)
         rhsg(:,:,:,4) = rhsg(:,:,:,4) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g21
         rhsg(:,:,:,5) = rhsg(:,:,:,5) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g22
         rhsg(:,:,:,6) = rhsg(:,:,:,6) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g23
+        !write(*,*) 'rhsg4-6:', maxval(rhsg(:,:,:,4:6)), minval(rhsg(:,:,:,4:6))
  
         tmp = -u*this%g31-v*this%g32-w*this%g33
+        !write(*,*) 'u*g:', maxval(tmp), minval(tmp)
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,7),rhsg(:,:,:,8),rhsg(:,:,:,9), x_bc, y_bc,-z_bc)
+        !write(*,*) 'grad(u*g):', maxval(rhsg(:,:,:,1:3)), minval(rhsg(:,:,:,1:3))
 
         call curl(this%decomp, this%der, this%g31, this%g32, this%g33, curlg, x_bc, y_bc, -z_bc)
         rhsg(:,:,:,7) = rhsg(:,:,:,7) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g31
         rhsg(:,:,:,8) = rhsg(:,:,:,8) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g32
         rhsg(:,:,:,9) = rhsg(:,:,:,9) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g33
+        !write(*,*) 'rhsg7-9:', maxval(rhsg(:,:,:,7:9)), minval(rhsg(:,:,:,7:9))
 
         if (this%plast) then
             if(this%explPlast) then
@@ -783,17 +810,36 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhom
 
+        integer :: i
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: detg
+
         ! Get detg in rhom
         rhom = this%g11*(this%g22*this%g33-this%g23*this%g32) &
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
+        detg = rhom
 
         if (this%usegTg) then
             rhom = sqrt(rhom)
         end if
 
         ! Get rhom = rho*Ys/VF (Additional terms to give correct limiting behaviour when Ys and VF tend to 0)
-        rhom = (rho*this%Ys + this%eos%rho0*rhom*epssmall)/(this%VF + epssmall)   
+        ! --niranjan: Does this work if Ys < zero or VF < zero?????? - Replacing
+        ! it by the where and elsewhere statements below
+        !rhom = (rho*this%Ys + this%eos%rho0*rhom*epssmall)/(this%VF + epssmall)   
+        where(this%Ys < zero .or. this%VF < zero)
+            rhom = this%eos%rho0*rhom
+        elsewhere
+            rhom = (rho*this%Ys + this%eos%rho0*rhom*epssmall)/(this%VF + epssmall)   
+        endwhere
+
+        ! debug
+        !write(*,*) '-----In speciesdensity'
+        !do i = 1, size(rhom,1)
+        !   write(*,'(8(e12.5,1x))') this%Ys(1,1,1), rho(i,1,1), detg(i,1,1), this%VF(i,1,1), this%eos%rho0, epssmall, rhom(i,1,1),  &
+        !                             (rho(i,1,1)*this%Ys(i,1,1) + this%eos%rho0*detg(i,1,1)*epssmall)/(this%VF(i,1,1) + epssmall)
+        !end do
+        !write(*,*) '-----Done speciesdensity'
 
     end subroutine
 
@@ -863,8 +909,10 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: sos2
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
 
+        !print *, '  ++A'
         this%Ys = this%consrv(:,:,:,1) / rho
         call this%getSpeciesDensity(rho,rhom)
+        !print *, '  ++B'
 
         !if(.NOT. this%PTeqb) then
         !    this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
@@ -874,9 +922,11 @@ contains
 
         ! Get gradients of Ys and put in Ji for subsequent use
         call gradient(this%decomp,this%der,this%Ys,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3))
+        !print *, '  ++C'
 
         ! Get pressure, temperature, devstress and speed of sound squared
         call this%eos%get_p_devstress_T_sos2(this%g,rhom,this%energy,this%p,this%T,this%devstress,sos2)
+        !print *, '  ++D'
 
     end subroutine
     

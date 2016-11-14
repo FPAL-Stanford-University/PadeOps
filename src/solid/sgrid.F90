@@ -561,6 +561,7 @@ contains
         ! ------------------------------------------------
         call this%get_dt(stability)
 
+        print *, 3
         ! Write out initial conditions and initial statistics
         statscount = 0
         call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,statscount,this%x_bc,this%y_bc,this%z_bc)
@@ -696,6 +697,10 @@ contains
         Qtmpt = zero
 
         do isub = 1,RK45_steps
+            !print *, 1
+            !write(*,*) 'Beginning substep', isub
+            !write(*,*) maxval(this%mix%material(1)%g), minval(this%mix%material(1)%g)
+            !write(*,*) maxval(this%mix%material(2)%g), minval(this%mix%material(2)%g)
             call this%get_conserved()
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
@@ -705,21 +710,26 @@ contains
                 call GracefulExit(trim(charout), 999)
             end if
             call this%mix%checkNaN()
+            !print *, 2
 
             ! Pre-compute stress, LAD, J, etc.
             ! call this%mix%getSOS(this%rho,this%p,this%sos)
             call this%mix%getLAD(this%rho,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%rho, this%x_bc,this%y_bc,this%z_bc)           ! Compute diffusive thermal fluxes (including enthalpy diffusion)
+            !print *, 3
 
             ! Update total mixture conserved variables
             call this%getRHS(rhs,divu,viscwork)
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
+            !print *, 4
 
             ! Now update all the individual species variables
             call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
+            !print *, 5
             call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
+            !print *, 6
 
             !if (.NOT. this%PTeqb) then
             !    call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
@@ -735,11 +745,13 @@ contains
             call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
             call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
             call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+            !print *, 7
 
             ! Filter the individual species variables
             call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
             
             call this%get_primitive()
+            !print *, 8
 
             ! if (.NOT. this%explPlast) then
             !     if (this%plastic) then
@@ -767,6 +779,7 @@ contains
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             call this%post_bc()
+            !print *, 9
         end do
 
         this%step = this%step + 1

@@ -80,7 +80,7 @@ contains
     
         real(rkind), dimension(size(g,1),size(g,2),size(g,3)  ) :: trG, trG2, detG, eelastic
         real(rkind), dimension(size(g,1),size(g,2),size(g,3),6) :: finger, fingersq
-    
+   
         call this%elastic%get_finger(g,finger,fingersq,trG,trG2,detG,this%usegTg)
         call this%elastic%get_eelastic(trG,trG2,detG,eelastic)
 

@@ -314,7 +314,12 @@ contains
 
         !real(rkind), dimension(4*this%ns), target :: fparams
         integer :: i, j, k, m
+        real(rkind) :: detg
         type(eqbPTFunction) :: eqbfn
+
+        !write(*,*) 'Beginning equilibratePressureTemperature'
+        !write(*,*) maxval(this%material(1)%g), minval(this%material(1)%g)
+        !write(*,*) maxval(this%material(2)%g), minval(this%material(2)%g)
 
         do k=1,this%nzp
          do j=1,this%nyp
@@ -324,8 +329,12 @@ contains
                   VF0(m)  = this%material(m)%VF(i,j,k)
                   Y(m)    = this%material(m)%Ys(i,j,k)
                   g0(:,m) = this%material(m)%g(i,j,k,:)
+                    !write(*,*) '-Material = ', m
+                    !write(*,'(3(e19.12,1x))') g0(1:3,m)
+                    !write(*,'(3(e19.12,1x))') g0(4:6,m)
+                    !write(*,'(3(e19.12,1x))') g0(7:9,m)
               end do
-              write(*,*) '---', i
+              !write(*,*) '---', i, minval(VF0)
               if(minval(VF0) < 1.0D-6) then
                   !if(VF0(1) > VF0(2)) then
                   !   this%material(2)%p = this%material(1)%p
@@ -336,6 +345,12 @@ contains
                   !endif
                   cycle
               endif
+              !do m = 1, this%ns
+              !      write(*,*) '-Material = ', m
+              !      write(*,'(3(e19.12,1x))') g0(1:3,m)
+              !      write(*,'(3(e19.12,1x))') g0(4:6,m)
+              !      write(*,'(3(e19.12,1x))') g0(7:9,m)
+              !end do
               eqbfn = eqbPTFunction(this%ns, this%material, VF0, g0, Y, mixE(i,j,k))
 
               ! set initial guesses and call newton_solve
@@ -349,6 +364,10 @@ contains
                   !    write(*,*) 'fvar before:    ', fvar
                   !endif
               call eqbfn%newton_solve(xvar, fvar)
+              if(minval(xvar) < zero) then
+                  write(*,*) 'Negative VFs or energies'
+                  write(*,'(a,4(i4,1x))') 'Indices: ', i, j, k, m
+              endif
                   !if(i==65 .and. j==1 .and. k==1) then
                       !write(*,'(a,4(e19.12,1x))') 'xvar after:    ', xvar
                   !endif
@@ -357,7 +376,23 @@ contains
               do m = 1, this%ns
                   this%material(m)%energy(i,j,k) = xvar(m)
                   this%material(m)%VF(i,j,k)  = xvar(this%ns+m)
-                  this%material(m)%g(i,j,k,:) = g0(:,m)*xvar(this%ns+m)**third
+                  this%material(m)%g(i,j,k,:) = g0(:,m)*(VF0(m)/xvar(this%ns+m))**third
+                    !write(*,'(3(e19.12,1x))') g0(1:3,m)
+                    !write(*,'(3(e19.12,1x))') g0(4:6,m)
+                    !write(*,'(3(e19.12,1x))') g0(7:9,m)
+                  g0(:,m) =this%material(m)%g(i,j,k,:)
+                  detg = g0(1,m)*(g0(5,m)*g0(9,m) - g0(6,m)*g0(8,m)) &
+                       - g0(2,m)*(g0(4,m)*g0(9,m) - g0(6,m)*g0(7,m)) &
+                       + g0(3,m)*(g0(4,m)*g0(8,m) - g0(5,m)*g0(7,m))
+                  !if(detg < zero) then
+                  !  write(*,*) 'Negative detg'
+                  !  write(*,'(4(i4,1x),e19.12,1x)') i, j, k, m, detg
+                  !  write(*,'(3(e19.12,1x))') g0(1:3,m)
+                  !  write(*,'(3(e19.12,1x))') g0(4:6,m)
+                  !  write(*,'(3(e19.12,1x))') g0(7:9,m)
+                  !  write(*,'(a,4(e19.12,1x))') 'xvar: ', xvar
+                  !  write(*,'(a,4(e19.12,1x))') 'VF0: ', VF0
+                  !endif
                   this%material(m)%p(i,j,k) = eqbfn%p(m)
                   this%material(m)%T(i,j,k) = eqbfn%T(m)
                   !if(i==65 .and. j==1 .and. k==1) then
@@ -368,6 +403,9 @@ contains
           end do
          end do
         end do
+        !write(*,*) 'Exiting equilibratePressureTemperature'
+        !write(*,*) maxval(this%material(1)%g), minval(this%material(1)%g)
+        !write(*,*) maxval(this%material(2)%g), minval(this%material(2)%g)
 
     end subroutine
 
@@ -535,7 +573,6 @@ contains
         if(this%pTeqb) then
            call this%equilibratePressureTemperature(rho, e)
         endif
-         
         do imat = 1, this%ns
           call this%material(imat)%get_primitive(rho,sosm) !ADD! This is only for single species. Need to fix for multi-species
           
