@@ -359,13 +359,16 @@ contains
               do m = 1, this%ns
                   this%material(m)%energy(i,j,k) = xvar(m)
                   this%material(m)%VF(i,j,k)  = xvar(this%ns+m)
-                  this%material(m)%g(i,j,k,:) = g0(:,m)*xvar(this%ns+m)**third
+                  this%material(m)%g(i,j,k,:) = g0(:,m)*(VF0(m)/xvar(this%ns+m))**third
                   this%material(m)%p(i,j,k) = this%PTeqbfn%p(m)
                   this%material(m)%T(i,j,k) = this%PTeqbfn%T(m)
                   !if(i==65 .and. j==1 .and. k==1) then
                   !    write(*,*) 'pressures:    ', this%PTeqbfn%p(m)
                   !    write(*,*) 'temperatures: ', this%PTeqbfn%T(m)
                   !endif
+                  if (this%material(m)%VF(i,j,k) < zero) then
+                      print '(A,e19.12,A,3I0.0)', "Negative volume fraction of ",this%material(m)%VF(i,j,k)," detected at indices: ", i, j, k
+                  end if
               end do
           end do
          end do
@@ -536,6 +539,8 @@ contains
 
         if(this%pTeqb .and. (this%ns > 1)) then
            call this%equilibratePressureTemperature(rho, e)
+           ! print*, "get_primitive: Max pressure difference error    = ", maxval(abs(this%material(1)%p - this%material(2)%p))
+           ! print*, "get_primitive: Max temperature difference error = ", maxval(abs(this%material(1)%T - this%material(2)%T))
         end if
 
         if (this%ns == 1) then
@@ -605,7 +610,7 @@ contains
         devstress = zero
          
         do imat = 1, this%ns
-            call this%material(imat)%get_energy(rho) ! Update internal energy
+            ! call this%material(imat)%get_energy(rho) ! Update internal energy
             call this%material(imat)%get_primitive(rho,sosm) !ADD! Material density is being calculated multiple times. Add as a field to SolidMod to avoid this
         
             ! Add contribution to mixture internal energy
@@ -637,6 +642,11 @@ contains
             endif
 
         end do
+        
+        if(this%pTeqb .and. (this%ns > 1)) then
+           ! print*, "post_bc: Max pressure difference error    = ", maxval(abs(this%material(1)%p - this%material(2)%p))
+           ! print*, "post_bc: Max temperature difference error = ", maxval(abs(this%material(1)%T - this%material(2)%T))
+        end if
 
         if(this%SOSmodel) then
             sos = one / (sqrt(rho*sos) + epssmall)

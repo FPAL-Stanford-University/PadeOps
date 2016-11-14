@@ -39,7 +39,7 @@ contains
         if (allocated(this%p)  ) deallocate(this%p);   allocate( this%p(this%ns)    )
         if (allocated(this%T)  ) deallocate(this%T);   allocate( this%T(this%ns)    )
 
-        this%niters = 10
+        this%niters = 50
         this%tolerance = real(1.D-18,rkind)
     end function
     

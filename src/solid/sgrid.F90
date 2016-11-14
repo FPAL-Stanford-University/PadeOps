@@ -367,6 +367,7 @@ contains
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
         this%tstats = tstats
+        if (this%tstats <= zero) this%tstats = this%tviz
 
     end subroutine
 
