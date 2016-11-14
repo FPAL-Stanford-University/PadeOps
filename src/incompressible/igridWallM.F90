@@ -233,8 +233,8 @@ contains
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
         real(rkind) :: Lz = 1.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true.
-        integer :: tSystemInteractions = 1
-        logical :: computeSpectra = .true., timeAvgFullFields = .true., fastCalcPressure = .false.  
+        integer :: tSystemInteractions = 100
+        logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true.  
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -1385,7 +1385,7 @@ contains
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
-           if (this%isStratified) this%dumpFullField(this%T,'potT')
+           if (this%isStratified) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
         end if
 
@@ -1395,7 +1395,7 @@ contains
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
-           if (this%isStratified) this%dumpFullField(this%T,'potT')
+           if (this%isStratified) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            !call output_tecplot(gp)
         end if
