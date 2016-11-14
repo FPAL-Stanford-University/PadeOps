@@ -1,4 +1,4 @@
-module MultSpecGauss_data
+module test_ptequilibrium_data
     use kind_parameters,  only: rkind
     use constants,        only: one,eight,two
     implicit none
@@ -17,7 +17,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: one
     use decomp_2d,        only: decomp_info
 
-    use MultSpecGauss_data
+    use test_ptequilibrium_data
 
     implicit none
 
@@ -58,16 +58,17 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
-    use kind_parameters,  only: rkind
-    use constants,        only: zero,half,one,two,three,four
-    use SolidGrid,        only: u_index,v_index,w_index, e_index
-    use decomp_2d,        only: decomp_info
-    use exits,            only: GracefulExit
-    use AbstractEOSMod,   only: abstracteos
-    use Sep1SolidEOSMod,  only: sep1solideos
-    use SolidMixtureMod,  only: solid_mixture
+    use kind_parameters,        only: rkind
+    use constants,              only: zero,half,one,two,three,four
+    use exits,                  only: GracefulExit
+    use SolidGrid,              only: u_index,v_index,w_index
+    use decomp_2d,              only: decomp_info
+    use SolidMixtureMod,        only: solid_mixture
+    use AbstractEOSMod,         only: abstracteos
+    use Sep1SolidEOSMod,        only: sep1solideos
+    use GodunovRomenskiiEOSMod, only: godromeos
     
-    use MultSpecGauss_data
+    use test_ptequilibrium_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -77,8 +78,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     type(solid_mixture),             intent(inout) :: mix
     real(rkind),                     intent(inout) :: tstop, dt, tviz
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-    type(sep1solideos), allocatable :: eos, eos2
 
+    type(sep1solideos), allocatable :: eos, eos2
     integer :: ioUnit, indwv, indwv2
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, sig11, eps11,lamLmix,mumix
     real(rkind) :: p_star, rho_star, c_star
@@ -93,7 +94,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     close(ioUnit)
 
     associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
-                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3), e => fields(:,:,:,e_index))
+                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
         if (mix%ns /= 2) then
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
@@ -135,8 +136,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         else
           Rgas_2 = Rgas*rho_0/rho_0_2*(p_amb_2+p_infty_2)/(p_amb+p_infty)
         endif
-        !call mix%set_material(1,stiffgas(gamma,  Rgas,  p_infty  ), sep1solid(  rho_0,mu,  1.0D30,1.0D-10))
-        !call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2), sep1solid(rho_0_2,mu_2,1.0D30,1.0D-10))
 
         ! material 1
         eos = sep1solideos(gamma,Rgas,p_infty,rho_0,mu,1.0D30,1.0D-10,mix%usegTg)
@@ -146,15 +145,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         eos2 = sep1solideos(gamma_2,Rgas_2,p_infty_2,rho_0_2,mu_2,1.0D30,1.0D-10,mix%usegTg)
         call mix%set_material(2, eos2)
 
-
         if(thick<zero) then
           tmp = half * ( erf( (x-half-0.0_rkind)/(thickness) ) - erf( (x-half-0.4_rkind)/(thickness) ) )
         else
           tmp = half * ( erf( (x-half-0.0_rkind)/(thick*dx) ) - erf( (x-half-0.4_rkind)/(thick*dx) ) )
           !tmp = half * ( one + erf( (x-0.5_rkind)/(thick*dx) ) )
         endif
-        ! write(*,*) 'thickness = ', thickness
-        ! write(*,*) tmp(48:52,1,1)
+        write(*,*) 'thickness = ', thickness
+        write(*,*) tmp(48:52,1,1)
 
         ! Set material 1 properties
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
@@ -221,7 +219,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         eps11 = sig11 / (lamLmix + two*mumix)
         write(*,'(a,3(e19.12,1x))') '--Init', maxval(sig11), minval(sig11), sigma_0
 
-
         u   = - (cL_mix * sig11) / (lamLmix + two*mumix)
         v   = zero
         w   = zero
@@ -233,20 +230,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(2)%p = p_infty_2*(mix%material(2)%g11**gamma_2 - one)
         write(*,'(a,4(e19.12,1x))') '--Init p', maxval(mix%material(1)%p), minval(mix%material(1)%p), maxval(mix%material(2)%p), minval(mix%material(2)%p)
 
-        !select case(eostype)
-        !case(1)
-            ! Get temperature by first getting hydro energy
-            call eos%hydro%get_e_from_p(rho_0*mix%material(1)%g11, mix%material(1)%p, e)
-            call eos%hydro%get_T(e,mix%material(1)%T,rho_0*mix%material(1)%g11)
 
-            ! Get temperature by first getting hydro energy
-            call eos2%hydro%get_e_from_p(rho_0_2*mix%material(2)%g11, mix%material(2)%p, e)
-            call eos2%hydro%get_T(e,mix%material(2)%T,rho_0_2*mix%material(2)%g11)
-        !case(2)
-        !    T = T0
-        !end select
-        !Tinit = T(1,1,1)
-
+        mix%material(1)%T = (mix%material(1)%p + p_infty  ) / (Rgas  *rho_0  *mix%material(1)%g11)
+        mix%material(2)%T = (mix%material(2)%p + p_infty_2) / (Rgas_2*rho_0_2*mix%material(2)%g11)
 
     end associate
 
@@ -261,7 +247,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use DerivativesMod,   only: derivatives
     use SolidMixtureMod,  only: solid_mixture
 
-    use MultSpecGauss_data
+    use test_ptequilibrium_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -313,9 +299,9 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
         if(vizcount==0) then
           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='replace')
           write(outputunit,'(330a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p", &
-                                   & "sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar", &
-                                   & "p-1","Ys-1","VF-1","eh-1","T-1","g11-1","g12-1","g13-1","g21-1","g22-1","g23-1","g31-1","g32-1","g33-1","Dstar-1","kap-1",&
-                                   & "p-2","Ys-2","VF-2","eh-2","T-2","g11-2","g12-2","g13-2","g21-2","g22-2","g23-2","g31-2","g32-2","g33-2","Dstar-2","kap-2"'
+                                     "sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar", &
+                                     "p-1","Ys-1","VF-1","eh-1","T-1","g11-1","g12-1","g13-1","g21-1","g22-1","g23-1","g31-1","g32-1","g33-1","Dstar-1","kap-1",&
+                                     "p-2","Ys-2","VF-2","eh-2","T-2","g11-2","g12-2","g13-2","g21-2","g22-2","g23-2","g31-2","g32-2","g33-2","Dstar-2","kap-2"'
           write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
           write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
           do k=1,decomp%ysz(3)
@@ -334,7 +320,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
             end do
            end do
           end do
-          !write(*,'(a,4(e19.12,1x))') '--hook_output: ', maxval(p), minval(p), maxval(sxx), minval(sxx)
+          write(*,'(a,4(e19.12,1x))') '--hook_output: ', maxval(p), minval(p), maxval(sxx), minval(sxx)
           close(outputunit)
         else
           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='old', action='write', position='append')
@@ -377,7 +363,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
                 prefl = sigma_0 * exp( -((-x(i,j,k) - cL_mix*tsim - 0.35_rkind + half + half)/(0.03_rkind))**2 ) * crefl * (three*lamLmix(i,j,k) + two*mumix(i,j,k))/(three*(lamLmix(i,j,k) + two*mumix(i,j,k)))
                 ptra =  sigma_0 * exp( -(cL_mix*(x(i,j,k)/cL_mix_2 - tsim - 0.35_rkind/cL_mix + half/cL_mix - half/cL_mix_2)/(0.03_rkind))**2 ) * ctran * (three*lamLmix(i,j,k) + two*mumix(i,j,k))/(three*(lamLmix(i,j,k) + two*mumix(i,j,k)))
                 write(outputunit,'(6ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), pinc, prefl, ptra
-                ! write(*,'(i5,1x,2(e19.12,1x))') i, sigma_0, pinc
+                write(*,'(i5,1x,2(e19.12,1x))') i, sigma_0, pinc
             end do
            end do
           end do
@@ -420,11 +406,12 @@ end subroutine
 
 subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
+    use constants,        only: zero
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use MultSpecGauss_data
+    use test_ptequilibrium_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -451,7 +438,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use reductions,       only: P_MAXVAL
     use SolidMixtureMod,  only: solid_mixture
 
-    use MultSpecGauss_data
+    use test_ptequilibrium_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp

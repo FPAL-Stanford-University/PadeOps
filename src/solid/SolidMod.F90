@@ -33,7 +33,7 @@ module SolidMod
 
         real(rkind), dimension(:,:,:), allocatable :: Ys
         real(rkind), dimension(:,:,:), allocatable :: VF
-        real(rkind), dimension(:,:,:), allocatable :: eh
+        real(rkind), dimension(:,:,:), allocatable :: energy
         real(rkind), dimension(:,:,:), allocatable :: eel
 
         real(rkind), dimension(:,:,:,:), allocatable :: g
@@ -80,13 +80,13 @@ module SolidMod
         procedure :: getRHS_g
         procedure :: getRHS_gTg
         procedure :: getRHS_Ys
-        procedure :: getRHS_eh
-        procedure :: getRHS_VF
+        !procedure :: getRHS_eh
+        !procedure :: getRHS_VF
         procedure :: update_g
         procedure :: update_gTg
         procedure :: update_Ys
-        procedure :: update_eh
-        procedure :: update_VF
+        !procedure :: update_eh
+        !procedure :: update_VF
         procedure :: getPhysicalProperties
         ! procedure :: getPlasticSources
         ! procedure :: get_p_from_ehydro
@@ -208,8 +208,8 @@ contains
         allocate( this%VF(this%nxp,this%nyp,this%nzp) )
         
         ! Allocate material hydrodynamic energy
-        if( allocated( this%eh ) ) deallocate( this%eh )
-        allocate( this%eh(this%nxp,this%nyp,this%nzp) )
+        if( allocated( this%energy ) ) deallocate( this%energy )
+        allocate( this%energy(this%nxp,this%nyp,this%nzp) )
         
         ! Allocate material elastic energy
         if( allocated( this%eel ) ) deallocate( this%eel )
@@ -323,7 +323,7 @@ contains
         if( allocated( this%g )         ) deallocate( this%g )
 
         if( allocated( this%eel ) ) deallocate( this%eel )
-        if( allocated( this%eh )  ) deallocate( this%eh )
+        if( allocated( this%energy )  ) deallocate( this%energy )
         if( allocated( this%VF )  ) deallocate( this%VF )
         if( allocated( this%Ys )  ) deallocate( this%Ys )
 
@@ -653,100 +653,100 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,x_bc,y_bc,z_bc)
-        use RKCoeffs,   only: RK45_A,RK45_B
-        class(solid), intent(inout) :: this
-        integer, intent(in) :: isub
-        real(rkind), intent(in) :: dt,tsim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,viscwork
-        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+    !!subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,x_bc,y_bc,z_bc)
+    !!    use RKCoeffs,   only: RK45_A,RK45_B
+    !!    class(solid), intent(inout) :: this
+    !!    integer, intent(in) :: isub
+    !!    real(rkind), intent(in) :: dt,tsim
+    !!    real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
+    !!    real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,viscwork
+    !!    integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
+    !!    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
 
-        if(this%PTeqb) then
-            call GracefulExit("update_eh shouldn't be called with PTeqb. Exiting.",4809)
-        endif
+    !!    if(this%PTeqb) then
+    !!        call GracefulExit("update_eh shouldn't be called with PTeqb. Exiting.",4809)
+    !!    endif
 
-        call this%getRHS_eh(rho,u,v,w,divu,viscwork,rhseh,x_bc,y_bc,z_bc)
-        call hook_material_energy_source(this%decomp,this%eos,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhseh)
+    !!    call this%getRHS_eh(rho,u,v,w,divu,viscwork,rhseh,x_bc,y_bc,z_bc)
+    !!    call hook_material_energy_source(this%decomp,this%eos,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhseh)
 
-        ! advance sub-step
-        if(isub==1) this%Qtmpeh = zero                   ! not really needed, since RK45_A(1) = 0
-        this%Qtmpeh  = dt*rhseh + RK45_A(isub)*this%Qtmpeh
-        this%consrv(:,:,:,2) = this%consrv(:,:,:,2) + RK45_B(isub)*this%Qtmpeh
+    !!    ! advance sub-step
+    !!    if(isub==1) this%Qtmpeh = zero                   ! not really needed, since RK45_A(1) = 0
+    !!    this%Qtmpeh  = dt*rhseh + RK45_A(isub)*this%Qtmpeh
+    !!    this%consrv(:,:,:,2) = this%consrv(:,:,:,2) + RK45_B(isub)*this%Qtmpeh
 
-    end subroutine
+    !!end subroutine
 
-    subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,rhseh,x_bc,y_bc,z_bc)
-        use operators, only: gradient, divergence
-        class(solid),                                       intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu,viscwork
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhseh
-        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+    !!subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,rhseh,x_bc,y_bc,z_bc)
+    !!    use operators, only: gradient, divergence
+    !!    class(solid),                                       intent(in)  :: this
+    !!    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
+    !!    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu,viscwork
+    !!    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhseh
+    !!    integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
+    !!    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
-        ! artificial conductivity and inter-species enthalpy diffusion fluxes
-        tmp1 = -this%qi(:,:,:,1) ! * this%VF 
-        tmp2 = -this%qi(:,:,:,2) ! * this%VF 
-        tmp3 = -this%qi(:,:,:,3) ! * this%VF 
+    !!    ! artificial conductivity and inter-species enthalpy diffusion fluxes
+    !!    tmp1 = -this%qi(:,:,:,1) ! * this%VF 
+    !!    tmp2 = -this%qi(:,:,:,2) ! * this%VF 
+    !!    tmp3 = -this%qi(:,:,:,3) ! * this%VF 
 
-        ! add convective fluxes
-        rhseh = -rho*this%Ys*this%eh
-        tmp1 = tmp1 + rhseh*u
-        tmp2 = tmp2 + rhseh*v
-        tmp3 = tmp3 + rhseh*w
+    !!    ! add convective fluxes
+    !!    rhseh = -rho*this%Ys*this%energy
+    !!    tmp1 = tmp1 + rhseh*u
+    !!    tmp2 = tmp2 + rhseh*v
+    !!    tmp3 = tmp3 + rhseh*w
 
-        ! Take divergence of fluxes
-        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh,-x_bc,-y_bc,-z_bc)     ! energy has to be anti-symmetric
+    !!    ! Take divergence of fluxes
+    !!    call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh,-x_bc,-y_bc,-z_bc)     ! energy has to be anti-symmetric
 
-        ! Add pressure and viscous work terms
-        rhseh = rhseh - this%VF * (this%p*divu + viscwork)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
+    !!    ! Add pressure and viscous work terms
+    !!    rhseh = rhseh - this%VF * (this%p*divu + viscwork)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
 
-    end subroutine
+    !!end subroutine
 
-    subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
-        use RKCoeffs,   only: RK45_A,RK45_B
-        class(solid), intent(inout) :: this
-        integer, intent(in) :: isub
-        real(rkind), intent(in) :: dt,tsim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: u,v,w
-        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+    !!subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+    !!    use RKCoeffs,   only: RK45_A,RK45_B
+    !!    class(solid), intent(inout) :: this
+    !!    integer, intent(in) :: isub
+    !!    real(rkind), intent(in) :: dt,tsim
+    !!    real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
+    !!    real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: u,v,w
+    !!    integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
+    !!    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
 
-        if(this%PTeqb) then
-            call GracefulExit("update_VF shouldn't be called with PTeqb. Exiting.",4809)
-        endif
+    !!    if(this%PTeqb) then
+    !!        call GracefulExit("update_VF shouldn't be called with PTeqb. Exiting.",4809)
+    !!    endif
 
-        call this%getRHS_VF(u,v,w,rhsVF,x_bc,y_bc,z_bc)
-        call hook_material_VF_source(this%decomp,this%eos,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
+    !!    call this%getRHS_VF(u,v,w,rhsVF,x_bc,y_bc,z_bc)
+    !!    call hook_material_VF_source(this%decomp,this%eos,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
 
-        ! advance sub-step
-        if(isub==1) this%QtmpVF = zero                   ! not really needed, since RK45_A(1) = 0
-        this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
-        this%VF = this%VF  + RK45_B(isub)*this%QtmpVF
+    !!    ! advance sub-step
+    !!    if(isub==1) this%QtmpVF = zero                   ! not really needed, since RK45_A(1) = 0
+    !!    this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
+    !!    this%VF = this%VF  + RK45_B(isub)*this%QtmpVF
 
-    end subroutine
+    !!end subroutine
 
-    subroutine getRHS_VF(this,u,v,w,rhsVF,x_bc,y_bc,z_bc)
-        use operators, only: gradient
-        class(solid),                                       intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: u,v,w
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
-        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+    !!subroutine getRHS_VF(this,u,v,w,rhsVF,x_bc,y_bc,z_bc)
+    !!    use operators, only: gradient
+    !!    class(solid),                                       intent(in)  :: this
+    !!    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: u,v,w
+    !!    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
+    !!    integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
+    !!    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
-        call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
-        rhsVF = u*tmp1 + v*tmp2 + w*tmp3
+    !!    call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
+    !!    rhsVF = u*tmp1 + v*tmp2 + w*tmp3
 
-        ! any penalty term to keep VF between 0 and 1???
+    !!    ! any penalty term to keep VF between 0 and 1???
 
-    end subroutine
+    !!end subroutine
 
     subroutine filter(this, iflag, x_bc, y_bc, z_bc)
         use operators, only: filter3D
@@ -769,7 +769,7 @@ contains
         call filter3D(this%decomp, this%fil, this%consrv(:,:,:,1), iflag, x_bc, y_bc, z_bc)
 
         if(.NOT. this%PTeqb) then
-            ! filter eh
+            ! filter energy
             call filter3D(this%decomp, this%fil, this%consrv(:,:,:,2), iflag,x_bc, y_bc, z_bc)
 
             ! filter VF
@@ -823,12 +823,16 @@ contains
 
     ! end subroutine
 
-    subroutine get_enthalpy(this,enthalpy)
+    subroutine get_enthalpy(this,rho,enthalpy)
         class(solid), intent(in) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in ) :: rho
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: enthalpy
 
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhom
+
         !ADD! call this%hydro%get_enthalpy(this%T,enthalpy)
-        enthalpy = zero
+        call this%getSpeciesDensity(rho,rhom)
+        enthalpy = this%energy + this%p/rhom
     end subroutine
 
     ! subroutine get_eelastic_devstress(this)
@@ -848,43 +852,43 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
 
         this%consrv(:,:,:,1) = rho * this%Ys
-        if(.NOT. this%PTeqb) this%consrv(:,:,:,2) = this%consrv(:,:,:,1) * this%eh
+        !if(.NOT. this%PTeqb) this%consrv(:,:,:,2) = this%consrv(:,:,:,1) * this%eh
 
     end subroutine
 
-    subroutine get_primitive(this,rho,e,sos2)
+    subroutine get_primitive(this,rho,sos2)
         use operators, only : gradient
         class(solid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho, e
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: sos2
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
 
         this%Ys = this%consrv(:,:,:,1) / rho
         call this%getSpeciesDensity(rho,rhom)
 
-        if(.NOT. this%PTeqb) then
-            this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
+        !if(.NOT. this%PTeqb) then
+        !    this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
 
-            !ADD! call this%hydro%get_T(this%eh, this%T, rhom)
-        endif
+        !    !ADD! call this%hydro%get_T(this%eh, this%T, rhom)
+        !endif
 
         ! Get gradients of Ys and put in Ji for subsequent use
         call gradient(this%decomp,this%der,this%Ys,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3))
 
         ! Get pressure, temperature, devstress and speed of sound squared
-        call this%eos%get_p_devstress_T_sos2(this%g,rhom,e,this%p,this%T,this%devstress,sos2)
+        call this%eos%get_p_devstress_T_sos2(this%g,rhom,this%energy,this%p,this%T,this%devstress,sos2)
 
     end subroutine
     
-    subroutine get_energy(this,rho,e)
+    subroutine get_energy(this,rho)
         class(solid), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: e
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
 
         call this%getSpeciesDensity(rho, rhom)
 
-        call this%eos%get_e_from_rho_g_T(rhom,this%g,this%T,e)
+        call this%eos%get_e_from_rho_g_T(rhom,this%g,this%T,this%energy)
+
     end subroutine
 
     subroutine checkNaN(this,imat)

@@ -20,6 +20,7 @@ module AbstractEOSMod
         procedure(get_e_from_rho_g_T_interface),              deferred :: get_e_from_rho_g_T
         procedure(get_p_devstress_T_sos2_interface),          deferred :: get_p_devstress_T_sos2
         procedure(get_pT_derivatives_wrt_energyVF_interface), deferred :: get_pT_derivatives_wrt_energyVF
+        procedure(get_pT_from_energyVF_interface),            deferred :: get_pT_from_energyVF
 
     end type
 
@@ -55,10 +56,23 @@ module AbstractEOSMod
             real(rkind),               intent(out) :: dpde, dpdVF, dTde, dTdVF
         end subroutine
 
+        subroutine get_pT_from_energyVF_interface(this, VF0, g0, energy, VF, p, T)
+            import :: abstracteos
+            import :: rkind
+            class(abstracteos),        intent(in)  :: this
+            real(rkind), dimension(9), intent(in)  :: g0
+            real(rkind),               intent(in)  :: VF0, VF, energy
+            real(rkind),               intent(out) :: p, T
+        end subroutine
+
     end interface
 
     interface abstracteos
         module procedure init
+    end interface
+
+    interface get_invariants
+        module procedure get_invariants_field, get_invariants_point
     end interface
 
 contains
@@ -69,17 +83,51 @@ contains
         this%usegTg = .TRUE.
     end function
 
-    subroutine get_invariants(tensor,I1,I2,I3)
+    subroutine get_invariants_field(tensor,I1,I2,I3)
         real(rkind), dimension(:,:,:,:), target,                              intent(in)  :: tensor
         real(rkind), dimension(size(tensor,1),size(tensor,2),size(tensor,3)), intent(out) :: I1, I2, I3
 
-        associate ( G11 => tensor(:,:,:,1), G12 => tensor(:,:,:,2), G13 => tensor(:,:,:,3), &
-                    G21 => tensor(:,:,:,2), G22 => tensor(:,:,:,4), G23 => tensor(:,:,:,5), &
-                    G31 => tensor(:,:,:,3), G32 => tensor(:,:,:,5), G33 => tensor(:,:,:,6)  )
-            I1 = G11 + G22 + G33 
-            I2 = G11*G22 + G22*G33 + G33*G11 - G12*G21 - G23*G32 - G13*G31
-            I3 = G11*(G22*G33-G23*G32) - G12*(G21*G33-G31*G23) + G13*(G21*G32-G31*G22)
-        end associate
+        if (size(tensor,4) == 6) then ! Symmetric tensor
+            associate ( G11 => tensor(:,:,:,1), G12 => tensor(:,:,:,2), G13 => tensor(:,:,:,3), &
+                        G21 => tensor(:,:,:,2), G22 => tensor(:,:,:,4), G23 => tensor(:,:,:,5), &
+                        G31 => tensor(:,:,:,3), G32 => tensor(:,:,:,5), G33 => tensor(:,:,:,6)  )
+                I1 = G11 + G22 + G33 
+                I2 = G11*G22 + G22*G33 + G33*G11 - G12*G21 - G23*G32 - G13*G31
+                I3 = G11*(G22*G33-G23*G32) - G12*(G21*G33-G31*G23) + G13*(G21*G32-G31*G22)
+            end associate
+        else if (size(tensor,4) == 9) then ! General tensor
+            associate ( G11 => tensor(:,:,:,1), G12 => tensor(:,:,:,2), G13 => tensor(:,:,:,3), &
+                        G21 => tensor(:,:,:,4), G22 => tensor(:,:,:,5), G23 => tensor(:,:,:,6), &
+                        G31 => tensor(:,:,:,7), G32 => tensor(:,:,:,8), G33 => tensor(:,:,:,9)  )
+                I1 = G11 + G22 + G33 
+                I2 = G11*G22 + G22*G33 + G33*G11 - G12*G21 - G23*G32 - G13*G31
+                I3 = G11*(G22*G33-G23*G32) - G12*(G21*G33-G31*G23) + G13*(G21*G32-G31*G22)
+            end associate
+        end if
+
+    end subroutine
+
+    subroutine get_invariants_point(tensor,I1,I2,I3)
+        real(rkind), dimension(:), target, intent(in)  :: tensor
+        real(rkind),                       intent(out) :: I1, I2, I3
+
+        if (size(tensor,1) == 6) then ! Symmetric tensor
+            associate ( G11 => tensor(1), G12 => tensor(2), G13 => tensor(3), &
+                        G21 => tensor(2), G22 => tensor(4), G23 => tensor(5), &
+                        G31 => tensor(3), G32 => tensor(5), G33 => tensor(6)  )
+                I1 = G11 + G22 + G33 
+                I2 = G11*G22 + G22*G33 + G33*G11 - G12*G21 - G23*G32 - G13*G31
+                I3 = G11*(G22*G33-G23*G32) - G12*(G21*G33-G31*G23) + G13*(G21*G32-G31*G22)
+            end associate
+        else if (size(tensor,1) == 9) then ! General tensor
+            associate ( G11 => tensor(1), G12 => tensor(2), G13 => tensor(3), &
+                        G21 => tensor(4), G22 => tensor(5), G23 => tensor(6), &
+                        G31 => tensor(7), G32 => tensor(8), G33 => tensor(9)  )
+                I1 = G11 + G22 + G33 
+                I2 = G11*G22 + G22*G33 + G33*G11 - G12*G21 - G23*G32 - G13*G31
+                I3 = G11*(G22*G33-G23*G32) - G12*(G21*G33-G31*G23) + G13*(G21*G32-G31*G22)
+            end associate
+        end if
 
     end subroutine
 

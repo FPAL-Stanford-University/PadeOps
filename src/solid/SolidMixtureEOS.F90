@@ -1,17 +1,17 @@
 module SolidMixtureMod
-
-    use kind_parameters, only: rkind,clen
-    use constants,       only: zero,epssmall,eps,one,two,third
-    use decomp_2d,       only: decomp_info
-    use DerivativesMod,  only: derivatives
-    use FiltersMod,      only: filters
-    use LADMod,          only: ladobject
-    use exits,           only: GracefulExit
-    use EOSMod,          only: eos
-    ! use StiffGasEOS,     only: stiffgas
-    ! use Sep1SolidEOS,    only: sep1solid
-    use SolidMod,        only: solid
-    use AbstractEOSMod,  only: abstracteos
+    use kind_parameters,  only: rkind,clen
+    use constants,        only: zero,epssmall,eps,one,two,third
+    use decomp_2d,        only: decomp_info
+    use DerivativesMod,   only: derivatives
+    use FiltersMod,       only: filters
+    use LADMod,           only: ladobject
+    use exits,            only: GracefulExit
+    use EOSMod,           only: eos
+    ! use StiffGasEOS,      only: stiffgas
+    ! use Sep1SolidEOS,     only: sep1solid
+    use SolidMod,         only: solid
+    use AbstractEOSMod,   only: abstracteos
+    use eqbPTFunctionMod, only: eqbPTFunction
 
     implicit none
 
@@ -26,6 +26,8 @@ module SolidMixtureMod
         type(filters),     pointer :: fil
         type(ladobject),   pointer :: LAD
 
+        type(eqbPTFunction)        :: PTeqbfn
+
         logical :: SOSmodel = .FALSE.           ! is sound speed given by `equilibrium' model? Alternative is `frozen' model. Check Saurel et al., JCP 2009.
         logical :: PTeqb = .TRUE.
         logical :: usegTg = .FALSE.
@@ -35,12 +37,12 @@ module SolidMixtureMod
         procedure :: init
         procedure :: set_material
         ! procedure :: relaxPressure
-        ! procedure :: equilibratePressureTemperature
+        procedure :: equilibratePressureTemperature
         procedure :: getLAD
         procedure :: update_g
         procedure :: update_Ys
-        procedure :: update_eh
-        procedure :: update_VF
+        !procedure :: update_eh
+        !procedure :: update_VF
         procedure :: filter
         procedure :: get_rho
         procedure :: get_primitive
@@ -50,7 +52,7 @@ module SolidMixtureMod
         procedure :: post_bc
 
         procedure :: get_rhoYs_from_gVF
-        procedure :: get_emix
+        !procedure :: get_emix
         procedure :: get_pmix
         procedure :: get_Tmix
         ! procedure :: getSOS
@@ -122,6 +124,8 @@ contains
             this%material(i)%Ys = zero
             this%material(i)%VF = zero
         end do
+
+        this%PTeqbfn = eqbPTFunction(this%ns, this%material)
 
     end subroutine
     !end function
@@ -303,6 +307,72 @@ contains
 
     !ADD! end subroutine
 
+    subroutine equilibratePressureTemperature(this,mixRho,mixE)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixRho, mixE
+
+        real(rkind), dimension(this%ns) :: VF0, Y
+        real(rkind), dimension(2*this%ns) :: xvar, fvar
+        real(rkind), dimension(9,this%ns) :: g0
+
+        !real(rkind), dimension(4*this%ns), target :: fparams
+        integer :: i, j, k, m
+
+        do k=1,this%nzp
+         do j=1,this%nyp
+          do i=1,this%nxp
+              ! create object that extends abstract class newton_functor
+              do m = 1, this%ns
+                  VF0(m)  = this%material(m)%VF(i,j,k)
+                  Y(m)    = this%material(m)%Ys(i,j,k)
+                  g0(:,m) = this%material(m)%g(i,j,k,:)
+              end do
+              if(minval(VF0) < 1.0D-6) then
+                  !if(VF0(1) > VF0(2)) then
+                  !   this%material(2)%p = this%material(1)%p
+                  !   this%material(2)%T = this%material(1)%T
+                  !else
+                  !   this%material(1)%p = this%material(2)%p
+                  !   this%material(1)%T = this%material(2)%T
+                  !endif
+                  cycle
+              endif
+              ! eqbfn = eqbPTFunction(this%ns, this%material, VF0, g0, Y, mixE(i,j,k))
+              call this%PTeqbfn%set_parameters(VF0, g0, Y, mixE(i,j,k))
+
+              ! set initial guesses and call newton_solve
+              do m = 1, this%ns
+                  xvar(m) = this%material(m)%energy(i,j,k)
+              end do
+              xvar(this%ns+1:2*this%ns) = VF0(:)
+              fvar = 0.0D0
+                  !if(i==65 .and. j==1 .and. k==1) then
+                  !    write(*,*) 'xvar before:    ', xvar
+                  !    write(*,*) 'fvar before:    ', fvar
+                  !endif
+              call this%PTeqbfn%newton_solve(xvar, fvar)
+                  !if(i==65 .and. j==1 .and. k==1) then
+                      !write(*,'(a,4(e19.12,1x))') 'xvar after:    ', xvar
+                  !endif
+
+              ! store returned VFs, gs and energies
+              do m = 1, this%ns
+                  this%material(m)%energy(i,j,k) = xvar(m)
+                  this%material(m)%VF(i,j,k)  = xvar(this%ns+m)
+                  this%material(m)%g(i,j,k,:) = g0(:,m)*xvar(this%ns+m)**third
+                  this%material(m)%p(i,j,k) = this%PTeqbfn%p(m)
+                  this%material(m)%T(i,j,k) = this%PTeqbfn%T(m)
+                  !if(i==65 .and. j==1 .and. k==1) then
+                  !    write(*,*) 'pressures:    ', this%PTeqbfn%p(m)
+                  !    write(*,*) 'temperatures: ', this%PTeqbfn%T(m)
+                  !endif
+              end do
+          end do
+         end do
+        end do
+
+    end subroutine
+
     subroutine get_dt(this, rho, delta, dtkap, dtDiff, dtplast)
         use reductions, only: P_MAXVAL
         class(solid_mixture), intent(inout) :: this
@@ -340,7 +410,7 @@ contains
 
             if (.NOT. this%PTeqb) then
                 ! Artificial conductivity
-                call this%LAD%get_conductivity(rho, this%material(i)%eh, this%material(i)%T, sos, &
+                call this%LAD%get_conductivity(rho, this%material(i)%energy, this%material(i)%T, sos, &
                                                     this%material(i)%kap, x_bc, y_bc, z_bc)
             end if
 
@@ -463,9 +533,17 @@ contains
 
         p = zero
         sos = zero
+
+        if(this%pTeqb .and. (this%ns > 1)) then
+           call this%equilibratePressureTemperature(rho, e)
+        end if
+
+        if (this%ns == 1) then
+            this%material(1)%energy = e ! Set material energy to mixture energy for single species case
+        end if
          
         do imat = 1, this%ns
-          call this%material(imat)%get_primitive(rho,e,sosm) !ADD! This is only for single species. Need to fix for multi-species
+          call this%material(imat)%get_primitive(rho,sosm)
           
           ! Add contribution to mixture pressure
           p = p + this%material(imat)%VF * this%material(imat)%p
@@ -516,7 +594,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(out) :: devstress
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: e, p, T, sos
         
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: em, sosm
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhom, sosm
 
         integer :: imat
 
@@ -527,11 +605,11 @@ contains
         devstress = zero
          
         do imat = 1, this%ns
-            call this%material(imat)%get_energy(rho,em) ! Get updated internal energy
-            call this%material(imat)%get_primitive(rho,em,sosm) !ADD! Material density is being calculated multiple times. Add as a field to SolidMod to avoid this
+            call this%material(imat)%get_energy(rho) ! Update internal energy
+            call this%material(imat)%get_primitive(rho,sosm) !ADD! Material density is being calculated multiple times. Add as a field to SolidMod to avoid this
         
             ! Add contribution to mixture internal energy
-            e = e + this%material(imat)%Ys * em
+            e = e + this%material(imat)%Ys * this%material(imat)%energy
             
             ! Add contribution to mixture pressure
             p = p + this%material(imat)%VF * this%material(imat)%p
@@ -551,8 +629,8 @@ contains
             sos = sos + sosm
             if(this%SOSmodel) then
                 ! equilibrium model
-                call this%material(imat)%getSpeciesDensity(rho,em) ! em contains species density now
-                sos = sos + this%material(imat)%VF/(em*sosm)
+                call this%material(imat)%getSpeciesDensity(rho,rhom)
+                sos = sos + this%material(imat)%VF/(rhom*sosm)
             else
                 ! frozen model (details in Saurel et al. 2009)
                 sos = sos + this%material(imat)%Ys*sosm
@@ -601,9 +679,10 @@ contains
         end do
     end subroutine
 
-    subroutine get_q(this,x_bc,y_bc,z_bc)
+    subroutine get_q(this,rho,x_bc,y_bc,z_bc)
         use decomp_2d, only: transpose_y_to_x, transpose_x_to_y, transpose_y_to_z, transpose_z_to_y
         class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: i
@@ -634,7 +713,7 @@ contains
 
             ! If multispecies, add the inter-species enthalpy flux
             if (this%ns .GT. 1) then
-                call this%material(i)%get_enthalpy(tmp1_in_y)
+                call this%material(i)%get_enthalpy(rho,tmp1_in_y)
                 this%material(i)%qi(:,:,:,1) = this%material(i)%qi(:,:,:,1) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,1) )
                 this%material(i)%qi(:,:,:,2) = this%material(i)%qi(:,:,:,2) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,2) )
                 this%material(i)%qi(:,:,:,3) = this%material(i)%qi(:,:,:,3) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,3) )
@@ -722,34 +801,34 @@ contains
 
     end subroutine
 
-    subroutine get_emix(this,e)
-        class(solid_mixture), intent(in) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: e  ! Mixture internal energy
+    !subroutine get_emix(this,e)
+    !    class(solid_mixture), intent(in) :: this
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: e  ! Mixture internal energy
 
-        integer :: i
+    !    integer :: i
 
-        e = zero
-        do i = 1,this%ns
-            e = e + this%material(i)%Ys * ( this%material(i)%eh + this%material(i)%eel )  ! Mass fraction weighted sum
-        end do
+    !    e = zero
+    !    do i = 1,this%ns
+    !        e = e + this%material(i)%Ys * ( this%material(i)%eh + this%material(i)%eel )  ! Mass fraction weighted sum
+    !    end do
 
-    end subroutine
+    !end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,x_bc,y_bc,z_bc)
-        class(solid_mixture), intent(inout) :: this
-        integer,              intent(in)    :: isub
-        real(rkind),          intent(in)    :: dt,tsim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,viscwork
-        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+    !subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,x_bc,y_bc,z_bc)
+    !    class(solid_mixture), intent(inout) :: this
+    !    integer,              intent(in)    :: isub
+    !    real(rkind),          intent(in)    :: dt,tsim
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,viscwork
+    !    integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
-        integer :: imat
+    !    integer :: imat
 
-        do imat = 1, this%ns
-          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,x_bc,y_bc,z_bc)
-        end do
+    !    do imat = 1, this%ns
+    !      call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,x_bc,y_bc,z_bc)
+    !    end do
 
-    end subroutine
+    !end subroutine
 
     ! subroutine getSOS(this,rho,p,sos)
     !     class(solid_mixture), intent(in) :: this
@@ -780,21 +859,21 @@ contains
 
     ! end subroutine
 
-    subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
-        class(solid_mixture), intent(inout) :: this
-        integer,              intent(in)    :: isub
-        real(rkind),          intent(in)    :: dt,tsim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: u,v,w
-        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+    !subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+    !    class(solid_mixture), intent(inout) :: this
+    !    integer,              intent(in)    :: isub
+    !    real(rkind),          intent(in)    :: dt,tsim
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: u,v,w
+    !    integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
-        integer :: imat
+    !    integer :: imat
 
-        do imat = 1, this%ns
-          call this%material(imat)%update_VF(isub,dt,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
-        end do
+    !    do imat = 1, this%ns
+    !      call this%material(imat)%update_VF(isub,dt,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+    !    end do
 
-    end subroutine
+    !end subroutine
 
     subroutine checkNaN(this)
         class(solid_mixture), intent(in)   :: this

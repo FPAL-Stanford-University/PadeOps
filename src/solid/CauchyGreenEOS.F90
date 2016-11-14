@@ -17,6 +17,8 @@ module CauchyGreenEOSMod
 
         procedure :: get_e_from_rho_g_T
         procedure :: get_p_devstress_T_sos2
+        procedure :: get_pT_derivatives_wrt_energyVF
+        procedure :: get_pT_from_energyVF
 
         procedure :: get_cauchygreen
 
@@ -100,7 +102,7 @@ contains
         call get_invariants(cauchygreen,I1,I2,I3)
 
         ! Get the derivatives of the internal energy wrt invariants of the Cauchy-Green tensor
-        call this%get_energy_derivatives(rho,e,I1,I2,I3,dedI1,dedI2,dedI3,T)!,sos_sq)
+        call this%get_energy_derivatives(rho,e,I1,I2,I3,dedI1,dedI2,dedI3,T)
 
         ! Compute the Cauchy stress tensor
         devstress(:,:,:,1) = two*rho*( (dedI1 + I1*dedI2)*cauchygreen(:,:,:,1) - dedI2*cauchygreensq(:,:,:,1) + I3*dedI3 )
@@ -122,6 +124,31 @@ contains
         sos_sq = zero
 
     end subroutine
+
+    subroutine get_pT_derivatives_wrt_energyVF(this, VF0, g0, energy, VF, dpde, dpdVF, dTde, dTdVF)
+        class(cauchygreeneos),       intent(in)  :: this
+        real(rkind), dimension(9), intent(in)  :: g0
+        real(rkind),               intent(in)  :: VF0, VF, energy
+        real(rkind),               intent(out) :: dpde, dpdVF, dTde, dTdVF
+
+        dpde  = 0.0D0
+        dTde  = 0.0D0
+        dpdVF = 0.0D0
+        dTdVF = 0.0D0
+
+    end subroutine
+
+    subroutine get_pT_from_energyVF(this, VF0, g0, energy, VF, p, T)
+        class(cauchygreeneos),       intent(in)  :: this
+        real(rkind), dimension(9), intent(in)  :: g0
+        real(rkind),               intent(in)  :: VF0, VF, energy
+        real(rkind),               intent(out) :: p, T
+
+        p = 0.0D0
+        T = 0.0D0
+
+    end subroutine
+
 
     subroutine get_cauchygreen(this,g,cauchygreen,cauchygreensq)
         class(cauchygreeneos),                                   intent(in)  :: this

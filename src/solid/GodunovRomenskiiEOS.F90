@@ -23,7 +23,8 @@ module GodunovRomenskiiEOSMod
         ! procedure :: init
         procedure :: get_energy_derivatives
         procedure :: get_e_from_rho_invariants_T
-        procedure :: get_pT_derivatives_wrt_energyVF
+        procedure :: get_pT_from_energyVF_invariants
+        procedure :: get_pT_derivatives_wrt_energyVF_invariants
 
     end type
 
@@ -92,19 +93,27 @@ contains
 
     end subroutine
 
-    subroutine get_pT_derivatives_wrt_energyVF(this, VF0, g0, energy, VF, dpde, dpdVF, dTde, dTdVF)
+    subroutine get_pT_from_energyVF_invariants(this,VF0,I1,I2,I3,energy,VF,p,T)
         use constants, only: zero
         class(godromeos),          intent(in)  :: this
-        real(rkind), dimension(9), intent(in)  :: g0
-        real(rkind),               intent(in)  :: VF0, VF, energy
+        real(rkind),               intent(in)  :: VF0, I1, I2, I3, VF, energy
+        real(rkind),               intent(out) :: p, T
+
+        ! NOT YET IMPLEMENTED
+        p = zero
+        T = zero
+    end subroutine
+
+    subroutine get_pT_derivatives_wrt_energyVF_invariants(this,VF0,I1,I2,I3,energy,VF,dpde,dpdVF,dTde,dTdVF)
+        use constants, only: zero
+        class(godromeos),          intent(in)  :: this
+        real(rkind),               intent(in)  :: VF0, I1, I2, I3, VF, energy
         real(rkind),               intent(out) :: dpde, dpdVF, dTde, dTdVF
         
+        ! NOT YET IMPLEMENTED
         dpde = zero
-
         dpdVF = zero
-
         dTde = zero
-
         dTdVF = zero
     end subroutine
 

@@ -17,11 +17,17 @@ module FingerEOSMod
 
         procedure :: get_e_from_rho_g_T
         procedure :: get_p_devstress_T_sos2
+        procedure :: get_pT_derivatives_wrt_energyVF
+        procedure :: get_pT_from_energyVF
 
-        procedure :: get_finger
+        procedure :: get_finger_field
+        procedure :: get_finger_point
+        generic   :: get_finger => get_finger_field, get_finger_point
 
-        procedure(get_energy_derivatives_interface),      deferred :: get_energy_derivatives
-        procedure(get_e_from_rho_invariants_T_interface), deferred :: get_e_from_rho_invariants_T
+        procedure(get_energy_derivatives_interface),                     deferred :: get_energy_derivatives
+        procedure(get_e_from_rho_invariants_T_interface),                deferred :: get_e_from_rho_invariants_T
+        procedure(get_pT_from_energyVF_invariants_interface),            deferred :: get_pT_from_energyVF_invariants
+        procedure(get_pT_derivatives_wrt_energyVF_invariants_interface), deferred :: get_pT_derivatives_wrt_energyVF_invariants
 
     end type
 
@@ -46,6 +52,22 @@ module FingerEOSMod
             real(rkind), dimension(:,:,:),                                 intent(in)  :: rho
             real(rkind), dimension(size(rho,1),size(rho,2),size(rho,3)),   intent(in)  :: I1,I2,I3,T
             real(rkind), dimension(size(rho,1),size(rho,2),size(rho,3)),   intent(out) :: e
+        end subroutine
+
+        subroutine get_pT_from_energyVF_invariants_interface(this,VF0,I1,I2,I3,energy,VF,p,T)
+            import :: fingereos
+            import :: rkind
+            class(fingereos), intent(in)  :: this
+            real(rkind),      intent(in)  :: VF0,I1,I2,I3,energy,VF
+            real(rkind),      intent(out) :: p,T
+        end subroutine
+        
+        subroutine get_pT_derivatives_wrt_energyVF_invariants_interface(this,VF0,I1,I2,I3,energy,VF,dpde,dpdVF,dTde,dTdVF)
+            import :: fingereos
+            import :: rkind
+            class(fingereos), intent(in)  :: this
+            real(rkind),      intent(in)  :: VF0,I1,I2,I3,energy,VF
+            real(rkind),      intent(out) :: dpde, dpdVF, dTde, dTdVF
         end subroutine
 
     end interface
@@ -123,7 +145,7 @@ contains
 
     end subroutine
 
-    subroutine get_finger(this,g,finger,fingersq)
+    subroutine get_finger_field(this,g,finger,fingersq)
         class(fingereos),                                        intent(in)  :: this
         real(rkind), dimension(:,:,:,:), target,                 intent(in)  :: g
         real(rkind), dimension(size(g,1),size(g,2),size(g,3),6), intent(out) :: finger
@@ -165,6 +187,90 @@ contains
                 fingersq(:,:,:,6) = GG31*GG13 + GG32*GG23 + GG33*GG33
             end associate
         end if
+
+    end subroutine
+
+    subroutine get_finger_point(this,g,finger,fingersq)
+        class(fingereos),                                        intent(in)  :: this
+        real(rkind), dimension(9), target,   intent(in)  :: g
+        real(rkind), dimension(6),           intent(out) :: finger
+        real(rkind), dimension(6), optional, intent(out) :: fingersq
+
+        if (this%usegTg) then
+            associate ( g11 => g(1), g12 => g(2), g13 => g(3), &
+                        g21 => g(4), g22 => g(5), g23 => g(6), &
+                        g31 => g(7), g32 => g(8), g33 => g(9)  )
+                finger(1) = g11
+                finger(2) = g12
+                finger(3) = g13
+                finger(4) = g22
+                finger(5) = g23
+                finger(6) = g33
+            end associate
+        else
+            associate ( g11 => g(1), g12 => g(2), g13 => g(3), &
+                        g21 => g(4), g22 => g(5), g23 => g(6), &
+                        g31 => g(7), g32 => g(8), g33 => g(9)  )
+                finger(1) = g11*g11 + g21*g21 + g31*g31
+                finger(2) = g11*g12 + g21*g22 + g31*g32
+                finger(3) = g11*g13 + g21*g23 + g31*g33
+                finger(4) = g12*g12 + g22*g22 + g32*g32
+                finger(5) = g12*g13 + g22*g23 + g32*g33
+                finger(6) = g13*g13 + g23*g23 + g33*g33
+            end associate
+        end if
+
+        if ( present(fingersq) ) then
+            associate ( GG11 => finger(1), GG12 => finger(2), GG13 => finger(3), &
+                        GG21 => finger(2), GG22 => finger(4), GG23 => finger(5), &
+                        GG31 => finger(3), GG32 => finger(5), GG33 => finger(6)  )
+                fingersq(1) = GG11*GG11 + GG12*GG21 + GG13*GG31
+                fingersq(2) = GG11*GG12 + GG12*GG22 + GG13*GG32
+                fingersq(3) = GG11*GG13 + GG12*GG23 + GG13*GG33
+                fingersq(4) = GG21*GG12 + GG22*GG22 + GG23*GG32
+                fingersq(5) = GG21*GG13 + GG22*GG23 + GG23*GG33
+                fingersq(6) = GG31*GG13 + GG32*GG23 + GG33*GG33
+            end associate
+        end if
+
+    end subroutine
+
+    subroutine get_pT_from_energyVF(this, VF0, g0, energy, VF, p, T)
+        class(fingereos),          intent(in)  :: this
+        real(rkind), dimension(9), intent(in)  :: g0
+        real(rkind),               intent(in)  :: VF0, VF, energy
+        real(rkind),               intent(out) :: p, T
+        
+        real(rkind), dimension(6) :: finger, fingersq
+        real(rkind)               :: I1, I2, I3
+        
+        ! Get the finger tensor and square of the finger tensor
+        call this%get_finger(g0,finger,fingersq)
+
+        ! Get invariants of the Finger tensor
+        call get_invariants(finger,I1,I2,I3)
+
+        ! Now call deferred procedure that uses invariants instead of the full g0
+        call this%get_pT_from_energyVF_invariants(VF0,I1,I2,I3,energy,VF,p,T)
+    end subroutine
+
+    subroutine get_pT_derivatives_wrt_energyVF(this, VF0, g0, energy, VF, dpde, dpdVF, dTde, dTdVF)
+        class(fingereos),          intent(in)  :: this
+        real(rkind), dimension(9), intent(in)  :: g0
+        real(rkind),               intent(in)  :: VF0, VF, energy
+        real(rkind),               intent(out) :: dpde, dpdVF, dTde, dTdVF
+        
+        real(rkind), dimension(6) :: finger, fingersq
+        real(rkind)               :: I1, I2, I3
+        
+        ! Get the finger tensor and square of the finger tensor
+        call this%get_finger(g0,finger,fingersq)
+
+        ! Get invariants of the Finger tensor
+        call get_invariants(finger,I1,I2,I3)
+
+        ! Now call deferred procedure that uses invariants instead of the full g0
+        call this%get_pT_derivatives_wrt_energyVF_invariants(VF0,I1,I2,I3,energy,VF,dpde,dpdVF,dTde,dTdVF)
 
     end subroutine
 

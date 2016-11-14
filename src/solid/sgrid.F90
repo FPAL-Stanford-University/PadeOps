@@ -103,11 +103,10 @@ module SolidGrid
             procedure          :: gradient 
             procedure          :: advance_RK45
             procedure          :: simulate
-            procedure          :: postproc
             procedure, private :: get_dt
             procedure, private :: get_primitive
             procedure, private :: get_conserved
-            procedure, private :: post_bc
+            procedure         :: post_bc
             procedure, private :: getRHS
             procedure, private :: getRHS_x
             procedure, private :: getRHS_y
@@ -334,7 +333,7 @@ contains
         ! Go to hooks if a different initialization is derired (Set mixture p, Ys, VF, u, v, w, rho)
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         this%mix, this%tstop, this%dtfixed, tviz)
-       
+ 
         ! Get hydrodynamic and elastic energies, stresses
         call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
         call this%post_bc()
@@ -500,15 +499,6 @@ contains
 
     end subroutine
 
-    subroutine postproc(this)
-        use decomp_2d,  only: nrank
-        class(sgrid), target, intent(inout) :: this
-
-        if(nrank==0) write(*,*) 'Calling hook_postproc'
-        !call hook_postproc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
-
-    end subroutine
-
     subroutine simulate(this)
         use reductions, only: P_MEAN
         use timer,      only: tic, toc
@@ -521,7 +511,6 @@ contains
         real(rkind) :: cputime
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
-        real(rkind), dimension(:,:,:), pointer :: ehmix
         integer :: i, statscount
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
@@ -549,22 +538,15 @@ contains
         call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 
         if (this%PTeqb) then
-            ! ehmix => duidxj(:,:,:,4) ! use some storage space
-            ! ehmix = this%e
-            ! do imat = 1, this%mix%ns
-            !     ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
-            ! enddo
-            ! call this%LAD%get_conductivity(this%rho,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
             call this%LAD%get_conductivity(this%rho,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
         end if
 
-        nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz,ehmix)
+        nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
         deallocate( duidxj )
 
         ! compute species artificial conductivities and diffusivities
         call this%mix%getLAD(this%rho,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
         ! ------------------------------------------------
-
         call this%get_dt(stability)
 
         ! Write out initial conditions and initial statistics
@@ -716,7 +698,7 @@ contains
             ! call this%mix%getSOS(this%rho,this%p,this%sos)
             call this%mix%getLAD(this%rho,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
-            call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
+            call this%mix%get_q(this%rho, this%x_bc,this%y_bc,this%z_bc)           ! Compute diffusive thermal fluxes (including enthalpy diffusion)
 
             ! Update total mixture conserved variables
             call this%getRHS(rhs,divu,viscwork)
@@ -727,10 +709,10 @@ contains
             call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
             call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
 
-            if (.NOT. this%PTeqb) then
-                call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
-                call this%mix%update_VF(isub,this%dt,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
-            end if
+            !if (.NOT. this%PTeqb) then
+            !    call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
+            !    call this%mix%update_VF(isub,this%dt,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
+            !end if
 
             ! Integrate simulation time to keep it in sync with RK substep
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
@@ -855,12 +837,12 @@ contains
         this%v = rhov * onebyrho
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
-       
+      
         call this%mix%get_primitive(this%rho, this%devstress, this%p, this%sos, this%e)                  ! Get primitive variables for individual species
 
     end subroutine
 
-    pure subroutine get_conserved(this)
+    subroutine get_conserved(this)
         class(sgrid), intent(inout) :: this
 
         ! Assume rho is already available
@@ -909,8 +891,6 @@ contains
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
         real(rkind), dimension(:,:,:), pointer :: qx,qy,qz
-        real(rkind), dimension(:,:,:), pointer :: ehmix
-        integer :: imat
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
@@ -926,14 +906,6 @@ contains
         call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 
         if (this%PTeqb) then
-            ! subtract elastic energies to determine mixture hydrostatic energy. conductivity 
-            ! is assumed a function of only hydrostatic energy
-            ! ehmix => viscwork ! use some storage space
-            ! ehmix = this%e
-            ! do imat = 1, this%mix%ns
-            !     ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
-            ! enddo
-            ! call this%LAD%get_conductivity(this%rho,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
             call this%LAD%get_conductivity(this%rho,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
         end if
 
