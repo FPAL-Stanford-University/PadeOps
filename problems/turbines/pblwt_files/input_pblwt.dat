@@ -18,7 +18,7 @@ restartFile_RID       = 10          ! RunID of the restart file being used
 TimeSteppingScheme    = 1           ! 0: Adams-Bashforth, 1: TVD-RK3 (use this)
 AdvectionTerm         = 1           ! 0: Rotational Form, 1: Skew-Symmetric Form (use this for Compact Scheme)
 NumericalSchemeVert   = 1           ! 0: Second order FD, 1: Sixth order Compact Difference (CD06)
-ComputeStokesPressure = .TRUE.     ! Set this to FALSE if using Compact Scheme / High Reynolds numbers
+ComputeStokesPressure = .TRUE.      ! This would be FALSE only is very special circumstances.  
 useDealiasFilterVert  = .FALSE.     ! Dealiasing filter used in vertical direction
 t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproject if needed.
 /
@@ -68,6 +68,7 @@ dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useE
 /
 /
 &PRESSURE_CALC
+fastCalcPressure      = .TRUE.      ! Compute and store pressure at every time step using the faster algorithm?
 storePressure         = .TRUE.     ! Would you like to compute and store pressure?
 P_dumpFreq            = 100         ! How often (timesteps) do you want to dump pressure?
 P_compFreq            = 10          ! How often (timesteps) do you want to compute pressure? 

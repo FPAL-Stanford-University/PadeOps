@@ -58,6 +58,7 @@ module PadePoissonMod
             procedure :: destroy
             procedure :: DivergenceCheck
             procedure :: getPressure
+            procedure :: getPressureAndUpdateRHS 
     end type
 
 contains
@@ -225,19 +226,19 @@ contains
             allocate(this%uhatinZ(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
             allocate(this%vhatinZ(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
             deallocate(temp)
-            if (present(storePressure)) then
-                if (storePressure) then
-                    allocate(this%phat_z1(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-                    allocate(this%phat_z2(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-                    if (present(gpC)) then
-                        this%gpC => gpC
-                    else
-                        call GracefulExit("If you wish to store pressure, you need & 
-                            & to pass in gpC while initialize PadePoisson",12)
-                    end if 
-                end if
-            end if 
             call message(1,"STOKES PRESSURE calculation enabled with the CD06 Poisson solver")
+        end if 
+        if (present(storePressure)) then
+            if (storePressure) then
+                allocate(this%phat_z1(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+                allocate(this%phat_z2(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+                if (present(gpC)) then
+                    this%gpC => gpC
+                else
+                    call GracefulExit("If you wish to store pressure, you need & 
+                        & to pass in gpC while initialize PadePoisson",12)
+                end if 
+            end if
         end if 
 
         deallocate(k1, k2, k3, k3mod, tfm, tfp)
@@ -289,15 +290,12 @@ contains
 
     end subroutine
 
-
-
-
     subroutine PressureProjection(this, uhat, vhat, what)
         class(PadePoisson), intent(inout) :: this
         complex(rkind), dimension(this%nx_in, this%ny_in, this%nz_in), intent(inout) :: uhat, vhat
         complex(rkind), dimension(this%nxE_in, this%nyE_in, this%nzE_in), intent(inout) :: what
         integer :: ii, jj, kk
-
+       
         ! Step 0: Project out the stokes pressure which will fix the wall BCs
         ! for velocity
         if (this%computeStokesPressure) then
@@ -340,6 +338,7 @@ contains
         call dfftw_execute_dft(this%plan_c2c_fwd_z, this%f2dext, this%f2dext)  
         call dfftw_execute_dft(this%plan_c2c_fwd_z, this%wext  , this%wext  )  
       
+
         ! Step 5: Solve the Poisson System and project out w velocity
         do kk = 1,size(this%f2dext,3) 
             do jj = 1,size(this%f2dext,2) 
@@ -385,7 +384,6 @@ contains
             call transpose_z_to_y(this%vhatinZ,vhat,this%sp_gp) 
         else
             call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
-
             ! Step 9: Project out u and v
             do kk = 1,size(uhat,3)
                 do jj = 1,size(uhat,2)
@@ -536,6 +534,114 @@ contains
         call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
 
         ! Step 9: Get pressure by ifft
+        call this%sp%ifft(this%f2dy,pressure)
+
+    end subroutine 
+
+    subroutine getPressureAndUpdateRHS(this, uhat, vhat, what, pressure)
+        !! NOTE :: uhat is really urhshat, vhat is really vrhshat, ...
+        class(PadePoisson), intent(inout) :: this
+        complex(rkind), dimension(this%nx_in, this%ny_in, this%nz_in), intent(inout) :: uhat, vhat
+        complex(rkind), dimension(this%nxE_in, this%nyE_in, this%nzE_in), intent(inout) :: what
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: pressure
+        integer :: ii, jj, kk
+
+        ! Step 0: compute the stokes pressure which will fix the wall BCs
+        ! for velocity rhs
+        if (this%computeStokesPressure) then
+            call this%GetStokesPressure(uhat, vhat, what)
+            do kk = 1,this%nzG
+                this%f2d(:,:,kk) = this%k1inZ*this%uhatInZ(:,:,kk)
+            end do 
+            do kk = 1,this%nzG
+                this%f2d(:,:,kk) = this%f2d(:,:,kk) + this%k2inZ*this%vhatInZ(:,:,kk)
+            end do 
+            this%f2d = imi*this%f2d
+        else
+            ! Step 1: compute dudx + dvdy
+            do kk = 1,size(uhat,3)
+                do jj = 1,size(uhat,2)
+                    do ii = 1,size(uhat,1)
+                        this%f2dy(ii,jj,kk) = this%k1_2d(ii,jj,kk)*uhat(ii,jj,kk)
+                        this%f2dy(ii,jj,kk) = this%f2dy(ii,jj,kk) + this%k2_2d(ii,jj,kk)*vhat(ii,jj,kk)
+                    end do
+                end do 
+            end do  
+            this%f2dy = imi*this%f2dy
+
+            ! Step 2: Transpose from y -> z
+            call transpose_y_to_z(this%f2dy,this%f2d,this%sp_gp)
+            call transpose_y_to_z(what, this%w2, this%sp_gpE)
+        end if
+
+        ! Step 3: Create Extensions
+        do kk = 1,this%nzG
+            this%f2dext(:,:,kk) = this%f2d(:,:,this%nzG-kk+1)
+        end do
+        this%f2dext(:,:,this%nzG+1:2*this%nzG) = this%f2d
+        do kk = 2,this%nzG
+            this%wext(:,:,kk-1) = -this%w2(:,:,this%nzG-kk+2)
+        end do 
+        this%wext(:,:,this%nzG:2*this%nzG) = this%w2
+
+        ! Step 4: Take Fourier Transform 
+        call dfftw_execute_dft(this%plan_c2c_fwd_z, this%f2dext, this%f2dext)  
+        call dfftw_execute_dft(this%plan_c2c_fwd_z, this%wext  , this%wext  )  
+      
+        ! Step 5: Solve the Poisson System and project out w velocity
+        do kk = 1,size(this%f2dext,3) 
+            do jj = 1,size(this%f2dext,2) 
+                do ii = 1,size(this%f2dext,1) 
+                    this%f2dext(ii,jj,kk) = this%f2dext(ii,jj,kk) + imi*this%k3modcm(kk)*this%wext(ii,jj,kk)
+                    this%f2dext(ii,jj,kk) = -this%f2dext(ii,jj,kk)*this%kradsq_inv(ii,jj,kk)
+                end do 
+            end do 
+        end do 
+
+        ! Step 6: add -dpdz to wrhs 
+        do kk = 1,size(this%f2dext,3) 
+            do jj = 1,size(this%f2dext,2) 
+                do ii = 1,size(this%f2dext,1) 
+                    this%wext(ii,jj,kk) = this%wext(ii,jj,kk) - imi*this%k3modcp(kk)*this%f2dext(ii,jj,kk)
+                end do 
+            end do 
+        end do
+        
+        ! Step 7: Take inverse Fourier Transform
+        call dfftw_execute_dft(this%plan_c2c_bwd_z, this%f2dext, this%f2dext)  
+        call dfftw_execute_dft(this%plan_c2c_bwd_z, this%wext  , this%wext  )  
+        this%f2dext = this%f2dext*this%mfact
+        this%wext = this%wext*this%mfact
+
+        this%f2d = this%f2dext(:,:,this%nzG+1:2*this%nzG)
+        this%w2  = this%wext(:,:,this%nzG:2*this%nzG)
+        this%w2(:,:,1) = czero; this%w2(:,:,this%nzG+1) = czero; 
+        
+
+        ! Step 8: Transpose back from z -> y, update RHS for w
+        call transpose_z_to_y(this%w2,what,this%sp_gpE)
+        
+        ! Step 9: Update the RHS for u and v
+        if (this%computeStokesPressure) then
+            do kk = 1,this%nzG
+                this%uhatinZ(:,:,kk) = this%uhatinZ(:,:,kk) - imi*this%f2d(:,:,kk)*this%k1inZ
+            end do 
+            do kk = 1,this%nzG
+                this%vhatinZ(:,:,kk) = this%vhatinZ(:,:,kk) - imi*this%f2d(:,:,kk)*this%k2inZ
+            end do
+            call transpose_z_to_y(this%uhatinZ,uhat,this%sp_gp) 
+            call transpose_z_to_y(this%vhatinZ,vhat,this%sp_gp) 
+        else
+            call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
+            uhat = uhat - imi*this%k1_2d*this%f2dy
+            vhat = vhat - imi*this%k2_2d*this%f2dy
+        end if 
+        
+        ! Step 10: Get pressure by ifft
+        if (this%computeStokesPressure) then
+            this%f2d = this%f2d + this%phat_z1 + this%phat_z2
+            call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
+        end if 
         call this%sp%ifft(this%f2dy,pressure)
 
     end subroutine 

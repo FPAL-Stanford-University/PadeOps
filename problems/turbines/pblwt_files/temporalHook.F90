@@ -40,14 +40,6 @@ contains
             call tic()
         end if 
 
-        if (mod(gp%step,gp%t_dataDump)==0) then
-           call message(0,"Data dump!")
-           call gp%dumpFullField(gp%u,'uVel')
-           call gp%dumpFullField(gp%v,'vVel')
-           call gp%dumpFullField(gp%wC,'wVel')
-           !call output_tecplot(gp)
-        end if 
-
     end subroutine
 
 

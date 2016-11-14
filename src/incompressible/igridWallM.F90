@@ -145,7 +145,7 @@ module IncompressibleGridWallM
         integer :: t_dumpKSprep
 
         ! Pressure Solver
-        logical :: StorePressure = .false.
+        logical :: StorePressure = .false., fastCalcPressure = .true. 
         integer :: P_dumpFreq = 10, P_compFreq = 10
         logical :: AlreadyHaveRHS = .false.
         real(rkind), dimension(:,:,:), allocatable :: pressure  
@@ -230,11 +230,11 @@ contains
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10
-        logical :: normStatsByUstar=.false., ComputeStokesPressure = .false., UseDealiasFilterVert = .false.
+        logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
         real(rkind) :: Lz = 1.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true.
         integer :: tSystemInteractions = 1
-        logical :: computeSpectra = .true., timeAvgFullFields = .true. 
+        logical :: computeSpectra = .true., timeAvgFullFields = .true., fastCalcPressure = .false.  
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -251,7 +251,7 @@ contains
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep
-        namelist /PRESSURE_CALC/ storePressure, P_dumpFreq, P_compFreq            
+        namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq            
         namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir
 
         ! STEP 1: READ INPUT 
@@ -290,7 +290,7 @@ contains
         this%tSimStartStats = tSimStartStats; this%useWindTurbines = useWindTurbines
         this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS 
         this%useDynamicProcedure = useDynamicProcedure; this%UseDealiasFilterVert = UseDealiasFilterVert
-        this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; 
+        this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; this%fastCalcPressure = fastCalcPressure 
         this%t_start_planeDump = t_start_planeDump; this%t_stop_planeDump = t_stop_planeDump
         this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro; 
         this%PreProcessForKS = preprocessForKS; this%KSOutputDir = KSoutputDir;this%t_dumpKSprep = t_dumpKSprep 
@@ -520,7 +520,7 @@ contains
         ! Pressure projection
         if (useCompactFD) then
             call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
-            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
+            !call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
         else
             call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
             call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
@@ -652,9 +652,19 @@ contains
         call this%init_stats3D()
 
         ! STEP 17: Set up storage for Pressure
-        if (this%storePressure) then
+        if ((this%storePressure) .or. (this%fastCalcPressure)) then
             allocate(this%Pressure(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             call this%ComputePressure()
+        end if 
+
+        if ((this%fastCalcPressure) .and. (.not. useCompactFD)) then
+            call GracefulExit("fastCalcPressure feature is only supported with CD06 scheme.",123)
+        end if 
+        if ((this%fastCalcPressure) .and. (TimeSteppingScheme .ne. 1)) then
+            call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 time stepping.",123)
+        end if 
+        if ((this%fastCalcPressure) .and. (useDealiasFilterVert)) then
+            call GracefulExit("fastCalcPressure feature is not supported if useDealiasFilterVert is TRUE",123) 
         end if 
 
 
@@ -714,8 +724,8 @@ contains
         this%uhat => this%SfieldsC2(:,:,:,1); this%vhat => this%SfieldsC2(:,:,:,2); this%what => this%SfieldsE2(:,:,:,1); 
         if (this%isStratified) this%That => this%SfieldsC2(:,:,:,3)
         ! Now perform the projection and prep for next stage
-        call this%project_and_prep()
-
+        call this%project_and_prep(this%fastCalcPressure)
+        
         !!! STAGE 2
         ! Second stage - u, v, w are really pointing to u1, v1, w1 (which is
         ! what we want. 
@@ -730,7 +740,7 @@ contains
         this%uhat => this%SfieldsC2(:,:,:,1); this%vhat => this%SfieldsC2(:,:,:,2); this%what => this%SfieldsE2(:,:,:,1); 
         if (this%isStratified) this%That => this%SfieldsC2(:,:,:,3)
         ! Now perform the projection and prep for next stage
-        call this%project_and_prep()
+        call this%project_and_prep(.false.)
 
         !!! STAGE 3 (Final Stage)
         ! Third stage - u, v, w are really pointing to u2, v2, w2 (which is what
@@ -743,7 +753,7 @@ contains
         this%what = (1.d0/3.d0)*this%what + (2.d0/3.d0)*this%what1 + (2.d0/3.d0)*this%dt*this%w_rhs
         if (this%isStratified) this%That = (1.d0/3.d0)*this%That + (2.d0/3.d0)*this%That1 + (2.d0/3.d0)*this%dt*this%T_rhs
         ! Now perform the projection and prep for next time step
-        call this%project_and_prep()
+        call this%project_and_prep(.false.)
 
         ! Wrap up this time step 
         call this%wrapup_timestep() 
@@ -758,10 +768,14 @@ contains
         call this%populate_rhs()
 
         ! STEP 2: Compute pressure
-        if (useCompactFD) then
-            call this%padepoiss%getPressure(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
+        if (this%fastCalcPressure) then
+            call this%Padepoiss%getPressureAndUpdateRHS(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
         else
-            call this%poiss%getPressure(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
+            if (useCompactFD) then
+                call this%padepoiss%getPressure(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
+            else
+                call this%poiss%getPressure(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
+            end if 
         end if 
 
         ! STEP 3: Inform the other subroutines that you already have RHS
@@ -1211,8 +1225,9 @@ contains
         end if 
     end subroutine
 
-    subroutine project_and_prep(this)
+    subroutine project_and_prep(this, AlreadyProjected)
         class(igridWallM), intent(inout) :: this
+        logical, intent(in) :: AlreadyProjected
 
         ! Step 1: Dealias
         call this%spectC%dealias(this%uhat)
@@ -1224,15 +1239,17 @@ contains
         end if
        
         ! Step 2: Pressure projection
-        if (useCompactFD) then
-            call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
-            if (mod(this%step,this%t_DivergenceCheck) == 0) then
-                call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
-            end if 
-        else
-            call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
-            if (mod(this%step,this%t_DivergenceCheck) == 0) then
-                call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+        if (.not. AlreadyProjected) then
+            if (useCompactFD) then
+                call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
+                if (mod(this%step,this%t_DivergenceCheck) == 0) then
+                    call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
+                end if 
+            else
+                call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
+                if (mod(this%step,this%t_DivergenceCheck) == 0) then
+                    call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+                end if 
             end if 
         end if 
 
@@ -1258,13 +1275,14 @@ contains
     subroutine wrapup_timestep(this)
         class(igridWallM), intent(inout) :: this
 
-        logical :: forceWrite, exitStat, forceDumpPressure
+        logical :: forceWrite, exitStat, forceDumpPressure, restartWrite
         integer :: ierr = -1
 
         ! STEP 1: Update Time and BCs
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
 
         ierr = -1; forceWrite = .FALSE.; exitstat = .FALSE.; forceDumpPressure = .FALSE.
+        restartWrite = .FALSE. 
         if(this%tsim > this%tstop) then
           forceWrite = .TRUE.
         endif
@@ -1295,19 +1313,39 @@ contains
                     else
                         close(777)
                     end if
-                end if 
+                end if
+
+                open(777,file=trim(this%controlDir)//"/dumprestart",status='old',iostat=ierr)
+                if(ierr==0) then
+                    restartWrite = .TRUE.
+                    call message(1, "Restart Dump because found file dumprestart")
+                    call message(2, "Current Time Step is:", this%step)
+                    if(nrank==0) then
+                      close(777, status='delete')
+                    else
+                      close(777)
+                    endif
+                else
+                    close(777)
+                endif
+
             end if 
         end if 
 
         ! STEP 2: Do logistical stuff
-        if (this%storePressure) then
-            if ((mod(this%step,this%P_compFreq)==0) .or. (forceDumpPressure)) then
-                call this%computePressure()
+        if (this%fastCalcPressure) then
+            call this%computePressure()
+        else
+            if ((this%storePressure)) then
+                if ((mod(this%step,this%P_compFreq)==0) .or. (forceDumpPressure)) then
+                    call this%computePressure()
+                end if 
+                if ( (mod(this%step,this%P_dumpFreq) == 0).or. (forceDumpPressure)) then
+                    call this%dumpFullField(this%pressure,"prss")
+                end if 
             end if 
-            if ( (mod(this%step,this%P_dumpFreq) == 0).or. (forceDumpPressure)) then
-                call this%dumpFullField(this%pressure,"prss")
-            end if 
-        end if 
+        end if
+
 
         if ( (forceWrite .or. (mod(this%step,this%tid_compStats)==0)) .and. (this%tsim > this%tSimStartStats) ) then
             !call this%compute_stats()
@@ -1323,7 +1361,7 @@ contains
             stop
         end if 
         
-        if ( forceWrite .or. (mod(this%step,this%t_restartDump) == 0) ) then
+        if ( restartWrite .or. (mod(this%step,this%t_restartDump) == 0) ) then
             call this%dumpRestartfile()
         end if
         
@@ -1342,10 +1380,23 @@ contains
             call this%dump_pointProbes()
         end if 
 
-        if (forceWrite) then
+        if (mod(this%step,this%t_dataDump) == 0) then
+           call message(0,"Scheduled data dump.")
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
+           if (this%isStratified) this%dumpFullField(this%T,'potT')
+           if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
+        end if
+
+
+        if (forceWrite) then
+           call message(2,"Performing a forced data dump.")
+           call this%dumpFullField(this%u,'uVel')
+           call this%dumpFullField(this%v,'vVel')
+           call this%dumpFullField(this%wC,'wVel')
+           if (this%isStratified) this%dumpFullField(this%T,'potT')
+           if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            !call output_tecplot(gp)
         end if
 
@@ -1390,7 +1441,7 @@ contains
         end if 
 
         ! Step 3: Pressure Project and prep for the next step
-        call this%project_and_prep()
+        call this%project_and_prep(.false.)
 
         ! Step 4: Store the RHS values for the next use
         this%u_Orhs = this%u_rhs; this%v_Orhs = this%v_rhs; this%w_Orhs = this%w_rhs
