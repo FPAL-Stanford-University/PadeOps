@@ -1,7 +1,7 @@
 &INPUT
 
-inputdir  =  "/home/akshays/Data/PadeOps/Multispecies_gTg"      ! Directory for input files
-outputdir  = "/home/akshays/Data/PadeOps/Multispecies_gTg"      ! Directory for output files
+inputdir  =  "/home/akshays/Data/PadeOps/Multispecies_GEOS/rhoRatio1E+0"      ! Directory for input files
+outputdir  = "/home/akshays/Data/PadeOps/Multispecies_GEOS/rhoRatio1E+0"      ! Directory for output files
 
 nx = 201                  ! Number of points in X
 ny = 1                    ! Number of points in Y
@@ -12,8 +12,9 @@ tstop = 2.0D0             ! Physical time to stop the simulation
 CFL =  0.5D0              ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
-tviz = 1.0D-1             ! Time between visualization dumps (Set to negative to disable)
-vizprefix = "Multispecies"! Prefix for the visualization files
+tviz   = 1.0D-1           ! Time between visualization dumps (Set to negative to disable)
+tstats = 1.0D-1           ! Time between statistics dumps (Set to negative to disable)
+vizprefix = "Multispecies" ! Prefix for the visualization files
 
 periodicx = .TRUE.        ! Periodic in X?
 periodicy = .TRUE.        ! Periodic in Y?
@@ -42,30 +43,26 @@ nu = 0.02D0               ! Kinematic viscosity
 /
 
 &SINPUT
-gam      = 1.4D0           ! Ratio of specific heats
-Rgas     = 1.D0            ! Gas constant
-PInf     = 1.D0            ! P_infinity, material stiffness
-shmod    = 1.D1            ! Shear modulus
-Cmu      = 2.D-3           ! Coefficient for artificial shear viscosity
-Cbeta    = 1.D0            ! Coefficient for artificial bulk viscosity
-Ckap     = 1.D-2           ! Coefficient for artificial thermal conductivity
-Cdiff    = 3.D-3           ! Coefficient for artificial diffusivity
-CY       = 1.D2            ! Coefficient for artificial diffusivity (bounds control)
-ns       = 2               ! Number of species
-use_gTg  = .FALSE.         ! Use the symmetric Finger tensor formulation?
-PTeqb    = .TRUE.          ! Enforce pressure and temperature equilibrium between species
-SOSmodel = .FALSE.        ! TRUE => equilibrium model, FALSE => frozen model [Saurel et. al. 2009]
+Cmu     = 2.D-3           ! Coefficient for artificial shear viscosity
+Cbeta   = 1.D0            ! Coefficient for artificial bulk viscosity
+Ckap    = 1.D-2           ! Coefficient for artificial thermal conductivity
+Cdiff   = 0.D-3           ! Coefficient for artificial species diffusivity
+CY      = 0.D2            ! Coefficient for artificial species diffusivity (bounds control)
+ns      = 2               ! Number of species
+PTeqb    = .TRUE.         ! Use pressure and temperature equilibrium?
+SOSmodel = .FALSE.        ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
+usegTg   = .FALSE.        ! Use the g^Tg formulation? (Finger tensor)
 /
 
 &PROBINPUT
-gamma    = 1.4D0          ! Ratio of specific heats
-Rgas     = 1.D0           ! Gas constant
-p_infty  = 1.D0           ! P_infinity, material stiffness
-mu       = 1.D1           ! Shear modulus
-rho_0    = 1.D0           ! No deformation density
-p_amb    = 1.D-1          ! Ambient pressure
-minVF    = 1.0D-6         ! Minimum mass fraction at initialization
-rhoRatio = 1.0D1          ! Density ratio
-sharp    = .TRUE.         ! Use sharp interface initializaion
-thick    = 3.0D0          ! Initial thickness in grid units for interface
+gamma   = 1.4D0           ! Ratio of specific heats
+Rgas    = 1.D0            ! Gas constant
+p_infty = 1.D0            ! P_infinity, material stiffness
+mu      = 1.D1            ! Shear modulus
+rho_0   = 1.D0            ! No deformation density
+p_amb   = 1.D-1           ! Ambient pressure
+minVF   = 1.0D-3          ! Minimum mass fraction at initialization
+rhoRatio = 1.D0           ! Density ratio between species
+thick   = 1.D0            ! Initial thickness in grid units for interface
+sharp   = .FALSE.
 /

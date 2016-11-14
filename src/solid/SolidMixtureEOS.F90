@@ -367,7 +367,7 @@ contains
                   !    write(*,*) 'temperatures: ', this%PTeqbfn%T(m)
                   !endif
                   if (this%material(m)%VF(i,j,k) < zero) then
-                      print '(A,e19.12,A,3I0.0)', "Negative volume fraction of ",this%material(m)%VF(i,j,k)," detected at indices: ", i, j, k
+                      print '(A,e19.12,A,3(I0.0,1x))', "Negative volume fraction of ",this%material(m)%VF(i,j,k)," detected at indices: ", i, j, k
                   end if
               end do
           end do
