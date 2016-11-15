@@ -1370,20 +1370,23 @@ contains
         end if
 
 
-        if ( (forceWrite .or. (mod(this%step,this%tid_compStats)==0)) .and. (this%tsim > this%tSimStartStats) ) then
-            !call this%compute_stats()
-            call this%compute_stats3D()
+
+        if (this%timeAvgFullFields) then
+            if ( (forceWrite .or. (mod(this%step,this%tid_compStats)==0)) .and. (this%tsim > this%tSimStartStats) ) then
+                !call this%compute_stats()
+                call this%compute_stats3D()
+            end if 
+
+            if ( (forceWrite .or. (mod(this%step,this%tid_statsDump) == 0)) .and. (this%tsim > this%tSimStartStats) ) then
+                !call this%compute_stats()
+                !call this%dump_stats()
+                call this%compute_stats3D()
+                call this%dump_stats3D()
+                call mpi_barrier(mpi_comm_world, ierr)
+                stop
+            end if 
         end if 
 
-        if ( (forceWrite .or. (mod(this%step,this%tid_statsDump) == 0)) .and. (this%tsim > this%tSimStartStats) ) then
-            !call this%compute_stats()
-            !call this%dump_stats()
-            call this%compute_stats3D()
-            call this%dump_stats3D()
-            call mpi_barrier(mpi_comm_world, ierr)
-            stop
-        end if 
-        
         if ( restartWrite .or. (mod(this%step,this%t_restartDump) == 0) ) then
             call this%dumpRestartfile()
         end if
