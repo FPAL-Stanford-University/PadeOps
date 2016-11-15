@@ -1363,6 +1363,7 @@ contains
         
         if ( restartWrite .or. (mod(this%step,this%t_restartDump) == 0) ) then
             call this%dumpRestartfile()
+            call message(0,"Scheduled restart file dumped.")
         end if
         
         if ( (forceWrite .or. ((mod(this%step,this%t_planeDump) == 0) .and. &
