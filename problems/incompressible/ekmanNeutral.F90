@@ -1,7 +1,7 @@
 ! Template for PadeOps
 
-#include "gabls_files/initialize.F90"       
-#include "gabls_files/temporalHook.F90"  
+#include "ekmanNeutral_files/initialize.F90"       
+#include "ekmanNeutral_files/temporalHook.F90"  
 
 program gabls
     use mpi
@@ -17,15 +17,15 @@ program gabls
     character(len=clen) :: inputfile
     integer :: ierr
 
-    call MPI_Init(ierr)               !<-- Begin MPI
+    call MPI_Init(ierr)                         !<-- Begin MPI
 
-    call GETARG(1,inputfile)          !<-- Get the location of the input file
+    call GETARG(1,inputfile)                    !<-- Get the location of the input file
 
-    allocate(igp)                     !<-- Initialize hit_grid with defaults
+    allocate(igp)                               !<-- Initialize hit_grid with defaults
 
-    call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
+    call igp%init(inputfile)                    !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
   
-    call igp%start_io()                !<-- Start I/O by creating a header file (see io.F90)
+    call igp%start_io(dumpInitField = .true.)   !<-- Start I/O by creating a header file (see io.F90)
 
     call igp%printDivergence()
   
@@ -36,7 +36,7 @@ program gabls
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
     end do 
     
-    call igp%finalize_io()                !<-- Close the header file (wrap up i/o)
+    call igp%finalize_io()                  !<-- Close the header file (wrap up i/o)
 
     call igp%finalize_stats()
     
