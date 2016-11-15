@@ -3,7 +3,7 @@ module IncompressibleGridWallM
     use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa 
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
-    use igrid_hooks, only: meshgen_WallM, initfields_wallM, set_planes_io, set_KS_planes_io 
+    use igrid_hooks!, only: setDirichletBC_Temp, set_Reference_Temperature, meshgen_WallM, initfields_wallM, set_planes_io, set_KS_planes_io 
     use decomp_2d
     use StaggOpsMod, only: staggOps  
     use exits, only: GracefulExit, message, check_exit
@@ -29,8 +29,6 @@ module IncompressibleGridWallM
     complex(rkind), parameter :: zeroC = zero + imi*zero 
     integer, parameter :: no_slip = 1, slip = 2
 
-
-
     ! Allow non-zero value (isEven) 
     logical :: topBC_u = .true.  , topBC_v = .true. 
     logical :: botBC_u = .false. , botBC_v = .false. 
@@ -40,6 +38,7 @@ module IncompressibleGridWallM
     type, extends(grid) :: igridWallM
         
         character(clen) :: inputDir
+        integer :: headerfid = 12345   
 
         type(decomp_info), allocatable :: gpC, gpE
         type(decomp_info), pointer :: Sp_gpC, Sp_gpE
@@ -172,6 +171,8 @@ module IncompressibleGridWallM
             procedure :: printDivergence 
             procedure :: getMaxKE
             procedure :: timeAdvance
+            procedure :: start_io
+            procedure :: finalize_io
             procedure, private :: AdamsBashforth
             procedure, private :: TVD_RK3
             procedure, private :: ComputePressure
@@ -279,7 +280,7 @@ contains
         this%timeSteppingScheme = timeSteppingScheme; this%useSystemInteractions = useSystemInteractions
         this%tSystemInteractions = tSystemInteractions; this%storePressure = storePressure
         this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq; this%timeAvgFullFields = timeAvgFullFields
-        this%computeSpectra = computeSpectra
+        this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -392,8 +393,17 @@ contains
                              isTopSided = .false., isBotSided = .false.) 
             call this%derWW%init( this%gpC%zsz(3),  this%dz, isTopEven = .true., isBotEven = .true., & 
                              isTopSided = .false., isBotSided = .false.) 
-            call this%derT%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
+            if (botBC_Temp == 0) then 
+                call this%derT%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
                              isTopSided = .true., isBotSided = .true.) 
+            else if (botBC_Temp == 1) then
+                call this%derT%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
+                             isTopSided = .true., isBotSided = .false.) 
+            else if (botBC_Temp == 2) then
+                    call GracefulExit("Inhomogeneous Neumann BC is not currently supported for temperature",123)
+            else
+                    call GracefulExit("Invalid choice for botBC_Temp.",213)
+            end if 
         else
             allocate(this%Ops)
             call this%Ops%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp, &
@@ -492,14 +502,18 @@ contains
             call this%dumpRestartfile()
         end if 
       
-        if (this%isStratified) then 
+        if (this%isStratified) then
+            call set_Reference_Temperatur(inputfile,this%ThetaRef)
             if (botBC_Temp == 0) then
-                call setDirichletBC_Temp(inputfile, this%Tsurf, this%dTsurf_dt, this%ThetaRef)
+                call setDirichletBC_Temp(inputfile, this%Tsurf, this%dTsurf_dt)
                 this%Tsurf = this%Tsurf + this%dTsurf_dt*this%tsim
+            else if (botBC_Temp == 1) then
+                ! Do nothing 
             else
-                call GraceFulExit("Only Dirichlet BC supported for Temperature at &
-                    & this time. Set botBC_Temp = 0",341)        
-            end if 
+                call GraceFulExit("Only Dirichlet and homog. Neumann BCs supported for Temperature at &
+                    & this time. Set botBC_Temp = 0 or 1",341)        
+            end if
+            call message(1,"Reference Temperature set to:",this%ThetaRef) 
         end if 
 
         call this%spectC%fft(this%u,this%uhat)   
@@ -671,6 +685,11 @@ contains
         ! Final Step: Safeguard against unfinished procedures
         if ((useCompactFD).and.(.not.useSkewSymm)) then
             call GracefulExit("You must solve in skew symmetric form if you use CD06",54)
+        end if 
+
+        if ((.not. useCompactFD).and.(this%isStratified).and.(botBC_Temp .ne. 0)) then
+            call GracefulExit("If you use 2nd order FD in the vertical, you &
+                & cannot specify botBC_Temp to be anything other than 0, at this time.",434)
         end if 
 
         call message("IGRID initialized successfully!")
@@ -872,11 +891,13 @@ contains
             else
                 call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
                 zbuffE(:,:,this%nz + 1) = two*zbuffC(:,:,this%nz) - zbuffE(:,:,this%nz)
-            end if 
-            zbuffE(:,:,1) = zero 
-            if (nrank == 0) then
-                zbuffE(1,1,1) = this%Tsurf*real(this%nx,rkind)*real(this%ny,rkind)
-            end if 
+            end if
+            if (this%botBC_Temp == 0) then 
+                zbuffE(:,:,1) = zero 
+                if (nrank == 0) then
+                    zbuffE(1,1,1) = this%Tsurf*real(this%nx,rkind)*real(this%ny,rkind)
+                end if 
+            end if
             call transpose_z_to_y(zbuffE,this%TEhat,this%sp_gpE)
             call this%spectE%ifft(this%TEhat,this%TE)
         end if 
@@ -1262,7 +1283,9 @@ contains
         ! STEP 4: Interpolate the cell center values of w
         call this%compute_and_bcast_surface_Mn()
         if (this%isStratified) then
-            this%Tsurf = this%Tsurf + this%dTsurf_dt*this%dt
+            if (this%botBC_Temp == 0) then
+                this%Tsurf = this%Tsurf + this%dTsurf_dt*this%dt
+            end if 
         end if  
         call this%interp_PrimitiveVars()
 
@@ -1715,24 +1738,31 @@ contains
         real(rkind) :: ustarNew, ustarDiff, dTheta, ustar
         real(rkind) :: a, b, c, PsiH, PsiM, wTh, z, u, Linv
         real(rkind), parameter :: beta_h = 7.8_rkind, beta_m = 4.8_rkind
+      
+        select case (this%botBC_Temp)
+        case(0) 
+            dTheta = this%Tsurf - this%Tmn
+            z = this%dz/two ; ustarDiff = one; 
+            a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
+            PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
        
-        dTheta = this%Tsurf - this%Tmn
-        z = this%dz/two ; ustarDiff = one; 
-        a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
-        PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
-       
-        ! Inside the do loop all the used variables are on the stored on the stack
-        ! After the while loop these variables are copied to their counterparts
-        ! on the heap (variables part of the derived type)
-        do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
-            ustarNew = u*kappa/(a - PsiM)
-            wTh = dTheta*ustarNew*kappa/(a - PsiH) 
-            Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
-            PsiM = -c*Linv; PsiH = -b*Linv;
-            ustarDiff = abs((ustarNew - ustar)/ustarNew)
-            ustar = ustarNew; idx = idx + 1
-        end do 
+            ! Inside the do loop all the used variables are on the stored on the stack
+            ! After the while loop these variables are copied to their counterparts
+            ! on the heap (variables part of the derived type)
+            do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
+                ustarNew = u*kappa/(a - PsiM)
+                wTh = dTheta*ustarNew*kappa/(a - PsiH) 
+                Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
+                PsiM = -c*Linv; PsiH = -b*Linv;
+                ustarDiff = abs((ustarNew - ustar)/ustarNew)
+                ustar = ustarNew; idx = idx + 1
+            end do 
         this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
+        case(1)
+            this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
+            this%invObLength = zero
+            this%wTh_surf = zero
+        end select
     end subroutine
 
     subroutine readRestartFile(this, tid, rid)
@@ -3157,7 +3187,10 @@ contains
         nullify(this%tau11_mean, this%tau12_mean, this%tau13_mean, this%tau22_mean, this%tau23_mean, this%tau33_mean)
         nullify(this%S11_mean, this%S12_mean, this%S13_mean, this%S22_mean, this%S23_mean, this%S33_mean)
         nullify(this%sgsdissp_mean, this%viscdisp_mean, this%sgscoeff_mean)
-        deallocate(this%zStats2dump, this%runningSum, this%TemporalMnNOW, this%runningSum_sc)
+        if (allocated(this%zStats2dump)) deallocate(this%zStats2dump)
+        if (allocated(this%runningSum)) deallocate(this%runningSum)
+        if (allocated(this%TemporalMnNow)) deallocate(this%TemporalMnNOW)
+        if (allocated(this%runningSum_sc)) deallocate(this%runningSum_sc)
         if(this%useWindTurbines) deallocate(this%inst_horz_avg_turb, this%runningSum_sc_turb, this%runningSum_turb)
     end subroutine 
 
@@ -3283,5 +3316,105 @@ contains
     end subroutine  
 
 
+    subroutine start_io(this, dumpInitField)
+        class(igridWallM), target, intent(in) :: this 
+        character(len=clen) :: fname
+        character(len=clen) :: tempname
+        !character(len=clen) :: command
+        character(len=clen) :: OutputDir
+        !integer :: system 
+        integer :: runIDX 
+        logical :: isThere
+        integer :: tag, idx, status(MPI_STATUS_SIZE), ierr
+        integer, dimension(:,:), allocatable        :: xst,xen,xsz
+        logical, optional, intent(in) :: dumpInitField
+
+        ! Create data sharing info
+        if (nrank == 0) then
+            allocate(xst(0:nproc-1,3),xen(0:nproc-1,3),xsz(0:nproc-1,3))
+        end if
+
+
+        ! communicate local processor grid info (Assume x-decomposition)
+        if (nrank == 0) then
+            xst(0,:) = this%gpC%xst
+            xen(0,:) = this%gpC%xen
+            
+            tag = 0
+            do idx = 1,nproc-1
+                call MPI_RECV(xst(idx,:), 3, MPI_INTEGER, idx, tag,&
+                    MPI_COMM_WORLD, status, ierr)
+            end do 
+            tag = 1
+            do idx = 1,nproc-1
+                call MPI_RECV(xen(idx,:), 3, MPI_INTEGER, idx, tag,&
+                    MPI_COMM_WORLD, status, ierr)
+            end do
+           tag = 2
+            do idx = 1,nproc-1
+                call MPI_RECV(xsz(idx,:), 3, MPI_INTEGER, idx, tag,&
+                    MPI_COMM_WORLD, status, ierr)
+            end do
+
+        else
+            tag = 0
+            call MPI_SEND(this%gpC%xst, 3, MPI_INTEGER, 0, tag, &
+                 &      MPI_COMM_WORLD, ierr)
+            tag = 1
+            call MPI_SEND(this%gpC%xen, 3, MPI_INTEGER, 0, tag, &
+                 &      MPI_COMM_WORLD, ierr)
+            tag = 2
+            call MPI_SEND(this%gpC%xsz, 3, MPI_INTEGER, 0, tag, &
+                 &      MPI_COMM_WORLD, ierr)
+
+        end if 
+
+        OutputDir = this%outputdir
+        runIDX = this%runID
+        
+        inquire(FILE=trim(OutputDir), exist=isThere)
+        if (nrank == 0) then
+            write(tempname,"(A3,I2.2,A6,A4)") "Run", runIDX, "HEADER",".txt"
+            fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+
+            open (this%headerfid, file=trim(fname), FORM='formatted', STATUS='replace',ACTION='write')
+            write(this%headerfid,*)"========================================================================="
+            write(this%headerfid,*)"---------------------  Header file for MATLAB ---------------------------"
+            write(this%headerfid,"(A9,A10,A10,A10,A10,A10,A10)") "PROC", "xst", "xen", "yst", "yen","zst","zen"
+            write(this%headerfid,*)"-------------------------------------------------------------------------"
+            do idx = 0,nproc-1
+                write(this%headerfid,"(I8,6I10)") idx, xst(idx,1), xen(idx,1), xst(idx,2), xen(idx,2), xst(idx,3), xen(idx,3)
+            end do 
+            write(this%headerfid,*)"-------------------------------------------------------------------------"
+            write(this%headerfid,*)"Dumps made at:"
+        end if
+        call mpi_barrier(mpi_comm_world,ierr)
+        
+        if (nrank == 0) then
+            deallocate(xst, xen, xsz)
+        end if 
+
+        if (present(dumpInitField)) then
+            if (dumpInitField) then
+                call message(0,"Performing initialization data dump.")
+                call this%dumpFullField(this%u,'uVel')
+                call this%dumpFullField(this%v,'vVel')
+                call this%dumpFullField(this%wC,'wVel')
+                if (this%isStratified) call this%dumpFullField(this%T,'potT')
+                if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
+                call message(0,"Done with the initialization data dump.")
+            end if
+        end if
+    end subroutine
+    
+    subroutine finalize_io(this)
+        class(igridWallM), intent(in) :: this
+
+        if (nrank == 0) then
+            write(this%headerfid,*) "--------------------------------------------------------------"
+            write(this%headerfid,*) "------------------ END OF HEADER FILE ------------------------"
+            close(this%headerfid)
+        end if 
+    end subroutine 
 
 end module 

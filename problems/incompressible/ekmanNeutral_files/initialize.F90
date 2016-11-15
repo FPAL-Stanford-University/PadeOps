@@ -1,4 +1,4 @@
-module gabls_parameters
+module ekmanNeutral_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
@@ -15,7 +15,7 @@ module gabls_parameters
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use gabls_parameters    
+    use ekmanNeutral_parameters    
     use kind_parameters,  only: rkind
     use constants,        only: zero, one, two, three, four, pi
     use decomp_2d,        only: decomp_info
@@ -24,16 +24,16 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     type(decomp_info),                                          intent(in)    :: decomp
     real(rkind),                                                intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
-    real(rkind) :: z0init
+    real(rkind) :: z0init = 1.d-4
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tsurf0 = zero, dTsurf_dt = zero, Tref = zero
-    namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt, Tref 
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero
+    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=GABLSINPUT)
+    read(unit=ioUnit, NML=EKMAN_NEUTRAL_INPUT)
     close(ioUnit)    
 
     !Lx = two*pi; Ly = two*pi; Lz = one
@@ -70,7 +70,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use gabls_parameters
+    use ekmanNeutral_parameters
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, three, four, pi, half
     use gridtools,          only: alloc_buffs
@@ -87,20 +87,21 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit, k
     real(rkind), dimension(:,:,:), pointer :: u, v, w, T, wC, x, y, z
-    real(rkind) ::  sig
-    real(rkind), dimension(:,:,:), allocatable :: randArr, ztmp, Tpurt
-    real(rkind) :: z0init
-    real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
+    real(rkind), dimension(:,:,:), allocatable :: randArr, Tpurt
+    real(rkind) :: z0init, sig!, epsnd
+    real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE, eta
     integer :: nz, nzE
-    !real(rkind) :: delta_Ek = 0.08d0, Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
-    real(rkind) ::  Tsurf0 = zero, dTsurf_dt = zero
+    !real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
     real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero
-    namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt, Tref 
+    real(rkind), parameter :: a = 2.43_rkind, b = 0.035_rkind, thetam = 15._rkind + 273.15_rkind
+    real(rkind), parameter :: c = 1.d0/3.d0, h0 = 0.5d0, h1 = 0.55d0, h2 = 0.6d0, D = h0/4.d0
+
+    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref 
 
     !z0init = 1.D-4
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=GABLSINPUT)
+    read(unit=ioUnit, NML=EKMAN_NEUTRAL_INPUT)
     close(ioUnit)    
 
 
@@ -114,41 +115,30 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    !epsnd = 5.d0
-    !u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    !v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-    !wC= zero  
-    !u = u /( (one/kappa) * log(one/z0init))
-    !v = v /( (one/kappa) * log(one/z0init))
-
-    u = one
-    v = zero
+    u = (1.d0 - exp(-z/D)*cos(z/D))
+    v = exp(-z/D)*sin(z/D)
     wC = zero 
 
-    allocate(ztmp(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    ztmp = z*xDim
-    T = 0.01d0*(ztmp - 100.d0) + 265.d0    
-    where(ztmp < 100.d0)
-        T = 265.d0
-    end where
-    T = T + 0.0001d0*ztmp
+    allocate(eta(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    eta = (z - h1)/(c*(h2 - h0))
+    T = thetam + a*(tanh(eta) + 1.d0)/2.d0 + b*(log(2.d0*cosh(eta)) + eta)/2.d0 
 
     ! Add random numbers
     allocate(randArr(size(T,1),size(T,2),size(T,3)))
     call gaussian_random(randArr,zero,one,seedu + 10*nrank)
     do k = 1,size(u,3)
-        sig = 0.08
+        sig = 0.08d0
         Tpurt(:,:,k) = sig*randArr(:,:,k)
     end do  
     deallocate(randArr)
     
-    where (ztmp > 50.d0)
+    where (z > 0.25d0)
         Tpurt = zero
     end where
     T = T + Tpurt
    
-    deallocate(ztmp, Tpurt)
+    deallocate(eta, Tpurt)
 
     ! Interpolate wC to w
     allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
@@ -194,49 +184,45 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
 end subroutine
 
-subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
-    use kind_parameters,    only: rkind
-    use constants,          only: zero
-    use gabls_parameters
-    implicit none
-    real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    character(len=*),                intent(in)    :: inputfile
-    real(rkind) :: Lx, Ly, Lz, z0init = zero, Tsurf0 = zero, Tref = zero
-    integer :: ioUnit 
-    namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt, Tref 
-
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=GABLSINPUT)
-    close(ioUnit)    
-
-    ! First change dTsurf_dt to K/s from K/hr
-    dTsurf_dt = dTsurf_dt / 3600._rkind
-    
-    ! Now Normalize: 
-    dTsurf_dt = dTsurf_dt * timeDim !/ Tref 
-    Tsurf = Tsurf0 !/ Tref
-    !ThetaRef = Tref
-
-end subroutine
-
 subroutine set_Reference_Temperatur(inputfile, Tref)
     use kind_parameters,    only: rkind
     use constants,          only: zero
     implicit none
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, z0init = zero, Tsurf0 = zero, dTsurf_dt
+    real(rkind) :: Lx, Ly, Lz, z0init
     integer :: ioUnit 
-    namelist /GABLSINPUT/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt, Tref 
+    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref 
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=GABLSINPUT)
+    read(unit=ioUnit, NML=EKMAN_NEUTRAL_INPUT)
     close(ioUnit)    
 
     ! This will have set the value of Tref.     
 
+end subroutine
+
+subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
+    use kind_parameters,    only: rkind
+    use constants,          only: zero
+    use ekmanNeutral_parameters
+    implicit none
+    real(rkind), intent(out) :: Tsurf, dTsurf_dt
+    real(rkind) :: Lx, Ly, Lz, z0init, Tref
+    character(len=*),                intent(in)    :: inputfile
+    integer :: ioUnit 
+    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref 
+     
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=EKMAN_NEUTRAL_INPUT)
+    close(ioUnit)    
+    
+    ! This subroutine is never called for this problem, since it used Neumann
+    ! BC.
+
+    Tsurf = 0.d0; dTsurf_dt = 0.d0
 end subroutine
 
 subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)

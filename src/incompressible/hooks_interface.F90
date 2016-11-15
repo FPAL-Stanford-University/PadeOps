@@ -72,6 +72,14 @@ module igrid_hooks
         end subroutine 
     end interface
 
+    interface set_Reference_Temperature
+        subroutine set_Reference_Temperature(inputfile, Tref)
+            import :: rkind
+            character(len=*), intent(in) :: inputfile
+            real(rkind), intent(out) :: Tref
+
+        end subroutine 
+    end interface
 
     interface initfields_wallM
         subroutine initfields_wallM(decompC, decompE, inpDirectory, mesh, fieldsC, fieldsE)

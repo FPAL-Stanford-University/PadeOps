@@ -162,9 +162,10 @@
     subroutine destroy(this)
         class(sgs), intent(inout) :: this
 
-        if ((useCompactFD) .and. (.not. this%useWallModel)) then
+        if (useCompactFD) then
             call this%derZ_SS%destroy()
-            deallocate(this%derZ_SS)
+            call this%derTAU33%destroy()
+            deallocate(this%derZ_SS, this%derTAU33)
         else
             call this%Ops2ndOrder%destroy()
             deallocate(this%Ops2ndOrder)
