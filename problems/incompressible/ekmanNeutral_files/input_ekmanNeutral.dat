@@ -77,7 +77,7 @@ P_compFreq            = 10          ! How often (timesteps) do you want to compu
 &BCs
 topWall               = 2           ! no_slip = 1, slip = 2
 useSpongeLayer        = .TRUE.     ! Use a sponge layer at the top 
-zstSponge             = 0.80d0      ! Height above which the sponge layer is active
+zstSponge             = 0.75d0      ! Height above which the sponge layer is active
 SpongeTscale          = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50)
 botBC_Temp            = 1           ! Bottom BC type for temperature; 0: Dirichlet, 1: Homog. Neumann 
 /
