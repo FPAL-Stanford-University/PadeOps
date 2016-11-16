@@ -10,7 +10,7 @@ contains
     subroutine write_2d_ascii(raw_data,filename)
         real(kind=rkind), intent(in) :: raw_data(:,:)
         character(len=*), intent(in) :: filename
-        integer :: n1, im, n2
+        integer :: n1, n2
         integer :: i, j 
 
         n1 = size(raw_data,1)
@@ -32,7 +32,7 @@ contains
         real(rkind), intent(out), dimension(:,:), allocatable :: data2read
         character(len=*), intent(in) :: filename
         character(len=100000) :: columncount
-        integer :: nc,nr, ierr, i, j , N
+        integer :: nc,nr, ierr, i, j 
 
 
         open(unit=10,file=filename,access='sequential',form='formatted')

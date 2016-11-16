@@ -1,6 +1,6 @@
 program test_SIGMA_SGS
     use kind_parameters, only: rkind, clen
-    use constants, only: pi, half, two, one, imi, zero
+    use constants, only: pi, half, two, one, zero
     use reductions, only: p_maxval
     use timer, only: tic, toc
     use basic_io, only: read_2d_ascii 
@@ -25,13 +25,13 @@ program test_SIGMA_SGS
     real(rkind), dimension(:,:), allocatable :: temp 
     type(spectral), allocatable :: spect
     type(spectral), allocatable :: spectE
-    type(padepoisson), allocatable :: poiss 
-    real(rkind), dimension(:,:,:), allocatable :: divergence, rtmp1z, rtmp2z, rtmp1x, rtmp1y, rtmp1yE, rtmp1zE
+    !type(padepoisson), allocatable :: poiss 
+    real(rkind), dimension(:,:,:), allocatable :: divergence!, rtmp1z, rtmp2z,  rtmp1y, rtmp1yE, rtmp1zE
     complex(rkind), dimension(:,:,:), allocatable :: urhs, vrhs, wrhs
     complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what
     type(cd06stagg), allocatable :: derZu, derZv, derZw
     complex(rkind), dimension(:,:,:), allocatable :: ctmp1, ctmp2, ctmpz1,ctmpz2
-    type(cf90) :: filzC, filzE
+    !type(cf90) :: filzC, filzE
     real(rkind) :: Lx, Ly, Lz
     real(rkind) :: Uperiods, Vperiods, zpeak, epsfac, delta_Ek
     integer :: ix1, ixn, iy1, iyn, iz1, izn
@@ -40,13 +40,11 @@ program test_SIGMA_SGS
     complex(rkind), dimension(:,:,:,:), allocatable :: duidxjH
     integer :: dimTransform = 2
     character(len=clen) :: filename = "/home/aditya90/Codes/PadeOps/data/OpenFoam_AllData.txt" 
-    type(sgs) :: sgsModel
+    !type(sgs) :: sgsModel
     real(rkind) :: maxnuSGS
    
-    integer :: ModelID = 0
+    !integer :: ModelID = 0
     logical :: useEkmanInit = .false. 
-    logical :: useDynamicProcedure = .true. 
-    logical :: useClipping = .true. 
     logical :: useCompact = .true. 
 
 
@@ -100,7 +98,7 @@ program test_SIGMA_SGS
 
         u = one - exp(-z/delta_Ek)*cos(z/delta_Ek) &
                 + half*exp(half)*(z/Lz)*cos(Uperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-        v = exp(-z/delta_Ek)*sin(z/delta_Ek) + &
+        v = exp(-z/delta_Ek)*sin(z/delta_Ek)  &
                 + half*exp(half)*(z/Lz)*cos(Vperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
         w = zero 
 

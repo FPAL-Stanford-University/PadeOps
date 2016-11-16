@@ -18,7 +18,7 @@ end module
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     use pblwt_parameters    
     use kind_parameters,  only: rkind
-    use constants,        only: one, two, three, four, pi
+    use constants,        only: one, two
     use decomp_2d,        only: decomp_info
     implicit none
 
@@ -73,9 +73,8 @@ end subroutine
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use pblwt_parameters
     use kind_parameters,    only: rkind
-    use constants,          only: zero, one, two, three, four, pi, half
+    use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
-    use IncompressibleGrid, only: u_index,v_index,w_index
     use random,             only: gaussian_random
     use decomp_2d          
     use reductions,         only: p_maxval
@@ -86,14 +85,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
-    integer :: ioUnit, k
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind) :: mfactor, sig, dpdxF
-    real(rkind), dimension(:,:,:), allocatable :: randArr
+    !real(rkind), dimension(:,:,:), allocatable :: randArr
     real(rkind) :: z0init, epsnd = 0.1
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: nz, nzE
-    real(rkind) :: delta_Ek = 0.08, Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
+    integer :: nz, nzE, ioUnit
+    real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0
     real(rkind) :: zpeak = 0.2d0
     real(rkind)  :: Lx = one, Ly = one, Lz = one
     namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
@@ -191,14 +188,45 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 
 end subroutine
 
-
-subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt, ThetaRef)
+subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
     use constants,          only: zero, one
-    character(len=*),                intent(in)    :: inputfile
-    real(rkind), intent(out) :: Tsurf, dTsurf_dt, ThetaRef
+    implicit none
 
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), intent(out) :: Tsurf, dTsurf_dt
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init
+    integer :: iounit
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
+    
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PBLINPUT)
+    close(ioUnit)    
 
     ! Do nothing really since this is an unstratified simulation
+end subroutine
+
+subroutine set_Reference_Temperature(inputfile, Tref)
+    use kind_parameters,    only: rkind
+    implicit none 
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), intent(out) :: Tref
+    real(rkind) :: Lx, Ly, Lz, z0init
+    integer :: iounit
+    
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PBLINPUT)
+    close(ioUnit)    
+     
+    Tref = 0.d0
+    
+    ! Do nothing really since this is an unstratified simulation
+
 end subroutine

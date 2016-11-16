@@ -98,7 +98,6 @@ end module
 
 program upsampleFields
     use kind_parameters, only: rkind, clen
-    use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa 
     use gridtools, only: alloc_buffs, destroy_buffs
     use decomp_2d
     use exits, only: GracefulExit, message

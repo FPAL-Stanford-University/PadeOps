@@ -1,6 +1,6 @@
 program test_projection
     use kind_parameters, only: rkind, clen
-    use constants, only: pi, two, one, imi, zero
+    use constants, only: imi, zero
     use reductions, only: p_maxval
     use timer, only: tic, toc
     use basic_io, only: read_2d_ascii 
@@ -21,19 +21,19 @@ program test_projection
     integer :: nx = 100, ny = 100, nz = 60
     integer :: ierr, prow = 0, pcol = 0
     real(rkind) :: dx, dy, dz, Lz
-    integer :: dimTransform = 2
+    !integer :: dimTransform = 2
     character(len=clen) :: filename = "/home/aditya90/Codes/PadeOps/data/OpenFoam_AllData.txt" 
     real(rkind), dimension(:,:), allocatable :: temp 
     type(spectral), allocatable :: spect
     type(spectral), allocatable :: spectE
     type(padepoisson), allocatable :: poiss 
-    real(rkind), dimension(:,:,:), allocatable :: divergence, rtmp1z, rtmp2z, rtmp1x, rtmp1y, rtmp1yE, rtmp1zE
+    real(rkind), dimension(:,:,:), allocatable :: divergence, rtmp1z, rtmp1y, rtmp1yE, rtmp1zE
     complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what
     type(cd06stagg), allocatable :: der
     complex(rkind), dimension(:,:,:), allocatable :: ctmp1, ctmp2, ctmp3, ctmp4
     complex(rkind), dimension(:,:,:,:), allocatable :: cbuffzC, cbuffzE
-    type(cf90) :: filzC, filzE
-    type(gaussian) :: testFiltC, testFiltE
+    !type(cf90) :: filzC, filzE
+    !type(gaussian) :: testFiltC, testFiltE
     type(staggops) :: der2nd
     logical :: computeStokesPressure = .true. 
 

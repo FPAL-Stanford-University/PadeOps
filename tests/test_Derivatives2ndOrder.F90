@@ -3,7 +3,7 @@ program test_deriv2ndOrder
     use mpi
     use kind_parameters, only : rkind
     use decomp_2d
-    use constants, only: pi, two, one, imi, zero
+    use constants, only: pi, two, one
     use reductions, only: p_maxval
     use timer, only: tic, toc
     use staggOpsMod, only: staggOps
@@ -17,8 +17,7 @@ program test_deriv2ndOrder
     integer :: nx = 8, ny = 8, nz = 16
     integer :: prow = 0, pcol = 0
     integer :: ierr, i, j, k, ii, jj, kk
-    real(rkind) :: dx, dy, dz, zbot, fmean
-    integer :: dimTransform = 2
+    real(rkind) :: dx, dy, dz
 
     call MPI_Init(ierr)
     
