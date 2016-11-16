@@ -659,7 +659,7 @@ contains
 
     subroutine printDivergence(this)
         use reductions, only: p_maxval
-        use constants, only: imi
+        !use constants, only: imi
         class(hit_grid),target, intent(inout) :: this
         type(derivatives), pointer :: der
         

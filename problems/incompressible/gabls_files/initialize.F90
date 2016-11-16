@@ -17,7 +17,7 @@ end module
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     use gabls_parameters    
     use kind_parameters,  only: rkind
-    use constants,        only: zero, one, two, three, four, pi
+    use constants,        only: zero, one, two
     use decomp_2d,        only: decomp_info
     implicit none
 
@@ -72,9 +72,8 @@ end subroutine
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use gabls_parameters
     use kind_parameters,    only: rkind
-    use constants,          only: zero, one, two, three, four, pi, half
+    use constants,          only: zero, one,  half
     use gridtools,          only: alloc_buffs
-    use IncompressibleGrid, only: u_index,v_index,w_index
     use random,             only: gaussian_random
     use decomp_2d          
     use reductions,         only: p_maxval
@@ -220,7 +219,7 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
 end subroutine
 
-subroutine set_Reference_Temperatur(inputfile, Tref)
+subroutine set_Reference_Temperature(inputfile, Tref)
     use kind_parameters,    only: rkind
     use constants,          only: zero
     implicit none

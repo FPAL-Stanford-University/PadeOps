@@ -17,7 +17,7 @@ end module
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     use ekmanNeutral_parameters    
     use kind_parameters,  only: rkind
-    use constants,        only: zero, one, two, three, four, pi
+    use constants,        only: zero, one, two
     use decomp_2d,        only: decomp_info
     implicit none
 
@@ -72,9 +72,8 @@ end subroutine
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use ekmanNeutral_parameters
     use kind_parameters,    only: rkind
-    use constants,          only: zero, one, two, three, four, pi, half
+    use constants,          only: zero, one,  half
     use gridtools,          only: alloc_buffs
-    use IncompressibleGrid, only: u_index,v_index,w_index
     use random,             only: gaussian_random
     use decomp_2d          
     use reductions,         only: p_maxval
@@ -94,7 +93,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     !real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
     real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero
     real(rkind), parameter :: a = 2.43_rkind, b = 0.027_rkind, thetam = 15._rkind + 273.15_rkind
-    real(rkind), parameter :: c = 1.d0/3.d0, h0 = 0.41667d0, h1 = 0.45833d0, h2 = 0.5d0, D = h0/4.d0
+    real(rkind), parameter :: c = 1.d0/3.d0, h0 = 0.41667d0, h1 = 0.45833d0, h2 = 0.5d0!, D = h0/4.d0
 
     namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref 
 
@@ -184,9 +183,8 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
 end subroutine
 
-subroutine set_Reference_Temperatur(inputfile, Tref)
+subroutine set_Reference_Temperature(inputfile, Tref)
     use kind_parameters,    only: rkind
-    use constants,          only: zero
     implicit none
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
@@ -205,7 +203,6 @@ end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
-    use constants,          only: zero
     use ekmanNeutral_parameters
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt

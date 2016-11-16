@@ -7,8 +7,8 @@ subroutine init_dealiasing_stuff(this,nx,ny,nz)
     complex(rkind), pointer, dimension(:,:,:) :: c_arr_in, c_arr_out
     real(rkind), pointer, dimension(:,:,:) :: r_arr_in, r_arr_out
 
-    this%nxF = (three*nx)/two
-    this%nyF = (three*ny)/two
+    this%nxF = ceiling((three*real(nx))/two) 
+    this%nyF = ceiling((three*real(ny))/two)
     call decomp_info_init(this%nxF/2+1,ny,nz,this%D1)
     allocate(this%d11x(this%D1%xsz(1),this%D1%xsz(2),this%D1%xsz(3)))
     allocate(this%d11y(this%D1%ysz(1),this%D1%ysz(2),this%D1%ysz(3)))

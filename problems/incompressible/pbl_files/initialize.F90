@@ -18,7 +18,7 @@ end module
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     use pbl_parameters    
     use kind_parameters,  only: rkind
-    use constants,        only: one, two, three, four, pi
+    use constants,        only: one,two
     use decomp_2d,        only: decomp_info
     implicit none
 
@@ -73,9 +73,8 @@ end subroutine
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use pbl_parameters
     use kind_parameters,    only: rkind
-    use constants,          only: zero, one, two, three, four, pi, half
+    use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
-    use IncompressibleGrid, only: u_index,v_index,w_index
     use random,             only: gaussian_random
     use decomp_2d          
     use reductions,         only: p_maxval
@@ -182,9 +181,10 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init
     integer :: iounit
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -195,9 +195,8 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 end subroutine
 
 
-subroutine set_Reference_Temperatur(inputfile, Tref)
+subroutine set_Reference_Temperature(inputfile, Tref)
     use kind_parameters,    only: rkind
-    use constants,          only: one, zero
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref

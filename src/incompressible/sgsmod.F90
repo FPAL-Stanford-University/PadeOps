@@ -215,7 +215,7 @@ contains
         end select
         
         if (this%useDynamicProcedure) then
-            call this%DynamicProcedure(u,v,wC,uhat, vhat, wChat, duidxj,duidxjhat) 
+            call this%DynamicProcedure(u,v,wC,uhat, vhat, wChat, duidxjhat) 
         else
             if (this%useWallFunction) then
                 this%nuSGS = this%cSMAG_WALL*this%nuSGS
@@ -306,7 +306,7 @@ contains
         !print*, this%nuSGS(3,2,3)
         if (this%useDynamicProcedure) then
             if (mod(this%mstep,ApplyDynEvery) == 0) then
-                call this%DynamicProcedure(u,v,wC,uhat, vhat, wChat, duidxjC,duidxjChat) 
+                call this%DynamicProcedure(u,v,wC,uhat, vhat, wChat, duidxjChat) 
             end if
             this%nuSGS = this%Lij(:,:,:,1) * (this%deltafilter * this%deltafilter) * this%nuSGS  
         elseif (this%eddyViscModel) then
@@ -505,7 +505,7 @@ contains
         call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
         this%ctmpEz(:,:,1) = zeroC
         if (nrank == 0) then
-            this%ctmpEz(1,1,1) = cmplx(wTh_surf/this%MeanFact,zero)
+            this%ctmpEz(1,1,1) = cmplx(wTh_surf/this%MeanFact,zero,rkind)
         end if
         if (useCompactFD) then
             call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpCz,1),size(this%ctmpCz,2))

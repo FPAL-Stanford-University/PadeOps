@@ -10,10 +10,10 @@ os=`uname`
 case "$os" in
     Linux)
         cd dependencies
-        if [ ! -d "fftw-3.3.4" ]; then
-            tar -zxf fftw-3.3.4.tar.gz
+        if [ ! -d "fftw-3.3.5" ]; then
+            tar -zxf fftw-3.3.5.tar.gz
         fi
-        cd fftw-3.3.4
+        cd fftw-3.3.5
         sh ./configure --prefix=$HOME/FFTW F77=gfortran-6 MPICC=mpicc > /dev/null
         make -j > /dev/null
         sudo make install > /dev/null

@@ -1,6 +1,6 @@
 program test_actuatorDisk
     use kind_parameters, only: rkind, clen
-    use constants, only: pi, two, one, imi, zero, half, kappa
+    use constants, only: pi, two, one, imi, zero
     use reductions, only: p_maxval, p_sum 
     use timer, only: tic, toc
     use decomp_2d
@@ -23,8 +23,8 @@ program test_actuatorDisk
     type(decomp_info) :: gpC, gpE
     type(decomp_info), pointer :: sp_gpC, sp_gpE
     type(spectral), allocatable, target :: spectC, spectE 
-    integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0 
-    real(rkind) :: xPeriods = 2.d0, yPeriods = 2.d0, zpeak = 0.3d0, epsnd = 5.d0, z0init = 1.d-4 
+    integer :: ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr
+    !real(rkind) :: xPeriods = 2.d0, yPeriods = 2.d0, zpeak = 0.3d0,  z0init = 1.d-4 
     real(rkind), dimension(:,:,:,:), allocatable :: rbuffxC
     complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
     real(rkind), dimension(:,:,:), allocatable :: rhs_real
@@ -78,7 +78,7 @@ program test_actuatorDisk
     allocate(cbuffzE(sp_gpE%zsz(1),sp_gpE%zsz(2),sp_gpE%zsz(3),1))
 
     allocate(turbArray)
-    call turbArray%init(inputFile, gpC, gpE, sp_gpC, sp_gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
+    call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
 
     !namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir
     !ioUnit = 11
