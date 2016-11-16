@@ -1308,6 +1308,9 @@ contains
         restartWrite = .FALSE. 
         if(this%tsim > this%tstop) then
           forceWrite = .TRUE.
+          restartWrite = .TRUE.
+          call message(0,"The simulation has ended.")
+          call message(1,"Dumping a restart file.")
         endif
 
         if (this%useSystemInteractions) then
@@ -1407,7 +1410,7 @@ contains
         end if 
 
         if (mod(this%step,this%t_dataDump) == 0) then
-           call message(0,"Scheduled data dump.")
+           call message(0,"Scheduled visualization dump.")
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
@@ -1417,7 +1420,7 @@ contains
 
 
         if (forceWrite) then
-           call message(2,"Performing a forced data dump.")
+           call message(2,"Performing a forced visualization dump.")
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
