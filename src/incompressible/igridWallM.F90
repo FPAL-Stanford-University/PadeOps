@@ -69,7 +69,7 @@ module IncompressibleGridWallM
         real(rkind), dimension(:,:,:), pointer :: ox,oy,oz
         complex(rkind), dimension(:,:,:), pointer :: T_rhs, T_Orhs
 
-        complex(rkind), dimension(:,:,:), allocatable :: uBase, Tbase, dTdxH, dTdyH, dTdzH
+        complex(rkind), dimension(:,:,:), allocatable :: uBase, Tbase, vBase, dTdxH, dTdyH, dTdzH
         real(rkind), dimension(:,:,:), allocatable :: dTdxC, dTdyC, dTdzE, dTdzC
 
         real(rkind), dimension(:,:,:,:), allocatable, public :: rbuffxC, rbuffyC, rbuffzC
@@ -610,9 +610,12 @@ contains
                 this%RdampC = zero
             end where
             call this%spectC%alloc_r2c_out(this%uBase)
+            call this%spectC%alloc_r2c_out(this%vBase)
             call this%spectC%alloc_r2c_out(this%TBase)
             this%rbuffxC(:,:,:,1) = this%Gx
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%uBase)
+            this%rbuffxC(:,:,:,1) = this%Gy
+            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%vBase)
             this%rbuffxC(:,:,:,1) = this%T
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%TBase)
             call message(0,"Sponge Layer initialized successfully")
@@ -1170,7 +1173,9 @@ contains
         deviationC = this%uhat - this%ubase
         this%u_rhs = this%u_rhs - (this%RdampC/this%dt)*deviationC
 
-        this%v_rhs = this%v_rhs - (this%RdampC/this%dt)*this%vhat ! base value for v is zero
+        deviationC = this%vhat - this%vbase
+        this%v_rhs = this%v_rhs - (this%RdampC/this%dt)*deviationC
+        !this%v_rhs = this%v_rhs - (this%RdampC/this%dt)*this%vhat ! base value for v is zero
         
         this%w_rhs = this%w_rhs - (this%RdampE/this%dt)*this%what ! base value for w is zero  
 
