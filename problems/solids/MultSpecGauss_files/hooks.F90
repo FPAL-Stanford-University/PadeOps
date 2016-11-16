@@ -509,6 +509,9 @@ subroutine hook_material_g_source(decomp,eos,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
     real(rkind), dimension(:,:,:),   intent(in)    :: x,y,z
     real(rkind), dimension(:,:,:),   intent(in)    :: rho,u,v,w,Ys,VF,p
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
+
+    print*, "Min/Max VF: ", minval(VF), maxval(VF)
+    print*, "Min/Max Ys: ", minval(Ys), maxval(Ys)
 end subroutine
 
 subroutine hook_material_mass_source(decomp,eos,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)

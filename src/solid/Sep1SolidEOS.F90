@@ -86,7 +86,10 @@ contains
 
         eelastic = e - eelastic ! Contains ehydro now
 
+        ! print*, "Sep1Solid: Min/Max eh  = ", minval(eelastic), maxval(eelastic)
+        ! print*, "Sep1Solid: Min/Max rho = ", minval(rho), maxval(rho)
         call this%hydro%get_p(rho,eelastic,p)
+        ! print*, "Sep1Solid: Min/Max p   = ", minval(p), maxval(p)
         call this%hydro%get_T(eelastic,T,rho)
 
         call this%elastic%get_devstress(finger,fingersq,trG,trG2,detG,devstress)

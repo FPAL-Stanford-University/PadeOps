@@ -84,6 +84,7 @@ module SolidMod
         !procedure :: getRHS_VF
         procedure :: update_g
         procedure :: update_gTg
+        procedure :: mass_consistency
         procedure :: update_Ys
         !procedure :: update_eh
         !procedure :: update_VF
@@ -576,6 +577,50 @@ contains
 
     end subroutine
 
+    subroutine mass_consistency(this,rho)
+        use constants, only: one, six
+        class(solid),                                         intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)    :: rho
+        
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhom, detg, penalty
+        real(rkind)                                        :: dt = one, etafac = one/six, tol = real(1.0D-6,rkind)
+
+        integer :: i, iters, niters = 500
+        
+        if (this%usegTg) then
+            call GracefulExit("mass_consistency not implemented for gTg formulation",34576)
+        else
+            detg = this%g11*(this%g22*this%g33-this%g23*this%g32) &
+                 - this%g12*(this%g21*this%g33-this%g31*this%g23) &
+                 + this%g13*(this%g21*this%g32-this%g31*this%g22)
+
+            call this%getSpeciesDensity(rho,rhom)
+            penalty = etafac*( rhom/detg/this%eos%rho0-one)/dt ! Penalty term to keep g consistent with species density
+        end if
+
+        iters = 0
+        do while ( ( maxval(abs(penalty)) > tol ) .and. (iters < niters) )
+            ! print '(I0.0,x,A,e19.12)', iters, ": ", maxval(abs(penalty))
+
+            do i = 1,9
+                this%g(:,:,:,i) = this%g(:,:,:,i) + penalty*this%g(:,:,:,i)
+            end do
+            iters = iters + 1
+
+            if (this%usegTg) then
+                call GracefulExit("mass_consistency not implemented for gTg formulation",34576)
+            else
+                detg = this%g11*(this%g22*this%g33-this%g23*this%g32) &
+                     - this%g12*(this%g21*this%g33-this%g31*this%g23) &
+                     + this%g13*(this%g21*this%g32-this%g31*this%g22)
+
+                call this%getSpeciesDensity(rho,rhom)
+                penalty = etafac*( rhom/detg/this%eos%rho0-one )/dt ! Penalty term to keep g consistent with species density
+            end if
+        end do
+
+    end subroutine
+
     ! subroutine getPlasticSources(this,detg,rhsg)
     !     use constants, only: twothird
     !     class(solid),                                         intent(in)    :: this
@@ -793,8 +838,13 @@ contains
         end if
 
         ! Get rhom = rho*Ys/VF (Additional terms to give correct limiting behaviour when Ys and VF tend to 0)
-        rhom = (rho*this%Ys + this%eos%rho0*rhom*epssmall)/(this%VF + epssmall)   
+        ! rhom = (rho*this%Ys + this%eos%rho0*rhom*epssmall)/(this%VF + epssmall)   
 
+        where(this%Ys < zero .or. this%VF < zero)
+            rhom = this%eos%rho0*rhom
+        elsewhere
+            rhom = (rho*this%Ys + this%eos%rho0*rhom*epssmall)/(this%VF + epssmall)   
+        endwhere
     end subroutine
 
     ! computes p from ehydro
@@ -865,6 +915,8 @@ contains
 
         this%Ys = this%consrv(:,:,:,1) / rho
         call this%getSpeciesDensity(rho,rhom)
+        ! print*, "Material get_primitive: Min/Max rho  = ", minval(rho ), maxval(rho )
+        ! print*, "Material get_primitive: Min/Max rhom = ", minval(rhom), maxval(rhom)
 
         !if(.NOT. this%PTeqb) then
         !    this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
@@ -877,6 +929,7 @@ contains
 
         ! Get pressure, temperature, devstress and speed of sound squared
         call this%eos%get_p_devstress_T_sos2(this%g,rhom,this%energy,this%p,this%T,this%devstress,sos2)
+        ! print*, "Material get_primitive: Min/Max p = ", minval(this%p), maxval(this%p)
 
     end subroutine
     

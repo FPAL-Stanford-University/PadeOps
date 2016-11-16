@@ -51,7 +51,7 @@ module SolidMixtureMod
         ! procedure :: get_p_from_ehydro
         procedure :: post_bc
 
-        procedure :: get_rhoYs_from_gVF
+        procedure :: get_rhoYsEnergy_from_gVF
         !procedure :: get_emix
         procedure :: get_pmix
         procedure :: get_Tmix
@@ -526,7 +526,7 @@ contains
 
     subroutine get_primitive(this,rho,devstress,p,sos,e)
         class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho, e
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho, e
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(out) :: devstress
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: p, sos
         
@@ -537,10 +537,21 @@ contains
         p = zero
         sos = zero
 
+        ! print*, "get_primitive: Min/Max rho = ", minval(rho), maxval(rho)
         if(this%pTeqb .and. (this%ns > 1)) then
-           call this%equilibratePressureTemperature(rho, e)
-           ! print*, "get_primitive: Max pressure difference error    = ", maxval(abs(this%material(1)%p - this%material(2)%p))
-           ! print*, "get_primitive: Max temperature difference error = ", maxval(abs(this%material(1)%T - this%material(2)%T))
+            do imat = 1,this%ns
+                ! call this%material(imat)%mass_consistency(rho)
+            end do
+
+            call this%equilibratePressureTemperature(rho, e)
+            ! print*, "get_primitive: Max pressure difference error    = ", maxval(abs(this%material(1)%p - this%material(2)%p))
+            ! print*, "get_primitive: Max temperature difference error = ", maxval(abs(this%material(1)%T - this%material(2)%T))
+            ! print*, "get_primitive: Min/Max energy1 = ", minval(this%material(1)%energy), maxval(this%material(1)%energy)
+            ! print*, "get_primitive: Min/Max energy2 = ", minval(this%material(2)%energy), maxval(this%material(2)%energy)
+            ! print*, "get_primitive: Min/Max VF1 = ", minval(this%material(1)%VF), maxval(this%material(1)%VF)
+            ! print*, "get_primitive: Min/Max VF2 = ", minval(this%material(2)%VF), maxval(this%material(2)%VF)
+            ! print*, "get_primitive: Min/Max Ys1 = ", minval(this%material(1)%Ys), maxval(this%material(1)%Ys)
+            ! print*, "get_primitive: Min/Max Ys2 = ", minval(this%material(2)%Ys), maxval(this%material(2)%Ys)
         end if
 
         if (this%ns == 1) then
@@ -580,6 +591,15 @@ contains
             sos = sqrt(sos)
         endif
 
+        if(this%pTeqb .and. (this%ns > 1)) then
+            ! print*, "get_primitive end: Max pressure difference error    = ", maxval(abs(this%material(1)%p - this%material(2)%p))
+            ! print*, "get_primitive end: Max temperature difference error = ", maxval(abs(this%material(1)%T - this%material(2)%T))
+            ! print*, "get_primitive end: Min/Max energy1 = ", minval(this%material(1)%energy), maxval(this%material(1)%energy)
+            ! print*, "get_primitive end: Min/Max energy2 = ", minval(this%material(2)%energy), maxval(this%material(2)%energy)
+            ! print*, "get_primitive: Min/Max VF1 = ", minval(this%material(1)%VF), maxval(this%material(1)%VF)
+            ! print*, "get_primitive: Min/Max VF2 = ", minval(this%material(2)%VF), maxval(this%material(2)%VF)
+        end if
+
         !ADD! call this%get_eelastic_devstress(devstress)   ! Get species elastic energies, and mixture and species devstress
         !ADD! if(this%ns == 1) then
         !ADD!   this%material(1)%eh = e - this%material(1)%eel ! Since eh equation is not exact and this is a better alternative for 1 species
@@ -610,7 +630,7 @@ contains
         devstress = zero
          
         do imat = 1, this%ns
-            ! call this%material(imat)%get_energy(rho) ! Update internal energy
+            call this%material(imat)%get_energy(rho) ! Update internal energy
             call this%material(imat)%get_primitive(rho,sosm) !ADD! Material density is being calculated multiple times. Add as a field to SolidMod to avoid this
         
             ! Add contribution to mixture internal energy
@@ -654,6 +674,11 @@ contains
             sos = sqrt(sos)
         endif
 
+        ! print*, 'sos: ', maxval(sos), minval(sos)
+        ! print*, 'rho: ', maxval(rho), minval(rho)
+        ! print*, 'p  : ', maxval(p  ), minval(p  )
+        ! print*, 'T  : ', maxval(T  ), minval(T  )
+
     end subroutine
 
     subroutine get_rho(this,rho)
@@ -665,13 +690,15 @@ contains
         rho = zero
         do imat = 1, this%ns
           rho = rho + this%material(imat)%consrv(:,:,:,1)
+          ! print*, "get_rho: Min/Max rhoYs = ", minval(this%material(imat)%consrv(:,:,:,1)), maxval(this%material(imat)%consrv(:,:,:,1))
         end do
+        ! print*, "get_rho: Min/Max rho = ", minval(rho), maxval(rho)
 
     end subroutine
 
-    subroutine get_rhoYs_from_gVF(this,rho)
+    subroutine get_rhoYsEnergy_from_gVF(this,rho, e)
         class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rho, e
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhom
 
         integer :: imat
@@ -682,9 +709,14 @@ contains
             rho = rho + this%material(imat)%VF * rhom
         end do
 
+        e = zero
         do imat = 1,this%ns
             call this%material(imat)%getSpeciesDensity_from_g(rhom)
             this%material(imat)%Ys = this%material(imat)%VF * rhom / rho
+            
+            call this%material(imat)%get_energy(rho)
+            e = e + this%material(imat)%Ys * this%material(imat)%energy
+
             call this%material(imat)%get_conserved(rho)
         end do
     end subroutine

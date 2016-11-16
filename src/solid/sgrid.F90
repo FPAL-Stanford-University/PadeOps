@@ -335,8 +335,12 @@ contains
                         this%mix, this%tstop, this%dtfixed, tviz)
  
         ! Get hydrodynamic and elastic energies, stresses
-        call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
+        ! call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
+        call this%mix% get_rhoYsEnergy_from_gVF(this%rho, this%e) ! Get mixture rho and species Ys from species deformations and volume fractions
         call this%post_bc()
+        ! print*, " =========================================================================================="
+        ! print*, "                                   Finished Initialization"
+        ! print*, " =========================================================================================="
         
         ! Allocate 2 buffers for each of the three decompositions
         call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
@@ -839,6 +843,9 @@ contains
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
       
+        ! print*, " =========================================================================================="
+        ! print*, "                                   Started get_primitive"
+        ! print*, " =========================================================================================="
         call this%mix%get_primitive(this%rho, this%devstress, this%p, this%sos, this%e)                  ! Get primitive variables for individual species
 
     end subroutine
@@ -864,6 +871,9 @@ contains
         ! For efficiency, these should be called only if boundary rho, g, T have been updated. 
         ! Also, only boundary values of energy, pressure, devstress, entropy should be updated.
         
+        ! print*, " =========================================================================================="
+        ! print*, "                                   Started post_bc"
+        ! print*, " =========================================================================================="
         ! Get mixture energy, pressure, deviatoric stress, temperature and speed of sound
         call this%mix%post_bc(this%rho, this%e, this%p, this%devstress, this%T, this%sos)
 
