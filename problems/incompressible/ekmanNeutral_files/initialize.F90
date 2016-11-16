@@ -29,7 +29,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero
-    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref 
+    real(rkind) :: aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
+    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -92,10 +93,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     integer :: nz, nzE
     !real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
     real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero
-    real(rkind), parameter :: a = 1.5_rkind, b = 0.027_rkind, thetam = 15._rkind + 273.15_rkind
-    real(rkind), parameter :: c = 1.d0/3.d0, h0 = 0.41667d0, h1 = 0.45833d0, h2 = 0.5d0!, D = h0/4.d0
+    real(rkind) :: thetam = 15._rkind + 273.15_rkind
+    real(rkind) :: cTemp = 1.d0/3.d0, aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
 
-    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref 
+    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
 
     !z0init = 1.D-4
     ioUnit = 11
@@ -120,8 +121,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
 
     allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     allocate(eta(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    eta = (z - h1)/(c*(h2 - h0))
-    T = thetam + a*(tanh(eta) + 1.d0)/2.d0 + b*(log(2.d0*cosh(eta)) + eta)/2.d0 
+    eta = (z - h1Temp)/(cTemp*(h2Temp - h0Temp))
+    T = thetam + aTemp*(tanh(eta) + 1.d0)/2.d0 + bTemp*(log(2.d0*cosh(eta)) + eta)/2.d0 
 
     ! Add random numbers
     allocate(randArr(size(T,1),size(T,2),size(T,3)))
@@ -190,7 +191,8 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     real(rkind), intent(out) :: Tref
     real(rkind) :: Lx, Ly, Lz, z0init
     integer :: ioUnit 
-    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref 
+    real(rkind) :: aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
+    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -209,7 +211,8 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind) :: Lx, Ly, Lz, z0init, Tref
     character(len=*),                intent(in)    :: inputfile
     integer :: ioUnit 
-    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref 
+    real(rkind) :: aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
+    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

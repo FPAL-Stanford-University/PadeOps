@@ -951,7 +951,6 @@ contains
 
    
     pure elemental function GetCD10D2ModWaveNum(kin,dx) result(wpp)
-        use constants, only: two
         use cd10stuff, only: alpha10d2, beta10d2, a10d2, b10d2, c10d2
         real(rkind), intent(in) :: kin,dx
         real(rkind) :: w
@@ -975,7 +974,6 @@ contains
 
     pure elemental function GetCD06ModWaveNum(kin,dx) result(kp)
         use constants
-        use cd06stuff, only: alpha06d1, a06d1, b06d1
         real(rkind), intent(in) :: kin,dx
         real(rkind) :: k
         real(rkind) :: kp

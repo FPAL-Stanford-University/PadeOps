@@ -20,7 +20,7 @@ module actuatorDisk_T2mod
     type :: actuatorDisk_T2
         ! Actuator Disk_T2 Info
         integer :: xLoc_idx, ActutorDisk_T2ID
-        integer(rkind), dimension(:,:), allocatable :: tag_face 
+        integer, dimension(:,:), allocatable :: tag_face 
         real(rkind) :: yaw, tilt
         real(rkind) :: xLoc, yLoc, zLoc
         real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq
