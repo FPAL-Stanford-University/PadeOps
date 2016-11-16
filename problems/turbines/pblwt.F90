@@ -7,7 +7,6 @@ program pblwt
     use mpi
     use kind_parameters,  only: clen
     use IncompressibleGridWallM, only: igridWallM
-    use pblwt_IO, only: start_io, finalize_io
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
     use exits, only: message
