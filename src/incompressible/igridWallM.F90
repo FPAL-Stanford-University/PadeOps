@@ -3345,6 +3345,7 @@ contains
         ! Create data sharing info
         if (nrank == 0) then
             allocate(xst(0:nproc-1,3),xen(0:nproc-1,3),xsz(0:nproc-1,3))
+            xst = 0; xen = 0; xsz = 0;
         end if
 
 
