@@ -1,17 +1,12 @@
 ! Template for PadeOps
-! Grid - hit_grid
-! Problem - HIT
 
 #include "pblwt_files/initialize.F90"       
-#include "pblwt_files/io.F90"            
 #include "pblwt_files/temporalHook.F90"  
 
 program pblwt
     use mpi
-    use kind_parameters,  only: rkind,clen,stdout,stderr
+    use kind_parameters,  only: clen
     use IncompressibleGridWallM, only: igridWallM
-    use pblwt_IO, only: start_io, finalize_io
-    use constants, only: half 
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
     use exits, only: message
@@ -30,7 +25,7 @@ program pblwt
 
     call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
   
-    call start_io(igp)                !<-- Start I/O by creating a header file (see io.F90)
+    call igp%start_io()                !<-- Start I/O by creating a header file (see io.F90)
 
     call igp%printDivergence()
   
@@ -42,7 +37,7 @@ program pblwt
        
     end do 
  
-    call finalize_io                  !<-- Close the header file (wrap up i/o)
+    call igp%finalize_io()                  !<-- Close the header file (wrap up i/o)
 
     !call igp%finalize_stats()
     call igp%finalize_stats3D()

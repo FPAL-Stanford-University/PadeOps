@@ -31,7 +31,7 @@ module IncompressibleGridWallM
 
     ! Allow non-zero value (isEven) 
     logical :: topBC_u = .true.  , topBC_v = .true. 
-    logical :: botBC_u = .false. , botBC_v = .false. 
+    !logical :: botBC_u = .false. , botBC_v = .false. 
     logical, parameter :: topBC_w = .false. , botBC_w = .false. 
     integer :: ierr 
 
@@ -69,7 +69,7 @@ module IncompressibleGridWallM
         real(rkind), dimension(:,:,:), pointer :: ox,oy,oz
         complex(rkind), dimension(:,:,:), pointer :: T_rhs, T_Orhs
 
-        complex(rkind), dimension(:,:,:), allocatable :: uBase, Tbase, dTdxH, dTdyH, dTdzH
+        complex(rkind), dimension(:,:,:), allocatable :: uBase, Tbase, vBase, dTdxH, dTdyH, dTdzH
         real(rkind), dimension(:,:,:), allocatable :: dTdxC, dTdyC, dTdzE, dTdzC
 
         real(rkind), dimension(:,:,:,:), allocatable, public :: rbuffxC, rbuffyC, rbuffzC
@@ -125,8 +125,9 @@ module IncompressibleGridWallM
         real(rkind), dimension(:,:,:), pointer :: S11_mean3D, S12_mean3D, S13_mean3D, S22_mean3D, S23_mean3D, S33_mean3D
         real(rkind), dimension(:,:,:), pointer :: viscdisp_mean3D, sgsdissp_mean3D, q1_mean3D, q2_mean3D, q3_mean3D
         real(rkind), dimension(:,:,:), pointer :: TT_mean3D, wT_mean3D, vT_mean3D, uT_mean3D, T_mean3D
-        integer :: tidSUM, tid_StatsDump, tid_compStats,tSimStartStats, tprev2, tprev1
+        integer :: tidSUM, tid_StatsDump, tid_compStats, tprev2, tprev1
         logical :: normByustar
+        real(rkind) :: tSimStartStats
 
         ! Pointers linked to SGS stuff
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
@@ -503,7 +504,7 @@ contains
         end if 
       
         if (this%isStratified) then
-            call set_Reference_Temperatur(inputfile,this%ThetaRef)
+            call set_Reference_Temperature(inputfile,this%ThetaRef)
             if (botBC_Temp == 0) then
                 call setDirichletBC_Temp(inputfile, this%Tsurf, this%dTsurf_dt)
                 this%Tsurf = this%Tsurf + this%dTsurf_dt*this%tsim
@@ -609,9 +610,12 @@ contains
                 this%RdampC = zero
             end where
             call this%spectC%alloc_r2c_out(this%uBase)
+            call this%spectC%alloc_r2c_out(this%vBase)
             call this%spectC%alloc_r2c_out(this%TBase)
             this%rbuffxC(:,:,:,1) = this%Gx
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%uBase)
+            this%rbuffxC(:,:,:,1) = this%Gy
+            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%vBase)
             this%rbuffxC(:,:,:,1) = this%T
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%TBase)
             call message(0,"Sponge Layer initialized successfully")
@@ -619,7 +623,7 @@ contains
 
         if (this%useWindTurbines) then
             allocate(this%WindTurbineArr)
-            call this%WindTurbineArr%init(inputFile, this%gpC, this%gpE, this%sp_gpC, this%sp_GPE, this%spectC, this%spectE, this%rbuffxC, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
+            call this%WindTurbineArr%init(inputFile, this%gpC, this%gpE, this%spectC, this%spectE, this%rbuffxC, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
         end if 
 
         ! STEP 12: Set visualization planes for io
@@ -1169,7 +1173,9 @@ contains
         deviationC = this%uhat - this%ubase
         this%u_rhs = this%u_rhs - (this%RdampC/this%dt)*deviationC
 
-        this%v_rhs = this%v_rhs - (this%RdampC/this%dt)*this%vhat ! base value for v is zero
+        deviationC = this%vhat - this%vbase
+        this%v_rhs = this%v_rhs - (this%RdampC/this%dt)*deviationC
+        !this%v_rhs = this%v_rhs - (this%RdampC/this%dt)*this%vhat ! base value for v is zero
         
         this%w_rhs = this%w_rhs - (this%RdampE/this%dt)*this%what ! base value for w is zero  
 
@@ -1308,6 +1314,9 @@ contains
         restartWrite = .FALSE. 
         if(this%tsim > this%tstop) then
           forceWrite = .TRUE.
+          restartWrite = .TRUE.
+          call message(0,"The simulation has ended.")
+          call message(1,"Dumping a restart file.")
         endif
 
         if (this%useSystemInteractions) then
@@ -1408,7 +1417,7 @@ contains
         end if 
 
         if (mod(this%step,this%t_dataDump) == 0) then
-           call message(0,"Scheduled data dump.")
+           call message(0,"Scheduled visualization dump.")
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
@@ -1418,7 +1427,7 @@ contains
 
 
         if (forceWrite) then
-           call message(2,"Performing a forced data dump.")
+           call message(2,"Performing a forced visualization dump.")
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
@@ -1671,37 +1680,37 @@ contains
 
     end subroutine
     
-    subroutine debug(this)
-        class(igridWallM), intent(inout), target :: this
-        real(rkind),    dimension(:,:,:), pointer :: dudx, dudy, dudz
-        real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
-        real(rkind),    dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
-        real(rkind),    dimension(:,:,:), pointer :: dvdzC, dudzC
-        real(rkind),    dimension(:,:,:), pointer :: dwdxC, dwdyC
-        real(rkind), dimension(:,:,:), pointer :: rbuff
-        complex(rkind), dimension(:,:,:), pointer :: cbuff, dvdzH
+    !subroutine debug(this)
+    !    class(igridWallM), intent(inout), target :: this
+    !    real(rkind),    dimension(:,:,:), pointer :: dudx, dudy, dudz
+    !    real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
+    !    real(rkind),    dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
+    !    real(rkind),    dimension(:,:,:), pointer :: dvdzC, dudzC
+    !    real(rkind),    dimension(:,:,:), pointer :: dwdxC, dwdyC
+    !    real(rkind), dimension(:,:,:), pointer :: rbuff
+    !    complex(rkind), dimension(:,:,:), pointer :: cbuff, dvdzH
 
-        dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
-        dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
-        dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
+    !    dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
+    !    dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
+    !    dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
 
-        dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
-        dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
+    !    dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
+    !    dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
 
-        rbuff => this%rbuffxC(:,:,:,1); cbuff => this%cbuffyC(:,:,:,1)
-        dvdzH => this%duidxjChat(:,:,:,6) 
+    !    rbuff => this%rbuffxC(:,:,:,1); cbuff => this%cbuffyC(:,:,:,1)
+    !    dvdzH => this%duidxjChat(:,:,:,6) 
 
-        !call this%spectC%ifft(this%v_rhs,rbuff)
-        if (nrank == 0) then
-            print*, "=------"
-            print*, real(dvdzH(1,1,55:64))
-        end if 
-        !stop 
-    end subroutine 
+    !    !call this%spectC%ifft(this%v_rhs,rbuff)
+    !    if (nrank == 0) then
+    !        print*, "=------"
+    !        print*, real(dvdzH(1,1,55:64))
+    !    end if 
+    !    !stop 
+    !end subroutine 
     
     subroutine compute_and_bcast_surface_Mn(this)
         use mpi
-        use constants, only: four
+        !use constants, only: four
         use kind_parameters, only: mpirkind
         class(igridWallM), intent(inout), target :: this
         real(rkind), dimension(:,:,:), pointer :: rbuff
@@ -1745,8 +1754,8 @@ contains
       
         select case (this%botBC_Temp)
         case(0) 
-            dTheta = this%Tsurf - this%Tmn
-            z = this%dz/two ; ustarDiff = one; 
+            dTheta = this%Tsurf - this%Tmn; Linv = zero
+            z = this%dz/two ; ustarDiff = one; wTh = zero
             a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
             PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
        
@@ -1761,7 +1770,7 @@ contains
                 ustarDiff = abs((ustarNew - ustar)/ustarNew)
                 ustar = ustarNew; idx = idx + 1
             end do 
-        this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
+            this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
         case(1)
             this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
             this%invObLength = zero

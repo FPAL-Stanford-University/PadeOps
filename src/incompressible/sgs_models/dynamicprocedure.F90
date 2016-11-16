@@ -55,9 +55,8 @@
 
     end subroutine
 
-    subroutine DynamicProcedure(this,u,v,wC,uhat,vhat, wChat, duidxj,duidxjhat)
+    subroutine DynamicProcedure(this,u,v,wC,uhat,vhat, wChat, duidxjhat)
         class(sgs), intent(inout), target :: this
-        real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(inout), target :: duidxj
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3),9), intent(inout), target :: duidxjhat
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: u, v, wC
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat, wChat

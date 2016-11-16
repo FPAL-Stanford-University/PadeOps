@@ -18,7 +18,6 @@ module turbineMod
     ! default initializations
     integer :: num_turbines = 1
     logical :: ADM = .TRUE. ! .FALSE. implies ALM
-    logical :: useWindTurbines = .TRUE. ! .FALSE. implies ALM
     character(len=clen) :: turbInfoDir
 
     integer :: ioUnit
@@ -62,15 +61,16 @@ module turbineMod
 
 contains
 
-subroutine init(this, inputFile, gpC, gpE, sp_gpC, sp_gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffYE, cbuffzC, cbuffzE, mesh, dx, dy, dz)
+subroutine init(this, inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffYE, cbuffzC, cbuffzE, mesh, dx, dy, dz)
     class(TurbineArray), intent(inout), target :: this
     character(len=*), intent(in) :: inputFile
     type(spectral), target :: spectC, spectE
-    type(decomp_info), target :: gpC, gpE, sp_gpC, sp_gpE
+    type(decomp_info), target :: gpC, gpE!, sp_gpC, sp_gpE
     real(rkind), dimension(:,:,:,:), target :: rbuffxC   ! actually 3 are required
     complex(rkind), dimension(:,:,:,:), target :: cbuffyC, cbuffyE, cbuffzC, cbuffzE
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), intent(in) :: dx, dy, dz
+    logical :: useWindTurbines = .TRUE. ! .FALSE. implies ALM
 
     integer :: i
 

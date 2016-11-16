@@ -2,7 +2,7 @@ program testSTAGGcd06
     use kind_parameters, only: rkind
     use cd06staggstuff, only: cd06stagg
     use cd06stuff, only: cd06
-    use constants, only: one, pi, two, imi
+    use constants, only: pi, two, imi
     use timer, only: tic, toc 
     use staggOpsMod, only: staggops
     use decomp_2d
@@ -14,10 +14,10 @@ program testSTAGGcd06
     real(rkind) :: omega = 1._rkind, dz
     logical :: isTopEven, isBotEven
     type(cd06stagg), allocatable :: der
-    type(cd06     ), allocatable :: der2
+    !type(cd06     ), allocatable :: der2
     integer :: i, j, k, ierr
     real(rkind) :: zzst = 0.1_rkind, zzend = 0.9_rkind
-    type(staggops) :: ops
+    !type(staggops) :: ops
     type(decomp_info) :: gp, gpE, sp_gp, sp_gpE
 
 

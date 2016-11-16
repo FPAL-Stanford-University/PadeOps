@@ -5,9 +5,8 @@
 
 program pbl
     use mpi
-    use kind_parameters,  only: rkind,clen,stdout,stderr
+    use kind_parameters,  only: clen
     use IncompressibleGridWallM, only: igridWallM
-    use constants, only: half 
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
     use exits, only: message

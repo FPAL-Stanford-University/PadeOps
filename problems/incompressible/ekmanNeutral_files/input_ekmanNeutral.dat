@@ -118,4 +118,9 @@ Ly                    =  4.d0       ! Domain Width  (appropriate dimesnions/non-
 Lz                    =  1.d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
 Tref                  =  288.15d0   ! Reference Temp. 
 z0init                =  1.d-4      ! Roughness scale used to initialize the profile
+aTemp                 =  1.500d0    ! Inversion Layer temp slope parameter (for temp initialization)
+bTemp                 =  0.040d0    ! Stable Free atmosphere temp slope parameter (for temp initialization)
+h0Temp                =  0.500d0    ! Inversion Layer Start Height (for temp initialization)
+h1Temp                =  0.550d0    ! Inversion Layer Middle Height (for temp initialization)
+h2Temp                =  0.600d0    ! Inversion Layer Top    Height (for temp initialization)
 /
