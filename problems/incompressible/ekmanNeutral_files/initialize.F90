@@ -92,7 +92,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     integer :: nz, nzE
     !real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
     real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero
-    real(rkind), parameter :: a = 2.43_rkind, b = 0.027_rkind, thetam = 15._rkind + 273.15_rkind
+    real(rkind), parameter :: a = 1.5_rkind, b = 0.027_rkind, thetam = 15._rkind + 273.15_rkind
     real(rkind), parameter :: c = 1.d0/3.d0, h0 = 0.41667d0, h1 = 0.45833d0, h2 = 0.5d0!, D = h0/4.d0
 
     namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref 
