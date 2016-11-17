@@ -1305,7 +1305,7 @@ contains
         class(igridWallM), intent(inout) :: this
 
         logical :: forceWrite, exitStat, forceDumpPressure, restartWrite
-        integer :: ierr = -1
+        integer :: ierr = -1, ierr2 
 
         ! STEP 1: Update Time and BCs
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
@@ -1328,11 +1328,9 @@ contains
                     forceWrite = .TRUE.
                     call message(1, "Forced Dump because found file dumppdo")
                     call message(2, "Current Time Step is:", this%step)
-                    if(nrank==0) then
-                      close(777, status='delete')
-                    else
-                      close(777)
-                    endif
+                    if (nrank .ne. 0) close(777)
+                    call mpi_barrier(mpi_comm_world, ierr2)
+                    if(nrank==0) close(777, status='delete')
                 else
                     close(777)
                 endif
@@ -1342,6 +1340,9 @@ contains
                     if (ierr == 0) then
                         forceDumpPressure = .true.
                         call message(1,"Force Dump for pressure reqested; file prsspdo found.")
+                        if (nrank .ne. 0) close(777)
+                        call mpi_barrier(mpi_comm_world, ierr2)
+                        if (nrank==0) close(777, status='delete')
                     else
                         close(777)
                     end if
@@ -1352,11 +1353,9 @@ contains
                     restartWrite = .TRUE.
                     call message(1, "Restart Dump because found file dumprestart")
                     call message(2, "Current Time Step is:", this%step)
-                    if(nrank==0) then
-                      close(777, status='delete')
-                    else
-                      close(777)
-                    endif
+                    if (nrank .ne. 0) close(777)
+                    call mpi_barrier(mpi_comm_world, ierr2)
+                    if(nrank==0) close(777, status='delete')
                 else
                     close(777)
                 endif
