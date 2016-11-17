@@ -38,8 +38,6 @@ program gabls
     
     call igp%finalize_io()                  !<-- Close the header file (wrap up i/o)
 
-    call igp%finalize_stats()
-    
     call igp%destroy()                !<-- Destroy the IGRID derived type 
    
 

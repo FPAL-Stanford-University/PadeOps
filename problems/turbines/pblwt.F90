@@ -39,9 +39,6 @@ program pblwt
  
     call igp%finalize_io()                  !<-- Close the header file (wrap up i/o)
 
-    !call igp%finalize_stats()
-    call igp%finalize_stats3D()
-    
     call igp%destroy()                !<-- Destroy the IGRID derived type 
    
 
