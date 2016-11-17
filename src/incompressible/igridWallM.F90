@@ -95,7 +95,7 @@ module IncompressibleGridWallM
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
         integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false. 
-        logical :: useExtraForcing = .false., useGeostrophicForcing = .false. 
+        logical :: useExtraForcing = .false., useGeostrophicForcing = .false., isInviscid = .false.  
         logical :: useSGS = .false. 
         logical :: UseDealiasFilterVert = .false.
         logical :: useDynamicProcedure 
@@ -181,7 +181,8 @@ module IncompressibleGridWallM
             procedure, private :: compute_duidxj
             procedure, private :: compute_dTdxi
             procedure, private :: addNonLinearTerm_Rot
-            procedure, private :: AddBuoyancyTerm
+            procedure, private :: addBuoyancyTerm
+            procedure, private :: addViscousTerm
             procedure, private :: addCoriolisTerm
             procedure, private :: addSponge
             procedure, private :: addExtraForcingTerm 
@@ -281,7 +282,7 @@ contains
         this%timeSteppingScheme = timeSteppingScheme; this%useSystemInteractions = useSystemInteractions
         this%tSystemInteractions = tSystemInteractions; this%storePressure = storePressure
         this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq; this%timeAvgFullFields = timeAvgFullFields
-        this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp
+        this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp; this%isInviscid = isInviscid
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -697,6 +698,12 @@ contains
         if ((.not. useCompactFD).and.(this%isStratified).and.(botBC_Temp .ne. 0)) then
             call GracefulExit("If you use 2nd order FD in the vertical, you &
                 & cannot specify botBC_Temp to be anything other than 0, at this time.",434)
+        end if 
+
+        if (.not.(this%isInviscid)) then
+            call GracefulExit("The viscous term is currently incomplete. You can & 
+                &only run problems that are inviscid using igridWallM right now. Try using &
+                &igrid instead",123)
         end if 
 
         call message("IGRID initialized successfully!")
@@ -1244,7 +1251,13 @@ contains
             call this%addBuoyancyTerm()
         end if 
 
-        ! Step 5: SGS Viscous Term
+        ! Step 5: Viscous Term (only if simulation if NOT inviscid)
+        if (.not. this%isInviscid) then
+            call this%addViscousTerm()
+        end if
+
+
+        ! Step 6: SGS Viscous Term
         if (this%useSGS) then
             call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
                                                 this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
@@ -1259,6 +1272,19 @@ contains
             end if 
         end if 
     end subroutine
+
+    subroutine addViscousTerm(this)
+        class(igridWallM), intent(inout) :: this
+        !complex(rkind), dimension(:,:,:), pointer :: fT1C, fT2C, fT1E, fT2E
+
+        !fT1C => this%cbuffyC(:,:,:,1); fT2C => this%cbuffyC(:,:,:,2)
+        !fT1E => this%cbuffyE(:,:,:,1); fT2E => this%cbuffyE(:,:,:,2)
+        this%u_rhs = this%u_rhs + cmplx(zero,zero,rkind)
+
+        ! Incomplete  -> don't run simulations with isInviscid = FALSE
+
+    end subroutine
+
 
     subroutine project_and_prep(this, AlreadyProjected)
         class(igridWallM), intent(inout) :: this
