@@ -417,7 +417,7 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
-        real(rkind), parameter :: etafac = one/6._rkind
+        real(rkind), parameter :: etafac = zero !one/6._rkind
 
         ! Symmetry and anti-symmetry properties of g are assumed as below
         ! In x g_{ij}: [S A A; A S S; A S S]
@@ -618,6 +618,7 @@ contains
                 penalty = etafac*( rhom/detg/this%eos%rho0-one )/dt ! Penalty term to keep g consistent with species density
             end if
         end do
+        print '(I0.0,x,A,e19.12)', iters, ": ", maxval(abs(penalty))
 
     end subroutine
 
