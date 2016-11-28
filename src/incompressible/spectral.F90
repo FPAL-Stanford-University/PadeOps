@@ -604,10 +604,15 @@ contains
         if (TwoPeriodic) then
             do j = 1,size(this%k1,2)
                 do i = 1,size(this%k1,1)
-                    if ((abs(this%k1(i,j,1))<1.D-14) .and. (abs(this%k2(i,j,1))<1.D-14)) then
+                    if ((abs(this%k1(i,j,1))<1.D-13) .and. (abs(this%k2(i,j,1))<1.D-13)) then
                         this%carryingZeroK = .true.
                         this%ZeroK_i = i
                         this%ZeroK_j = j
+                        if ((i .ne. 1) .and. (j .ne. 1)) then
+                            print*, nrank, i, j
+                            call GracefulExit("Catastrophic failure while initializing spectral &
+                                    derived type. Unable to isolate k1 = 0 and k2 = 0 wavenumbers.",312)
+                        end if
                         !print*,  "Identified ZERO wavenumber on process:", nrank
                         !print*,  "i - index:", i
                         !print*,  "j - index:", j
