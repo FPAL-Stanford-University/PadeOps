@@ -120,11 +120,13 @@ module IncompressibleGridWallM
         real(rkind), dimension(:), pointer :: S11_mean, S12_mean, S13_mean, S22_mean, S23_mean, S33_mean
         real(rkind), dimension(:), pointer :: viscdisp_mean, sgsdissp_mean, sgscoeff_mean, PhiM, q1_mean, q2_mean, q3_mean
         real(rkind), dimension(:), pointer :: TT_mean, wT_mean, vT_mean, uT_mean, T_mean, disperuw_mean, dispervw_mean
+        real(rkind), dimension(:), pointer :: p_mean, pw_mean, pv_mean, pu_mean
         real(rkind), dimension(:,:,:), pointer :: u_mean3D, v_mean3D, w_mean3D, uu_mean3D, uv_mean3D, uw_mean3D, vv_mean3D, vw_mean3D, ww_mean3D
         real(rkind), dimension(:,:,:), pointer :: tau11_mean3D, tau12_mean3D, tau13_mean3D, tau22_mean3D, tau23_mean3D, tau33_mean3D
         real(rkind), dimension(:,:,:), pointer :: S11_mean3D, S12_mean3D, S13_mean3D, S22_mean3D, S23_mean3D, S33_mean3D
         real(rkind), dimension(:,:,:), pointer :: viscdisp_mean3D, sgsdissp_mean3D, q1_mean3D, q2_mean3D, q3_mean3D
         real(rkind), dimension(:,:,:), pointer :: TT_mean3D, wT_mean3D, vT_mean3D, uT_mean3D, T_mean3D
+        real(rkind), dimension(:,:,:), pointer :: p_mean3D, pw_mean3D, pv_mean3D, pu_mean3D
         integer :: tidSUM, tid_StatsDump, tid_compStats, tprev2, tprev1
         logical :: normByustar
         real(rkind) :: tSimStartStats
@@ -236,7 +238,7 @@ contains
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
         real(rkind) :: Lz = 1.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true.
-        integer :: tSystemInteractions = 100
+        integer :: tSystemInteractions = 100, ierr
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true.  
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
@@ -259,7 +261,7 @@ contains
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
-        open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+        open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
         read(unit=ioUnit, NML=INPUT)
         read(unit=ioUnit, NML=NUMERICS)
         read(unit=ioUnit, NML=IO)
@@ -273,7 +275,6 @@ contains
         read(unit=ioUnit, NML=WINDTURBINES)
         read(unit=ioUnit, NML=KSPREPROCESS)
         close(ioUnit)
-      
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
         this%dt = dt; this%dtby2 = dt/two ; this%z0 = z0 ; this%Re = Re; this%useSponge = useSpongeLayer
         this%outputdir = outputdir; this%inputdir = inputdir; this%isStratified = isStratified 
@@ -1915,24 +1916,22 @@ contains
     subroutine init_stats3D(this)
         use exits, only: message
         class(igridWallM), intent(inout), target :: this
+        integer :: nstatsvar, nhorzavgvars, nstv, nhzv
 
-        if (this%isStratified) then
-            allocate(this%inst_horz_avg(5))
-            allocate(this%runningSum_sc(5))
-        else
-            allocate(this%inst_horz_avg(3))
-            allocate(this%runningSum_sc(3))
-        end if 
 
-        if (this%timeAvgFullFields) then
-            if (this%isStratified) then
-                allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),31))
-                allocate(this%horzavgstats(this%nz,33))
-            else
-                allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),23))
-                allocate(this%horzavgstats(this%nz,25))
-            end if 
-        end if 
+        nstatsvar = 23; nhorzavgvars = 3
+        if(this%isStratified) then
+           nstatsvar = nstatsvar + 8
+           nhorzavgvars = nhorzavgvars + 2
+        endif
+        if(this%fastCalcPressure .or. this%storePressure) then
+           nstatsvar = nstatsvar + 4
+        endif
+
+        allocate(this%inst_horz_avg(nhorzavgvars))
+        allocate(this%runningSum_sc(nhorzavgvars))
+        allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),nstatsvar))
+        allocate(this%horzavgstats(this%nz,nstatsvar+2))  ! add 2 for dispersive <u'w'> and <v'w'>
 
         if(this%useWindTurbines) then
             allocate(this%inst_horz_avg_turb(8*this%WindTurbineArr%nTurbines))
@@ -1944,34 +1943,42 @@ contains
             allocate(this%xspectra_mean(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))   ! ensure that number of variables for which spectrum is to be computed is smaller than nyg
         end if 
 
-        if (this%timeAvgFullFields) then
-            ! mean velocities
-            this%u_mean3D => this%stats3D(:,:,:,1);  this%v_mean3D  => this%stats3D(:,:,:,2);  this%w_mean3D => this%stats3D(:,:,:,3) 
-            ! mean squared velocities
-            this%uu_mean3D => this%stats3D(:,:,:,4); this%uv_mean3D => this%stats3D(:,:,:,5); this%uw_mean3D => this%stats3D(:,:,:,6)
-                                                     this%vv_mean3D => this%stats3D(:,:,:,7); this%vw_mean3D => this%stats3D(:,:,:,8) 
-                                                                                              this%ww_mean3D => this%stats3D(:,:,:,9)
-            ! SGS stresses
-            this%tau11_mean3D => this%stats3D(:,:,:,10); this%tau12_mean3D => this%stats3D(:,:,:,11); this%tau13_mean3D => this%stats3D(:,:,:,12)
-                                                         this%tau22_mean3D => this%stats3D(:,:,:,13); this%tau23_mean3D => this%stats3D(:,:,:,14) 
-                                                                                                      this%tau33_mean3D => this%stats3D(:,:,:,15)
-            ! SGS dissipation
-            this%sgsdissp_mean3D => this%stats3D(:,:,:,16)
-            ! velocity derivative products - for viscous dissipation
-            this%viscdisp_mean3D => this%stats3D(:,:,:,17)
-            ! means of velocity derivatives
-            this%S11_mean3D => this%stats3D(:,:,:,18); this%S12_mean3D => this%stats3D(:,:,:,19); this%S13_mean3D => this%stats3D(:,:,:,20)
-                                                       this%S22_mean3D => this%stats3D(:,:,:,21); this%S23_mean3D => this%stats3D(:,:,:,22)
-                                                                                                  this%S33_mean3D => this%stats3D(:,:,:,23)
-            !! SGS model coefficient
-            !this%sgscoeff_mean => this%stats3D(:,:,:,24)
-            !this%PhiM => this%stats3D(:,:,:,25)
-            if (this%isStratified) then
-                this%TT_mean3D => this%stats3D(:,:,:,28);  this%wT_mean3D => this%stats3D(:,:,:,27);  this%vT_mean3D => this%stats3D(:,:,:,26)
-                this%uT_mean3D => this%stats3D(:,:,:,25);  this%T_mean3D => this%stats3D(:,:,:,24);   this%q1_mean3D => this%stats3D(:,:,:,29)
-                this%q2_mean3D => this%stats3D(:,:,:,30);  this%q3_mean3D => this%stats3D(:,:,:,31)
-            end if 
+        ! mean velocities
+        this%u_mean3D => this%stats3D(:,:,:,1);  this%v_mean3D  => this%stats3D(:,:,:,2);  this%w_mean3D => this%stats3D(:,:,:,3) 
+        ! mean squared velocities
+        this%uu_mean3D => this%stats3D(:,:,:,4); this%uv_mean3D => this%stats3D(:,:,:,5); this%uw_mean3D => this%stats3D(:,:,:,6)
+                                                 this%vv_mean3D => this%stats3D(:,:,:,7); this%vw_mean3D => this%stats3D(:,:,:,8) 
+                                                                                          this%ww_mean3D => this%stats3D(:,:,:,9)
+        ! SGS stresses
+        this%tau11_mean3D => this%stats3D(:,:,:,10); this%tau12_mean3D => this%stats3D(:,:,:,11); this%tau13_mean3D => this%stats3D(:,:,:,12)
+                                                     this%tau22_mean3D => this%stats3D(:,:,:,13); this%tau23_mean3D => this%stats3D(:,:,:,14) 
+                                                                                                  this%tau33_mean3D => this%stats3D(:,:,:,15)
+        ! SGS dissipation
+        this%sgsdissp_mean3D => this%stats3D(:,:,:,16)
+        ! velocity derivative products - for viscous dissipation
+        this%viscdisp_mean3D => this%stats3D(:,:,:,17)
+        ! means of velocity derivatives
+        this%S11_mean3D => this%stats3D(:,:,:,18); this%S12_mean3D => this%stats3D(:,:,:,19); this%S13_mean3D => this%stats3D(:,:,:,20)
+                                                   this%S22_mean3D => this%stats3D(:,:,:,21); this%S23_mean3D => this%stats3D(:,:,:,22)
+                                                                                              this%S33_mean3D => this%stats3D(:,:,:,23)
+        nstv = 23
+
+        !! SGS model coefficient
+        !this%sgscoeff_mean => this%stats3D(:,:,:,24)
+        !this%PhiM => this%stats3D(:,:,:,25)
+        if (this%isStratified) then
+           this%TT_mean3D => this%stats3D(:,:,:,nstv+1);  this%wT_mean3D => this%stats3D(:,:,:,nstv+2);  this%vT_mean3D => this%stats3D(:,:,:,nstv+3)
+           this%uT_mean3D => this%stats3D(:,:,:,nstv+4);  this%T_mean3D  => this%stats3D(:,:,:,nstv+5);  this%q1_mean3D => this%stats3D(:,:,:,nstv+6)
+           this%q2_mean3D => this%stats3D(:,:,:,nstv+7);  this%q3_mean3D => this%stats3D(:,:,:,nstv+8)
+           nstv = 31
         end if 
+
+        if(this%fastCalcPressure .or. this%storePressure) then
+           this%p_mean3D  => this%stats3D(:,:,:,nstv+1)
+           this%pu_mean3D => this%stats3D(:,:,:,nstv+2)
+           this%pv_mean3D => this%stats3D(:,:,:,nstv+3)
+           this%pw_mean3D => this%stats3D(:,:,:,nstv+4)
+        endif
 
         ! horizontal averages
         ! mean velocities
@@ -1995,11 +2002,22 @@ contains
         ! Dispersive stresses
         this%disperuw_mean => this%horzavgstats(:,24)
         this%dispervw_mean => this%horzavgstats(:,25)
+
+        nhzv = 25
+
         if (this%isStratified) then
-            this%T_mean  => this%horzavgstats(:,26);  this%uT_mean => this%horzavgstats(:,27);  this%vT_mean => this%horzavgstats(:,28)
-            this%wT_mean => this%horzavgstats(:,29);  this%TT_mean => this%horzavgstats(:,30);  this%q1_mean => this%horzavgstats(:,31)
-            this%q2_mean => this%horzavgstats(:,32);  this%q3_mean => this%horzavgstats(:,33)
+            this%T_mean  => this%horzavgstats(:,nhzv+1);  this%uT_mean => this%horzavgstats(:,nhzv+2);  this%vT_mean => this%horzavgstats(:,nhzv+3)
+            this%wT_mean => this%horzavgstats(:,nhzv+4);  this%TT_mean => this%horzavgstats(:,nhzv+5);  this%q1_mean => this%horzavgstats(:,nhzv+6)
+            this%q2_mean => this%horzavgstats(:,nhzv+7);  this%q3_mean => this%horzavgstats(:,nhzv+8)
+            nhzv = 33
         end if 
+
+        if(this%fastCalcPressure .or. this%storePressure) then
+           this%p_mean  => this%horzavgstats(:,nhzv+1)
+           this%pu_mean => this%horzavgstats(:,nhzv+2)
+           this%pv_mean => this%horzavgstats(:,nhzv+3)
+           this%pw_mean => this%horzavgstats(:,nhzv+4)
+        endif
 
         this%tidSUM = 0
         this%tprev2 = -1; this%tprev1 = -1;
@@ -2013,6 +2031,11 @@ contains
             this%runningSum_turb    = zero
         endif
         this%xspectra_mean = zero
+
+        if(nhzv .ne. nhorzavgvars .or. nstv .ne. nstatsvar) then
+            call message(0,"Error in init_stats3D")
+        endif
+
         call message(0,"Done init_stats3D")
     end subroutine
 
@@ -2051,12 +2074,12 @@ contains
             this%v_mean3D = this%v_mean3D + this%v/this%ustar
             this%w_mean3D = this%w_mean3D + this%wC/this%ustar
 
-            this%uu_mean3D = this%uu_mean3D + this%u * this%u /this%ustar
-            this%uv_mean3D = this%uv_mean3D + this%u * this%v /this%ustar
-            this%uw_mean3D = this%uw_mean3D + rbuff1          /this%ustar
-            this%vv_mean3D = this%vv_mean3D + this%v * this%v /this%ustar
-            this%vw_mean3D = this%vw_mean3D + rbuff0          /this%ustar
-            this%ww_mean3D = this%ww_mean3D + this%wC* this%wC/this%ustar
+            this%uu_mean3D = this%uu_mean3D + this%u * this%u /this%ustar**2
+            this%uv_mean3D = this%uv_mean3D + this%u * this%v /this%ustar**2
+            this%uw_mean3D = this%uw_mean3D + rbuff1          /this%ustar**2
+            this%vv_mean3D = this%vv_mean3D + this%v * this%v /this%ustar**2
+            this%vw_mean3D = this%vw_mean3D + rbuff0          /this%ustar**2
+            this%ww_mean3D = this%ww_mean3D + this%wC* this%wC/this%ustar**2
 
             if(this%isStratified) then
                 this%T_mean3D = this%T_mean3D + this%T*this%ustar/this%wTh_surf
@@ -2083,6 +2106,20 @@ contains
                 this%vT_mean3D = this%vT_mean3D + this%T * this%v
                 this%wT_mean3D = this%wT_mean3D + this%T * this%wC
                 this%TT_mean3D = this%TT_mean3D + this%T * this%T
+            endif
+        endif
+
+        if(this%fastCalcPressure .or. this%storePressure) then
+            if(this%normByUstar) then
+                this%p_mean3D  = this%p_mean3D  + this%pressure          /this%ustar**2
+                this%pu_mean3D = this%pu_mean3D + this%pressure * this%u /this%ustar**3
+                this%pv_mean3D = this%pv_mean3D + this%pressure * this%v /this%ustar**3
+                this%pw_mean3D = this%pw_mean3D + this%pressure * this%wC/this%ustar**3
+            else
+                this%p_mean3D  = this%p_mean3D  + this%pressure
+                this%pu_mean3D = this%pu_mean3D + this%pressure * this%u
+                this%pv_mean3D = this%pv_mean3D + this%pressure * this%v
+                this%pw_mean3D = this%pw_mean3D + this%pressure * this%wC
             endif
         endif
 
@@ -2215,8 +2252,18 @@ contains
             end do
             
             if(this%isStratified) then
-                jindx = 5    ! T
+                jindx = jindx + 1    ! T
                 call this%spectC%fft1_x2y(this%T,this%cbuffyC(:,:,:,1))
+                do k = 1, size(this%cbuffyC, 3)
+                  do j = 1, size(this%cbuffyC, 2)
+                    this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
+                  end do
+                end do
+            endif
+            
+            if(this%fastCalcPressure .or. this%storePressure) then
+                jindx = jindx + 1    ! p
+                call this%spectC%fft1_x2y(this%pressure,this%cbuffyC(:,:,:,1))
                 do k = 1, size(this%cbuffyC, 3)
                   do j = 1, size(this%cbuffyC, 2)
                     this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%cbuffyC(:,j,k,1))
@@ -2301,6 +2348,24 @@ contains
               open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
               ! -- TT
               write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_TTm_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+          endif
+          if(this%fastCalcPressure .or. this%storePressure) then
+              ! -- p
+              write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_pm_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- pu
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_pum_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- pv
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_pvm_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- pw
+              write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_pwm_t",this%tprev2,".3Dstt"
               fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
               open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
           endif
@@ -2500,6 +2565,43 @@ contains
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
         call decomp_2d_write_one(1, rbuff6, fname)
       
+        if(this%fastCalcPressure .or. this%storePressure) then
+            ! p_avg
+            call transpose_x_to_y(this%p_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                   rbuff6, this%gpC)
+            call this%compute_z_mean(rbuff6, this%p_mean)
+            write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_pm_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff6, fname)
+      
+            ! pu_avg - u_avg*p_avg - Reynolds only
+            rbuff1 = this%pu_mean3D/tidSUMreal - this%u_mean3D * this%p_mean3D / tidSUMreal**2
+            call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%pu_mean)       !--Reynolds
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_pum_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! pv_avg - v_avg*p_avg - Reynolds only
+            rbuff1 = this%pv_mean3D/tidSUMreal - this%v_mean3D * this%p_mean3D / tidSUMreal**2
+            call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%pv_mean)       !--Reynolds
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_pvm_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+      
+            ! pw_avg - w_avg*p_avg - Reynolds only
+            rbuff1 = this%pw_mean3D/tidSUMreal - this%w_mean3D * this%p_mean3D / tidSUMreal**2
+            call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%compute_z_mean(rbuff3, this%pw_mean)       !--Reynolds
+            write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_pwm_t",this%step,".3Dstt"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, rbuff3, fname)
+        endif
+
         if(this%isStratified) then
             ! T_avg
             call transpose_x_to_y(this%T_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -2724,12 +2826,11 @@ contains
             ! Dump horizontally averaged x-spectra
             dirid = 2; decompdir = 2
 
-            ! --- only 4 or 5 planes of xspextra_mean in y-direction are being used
-            if(this%isStratified) then
-               nspectra = 5
-            else
-               nspectra = 4
-            endif
+            ! --- only 4, 5 or 6 planes of xspextra_mean in y-direction are being used
+            nspectra = 4
+            if(this%isStratified)                             nspectra = nspectra + 1
+            if(this%fastCalcPressure .or. this%storePressure) nspectra = nspectra+1
+
             ! --- for k1 = 1, multiplication factor is 1.0,
             ! --- for k1 = 2:Nx/2+1, multiplication factor is 2.0
             normfac = two/real(size(this%cbuffyC(:,:,:,1),2),rkind)/tidSUMreal
@@ -2759,8 +2860,15 @@ contains
             call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
 
             if(this%isStratified) then
-                jindx = 5 ! T
+                jindx = jindx + 1 ! T
                 write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specT_t",tid,".out"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
+            endif
+
+            if(this%fastCalcPressure .or. this%storePressure) then
+                jindx = jindx + 1 ! p
+                write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specp_t",tid,".out"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                 call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
             endif
@@ -2783,6 +2891,11 @@ contains
         if(this%isStratified) then
             nullify(this%T_mean, this%uT_mean, this%vT_mean, this%wT_mean, this%TT_mean, this%q1_mean, this%q2_mean, this%q3_mean)
             nullify(this%T_mean3D, this%uT_mean3D, this%vT_mean3D, this%wT_mean3D, this%TT_mean3D, this%q1_mean3D, this%q2_mean3D, this%q3_mean3D)
+        endif
+
+        if(this%fastCalcPressure .or. this%storePressure) then
+            nullify(this%p_mean,   this%pu_mean,   this%pv_mean,   this%pw_mean)
+            nullify(this%p_mean3D, this%pu_mean3D, this%pv_mean3D, this%pw_mean3D)
         endif
 
         deallocate(this%stats3D, this%horzavgstats, this%inst_horz_avg, this%runningSum_sc, this%xspectra_mean)
