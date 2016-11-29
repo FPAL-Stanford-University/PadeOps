@@ -617,7 +617,7 @@ contains
             call transpose_y_to_z(zinY,zinZ,this%gpC)
             call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
             zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
-            ztop = zEinZ(1,1,this%nz+1)
+            ztop = zEinZ(1,1,this%nz+1); zstSponge = zstSponge*ztop 
             call transpose_z_to_y(zEinZ,zEinY,this%gpE)
             this%RdampC = (one/SpongeTscale) * (one - cos(pi*(zinY - zstSponge) /(zTop - zstSponge)))/two
             this%RdampE = (one/SpongeTscale) * (one - cos(pi*(zEinY - zstSponge)/(zTop - zstSponge)))/two
@@ -637,6 +637,7 @@ contains
             this%rbuffxC(:,:,:,1) = this%T
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%TBase)
             call message(0,"Sponge Layer initialized successfully")
+            call message(1,"Sponge Layer active above z = ",zstSponge)
         end if 
 
         if (this%useWindTurbines) then
