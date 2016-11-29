@@ -25,7 +25,7 @@ program pblwt
 
     call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
   
-    call igp%start_io()                !<-- Start I/O by creating a header file (see io.F90)
+    call igp%start_io(.true.)                !<-- Start I/O by creating a header file (see io.F90)
 
     call igp%printDivergence()
   
@@ -39,9 +39,6 @@ program pblwt
  
     call igp%finalize_io()                  !<-- Close the header file (wrap up i/o)
 
-    !call igp%finalize_stats()
-    call igp%finalize_stats3D()
-    
     call igp%destroy()                !<-- Destroy the IGRID derived type 
    
 

@@ -86,16 +86,17 @@ module IncompressibleGridWallM
 
         real(rkind), dimension(:,:,:), allocatable :: rDampC, rDampE         
         real(rkind) :: Re, Gx, Gy, Gz, dtby2, meanfact, Tref
-        complex(rkind), dimension(:,:,:), allocatable :: GxHat 
+        complex(rkind), dimension(:,:,:), allocatable :: GxHat, GyHat 
         real(rkind) :: Ro = 1.d5, Fr = 1000.d0
-
+        logical :: assume_fplane = .true.
+        real(rkind) :: coriolis_cosine, coriolis_sine 
         integer :: nxZ, nyZ
        
         integer :: timeSteppingScheme = 0 
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
         integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false. 
-        logical :: useExtraForcing = .false., useGeostrophicForcing = .false. 
+        logical :: useExtraForcing = .false., useGeostrophicForcing = .false., isInviscid = .false.  
         logical :: useSGS = .false. 
         logical :: UseDealiasFilterVert = .false.
         logical :: useDynamicProcedure 
@@ -165,15 +166,15 @@ module IncompressibleGridWallM
 
 
         contains
-            procedure :: init
-            procedure :: init_stats
-            procedure :: init_stats3D
-            procedure :: destroy
-            procedure :: printDivergence 
-            procedure :: getMaxKE
-            procedure :: timeAdvance
-            procedure :: start_io
-            procedure :: finalize_io
+            procedure          :: init
+            procedure          :: destroy
+            procedure          :: printDivergence 
+            procedure          :: getMaxKE
+            procedure          :: timeAdvance
+            procedure          :: start_io
+            procedure          :: finalize_io
+            procedure, private :: init_stats
+            procedure, private :: init_stats3D
             procedure, private :: AdamsBashforth
             procedure, private :: TVD_RK3
             procedure, private :: ComputePressure
@@ -181,7 +182,8 @@ module IncompressibleGridWallM
             procedure, private :: compute_duidxj
             procedure, private :: compute_dTdxi
             procedure, private :: addNonLinearTerm_Rot
-            procedure, private :: AddBuoyancyTerm
+            procedure, private :: addBuoyancyTerm
+            procedure, private :: addViscousTerm
             procedure, private :: addCoriolisTerm
             procedure, private :: addSponge
             procedure, private :: addExtraForcingTerm 
@@ -204,10 +206,10 @@ module IncompressibleGridWallM
             procedure, private :: project_and_prep
             procedure, private :: wrapup_timestep
             procedure, private :: reset_pointers
-            procedure          :: finalize_stats
-            procedure          :: finalize_stats3D
+            procedure, private :: finalize_stats
+            procedure, private :: finalize_stats3D
             procedure, private :: dump_planes
-            procedure          :: dumpFullField 
+            procedure, private :: dumpFullField 
             procedure, private :: DeletePrevStats3DFiles
     end type
 
@@ -233,10 +235,11 @@ contains
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
-        real(rkind) :: Lz = 1.d0
+        real(rkind) :: Lz = 1.d0, latitude = 90._rkind
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true.
         integer :: tSystemInteractions = 100
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true.  
+        logical :: assume_fplane = .true. 
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -244,7 +247,7 @@ contains
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, &
-                          useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz
+                          useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz, assume_fplane, latitude
         namelist /BCs/ topWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp
         namelist /LES/ useSGS, useDynamicProcedure, useSGSclipping, SGSmodelID, useVerticalTfilter, &
                         useWallDamping, ncWall, Cs 
@@ -281,7 +284,8 @@ contains
         this%timeSteppingScheme = timeSteppingScheme; this%useSystemInteractions = useSystemInteractions
         this%tSystemInteractions = tSystemInteractions; this%storePressure = storePressure
         this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq; this%timeAvgFullFields = timeAvgFullFields
-        this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp
+        this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp; this%isInviscid = isInviscid
+        this%assume_fplane = assume_fplane
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -297,8 +301,8 @@ contains
         this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro; 
         this%PreProcessForKS = preprocessForKS; this%KSOutputDir = KSoutputDir;this%t_dumpKSprep = t_dumpKSprep 
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
-        this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; this%t_pointProbe = t_pointProbe
-
+        this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; 
+        this%t_pointProbe = t_pointProbe
 
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
@@ -559,11 +563,25 @@ contains
         ! STEP 10a: Compute Coriolis Term
         if (this%useCoriolis) then
             call message(0, "Turning on Coriolis with Geostrophic Forcing")
-            call message(1, "Geostrophic Velocity:", this%Gx) 
+            call message(1, "Geostrophic Velocity (East-West)  :", this%Gx) 
+            call message(1, "Geostrophic Velocity (South-North):", this%Gy)
             call message(1, "Rossby Number       :", this%Ro) 
             call this%spectC%alloc_r2c_out(this%GxHat)
+            call this%spectC%alloc_r2c_out(this%GyHat)
             this%rbuffxC(:,:,:,1) = this%Gx
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gxhat)
+            this%rbuffxC(:,:,:,1) = this%Gy
+            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gyhat)
+            if (this%assume_fplane) then
+                this%coriolis_sine   = sin(latitude*pi/180.d0)
+                this%coriolis_cosine = 0.d0
+                call message(1, "Making the f-plane assumption (Lattitude effect &
+                & ignored in w equation)")
+            else
+                this%coriolis_sine   = sin(latitude*pi/180.d0)
+                this%coriolis_cosine = cos(latitude*pi/180.d0)
+                call message(1,"Lattitude used for Coriolis (degrees)",latitude)
+            end if
         end if
 
         ! STEP 10b: Compute additional forcing (channel)
@@ -666,8 +684,11 @@ contains
         end if 
 
         ! STEP 16: Initialize Statistics
-        !call this%init_stats()
-        call this%init_stats3D()
+        if (this%timeAvgFullFields) then
+            call this%init_stats3D()
+        else
+            call this%init_stats()
+        end if
 
         ! STEP 17: Set up storage for Pressure
         if ((this%storePressure) .or. (this%fastCalcPressure)) then
@@ -686,14 +707,29 @@ contains
         end if 
 
 
+       
+
         ! Final Step: Safeguard against unfinished procedures
         if ((useCompactFD).and.(.not.useSkewSymm)) then
             call GracefulExit("You must solve in skew symmetric form if you use CD06",54)
         end if 
 
+        if ((this%isStratified) .and. (.not. ComputeStokesPressure )) then
+            call GracefulExit("You must set ComputeStokesPressure to TRUE if &
+            & there is stratification in the problem", 323)
+        end if 
+
+        
+
         if ((.not. useCompactFD).and.(this%isStratified).and.(botBC_Temp .ne. 0)) then
             call GracefulExit("If you use 2nd order FD in the vertical, you &
                 & cannot specify botBC_Temp to be anything other than 0, at this time.",434)
+        end if 
+
+        if (.not.(this%isInviscid)) then
+            call GracefulExit("The viscous term is currently incomplete. You can & 
+                &only run problems that are inviscid using igridWallM right now. Try using &
+                &igrid instead",123)
         end if 
 
         call message("IGRID initialized successfully!")
@@ -918,7 +954,12 @@ contains
 
     subroutine destroy(this)
         class(igridWallM), intent(inout) :: this
-        
+       
+        if (this%timeAvgFullFields) then
+            call this%finalize_stats3d()
+        else
+            call this%finalize_stats()
+        end if 
         nullify(this%u, this%uhat, this%v, this%vhat, this%w, this%what, this%wC)
         deallocate(this%PfieldsC, this%PfieldsE, this%SfieldsC, this%SfieldsE)
         nullify(this%u_rhs, this%v_rhs, this%w_rhs)
@@ -1158,11 +1199,27 @@ contains
     end subroutine
 
     subroutine addCoriolisTerm(this)
-        class(igridWallM), intent(inout) :: this
+        class(igridWallM), intent(inout), target :: this
+        complex(rkind), dimension(:,:,:), pointer :: fT1E 
         ! u equation 
-        this%u_rhs = this%u_rhs + this%vhat/this%Ro
+        this%u_rhs = this%u_rhs - (this%coriolis_cosine*this%what &
+                            + this%coriolis_sine*(this%GyHat - this%vhat))/this%Ro
         ! v equation 
-        this%v_rhs = this%v_rhs +  (this%GxHat - this%uhat)/this%Ro
+        this%v_rhs = this%v_rhs + this%coriolis_sine*(this%GxHat - this%uhat)/this%Ro
+        
+        ! w equation 
+        ! The real equation is given as:
+        !this%w_rhs = this%w_rhs - this%coriolis_cosine*(this%GxHat - this%uhat)/this%Ro
+        ! But we evaluate this term as:
+        fT1E => this%cbuffyE(:,:,:,1)
+        fT1E = this%coriolis_cosine*(this%uhat)
+        if (this%spectE%carryingZeroK) then
+            fT1E(1,1,:) = cmplx(zero,zero,rkind)
+        end if
+        this%w_rhs = this%w_rhs + fT1E
+        ! The residual quantity (Gx - <u>)*cos(alpha)/Ro is accomodated in
+        ! pressure
+
     end subroutine  
 
     subroutine addSponge(this)
@@ -1197,9 +1254,9 @@ contains
         complex(rkind), dimension(:,:,:), pointer :: fT1E 
    
         fT1E => this%cbuffyE(:,:,:,1)
-        fT1E = this%TEhat/(this%ThetaRef*this%Fr*this%Fr)
+        fT1E = (this%TEhat)/(this%ThetaRef*this%Fr*this%Fr)
         if (this%spectE%carryingZeroK) then
-            fT1E(1,1,:) = zero
+            fT1E(1,1,:) = cmplx(zero,zero,rkind)
         end if 
         this%w_rhs = this%w_rhs + fT1E 
         
@@ -1236,7 +1293,13 @@ contains
             call this%addBuoyancyTerm()
         end if 
 
-        ! Step 5: SGS Viscous Term
+        ! Step 5: Viscous Term (only if simulation if NOT inviscid)
+        if (.not. this%isInviscid) then
+            call this%addViscousTerm()
+        end if
+
+
+        ! Step 6: SGS Viscous Term
         if (this%useSGS) then
             call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
                                                 this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
@@ -1251,6 +1314,19 @@ contains
             end if 
         end if 
     end subroutine
+
+    subroutine addViscousTerm(this)
+        class(igridWallM), intent(inout) :: this
+        !complex(rkind), dimension(:,:,:), pointer :: fT1C, fT2C, fT1E, fT2E
+
+        !fT1C => this%cbuffyC(:,:,:,1); fT2C => this%cbuffyC(:,:,:,2)
+        !fT1E => this%cbuffyE(:,:,:,1); fT2E => this%cbuffyE(:,:,:,2)
+        this%u_rhs = this%u_rhs + cmplx(zero,zero,rkind)
+
+        ! Incomplete  -> don't run simulations with isInviscid = FALSE
+
+    end subroutine
+
 
     subroutine project_and_prep(this, AlreadyProjected)
         class(igridWallM), intent(inout) :: this
@@ -1305,7 +1381,7 @@ contains
         class(igridWallM), intent(inout) :: this
 
         logical :: forceWrite, exitStat, forceDumpPressure, restartWrite
-        integer :: ierr = -1
+        integer :: ierr = -1, ierr2 
 
         ! STEP 1: Update Time and BCs
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
@@ -1328,11 +1404,9 @@ contains
                     forceWrite = .TRUE.
                     call message(1, "Forced Dump because found file dumppdo")
                     call message(2, "Current Time Step is:", this%step)
-                    if(nrank==0) then
-                      close(777, status='delete')
-                    else
-                      close(777)
-                    endif
+                    if (nrank .ne. 0) close(777)
+                    call mpi_barrier(mpi_comm_world, ierr2)
+                    if(nrank==0) close(777, status='delete')
                 else
                     close(777)
                 endif
@@ -1342,6 +1416,9 @@ contains
                     if (ierr == 0) then
                         forceDumpPressure = .true.
                         call message(1,"Force Dump for pressure reqested; file prsspdo found.")
+                        if (nrank .ne. 0) close(777)
+                        call mpi_barrier(mpi_comm_world, ierr2)
+                        if (nrank==0) close(777, status='delete')
                     else
                         close(777)
                     end if
@@ -1352,11 +1429,9 @@ contains
                     restartWrite = .TRUE.
                     call message(1, "Restart Dump because found file dumprestart")
                     call message(2, "Current Time Step is:", this%step)
-                    if(nrank==0) then
-                      close(777, status='delete')
-                    else
-                      close(777)
-                    endif
+                    if (nrank .ne. 0) close(777)
+                    call mpi_barrier(mpi_comm_world, ierr2)
+                    if(nrank==0) close(777, status='delete')
                 else
                     close(777)
                 endif
@@ -1379,21 +1454,25 @@ contains
         end if
 
 
+       
+       if ((forceWrite.or.(mod(this%step,this%tid_compStats)==0)).and.(this%tsim > this%tSimStartStats) ) then
+           if (this%timeAvgFullFields) then
+               call this%compute_stats3D()
+           else
+               call this%compute_stats()
+           end if 
+       end if 
 
-        if (this%timeAvgFullFields) then
-            if ( (forceWrite .or. (mod(this%step,this%tid_compStats)==0)) .and. (this%tsim > this%tSimStartStats) ) then
-                !call this%compute_stats()
-                call this%compute_stats3D()
-            end if 
-
-            if ( (forceWrite .or. (mod(this%step,this%tid_statsDump) == 0)) .and. (this%tsim > this%tSimStartStats) ) then
-                !call this%compute_stats()
-                !call this%dump_stats()
-                call this%compute_stats3D()
+       if ((forceWrite.or.(mod(this%step,this%tid_statsDump)==0)).and.(this%tsim > this%tSimStartStats) ) then
+           if (this%timeAvgFullFields) then
+                !call this%compute_stats3D()
                 call this%dump_stats3D()
                 call mpi_barrier(mpi_comm_world, ierr)
-                stop
-            end if 
+                !stop
+            else
+                !call this%compute_stats()
+                call this%dump_stats()
+            end if
         end if 
 
         if ( restartWrite .or. (mod(this%step,this%t_restartDump) == 0) ) then
@@ -2009,47 +2088,45 @@ contains
         call transpose_y_to_x(rbuff2,rbuff0,this%gpC)
 
         ! Compute u,v,wC - mean
-        if (this%timeAvgFullFields) then
-            if(this%normByUstar) then
-                this%u_mean3D = this%u_mean3D + this%u/this%ustar
-                this%v_mean3D = this%v_mean3D + this%v/this%ustar
-                this%w_mean3D = this%w_mean3D + this%wC/this%ustar
+        if(this%normByUstar) then
+            this%u_mean3D = this%u_mean3D + this%u/this%ustar
+            this%v_mean3D = this%v_mean3D + this%v/this%ustar
+            this%w_mean3D = this%w_mean3D + this%wC/this%ustar
 
-                this%uu_mean3D = this%uu_mean3D + this%u * this%u /this%ustar
-                this%uv_mean3D = this%uv_mean3D + this%u * this%v /this%ustar
-                this%uw_mean3D = this%uw_mean3D + rbuff1          /this%ustar
-                this%vv_mean3D = this%vv_mean3D + this%v * this%v /this%ustar
-                this%vw_mean3D = this%vw_mean3D + rbuff0          /this%ustar
-                this%ww_mean3D = this%ww_mean3D + this%wC* this%wC/this%ustar
+            this%uu_mean3D = this%uu_mean3D + this%u * this%u /this%ustar
+            this%uv_mean3D = this%uv_mean3D + this%u * this%v /this%ustar
+            this%uw_mean3D = this%uw_mean3D + rbuff1          /this%ustar
+            this%vv_mean3D = this%vv_mean3D + this%v * this%v /this%ustar
+            this%vw_mean3D = this%vw_mean3D + rbuff0          /this%ustar
+            this%ww_mean3D = this%ww_mean3D + this%wC* this%wC/this%ustar
 
-                if(this%isStratified) then
-                    this%T_mean3D = this%T_mean3D + this%T*this%ustar/this%wTh_surf
-                    this%uT_mean3D = this%uT_mean3D + this%T * this%u /this%wTh_surf
-                    this%vT_mean3D = this%vT_mean3D + this%T * this%v /this%wTh_surf
-                    this%wT_mean3D = this%wT_mean3D + this%T * this%wC/this%wTh_surf
-                    this%TT_mean3D = this%TT_mean3D + this%T * this%T*(this%ustar/this%wTh_surf)**2
-                endif
-            else
-                this%u_mean3D = this%u_mean3D + this%u
-                this%v_mean3D = this%v_mean3D + this%v
-                this%w_mean3D = this%w_mean3D + this%wC
-
-                this%uu_mean3D = this%uu_mean3D + this%u * this%u
-                this%uv_mean3D = this%uv_mean3D + this%u * this%v
-                this%uw_mean3D = this%uw_mean3D + this%u * this%wC
-                this%vv_mean3D = this%vv_mean3D + this%v * this%v
-                this%vw_mean3D = this%vw_mean3D + this%v * this%wC
-                this%ww_mean3D = this%ww_mean3D + this%wC* this%wC
-
-                if(this%isStratified) then
-                    this%T_mean3D = this%T_mean3D + this%T
-                    this%uT_mean3D = this%uT_mean3D + this%T * this%u
-                    this%vT_mean3D = this%vT_mean3D + this%T * this%v
-                    this%wT_mean3D = this%wT_mean3D + this%T * this%wC
-                    this%TT_mean3D = this%TT_mean3D + this%T * this%T
-                endif
+            if(this%isStratified) then
+                this%T_mean3D = this%T_mean3D + this%T*this%ustar/this%wTh_surf
+                this%uT_mean3D = this%uT_mean3D + this%T * this%u /this%wTh_surf
+                this%vT_mean3D = this%vT_mean3D + this%T * this%v /this%wTh_surf
+                this%wT_mean3D = this%wT_mean3D + this%T * this%wC/this%wTh_surf
+                this%TT_mean3D = this%TT_mean3D + this%T * this%T*(this%ustar/this%wTh_surf)**2
             endif
-        end if 
+        else
+            this%u_mean3D = this%u_mean3D + this%u
+            this%v_mean3D = this%v_mean3D + this%v
+            this%w_mean3D = this%w_mean3D + this%wC
+
+            this%uu_mean3D = this%uu_mean3D + this%u * this%u
+            this%uv_mean3D = this%uv_mean3D + this%u * this%v
+            this%uw_mean3D = this%uw_mean3D + this%u * this%wC
+            this%vv_mean3D = this%vv_mean3D + this%v * this%v
+            this%vw_mean3D = this%vw_mean3D + this%v * this%wC
+            this%ww_mean3D = this%ww_mean3D + this%wC* this%wC
+
+            if(this%isStratified) then
+                this%T_mean3D = this%T_mean3D + this%T
+                this%uT_mean3D = this%uT_mean3D + this%T * this%u
+                this%vT_mean3D = this%vT_mean3D + this%T * this%v
+                this%wT_mean3D = this%wT_mean3D + this%T * this%wC
+                this%TT_mean3D = this%TT_mean3D + this%T * this%T
+            endif
+        endif
 
         if(this%useSGS) then
             ! interpolate tau13 from E to C
@@ -2685,50 +2762,51 @@ contains
         call message(1, "Just dumped a .stt file")
         call message(2, "Number ot tsteps averaged:",this%tidSUM)
 
-        ! Dump horizontally averaged x-spectra
-        dirid = 2; decompdir = 2
+        if (this%computeSpectra) then
+            ! Dump horizontally averaged x-spectra
+            dirid = 2; decompdir = 2
 
+            ! --- only 4 or 5 planes of xspextra_mean in y-direction are being used
+            if(this%isStratified) then
+               nspectra = 5
+            else
+               nspectra = 4
+            endif
+            ! --- for k1 = 1, multiplication factor is 1.0,
+            ! --- for k1 = 2:Nx/2+1, multiplication factor is 2.0
+            normfac = two/real(size(this%cbuffyC(:,:,:,1),2),rkind)/tidSUMreal
+            tmpvar(1:this%sp_gpC%ysz(1),1:nspectra,:) = normfac*this%xspectra_mean(1:this%sp_gpC%ysz(1),1:nspectra,:)
+            if(this%sp_gpC%yst(1)==1) then
+                tmpvar(1,1:nspectra,:) = half*tmpvar(1,1:nspectra,:)
+            endif
 
-        ! --- only 4 or 5 planes of xspextra_mean in y-direction are being used
-        if(this%isStratified) then
-           nspectra = 5
-        else
-           nspectra = 4
-        endif
-        ! --- for k1 = 1, multiplication factor is 1.0,
-        ! --- for k1 = 2:Nx/2+1, multiplication factor is 2.0
-        normfac = two/real(size(this%cbuffyC(:,:,:,1),2),rkind)/tidSUMreal
-        tmpvar(1:this%sp_gpC%ysz(1),1:nspectra,:) = normfac*this%xspectra_mean(1:this%sp_gpC%ysz(1),1:nspectra,:)
-        if(this%sp_gpC%yst(1)==1) then
-            tmpvar(1,1:nspectra,:) = half*tmpvar(1,1:nspectra,:)
-        endif
-
-        jindx = 1 ! u
-        write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specu_t",tid,".out"
-        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
-
-        jindx = 2 ! v
-        write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specv_t",tid,".out"
-        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
-
-        jindx = 3 ! w
-        write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specw_t",tid,".out"
-        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
-
-        jindx = 4 ! KE
-        write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_speck_t",tid,".out"
-        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
-
-        if(this%isStratified) then
-            jindx = 5 ! T
-            write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specT_t",tid,".out"
+            jindx = 1 ! u
+            write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specu_t",tid,".out"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
             call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
-        endif
+
+            jindx = 2 ! v
+            write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specv_t",tid,".out"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
+
+            jindx = 3 ! w
+            write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specw_t",tid,".out"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
+
+            jindx = 4 ! KE
+            write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_speck_t",tid,".out"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
+
+            if(this%isStratified) then
+                jindx = 5 ! T
+                write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%RunID,"_specT_t",tid,".out"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%sp_gpC)
+            endif
+        end if 
 
     end subroutine
 
@@ -3196,6 +3274,7 @@ contains
 
     subroutine finalize_stats(this)
         class(igridWallM), intent(inout) :: this
+
         nullify(this%u_mean, this%v_mean, this%w_mean, this%uu_mean, this%uv_mean, this%uw_mean, this%vv_mean, this%vw_mean, this%ww_mean)
         nullify(this%tau11_mean, this%tau12_mean, this%tau13_mean, this%tau22_mean, this%tau23_mean, this%tau33_mean)
         nullify(this%S11_mean, this%S12_mean, this%S13_mean, this%S22_mean, this%S23_mean, this%S33_mean)

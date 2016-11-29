@@ -4,14 +4,14 @@ outputdir             = "/home/aditya90/Codes/PadeOps/data/ekmanNeutral/"   ! Di
 nx                    = 128          ! Number of points in X
 ny                    = 128          ! Number of points in Y
 nz                    = 128          ! Number of points in Z
-tstop                 = 50.D0       ! Physical time to stop the simulation
+tstop                 = 650.D0       ! Physical time to stop the simulation
 CFL                   = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 0.0005D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
-restartFile_TID       = 8000        ! TimeID of the restart file being used
-restartFile_RID       = 66          ! RunID of the restart file being used
+restartFile_TID       = 41089        ! TimeID of the restart file being used
+restartFile_RID       = 50          ! RunID of the restart file being used
 /
 /
 &NUMERICS
@@ -24,9 +24,9 @@ t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproj
 /
 /
 &IO
-RunID                 = 10          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 1000        ! Restart File Dumping Frequency  (# of time steps)
-t_dataDump            = 1000        ! Data dumping frequency (# of timesteps)
+RunID                 = 51          ! Run Label (All output files will be tagged with this nubber)
+t_restartDump         = 5000        ! Restart File Dumping Frequency  (# of time steps)
+t_dataDump            = 5000        ! Data dumping frequency (# of timesteps)
 ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 100         ! Plane dumping frequency (# of timesteps)
@@ -35,9 +35,9 @@ t_stop_planeDump      = 5000        ! When do you want to stop dumping planes?
 /
 /
 &STATS
-tid_StatsDump         = 4000        ! Dumping Frequency for Statistics file (# of time steps)
-tid_compStats         = 1000         ! Frequency of Computing Statistics
-tSimStartStats        = 100.d0        ! Simulation time for starting stats calculations 
+tid_StatsDump         = 1000        ! Dumping Frequency for Statistics file (# of time steps)
+tid_compStats         = 100         ! Frequency of Computing Statistics
+tSimStartStats        = 500.d0        ! Simulation time for starting stats calculations 
 normStatsByUstar      = .FALSE.      ! Normalize Statistics by ustar at each instant
 computeSpectra        = .FALSE.     ! Compute and time average x - spectra on the run
 timeAvgFullFields     = .FALSE.     ! Time average and store fields on the run
@@ -50,21 +50,23 @@ controlDir            = "null"          ! Check in this directory for command fi
 /
 /
 &PHYSICS
-isInviscid            = .TRUE.              ! Is this a viscous simulation?
-useCoriolis           = .TRUE.              ! Activate the coriolis term? 
-useExtraForcing       = .FALSE.             ! Is an extra forcing term being used? (non-Geostrophic forcing only)
-useGeostrophicForcing = .TRUE.              ! This is true if forcing is provided using the coriolis term  
-isStratified          = .TRUE.              ! Use Stratification / active scalar in momentum
-Pr                    = 0.75D0              ! Turbulent Prandtl Number; used when isStratified is TRUE 
-Ro                    = 71.942446043165d0   ! Rossby Number used when Coriolis is ON
-Re                    = 1D10                ! Reynolds Number; used when isInvisid is FALSE
-Fr                    = 0.127775313D0       ! Froude number; used when isStratified is TRUE
-Gx                    = 1.D0                ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gy                    = 0.D0                ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gz                    = 0.D0                ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-dPfdx                 = 0.0D0               ! Additional Acceleration in X; used if useExtraForcing is ON
-dPfdy                 = 0.D0                ! Additional Acceleration in Y; used if useExtraForcing is ON
-dPfdz                 = 0.D0                ! Additional Acceleration in Z; used if useExtraForcing is ON
+isInviscid            = .TRUE.            ! Is this a viscous simulation?
+useCoriolis           = .TRUE.            ! Activate the coriolis term? 
+assume_fplane         = .TRUE.            ! make the f-plane assumption while computing the coriolis term
+latitude             =  45.d0            ! Latittude of the domain in degrees 
+useExtraForcing       = .FALSE.           ! Is an extra forcing term being used? (non-Geostrophic forcing only)
+useGeostrophicForcing = .TRUE.            ! This is true if forcing is provided using the coriolis term  
+isStratified          = .TRUE.            ! Use Stratification / active scalar in momentum
+Pr                    = 0.65D0            ! Turbulent Prandtl Number; used when isStratified is TRUE 
+Ro                    = 71.942446043165d0 ! Rossby Number used when Coriolis is ON
+Re                    = 1D10              ! Reynolds Number; used when isInvisid is FALSE
+Fr                    = 0.127775313D0     ! Froude number; used when isStratified is TRUE
+Gx                    = 1.D0              ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+Gy                    = 0.D0              ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+Gz                    = 0.D0              ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+dPfdx                 = 0.0D0             ! Additional Acceleration in X; used if useExtraForcing is ON
+dPfdy                 = 0.D0              ! Additional Acceleration in Y; used if useExtraForcing is ON
+dPfdz                 = 0.D0              ! Additional Acceleration in Z; used if useExtraForcing is ON
 /
 /
 &PRESSURE_CALC
@@ -118,9 +120,9 @@ Ly                    =  4.d0       ! Domain Width  (appropriate dimesnions/non-
 Lz                    =  1.d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
 Tref                  =  288.15d0   ! Reference Temp. 
 z0init                =  1.d-4      ! Roughness scale used to initialize the profile
-aTemp                 =  1.500d0    ! Inversion Layer temp slope parameter (for temp initialization)
+aTemp                 =  1.000d0    ! Inversion Layer temp slope parameter (for temp initialization)
 bTemp                 =  0.040d0    ! Stable Free atmosphere temp slope parameter (for temp initialization)
-h0Temp                =  0.500d0    ! Inversion Layer Start Height (for temp initialization)
-h1Temp                =  0.550d0    ! Inversion Layer Middle Height (for temp initialization)
-h2Temp                =  0.600d0    ! Inversion Layer Top    Height (for temp initialization)
+h0Temp                =  0.41667d0    ! Inversion Layer Start Height (for temp initialization)
+h1Temp                =  0.45833d0    ! Inversion Layer Middle Height (for temp initialization)
+h2Temp                =  0.500d0    ! Inversion Layer Top    Height (for temp initialization)
 /
