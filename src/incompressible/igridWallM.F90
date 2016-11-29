@@ -86,9 +86,10 @@ module IncompressibleGridWallM
 
         real(rkind), dimension(:,:,:), allocatable :: rDampC, rDampE         
         real(rkind) :: Re, Gx, Gy, Gz, dtby2, meanfact, Tref
-        complex(rkind), dimension(:,:,:), allocatable :: GxHat 
+        complex(rkind), dimension(:,:,:), allocatable :: GxHat, GyHat 
         real(rkind) :: Ro = 1.d5, Fr = 1000.d0
-
+        logical :: assume_fplane = .true.
+        real(rkind) :: coriolis_cosine, coriolis_sine 
         integer :: nxZ, nyZ
        
         integer :: timeSteppingScheme = 0 
@@ -236,10 +237,11 @@ contains
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
-        real(rkind) :: Lz = 1.d0
+        real(rkind) :: Lz = 1.d0, latitude = 90._rkind
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true.
         integer :: tSystemInteractions = 100, ierr
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true.  
+        logical :: assume_fplane = .true. 
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -247,7 +249,7 @@ contains
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, &
-                          useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz
+                          useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz, assume_fplane, latitude
         namelist /BCs/ topWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp
         namelist /LES/ useSGS, useDynamicProcedure, useSGSclipping, SGSmodelID, useVerticalTfilter, &
                         useWallDamping, ncWall, Cs 
@@ -284,6 +286,7 @@ contains
         this%tSystemInteractions = tSystemInteractions; this%storePressure = storePressure
         this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq; this%timeAvgFullFields = timeAvgFullFields
         this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp; this%isInviscid = isInviscid
+        this%assume_fplane = assume_fplane
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -299,8 +302,8 @@ contains
         this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro; 
         this%PreProcessForKS = preprocessForKS; this%KSOutputDir = KSoutputDir;this%t_dumpKSprep = t_dumpKSprep 
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
-        this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; this%t_pointProbe = t_pointProbe
-
+        this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; 
+        this%t_pointProbe = t_pointProbe
 
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
@@ -561,11 +564,25 @@ contains
         ! STEP 10a: Compute Coriolis Term
         if (this%useCoriolis) then
             call message(0, "Turning on Coriolis with Geostrophic Forcing")
-            call message(1, "Geostrophic Velocity:", this%Gx) 
+            call message(1, "Geostrophic Velocity (East-West)  :", this%Gx) 
+            call message(1, "Geostrophic Velocity (South-North):", this%Gy)
             call message(1, "Rossby Number       :", this%Ro) 
             call this%spectC%alloc_r2c_out(this%GxHat)
+            call this%spectC%alloc_r2c_out(this%GyHat)
             this%rbuffxC(:,:,:,1) = this%Gx
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gxhat)
+            this%rbuffxC(:,:,:,1) = this%Gy
+            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gyhat)
+            if (this%assume_fplane) then
+                this%coriolis_sine   = sin(latitude*pi/180.d0)
+                this%coriolis_cosine = 0.d0
+                call message(1, "Making the f-plane assumption (Lattitude effect &
+                & ignored in w equation)")
+            else
+                this%coriolis_sine   = sin(latitude*pi/180.d0)
+                this%coriolis_cosine = cos(latitude*pi/180.d0)
+                call message(1,"Lattitude used for Coriolis (degrees)",latitude)
+            end if
         end if
 
         ! STEP 10b: Compute additional forcing (channel)
@@ -601,7 +618,7 @@ contains
             call transpose_y_to_z(zinY,zinZ,this%gpC)
             call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
             zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
-            ztop = zEinZ(1,1,this%nz+1)
+            ztop = zEinZ(1,1,this%nz+1); zstSponge = zstSponge*ztop 
             call transpose_z_to_y(zEinZ,zEinY,this%gpE)
             this%RdampC = (one/SpongeTscale) * (one - cos(pi*(zinY - zstSponge) /(zTop - zstSponge)))/two
             this%RdampE = (one/SpongeTscale) * (one - cos(pi*(zEinY - zstSponge)/(zTop - zstSponge)))/two
@@ -621,6 +638,7 @@ contains
             this%rbuffxC(:,:,:,1) = this%T
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%TBase)
             call message(0,"Sponge Layer initialized successfully")
+            call message(1,"Sponge Layer active above z = ",zstSponge)
         end if 
 
         if (this%useWindTurbines) then
@@ -691,10 +709,19 @@ contains
         end if 
 
 
+       
+
         ! Final Step: Safeguard against unfinished procedures
         if ((useCompactFD).and.(.not.useSkewSymm)) then
             call GracefulExit("You must solve in skew symmetric form if you use CD06",54)
         end if 
+
+        if ((this%isStratified) .and. (.not. ComputeStokesPressure )) then
+            call GracefulExit("You must set ComputeStokesPressure to TRUE if &
+            & there is stratification in the problem", 323)
+        end if 
+
+        
 
         if ((.not. useCompactFD).and.(this%isStratified).and.(botBC_Temp .ne. 0)) then
             call GracefulExit("If you use 2nd order FD in the vertical, you &
@@ -1174,11 +1201,27 @@ contains
     end subroutine
 
     subroutine addCoriolisTerm(this)
-        class(igridWallM), intent(inout) :: this
+        class(igridWallM), intent(inout), target :: this
+        complex(rkind), dimension(:,:,:), pointer :: fT1E 
         ! u equation 
-        this%u_rhs = this%u_rhs + this%vhat/this%Ro
+        this%u_rhs = this%u_rhs - (this%coriolis_cosine*this%what &
+                            + this%coriolis_sine*(this%GyHat - this%vhat))/this%Ro
         ! v equation 
-        this%v_rhs = this%v_rhs +  (this%GxHat - this%uhat)/this%Ro
+        this%v_rhs = this%v_rhs + this%coriolis_sine*(this%GxHat - this%uhat)/this%Ro
+        
+        ! w equation 
+        ! The real equation is given as:
+        !this%w_rhs = this%w_rhs - this%coriolis_cosine*(this%GxHat - this%uhat)/this%Ro
+        ! But we evaluate this term as:
+        fT1E => this%cbuffyE(:,:,:,1)
+        fT1E = this%coriolis_cosine*(this%uhat)
+        if (this%spectE%carryingZeroK) then
+            fT1E(1,1,:) = cmplx(zero,zero,rkind)
+        end if
+        this%w_rhs = this%w_rhs + fT1E
+        ! The residual quantity (Gx - <u>)*cos(alpha)/Ro is accomodated in
+        ! pressure
+
     end subroutine  
 
     subroutine addSponge(this)
@@ -1213,9 +1256,9 @@ contains
         complex(rkind), dimension(:,:,:), pointer :: fT1E 
    
         fT1E => this%cbuffyE(:,:,:,1)
-        fT1E = this%TEhat/(this%ThetaRef*this%Fr*this%Fr)
+        fT1E = (this%TEhat)/(this%ThetaRef*this%Fr*this%Fr)
         if (this%spectE%carryingZeroK) then
-            fT1E(1,1,:) = zero
+            fT1E(1,1,:) = cmplx(zero,zero,rkind)
         end if 
         this%w_rhs = this%w_rhs + fT1E 
         
