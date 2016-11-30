@@ -4,14 +4,14 @@ outputdir             = "/home/aditya90/Codes/PadeOps/data/stableEkman/"   ! Dir
 nx                    = 128          ! Number of points in X
 ny                    = 128          ! Number of points in Y
 nz                    = 256          ! Number of points in Z
-tstop                 = 100.D0       ! Physical time to stop the simulation
-CFL                   = 0.65D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+tstop                 = 580.D0       ! Physical time to stop the simulation
+CFL                   = 0.75D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 0.0005D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
-restartFile_TID       = 4000        ! TimeID of the restart file being used
-restartFile_RID       = 25          ! RunID of the restart file being used
+useRestartFile        = .TRUE.     ! Set to false if it's a fresh simulation 
+restartFile_TID       = 42000        ! TimeID of the restart file being used
+restartFile_RID       = 26          ! RunID of the restart file being used
 /
 /
 &NUMERICS
@@ -24,7 +24,7 @@ t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproj
 /
 /
 &IO
-RunID                 = 25          ! Run Label (All output files will be tagged with this nubber)
+RunID                 = 26          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump         = 2000        ! Restart File Dumping Frequency  (# of time steps)
 t_dataDump            = 2000        ! Data dumping frequency (# of timesteps)
 ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
@@ -37,7 +37,7 @@ t_stop_planeDump      = 5000        ! When do you want to stop dumping planes?
 &STATS
 tid_StatsDump         = 4000        ! Dumping Frequency for Statistics file (# of time steps)
 tid_compStats         = 1000         ! Frequency of Computing Statistics
-tSimStartStats        = 100.d0        ! Simulation time for starting stats calculations 
+tSimStartStats        = 500.d0        ! Simulation time for starting stats calculations 
 normStatsByUstar      = .FALSE.      ! Normalize Statistics by ustar at each instant
 computeSpectra        = .FALSE.     ! Compute and time average x - spectra on the run
 timeAvgFullFields     = .FALSE.     ! Time average and store fields on the run
@@ -52,7 +52,7 @@ controlDir            = "null"      ! Check in this directory for command files 
 &PHYSICS
 isInviscid            = .TRUE.              ! Is this a viscous simulation?
 useCoriolis           = .TRUE.              ! Activate the coriolis term? 
-assume_fplane         = .TRUE.             ! make the f-plane assumption while computing the coriolis term
+assume_fplane         = .FALSE.             ! make the f-plane assumption while computing the coriolis term
 latitude              =  73.d0               ! Latittude of the domain in degrees 
 useExtraForcing       = .FALSE.             ! Is an extra forcing term being used? (non-Geostrophic forcing only)
 useGeostrophicForcing = .TRUE.              ! This is true if forcing is provided using the coriolis term  
