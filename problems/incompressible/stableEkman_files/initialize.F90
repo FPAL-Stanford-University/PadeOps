@@ -137,7 +137,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     allocate(randArr(size(T,1),size(T,2),size(T,3)))
     call gaussian_random(randArr,zero,one,seedu + 10*nrank)
     do k = 1,size(u,3)
-        sig = 0.08
+        sig = 0.12
         Tpurt(:,:,k) = sig*randArr(:,:,k)
     end do  
     deallocate(randArr)
