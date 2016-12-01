@@ -69,7 +69,7 @@ module IncompressibleGridWallM
         real(rkind), dimension(:,:,:), pointer :: ox,oy,oz
         complex(rkind), dimension(:,:,:), pointer :: T_rhs, T_Orhs
 
-        complex(rkind), dimension(:,:,:), allocatable :: uBase, Tbase, vBase, dTdxH, dTdyH, dTdzH
+        complex(rkind), dimension(:,:,:), allocatable :: uBase, Tbase, vBase, dTdxH, dTdyH, dTdzH, dTdzHC
         real(rkind), dimension(:,:,:), allocatable :: dTdxC, dTdyC, dTdzE, dTdzC
 
         real(rkind), dimension(:,:,:,:), allocatable, public :: rbuffxC, rbuffyC, rbuffzC
@@ -438,6 +438,7 @@ contains
             call this%spectC%alloc_r2c_out(this%dTdxH)
             call this%spectC%alloc_r2c_out(this%dTdyH)
             call this%spectE%alloc_r2c_out(this%dTdzH)
+            call this%spectC%alloc_r2c_out(this%dTdzHC)
             call this%spectC%alloc_r2c_out(this%rhsC,3); call this%spectC%alloc_r2c_out(this%OrhsC,3)
             call this%spectE%alloc_r2c_out(this%SfieldsE,2)
         else
@@ -603,6 +604,9 @@ contains
                 this%isStratified )
             call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23, &
                                 this%q1, this%q2, this%q3)
+            if (this%isStratified) then
+                call this%sgsmodel%setStratificationConstants(this%Fr,this%ThetaRef)
+            end if 
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -709,7 +713,6 @@ contains
         end if 
 
 
-       
 
         ! Final Step: Safeguard against unfinished procedures
         if ((useCompactFD).and.(.not.useSkewSymm)) then
@@ -1303,16 +1306,26 @@ contains
 
         ! Step 6: SGS Viscous Term
         if (this%useSGS) then
-            call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
+            if (this%isStratified) then
+                call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
+                                                    this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
+                                                    this%uhat   , this%vhat           , this%whatC      ,&
+                                                    this%u      , this%v              , this%wC         ,&
+                                                    this%ustar  , this%Umn            , this%Vmn        ,&
+                                                    this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
+                                                    this%max_nuSGS, this%inst_horz_avg, this%dTdxC      ,&
+                                                    this%dTdyC  , this%dTdzHC)
+                
+                call this%SGSmodel%getRHS_SGS_Scalar_WallM(this%dTdxC, this%dTdyC, this%dTdzE, &
+                                                           this%T_rhs, this%wTh_surf           )
+            else
+                call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
                                                 this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
                                                 this%uhat   , this%vhat           , this%whatC      ,&
                                                 this%u      , this%v              , this%wC         ,&
                                                 this%ustar  , this%Umn            , this%Vmn        ,&
                                                 this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
                                                 this%max_nuSGS, this%inst_horz_avg)
-            if (this%isStratified) then
-                call this%SGSmodel%getRHS_SGS_Scalar_WallM(this%dTdxC, this%dTdyC, this%dTdzE, &
-                                                           this%T_rhs, this%wTh_surf           )
             end if 
         end if 
     end subroutine
@@ -1756,8 +1769,8 @@ contains
         call transpose_z_to_y(ctmpz2, this%dTdzH, this%sp_gpE)
         call this%spectE%ifft(this%dTdzH,this%dTdzE)
         
-        call transpose_z_to_y(ctmpz1,ctmpy1,this%sp_gpC)
-        call this%spectC%ifft(ctmpy1,this%dTdzC)
+        call transpose_z_to_y(ctmpz1,this%dTdzHC,this%sp_gpC)
+        call this%spectC%ifft(this%dTdzHC,this%dTdzC)
 
     end subroutine
     

@@ -24,6 +24,7 @@ module sgsmod
     complex(rkind), parameter :: zeroC = zero + imi*zero
     logical :: useVerticalTfilter = .false. 
     integer :: applyDynEvery  = 10
+    real(rkind), parameter :: cx_amd = 1.d0/sqrt(12.d0), cy_amd = 1.d0/sqrt(12.d0), cz_amd = 1.d0/sqrt(3.d0)
 
     real(rkind), parameter :: bm = 4.8_rkind, bh = 7.8_rkind
     type :: sgs
@@ -39,8 +40,8 @@ module sgsmod
         complex(rkind), allocatable, dimension(:,:,:) :: ctmpCz, ctmpEz, ctmpEy, ctmpCz2
         complex(rkind), pointer, dimension(:,:,:) :: nuSGShat
         
-        real(rkind), dimension(:,:,:), allocatable :: rtmpY, rtmpZ, rtmpZ2, rtmpZE2, rtmpYE, rtmpZE
-        real(rkind), dimension(:,:,:), allocatable :: SSI_xbuff1, SSI_xbuff2, q1, q2, q3
+        real(rkind), dimension(:,:,:), allocatable :: rtmpY, rtmpZ, rtmpZ2, rtmpZE2, rtmpYE, rtmpZE, dTdzC_diff
+        real(rkind), dimension(:,:,:), allocatable :: SSI_xbuff1, SSI_xbuff2, q1, q2, q3, AMD_NUM, AMD_DEN
 
         type(cd06stagg), allocatable :: derZ_SS, derTAU33
         type(staggOps), allocatable :: Ops2ndOrder, OpsNU
@@ -50,10 +51,10 @@ module sgsmod
         logical :: useClipping = .false., CompStokesP = .false. 
         logical :: eddyViscModel = .true., isStratified = .false. 
         
-        real(rkind) :: meanFact, Pr
+        real(rkind) :: meanFact, Pr, Theta0, Fr
 
         logical :: useWallModel = .false.  
-        real(rkind) :: z0, dz, dxsq, dysq, dzsq
+        real(rkind) :: z0, dz, dxsq, dysq, dzsq, cx, cy, cz 
         integer :: nz, ntimeAvgQs = 3
 
         type(gaussian) :: Gfilz 
@@ -66,10 +67,13 @@ module sgsmod
         contains 
             procedure :: init
             procedure :: destroy
+            procedure :: setStratificationConstants
             procedure, private :: DynamicProcedure
             procedure, private :: planarAverage 
             procedure, private :: planarAverage_oop 
             procedure, private :: get_SMAG_Op
+            procedure, private :: get_AMD_Op
+            procedure, private :: get_AMD_Op_Strat
             procedure, private :: get_ShearImpSMAG_Op
             procedure, private :: get_SIGMA_Op
             procedure, private :: get_MGM_Op
@@ -88,7 +92,15 @@ contains
 
 #include "sgs_models/initialize.F90"
 #include "sgs_models/sigma_model_get_nuSGS.F90"
+#include "sgs_models/amd_model_get_nuSGS.F90"
 #include "sgs_models/mgm_model.F90"
+
+    subroutine setStratificationConstants(this, Fr, Theta0)
+        class(sgs), intent(inout) :: this
+        real(rkind), intent(in) :: Fr, Theta0
+    
+        this%Fr = Fr; this%theta0 = theta0
+    end subroutine
 
     subroutine link_pointers(this,nuSGS,c_SGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
         class(sgs), intent(in), target :: this
@@ -248,15 +260,17 @@ contains
     end subroutine
 
 
-    subroutine getRHS_SGS_WallM(this, duidxjC, duidxjE, duidxjChat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, ustar, Umn, Vmn, Uspmn, filteredSpeedSq, InvObLength, max_nuSGS, inst_horz_avg)    
+    subroutine getRHS_SGS_WallM(this, duidxjC, duidxjE, duidxjChat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, ustar, Umn, Vmn, Uspmn, filteredSpeedSq, InvObLength, max_nuSGS, inst_horz_avg, dTdx, dTdy, dTdzHC)    
         class(sgs), intent(inout), target :: this
         real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(inout), target :: duidxjC
+        real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in), optional :: dTdx, dTdy
         real(rkind)   , dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4), intent(inout), target :: duidxjE
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3),9), intent(inout) :: duidxjChat
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: urhs, vrhs
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat, wChat
         complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: u, v, wC, filteredSpeedSq
+        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout), optional :: dTdzHC
         real(rkind), dimension(this%ntimeAvgQs), intent(out) :: inst_horz_avg
         real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
         real(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
@@ -301,6 +315,16 @@ contains
             call this%get_ShearImpSMAG_Op(this%nuSGS, S11,S22,S33,S12,S13C,S23C)
         case (3)
             call this%get_MGM_Op(duidxjC, duidxjE)!, maxDissp)
+        case (4)
+            if (this%isStratified) then
+                if (this%spectC%carryingZeroK) then
+                    dTdzHC(1,1,:) = cmplx(0.d0,0.d0)
+                end if
+                call this%spectC%ifft(dTdzHC,this%dTdzC_diff)
+                call this%get_AMD_Op_strat(this%nuSGS,dudx, dudy, dudzC, dvdx, dvdy, dvdzC, dwdxC, dwdyC, dwdz, S11,S22,S33,S12,S13C,S23C, dTdx, dTdy)
+            else
+                call this%get_AMD_Op(this%nuSGS,dudx, dudy, dudzC, dvdx, dvdy, dvdzC, dwdxC, dwdyC, dwdz, S11,S22,S33,S12,S13C,S23C)
+            end if
         end select
 
         !print*, this%nuSGS(3,2,3)

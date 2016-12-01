@@ -83,6 +83,15 @@
             end if
             this%eddyViscModel = .false.
             call message(1,"MGM SGS model initialized")
+        case(4)
+            this%cx = cx_amd*dx; this%cy = cy_amd*dy; this%cz = cz_amd*dz
+            !allocate(this%AMD_Buffs(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),3))
+            allocate(this%AMD_Num(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+            allocate(this%AMD_Den(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+            if (this%isStratified) then
+                allocate(this%dTdzC_diff(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+            end if
+            call message(1,"AMD SGS model initialized")
         case default 
             call GracefulExit("Invalid choice for SGS model.",2013)
         end select
