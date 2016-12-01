@@ -20,6 +20,8 @@ subroutine get_AMD_Op(this, nuSGS, dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwd
      this%AMD_num = this%AMD_num + (this%cz**2)*(dudz*dudz*S11 + dvdz*dvdz*S22 + dwdz*dwdz*S33 + 2.d0*dudz*dvdz*S12 + 2.d0*dudz*dwdz*S13 + 2.d0*dvdz*dwdz*S23)
     
      nuSGS = this%AMD_num/this%AMD_den
+     nuSGS = -nuSGS
+     nuSGS = max(zero,nuSGS)
 
 end subroutine
 
@@ -49,5 +51,7 @@ subroutine get_AMD_Op_strat(this, nuSGS, dudx, dudy, dudz, dvdx, dvdy, dvdz, dwd
      this%AMD_num = this%AMD_num + (1.d0/(this%Theta0*this%Fr*this%Fr))*(dwdx*dTdx + dwdy*dTdy  + dwdz*this%dTdzC_diff)
 
      nuSGS = this%AMD_num/this%AMD_den
+     nuSGS = -nuSGS
+     nuSGS = max(zero,nuSGS)
 
 end subroutine
