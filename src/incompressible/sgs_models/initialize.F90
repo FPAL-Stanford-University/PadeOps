@@ -85,8 +85,6 @@
             call message(1,"MGM SGS model initialized")
         case(4)
             this%cx = cx_amd*(1.5d0*dx); this%cy = cy_amd*(1.5d0*dy); this%cz = cz_amd*dz
-            !allocate(this%AMD_Buffs(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),3))
-            allocate(this%AMD_Num(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
             allocate(this%AMD_Den(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
             if (this%isStratified) then
                 allocate(this%dTdzC_diff(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
@@ -146,6 +144,9 @@
         allocate(this%Lij(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
         allocate(this%Mij(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),6))
         if (this%useDynamicProcedure) then
+            allocate(this%uf(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+            allocate(this%vf(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+            allocate(this%wCf(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
             call message(1,"Dynamic Procedure initialized")
         end if 
 

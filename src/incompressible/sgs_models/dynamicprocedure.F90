@@ -58,7 +58,7 @@
     subroutine DynamicProcedure(this,u,v,wC,uhat,vhat, wChat, duidxjhat)
         class(sgs), intent(inout), target :: this
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3),9), intent(inout), target :: duidxjhat
-        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: u, v, wC
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v, wC
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat, wChat
 
         real(rkind), dimension(:,:,:), pointer :: L11, L12, L13, L22, L23, L33
@@ -131,12 +131,12 @@
 
 
         ! STEP 4: Compute Lij = Lij - \testF{ui}*\testF{uj}
-        call this%testFilter_oop_C2R(uhat,u)
-        call this%testFilter_oop_C2R(vhat,v)
-        call this%testFilter_oop_C2R(wChat,wC)
+        call this%testFilter_oop_C2R(uhat,this%uf)
+        call this%testFilter_oop_C2R(vhat,this%vf)
+        call this%testFilter_oop_C2R(wChat,this%wCf)
         
-        L11 = L11 - u*u ; L12 = L12 - u*v  ; L13 = L13 - u *wC
-        L22 = L22 - v*v ; L23 = L23 - v*wC ; L33 = L33 - wC*wC
+        L11 = L11 - this%uf*this%uf ; L12 = L12 - this%uf*this%vf  ; L13 = L13 - this%uf *this%wCf
+        L22 = L22 - this%vf*this%vf ; L23 = L23 - this%vf*this%wCf ; L33 = L33 - this%wCf*this%wCf
 
         ! STEP 5: Compute Numerator = Mij * Lij 
         this%Lij = this%Lij * this%Mij 

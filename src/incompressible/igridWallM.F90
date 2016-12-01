@@ -604,9 +604,6 @@ contains
                 this%isStratified )
             call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23, &
                                 this%q1, this%q2, this%q3)
-            if (this%isStratified) then
-                call this%sgsmodel%setStratificationConstants(this%Fr,this%ThetaRef)
-            end if 
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -1304,21 +1301,13 @@ contains
         end if
 
 
+        ! WARNING: the duidxjChat tensor changes state after this subroutine, so
+        ! you must not assume that the values in it are correct after this
+        ! state. Therefore, if you need to use it, use it BEFORE calling this
+        ! subroutine. 
         ! Step 6: SGS Viscous Term
         if (this%useSGS) then
             if (this%isStratified) then
-                call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
-                                                    this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
-                                                    this%uhat   , this%vhat           , this%whatC      ,&
-                                                    this%u      , this%v              , this%wC         ,&
-                                                    this%ustar  , this%Umn            , this%Vmn        ,&
-                                                    this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
-                                                    this%max_nuSGS, this%inst_horz_avg, this%dTdxC      ,&
-                                                    this%dTdyC  , this%dTdzHC)
-                
-                call this%SGSmodel%getRHS_SGS_Scalar_WallM(this%dTdxC, this%dTdyC, this%dTdzE, &
-                                                           this%T_rhs, this%wTh_surf           )
-            else
                 call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
                                                 this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
                                                 this%uhat   , this%vhat           , this%whatC      ,&
@@ -1326,6 +1315,18 @@ contains
                                                 this%ustar  , this%Umn            , this%Vmn        ,&
                                                 this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
                                                 this%max_nuSGS, this%inst_horz_avg)
+
+                call this%SGSmodel%getRHS_SGS_Scalar_WallM(this%duidxjC, this%dTdxC, this%dTdyC, this%dTdzE, &
+                                                           this%dTdzC, this%T_rhs, this%wTh_surf)
+            else
+                call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
+                                                this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
+                                                this%uhat   , this%vhat           , this%whatC      ,&
+                                                this%u      , this%v              , this%wC         ,&
+                                                this%ustar  , this%Umn            , this%Vmn        ,&
+                                                this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
+                                                this%max_nuSGS, this%inst_horz_avg, this%dTdxC      ,&
+                                                this%dTdyC  , this%dTdzHC)
             end if 
         end if 
     end subroutine
