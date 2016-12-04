@@ -41,11 +41,26 @@ module kspreprocessing
             procedure :: LES_for_KS
             procedure :: LES_to_KS
             procedure :: applyFilterForKS
+            procedure :: link_pointers
             generic :: init => initFull, initLES2KSfilter 
     end type
 
 
 contains 
+
+    subroutine link_pointers(this, uout, vout, wout) 
+        class(ksprep), intent(inout), target :: this
+        real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: uout, vout, wout 
+        
+        if (.not.this%isAllocated) then
+            call GracefulExit("You cannot call LINK_POINTERS to KSPREP before initializing it",12)
+        end if
+
+        uout => this%ufil
+        vout => this%vfil
+        wout => this%wfil
+
+    end subroutine
 
     pure subroutine DownsampleBy4_x(arrIn,arrOut)
         real(rkind), dimension(:,:,:), intent(in) :: arrIn
@@ -154,7 +169,7 @@ contains
         this%outputdir = outputdir
         ierr = this%zfil1%init(gpC%zsz(3),.false.)
         if (allocated(this%cbuffY)) deallocate(this%cbuffY)
-        call this%spectE%alloc_r2c_out(this%cbuffY)
+        call this%spectC%alloc_r2c_out(this%cbuffY)
         if (allocated(this%ffil)) deallocate(this%ffil)
 
         allocate(this%ufil(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
@@ -189,11 +204,9 @@ contains
 
     end subroutine
 
-    subroutine applyFilterForKS(this, u, v, w, step, updateProbes)
+    subroutine applyFilterForKS(this, u, v, w)
         class(ksprep), intent(inout) :: this
         real(rkind), intent(in), dimension(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)) :: u, v, w
-        logical, intent(in), optional :: updateProbes
-        integer, intent(in) :: step
 
         ! Filter u into ufil 
         call this%spectC%fft(u,this%cbuffY)
@@ -220,15 +233,6 @@ contains
         call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
         call transpose_z_to_y(this%fCtmp2,this%cbuffY,this%spectC%spectdecomp)
         call this%spectC%ifft(this%cbuffY,this%wfil)
-
-        this%step = step
-
-        if (present(updateProbes)) then
-            if (updateProbes) then
-
-            end if
-        end if
-
 
     end subroutine
 

@@ -106,7 +106,9 @@ turbInfoDir           = "/home/aditya90/Codes/PadeOps/problems/turbines/pblwt_fi
 /
 /
 &KSPREPROCESS
-PreprocessForKS       = .FALSE.        ! Do you want to generate preprocessing files for KS? 
+PreprocessForKS       = .FALSE.         ! Do you want to generate preprocessing files for KS?
+KSFilFact             = 4.d0           ! Filter factor (fraction of nyquist) 
+KSinitType            = 0              ! 0: just filter, 1: Filter + Downsample on coarser mesh
 KSoutputDir           = "SomeLocation" ! Directory where KS files are dumped.
 KSRunID               = 99             ! RunID tag for KS files
 t_dumpKSprep          = 10             ! Dumping Frequency for KS files
