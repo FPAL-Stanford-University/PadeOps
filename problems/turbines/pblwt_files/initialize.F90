@@ -252,3 +252,52 @@ subroutine set_Reference_Temperatur(inputfile, Tref)
     ! Do nothing really since this is an unstratified simulation
 
 end subroutine
+
+subroutine hook_probes(inputfile, probe_locs)
+    use kind_parameters,    only: rkind, clen
+    use exits, only: message
+    implicit none
+
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
+    
+    ! This code is specific to turbines where i am placing probes in front of
+    ! each turbine. For a more generic implementation of probes check the
+    ! initialization.F90 files for other igridWallM problems. 
+
+    integer :: num_Turbines, nprobes = 2, ActuatorDiskID, ioUnit 
+    logical :: useWindTurbines, ADM
+    real(rkind) :: xloc, yloc, zloc, diam, ct, yaw, tilt
+    real(rkind) :: upstreamdisplacement = 0.05d0 ! Place the probes this far upstream of the turbine centers
+    character(len=clen) :: turbInfoDir, fname, tempname
+
+    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
+    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir
+    
+    
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=WINDTURBINES)
+    close(ioUnit)    
+    
+   
+    nprobes = num_turbines
+    allocate(probe_locs(3,nprobes))
+    
+    do ActuatorDiskID = 1,nprobes
+        write(tempname,"(A13,I3.3,A10)") "ActuatorDisk_", ActuatorDiskID, "_input.inp"
+        fname = turbInfoDir(:len_trim(turbInfoDir))//"/"//trim(tempname)
+
+        ioUnit = 55
+        open(unit=ioUnit, file=trim(fname), form='FORMATTED')
+        read(unit=ioUnit, NML=ACTUATOR_DISK)
+        close(ioUnit)
+        
+        probe_locs(1,ActuatorDiskID) = xLoc - upstreamdisplacement; 
+        probe_locs(2,ActuatorDiskID) = yLoc; 
+        probe_locs(3,ActuatorDiskID) = zLoc;
+    end do 
+    
+    call message(1,"Total number of probes desired:", nprobes)
+
+end subroutine

@@ -163,4 +163,12 @@ module igrid_hooks
         end subroutine
     end interface
 
+    interface hook_probes
+        subroutine hook_probes(inputfile, probe_locs)
+            import :: rkind
+            character(len=*),                intent(in)    :: inputfile
+            real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
+
+        end subroutine
+    end interface
 end module 

@@ -6,7 +6,7 @@ module kspreprocessing
     use decomp_2d
     use decomp_2d_io
     use staggOpsMod, only: staggops
-    use constants, only: two, eight
+    use constants, only: two, pi, eight
 
     implicit none
 
@@ -17,25 +17,31 @@ module kspreprocessing
     type :: ksprep
         private
         real(rkind), dimension(:,:,:), allocatable :: ffil,fdump, fxDnX, fxDnY, fxDnyDnY, fxDnyDnZ, fallDnZ, ztmp
-        type(spectral), pointer :: spectE
-        type(decomp_info), pointer :: gpE, sp_gpE
+        type(spectral), pointer :: spectE, spectC
+        type(decomp_info), pointer :: gpE, gpC, sp_gpE
         type(decomp_info) :: gp_xDn, gp_xDnyDn, gp_allDn, gp_Dump0, gp_xDn8, gp_xDn8yDn8
         integer, dimension(:), allocatable :: planes2dumpC, planes2dumpF
         integer :: nxF, nyF, nzF
         character(len=clen) :: outputDir
-        integer :: RunID
+        integer :: RunID, step
         complex(rkind), dimension(:,:,:), allocatable :: cbuffY, fCtmp1, fCtmp2
         real(rkind), dimension(:,:,:), allocatable :: fdumpFinal, fdump8, fdump8x1, fdump8x2, fdump8y
-        real(rkind), dimension(:,:,:), allocatable :: ztmp8, fxDn8X, fxDn8Y, fxDn8yDn8Y, fxDn8yDn8Z
+        real(rkind), dimension(:,:,:), allocatable :: ufil, vfil, wfil, ztmp8, fxDn8X, fxDn8Y, fxDn8yDn8Y, fxDn8yDn8Z
         type(gaussian) :: zfil1, zfil2
         type(spectral) :: spectSmall
         type(staggops) :: OpsSmall
-
+        real(rkind), dimension(:,:,:), allocatable :: Gspectral
+        integer, dimension(:,:), pointer :: probes
+        logical :: isAllocated = .false. 
+    
         contains 
-            procedure :: init
+            procedure :: initFull
+            procedure :: initLES2KSfilter 
             procedure :: destroy
             procedure :: LES_for_KS
             procedure :: LES_to_KS
+            procedure :: applyFilterForKS
+            generic :: init => initFull, initLES2KSfilter 
     end type
 
 
@@ -127,8 +133,132 @@ contains
     end subroutine
 
 
+    subroutine initLES2KSfilter(this, spectC, gpC, dx, dy, outputdir, RunID, probes, FilFact)
+        class(ksprep), intent(inout) :: this
+        integer, intent(in) :: RunID
+        type(decomp_info), target, intent(in) :: gpC 
+        type(spectral), target, intent(in) :: spectC
+        character(len=*), intent(in) :: outputdir
+        real(rkind), intent(in) :: FilFact
+        real(rkind), intent(in) :: dx, dy
+        integer, dimension(:,:), intent(in), target, optional :: probes
+        integer :: ierr, i, j, k 
+        real(rkind) :: kdealiasx, kdealiasy
 
-    subroutine init(this, nx, ny, nz, spectE, gpE, outputdir, RunID, dx, dy, dz, planes2DumpC, planes2DumpF)
+        if (this%isAllocated) then
+            call GracefulExit("You cannot allocate ksprep derived type if it has already been allocated",12)
+        end if
+        this%RunID = runID
+        this%spectC => spectC
+        this%gpC => gpC
+        this%outputdir = outputdir
+        ierr = this%zfil1%init(gpC%zsz(3),.false.)
+        if (allocated(this%cbuffY)) deallocate(this%cbuffY)
+        call this%spectE%alloc_r2c_out(this%cbuffY)
+        if (allocated(this%ffil)) deallocate(this%ffil)
+
+        allocate(this%ufil(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+        allocate(this%vfil(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+        allocate(this%wfil(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+
+        allocate(this%fCtmp1(spectC%spectdecomp%zsz(1),spectC%spectdecomp%zsz(2),spectC%spectdecomp%zsz(3)))
+        allocate(this%fCtmp2(spectC%spectdecomp%zsz(1),spectC%spectdecomp%zsz(2),spectC%spectdecomp%zsz(3)))
+       
+        if (present(probes)) then
+            this%probes => probes
+        end if 
+
+        allocate(this%Gspectral(size(this%cbuffY,1),size(this%cbuffY,2),size(this%cbuffY,3)))
+
+        kdealiasx = (1.d0/FilFact)*pi/dx
+        kdealiasy = (1.d0/FilFact)*pi/dy
+        do k = 1,size(this%Gspectral,3)
+            do j = 1,size(this%Gspectral,2)
+                do i = 1,size(this%Gspectral,1)
+                    if ((abs(this%spectC%k1(i,j,k)) < kdealiasx) .and. (abs(this%spectC%k2(i,j,k))< kdealiasy)) then
+                        this%Gspectral(i,j,k) = 1.d0
+                    else
+                        this%Gspectral(i,j,k) = 0.d0
+                    end if
+                end do 
+            end do 
+        end do 
+
+
+        this%isAllocated = .true. 
+
+    end subroutine
+
+    subroutine applyFilterForKS(this, u, v, w, step, updateProbes)
+        class(ksprep), intent(inout) :: this
+        real(rkind), intent(in), dimension(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)) :: u, v, w
+        logical, intent(in), optional :: updateProbes
+        integer, intent(in) :: step
+
+        ! Filter u into ufil 
+        call this%spectC%fft(u,this%cbuffY)
+        this%cbuffY = this%cbuffY*this%Gspectral
+        call transpose_y_to_z(this%cbuffY, this%fCtmp1,this%spectC%spectdecomp)
+        call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
+        call transpose_z_to_y(this%fCtmp2,this%cbuffY,this%spectC%spectdecomp)
+        call this%spectC%ifft(this%cbuffY,this%ufil)
+
+        
+        ! Filter v into vfil 
+        call this%spectC%fft(v,this%cbuffY)
+        this%cbuffY = this%cbuffY*this%Gspectral
+        call transpose_y_to_z(this%cbuffY, this%fCtmp1,this%spectC%spectdecomp)
+        call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
+        call transpose_z_to_y(this%fCtmp2,this%cbuffY,this%spectC%spectdecomp)
+        call this%spectC%ifft(this%cbuffY,this%vfil)
+
+
+        ! Filter w into wfil 
+        call this%spectC%fft(w,this%cbuffY)
+        this%cbuffY = this%cbuffY*this%Gspectral
+        call transpose_y_to_z(this%cbuffY, this%fCtmp1,this%spectC%spectdecomp)
+        call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
+        call transpose_z_to_y(this%fCtmp2,this%cbuffY,this%spectC%spectdecomp)
+        call this%spectC%ifft(this%cbuffY,this%wfil)
+
+        this%step = step
+
+        if (present(updateProbes)) then
+            if (updateProbes) then
+
+            end if
+        end if
+
+
+    end subroutine
+
+    subroutine dumpKSfilteredFields(this)
+        use decomp_2d_io
+        class(ksprep), intent(in) :: this
+        character(len=clen) :: tempname, fname
+        character(len=4) :: label
+        
+        label = "u_ks"
+        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1,this%ufil,fname, this%gpC)
+
+        label = "v_ks"
+        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1,this%vfil,fname, this%gpC)
+
+        label = "w_ks"
+        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1,this%wfil,fname, this%gpC)
+
+
+    end subroutine
+
+
+
+    subroutine initFull(this, nx, ny, nz, spectE, gpE, outputdir, RunID, dx, dy, dz, planes2DumpC, planes2DumpF)
         class(ksprep), intent(inout) :: this
         real(rkind), intent(in) :: dx, dy, dz
         integer, intent(in) :: runID, nx, ny, nz
@@ -138,6 +268,9 @@ contains
         character(len=*), intent(in) :: outputdir
         integer :: ierr
 
+        if (this%isAllocated) then
+            call GracefulExit("You cannot allocate ksprep derived type if it has already been allocated",12)
+        end if
         this%outputdir = outputdir
         this%gpE => gpE
         this%sp_gpE => spectE%spectdecomp
@@ -189,6 +322,7 @@ contains
         allocate(this%fxDn8Y(this%gp_xDn8%ysz(1),this%gp_xDn8%ysz(2),this%gp_xDn8%ysz(3)))
         allocate(this%fxDn8yDn8Y(this%gp_xDn8yDn8%ysz(1),this%gp_xDn8yDn8%ysz(2),this%gp_xDn8yDn8%ysz(3)))
         allocate(this%fxDn8yDn8Z(this%gp_xDn8yDn8%zsz(1),this%gp_xDn8yDn8%zsz(2),this%gp_xDn8yDn8%zsz(3)))
+        this%isAllocated = .true.  
 
     end subroutine
 
@@ -438,6 +572,7 @@ contains
      
 
     end subroutine 
+
 
 
     subroutine destroy(this)
