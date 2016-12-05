@@ -6,7 +6,8 @@ module kspreprocessing
     use decomp_2d
     use decomp_2d_io
     use staggOpsMod, only: staggops
-    use constants, only: two, pi, eight
+    use constants, only: two, pi, eight 
+    use lstsqstuff, only: lstsq
 
     implicit none
 
@@ -27,13 +28,14 @@ module kspreprocessing
         complex(rkind), dimension(:,:,:), allocatable :: cbuffY, fCtmp1, fCtmp2
         real(rkind), dimension(:,:,:), allocatable :: fdumpFinal, fdump8, fdump8x1, fdump8x2, fdump8y
         real(rkind), dimension(:,:,:), allocatable :: ufil, vfil, wfil, ztmp8, fxDn8X, fxDn8Y, fxDn8yDn8Y, fxDn8yDn8Z
-        type(gaussian) :: zfil1, zfil2
+        type(lstsq ) :: zfil1, zfil2
         type(spectral) :: spectSmall
         type(staggops) :: OpsSmall
         real(rkind), dimension(:,:,:), allocatable :: Gspectral
         integer, dimension(:,:), pointer :: probes
         logical :: isAllocated = .false. 
-    
+        logical :: doZFilter = .true.  
+
         contains 
             procedure :: initFull
             procedure :: initLES2KSfilter 
@@ -148,7 +150,7 @@ contains
     end subroutine
 
 
-    subroutine initLES2KSfilter(this, spectC, gpC, dx, dy, outputdir, RunID, probes, FilFact)
+    subroutine initLES2KSfilter(this, spectC, gpC, dx, dy, outputdir, RunID, probes, FilFact, doZfilter)
         class(ksprep), intent(inout) :: this
         integer, intent(in) :: RunID
         type(decomp_info), target, intent(in) :: gpC 
@@ -159,6 +161,7 @@ contains
         integer, dimension(:,:), intent(in), target, optional :: probes
         integer :: ierr, i, j, k 
         real(rkind) :: kdealiasx, kdealiasy
+        logical, intent(in) :: doZfilter
 
         if (this%isAllocated) then
             call GracefulExit("You cannot allocate ksprep derived type if it has already been allocated",12)
@@ -167,6 +170,7 @@ contains
         this%spectC => spectC
         this%gpC => gpC
         this%outputdir = outputdir
+        this%doZfilter = doZfilter
         ierr = this%zfil1%init(gpC%zsz(3),.false.)
         if (allocated(this%cbuffY)) deallocate(this%cbuffY)
         call this%spectC%alloc_r2c_out(this%cbuffY)
@@ -211,27 +215,33 @@ contains
         ! Filter u into ufil 
         call this%spectC%fft(u,this%cbuffY)
         this%cbuffY = this%cbuffY*this%Gspectral
-        call transpose_y_to_z(this%cbuffY, this%fCtmp1,this%spectC%spectdecomp)
-        call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
-        call transpose_z_to_y(this%fCtmp2,this%cbuffY,this%spectC%spectdecomp)
+        if (this%doZfilter) then
+            call transpose_y_to_z(this%cbuffY, this%fCtmp1,this%spectC%spectdecomp)
+            call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
+            call transpose_z_to_y(this%fCtmp2,this%cbuffY,this%spectC%spectdecomp)
+        end if
         call this%spectC%ifft(this%cbuffY,this%ufil)
 
         
         ! Filter v into vfil 
         call this%spectC%fft(v,this%cbuffY)
         this%cbuffY = this%cbuffY*this%Gspectral
-        call transpose_y_to_z(this%cbuffY, this%fCtmp1,this%spectC%spectdecomp)
-        call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
-        call transpose_z_to_y(this%fCtmp2,this%cbuffY,this%spectC%spectdecomp)
+        if (this%doZfilter) then
+            call transpose_y_to_z(this%cbuffY, this%fCtmp1,this%spectC%spectdecomp)
+            call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
+            call transpose_z_to_y(this%fCtmp2,this%cbuffY,this%spectC%spectdecomp)
+        end if
         call this%spectC%ifft(this%cbuffY,this%vfil)
 
 
         ! Filter w into wfil 
         call this%spectC%fft(w,this%cbuffY)
         this%cbuffY = this%cbuffY*this%Gspectral
-        call transpose_y_to_z(this%cbuffY, this%fCtmp1,this%spectC%spectdecomp)
-        call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
-        call transpose_z_to_y(this%fCtmp2,this%cbuffY,this%spectC%spectdecomp)
+        if (this%doZfilter) then
+            call transpose_y_to_z(this%cbuffY, this%fCtmp1,this%spectC%spectdecomp)
+            call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
+            call transpose_z_to_y(this%fCtmp2,this%cbuffY,this%spectC%spectdecomp)
+        end if
         call this%spectC%ifft(this%cbuffY,this%wfil)
 
     end subroutine

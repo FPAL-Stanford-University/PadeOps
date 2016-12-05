@@ -253,7 +253,7 @@ contains
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true.  
-        logical :: assume_fplane = .true., useProbes = .false.
+        logical :: assume_fplane = .true., useProbes = .false., KSdoZfilter = .true. 
         real(rkind), dimension(:,:), allocatable :: probe_locs
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
@@ -272,7 +272,7 @@ contains
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme
-        namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact
+        namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, KSdoZfilter
         namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq            
         namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir
 
@@ -745,7 +745,7 @@ contains
         if (this%PreprocessForKS) then
             allocate(this%LES2KS)
             if (this%KSinitType == 0) then
-                call this%LES2KS%init(this%spectC, this%gpC, this%dx, this%dy, this%outputdir, this%RunID, this%probes, this%KSFilFact)
+                call this%LES2KS%init(this%spectC, this%gpC, this%dx, this%dy, this%outputdir, this%RunID, this%probes, this%KSFilFact, KSdoZfilter)
                 call this%LES2KS%link_pointers(this%uFil4KS, this%vFil4KS, this%wFil4KS)
                 if (this%useProbes) then
                     if (this%doIhaveAnyProbes) then
