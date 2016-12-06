@@ -121,7 +121,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     !u = u /( (one/kappa) * log(one/z0init))
     !v = v /( (one/kappa) * log(one/z0init))
 
-    u = one
+    u = one 
     v = zero
     wC = zero 
     
