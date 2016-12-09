@@ -168,13 +168,11 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
+    integer, parameter :: nxplanes = 4, nyplanes = 1, nzplanes = 1
 
-    allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
+    allocate(xplanes(nxplanes))
 
-    xplanes = [64]
-    yplanes = [64]
-    zplanes = [30]
+    xplanes = [46,140,237,330]
 
 end subroutine
 
@@ -265,7 +263,7 @@ subroutine hook_probes(inputfile, probe_locs)
     ! each turbine. For a more generic implementation of probes check the
     ! initialization.F90 files for other igridWallM problems. 
 
-    integer :: num_Turbines, nprobes = 2, ActuatorDiskID, ioUnit 
+    integer :: num_Turbines, nprobes = 2, ActuatorDiskID, ioUnit, ii 
     logical :: useWindTurbines, ADM
     real(rkind) :: xloc, yloc, zloc, diam, ct, yaw, tilt
     real(rkind) :: upstreamdisplacement = 0.05d0 ! Place the probes this far upstream of the turbine centers
@@ -281,10 +279,13 @@ subroutine hook_probes(inputfile, probe_locs)
     close(ioUnit)    
     
    
-    nprobes = num_turbines
+    nprobes = 4*num_turbines
     allocate(probe_locs(3,nprobes))
-    
-    do ActuatorDiskID = 1,nprobes
+    probe_locs = 0.d0   
+   
+
+    ! Set 1: Located at Hub height 
+    do ActuatorDiskID = 1,num_turbines
         write(tempname,"(A13,I3.3,A10)") "ActuatorDisk_", ActuatorDiskID, "_input.inp"
         fname = turbInfoDir(:len_trim(turbInfoDir))//"/"//trim(tempname)
 
@@ -297,7 +298,35 @@ subroutine hook_probes(inputfile, probe_locs)
         probe_locs(2,ActuatorDiskID) = yLoc; 
         probe_locs(3,ActuatorDiskID) = zLoc;
     end do 
-    
-    call message(1,"Total number of probes desired:", nprobes)
+
+    ! Set 2: Located 0.045 down from the hub 
+    ii = 1 
+    do ActuatorDiskID = num_turbines+1,2*num_turbines
+        probe_locs(1,ActuatorDiskID) = probe_locs(1,ii)
+        probe_locs(2,ActuatorDiskID) = probe_locs(2,ii)
+        probe_locs(3,ActuatorDiskID) = probe_locs(3,ii) - 0.045d0
+        ii = ii + 1
+    end do  
+        
+    ! Set 3: Located 0.045 right from the hub 
+    ii = 1 
+    do ActuatorDiskID = 2*num_turbines+1,3*num_turbines
+        probe_locs(1,ActuatorDiskID) = probe_locs(1,ii)
+        probe_locs(2,ActuatorDiskID) = probe_locs(2,ii) + 0.045d0
+        probe_locs(3,ActuatorDiskID) = probe_locs(3,ii) 
+        ii = ii + 1
+    end do  
+
+    ! Set 4: Located 0.045 up from the hub 
+    ii = 1 
+    do ActuatorDiskID = 3*num_turbines+1,4*num_turbines
+        probe_locs(1,ActuatorDiskID) = probe_locs(1,ii)
+        probe_locs(2,ActuatorDiskID) = probe_locs(2,ii) 
+        probe_locs(3,ActuatorDiskID) = probe_locs(3,ii) + 0.045d0 
+        ii = ii + 1
+    end do  
+
+ 
+    call message(0,"Total number of probes desired:", nprobes)
 
 end subroutine
