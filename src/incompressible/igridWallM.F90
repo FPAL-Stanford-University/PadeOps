@@ -753,7 +753,7 @@ contains
                     end if
                 end if
             else
-                call GracefulExit("All KSinitTypes except for 0 are temporarily supended.",12)
+                call GracefulExit("All KSinitTypes except for 0 are temporarily suspended.",12)
                 call set_KS_planes_io(this%planes2dumpC_KS, this%planes2dumpF_KS) 
                 call this%LES2KS%init(nx,ny,nz,this%spectE, this%gpE, this%KSOutputDir, KSrunID, this%dx, this%dy, &
                    &         this%dz, this%planes2dumpC_KS, this%planes2dumpF_KS)
@@ -1323,7 +1323,12 @@ contains
 
     subroutine addCoriolisTerm(this)
         class(igridWallM), intent(inout), target :: this
-        complex(rkind), dimension(:,:,:), pointer :: fT1E 
+        complex(rkind), dimension(:,:,:), pointer :: ybuffE, zbuffC, zbuffE
+
+        ybuffE => this%cbuffyE(:,:,:,1)
+        zbuffE => this%cbuffzE(:,:,:,1)
+        zbuffC => this%cbuffzC(:,:,:,1)
+
         ! u equation 
         this%u_rhs = this%u_rhs - (this%coriolis_cosine*this%what &
                             + this%coriolis_sine*(this%GyHat - this%vhat))/this%Ro
@@ -1334,12 +1339,18 @@ contains
         ! The real equation is given as:
         !this%w_rhs = this%w_rhs - this%coriolis_cosine*(this%GxHat - this%uhat)/this%Ro
         ! But we evaluate this term as:
-        fT1E => this%cbuffyE(:,:,:,1)
-        fT1E = this%coriolis_cosine*(this%uhat)
-        if (this%spectE%carryingZeroK) then
-            fT1E(1,1,:) = cmplx(zero,zero,rkind)
-        end if
-        this%w_rhs = this%w_rhs + fT1E
+        call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
+        if (useCompactFD) then
+            call this%derSE%InterpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+        else
+            call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
+            zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
+        end if 
+        zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
+        if (nrank == 0) zbuffE(1,1,:) = cmplx(zero,zero,rkind)
+        call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
+         
+        this%w_rhs = this%w_rhs + this%coriolis_cosine*ybuffE/this%Ro
         ! The residual quantity (Gx - <u>)*cos(alpha)/Ro is accomodated in
         ! pressure
 
