@@ -84,6 +84,7 @@
             this%eddyViscModel = .false.
             call message(1,"MGM SGS model initialized")
         case(4)
+            this%mconst = one  ! Model constants are absorbed in cx, cy and c
             this%cx = cx_amd*(1.5d0*dx); this%cy = cy_amd*(1.5d0*dy); this%cz = cz_amd*dz
             allocate(this%AMD_Den(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
             if (this%isStratified) then
