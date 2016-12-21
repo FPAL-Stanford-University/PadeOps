@@ -1337,7 +1337,7 @@ contains
         
         ! w equation 
         ! The real equation is given as:
-        !this%w_rhs = this%w_rhs - this%coriolis_cosine*(this%GxHat - this%uhat)/this%Ro
+        ! this%w_rhs = this%w_rhs - this%coriolis_cosine*(this%GxHat - this%uhat)/this%Ro
         ! But we evaluate this term as:
         call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
         if (useCompactFD) then
