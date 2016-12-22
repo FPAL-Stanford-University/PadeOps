@@ -1,0 +1,15 @@
+&TURBINE_TYPE
+rotor_diam = 112.0D0
+hub_diam   = 22.4D0
+hub_height = 67.2D0
+num_blades = 3
+initial_yaw = 0.0D0                ! positive x axis is 0, negative y axis is 90 degrees and so on
+initial_azimuth = 0.0D0            ! vertically upward is 0, increases clockwise
+initial_rpm = 8.0D0
+nacelle_width = 2.24D0           ! separates rotor plane from the tower
+clockwise_rotation = .TRUE.
+num_blade_points = 40
+epsFact = 1.5D0
+bladeTypeID = 0                ! properties defined in BladeType_$bladeTypeID_input.inp files
+reference_length = 224.D0
+/

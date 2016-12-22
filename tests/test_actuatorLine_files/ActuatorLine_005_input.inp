@@ -1,0 +1,6 @@
+&ACTUATOR_LINE
+xLoc = 2.356194
+yLoc = 1.570796
+zLoc = 0           ! Note :: this is not the hub-height. This is the height of the base of the turbine
+turbineTypeID = 0  ! properties defined in TurbineType_$turbineTypeID_input.inp files
+/

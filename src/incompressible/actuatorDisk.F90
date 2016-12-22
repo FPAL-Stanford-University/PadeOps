@@ -57,6 +57,7 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG)
     real(rkind), intent(in), dimension(:,:,:), target :: xG, yG, zG
     integer, intent(in) :: ActuatorDiskID
     character(len=*), intent(in) :: inputDir
+
     character(len=clen) :: tempname, fname
     integer :: ioUnit, tmpSum, totSum
     real(rkind) :: xLoc=1.d0, yLoc=1.d0, zLoc=0.1d0, diam=0.08d0, cT=0.65d0
@@ -230,7 +231,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     if (this%Am_I_Active) then
         call this%getMeanU(u,v,w)
         usp_sq = this%uface**2 !+ this%vface**2 + this%wface**2
-        force = this%normfactor * 0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
+        force = -this%normfactor * 0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
         this%source = 0.d0
         do j =1,size(this%xs)
             this%dsq = (this%xSmall - this%xs(j))**2 + (this%ySmall - this%ys(j))**2 + (this%zSmall - this%zs(j))**2 

@@ -1,0 +1,30 @@
+!---This file contains "V112-3.0" turbine data accompanying SOWFA
+!----Table for TwistAngle (in degrees)
+2
+1.4    17.5
+56.0   0.0
+
+!----Table for chord length (in meters)
+2
+1.4     4.0
+56.0    0.5
+
+!----Table for airfoilID (integers in real format): properties defined in AirfoilType_$airfoilID_CL.inp and AirfoilType_$airfoilID_CD.inp
+2
+1.4     0.0
+56.0    0.0
+
+!-----------------------------------------------------------------
+!--- This file does not use namelists, so order in which data is 
+!--- written in this file appears is important. Contains one header 
+!--- followed by three tables. Each table has the following format:
+ > ! Comments - this line is ignored
+ > num_entries
+ > raddist(1), twistAng(1)
+ > raddist(2), twistAng(2)
+ > .....
+ > .....
+ > raddist(num_entries), twistAng(num_entries)
+ > 
+!--- Tables for twistAng, chord, airfoilID in that order
+

@@ -241,7 +241,7 @@ contains
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true.
         integer :: tSystemInteractions = 100, ierr
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true.  
-        logical :: assume_fplane = .true. 
+        logical :: assume_fplane = .true., periodicbcs(3) 
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -308,7 +308,8 @@ contains
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC); allocate(this%gpE)
-        call decomp_2d_init(nx, ny, nz, prow, pcol)
+        periodicbcs(1) = .true.; periodicbcs(2) = .true.; periodicbcs(3) = .false.    ! hard coded for now
+        call decomp_2d_init(nx, ny, nz, prow, pcol, periodicbcs)
         call get_decomp_info(this%gpC)
         call decomp_info_init(nx,ny,nz+1,this%gpE)
         
@@ -778,7 +779,7 @@ contains
         if (this%AlreadyHaveRHS) then
             this%AlreadyHaveRHS = .false.
         else
-            call this%populate_rhs()
+            call this%populate_rhs(1)
         end if
         this%uhat1 = this%uhat + this%dt*this%u_rhs 
         this%vhat1 = this%vhat + this%dt*this%v_rhs 
@@ -793,7 +794,7 @@ contains
         !!! STAGE 2
         ! Second stage - u, v, w are really pointing to u1, v1, w1 (which is
         ! what we want. 
-        call this%populate_rhs()
+        call this%populate_rhs(2)
         ! reset u, v, w pointers
         call this%reset_pointers()
         this%uhat1 = (3.d0/4.d0)*this%uhat + (1.d0/4.d0)*this%uhat1 + (1.d0/4.d0)*this%dt*this%u_rhs
@@ -809,7 +810,7 @@ contains
         !!! STAGE 3 (Final Stage)
         ! Third stage - u, v, w are really pointing to u2, v2, w2 (which is what
         ! we really want. 
-        call this%populate_rhs()
+        call this%populate_rhs(3)
         ! reset u, v, w pointers
         call this%reset_pointers()
         this%uhat = (1.d0/3.d0)*this%uhat + (2.d0/3.d0)*this%uhat1 + (2.d0/3.d0)*this%dt*this%u_rhs
@@ -829,7 +830,7 @@ contains
         class(igridWallM), intent(inout) :: this
       
         ! STEP 1: Populate RHS 
-        call this%populate_rhs()
+        call this%populate_rhs(1)
 
         ! STEP 2: Compute pressure
         if (this%fastCalcPressure) then
@@ -1270,8 +1271,9 @@ contains
         end if 
     end subroutine
 
-    subroutine populate_rhs(this)
+    subroutine populate_rhs(this, RKstage)
         class(igridWallM), intent(inout) :: this
+        integer,           intent(in)    :: RKstage
 
         ! Step 1: Non Linear Term 
         if (useSkewSymm) then
@@ -1288,7 +1290,7 @@ contains
             call this%addExtraForcingTerm()
         end if 
         ! Step 3b: Wind Turbines
-        if (this%useWindTurbines) then
+        if (this%useWindTurbines .and. (RKstage==1)) then
             call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
                                     this%u_rhs, this%v_rhs, this%w_rhs, this%inst_horz_avg_turb)
         end if 
@@ -1517,6 +1519,9 @@ contains
            call this%dumpFullField(this%wC,'wVel')
            if (this%isStratified) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
+           !call this%dumpFullField(this%WindTurbineArr%fx,'wtfx')
+           !call this%dumpFullField(this%WindTurbineArr%fy,'wtfy')
+           !call this%dumpFullField(this%WindTurbineArr%fz,'wtfz')
         end if
 
 
@@ -1548,7 +1553,7 @@ contains
         if (this%AlreadyHaveRHS) then
             this%AlreadyHaveRHS = .false.
         else
-            call this%populate_rhs()
+            call this%populate_rhs(1)
         end if 
 
         ! Step 2: Time Advance
@@ -2034,6 +2039,7 @@ contains
            this%pu_mean3D => this%stats3D(:,:,:,nstv+2)
            this%pv_mean3D => this%stats3D(:,:,:,nstv+3)
            this%pw_mean3D => this%stats3D(:,:,:,nstv+4)
+           nstv = nstv + 4
         endif
 
         ! horizontal averages
@@ -2073,6 +2079,7 @@ contains
            this%pu_mean => this%horzavgstats(:,nhzv+2)
            this%pv_mean => this%horzavgstats(:,nhzv+3)
            this%pw_mean => this%horzavgstats(:,nhzv+4)
+           nhzv = nhzv + 4
         endif
 
         this%tidSUM = 0
@@ -2088,8 +2095,10 @@ contains
         endif
         this%xspectra_mean = zero
 
-        if(nhzv .ne. nhorzavgvars .or. nstv .ne. nstatsvar) then
+        if((nhzv .ne. nstatsvar+2) .or. (nstv .ne. nstatsvar)) then
             call message(0,"Error in init_stats3D")
+            write(*,*) 'nhzv = ', nhzv, nhorzavgvars
+            write(*,*) 'nstv = ', nstv, nstatsvar
         endif
 
         call message(0,"Done init_stats3D")

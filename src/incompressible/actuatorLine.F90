@@ -12,7 +12,7 @@ module actuatorLineMod
     implicit none
 
     private
-    public :: turbArrayALM
+    public :: actuatorLine
 
     ! default initializations
     integer :: num_turbines = 1, num_blades = 3, num_blade_points
@@ -23,250 +23,422 @@ module actuatorLineMod
 
     integer :: ioUnit
 
-    real(rkind) :: epsilon_sq, eps_pi_fac
+    !real(rkind) :: epsilon_sq, eps_pi_fac
     real(rkind), parameter :: degrees_to_radians = pi/180.0_rkind
+    real(rkind), parameter :: rpm_to_radianspersec = two*pi/60.0_rkind
 
-    integer, dimension(:), allocatable :: ist, iend, jst, jend, kst, kend, kstE, kendE  ! start and end indices for cube of cells that can be potentially affected by each turbine
-    real(rkind), dimension(:,:,:,:), allocatable :: dist_sq, distE_sq, x_cloud, y_cloud, zC_cloud, zE_cloud
+    type :: actuatorLine
+        real(rkind) :: xLoc, yLoc, zLoc, tip_radius, hub_radius, hub_height
+        integer     :: num_blades
+        real(rkind) :: yaw_angle, blade_azimuth, rotspeed, nacelle_width
+        logical     :: clockwise_rotation
+        integer     :: num_blade_points  ! number of actuator points on each blade
 
-    type :: turbArrayALM
-        integer :: myProc
-        integer, dimension(:), allocatable  :: xst, xen, yst, yen
-        integer :: nTurbines
-        type(decomp_info), pointer :: gpC, sp_gpC, gpE, sp_gpE
-        type(spectral), pointer :: spectC, spectE
-        integer :: myLeftNeigh, myRightNeigh, myTopNeigh, myBotNeigh
- 
-        integer, dimension(:),   allocatable :: num_cells_cloud                                     ! total number of cells in the cubic cloud around a turbine on this processor
-        integer, dimension(:),   allocatable :: num_blades  ! number of blades
-        integer, dimension(:), allocatable :: num_blade_points  ! number of actuator points on each blade
-        real(rkind), dimension(:), allocatable :: yaw_angle, blade_azimuth, nacelle_width, hub_radius, tip_radius, turb_thrust, turb_torque, rotspeed
-        real(rkind), dimension(:,:), allocatable :: rotor_center, turbLoc, rotor_shaft
-        real(rkind), dimension(:,:,:,:), allocatable :: blade_points  ! number of actuator points on each blade
-        real(rkind), dimension(:,:,:,:), allocatable :: blade_forces  ! forces at actuator points
-        logical, dimension(:), allocatable :: clockwise_rotation
+        integer     :: nxLoc, nyLoc, nzLoc
+        integer     :: ist, iend, jst, jend, kst, kend, xlen, ylen, zlen
+        real(rkind) :: delta, OneByDelSq, turb_thrust, turb_torque, normfactor, invdxdy, invdz, distr_thrust
+        real(rkind) :: uturbavg
+        real(rkind) :: xRightPad, yRightPad, zLeftPad, zRightPad
+        real(rkind), dimension(3) :: turbLoc, rotor_shaft, rotor_center
+        real(rkind), dimension(:,:,:),   allocatable :: blade_points  ! number of actuator points on each blade
+        real(rkind), dimension(:,:,:),   allocatable :: blade_forces  ! forces at actuator points
+        real(rkind), dimension(:,:,:),   allocatable :: blade_forcesloc  ! needed if actuator points are split across processors
+        real(rkind), dimension(:,:),     allocatable :: radial_dist, chord, twistAng  ! data at actuator points
+        integer,     dimension(:,:),     allocatable :: airfoilID, airfoilIDIndex     ! data at actuator points
+        real(rkind), dimension(:,:,:),   allocatable :: clTable, cdTable          ! CL and CD tables for each airfoil used
+        integer,     dimension(:),       allocatable :: clTableSize, cdTableSize  ! Sizes of the CL and CD tables. All airfoils need not have same-sized tables
+        real(rkind), dimension(:,:,:),   allocatable :: dsq, xSmall, ySmall, zSmall
+        real(rkind), dimension(:,:,:,:), allocatable :: source
+        real(rkind), dimension(:,:,:),   allocatable :: blade_statsloc, blade_stats  ! needed if actuator points are split across processors
 
-        real(rkind), dimension(:,:,:), pointer :: fx, fy, fz
-        real(rkind), dimension(:,:,:,:), allocatable :: rbuffC, rbuffE
-        complex(rkind), dimension(:,:,:,:), allocatable :: cbuffC, cbuffE
+        ! MPI communicator stuff
+        logical :: Am_I_Active, Am_I_Split
+        integer :: tag_proc, myComm, myComm_nproc, myComm_nrank
 
     contains
 
         procedure :: init
         procedure :: destroy
-        procedure :: getForceRHS 
+        procedure :: get_RHS 
+        procedure, private :: get_extents
         procedure, private :: distribute_forces
         procedure, private :: get_blade_forces 
         procedure, private :: rotate_one_blade 
         procedure, private :: yaw_turbine
-        procedure, private :: get_extents
-        procedure, private :: interp_airfoil_props
         procedure, private :: interp_velocity
         procedure, private :: interp_clcd
         procedure, private :: get_rotation_speed
-        procedure, private :: update_turbines
+        procedure, private :: update_turbine
 
     end type
 
 contains
 
-subroutine init(this, inputFile, gpC, gpE, spectC, spectE, mesh, dx, dy, dz)
-    class(turbArrayALM), intent(inout), target :: this
-    character(len=*), intent(in) :: inputFile
-    type(spectral), target :: spectC, spectE
-    type(decomp_info), target :: gpC, gpE
-    real(rkind), dimension(:,:,:,:), intent(in) :: mesh
-    real(rkind), intent(in) :: dx, dy, dz
+subroutine init(this, inputDir, ActuatorLineID, xG, yG, zG, xyzPads)
+    use mpi
+    class(actuatorLine), intent(inout) :: this
+    character(len=*), intent(in)                           :: inputDir
+    integer,          intent(in)                           :: ActuatorLineID
+    real(rkind),      intent(in), dimension(:,:,:), target :: xG, yG, zG
+    real(rkind),      intent(in), dimension(6)             :: xyzPads
 
-    integer :: i, j, k
-    real(rkind) :: element_length, radial_dist, projection_radius
+    character(len=clen) :: tempname, fname
+    integer :: j, k, ierr,  max_size_cltable, max_size_cdtable
+    integer :: num_table_entries, turbineTypeID, num_airfoil_types
+    integer :: num_blades, num_blade_points, bladeTypeID, size_table
+    real(rkind) :: element_length, projection_radius, cloud_radius
     real(rkind) :: xmin, xmax, ymin, ymax, zmin, zmax 
-    integer :: mini, minj, mink, maxi, maxj, maxk
-    integer :: max_num_blades = 0, max_num_blade_points = 0
+    real(rkind) :: dx, dy, dz, xLoc, yLoc, zLoc, rotor_diam, hub_diam, hub_height, initial_yaw, reference_length, reference_velocity
+    real(rkind) :: initial_azimuth, initial_rpm, nacelle_width, epsFact
+    logical     :: isEntryUnique, clockwise_rotation
 
-    namelist /TURBDATA/ num_turbines, num_blades, num_blade_points, initial_yaw, initial_azimuth, &
-                        initial_rpm, turb_xloc, turb_yloc, turb_zloc, tip_radius, hub_radius,     &
-                        nacelle_width, epsfactor
+    real(rkind), allocatable, dimension(:,:) :: twistAngTable, chordTable, airfoilIDTable, airfoilIDIndexTable
+    integer,     allocatable, dimension(:)   :: airfoilIDs
 
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=TURBDATA)
+    namelist /ACTUATOR_LINE/ xLoc, yLoc, zLoc, turbineTypeID
+    namelist /TURBINE_TYPE/ rotor_diam, hub_diam, hub_height, num_blades, initial_yaw, initial_azimuth, &
+                        initial_rpm, nacelle_width, clockwise_rotation, num_blade_points, epsFact, bladeTypeID, &
+                        reference_length, reference_velocity
+
+    ! Read input file for this turbine    
+    write(tempname,"(A13,I3.3,A10)") "ActuatorLine_", ActuatorLineID, "_input.inp"
+    fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
+
+    ioUnit = 55
+    open(unit=ioUnit, file=trim(fname), form='FORMATTED')
+    read(unit=ioUnit, NML=ACTUATOR_LINE)
     close(ioUnit)
 
-    this%gpC => gpC
-    this%spectC => spectC
-    this%sp_gpC => this%spectC%spectdecomp
+    ! Read information about this turbine type
+    write(tempname,"(A12,I3.3,A10)") "TurbineType_", turbineTypeID, "_input.inp"
+    fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
 
-    this%gpE => gpE
-    this%spectE => spectE
-    this%sp_gpE => this%spectE%spectdecomp
+    ioUnit = 55
+    open(unit=ioUnit, file=trim(fname), form='FORMATTED')
+    read(unit=ioUnit, NML=TURBINE_TYPE)
+    close(ioUnit)
 
-    !call GracefulExit("Wind Turbine stuff is incomplete", 423)
+    ! Read information about blade type used in this turbine - identical blades per turbine for now
+    ! This file does not use namelists, so order in which data is written in this file appears is important
+    write(tempname,"(A10,I3.3,A10)") "BladeType_", bladeTypeID, "_input.inp"
+    fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
 
-    allocate(this%cbuffC(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3), 1))
-    allocate(this%cbuffE(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3), 1))
+    ioUnit = 55
+    open(unit=ioUnit, file=trim(fname), form='FORMATTED')
+      ! first table for twist angle
+      read(ioUnit, *); read(ioUnit, *) 
+      read(ioUnit, *) num_table_entries
+      allocate(twistAngTable(num_table_entries,2))
+      do k = 1, num_table_entries
+        read(ioUnit, *) twistAngTable(k,:)
+      enddo
+      ! normalize radial distance by reference length
+      twistAngTable(:,1) = twistAngTable(:,1)/reference_length
+      ! convert twist angle from degrees to radians
+      twistAngTable(:,2) = twistAngTable(:,2) * degrees_to_radians
 
-    allocate(this%rbuffC(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3), 2))
-    allocate(this%rbuffE(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3), 1))
+      ! second table for chord
+      read(ioUnit, *); read(ioUnit, *)
+      read(ioUnit, *) num_table_entries
+      allocate(chordTable(num_table_entries,2))
+      do k = 1, num_table_entries
+        read(ioUnit, *) chordTable(k,:)
+      enddo
+      ! normalize radial distance and chord length by reference length
+      chordTable = chordTable/reference_length
 
-    this%fx => this%rbuffC(:,:,:,1); this%fy => this%rbuffC(:,:,:,2); this%fz => this%rbuffE(:,:,:,1)
+      ! third table for airfoilIDs
+      read(ioUnit, *); read(ioUnit, *)
+      read(ioUnit, *) num_table_entries
+      allocate(airfoilIDTable(num_table_entries,2))
+      do k = 1, num_table_entries
+        read(ioUnit, *) airfoilIDTable(k,:)
+      enddo
+      ! normalize radial distance by reference length
+      airfoilIDTable(:,1) = airfoilIDTable(:,1)/reference_length
+    close(ioUnit)
 
-    ! set number of turbines
-    this%nTurbines = num_turbines;
+    ! read in airfoil data
+    ! first identify the number of airfoils used in this blade and the size of
+    ! corresponding CL and CD table
+    num_table_entries = size(airfoilIDTable,1)
+    max_size_cltable = 0; max_size_cdtable = 0
 
-    allocate(this%num_cells_cloud(this%nTurbines), this%num_blades(this%nTurbines))
-    allocate(this%tip_radius(this%nTurbines),    this%hub_radius(this%nTurbines))
-    allocate(this%yaw_angle(this%nTurbines))
-    allocate(this%blade_azimuth(this%nTurbines))
-    allocate(this%turbLoc(3, this%nTurbines),    this%nacelle_width(this%nTurbines))
-    allocate(this%rotspeed(this%nTurbines))
-    allocate(this%clockwise_rotation(this%nTurbines))
-    allocate(this%num_blade_points(this%nTurbines))
+    allocate(airfoilIDs(num_table_entries))    ! at most, all entries can be unique
+
+    ! at least one airfoiltype is always present
+    num_airfoil_types = 1
+    airfoilIDs(num_airfoil_types) = airfoilIDTable(1,2)
+
+    ! determine size of CL table
+    write(tempname,"(A12,I3.3,A7)") "AirfoilType_", airfoilIDs(num_airfoil_types), "_CL.inp"
+    fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
+    open(unit=ioUnit,file=trim(fname), form='FORMATTED')
+    read(ioUnit, *) size_table
+    close(ioUnit)
+    max_size_cltable = max(size_table, max_size_cltable)
+
+    ! determine size of CD table
+    write(tempname,"(A12,I3.3,A7)") "AirfoilType_", airfoilIDs(num_airfoil_types), "_CD.inp"
+    fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
+    open(unit=ioUnit,file=trim(fname), form='FORMATTED')
+    read(ioUnit, *) size_table
+    close(ioUnit)
+    max_size_cdtable = max(size_table, max_size_cdtable)
+
+    do k = 2, num_table_entries
+      isEntryUnique = .true.
+      do j = 1, k-1
+        if(airfoilIDTable(k,2) == airfoilIDTable(j,2)) then
+          isEntryUnique = .false.
+          exit
+        endif
+      enddo
+      if(isEntryUnique) then
+        num_airfoil_types = num_airfoil_types + 1
+        airfoilIDs(num_airfoil_types) = airfoilIDTable(k,2)
+
+        ! determine size of CL table
+        write(tempname,"(A12,I3.3,A7)") "AirfoilType_", airfoilIDs(num_airfoil_types), "_CL.inp"
+        fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
+        open(unit=ioUnit,file=trim(fname), form='FORMATTED')
+        read(ioUnit, *) size_table
+        close(ioUnit)
+        max_size_cltable = max(size_table, max_size_cltable)
+    
+        ! determine size of CD table
+        write(tempname,"(A12,I3.3,A7)") "AirfoilType_", airfoilIDs(num_airfoil_types), "_CD.inp"
+        fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
+        open(unit=ioUnit,file=trim(fname), form='FORMATTED')
+        read(ioUnit, *) size_table
+        close(ioUnit)
+        max_size_cdtable = max(size_table, max_size_cdtable)
+      endif
+    enddo
+
+    ! set airfoilIDIndexTable
+    allocate(airfoilIDIndexTable(size(airfoilIDTable,1), 2))
+    airfoilIDIndexTable = -1.0
+    do k = 1, size(airfoilIDTable,1)
+      do j = 1, num_airfoil_types
+        if(nint(airfoilIDTable(k,2)) == airfoilIDs(j)) then
+            airfoilIDIndexTable(k,1) = airfoilIDTable(k,1)
+            airfoilIDIndexTable(k,2) = j
+            exit
+        endif
+      enddo
+      if(nint(airfoilIDIndexTable(k,1))==-1) then 
+        write(*,*) 'airfoilIDTable(k,2): ', airfoilIDTable(k,2), ' not found in airfoilIDs:', airfoilIDs(:)
+      endif
+    enddo
+
+    ! allocate memory and read in table entries for each airfoil type
+    allocate(this%clTable(max_size_cltable, max_size_cltable, num_airfoil_types), this%clTableSize(num_airfoil_types))
+    allocate(this%cdTable(max_size_cdtable, max_size_cdtable, num_airfoil_types), this%cdTableSize(num_airfoil_types))
+
+    do k = 1, num_airfoil_types
+        ! read CL table
+        write(tempname,"(A12,I3.3,A7)") "AirfoilType_", airfoilIDs(num_airfoil_types), "_CL.inp"
+        fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
+        open(unit=ioUnit,file=trim(fname), form='FORMATTED')
+        read(ioUnit, *) this%clTableSize(k)
+        do j = 1, this%clTableSize(k)
+          read(ioUnit, *) this%clTable(j,1,k), this%clTable(j,2,k)
+          this%clTable(j,1,k) = this%clTable(j,1,k) * degrees_to_radians
+        enddo
+        close(ioUnit)
+       
+        !if(nrank==0) then
+        !  write(*,*) '-----ClTable:-----', k
+        !  do j = 1, this%clTableSize(k)
+        !    write(*, *) this%clTable(j,1,k), this%clTable(j,2,k)
+        !  enddo
+        !endif
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Done write CL table"); call mpi_barrier(mpi_comm_world, ierr)
+        !stop 
+
+        ! read CD table
+        write(tempname,"(A12,I3.3,A7)") "AirfoilType_", airfoilIDs(num_airfoil_types), "_CD.inp"
+        fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
+        open(unit=ioUnit,file=trim(fname), form='FORMATTED')
+        read(ioUnit, *) this%cdTableSize(k)
+        do j = 1, this%cdTableSize(k)
+          read(ioUnit, *) this%cdTable(j,1,k), this%cdTable(j,2,k)
+          this%cdTable(j,1,k) = this%cdTable(j,1,k) * degrees_to_radians
+        enddo
+        close(ioUnit)
+    enddo
+    deallocate(airfoilIDs)
+
+    this%xLoc = xLoc; this%yLoc = yLoc; this%zLoc = zLoc
+    this%tip_radius = half*rotor_diam/reference_length
+    this%hub_radius = half*hub_diam  /reference_length
+    this%hub_height = hub_height     /reference_length
+    this%num_blades = num_blades;  
+    this%yaw_angle  = initial_yaw * degrees_to_radians        ! initialize turbines with initial yaw zero (facing positive x direction)
+    this%blade_azimuth = initial_azimuth * degrees_to_radians ! initialize first blade to zero azimuth; others are equally spaced in the 360 degree space
+    this%rotspeed = initial_rpm * rpm_to_radianspersec * reference_length/reference_velocity
+    this%nacelle_width = nacelle_width / reference_length
+    this%clockwise_rotation = clockwise_rotation
+    this%num_blade_points = num_blade_points
+
+    dx=xG(2,1,1)-xG(1,1,1); dy=yG(1,2,1)-yG(1,1,1); dz=zG(1,1,2)-zG(1,1,1)
+    this%nxLoc = size(xG,1); this%nyLoc = size(xG,2); this%nzLoc = size(xG,3)
+    this%invdxdy = one/(dx*dy)
+    this%invdz = one/dz
 
     ! factor for distributing blade forces to grid points
-    epsilon_sq = (epsfactor*min(dx, dy, dz))**2 ! adjust this factor later
-    eps_pi_fac = (pi * epsilon_sq)**1.5d0
+    this%delta = epsFact * (dx*dy*dz)**(1.d0/3.d0)
+    this%OneByDelSq = 1.d0/(this%delta**2)
 
-    ! this block reads and uses all inputs. this can be moved to a hook for more i
-    ! flexibility with changing number and properties of turbines
-    do i = 1, this%nTurbines
+    allocate(this%blade_points(3, this%num_blade_points, this%num_blades))
+    allocate(this%blade_forces(3, this%num_blade_points, this%num_blades))
+    allocate(this%blade_forcesloc(3, this%num_blade_points, this%num_blades))
+    allocate(this%blade_statsloc(28, this%num_blade_points, this%num_blades))
+    allocate(this%blade_stats(28, this%num_blade_points, this%num_blades))
 
-      ! set number of blades for each turbine (identical for now)
-      this%num_blades(i) = num_blades
-      max_num_blades = max(max_num_blades, this%num_blades(i))
+    allocate(this%radial_dist(this%num_blade_points, this%num_blades))
+    allocate(this%twistAng(   this%num_blade_points, this%num_blades))
+    allocate(this%chord(      this%num_blade_points, this%num_blades))
+    allocate(this%airfoilID(  this%num_blade_points, this%num_blades))
+    allocate(this%airfoilIDIndex(this%num_blade_points, this%num_blades))
 
-      ! set tip radius
-      this%tip_radius(i) = tip_radius
+    !do i = 1, this%nTurbines
 
-      ! set hub radius
-      this%hub_radius(i) = hub_radius
+    ! turbLoc is offset from (xLoc, yLoc, zLoc) by hub_height in z
+    this%turbLoc(1) = this%xLoc
+    this%turbLoc(2) = this%yLoc
+    this%turbLoc(3) = this%zLoc + this%hub_height
 
-      ! initialize turbines with initial yaw zero (facing positive x direction)
-      this%yaw_angle(i) = initial_yaw * degrees_to_radians
+    ! rotor center is offset from turbLoc by Nacelle width in x-y plane (only in x direction initially)
+    this%rotor_center(1) = this%turbLoc(1) - this%nacelle_width
+    this%rotor_center(2) = this%turbLoc(2)
+    this%rotor_center(3) = this%turbLoc(3)
 
-      ! initialize first blade to zero azimuth; others are equally spaced in the 360 degree space
-      this%blade_azimuth(i) = initial_azimuth * degrees_to_radians
+    this%rotor_shaft = this%turbLoc - this%rotor_center
 
-      ! set turbine location
-      this%turbLoc(1,i) = turb_xloc + real(i-1,rkind)*(3.0_rkind*tip_radius) ! move turbine 1.5 diamters away
-      this%turbLoc(2,i) = turb_yloc + real(i-1,rkind)*(3.0_rkind*tip_radius) ! move turbine 1.5 diamters away
-      this%turbLoc(3,i) = turb_zloc
+    ! length of each actuator line element
+    element_length = (this%tip_radius - this%hub_radius) / this%num_blade_points
 
-      ! set nacelle width 
-      this%nacelle_width(i) = nacelle_width
+    do j = 1, this%num_blades
+      do k = 1, this%num_blade_points
+        ! set blade points beginning from the hub and going radially outward
+        this%radial_dist(k,j) = this%hub_radius + element_length * (real(k-1, rkind) + half)
 
-      ! set initial rotation speed of the turbines
-      this%rotspeed(i) = initial_rpm*two*pi/60.0_rkind     ! 8 RPM
-
-      ! set rotation direction
-      this%clockwise_rotation(i) = .TRUE.
-
-      ! set number of actuator points along each blade (identical for now)
-      this%num_blade_points(i) = num_blade_points
-      max_num_blade_points = max(max_num_blade_points, this%num_blade_points(i))
-    enddo
-
-    allocate(this%rotor_shaft(3, this%nTurbines))
-    allocate(this%rotor_center(3, this%nTurbines))
-    allocate(ist(this%nTurbines), iend(this%nTurbines),  jst(this%nTurbines),  jend(this%nTurbines))
-    allocate(kst(this%nTurbines), kend(this%nTurbines), kstE(this%nTurbines), kendE(this%nTurbines))
-    allocate(this%turb_thrust(this%nTurbines),   this%turb_torque(this%nTurbines))
-    allocate(this%blade_points(3, max_num_blade_points, max_num_blades, this%nTurbines))
-    allocate(this%blade_forces(3, max_num_blade_points, max_num_blades, this%nTurbines))
-
-    do i = 1, this%nTurbines
-
-      ! rotor center is offset from (xLoc, yLoc, zLoc) by Nacelle width
-      this%rotor_center(1,i) = this%turbLoc(1,i) - this%nacelle_width(i)
-      this%rotor_center(2,i) = this%turbLoc(2,i); this%rotor_center(3,i) = this%turbLoc(3,i)
-
-      this%rotor_shaft(:,i) = this%turbLoc(:,i) - this%rotor_center(:,i)
-
-      ! length of each actuator line element
-      element_length = (this%tip_radius(i) - this%hub_radius(i)) / this%num_blade_points(i)
-
-      do j = 1, this%num_blades(i)
-        do k = 1, this%num_blade_points(i)
-          ! set blade points beginning from the hub and going radially outward
-          radial_dist = this%hub_radius(i) + element_length * (real(k-1, rkind) + half)
-
-          ! initialize each blade with initial azimuth zero (vertically upwards)
-          this%blade_points(:,k,j,i) = this%rotor_center(:,i)
-          this%blade_points(3,k,j,i) = this%rotor_center(3,i) + radial_dist
-        enddo
-
-        ! rotate each blade to its correct azimuth
-        call this%rotate_one_blade(i, j, this%blade_azimuth(i) + real(j-1,rkind)*two*pi/real(this%num_blades(i), rkind))
+        ! initialize each blade with initial azimuth zero (vertically upwards)
+        this%blade_points(:,k,j) = this%rotor_center
+        this%blade_points(3,k,j) = this%rotor_center(3) + this%radial_dist(k,j)
       enddo
 
-      ! now rotate all blades so that yaw angle is correct
-      call this%yaw_turbine(i, this%yaw_angle(i))
+      ! rotate each blade to its correct azimuth
+      call this%rotate_one_blade(j, this%blade_azimuth + real(j-1,rkind)*two*pi/real(this%num_blades, rkind))
 
-      ! compute ist, iend, jst, jend, kst, kend based on turbine location, blade radius, projection radius and processor extents
-      projection_radius = sqrt(epsilon_sq * log(1.0D3))    ! distance where influence of actuator points reduces to 0.001 of the max value
-      radial_dist = this%tip_radius(i) + projection_radius
-
-      xmin = this%rotor_center(1,i) - radial_dist; xmax = this%rotor_center(1,i) + radial_dist
-      ymin = this%rotor_center(2,i) - radial_dist; ymax = this%rotor_center(2,i) + radial_dist
-      zmin = this%rotor_center(3,i) - radial_dist; zmax = this%rotor_center(3,i) + radial_dist
-
-      call this%get_extents(ist(i), iend(i), xmin, xmax, mesh(:,1,1,1))
-      call this%get_extents(jst(i), jend(i), ymin, ymax, mesh(1,:,1,2))
-      call this%get_extents(kst(i), kend(i), zmin, zmax, mesh(1,1,:,3))
-      call this%get_extents(kstE(i), kendE(i), zmin, zmax, mesh(1,1,:,3))     ! this needs a zE or meshE array - not correct right now
-
-      this%num_cells_cloud(i) = (iend(i)-ist(i)+1) * (jend(i)-jst(i)+1) * (kend(i)-kst(i)+1)
+      ! interpolate airfoil properties - twist angle, chord length, airfoilID - based on radial distance
+      call interp(this%radial_dist(:,j), this%twistAng(:,j),  twistAngTable )
+      call interp(this%radial_dist(:,j), this%chord(:,j),     chordTable    )
+      call interpint(this%radial_dist(:,j), this%airfoilID(:,j), airfoilIDTable)
+      call interpint(this%radial_dist(:,j), this%airfoilIDIndex(:,j), airfoilIDIndexTable)
     enddo
+    deallocate(twistAngTable, chordTable, airfoilIDTable, airfoilIDIndexTable)
 
-    ! allocate memory corresponding to cloud of points over which turbine forces will be distributed
-    ! first determine max and min extents of required buffers
-    maxi = -1; mini = size(mesh,1)+1; maxj = -1; minj = size(mesh,2)+1; maxk = -1; mink = size(mesh,3)+1
-    do i = 1, this%nTurbines
-      if(this%num_cells_cloud(i) > 0) then
-          mini = min(mini, ist(i)); maxi = max(maxi, iend(i))
-          minj = min(minj, jst(i)); maxj = max(maxj, jend(i))
-          mink = min(mink, kst(i)); maxk = max(maxk, kend(i))
-      endif
-    enddo
+    ! now rotate all blades so that yaw angle is correct
+    call this%yaw_turbine(this%yaw_angle)
+
+    ! compute ist, iend, jst, jend, kst, kend based on turbine location, blade radius, projection radius and processor extents
+    projection_radius = 1.1d0 * this%delta * sqrt(log(1.0D3))    ! distance where influence of actuator points reduces to 0.001 of the max value
+    cloud_radius = this%tip_radius + projection_radius
+ 
+    xmin = this%rotor_center(1) - cloud_radius; xmax = this%rotor_center(1) + cloud_radius
+    ymin = this%rotor_center(2) - cloud_radius; ymax = this%rotor_center(2) + cloud_radius
+    zmin = this%rotor_center(3) - cloud_radius; zmax = this%rotor_center(3) + cloud_radius
+
+    call this%get_extents(1, xmin, xmax, xG(:,1,1))
+    call this%get_extents(2, ymin, ymax, yG(1,:,1))
+    call this%get_extents(3, zmin, zmax, zG(1,1,:))
+ 
+    this%xlen = this%iend - this%ist + 1
+    this%ylen = this%jend - this%jst + 1
+    this%zlen = this%kend - this%kst + 1
+
+    if(this%xlen * this%ylen * this%zlen > 0) then
+      this%tag_proc = 1
+      this%Am_I_Active = .true.
+      !this%color = ActuatorLineID
+    else
+      this%tag_proc = 0
+      this%Am_I_Active = .false.
+      !this%color = ActuatorLineID*1000
+    endif
+    if(p_sum(this%tag_proc) > 1) then
+      this%Am_I_Split = .true.
+    else
+      this%Am_I_Split = .false.
+    endif
+
+    if (this%Am_I_Split) then
+        call MPI_COMM_SPLIT(mpi_comm_world, this%tag_proc, nrank, this%myComm, ierr)
+        call MPI_COMM_RANK( this%myComm, this%myComm_nrank, ierr )
+        call MPI_COMM_SIZE( this%myComm, this%myComm_nproc, ierr )
+    end if
 
     ! allocate buffers ranging from min index to max index in each direction
-    allocate( dist_sq(mini:maxi, minj:maxj, mink:maxk, this%nTurbines))
-    allocate(distE_sq(mini:maxi, minj:maxj, mink:maxk, this%nTurbines))
-    allocate( x_cloud(mini:maxi, minj:maxj, mink:maxk, this%nTurbines))
-    allocate( y_cloud(mini:maxi, minj:maxj, mink:maxk, this%nTurbines))
-    allocate(zC_cloud(mini:maxi, minj:maxj, mink:maxk, this%nTurbines))
-    allocate(zE_cloud(mini:maxi, minj:maxj, mink:maxk, this%nTurbines))
+    if(this%Am_I_Active) then
+      allocate( this%dsq(   1:this%xlen, 1:this%ylen, 1:this%zlen   ))
+      allocate( this%xSmall(1:this%xlen, 1:this%ylen, 1:this%zlen   ))
+      allocate( this%ySmall(1:this%xlen, 1:this%ylen, 1:this%zlen   ))
+      allocate( this%zSmall(1:this%xlen, 1:this%ylen, 1:this%zlen   ))
+      allocate( this%source(1:this%xlen, 1:this%ylen, 1:this%zlen, 3))
 
-    ! now use correct extent for each turbine
-    do i = 1, this%nTurbines
-      if(this%num_cells_cloud(i) > 0) then
-        x_cloud(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i),   i) = mesh(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i), 1)
-        y_cloud(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i),   i) = mesh(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i), 2)
-        zC_cloud(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i),   i) = mesh(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i), 3)
-        zE_cloud(ist(i):iend(i), jst(i):jend(i), kstE(i):kendE(i), i) = zero ! is there a zE array?
+      this%xSmall = xG(this%ist:this%iend, this%jst:this%jend, this%kst:this%kend)
+      this%ySmall = yG(this%ist:this%iend, this%jst:this%jend, this%kst:this%kend)
+      this%zSmall = zG(this%ist:this%iend, this%jst:this%jend, this%kst:this%kend)
+
+    endif
+
+    if(this%Am_I_Active) then
+        this%normfactor = one/(this%delta**3 * pi**1.5d0)
+        !this%normfactor = one/(real(this%xlen*this%ylen*this%zlen, rkind) * this%delta**3 * pi**1.5d0)
+    endif
+
+    ! x, y and z locations on the left and right. Used in conjunction with halo
+    ! values (if required) in interpolation of velocities
+    this%xRightPad = xyzPads(2);   this%yRightPad = xyzPads(4)
+    this%zLeftPad  = xyzPads(5);   this%zRightPad = xyzPads(6)
+
+    write(*,*) 'Done init subroutine'
+    write(*,*) nrank, this%Am_I_Active, this%Am_I_Split
+    if(this%Am_I_Active) then
+      if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
+          write(*,*) 'Writing blade_init.dat from proc. no.', this%myComm_nrank, nrank
+          open(13,file='blade_init.dat',status='replace',action='write')
+          write(13,'(a300)') 'VARIABLES="i","x","y",z","radialdist","twistAng","chord","airfoilIDIndex"'
+          do j = 1, this%num_blades
+            write(13,'(a,i4.4,a,i6)') 'ZONE T="Blade ', k, '", F=POINT, I=', this%num_blade_points
+            do k = 1, this%num_blade_points
+              write(13,'(i6,1x,6(e19.12,1x),i6)') j, this%blade_points(:,k,j), this%radial_dist(k,j), this%twistAng(k,j), this%chord(k,j), this%airfoilIDIndex(k,j)
+            enddo
+          enddo
+          close(13)
       endif
-    enddo
-
-    call message(1,"WIND TURBINE model initialized")
+    endif
 
 end subroutine
 
 
 subroutine destroy(this)
-    class(turbArrayALM), intent(inout) :: this
-    nullify(this%gpC, this%gpE, this%spectC, this%sp_gpC, this%fx, this%fy, this%fz)
-    deallocate(kst, kend, jst, jend, ist, iend, kstE, kendE, this%num_cells_cloud)
-    deallocate(this%cbuffC, this%cbuffE, this%num_cells_cloud, x_cloud, y_cloud, zC_cloud, zE_cloud)
-    deallocate(this%blade_points, this%blade_forces)
+    class(actuatorLine), intent(inout) :: this
+    if(this%Am_I_Active) deallocate(this%dsq, this%xSmall, this%ySmall, this%zSmall, this%source)
+    deallocate(this%airfoilIDIndex, this%airfoilID, this%chord, this%twistAng, this%radial_dist, this%blade_stats, this%blade_statsloc, this%blade_forcesloc, this%blade_forces, this%blade_points)
+    deallocate(this%cdTableSize, this%cdTable, this%clTableSize, this%clTable)
 end subroutine
 
-subroutine get_extents(this, ist, iend, xmin, xmax, procmesh)
-    class(turbArrayALM), intent(in) :: this
-    integer, intent(out) :: ist, iend
+subroutine get_extents(this, idir, xmin, xmax, procmesh)
+    class(actuatorLine), intent(inout) :: this
+    integer, intent(in) :: idir
     real(rkind), intent(in) :: xmin, xmax
     real(rkind), dimension(:), intent(in) :: procmesh
 
-    integer :: nloc, ind
+    integer :: nloc, ind, ist, iend
 
     nloc = size(procmesh)
 
@@ -310,11 +482,19 @@ subroutine get_extents(this, ist, iend, xmin, xmax, procmesh)
           endif
        endif
     endif
+
+    if(idir==1) then
+       this%ist = ist; this%iend = iend
+    elseif(idir==2) then
+       this%jst = ist; this%jend = iend
+    elseif(idir==3) then
+       this%kst = ist; this%kend = iend
+    endif
+
 end subroutine
 
-subroutine yaw_turbine(this, turbID, angle)
-    class(turbArrayALM), intent(inout) :: this
-    integer, intent(in) :: turbID
+subroutine yaw_turbine(this, angle)
+    class(actuatorLine), intent(inout) :: this
     real(rkind), intent(in) :: angle
 
     real(rkind) :: axis(3), cosa, sina, onemcosa, onemsina, rot_matrix(3,3)
@@ -333,38 +513,38 @@ subroutine yaw_turbine(this, turbID, angle)
     rot_matrix(3,3) = axis(3)**2*onemcosa+cosa;  rot_matrix(3,1) = axis(3)*axis(1)*onemcosa-axis(2)*sina;  rot_matrix(3,2) = axis(3)*axis(2)*onemcosa+axis(1)*sina
 
     ! first rotate rotor_center
-    this%rotor_center(:,turbID) = this%rotor_center(:,turbID) - this%turbLoc(:,turbID)
-    this%rotor_center(:,turbID) = matmul(rot_matrix, this%rotor_center(:,turbID))
-    this%rotor_center(:,turbID) = this%rotor_center(:,turbID) + this%turbLoc(:,turbID)
+    this%rotor_center = this%rotor_center - this%turbLoc
+    this%rotor_center = matmul(rot_matrix, this%rotor_center)
+    this%rotor_center = this%rotor_center + this%turbLoc
 
     ! update shaft direction
-    this%rotor_shaft(:,turbID) = this%turbLoc(:,turbID) - this%rotor_center(:,turbID)
+    this%rotor_shaft = this%turbLoc - this%rotor_center
 
     ! next rotate each blade
-    do blID = 1, this%num_blades(turbID)
-      do ptID = 1, this%num_blade_points(turbID)
+    do blID = 1, this%num_blades
+      do ptID = 1, this%num_blade_points
          ! shift origin to turbLoc
-         this%blade_points(:, ptID, blID, turbID) = this%blade_points(:, ptID, blID, turbID) - this%turbLoc(:,turbID)
+         this%blade_points(:, ptID, blID) = this%blade_points(:, ptID, blID) - this%turbLoc
 
          ! rotate point in this frame of reference
-         this%blade_points(:, ptID, blID, turbID) = matmul(rot_matrix, this%blade_points(:, ptID, blID, turbID))
+         this%blade_points(:, ptID, blID) = matmul(rot_matrix, this%blade_points(:, ptID, blID))
 
          ! revert to origin
-         this%blade_points(:, ptID, blID, turbID) = this%blade_points(:, ptID, blID, turbID) + this%turbLoc(:,turbID)
+         this%blade_points(:, ptID, blID) = this%blade_points(:, ptID, blID) + this%turbLoc
       enddo
     enddo
 end subroutine
 
-subroutine rotate_one_blade(this, turbID, blID, angle)
-    class(turbArrayALM), intent(inout) :: this
-    integer, intent(in) :: turbID, blID
+subroutine rotate_one_blade(this, blID, angle)
+    class(actuatorLine), intent(inout) :: this
+    integer, intent(in) :: blID
     real(rkind), intent(in) :: angle
 
     real(rkind) :: axis(3), cosa, sina, onemcosa, onemsina, rot_matrix(3,3)
     integer :: ptID
 
     ! set unit vector in the direction of axis of rotation
-    axis(:) = this%rotor_shaft(:,turbID)
+    axis(:) = this%rotor_shaft(:)
     axis = axis/sqrt(sum(axis**2))
 
     ! cos and sin of angle 
@@ -376,120 +556,452 @@ subroutine rotate_one_blade(this, turbID, blID, angle)
     rot_matrix(2,2) = axis(2)**2*onemcosa+cosa;  rot_matrix(2,3) = axis(2)*axis(3)*onemcosa-axis(1)*sina;  rot_matrix(2,1) = axis(2)*axis(1)*onemcosa+axis(3)*sina
     rot_matrix(3,3) = axis(3)**2*onemcosa+cosa;  rot_matrix(3,1) = axis(3)*axis(1)*onemcosa-axis(2)*sina;  rot_matrix(3,2) = axis(3)*axis(2)*onemcosa+axis(1)*sina
 
-    do ptID = 1, this%num_blade_points(turbID)
+    do ptID = 1, this%num_blade_points
        ! shift origin to rotor_center
-       this%blade_points(:, ptID, blID, turbID) = this%blade_points(:, ptID, blID, turbID) - this%rotor_center(:,turbID)
+       this%blade_points(:, ptID, blID) = this%blade_points(:, ptID, blID) - this%rotor_center(:)
 
        ! rotate point in this frame of reference
-       this%blade_points(:, ptID, blID, turbID) = matmul(rot_matrix, this%blade_points(:, ptID, blID, turbID))
+       this%blade_points(:, ptID, blID) = matmul(rot_matrix, this%blade_points(:, ptID, blID))
 
        ! revert to origin
-       this%blade_points(:, ptID, blID, turbID) = this%blade_points(:, ptID, blID, turbID) + this%rotor_center(:,turbID)
+       this%blade_points(:, ptID, blID) = this%blade_points(:, ptID, blID) + this%rotor_center(:)
     enddo
 end subroutine
 
-subroutine distribute_forces(this)
-    class(turbArrayALM), intent(inout) :: this
+subroutine distribute_forces(this, rhsx, rhsy, rhsz)
+    class(actuatorLine), intent(inout) :: this
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsx, rhsy, rhsz
 
-    integer :: i, j, k
+    integer :: j, k
+    real(rkind) :: tmp_dsqsum, dsqsum, mindsqsum, maxdsqsum, tmp_distr_thrust
 
-    this%fx = zero; this%fy = zero; this%fz = zero
+    mindsqsum = 1.0D30; maxdsqsum = -1.0D30
+    if(this%Am_I_Active) then
+      this%source = zero
+      ! for each blade
+      do j = 1, this%num_blades
+        do k = 1, this%num_blade_points
+          ! fx and fy first (C points)
+          this%dsq = (this%xSmall-this%blade_points(1,k,j))**2 + (this%ySmall-this%blade_points(2,k,j))**2 + (this%zSmall-this%blade_points(3,k,j))**2
+          this%dsq = this%normfactor * exp(-this%dsq*this%OneByDelSq)
+          this%source(:,:,:,1) = this%source(:,:,:,1) + this%blade_forces(1, k, j)*this%dsq
+          this%source(:,:,:,2) = this%source(:,:,:,2) + this%blade_forces(2, k, j)*this%dsq
+          this%source(:,:,:,3) = this%source(:,:,:,3) + this%blade_forces(3, k, j)*this%dsq
 
-    ! for each turbine
-    do i = 1, this%nTurbines
-      if(this%num_cells_cloud(i) > 0) then
-        ! for each blade
-        do j = 1, this%num_blades(i)
-          do k = 1, this%num_blade_points(i)
-            ! fx and fy first (C points)
-            dist_sq(:,:,:,i) = (x_cloud(:,:,:,i)  - this%blade_points(1,k,j,i))**2 &
-                             + (y_cloud(:,:,:,i)  - this%blade_points(2,k,j,i))**2 &
-                             + (zC_cloud(:,:,:,i) - this%blade_points(3,k,j,i))**2
-            this%fx(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i)) = &
-            this%fx(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i)) + this%blade_forces(1,k,j,i) * exp(-dist_sq(:,:,:,i)/epsilon_sq) / eps_pi_fac
-
-            this%fy(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i)) = &
-            this%fy(ist(i):iend(i), jst(i):jend(i), kst(i):kend(i)) + this%blade_forces(2,k,j,i) * exp(-dist_sq(:,:,:,i)/epsilon_sq) / eps_pi_fac
-
-            ! then fz (E points)
-            distE_sq(:,:,:,i) = (x_cloud(:,:,:,i)  - this%blade_points(1,k,j,i))**2 &
-                              + (y_cloud(:,:,:,i)  - this%blade_points(2,k,j,i))**2 &
-                              + (zE_cloud(:,:,:,i) - this%blade_points(3,k,j,i))**2
-            this%fz(ist(i):iend(i), jst(i):jend(i), kstE(i):kendE(i)) = &
-            this%fz(ist(i):iend(i), jst(i):jend(i), kstE(i):kendE(i)) + this%blade_forces(3,k,j,i) * exp(-distE_sq(:,:,:,i)/epsilon_sq) / eps_pi_fac
-            
-          enddo
+          !! check if dsq sums to one
+          !tmp_dsqsum = sum(this%dsq)
+          !if(this%Am_I_Split) then
+          !  dsqsum = p_sum(tmp_dsqsum, this%myComm)
+          !else
+          !  dsqsum = tmp_dsqsum
+          !endif
+          !mindsqsum = min(mindsqsum, dsqsum)
+          !maxdsqsum = max(maxdsqsum, dsqsum)
         enddo
+      enddo
+      ! compute thrust from distributed forces -- this should equal turb_thrust
+      tmp_distr_thrust = sum(this%source(:,:,:,1))*this%rotor_shaft(1) + &
+                         sum(this%source(:,:,:,2))*this%rotor_shaft(2) + &
+                         sum(this%source(:,:,:,3))*this%rotor_shaft(3)
+      if(this%Am_I_Split) then
+        this%distr_thrust = p_sum(tmp_distr_thrust, this%myComm)
+      else
+        this%distr_thrust = tmp_distr_thrust
       endif
-    enddo
+      this%distr_thrust = this%distr_thrust / (this%invdxdy*this%invdz)
+      !write(*,'(2(i3,1x),2(e19.12,1x))') nrank, this%myComm_nrank, mindsqsum, maxdsqsum
+      !tmp_dsqsum = sum(this%source(:,:,:,1))
+      !dsqsum = p_sum(tmp_dsqsum, this%myComm)
+
+      rhsx(this%ist:this%iend, this%jst:this%jend, this%kst:this%kend) = rhsx(this%ist:this%iend, this%jst:this%jend, this%kst:this%kend) + this%source(:,:,:,1)
+      rhsy(this%ist:this%iend, this%jst:this%jend, this%kst:this%kend) = rhsy(this%ist:this%iend, this%jst:this%jend, this%kst:this%kend) + this%source(:,:,:,2)
+      rhsz(this%ist:this%iend, this%jst:this%jend, this%kst:this%kend) = rhsz(this%ist:this%iend, this%jst:this%jend, this%kst:this%kend) + this%source(:,:,:,3)
+    endif
+end subroutine
+
+subroutine interp_velocity(this, ptID, blID, u, v, w, yRightHalo, zLeftHalo, zRightHalo, uloc, point_is_on_proc)
+    class(actuatorLine), intent(inout) :: this
+    integer,                                                    intent(in)  :: ptID, blID
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)  :: u, v, w
+    real(rkind), dimension(this%nxLoc, this%nzLoc,   3), intent(in)         :: yRightHalo
+    real(rkind), dimension(this%nxLoc, this%nyLoc+1, 3), intent(in)         :: zLeftHalo, zRightHalo
+    real(rkind), dimension(3),                                  intent(out) :: uloc
+    logical,                                                    intent(out) :: point_is_on_proc
+
+    real(rkind) :: dx1, dy1, dx2, dy2, x1, y1, x2, y2, z1, invdz, blin1(3), blin2(3), acPt(3)
+    real(rkind) :: f111(3), f121(3), f211(3), f221(3), f112(3), f122(3), f212(3), f222(3)
+    integer     :: ind, jnd, knd, i, j, k
+    logical     :: x_halo_reqd, y_halo_reqd, z_halo_reqd
+
+
+    acPt = this%blade_points(:,ptID, blID)
+
+    point_is_on_proc = .true.
+
+    ! find x location of actuator point
+    ind = -1; x_halo_reqd = .false.
+    ! Check if point is between xSmall(xlen,1,1) and xRightPad
+    if(acPt(1) >= this%xSmall(this%xlen,1,1) .and. acPt(1) <= this%xRightPad) then
+        ind = this%xlen
+        x_halo_reqd = .true.
+    endif
+    if(ind==-1) then
+        do i=1, this%xlen-1
+          if(acPt(1) >= this%xSmall(i,1,1) .and. acPt(1) <= this%xSmall(i+1,1,1)) then
+              ind = i
+              exit
+          endif
+        enddo
+    endif
+
+    ! find y location of actuator point
+    jnd = -1; y_halo_reqd = .false.
+    ! Check if point is between ySmall(1,ylen,1) and yRightPad
+    if(acPt(2) >= this%ySmall(1,this%ylen,1) .and. acPt(2) <= this%yRightPad) then
+        jnd = this%ylen
+        y_halo_reqd = .true.
+    endif
+    if(jnd==-1) then
+        do j=1, this%ylen-1
+          if(acPt(2) >= this%ySmall(1,j,1) .and. acPt(2) <= this%ySmall(1,j+1,1)) then
+              jnd = j
+              exit
+          endif
+        enddo
+    endif
+
+    ! find z location of actuator point
+    knd = -1; z_halo_reqd = .false.
+    ! Check if point is between zLeftPad and zSmall(1,1,1)
+    if(acPt(3) <= this%zSmall(1,1,1) .and. acPt(3) >= this%zLeftPad) then
+        knd = 0
+        z_halo_reqd = .true.
+    endif
+    ! Check if point is between zSmall(1,1,zlen) and zRightPad
+    if(acPt(3) >= this%zSmall(1,1,this%zlen) .and. acPt(3) <= this%zRightPad) then
+        knd = this%zlen
+        z_halo_reqd = .true.
+    endif
+    if(knd==-1) then
+        do k=1, this%zlen-1
+          if(acPt(3) >= this%zSmall(1,1,k) .and. acPt(3) <= this%zSmall(1,1,k+1)) then
+              knd = k
+              exit
+          endif
+        enddo
+    endif
+
+    if(ind==-1 .or. jnd==-1 .or. knd==-1) then
+       point_is_on_proc = .false.
+       uloc = zero
+       return
+    endif
+
+    if(x_halo_reqd) then
+      if(y_halo_reqd) then
+        if(z_halo_reqd) then
+          ! T T T
+          ! -- we are in x-decomp, so x-halo does not require communication
+          x1 = this%xSmall(ind,1,1); y1 = this%ySmall(1,jnd,1);
+          x2 = this%xRightPad;       y2 = this%yRightPad
+
+          if(knd==0) then
+              z1 = this%zLeftPad
+              invdz = -this%invdz
+
+              f111(1) = u(ind, jnd, knd+1);   f111(2) = v(ind, jnd, knd+1);   f111(3) = w(ind, jnd, knd+1)
+              f211(1) = u(1,   jnd, knd+1);   f211(2) = v(1,   jnd, knd+1);   f211(3) = w(1,   jnd, knd+1)
+              f221(1:3) = yRightHalo(1,   knd+1, 1:3)
+              f121(1:3) = yRightHalo(ind, knd+1, 1:3)
+
+              f112(1:3) = zLeftHalo(ind, jnd,   1:3)
+              f212(1:3) = zLeftHalo(1,   jnd,   1:3)
+              f222(1:3) = zLeftHalo(1,   jnd+1, 1:3)
+              f122(1:3) = zLeftHalo(ind, jnd+1, 1:3)
+          else ! knd == this%zlen
+              z1 = this%zSmall(1,1,knd)
+              invdz = this%invdz
+
+              f111(1) = u(ind, jnd, knd);   f111(2) = v(ind, jnd, knd);   f111(3) = w(ind, jnd, knd)
+              f211(1) = u(1,   jnd, knd);   f211(2) = v(1,   jnd, knd);   f211(3) = w(1,   jnd, knd)
+              f221(1:3) = yRightHalo(1,   knd, 1:3)
+              f121(1:3) = yRightHalo(ind, knd, 1:3)
+
+              f112(1:3) = zRightHalo(ind, jnd,   1:3)
+              f212(1:3) = zRightHalo(1,   jnd,   1:3)
+              f222(1:3) = zRightHalo(1,   jnd+1, 1:3)
+              f122(1:3) = zRightHalo(ind, jnd+1, 1:3)
+          endif
+        else
+          ! T T F
+          ! -- we are in x-decomp, so x-halo does not require communication
+          x1 = this%xSmall(ind,1,1); y1 = this%ySmall(1,jnd,1); z1 = this%zSmall(1,1,knd)
+          x2 = this%xRightPad;       y2 = this%yRightPad
+          invdz = this%invdz
+ 
+          f111(1) = u(ind, jnd, knd  ); f111(2) = v(ind, jnd, knd  ); f111(3) = w(ind, jnd, knd  )
+          f112(1) = u(ind, jnd, knd+1); f112(2) = v(ind, jnd, knd+1); f112(3) = w(ind, jnd, knd+1)
+
+          f211(1) = u(1, jnd, knd  );   f211(2) = v(1, jnd, knd  );   f211(3) = w(1, jnd, knd  )
+          f212(1) = u(1, jnd, knd+1);   f212(2) = v(1, jnd, knd+1);   f212(3) = w(1, jnd, knd+1)
+
+          f221(1:3) = yRighthalo(1, knd,   1:3)
+          f222(1:3) = yRighthalo(1, knd+1, 1:3)
+
+          f121(1:3) = yRighthalo(ind, knd,   1:3)
+          f122(1:3) = yRighthalo(ind, knd+1, 1:3)
+        endif
+      else
+        if(z_halo_reqd) then
+          ! T F T
+          ! -- we are in x-decomp, so x-halo does not require communication
+          x1 = this%xSmall(ind,1,1); y1 = this%ySmall(1,jnd,1);
+          x2 = this%xRightPad;       y2 = this%ySmall(1,jnd+1,1)
+
+          if(knd==0) then
+              z1 = this%zLeftPad
+              invdz = -this%invdz
+
+              f111(1) = u(ind, jnd,   knd+1);   f111(2) = v(ind, jnd,   knd+1);   f111(3) = w(ind, jnd,   knd+1)
+              f211(1) = u(1,   jnd,   knd+1);   f211(2) = v(1,   jnd,   knd+1);   f211(3) = w(1,   jnd,   knd+1)
+              f221(1) = u(1,   jnd+1, knd+1);   f221(2) = v(1,   jnd+1, knd+1);   f221(3) = w(1,   jnd+1, knd+1)
+              f121(1) = u(ind, jnd+1, knd+1);   f121(2) = v(ind, jnd+1, knd+1);   f121(3) = w(ind, jnd+1, knd+1)
+
+              f112(1:3) = zLeftHalo(ind, jnd,   1:3)
+              f212(1:3) = zLeftHalo(1,   jnd,   1:3)
+              f222(1:3) = zLeftHalo(1,   jnd+1, 1:3)
+              f122(1:3) = zLeftHalo(ind, jnd+1, 1:3)
+          else ! knd == this%zlen
+              z1 = this%zSmall(1,1,knd)
+              invdz = this%invdz
+
+              f111(1) = u(ind, jnd,   knd);   f111(2) = v(ind, jnd,   knd);   f111(3) = w(ind, jnd,   knd)
+              f211(1) = u(1,   jnd,   knd);   f211(2) = v(1,   jnd,   knd);   f211(3) = w(1,   jnd,   knd)
+              f221(1) = u(1,   jnd+1, knd);   f221(2) = v(1,   jnd+1, knd);   f221(3) = w(1,   jnd+1, knd)
+              f121(1) = u(ind, jnd+1, knd);   f121(2) = v(ind, jnd+1, knd);   f121(3) = w(ind, jnd+1, knd)
+
+              f112(1:3) = zRightHalo(ind, jnd,   1:3)
+              f212(1:3) = zRightHalo(1,   jnd,   1:3)
+              f222(1:3) = zRightHalo(1,   jnd+1, 1:3)
+              f122(1:3) = zRightHalo(ind, jnd+1, 1:3)
+          endif
+        else
+          ! T F F
+          ! -- we are in x-decomp, so x-halo does not require communication
+          x1 = this%xSmall(ind,1,1); y1 = this%ySmall(1,jnd,  1); z1 = this%zSmall(1,1,knd)
+          x2 = this%xRightPad;       y2 = this%ySmall(1,jnd+1,1)
+          invdz = this%invdz
+ 
+          f111(1) = u(ind, jnd, knd  ); f111(2) = v(ind, jnd, knd  ); f111(3) = w(ind, jnd, knd  )
+          f112(1) = u(ind, jnd, knd+1); f112(2) = v(ind, jnd, knd+1); f112(3) = w(ind, jnd, knd+1)
+
+          f211(1) = u(1, jnd, knd  );   f211(2) = v(1, jnd, knd  );   f211(3) = w(1, jnd, knd  )     !--periodic in x--
+          f212(1) = u(1, jnd, knd+1);   f212(2) = v(1, jnd, knd+1);   f212(3) = w(1, jnd, knd+1)
+
+          f221(1) = u(1, jnd+1, knd  );   f221(2) = v(1, jnd+1, knd  );   f221(3) = w(1, jnd+1, knd  )
+          f222(1) = u(1, jnd+1, knd+1);   f222(2) = v(1, jnd+1, knd+1);   f222(3) = w(1, jnd+1, knd+1)
+
+          f121(1) = u(ind, jnd+1, knd  );   f121(2) = v(ind, jnd+1, knd  );   f121(3) = w(ind, jnd+1, knd  )
+          f122(1) = u(ind, jnd+1, knd+1);   f122(2) = v(ind, jnd+1, knd+1);   f122(3) = w(ind, jnd+1, knd+1)
+        endif
+      endif
+    else
+      if(y_halo_reqd) then
+        if(z_halo_reqd) then
+          ! F T T
+          x1 = this%xSmall(ind,  1,1); y1 = this%ySmall(1,jnd,1)
+          x2 = this%xSmall(ind+1,1,1); y2 = this%yRightPad
+ 
+          if(knd==0) then
+              z1 = this%zLeftPad
+              invdz = -this%invdz
+
+              f111(1) = u(ind,   jnd, knd+1);   f111(2) = v(ind,   jnd, knd+1);   f111(3) = w(ind,   jnd, knd+1)
+              f211(1) = u(ind+1, jnd, knd+1);   f211(2) = v(ind+1, jnd, knd+1);   f211(3) = w(ind+1, jnd, knd+1)
+              f221(1:3) = yRightHalo(ind+1, knd+1, 1:3)
+              f121(1:3) = yRightHalo(ind,   knd+1, 1:3)
+
+              f112(1:3) = zLeftHalo(ind,   jnd,   1:3)
+              f212(1:3) = zLeftHalo(ind+1, jnd,   1:3)
+              f222(1:3) = zLeftHalo(ind+1, jnd+1, 1:3)
+              f122(1:3) = zLeftHalo(ind  , jnd+1, 1:3)
+          else ! knd == this%zlen
+              z1 = this%zSmall(1,1,knd)
+              invdz = this%invdz
+
+              f111(1) = u(ind,   jnd, knd);   f111(2) = v(ind,   jnd, knd);   f111(3) = w(ind,   jnd, knd)
+              f211(1) = u(ind+1, jnd, knd);   f211(2) = v(ind+1, jnd, knd);   f211(3) = w(ind+1, jnd, knd)
+              f221(1:3) = yRightHalo(ind+1, knd, 1:3)
+              f121(1:3) = yRightHalo(ind,   knd, 1:3)
+
+              f112(1:3) = zLeftHalo(ind,   jnd,   1:3)
+              f112(1:3) = zRightHalo(ind,   jnd,   1:3)
+              f212(1:3) = zRightHalo(ind+1, jnd,   1:3)
+              f222(1:3) = zRightHalo(ind+1, jnd+1, 1:3)
+              f122(1:3) = zRightHalo(ind  , jnd+1, 1:3)
+          endif
+        else
+          ! F T F
+          x1 = this%xSmall(ind,1,1);   y1 = this%ySmall(1,jnd,1); z1 = this%zSmall(1,1,knd)
+          x2 = this%xSmall(ind+1,1,1); y2 = this%yRightPad
+          invdz = this%invdz
+ 
+          f111(1) = u(ind, jnd, knd  ); f111(2) = v(ind, jnd, knd  ); f111(3) = w(ind, jnd, knd  )
+          f112(1) = u(ind, jnd, knd+1); f112(2) = v(ind, jnd, knd+1); f112(3) = w(ind, jnd, knd+1)
+
+          f211(1) = u(ind+1, jnd, knd  );   f111(2) = v(ind+1, jnd, knd  );   f111(3) = w(ind+1, jnd, knd  )
+          f212(1) = u(ind+1, jnd, knd+1);   f212(2) = v(ind+1, jnd, knd+1);   f212(3) = w(ind+1, jnd, knd+1)
+
+          f221(1:3) = yRightHalo(ind+1, knd,  1:3)
+          f222(1:3) = yRightHalo(ind+1, knd+1,1:3)
+
+          f121(1:3) = yRightHalo(ind, knd,  1:3)
+          f122(1:3) = yRightHalo(ind, knd+1,1:3)
+        endif
+      else
+        if(z_halo_reqd) then
+          !! F F T
+          x1 = this%xSmall(ind,  1,1); y1 = this%ySmall(1,jnd,  1)
+          x2 = this%xSmall(ind+1,1,1); y2 = this%ySmall(1,jnd+1,1)
+
+          if(knd==0) then
+              z1 = this%zLeftPad
+              invdz = -this%invdz
+
+              f111(1) = u(ind,   jnd,   knd+1);   f111(2) = v(ind,   jnd,   knd+1);   f111(3) = w(ind,   jnd,   knd+1)
+              f211(1) = u(ind+1, jnd,   knd+1);   f211(2) = v(ind+1, jnd,   knd+1);   f211(3) = w(ind+1, jnd,   knd+1)
+              f221(1) = u(ind+1, jnd+1, knd+1);   f221(2) = v(ind+1, jnd+1, knd+1);   f221(3) = w(ind+1, jnd+1, knd+1)
+              f121(1) = u(ind,   jnd+1, knd+1);   f121(2) = v(ind,   jnd+1, knd+1);   f121(3) = w(ind,   jnd+1, knd+1)
+
+              f112(1:3) = zLeftHalo(ind,   jnd,   1:3)
+              f212(1:3) = zLeftHalo(ind+1, jnd,   1:3)
+              f222(1:3) = zLeftHalo(ind+1, jnd+1, 1:3)
+              f122(1:3) = zLeftHalo(ind,   jnd+1, 1:3)
+          else ! knd == this%zlen
+              z1 = this%zSmall(1,1,knd)
+              invdz = this%invdz
+
+              f111(1) = u(ind,   jnd,   knd);   f111(2) = v(ind,   jnd,   knd);   f111(3) = w(ind,   jnd,   knd)
+              f211(1) = u(ind+1, jnd,   knd);   f211(2) = v(ind+1, jnd,   knd);   f211(3) = w(ind+1, jnd,   knd)
+              f221(1) = u(ind+1, jnd+1, knd);   f221(2) = v(ind+1, jnd+1, knd);   f221(3) = w(ind+1, jnd+1, knd)
+              f121(1) = u(ind,   jnd+1, knd);   f121(2) = v(ind,   jnd+1, knd);   f121(3) = w(ind,   jnd+1, knd)
+
+              f112(1:3) = zRightHalo(ind,   jnd,   1:3)
+              f212(1:3) = zRightHalo(ind+1, jnd,   1:3)
+              f222(1:3) = zRightHalo(ind+1, jnd+1, 1:3)
+              f122(1:3) = zRightHalo(ind,   jnd+1, 1:3)
+          endif
+        else
+          ! F F F
+          x1 = this%xSmall(ind,1,1);   y1 = this%ySmall(1,jnd,1);   z1 = this%zSmall(1,1,knd)
+          x2 = this%xSmall(ind+1,1,1); y2 = this%ySmall(1,jnd+1,1);
+          invdz = this%invdz
+ 
+          f111(1) = u(ind, jnd, knd  ); f111(2) = v(ind, jnd, knd  ); f111(3) = w(ind, jnd, knd  )
+          f112(1) = u(ind, jnd, knd+1); f112(2) = v(ind, jnd, knd+1); f112(3) = w(ind, jnd, knd+1)
+
+          f211(1) = u(ind+1, jnd, knd  );   f211(2) = v(ind+1, jnd, knd  );   f211(3) = w(ind+1, jnd, knd  )
+          f212(1) = u(ind+1, jnd, knd+1);   f212(2) = v(ind+1, jnd, knd+1);   f212(3) = w(ind+1, jnd, knd+1)
+
+          f221(1) = u(ind+1, jnd+1, knd  );   f221(2) = v(ind+1, jnd+1, knd  );   f221(3) = w(ind+1, jnd+1, knd  )
+          f222(1) = u(ind+1, jnd+1, knd+1);   f222(2) = v(ind+1, jnd+1, knd+1);   f222(3) = w(ind+1, jnd+1, knd+1)
+
+          f121(1) = u(ind, jnd+1, knd  );   f121(2) = v(ind, jnd+1, knd  );   f121(3) = w(ind, jnd+1, knd  )
+          f122(1) = u(ind, jnd+1, knd+1);   f122(2) = v(ind, jnd+1, knd+1);   f122(3) = w(ind, jnd+1, knd+1)
+        endif
+      endif
+    endif
+
+    dx1 = acPt(1) - x1; dx2 = x2 - acPt(1)
+    dy1 = acPt(2) - y1; dy2 = y2 - acPt(2)
+ 
+    ! trilinear interpolation is linear interpolation (in z) of two bilinear interpolations (in x and y)
+    blin1 = this%invdxdy * (f111*dx2*dy2 + f211*dx1*dy2 + f121*dx2*dy1 + f221*dx1*dy1)
+    blin2 = this%invdxdy * (f112*dx2*dy2 + f212*dx1*dy2 + f122*dx2*dy1 + f222*dx1*dy1)
+    uloc = blin1 + invdz * (blin2 - blin1) * (acPt(3) - z1)
+
+    point_is_on_proc = .true.
 
 end subroutine
 
-subroutine interp_airfoil_props(this, i, radial_dist, twistAng, chord, airfoilID)
-    class(turbArrayALM), intent(inout) :: this
-    integer, intent(in) :: i
-    real(rkind), intent(in) :: radial_dist
-    real(rkind), intent(out) :: twistAng, chord
-    integer, intent(out) :: airfoilID
-
-end subroutine
-
-subroutine interp_velocity(this, uloc, blPoint)
-    class(turbArrayALM), intent(inout) :: this
-    real(rkind), dimension(3), intent(out) :: uloc
-    real(rkind), dimension(3), intent(in) :: blPoint
-
-end subroutine
-
-subroutine interp_clcd(this, i, j, AOA, cl, cd)
-    class(turbArrayALM), intent(inout) :: this
-    integer, intent(in) :: i, j
+subroutine interp_clcd(this, ptID, blID, AOA, cl, cd)
+    class(actuatorLine), intent(inout), target :: this
+    integer, intent(in) :: ptID, blID
     real(rkind), intent(in) :: AOA
     real(rkind), intent(out) :: cl, cd
 
-    cl = zero; cd = zero
+    integer :: airfIDInd, nsize, j
+    real(rkind), dimension(:,:), pointer :: tablePtr
+    real(rkind) :: aoaloc(1), clloc(1), cdloc(1)
+
+    aoaloc(1) = AOA
+    airfIDInd = this%airfoilIDIndex(ptID, blID)
+
+    nsize = this%clTableSize(airfIDInd)
+    tablePtr => this%clTable(1:nsize,1:nsize,airfIDInd)
+    call interp(aoaloc, clloc, tablePtr)
+    nullify(tablePtr)
+
+    nsize = this%cdTableSize(airfIDInd)
+    tablePtr => this%cdTable(1:nsize,1:nsize,airfIDInd)
+    call interp(aoaloc, cdloc, tablePtr)
+    !if(nrank==0) then
+    !  write(*,'(a,3(e19.12,1x))') 'interpclcd: ', aoaloc(1), clloc, cdloc
+    !endif
+    nullify(tablePtr)
+
+    cl = clloc(1); cd = cdloc(1)
 
 end subroutine
-subroutine get_blade_forces(this)
-    class(turbArrayALM), intent(inout) :: this
 
-    integer :: i, j, k, airfoilID
-    real(rkind) :: element_length, radial_dist, twistAng, chord, uloc(3), lift, drag
+subroutine get_blade_forces(this, u, v, w, yRightHalo, zLeftHalo, zRightHalo)
+    use mpi
+    use kind_parameters, only: mpirkind
+    class(actuatorLine), intent(inout) :: this
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)  :: u, v, w
+    real(rkind), dimension(this%nxLoc, this%nzLoc,   3),        intent(in)  :: yRightHalo
+    real(rkind), dimension(this%nxLoc, this%nyLoc+1, 3),        intent(in)  :: zLeftHalo, zRightHalo
+
+    integer :: j, k, ierr
+    real(rkind) :: element_length, uloc(3), lift, drag
     real(rkind) :: e_rad(3), e_tan(3), e_nrm(3), urad, utan, unrm, umag, AOA, cl, cd
-    real(rkind) :: dragVec(3), liftVec(3)
+    real(rkind) :: dragVec(3), liftVec(3), tmp_thrust, tmp_torque, tmp_uturbavg
+    logical     :: point_is_on_proc
 
-    ! for each turbine
-    do i = 1, this%nTurbines
+    tmp_thrust = zero; tmp_torque = zero; tmp_uturbavg = zero
 
-      if(this%num_cells_cloud(i) > 0) then
+    if(this%Am_I_Active) then
+      ! for each blade
+      do j = 1, this%num_blades
 
-        ! for each blade
-        do j = 1, this%num_blades(i)
+        element_length = (this%tip_radius - this%hub_radius) / this%num_blade_points
 
-          element_length = (this%tip_radius(i) - this%hub_radius(i)) / this%num_blade_points(i)
+        ! for each actuator point
+        do k = 1, this%num_blade_points
 
-          ! for each actuator point
-          do k = 1, this%num_blade_points(i)
+          call this%interp_velocity(k, j, u, v, w, yRightHalo, zLeftHalo, zRightHalo, uloc, point_is_on_proc)
 
-            radial_dist = this%hub_radius(i) + element_length * (real(k-1, rkind) + half)
-            call this%interp_airfoil_props(i, radial_dist, twistAng, chord, airfoilID)
-
-            call this%interp_velocity(uloc, this%blade_points(:,k,j,i))
+          if(.not. point_is_on_proc) then
+            ! blade force at this point will be computed on a different processor
+            this%blade_forcesloc(:,k,j) = zero
+            this%blade_statsloc(:,k,j) = zero
+          else
+            ! this processor computes blade force at this point
 
             ! compute velocity in blade frame of reference
               ! first compute unit vectors
-              ! radial direction,  radially outward if cw; inward if ccw
-              e_rad = this%blade_points(:,k,j,i) - this%rotor_center(:,i)
-              if(this%clockwise_rotation(i)) e_rad = -e_rad
+              ! radial direction,  radially outward if ccw; inward if cw
+              e_rad = this%blade_points(:,k,j) - this%rotor_center
+              if(this%clockwise_rotation) e_rad = -e_rad
               e_rad = e_rad/sqrt(sum(e_rad**2))
 
               ! tangential direction, facing the wind, e_rad x rotor_shaft
-              e_tan(1) = e_rad(2)*this%rotor_shaft(3,i) - e_rad(3)*this%rotor_shaft(2,i)
-              e_tan(2) = e_rad(3)*this%rotor_shaft(1,i) - e_rad(1)*this%rotor_shaft(3,i)
-              e_tan(3) = e_rad(1)*this%rotor_shaft(2,i) - e_rad(2)*this%rotor_shaft(1,i)
+              e_tan(1) = e_rad(2)*this%rotor_shaft(3) - e_rad(3)*this%rotor_shaft(2)
+              e_tan(2) = e_rad(3)*this%rotor_shaft(1) - e_rad(1)*this%rotor_shaft(3)
+              e_tan(3) = e_rad(1)*this%rotor_shaft(2) - e_rad(2)*this%rotor_shaft(1)
               e_tan = e_tan/sqrt(sum(e_tan**2))
               
-              ! normal, in the direction of wind, 
+              ! normal, in the direction of wind, e_tan x e_rad
               e_nrm(1) = e_tan(2)*e_rad(3) - e_tan(3)*e_rad(2)
               e_nrm(2) = e_tan(3)*e_rad(1) - e_tan(1)*e_rad(3)
               e_nrm(3) = e_tan(1)*e_rad(2) - e_tan(2)*e_rad(1)
@@ -498,131 +1010,240 @@ subroutine get_blade_forces(this)
               ! now decompose local velocity in blade frame of reference
               urad = sum(uloc * e_rad);  utan = sum(uloc * e_tan);  unrm = sum(uloc * e_nrm)
 
-            ! add rotation speed to tangential component
-            utan = utan + this%rotspeed(i)*radial_dist
+            ! add rotation speed to tangential component: note e_tan is in the
+            ! direction of radial motion, hence, negative sign for computing
+            ! relative speed
+            utan = utan - this%rotspeed*this%radial_dist(k,j)
 
             umag = sqrt(utan**2 + unrm**2)
-            AOA = atan2(unrm, utan)
-            AOA = AOA - twistAng
-            call this%interp_clcd(i, j, AOA, cl, cd)
-            lift = half * cl * umag**2 * chord * element_length
-            drag = half * cd * umag**2 * chord * element_length
+            AOA = atan2(unrm, -utan)
+            !AOA = atan2(utan, unrm)
+            AOA = AOA - this%twistAng(k,j)
+            call this%interp_clcd(k, j, AOA, cl, cd)
+            lift = half * cl * umag**2 * this%chord(k,j) * element_length
+            drag = half * cd * umag**2 * this%chord(k,j) * element_length
 
             ! drag vector in Cartesian frame
-            dragVec = urad * e_nrm + utan * e_tan
+            dragVec = unrm * e_nrm + utan * e_tan
+            dragVec = dragVec/sqrt(sum(dragVec**2))
 
-            ! liftDir = dragDir x radialDir
-            liftVec(1) = dragVec(2)*e_rad(3) - dragVec(3)*e_rad(2)
-            liftVec(2) = dragVec(3)*e_rad(1) - dragVec(1)*e_rad(3)
-            liftVec(3) = dragVec(1)*e_rad(2) - dragVec(2)*e_rad(1)
+            ! liftDir = radialDir x dragDir
+            liftVec(1) = e_rad(2)*dragVec(3) - e_rad(3)*dragVec(2)
+            liftVec(2) = e_rad(3)*dragVec(1) - e_rad(1)*dragVec(3)
+            liftVec(3) = e_rad(1)*dragVec(2) - e_rad(2)*dragVec(1)
 
-            this%blade_forces(:,k,j,i) = - lift * liftVec(:) - drag * dragVec(:)
+            this%blade_forcesloc(:,k,j) = - lift * liftVec(:) - drag * dragVec(:)
 
             ! compute sum over turbine of thrust and torque
-            this%turb_thrust(i) = this%turb_thrust(i) - sum(this%blade_forces(:,k,j,i) * this%rotor_shaft(:,i))
-            this%turb_torque(i) = this%turb_torque(i) + sum(this%blade_forces(:,k,j,i) * e_tan) * radial_dist
-          enddo
+            tmp_thrust = tmp_thrust - sum(this%blade_forcesloc(:,k,j) * this%rotor_shaft)
+            tmp_torque = tmp_torque - sum(this%blade_forcesloc(:,k,j) * e_tan) * this%radial_dist(k,j)
+            tmp_uturbavg = tmp_uturbavg + umag
+
+            !if(j==1 .and. k==30) then
+            !!write(100+nrank,'(7(e19.12,1x))') AOA, atan2(unrm, utan), this%radial_dist(k,j), this%twistAng(k,j), cl, cd
+            !write(100+nrank,'(a,i4,1x,7(e19.12,1x))') 'e_rad   : ', nrank, e_rad
+            !write(100+nrank,'(a,i4,1x,7(e19.12,1x))') 'rotshaft: ', nrank, this%rotor_shaft
+            !write(100+nrank,'(a,i4,1x,7(e19.12,1x))') 'e_tan   : ', nrank, e_tan
+            !write(100+nrank,'(a,i4,1x,7(e19.12,1x))') 'e_nrm   : ', nrank, e_nrm
+
+            !write(100+nrank,'(a,i4,1x,7(e19.12,1x))') 'lift: ', nrank, lift, liftvec, lift*liftvec
+            !write(100+nrank,'(a,i4,1x,7(e19.12,1x))') 'drag: ', nrank, drag, dragvec, drag*dragvec
+            !write(100+nrank,'(3(i4,1x),4(e19.12,1x))') nrank, k, j, tmp_thrust, this%blade_forcesloc(:,k,j)
+            !write(100+nrank,*) '---------'
+            !endif
+
+            !! if blade statistics are needed
+            !this%blade_statsloc(1,k,j) = unrm;                    this%blade_statsloc(2,k,j) = utan;                  this%blade_statsloc(3,k,j) = urad
+            !this%blade_statsloc(4,k,j) = umag;                    this%blade_statsloc(5,k,j) = aoa;                   this%blade_statsloc(6,k,j) = lift
+            !this%blade_statsloc(7,k,j) = drag;                    this%blade_statsloc(8:10,k,j) = liftVec;            this%blade_statsloc(11:13,k,j) = dragVec
+            !this%blade_statsloc(14,k,j) = this%radial_dist(k,j);  this%blade_statsloc(15:17,k,j) = this%rotor_shaft;  this%blade_statsloc(18:20,k,j) = e_nrm
+            !this%blade_statsloc(21:23,k,j) = e_tan;               this%blade_statsloc(24:26,k,j) = e_rad;             this%blade_statsloc(27,k,j) = cl
+            !this%blade_statsloc(28,k,j) = cd
+          endif
         enddo
+      enddo
+
+      ! get values from actuator points that lie on other processors
+      if(this%Am_I_Split) then
+        call MPI_Allreduce(this%blade_forcesloc, this%blade_forces, 3*this%num_blade_points*this%num_blades, mpirkind, MPI_SUM, this%myComm, ierr)
+        this%turb_thrust = p_sum(tmp_thrust, this%myComm)
+        this%turb_torque = p_sum(tmp_torque, this%myComm)
+        this%uturbavg = p_sum(tmp_uturbavg, this%myComm) / real(this%num_blades*this%num_blade_points, rkind)
+        !call MPI_Allreduce(this%blade_statsloc, this%blade_stats, 28*this%num_blade_points*this%num_blades, mpirkind, MPI_SUM, this%myComm, ierr)
+      else
+        this%blade_forces = this%blade_forcesloc
+        this%turb_thrust = tmp_thrust
+        this%turb_torque = tmp_torque
+        this%uturbavg =  tmp_uturbavg / real(this%num_blades*this%num_blade_points, rkind)
+        !this%blade_stats = this%blade_statsloc
       endif
-    enddo
+      !if(this%myComm_nrank==0) then
+      !!  write(*,*) '---------'
+      !!  do j = 1, this%num_blades
+      !!   do k = 1, this%num_blade_points
+      !!     write(*,'(2(i4,1x),3(e19.12,1x))') k, j, this%blade_forces(:,k,j)
+      !!   enddo
+      !!  enddo
+      !!  write(*,*) '---------'
+      !  open(13,file='blade_stats.dat',status='replace',action='write')
+      !  write(13,'(a300)') 'VARIABLES="i","x","y",z","unrm","utan","urad","umag","aoa","lift","drag","liftvecx","liftvecy","liftvecz","dragvecx","gradvecy","dragvecz",&
+      !                         "raddist","rotshaftx","rotshafty","rotshaftz","enrmx","enrmy","enrmz","etanx","etany","etanz","eradx","erady","eradz","cl","cd","bfx","bfy","bfz"' 
+      !  do j = 1, this%num_blades
+      !    write(13,'(a,i4.4,a,i6)') 'ZONE T="Blade ', j, '", F=POINT, I=', this%num_blade_points
+      !    do k = 1, this%num_blade_points
+      !      write(13,'(i6,1x,50(e19.12,1x))') k, this%blade_points(:,k,j), this%blade_stats(:,k,j), this%blade_forces(:,k,j)
+      !    enddo
+      !  enddo
+      !  close(13)
+      !  !k = 4; j = 1; write(*,'(i6,1x,50(e19.12,1x))') j, this%blade_points(:,k,j), this%blade_stats(:,k,j), this%blade_forces(:,k,j)
+      !  !write(*,*) '---+++---'
+      !endif
+    endif
+
 end subroutine
 
 subroutine get_rotation_speed(this)
-    class(turbArrayALM), intent(inout), target :: this
+    class(actuatorLine), intent(inout), target :: this
 
-    integer :: i
+    ! implement a controller here
+    ! constant imposed rotation speed for now, so do nothing
 
-    do i = 1, this%nTurbines
-      if(this%num_cells_cloud(i) > 0) then
-        ! implement a controller here
-        ! constant imposed rotation speed for now, so do nothing
-      endif
-    enddo
+    !if(this%Am_I_Active) then
+    !endif
 
 end subroutine
 
-subroutine update_turbines(this, dt)
-    class(turbArrayALM), intent(inout), target :: this
+subroutine update_turbine(this, dt)
+    class(actuatorLine), intent(inout), target :: this
     real(rkind), intent(in) :: dt
 
-    integer :: i, j
+    integer :: j
     real(rkind) :: dAzimuth, dYaw
 
-    do i = 1, this%nTurbines
-      if(this%num_cells_cloud(i) > 0) then
+    if(this%Am_I_Active) then
+      ! rotate blades
+        ! set increment in azimuth
+        dAzimuth = this%rotspeed * dt
+        if( .NOT. this%clockwise_rotation) dAzimuth = -dAzimuth
+  
         ! rotate blades
-          ! set increment in azimuth
-          dAzimuth = this%rotspeed(i) * dt
-          if( .NOT. this%clockwise_rotation(i)) dAzimuth = -dAzimuth
+        do j = 1, this%num_blades
+            ! rotate each blade to its correct azimuth
+            call this%rotate_one_blade(j, dAzimuth)
+        enddo
   
-          ! rotate blades
-          do j = 1, this%num_blades(i)
-              ! rotate each blade to its correct azimuth
-              call this%rotate_one_blade(i, j, dAzimuth)
-          enddo
-  
-          ! update azimuth of first blade
-          this%blade_azimuth(i) = this%blade_azimuth(i) + dAzimuth
-          if(this%blade_azimuth(i) > two*pi) then
-              this%blade_azimuth(i) = this%blade_azimuth(i) - two*pi
-          elseif(this%blade_azimuth(i) < zero) then
-              this%blade_azimuth(i) = this%blade_azimuth(i) + two*pi
-          endif
+        ! update azimuth of first blade
+        this%blade_azimuth = this%blade_azimuth + dAzimuth
+        if(this%blade_azimuth > two*pi) then
+            this%blade_azimuth = this%blade_azimuth - two*pi
+        elseif(this%blade_azimuth < zero) then
+            this%blade_azimuth = this%blade_azimuth + two*pi
+        endif
 
-        ! yaw rotor
-          ! set increment in yaw
-          dYaw = zero
+      ! yaw rotor
+        ! set increment in yaw
+        dYaw = zero
 
-          ! update turbine blades, rotor_center and shaft direction
-          if(dYaw > 1.0d-10) then
-            call this%yaw_turbine(i, dYaw)
-            this%yaw_angle(i) = this%yaw_angle(i) + dYaw
-            if(this%yaw_angle(i) > two*pi) then
-                this%yaw_angle(i) = this%yaw_angle(i) - two*pi
-            elseif(this%yaw_angle(i) < zero) then
-                this%yaw_angle(i) = this%yaw_angle(i) + two*pi
-            endif
+        ! update turbine blades, rotor_center and shaft direction
+        if(dYaw > 1.0d-10) then
+          call this%yaw_turbine(dYaw)
+          this%yaw_angle = this%yaw_angle + dYaw
+          if(this%yaw_angle > two*pi) then
+              this%yaw_angle = this%yaw_angle - two*pi
+          elseif(this%yaw_angle < zero) then
+              this%yaw_angle = this%yaw_angle + two*pi
           endif
-      endif
+        endif
+    endif
+
+end subroutine
+
+subroutine get_RHS(this, dt, u, v, w, yRightHalo, zLeftHalo, zRightHalo, rhsxvals, rhsyvals, rhszvals, inst_val)
+    class(actuatorLine),                                        intent(inout) :: this
+    real(rkind),                                                intent(in)    :: dt
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
+    real(rkind), dimension(this%nxLoc, this%nzLoc,   3),        intent(in)    :: yRightHalo
+    real(rkind), dimension(this%nxLoc, this%nyLoc+1, 3),        intent(in)    :: zLeftHalo, zRightHalo
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
+    real(rkind), dimension(8),                                  intent(out), optional  :: inst_val
+
+
+    integer :: ierr
+
+    ! update turbine point locations to account for nacelle yaw and blade rotation
+    call this%update_turbine(dt)
+    !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Done update_turbine"); call mpi_barrier(mpi_comm_world, ierr)
+
+    ! compute turbine rotation speed based on a torque controller
+    call this%get_rotation_speed()
+    !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Done get_rotation_speed"); call mpi_barrier(mpi_comm_world, ierr)
+
+    ! compute forces at ALM actuator points
+    call this%get_blade_forces(u, v, w, yRightHalo, zLeftHalo, zRightHalo)
+    !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Done get_blade_forces"); call mpi_barrier(mpi_comm_world, ierr)
+
+    ! distribute forces from ALM points to Cartesian grid
+    call this%distribute_forces(rhsxvals, rhsyvals, rhszvals)
+    !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Done distribute_forces"); call mpi_barrier(mpi_comm_world, ierr)
+
+    ! some turbine-level quantities
+    inst_val(1) = abs(this%turb_thrust)
+    inst_val(2) = abs(this%distr_thrust)
+    inst_val(3) = abs(this%turb_torque)
+    inst_val(4) = abs(this%rotspeed)
+    inst_val(5) = abs(this%rotspeed*this%rotspeed)
+    inst_val(6) = abs(this%uturbavg)
+    inst_val(7) = abs(this%uturbavg**2)
+    inst_val(8) = abs(this%uturbavg**3)
+
+end subroutine 
+
+!subroutine write_turbineData(this)
+!    class(actuatorLine),                                        intent(inout) :: this
+!
+!end subroutine
+
+subroutine interpint(x, y, xyTable)
+    !class(actuatorLine), intent(inout) :: this
+    real(rkind), intent(in),  dimension(:)   :: x
+    integer,     intent(out), dimension(:)   :: y
+    real(rkind), intent(in),  dimension(:,:) :: xyTable
+
+    integer :: i, j
+
+    do i = 1, size(x)
+      do j = 1, size(xyTable,1)-1
+        if(x(i)>=xyTable(j,1) .and. x(i)<=xyTable(j+1,1)) exit
+      enddo
+      y(i) = xyTable(j,2)
     enddo
 
 end subroutine
 
-subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs)
-    class(turbArrayALM), intent(inout), target :: this
-    real(rkind),                                                                         intent(in) :: dt
-    real(rkind),    dimension(this%gpC%xsz(1),   this%gpC%xsz(2),   this%gpC%xsz(3)),    intent(in) :: u, v, wC
-    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
-    complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs 
+subroutine interp(x, y, xyTable)
+    !class(actuatorLine), intent(inout) :: this
+    real(rkind), intent(in),  dimension(:)   :: x
+    real(rkind), intent(out), dimension(:)   :: y
+    real(rkind), intent(in),  dimension(:,:) :: xyTable
 
-    complex(rkind), dimension(:,:,:), pointer :: fChat, fEhat
+    integer :: i, locator(1), imin, i1, i2
 
-    fChat => this%cbuffC(:,:,:,1); fEhat => this%cbuffE(:,:,:,1)
+    do i = 1, size(x)
+       locator = minloc(abs(xyTable(:,1) - x(i))); imin = locator(1)
+       if(xyTable(imin,1) < x(i)) then
+         i1 = imin; i2 = imin+1
+       else
+         i1 = imin-1; i2 = imin
+       endif
+       if(i2 > size(xyTable,1)) then
+         i1 = i1-1; i2 = i2-1
+       endif
+       if(i1 < 1) then
+         i1 = i1+1; i2 = i2+1
+       endif
+       y(i) = xyTable(i1,2) + (xyTable(i2,2)-xyTable(i1,2))/(xyTable(i2,1)-xyTable(i1,1))*(x(i) - xyTable(i1,1))
+    enddo
 
-    ! compute turbine rotation speed based on a torque controller
-    call this%get_rotation_speed()         
-
-    ! update turbine point locations to account for nacelle yaw and blade rotation
-    call this%update_turbines(dt)          
-
-    ! compute forces at ALM actuator points
-    call this%get_blade_forces()           
-
-    ! distribute forces from ALM points to Cartesian grid
-    call this%distribute_forces()          
-
-    ! add forces to rhs
-    call this%spectC%fft(this%fx,fChat)
-    urhs = urhs + fChat
-
-    call this%spectC%fft(this%fy,fChat)
-    vrhs = vrhs + fChat
-
-    call this%spectC%fft(this%fz,fEhat)
-    wrhs = wrhs + fEhat
-
-    nullify(fChat, fEhat)
-
-end subroutine 
+end subroutine
 
 end module

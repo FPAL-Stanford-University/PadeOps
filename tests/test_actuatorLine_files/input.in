@@ -1,0 +1,9 @@
+&DECOMP
+prow            = 4
+pcol            = 4
+&WINDTURBINES
+useWindTurbines = .TRUE.
+num_turbines    = 16
+ADM             = .FALSE.
+turbInfoDir     = "/home/nghaisas/PadeOps/tests/test_actuatorLine_files"
+/
