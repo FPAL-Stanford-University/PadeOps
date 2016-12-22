@@ -72,7 +72,7 @@ end subroutine
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use stableEkman_parameters
     use kind_parameters,    only: rkind
-    use constants,          only: zero, one,  half
+    use constants,          only: zero, one, two, half, pi
     use gridtools,          only: alloc_buffs
     use random,             only: gaussian_random
     use decomp_2d          
@@ -91,9 +91,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind) :: z0init
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
-    !real(rkind) :: delta_Ek = 0.08d0, Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
+    !real(rkind) :: Xperiods = 6.d0, Yperiods = 6.d0
     real(rkind) ::  Tsurf0 = zero, dTsurf_dt = zero
     real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero
+    real(rkind), parameter :: epsnd = 5.d0, zpeak = 0.3d0
     namelist /STABLEEKMAN/ Lx, Ly, Lz, z0init, Tsurf0, dTsurf_dt, Tref 
 
     !z0init = 1.D-4
@@ -120,9 +121,15 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     !u = u /( (one/kappa) * log(one/z0init))
     !v = v /( (one/kappa) * log(one/z0init))
 
-    u = one
+    u = one 
     v = zero
     wC = zero 
+    
+    !u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    !u = u/((one/kappa)*log(Lz/z0init))
+    !v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    !v = v/((one/kappa)*log(Lz/z0init))
+    !wC= zero  
 
     allocate(ztmp(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
@@ -187,9 +194,9 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [128]
-    yplanes = [128]
-    zplanes = [20]
+    xplanes = [32]
+    yplanes = [32]
+    zplanes = [50]
 
 end subroutine
 
@@ -245,5 +252,28 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
     allocate(planesCoarseGrid(1), planesFineGrid(1))
     planesCoarseGrid = [8]
     planesFineGrid = [16]
+
+end subroutine
+
+subroutine hook_probes(inputfile, probe_locs)
+    use kind_parameters,    only: rkind
+    real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
+    character(len=*),                intent(in)    :: inputfile
+    integer, parameter :: nprobes = 2
+    
+    ! IMPORTANT : Convention is to allocate probe_locs(3,nprobes)
+    ! Example: If you have at least 3 probes:
+    ! probe_locs(1,3) : x -location of the third probe
+    ! probe_locs(2,3) : y -location of the third probe
+    ! probe_locs(3,3) : z -location of the third probe
+
+
+    ! Add probes here if needed
+    ! Example code: The following allocates 2 probes at (0.1,0.1,0.1) and
+    ! (0.2,0.2,0.2)  
+    allocate(probe_locs(3,nprobes))
+    probe_locs(1,1) = 0.1d0; probe_locs(2,1) = 0.1d0; probe_locs(3,1) = 0.1d0;
+    probe_locs(1,2) = 0.2d0; probe_locs(2,2) = 0.2d0; probe_locs(3,2) = 0.2d0;
+
 
 end subroutine

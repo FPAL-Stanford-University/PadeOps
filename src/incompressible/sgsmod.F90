@@ -40,7 +40,7 @@ module sgsmod
         complex(rkind), allocatable, dimension(:,:,:) :: ctmpCz, ctmpEz, ctmpEy, ctmpCz2
         complex(rkind), pointer, dimension(:,:,:) :: nuSGShat
         
-        real(rkind), dimension(:,:,:), allocatable :: rtmpY, rtmpZ, rtmpZ2, rtmpZE2, rtmpYE, rtmpZE, dTdzC_diff
+        real(rkind), dimension(:,:,:), allocatable :: uf, vf, wCf, rtmpY, rtmpZ, rtmpZ2, rtmpZE2, rtmpYE, rtmpZE, dTdzC_diff
         real(rkind), dimension(:,:,:), allocatable :: SSI_xbuff1, SSI_xbuff2, q1, q2, q3, AMD_NUM, AMD_DEN
 
         type(cd06stagg), allocatable :: derZ_SS, derTAU33
@@ -262,15 +262,16 @@ contains
 
     subroutine getRHS_SGS_WallM(this, duidxjC, duidxjE, duidxjChat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, ustar, Umn, Vmn, Uspmn, filteredSpeedSq, InvObLength, max_nuSGS, inst_horz_avg, dTdx, dTdy, dTdzHC)    
         class(sgs), intent(inout), target :: this
-        real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(inout), target :: duidxjC
-        real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in), optional :: dTdx, dTdy
-        real(rkind)   , dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4), intent(inout), target :: duidxjE
+        real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in), target :: duidxjC
+        real(rkind)   , dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4), intent(in), target :: duidxjE
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3),9), intent(inout) :: duidxjChat
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: urhs, vrhs
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat, vhat, wChat
         complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
-        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: u, v, wC, filteredSpeedSq
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v, wC
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: filteredSpeedSq
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout), optional :: dTdzHC
+        real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in), optional :: dTdx, dTdy
         real(rkind), dimension(this%ntimeAvgQs), intent(out) :: inst_horz_avg
         real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
         real(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
@@ -317,11 +318,16 @@ contains
             call this%get_MGM_Op(duidxjC, duidxjE)!, maxDissp)
         case (4)
             if (this%isStratified) then
-                if (this%spectC%carryingZeroK) then
-                    dTdzHC(1,1,:) = cmplx(0.d0,0.d0)
+                if ((present(dTdx)).and.(present(dTdy)).and.(present(dTdzHC))) then
+                    if (this%spectC%carryingZeroK) then
+                        dTdzHC(1,1,:) = cmplx(0.d0,0.d0)
+                    end if
+                    call this%spectC%ifft(dTdzHC,this%dTdzC_diff)
+                    call this%get_AMD_Op_strat(this%nuSGS,dudx, dudy, dudzC, dvdx, dvdy, dvdzC, dwdxC, dwdyC, &
+                                               dwdz,S11,S22,S33,S12,S13C,S23C, dTdx, dTdy)
+                else ! This should never happen if called from igridWallM
+                    this%nuSGS = zero        
                 end if
-                call this%spectC%ifft(dTdzHC,this%dTdzC_diff)
-                call this%get_AMD_Op_strat(this%nuSGS,dudx, dudy, dudzC, dvdx, dvdy, dvdzC, dwdxC, dwdyC, dwdz, S11,S22,S33,S12,S13C,S23C, dTdx, dTdy)
             else
                 call this%get_AMD_Op(this%nuSGS,dudx, dudy, dudzC, dvdx, dvdy, dvdzC, dwdxC, dwdyC, dwdz, S11,S22,S33,S12,S13C,S23C)
             end if
@@ -364,6 +370,7 @@ contains
           end if
           call transpose_z_to_y(this%rtmpzE,this%rtmpYE,this%gpE)
           call transpose_y_to_x(this%rtmpYE,this%nuSGSE,this%gpE)
+          this%nuSGSE = max(zero,this%nuSGSE)
           tau13 = this%nuSGSE * S13
           tau23 = this%nuSGSE * S23
         endif
@@ -383,7 +390,7 @@ contains
 
         select case(this%wallModel) 
         case(0)
-            this%WallMFactor = -ustar*ustar/(Umn + 1.D-13)
+            this%WallMFactor = -ustar*ustar/(Uspmn + 1.D-13)
             
             ! STEP 4: tau13 -> ddz() in urhs, ddx in wrhs
             call transpose_y_to_z(uhat,this%ctmpCz,this%sp_gp) ! <- send uhat to z decomp (wallmodel)
@@ -500,19 +507,52 @@ contains
 
 #include "sgs_models/dynamicprocedure.F90"
 
-    subroutine getRHS_SGS_Scalar_WallM(this, dTdxC, dTdyC, dTdzE, T_rhs, wTh_surf)
+    subroutine getRHS_SGS_Scalar_WallM(this, duidxjC, dTdxC, dTdyC, dTdzE, dTdzC, T_rhs, wTh_surf)
         class(sgs), intent(inout), target :: this
+        real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in), target :: duidxjC
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: T_rhs
-        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: dTdxC,dTdyC 
-        real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(inout) :: dTdzE
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC,dTdyC, dTdzC 
+        real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdzE
         real(rkind), intent(in) :: wTh_surf
         complex(rkind), dimension(:,:,:), pointer :: tauhat, tauhat2    
+        real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
+        real(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
+        real(rkind), dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
         !real(rkind) :: wallMfactor  
         
         tauhat => this%cbuff(:,:,:,1); tauhat2 => this%cbuff(:,:,:,2)       
+        dudx  => duidxjC(:,:,:,1); dudy  => duidxjC(:,:,:,2); dudz  => duidxjC(:,:,:,3); 
+        dvdx  => duidxjC(:,:,:,4); dvdy  => duidxjC(:,:,:,5); dvdz  => duidxjC(:,:,:,6); 
+        dwdx  => duidxjC(:,:,:,7); dwdy  => duidxjC(:,:,:,8); dwdz  => duidxjC(:,:,:,9); 
 
-        this%nuSCA = this%nuSGS/(two*this%Pr); this%nuSCAE = this%nuSGSE/(two*this%Pr)
-       
+        select case (this%SGSmodel)
+        case(0)
+            this%nuSCA = this%nuSGS/(two*this%Pr); this%nuSCAE = this%nuSGSE/(two*this%Pr)
+        case(1)
+            this%nuSCA = this%nuSGS/(two*this%Pr); this%nuSCAE = this%nuSGSE/(two*this%Pr)
+        case(2)
+            this%nuSCA = this%nuSGS/(two*this%Pr); this%nuSCAE = this%nuSGSE/(two*this%Pr)
+        case(3)
+            this%nuSCA = this%nuSGS/(two*this%Pr); this%nuSCAE = this%nuSGSE/(two*this%Pr)
+        case(4)
+            this%nuSCA = (this%cx**2)*(dudx*dTdxC*dTdxC + dvdx*dTdxC*dTdyC + dwdx*dTdxC*dTdzC)
+            this%nuSCA = this%nuSCA + (this%cy**2)*(dudy*dTdyC*dTdxC + dvdy*dTdyC*dTdyC + dwdy*dTdyC*dTdzC)
+            this%nuSCA = this%nuSCA + (this%cz**2)*(dudz*dTdzC*dTdxC + dvdz*dTdzC*dTdyC + dwdz*dTdzC*dTdzC)
+            this%amd_DEN = dTdxC*dTdxC + dTdyC*dTdyC + dTdzC*dTdzC
+            this%nuSCA = -this%nuSCA/this%amd_DEN
+            this%nuSCA = max(this%nuSCA,zero)
+            call transpose_x_to_y(this%nuSGS,this%rtmpY,this%gpC)
+            call transpose_y_to_z(this%rtmpY,this%rtmpZ,this%gpC)
+            if (useCompactFD) then
+              call this%derZ_SS%InterpZ_C2E(this%rtmpZ,this%rtmpZE,size(this%rtmpZ,1),size(this%rtmpZ,2))
+            else
+              call this%OpsNU%InterpZ_Cell2Edge(this%rtmpZ,this%rtmpZE,zero,zero)
+              this%rtmpzE(:,:,this%nz+1) = two*this%rtmpZ(:,:,this%nz) - this%rtmpzE(:,:,this%nz)
+            end if
+            call transpose_z_to_y(this%rtmpzE,this%rtmpYE,this%gpE)
+            call transpose_y_to_x(this%rtmpYE,this%nuSCAE,this%gpE)
+        end select
+
         this%q1 = this%nuSCA  * dTdxC
         this%q2 = this%nuSCA  * dTdyC
         this%q3 = this%nuSCAE * dTdzE
@@ -544,7 +584,7 @@ contains
 
     subroutine getLocalWallModel(this, filteredSpeedSq, tauWallH)
         class(sgs), intent(inout), target :: this
-        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) ::filteredSpeedSq
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) ::filteredSpeedSq
         complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)), intent(out) :: tauWallH
 
         complex(rkind), dimension(:,:,:), pointer :: cbuffy

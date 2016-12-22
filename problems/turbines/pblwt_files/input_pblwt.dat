@@ -1,6 +1,6 @@
 &INPUT
-inputdir              = "/home/aditya90/Codes/PadeOps/data/pbl/"   ! Directory for any input files
-outputdir             = "/home/aditya90/Codes/PadeOps/data/pbl/"   ! Directory for all output files
+inputdir              = "/home/aditya90/Codes/PadeOps/data/pblwt/"   ! Directory for any input files
+outputdir             = "/home/aditya90/Codes/PadeOps/data/pblwt/"   ! Directory for all output files
 nx                    = 128          ! Number of points in X
 ny                    = 128          ! Number of points in Y
 nz                    = 128          ! Number of points in Z
@@ -32,6 +32,7 @@ dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in 
 t_planeDump           = 100         ! Plane dumping frequency (# of timesteps)
 t_start_planeDump     = 1           ! When do you want to start dumping planes?
 t_stop_planeDump      = 5000        ! When do you want to stop dumping planes?
+useProbes             = .TRUE.     ! Do you want to use probes
 /
 /
 &STATS
@@ -98,14 +99,16 @@ z0                    = 1.d-4       ! Roughness length scale (CAREFUL: This is a
 /
 /
 &WINDTURBINES
-useWindTurbines       = .FALSE.
+useWindTurbines       = .TRUE.
 num_turbines          = 24
 ADM                   = .TRUE.
-turbInfoDir           = "/home/nghaisas/ActuatorDisk/"
+turbInfoDir           = "/home/aditya90/Codes/PadeOps/problems/turbines/pblwt_files/turbInfo/"
 /
 /
 &KSPREPROCESS
-PreprocessForKS       = .FALSE.        ! Do you want to generate preprocessing files for KS? 
+PreprocessForKS       = .FALSE.         ! Do you want to generate preprocessing files for KS?
+KSFilFact             = 4.d0           ! Filter factor (fraction of nyquist) 
+KSinitType            = 0              ! 0: just filter, 1: Filter + Downsample on coarser mesh
 KSoutputDir           = "SomeLocation" ! Directory where KS files are dumped.
 KSRunID               = 99             ! RunID tag for KS files
 t_dumpKSprep          = 10             ! Dumping Frequency for KS files

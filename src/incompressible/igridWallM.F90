@@ -143,9 +143,13 @@ module IncompressibleGridWallM
         ! KS preprocessor 
         type(ksprep), allocatable :: LES2KS
         character(len=clen) :: KSoutputdir
-        logical :: PreProcessForKS
+        logical :: PreProcessForKS, KSupdated = .false. 
         integer, dimension(:), allocatable :: planes2dumpC_KS, planes2dumpF_KS
-        integer :: t_dumpKSprep
+        integer :: t_dumpKSprep, KSinitType
+        real(rkind), dimension(:,:,:), pointer :: uFil4KS, vFil4KS, wFil4KS
+        real(rkind) :: KSFilFact 
+        real(rkind), dimension(:,:,:), allocatable :: KS_probe_data
+
 
         ! Pressure Solver
         logical :: StorePressure = .false., fastCalcPressure = .true. 
@@ -166,6 +170,12 @@ module IncompressibleGridWallM
         ! i, j but is still stored as a full 3 rank array. This is mostly done to
         ! make it convenient us to later do transposes or to compute Sij.
 
+        ! Probes
+        logical :: useProbes = .false., doIhaveAnyProbes = .false.  
+        integer, dimension(:,:), allocatable :: probes
+        integer :: nprobes, probeTimeLimit = 1000000, probeStartStep = 0 
+        real(rkind), dimension(:,:,:), allocatable :: probe_data
+        integer :: tpro
 
         contains
             procedure          :: init
@@ -213,6 +223,8 @@ module IncompressibleGridWallM
             procedure, private :: dump_planes
             procedure, private :: dumpFullField 
             procedure, private :: DeletePrevStats3DFiles
+            procedure, private :: updateProbes 
+            procedure, private :: dumpProbes 
     end type
 
 contains 
@@ -237,15 +249,18 @@ contains
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
-        real(rkind) :: Lz = 1.d0, latitude = 90._rkind
+        real(rkind) :: Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true.
-        integer :: tSystemInteractions = 100, ierr
+        integer :: tSystemInteractions = 100, ierr, KSinitType = 0
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true.  
-        logical :: assume_fplane = .true., periodicbcs(3) 
+        logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true. 
+        real(rkind), dimension(:,:), allocatable :: probe_locs
+        real(rkind), dimension(:), allocatable :: temp
+        integer :: ii, idx, temploc(1)
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
-        namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, &
+        namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, &
@@ -257,7 +272,7 @@ contains
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme
-        namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep
+        namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, KSdoZfilter
         namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq            
         namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir
 
@@ -286,7 +301,8 @@ contains
         this%tSystemInteractions = tSystemInteractions; this%storePressure = storePressure
         this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq; this%timeAvgFullFields = timeAvgFullFields
         this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp; this%isInviscid = isInviscid
-        this%assume_fplane = assume_fplane
+        this%assume_fplane = assume_fplane; this%useProbes = useProbes
+        this%KSinitType = KSinitType; this%KSFilFact = KSFilFact
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -605,9 +621,6 @@ contains
                 this%isStratified )
             call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23, &
                                 this%q1, this%q2, this%q3)
-            if (this%isStratified) then
-                call this%sgsmodel%setStratificationConstants(this%Fr,this%ThetaRef)
-            end if 
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -660,14 +673,99 @@ contains
         this%dtOld = this%dt
         this%dtRat = one 
 
+        ! STEP 14a : Probes
+        if (this%useProbes) then
+            call hook_probes(inputfile, probe_locs)
+            if (.not. allocated(probe_locs)) then
+                call GracefulExit("You forgot to set the probe locations in initialize.F90 file for the problem.",123)
+            end if
+            if (size(probe_locs,2) > 999) then
+                call GracefulExit("Maximum number of probes allowed is 999",123)
+            end if
 
-        ! STEP 14: Preprocessing for KS
+            this%nprobes = 0
+            do idx = 1,size(probe_locs,2)
+                ! assume x - decomposition
+                ! First check if y lies within decomposition
+                if ((probe_locs(2,idx) < maxval(this%mesh(:,:,:,2))+this%dy/2.d0) .and. (probe_locs(2,idx) > minval(this%mesh(:,:,:,2))- this%dy/2.d0)) then
+                    ! Now check if z lies within my decomposition
+                    if ((probe_locs(3,idx) < maxval(this%mesh(:,:,:,3))+this%dz/2.d0) .and. (probe_locs(3,idx) > minval(this%mesh(:,:,:,3))-this%dz/2.d0)) then
+                        ! Looks like I have the probe!
+                        this%nprobes = this%nprobes + 1
+                    end if
+                end if
+            end do  
+               
+            ! If have 1 or more probes, I need to allocate memory for probes
+            if (this%nprobes > 0) then
+                allocate(this%probes(4,this%nprobes))
+                if (this%isStratified) then
+                    allocate(this%probe_data(1:5,1:this%nprobes,0:this%probeTimeLimit-1)) ! Store time + 3 fields
+                else                                     
+                    allocate(this%probe_data(1:4,1:this%nprobes,0:this%probeTimeLimit-1)) ! Store time + 3 fields
+                end if
+                this%probe_data = 0.d0
+                ii = 1
+                do idx = 1,size(probe_locs,2)
+                    if ((probe_locs(2,idx) < maxval(this%mesh(:,:,:,2)) + this%dy/2.d0) .and. (probe_locs(2,idx) > minval(this%mesh(:,:,:,2)) - this%dy/2.d0)) then
+                        if ((probe_locs(3,idx) < maxval(this%mesh(:,:,:,3)) + this%dz/2.d0) .and. (probe_locs(3,idx) > minval(this%mesh(:,:,:,3)) - this%dz/2.d0)) then
+                            allocate(temp(size(this%mesh,1)))
+                            temp = abs(probe_locs(1,idx) - this%mesh(:,1,1,1))
+                            temploc = minloc(temp)
+                            this%probes(1,ii) = temploc(1) 
+                            deallocate(temp)
+
+                            allocate(temp(size(this%mesh,2)))
+                            temp = abs(probe_locs(2,idx) - this%mesh(1,:,1,2));
+                            temploc = minloc(temp)
+                            this%probes(2,ii) = temploc(1)
+                            deallocate(temp)
+                            
+                            allocate(temp(size(this%mesh,3)))
+                            temp = abs(probe_locs(3,idx) - this%mesh(1,1,:,3))
+                            temploc = minloc(temp)
+                            this%probes(3,ii) = temploc(1) 
+                            deallocate(temp)
+                            
+                            this%probes(4,ii) = idx ! Probe ID
+                            ii = ii + 1
+                        end if
+                    end if
+                end do 
+                this%doIhaveAnyProbes = .true. 
+            else
+                this%doIhaveAnyProbes = .false.  
+            end if
+            this%ProbeStartStep = this%step
+            deallocate(probe_locs)
+            !print*, nrank, "Do I have probes?:", this%doIhaveAnyProbes, this%nprobes
+            call message(0,"Total probes initialized:", p_sum(this%nprobes))
+        end if
+       
+        ! STEP 14b : Preprocessing for KS
         if (this%PreprocessForKS) then
             allocate(this%LES2KS)
-            call set_KS_planes_io(this%planes2dumpC_KS, this%planes2dumpF_KS) 
-            call this%LES2KS%init(nx,ny,nz,this%spectE, this%gpE, this%KSOutputDir, KSrunID, this%dx, this%dy, &
-               &         this%dz, this%planes2dumpC_KS, this%planes2dumpF_KS)
+            if (this%KSinitType == 0) then
+                call this%LES2KS%init(this%spectC, this%gpC, this%dx, this%dy, this%outputdir, this%RunID, this%probes, this%KSFilFact, KSdoZfilter)
+                call this%LES2KS%link_pointers(this%uFil4KS, this%vFil4KS, this%wFil4KS)
+                if (this%useProbes) then
+                    if (this%doIhaveAnyProbes) then
+                        allocate(this%KS_Probe_Data(1:4,1:this%nprobes,0:this%probeTimeLimit-1))
+                    end if
+                end if
+            else
+                call GracefulExit("All KSinitTypes except for 0 are temporarily suspended.",12)
+                call set_KS_planes_io(this%planes2dumpC_KS, this%planes2dumpF_KS) 
+                call this%LES2KS%init(nx,ny,nz,this%spectE, this%gpE, this%KSOutputDir, KSrunID, this%dx, this%dy, &
+                   &         this%dz, this%planes2dumpC_KS, this%planes2dumpF_KS)
+            end if
+            this%KSupdated = .false. 
+            call message(0, "KS Preprocessor initializaed successfully.")
         end if 
+
+
+        ! STEP 14c: Update the probes
+        if (this%useProbes) call this%updateProbes()
 
         ! STEP 15: Set up extra buffers for RK3
         if (timeSteppingScheme == 1) then
@@ -1186,27 +1284,52 @@ contains
 
 
         if (this%isStratified) then
-            T1C = -this%u*this%dTdxC 
-            T2C = -this%v*this%dTdyC
-            T1C = T1C + T2C
-            call this%spectC%fft(T1C,this%T_rhs) 
-            T1E = -this%w * this%dTdzE    
-            call this%spectC%fft(T1E,fT1E)
+            !T1C = -this%u*this%dTdxC 
+            !T2C = -this%v*this%dTdyC
+            !T1C = T1C + T2C
+            !call this%spectC%fft(T1C,this%T_rhs) 
+            !T1E = -this%w * this%dTdzE    
+            !call this%spectC%fft(T1E,fT1E)
+            !call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
+            !if (useCompactFD) then
+            !    call this%derW%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+            !else
+            !    call this%Ops%InterpZ_edge2cell(tzE,tzC)
+            !end if 
+            !call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
+            !this%T_rhs = this%T_rhs + fT1C
+
+            T1C = -this%u*this%T
+            call this%spectC%fft(T1C,this%T_rhs)
+            call this%spectC%mtimes_ik1_ip(this%T_rhs)
+            T1C = -this%v*this%T
+            call this%spectC%fft(T1C,fT1C)
+            call this%spectC%mtimes_ik2_ip(fT1C)
+            this%T_rhs = this%T_rhs + fT1C
+            T1E = -this%w * this%TE
+            call this%spectE%fft(T1E,fT1E)
             call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
             if (useCompactFD) then
-                call this%derW%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+                call this%derW%ddz_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
             else
-                call this%Ops%InterpZ_edge2cell(tzE,tzC)
+                call this%Ops%ddz_E2C(tzE,tzC)
             end if 
             call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
             this%T_rhs = this%T_rhs + fT1C
+        
+            
         end if 
 
     end subroutine
 
     subroutine addCoriolisTerm(this)
         class(igridWallM), intent(inout), target :: this
-        complex(rkind), dimension(:,:,:), pointer :: fT1E 
+        complex(rkind), dimension(:,:,:), pointer :: ybuffE, zbuffC, zbuffE
+
+        ybuffE => this%cbuffyE(:,:,:,1)
+        zbuffE => this%cbuffzE(:,:,:,1)
+        zbuffC => this%cbuffzC(:,:,:,1)
+
         ! u equation 
         this%u_rhs = this%u_rhs - (this%coriolis_cosine*this%what &
                             + this%coriolis_sine*(this%GyHat - this%vhat))/this%Ro
@@ -1215,14 +1338,20 @@ contains
         
         ! w equation 
         ! The real equation is given as:
-        !this%w_rhs = this%w_rhs - this%coriolis_cosine*(this%GxHat - this%uhat)/this%Ro
+        ! this%w_rhs = this%w_rhs - this%coriolis_cosine*(this%GxHat - this%uhat)/this%Ro
         ! But we evaluate this term as:
-        fT1E => this%cbuffyE(:,:,:,1)
-        fT1E = this%coriolis_cosine*(this%uhat)
-        if (this%spectE%carryingZeroK) then
-            fT1E(1,1,:) = cmplx(zero,zero,rkind)
-        end if
-        this%w_rhs = this%w_rhs + fT1E
+        call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
+        if (useCompactFD) then
+            call this%derSE%InterpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+        else
+            call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
+            zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
+        end if 
+        zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
+        if (nrank == 0) zbuffE(1,1,:) = cmplx(zero,zero,rkind)
+        call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
+         
+        this%w_rhs = this%w_rhs + this%coriolis_cosine*ybuffE/this%Ro
         ! The residual quantity (Gx - <u>)*cos(alpha)/Ro is accomodated in
         ! pressure
 
@@ -1242,8 +1371,8 @@ contains
         
         this%w_rhs = this%w_rhs - (this%RdampE/this%dt)*this%what ! base value for w is zero  
 
-        deviationC = this%That - this%Tbase
-        this%T_rhs = this%T_rhs - (this%RdampC/this%dt)*deviationC
+        !deviationC = this%That - this%Tbase
+        !this%T_rhs = this%T_rhs - (this%RdampC/this%dt)*deviationC
 
     end subroutine
 
@@ -1306,21 +1435,13 @@ contains
         end if
 
 
+        ! WARNING: the duidxjChat tensor changes state after this subroutine, so
+        ! you must not assume that the values in it are correct after this
+        ! state. Therefore, if you need to use it, use it BEFORE calling this
+        ! subroutine. 
         ! Step 6: SGS Viscous Term
         if (this%useSGS) then
             if (this%isStratified) then
-                call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
-                                                    this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
-                                                    this%uhat   , this%vhat           , this%whatC      ,&
-                                                    this%u      , this%v              , this%wC         ,&
-                                                    this%ustar  , this%Umn            , this%Vmn        ,&
-                                                    this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
-                                                    this%max_nuSGS, this%inst_horz_avg, this%dTdxC      ,&
-                                                    this%dTdyC  , this%dTdzHC)
-                
-                call this%SGSmodel%getRHS_SGS_Scalar_WallM(this%dTdxC, this%dTdyC, this%dTdzE, &
-                                                           this%T_rhs, this%wTh_surf           )
-            else
                 call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
                                                 this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
                                                 this%uhat   , this%vhat           , this%whatC      ,&
@@ -1328,6 +1449,18 @@ contains
                                                 this%ustar  , this%Umn            , this%Vmn        ,&
                                                 this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
                                                 this%max_nuSGS, this%inst_horz_avg)
+
+                call this%SGSmodel%getRHS_SGS_Scalar_WallM(this%duidxjC, this%dTdxC, this%dTdyC, this%dTdzE, &
+                                                           this%dTdzC, this%T_rhs, this%wTh_surf)
+            else
+                call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
+                                                this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
+                                                this%uhat   , this%vhat           , this%whatC      ,&
+                                                this%u      , this%v              , this%wC         ,&
+                                                this%ustar  , this%Umn            , this%Vmn        ,&
+                                                this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
+                                                this%max_nuSGS, this%inst_horz_avg, this%dTdxC      ,&
+                                                this%dTdyC  , this%dTdzHC)
             end if 
         end if 
     end subroutine
@@ -1394,20 +1527,86 @@ contains
 
     end subroutine
 
+
+    subroutine updateProbes(this)
+        class(igridWallM), intent(inout) :: this
+        integer :: idx
+
+        if (this%doIhaveAnyProbes) then
+            do idx = 1,this%nprobes
+                this%probe_data(1,idx,this%step) = this%tsim
+                this%probe_data(2,idx,this%step) = this%u (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%probe_data(3,idx,this%step) = this%v (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%probe_data(4,idx,this%step) = this%wC(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                if (this%isStratified) then
+                    this%probe_data(5,idx,this%step) = this%T(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                end if
+            end do 
+        end if
+
+        ! KS - preprocess
+        if (this%PreprocessForKS) then
+            if (.not. this%KSupdated) then
+                call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
+                this%KSupdated = .true. 
+            end if
+            if (this%doIhaveAnyProbes) then
+                do idx = 1,this%nprobes
+                    this%KS_probe_data(1,idx,this%step) = this%tsim
+                    this%KS_probe_data(2,idx,this%step) = this%ufil4KS (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                    this%KS_probe_data(3,idx,this%step) = this%vfil4KS (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                    this%KS_probe_data(4,idx,this%step) = this%wfil4KS(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                end do 
+            end if
+        end if
+
+    end subroutine
+
+
+    subroutine dumpProbes(this)
+        use basic_io, only: write_2d_ascii
+        class(igridWallM), intent(in) :: this
+        character(len=clen) :: tempname, fname
+        integer :: pid, idx
+
+        do idx = 1,this%nprobes
+            pid = this%probes(4,idx)
+            write(tempname,"(A3,I2.2,A6,I3.3,A4,I6.6,A4,I6.6,A4)") "Run",this%runID, "_PROBE",pid,"_tst",this%probeStartStep,"_ten",this%step,".out"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call write_2d_ascii(transpose(this%probe_data(:,idx,this%probeStartStep:this%step)), fname)
+        end do 
+
+        ! KS - preprocess
+        if (this%PreprocessForKS) then
+            do idx = 1,this%nprobes
+                pid = this%probes(4,idx)
+                write(tempname,"(A3,I2.2,A9,I3.3,A4,I6.6,A4,I6.6,A4)") "Run",this%runID, "_PROBE_KS",pid,"_tst",this%probeStartStep,"_ten",this%step,".out"
+                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                call write_2d_ascii(transpose(this%KS_probe_data(:,idx,this%probeStartStep:this%step)), fname)
+            end do 
+        end if
+        
+    end subroutine
+
     subroutine wrapup_timestep(this)
         class(igridWallM), intent(inout) :: this
 
-        logical :: forceWrite, exitStat, forceDumpPressure, restartWrite
-        integer :: ierr = -1, ierr2 
+        logical :: forceWrite, exitStat, forceDumpPressure, restartWrite, forceDumpProbes 
+        integer :: ierr = -1, ierr2
 
-        ! STEP 1: Update Time and BCs
+        ! STEP 1: Update Time, BCs and record probe data
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
+        if (this%PreprocessForKS) this%KSupdated = .false. 
+        if (this%useProbes) call this%updateProbes()
 
-        ierr = -1; forceWrite = .FALSE.; exitstat = .FALSE.; forceDumpPressure = .FALSE.
-        restartWrite = .FALSE. 
+
+        ierr = -1; forceWrite = .FALSE.; exitstat = .FALSE.; forceDumpPressure = .FALSE.; 
+        forceDumpProbes = .false.; restartWrite = .FALSE. 
+
         if(this%tsim > this%tstop) then
           forceWrite = .TRUE.
           restartWrite = .TRUE.
+          if (this%useProbes) forceDumpProbes = .TRUE.
           call message(0,"The simulation has ended.")
           call message(1,"Dumping a restart file.")
         endif
@@ -1428,6 +1627,21 @@ contains
                     close(777)
                 endif
            
+
+                if (this%useProbes) then
+                    open(777,file=trim(this%controlDir)//"/dumpprobes",status='old',iostat=ierr)
+                    if (ierr==0) then
+                        forceDumpProbes = .true. 
+                        call message(1, "Forced Dump for PROBES because found file dumpprobes")
+                        call message(2, "Current Time Step is:", this%step)
+                        if (nrank .ne. 0) close(777)
+                        call mpi_barrier(mpi_comm_world, ierr2)
+                        if(nrank==0) close(777, status='delete')
+                    else
+                        close(777)
+                    end if
+                end if
+
                 if (this%storePressure) then 
                     open(777,file=trim(this%controlDir)//"/prsspdo",status='old',iostat=ierr)
                     if (ierr == 0) then
@@ -1470,8 +1684,6 @@ contains
             end if 
         end if
 
-
-       
        if ((forceWrite.or.(mod(this%step,this%tid_compStats)==0)).and.(this%tsim > this%tSimStartStats) ) then
            if (this%timeAvgFullFields) then
                call this%compute_stats3D()
@@ -1499,13 +1711,19 @@ contains
         
         if ( (forceWrite .or. ((mod(this%step,this%t_planeDump) == 0) .and. &
                  (this%step .ge. this%t_start_planeDump) .and. (this%step .le. this%t_stop_planeDump))) .and. (this%dumpPlanes)) then
+            if (this%PreprocessForKS) then
+                if (.not. this%KSupdated) then
+                    call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
+                    this%KSupdated = .true. 
+                end if
+            end if
             call this%dump_planes()
         end if 
 
-        if ( (forceWrite .or. (mod(this%step,this%t_dumpKSprep) == 0)) .and. this%PreprocessForKS ) then
-            call this%LES2KS%LES_TO_KS(this%uE,this%vE,this%w,this%step)
-            call this%LES2KS%LES_FOR_KS(this%uE,this%vE,this%w,this%step)
-        end if 
+        !if ( (forceWrite .or. (mod(this%step,this%t_dumpKSprep) == 0)) .and. this%PreprocessForKS ) then
+        !    call this%LES2KS%LES_TO_KS(this%uE,this%vE,this%w,this%step)
+        !    call this%LES2KS%LES_FOR_KS(this%uE,this%vE,this%w,this%step)
+        !end if 
 
         if ( (forceWrite .or. ((mod(this%step,this%t_pointProbe) == 0) .and. &
                  (this%step .ge. this%t_start_pointProbe) .and. (this%step .le. this%t_stop_pointProbe))) .and. (this%t_pointProbe > 0)) then
@@ -1522,8 +1740,27 @@ contains
            !call this%dumpFullField(this%WindTurbineArr%fx,'wtfx')
            !call this%dumpFullField(this%WindTurbineArr%fy,'wtfy')
            !call this%dumpFullField(this%WindTurbineArr%fz,'wtfz')
+           if (this%PreProcessForKS) then
+                if (.not. this%KSupdated) then
+                    call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
+                    this%KSupdated = .true. 
+                end if
+                call this%dumpFullField(this%uFil4KS,'uFks')
+                call this%dumpFullField(this%vFil4KS,'vFks')
+                call this%dumpFullField(this%wFil4KS,'wFks')
+           end if
+           if (this%useProbes) then
+                call this%dumpProbes()    
+                call message(0,"Performed a scheduled dump for probes.")
+           end if
         end if
 
+        if (this%useProbes) then
+            if (forceDumpProbes) then
+                call this%dumpProbes()    
+                call message(0,"Performed a forced dump for probes.")
+            end if
+        end if
 
         if (forceWrite) then
            call message(2,"Performing a forced visualization dump.")
@@ -1532,6 +1769,15 @@ contains
            call this%dumpFullField(this%wC,'wVel')
            if (this%isStratified) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
+           if (this%PreProcessForKS) then
+                if (.not. this%KSupdated) then
+                    call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
+                    this%KSupdated = .true. 
+                end if
+                call this%dumpFullField(this%uFil4KS,'uFks')
+                call this%dumpFullField(this%vFil4KS,'vFks')
+                call this%dumpFullField(this%wFil4KS,'wFks')
+           end if
            !call output_tecplot(gp)
         end if
 
@@ -3454,12 +3700,15 @@ contains
         character(len=clen) :: fname
         character(len=clen) :: tempname
 
+
+
         tid = this%step 
         if (allocated(this%xplanes)) then
             nxplanes = size(this%xplanes)
             dirid = 1
             do idx = 1,nxplanes
                 pid = this%xplanes(idx)
+            
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plu"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                 call decomp_2d_write_plane(1,this%u,dirid, pid, fname)
@@ -3471,6 +3720,27 @@ contains
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plw"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                 call decomp_2d_write_plane(1,this%wC,dirid, pid, fname)
+                
+                if (this%isStratified) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plT"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%T,dirid, pid, fname)
+                end if
+
+                ! planes for KS preprocess
+                if (this%PreProcessForKS) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".ksu"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%uFil4KS,dirid, pid, fname)
+
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".ksv"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%vFil4KS,dirid, pid, fname)
+
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".ksw"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%wFil4KS,dirid, pid, fname)
+                end if 
             end do 
         end if 
             
@@ -3480,6 +3750,7 @@ contains
             dirid = 2
             do idx = 1,nyplanes
                 pid = this%yplanes(idx)
+
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plu"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                 call decomp_2d_write_plane(1,this%u,dirid, pid, fname)
@@ -3491,6 +3762,29 @@ contains
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plw"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                 call decomp_2d_write_plane(1,this%wC,dirid, pid, fname)
+                
+                if (this%isStratified) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plT"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%T,dirid, pid, fname)
+                end if
+
+                ! planes for KS preprocess
+                if (this%PreProcessForKS) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".ksu"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%uFil4KS,dirid, pid, fname)
+
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".ksv"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%vFil4KS,dirid, pid, fname)
+
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".ksw"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%wFil4KS,dirid, pid, fname)
+
+                end if
+
             end do 
         end if 
         
@@ -3500,6 +3794,7 @@ contains
             dirid = 3
             do idx = 1,nzplanes
                 pid = this%zplanes(idx)
+
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plu"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                 call decomp_2d_write_plane(1,this%u,dirid, pid, fname)
@@ -3511,6 +3806,28 @@ contains
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plw"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                 call decomp_2d_write_plane(1,this%wC,dirid, pid, fname)
+                
+                if (this%isStratified) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plT"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%T,dirid, pid, fname)
+                end if
+
+
+                ! planes for KS preprocess
+                if (this%PreProcessForKS) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".ksu"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%uFil4KS,dirid, pid, fname)
+
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".ksv"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%vFil4KS,dirid, pid, fname)
+
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".ksw"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%wFil4KS,dirid, pid, fname)
+                end if
             end do 
         end if 
         call message(1, "Dumped Planes.")        
