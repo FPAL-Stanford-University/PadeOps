@@ -105,7 +105,7 @@ module IncompressibleGridWallM
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
-        real(rkind) :: max_nuSGS, invObLength, Tsurf, dTsurf_dt, ThetaRef
+        real(rkind) :: max_nuSGS, invObLength, Tsurf0, Tsurf, dTsurf_dt, ThetaRef
 
         real(rkind) :: z0, ustar = zero, Umn, Vmn, Uspmn, dtOld, dtRat, Tmn, wTh_surf
         real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
@@ -282,15 +282,19 @@ contains
         read(unit=ioUnit, NML=INPUT)
         read(unit=ioUnit, NML=NUMERICS)
         read(unit=ioUnit, NML=IO)
+         write(*,*) 1
         read(unit=ioUnit, NML=STATS)
         read(unit=ioUnit, NML=OS_INTERACTIONS)
         read(unit=ioUnit, NML=PHYSICS)
+         write(*,*) 2
         read(unit=ioUnit, NML=PRESSURE_CALC)
         read(unit=ioUnit, NML=BCs)
         read(unit=ioUnit, NML=LES)
+         write(*,*) 3
         read(unit=ioUnit, NML=WALLMODEL)
         read(unit=ioUnit, NML=WINDTURBINES)
         read(unit=ioUnit, NML=KSPREPROCESS)
+         write(*,*) 4
         close(ioUnit)
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
         this%dt = dt; this%dtby2 = dt/two ; this%z0 = z0 ; this%Re = Re; this%useSponge = useSpongeLayer
@@ -530,7 +534,8 @@ contains
             call set_Reference_Temperature(inputfile,this%ThetaRef)
             if (botBC_Temp == 0) then
                 call setDirichletBC_Temp(inputfile, this%Tsurf, this%dTsurf_dt)
-                this%Tsurf = this%Tsurf + this%dTsurf_dt*this%tsim
+                this%Tsurf0 = this%Tsurf
+                this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
             else if (botBC_Temp == 1) then
                 ! Do nothing 
             else
@@ -1514,11 +1519,6 @@ contains
     
         ! STEP 4: Interpolate the cell center values of w
         call this%compute_and_bcast_surface_Mn()
-        if (this%isStratified) then
-            if (this%botBC_Temp == 0) then
-                this%Tsurf = this%Tsurf + this%dTsurf_dt*this%dt
-            end if 
-        end if  
         call this%interp_PrimitiveVars()
 
         ! STEP 5: Compute duidxjC 
@@ -1596,6 +1596,11 @@ contains
 
         ! STEP 1: Update Time, BCs and record probe data
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
+        if (this%isStratified) then
+            if (this%botBC_Temp == 0) then
+                this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
+            end if 
+        end if  
         if (this%PreprocessForKS) this%KSupdated = .false. 
         if (this%useProbes) call this%updateProbes()
 
@@ -2790,7 +2795,7 @@ contains
         call this%compute_z_mean(rbuff3, this%u_mean)
         write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_um_t",this%step,".3Dstt"
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1, rbuff3, fname)
+        call decomp_2d_write_one(3, rbuff3, fname)
 
         ! v_avg
         call transpose_x_to_y(this%v_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -2798,7 +2803,7 @@ contains
         call this%compute_z_mean(rbuff4, this%v_mean)
         write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_vm_t",this%step,".3Dstt"
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1, rbuff4, fname)
+        call decomp_2d_write_one(3, rbuff4, fname)
       
         ! w_avg
         call transpose_x_to_y(this%w_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -2806,7 +2811,7 @@ contains
         call this%compute_z_mean(rbuff5, this%w_mean)
         write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_wm_t",this%step,".3Dstt"
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1, rbuff5, fname)
+        call decomp_2d_write_one(3, rbuff5, fname)
       
         ! uu_avg - u_avg*u_avg - Total (1D) and Reynolds (3D)
         call transpose_x_to_y(this%uu_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -2816,7 +2821,7 @@ contains
         rbuff6 = rbuff6 - rbuff3 * rbuff3                        !--Reynolds
         write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_uum_t",this%step,".3Dstt"
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1, rbuff6, fname)
+        call decomp_2d_write_one(3, rbuff6, fname)
       
         ! uv_avg - u_avg*v_avg - Total (1D) and Reynolds (3D)
         call transpose_x_to_y(this%uv_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -2826,7 +2831,7 @@ contains
         rbuff6 = rbuff6 - rbuff3 * rbuff4                        !--Reynolds
         write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_uvm_t",this%step,".3Dstt"
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1, rbuff6, fname)
+        call decomp_2d_write_one(3, rbuff6, fname)
       
         ! uw_avg - u_avg*w_avg - Reynolds
         call transpose_x_to_y(this%uw_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -2835,7 +2840,7 @@ contains
         call this%compute_z_mean(rbuff6, this%uw_mean)
         write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_uwm_t",this%step,".3Dstt"
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1, rbuff6, fname)
+        call decomp_2d_write_one(3, rbuff6, fname)
       
         ! uw_avg - u_avg*w_avg - Dispersive
         rbuff6 = rbuff3*rbuff5
@@ -2850,7 +2855,7 @@ contains
         rbuff6 = rbuff6 - rbuff4 * rbuff4                        !--Reynolds
         write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_vvm_t",this%step,".3Dstt"
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1, rbuff6, fname)
+        call decomp_2d_write_one(3, rbuff6, fname)
       
         ! vw_avg - v_avg*w_avg - Reynolds
         call transpose_x_to_y(this%vw_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -2859,7 +2864,7 @@ contains
         call this%compute_z_mean(rbuff6, this%vw_mean)
         write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_vwm_t",this%step,".3Dstt"
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1, rbuff6, fname)
+        call decomp_2d_write_one(3, rbuff6, fname)
       
         ! vw_avg - v_avg*w_avg - Dispersive
         rbuff6 = rbuff4*rbuff5
@@ -2874,7 +2879,7 @@ contains
         rbuff6 = rbuff6 - rbuff5 * rbuff5                        !--Reynolds
         write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_wwm_t",this%step,".3Dstt"
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1, rbuff6, fname)
+        call decomp_2d_write_one(3, rbuff6, fname)
       
         if(this%fastCalcPressure .or. this%storePressure) then
             ! p_avg
@@ -2883,7 +2888,7 @@ contains
             call this%compute_z_mean(rbuff6, this%p_mean)
             write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_pm_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff6, fname)
+            call decomp_2d_write_one(3, rbuff6, fname)
       
             ! pu_avg - u_avg*p_avg - Reynolds only
             rbuff1 = this%pu_mean3D/tidSUMreal - this%u_mean3D * this%p_mean3D / tidSUMreal**2
@@ -2892,7 +2897,7 @@ contains
             call this%compute_z_mean(rbuff3, this%pu_mean)       !--Reynolds
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_pum_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! pv_avg - v_avg*p_avg - Reynolds only
             rbuff1 = this%pv_mean3D/tidSUMreal - this%v_mean3D * this%p_mean3D / tidSUMreal**2
@@ -2901,7 +2906,7 @@ contains
             call this%compute_z_mean(rbuff3, this%pv_mean)       !--Reynolds
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_pvm_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! pw_avg - w_avg*p_avg - Reynolds only
             rbuff1 = this%pw_mean3D/tidSUMreal - this%w_mean3D * this%p_mean3D / tidSUMreal**2
@@ -2910,7 +2915,7 @@ contains
             call this%compute_z_mean(rbuff3, this%pw_mean)       !--Reynolds
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_pwm_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
         endif
 
         if(this%isStratified) then
@@ -2920,7 +2925,7 @@ contains
             call this%compute_z_mean(rbuff6, this%T_mean)
             write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_Tm_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff6, fname)
+            call decomp_2d_write_one(3, rbuff6, fname)
       
             ! uT_avg - u_avg*T_avg - Reynolds only
             rbuff1 = this%uT_mean3D/tidSUMreal - this%u_mean3D * this%T_mean3D / tidSUMreal**2
@@ -2929,7 +2934,7 @@ contains
             call this%compute_z_mean(rbuff3, this%uT_mean)       !--Reynolds
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_uTm_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! vT_avg - v_avg*T_avg - Reynolds only
             rbuff1 = this%vT_mean3D/tidSUMreal - this%v_mean3D * this%T_mean3D / tidSUMreal**2
@@ -2938,7 +2943,7 @@ contains
             call this%compute_z_mean(rbuff3, this%vT_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_vTm_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! wT_avg - w_avg*T_avg - Reynolds only
             rbuff1 = this%wT_mean3D/tidSUMreal - this%w_mean3D * this%T_mean3D / tidSUMreal**2
@@ -2947,7 +2952,7 @@ contains
             call this%compute_z_mean(rbuff3, this%wT_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_wTm_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! TT_avg - T_avg*T_avg - Reynolds only
             rbuff1 = this%TT_mean3D/tidSUMreal - this%T_mean3D * this%T_mean3D / tidSUMreal**2
@@ -2956,7 +2961,7 @@ contains
             call this%compute_z_mean(rbuff3, this%TT_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_TTm_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
         endif
 
         if(this%useSGS) then
@@ -2966,7 +2971,7 @@ contains
             call this%compute_z_mean(rbuff3, this%tau11_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t11_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! tau12SGS_avg
             call transpose_x_to_y(this%tau12_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -2974,7 +2979,7 @@ contains
             call this%compute_z_mean(rbuff3, this%tau12_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t12_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! tau13SGS_avg
             call transpose_x_to_y(this%tau13_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -2982,7 +2987,7 @@ contains
             call this%compute_z_mean(rbuff3, this%tau13_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t13_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! tau22SGS_avg
             call transpose_x_to_y(this%tau22_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -2990,7 +2995,7 @@ contains
             call this%compute_z_mean(rbuff3, this%tau22_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t22_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! tau23SGS_avg
             call transpose_x_to_y(this%tau23_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -2998,7 +3003,7 @@ contains
             call this%compute_z_mean(rbuff3, this%tau23_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t23_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! tau33SGS_avg
             call transpose_x_to_y(this%tau33_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -3006,7 +3011,7 @@ contains
             call this%compute_z_mean(rbuff3, this%tau33_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_t33_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! SGSdissp_avg
             call transpose_x_to_y(this%sgsdissp_mean3D/(two*tidSUMreal), rbuff2, this%gpC)
@@ -3014,7 +3019,7 @@ contains
             call this%compute_z_mean(rbuff3, this%sgsdissp_mean)
             write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_sgsd_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! viscdissp_avg -- after all derivative averages
             rbuff1 = this%viscdisp_mean3D/tidSumreal     - &
@@ -3026,7 +3031,7 @@ contains
             call this%compute_z_mean(rbuff3, this%viscdisp_mean)
             write(tempname,"(A3,I2.2,A8,I6.6,A6)") "Run",this%runID, "_viscd_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
 
             ! S11_avg
             call transpose_x_to_y(this%S11_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -3034,7 +3039,7 @@ contains
             call this%compute_z_mean(rbuff3, this%S11_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s11_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! S12_avg
             call transpose_x_to_y(this%S12_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -3042,7 +3047,7 @@ contains
             call this%compute_z_mean(rbuff3, this%S12_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s12_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! S13_avg
             call transpose_x_to_y(this%S13_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -3050,7 +3055,7 @@ contains
             call this%compute_z_mean(rbuff3, this%S13_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s13_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! S22_avg
             call transpose_x_to_y(this%S22_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -3058,7 +3063,7 @@ contains
             call this%compute_z_mean(rbuff3, this%S22_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s22_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! S23_avg
             call transpose_x_to_y(this%S23_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -3066,7 +3071,7 @@ contains
             call this%compute_z_mean(rbuff3, this%S23_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s23_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
       
             ! S33_avg
             call transpose_x_to_y(this%S33_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -3074,7 +3079,7 @@ contains
             call this%compute_z_mean(rbuff3, this%S33_mean)
             write(tempname,"(A3,I2.2,A6,I6.6,A6)") "Run",this%runID, "_s33_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1, rbuff3, fname)
+            call decomp_2d_write_one(3, rbuff3, fname)
      
             ! SGS Coeff and PhiM -- not written for now
             !this%sgscoeff_mean(:) = zero
@@ -3087,7 +3092,7 @@ contains
                 call this%compute_z_mean(rbuff3, this%q1_mean)
                 write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_q1_t",this%step,".3Dstt"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                call decomp_2d_write_one(1, rbuff3, fname)
+                call decomp_2d_write_one(3, rbuff3, fname)
      
                 ! q2_mean
                 call transpose_x_to_y(this%q2_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -3095,7 +3100,7 @@ contains
                 call this%compute_z_mean(rbuff3, this%q2_mean)
                 write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_q2_t",this%step,".3Dstt"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                call decomp_2d_write_one(1, rbuff3, fname)
+                call decomp_2d_write_one(3, rbuff3, fname)
      
                 ! q3_mean
                 call transpose_x_to_y(this%q3_mean3D/tidSUMreal, rbuff2, this%gpC)
@@ -3103,7 +3108,7 @@ contains
                 call this%compute_z_mean(rbuff3, this%q3_mean)
                 write(tempname,"(A3,I2.2,A5,I6.6,A6)") "Run",this%runID, "_q3_t",this%step,".3Dstt"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                call decomp_2d_write_one(1, rbuff3, fname)
+                call decomp_2d_write_one(3, rbuff3, fname)
             endif
         endif
         call message(1, "Dumped 3D stats files")
