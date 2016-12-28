@@ -893,7 +893,7 @@ contains
         if (this%isStratified) this%That => this%SfieldsC2(:,:,:,3)
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(this%fastCalcPressure)
-        
+
         !!! STAGE 2
         ! Second stage - u, v, w are really pointing to u1, v1, w1 (which is
         ! what we want. 
@@ -910,6 +910,7 @@ contains
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(.false.)
 
+
         !!! STAGE 3 (Final Stage)
         ! Third stage - u, v, w are really pointing to u2, v2, w2 (which is what
         ! we really want. 
@@ -922,6 +923,7 @@ contains
         if (this%isStratified) this%That = (1.d0/3.d0)*this%That + (2.d0/3.d0)*this%That1 + (2.d0/3.d0)*this%dt*this%T_rhs
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
+
 
         ! Wrap up this time step 
         call this%wrapup_timestep() 
@@ -1691,6 +1693,14 @@ contains
 
        if ((forceWrite.or.(mod(this%step,this%tid_compStats)==0)).and.(this%tsim > this%tSimStartStats) ) then
            if (this%timeAvgFullFields) then
+               ! rhs needs to be evaluated before computing statistics to ensure
+               ! that tauSGS are consistent with the velocities and velocity
+               ! derivatives, which is needed for correct SGS dissipation
+               if (.not. this%AlreadyHaveRHS) then
+                   call this%populate_rhs(1)
+                   this%AlreadyHaveRHS = .true. 
+               end if 
+
                call this%compute_stats3D()
            else
                call this%compute_stats()
@@ -1699,7 +1709,6 @@ contains
 
        if ((forceWrite.or.(mod(this%step,this%tid_statsDump)==0)).and.(this%tsim > this%tSimStartStats) ) then
            if (this%timeAvgFullFields) then
-                !call this%compute_stats3D()
                 call this%dump_stats3D()
                 call mpi_barrier(mpi_comm_world, ierr)
                 !stop
@@ -2359,12 +2368,21 @@ contains
         class(igridWallM), intent(inout), target :: this
         real(rkind), dimension(:,:,:), pointer :: rbuff0, rbuff1, rbuff2, rbuff2E, rbuff3E, rbuff3, rbuff1E, rbuff4
         integer :: j, k, jindx
+        real(rkind),    dimension(:,:,:), pointer :: dudx, dudy
+        real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy
+        real(rkind),    dimension(:,:,:), pointer :: dwdz
+        real(rkind),    dimension(:,:,:), pointer :: dvdzC, dudzC
+        real(rkind),    dimension(:,:,:), pointer :: dwdxC, dwdyC
 
         rbuff0  => this%rbuffxC(:,:,:,1); rbuff1  => this%rbuffxC(:,:,:,2);
         rbuff2  => this%rbuffyC(:,:,:,1);
         rbuff2E => this%rbuffyE(:,:,:,1); rbuff3E => this%rbuffzE(:,:,:,1);
         rbuff3 => this%rbuffzC(:,:,:,1);  rbuff1E => this%rbuffxE(:,:,:,1)
         rbuff4 => this%rbuffzC(:,:,:,2);
+
+        dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
+        dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
+        dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
 
         this%tidSUM = this%tidSUM + 1
 
@@ -2380,7 +2398,7 @@ contains
         rbuff1E = this%vE * this%w
         call transpose_x_to_y(rbuff1E,rbuff2E,this%gpE)
         call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-        call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff4)
+        call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
         call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
         call transpose_y_to_x(rbuff2,rbuff0,this%gpC)
 
@@ -2396,14 +2414,6 @@ contains
             this%vv_mean3D = this%vv_mean3D + this%v * this%v /this%ustar**2
             this%vw_mean3D = this%vw_mean3D + rbuff0          /this%ustar**2
             this%ww_mean3D = this%ww_mean3D + this%wC* this%wC/this%ustar**2
-
-            if(this%isStratified) then
-                this%T_mean3D = this%T_mean3D + this%T*this%ustar/this%wTh_surf
-                this%uT_mean3D = this%uT_mean3D + this%T * this%u /this%wTh_surf
-                this%vT_mean3D = this%vT_mean3D + this%T * this%v /this%wTh_surf
-                this%wT_mean3D = this%wT_mean3D + this%T * this%wC/this%wTh_surf
-                this%TT_mean3D = this%TT_mean3D + this%T * this%T*(this%ustar/this%wTh_surf)**2
-            endif
         else
             this%u_mean3D = this%u_mean3D + this%u
             this%v_mean3D = this%v_mean3D + this%v
@@ -2411,16 +2421,32 @@ contains
 
             this%uu_mean3D = this%uu_mean3D + this%u * this%u
             this%uv_mean3D = this%uv_mean3D + this%u * this%v
-            this%uw_mean3D = this%uw_mean3D + this%u * this%wC
+            this%uw_mean3D = this%uw_mean3D + rbuff1
             this%vv_mean3D = this%vv_mean3D + this%v * this%v
-            this%vw_mean3D = this%vw_mean3D + this%v * this%wC
+            this%vw_mean3D = this%vw_mean3D + rbuff0
             this%ww_mean3D = this%ww_mean3D + this%wC* this%wC
+        endif
 
-            if(this%isStratified) then
+        if(this%isStratified) then
+            ! compute T*w on E, interpolate to C
+            rbuff1E = this%TE * this%w
+            call transpose_x_to_y(rbuff1E,rbuff2E,this%gpE)
+            call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+            call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
+            call transpose_y_to_x(rbuff2,rbuff0,this%gpC)
+
+            if(this%normByUstar) then
+                this%T_mean3D = this%T_mean3D + this%T*this%ustar/this%wTh_surf
+                this%uT_mean3D = this%uT_mean3D + this%T * this%u /this%wTh_surf
+                this%vT_mean3D = this%vT_mean3D + this%T * this%v /this%wTh_surf
+                this%wT_mean3D = this%wT_mean3D + rbuff0          /this%wTh_surf
+                this%TT_mean3D = this%TT_mean3D + this%T * this%T*(this%ustar/this%wTh_surf)**2
+            else
                 this%T_mean3D = this%T_mean3D + this%T
                 this%uT_mean3D = this%uT_mean3D + this%T * this%u
                 this%vT_mean3D = this%vT_mean3D + this%T * this%v
-                this%wT_mean3D = this%wT_mean3D + this%T * this%wC
+                this%wT_mean3D = this%wT_mean3D + rbuff0
                 this%TT_mean3D = this%TT_mean3D + this%T * this%T
             endif
         endif
@@ -2443,7 +2469,8 @@ contains
             ! interpolate tau13 from E to C
             call transpose_x_to_y(this%tau13,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-            rbuff3E(:,:,1) = -(this%ustar**2)
+            !rbuff3E(:,:,1) = -(this%ustar**2)
+            rbuff3E(:,:,1) = this%inst_horz_avg(2)     !--- =-(this%ustar**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model
             call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
             call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,3),this%gpC)
@@ -2451,65 +2478,71 @@ contains
             ! interpolate tau13 from E to C
             call transpose_x_to_y(this%tau23,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-            rbuff3E(:,:,1) = -(this%ustar**2)*this%Vmn/this%Umn
+            !rbuff3E(:,:,1) = -(this%ustar**2)*this%Vmn/this%Umn
+            rbuff3E(:,:,1) = this%inst_horz_avg(3)     !--- =-(this%ustar**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model
             call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
             call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,5),this%gpC)
 
             ! sgs dissipation
-            rbuff1 = this%tauSGS_ij(:,:,:,1)*this%tauSGS_ij(:,:,:,1) + &
-                     this%tauSGS_ij(:,:,:,2)*this%tauSGS_ij(:,:,:,2) + &
-                     this%tauSGS_ij(:,:,:,3)*this%tauSGS_ij(:,:,:,3)
-            rbuff1 = rbuff1 + two*(this%tauSGS_ij(:,:,:,4)*this%tauSGS_ij(:,:,:,4) + &
-                                   this%tauSGS_ij(:,:,:,5)*this%tauSGS_ij(:,:,:,5) + &
-                                   this%tauSGS_ij(:,:,:,6)*this%tauSGS_ij(:,:,:,6) )
-            rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)         ! note: factor of half is in dump_stats
+            !rbuff1 = this%tauSGS_ij(:,:,:,1)*this%tauSGS_ij(:,:,:,1) + &
+            !         this%tauSGS_ij(:,:,:,4)*this%tauSGS_ij(:,:,:,4) + &
+            !         this%tauSGS_ij(:,:,:,6)*this%tauSGS_ij(:,:,:,6)
+            !rbuff1 = rbuff1 + two*(this%tauSGS_ij(:,:,:,2)*this%tauSGS_ij(:,:,:,2) + &
+            !                       this%tauSGS_ij(:,:,:,3)*this%tauSGS_ij(:,:,:,3) + &
+            !                       this%tauSGS_ij(:,:,:,5)*this%tauSGS_ij(:,:,:,5) )
+            !rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)         ! note: factor of half is in dump_stats
+            rbuff1 = this%tauSGS_ij(:,:,:,1)*dudx + this%tauSGS_ij(:,:,:,4)*dvdy + this%tauSGS_ij(:,:,:,6)*dwdz &
+                   + this%tauSGS_ij(:,:,:,2)*(dudy + dvdx) + this%tauSGS_ij(:,:,:,3)*(dudzC + dwdxC) &
+                   + this%tauSGS_ij(:,:,:,5)*(dvdzC + dwdyC)
 
-            if (this%timeAvgFullFields) then
-                if(this%normByUstar) then
-                    this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%ustar**2)
-                    this%tau12_mean3D = this%tau12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%ustar**2)
-                    this%tau13_mean3D = this%tau13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%ustar**2)
-                    this%tau22_mean3D = this%tau22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%ustar**2)
-                    this%tau23_mean3D = this%tau23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%ustar**2)
-                    this%tau33_mean3D = this%tau33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%ustar**2)
+            ! -- this is for viscous dissipation. figure that out later
+            !rbuff2 = dudx*dudx + dvdy*dvdy + dwdz*dwdz &
+            !       + half*( (dudy + dvdx)**2 + (dudzC + dwdxC)**2 + (dvdzC + dwdyC)**2)
 
-                    ! factor of H in normalization is missing from all statistics below
-                    this%sgsdissp_mean3D = this%sgsdissp_mean3D + rbuff1/(this%ustar**3)
+            if(this%normByUstar) then
+                this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%ustar**2)
+                this%tau12_mean3D = this%tau12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%ustar**2)
+                this%tau13_mean3D = this%tau13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%ustar**2)
+                this%tau22_mean3D = this%tau22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%ustar**2)
+                this%tau23_mean3D = this%tau23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%ustar**2)
+                this%tau33_mean3D = this%tau33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%ustar**2)
 
-                    rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)
-                    this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff1/(this%ustar**3)
+                ! factor of H in normalization is missing from all statistics below
+                this%sgsdissp_mean3D = this%sgsdissp_mean3D - rbuff1/(this%ustar**3)
 
-                    this%S11_mean3D = this%S11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%nu_SGS+1.0d-14)/this%ustar
-                    this%S12_mean3D = this%S12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%nu_SGS+1.0d-14)/this%ustar
-                    this%S13_mean3D = this%S13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%nu_SGS+1.0d-14)/this%ustar
-                    this%S22_mean3D = this%S22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%nu_SGS+1.0d-14)/this%ustar
-                    this%S23_mean3D = this%S23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%nu_SGS+1.0d-14)/this%ustar
-                    this%S33_mean3D = this%S33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%nu_SGS+1.0d-14)/this%ustar
-                else
-                    this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)
-                    this%tau12_mean3D = this%tau12_mean3D + this%tauSGS_ij(:,:,:,2)
-                    this%tau13_mean3D = this%tau13_mean3D + this%tauSGS_ij(:,:,:,3)
-                    this%tau22_mean3D = this%tau22_mean3D + this%tauSGS_ij(:,:,:,4)
-                    this%tau23_mean3D = this%tau23_mean3D + this%tauSGS_ij(:,:,:,5)
-                    this%tau33_mean3D = this%tau33_mean3D + this%tauSGS_ij(:,:,:,6)
+                !!rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)
+                !this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff2/(this%ustar**3)
 
-                    this%sgsdissp_mean3D = this%sgsdissp_mean3D + rbuff1
+                this%S11_mean3D = this%S11_mean3D + dudx                /this%ustar
+                this%S12_mean3D = this%S12_mean3D + half*(dudy  + dvdx )/this%ustar
+                this%S13_mean3D = this%S13_mean3D + half*(dudzC + dwdxC)/this%ustar
+                this%S22_mean3D = this%S22_mean3D + dvdy                /this%ustar
+                this%S23_mean3D = this%S23_mean3D + half*(dvdZC + dwdyC)/this%ustar
+                this%S33_mean3D = this%S33_mean3D + dwdz                /this%ustar
+            else
+                this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)
+                this%tau12_mean3D = this%tau12_mean3D + this%tauSGS_ij(:,:,:,2)
+                this%tau13_mean3D = this%tau13_mean3D + this%tauSGS_ij(:,:,:,3)
+                this%tau22_mean3D = this%tau22_mean3D + this%tauSGS_ij(:,:,:,4)
+                this%tau23_mean3D = this%tau23_mean3D + this%tauSGS_ij(:,:,:,5)
+                this%tau33_mean3D = this%tau33_mean3D + this%tauSGS_ij(:,:,:,6)
 
-                    rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)
-                    this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff1
+                this%sgsdissp_mean3D = this%sgsdissp_mean3D - rbuff1
 
-                    this%S11_mean3D = this%S11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%nu_SGS+1.0d-14)
-                    this%S12_mean3D = this%S12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%nu_SGS+1.0d-14)
-                    this%S13_mean3D = this%S13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%nu_SGS+1.0d-14)
-                    this%S22_mean3D = this%S22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%nu_SGS+1.0d-14)
-                    this%S23_mean3D = this%S23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%nu_SGS+1.0d-14)
-                    this%S33_mean3D = this%S33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%nu_SGS+1.0d-14)
-                endif
-            end if 
+                !!rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)
+                !this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff2
+
+                this%S11_mean3D = this%S11_mean3D + dudx
+                this%S12_mean3D = this%S12_mean3D + half*(dudy + dvdx)
+                this%S13_mean3D = this%S13_mean3D + half*(dudzC + dwdxC)
+                this%S22_mean3D = this%S22_mean3D + dvdy
+                this%S23_mean3D = this%S23_mean3D + half*(dvdzC + dwdyC)
+                this%S33_mean3D = this%S33_mean3D + dwdz
+            endif
 
             if(this%isStratified) then
-                ! interpolate q3 from C to E
+                ! interpolate q3 from E to C
                 call transpose_x_to_y(this%q3,rbuff2E,this%gpE)
                 call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
                 rbuff3E(:,:,1) = this%wTh_surf
@@ -2517,17 +2550,15 @@ contains
                 call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
                 call transpose_y_to_x(rbuff2,rbuff1,this%gpC)
 
-                if (this%timeAvgFullFields) then
-                    if(this%normByUstar) then
-                        this%q1_mean3D = this%q1_mean3D + this%q1/this%wTh_surf
-                        this%q2_mean3D = this%q2_mean3D + this%q2/this%wTh_surf
-                        this%q3_mean3D = this%q3_mean3D + rbuff1/this%wTh_surf
-                    else
-                        this%q1_mean3D = this%q1_mean3D + this%q1
-                        this%q2_mean3D = this%q2_mean3D + this%q2
-                        this%q3_mean3D = this%q3_mean3D + rbuff1
-                    endif
-                end if 
+                if(this%normByUstar) then
+                    this%q1_mean3D = this%q1_mean3D + this%q1/this%wTh_surf
+                    this%q2_mean3D = this%q2_mean3D + this%q2/this%wTh_surf
+                    this%q3_mean3D = this%q3_mean3D + rbuff1/this%wTh_surf
+                else
+                    this%q1_mean3D = this%q1_mean3D + this%q1
+                    this%q2_mean3D = this%q2_mean3D + this%q2
+                    this%q3_mean3D = this%q3_mean3D + rbuff1
+                endif
             endif
 
         endif
@@ -2591,6 +2622,8 @@ contains
         ! instantaneous horizontal averages of some quantities
         this%inst_horz_avg(1) = this%ustar
         ! this%inst_horz(2) and (3) are computed in getRHS_SGS_WallM
+        ! normalize it here
+        this%inst_horz_avg(2:3) = this%inst_horz_avg(2:3)/this%meanFact
         if(this%isStratified) then
             this%inst_horz_avg(4) = this%invObLength
             this%inst_horz_avg(5) = this%wTh_surf
@@ -2600,6 +2633,7 @@ contains
         if(this%useWindTurbines) this%runningSum_sc_turb = this%runningSum_sc_turb + this%inst_horz_avg_turb
 
         nullify(rbuff0,rbuff1,rbuff2,rbuff3,rbuff2E,rbuff3E,rbuff4,rbuff1E)
+        nullify(dudx, dudy, dudzC, dvdx, dvdy, dvdzC, dwdxC, dwdyC, dwdz)
 
     end subroutine
 

@@ -6,7 +6,7 @@ module sgsmod
     use spectralMod, only: spectral  
     use mpi 
     use cd06staggstuff, only: cd06stagg
-    use reductions, only: p_maxval, p_sum
+    use reductions, only: p_maxval, p_sum, p_minval
     use numerics, only: useCompactFD 
     use StaggOpsMod, only: staggOps  
     use gaussianstuff, only: gaussian
@@ -370,7 +370,8 @@ contains
           end if
           call transpose_z_to_y(this%rtmpzE,this%rtmpYE,this%gpE)
           call transpose_y_to_x(this%rtmpYE,this%nuSGSE,this%gpE)
-          this%nuSGSE = max(zero,this%nuSGSE)
+          !this%nuSGSE = max(zero,this%nuSGSE) !-- bug here. nuSGSE here should be non-positive to avoid backscatter
+          this%nuSGSE = min(zero,this%nuSGSE) !-- bug here. nuSGSE here should be non-positive to avoid backscatter
           tau13 = this%nuSGSE * S13
           tau23 = this%nuSGSE * S23
         endif
@@ -397,7 +398,7 @@ contains
             call this%spectE%fft(tau13,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1)
-            inst_horz_avg(2) = real(this%ctmpEz(1,1,1), rkind)
+            inst_horz_avg(2) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
@@ -418,7 +419,7 @@ contains
             call this%spectE%fft(tau23,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1)
-            inst_horz_avg(3) = real(this%ctmpEz(1,1,1), rkind)
+            inst_horz_avg(3) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
@@ -439,7 +440,7 @@ contains
             call this%spectE%fft(tau13,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = (this%WallMFactor*Umn/Uspmn)*this%ctmpCz(:,:,1) 
-            inst_horz_avg(2) = real(this%ctmpEz(1,1,1), rkind)
+            inst_horz_avg(2) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
@@ -458,7 +459,7 @@ contains
             call this%spectE%fft(tau23,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = (this%WallMFactor*Vmn/Uspmn)*this%ctmpCz(:,:,1) 
-            inst_horz_avg(3) = real(this%ctmpEz(1,1,1), rkind)
+            inst_horz_avg(3) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else

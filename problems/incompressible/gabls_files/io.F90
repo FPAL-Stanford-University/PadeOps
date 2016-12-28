@@ -67,7 +67,6 @@ contains
 
         OutputDir = gp%outputdir
         runIDX = gp%runID
-        
         inquire(FILE=trim(OutputDir), exist=isThere)
         if (nrank == 0) then
             !if (.not. isThere) then
@@ -100,6 +99,7 @@ contains
         call gp%dumpFullField(gp%v,'vVel')
         call gp%dumpFullField(gp%wC,'wVel')
         call gp%dumpFullField(gp%T,'potT')
+
     end subroutine
 
     subroutine dumpData4Matlab(gp)

@@ -14,7 +14,7 @@ program test_actuatorLine
     type(actuatorLine), dimension(:), allocatable :: hawts
     integer, parameter :: nx = 96, ny = 96, nz = 64
     character(len=clen) :: inputDir = "/home/nghaisas/PadeOps/tests/test_actuatorLine_files"
-    real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
+    real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG, yRightHalo, zRightHalo, zLeftHalo
     real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs, rhsv, rhsw
     real(rkind), parameter :: Lx = pi, Ly = pi, Lz = one
     real(rkind) :: dx, dy, dz
@@ -33,6 +33,10 @@ program test_actuatorLine
     allocate(rhs(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
     allocate(rhsv(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
     allocate(rhsw(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(yRightHalo(gp%xsz(1),gp%xsz(3),  3))
+    allocate(zRightHalo(gp%xsz(1),gp%xsz(2)+1,3))
+    allocate(zLeftHalo (gp%xsz(1),gp%xsz(2)+1,3))
+
 
     dx = Lx/real(nx,rkind); dy = Ly/real(ny,rkind); dz = Lz/real(nz,rkind)
     ix1 = gp%xst(1); iy1 = gp%xst(2); iz1 = gp%xst(3)
@@ -64,13 +68,13 @@ program test_actuatorLine
     rhs = 0.d0
     call mpi_barrier(mpi_comm_world, ierr)
     call tic()
-    call halo_communicate
+    !call halo_communicate
     do idx = 1,6
-        call hawts(idx)%get_RHS(dt, u, v, w, rhs, rhsv, rhsw, inst_val)
+        call hawts(idx)%get_RHS(dt, u, v, w, yRightHalo, zLeftHalo, zRightHalo, rhs, rhsv, rhsw, inst_val)
     end do 
     call mpi_barrier(mpi_comm_world, ierr)
     call toc()
-   
+ 
     call decomp_2d_write_one(1,rhs,"temp.bin", gp)
     
     call message(2,"Computed Source:", p_sum(sum(rhs)) * dx*dy*dz)
@@ -81,6 +85,6 @@ program test_actuatorLine
     call hawts(idx)%destroy()
     end do 
     deallocate(hawts)
-    deallocate(xG, yG, zG, u, v, w, rhs)
+    deallocate(xG, yG, zG, u, v, w, rhs,yRightHalo, zRightHalo, zLeftHalo)
     call MPI_Finalize(ierr)
 end program 
