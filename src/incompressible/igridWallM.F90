@@ -112,7 +112,7 @@ module IncompressibleGridWallM
         integer :: wallMType, botBC_Temp 
 
         ! Statistics to compute 
-        real(rkind), dimension(:), allocatable :: runningSum_sc, inst_horz_avg, runningSum_sc_turb, runningSum_turb, inst_horz_avg_turb
+        real(rkind), dimension(:), allocatable :: runningSum_sc, inst_horz_avg, runningSum_sc_turb, runningSum_turb, inst_horz_avg_turb, debugavg, debuginst
         real(rkind), dimension(:,:), allocatable :: zStats2dump, runningSum, TemporalMnNOW, horzavgstats
         real(rkind), dimension(:,:,:,:), allocatable :: stats3D
         real(rkind), dimension(:,:,:),   allocatable :: xspectra_mean
@@ -1426,7 +1426,8 @@ contains
             call this%addExtraForcingTerm()
         end if 
         ! Step 3b: Wind Turbines
-        if (this%useWindTurbines .and. (RKstage==1)) then
+        !if (this%useWindTurbines .and. (RKstage==1)) then
+        if (this%useWindTurbines) then
             call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
                                     this%u_rhs, this%v_rhs, this%w_rhs, this%inst_horz_avg_turb)
         end if 
@@ -1751,9 +1752,10 @@ contains
            call this%dumpFullField(this%wC,'wVel')
            if (this%isStratified) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
-           !call this%dumpFullField(this%WindTurbineArr%fx,'wtfx')
-           !call this%dumpFullField(this%WindTurbineArr%fy,'wtfy')
-           !call this%dumpFullField(this%WindTurbineArr%fz,'wtfz')
+           if (this%useWindTurbines) then
+               this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
+               this%WindTurbineArr%step = this%step-1
+           endif
            if (this%PreProcessForKS) then
                 if (.not. this%KSupdated) then
                     call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
@@ -1783,6 +1785,10 @@ contains
            call this%dumpFullField(this%wC,'wVel')
            if (this%isStratified) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
+           if (this%useWindTurbines) then
+               this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
+               this%WindTurbineArr%step = this%step-1
+           endif
            if (this%PreProcessForKS) then
                 if (.not. this%KSupdated) then
                     call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
@@ -2249,6 +2255,7 @@ contains
            nstatsvar = nstatsvar + 4
         endif
 
+        allocate(this%debugavg(5),this%debuginst(5))
         allocate(this%inst_horz_avg(nhorzavgvars))
         allocate(this%runningSum_sc(nhorzavgvars))
         allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),nstatsvar))
@@ -2346,6 +2353,8 @@ contains
         this%tprev2 = -1; this%tprev1 = -1;
         this%stats3D = zero
         this%horzavgstats = zero
+        this%debugavg = zero
+        this%debuginst = zero
         this%inst_horz_avg = zero
         this%runningSum_sc = zero
         if(this%useWindTurbines) then
@@ -2365,9 +2374,10 @@ contains
     end subroutine
 
     subroutine compute_stats3D(this)
+        use kind_parameters, only: mpirkind
         class(igridWallM), intent(inout), target :: this
         real(rkind), dimension(:,:,:), pointer :: rbuff0, rbuff1, rbuff2, rbuff2E, rbuff3E, rbuff3, rbuff1E, rbuff4
-        integer :: j, k, jindx
+        integer :: j, k, jindx, ierr
         real(rkind),    dimension(:,:,:), pointer :: dudx, dudy
         real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy
         real(rkind),    dimension(:,:,:), pointer :: dwdz
@@ -2466,12 +2476,37 @@ contains
         endif
 
         if(this%useSGS) then
+
+            !write(300+nrank,'(i4,3(e19.12,1x))') 1, this%inst_horz_avg(2:3)
+            call mpi_bcast(this%inst_horz_avg(2:3),2,mpirkind,0,mpi_comm_world,ierr)
+            !write(300+nrank,'(i4,3(e19.12,1x))') 2, this%inst_horz_avg(2:3)
+
+
             ! interpolate tau13 from E to C
             call transpose_x_to_y(this%tau13,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
             !rbuff3E(:,:,1) = -(this%ustar**2)
+            !if(nrank==0) then
+            !    write(*,*) '-----------------'
+            !    write(*,*) rbuff3E(1,1,1:2)
+            !endif
+            !write(200+nrank,*) 1, this%tsim, this%inst_horz_avg(2)
             rbuff3E(:,:,1) = this%inst_horz_avg(2)     !--- =-(this%ustar**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model
+            !if(nrank==0) then
+            !    write(*,*) rbuff3E(1,1,1:2)
+            !endif
+            !this%debuginst(1) = p_sum(sum(rbuff3E(:,:,1)))*this%meanFact
+            !write(200+nrank,*) 2, this%tsim, this%debuginst(1)
+            !this%debuginst(2) = p_sum(sum(rbuff3E(:,:,2)))*this%meanFact
+            !this%debuginst(3) = p_sum(sum(rbuff3E(:,:,3)))*this%meanFact
             call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            !this%debuginst(4) = p_sum(sum(rbuff3(:,:,1)))*this%meanFact
+            !this%debuginst(5) = p_sum(sum(rbuff3(:,:,2)))*this%meanFact
+            !this%debugavg(:) = this%debugavg(:) + this%debuginst(:)
+            !if(nrank==0) then
+            !    write(nrank+100,'(11(e19.12,1x))') this%tsim, this%debuginst, this%debugavg/real(this%tidSUM, rkind)
+            !    !write(*,*) '-----------------'
+            !endif
             call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
             call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,3),this%gpC)
 
@@ -2621,15 +2656,16 @@ contains
 
         ! instantaneous horizontal averages of some quantities
         this%inst_horz_avg(1) = this%ustar
-        ! this%inst_horz(2) and (3) are computed in getRHS_SGS_WallM
-        ! normalize it here
-        this%inst_horz_avg(2:3) = this%inst_horz_avg(2:3)/this%meanFact
+        ! this%inst_horz(2) and (3) are computed on nrank==0 proc in getRHS_SGS_WallM
+        ! broadcast to all other procs above in this subroutine
+        ! do nothing about inst_horz_avg(2:3) herre
         if(this%isStratified) then
             this%inst_horz_avg(4) = this%invObLength
             this%inst_horz_avg(5) = this%wTh_surf
         endif
         ! this%inst_horz_avg_turb(1:5*this%WindTurbineArr%nTurbines) is computed in this%WindTurbineArr%getForceRHS
         this%runningSum_sc = this%runningSum_sc + this%inst_horz_avg
+            !write(200+nrank,*) 3, this%tsim, this%runningSum_sc(2)
         if(this%useWindTurbines) this%runningSum_sc_turb = this%runningSum_sc_turb + this%inst_horz_avg_turb
 
         nullify(rbuff0,rbuff1,rbuff2,rbuff3,rbuff2E,rbuff3E,rbuff4,rbuff1E)
@@ -3169,6 +3205,7 @@ contains
             endif
             close(771)
         end if
+        !write(200+nrank,*) 4, this%tsim, this%runningSum_sc(2)/tidSUMreal
         call message(1, "Just dumped a .stt file")
         call message(2, "Number ot tsteps averaged:",this%tidSUM)
 
@@ -3901,7 +3938,7 @@ contains
 
 
     subroutine start_io(this, dumpInitField)
-        class(igridWallM), target, intent(in) :: this 
+        class(igridWallM), target, intent(inout) :: this 
         character(len=clen) :: fname
         character(len=clen) :: tempname
         !character(len=clen) :: command
@@ -3987,6 +4024,10 @@ contains
                 call this%dumpFullField(this%wC,'wVel')
                 if (this%isStratified) call this%dumpFullField(this%T,'potT')
                 if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
+                if (this%useWindTurbines) then
+                    this%WindTurbineArr%dumpTurbField = .true.
+                    this%WindTurbineArr%step = this%step-1
+                endif
                 call message(0,"Done with the initialization data dump.")
             end if
         end if

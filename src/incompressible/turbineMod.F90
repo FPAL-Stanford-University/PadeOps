@@ -43,6 +43,9 @@ module turbineMod
         ! variables needed for halo communication
         integer :: neighbour(6), coord(2), dims(2), tag_s, tag_n, tag_b, tag_t
         real(rkind), allocatable, dimension(:,:,:) :: ySendBuf, zSendBuf, yRightHalo, zRightHalo, zLeftHalo
+
+        logical :: dumpTurbField = .false.
+        integer :: step = 0
     contains
 
         procedure :: init
@@ -51,6 +54,7 @@ module turbineMod
         procedure :: halo_communication
         procedure :: destroy_halo_communication
         procedure :: getForceRHS 
+        procedure :: dumpFullField
 
     end type
 
@@ -113,6 +117,14 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbu
         call this%turbArrayALM(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3), xyzPads)
       end do
       call message(1,"WIND TURBINE ALM model initialized")
+    endif
+
+    if(this%dumpTurbField) then
+        this%fx = zero; this%fy = zero; this%fz = zero
+        call this%dumpFullField(this%fx, "wtfx")
+        call this%dumpFullField(this%fy, "wtfy")
+        call this%dumpFullField(this%fz, "wtfz")
+        this%dumpTurbField = .false.
     endif
 
 end subroutine
@@ -327,8 +339,10 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, inst_horz_avg)
             call this%turbArrayALM(i)%get_RHS(dt, u, v, wC, this%yRightHalo, this%zLeftHalo, this%zRightHalo, this%fx, this%fy, this%fz)   
         end if 
       end do
-       !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Done turbine force calculation"); call mpi_barrier(mpi_comm_world, ierr)
     endif
+       !call mpi_barrier(mpi_comm_world, ierr)
+       !write(*,'(i5,6(e19.12,1x))') nrank, maxval(this%fx), minval(this%fx), maxval(this%fy), minval(this%fy), maxval(this%fz), minval(this%fz) 
+       !call mpi_barrier(mpi_comm_world, ierr)
 
     ! add forces to rhs
     call this%spectC%fft(this%fx,this%fChat)
@@ -344,6 +358,36 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, inst_horz_avg)
     call transpose_z_to_y(this%zbuffE,this%fEhat,this%sp_gpE)
     wrhs = wrhs + this%fEhat
 
+    if(this%dumpTurbField) then
+      !if(ADM) then
+      !else
+      !  do i = 1, this%nTurbines
+      !    call this%turbArrayALM(i)%dumpTurbineField()
+      !  enddo
+      !endif
+      this%step = this%step + 1
+      call this%dumpFullField(this%fx, 'wtfx')
+      call this%dumpFullField(this%fy, 'wtfy')
+      call this%dumpFullField(this%fz, 'wtfz')
+      this%dumpTurbField = .false.
+    endif
+
 end subroutine 
+
+    subroutine dumpFullField(this,arr,label)
+        use decomp_2d_io
+        use mpi
+        use exits, only: message
+        class(TurbineArray), intent(in) :: this
+        character(len=clen) :: tempname!, fname
+        real(rkind), dimension(:,:,:), intent(in) :: arr
+        character(len=4), intent(in) :: label
+
+        write(tempname,"(A6,A4,A2,I6.6,A4)") "Run02_",label,"_t",this%step,".out"
+        !fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1,arr,tempname)
+
+    end subroutine
+
 
 end module

@@ -398,7 +398,7 @@ contains
             call this%spectE%fft(tau13,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1)
-            inst_horz_avg(2) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
+            if(nrank==0) inst_horz_avg(2) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
@@ -419,7 +419,7 @@ contains
             call this%spectE%fft(tau23,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1)
-            inst_horz_avg(3) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
+            if(nrank==0) inst_horz_avg(3) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
@@ -440,7 +440,7 @@ contains
             call this%spectE%fft(tau13,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = (this%WallMFactor*Umn/Uspmn)*this%ctmpCz(:,:,1) 
-            inst_horz_avg(2) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
+            if(nrank==0) inst_horz_avg(2) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
@@ -459,7 +459,7 @@ contains
             call this%spectE%fft(tau23,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
             this%ctmpEz(:,:,1) = (this%WallMFactor*Vmn/Uspmn)*this%ctmpCz(:,:,1) 
-            inst_horz_avg(3) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
+            if(nrank==0) inst_horz_avg(3) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
             else
@@ -474,7 +474,6 @@ contains
             call this%spectE%mtimes_ik2_ip(this%ctmpEy)
             wrhs = wrhs - this%ctmpEy
         end select
-
 
         ! STEP 6: tau12 -> ddy in urhs, ddx in vrhs
         call this%spectC%fft(tau12,tauhat)

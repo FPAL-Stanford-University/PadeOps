@@ -33,6 +33,7 @@ contains
             call message(1,"T_surf:", gp%Tsurf)
             call message(1,"u_star:",gp%ustar)
             call message(1,"Inv. Ob. Length:",gp%InvObLength)
+            call message(1,"wTh_surf:",gp%wTh_surf)
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 

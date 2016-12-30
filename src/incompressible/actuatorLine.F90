@@ -108,6 +108,7 @@ subroutine init(this, inputDir, ActuatorLineID, xG, yG, zG, xyzPads)
     open(unit=ioUnit, file=trim(fname), form='FORMATTED')
     read(unit=ioUnit, NML=ACTUATOR_LINE)
     close(ioUnit)
+    !call mpi_barrier(mpi_comm_world, ierr); call message(2,"Read ActuatorLine_input.inp"); call mpi_barrier(mpi_comm_world, ierr)
 
     ! Read information about this turbine type
     write(tempname,"(A12,I3.3,A10)") "TurbineType_", turbineTypeID, "_input.inp"
@@ -117,6 +118,7 @@ subroutine init(this, inputDir, ActuatorLineID, xG, yG, zG, xyzPads)
     open(unit=ioUnit, file=trim(fname), form='FORMATTED')
     read(unit=ioUnit, NML=TURBINE_TYPE)
     close(ioUnit)
+    !call mpi_barrier(mpi_comm_world, ierr); call message(2,"Read TurbineType_input.inp"); call mpi_barrier(mpi_comm_world, ierr)
 
     ! Read information about blade type used in this turbine - identical blades per turbine for now
     ! This file does not use namelists, so order in which data is written in this file appears is important
@@ -157,6 +159,7 @@ subroutine init(this, inputDir, ActuatorLineID, xG, yG, zG, xyzPads)
       ! normalize radial distance by reference length
       airfoilIDTable(:,1) = airfoilIDTable(:,1)/reference_length
     close(ioUnit)
+    !call mpi_barrier(mpi_comm_world, ierr); call message(2,"Read BladeType_input.inp"); call mpi_barrier(mpi_comm_world, ierr)
 
     ! read in airfoil data
     ! first identify the number of airfoils used in this blade and the size of
@@ -247,6 +250,7 @@ subroutine init(this, inputDir, ActuatorLineID, xG, yG, zG, xyzPads)
           this%clTable(j,1,k) = this%clTable(j,1,k) * degrees_to_radians
         enddo
         close(ioUnit)
+        !call mpi_barrier(mpi_comm_world, ierr); call message(2,"Read AirfoilType_CL_input.inp"); call mpi_barrier(mpi_comm_world, ierr)
        
         !if(nrank==0) then
         !  write(*,*) '-----ClTable:-----', k
@@ -267,6 +271,7 @@ subroutine init(this, inputDir, ActuatorLineID, xG, yG, zG, xyzPads)
           this%cdTable(j,1,k) = this%cdTable(j,1,k) * degrees_to_radians
         enddo
         close(ioUnit)
+        !call mpi_barrier(mpi_comm_world, ierr); call message(2,"Read AirfoilType_CD_input.inp"); call mpi_barrier(mpi_comm_world, ierr)
     enddo
     deallocate(airfoilIDs)
 
@@ -290,6 +295,7 @@ subroutine init(this, inputDir, ActuatorLineID, xG, yG, zG, xyzPads)
     ! factor for distributing blade forces to grid points
     this%delta = epsFact * (dx*dy*dz)**(1.d0/3.d0)
     this%OneByDelSq = 1.d0/(this%delta**2)
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 1"); call mpi_barrier(mpi_comm_world, ierr)
 
     allocate(this%blade_points(3, this%num_blade_points, this%num_blades))
     allocate(this%blade_forces(3, this%num_blade_points, this%num_blades))
@@ -315,10 +321,17 @@ subroutine init(this, inputDir, ActuatorLineID, xG, yG, zG, xyzPads)
     this%rotor_center(2) = this%turbLoc(2)
     this%rotor_center(3) = this%turbLoc(3)
 
-    this%rotor_shaft = this%turbLoc - this%rotor_center
+    ! rotor shaft points in the direction of the wind
+    if(this%nacelle_width > 1.0d-10) then
+        this%rotor_shaft = this%turbLoc - this%rotor_center
+    else
+        this%rotor_shaft(1) = one;  this%rotor_shaft(2:3) = zero
+    endif
+    this%rotor_shaft = this%rotor_shaft/sqrt(sum(this%rotor_shaft**2))
 
     ! length of each actuator line element
     element_length = (this%tip_radius - this%hub_radius) / this%num_blade_points
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 2"); call mpi_barrier(mpi_comm_world, ierr)
 
     do j = 1, this%num_blades
       do k = 1, this%num_blade_points
@@ -329,36 +342,47 @@ subroutine init(this, inputDir, ActuatorLineID, xG, yG, zG, xyzPads)
         this%blade_points(:,k,j) = this%rotor_center
         this%blade_points(3,k,j) = this%rotor_center(3) + this%radial_dist(k,j)
       enddo
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 2.1"); call mpi_barrier(mpi_comm_world, ierr)
 
       ! rotate each blade to its correct azimuth
       call this%rotate_one_blade(j, this%blade_azimuth + real(j-1,rkind)*two*pi/real(this%num_blades, rkind))
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 2.2"); call mpi_barrier(mpi_comm_world, ierr)
 
       ! interpolate airfoil properties - twist angle, chord length, airfoilID - based on radial distance
       call interp(this%radial_dist(:,j), this%twistAng(:,j),  twistAngTable )
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 2.3"); call mpi_barrier(mpi_comm_world, ierr)
       call interp(this%radial_dist(:,j), this%chord(:,j),     chordTable    )
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 2.4"); call mpi_barrier(mpi_comm_world, ierr)
       call interpint(this%radial_dist(:,j), this%airfoilID(:,j), airfoilIDTable)
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 2.5"); call mpi_barrier(mpi_comm_world, ierr)
       call interpint(this%radial_dist(:,j), this%airfoilIDIndex(:,j), airfoilIDIndexTable)
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 2.6"); call mpi_barrier(mpi_comm_world, ierr)
     enddo
     deallocate(twistAngTable, chordTable, airfoilIDTable, airfoilIDIndexTable)
 
     ! now rotate all blades so that yaw angle is correct
     call this%yaw_turbine(this%yaw_angle)
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 2.7"); call mpi_barrier(mpi_comm_world, ierr)
 
     ! compute ist, iend, jst, jend, kst, kend based on turbine location, blade radius, projection radius and processor extents
     projection_radius = 1.1d0 * this%delta * sqrt(log(1.0D3))    ! distance where influence of actuator points reduces to 0.001 of the max value
     cloud_radius = this%tip_radius + projection_radius
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 2.8"); call mpi_barrier(mpi_comm_world, ierr)
  
     xmin = this%rotor_center(1) - cloud_radius; xmax = this%rotor_center(1) + cloud_radius
     ymin = this%rotor_center(2) - cloud_radius; ymax = this%rotor_center(2) + cloud_radius
     zmin = this%rotor_center(3) - cloud_radius; zmax = this%rotor_center(3) + cloud_radius
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 2.9"); call mpi_barrier(mpi_comm_world, ierr)
 
     call this%get_extents(1, xmin, xmax, xG(:,1,1))
     call this%get_extents(2, ymin, ymax, yG(1,:,1))
     call this%get_extents(3, zmin, zmax, zG(1,1,:))
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 2.10"); call mpi_barrier(mpi_comm_world, ierr)
  
     this%xlen = this%iend - this%ist + 1
     this%ylen = this%jend - this%jst + 1
     this%zlen = this%kend - this%kst + 1
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 3"); call mpi_barrier(mpi_comm_world, ierr)
 
     if(this%xlen * this%ylen * this%zlen > 0) then
       this%tag_proc = 1
@@ -394,6 +418,7 @@ subroutine init(this, inputDir, ActuatorLineID, xG, yG, zG, xyzPads)
       this%zSmall = zG(this%ist:this%iend, this%jst:this%jend, this%kst:this%kend)
 
     endif
+        !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Step 4"); call mpi_barrier(mpi_comm_world, ierr)
 
     if(this%Am_I_Active) then
         this%normfactor = one/(this%delta**3 * pi**1.5d0)
@@ -518,7 +543,12 @@ subroutine yaw_turbine(this, angle)
     this%rotor_center = this%rotor_center + this%turbLoc
 
     ! update shaft direction
-    this%rotor_shaft = this%turbLoc - this%rotor_center
+    if(this%nacelle_width > 1.0d-10) then
+        this%rotor_shaft = this%turbLoc - this%rotor_center
+    else
+        this%rotor_shaft(1) = one;  this%rotor_shaft(2:3) = zero
+    endif
+    this%rotor_shaft = this%rotor_shaft/sqrt(sum(this%rotor_shaft**2))
 
     ! next rotate each blade
     do blID = 1, this%num_blades
@@ -1191,7 +1221,7 @@ subroutine get_RHS(this, dt, u, v, w, yRightHalo, zLeftHalo, zRightHalo, rhsxval
     inst_val(2) = abs(this%distr_thrust)
     inst_val(3) = abs(this%turb_torque)
     inst_val(4) = abs(this%rotspeed)
-    inst_val(5) = abs(this%rotspeed*this%rotspeed)
+    inst_val(5) = abs(this%turb_torque*this%rotspeed)
     inst_val(6) = abs(this%uturbavg)
     inst_val(7) = abs(this%uturbavg**2)
     inst_val(8) = abs(this%uturbavg**3)

@@ -1,0 +1,13 @@
+&INPUT
+nx                    = 96 
+ny                    = 96
+nz                    = 64
+inputdir              = "/home/nghaisas/runs/PadeOps/pblwt/gabls1new/"   ! Directory for any input files
+outputdir             = "/home/nghaisas/runs/PadeOps/pblwt/gabls1new/"   ! Directory for all output files
+inputFile_TID         = 12000       ! TimeID of the restart file for the original data
+inputFile_RID         = 10          ! RunID of the restart file for the original data
+outputFile_TID        = 12000       ! TimeID of the restart file with upsampled data
+outputFile_RID        = 12          ! RunID of the restart file with the upsampled data
+statsFile_TID         = 12          ! RunID of the restart file with the upsampled data
+HubHeight             = 0.2
+/
