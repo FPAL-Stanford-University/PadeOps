@@ -39,6 +39,11 @@ module IO_HDF5_stuff
     contains
 
         procedure :: init
+        procedure :: write_dataset
+        procedure :: write_coords
+        procedure :: start_viz
+        procedure :: end_viz
+        procedure :: write_variable
         final     :: destroy
 
     end type
@@ -94,7 +99,7 @@ contains
         this%dimsf = [gp%xsz(1), gp%ysz(2), gp%zsz(3)]
 
         ! Set dimensions of each chunk
-        select case(this%pencil_)
+        select case(this%pencil)
         case('x')
             this%chunk_dims = gp%xsz
             this%offset     = gp%xst - 1
@@ -115,7 +120,7 @@ contains
         this%block  = this%chunk_dims
     end subroutine
 
-    pure elemental subroutine destroy(this)
+    impure elemental subroutine destroy(this)
         type(io_hdf5), intent(inout) :: this
 
         integer :: error
@@ -156,11 +161,11 @@ contains
 
         ! Create property list for collective dataset write
         call h5pcreate_f(H5P_DATASET_XFER_F, this%plist_id, error)
-        call h5pset_dxpl_mpio_f(this%plist_id, H5D_MPIO_COLLECTIVE_F, error)
+        call h5pset_dxpl_mpio_f(this%plist_id, H5FD_MPIO_COLLECTIVE_F, error)
 
         ! Write dataset collectively
-        call h5dwrite(this%dset_id, H5T_NATIVE_DOUBLE, field, this%dimsf, error, &
-                      file_space_id = this%filespace, mem_space_id = this%memspace. xfer_prp = this%plist_id)
+        call h5dwrite_f(this%dset_id, H5T_NATIVE_DOUBLE, field, this%dimsf, error, &
+                        file_space_id = this%filespace, mem_space_id = this%memspace, xfer_prp = this%plist_id)
 
         ! Close dataspaces
         call h5sclose_f(this%filespace, error)
@@ -178,8 +183,6 @@ contains
         class(io_hdf5), intent(inout) :: this
         real(rkind), dimension(this%chunk_dims(1),this%chunk_dims(2),this%chunk_dims(3),3), intent(in) :: coords
 
-        integer :: error
-
         call this%write_dataset(coords(:,:,:,1), 'coords/X')
         call this%write_dataset(coords(:,:,:,2), 'coords/Y')
         call this%write_dataset(coords(:,:,:,3), 'coords/Z')
@@ -191,7 +194,7 @@ contains
         real(rkind),    intent(in)    :: time
 
         this%xdmf_filename = ''
-        write(this%xdmf_filename,'A,A,I4.4,A') adjustl(trim(this%vizdir)), "/", this%vizcount, '.xmf'
+        write(this%xdmf_filename,'(A,A,I4.4,A)') adjustl(trim(this%vizdir)), "/", this%vizcount, '.xmf'
 
         if (this%master) then
             open(unit=this%xdmf_file_id, file=adjustl(trim(this%xdmf_filename)), form='FORMATTED', status='REPLACE')
@@ -224,7 +227,6 @@ contains
         character(len=*),                                                                 intent(in)    :: varname
 
         character(len=clen) :: dsetname
-        integer :: error
 
         write(dsetname,'(I4.4,A,A)') this%vizcount, '/', adjustl(trim(varname))
         call this%write_dataset(field, dsetname)
@@ -249,6 +251,8 @@ contains
 
             close(this%xdmf_file_id)
         end if
+
+        this%vizcount = this%vizcount + 1
     end subroutine
 
 end module

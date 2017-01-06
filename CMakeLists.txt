@@ -25,6 +25,11 @@ set(VTK_IO_PATH $ENV{VTK_IO_PATH})
 set(VTK_IO_LIBRARY_PATH "${VTK_IO_PATH}/lib")
 set(VTK_IO_INCLUDE_PATH "${VTK_IO_PATH}/modules")
 
+# Where to look for HDF5
+set(HDF5_PATH $ENV{HDF5_PATH})
+set(HDF5_LIBRARY_PATH "${HDF5_PATH}/lib")
+set(HDF5_INCLUDE_PATH "${HDF5_PATH}/include")
+
 set(CMAKE_Fortran_COMPILER_ID $ENV{COMPILER_ID})
 
 # Intel compiler suite
