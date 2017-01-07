@@ -16,7 +16,7 @@ case "$os" in
         cd hdf5-1.10.0-patch1
         FC=mpif90 CC=mpicc CXX=mpic++ RUNPARALLEL='mpiexec -n $${NPROCS:=4}' sh ./configure --enable-fortran --enable-parallel --prefix=$HOME/HDF5 > /dev/null
         make -j > /dev/null
-        sudo make install > /dev/null
+        make install > /dev/null
         ;;
 
     *)
