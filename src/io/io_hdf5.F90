@@ -20,6 +20,7 @@ module IO_HDF5_stuff
         integer(hid_t) :: file_id        ! File identifier
         integer        :: xdmf_file_id   ! XDMF file identifier
         integer(hid_t) :: dset_id        ! Dataset identifier
+        integer(hid_t) :: lcpl_id        ! Link creation property list identifier
         integer(hid_t) :: filespace      ! Dataspace identifier in file
         integer(hid_t) :: memspace       ! Dataspace identifier in memory
         integer(hid_t) :: plist_id       ! Property list identifier
@@ -44,7 +45,7 @@ module IO_HDF5_stuff
         procedure :: start_viz
         procedure :: end_viz
         procedure :: write_variable
-        final     :: destroy
+        procedure :: destroy
 
     end type
 
@@ -61,6 +62,8 @@ contains
         integer :: nrank
         integer :: info
         integer :: error
+
+        info = mpi_info_null
 
         this%comm = comm_
         this%pencil = pencil_
@@ -95,6 +98,10 @@ contains
         call h5fcreate_f(this%filename, H5F_ACC_TRUNC_F, this%file_id, error, access_prp = this%plist_id)
         call h5pclose_f(this%plist_id, error)
 
+        ! Create group creation property list and set it to allow creation of intermediate groups
+        call h5pcreate_f(H5P_LINK_CREATE_F, this%lcpl_id, error)
+        call h5pset_create_inter_group_f(this%lcpl_id, 1, error)
+
         ! Set the dataset dimensions
         this%dimsf = [gp%xsz(1), gp%ysz(2), gp%zsz(3)]
 
@@ -120,14 +127,17 @@ contains
         this%block  = this%chunk_dims
     end subroutine
 
-    impure elemental subroutine destroy(this)
-        type(io_hdf5), intent(inout) :: this
+    subroutine destroy(this)
+        class(io_hdf5), intent(inout) :: this
 
         integer :: error
 
         this%vizcount = 0
         this%filename = ''
         this%vizdir = ''
+
+        ! Close the link creation property list
+        call h5pclose_f(this%lcpl_id, error)
 
         ! Close the file
         call h5fclose_f(this%file_id, error)
@@ -151,7 +161,7 @@ contains
         call h5pcreate_f(H5P_DATASET_CREATE_F, this%plist_id, error)
         call h5pset_chunk_f(this%plist_id, this%rank, this%chunk_dims, error)
         call h5dcreate_f(this%file_id, adjustl(trim(dsetname)), H5T_NATIVE_DOUBLE, this%filespace, &
-                         this%dset_id, error, this%plist_id)
+                         this%dset_id, error, this%plist_id, this%lcpl_id)
         call h5sclose_f(this%filespace, error)
 
         ! Select hyperslab in file
