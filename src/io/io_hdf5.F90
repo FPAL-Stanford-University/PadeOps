@@ -24,6 +24,7 @@ module IO_HDF5_stuff
         integer(hid_t) :: filespace      ! Dataspace identifier in file
         integer(hid_t) :: memspace       ! Dataspace identifier in memory
         integer(hid_t) :: plist_id       ! Property list identifier
+        integer(hid_t) :: group_id       ! Group identifier
 
         integer :: rank = 3              ! Dataset rank
 
@@ -41,6 +42,9 @@ module IO_HDF5_stuff
 
         procedure :: init
         procedure :: write_dataset
+        procedure :: write_attribute_integer
+        procedure :: write_attribute_double
+        generic   :: write_attribute => write_attribute_integer, write_attribute_double
         procedure :: write_coords
         procedure :: start_viz
         procedure :: end_viz
@@ -189,6 +193,78 @@ contains
 
     end subroutine
 
+    subroutine write_attribute_integer(this, dims, adata, aname, grpname)
+        class(io_hdf5),           intent(inout) :: this
+        integer,                  intent(in)    :: dims    ! Attribute dimensions
+        integer, dimension(dims), intent(in)    :: adata   ! Attribute data
+        character(len=*),         intent(in)    :: aname   ! Attribute name
+        character(len=*),         intent(in)    :: grpname ! Group name to attach attribute to
+        
+        integer :: error
+        integer :: arank = 1        ! Attribute rank
+        integer(hid_t) :: attr_id   ! Attribute identifier
+        integer(hid_t) :: aspace_id ! Attribute dataspace identifier
+        integer(hid_t) :: atype_id  ! Attribute datatype identifier
+        integer(hid_t), dimension(1) :: adims   ! Attribute dimensions
+        
+        adims = [dims]
+        atype_id = H5T_NATIVE_INTEGER
+
+        call h5gopen_f(this%file_id, adjustl(trim(grpname)), this%group_id, error)
+
+        ! Create scalar data space for the attribute
+        call h5screate_simple_f(arank, adims, aspace_id, error)
+
+        ! Create group attribute
+        call h5acreate_f(this%group_id, adjustl(trim(aname)), atype_id, aspace_id, attr_id, error)
+
+        ! Write the attribute data
+        call h5awrite_f(attr_id, atype_id, adata, adims, error)
+
+        ! Close the attribute
+        call h5aclose_f(attr_id, error)
+
+        ! Close the group
+        call h5gclose_f(this%group_id, error)
+
+    end subroutine
+
+    subroutine write_attribute_double(this, dims, adata, aname, grpname)
+        class(io_hdf5),               intent(inout) :: this
+        integer,                      intent(in)    :: dims    ! Attribute dimensions
+        real(rkind), dimension(dims), intent(in)    :: adata   ! Attribute data
+        character(len=*),             intent(in)    :: aname   ! Attribute name
+        character(len=*),             intent(in)    :: grpname ! Group name to attach attribute to
+        
+        integer :: error
+        integer :: arank = 1        ! Attribute rank
+        integer(hid_t) :: attr_id   ! Attribute identifier
+        integer(hid_t) :: aspace_id ! Attribute dataspace identifier
+        integer(hid_t) :: atype_id  ! Attribute datatype identifier
+        integer(hid_t), dimension(1) :: adims   ! Attribute dimensions
+        
+        adims = [dims]
+        atype_id = H5T_NATIVE_DOUBLE
+
+        call h5gopen_f(this%file_id, adjustl(trim(grpname)), this%group_id, error)
+
+        ! Create scalar data space for the attribute
+        call h5screate_simple_f(arank, adims, aspace_id, error)
+
+        ! Create group attribute
+        call h5acreate_f(this%group_id, adjustl(trim(aname)), atype_id, aspace_id, attr_id, error)
+
+        ! Write the attribute data
+        call h5awrite_f(attr_id, atype_id, adata, adims, error)
+
+        ! Close the attribute
+        call h5aclose_f(attr_id, error)
+
+        ! Close the group
+        call h5gclose_f(this%group_id, error)
+
+    end subroutine
+
     subroutine write_coords(this, coords)
         class(io_hdf5), intent(inout) :: this
         real(rkind), dimension(this%chunk_dims(1),this%chunk_dims(2),this%chunk_dims(3),3), intent(in) :: coords
@@ -197,11 +273,22 @@ contains
         call this%write_dataset(coords(:,:,:,2), 'coords/Y')
         call this%write_dataset(coords(:,:,:,3), 'coords/Z')
 
+        call this%write_attribute(3, int(this%dimsf), 'GridSize', 'coords')
+
     end subroutine
 
     subroutine start_viz(this, time)
         class(io_hdf5), intent(inout) :: this
         real(rkind),    intent(in)    :: time
+
+        integer :: error
+        character(len=clen) :: grpname
+
+        write(grpname,'(I4.4)') this%vizcount
+
+        call h5gcreate_f(this%file_id, adjustl(trim(grpname)), this%group_id, error)
+        call h5gclose_f(this%group_id, error)
+        call this%write_attribute(1, [time], 'Time', grpname)
 
         this%xdmf_filename = ''
         write(this%xdmf_filename,'(A,A,I4.4,A)') adjustl(trim(this%vizdir)), "/", this%vizcount, '.xmf'

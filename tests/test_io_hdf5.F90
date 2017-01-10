@@ -2,7 +2,7 @@ program test_derivatives_parallel
     use mpi
     use kind_parameters, only : rkind
     use decomp_2d
-    use constants,       only: zero, two, pi
+    use constants,       only: two, pi
     use IO_HDF5_stuff,   only: io_hdf5
 
     implicit none
@@ -13,11 +13,12 @@ program test_derivatives_parallel
     type(decomp_info) :: gp
     type(io_hdf5)     :: viz
 
-    integer :: nx = 16, ny = 16, nz = 16
+    integer :: nx = 256, ny = 256, nz = 256
     integer :: prow = 0, pcol = 0
-    integer :: ierr, i, j, k
+    integer :: ierr, i, j, k, iter
 
     real(rkind) :: dx, dy, dz
+    real(rkind) :: time
 
     ! double precision :: t0, t1
 
@@ -50,46 +51,34 @@ program test_derivatives_parallel
         end do
     end do
 
-    f = sin(x)*sin(y)*cos(z)
-    dfdx = cos(x)*sin(y)*cos(z)
-    dfdy = sin(x)*cos(y)*cos(z)
-    dfdz = -sin(x)*sin(y)*sin(z)
-
-    print *, 1
-
     ! Initialize everything
     call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io')
 
-    call mpi_barrier(mpi_comm_world, ierr)
-
-    print *, 2
     ! Write mesh coordinates to file
     call viz%write_coords(coords)
 
-    call mpi_barrier(mpi_comm_world, ierr)
+    do iter=1,4
+        print*, "Starting viz dump", viz%vizcount
 
-    print *, 3
-    ! Start vizualization dump
-    call viz%start_viz(zero)
+        time = (iter - 1)*0.01D0
+        f    =  sin(iter*x)*sin(iter*y)*cos(iter*z)*iter
+        dfdx =  cos(iter*x)*sin(iter*y)*cos(iter*z)*iter
+        dfdy =  sin(iter*x)*cos(iter*y)*cos(iter*z)*iter
+        dfdz = -sin(iter*x)*sin(iter*y)*sin(iter*z)*iter
 
-    call mpi_barrier(mpi_comm_world, ierr)
+        ! Start vizualization dump
+        call viz%start_viz(time)
 
-    print *, 4
-    ! Add variables to file
-    call viz%write_variable(f,    'f'   )
-    call viz%write_variable(dfdx, 'dfdx')
-    call viz%write_variable(dfdy, 'dfdy')
-    call viz%write_variable(dfdz, 'dfdz')
+        ! Add variables to file
+        call viz%write_variable(f,    'f'   )
+        call viz%write_variable(dfdx, 'dfdx')
+        call viz%write_variable(dfdy, 'dfdy')
+        call viz%write_variable(dfdz, 'dfdz')
 
-    call mpi_barrier(mpi_comm_world, ierr)
+        ! End vizualization dump
+        call viz%end_viz()
+    end do
 
-    print *, 5
-    ! End vizualization dump
-    call viz%end_viz()
-
-    call mpi_barrier(mpi_comm_world, ierr)
-
-    print *, 6
     deallocate(coords, f, dfdx,dfdy, dfdz)
     nullify(x, y, z)
 
