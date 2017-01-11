@@ -2,8 +2,10 @@ program test_derivatives_parallel
     use mpi
     use kind_parameters, only : rkind
     use decomp_2d
-    use constants,       only: two, pi
+    use constants,       only: eps, two, pi
     use IO_HDF5_stuff,   only: io_hdf5
+    use exits,           only: message
+    use reductions,      only: P_MAXVAL
 
     implicit none
 
@@ -19,6 +21,7 @@ program test_derivatives_parallel
 
     real(rkind) :: dx, dy, dz
     real(rkind) :: time
+    real(rkind), dimension(1) :: time_arr
 
     ! double precision :: t0, t1
 
@@ -52,13 +55,13 @@ program test_derivatives_parallel
     end do
 
     ! Initialize everything
-    call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io')
+    call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', read_only=.false.)
 
     ! Write mesh coordinates to file
     call viz%write_coords(coords)
 
     do iter=1,4
-        print*, "Starting viz dump", viz%vizcount
+        call message("Starting viz dump", viz%vizcount)
 
         time = (iter - 1)*0.01D0
         f    =  sin(iter*x)*sin(iter*y)*cos(iter*z)*iter
@@ -78,6 +81,25 @@ program test_derivatives_parallel
         ! End vizualization dump
         call viz%end_viz()
     end do
+
+    call viz%destroy()
+    
+    call message("")
+    call message("Now reading in the file written out")
+
+    call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', read_only=.true.)
+    call viz%read_dataset(dfdx, '0003/f')
+    if ( P_MAXVAL(abs(f - dfdx)) > 10.D0*eps ) then
+        call message("ERROR:")
+        call message("  Array '0003/f' read in has incorrect values")
+    end if
+
+    call viz%read_attribute(1, time_arr, 'Time', '0003')
+    if ( abs(time_arr(1) - time) > 10.D0*eps ) then
+        call message("ERROR:")
+        call message("  Wrong value of time read in. Expected time",time)
+        call message("  Got time",time_arr(1))
+    end if
 
     deallocate(coords, f, dfdx,dfdy, dfdz)
     nullify(x, y, z)

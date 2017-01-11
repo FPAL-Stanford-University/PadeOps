@@ -16,6 +16,7 @@ module IO_HDF5_stuff
 
         integer :: comm                  ! Communicator for parallel I/O
         character(len=1) :: pencil       ! Which pencil to use for I/O
+        logical :: read_only             ! Open file as read only? If false, file is erased if exists
 
         integer(hid_t) :: file_id        ! File identifier
         integer        :: xdmf_file_id   ! XDMF file identifier
@@ -42,9 +43,13 @@ module IO_HDF5_stuff
 
         procedure :: init
         procedure :: write_dataset
+        procedure :: read_dataset
         procedure :: write_attribute_integer
+        procedure :: read_attribute_integer
         procedure :: write_attribute_double
+        procedure :: read_attribute_double
         generic   :: write_attribute => write_attribute_integer, write_attribute_double
+        generic   :: read_attribute => read_attribute_integer, read_attribute_double
         procedure :: write_coords
         procedure :: start_viz
         procedure :: end_viz
@@ -55,17 +60,21 @@ module IO_HDF5_stuff
 
 contains
 
-    subroutine init(this, comm_, gp, pencil_, vizdir_, filename_)
+    subroutine init(this, comm_, gp, pencil_, vizdir_, filename_, read_only)
         class(io_hdf5),     intent(inout) :: this
         integer,            intent(in)    :: comm_
         class(decomp_info), intent(in)    :: gp
         character(len=1),   intent(in)    :: pencil_
         character(len=*),   intent(in)    :: vizdir_
         character(len=*),   intent(in)    :: filename_
+        logical, optional,  intent(in)    :: read_only
 
         integer :: nrank
         integer :: info
         integer :: error
+
+        this%read_only = .true.
+        if (present(read_only)) this%read_only = read_only
 
         info = mpi_info_null
 
@@ -99,7 +108,12 @@ contains
         call h5pset_fapl_mpio_f(this%plist_id, this%comm, info, error)
 
         ! Create the file collectively
-        call h5fcreate_f(this%filename, H5F_ACC_TRUNC_F, this%file_id, error, access_prp = this%plist_id)
+        if (this%read_only) then
+            call h5fopen_f(this%filename, H5F_ACC_RDONLY_F, this%file_id, error, access_prp = this%plist_id)
+            if (error /= 0) call GracefulExit("Could not open HDF5 file " // adjustl(trim(this%filename)), 7356)
+        else
+            call h5fcreate_f(this%filename, H5F_ACC_TRUNC_F, this%file_id, error, access_prp = this%plist_id)
+        end if
         call h5pclose_f(this%plist_id, error)
 
         ! Create group creation property list and set it to allow creation of intermediate groups
@@ -193,6 +207,48 @@ contains
 
     end subroutine
 
+    subroutine read_dataset(this,field,dsetname)
+        class(io_hdf5), intent(inout) :: this
+        real(rkind), dimension(this%chunk_dims(1),this%chunk_dims(2),this%chunk_dims(3)), intent(out) :: field
+        character(len=*), intent(in) :: dsetname
+
+        integer :: error
+
+        ! Create the dataspace for the dataset
+        call h5screate_simple_f(this%rank, this%dimsf, this%filespace, error)
+        call h5screate_simple_f(this%rank, this%chunk_dims, this%memspace, error)
+
+        ! Create chunked dataset
+        call h5pcreate_f(H5P_DATASET_ACCESS_F, this%plist_id, error)
+        ! call h5pset_chunk_f(this%plist_id, this%rank, this%chunk_dims, error)
+        call h5dopen_f(this%file_id, adjustl(trim(dsetname)), this%dset_id, error, this%plist_id)
+        call h5sclose_f(this%filespace, error)
+
+        ! Select hyperslab in file
+        call h5dget_space_f(this%dset_id, this%filespace, error)
+        call h5sselect_hyperslab_f(this%filespace, H5S_SELECT_SET_F, this%offset, this%count, error, &
+                                   this%stride, this%block)
+
+        ! Create property list for collective dataset write
+        call h5pcreate_f(H5P_DATASET_XFER_F, this%plist_id, error)
+        call h5pset_dxpl_mpio_f(this%plist_id, H5FD_MPIO_COLLECTIVE_F, error)
+
+        ! Write dataset collectively
+        call h5dread_f(this%dset_id, H5T_NATIVE_DOUBLE, field, this%dimsf, error, &
+                       file_space_id = this%filespace, mem_space_id = this%memspace, xfer_prp = this%plist_id)
+
+        ! Close dataspaces
+        call h5sclose_f(this%filespace, error)
+        call h5sclose_f(this%memspace, error)
+
+        ! Close the dataset
+        call h5dclose_f(this%dset_id, error)
+
+        ! Close the property list
+        call h5pclose_f(this%plist_id, error)
+
+    end subroutine
+
     subroutine write_attribute_integer(this, dims, adata, aname, grpname)
         class(io_hdf5),           intent(inout) :: this
         integer,                  intent(in)    :: dims    ! Attribute dimensions
@@ -229,6 +285,37 @@ contains
 
     end subroutine
 
+    subroutine read_attribute_integer(this, dims, adata, aname, grpname)
+        class(io_hdf5),           intent(inout) :: this
+        integer,                  intent(in)    :: dims    ! Attribute dimensions
+        integer, dimension(dims), intent(out)   :: adata   ! Attribute data
+        character(len=*),         intent(in)    :: aname   ! Attribute name
+        character(len=*),         intent(in)    :: grpname ! Group name to attach attribute to
+        
+        integer :: error
+        integer(hid_t) :: attr_id   ! Attribute identifier
+        integer(hid_t) :: atype_id  ! Attribute datatype identifier
+        integer(hid_t), dimension(1) :: adims   ! Attribute dimensions
+        
+        adims = [dims]
+        atype_id = H5T_NATIVE_INTEGER
+
+        call h5gopen_f(this%file_id, adjustl(trim(grpname)), this%group_id, error)
+
+        ! Create group attribute
+        call h5aopen_f(this%group_id, adjustl(trim(aname)), attr_id, error)
+
+        ! Read the attribute data
+        call h5aread_f(attr_id, atype_id, adata, adims, error)
+
+        ! Close the attribute
+        call h5aclose_f(attr_id, error)
+
+        ! Close the group
+        call h5gclose_f(this%group_id, error)
+
+    end subroutine
+
     subroutine write_attribute_double(this, dims, adata, aname, grpname)
         class(io_hdf5),               intent(inout) :: this
         integer,                      intent(in)    :: dims    ! Attribute dimensions
@@ -256,6 +343,37 @@ contains
 
         ! Write the attribute data
         call h5awrite_f(attr_id, atype_id, adata, adims, error)
+
+        ! Close the attribute
+        call h5aclose_f(attr_id, error)
+
+        ! Close the group
+        call h5gclose_f(this%group_id, error)
+
+    end subroutine
+
+    subroutine read_attribute_double(this, dims, adata, aname, grpname)
+        class(io_hdf5),               intent(inout) :: this
+        integer,                      intent(in)    :: dims    ! Attribute dimensions
+        real(rkind), dimension(dims), intent(out)   :: adata   ! Attribute data
+        character(len=*),             intent(in)    :: aname   ! Attribute name
+        character(len=*),             intent(in)    :: grpname ! Group name to attach attribute to
+        
+        integer :: error
+        integer(hid_t) :: attr_id   ! Attribute identifier
+        integer(hid_t) :: atype_id  ! Attribute datatype identifier
+        integer(hid_t), dimension(1) :: adims   ! Attribute dimensions
+        
+        adims = [dims]
+        atype_id = H5T_NATIVE_DOUBLE
+
+        call h5gopen_f(this%file_id, adjustl(trim(grpname)), this%group_id, error)
+
+        ! Create group attribute
+        call h5aopen_f(this%group_id, adjustl(trim(aname)), attr_id, error)
+
+        ! Read the attribute data
+        call h5aread_f(attr_id, atype_id, adata, adims, error)
 
         ! Close the attribute
         call h5aclose_f(attr_id, error)

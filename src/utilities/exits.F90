@@ -9,7 +9,7 @@ module exits
     public :: GracefulExit, message, message_min_max, warning, newline, nancheck, check_exit
         
     interface message
-        module procedure message_char, message_char_double, message_level_char, message_level_char_double, message_level_char_int
+        module procedure message_char, message_char_double, message_char_int, message_level_char, message_level_char_double, message_level_char_int
     end interface
 
     interface message_min_max
@@ -51,7 +51,13 @@ contains
     subroutine message_char_double(mess,val)
         character(len=*), intent(in) :: mess
         real(rkind), intent(in) :: val
-        if (nrank == 0) write(stdout,*) mess, " = ", val
+        if (nrank == 0) write(stdout,'(A,A,ES26.16)') mess, " = ", val
+    end subroutine
+    
+    subroutine message_char_int(mess,val)
+        character(len=*), intent(in) :: mess
+        integer, intent(in) :: val
+        if (nrank == 0) write(stdout,'(A,A,I0)') mess, " = ", val
     end subroutine
     
     subroutine message_level_char(level,mess)
