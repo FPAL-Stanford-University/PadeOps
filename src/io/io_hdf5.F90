@@ -1,4 +1,4 @@
-module IO_HDF5_stuff
+module io_hdf5_stuff
     use hdf5
     use mpi
     use kind_parameters, only: rkind, clen

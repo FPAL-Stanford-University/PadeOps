@@ -1,11 +1,11 @@
-program test_derivatives_parallel
+program test_io_hdf5
     use mpi
     use kind_parameters, only : rkind
     use decomp_2d
     use constants,       only: eps, two, pi
-    use IO_HDF5_stuff,   only: io_hdf5
     use exits,           only: message
     use reductions,      only: P_MAXVAL
+    use io_hdf5_stuff,   only: io_hdf5
 
     implicit none
 
