@@ -261,7 +261,7 @@ contains
         integer(hid_t) :: attr_id   ! Attribute identifier
         integer(hid_t) :: aspace_id ! Attribute dataspace identifier
         integer(hid_t) :: atype_id  ! Attribute datatype identifier
-        integer(hid_t), dimension(1) :: adims   ! Attribute dimensions
+        integer(hsize_t), dimension(1) :: adims   ! Attribute dimensions
         
         adims = [dims]
         atype_id = H5T_NATIVE_INTEGER
@@ -295,7 +295,7 @@ contains
         integer :: error
         integer(hid_t) :: attr_id   ! Attribute identifier
         integer(hid_t) :: atype_id  ! Attribute datatype identifier
-        integer(hid_t), dimension(1) :: adims   ! Attribute dimensions
+        integer(hsize_t), dimension(1) :: adims   ! Attribute dimensions
         
         adims = [dims]
         atype_id = H5T_NATIVE_INTEGER
@@ -328,7 +328,7 @@ contains
         integer(hid_t) :: attr_id   ! Attribute identifier
         integer(hid_t) :: aspace_id ! Attribute dataspace identifier
         integer(hid_t) :: atype_id  ! Attribute datatype identifier
-        integer(hid_t), dimension(1) :: adims   ! Attribute dimensions
+        integer(hsize_t), dimension(1) :: adims   ! Attribute dimensions
         
         adims = [dims]
         atype_id = H5T_NATIVE_DOUBLE
@@ -362,7 +362,7 @@ contains
         integer :: error
         integer(hid_t) :: attr_id   ! Attribute identifier
         integer(hid_t) :: atype_id  ! Attribute datatype identifier
-        integer(hid_t), dimension(1) :: adims   ! Attribute dimensions
+        integer(hsize_t), dimension(1) :: adims   ! Attribute dimensions
         
         adims = [dims]
         atype_id = H5T_NATIVE_DOUBLE
