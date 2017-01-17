@@ -282,19 +282,15 @@ contains
         read(unit=ioUnit, NML=INPUT)
         read(unit=ioUnit, NML=NUMERICS)
         read(unit=ioUnit, NML=IO)
-         write(*,*) 1
         read(unit=ioUnit, NML=STATS)
         read(unit=ioUnit, NML=OS_INTERACTIONS)
         read(unit=ioUnit, NML=PHYSICS)
-         write(*,*) 2
         read(unit=ioUnit, NML=PRESSURE_CALC)
         read(unit=ioUnit, NML=BCs)
         read(unit=ioUnit, NML=LES)
-         write(*,*) 3
         read(unit=ioUnit, NML=WALLMODEL)
         read(unit=ioUnit, NML=WINDTURBINES)
         read(unit=ioUnit, NML=KSPREPROCESS)
-         write(*,*) 4
         close(ioUnit)
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
         this%dt = dt; this%dtby2 = dt/two ; this%z0 = z0 ; this%Re = Re; this%useSponge = useSpongeLayer
