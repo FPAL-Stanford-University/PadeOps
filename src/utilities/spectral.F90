@@ -714,7 +714,7 @@ contains
         if (allocated(this%k3_der2)) deallocate(this%k3_der2)
         if (allocated(this%one_by_kabs_sq)) deallocate(this%one_by_kabs_sq)
       
-        deallocate(this%arr1Up, this%arr2Up) 
+        !deallocate(this%arr1Up, this%arr2Up) 
         if (allocated(this%spectdecomp)) deallocate(this%spectdecomp)
         this%isInitialized = .false. 
    

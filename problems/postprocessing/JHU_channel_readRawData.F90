@@ -23,6 +23,8 @@ program JHU_channel
    use exits, only: message, gracefulexit
    use binary_io_singleprec, only: readBinarySinglePrec
    use decomp_2d_io
+   use spectralmod, only: spectral
+   use constants, only: pi
 
    implicit none
    character(len=clen) :: inputfile, inputdir, outputdir, tempname, fname
@@ -34,7 +36,6 @@ program JHU_channel
    real(kind=4), dimension(nxChunk,nyChunk,nzChunk) :: dataRead
    integer, parameter :: nxIn = 2048, nyIn = 512, nzIn = 1536, nchunks = nzIn/nzChunk
    integer, parameter :: nxOut = 2048, nyOut = 1536, nzOut = 512
-   
    integer :: mychunksize, my_yidx_start, yidx, j, k
    real(rkind), dimension(:,:,:), allocatable :: rawData
 
@@ -85,12 +86,19 @@ program JHU_channel
    end do 
    call toc
    call message(0,"Data reading complete.")
+   call message(0,"Now writing data in 2decomp format to disk.")
 
-   !! Dump planes
-   call decomp_2d_write_plane(1,rawData, 1, nxOut/2, "TestPlane_x.dat")
-   call decomp_2d_write_plane(1,rawData, 2, nyOut/2, "TestPlane_y.dat")
-   call decomp_2d_write_plane(1,rawData, 3, nzOut/4, "TestPlane_z.dat")
+   write(tempname,"(A1,A2,I3.3,A15)") fieldname,"_t",tid,"_JHUchannel.bin"
+   fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+   call decomp_2d_write_one(1,rawData,fname, gp)
+   
 
+   !!! Dump planes
+   !call decomp_2d_write_plane(1,rawData, 1, nxOut/2, "TestPlane_x.dat")
+   !call decomp_2d_write_plane(1,rawData, 2, nyOut/2, "TestPlane_y.dat")
+   !call decomp_2d_write_plane(1,rawData, 3, nzOut/4, "TestPlane_z.dat")
+
+   call message(0,"Field written to disk.")
 
    call MPI_Barrier(mpi_comm_world, ierr)
    call MPI_Finalize(ierr)   
