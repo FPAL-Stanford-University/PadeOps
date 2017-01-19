@@ -9,12 +9,11 @@ module spectralMod
     use fft_3d_stuff, only: fft_3d
     use mpi
     use reductions, only: p_sum 
-    use numerics, only: use3by2rule
  
     implicit none
     private
     public :: spectral, GetWaveNums 
-
+    logical, parameter :: use3by2rule = .false.
     logical :: useExhaustiveFFT = .true. 
 
     type :: spectral
