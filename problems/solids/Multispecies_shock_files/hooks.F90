@@ -331,7 +331,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         u1 = u1 / rho1
         u2 = u2 / rho2
 
-        shock_init = interface_init - 0.5_rkind  ! (10*thick) grid points away from the interface
+        shock_init = interface_init - 1.0_rkind  ! (10*thick) grid points away from the interface
         dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
 
         u   = (u2-u1)*dum
@@ -582,6 +582,11 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+        !!! Hack to stop liquid's g from blowing up
+        !mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
+        !mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
+        !mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
         if(decomp%yst(1)==1) then
           if(x_bc(1)==0) then

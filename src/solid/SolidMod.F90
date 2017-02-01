@@ -412,7 +412,10 @@ contains
     end subroutine
 
     subroutine getRHS_g(this,rho,u,v,w,dt,rhsg,x_bc,y_bc,z_bc)
+        use decomp_2d, only: nrank
+        use constants, only: eps
         use operators, only: gradient, curl
+        use reductions, only: P_MAXLOC
         class(solid),                                         intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
         real(rkind),                                          intent(in)  :: dt
@@ -422,6 +425,9 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
         real(rkind), parameter :: etafac = one/6._rkind
+
+        real(rkind) :: pmax
+        integer :: imax, jmax, kmax, rmax
 
         ! Symmetry and anti-symmetry properties of g are assumed as below
         ! In x g_{ij}: [S A A; A S S; A S S]
@@ -438,11 +444,27 @@ contains
         tmp = (rho*this%Ys + this%elastic%rho0*detg*epssmall)/(this%VF + epssmall)   
         ! tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
         penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
+        if (this%elastic%mu < eps) penalty = zero
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-x_bc, y_bc, z_bc)
         
         call curl(this%decomp, this%der, this%g11, this%g12, this%g13, curlg, -x_bc, y_bc, z_bc)
+        ! call P_MAXLOC( abs(penalty*this%g11), pmax, imax, jmax, kmax, rmax)
+        ! if (nrank == rmax) then
+        !     print*, "Maximum penalty term = ", pmax
+        !     print*, "        curl    term = ", v(imax,jmax,kmax)*curlg(imax,jmax,kmax,3) - w(imax,jmax,kmax)*curlg(imax,jmax,kmax,2)
+        !     print*, "        g11          = ", this%g11(imax,jmax,kmax)
+        !     print*, "        VF           = ", this%VF(imax,jmax,kmax)
+        ! end if
+        ! call P_MAXLOC( abs(v*curlg(:,:,:,3) - w*curlg(:,:,:,2)), pmax, imax, jmax, kmax, rmax)
+        ! if (nrank == rmax) then
+        !     print*, "Maximum curl    term = ", pmax
+        !     print*, "        penalty term = ", penalty(imax,jmax,kmax)*this%g11(imax,jmax,kmax)
+        !     print*, "        g11          = ", this%g11(imax,jmax,kmax)
+        !     print*, "        VF           = ", this%VF(imax,jmax,kmax)
+        !     print*, ""
+        ! end if
         rhsg(:,:,:,1) = rhsg(:,:,:,1) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g11
         rhsg(:,:,:,2) = rhsg(:,:,:,2) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g12
         rhsg(:,:,:,3) = rhsg(:,:,:,3) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g13

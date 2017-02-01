@@ -7,10 +7,14 @@ module reductions
     implicit none
 
     private
-    public :: P_MAXVAL, P_MINVAL, P_SUM, P_MEAN, P_AVGZ
+    public :: P_MAXVAL, P_MAXLOC, P_MINVAL, P_SUM, P_MEAN, P_AVGZ
 
     interface P_MAXVAL
         module procedure P_MAXVAL_arr4, P_MAXVAL_arr3, P_MAXVAL_arr2, P_MAXVAL_sca
+    end interface
+
+    interface P_MAXLOC
+        module procedure P_MAXLOC_arr3
     end interface
 
     interface P_MINVAL
@@ -185,6 +189,32 @@ contains
 
     end function
     
+    subroutine P_MAXLOC_arr3(f, val, imax, jmax, kmax, rank)
+        real(rkind), dimension(:,:,:), intent(in)  :: f
+        real(rkind),                   intent(out) :: val
+        integer,                       intent(out) :: imax, jmax, kmax, rank
+
+        integer :: i, j, k, ierr
+        real(rkind), dimension(2) :: maximum, gmaximum
+
+        maximum(2) = real(nrank,rkind)
+        maximum(1) = f(1,1,1); imax = 1; jmax = 1; kmax = 1;
+        do k=1,size(f,3)
+            do j=1,size(f,2)
+                do i=1,size(f,1)
+                    if(f(i,j,k) > maximum(1)) then
+                        maximum(1) = f(i,j,k)
+                        imax = i; jmax = j; kmax = k
+                    end if
+                end do
+            end do
+        end do
+
+        call MPI_Allreduce(maximum, gmaximum, 1, mpi_2double_precision, mpi_maxloc, mpi_comm_world, ierr)
+        val  = gmaximum(1)
+        rank = int(gmaximum(2))
+    end subroutine
+
     subroutine P_AVGZ(gp, f, avg)
         type(decomp_info), intent(in) :: gp
         real(rkind), dimension(:,:,:), intent(in) :: f
