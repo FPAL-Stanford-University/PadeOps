@@ -104,7 +104,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbu
     if(ADM) then
       allocate (this%turbArrayADM(this%nTurbines))
       do i = 1, this%nTurbines
-        call this%turbArrayADM(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
+        call this%turbArrayADM(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3),this%gpC)
       end do
       call message(1,"WIND TURBINE ADM model initialized")
     else

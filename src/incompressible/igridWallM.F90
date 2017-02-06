@@ -1467,8 +1467,8 @@ contains
                                                 this%u      , this%v              , this%wC         ,&
                                                 this%ustar  , this%Umn            , this%Vmn        ,&
                                                 this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
-                                                this%max_nuSGS, this%inst_horz_avg, this%dTdxC      ,&
-                                                this%dTdyC  , this%dTdzHC)
+                                                this%max_nuSGS, this%inst_horz_avg)!, this%dTdxC      ,&
+                                                !this%dTdyC  , this%dTdzHC)
             end if 
         end if 
     end subroutine
@@ -3188,7 +3188,7 @@ contains
         ! dump horizontal averages
         if(this%useWindTurbines) then
             this%runningSum_turb = zero
-            call MPI_reduce(this%runningSum_sc_turb, this%runningSum_turb, 8*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+            call MPI_reduce(this%runningSum_sc_turb, this%runningSum_turb, 8*this%WindTurbineArr%nTurbines, mpirkind, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
         endif
         if (nrank == 0) then
             write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%RunID,"_t",tid,".stt"
