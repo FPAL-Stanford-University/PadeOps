@@ -1,0 +1,6 @@
+&INPUT
+inputdir              = "/home/aditya90/Codes/JHU_channel_flow_data/"   ! Directory for any input files
+outputdir             = "/home/aditya90/Codes/PadeOps/data/JHU_channel_flow_data/"   ! Directory for all output files
+tid                   = 6          ! time id for the data file
+fieldname             = "u"        ! "u", "v" or "w"
+/

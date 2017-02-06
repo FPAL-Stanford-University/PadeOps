@@ -22,7 +22,7 @@ module kspreprocessing
         type(decomp_info), pointer :: gpE, gpC, sp_gpE
         type(decomp_info) :: gp_xDn, gp_xDnyDn, gp_allDn, gp_Dump0, gp_xDn8, gp_xDn8yDn8
         integer, dimension(:), allocatable :: planes2dumpC, planes2dumpF
-        integer :: nxF, nyF, nzF
+        integer :: nxF, nyF, nzF, nKSvertFilter
         character(len=clen) :: outputDir
         integer :: RunID, step
         complex(rkind), dimension(:,:,:), allocatable :: cbuffY, fCtmp1, fCtmp2
@@ -150,9 +150,9 @@ contains
     end subroutine
 
 
-    subroutine initLES2KSfilter(this, spectC, gpC, dx, dy, outputdir, RunID, probes, FilFact, doZfilter)
+    subroutine initLES2KSfilter(this, spectC, gpC, dx, dy, outputdir, RunID, probes, FilFact, doZfilter, nKSvertFilter)
         class(ksprep), intent(inout) :: this
-        integer, intent(in) :: RunID
+        integer, intent(in) :: RunID, nKSvertFilter
         type(decomp_info), target, intent(in) :: gpC 
         type(spectral), target, intent(in) :: spectC
         character(len=*), intent(in) :: outputdir
@@ -167,6 +167,7 @@ contains
             call GracefulExit("You cannot allocate ksprep derived type if it has already been allocated",12)
         end if
         this%RunID = runID
+        this%nKSvertFilter = nKSvertFilter
         this%spectC => spectC
         this%gpC => gpC
         this%outputdir = outputdir
@@ -211,13 +212,17 @@ contains
     subroutine applyFilterForKS(this, u, v, w)
         class(ksprep), intent(inout) :: this
         real(rkind), intent(in), dimension(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)) :: u, v, w
+        integer :: idx
 
         ! Filter u into ufil 
         call this%spectC%fft(u,this%cbuffY)
         this%cbuffY = this%cbuffY*this%Gspectral
         if (this%doZfilter) then
             call transpose_y_to_z(this%cbuffY, this%fCtmp1,this%spectC%spectdecomp)
-            call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
+            do idx = 1,this%nKSVertFilter
+                call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
+                this%fCtmp1 = this%fCtmp2
+            end do 
             call transpose_z_to_y(this%fCtmp2,this%cbuffY,this%spectC%spectdecomp)
         end if
         call this%spectC%ifft(this%cbuffY,this%ufil)
@@ -228,7 +233,10 @@ contains
         this%cbuffY = this%cbuffY*this%Gspectral
         if (this%doZfilter) then
             call transpose_y_to_z(this%cbuffY, this%fCtmp1,this%spectC%spectdecomp)
-            call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
+            do idx = 1,this%nKSVertFilter
+                call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
+                this%fCtmp1 = this%fCtmp2
+            end do 
             call transpose_z_to_y(this%fCtmp2,this%cbuffY,this%spectC%spectdecomp)
         end if
         call this%spectC%ifft(this%cbuffY,this%vfil)
@@ -239,7 +247,10 @@ contains
         this%cbuffY = this%cbuffY*this%Gspectral
         if (this%doZfilter) then
             call transpose_y_to_z(this%cbuffY, this%fCtmp1,this%spectC%spectdecomp)
-            call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
+            do idx = 1,this%nKSVertFilter
+                call this%zfil1%filter3(this%fCtmp1,this%fCtmp2,size(this%fCtmp1,1),size(this%fCtmp1,2))
+                this%fCtmp1 = this%fCtmp2
+            end do 
             call transpose_z_to_y(this%fCtmp2,this%cbuffY,this%spectC%spectdecomp)
         end if
         call this%spectC%ifft(this%cbuffY,this%wfil)

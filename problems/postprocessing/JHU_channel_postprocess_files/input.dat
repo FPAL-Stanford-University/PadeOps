@@ -1,0 +1,7 @@
+&INPUT
+inputdir       = "/home/aditya90/Codes/PadeOps/data/JHU_channel_flow_data/"   ! Directory for all output files
+outputdir      = "/home/aditya90/Codes/PadeOps/data/JHU_channel_flow_data/"   ! Directory for all output files
+zLocsFile      = "/home/aditya90/Codes/PadeOps/problems/postprocessing/JHU_channel_readRawData_files/zLocations.txt"
+tid            = 6          ! time id for the data file
+filterfact_xy  = 0.0312d0   ! What filter factor do we want to use?
+/
