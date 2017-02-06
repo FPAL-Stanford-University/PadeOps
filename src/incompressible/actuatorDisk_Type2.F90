@@ -66,8 +66,10 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     real(rkind) :: yaw=0.d0, tilt=0.d0, epsFact = 1.5d0, dx, dy, dz
     real(rkind), dimension(:,:), allocatable :: tmp
     integer, dimension(:,:), allocatable :: tmp_tag
-    integer :: i, j, locator(1)
-    integer :: xLc(1), yLc(1), zLc(1), xst, xen, yst, yen, zst, zen, ierr, xlen, ylen, zlen
+    integer :: j, locator(1)
+    !integer :: i, ylen, zlen
+    integer :: xLc(1), yLc(1), zLc(1), xst, xen, yst, yen, zst, zen, ierr, xlen
+   
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
     ! Read input file for this turbine    
@@ -243,6 +245,8 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals)
                                 this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
                                 this%startEnds(5,j),this%startEnds(6,j),this%startEnds(7,j))
     end do 
+    rhsyvals = zero
+    rhszvals = zero
 
 end subroutine
 

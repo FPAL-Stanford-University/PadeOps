@@ -611,7 +611,8 @@ subroutine distribute_forces(this, rhsx, rhsy, rhsz)
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsx, rhsy, rhsz
 
     integer :: j, k
-    real(rkind) :: tmp_dsqsum, dsqsum, mindsqsum, maxdsqsum, tmp_distr_thrust
+    real(rkind) :: mindsqsum, maxdsqsum, tmp_distr_thrust
+    !real(rkind) :: tmp_dsqsum, dsqsum
 
     mindsqsum = 1.0D30; maxdsqsum = -1.0D30
     if(this%Am_I_Active) then
@@ -968,7 +969,7 @@ subroutine interp_clcd(this, ptID, blID, AOA, cl, cd)
     real(rkind), intent(in) :: AOA
     real(rkind), intent(out) :: cl, cd
 
-    integer :: airfIDInd, nsize, j
+    integer :: airfIDInd, nsize
     real(rkind), dimension(:,:), pointer :: tablePtr
     real(rkind) :: aoaloc(1), clloc(1), cdloc(1)
 
@@ -1205,8 +1206,7 @@ subroutine get_RHS(this, dt, u, v, w, yRightHalo, zLeftHalo, zRightHalo, rhsxval
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(8),                                  intent(out), optional  :: inst_val
 
-
-    integer :: ierr
+    !integer :: ierr
 
     ! update turbine point locations to account for nacelle yaw and blade rotation
     call this%update_turbine(dt)

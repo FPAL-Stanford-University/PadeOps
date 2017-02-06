@@ -66,7 +66,7 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
     character(len=*), intent(in) :: inputDir
     type(decomp_info), target :: gpC
 
-    character(len=clen) :: tempname, fname
+    character(len=clen) :: tempname, fname, turboutfname
     integer :: ioUnit, tmpSum, totSum
     real(rkind) :: xLoc=1.d0, yLoc=1.d0, zLoc=0.1d0, diam=0.08d0, cT=0.65d0
     real(rkind) :: yaw=0.d0, tilt=0.d0, epsFact = 1.5d0, dx, dy, dz
@@ -75,7 +75,8 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
     real(rkind), dimension(:,:), allocatable :: tmp,tmpGhlo,tmpGhUp
     integer, dimension(:,:), allocatable :: tmp_tag
     integer :: locator(1), ierr, stind, endind
-    integer :: xLc(1), yLc(1), zLc(1), icl
+    !integer :: xLc(1), yLc(1), zLc(1)
+    integer :: icl
     logical :: periodicY = .true., periodicX = .true. ! hard coded for now
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
@@ -217,9 +218,9 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
           ymin = this%Cloud(icl)%yTurbLoc - totProjRadius;             ymax = this%Cloud(icl)%yTurbLoc + totProjRadius
           zmin = zLoc - totProjRadius;             zmax = zLoc + totProjRadius
 
-          call get_extents(1, xmin, xmax, xG(:,1,1), stind, endind); this%xst(icl) = stind; this%xen(icl) = endind
-          call get_extents(2, ymin, ymax, yG(1,:,1), stind, endind); this%yst(icl) = stind; this%yen(icl) = endind
-          call get_extents(3, zmin, zmax, zG(1,1,:), stind, endind); this%zst(icl) = stind; this%zen(icl) = endind
+          call get_extents(xmin, xmax, xG(:,1,1), stind, endind); this%xst(icl) = stind; this%xen(icl) = endind
+          call get_extents(ymin, ymax, yG(1,:,1), stind, endind); this%yst(icl) = stind; this%yen(icl) = endind
+          call get_extents(zmin, zmax, zG(1,1,:), stind, endind); this%zst(icl) = stind; this%zen(icl) = endind
           
           this%xlen(icl)=this%xen(icl)-this%xst(icl)+1
           this%ylen(icl)=this%yen(icl)-this%yst(icl)+1
@@ -431,8 +432,7 @@ subroutine sample_on_circle(R,xcen, ycen, xloc,yloc,np)
     xloc = xloc + xcen; yloc = yloc + ycen 
 end subroutine
 
-subroutine get_extents(idir, xmin, xmax, procmesh, stind, endind)
-    integer, intent(in) :: idir
+subroutine get_extents(xmin, xmax, procmesh, stind, endind)
     real(rkind), intent(in) :: xmin, xmax
     real(rkind), dimension(:), intent(in) :: procmesh
     integer, intent(out) :: stind, endind

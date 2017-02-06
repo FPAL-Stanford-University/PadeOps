@@ -12,7 +12,7 @@ program test_actuatorDisk
 
     implicit none 
 
-    type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
+    !type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
     type(actuatorDisk), dimension(:), allocatable :: hawts
     integer, parameter :: nx = 192, ny = 192, nz = 128
     character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/ActuatorDisk/"
