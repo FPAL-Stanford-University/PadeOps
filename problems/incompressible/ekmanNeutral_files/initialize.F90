@@ -28,10 +28,9 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, Gx0, Gy0
     real(rkind) :: aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
-    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
-
+    namelist /EKMAN_NEUTRAL_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=EKMAN_NEUTRAL_INPUT)
@@ -92,11 +91,11 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE, eta
     integer :: nz, nzE
     !real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, Gx0 = one, Gy0 = zero;
     real(rkind) :: thetam = 15._rkind + 273.15_rkind
     real(rkind) :: cTemp = 1.d0/3.d0, aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
 
-    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
+    namelist /EKMAN_NEUTRAL_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
 
     !z0init = 1.D-4
     ioUnit = 11
@@ -115,8 +114,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    u = 1.d0!(1.d0 - exp(-z/D)*cos(z/D))
-    v = zero!exp(-z/D)*sin(z/D)
+    u = Gx0!(1.d0 - exp(-z/D)*cos(z/D))
+    v = Gy0!exp(-z/D)*sin(z/D)
     wC = zero 
 
     allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
@@ -189,10 +188,10 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     implicit none
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, z0init
+    real(rkind) :: Lx, Ly, Lz, z0init, Gx0, Gy0
     integer :: ioUnit 
     real(rkind) :: aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
-    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
+    namelist /EKMAN_NEUTRAL_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -208,11 +207,11 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use ekmanNeutral_parameters
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: Lx, Ly, Lz, z0init, Tref
+    real(rkind) :: Gx0, Gy0, Lx, Ly, Lz, z0init, Tref
     character(len=*),                intent(in)    :: inputfile
     integer :: ioUnit 
     real(rkind) :: aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
-    namelist /EKMAN_NEUTRAL_INPUT/ Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
+    namelist /EKMAN_NEUTRAL_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
