@@ -84,7 +84,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     logical :: SOSmodel
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rho_ratio, &
-                          p_infty_2, gamma_2, mu_2, rho_0_2, p_amb_2, sigma_0, SOSmodel
+                          p_infty_2, gamma_2, mu_2, rho_0_2, p_amb_2, sigma_0, SOSmodel, thickness
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -215,12 +215,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
 end subroutine
 
-subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
+subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,eps,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
                                 sxx_index,syy_index,szz_index,sxy_index,sxz_index,syz_index,sos_index
     use decomp_2d,        only: decomp_info
+    use DerivativesMod,   only: derivatives
     use SolidMixtureMod,  only: solid_mixture
 
     use MultSpecGauss_data
@@ -228,11 +229,13 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     implicit none
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
     type(solid_mixture),             intent(in) :: mix
+    integer, dimension(2), intent(in), optional :: x_bc, y_bc, z_bc
     integer                                     :: outputunit=229
 
     character(len=clen) :: outputfile, str
@@ -250,8 +253,8 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3),       &
                  sos  => fields(:,:,:,sos_index) )
 
-        write(str,'(I4.4)') decomp%ysz(1)
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/MultSpecGauss_"//trim(str)//"_", vizcount, ".dat"
+        write(str,'(I5.5)') decomp%ysz(1)
+        write(outputfile,'(2A,I5.5,A)') trim(outputdir),"/MultSpecGauss_"//trim(str)//"_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
         write(outputunit,'(1ES27.16E3)') tsim
@@ -268,7 +271,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
         end do
         close(outputunit)
 
-        write(outputfile,'(4A)') trim(outputdir),"/tec_MultSpecGauss_"//trim(str),".dat"
+        write(outputfile,'(5A)') trim(outputdir),"/tec_MultSpecGauss_"//trim(str),".dat"
         if(vizcount==0) then
           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='replace')
           write(outputunit,'(330a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p", &
@@ -318,7 +321,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
           close(outputunit)
         endif
 
-        write(outputfile,'(4A)') trim(outputdir),"/tec_ExactGauss_"//trim(str),".dat"
+        write(outputfile,'(5A)') trim(outputdir),"/tec_ExactGauss_"//trim(str),".dat"
         if(vizcount==0) then
           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='replace')
           write(outputunit,'(330a)') 'VARIABLES="x","y","z","pincident","preflected","ptransmitted"'
@@ -371,7 +374,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     end associate
 end subroutine
 
-subroutine hook_bc(decomp,mesh,fields,mix,tsim)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
@@ -386,6 +389,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     type(solid_mixture),             intent(inout) :: mix
+    integer, dimension(2), intent(in), optional    :: x_bc, y_bc, z_bc
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
