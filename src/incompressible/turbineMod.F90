@@ -104,7 +104,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbu
     if(ADM) then
       allocate (this%turbArrayADM(this%nTurbines))
       do i = 1, this%nTurbines
-        call this%turbArrayADM(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
+        call this%turbArrayADM(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3),this%gpC)
       end do
       call message(1,"WIND TURBINE ADM model initialized")
     else
@@ -132,7 +132,7 @@ end subroutine
 
 subroutine destroy(this)
     class(TurbineArray), intent(inout) :: this
-    integer :: i, ierr
+    integer :: i
 
     nullify(this%gpC, this%gpE, this%spectC, this%sp_gpC, this%fx, this%fy, this%fz)
     nullify(this%zbuffC, this%zbuffE, this%fChat, this%fEhat)
@@ -247,7 +247,7 @@ subroutine halo_communication(this, u, v, wC)
   class(TurbineArray), intent(inout) :: this
   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)),intent(in) :: u, v, wC
 
-  integer :: k, icount, requests(2), ierror, ierr
+  integer :: k, icount, requests(2), ierror
   integer, dimension(MPI_STATUS_SIZE,2) :: status
 
   ! fill this%yRightHalo
@@ -313,7 +313,8 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, inst_horz_avg)
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs 
     real(rkind),    dimension(:),                                                        intent(out), optional   :: inst_horz_avg
-    integer :: i, ierr
+    integer :: i
+    !integer :: ierr
 
     this%fx = zero; this%fy = zero; this%fz = zero
     if(ADM) then

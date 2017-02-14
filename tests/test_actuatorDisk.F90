@@ -12,7 +12,7 @@ program test_actuatorDisk
 
     implicit none 
 
-    type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
+    !type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
     type(actuatorDisk), dimension(:), allocatable :: hawts
     integer, parameter :: nx = 192, ny = 192, nz = 128
     character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/ActuatorDisk/"
@@ -56,7 +56,7 @@ program test_actuatorDisk
     u = one; v = zero; w = zero
     allocate(hawts(6))
     do idx = 1,6
-        call hawts(idx)%init(inputDir, idx, xG, yG, zG)
+        call hawts(idx)%init(inputDir, idx, xG, yG, zG, gp)
     end do 
     rhs = 0.d0
     call mpi_barrier(mpi_comm_world, ierr)

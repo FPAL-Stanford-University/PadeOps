@@ -403,6 +403,8 @@ subroutine init(this, inputDir, ActuatorLineID, xG, yG, zG, xyzPads)
         call MPI_COMM_SPLIT(mpi_comm_world, this%tag_proc, nrank, this%myComm, ierr)
         call MPI_COMM_RANK( this%myComm, this%myComm_nrank, ierr )
         call MPI_COMM_SIZE( this%myComm, this%myComm_nproc, ierr )
+    else
+        this%myComm_nrank = -1
     end if
 
     ! allocate buffers ranging from min index to max index in each direction
@@ -430,8 +432,14 @@ subroutine init(this, inputDir, ActuatorLineID, xG, yG, zG, xyzPads)
     this%xRightPad = xyzPads(2);   this%yRightPad = xyzPads(4)
     this%zLeftPad  = xyzPads(5);   this%zRightPad = xyzPads(6)
 
-    write(*,*) 'Done init subroutine'
-    write(*,*) nrank, this%Am_I_Active, this%Am_I_Split
+    ! initialize values to zero by default
+    this%turb_thrust = zero
+    this%distr_thrust = zero
+    this%turb_torque = zero
+    this%uturbavg = zero
+
+    !write(*,*) 'Done init subroutine'
+    !write(*,*) nrank, this%Am_I_Active, this%Am_I_Split
     if(this%Am_I_Active) then
       if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
           write(*,*) 'Writing blade_init.dat from proc. no.', this%myComm_nrank, nrank
@@ -603,7 +611,8 @@ subroutine distribute_forces(this, rhsx, rhsy, rhsz)
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsx, rhsy, rhsz
 
     integer :: j, k
-    real(rkind) :: tmp_dsqsum, dsqsum, mindsqsum, maxdsqsum, tmp_distr_thrust
+    real(rkind) :: mindsqsum, maxdsqsum, tmp_distr_thrust
+    !real(rkind) :: tmp_dsqsum, dsqsum
 
     mindsqsum = 1.0D30; maxdsqsum = -1.0D30
     if(this%Am_I_Active) then
@@ -960,7 +969,7 @@ subroutine interp_clcd(this, ptID, blID, AOA, cl, cd)
     real(rkind), intent(in) :: AOA
     real(rkind), intent(out) :: cl, cd
 
-    integer :: airfIDInd, nsize, j
+    integer :: airfIDInd, nsize
     real(rkind), dimension(:,:), pointer :: tablePtr
     real(rkind) :: aoaloc(1), clloc(1), cdloc(1)
 
@@ -1197,8 +1206,7 @@ subroutine get_RHS(this, dt, u, v, w, yRightHalo, zLeftHalo, zRightHalo, rhsxval
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(8),                                  intent(out), optional  :: inst_val
 
-
-    integer :: ierr
+    !integer :: ierr
 
     ! update turbine point locations to account for nacelle yaw and blade rotation
     call this%update_turbine(dt)
@@ -1216,15 +1224,17 @@ subroutine get_RHS(this, dt, u, v, w, yRightHalo, zLeftHalo, zRightHalo, rhsxval
     call this%distribute_forces(rhsxvals, rhsyvals, rhszvals)
     !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Done distribute_forces"); call mpi_barrier(mpi_comm_world, ierr)
 
-    ! some turbine-level quantities
-    inst_val(1) = abs(this%turb_thrust)
-    inst_val(2) = abs(this%distr_thrust)
-    inst_val(3) = abs(this%turb_torque)
-    inst_val(4) = abs(this%rotspeed)
-    inst_val(5) = abs(this%turb_torque*this%rotspeed)
-    inst_val(6) = abs(this%uturbavg)
-    inst_val(7) = abs(this%uturbavg**2)
-    inst_val(8) = abs(this%uturbavg**3)
+    if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
+      ! some turbine-level quantities
+      inst_val(1) = this%turb_thrust
+      inst_val(2) = this%distr_thrust
+      inst_val(3) = this%turb_torque
+      inst_val(4) = this%rotspeed
+      inst_val(5) = this%turb_torque*this%rotspeed
+      inst_val(6) = this%uturbavg
+      inst_val(7) = this%uturbavg**2
+      inst_val(8) = this%uturbavg**3
+    endif
 
 end subroutine 
 

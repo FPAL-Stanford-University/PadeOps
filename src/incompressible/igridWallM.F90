@@ -878,7 +878,7 @@ contains
         if (this%AlreadyHaveRHS) then
             this%AlreadyHaveRHS = .false.
         else
-            call this%populate_rhs(1)
+            call this%populate_rhs()
         end if
         this%uhat1 = this%uhat + this%dt*this%u_rhs 
         this%vhat1 = this%vhat + this%dt*this%v_rhs 
@@ -893,7 +893,7 @@ contains
         !!! STAGE 2
         ! Second stage - u, v, w are really pointing to u1, v1, w1 (which is
         ! what we want. 
-        call this%populate_rhs(2)
+        call this%populate_rhs()
         ! reset u, v, w pointers
         call this%reset_pointers()
         this%uhat1 = (3.d0/4.d0)*this%uhat + (1.d0/4.d0)*this%uhat1 + (1.d0/4.d0)*this%dt*this%u_rhs
@@ -910,7 +910,7 @@ contains
         !!! STAGE 3 (Final Stage)
         ! Third stage - u, v, w are really pointing to u2, v2, w2 (which is what
         ! we really want. 
-        call this%populate_rhs(3)
+        call this%populate_rhs()
         ! reset u, v, w pointers
         call this%reset_pointers()
         this%uhat = (1.d0/3.d0)*this%uhat + (2.d0/3.d0)*this%uhat1 + (2.d0/3.d0)*this%dt*this%u_rhs
@@ -931,7 +931,7 @@ contains
         class(igridWallM), intent(inout) :: this
       
         ! STEP 1: Populate RHS 
-        call this%populate_rhs(1)
+        call this%populate_rhs()
 
         ! STEP 2: Compute pressure
         if (this%fastCalcPressure) then
@@ -1403,9 +1403,9 @@ contains
         end if 
     end subroutine
 
-    subroutine populate_rhs(this, RKstage)
+    subroutine populate_rhs(this)
         class(igridWallM), intent(inout) :: this
-        integer,           intent(in)    :: RKstage
+        !integer,           intent(in)    :: RKstage
 
         ! Step 1: Non Linear Term 
         if (useSkewSymm) then
@@ -1463,8 +1463,8 @@ contains
                                                 this%u      , this%v              , this%wC         ,&
                                                 this%ustar  , this%Umn            , this%Vmn        ,&
                                                 this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
-                                                this%max_nuSGS, this%inst_horz_avg, this%dTdxC      ,&
-                                                this%dTdyC  , this%dTdzHC)
+                                                this%max_nuSGS, this%inst_horz_avg)!, this%dTdxC      ,&
+                                                !this%dTdyC  , this%dTdzHC)
             end if 
         end if 
     end subroutine
@@ -1694,7 +1694,7 @@ contains
                ! that tauSGS are consistent with the velocities and velocity
                ! derivatives, which is needed for correct SGS dissipation
                if (.not. this%AlreadyHaveRHS) then
-                   call this%populate_rhs(1)
+                   call this%populate_rhs()
                    this%AlreadyHaveRHS = .true. 
                end if 
 
@@ -1815,7 +1815,7 @@ contains
         if (this%AlreadyHaveRHS) then
             this%AlreadyHaveRHS = .false.
         else
-            call this%populate_rhs(1)
+            call this%populate_rhs()
         end if 
 
         ! Step 2: Time Advance
@@ -3184,7 +3184,7 @@ contains
         ! dump horizontal averages
         if(this%useWindTurbines) then
             this%runningSum_turb = zero
-            call MPI_reduce(this%runningSum_sc_turb, this%runningSum_turb, 8*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+            call MPI_reduce(this%runningSum_sc_turb, this%runningSum_turb, 8*this%WindTurbineArr%nTurbines, mpirkind, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
         endif
         if (nrank == 0) then
             write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%RunID,"_t",tid,".stt"
