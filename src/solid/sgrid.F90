@@ -180,6 +180,7 @@ contains
         real(rkind) :: PInf = zero
         real(rkind) :: shmod = zero
         real(rkind) :: yield = real(1.D30,rkind)
+        real(rkind) :: aparam = 10.0_rkind
         real(rkind) :: tau0 = one       !--- since these are specific to separable EOS
         integer     :: eostype = 1
         real(rkind) :: eosparams(20)
@@ -291,6 +292,8 @@ contains
             gam   = eosparams(1);   Rgas  = eosparams(2);   PInf = eosparams(3);
             shmod = eosparams(4);    yield = eosparams(5);   tau0 = eosparams(6);
             this%tau0 = tau0    ! maybe move this to elastic or geneos
+            aparam = eosparams(7)
+            write(*,*) 'aparam = ', aparam, eosparams(7)
             if ( allocated(this%sgas) ) deallocate(this%sgas)
             allocate(this%sgas)
             call this%sgas%init(gam,Rgas,PInf)
@@ -298,7 +301,7 @@ contains
             ! Allocate elastic
             if ( allocated(this%elastic) ) deallocate(this%elastic)
             allocate(this%elastic)
-            call this%elastic%init(shmod,yield)
+            call this%elastic%init(shmod,yield,aparam)
         else
             ! general eos
             this%tau0 = eosparams(9)    ! maybe move this to elastic or geneos
@@ -1302,7 +1305,7 @@ contains
         mustar = this%Cmu*this%rho*abs(mustar)
         
         ! Filter mustar
-        call this%filter(mustar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
+        call this%filter(mustar, this%gfil, 4, this%x_bc, this%y_bc, this%z_bc)
         
         ! -------- Artificial Bulk Viscosity --------
         

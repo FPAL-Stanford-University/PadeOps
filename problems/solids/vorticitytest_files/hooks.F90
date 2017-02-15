@@ -158,7 +158,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PInf,tau0,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rho0,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,one,two,pi,eight,seven
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
@@ -171,7 +171,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     character(len=*),                                               intent(in)    :: inputfile
     type(decomp_info),                                              intent(in)    :: decomp
     real(rkind),                                                    intent(in)    :: dx,dy,dz
-    real(rkind),                                          optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz, yield, tau0
+    real(rkind),                                          optional, intent(inout) :: rho0, tstop, dt, tviz
+    integer,                                                        intent(in)    :: eostype
+    real(rkind), dimension(:),                                      intent(in)    :: eosparams
     real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
@@ -181,6 +183,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     real(rkind) :: p_star, grho1, grho2, u1vrt, u2vrt, v1vrt, v2vrt
     integer, dimension(2) :: iparams
     real(rkind), dimension(8) :: fparams
+    real(rkind) :: mu, gam, PInf, yield, tau0, Rgas
 
     namelist /PROBINPUT/  omega, dxdyfixed, pRatio, p1, thick, xs
     
@@ -201,6 +204,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
+
+        if(eostype==1) then
+            gam   = eosparams(1);   Rgas  = eosparams(2);   PInf = eosparams(3);
+            mu = eosparams(4);    yield = eosparams(5);   tau0 =   eosparams(6);
+        else
+            write(*,*) 'eostype=2 not supported for this problem yet'
+        endif
 
         ! solve non-linear problem for determining shock jump
         p_star = one;         
@@ -670,10 +680,11 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,step,tsim)
+subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc,hookcond)
     use kind_parameters,  only: rkind
     use SolidGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
+    use DerivativesMod,   only: derivatives
     use exits,            only: message
     use reductions,       only: P_MAXVAL
 
@@ -681,10 +692,13 @@ subroutine hook_timestep(decomp,mesh,fields,step,tsim)
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
     integer,                         intent(in) :: step
-    real(rkind),                     intent(in) :: tsim
+    real(rkind),                     intent(in) :: tsim, dt
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    integer, dimension(2),           intent(in) :: x_bc,y_bc,z_bc
+    logical, optional,            intent(inout) :: hookcond
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &

@@ -1,7 +1,7 @@
 module Sep1SolidEOS
 
     use kind_parameters, only: rkind
-    use constants,       only: zero,half,one,two,three,fourth,sixth,third,twothird,fourthird
+    use constants,       only: zero,half,one,two,three,fourth,sixth,third,twothird,fourthird,eps
     use ElasticEOSMod,   only: elasticeos
 
     implicit none
@@ -10,6 +10,7 @@ module Sep1SolidEOS
 
         real(rkind) :: mu = zero                     ! Shear Modulus
         real(rkind) :: yield = one                   ! Shear Modulus
+        real(rkind) :: aparam = 10.0_rkind           ! used if this is between 0.5 and -1, we switch to the one-parameter family of EOS in that case
 
     contains
 
@@ -24,12 +25,14 @@ module Sep1SolidEOS
 
 contains
 
-    subroutine init(this,mu_,yield_)
+    subroutine init(this,mu_,yield_,aparam_)
         class(sep1solid), intent(inout) :: this
-        real(rkind), intent(in) :: mu_, yield_
+        real(rkind), intent(in) :: mu_, yield_, aparam_
 
         this%mu = mu_
         this%yield = yield_
+        this%aparam = aparam_
+         write(*,*) 'In Sep1Solid', this%aparam
 
     end subroutine
 
@@ -85,17 +88,31 @@ contains
         real(rkind), dimension(:,:,:,:), intent(out) :: devstress
 
         real(rkind), dimension(size(finger,1),size(finger,2),size(finger,3)) :: devstmp
+        real(rkind) :: afac
         integer :: i
 
         ! if(.not.present(fingersq)) call GracefulExit("fingersq required for devstress",1111)
-        
-        do i = 1,6
-            devstress(:,:,:,i) = -this%mu*(detG**(-sixth)*fingersq(:,:,:,i) - detG**sixth*finger(:,:,:,i))
-        end do
-        devstmp = third*this%mu*(detG**(-sixth)*trG2 - detG**sixth*trG)
-        devstress(:,:,:,1) = devstress(:,:,:,1) + devstmp
-        devstress(:,:,:,4) = devstress(:,:,:,4) + devstmp
-        devstress(:,:,:,6) = devstress(:,:,:,6) + devstmp
+       
+        if(this%aparam > half+eps .or. this%aparam < -(one+eps)) then
+            ! Old EOS described in Gavrilyuk et al. (2008) 
+            do i = 1,6
+                devstress(:,:,:,i) = -this%mu*(detG**(-sixth)*fingersq(:,:,:,i) - detG**sixth*finger(:,:,:,i))
+            end do
+            devstmp = third*this%mu*(detG**(-sixth)*trG2 - detG**sixth*trG)
+            devstress(:,:,:,1) = devstress(:,:,:,1) + devstmp
+            devstress(:,:,:,4) = devstress(:,:,:,4) + devstmp
+            devstress(:,:,:,6) = devstress(:,:,:,6) + devstmp
+        else
+            ! One-parameter family of EOS described in Gavrilyuk et al. (2016) 
+            afac = third*(one-two*this%aparam)
+            do i = 1,6
+                devstress(:,:,:,i) = -this%mu*detG**(-sixth)*(afac * trG * finger(:,:,:,i) + this%aparam * fingersq(:,:,:,i))
+            enddo
+            devstmp = third*this%mu*detG**(-sixth)*(afac*trG*trG + this%aparam*trG2)
+            devstress(:,:,:,1) = devstress(:,:,:,1) + devstmp
+            devstress(:,:,:,4) = devstress(:,:,:,4) + devstmp
+            devstress(:,:,:,6) = devstress(:,:,:,6) + devstmp
+        endif
 
     end subroutine
 
@@ -105,7 +122,14 @@ contains
         real(rkind), dimension(:,:,:), intent(in)  :: trG,trG2,detG
         real(rkind), dimension(:,:,:), intent(out) :: eelastic
 
-        eelastic = fourth*this%mu/rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
+        real(rkind) :: afac
+
+        if(this%aparam > half+eps .or. this%aparam < -(one+eps)) then
+            eelastic = fourth*this%mu/rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
+        else
+            afac = third*(one-two*this%aparam)
+            eelastic = fourth*this%mu/rho0*((this%aparam*trG2 + afac*trG*trG)*detG**(-twothird) + three*(this%aparam-one))
+        endif
 
     end subroutine
 
