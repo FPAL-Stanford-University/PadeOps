@@ -87,11 +87,11 @@ program JHU_channel
    call toc
    call message(0,"Data reading complete.")
    call message(0,"Now writing data in 2decomp format to disk.")
-
+   call tic()
    write(tempname,"(A1,A2,I3.3,A15)") fieldname,"_t",tid,"_JHUchannel.bin"
    fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
    call decomp_2d_write_one(1,rawData,fname, gp)
-   
+   call toc()
 
    !!! Dump planes
    !call decomp_2d_write_plane(1,rawData, 1, nxOut/2, "TestPlane_x.dat")

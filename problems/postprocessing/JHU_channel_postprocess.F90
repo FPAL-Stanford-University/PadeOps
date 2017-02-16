@@ -109,7 +109,7 @@ program JHU_channel_postprocess
    call message(0,"Step 5: Write statistics to an ascii file")
    write(tempname,"(A7,I3.3,A15)") "stats_t",tid,"_JHUchannel.txt"
    fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
-   call write_2d_ascii(meanprofiles,fname)
+   if (nrank == 0) call write_2d_ascii(meanprofiles,fname)
 
    call message(0,"Verification - write filtered fields.")
    call message(1,"u - velocity.")

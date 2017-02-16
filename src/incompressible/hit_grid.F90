@@ -1,4 +1,4 @@
-module IncompressibleGrid
+module HITGrid
     use kind_parameters, only: rkind, clen
     use constants, only: zero,one,two,three,half 
     use GridMod, only: grid

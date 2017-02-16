@@ -101,7 +101,7 @@ program test_projection
     allocate(cbuffzC(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3),2))
     allocate(cbuffzE(spectE%spectdecomp%zsz(1),spectE%spectdecomp%zsz(2),spectE%spectdecomp%zsz(3),1))
     
-    call poiss%init(dx, dy, dz, spect, spectE, der, computeStokesPressure, Lz)
+    call poiss%init(dx, dy, dz, spect, spectE, computeStokesPressure, Lz)
     
     allocate(ctmp1(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3)))
     allocate(ctmp2(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3)))

@@ -1,4 +1,4 @@
-module IncompressibleGridWallM
+module IncompressibleGrid
     use kind_parameters, only: rkind, clen
     use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa 
     use GridMod, only: grid
@@ -16,26 +16,45 @@ module IncompressibleGridWallM
     use sgsmod, only: sgs
     use wallmodelMod, only: wallmodel
     use numerics
-    use cd06staggstuff, only: cd06stagg
+    !use cd06staggstuff, only: cd06stagg
     use cf90stuff, only: cf90
     use TurbineMod, only: TurbineArray 
     use kspreprocessing, only: ksprep  
+    use PadeDerOps, only: Pade6Stagg
 
     implicit none
 
     private
-    public :: igridWallM 
+    public :: igrid 
 
     complex(rkind), parameter :: zeroC = zero + imi*zero 
-    integer, parameter :: no_slip = 1, slip = 2
 
     ! Allow non-zero value (isEven) 
     logical :: topBC_u = .true.  , topBC_v = .true. 
-    !logical :: botBC_u = .false. , botBC_v = .false. 
     logical, parameter :: topBC_w = .false. , botBC_w = .false. 
     integer :: ierr 
+    
+    !! BC convention: 
+    !! +1: even extension
+    !! -1: odd extension
+    !!  0: sided stencil
+    !!  Default values: 
+    integer :: wBC_bottom     = -1, wBC_top     = -1
+    integer :: uBC_bottom     =  0, uBC_top     =  1
+    integer :: vBC_bottom     =  0, vBC_top     =  1
+    integer :: TBC_bottom     =  1, TBC_top     =  0
+    integer :: WdUdzBC_bottom = -1, WdUdzBC_top =  1
+    integer :: WdVdzBC_bottom = -1, WdVdzBC_top =  1
+    integer :: WdWdzBC_bottom = -1, WdWdzBC_top = -1
+    integer :: WWBC_bottom    =  1, WWBC_top    =  1
+    integer :: UWBC_bottom    = -1, UWBC_top    = -1
+    integer :: VWBC_bottom    = -1, VWBC_top    = -1
+    integer :: WTBC_bottom    = -1, WTBC_top    = -1
+    integer :: dUdzBC_bottom  =  0, dUdzBC_top  =  -1
+    integer :: dVdzBC_bottom  =  0, dVdzBC_top  =  -1
+    integer :: dTdzBC_bottom  =  -1, dTdzBC_top  =  -1
 
-    type, extends(grid) :: igridWallM
+    type, extends(grid) :: igrid
         
         character(clen) :: inputDir
         integer :: headerfid = 12345   
@@ -49,7 +68,8 @@ module IncompressibleGridWallM
 
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsC
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsE
-        type(cd06stagg), allocatable :: derW, derWW, derSO, derSE, derT, derOE
+        !type(cd06stagg), allocatable :: derW, derWW, derSO, derSE, derT
+        type(Pade6Stagg), allocatable :: Pade6opZ
         type(cf90),      allocatable :: filzE, filzC
 
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC
@@ -230,10 +250,10 @@ module IncompressibleGridWallM
 contains 
 
     subroutine init(this,inputfile)
-        class(igridWallM), intent(inout), target :: this        
+        class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
         character(len=clen) :: outputdir, inputdir, turbInfoDir, ksOutputDir, controlDir = "null"
-        integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, topWall = slip, SGSModelID = 1
+        integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, SGSModelID = 1, topWall = 1, botWall = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
@@ -265,7 +285,7 @@ contains
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, &
                           useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz, assume_fplane, latitude
-        namelist /BCs/ topWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp
+        namelist /BCs/ topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp
         namelist /LES/ useSGS, useDynamicProcedure, useSGSclipping, SGSmodelID, useVerticalTfilter, &
                         useWallDamping, ncWall, Cs 
         namelist /WALLMODEL/ z0, wallMType
@@ -348,18 +368,7 @@ contains
             call GracefulExit("The code hasn't been tested for odd values of Nz. Crazy shit could happen.", 423)
         end if 
 
-        ! Set Top and Bottom BCs
-        if (topWall == slip) then
-            topBC_u = .true.; topBC_v = .true.
-            call message(1, "TopWall BC set to: SLIP")
-        elseif (topWall == no_slip) then
-            topBC_u = .false.; topBC_v = .false.
-            call message(1, "TopWall BC set to: NO_SLIP")
-        elseif (topWall == 3) then
-            call GracefulExit("Wall model for the top wall is not currently supported", 321)
-        else
-            call message("WARNING: No Top BCs provided. Using defaults found in igridWallM.F90")
-        end if 
+        call get_boundary_conditions_stencil(botWall, topWall)
 
         ! Set numerics
         select case(NumericalSchemeVert)
@@ -407,28 +416,8 @@ contains
 
         ! STEP 5: ALLOCATE/INITIALIZE THE OPERATORS DERIVED TYPE
         if (useCompactFD) then
-            allocate(this%derSE, this%derSO, this%derW, this%derWW, this%derT, this%derOE) 
-            call this%derSE%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
-                             isTopSided = .false., isBotSided = .true.) 
-            call this%derSO%init( this%gpC%zsz(3), this%dz, isTopEven = .false., isBotEven = .false., & 
-                             isTopSided = .false., isBotSided = .true.) 
-            call this%derW%init( this%gpC%zsz(3),  this%dz, isTopEven = .false., isBotEven = .false., & 
-                             isTopSided = .false., isBotSided = .false.) 
-            call this%derWW%init( this%gpC%zsz(3),  this%dz, isTopEven = .true., isBotEven = .true., & 
-                             isTopSided = .false., isBotSided = .false.) 
-            call this%derOE%init( this%gpC%zsz(3),  this%dz, isTopEven = .true., isBotEven = .false., & 
-                             isTopSided = .false., isBotSided = .false.) 
-            if (botBC_Temp == 0) then 
-                call this%derT%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
-                             isTopSided = .true., isBotSided = .true.) 
-            else if (botBC_Temp == 1) then
-                call this%derT%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
-                             isTopSided = .true., isBotSided = .false.) 
-            else if (botBC_Temp == 2) then
-                    call GracefulExit("Inhomogeneous Neumann BC is not currently supported for temperature",123)
-            else
-                    call GracefulExit("Invalid choice for botBC_Temp.",213)
-            end if 
+            allocate(this%Pade6OpZ)
+            call this%Pade6OpZ%init(this%gpC,this%sp_gpC,this%dz)
         else
             allocate(this%Ops)
             call this%Ops%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp, &
@@ -835,7 +824,7 @@ contains
 
         if (.not.(this%isInviscid)) then
             call GracefulExit("The viscous term is currently incomplete. You can & 
-                &only run problems that are inviscid using igridWallM right now. Try using &
+                &only run problems that are inviscid using igrid right now. Try using &
                 &igrid instead",123)
         end if 
 
@@ -846,7 +835,7 @@ contains
     end subroutine
 
     subroutine timeAdvance(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
 
         select case (this%timeSteppingScheme)
         case(0)
@@ -858,7 +847,7 @@ contains
     end subroutine
 
     subroutine reset_pointers(this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
 
         this%uhat => this%SfieldsC(:,:,:,1); 
         this%vhat => this%SfieldsC(:,:,:,2); 
@@ -870,7 +859,7 @@ contains
 
     
     subroutine TVD_RK3(this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
 
         ! Step 0: Compute TimeStep 
         call this%compute_deltaT
@@ -930,7 +919,7 @@ contains
 
 
     subroutine computePressure(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
       
         ! STEP 1: Populate RHS 
         call this%populate_rhs()
@@ -953,7 +942,7 @@ contains
 
     subroutine compute_deltaT(this)
         use reductions, only: p_maxval
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         real(rkind) :: TSmax  
         real(rkind), dimension(:,:,:), pointer :: rb1, rb2
 
@@ -978,7 +967,7 @@ contains
 
 
     function getMaxKE(this) result(maxKE)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         real(rkind)  :: maxKE
 
         this%rbuffxC(:,:,:,1) = this%u**2 + this%v**2 + this%wC**2
@@ -987,9 +976,9 @@ contains
     end function
 
     subroutine interp_PrimitiveVars(this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ybuffC, ybuffE, zbuffC, zbuffE
-
+        
         ybuffE => this%cbuffyE(:,:,:,1)
         zbuffE => this%cbuffzE(:,:,:,1)
         zbuffC => this%cbuffzC(:,:,:,1)
@@ -998,7 +987,7 @@ contains
         ! Step 1: Interpolate w -> wC
         call transpose_y_to_z(this%what,zbuffE,this%sp_gpE)
         if (useCompactFD) then
-            call this%derW%InterpZ_E2C(zbuffE,zbuffC,size(zbuffE,1),size(zbuffE,2))
+            call this%Pade6opZ%interpz_E2C(zbuffE,zbuffC,wBC_bottom, wBC_top)
         else
             call this%Ops%InterpZ_Edge2Cell(zbuffE,zbuffC)
         end if
@@ -1008,7 +997,7 @@ contains
         ! Step 2: Interpolate u -> uE
         call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
         if (useCompactFD) then
-            call this%derSE%InterpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+            call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,uBC_bottom, uBC_top)
         else
             call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
             zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
@@ -1021,7 +1010,7 @@ contains
         ! Step 3: Interpolate v -> vE
         call transpose_y_to_z(this%vhat,zbuffC,this%sp_gpC)
         if (useCompactFD) then
-            call this%derSE%InterpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+            call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,vBC_bottom, vBC_top)
         else
             call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
             zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
@@ -1036,7 +1025,7 @@ contains
         if (this%isStratified) then
             call transpose_y_to_z(this%That,zbuffC,this%sp_gpC)
             if (useCompactFD) then
-                call this%derT%InterpZ_C2E(zbuffC,zbuffE,size(zbuffE,1),size(zbuffE,2))
+                call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,TBC_bottom, TBC_top)
             else
                 call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
                 zbuffE(:,:,this%nz + 1) = two*zbuffC(:,:,this%nz) - zbuffE(:,:,this%nz)
@@ -1053,7 +1042,7 @@ contains
     end subroutine
 
     subroutine printDivergence(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         if (useCompactFD) then
             call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
         else
@@ -1062,7 +1051,7 @@ contains
     end subroutine 
 
     subroutine destroy(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
        
         if (this%timeAvgFullFields) then
             call this%finalize_stats3d()
@@ -1083,7 +1072,7 @@ contains
     end subroutine
 
     subroutine addNonLinearTerm_Rot(this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         real(rkind),    dimension(:,:,:), pointer :: dudy, dudz, dudx
         real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
         real(rkind),    dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
@@ -1155,7 +1144,7 @@ contains
     end subroutine
 
     subroutine addNonLinearTerm_skewSymm(this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         real(rkind),    dimension(:,:,:), pointer :: dudy, dudz, dudx
         real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
         real(rkind),    dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
@@ -1189,8 +1178,7 @@ contains
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,tzE, this%sp_gpE)
         if (useCompactFD) then
-            !call this%derW%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
-            call this%derOE%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+            call this%Pade6opZ%interpz_E2C(tzE,tzC,WdUdzBC_bottom,WdUdzBC_top)
         else
             call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
         end if 
@@ -1205,8 +1193,7 @@ contains
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,tzE, this%sp_gpE)
         if (useCompactFD) then
-            !call this%derW%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
-            call this%derOE%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+            call this%Pade6opZ%interpz_E2C(tzE,tzC,WdVdzBC_bottom,WdVdzBC_top)
         else
             call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
         end if 
@@ -1221,7 +1208,7 @@ contains
         call this%spectC%fft(T1C,fT1C)
         call transpose_y_to_z(fT1C,tzC, this%sp_gpC)
         if (useCompactFD) then
-            call this%derW%InterpZ_C2E(tzC,tzE,size(tzC,1),size(tzC,2))
+            call this%Pade6opZ%interpz_C2E(tzC,tzE,WdWdzBC_bottom,WdWdzBC_top)
         else
             call this%Ops%InterpZ_Cell2Edge(tzC,tzE,zeroC,zeroC)
         end if 
@@ -1242,7 +1229,7 @@ contains
         call this%spectC%fft(T1C,fT1C)
         call transpose_y_to_z(fT1C,tzC,this%sp_gpC)
         if (useCompactFD) then
-            call this%derWW%ddz_C2E(tzC,tzE,size(tzC,1),size(tzC,2))
+            call this%Pade6opZ%ddz_C2E(tzC,tzE,WWBC_bottom,WWBC_top)
         else
             call this%Ops%ddz_C2E(tzC,tzE,.true.,.true.)
         end if
@@ -1260,7 +1247,7 @@ contains
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
         if (useCompactFD) then
-            call this%derW%ddz_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+            call this%Pade6opZ%ddz_E2C(tzE,tzC,UWBC_bottom,UWBC_top)
         else
             call this%Ops%ddz_E2C(tzE,tzC)
         end if 
@@ -1275,7 +1262,7 @@ contains
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
         if (useCompactFD) then
-            call this%derW%ddz_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+            call this%Pade6opZ%ddz_E2C(tzE,tzC,VWBC_bottom,VWBC_top)
         else
             call this%Ops%ddz_E2C(tzE,tzC)
         end if 
@@ -1317,7 +1304,7 @@ contains
             call this%spectE%fft(T1E,fT1E)
             call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
             if (useCompactFD) then
-                call this%derW%ddz_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+                call this%Pade6opZ%ddz_E2C(tzE,tzC,WTBC_bottom,WTBC_top)
             else
                 call this%Ops%ddz_E2C(tzE,tzC)
             end if 
@@ -1330,7 +1317,7 @@ contains
     end subroutine
 
     subroutine addCoriolisTerm(this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ybuffE, zbuffC, zbuffE
 
         ybuffE => this%cbuffyE(:,:,:,1)
@@ -1349,7 +1336,8 @@ contains
         ! But we evaluate this term as:
         call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
         if (useCompactFD) then
-            call this%derSE%InterpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+            !call this%derSE%InterpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+            call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,uBC_bottom,uBC_top)
         else
             call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
             zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
@@ -1365,7 +1353,7 @@ contains
     end subroutine  
 
     subroutine addSponge(this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: deviationC
         deviationC => this%cbuffyC(:,:,:,1)
         
@@ -1384,7 +1372,7 @@ contains
     end subroutine
 
     subroutine addExtraForcingTerm(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         !if (this%spectC%carryingZeroK) then
         !    this%dpF_dxhat(1,1,:) = cmplx(this%ustar*this%ustar*this%nx*this%ny,zero)
         !end if
@@ -1392,7 +1380,7 @@ contains
     end subroutine
 
     subroutine AddBuoyancyTerm(this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: fT1E 
    
         fT1E => this%cbuffyE(:,:,:,1)
@@ -1408,7 +1396,7 @@ contains
     end subroutine
 
     subroutine populate_rhs(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         !integer,           intent(in)    :: RKstage
 
         ! Step 1: Non Linear Term 
@@ -1474,7 +1462,7 @@ contains
     end subroutine
 
     subroutine addViscousTerm(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         !complex(rkind), dimension(:,:,:), pointer :: fT1C, fT2C, fT1E, fT2E
 
         !fT1C => this%cbuffyC(:,:,:,1); fT2C => this%cbuffyC(:,:,:,2)
@@ -1487,7 +1475,7 @@ contains
 
 
     subroutine project_and_prep(this, AlreadyProjected)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         logical, intent(in) :: AlreadyProjected
 
         ! Step 1: Dealias
@@ -1532,7 +1520,7 @@ contains
 
 
     subroutine updateProbes(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         integer :: idx
 
         if (this%doIhaveAnyProbes) then
@@ -1568,7 +1556,7 @@ contains
 
     subroutine dumpProbes(this)
         use basic_io, only: write_2d_ascii
-        class(igridWallM), intent(in) :: this
+        class(igrid), intent(in) :: this
         character(len=clen) :: tempname, fname
         integer :: pid, idx
 
@@ -1592,7 +1580,7 @@ contains
     end subroutine
 
     subroutine wrapup_timestep(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
 
         logical :: forceWrite, exitStat, forceDumpPressure, restartWrite, forceDumpProbes 
         integer :: ierr = -1, ierr2
@@ -1808,7 +1796,7 @@ contains
     end subroutine
 
     subroutine AdamsBashforth(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         real(rkind) :: abf1, abf2
 
         ! Step 0: Compute TimeStep 
@@ -1854,7 +1842,7 @@ contains
     end subroutine
 
     subroutine ApplyCompactFilter(this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: zbuff1, zbuff2, zbuff3, zbuff4
         zbuff1 => this%cbuffzC(:,:,:,1)
         zbuff2 => this%cbuffzC(:,:,:,2)
@@ -1886,7 +1874,7 @@ contains
 
 
     subroutine compute_duidxj(this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
         complex(rkind), dimension(:,:,:), pointer :: ctmpz3!, ctmpz4
         complex(rkind), dimension(:,:,:), pointer :: ctmpy1, ctmpy2
@@ -1947,7 +1935,7 @@ contains
         
         call transpose_y_to_z(this%what,ctmpz2,this%sp_gpE)
         if (useCompactFD) then
-            call this%derW%ddz_E2C(ctmpz2,ctmpz1,size(ctmpz2,1),size(ctmpz2,2))
+            call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,wBC_bottom,wBC_top)
         else
             call this%Ops%ddz_E2C(ctmpz2,ctmpz1)
         end if 
@@ -1958,7 +1946,7 @@ contains
         ! Compute dudz
         call transpose_y_to_z(this%uhat,ctmpz1,this%sp_gpC)
         if (useCompactFD) then
-            call this%derSE%ddz_C2E(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+            call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,uBC_bottom,uBC_top)
         else    
             call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_u,.true.)
             dudz_dzby2 = ctmpz1(:,:,1)/((this%dz/two)*log(this%dz/two/this%z0))
@@ -1978,7 +1966,7 @@ contains
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dudz)
         if (useCompactFD) then
-            call this%derSO%InterpZ_E2C(ctmpz2,ctmpz1,size(ctmpz2,1),size(ctmpz2,2))
+            call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dUdzBC_bottom,dUdzBC_top)
         else
             call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
             ctmpz1(:,:,1) = dudz_dzby2 
@@ -1990,7 +1978,7 @@ contains
         ! Compute dvdz 
         call transpose_y_to_z(this%vhat,ctmpz1,this%sp_gpC)
         if (useCompactFD) then
-            call this%derSE%ddz_C2E(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
+            call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,vBC_bottom,vBC_top)
         else
             call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_v,.true.)
             dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
@@ -2000,7 +1988,7 @@ contains
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dvdz)
         if (useCompactFD) then
-            call this%derSO%InterpZ_E2C(ctmpz2,ctmpz1,size(ctmpz2,1),size(ctmpz2,2))
+            call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dVdzBC_bottom,dVdzBC_top)
         else
             call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
             ctmpz1(:,:,1) = dvdz_dzby2
@@ -2012,7 +2000,7 @@ contains
 
 
     subroutine compute_dTdxi(this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
         complex(rkind), dimension(:,:,:), pointer :: ctmpy1
 
@@ -2028,8 +2016,8 @@ contains
         call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
        
         if (useCompactFD) then
-            call this%derT%ddz_C2E(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
-            call this%derT%InterpZ_E2C(ctmpz2,ctmpz1,size(ctmpz1,1),size(ctmpz1,2))
+            call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,TBC_bottom,TBC_top)
+            call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dTdzBC_bottom,dTdzBC_top)
         else 
             call this%OpsPP%ddz_C2E(ctmpz1,ctmpz2,.true.,.true.)
             ctmpz2(:,:,this%nz+1) = ctmpz2(:,:,this%nz)
@@ -2046,7 +2034,7 @@ contains
     end subroutine
     
     !subroutine debug(this)
-    !    class(igridWallM), intent(inout), target :: this
+    !    class(igrid), intent(inout), target :: this
     !    real(rkind),    dimension(:,:,:), pointer :: dudx, dudy, dudz
     !    real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
     !    real(rkind),    dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
@@ -2077,7 +2065,7 @@ contains
         use mpi
         !use constants, only: four
         use kind_parameters, only: mpirkind
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         real(rkind), dimension(:,:,:), pointer :: rbuff
         complex(rkind), dimension(:,:,:), pointer :: cbuff
         integer :: ierr
@@ -2110,7 +2098,7 @@ contains
     end subroutine
     
     subroutine getSurfaceQuantities(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         integer :: idx
         integer, parameter :: itermax = 100 
         real(rkind) :: ustarNew, ustarDiff, dTheta, ustar
@@ -2147,7 +2135,7 @@ contains
         use decomp_2d_io
         use mpi
         use exits, only: message
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         integer, intent(in) :: tid, rid
         character(len=clen) :: tempname, fname
         integer :: ierr
@@ -2187,7 +2175,7 @@ contains
         use decomp_2d_io
         use mpi
         use exits, only: message
-        class(igridWallM), intent(in) :: this
+        class(igrid), intent(in) :: this
         character(len=clen) :: tempname, fname
         integer :: ierr
 
@@ -2225,7 +2213,7 @@ contains
         use decomp_2d_io
         use mpi
         use exits, only: message
-        class(igridWallM), intent(in) :: this
+        class(igrid), intent(in) :: this
         character(len=clen) :: tempname, fname
         real(rkind), dimension(:,:,:), intent(in) :: arr
         character(len=4), intent(in) :: label
@@ -2242,7 +2230,7 @@ contains
     !--------------------------------Beginning 3D Statistics----------------------------------------------
     subroutine init_stats3D(this)
         use exits, only: message
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         integer :: nstatsvar, nhorzavgvars, nstv, nhzv
 
 
@@ -2375,7 +2363,7 @@ contains
 
     subroutine compute_stats3D(this)
         use kind_parameters, only: mpirkind
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         real(rkind), dimension(:,:,:), pointer :: rbuff0, rbuff1, rbuff2, rbuff2E, rbuff3E, rbuff3, rbuff1E, rbuff4
         integer :: j, k, jindx, ierr
         real(rkind),    dimension(:,:,:), pointer :: dudx, dudy
@@ -2674,7 +2662,7 @@ contains
     end subroutine
 
     subroutine DeletePrevStats3DFiles(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         character(len=clen) :: tempname, fname
 
         if(nrank==0) then
@@ -2834,7 +2822,7 @@ contains
         use basic_io, only: write_2d_ascii
         use decomp_2d_io
         use kind_parameters, only: mpirkind
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
       ! compute horizontal averages and dump .stt files
       ! overwrite previously written out 3D stats dump
         real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3, rbuff4, rbuff5, rbuff6
@@ -3264,7 +3252,7 @@ contains
     end subroutine
 
     subroutine finalize_stats3D(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         nullify(this%u_mean, this%v_mean, this%w_mean, this%uu_mean, this%uv_mean, this%uw_mean, this%vv_mean, this%vw_mean, this%ww_mean)
         nullify(this%tau11_mean, this%tau12_mean, this%tau13_mean, this%tau22_mean, this%tau23_mean, this%tau33_mean)
         nullify(this%S11_mean, this%S12_mean, this%S13_mean, this%S22_mean, this%S23_mean, this%S33_mean)
@@ -3293,7 +3281,7 @@ contains
 
     !--------------------------------Beginning 1D Statistics----------------------------------------------
     subroutine init_stats( this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         type(decomp_info), pointer  :: gpC
 
         gpC => this%gpC
@@ -3367,7 +3355,7 @@ contains
     end subroutine
 
     subroutine compute_stats(this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         type(decomp_info), pointer :: gpC
         real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3E, rbuff2E, rbuff3, rbuff4, rbuff5, rbuff5E, rbuff4E, rbuff6E, rbuff6!, rbuff7
 
@@ -3628,7 +3616,7 @@ contains
         use exits, only: message
         use kind_parameters, only: clen, mpirkind
         use mpi
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
         character(len=clen) :: fname
         character(len=clen) :: tempname
         integer :: tid, ierr
@@ -3691,7 +3679,7 @@ contains
 
     subroutine compute_z_fluct(this,fin)
         use reductions, only: P_SUM
-        class(igridWallM), intent(in), target :: this
+        class(igrid), intent(in), target :: this
         real(rkind), dimension(:,:,:), intent(inout) :: fin
         integer :: k
         real(rkind) :: fmean
@@ -3705,7 +3693,7 @@ contains
 
     !subroutine compute_y_mean(this, arr_in, arr_out)
     !    use reductions, only: P_SUM
-    !    class(igridWallM), intent(in), target :: this
+    !    class(igrid), intent(in), target :: this
     !    real(rkind), dimension(:,:,:), intent(in) :: arr_in
     !    real(rkind), dimension(:,:), intent(out) :: arr_out
     !    integer :: k, i
@@ -3719,7 +3707,7 @@ contains
 
     subroutine compute_z_mean(this, arr_in, vec_out)
         use reductions, only: P_SUM
-        class(igridWallM), intent(in), target :: this
+        class(igrid), intent(in), target :: this
         real(rkind), dimension(:,:,:), intent(in) :: arr_in
         real(rkind), dimension(:), intent(out) :: vec_out
         integer :: k
@@ -3731,7 +3719,7 @@ contains
     end subroutine
 
     subroutine finalize_stats(this)
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
 
         nullify(this%u_mean, this%v_mean, this%w_mean, this%uu_mean, this%uv_mean, this%uw_mean, this%vv_mean, this%vw_mean, this%ww_mean)
         nullify(this%tau11_mean, this%tau12_mean, this%tau13_mean, this%tau22_mean, this%tau23_mean, this%tau33_mean)
@@ -3748,7 +3736,7 @@ contains
 
     subroutine dump_pointProbes(this)
         use kind_parameters, only: mpirkind
-        class(igridWallM), intent(inout) :: this
+        class(igrid), intent(inout) :: this
         character(len=clen) :: fname
         character(len=clen) :: tempname
         integer :: ierr
@@ -3770,7 +3758,7 @@ contains
 
     subroutine dump_planes(this)
         use decomp_2d_io
-        class(igridWallM), intent(in) :: this
+        class(igrid), intent(in) :: this
         integer :: nxplanes, nyplanes, nzplanes
         integer :: idx, pid, dirid, tid
         character(len=clen) :: fname
@@ -3912,7 +3900,7 @@ contains
 
 
     subroutine getfilteredSpeedSqAtWall(this)
-        class(igridWallM), intent(inout), target :: this
+        class(igrid), intent(inout), target :: this
 
         real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2
         complex(rkind), dimension(:,:,:), pointer :: cbuffy, tauWallH
@@ -3938,7 +3926,7 @@ contains
 
 
     subroutine start_io(this, dumpInitField)
-        class(igridWallM), target, intent(inout) :: this 
+        class(igrid), target, intent(inout) :: this 
         character(len=clen) :: fname
         character(len=clen) :: tempname
         !character(len=clen) :: command
@@ -4034,7 +4022,7 @@ contains
     end subroutine
     
     subroutine finalize_io(this)
-        class(igridWallM), intent(in) :: this
+        class(igrid), intent(in) :: this
 
         if (nrank == 0) then
             write(this%headerfid,*) "--------------------------------------------------------------"
@@ -4043,4 +4031,66 @@ contains
         end if 
     end subroutine 
 
+    subroutine get_boundary_conditions_stencil(botWall, topWall)
+         integer, intent(in) :: botWall, topWall
+
+         wBC_bottom   = -1; wBC_top   = -1;  
+         WdWdzBC_bottom = -1; WdWdzBC_top = -1;
+         WWBC_bottom  = +1; WWBC_top  = +1;
+
+         !! Bottom wall 
+         call message(0,"Bottom Wall Boundary Condition is:")
+         select case (botWall)
+         case(1)
+            call message(1,"No-Slip Wall")
+            uBC_bottom    = -1; vBC_bottom    = -1;
+            dUdzBC_bottom = +1; dVdzBC_bottom = +1;
+            WdUdzBC_bottom  = -1; WdVdzBC_bottom  = -1;
+            UWBC_bottom   = +1; VWBC_bottom   = +1;   
+         case(2) 
+            call message(1,"Slip Wall")
+            uBC_bottom    = +1; vBC_bottom    = +1;
+            dUdzBC_bottom = -1; dVdzBC_bottom = -1;
+            WdUdzBC_bottom  = +1; WdVdzBC_bottom  = +1;
+            UWBC_bottom   = -1; VWBC_bottom   = -1;   
+         case(3) 
+            call message(1,"Wall Model")
+            uBC_bottom    =  0; vBC_bottom    =  0;
+            dUdzBC_bottom =  0; dVdzBC_bottom =  0;
+            WdUdzBC_bottom  = -1; WdVdzBC_bottom  = -1;
+            UWBC_bottom   = -1; VWBC_bottom   = -1;   
+         case default
+            call gracefulExit("Invalid choice for BOTTOM WALL BCs",423)
+         end select
+         
+         ! Top wall 
+         call message(0,"Top Wall Boundary Condition is:")
+         select case (TopWall)
+         case(1)
+            call message(1,"No-Slip Wall")
+            uBC_top      = -1; vBC_top      = -1;
+            dUdzBC_top   = +1; dVdzBC_top   = +1;
+            WdUdzBC_top  = -1; WdVdzBC_top  = -1;
+            UWBC_top     = +1; VWBC_top     = +1;   
+         case(2) 
+            call message(1,"Slip Wall")
+            uBC_top      = +1; vBC_top      = +1;
+            dUdzBC_top   = -1; dVdzBC_top   = -1;
+            WdUdzBC_top  = +1; WdVdzBC_top  = +1;
+            UWBC_top     = -1; VWBC_top     = -1;   
+         case(3) 
+            call message(1,"Wall Model")
+            uBC_top      =  0; vBC_top      =  0;
+            dUdzBC_top   =  0; dVdzBC_top   =  0;
+            WdUdzBC_top  = -1; WdVdzBC_top  = -1;
+            UWBC_top     = -1; VWBC_top     = -1;   
+         case default
+            call gracefulExit("Invalid choice for TOP WALL BCs",13)
+         end select
+         
+         !!! NEEDS UPDATING !!! 
+         TBC_bottom = +1; TBC_top =  0;
+         dTdzBC_bottom = -1; dTdzBC_top = 0;
+         WTBC_bottom = -1; WTBC_top = -1;
+    end subroutine
 end module 
