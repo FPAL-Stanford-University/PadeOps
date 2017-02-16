@@ -306,12 +306,14 @@ subroutine halo_communication(this, u, v, wC)
 
 end subroutine
 
-subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, inst_horz_avg)
+subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, storeBodyForce, totBodyForce, inst_horz_avg)
     class(TurbineArray), intent(inout), target :: this
     real(rkind),                                                                         intent(in) :: dt
     real(rkind),    dimension(this%gpC%xsz(1),   this%gpC%xsz(2),   this%gpC%xsz(3)),    intent(in) :: u, v, wC
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
-    complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs 
+    complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
+    logical,                                                                             intent(in)    :: storeBodyForce
+    real(rkind),    dimension(this%gpC%xsz(1),   this%gpC%xsz(2),   this%gpC%xsz(3), 3), intent(inout) :: totBodyForce
     real(rkind),    dimension(:),                                                        intent(out), optional   :: inst_horz_avg
     integer :: i
     !integer :: ierr
@@ -371,6 +373,12 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, inst_horz_avg)
       call this%dumpFullField(this%fy, 'wtfy')
       call this%dumpFullField(this%fz, 'wtfz')
       this%dumpTurbField = .false.
+    endif
+
+    if(storeBodyForce) then
+      totBodyforce(:,:,:,1) = totBodyForce(:,:,:,1) + this%fx
+      totBodyforce(:,:,:,2) = totBodyForce(:,:,:,2) + this%fy
+      totBodyforce(:,:,:,3) = totBodyForce(:,:,:,3) + this%fz
     endif
 
 end subroutine 

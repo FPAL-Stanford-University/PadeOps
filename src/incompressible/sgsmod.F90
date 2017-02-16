@@ -32,7 +32,7 @@ module sgsmod
         type(spectral), pointer :: spectC, spectE 
         real(rkind), allocatable, dimension(:,:,:,:) :: rbuff, rbuffE, SIGMAbuffs, Lij, Mij, MGMbuffs, MGMbuffsE
         real(rkind), pointer, dimension(:,:,:) :: cSMAG_WALL, nuSGS, nuSGSfil,nuSGSE, nuSCA, nuSCAE
-        real(rkind) :: deltaFilter, mconst, deltaTFilter 
+        real(rkind) :: deltaFilter, mconst, deltaTFilter
         type(decomp_info), pointer :: sp_gp, gpC
         type(decomp_info), pointer :: sp_gpE, gpE
 
@@ -49,7 +49,7 @@ module sgsmod
         logical :: useWallFunction = .false. 
         logical :: useDynamicProcedure = .false.
         logical :: useClipping = .false., CompStokesP = .false. 
-        logical :: eddyViscModel = .true., isStratified = .false. 
+        logical :: eddyViscModel = .true., isStratified = .false.
         
         real(rkind) :: meanFact, Pr, Theta0, Fr
 
@@ -61,6 +61,13 @@ module sgsmod
         type(lstsq) :: Tfilz 
         integer :: SGSmodel 
 
+        ! for GlobDynProcedure
+        integer :: zEdgeLo, GlobDynProcFreq = 10
+        real(rkind), allocatable, dimension(:,:,:,:) :: GlobDynrbuffxC, GlobDynrbuffxE
+        logical :: useGlobDynProcedure = .false., isInviscid = .true., useCoriolis, useWindTurbines = .false. 
+        real(rkind) :: GlobDynCoeff, invRe
+
+
         integer :: WallModel = 1
         real(rkind) :: WallMfactor
         integer :: mstep = 0
@@ -68,6 +75,7 @@ module sgsmod
             procedure :: init
             procedure :: destroy
             procedure :: setStratificationConstants
+            procedure, private :: GlobDynProcedure
             procedure, private :: DynamicProcedure
             procedure, private :: planarAverage 
             procedure, private :: planarAverage_oop 
@@ -102,12 +110,13 @@ contains
         this%Fr = Fr; this%theta0 = theta0
     end subroutine
 
-    subroutine link_pointers(this,nuSGS,c_SGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
+    subroutine link_pointers(this,nuSGS,c_SGS, tauSGS_ij, tau13, tau23, q1, q2, q3, totBodyForce)
         class(sgs), intent(in), target :: this
         real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: c_SGS, nuSGS
         real(rkind), dimension(:,:,:)  , pointer, intent(inout), optional :: tau13, tau23
         real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: tauSGS_ij
         real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: q1, q2, q3
+        real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: totBodyForce
 
         if (allocated(this%rbuff)) then
             if (this%useDynamicProcedure) then
@@ -128,7 +137,14 @@ contains
             end if 
             if (this%isStratified) then
                 q1 => this%q1; q2 => this%q2; q3 => this%q3
-            end if 
+            end if
+            if(this%useGlobDynProcedure) then
+              if(this%isStratified .or. this%useCoriolis .or. this%useWindTurbines) then
+                totBodyForce => this%GlobDynrbuffxC(:,:,:,1:3)
+              else
+                totBodyForce => null()
+              endif
+            endif
         else
             call gracefulExit("You have called SGS%LINK_POINTERS before &
                 & initializing SGS",324)
@@ -260,7 +276,7 @@ contains
     end subroutine
 
 
-    subroutine getRHS_SGS_WallM(this, duidxjC, duidxjE, duidxjChat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, ustar, Umn, Vmn, Uspmn, filteredSpeedSq, InvObLength, max_nuSGS, inst_horz_avg, dTdx, dTdy, dTdzHC)    
+    subroutine getRHS_SGS_WallM(this, duidxjC, duidxjE, duidxjChat, urhs, vrhs, wrhs, uhat, vhat, wChat, u, v, wC, ustar, Umn, Vmn, Uspmn, filteredSpeedSq, InvObLength, max_nuSGS, inst_horz_avg, totBodyForce, step, dTdx, dTdy, dTdzHC)    
         class(sgs), intent(inout), target :: this
         real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in), target :: duidxjC
         real(rkind)   , dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4), intent(in), target :: duidxjE
@@ -273,6 +289,8 @@ contains
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout), optional :: dTdzHC
         real(rkind)   , dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in), optional :: dTdx, dTdy
         real(rkind), dimension(this%ntimeAvgQs), intent(out) :: inst_horz_avg
+        real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: totBodyForce
+        integer,                                  intent(in)    :: step
         real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz
         real(rkind), dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
         real(rkind), dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
@@ -333,12 +351,26 @@ contains
             end if
         end select
 
+        ! set Wall Model Factor before calling GlobDynProcedure
+        select case(this%wallModel) 
+        case(0)
+            this%WallMFactor = -ustar*ustar/(Uspmn + 1.D-13)
+        case(1)
+            call this%getLocalWallModel(filteredSpeedSq, this%ctmpCz)
+            this%WallMFactor = -(kappa/(log(this%dz/(two*this%z0)) + bm*InvObLength*this%dz/two))**2 
+        end select
+
         !print*, this%nuSGS(3,2,3)
         if (this%useDynamicProcedure) then
             if (mod(this%mstep,ApplyDynEvery) == 0) then
                 call this%DynamicProcedure(u,v,wC,uhat, vhat, wChat, duidxjChat) 
             end if
             this%nuSGS = this%Lij(:,:,:,1) * (this%deltafilter * this%deltafilter) * this%nuSGS  
+        elseif(this%useGlobDynProcedure) then
+            if(mod(step, this%GlobDynProcFreq)==0) then
+                call this%GlobDynProcedure(u, v, wC, uhat, vhat, wChat, S13, S23, S13C, S23C, duidxjC, duidxjE, duidxjChat, totBodyForce)
+            endif
+            this%nuSGS = (this%GlobDynCoeff*this%deltaFilter**2)*this%nuSGS
         elseif (this%eddyViscModel) then
             if (this%useWallFunction) then
                 !print*, this%deltaFIlter, this%cSMAG_WALL(3,2,3)
@@ -506,6 +538,7 @@ contains
     end subroutine
 
 #include "sgs_models/dynamicprocedure.F90"
+#include "sgs_models/globdynprocedure.F90"
 
     subroutine getRHS_SGS_Scalar_WallM(this, duidxjC, dTdxC, dTdyC, dTdzE, dTdzC, T_rhs, wTh_surf)
         class(sgs), intent(inout), target :: this

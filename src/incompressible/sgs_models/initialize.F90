@@ -1,4 +1,4 @@
-    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, zmesh,  z0, useWallModel, wallMtype,  TfilterZ, Pr, useWallDamping, nCWall, Cs, CompStokesP , isStratified)
+    subroutine init(this, ModelID, spectC, spectE, gpC, gpE, dx, dy, dz, useDynamicProcedure, useClipping, zmesh,  z0, useWallModel, wallMtype,  TfilterZ, Pr, useWallDamping, nCWall, Cs, CompStokesP , useGlobDynProcedure, GlobDynProcFreq, isStratified, isInviscid, useCoriolis, useWindTurbines, Re)
         class(sgs), intent(inout), target :: this
         type(spectral), intent(in), target :: spectC, spectE
         type(decomp_info), intent(in), target :: gpC, gpE
@@ -7,13 +7,16 @@
         integer, intent(in) :: modelID
         real(rkind), dimension(:,:,:), intent(in), optional :: zMesh
         real(rkind), intent(in), optional :: z0, Pr, Cs, nCWall
-        integer, intent(in), optional :: wallMtype
-        logical, intent(in), optional :: useWallModel, TfilterZ, CompStokesP, useWallDamping, isStratified
+        integer, intent(in), optional :: wallMtype, GlobDynProcFreq
+        logical, intent(in), optional :: useWallModel, TfilterZ, CompStokesP, useWallDamping, useGlobDynProcedure, isStratified, isInviscid, useCoriolis, useWindTurbines
+        real(rkind), intent(in), optional :: Re
         integer :: ierr
 
         this%SGSmodel = modelID 
         this%useDynamicProcedure = useDynamicProcedure
         this%useClipping = useClipping
+        if(present(useGlobDynProcedure)) this%useGlobDynProcedure = useGlobDynProcedure
+        if(present(GlobDynProcFreq)) this%GlobDynProcFreq = GlobDynProcFreq
 
         allocate(this%rbuff(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),11))
         this%rbuff = zero  
@@ -32,6 +35,10 @@
         if (present(useWallDamping)) this%useWallFunction = useWallDamping   
         if (present(isStratified)) this%isStratified = isStratified
         if (this%isStratified) this%ntimeAvgQs = 5 ! Update the size of the inst_horz_avg vector from 3 to 5
+        if (present(isInviscid)) this%isInviscid = isInviscid
+        if (present(useCoriolis)) this%useCoriolis = useCoriolis
+        if (present(useWindTurbines)) this%useWindTurbines = useWindTurbines
+        if (present(Re)) this%invRe = one/Re
 
         if (present(useWallmodel)) then
             this%useWallModel = useWallModel
@@ -151,6 +158,22 @@
             call message(1,"Dynamic Procedure initialized")
         end if 
 
+        if(this%useGlobDynProcedure) then
+          !if(this%useCoriolis .or. this%isStratified .or. this%useWindTurbines) then
+            allocate(this%GlobDynrbuffxC(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),15))
+            allocate(this%GlobDynrbuffxE(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3),2))
+          !endif
+
+          if(gpC%xst(3)==1) then
+            this%zEdgeLo = 1
+          else
+            this%zEdgeLo = 0
+          endif
+          !call MPI_COMM_SPLIT(mpi_comm_world, this%zEdgeLo, nrank, this%mycomm, ierr)
+          !call MPI_COMM_RANK( this%mycomm, this%myComm_nrank, ierr )
+          !call MPI_COMM_SIZE( this%mycomm, this%myComm_nproc, ierr )
+        endif
+
         this%meanFact = one/(real(gpC%xsz(1))*real(gpC%ysz(2)))
         allocate(this%rtmpY(gpC%ysz(1),gpC%ysz(2),gpC%ysz(3)))
         allocate(this%rtmpZ(gpC%zsz(1),gpC%zsz(2),gpC%zsz(3)))
@@ -186,6 +209,10 @@
         if (allocated(this%MGMbuffsE)) deallocate(this%MGMbuffsE)
         nullify( this%nuSGS)
         if(this%useDynamicProcedure) deallocate(this%Lij, this%Mij)
+        if(this%useGlobDynProcedure)  then
+          deallocate(this%GlobDynrbuffxE)
+          deallocate(this%GlobDynrbuffxC)
+        endif
         nullify(this%sp_gp, this%gpC, this%spectC)
         deallocate(this%rbuff, this%cbuff)
         deallocate(this%rtmpZ, this%rtmpY)

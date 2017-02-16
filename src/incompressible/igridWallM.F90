@@ -99,9 +99,10 @@ module IncompressibleGridWallM
         logical :: useExtraForcing = .false., useGeostrophicForcing = .false., isInviscid = .false.  
         logical :: useSGS = .false. 
         logical :: UseDealiasFilterVert = .false.
-        logical :: useDynamicProcedure 
+        logical :: useDynamicProcedure, useGlobDynProcedure, storeBodyForce = .false.
         logical :: useCFL = .false.  
         logical :: dumpPlanes = .false., useWindTurbines = .false. 
+        integer :: GlobDynProcFreq
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
@@ -133,7 +134,7 @@ module IncompressibleGridWallM
         real(rkind) :: tSimStartStats
 
         ! Pointers linked to SGS stuff
-        real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
+        real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij, totBodyForce
         real(rkind), dimension(:,:,:)  , pointer :: nu_SGS, tau13, tau23
         real(rkind), dimension(:,:,:)  , pointer :: c_SGS, q1, q2, q3 
        
@@ -257,6 +258,8 @@ contains
         real(rkind), dimension(:,:), allocatable :: probe_locs
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
+        logical :: useGlobDynProcedure=.false.!, storeBodyForce=.false.
+        integer :: GlobDynProcFreq = 10
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -267,7 +270,7 @@ contains
                           useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz, assume_fplane, latitude
         namelist /BCs/ topWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp
         namelist /LES/ useSGS, useDynamicProcedure, useSGSclipping, SGSmodelID, useVerticalTfilter, &
-                        useWallDamping, ncWall, Cs 
+                        useWallDamping, ncWall, Cs, useGlobDynProcedure, GlobDynProcFreq 
         namelist /WALLMODEL/ z0, wallMType
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
@@ -313,6 +316,7 @@ contains
         this%tSimStartStats = tSimStartStats; this%useWindTurbines = useWindTurbines
         this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS 
         this%useDynamicProcedure = useDynamicProcedure; this%UseDealiasFilterVert = UseDealiasFilterVert
+        this%useGlobDynProcedure = useGlobDynProcedure; this%GlobDynProcFreq = GlobDynProcFreq
         this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; this%fastCalcPressure = fastCalcPressure 
         this%t_start_planeDump = t_start_planeDump; this%t_stop_planeDump = t_stop_planeDump
         this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro; 
@@ -619,10 +623,11 @@ contains
             call this%SGSmodel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
                 this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3), this%z0, &
                 .true., WallMType, useVerticalTfilter, Pr, useWallDamping, nCWall, Cs, ComputeStokesPressure, &
-                this%isStratified )
+                useGlobDynProcedure, GlobDynProcFreq, this%isStratified, this%isInviscid, this%useCoriolis, this%useWindTurbines, this%Re )
             call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23, &
-                                this%q1, this%q2, this%q3)
+                                this%q1, this%q2, this%q3, this%totBodyForce)
             call message(0,"SGS model initialized successfully")
+            if (this%useGlobDynProcedure .and. (mod(this%step, this%GlobDynProcFreq)==0)) this%storeBodyForce = .true.
         end if 
         this%max_nuSGS = zero
 
@@ -1358,6 +1363,12 @@ contains
         ! The residual quantity (Gx - <u>)*cos(alpha)/Ro is accomodated in
         ! pressure
 
+        if(this%storeBodyForce) then
+          this%totBodyForce(:,:,:,1) = (-this%coriolis_cosine*this%wC +  this%coriolis_sine   * (this%Gy-this%v))/this%Ro
+          this%totBodyForce(:,:,:,2) =                                   this%coriolis_sine   * (this%Gx-this%u) /this%Ro
+          this%totBodyForce(:,:,:,3) =                                -  this%coriolis_cosine * (this%Gx-this%u) /this%Ro
+        endif
+
     end subroutine  
 
     subroutine addSponge(this)
@@ -1401,6 +1412,11 @@ contains
         if (this%useSponge) then
             call this%addSponge
         end if 
+
+        if(this%storeBodyForce) then
+          this%totBodyForce(:,:,:,3) = this%totBodyForce(:,:,:,3) + this%T/(this%ThetaRef*This%Fr*this%Fr)
+        endif
+
     end subroutine
 
     subroutine populate_rhs(this)
@@ -1425,7 +1441,7 @@ contains
         !if (this%useWindTurbines .and. (RKstage==1)) then
         if (this%useWindTurbines) then
             call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
-                                    this%u_rhs, this%v_rhs, this%w_rhs, this%inst_horz_avg_turb)
+                                    this%u_rhs, this%v_rhs, this%w_rhs, this%storeBodyForce, this%totBodyForce, this%inst_horz_avg_turb)
         end if 
 
         ! Step 4: Buoyance + Sponge (inside Buoyancy)
@@ -1447,26 +1463,31 @@ contains
         if (this%useSGS) then
             if (this%isStratified) then
                 call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
-                                                this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
-                                                this%uhat   , this%vhat           , this%whatC      ,&
-                                                this%u      , this%v              , this%wC         ,&
-                                                this%ustar  , this%Umn            , this%Vmn        ,&
-                                                this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
-                                                this%max_nuSGS, this%inst_horz_avg)
+                                                this%u_rhs      , this%v_rhs          , this%w_rhs      ,&
+                                                this%uhat       , this%vhat           , this%whatC      ,&
+                                                this%u          , this%v              , this%wC         ,&
+                                                this%ustar      , this%Umn            , this%Vmn        ,&
+                                                this%Uspmn      , this%filteredSpeedSq, this%InvObLength,&
+                                                this%max_nuSGS  , this%inst_horz_avg  , this%totBodyForce,& 
+                                                this%step,                                                &
+                                                this%dTdXC      , this%dTdYC          , this%dTdZHC)
 
                 call this%SGSmodel%getRHS_SGS_Scalar_WallM(this%duidxjC, this%dTdxC, this%dTdyC, this%dTdzE, &
                                                            this%dTdzC, this%T_rhs, this%wTh_surf)
             else
-                call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
+                call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE    , this%duidxjChat ,& 
                                                 this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
                                                 this%uhat   , this%vhat           , this%whatC      ,&
                                                 this%u      , this%v              , this%wC         ,&
                                                 this%ustar  , this%Umn            , this%Vmn        ,&
                                                 this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
-                                                this%max_nuSGS, this%inst_horz_avg)!, this%dTdxC      ,&
-                                                !this%dTdyC  , this%dTdzHC)
+                                                this%max_nuSGS, this%inst_horz_avg, this%totBodyForce,&
+                                                this%step                                            )
+                                                !,this%dTdxC, this%dTdyC  , this%dTdzHC)
             end if 
-        end if 
+        end if
+
+        if(this%storeBodyForce) this%storeBodyForce = .false. 
     end subroutine
 
     subroutine addViscousTerm(this)
@@ -1602,7 +1623,10 @@ contains
         end if  
         if (this%PreprocessForKS) this%KSupdated = .false. 
         if (this%useProbes) call this%updateProbes()
-
+        if (this%useGlobDynProcedure .and. (mod(this%step, this%GlobDynProcFreq)==0) .and. associated(this%totBodyForce)) then
+          this%storeBodyForce = .true.
+          this%totBodyForce = zero
+        endif
 
         ierr = -1; forceWrite = .FALSE.; exitstat = .FALSE.; forceDumpPressure = .FALSE.; 
         forceDumpProbes = .false.; restartWrite = .FALSE. 
