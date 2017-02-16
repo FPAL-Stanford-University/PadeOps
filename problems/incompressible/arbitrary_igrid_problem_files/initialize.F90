@@ -1,4 +1,4 @@
-module ekmanNeutral_parameters
+module arbitrary_igrid_problem_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
@@ -9,31 +9,32 @@ module ekmanNeutral_parameters
     integer :: seedw = 131344
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
-
-    real(rkind), parameter :: xdim = 400._rkind, udim = 8._rkind
+    
+    real(rkind), parameter :: xdim = 1000._rkind, udim = 0.45_rkind
     real(rkind), parameter :: timeDim = xdim/udim
+
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use ekmanNeutral_parameters    
+    use arbitrary_igrid_problem_parameters    
     use kind_parameters,  only: rkind
-    use constants,        only: zero, one, two
+    use constants,        only: one,two
     use decomp_2d,        only: decomp_info
     implicit none
 
     type(decomp_info),                                          intent(in)    :: decomp
     real(rkind),                                                intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
-    real(rkind) :: z0init = 1.d-4
+    real(rkind) :: z0init
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, Gx0, Gy0
-    real(rkind) :: aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
-    namelist /EKMAN_NEUTRAL_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
+    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    namelist /arbitrary_igrid_problem_input/ Lx, Ly, Lz, z0init 
+
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=EKMAN_NEUTRAL_INPUT)
+    read(unit=ioUnit, NML=arbitrary_igrid_problem_input)
     close(ioUnit)    
 
     !Lx = two*pi; Ly = two*pi; Lz = one
@@ -70,9 +71,9 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use ekmanNeutral_parameters
+    use arbitrary_igrid_problem_parameters
     use kind_parameters,    only: rkind
-    use constants,          only: zero, one,  half
+    use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
     use random,             only: gaussian_random
     use decomp_2d          
@@ -84,23 +85,19 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
-    integer :: ioUnit, k
-    real(rkind), dimension(:,:,:), pointer :: u, v, w, T, wC, x, y, z
-    real(rkind), dimension(:,:,:), allocatable :: randArr, Tpurt
-    real(rkind) :: z0init, sig!, epsnd
-    real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE, eta
+    integer :: ioUnit
+    real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
+    real(rkind) :: z0init, epsnd = 0.1
+    real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
-    !real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0, Zperiods = 1.d0
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, Gx0 = one, Gy0 = zero;
-    real(rkind) :: thetam = 15._rkind + 273.15_rkind
-    real(rkind) :: cTemp = 1.d0/3.d0, aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
+    real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0!, Zperiods = 1.d0
+    real(rkind) :: zpeak = 0.2d0
+    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    namelist /arbitrary_igrid_problem_input/ Lx, Ly, Lz, z0init 
 
-    namelist /EKMAN_NEUTRAL_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
-
-    !z0init = 1.D-4
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=EKMAN_NEUTRAL_INPUT)
+    read(unit=ioUnit, NML=arbitrary_igrid_problem_input)
     close(ioUnit)    
 
 
@@ -108,36 +105,17 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     v  => fieldsC(:,:,:,2)
     wC => fieldsC(:,:,:,3)
     w  => fieldsE(:,:,:,1)
-    T  => fieldsC(:,:,:,7)
 
     z => mesh(:,:,:,3)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    u = Gx0!(1.d0 - exp(-z/D)*cos(z/D))
-    v = Gy0!exp(-z/D)*sin(z/D)
-    wC = zero 
+    epsnd = 5.d0
 
-    allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    allocate(eta(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    eta = (z - h1Temp)/(cTemp*(h2Temp - h0Temp))
-    T = thetam + aTemp*(tanh(eta) + 1.d0)/2.d0 + bTemp*(log(2.d0*cosh(eta)) + eta)/2.d0 
-
-    ! Add random numbers
-    allocate(randArr(size(T,1),size(T,2),size(T,3)))
-    call gaussian_random(randArr,zero,one,seedu + 10*nrank)
-    do k = 1,size(u,3)
-        sig = 0.08d0
-        Tpurt(:,:,k) = sig*randArr(:,:,k)
-    end do  
-    deallocate(randArr)
-    
-    where (z > 0.25d0)
-        Tpurt = zero
-    end where
-    T = T + Tpurt
+    u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    wC= zero  
    
-    deallocate(eta, Tpurt)
 
     ! Interpolate wC to w
     allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
@@ -177,51 +155,10 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [128]
-    yplanes = [128]
+    xplanes = [64]
+    yplanes = [64]
     zplanes = [20]
 
-end subroutine
-
-subroutine set_Reference_Temperature(inputfile, Tref)
-    use kind_parameters,    only: rkind
-    implicit none
-    character(len=*),                intent(in)    :: inputfile
-    real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, z0init, Gx0, Gy0
-    integer :: ioUnit 
-    real(rkind) :: aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
-    namelist /EKMAN_NEUTRAL_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
-     
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=EKMAN_NEUTRAL_INPUT)
-    close(ioUnit)    
-
-    ! This will have set the value of Tref.     
-
-end subroutine
-
-subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
-    use kind_parameters,    only: rkind
-    use ekmanNeutral_parameters
-    implicit none
-    real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: Gx0, Gy0, Lx, Ly, Lz, z0init, Tref
-    character(len=*),                intent(in)    :: inputfile
-    integer :: ioUnit 
-    real(rkind) :: aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
-    namelist /EKMAN_NEUTRAL_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
-     
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=EKMAN_NEUTRAL_INPUT)
-    close(ioUnit)    
-    
-    ! This subroutine is never called for this problem, since it used Neumann
-    ! BC.
-
-    Tsurf = 0.d0; dTsurf_dt = 0.d0
 end subroutine
 
 subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
@@ -234,10 +171,55 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 
 end subroutine
 
+
+subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
+    use kind_parameters,    only: rkind
+    use constants,          only: zero, one
+    implicit none
+
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), intent(out) :: Tsurf, dTsurf_dt
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init
+    integer :: iounit
+    namelist /arbitrary_igrid_problem_input/ Lx, Ly, Lz, z0init 
+    
+    Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
+    
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=arbitrary_igrid_problem_input)
+    close(ioUnit)    
+
+    ! Do nothing really since this is an unstratified simulation
+end subroutine
+
+
+subroutine set_Reference_Temperature(inputfile, Tref)
+    use kind_parameters,    only: rkind
+    implicit none 
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), intent(out) :: Tref
+    real(rkind) :: Lx, Ly, Lz, z0init
+    integer :: iounit
+    
+    namelist /arbitrary_igrid_problem_input/ Lx, Ly, Lz, z0init 
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=arbitrary_igrid_problem_input)
+    close(ioUnit)    
+     
+    Tref = 0.d0
+    
+    ! Do nothing really since this is an unstratified simulation
+
+end subroutine
+
 subroutine hook_probes(inputfile, probe_locs)
     use kind_parameters,    only: rkind
-    character(len=*),                intent(in)    :: inputfile
     real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
+    character(len=*),                intent(in)    :: inputfile
     integer, parameter :: nprobes = 2
     
     ! IMPORTANT : Convention is to allocate probe_locs(3,nprobes)

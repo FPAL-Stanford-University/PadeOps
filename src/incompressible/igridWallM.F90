@@ -49,7 +49,7 @@ module IncompressibleGridWallM
 
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsC
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsE
-        type(cd06stagg), allocatable :: derW, derWW, derSO, derSE, derT
+        type(cd06stagg), allocatable :: derW, derWW, derSO, derSE, derT, derOE
         type(cf90),      allocatable :: filzE, filzC
 
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC
@@ -411,7 +411,7 @@ contains
 
         ! STEP 5: ALLOCATE/INITIALIZE THE OPERATORS DERIVED TYPE
         if (useCompactFD) then
-            allocate(this%derSE, this%derSO, this%derW, this%derWW, this%derT) 
+            allocate(this%derSE, this%derSO, this%derW, this%derWW, this%derT, this%derOE) 
             call this%derSE%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
                              isTopSided = .false., isBotSided = .true.) 
             call this%derSO%init( this%gpC%zsz(3), this%dz, isTopEven = .false., isBotEven = .false., & 
@@ -419,6 +419,8 @@ contains
             call this%derW%init( this%gpC%zsz(3),  this%dz, isTopEven = .false., isBotEven = .false., & 
                              isTopSided = .false., isBotSided = .false.) 
             call this%derWW%init( this%gpC%zsz(3),  this%dz, isTopEven = .true., isBotEven = .true., & 
+                             isTopSided = .false., isBotSided = .false.) 
+            call this%derOE%init( this%gpC%zsz(3),  this%dz, isTopEven = .true., isBotEven = .false., & 
                              isTopSided = .false., isBotSided = .false.) 
             if (botBC_Temp == 0) then 
                 call this%derT%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
@@ -513,7 +515,7 @@ contains
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
         if (useCompactFD) then
             allocate(this%padepoiss)
-            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, this%derW, computeStokesPressure, Lz, this%storePressure, this%gpC) 
+            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, this%storePressure, this%gpC) 
         else    
             allocate(this%poiss)
             call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE, computeStokesPressure, this%gpC)  
@@ -1015,8 +1017,8 @@ contains
         else
             call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
             zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
+            zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
         end if 
-        zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
 
         call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
         call this%spectE%ifft(ybuffE,this%uE)
@@ -1028,9 +1030,9 @@ contains
         else
             call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
             zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
+            zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
         end if 
         
-        zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
         
         call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
         call this%spectE%ifft(ybuffE,this%vE)
@@ -1192,7 +1194,8 @@ contains
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,tzE, this%sp_gpE)
         if (useCompactFD) then
-            call this%derW%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+            !call this%derW%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+            call this%derOE%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
         else
             call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
         end if 
@@ -1207,7 +1210,8 @@ contains
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,tzE, this%sp_gpE)
         if (useCompactFD) then
-            call this%derW%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+            !call this%derW%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
+            call this%derOE%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
         else
             call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
         end if 

@@ -23,7 +23,7 @@ module PadePoissonMod
     type :: Padepoisson
         integer :: nzG, nx_in, ny_in, nz_in
         integer ::      nxE_in, nyE_in, nzE_in
-        type(cd06stagg), pointer :: derZ
+        type(cd06stagg), allocatable :: derZ
         type(spectral), pointer :: sp, spE
         type(decomp_info), pointer :: sp_gp, sp_gpE
 
@@ -64,10 +64,10 @@ module PadePoissonMod
 contains
 
 
-    subroutine init(this, dx, dy, dz, sp, spE, derZ, computeStokesPressure, Lz, storePressure, gpC)
+    subroutine init(this, dx, dy, dz, sp, spE, computeStokesPressure, Lz, storePressure, gpC)
         class(padepoisson), intent(inout) :: this
         real(rkind), intent(in) :: dx, dy, dz
-        class(cd06stagg), intent(in), target :: derZ
+        !class(cd06stagg), intent(in), target :: derZ
         class(spectral), intent(in), target :: sp, spE
         integer :: nxExt, nyExt, nzExt
         real(rkind), dimension(:), allocatable :: k1, k2, k3, k3mod
@@ -82,7 +82,9 @@ contains
 
         call  message("=========================================")
         call  message(0,"Initializing PADEPOISSON derived type")
-        this%derZ => derZ
+        allocate(this%derZ)
+        call this%derZ%init( gpC%zsz(3),  dz, isTopEven = .false., isBotEven = .false., & 
+                             isTopSided = .false., isBotSided = .false.) 
         this%sp => sp
         this%spE => spE
         this%sp_gp => sp%spectdecomp
@@ -414,8 +416,8 @@ contains
         deallocate(this%f2d, this%f2dy, this%w2)
         if (allocated(this%phat_z1)) deallocate(this%phat_z1)
         if (allocated(this%phat_z2)) deallocate(this%phat_z2)
-        nullify(this%derZ, this%sp_gp, this%sp_gpE, this%sp, this%spE)
-
+        nullify( this%sp_gp, this%sp_gpE, this%sp, this%spE)
+        deallocate(this%derZ)
     end subroutine
 
     subroutine GetStokesPressure(this,uhat,vhat,what)
