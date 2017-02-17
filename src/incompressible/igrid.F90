@@ -33,7 +33,8 @@ module IncompressibleGrid
     logical :: topBC_u = .true.  , topBC_v = .true. 
     logical, parameter :: topBC_w = .false. , botBC_w = .false. 
     integer :: ierr 
-    
+    integer :: topWall = 1, botWall = 1
+
     !! BC convention: 
     !! +1: even extension
     !! -1: odd extension
@@ -52,6 +53,7 @@ module IncompressibleGrid
     integer :: WTBC_bottom    = -1, WTBC_top    = -1
     integer :: dUdzBC_bottom  =  0, dUdzBC_top  =  -1
     integer :: dVdzBC_bottom  =  0, dVdzBC_top  =  -1
+    integer :: dWdzBC_bottom  =  1, dWdzBC_top  =  1
     integer :: dTdzBC_bottom  =  -1, dTdzBC_top  =  -1
 
     type, extends(grid) :: igrid
@@ -101,6 +103,7 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:,:), allocatable :: rhsC, rhsE, OrhsC, OrhsE 
         real(rkind), dimension(:,:,:,:), allocatable :: duidxjC, duidxjE 
         complex(rkind), dimension(:,:,:,:), allocatable :: duidxjChat
+        complex(rkind), dimension(:,:,:), allocatable :: d2udz2hatC, d2vdz2hatC,d2wdz2hatE
         complex(rkind), dimension(:,:,:), pointer:: u_rhs, v_rhs, wC_rhs, w_rhs 
         complex(rkind), dimension(:,:,:), pointer:: u_Orhs, v_Orhs, w_Orhs
 
@@ -253,7 +256,7 @@ contains
         class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
         character(len=clen) :: outputdir, inputdir, turbInfoDir, ksOutputDir, controlDir = "null"
-        integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, SGSModelID = 1, topWall = 1, botWall = 1
+        integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, SGSModelID = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
@@ -368,7 +371,7 @@ contains
             call GracefulExit("The code hasn't been tested for odd values of Nz. Crazy shit could happen.", 423)
         end if 
 
-        call get_boundary_conditions_stencil(botWall, topWall)
+        call get_boundary_conditions_stencil()
 
         ! Set numerics
         select case(NumericalSchemeVert)
@@ -495,6 +498,11 @@ contains
         allocate(this%rbuffyE(this%gpE%ysz(1),this%gpE%ysz(2),this%gpE%ysz(3),2))
         allocate(this%rbuffzE(this%gpE%zsz(1),this%gpE%zsz(2),this%gpE%zsz(3),4))
         allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+        if (.not.this%isinviscid) then
+            allocate(this%d2udz2hatC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+            allocate(this%d2vdz2hatC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+            allocate(this%d2wdz2hatE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
+        end if 
         this%nxZ = size(this%cbuffzE,1); this%nyZ = size(this%cbuffzE,2)
 
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
@@ -563,7 +571,10 @@ contains
         if (this%isStratified) call this%spectC%ifft(this%That,this%T)
 
         ! STEP 8: Interpolate the cell center values of w
-        call this%compute_and_bcast_surface_Mn()
+        if (this%useSGS) then
+            call this%compute_and_bcast_surface_Mn()
+        end if
+
         call this%interp_PrimitiveVars()
         call message(1,"Max KE:",P_MAXVAL(this%getMaxKE()))
      
@@ -822,12 +833,6 @@ contains
                 & cannot specify botBC_Temp to be anything other than 0, at this time.",434)
         end if 
 
-        if (.not.(this%isInviscid)) then
-            call GracefulExit("The viscous term is currently incomplete. You can & 
-                &only run problems that are inviscid using igrid right now. Try using &
-                &igrid instead",123)
-        end if 
-
         call message("IGRID initialized successfully!")
         call message("===========================================================")
 
@@ -943,9 +948,9 @@ contains
     subroutine compute_deltaT(this)
         use reductions, only: p_maxval
         class(igrid), intent(inout), target :: this
-        real(rkind) :: TSmax  
+        real(rkind) :: TSmax , Tvisc
         real(rkind), dimension(:,:,:), pointer :: rb1, rb2
-
+        
         rb1 => this%rbuffxC(:,:,:,1)
         rb2 => this%rbuffxC(:,:,:,2)
 
@@ -960,6 +965,11 @@ contains
             rb1 = rb1 + rb2
             TSmax = p_maxval(rb1)
             this%dt = this%CFL/TSmax
+
+            if (.not. this%isInviscid) then
+               Tvisc = this%CFL*this%Re*(min(this%dx,this%dy,this%dz)**2)
+               this%dt = min(this%dt,Tvisc)
+            end if
         end if 
 
 
@@ -1067,8 +1077,10 @@ contains
         call this%spectE%destroy()
         deallocate(this%spectC, this%spectE)
         nullify(this%nu_SGS, this%c_SGS, this%tauSGS_ij)
-        call this%sgsModel%destroy()
-        deallocate(this%sgsModel)
+        if (this%useSGS) then
+           call this%sgsModel%destroy()
+           deallocate(this%sgsModel)
+        end if
     end subroutine
 
     subroutine addNonLinearTerm_Rot(this)
@@ -1458,18 +1470,24 @@ contains
                                                 this%max_nuSGS, this%inst_horz_avg)!, this%dTdxC      ,&
                                                 !this%dTdyC  , this%dTdzHC)
             end if 
-        end if 
+        end if
+
+
+        !if (nrank == 0) print*, maxval(abs(this%u_rhs)), maxval(abs(this%v_rhs)), maxval(abs(this%w_rhs))
     end subroutine
 
     subroutine addViscousTerm(this)
         class(igrid), intent(inout) :: this
-        !complex(rkind), dimension(:,:,:), pointer :: fT1C, fT2C, fT1E, fT2E
+      
+        this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%uhat + this%d2udz2hatC
+        this%u_rhs = this%u_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
 
-        !fT1C => this%cbuffyC(:,:,:,1); fT2C => this%cbuffyC(:,:,:,2)
-        !fT1E => this%cbuffyE(:,:,:,1); fT2E => this%cbuffyE(:,:,:,2)
-        this%u_rhs = this%u_rhs + cmplx(zero,zero,rkind)
+        this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%vhat + this%d2vdz2hatC
+        this%v_rhs = this%v_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
 
-        ! Incomplete  -> don't run simulations with isInviscid = FALSE
+        this%cbuffyE(:,:,:,1) = -this%spectE%kabs_sq*this%what + this%d2wdz2hatE
+        this%w_rhs = this%w_rhs + (one/this%Re)*this%cbuffyE(:,:,:,1)
+
 
     end subroutine
 
@@ -1876,7 +1894,7 @@ contains
     subroutine compute_duidxj(this)
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
-        complex(rkind), dimension(:,:,:), pointer :: ctmpz3!, ctmpz4
+        complex(rkind), dimension(:,:,:), pointer :: ctmpz3, ctmpz4
         complex(rkind), dimension(:,:,:), pointer :: ctmpy1, ctmpy2
         real(rkind),    dimension(:,:,:), pointer :: dudx, dudy, dudz
         real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
@@ -1887,8 +1905,6 @@ contains
         complex(rkind), dimension(:,:,:), pointer :: dudxH, dudyH, dudzH 
         complex(rkind), dimension(:,:,:), pointer :: dvdxH, dvdyH, dvdzH
         complex(rkind), dimension(:,:,:), pointer :: dwdxH, dwdyH, dwdzH
-
-        complex(rkind), dimension(:,:)  , pointer :: dudz_dzby2, dvdz_dzby2
 
         dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
         dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
@@ -1902,11 +1918,8 @@ contains
         dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
 
         ctmpz1 => this%cbuffzC(:,:,:,1); ctmpz2 => this%cbuffzE(:,:,:,1); 
-        ctmpz3 => this%cbuffzC(:,:,:,2)!; ctmpz4 => this%cbuffzE(:,:,:,2)
+        ctmpz3 => this%cbuffzC(:,:,:,2); ctmpz4 => this%cbuffzE(:,:,:,2)
         ctmpy1 => this%cbuffyC(:,:,:,1); ctmpy2 => this%cbuffyE(:,:,:,1)
-
-
-        dudz_dzby2 => this%cbuffzE(:,:,1,2); dvdz_dzby2 => this%cbuffzE(:,:,1,2)
 
 
         call this%spectC%mTimes_ik1_oop(this%uhat,dudxH)
@@ -1934,65 +1947,42 @@ contains
         call this%spectE%ifft(ctmpy2,dwdy)
         
         call transpose_y_to_z(this%what,ctmpz2,this%sp_gpE)
-        if (useCompactFD) then
-            call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,wBC_bottom,wBC_top)
-        else
-            call this%Ops%ddz_E2C(ctmpz2,ctmpz1)
-        end if 
+        call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,wBC_bottom,wBC_top)
         call transpose_z_to_y(ctmpz1,dwdzH,this%sp_gpC)
         call this%spectC%ifft(dwdzH,dwdz)
-
+        if(.not. this%isinviscid) then
+               call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,wBC_bottom,wBC_top)
+               call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,dWdzBC_bottom,dWdzBC_top)
+               call transpose_z_to_y(ctmpz2,this%d2wdz2hatE,this%sp_gpE)
+        end if
 
         ! Compute dudz
         call transpose_y_to_z(this%uhat,ctmpz1,this%sp_gpC)
-        if (useCompactFD) then
-            call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,uBC_bottom,uBC_top)
-        else    
-            call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_u,.true.)
-            dudz_dzby2 = ctmpz1(:,:,1)/((this%dz/two)*log(this%dz/two/this%z0))
-            call this%spectE%SurfaceFilter_ip(dudz_dzby2)
-            dudz_dzby2 = (this%Umn/this%Uspmn) * dudz_dzby2
-        end if     
-
-
-        ! Correct derivative at the z = dz (see Porte Agel, JFM (appendix))
-        if ((.not. this%isStratified) .and. (.not. useCompactFD)) then
-            if (nrank == 0) then
-                ctmpz2(1,1,2) = ctmpz2(1,1,2) + (0.08976d0/(kappa*this%dz))*real(this%nx,rkind)*real(this%ny,rkind)
-            end if 
-            ctmpz2(:,:,1) = (two*ctmpz2(:,:,2) - ctmpz2(:,:,3))
-        end if 
-
+        call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,uBC_bottom,uBC_top)
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dudz)
-        if (useCompactFD) then
-            call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dUdzBC_bottom,dUdzBC_top)
-        else
-            call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
-            ctmpz1(:,:,1) = dudz_dzby2 
+        if (.not. this%isinviscid) then
+               call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz4,uBC_bottom,uBC_top)
+               call this%Pade6opZ%ddz_E2C(ctmpz4,ctmpz1,dUdzBC_bottom,dUdzBC_top)
+               call transpose_z_to_y(ctmpz1,this%d2udz2hatC,this%sp_gpC)
         end if 
+
+        call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dUdzBC_bottom,dUdzBC_top)
         call transpose_z_to_y(ctmpz1,dudzH,this%sp_gpC)
         call this%spectC%ifft(dudzH,dudzC)
-
-
+      
         ! Compute dvdz 
         call transpose_y_to_z(this%vhat,ctmpz1,this%sp_gpC)
-        if (useCompactFD) then
-            call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,vBC_bottom,vBC_top)
-        else
-            call this%Ops%ddz_C2E(ctmpz1,ctmpz2,topBC_v,.true.)
-            dvdz_dzby2 = dudz_dzby2 * this%Vmn/this%Umn
-            ctmpz2(:,:,1) = two*dvdz_dzby2 - ctmpz2(:,:,2)
-        end if 
-
+        call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,vBC_bottom,vBC_top)
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dvdz)
-        if (useCompactFD) then
-            call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dVdzBC_bottom,dVdzBC_top)
-        else
-            call this%Ops%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
-            ctmpz1(:,:,1) = dvdz_dzby2
+        if (.not. this%isinviscid) then
+            call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz4,vBC_bottom,vBC_top)
+            call this%Pade6opZ%ddz_E2C(ctmpz4,ctmpz1,dVdzBC_bottom,dVdzBC_top)
+            call transpose_z_to_y(ctmpz1,this%d2vdz2hatC,this%sp_gpC)
         end if 
+      
+        call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dVdzBC_bottom,dVdzBC_top)
         call transpose_z_to_y(ctmpz1,dvdzH,this%sp_gpC)
         call this%spectC%ifft(dvdzH,dvdzC)
 
@@ -2106,24 +2096,26 @@ contains
         real(rkind), parameter :: beta_h = 7.8_rkind, beta_m = 4.8_rkind
       
         select case (this%botBC_Temp)
-        case(0) 
-            dTheta = this%Tsurf - this%Tmn; Linv = zero
-            z = this%dz/two ; ustarDiff = one; wTh = zero
-            a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
-            PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
+        case(0)
+            if (this%useSGS) then
+               dTheta = this%Tsurf - this%Tmn; Linv = zero
+               z = this%dz/two ; ustarDiff = one; wTh = zero
+               a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
+               PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
        
-            ! Inside the do loop all the used variables are on the stored on the stack
-            ! After the while loop these variables are copied to their counterparts
-            ! on the heap (variables part of the derived type)
-            do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
-                ustarNew = u*kappa/(a - PsiM)
-                wTh = dTheta*ustarNew*kappa/(a - PsiH) 
-                Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
-                PsiM = -c*Linv; PsiH = -b*Linv;
-                ustarDiff = abs((ustarNew - ustar)/ustarNew)
-                ustar = ustarNew; idx = idx + 1
-            end do 
-            this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
+               ! Inside the do loop all the used variables are on the stored on the stack
+               ! After the while loop these variables are copied to their counterparts
+               ! on the heap (variables part of the derived type)
+               do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
+                   ustarNew = u*kappa/(a - PsiM)
+                   wTh = dTheta*ustarNew*kappa/(a - PsiH) 
+                   Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
+                   PsiM = -c*Linv; PsiH = -b*Linv;
+                   ustarDiff = abs((ustarNew - ustar)/ustarNew)
+                   ustar = ustarNew; idx = idx + 1
+               end do 
+               this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
+            end if
         case(1)
             this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
             this%invObLength = zero
@@ -3905,22 +3897,24 @@ contains
         real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2
         complex(rkind), dimension(:,:,:), pointer :: cbuffy, tauWallH
 
-        cbuffy => this%cbuffyC(:,:,:,1); tauWallH => this%cbuffzC(:,:,:,1)     
-        rbuffx1 => this%filteredSpeedSq; rbuffx2 => this%rbuffxC(:,:,:,1)
+        if (this%useSGS) then
+            cbuffy => this%cbuffyC(:,:,:,1); tauWallH => this%cbuffzC(:,:,:,1)     
+            rbuffx1 => this%filteredSpeedSq; rbuffx2 => this%rbuffxC(:,:,:,1)
 
-        call transpose_y_to_z(this%uhat,tauWallH,this%sp_gpC)
-        call this%spectC%SurfaceFilter_ip(tauWallH(:,:,1))
-        call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
-        call this%spectC%ifft(cbuffy,rbuffx1)
+            call transpose_y_to_z(this%uhat,tauWallH,this%sp_gpC)
+            call this%spectC%SurfaceFilter_ip(tauWallH(:,:,1))
+            call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
+            call this%spectC%ifft(cbuffy,rbuffx1)
 
-        call transpose_y_to_z(this%vhat,tauWallH,this%sp_gpC)
-        call this%spectC%SurfaceFilter_ip(tauWallH(:,:,1))
-        call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
-        call this%spectC%ifft(cbuffy,rbuffx2)
+            call transpose_y_to_z(this%vhat,tauWallH,this%sp_gpC)
+            call this%spectC%SurfaceFilter_ip(tauWallH(:,:,1))
+            call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
+            call this%spectC%ifft(cbuffy,rbuffx2)
 
-        rbuffx1 = rbuffx1*rbuffx1
-        rbuffx2 = rbuffx2*rbuffx2
-        rbuffx1 = rbuffx1 + rbuffx2
+            rbuffx1 = rbuffx1*rbuffx1
+            rbuffx2 = rbuffx2*rbuffx2
+            rbuffx1 = rbuffx1 + rbuffx2
+        end if 
 
     end subroutine  
 
@@ -4031,34 +4025,34 @@ contains
         end if 
     end subroutine 
 
-    subroutine get_boundary_conditions_stencil(botWall, topWall)
-         integer, intent(in) :: botWall, topWall
+    subroutine get_boundary_conditions_stencil()
 
          wBC_bottom   = -1; wBC_top   = -1;  
          WdWdzBC_bottom = -1; WdWdzBC_top = -1;
          WWBC_bottom  = +1; WWBC_top  = +1;
+         dWdzBC_bottom =  0; dWdzBC_top =  0;
 
          !! Bottom wall 
          call message(0,"Bottom Wall Boundary Condition is:")
          select case (botWall)
          case(1)
             call message(1,"No-Slip Wall")
-            uBC_bottom    = -1; vBC_bottom    = -1;
-            dUdzBC_bottom = +1; dVdzBC_bottom = +1;
-            WdUdzBC_bottom  = -1; WdVdzBC_bottom  = -1;
-            UWBC_bottom   = +1; VWBC_bottom   = +1;   
+            uBC_bottom      = -1; vBC_bottom      = -1;
+            dUdzBC_bottom   =  0; dVdzBC_bottom   =  0;
+            WdUdzBC_bottom  =  0; WdVdzBC_bottom  =  0;
+            UWBC_bottom     = +1; VWBC_bottom     = +1;   
          case(2) 
             call message(1,"Slip Wall")
-            uBC_bottom    = +1; vBC_bottom    = +1;
-            dUdzBC_bottom = -1; dVdzBC_bottom = -1;
+            uBC_bottom      = +1; vBC_bottom      = +1;
+            dUdzBC_bottom   = -1; dVdzBC_bottom   = -1;
             WdUdzBC_bottom  = +1; WdVdzBC_bottom  = +1;
-            UWBC_bottom   = -1; VWBC_bottom   = -1;   
+            UWBC_bottom     = -1; VWBC_bottom     = -1;   
          case(3) 
             call message(1,"Wall Model")
-            uBC_bottom    =  0; vBC_bottom    =  0;
-            dUdzBC_bottom =  0; dVdzBC_bottom =  0;
+            uBC_bottom      =  0; vBC_bottom      =  0;
+            dUdzBC_bottom   =  0; dVdzBC_bottom   =  0;
             WdUdzBC_bottom  = -1; WdVdzBC_bottom  = -1;
-            UWBC_bottom   = -1; VWBC_bottom   = -1;   
+            UWBC_bottom     = -1; VWBC_bottom     = -1;   
          case default
             call gracefulExit("Invalid choice for BOTTOM WALL BCs",423)
          end select
@@ -4069,8 +4063,8 @@ contains
          case(1)
             call message(1,"No-Slip Wall")
             uBC_top      = -1; vBC_top      = -1;
-            dUdzBC_top   = +1; dVdzBC_top   = +1;
-            WdUdzBC_top  = -1; WdVdzBC_top  = -1;
+            dUdzBC_top   =  0; dVdzBC_top   =  0;
+            WdUdzBC_top  =  0; WdVdzBC_top  =  0;
             UWBC_top     = +1; VWBC_top     = +1;   
          case(2) 
             call message(1,"Slip Wall")

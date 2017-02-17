@@ -23,8 +23,14 @@ module PadeDerOps
       procedure, private :: interpz_C2E_cmplx
       procedure, private :: interpz_E2C_real
       procedure, private :: interpz_E2C_cmplx
+      procedure, private :: d2dz2_C2C_real
+      procedure, private :: d2dz2_C2C_cmplx
+      procedure, private :: d2dz2_E2E_real
+      procedure, private :: d2dz2_E2E_cmplx
       generic            :: ddz_C2E => ddz_C2E_real, ddz_C2E_cmplx
       generic            :: ddz_E2C => ddz_E2C_real, ddz_E2C_cmplx
+      generic            :: d2dz2_C2C => d2dz2_C2C_real, d2dz2_C2C_cmplx
+      generic            :: d2dz2_E2E => d2dz2_E2E_real, d2dz2_E2E_cmplx
       generic            :: interpz_C2E => interpz_C2E_real, interpz_C2E_cmplx
       generic            :: interpz_E2C => interpz_E2C_real, interpz_E2C_cmplx
    end type
@@ -67,6 +73,125 @@ subroutine destroy(this)
    nullify(this%gp, this%sp_gp)
 
 end subroutine
+
+subroutine d2dz2_C2C_real(this,input,output,bot,top)
+   class(Pade6stagg), intent(in) :: this
+   real(rkind), dimension(this%gp%zsz(1),this%gp%zsz(2),this%gp%zsz(3)  ), intent(in)  :: input
+   real(rkind), dimension(this%gp%zsz(1),this%gp%zsz(2),this%gp%zsz(3)  ), intent(out) :: output
+   integer, intent(in) :: bot, top
+
+   select case (bot)
+   case(-1) 
+      if     (top == -1) then
+         call this%derOO%d2dz2_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      elseif (top ==  1) then
+         call this%derEO%d2dz2_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      else 
+         output = 0.d0
+      end if
+   case(1)  ! bottom = even
+      if     (top == -1) then
+         call this%derOE%d2dz2_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      elseif (top ==  1) then
+         call this%derEE%d2dz2_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      else 
+         output = 0.d0
+      end if
+   case default
+      output = 0.d0
+   end select
+
+end subroutine 
+
+
+subroutine d2dz2_C2C_cmplx(this,input,output,bot,top)
+   class(Pade6stagg), intent(in) :: this
+   complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)  ), intent(in)  :: input
+   complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)  ), intent(out) :: output
+   integer, intent(in) :: bot, top
+
+   select case (bot)
+   case(-1) 
+      if     (top == -1) then
+         call this%derOO%d2dz2_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      elseif (top ==  1) then
+         call this%derEO%d2dz2_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      else 
+         output = 0.d0
+      end if
+   case(1)  ! bottom = even
+      if     (top == -1) then
+         call this%derOE%d2dz2_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      elseif (top ==  1) then
+         call this%derEE%d2dz2_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      else 
+         output = 0.d0
+      end if
+   case default
+      output = 0.d0
+   end select
+
+end subroutine 
+
+
+subroutine d2dz2_E2E_real(this,input,output,bot,top)
+   class(Pade6stagg), intent(in) :: this
+   real(rkind), dimension(this%gp%zsz(1),this%gp%zsz(2),this%gp%zsz(3) + 1), intent(in)  :: input
+   real(rkind), dimension(this%gp%zsz(1),this%gp%zsz(2),this%gp%zsz(3) + 1), intent(out) :: output
+   integer, intent(in) :: bot, top
+
+   select case (bot)
+   case(-1) 
+      if     (top == -1) then
+         call this%derOO%d2dz2_E2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      elseif (top ==  1) then
+         call this%derEO%d2dz2_E2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      else 
+         output = 0.d0
+      end if
+   case(1)  ! bottom = even
+      if     (top == -1) then
+         call this%derOE%d2dz2_E2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      elseif (top ==  1) then
+         call this%derEE%d2dz2_E2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      else 
+         output = 0.d0
+      end if
+   case default
+      output = 0.d0
+   end select
+
+end subroutine 
+
+subroutine d2dz2_E2E_cmplx(this,input,output,bot,top)
+   class(Pade6stagg), intent(in) :: this
+   complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)+1), intent(in)  :: input
+   complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)+1), intent(out) :: output
+   integer, intent(in) :: bot, top
+
+   select case (bot)
+   case(-1) 
+      if     (top == -1) then
+         call this%derOO%d2dz2_E2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      elseif (top ==  1) then
+         call this%derEO%d2dz2_E2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      else 
+         output = 0.d0
+      end if
+   case(1)  ! bottom = even
+      if     (top == -1) then
+         call this%derOE%d2dz2_E2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      elseif (top ==  1) then
+         call this%derEE%d2dz2_E2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      else 
+         output = 0.d0
+      end if
+   case default
+      output = 0.d0
+   end select
+
+end subroutine 
+
 
 subroutine ddz_C2E_real(this,input,output,bot,top)
    class(Pade6stagg), intent(in) :: this

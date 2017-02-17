@@ -92,7 +92,7 @@ program test_pressureCalculation
     call spectE%fft(wrhs,wrhshat)
 
     call poiss2ndOrder%init(spectC,.false.,dx,dy,dz,Ops,spectE,.true.,gpC) 
-    call poiss6thOrder%init(dx, dy, dz, spectC, spectE,derZ,.true.,2.d0*pi,.true.,gpC)
+    call poiss6thOrder%init(dx, dy, dz, spectC, spectE,.true.,2.d0*pi,.true.,gpC)
 
     call poiss2ndOrder%getPressure(urhshat,vrhshat,wrhshat,p)
     maxE = p_maxval(abs(p - pexact))
