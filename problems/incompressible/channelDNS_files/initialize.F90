@@ -111,8 +111,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    u = z*(two - z) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    u = z*(two - z) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2) &
+                    + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*((Lz-z)/zpeak/Lz)**2) 
+    
+    v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2) &
+      + epsnd*((Lz-z)/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*((Lz-z)/zpeak/Lz)**2)
+    
     wC= zero  
   
     call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
