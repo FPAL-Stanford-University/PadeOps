@@ -2140,10 +2140,11 @@ contains
         use decomp_2d_io
         use mpi
         use exits, only: message
+        use kind_parameters, only: mpirkind
         class(igrid), intent(inout) :: this
         integer, intent(in) :: tid, rid
         character(len=clen) :: tempname, fname
-        integer :: ierr
+        integer :: ierr, fid 
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_u.",tid
         fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
@@ -2163,12 +2164,17 @@ contains
             call decomp_2d_read_one(1,this%T,fname, this%gpC)
         end if 
 
-        write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
-        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
-        open(unit=10,file=fname,access='sequential',form='formatted')
-        read (10, *)  this%tsim
-        close(10)
+        if (nrank == 0) then
+            write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
+            fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+            fid = 10
+            open(unit=fid,file=trim(fname),status="old",action="read")
+            read (fid, "(100g15.5)")  this%tsim
+            close(fid)
+        end if 
 
+        call mpi_barrier(mpi_comm_world, ierr)
+        call mpi_bcast(this%tsim,1,mpirkind,0,mpi_comm_world,ierr)
         call mpi_barrier(mpi_comm_world, ierr)
         call message("================= RESTART FILE USED ======================")
         call message(0, "Simulation Time at restart:", this%tsim)
@@ -2202,11 +2208,13 @@ contains
             call decomp_2d_write_one(1,this%T,fname, this%gpE)
         end if 
 
-        write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",this%runID, "_info.",this%step
-        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        OPEN(UNIT=10, FILE=trim(fname))
-        write(10,"(100g15.5)") this%tsim
-        close(10)
+        if (nrank == 0) then
+            write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",this%runID, "_info.",this%step
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            OPEN(UNIT=10, FILE=trim(fname))
+            write(10,"(100g15.5)") this%tsim
+            close(10)
+        end if 
 
         call mpi_barrier(mpi_comm_world, ierr)
         call message(1, "Just Dumped a RESTART file")
