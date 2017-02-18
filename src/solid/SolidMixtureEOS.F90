@@ -34,6 +34,7 @@ module SolidMixtureMod
         procedure :: init
         procedure :: set_material
         procedure :: relaxPressure
+        procedure :: equilibratePressure
         procedure :: equilibratePressureTemperature
         procedure :: getLAD
         procedure :: update_g
@@ -228,6 +229,79 @@ contains
         do imat = 1, this%ns
             call this%material(imat)%get_ehydroT_from_p(rho)
         end do
+
+    end subroutine
+
+    subroutine equilibratePressure(this,mixRho,mixE,mixP)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixRho, mixE
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP
+
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix, rhom, tmp
+
+        integer :: imat, i,j,k,a(3)
+        real(rkind) :: gamfac
+
+        print *, '---'
+        ! subtract elastic energy to determine hydrostatic energy. Temperature
+        ! is assumed a function of only hydrostatic energy. Not sure if this is
+        ! correct.
+        ehmix = mixE
+        tmp = zero
+        do imat = 1, this%ns
+            ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
+
+            gamfac =  this%material(imat)%hydro%gam * this%material(imat)%hydro%onebygam_m1*this%material(imat)%hydro%PInf
+            call this%material(imat)%getSpeciesDensity(mixRho,rhom)
+            
+            ! ehmix = ehmix - gamfac*this%material(imat)%Ys/rhom
+            ehmix = ehmix - gamfac*this%material(imat)%VF/mixRho
+            ! tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%Ys/rhom
+            tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF/mixRho
+
+            !do k=1,this%nzp
+            !    do j = 1,this%nyp
+            !        do i = 1,this%nxp
+            !            if ( this%material(imat)%Ys(i,j,k) * this%material(imat)%VF(i,j,k) < zero ) then
+            !                print *, "Found negative Ys*VF in material ", imat, " at ", i, j, k
+            !                print *, "  Ys = ", this%material(imat)%Ys(i,j,k)
+            !                print *, "  VF = ", this%material(imat)%Vf(i,j,k)
+            !                ! exit
+            !            end if
+            !        end do
+            !    end do
+            !end do
+
+        enddo
+
+            a = minloc(ehmix)
+            print *, "  loc: ", minloc(ehmix)
+            a(1) = 122; a(2:3) = 1
+            print *, "Mat1 Ys, VF = ", this%material(1)%Ys(a(1),a(2),a(3)), this%material(1)%VF(a(1),a(2),a(3))
+            print *, "Mat2 Ys, VF = ", this%material(2)%Ys(a(1),a(2),a(3)), this%material(2)%VF(a(1),a(2),a(3))
+            print *, "Mat1 T1     = ", this%material(1)%hydro%gam * this%material(1)%hydro%onebygam_m1 * this%material(1)%hydro%PInf   * this%material(1)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3))
+            print *, "Mat2 T1     = ", this%material(2)%hydro%gam * this%material(2)%hydro%onebygam_m1 * this%material(2)%hydro%PInf   * this%material(2)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3))
+            print *, "Mix eh      = ",  mixE(a(1),a(2),a(3)) -   (&
+            this%material(1)%Ys(a(1),a(2),a(3)) * this%material(1)%eel(a(1),a(2),a(3)) + &
+            this%material(2)%Ys(a(1),a(2),a(3)) * this%material(2)%eel(a(1),a(2),a(3)) )
+            print *, "ehmix      = ",  ehmix(a(1),a(2),a(3))
+            print *, "tmp        = ",  tmp(a(1),a(2),a(3))
+            print *, "mixP       = ",  mixP(a(1),a(2),a(3))
+
+         mixP = ehmix/tmp
+         
+         print*, "ehmix: ", minval(ehmix), maxval(ehmix)
+         print*, "tmp  : ", minval(tmp), maxval(tmp)
+         print*, "mixP : ", minval(mixP), maxval(mixP)
+      
+         !if (minval(mixP) < zero) then
+         !    print *, "  loc: ", minloc(mixP)
+         !end if
+
+         do imat = 1, this%ns
+             this%material(imat)%p = mixP
+             call this%material(imat)%get_ehydroT_from_p(mixRho)
+         end do
 
     end subroutine
 
@@ -577,6 +651,8 @@ contains
         do imat = 1, this%ns
           call this%material(imat)%filter(iflag,x_bc,y_bc,z_bc)
         end do
+        
+        !this%material(2)%VF = one - this%material(1)%VF
 
     end subroutine
 
@@ -687,19 +763,23 @@ contains
 
     end subroutine
 
-    subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+    subroutine update_VF(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,x_bc,y_bc,z_bc)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: imat
 
+        if (this%ns > 2) call GracefulExit("Figure out 2 materials first!",4356)
+
         do imat = 1, this%ns
-          call this%material(imat)%update_VF(isub,dt,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+          call this%material(imat)%update_VF(this%material( 2-mod(imat+1,2) ),isub,dt,rho,u,v,w,x,y,z,tsim,divu,x_bc,y_bc,z_bc)
         end do
+
+        !this%material(2)%VF = one - this%material(1)%VF
 
     end subroutine
 

@@ -693,7 +693,7 @@ contains
 
             if (.NOT. this%PTeqb) then
                 call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
-                call this%mix%update_VF(isub,this%dt,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
+                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
             end if
 
             ! Integrate simulation time to keep it in sync with RK substep
@@ -732,7 +732,8 @@ contains
             if (this%PTeqb) then
                 call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T)
             else
-                call this%mix%relaxPressure(this%rho, this%e, this%p)
+                !call this%mix%relaxPressure(this%rho, this%e, this%p)
+                call this%mix%equilibratePressure(this%rho, this%e, this%p)
             end if
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)

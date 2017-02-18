@@ -98,7 +98,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         call mix%set_material(1,stiffgas(gamma,Rgas,p_infty),sep1solid(rho_0,mu,1.0D30,1.0D-10))
         call mix%set_material(2,stiffgas(gamma,Rgas/rhoRatio,p_infty),sep1solid(rhoRatio*rho_0,mu,1.0D30,1.0D-10))
 
-        u   = half
+        u   = zero!half
         v   = zero
         w   = zero
 

@@ -734,13 +734,14 @@ contains
 
     end subroutine
 
-    subroutine update_VF(this,isub,dt,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+    subroutine update_VF(this,other,isub,dt,rho,u,v,w,x,y,z,tsim,divu,x_bc,y_bc,z_bc)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
+        class(solid), intent(in)    :: other
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
@@ -749,7 +750,7 @@ contains
             call GracefulExit("update_VF shouldn't be called with PTeqb. Exiting.",4809)
         endif
 
-        call this%getRHS_VF(u,v,w,rhsVF,x_bc,y_bc,z_bc)
+        call this%getRHS_VF(other,rho,u,v,w,divu,rhsVF,x_bc,y_bc,z_bc)
         call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
 
         ! advance sub-step
@@ -759,19 +760,41 @@ contains
 
     end subroutine
 
-    subroutine getRHS_VF(this,u,v,w,rhsVF,x_bc,y_bc,z_bc)
-        use operators, only: gradient
+    subroutine getRHS_VF(this,other,rho,u,v,w,divu,rhsVF,x_bc,y_bc,z_bc)
+        use operators, only: gradient, divergence
+        use constants, only: one
         class(solid),                                       intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: u,v,w
+        class(solid),                                       intent(in)  :: other
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,divu
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
-
-        call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
-        rhsVF = u*tmp1 + v*tmp2 + w*tmp3
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3, rhocsq1, rhocsq2
 
         ! any penalty term to keep VF between 0 and 1???
+        call this%getSpeciesDensity(rho,tmp1)
+        call this%hydro%get_sos2(tmp1,this%p,tmp2)
+        call this%elastic%get_sos2(tmp1,tmp2)
+        rhocsq1 = tmp1*tmp2
+
+        call other%getSpeciesDensity(rho,tmp1)
+        call other%hydro%get_sos2(tmp1,other%p,tmp3)
+        call other%elastic%get_sos2(tmp1,tmp3)
+        rhocsq2 = tmp1*tmp3
+
+        rhsVF = other%VF*tmp2 + this%VF*tmp3
+
+        call this%get_enthalpy(tmp2)
+        call other%get_enthalpy(tmp3)
+
+        call divergence(this%decomp,this%der,-this%Ji(:,:,:,1),-this%Ji(:,:,:,2),-this%Ji(:,:,:,3),tmp1,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+
+        rhsVF = -(rhocsq1 - rhocsq2)*divu*this%VF*other%VF + (rhsVF + this%VF*(other%hydro%gam-one)*(tmp2-tmp3))*tmp1
+
+        rhsVF = rhsVF / (other%VF*rhocsq1 + this%VF*rhocsq2)
+
+        call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
+        rhsVF = rhsVF + u*tmp1 + v*tmp2 + w*tmp3
 
     end subroutine
 
