@@ -816,11 +816,6 @@ contains
 
 
 
-        ! Final Step: Safeguard against unfinished procedures
-        if ((useCompactFD).and.(.not.useSkewSymm)) then
-            call GracefulExit("You must solve in skew symmetric form if you use CD06",54)
-        end if 
-
         if ((this%isStratified) .and. (.not. ComputeStokesPressure )) then
             call GracefulExit("You must set ComputeStokesPressure to TRUE if &
             & there is stratification in the problem", 323)
@@ -1117,7 +1112,8 @@ contains
         T2E = T2E*this%w
         call this%spectE%fft(T2E,fT2E)
         call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
-        call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        !call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        call this%Pade6opZ%interpz_E2C(tzE,tzC,0,0)
         call transpose_z_to_y(tzC,this%u_rhs, this%sp_gpC)
         this%u_rhs = this%u_rhs + fT1C
 
@@ -1129,7 +1125,8 @@ contains
         T2E = T2E*this%w
         call this%spectE%fft(T2E,fT2E)
         call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
-        call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        !call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+        call this%Pade6opZ%interpz_E2C(tzE,tzC,0,0)
         call transpose_z_to_y(tzC,this%v_rhs, this%sp_gpC)
         this%v_rhs = this%v_rhs + fT1C
 
@@ -1922,8 +1919,10 @@ contains
         ctmpy1 => this%cbuffyC(:,:,:,1); ctmpy2 => this%cbuffyE(:,:,:,1)
 
 
-        call this%spectC%mTimes_ik1_oop(this%uhat,dudxH)
-        call this%spectC%ifft(dudxH,dudx)
+        if ((this%useSGS) .or. (useSkewSymm)) then
+            call this%spectC%mTimes_ik1_oop(this%uhat,dudxH)
+            call this%spectC%ifft(dudxH,dudx)
+        end if
 
         call this%spectC%mTimes_ik2_oop(this%uhat,dudyH)
         call this%spectC%ifft(dudyH,dudy)
@@ -1931,14 +1930,18 @@ contains
         call this%spectC%mTimes_ik1_oop(this%vhat,dvdxH)
         call this%spectC%ifft(dvdxH,dvdx)
 
-        call this%spectC%mTimes_ik2_oop(this%vhat,dvdyH)
-        call this%spectC%ifft(dvdyH,dvdy)
-        
-        call this%spectC%mTimes_ik1_oop(this%whatC,dwdxH)
-        call this%spectC%ifft(dwdxH,dwdxC)
+        if ((this%useSGS) .or. (useSkewSymm)) then
+            call this%spectC%mTimes_ik2_oop(this%vhat,dvdyH)
+            call this%spectC%ifft(dvdyH,dvdy)
+        end if
 
-        call this%spectC%mTimes_ik2_oop(this%whatC,dwdyH)
-        call this%spectC%ifft(dwdyH,dwdyC)
+        if ((this%useSGS) .or. (useSkewSymm)) then
+            call this%spectC%mTimes_ik1_oop(this%whatC,dwdxH)
+            call this%spectC%ifft(dwdxH,dwdxC)
+
+            call this%spectC%mTimes_ik2_oop(this%whatC,dwdyH)
+            call this%spectC%ifft(dwdyH,dwdyC)
+        end if
 
         call this%spectE%mTimes_ik1_oop(this%what,ctmpy2)
         call this%spectE%ifft(ctmpy2,dwdx)
@@ -1947,13 +1950,15 @@ contains
         call this%spectE%ifft(ctmpy2,dwdy)
         
         call transpose_y_to_z(this%what,ctmpz2,this%sp_gpE)
-        call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,wBC_bottom,wBC_top)
-        call transpose_z_to_y(ctmpz1,dwdzH,this%sp_gpC)
-        call this%spectC%ifft(dwdzH,dwdz)
+        if ((this%useSGS) .or. (useSkewSymm)) then
+            call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,wBC_bottom,wBC_top)
+            call transpose_z_to_y(ctmpz1,dwdzH,this%sp_gpC)
+            call this%spectC%ifft(dwdzH,dwdz)
+        end if
+
         if(.not. this%isinviscid) then
-               call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,wBC_bottom,wBC_top)
-               call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,dWdzBC_bottom,dWdzBC_top)
-               call transpose_z_to_y(ctmpz2,this%d2wdz2hatE,this%sp_gpE)
+           call this%Pade6opZ%d2dz2_E2E(ctmpz2,ctmpz4,wBC_bottom,wBC_top)
+           call transpose_z_to_y(ctmpz4,this%d2wdz2hatE,this%sp_gpE)
         end if
 
         ! Compute dudz
@@ -1962,9 +1967,13 @@ contains
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dudz)
         if (.not. this%isinviscid) then
-               call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz4,uBC_bottom,uBC_top)
-               call this%Pade6opZ%ddz_E2C(ctmpz4,ctmpz1,dUdzBC_bottom,dUdzBC_top)
-               call transpose_z_to_y(ctmpz1,this%d2udz2hatC,this%sp_gpC)
+               if ((uBC_top == 0) .or. (uBC_bottom == 0)) then
+                  call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz4,uBC_bottom,uBC_top)
+                  call this%Pade6opZ%ddz_E2C(ctmpz4,ctmpz3,dUdzBC_bottom,dUdzBC_top)
+               else
+                  call this%Pade6opZ%d2dz2_C2C(ctmpz1,ctmpz3,uBC_bottom,uBC_top)
+               end if
+               call transpose_z_to_y(ctmpz3,this%d2udz2hatC,this%sp_gpC)
         end if 
 
         call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dUdzBC_bottom,dUdzBC_top)
@@ -1977,9 +1986,13 @@ contains
         call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
         call this%spectE%ifft(ctmpy2,dvdz)
         if (.not. this%isinviscid) then
-            call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz4,vBC_bottom,vBC_top)
-            call this%Pade6opZ%ddz_E2C(ctmpz4,ctmpz1,dVdzBC_bottom,dVdzBC_top)
-            call transpose_z_to_y(ctmpz1,this%d2vdz2hatC,this%sp_gpC)
+            if ((vBC_top == 0) .or. (vBC_bottom == 0)) then
+               call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz4,vBC_bottom,vBC_top)
+               call this%Pade6opZ%ddz_E2C(ctmpz4,ctmpz3,dVdzBC_bottom,dVdzBC_top)
+            else
+               call this%Pade6opZ%d2dz2_C2C(ctmpz1,ctmpz3,vBC_bottom,vBC_top)
+            end if
+            call transpose_z_to_y(ctmpz3,this%d2vdz2hatC,this%sp_gpC)
         end if 
       
         call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dVdzBC_bottom,dVdzBC_top)
