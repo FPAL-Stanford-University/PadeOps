@@ -1,11 +1,11 @@
 &INPUT
 inputdir              = "/home/aditya90/Codes/PadeOps/data/ekman/"   ! Directory for any input files
 outputdir             = "/home/aditya90/Codes/PadeOps/data/ekman/"   ! Directory for all output files
-nx                    = 64          ! Number of points in X
-ny                    = 64          ! Number of points in Y
-nz                    = 128          ! Number of points in Z
+nx                    = 128          ! Number of points in X
+ny                    = 128          ! Number of points in Y
+nz                    = 512          ! Number of points in Z
 tstop                 = 2000.D0       ! Physical time to stop the simulation
-CFL                   = 0.25D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+CFL                   = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 5.D-5     ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
@@ -52,14 +52,14 @@ controlDir            = "null"          ! Check in this directory for command fi
 &PHYSICS
 isInviscid            = .FALSE.      ! Is this an inviscid simulation?
 useCoriolis           = .TRUE.     ! Activate the coriolis term? 
-assume_fplane         = .FALSE.            ! make the f-plane assumption while computing the coriolis term
+assume_fplane         = .TRUE.            ! make the f-plane assumption while computing the coriolis term
 latitude              = 90.d0            ! Latittude of the domain in degrees 
 useExtraForcing       = .FALSE.      ! Is an extra forcing term being used? (non-Geostrophic forcing only)
 useGeostrophicForcing = .TRUE.     ! This is true if forcing is provided using the coriolis term  
 isStratified          = .FALSE.     ! Use Stratification / active scalar in momentum
 Pr                    = 0.6D0       ! Turbulent Prandtl Number; used when 
-Ro                    = 50.D0       ! Rossby Number used when Coriolis is ON
-Re                    = 100.D0       ! Reynolds Number; used when isInvisid is FALSE
+Ro                    = 200.D0       ! Rossby Number used when Coriolis is ON
+Re                    = 400.D0       ! Reynolds Number; used when isInvisid is FALSE
 Fr                    = 1.D10       ! Froude number; used when isStratified is TRUE
 Gx                    = 1.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
 Gy                    = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
@@ -117,8 +117,9 @@ t_dumpKSprep          = 10             ! Dumping Frequency for KS files
 &EkmanDNSINPUT
 Lx                    = 36.d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Ly                    = 36.d0 ! Domain Width (appropriate dimesnions/non-dimensionalized)
-Lz                    = 20.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
-zpeak                 = 0.05d0
-epsnd                 = 4.d0          
-randscale             = 0.1d0
+Lz                    = 25.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
+periods               = 6.d0
+zpeak                 = 0.1d0
+epsnd                 = 5.d0          
+randscale             = 0.01d0
 /
