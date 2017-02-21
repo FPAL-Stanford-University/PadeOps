@@ -430,7 +430,7 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
-        real(rkind), parameter :: etafac = zero ! one/6._rkind
+        real(rkind), parameter :: etafac = one/6._rkind
 
         real(rkind) :: pmax
         integer :: imax, jmax, kmax, rmax
