@@ -37,6 +37,7 @@ module SolidMixtureMod
         procedure :: equilibratePressure
         procedure :: equilibratePressureTemperature
         procedure :: getLAD
+        procedure :: calculate_source
         procedure :: update_g
         procedure :: update_Ys
         procedure :: update_eh
@@ -274,25 +275,25 @@ contains
 
         enddo
 
+         mixP = ehmix/tmp
+
             a = minloc(ehmix)
             print *, "  loc: ", minloc(ehmix)
-            a(1) = 122; a(2:3) = 1
+            !a(1) = 122; a(2:3) = 1
             print *, "Mat1 Ys, VF = ", this%material(1)%Ys(a(1),a(2),a(3)), this%material(1)%VF(a(1),a(2),a(3))
             print *, "Mat2 Ys, VF = ", this%material(2)%Ys(a(1),a(2),a(3)), this%material(2)%VF(a(1),a(2),a(3))
-            print *, "Mat1 T1     = ", this%material(1)%hydro%gam * this%material(1)%hydro%onebygam_m1 * this%material(1)%hydro%PInf   * this%material(1)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3))
-            print *, "Mat2 T1     = ", this%material(2)%hydro%gam * this%material(2)%hydro%onebygam_m1 * this%material(2)%hydro%PInf   * this%material(2)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3))
-            print *, "Mix eh      = ",  mixE(a(1),a(2),a(3)) -   (&
-            this%material(1)%Ys(a(1),a(2),a(3)) * this%material(1)%eel(a(1),a(2),a(3)) + &
-            this%material(2)%Ys(a(1),a(2),a(3)) * this%material(2)%eel(a(1),a(2),a(3)) )
+            print *, "Mat1,2 T1   = ", this%material(1)%hydro%gam * this%material(1)%hydro%onebygam_m1 * this%material(1)%hydro%PInf   * this%material(1)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3)),  this%material(2)%hydro%gam * this%material(2)%hydro%onebygam_m1 * this%material(2)%hydro%PInf   * this%material(2)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3))
+            print *, "Mat1,2 eel = ",  this%material(1)%eel(a(1),a(2),a(3)),  this%material(2)%eel(a(1),a(2),a(3))
+            print *, "Mat1,2 g11 = ",  this%material(1)%g11(a(1),a(2),a(3)),  this%material(2)%g11(a(1),a(2),a(3))
+            print *, "Mat1,2 g22 = ",  this%material(1)%g22(a(1),a(2),a(3)),  this%material(2)%g22(a(1),a(2),a(3))
+            print *, "Mix eh      = ",  mixE(a(1),a(2),a(3)), mixE(a(1),a(2),a(3)) -   (this%material(1)%Ys(a(1),a(2),a(3)) * this%material(1)%eel(a(1),a(2),a(3)) + this%material(2)%Ys(a(1),a(2),a(3)) * this%material(2)%eel(a(1),a(2),a(3)) )
             print *, "ehmix      = ",  ehmix(a(1),a(2),a(3))
             print *, "tmp        = ",  tmp(a(1),a(2),a(3))
             print *, "mixP       = ",  mixP(a(1),a(2),a(3))
-
-         mixP = ehmix/tmp
          
-         print*, "ehmix: ", minval(ehmix), maxval(ehmix)
-         print*, "tmp  : ", minval(tmp), maxval(tmp)
-         print*, "mixP : ", minval(mixP), maxval(mixP)
+         !print*, "ehmix: ", minval(ehmix), maxval(ehmix)
+         !print*, "tmp  : ", minval(tmp), maxval(tmp)
+         !print*, "mixP : ", minval(mixP), maxval(mixP)
       
          !if (minval(mixP) < zero) then
          !    print *, "  loc: ", minloc(mixP)
@@ -656,21 +657,56 @@ contains
 
     end subroutine
 
-    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+    subroutine calculate_source(this,rho,divu,Fsource,x_bc,y_bc,z_bc)
+        use operators, only: divergence
+        class(solid_mixture), intent(in), target :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,divu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: Fsource
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+      
+        type(solid), pointer :: mat1, mat2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: tmp1,tmp2,tmp3,rhocsq1,rhocsq2
+
+        mat1 => this%material(1); mat2 => this%material(2)
+
+        !call mat1%getSpeciesDensity(rho,tmp1)
+        call mat1%hydro%get_sos2(mat1%rhom,mat1%p,tmp2)
+        call mat1%elastic%get_sos2(mat1%rhom,tmp2)
+        rhocsq1 = mat1%rhom*tmp2
+
+        !call mat2%getSpeciesDensity(rho,tmp1)
+        call mat2%hydro%get_sos2(mat2%rhom,mat2%p,tmp3)
+        call mat2%elastic%get_sos2(mat2%rhom,tmp3)
+        rhocsq2 = mat2%rhom*tmp3
+
+        Fsource = mat1%VF*tmp3*(one - mat2%rhom/mat1%rhom)
+
+        call mat1%get_enthalpy(tmp2)
+        call mat2%get_enthalpy(tmp3)
+
+        call divergence(this%decomp,this%der,-mat1%Ji(:,:,:,1),-mat1%Ji(:,:,:,2),-mat1%Ji(:,:,:,3),tmp1,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+
+        Fsource = -(rhocsq1 - rhocsq2)*divu*mat1%VF*mat2%VF + (Fsource + mat1%VF*(mat2%hydro%gam-one)*(tmp2-tmp3))*tmp1
+
+        Fsource = Fsource / (mat2%VF*rhocsq1 + mat1%VF*rhocsq2)
+
+    end subroutine 
+
+    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: x,y,z
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: imat
 
         do imat = 1, this%ns
             if (this%use_gTg) then
-                call this%material(imat)%update_gTg(isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+                call this%material(imat)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
             else
-                call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+                call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
             end if
         end do
 
@@ -718,24 +754,24 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,x_bc,y_bc,z_bc)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,x_bc,y_bc,z_bc)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,viscwork
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,viscwork,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,x_bc,y_bc,z_bc)
+          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,x_bc,y_bc,z_bc)
         end do
 
     end subroutine
 
     subroutine getSOS(this,rho,p,sos)
-        class(solid_mixture), intent(in) :: this
+        class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho, p  ! Mixture density and pressure
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: sos     ! Mixture speed of sound
 
@@ -763,21 +799,23 @@ contains
 
     end subroutine
 
-    subroutine update_VF(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,x_bc,y_bc,z_bc)
+    subroutine update_VF(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: imat
 
         if (this%ns > 2) call GracefulExit("Figure out 2 materials first!",4356)
 
-        do imat = 1, this%ns
-          call this%material(imat)%update_VF(this%material( 2-mod(imat+1,2) ),isub,dt,rho,u,v,w,x,y,z,tsim,divu,x_bc,y_bc,z_bc)
-        end do
+        !do imat = 1, this%ns
+        !  call this%material(imat)%update_VF(this%material( 2-mod(imat+1,2) ),isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc)
+        !end do
+        call this%material(1)%update_VF(this%material(2),isub,dt,rho,u,v,w,x,y,z,tsim,divu, src,x_bc,y_bc,z_bc)
+        call this%material(2)%update_VF(this%material(1),isub,dt,rho,u,v,w,x,y,z,tsim,divu,-src,x_bc,y_bc,z_bc)
 
         !this%material(2)%VF = one - this%material(1)%VF
 

@@ -51,6 +51,7 @@ module SolidMod
         real(rkind), dimension(:,:,:),   pointer     :: syz
         real(rkind), dimension(:,:,:),   pointer     :: szz
         
+        real(rkind), dimension(:,:,:),   allocatable :: rhom
         real(rkind), dimension(:,:,:),   allocatable :: p
         real(rkind), dimension(:,:,:),   allocatable :: T
 
@@ -215,6 +216,10 @@ contains
         if( allocated( this%eel ) ) deallocate( this%eel )
         allocate( this%eel(this%nxp,this%nyp,this%nzp) )
         
+        ! Allocate material density
+        if( allocated( this%rhom ) ) deallocate( this%rhom )
+        allocate( this%rhom(this%nxp,this%nyp,this%nzp) )
+        
         ! Allocate material inverse elastic deformation gradients and associate pointers
         if( allocated( this%g ) ) deallocate( this%g )
         allocate( this%g(this%nxp,this%nyp,this%nzp,9) )
@@ -322,6 +327,7 @@ contains
         nullify( this%g31 ); nullify( this%g32 ); nullify( this%g33 )
         if( allocated( this%g )         ) deallocate( this%g )
 
+        if( allocated( this%rhom) ) deallocate( this%rhom )
         if( allocated( this%eel ) ) deallocate( this%eel )
         if( allocated( this%eh )  ) deallocate( this%eh )
         if( allocated( this%VF )  ) deallocate( this%VF )
@@ -361,19 +367,19 @@ contains
 
     end subroutine
 
-    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for g tensor equation
         real(rkind) :: max_modDevSigma
 
-        call this%getRHS_g(rho,u,v,w,dt,rhsg,x_bc,y_bc,z_bc)
+        call this%getRHS_g(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
         call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
         ! advance sub-step
@@ -411,20 +417,20 @@ contains
 
     end subroutine
 
-    subroutine getRHS_g(this,rho,u,v,w,dt,rhsg,x_bc,y_bc,z_bc)
+    subroutine getRHS_g(this,rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
         use decomp_2d, only: nrank
         use constants, only: eps
         use operators, only: gradient, curl
         use reductions, only: P_MAXLOC
         class(solid),                                         intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
         real(rkind),                                          intent(in)  :: dt
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
-        real(rkind), parameter :: etafac = one/6._rkind
+        real(rkind), parameter :: etafac = zero ! one/6._rkind
 
         real(rkind) :: pmax
         integer :: imax, jmax, kmax, rmax
@@ -445,6 +451,9 @@ contains
         ! tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
         penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
         if (this%elastic%mu < eps) penalty = zero
+
+        ! add Fsource term to penalty 
+        penalty = penalty - src/this%VF
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-x_bc, y_bc, z_bc)
@@ -493,18 +502,18 @@ contains
 
     end subroutine
 
-    subroutine update_gTg(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+    subroutine update_gTg(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for gTg tensor equation
 
-        call this%getRHS_gTg(rho,u,v,w,dt,rhsg,x_bc,y_bc,z_bc)
+        call this%getRHS_gTg(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
         call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
         ! advance sub-step
@@ -520,10 +529,10 @@ contains
 
     end subroutine
 
-    subroutine getRHS_gTg(this,rho,u,v,w,dt,rhsg,x_bc,y_bc,z_bc)
+    subroutine getRHS_gTg(this,rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
         use operators, only: gradient, curl
         class(solid),                                         intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
         real(rkind),                                          intent(in)  :: dt
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
@@ -680,13 +689,13 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,x_bc,y_bc,z_bc)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,x_bc,y_bc,z_bc)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,viscwork
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,viscwork,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
@@ -695,7 +704,7 @@ contains
             call GracefulExit("update_eh shouldn't be called with PTeqb. Exiting.",4809)
         endif
 
-        call this%getRHS_eh(rho,u,v,w,divu,viscwork,rhseh,x_bc,y_bc,z_bc)
+        call this%getRHS_eh(rho,u,v,w,divu,viscwork,src,rhseh,x_bc,y_bc,z_bc)
         call hook_material_energy_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhseh)
 
         ! advance sub-step
@@ -705,11 +714,11 @@ contains
 
     end subroutine
 
-    subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,rhseh,x_bc,y_bc,z_bc)
+    subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,src,rhseh,x_bc,y_bc,z_bc)
         use operators, only: gradient, divergence
         class(solid),                                       intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu,viscwork
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu,viscwork,src
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhseh
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
@@ -734,14 +743,14 @@ contains
 
     end subroutine
 
-    subroutine update_VF(this,other,isub,dt,rho,u,v,w,x,y,z,tsim,divu,x_bc,y_bc,z_bc)
+    subroutine update_VF(this,other,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         class(solid), intent(in)    :: other
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
@@ -750,7 +759,7 @@ contains
             call GracefulExit("update_VF shouldn't be called with PTeqb. Exiting.",4809)
         endif
 
-        call this%getRHS_VF(other,rho,u,v,w,divu,rhsVF,x_bc,y_bc,z_bc)
+        call this%getRHS_VF(other,rho,u,v,w,divu,src,rhsVF,x_bc,y_bc,z_bc)
         call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
 
         ! advance sub-step
@@ -760,40 +769,24 @@ contains
 
     end subroutine
 
-    subroutine getRHS_VF(this,other,rho,u,v,w,divu,rhsVF,x_bc,y_bc,z_bc)
+    subroutine getRHS_VF(this,other,rho,u,v,w,divu,src,rhsVF,x_bc,y_bc,z_bc)
         use operators, only: gradient, divergence
         use constants, only: one
         class(solid),                                       intent(in)  :: this
         class(solid),                                       intent(in)  :: other
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,divu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,divu,src
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3, rhocsq1, rhocsq2
 
-        ! any penalty term to keep VF between 0 and 1???
-        call this%getSpeciesDensity(rho,tmp1)
-        call this%hydro%get_sos2(tmp1,this%p,tmp2)
-        call this%elastic%get_sos2(tmp1,tmp2)
-        rhocsq1 = tmp1*tmp2
-
-        call other%getSpeciesDensity(rho,tmp1)
-        call other%hydro%get_sos2(tmp1,other%p,tmp3)
-        call other%elastic%get_sos2(tmp1,tmp3)
-        rhocsq2 = tmp1*tmp3
-
-        rhsVF = other%VF*tmp2 + this%VF*tmp3
-
-        call this%get_enthalpy(tmp2)
-        call other%get_enthalpy(tmp3)
-
-        call divergence(this%decomp,this%der,-this%Ji(:,:,:,1),-this%Ji(:,:,:,2),-this%Ji(:,:,:,3),tmp1,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
-
-        rhsVF = -(rhocsq1 - rhocsq2)*divu*this%VF*other%VF + (rhsVF + this%VF*(other%hydro%gam-one)*(tmp2-tmp3))*tmp1
-
-        rhsVF = rhsVF / (other%VF*rhocsq1 + this%VF*rhocsq2)
+        ! Add C/rhom to Fsource
+        !--call this%getSpeciesDensity(rho,tmp1)  !-- use this%rhom
+        call divergence(this%decomp,this%der,-this%Ji(:,:,:,1),-this%Ji(:,:,:,2),-this%Ji(:,:,:,3),rhsVF,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+        rhsVF = src + rhsVF/this%rhom
 
         call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
+
         rhsVF = rhsVF + u*tmp1 + v*tmp2 + w*tmp3
 
     end subroutine
@@ -829,7 +822,7 @@ contains
     end subroutine
 
     subroutine getSpeciesDensity(this,rho,rhom)
-        class(solid), intent(in) :: this
+        class(solid), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhom
 
@@ -844,6 +837,8 @@ contains
 
         ! Get rhom = rho*Ys/VF (Additional terms to give correct limiting behaviour when Ys and VF tend to 0)
         rhom = (rho*this%Ys + this%elastic%rho0*rhom*epssmall)/(this%VF + epssmall)   
+
+        this%rhom = rhom
 
     end subroutine
 

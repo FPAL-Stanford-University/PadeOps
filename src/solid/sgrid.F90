@@ -658,6 +658,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: Qtmp      ! Temporary variable for RK45
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: divu      ! Velocity divergence for species energy eq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: viscwork  ! Viscous work term for species energy eq
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: Fsource   ! Source term for possible use in VF, g eh eqns
         integer :: isub,i,j,k,l
 
         character(len=clen) :: charout
@@ -687,13 +688,16 @@ contains
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
+            ! calculate sources if they are needed
+            if(.not. this%PTeqb) call this%mix%calculate_source(this%rho,divu,Fsource,this%x_bc,this%y_bc,this%z_bc)
+
             ! Now update all the individual species variables
-            call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
+            call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,Fsource,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
             call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
 
             if (.NOT. this%PTeqb) then
-                call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
-                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
+                call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
+                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
             end if
 
             ! Integrate simulation time to keep it in sync with RK substep
