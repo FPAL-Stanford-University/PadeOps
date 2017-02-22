@@ -1,12 +1,12 @@
 &INPUT
-inputdir              = "/home/aditya90/Codes/PadeOps/data/channel/"   ! Directory for any input files
-outputdir             = "/home/aditya90/Codes/PadeOps/data/channel/"   ! Directory for all output files
-nx                    = 64          ! Number of points in X
-ny                    = 64          ! Number of points in Y
+inputdir              = "/home/aditya90/Codes/PadeOps/data/TaylorGreen/"   ! Directory for any input files
+outputdir             = "/home/aditya90/Codes/PadeOps/data/TaylorGreen/"   ! Directory for all output files
+nx                    = 16          ! Number of points in X
+ny                    = 16          ! Number of points in Y
 nz                    = 64          ! Number of points in Z
 tstop                 = 300.D0       ! Physical time to stop the simulation
-CFL                   = 0.25D0       ! CFL criterion for calculating the time step (Set to negative to disable)
-dt                    = 5.D-5     ! Fixed time step value (only used if CFL is set to negative)
+CFL                   = -0.25D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+dt                    = 0.01D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
@@ -16,7 +16,7 @@ restartFile_RID       = 15          ! RunID of the restart file being used
 /
 &NUMERICS
 TimeSteppingScheme    = 1           ! 0: Adams-Bashforth, 1: TVD-RK3 (use this)
-AdvectionTerm         = 0           ! 0: Rotational Form, 1: Skew-Symmetric Form (use this for Compact Scheme)
+AdvectionTerm         = 1           ! 0: Rotational Form, 1: Skew-Symmetric Form (use this for Compact Scheme)
 NumericalSchemeVert   = 1           ! 0: Second order FD, 1: Sixth order Compact Difference (CD06)
 ComputeStokesPressure = .TRUE.      ! This would be FALSE only is very special circumstances.  
 useDealiasFilterVert  = .FALSE.     ! Dealiasing filter used in vertical direction
@@ -52,7 +52,7 @@ controlDir            = "null"          ! Check in this directory for command fi
 &PHYSICS
 isInviscid            = .FALSE.      ! Is this an inviscid simulation?
 useCoriolis           = .FALSE.     ! Activate the coriolis term? 
-useExtraForcing       = .TRUE.      ! Is an extra forcing term being used? (non-Geostrophic forcing only)
+useExtraForcing       = .FALSE.      ! Is an extra forcing term being used? (non-Geostrophic forcing only)
 useGeostrophicForcing = .FALSE.     ! This is true if forcing is provided using the coriolis term  
 isStratified          = .FALSE.     ! Use Stratification / active scalar in momentum
 Pr                    = 0.6D0       ! Turbulent Prandtl Number; used when 
@@ -62,7 +62,7 @@ Fr                    = 1.D10       ! Froude number; used when isStratified is T
 Gx                    = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
 Gy                    = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
 Gz                    = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-dPfdx                 = 0.02D0        ! Additional Acceleration in X; used if useExtraForcing is ON
+dPfdx                 = 0.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
 /
@@ -75,8 +75,8 @@ P_compFreq            = 10          ! How often (timesteps) do you want to compu
 /
 /
 &BCs
-topWall               = 1           ! no_slip = 1, slip = 2
-botWall               = 1           ! no_slip = 1, slip = 2
+topWall               = 2           ! no_slip = 1, slip = 2
+botWall               = 2           ! no_slip = 1, slip = 2
 useSpongeLayer        = .FALSE.     ! Use a sponge layer at the top 
 zstSponge             = 0.8d0       ! Height above which the sponge layer is active
 SpongeTscale          = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
@@ -112,10 +112,6 @@ KSRunID               = 99             ! RunID tag for KS files
 t_dumpKSprep          = 10             ! Dumping Frequency for KS files
 /
 /
-&channelDNSINPUT
-Lx                    = 6.28318530717959d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                    = 6.28318530717959d0 ! Domain Width (appropriate dimesnions/non-dimensionalized)
-Lz                    = 2.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
-zpeak                 = 0.05d0
-epsnd                 = 0.5d0              
+&TaylorGreenDNSINPUT
+directionID          = 3
 /

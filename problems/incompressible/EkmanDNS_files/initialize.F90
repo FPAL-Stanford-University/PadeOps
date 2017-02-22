@@ -28,8 +28,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, epsnd, zpeak, periods, randscale
-    namelist /EkmanDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, epsnd, zpeak, periods, randscale, D_nd
+    namelist /EkmanDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale, D_nd
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -90,10 +90,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind) :: epsnd = 0.2
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE, k
-    real(rkind) :: periods = 3.d0, randscale = 0.01
+    real(rkind) :: periods = 3.d0, randscale = 0.d0, D_nd = 0.05
     real(rkind) :: zpeak = 0.2d0
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /EkmanDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    namelist /EkmanDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale, D_nd
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -112,8 +112,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
  
    
     ! Laminar Ekman layer profile
-    u = (one - exp(-z)*cos(z))
-    v = exp(-z)*sin(z)
+    u = (one - exp(-z/D_nd)*cos(z/D_nd))
+    v = exp(-z/D_nd)*sin(z/D_nd)
 
     ! sinusoidal modes
     u = u + epsnd*(z/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) 
@@ -199,9 +199,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, epsnd, zpeak, periods, randscale, D_nd
     integer :: iounit
-    namelist /EkmanDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    namelist /EkmanDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale, D_nd
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -220,10 +220,10 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    real(rkind) :: Lx, Ly, Lz, epsnd, zpeak, periods, randscale, D_nd
     integer :: iounit
     
-    namelist /EkmanDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    namelist /EkmanDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale, D_nd
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
