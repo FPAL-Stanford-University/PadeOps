@@ -67,7 +67,10 @@ module SolidGrid
         type( IOsgrid ),     allocatable :: viz
 
         logical     :: PTeqb                       ! Use pressure and temperature equilibrium formulation
+        logical     :: pEqb                        ! Use pressure equilibrium formulation
+        logical     :: pRelax                      ! Use pressure and temperature non-equilibrium formulation, but relax pressure at each substep
         logical     :: use_gTg                     ! Use formulation with the Finger tensor g^T.g instead of the full g tensor
+        logical     :: updateEtot                  ! Update species etot (vs ehydro) with pRelax
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -142,7 +145,7 @@ contains
         character(len=clen) :: filter_y = "cf90" 
         character(len=clen) :: filter_z = "cf90"
         integer :: prow = 0, pcol = 0 
-        integer :: i, j, k 
+        integer :: i, j, k, itmp(3) 
         integer :: ioUnit
         real(rkind) :: gam = 1.4_rkind
         real(rkind) :: Rgas = one
@@ -158,7 +161,7 @@ contains
         real(rkind) :: Ckap = 0.01_rkind
         real(rkind) :: Cdiff = 0.003_rkind
         real(rkind) :: CY = 100._rkind
-        logical     :: PTeqb = .TRUE.
+        logical     :: PTeqb = .TRUE., pEqb = .False., pRelax = .false., updateEtot = .false.
         logical     :: use_gTg = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
@@ -171,7 +174,7 @@ contains
                                                        prow, pcol, &
                                                          SkewSymm  
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
-                           PTeqb, SOSmodel, use_gTg, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
+                           PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
         ioUnit = 11
@@ -193,8 +196,20 @@ contains
         this%step = 0
         this%nsteps = nsteps
 
-        this%PTeqb = PTeqb
+        this%PTeqb  = PTeqb
+        this%pEqb   = pEqb
+        this%pRelax = pRelax
         this%use_gTg = use_gTg
+        this%updateEtot = updateEtot
+
+        itmp(1:3) = 0; if(this%PTeqb) itmp(1) = 1; if(this%pEqb) itmp(2) = 1; if(this%pRelax) itmp(3) = 1; 
+        if(sum(itmp) .ne. 1) then
+            call GracefulExit("Exactly one among PTeqb, pEqb and pRelax should be true",4634)
+        endif
+
+        if(SOSmodel .and. this%pRelax) then
+            call GracefulExit("Equilibrium sound speed model valid only with PTeqb or pEqb. SOSmodel must be .false. with pRelax",4634)
+        endif
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -296,7 +311,7 @@ contains
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
         allocate(this%mix)
-        call this%mix%init(this%decomp,this%der,this%fil,this%LAD,ns,this%PTeqb,SOSmodel,this%use_gTg)
+        call this%mix%init(this%decomp,this%der,this%fil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot)
         !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields
@@ -689,15 +704,18 @@ contains
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
             ! calculate sources if they are needed
-            if(.not. this%PTeqb) call this%mix%calculate_source(this%rho,divu,Fsource,this%x_bc,this%y_bc,this%z_bc)
+            if(.not. this%PTeqb) call this%mix%calculate_source(this%rho,divu,Fsource,this%u,this%v,this%w,this%p,this%x_bc,this%y_bc,this%z_bc) ! -- actually, source terms should be included for PTeqb as well --NSG
 
             ! Now update all the individual species variables
             call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,Fsource,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
             call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
 
-            if (.NOT. this%PTeqb) then
-                call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
+            !if (.NOT. this%PTeqb) then
+            if(this%pEqb) then
                 call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
+            elseif(this%pRelax) then
+                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
+                call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%devstress,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
             end if
 
             ! Integrate simulation time to keep it in sync with RK substep
@@ -735,9 +753,10 @@ contains
             
             if (this%PTeqb) then
                 call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T)
-            else
-                !call this%mix%relaxPressure(this%rho, this%e, this%p)
+            elseif (this%pEqb) then
                 call this%mix%equilibratePressure(this%rho, this%e, this%p)
+            elseif (this%pRelax) then
+                call this%mix%relaxPressure(this%rho, this%e, this%p)
             end if
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
@@ -905,7 +924,13 @@ contains
         tauxx = tauxx + this%sxx; tauxy = tauxy + this%sxy; tauxz = tauxz + this%sxz
                                   tauyy = tauyy + this%syy; tauyz = tauyz + this%syz
                                                             tauzz = tauzz + this%szz
-       
+      
+        ! store artificial stress tensor in devstress. this should not break anything since devstress will be
+        ! overwritten in get_primitive and post_bc. used in update_eh -- NSG
+        this%sxx = tauxx - this%sxx; this%sxy = tauxy - this%sxy; this%sxz = tauxz - this%sxz
+                                     this%syy = tauyy - this%syy; this%syz = tauyz - this%syz
+                                                                  this%szz = tauzz - this%szz
+      
         ! Get heat conduction vector (q). Stored in remaining 3 components of duidxj 
         qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
         call this%mix%get_qmix(qx, qy, qz)                     ! Get only species diffusion fluxes if PTeqb, else, everything

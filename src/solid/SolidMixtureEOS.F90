@@ -1,7 +1,7 @@
 module SolidMixtureMod
 
     use kind_parameters, only: rkind,clen
-    use constants,       only: zero,epssmall,eps,one,two,third
+    use constants,       only: zero,epssmall,eps,one,two,third,half
     use decomp_2d,       only: decomp_info
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
@@ -26,7 +26,7 @@ module SolidMixtureMod
         type(ladobject),   pointer :: LAD
 
         logical :: SOSmodel = .FALSE.           ! is sound speed given by `equilibrium' model? Alternative is `frozen' model. Check Saurel et al., JCP 2009.
-        logical :: PTeqb = .TRUE.
+        logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .FALSE.
         logical :: use_gTg = .FALSE.
 
     contains
@@ -72,7 +72,7 @@ module SolidMixtureMod
 contains
 
     !function init(decomp,der,fil,LAD,ns) result(this)
-    subroutine init(this,decomp,der,fil,LAD,ns,PTeqb,SOSmodel,use_gTg)
+    subroutine init(this,decomp,der,fil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot)
         !type(solid_mixture)      , intent(inout) :: this
         class(solid_mixture)      , intent(inout) :: this
         type(decomp_info), target, intent(in)    :: decomp
@@ -80,7 +80,7 @@ contains
         type(derivatives), target, intent(in)    :: der
         type(ladobject),   target, intent(in)    :: LAD
         integer,                   intent(in)    :: ns
-        logical,                   intent(in)    :: PTeqb
+        logical,                   intent(in)    :: PTeqb,pEqb,pRelax,updateEtot
         logical,                   intent(in)    :: SOSmodel
         logical,                   intent(in)    :: use_gTg
 
@@ -89,9 +89,12 @@ contains
 
         if (ns < 1) call GracefulExit("Must have at least 1 species in the problem. Check input file for errors",3457)
 
-        this%PTeqb    = PTeqb
-        this%SOSmodel = SOSmodel
-        this%use_gTg  = use_gTg
+        this%PTeqb      = PTeqb
+        this%pEqb       = pEqb
+        this%pRelax     = pRelax
+        this%SOSmodel   = SOSmodel
+        this%use_gTg    = use_gTg
+        this%updateEtot = updateEtot
 
         this%ns = ns
 
@@ -106,12 +109,12 @@ contains
 
         ! Allocate array of solid objects (Use a dummy to avoid memory leaks)
         allocate(dummy)
-        call dummy%init(decomp,der,fil,this%PTeqb,this%use_gTg)
+        call dummy%init(decomp,der,fil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%updateEtot)
 
         if (allocated(this%material)) deallocate(this%material)
         allocate(this%material(this%ns))!, source=dummy)
         do i=1,this%ns
-            call this%material(i)%init(decomp,der,fil,this%PTeqb,this%use_gTg)
+            call this%material(i)%init(decomp,der,fil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%updateEtot)
         end do
         deallocate(dummy)
 
@@ -542,10 +545,10 @@ contains
         if(this%ns == 1) then
           this%material(1)%eh = e - this%material(1)%eel ! Since eh equation is not exact and this is a better alternative for 1 species
         endif
-        if(this%PTeqb) then
+        !if(this%PTeqb) then    ! --- why is this condition needed here? this provides initial guess for pressure even in pRelax case -- NSG
             call this%get_p_from_ehydro(rho)   ! Get species pressures from species hydrodynamic energy 
             call this%get_pmix(p)              ! Get mixture pressure from species pressures
-        endif
+        !endif
         
         call this%getSOS(rho,p,sos)
 
@@ -657,38 +660,50 @@ contains
 
     end subroutine
 
-    subroutine calculate_source(this,rho,divu,Fsource,x_bc,y_bc,z_bc)
-        use operators, only: divergence
+    subroutine calculate_source(this,rho,divu,u,v,w,p,Fsource,x_bc,y_bc,z_bc)
+        use operators, only: divergence,gradient
         class(solid_mixture), intent(in), target :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,divu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,divu,u,v,w,p
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: Fsource
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
       
         type(solid), pointer :: mat1, mat2
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: tmp1,tmp2,tmp3,rhocsq1,rhocsq2
 
-        mat1 => this%material(1); mat2 => this%material(2)
+            mat1 => this%material(1); mat2 => this%material(2)
 
-        !call mat1%getSpeciesDensity(rho,tmp1)
-        call mat1%hydro%get_sos2(mat1%rhom,mat1%p,tmp2)
-        call mat1%elastic%get_sos2(mat1%rhom,tmp2)
-        rhocsq1 = mat1%rhom*tmp2
+        if(this%pEqb) then
 
-        !call mat2%getSpeciesDensity(rho,tmp1)
-        call mat2%hydro%get_sos2(mat2%rhom,mat2%p,tmp3)
-        call mat2%elastic%get_sos2(mat2%rhom,tmp3)
-        rhocsq2 = mat2%rhom*tmp3
+            !call mat1%getSpeciesDensity(rho,tmp1)
+            call mat1%hydro%get_sos2(mat1%rhom,mat1%p,tmp2)
+            call mat1%elastic%get_sos2(mat1%rhom,tmp2)
+            rhocsq1 = mat1%rhom*tmp2
 
-        Fsource = mat1%VF*tmp3*(one - mat2%rhom/mat1%rhom)
+            !call mat2%getSpeciesDensity(rho,tmp1)
+            call mat2%hydro%get_sos2(mat2%rhom,mat2%p,tmp3)
+            call mat2%elastic%get_sos2(mat2%rhom,tmp3)
+            rhocsq2 = mat2%rhom*tmp3
 
-        call mat1%get_enthalpy(tmp2)
-        call mat2%get_enthalpy(tmp3)
+            Fsource = mat1%VF*tmp3*(one - mat2%rhom/mat1%rhom)
 
-        call divergence(this%decomp,this%der,-mat1%Ji(:,:,:,1),-mat1%Ji(:,:,:,2),-mat1%Ji(:,:,:,3),tmp1,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+            call mat1%get_enthalpy(tmp2)
+            call mat2%get_enthalpy(tmp3)
 
-        Fsource = -(rhocsq1 - rhocsq2)*divu*mat1%VF*mat2%VF + (Fsource + mat1%VF*(mat2%hydro%gam-one)*(tmp2-tmp3))*tmp1
+            call divergence(this%decomp,this%der,-mat1%Ji(:,:,:,1),-mat1%Ji(:,:,:,2),-mat1%Ji(:,:,:,3),tmp1,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
 
-        Fsource = Fsource / (mat2%VF*rhocsq1 + mat1%VF*rhocsq2)
+            Fsource = -(rhocsq1 - rhocsq2)*divu*mat1%VF*mat2%VF + (Fsource + mat1%VF*(mat2%hydro%gam-one)*(tmp2-tmp3))*tmp1
+
+            Fsource = Fsource / (mat2%VF*rhocsq1 + mat1%VF*rhocsq2)
+
+        elseif(this%pRelax) then
+
+            call divergence(this%decomp,this%der,mat1%Ji(:,:,:,1),mat1%Ji(:,:,:,2),mat1%Ji(:,:,:,3),tmp1,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+            Fsource = -tmp1*(mat1%eh + mat1%eel + half*(u*u + v*v + w*v))
+
+            call gradient(this%decomp,this%der,mat2%VF,tmp1,tmp2,tmp3)
+            Fsource = Fsource - p*(u*tmp1 + v*tmp2 + w*tmp3)
+
+        endif
 
     end subroutine 
 
@@ -754,18 +769,19 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,x_bc,y_bc,z_bc)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,viscwork,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: x,y,z
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,u,v,w,divu,viscwork,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(in) :: taustar
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,x_bc,y_bc,z_bc)
+          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc)
         end do
 
     end subroutine

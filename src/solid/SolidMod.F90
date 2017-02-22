@@ -1,7 +1,7 @@
 module SolidMod
 
     use kind_parameters, only: rkind,clen
-    use constants,       only: zero,one,two,epssmall,three
+    use constants,       only: zero,one,two,epssmall,three,half
     use decomp_2d,       only: decomp_info
     use DerivativesMod,  only: derivatives
     use FiltersMod,      only: filters
@@ -17,7 +17,7 @@ module SolidMod
 
         logical :: plast = .FALSE.
         logical :: explPlast = .FALSE.
-        logical :: PTeqb = .TRUE.
+        logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .TRUE.
         logical :: use_gTg = .FALSE.
 
         class(stiffgas ), allocatable :: hydro
@@ -173,21 +173,24 @@ module SolidMod
 contains
 
     !function init(decomp,der,fil,hydro,elastic) result(this)
-    subroutine init(this,decomp,der,fil,PTeqb,use_gTg)
+    subroutine init(this,decomp,der,fil,PTeqb,pEqb,pRelax,use_gTg,updateEtot)
         class(solid), target, intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der
         type(filters),     target, intent(in) :: fil
-        logical, intent(in) :: PTeqb
+        logical, intent(in) :: PTeqb,pEqb,pRelax,updateEtot
         logical, intent(in) :: use_gTg
 
         this%decomp => decomp
         this%der => der
         this%fil => fil
        
-        this%PTeqb = PTeqb
+        this%PTeqb  = PTeqb
+        this%pEqb   = pEqb
+        this%pRelax = pRelax
 
         this%use_gTg = use_gTg
+        this%updateEtot  = updateEtot
 
         ! Assume everything is in Y decomposition
         this%nxp = decomp%ysz(1)
@@ -273,7 +276,7 @@ contains
         
         ! Allocate material conserved variables
         if( allocated( this%consrv ) ) deallocate( this%consrv )
-        if(this%PTeqb) then
+        if(this%PTeqb .or. this%pEqb) then
             allocate( this%consrv(this%nxp,this%nyp,this%nzp,1) )
         else
             allocate( this%consrv(this%nxp,this%nyp,this%nzp,2) )
@@ -288,7 +291,13 @@ contains
         if( allocated( this%QtmpYs ) ) deallocate( this%QtmpYs )
         allocate( this%QtmpYs(this%nxp,this%nyp,this%nzp) )
 
-        if(.NOT. this%PTeqb) then
+        if(this%pEqb) then
+            ! VF equation
+            if( allocated( this%QtmpVF ) ) deallocate( this%QtmpVF )
+            allocate( this%QtmpVF(this%nxp,this%nyp,this%nzp) )
+        endif
+
+        if(this%pRelax) then
             ! eh equation
             if( allocated( this%Qtmpeh ) ) deallocate( this%Qtmpeh )
             allocate( this%Qtmpeh(this%nxp,this%nyp,this%nzp) )
@@ -400,7 +409,7 @@ contains
                 !if(max_modDevSigma > this%elastic%yield) then
                 !  write(*,'(a,2(e19.12,1x))') 'Entering plasticity. Stresses = ', max_modDevSigma, this%elastic%yield
                 !endif
-                if(this%PTeqb) this%kap = sqrt(two/three*this%modDevSigma)
+                if(this%PTeqb) this%kap = sqrt(two/three*this%modDevSigma) !-- is this temporary storage ?? -- NSG
 
                 call this%elastic%plastic_deformation(this%g, this%use_gTg)
 
@@ -452,8 +461,10 @@ contains
         penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
         if (this%elastic%mu < eps) penalty = zero
 
-        ! add Fsource term to penalty 
-        penalty = penalty - src/this%VF
+        if(this%pEqb) then  !--actually, these source terms should be included for PTeqb as well -- NSG
+            ! add Fsource term to penalty 
+            penalty = penalty - src/this%VF
+        endif
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-x_bc, y_bc, z_bc)
@@ -689,22 +700,23 @@ contains
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,x_bc,y_bc,z_bc)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,viscwork,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(in) :: taustar
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
 
-        if(this%PTeqb) then
-            call GracefulExit("update_eh shouldn't be called with PTeqb. Exiting.",4809)
+        if(.not. this%pRelax) then
+            call GracefulExit("update_eh shouldn't be called without pRelax. Exiting.",4809)
         endif
 
-        call this%getRHS_eh(rho,u,v,w,divu,viscwork,src,rhseh,x_bc,y_bc,z_bc)
+        call this%getRHS_eh(rho,u,v,w,divu,viscwork,src,taustar,rhseh,x_bc,y_bc,z_bc)
         call hook_material_energy_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhseh)
 
         ! advance sub-step
@@ -714,11 +726,12 @@ contains
 
     end subroutine
 
-    subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,src,rhseh,x_bc,y_bc,z_bc)
+    subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,src,taustar,rhseh,x_bc,y_bc,z_bc)
         use operators, only: gradient, divergence
         class(solid),                                       intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu,viscwork,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(in) :: taustar
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhseh
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
@@ -730,16 +743,31 @@ contains
         tmp3 = -this%qi(:,:,:,3) ! * this%VF 
 
         ! add convective fluxes
-        rhseh = -rho*this%Ys*this%eh
+        if(this%updateEtot) then
+            rhseh = -rho*this%Ys*(this%eh + this%eel + half*(u*u + v*v + w*w))
+        else
+            rhseh = -rho*this%Ys*this%eh
+        endif
         tmp1 = tmp1 + rhseh*u
         tmp2 = tmp2 + rhseh*v
         tmp3 = tmp3 + rhseh*w
 
+        if(this%updateEtot) then
+            tmp1 = tmp1 + this%VF*((taustar(:,:,:,1) + this%sxx - this%p)*u + (taustar(:,:,:,2) + this%sxy         )*v + (taustar(:,:,:,3) + this%sxz         )*w)
+            tmp2 = tmp2 + this%VF*((taustar(:,:,:,2) + this%sxy         )*u + (taustar(:,:,:,4) + this%syy - this%p)*v + (taustar(:,:,:,5) + this%syz         )*w)
+            tmp3 = tmp3 + this%VF*((taustar(:,:,:,3) + this%sxz         )*u + (taustar(:,:,:,5) + this%syz         )*v + (taustar(:,:,:,6) + this%szz - this%p)*w)
+        endif
+
         ! Take divergence of fluxes
         call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh,-x_bc,-y_bc,-z_bc)     ! energy has to be anti-symmetric
 
-        ! Add pressure and viscous work terms
-        rhseh = rhseh - this%VF * (this%p*divu + viscwork)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
+        if(this%updateEtot) then
+            ! Add source
+            rhseh = rhseh + src
+        else
+            ! Add pressure and viscous work terms
+            rhseh = rhseh - this%VF * (this%p*divu + viscwork)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
+        endif
 
     end subroutine
 
@@ -782,8 +810,12 @@ contains
 
         ! Add C/rhom to Fsource
         !--call this%getSpeciesDensity(rho,tmp1)  !-- use this%rhom
-        call divergence(this%decomp,this%der,-this%Ji(:,:,:,1),-this%Ji(:,:,:,2),-this%Ji(:,:,:,3),rhsVF,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
-        rhsVF = src + rhsVF/this%rhom
+        call divergence(this%decomp,this%der,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),rhsVF,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+        if(this%pEqb) then
+            rhsVF = src - rhsVF/this%rhom
+        else
+            rhsVF = -rhsVF/this%rhom
+        endif
 
         call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
 
@@ -811,7 +843,12 @@ contains
         ! filter Ys
         call filter3D(this%decomp, this%fil, this%consrv(:,:,:,1), iflag, x_bc, y_bc, z_bc)
 
-        if(.NOT. this%PTeqb) then
+        if(this%pEqb) then
+            ! filter VF
+            call filter3D(this%decomp, this%fil, this%VF, iflag, x_bc, y_bc,z_bc)
+        endif
+
+        if(this%pRelax) then
             ! filter eh
             call filter3D(this%decomp, this%fil, this%consrv(:,:,:,2), iflag,x_bc, y_bc, z_bc)
 
@@ -892,7 +929,13 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
 
         this%consrv(:,:,:,1) = rho * this%Ys
-        if(.NOT. this%PTeqb) this%consrv(:,:,:,2) = this%consrv(:,:,:,1) * this%eh
+        if(this%pRelax) then
+            if(this%updateEtot) then
+                this%consrv(:,:,:,2) = this%consrv(:,:,:,1) * (this%eh + this%eel)
+            else
+                this%consrv(:,:,:,2) = this%consrv(:,:,:,1) * this%eh
+            endif
+        endif
 
     end subroutine
 
@@ -903,8 +946,13 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
 
         this%Ys = this%consrv(:,:,:,1) / rho
-        if(.NOT. this%PTeqb) then
-            this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
+        if(this%pRelax) then
+            if(this%updateEtot) then
+                call this%get_eelastic_devstress()
+                this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1) - this%eel
+            else
+                this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
+            endif
 
             call this%getSpeciesDensity(rho,rhom)
             call this%hydro%get_T(this%eh, this%T, rhom)
