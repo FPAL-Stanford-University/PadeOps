@@ -7,7 +7,7 @@ program test2dFFT
 
     implicit none
    
-    real(rkind), dimension(:,:,:), allocatable :: f, fr, x, y, z, dfdx
+    real(rkind), dimension(:,:,:), allocatable :: f, fr, x, y, z, dfdx, lapf
     complex(rkind), dimension(:,:,:), allocatable :: fhat
     type(decomp_info) :: gp
     
@@ -27,7 +27,9 @@ program test2dFFT
 
     dx = two*pi/nx; dy = two*pi/ny; dz = two*pi/nz
     allocate(spect)
-    call spect%init("x", nx, ny, nz, dx, dy, dz, "four", "2/3rd", dimTransform)
+    !call spect%init("x", nx, ny, nz, dx, dy, dz, "four", "2/3rd", dimTransform)
+    call spect%init("x", nx, ny, nz, dx, dy, dz, &
+                "four", "2/3rd", 2 , .false.)
 
     allocate( f ( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
     allocate( x ( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
@@ -35,6 +37,7 @@ program test2dFFT
     allocate( z ( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
     allocate( fr( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
     allocate(dfdx( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
+    allocate(lapf( gp%xsz(1), gp%xsz(2), gp%xsz(3) ) )
     
     call spect%alloc_r2c_out(fhat)
   
@@ -55,19 +58,24 @@ program test2dFFT
         kk = kk + 1
     end do 
 
-    f = cos(x)*sin(y)*(z*(two*pi - z))
-    dfdx = cos(x)*cos(y)*(z*(two*pi - z))
-
+    !f = cos(x)*sin(y)*(z*(two*pi - z))
+    f = sin(x)*cos(y)
+    dfdx = cos(x)*cos(y)
+    lapf = -2.d0*cos(y)*sin(x)
     call sleep(nrank)
-    print*, shape(spect%k1)
-    print*, shape(fhat)
 
     call spect%fft(f,fhat)
-    fhat = imi*spect%k2*fhat 
-    !print*, fhat(1:5,1,1)
+    fhat = imi*spect%k1*fhat 
     call spect%ifft(fhat,fr)
     print*, "Done"
     print*, maxval(abs(fr - dfdx))
+    
+    call spect%fft(f,fhat)
+    fhat = -spect%kabs_sq*fhat 
+    call spect%ifft(fhat,fr)
+    print*, maxval(abs(fr - lapf))
+   
+
     call spect%destroy()
     deallocate(spect)
 

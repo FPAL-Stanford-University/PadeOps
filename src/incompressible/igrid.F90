@@ -209,6 +209,7 @@ module IncompressibleGrid
             procedure          :: start_io
             procedure          :: finalize_io
             procedure, private :: init_stats
+            procedure, private :: debug
             procedure, private :: init_stats3D
             procedure, private :: AdamsBashforth
             procedure, private :: TVD_RK3
@@ -1413,7 +1414,8 @@ contains
             call this%addNonLinearTerm_skewSymm()
         else
             call this%AddNonLinearTerm_Rot()
-        end if 
+        end if
+        
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
@@ -1438,7 +1440,6 @@ contains
         if (.not. this%isInviscid) then
             call this%addViscousTerm()
         end if
-
 
         ! WARNING: the duidxjChat tensor changes state after this subroutine, so
         ! you must not assume that the values in it are correct after this
@@ -1475,7 +1476,7 @@ contains
 
     subroutine addViscousTerm(this)
         class(igrid), intent(inout) :: this
-      
+
         this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%uhat + this%d2udz2hatC
         this%u_rhs = this%u_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
 
@@ -1484,7 +1485,6 @@ contains
 
         this%cbuffyE(:,:,:,1) = -this%spectE%kabs_sq*this%what + this%d2wdz2hatE
         this%w_rhs = this%w_rhs + (one/this%Re)*this%cbuffyE(:,:,:,1)
-
 
     end subroutine
 
@@ -1832,7 +1832,7 @@ contains
             this%what = this%what + this%dt*this%w_rhs 
             if (this%isStratified) then
                 this%That = this%That + this%dt*this%T_rhs
-            end if 
+            end if
         else
             abf1 = (one + half*this%dtRat)*this%dt
             abf2 = -half*this%dtRat*this%dt
@@ -1855,6 +1855,38 @@ contains
         ! Step 5: Do end of time step operations (I/O, stats, etc.)
         call this%wrapup_timestep()
     end subroutine
+    
+    subroutine debug(this)
+        class(igrid), intent(inout), target :: this
+        real(rkind),    dimension(:,:,:), pointer :: dudx, dudy, dudz
+        real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
+        real(rkind),    dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
+        real(rkind),    dimension(:,:,:), pointer :: dvdzC, dudzC
+        real(rkind),    dimension(:,:,:), pointer :: dwdxC, dwdyC
+        real(rkind), dimension(:,:,:), pointer :: rbuff
+        complex(rkind), dimension(:,:,:), pointer :: cbuff, dvdzH
+
+        dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
+        dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
+        dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
+
+        dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
+        dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
+
+        rbuff => this%rbuffxC(:,:,:,1); cbuff => this%cbuffyC(:,:,:,1)
+        dvdzH => this%duidxjChat(:,:,:,6) 
+
+        !print*, this%dt
+        !call this%spectC%ifft(this%uhat,rbuff)
+        !print*, rbuff(5,5,4)
+        !call this%spectC%ifft(this%vhat,rbuff)
+        !print*, rbuff(5,5,4)
+        
+        call this%spectC%ifft(this%u_rhs,rbuff)
+        print*, rbuff(5,5,4)
+        call this%spectC%ifft(this%v_rhs,rbuff)
+        print*, rbuff(5,5,4)
+    end subroutine 
 
     subroutine ApplyCompactFilter(this)
         class(igrid), intent(inout), target :: this
@@ -2036,33 +2068,6 @@ contains
 
     end subroutine
     
-    !subroutine debug(this)
-    !    class(igrid), intent(inout), target :: this
-    !    real(rkind),    dimension(:,:,:), pointer :: dudx, dudy, dudz
-    !    real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
-    !    real(rkind),    dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
-    !    real(rkind),    dimension(:,:,:), pointer :: dvdzC, dudzC
-    !    real(rkind),    dimension(:,:,:), pointer :: dwdxC, dwdyC
-    !    real(rkind), dimension(:,:,:), pointer :: rbuff
-    !    complex(rkind), dimension(:,:,:), pointer :: cbuff, dvdzH
-
-    !    dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
-    !    dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
-    !    dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
-
-    !    dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
-    !    dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
-
-    !    rbuff => this%rbuffxC(:,:,:,1); cbuff => this%cbuffyC(:,:,:,1)
-    !    dvdzH => this%duidxjChat(:,:,:,6) 
-
-    !    !call this%spectC%ifft(this%v_rhs,rbuff)
-    !    if (nrank == 0) then
-    !        print*, "=------"
-    !        print*, real(dvdzH(1,1,55:64))
-    !    end if 
-    !    !stop 
-    !end subroutine 
     
     subroutine compute_and_bcast_surface_Mn(this)
         use mpi
