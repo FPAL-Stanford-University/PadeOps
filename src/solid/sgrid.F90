@@ -704,7 +704,7 @@ contains
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
             ! calculate sources if they are needed
-            if(.not. this%PTeqb) call this%mix%calculate_source(this%rho,divu,Fsource,this%u,this%v,this%w,this%p,this%x_bc,this%y_bc,this%z_bc) ! -- actually, source terms should be included for PTeqb as well --NSG
+            if(.not. this%PTeqb) call this%mix%calculate_source(this%rho,divu,this%u,this%v,this%w,this%p,Fsource,this%x_bc,this%y_bc,this%z_bc) ! -- actually, source terms should be included for PTeqb as well --NSG
 
             ! Now update all the individual species variables
             call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,Fsource,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
@@ -757,6 +757,7 @@ contains
                 call this%mix%equilibratePressure(this%rho, this%e, this%p)
             elseif (this%pRelax) then
                 call this%mix%relaxPressure(this%rho, this%e, this%p)
+                !call this%mix%relaxPressure_os(this%rho, this%u, this%v, this%w, this%e, this%dt, this%p)
             end if
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
@@ -844,7 +845,7 @@ contains
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
        
-        call this%mix%get_primitive(this%rho, this%devstress, this%p, this%sos, this%e)                  ! Get primitive variables for individual species
+        call this%mix%get_primitive(this%rho, this%u, this%v, this%w, this%e, this%devstress, this%p, this%sos)                  ! Get primitive variables for individual species
 
     end subroutine
 
@@ -858,7 +859,7 @@ contains
         this%Wcnsrv(:,:,:, TE_index  ) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
 
         ! add 2M (mass fraction and hydrodynamic energy) variables here
-        call this%mix%get_conserved(this%rho)
+        call this%mix%get_conserved(this%rho,this%u,this%v,this%w)
 
     end subroutine
 

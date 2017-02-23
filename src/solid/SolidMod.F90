@@ -439,7 +439,7 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
-        real(rkind), parameter :: etafac = one/6._rkind
+        real(rkind), parameter :: etafac = zero!one/6._rkind
 
         real(rkind) :: pmax
         integer :: imax, jmax, kmax, rmax
@@ -924,14 +924,14 @@ contains
 
     end subroutine
 
-    pure subroutine get_conserved(this,rho)
+    pure subroutine get_conserved(this,rho,u,v,w)
         class(solid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
 
         this%consrv(:,:,:,1) = rho * this%Ys
         if(this%pRelax) then
             if(this%updateEtot) then
-                this%consrv(:,:,:,2) = this%consrv(:,:,:,1) * (this%eh + this%eel)
+                this%consrv(:,:,:,2) = this%consrv(:,:,:,1) * (this%eh + this%eel + half*(u*u+v*v+w*w))
             else
                 this%consrv(:,:,:,2) = this%consrv(:,:,:,1) * this%eh
             endif
@@ -939,17 +939,17 @@ contains
 
     end subroutine
 
-    subroutine get_primitive(this,rho)
+    subroutine get_primitive(this,rho,u,v,w)
         use operators, only : gradient
         class(solid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
 
         this%Ys = this%consrv(:,:,:,1) / rho
         if(this%pRelax) then
             if(this%updateEtot) then
                 call this%get_eelastic_devstress()
-                this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1) - this%eel
+                this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1) - this%eel - half*(u*u+v*v+w*w)
             else
                 this%eh = this%consrv(:,:,:,2) / this%consrv(:,:,:,1)
             endif

@@ -98,7 +98,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         call mix%set_material(1,stiffgas(gamma,Rgas,p_infty),sep1solid(rho_0,mu,1.0D30,1.0D-10))
         call mix%set_material(2,stiffgas(gamma,Rgas/rhoRatio,p_infty),sep1solid(rhoRatio*rho_0,mu,1.0D30,1.0D-10))
 
-        u   = zero!half
+        u   = half
         v   = zero
         w   = zero
 
@@ -224,7 +224,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use exits,            only: message
-    use reductions,       only: P_MAXVAL
+    use reductions,       only: P_MAXVAL, P_MINVAL
     use SolidMixtureMod,  only: solid_mixture
 
     use Multispecies_data
@@ -243,6 +243,10 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+        call message("Min. VF1",P_MINVAL(mix%material(1)%VF))
+        call message("Min. VF2",P_MINVAL(mix%material(2)%VF))
+        call message("Max. VF1",P_MAXVAL(mix%material(1)%VF))
+        call message("Max. VF2",P_MAXVAL(mix%material(2)%VF))
     end associate
 end subroutine
 

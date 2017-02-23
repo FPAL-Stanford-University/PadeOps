@@ -34,6 +34,7 @@ module SolidMixtureMod
         procedure :: init
         procedure :: set_material
         procedure :: relaxPressure
+        procedure :: relaxPressure_os
         procedure :: equilibratePressure
         procedure :: equilibratePressureTemperature
         procedure :: getLAD
@@ -154,6 +155,54 @@ contains
         
         if (allocated(this%material(imat)%elastic)) deallocate(this%material(imat)%elastic)
         allocate( this%material(imat)%elastic, source=elastic )
+    end subroutine
+
+    subroutine relaxPressure_os(this,rho,u,v,w,mixE,dtsim,mixP)
+        class(solid_mixture), intent(inout), target :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,mixE
+        real(rkind),                                        intent(in)  :: dtsim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP
+
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: Fsrc,dt
+        type(solid), pointer :: mat1, mat2
+        integer :: i, tt 
+        real(rkind) :: muc = one
+
+        mat1 => this%material(1); mat2 => this%material(2)
+
+
+        do tt = 1, 1000
+            !print *, tt, maxval(abs(mat1%p-mat2%p))
+            Fsrc = abs(mat1%VF*mat2%VF)*(mat1%p - mat2%p)/muc
+            !if(maxval(abs(Fsrc))*dtsim < 1.0d-10) exit
+            if(maxval(abs((mat1%p-mat2%p)/(mat1%p+mat2%p))) < 1.0d-10) exit
+            dt = 0.00000002_rkind*(mat1%VF/Fsrc)
+
+            !do i = 1, 9
+            !    mat1%g(:,:,:,i) = mat1%g(:,:,:,i) * (one - dt*Fsrc/mat1%VF)
+            !    mat2%g(:,:,:,i) = mat2%g(:,:,:,i) * (one - dt*Fsrc/mat2%VF)
+            !enddo
+
+            mat1%VF = mat1%VF + Fsrc*dt
+            mat2%VF = mat2%VF - Fsrc*dt
+            print *, tt, maxval((mat1%p*Fsrc*dt)), minval(mat1%p*Fsrc*dt)
+            print *, "p1 before = ", mat1%p(100,1,1)
+
+            mat1%consrv(:,:,:,2) = mat1%consrv(:,:,:,2) - dt*mat1%p*Fsrc
+            mat2%consrv(:,:,:,2) = mat2%consrv(:,:,:,2) + dt*mat1%p*Fsrc
+
+            call mat1%get_primitive(rho,u,v,w)
+            call mat2%get_primitive(rho,u,v,w)
+            call this%get_p_from_ehydro(rho)   ! Get species pressures from species hydrodynamic energy 
+            print *, "p1 after = ", mat1%p(100,1,1)
+
+            if (tt==1000) then
+                print *, "Pressure relaxation OS did not converge", maxval(abs(Fsrc)), dtsim
+            endif
+        enddo
+
+        call this%get_pmix(mixP)              ! Get mixture pressure from species pressures
+stop
     end subroutine
 
     subroutine relaxPressure(this,rho,mixE,mixP)
@@ -517,28 +566,28 @@ contains
 
     end subroutine
 
-    pure subroutine get_conserved(this,rho)
+    pure subroutine get_conserved(this,rho,u,v,w)
         class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%get_conserved(rho)
+          call this%material(imat)%get_conserved(rho,u,v,w)
         end do
 
     end subroutine
 
-    subroutine get_primitive(this,rho,devstress,p,sos,e)
+    subroutine get_primitive(this,rho,u,v,w,e,devstress,p,sos)
         class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho, e
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho, u,v,w,e
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(out) :: devstress
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: p, sos
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%get_primitive(rho)
+          call this%material(imat)%get_primitive(rho,u,v,w)
         end do
   
         call this%get_eelastic_devstress(devstress)   ! Get species elastic energies, and mixture and species devstress
@@ -656,7 +705,7 @@ contains
           call this%material(imat)%filter(iflag,x_bc,y_bc,z_bc)
         end do
         
-        !this%material(2)%VF = one - this%material(1)%VF
+        this%material(2)%VF = one - this%material(1)%VF
 
     end subroutine
 
@@ -698,7 +747,7 @@ contains
         elseif(this%pRelax) then
 
             call divergence(this%decomp,this%der,mat1%Ji(:,:,:,1),mat1%Ji(:,:,:,2),mat1%Ji(:,:,:,3),tmp1,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
-            Fsource = -tmp1*(mat1%eh + mat1%eel + half*(u*u + v*v + w*v))
+            Fsource = -tmp1*(mat1%eh + mat1%eel + half*(u*u+v*v+w*w))
 
             call gradient(this%decomp,this%der,mat2%VF,tmp1,tmp2,tmp3)
             Fsource = Fsource - p*(u*tmp1 + v*tmp2 + w*tmp3)
@@ -780,9 +829,11 @@ contains
 
         integer :: imat
 
-        do imat = 1, this%ns
-          call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc)
-        end do
+        !do imat = 1, this%ns
+        !  call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc)
+        !end do
+        call this%material(1)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork, src,taustar,x_bc,y_bc,z_bc)
+        call this%material(2)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,-src,taustar,x_bc,y_bc,z_bc)
 
     end subroutine
 
@@ -831,9 +882,9 @@ contains
         !  call this%material(imat)%update_VF(this%material( 2-mod(imat+1,2) ),isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc)
         !end do
         call this%material(1)%update_VF(this%material(2),isub,dt,rho,u,v,w,x,y,z,tsim,divu, src,x_bc,y_bc,z_bc)
-        call this%material(2)%update_VF(this%material(1),isub,dt,rho,u,v,w,x,y,z,tsim,divu,-src,x_bc,y_bc,z_bc)
+        ! call this%material(2)%update_VF(this%material(1),isub,dt,rho,u,v,w,x,y,z,tsim,divu,-src,x_bc,y_bc,z_bc)
 
-        !this%material(2)%VF = one - this%material(1)%VF
+        this%material(2)%VF = one - this%material(1)%VF
 
     end subroutine
 
