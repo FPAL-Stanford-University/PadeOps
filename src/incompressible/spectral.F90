@@ -218,7 +218,7 @@ contains
         fout = fin * this%GsurfaceFilter
     end subroutine 
     
-    pure subroutine TestFilter_oop(this, fhat,fhatout)
+    subroutine TestFilter_oop(this, fhat,fhatout)
         class(spectral),  intent(in)         :: this
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(in) :: fhat
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(out) :: fhatout
@@ -226,6 +226,7 @@ contains
 
         do k = 1,this%fft_size(3)
             do j = 1,this%fft_size(2)
+                !$omp simd 
                 do i = 1,this%fft_size(1)
                     fhatout(i,j,k) = fhat(i,j,k)*this%GTestFilt(i,j,k)
                 end do 

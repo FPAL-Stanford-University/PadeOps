@@ -1476,15 +1476,41 @@ contains
 
     subroutine addViscousTerm(this)
         class(igrid), intent(inout) :: this
+        integer :: i, j, k
+        real(rkind) :: oneByRe, tmp1, tmp2
 
-        this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%uhat + this%d2udz2hatC
-        this%u_rhs = this%u_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
+        oneByRe = one/this%Re
 
-        this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%vhat + this%d2vdz2hatC
-        this%v_rhs = this%v_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
+        do k = 1,size(this%u_rhs,3)
+           do j = 1,size(this%u_rhs,2)
+              !$omp simd
+              do i = 1,size(this%u_rhs,1)
+                  tmp1 = -this%spectC%kabs_sq(i,j,k)*this%uhat(i,j,k) + this%d2udz2hatC(i,j,k)
+                  tmp2 = -this%spectC%kabs_sq(i,j,k)*this%vhat(i,j,k) + this%d2vdz2hatC(i,j,k)
+                  this%u_rhs(i,j,k) = this%u_rhs(i,j,k) + oneByRe*tmp1
+                  this%v_rhs(i,j,k) = this%v_rhs(i,j,k) + oneByRe*tmp2
+               end do
+            end do
+         end do
 
-        this%cbuffyE(:,:,:,1) = -this%spectE%kabs_sq*this%what + this%d2wdz2hatE
-        this%w_rhs = this%w_rhs + (one/this%Re)*this%cbuffyE(:,:,:,1)
+        do k = 1,size(this%w_rhs,3)
+           do j = 1,size(this%w_rhs,2)
+              !$omp simd
+              do i = 1,size(this%w_rhs,1)
+                  tmp1 = -this%spectC%kabs_sq(i,j,k)*this%what(i,j,k) + this%d2wdz2hatE(i,j,k)
+                  this%w_rhs(i,j,k) = this%w_rhs(i,j,k) + oneByRe*tmp1
+               end do
+            end do
+         end do
+
+        !this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%uhat + this%d2udz2hatC
+        !this%u_rhs = this%u_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
+
+        !this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%vhat + this%d2vdz2hatC
+        !this%v_rhs = this%v_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
+
+        !this%cbuffyE(:,:,:,1) = -this%spectE%kabs_sq*this%what + this%d2wdz2hatE
+        !this%w_rhs = this%w_rhs + (one/this%Re)*this%cbuffyE(:,:,:,1)
 
     end subroutine
 
