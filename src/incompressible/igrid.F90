@@ -1477,7 +1477,8 @@ contains
     subroutine addViscousTerm(this)
         class(igrid), intent(inout) :: this
         integer :: i, j, k
-        real(rkind) :: oneByRe, tmp1, tmp2
+        real(rkind) :: oneByRe
+        complex(rkind) :: tmp1, tmp2
 
         oneByRe = one/this%Re
 
@@ -1497,7 +1498,7 @@ contains
            do j = 1,size(this%w_rhs,2)
               !$omp simd
               do i = 1,size(this%w_rhs,1)
-                  tmp1 = -this%spectC%kabs_sq(i,j,k)*this%what(i,j,k) + this%d2wdz2hatE(i,j,k)
+                  tmp1 = -this%spectE%kabs_sq(i,j,k)*this%what(i,j,k) + this%d2wdz2hatE(i,j,k)
                   this%w_rhs(i,j,k) = this%w_rhs(i,j,k) + oneByRe*tmp1
                end do
             end do
