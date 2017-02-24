@@ -29,10 +29,15 @@ module sgsmod_igrid
         real(rkind) :: cmodel_global, cmodel_global_x, cmodel_global_y, cmodel_global_z
         real(rkind), dimension(:,:,:), allocatable :: nu_sgs_C, nu_sgs_E
         logical :: isEddyViscosityModel = .false. 
-        real(rkind),    dimension(:,:,:,:), allocatable :: rbuff_DynProc
-        complex(rkind), dimension(:,:,:,:), allocatable :: cbuff_DynProc
         real(rkind), dimension(:,:,:), allocatable :: tau_11, tau_12, tau_13, tau_22, tau_23, tau_33
         real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E
+        ! for dyanamic procedures - all are at edges
+        real(rkind), dimension(:,:,:,:), allocatable :: Sij_Filt, alphaij_Filt, tauijWM_Filt, fi_Filt, ui_Filt
+        real(rkind), dimension(:,:,:),   allocatable :: Dsgs_Filt, buff1, buff2
+        real(rkind), dimension(:,:,:,:), pointer     :: fi
+        real(rkind), dimension(:,:,:),   pointer     :: Dsgs
+        logical :: isInviscid
+        real(rkind) :: invRe
         contains 
             !! ALL INIT PROCEDURES
             procedure          :: init
@@ -77,6 +82,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE)
       call this%get_SGS_kernel(duidxjC, duidxjE)
 
       ! Step 2: Dynamic Procedure ?
+      
 
       ! Step 3: Multiply by model constant
       call this%multiply_by_model_constant()

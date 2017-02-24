@@ -1,6 +1,6 @@
 subroutine destroy(this)
   class(sgs_igrid), intent(inout) :: this
-  nullify(this%gpC, this%gpE, this%spectC, this%spectE, this%sp_gpC, this%sp_gpE)
+  nullify(this%gpC, this%gpE, this%spectC, this%spectE, this%sp_gpC, this%sp_gpE, this%fi)
   if (this%isEddyViscosityModel) call this%destroyMemory_EddyViscosity()
   if (this%DynamicProcedureType .ne. 0) call this%destroyMemory_DynamicProcedure()
   select case (this%mid)
@@ -12,13 +12,14 @@ subroutine destroy(this)
   deallocate(this%tau_11, this%tau_12, this%tau_13, this%tau_22, this%tau_23, this%tau_33)
 end subroutine
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody)
   class(sgs_igrid), intent(inout) :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
   real(rkind), intent(in) :: dx, dy, dz
   character(len=*), intent(in) :: inputfile
   real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC
+  real(rkind), dimension(:,:,:,:), intent(in), target :: fBody
   integer :: ierr
 
   ! Input file variables
@@ -63,5 +64,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   allocate(this%tau_33(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
   allocate(this%tau_13(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
   allocate(this%tau_23(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+
+  this%fi => fBody
 
 end subroutine
