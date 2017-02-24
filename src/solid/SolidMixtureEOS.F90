@@ -216,7 +216,7 @@ stop
         real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
 
         integer :: i,j,k,imat
-        real(rkind) :: maxp, peqb
+        real(rkind) :: maxp, peqb, peqb2
 
         real(rkind), dimension(1:this%ns) :: fac
 
@@ -264,11 +264,10 @@ stop
             fac = (psph + gam*pinf + (gam-one)*peqb)/(gam*(pinf+peqb))
             vf = vf*fac
             !this%material(1:this%ns)%g = this%material(1:this%ns)%g*fac**third        !! --- not clear if this is needed or if it works
+            peqb2 = (rho(i,j,k)*ehmix(i,j,k) - sum(vf*gam*pinf/(gam-one))) / sum(vf/(gam-one))
+            psph = peqb2
 
-            peqb = (rho(i,j,k)*ehmix(i,j,k) - sum(vf*gam*pinf/(gam-one))) / sum(vf/(gam-one))
-            psph = peqb
-
-            mixP(i,j,k) = peqb
+            mixP(i,j,k) = peqb2
             do imat=1,this%ns
               this%material(imat)%VF(i,j,k) = vf(imat)
               this%material(imat)%p(i,j,k) = psph(imat)
@@ -455,9 +454,9 @@ stop
     end subroutine
 
     ! Subroutine to get species art. conductivities and diffusivities
-    subroutine getLAD(this,rho,sos,x_bc,y_bc,z_bc)
+    subroutine getLAD(this,rho,e,sos,x_bc,y_bc,z_bc)
         class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,sos  ! Mixture density and speed of sound
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,e,sos  ! Mixture density and speed of sound
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         integer :: i
@@ -467,7 +466,9 @@ stop
 
             if (.NOT. this%PTeqb) then
                 ! Artificial conductivity
-                call this%LAD%get_conductivity(rho, this%material(i)%eh, this%material(i)%T, sos, &
+                !call this%LAD%get_conductivity(rho, this%material(i)%eh, this%material(i)%T, sos, &
+                !                                    this%material(i)%kap, x_bc, y_bc, z_bc)
+                call this%LAD%get_conductivity(rho, this%material(i)%Ys*this%material(i)%eh, e, sos, &     ! --change2
                                                     this%material(i)%kap, x_bc, y_bc, z_bc)
             end if
 
@@ -585,7 +586,6 @@ stop
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: p, sos
 
         integer :: imat
-
         do imat = 1, this%ns
           call this%material(imat)%get_primitive(rho,u,v,w)
         end do
@@ -594,10 +594,10 @@ stop
         if(this%ns == 1) then
           this%material(1)%eh = e - this%material(1)%eel ! Since eh equation is not exact and this is a better alternative for 1 species
         endif
-        !if(this%PTeqb) then    ! --- why is this condition needed here? this provides initial guess for pressure even in pRelax case -- NSG
+        if(this%PTeqb) then    ! --- why is this condition needed here? this provides initial guess for pressure even in pRelax case -- NSG
             call this%get_p_from_ehydro(rho)   ! Get species pressures from species hydrodynamic energy 
             call this%get_pmix(p)              ! Get mixture pressure from species pressures
-        !endif
+        endif
         
         call this%getSOS(rho,p,sos)
 
@@ -648,20 +648,30 @@ stop
         do i = 1,this%ns
             if(.NOT. this%PTeqb) then
                 ! Step 1: Get qy
-                call this%der%ddy(this%material(i)%T,tmp1_in_y,y_bc(1),y_bc(2))
-                this%material(i)%qi(:,:,:,2) = -this%material(i)%VF*this%material(i)%kap*tmp1_in_y
+                !call this%der%ddy(this%material(i)%T,tmp1_in_y,y_bc(1),y_bc(2))
+                !this%material(i)%qi(:,:,:,2) = -this%material(i)%VF*this%material(i)%kap*tmp1_in_y
+                call this%der%ddy(this%material(i)%Ys*this%material(i)%eh,tmp1_in_y,y_bc(1),y_bc(2)) ! --change2
+                this%material(i)%qi(:,:,:,2) = -this%material(i)%kap*tmp1_in_y
 
                 ! Step 2: Get qx
-                call transpose_y_to_x(this%material(i)%T,tmp1_in_x,this%decomp)
+                !call transpose_y_to_x(this%material(i)%T,tmp1_in_x,this%decomp)
+                !call this%der%ddx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
+                !call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
+                !this%material(i)%qi(:,:,:,1) = -this%material(i)%VF*this%material(i)%kap*tmp1_in_y
+                call transpose_y_to_x(this%material(i)%Ys*this%material(i)%eh,tmp1_in_x,this%decomp) ! --change2
                 call this%der%ddx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
                 call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
-                this%material(i)%qi(:,:,:,1) = -this%material(i)%VF*this%material(i)%kap*tmp1_in_y
+                this%material(i)%qi(:,:,:,1) = -this%material(i)%kap*tmp1_in_y
 
                 ! Step 3: Get qz
-                call transpose_y_to_z(this%material(i)%T,tmp1_in_z,this%decomp)
+                !call transpose_y_to_z(this%material(i)%T,tmp1_in_z,this%decomp)
+                !call this%der%ddz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
+                !call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
+                !this%material(i)%qi(:,:,:,3) = -this%material(i)%VF*this%material(i)%kap*tmp1_in_y
+                call transpose_y_to_z(this%material(i)%Ys*this%material(i)%eh,tmp1_in_z,this%decomp) ! --change2
                 call this%der%ddz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
                 call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
-                this%material(i)%qi(:,:,:,3) = -this%material(i)%VF*this%material(i)%kap*tmp1_in_y
+                this%material(i)%qi(:,:,:,3) = -this%material(i)%kap*tmp1_in_y
             else
                 this%material(i)%qi(:,:,:,:) = zero     ! calculated in sgrid
             endif

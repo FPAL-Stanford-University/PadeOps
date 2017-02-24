@@ -17,7 +17,7 @@ module SolidMod
 
         logical :: plast = .FALSE.
         logical :: explPlast = .FALSE.
-        logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .TRUE.
+        logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .TRUE., includeSources = .FALSE.
         logical :: use_gTg = .FALSE.
 
         class(stiffgas ), allocatable :: hydro
@@ -439,7 +439,7 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
-        real(rkind), parameter :: etafac = zero!one/6._rkind
+        real(rkind), parameter :: etafac = one/6._rkind
 
         real(rkind) :: pmax
         integer :: imax, jmax, kmax, rmax
@@ -459,6 +459,8 @@ contains
         tmp = (rho*this%Ys + this%elastic%rho0*detg*epssmall)/(this%VF + epssmall)   
         ! tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
         penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
+        if(this%pRelax) penalty = this%VF*etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density -- change2
+
         if (this%elastic%mu < eps) penalty = zero
 
         if(this%pEqb) then  !--actually, these source terms should be included for PTeqb as well -- NSG
@@ -763,7 +765,7 @@ contains
 
         if(this%updateEtot) then
             ! Add source
-            rhseh = rhseh + src
+            if(this%includeSources) rhseh = rhseh + src
         else
             ! Add pressure and viscous work terms
             rhseh = rhseh - this%VF * (this%p*divu + viscwork)  ! full viscous stress tensor here so equation is exact in the stiffened gas limit
@@ -816,6 +818,7 @@ contains
         else
             rhsVF = -rhsVF/this%rhom
         endif
+        if(.not. this%includeSources) rhsVF = zero
 
         call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
 
