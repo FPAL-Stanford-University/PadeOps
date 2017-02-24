@@ -1,16 +1,23 @@
-pure subroutine get_Sij_from_duidxj(duidxj, Sij, nxL, nyL, nzL)
+subroutine get_Sij_from_duidxj(duidxj, Sij, nxL, nyL, nzL)
    integer, intent(in) :: nxL, nyL, nzL
    real(rkind), dimension(nxL,nyL,nzL,9), intent(in) :: duidxj
    real(rkind), dimension(nxL,nyL,nzL,6), intent(out) :: Sij
+   integer :: i, j, k
 
-   Sij(:,:,:,1) = duidxj(:,:,:,1) ! S11 = dudx
-   Sij(:,:,:,4) = duidxj(:,:,:,5) ! S22 = dvdy
-   Sij(:,:,:,6) = duidxj(:,:,:,9) ! S33 = dwdz
+   do k = 1,nzL
+      do j = 1,nyL
+         !$omp simd
+         do i = 1,nxL
+            Sij(i,j,k,1) = duidxj(i,j,k,1) ! S11 = dudx
+            Sij(i,j,k,4) = duidxj(i,j,k,5) ! S22 = dvdy
+            Sij(i,j,k,6) = duidxj(i,j,k,9) ! S33 = dwdz
 
-   Sij(:,:,:,2) = 0.5d0*(duidxj(:,:,:,2) + duidxj(:,:,:,4)) ! S12 = 0.5*(dudy + dvdx)
-   Sij(:,:,:,3) = 0.5d0*(duidxj(:,:,:,3) + duidxj(:,:,:,7)) ! S13 = 0.5*(dudz + dwdx)
-   Sij(:,:,:,2) = 0.5d0*(duidxj(:,:,:,6) + duidxj(:,:,:,8)) ! S23 = 0.5*(dvdz + dwdy)
-
+            Sij(i,j,k,2) = 0.5d0*(duidxj(i,j,k,2) + duidxj(i,j,k,4)) ! S12 = 0.5*(dudy + dvdx)
+            Sij(i,j,k,3) = 0.5d0*(duidxj(i,j,k,3) + duidxj(i,j,k,7)) ! S13 = 0.5*(dudz + dwdx)
+            Sij(i,j,k,2) = 0.5d0*(duidxj(i,j,k,6) + duidxj(i,j,k,8)) ! S23 = 0.5*(dvdz + dwdy)
+         end do 
+      end do 
+   end do 
 end subroutine
 
 subroutine allocateMemory_EddyViscosity(this)
@@ -23,7 +30,7 @@ subroutine allocateMemory_EddyViscosity(this)
 
 end subroutine
 
-subroutine get_nu_SGS(this,duidxjC, duidxjE)
+subroutine get_SGS_kernel(this,duidxjC, duidxjE)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: duidxjC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: duidxjE
@@ -32,14 +39,14 @@ subroutine get_nu_SGS(this,duidxjC, duidxjE)
    select case(this%mid) 
    case (0)
       ! Smagorinsky
-      call get_nu_smagorinsky(this%S_ij_C,this%nu_sgs_C, &
-                              this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3))
-      call get_nu_smagorinsky(this%S_ij_E,this%nu_sgs_E, &
+      call get_smagorinsky_kernel(this%S_ij_C,this%nu_sgs_C, &
+                                 this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3))
+      call get_smagorinsky_kernel(this%S_ij_E,this%nu_sgs_E, &
                               this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3))
    case (1)
       ! Sigma
-      call get_nu_sigma(this%nu_sgs_C, duidxjC, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3))
-      call get_nu_sigma(this%nu_sgs_E, duidxjE, this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3))
+      call get_sigma_kernel(this%nu_sgs_C, duidxjC, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3))
+      call get_sigma_kernel(this%nu_sgs_E, duidxjE, this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3))
    end select
 
 end subroutine

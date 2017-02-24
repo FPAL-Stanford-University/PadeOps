@@ -26,26 +26,31 @@ subroutine init_smagorinsky(this,dx,dy,dz,Cs,ncWall,z0,useWallDamping, zMeshC, z
    call message(1,"Smagorinsky model initialized")
 end subroutine
 
-pure subroutine get_nu_smagorinsky(Sij, nuSGS, nxL, nyL, nzL)
+subroutine get_smagorinsky_kernel(Sij, nuSGS, nxL, nyL, nzL)
    integer, intent(in) :: nxL, nyL, nzL
    real(rkind), dimension(nxL,nyL,nzL), intent(out) :: nuSGS
    real(rkind), dimension(nxL,nyL,nzL,6), intent(in)  :: Sij
-   real(rkind), dimension(nxL, nyL) :: S
-   integer :: k
+   !real(rkind), dimension(nxL, nyL) :: S
+   real(rkind) :: S
+   integer :: i,j,k
 
    
    do k = 1,nzL
-      ! S12 
-      S = Sij(:,:,k,1)*Sij(:,:,k,1) ! S11*S11
-      S = S + 2.d0*(Sij(:,:,k,2)*Sij(:,:,k,2)) ! S12*S12 + S21*S21
-      S = S + 2.d0*(Sij(:,:,k,3)*Sij(:,:,k,3)) ! S13*S13 + S31*S31
-      S = S + (Sij(:,:,k,4)*Sij(:,:,k,4)) ! S22*S22
-      S = S + 2.d0*(Sij(:,:,k,5)*Sij(:,:,k,5)) ! S23*S23 + S32*S32
-      S = S + (Sij(:,:,k,6)*Sij(:,:,k,6)) ! S33*S33
+      do j = 1,nyL
+         !$omp simd 
+         do i = 1,nxL
+            S = Sij(i,j,k,1)*Sij(i,j,k,1) ! S11*S11
+            S = S + 2.d0*(Sij(i,j,k,2)*Sij(i,j,k,2)) ! S12*S12 + S21*S21
+            S = S + 2.d0*(Sij(i,j,k,3)*Sij(i,j,k,3)) ! S13*S13 + S31*S31
+            S = S + (Sij(i,j,k,4)*Sij(i,j,k,4)) ! S22*S22
+            S = S + 2.d0*(Sij(i,j,k,5)*Sij(i,j,k,5)) ! S23*S23 + S32*S32
+            S = S + (Sij(i,j,k,6)*Sij(i,j,k,6)) ! S33*S33
 
-      ! Now do modS = sqrt(2* S_ij*S_ij)
-      S = 2.d0*S
-      nuSGS(:,:,k) = sqrt(S)
+            ! Now do modS = sqrt(2* S_ij*S_ij)
+            S = 2.d0*S
+            nuSGS(i,j,k) = sqrt(S)
+         end do 
+      end do 
    end do
 
 

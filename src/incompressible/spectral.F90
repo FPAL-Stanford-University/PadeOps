@@ -93,15 +93,16 @@ contains
 
         finout = this%GksPrep2*finout
     end subroutine
-    pure subroutine mTimes_ik1_oop(this, fin, fout)
+    subroutine mTimes_ik1_oop(this, fin, fout)
         class(spectral),  intent(in)         :: this
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(in) :: fin
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(out) :: fout
         integer :: i, j, k
         real(rkind) :: rpart, ipart
-        
+       
         do k = 1,this%fft_size(3)
             do j = 1,this%fft_size(2)
+                !$omp simd 
                 do i = 1,this%fft_size(1)
                     rpart = -this%k1(i,j,k)*dimag(fin(i,j,k))
                     ipart = this%k1(i,j,k)*dreal(fin(i,j,k))
@@ -112,7 +113,7 @@ contains
 
     end subroutine
     
-    pure subroutine mTimes_ik2_oop(this, fin, fout)
+    subroutine mTimes_ik2_oop(this, fin, fout)
         class(spectral),  intent(in)         :: this
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(in) :: fin
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(out) :: fout
@@ -121,6 +122,7 @@ contains
         
         do k = 1,this%fft_size(3)
             do j = 1,this%fft_size(2)
+                !$omp simd 
                 do i = 1,this%fft_size(1)
                     rpart = -this%k2(i,j,k)*dimag(fin(i,j,k))
                     ipart = this%k2(i,j,k)*dreal(fin(i,j,k))
@@ -140,6 +142,7 @@ contains
         
         do k = 1,this%fft_size(3)
             do j = 1,this%fft_size(2)
+                !$omp simd 
                 do i = 1,this%fft_size(1)
                     rpart = -this%k1(i,j,k)*dimag(fin(i,j,k))
                     ipart = this%k1(i,j,k)*dreal(fin(i,j,k))
@@ -158,6 +161,7 @@ contains
         
         do k = 1,this%fft_size(3)
             do j = 1,this%fft_size(2)
+                !$omp simd 
                 do i = 1,this%fft_size(1)
                     rpart = -this%k2(i,j,k)*dimag(fin(i,j,k))
                     ipart = this%k2(i,j,k)*dreal(fin(i,j,k))
@@ -175,6 +179,7 @@ contains
 
         do k = 1,this%fft_size(3)
             do j = 1,this%fft_size(2)
+                !$omp simd 
                 do i = 1,this%fft_size(1)
                     fhat(i,j,k) = fhat(i,j,k)*this%Gdealias(i,j,k)
                 end do 
@@ -190,6 +195,7 @@ contains
 
         do k = 1,this%fft_size(3)
             do j = 1,this%fft_size(2)
+                !$omp simd 
                 do i = 1,this%fft_size(1)
                     fhat(i,j,k) = fhat(i,j,k)*this%GTestFilt(i,j,k)
                 end do 

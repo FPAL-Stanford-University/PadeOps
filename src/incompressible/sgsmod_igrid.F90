@@ -43,7 +43,7 @@ module sgsmod_igrid
 
             !! ALL GET_TAU PROCEDURES
             procedure, private :: getTauSGS
-            procedure, private :: get_nu_SGS
+            procedure, private :: get_SGS_kernel
             procedure, private :: multiply_by_model_constant 
             
             !! ALL DESTROY PROCEDURES
@@ -74,7 +74,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE)
       call get_Sij_from_duidxj(duidxjE, this%S_ij_E, this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)) 
       
       ! Step 1: Get nuSGS
-      call this%get_nu_SGS(duidxjC, duidxjE)
+      call this%get_SGS_kernel(duidxjC, duidxjE)
 
       ! Step 2: Dynamic Procedure ?
 
