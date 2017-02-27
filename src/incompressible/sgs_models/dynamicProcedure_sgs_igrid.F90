@@ -18,19 +18,20 @@ subroutine allocateMemory_DynamicProcedure(this, computeFbody)
       allocate(this%Sij_Filt    (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),6))
       allocate(this%alphaij_Filt(this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),9))
       allocate(this%tauijWM_Filt(this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),2))
+      allocate(this%fiE         (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),3))
       allocate(this%fi_Filt     (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),3))
       allocate(this%ui_Filt     (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),3))
       allocate(this%Dsgs_Filt   (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3)))
       allocate(this%buff1       (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3)))
       allocate(this%buff2       (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3)))
-      allocate(this%Tfilhat     (this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
-      allocate(this%Tfilhatz1   (this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
-      allocate(this%Tfilhatz2   (this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
    end select
 
    this%Dsgs => this%nu_SGS_E
+   allocate(this%Tfilhat     (this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
+   allocate(this%Tfilhatz1   (this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
+   allocate(this%Tfilhatz2   (this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
 
-   if((.not. associated(this%fi)) .and. (this%DynamicProcedureType==2)) then
+   if((.not. associated(this%fiC)) .and. (this%DynamicProcedureType==2)) then
       call GracefulExit("Global dynamic procedure needs body force term",1111)
    endif
 
@@ -48,6 +49,7 @@ subroutine destroyMemory_DynamicProcedure(this)
    class(sgs_igrid), intent(inout) :: this
      
    nullify(this%Dsgs)
+   if (allocated(this%fiE         )) deallocate(this%fiE         )
    if (allocated(this%Lij         )) deallocate(this%Lij         )
    if (allocated(this%Mij         )) deallocate(this%Mij         )
    if (allocated(this%Sij_Filt    )) deallocate(this%Sij_Filt    )

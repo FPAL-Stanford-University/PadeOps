@@ -19,8 +19,9 @@ subroutine DoGlobalDynamicProcedure(this, uhatE, vhatE, whatE, uE, vE, wE, duidx
    
    call this%TestFilter_Cmplx_to_Real(whatE, this%ui_Filt(:,:,:,3))   
 
+   call this%interp_bForce_CellToEdge()
    do idx = 1,3
-      call this%TestFilter_Real_to_Real(this%fi(:,:,:,idx),this%fi_filt(:,:,:,idx))
+      call this%TestFilter_Real_to_Real(this%fiE(:,:,:,idx),this%fi_filt(:,:,:,idx))
    end do 
 
    select case (this%mid)
@@ -53,9 +54,9 @@ subroutine DoGlobalDynamicProcedure(this, uhatE, vhatE, whatE, uE, vE, wE, duidx
    this%buff2 = this%buff2 - this%buff1
 
    ! Numerator Calculation
-   this%buff1 = uE*this%fi(:,:,:,1)
-   this%buff1 = this%buff1 + vE*this%fi(:,:,:,2)
-   this%buff1 = this%buff1 + wE*this%fi(:,:,:,3)
+   this%buff1 = uE*this%fiE(:,:,:,1)
+   this%buff1 = this%buff1 + vE*this%fiE(:,:,:,2)
+   this%buff1 = this%buff1 + wE*this%fiE(:,:,:,3)
   
    if (.not. this%isInviscid) then
       do idx = 1,9
@@ -86,5 +87,22 @@ subroutine DoGlobalDynamicProcedure(this, uhatE, vhatE, whatE, uE, vE, wE, duidx
    den = p_sum(this%buff2) 
 
    this%cmodel_global = 0.5d0*max(num/den,0.d0)
+
+end subroutine
+
+
+subroutine interp_bForce_CellToEdge(this)
+   class(sgs_igrid), intent(inout) :: this
+   integer :: idx
+
+   do idx = 1,3
+      call transpose_x_to_y(this%fiC(:,:,:,idx), this%rbuffyC(:,:,:,1), this%gpC)
+      call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+      
+      call this%PadeDer%interpz_C2E(this%rbuffzC(:,:,:,1), this%rbuffzE(:,:,:,1), 0, 0)
+
+      call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
+      call transpose_y_to_x(this%rbuffyE(:,:,:,1), this%fiE(:,:,:,idx), this%gpE)
+   end do
 
 end subroutine

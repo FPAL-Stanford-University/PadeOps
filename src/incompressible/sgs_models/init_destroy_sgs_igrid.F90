@@ -1,6 +1,6 @@
 subroutine destroy(this)
   class(sgs_igrid), intent(inout) :: this
-  nullify(this%gpC, this%gpE, this%spectC, this%spectE, this%sp_gpC, this%sp_gpE, this%fi)
+  nullify(this%gpC, this%gpE, this%spectC, this%spectE, this%sp_gpC, this%sp_gpE, this%fiC)
   nullify(this%cbuffyC, this%cbuffzC, this%rbuffxC, this%Tsurf)
   if (this%isEddyViscosityModel) call this%destroyMemory_EddyViscosity()
   if (this%DynamicProcedureType .ne. 0) call this%destroyMemory_DynamicProcedure()
@@ -13,7 +13,7 @@ subroutine destroy(this)
   deallocate(this%tau_11, this%tau_12, this%tau_13, this%tau_22, this%tau_23, this%tau_33)
 end subroutine
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody, computeFbody, cbuffyC, cbuffzC, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re)
   class(sgs_igrid), intent(inout) :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
@@ -25,7 +25,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   logical, intent(out) :: computeFbody
   integer :: ierr
   real(rkind), dimension(:,:,:,:), intent(in), target :: rbuffxC, rbuffyE, rbuffzE, rbuffyC, rbuffzC
-  complex(rkind), dimension(:,:,:,:), intent(in), target :: cbuffyC, cbuffzC
+  complex(rkind), dimension(:,:,:,:), intent(in), target :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
+  type(Pade6stagg), target, intent(in) :: PadeDer
 
   ! Input file variables
   logical :: useWallDamping = .false.
@@ -46,6 +47,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%Fr = Fr
   this%Re = Re
   this%ThetaRef = ThetaRef
+  this%PadeDer => PadeDer
 
   open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
   read(unit=123, NML=SGS_MODEL)
@@ -77,12 +79,14 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   allocate(this%tau_13(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
   allocate(this%tau_23(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
 
-  this%fi => fBody
+  this%fiC => fBody
   this%meanfact = one/(real(gpC%xsz(1),rkind) * real(gpC%ysz(2),rkind))
 
   ! Link buffers
   this%cbuffyC => cbuffyC
   this%cbuffzC => cbuffzC
+  this%cbuffyE => cbuffyE
+  this%cbuffzE => cbuffzE
   this%rbuffxC => rbuffxC
   this%rbuffyE => rbuffyE
   this%rbuffzE => rbuffzE

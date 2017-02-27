@@ -5,12 +5,12 @@ module sgsmod_igrid
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
     use mpi 
-    use cd06staggstuff, only: cd06stagg
     use reductions, only: p_maxval, p_sum, p_minval
     use numerics, only: useCompactFD 
     use StaggOpsMod, only: staggOps  
     use gaussianstuff, only: gaussian
     use lstsqstuff, only: lstsq
+    use PadeDerOps, only: Pade6stagg
     implicit none
 
     private
@@ -33,8 +33,9 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:), allocatable :: tau_11, tau_12, tau_13, tau_22, tau_23, tau_33
         real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E
         real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffzC, rbuffyC, rbuffxE, rbuffyE, rbuffzE
-        complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC
-        
+        complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
+        type(Pade6stagg), pointer :: PadeDer
+
         ! Wall model
         real(rkind), dimension(:,:,:,:), allocatable :: tauijWM
         complex(rkind),dimension(:,:,:,:), allocatable :: tauijWMhat_inZ, tauijWMhat_inY
@@ -49,9 +50,9 @@ module sgsmod_igrid
         ! for dynamic procedures - all are at edges
         type(gaussian) :: gaussianTestFilterZ
         real(rkind), dimension(:,:,:,:), allocatable :: Mij, Lij, Sij_Filt, alphaij_Filt, tauijWM_Filt
-        real(rkind), dimension(:,:,:,:), allocatable :: fi_Filt, ui_Filt
+        real(rkind), dimension(:,:,:,:), allocatable :: fi_Filt, ui_Filt, fiE
         real(rkind), dimension(:,:,:),   allocatable :: Dsgs_Filt, buff1, buff2
-        real(rkind), dimension(:,:,:,:), pointer     :: fi
+        real(rkind), dimension(:,:,:,:), pointer     :: fiC
         real(rkind), dimension(:,:,:),   pointer     :: Dsgs
         logical :: isInviscid, isStratified, useDynamicProcedure, useVerticalTfilter = .false. 
         real(rkind) :: invRe, deltaRat
@@ -78,6 +79,7 @@ module sgsmod_igrid
             procedure, private :: TestFilter_Real_to_Real
             procedure, private :: TestFilter_Real_to_Real_ip
             procedure, private :: planarAverageAndInterpolateToCells 
+            procedure, private :: interp_bForce_CellToEdge
             procedure, private :: DoStandardDynamicProcedure
             procedure, private :: DoGlobalDynamicProcedure
 
@@ -102,6 +104,74 @@ contains
 #include "sgs_models/standardDynamicProcedure.F90"
 #include "sgs_models/globalDynamicProcedure.F90"
 #include "sgs_models/wallmodel.F90"
+
+
+
+subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE)
+   class(sgs_igrid), intent(inout), target :: this
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
+   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
+   complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3),9), intent(in) :: duidxjEhat
+   complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in) :: uhatE, vhatE, whatE
+   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC, ThatC
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: uC, vC
+   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: uE, vE, wE
+   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
+   complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
+
+   complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffy3, cbuffz1, cbuffz2
+   
+   call this%getTauSGS(duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE)
+
+   cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
+   cbuffz1 => this%cbuffzC(:,:,:,1); cbuffz2 => this%cbuffzE(:,:,:,1) 
+   cbuffy3 => this%cbuffyC(:,:,:,2); 
+
+   ! ddx(tau11)
+   call this%spectC%fft(this%tau_11, cbuffy1)
+   call this%spectC%mtimes_ik1_ip(cbuffy1)
+   urhs = urhs + cbuffy1
+
+   ! ddy(tau22)
+   call this%spectC%fft(this%tau_22, cbuffy1)
+   call this%spectC%mtimes_ik2_ip(cbuffy1)
+   vrhs = vrhs + cbuffy1
+
+   ! ddz(tau33)
+   call this%spectC%fft(this%tau_33, cbuffy1)
+   call transpose_y_to_z(cbuffy1, cbuffz1, this%sp_gpC)
+   call this%PadeDer%ddz_C2E(cbuffz1, cbuffz2, 0, 0)
+   call transpose_z_to_y(cbuffz2, cbuffz1, this%sp_gpE)
+   wrhs = wrhs + cbuffz1
+
+   ! ddy(tau12) for urhs, and ddx(tau12) for vrhs
+   call this%spectC%fft(this%tau_12, cbuffy1)
+   call this%spectC%mtimes_ik1_oop(cbuffy1, cbuffy3)
+   vrhs = vrhs + cbuffy3
+   call this%spectC%mtimes_ik2_ip(cbuffy1)
+   urhs = urhs + cbuffy1
+
+   ! ddz(tau13) for urhs, ddx(tau13) for wrhs
+   call this%spectE%fft(this%tau_13, cbuffy2)
+   if (this%useWallModel) cbuffy2 = cbuffy2 + this%tauijWMhat_inY(:,:,:,1)
+   call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
+   call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
+   call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
+   urhs = urhs + cbuffy1
+   call this%spectE%mtimes_ik1_ip(cbuffy2)
+   wrhs = wrhs + cbuffy2
+
+   ! ddz(tau23) for vrhs, ddy(tau23) for wrhs
+   call this%spectE%fft(this%tau_23, cbuffy2)
+   if (this%useWallModel) cbuffy2 = cbuffy2 + this%tauijWMhat_inY(:,:,:,2)
+   call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
+   call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
+   call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
+   vrhs = vrhs + cbuffy1
+   call this%spectE%mtimes_ik2_ip(cbuffy2)
+   wrhs = wrhs + cbuffy2
+
+end subroutine
 
 subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE)
    class(sgs_igrid), intent(inout) :: this
@@ -140,7 +210,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
       this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
 
    end if
-
+   
 end subroutine
     
 
