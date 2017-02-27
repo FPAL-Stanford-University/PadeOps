@@ -74,19 +74,43 @@ subroutine DoStandardDynamicProcedure(this, uE, vE, wE, uhatE, vhatE, whatE, dui
    end do
    this%buff2 = 2.d0 * this%buff2
 
-   ! STEP 6: Get the planar averages
-   call this%planarAverage(this%buff1)
-   call this%planarAverage(this%buff2)
+   ! STEP 6: Get the planar average and interpolate
+   !call this%planarAverage(this%buff1)
+   !call this%planarAverage(this%buff2)
+   call this%planarAverageAndInterpolateToCells(this%buff1, this%buff2, this%rbuffxC(:,:,:,1))
 
    ! STEP 7: get the fraction and clip
-   this%buff1 = this%buff1/(this%buff2 + 1.d-15)
-   where (this%buff1 < 0.d0) 
-      this%buff1 = 0.d0
-   end where
-
-   ! STEP 8: Interpolate to cells 
+   this%cmodelE = this%buff1(1,1,:)
+   this%cmodelC = this%rbuffxC(1,1,:,1)
 end subroutine
 
 
+subroutine planarAverageAndInterpolateToCells(this, numE, denE, ratC)
+   class(sgs_igrid), intent(inout) :: this
+   real(rkind), dimension(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)), intent(inout) :: numE
+   real(rkind), dimension(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)), intent(in)    :: denE
+   real(rkind), dimension(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)), intent(out)   :: ratC
+   integer :: idx
+   
+   call transpose_x_to_y(numE, this%rbuffyE(:,:,:,1), this%gpE)
+   call transpose_y_to_z(this%rbuffyE(:,:,:,1), this%rbuffzE(:,:,:,1), this%gpE)
+   do idx = 1,this%gpE%zsz(3)
+      this%rbuffzE(:,:,idx,1) = max(p_sum(sum(this%rbuffzE(:,:,idx,1)))*this%meanfact, zero)
+   end do 
+   
+   call transpose_x_to_y(denE, this%rbuffyE(:,:,:,1), this%gpE)
+   call transpose_y_to_z(this%rbuffyE(:,:,:,1), this%rbuffzE(:,:,:,2), this%gpE)
+   do idx = 1,this%gpE%zsz(3)
+      this%rbuffzE(:,:,idx,2) = p_sum(sum(this%rbuffzE(:,:,idx,2)))*this%meanfact
+   end do 
+   this%rbuffzE(:,:,:,1) = this%rbuffzE(:,:,:,1)/(this%rbuffzE(:,:,:,2) + 1.d-14)
+
+   this%rbuffzC(:,:,1:this%gpC%zsz(3),1) = 0.5d0*(this%rbuffzE(:,:,1:this%gpC%zsz(3),1)+this%rbuffzE(:,:,2:this%gpC%zsz(3)+1,1))
+   call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
+   call transpose_y_to_x(this%rbuffyE(:,:,:,1), numE, this%gpE)
+
+   call transpose_z_to_y(this%rbuffzC(:,:,:,1), this%rbuffyC(:,:,:,1), this%gpC)
+   call transpose_y_to_x(this%rbuffyC(:,:,:,1), ratC, this%gpE)
+end subroutine
 
 

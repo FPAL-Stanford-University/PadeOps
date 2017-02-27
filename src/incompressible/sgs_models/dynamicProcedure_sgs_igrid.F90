@@ -71,7 +71,8 @@ subroutine applyDynamicProcedure(this, uE, vE, wE, uhatE, vhatE, whatE, duidxjE,
    select case(this%dynamicProcedureType) 
    case (1) ! Standard (planar averaged) dynamic procedure
       call this%DoStandardDynamicProcedure(uE, vE, wE, uhatE, vhatE, whatE, duidxjEhat)
-   case (2) ! Global Dynamic Procedure 
+   case (2) ! Global Dynamic Procedure
+      call this%DoGlobalDynamicProcedure() ! Pass in the relevant stuff, finish the procedure implementation
    end select 
 
 end subroutine

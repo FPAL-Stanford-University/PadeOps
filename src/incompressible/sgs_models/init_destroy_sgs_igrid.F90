@@ -13,7 +13,7 @@ subroutine destroy(this)
   deallocate(this%tau_11, this%tau_12, this%tau_13, this%tau_22, this%tau_23, this%tau_33)
 end subroutine
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody, computeFbody, cbuffyC, cbuffzC, rbuffxC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody, computeFbody, cbuffyC, cbuffzC, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr)
   class(sgs_igrid), intent(inout) :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
@@ -24,7 +24,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   real(rkind), dimension(:,:,:,:), intent(in), target :: fBody
   logical, intent(out) :: computeFbody
   integer :: ierr
-  real(rkind), dimension(:,:,:,:), intent(in), target :: rbuffxC, rbuffyE, rbuffzE
+  real(rkind), dimension(:,:,:,:), intent(in), target :: rbuffxC, rbuffyE, rbuffzE, rbuffyC, rbuffzC
   complex(rkind), dimension(:,:,:,:), intent(in), target :: cbuffyC, cbuffzC
 
   ! Input file variables
@@ -85,4 +85,6 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%rbuffxC => rbuffxC
   this%rbuffyE => rbuffyE
   this%rbuffzE => rbuffzE
+  this%rbuffyC => rbuffyC
+  this%rbuffzC => rbuffzC
 end subroutine

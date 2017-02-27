@@ -32,7 +32,7 @@ module sgsmod_igrid
         logical :: isEddyViscosityModel = .false. 
         real(rkind), dimension(:,:,:), allocatable :: tau_11, tau_12, tau_13, tau_22, tau_23, tau_33
         real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E
-        real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffxE, rbuffyE, rbuffzE
+        real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffzC, rbuffyC, rbuffxE, rbuffyE, rbuffzE
         complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC
         
         ! Wall model
@@ -76,8 +76,9 @@ module sgsmod_igrid
             procedure, private :: applyDynamicProcedure 
             procedure, private :: TestFilter_Cmplx_to_Real
             procedure, private :: TestFilter_Real_to_Real
-            procedure, private :: PlanarAverage 
+            procedure, private :: planarAverageAndInterpolateToCells 
             procedure, private :: DoStandardDynamicProcedure
+            procedure, private :: DoGlobalDynamicProcedure
 
             !! ALL GET_TAU PROCEDURES
             procedure, private :: getTauSGS
@@ -98,6 +99,7 @@ contains
 #include "sgs_models/eddyViscosity.F90"
 #include "sgs_models/dynamicProcedure_sgs_igrid.F90"
 #include "sgs_models/standardDynamicProcedure.F90"
+#include "sgs_models/globalDynamicProcedure.F90"
 #include "sgs_models/wallmodel.F90"
 
 subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, TC, uE, vE, wE)
