@@ -72,7 +72,7 @@ subroutine applyDynamicProcedure(this, uE, vE, wE, uhatE, vhatE, whatE, duidxjE,
    case (1) ! Standard (planar averaged) dynamic procedure
       call this%DoStandardDynamicProcedure(uE, vE, wE, uhatE, vhatE, whatE, duidxjEhat)
    case (2) ! Global Dynamic Procedure
-      call this%DoGlobalDynamicProcedure() ! Pass in the relevant stuff, finish the procedure implementation
+      call this%DoGlobalDynamicProcedure(uhatE, vhatE, whatE, uE, vE, wE, duidxjEhat, duidxjE) ! Pass in the relevant stuff, finish the procedure implementation
    end select 
 
 end subroutine
@@ -108,6 +108,20 @@ subroutine TestFilter_Real_to_Real(this, f,ffil)
 
 end subroutine
 
+subroutine TestFilter_Real_to_Real_ip(this, f)
+   class(sgs_igrid), intent(inout) :: this
+   real(rkind), dimension(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)), intent(inout)  :: f
+   
+   call this%spectE%fft(f, this%Tfilhat)
+   call this%spectE%testFilter_ip(this%Tfilhat)
+   if (this%useVerticalTfilter) then
+      call transpose_y_to_z(this%Tfilhat, this%Tfilhatz1, this%sp_gpE)
+      call this%gaussianTestFilterZ%filter3(this%Tfilhatz1, this%Tfilhatz2, this%sp_gpE%zsz(1), this%sp_gpE%zsz(2))
+      call transpose_z_to_y(this%Tfilhatz2, this%Tfilhat, this%sp_gpE)
+   end if
+   call this%spectE%ifft(this%Tfilhat, f)
+
+end subroutine
 
 subroutine TestFilter_Cmplx_to_Real(this, fhat, f)
    class(sgs_igrid), intent(inout) :: this

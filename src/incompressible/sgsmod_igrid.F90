@@ -43,7 +43,7 @@ module sgsmod_igrid
         logical :: useWallModel
         integer :: WallModel, botBC_temp = 1
         real(rkind) :: ustar, InvObLength, umn, vmn, uspmn, Tmn, wTh_surf
-        real(rkind) :: dz, z0, meanfact, ThetaRef, Fr, WallMfactor
+        real(rkind) :: dz, z0, meanfact, ThetaRef, Fr, WallMfactor, Re
         real(rkind), pointer :: Tsurf
 
         ! for dynamic procedures - all are at edges
@@ -76,6 +76,7 @@ module sgsmod_igrid
             procedure, private :: applyDynamicProcedure 
             procedure, private :: TestFilter_Cmplx_to_Real
             procedure, private :: TestFilter_Real_to_Real
+            procedure, private :: TestFilter_Real_to_Real_ip
             procedure, private :: planarAverageAndInterpolateToCells 
             procedure, private :: DoStandardDynamicProcedure
             procedure, private :: DoGlobalDynamicProcedure
@@ -102,14 +103,14 @@ contains
 #include "sgs_models/globalDynamicProcedure.F90"
 #include "sgs_models/wallmodel.F90"
 
-subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, TC, uE, vE, wE)
+subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
    complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3),9), intent(in) :: duidxjEhat
    complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in) :: uhatE, vhatE, whatE
-   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC, whatC, ThatC
-   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: uC, vC, wC, TC
+   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC, ThatC
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: uC, vC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: uE, vE, wE
 
 

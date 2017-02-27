@@ -13,11 +13,11 @@ subroutine destroy(this)
   deallocate(this%tau_11, this%tau_12, this%tau_13, this%tau_22, this%tau_23, this%tau_33)
 end subroutine
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody, computeFbody, cbuffyC, cbuffzC, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody, computeFbody, cbuffyC, cbuffzC, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re)
   class(sgs_igrid), intent(inout) :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
-  real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr
+  real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re
   real(rkind), intent(in), target :: Tsurf
   character(len=*), intent(in) :: inputfile
   real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC
@@ -44,6 +44,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%dz = dz
   this%Tsurf => Tsurf
   this%Fr = Fr
+  this%Re = Re
   this%ThetaRef = ThetaRef
 
   open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
