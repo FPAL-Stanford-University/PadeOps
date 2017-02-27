@@ -161,7 +161,7 @@ contains
         real(rkind) :: Ckap = 0.01_rkind
         real(rkind) :: Cdiff = 0.003_rkind
         real(rkind) :: CY = 100._rkind
-        logical     :: PTeqb = .TRUE., pEqb = .False., pRelax = .false., updateEtot = .false.
+        logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
         logical     :: use_gTg = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric

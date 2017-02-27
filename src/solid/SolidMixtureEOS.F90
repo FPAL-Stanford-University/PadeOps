@@ -295,7 +295,7 @@ stop
         integer :: imat, i,j,k,a(3)
         real(rkind) :: gamfac
 
-        print *, '---'
+        ! print *, '---'
         ! subtract elastic energy to determine hydrostatic energy. Temperature
         ! is assumed a function of only hydrostatic energy. Not sure if this is
         ! correct.
@@ -329,19 +329,19 @@ stop
 
          mixP = ehmix/tmp
 
-            a = minloc(ehmix)
-            print *, "  loc: ", minloc(ehmix)
-            !a(1) = 122; a(2:3) = 1
-            print *, "Mat1 Ys, VF = ", this%material(1)%Ys(a(1),a(2),a(3)), this%material(1)%VF(a(1),a(2),a(3))
-            print *, "Mat2 Ys, VF = ", this%material(2)%Ys(a(1),a(2),a(3)), this%material(2)%VF(a(1),a(2),a(3))
-            print *, "Mat1,2 T1   = ", this%material(1)%hydro%gam * this%material(1)%hydro%onebygam_m1 * this%material(1)%hydro%PInf   * this%material(1)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3)),  this%material(2)%hydro%gam * this%material(2)%hydro%onebygam_m1 * this%material(2)%hydro%PInf   * this%material(2)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3))
-            print *, "Mat1,2 eel = ",  this%material(1)%eel(a(1),a(2),a(3)),  this%material(2)%eel(a(1),a(2),a(3))
-            print *, "Mat1,2 g11 = ",  this%material(1)%g11(a(1),a(2),a(3)),  this%material(2)%g11(a(1),a(2),a(3))
-            print *, "Mat1,2 g22 = ",  this%material(1)%g22(a(1),a(2),a(3)),  this%material(2)%g22(a(1),a(2),a(3))
-            print *, "Mix eh      = ",  mixE(a(1),a(2),a(3)), mixE(a(1),a(2),a(3)) -   (this%material(1)%Ys(a(1),a(2),a(3)) * this%material(1)%eel(a(1),a(2),a(3)) + this%material(2)%Ys(a(1),a(2),a(3)) * this%material(2)%eel(a(1),a(2),a(3)) )
-            print *, "ehmix      = ",  ehmix(a(1),a(2),a(3))
-            print *, "tmp        = ",  tmp(a(1),a(2),a(3))
-            print *, "mixP       = ",  mixP(a(1),a(2),a(3))
+         ! a = minloc(ehmix)
+         ! print *, "  loc: ", minloc(ehmix)
+         ! !a(1) = 122; a(2:3) = 1
+         ! print *, "Mat1 Ys, VF = ", this%material(1)%Ys(a(1),a(2),a(3)), this%material(1)%VF(a(1),a(2),a(3))
+         ! print *, "Mat2 Ys, VF = ", this%material(2)%Ys(a(1),a(2),a(3)), this%material(2)%VF(a(1),a(2),a(3))
+         ! print *, "Mat1,2 T1   = ", this%material(1)%hydro%gam * this%material(1)%hydro%onebygam_m1 * this%material(1)%hydro%PInf   * this%material(1)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3)),  this%material(2)%hydro%gam * this%material(2)%hydro%onebygam_m1 * this%material(2)%hydro%PInf   * this%material(2)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3))
+         ! print *, "Mat1,2 eel = ",  this%material(1)%eel(a(1),a(2),a(3)),  this%material(2)%eel(a(1),a(2),a(3))
+         ! print *, "Mat1,2 g11 = ",  this%material(1)%g11(a(1),a(2),a(3)),  this%material(2)%g11(a(1),a(2),a(3))
+         ! print *, "Mat1,2 g22 = ",  this%material(1)%g22(a(1),a(2),a(3)),  this%material(2)%g22(a(1),a(2),a(3))
+         ! print *, "Mix eh      = ",  mixE(a(1),a(2),a(3)), mixE(a(1),a(2),a(3)) -   (this%material(1)%Ys(a(1),a(2),a(3)) * this%material(1)%eel(a(1),a(2),a(3)) + this%material(2)%Ys(a(1),a(2),a(3)) * this%material(2)%eel(a(1),a(2),a(3)) )
+         ! print *, "ehmix      = ",  ehmix(a(1),a(2),a(3))
+         ! print *, "tmp        = ",  tmp(a(1),a(2),a(3))
+         ! print *, "mixP       = ",  mixP(a(1),a(2),a(3))
          
          !print*, "ehmix: ", minval(ehmix), maxval(ehmix)
          !print*, "tmp  : ", minval(tmp), maxval(tmp)
