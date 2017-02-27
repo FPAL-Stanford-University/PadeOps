@@ -28,9 +28,9 @@ contains
     end function
 
     subroutine evaluate(this, x, y)
-        class(myfunction),                 intent(in)  :: this
-        real(rkind), dimension(:),         intent(in)  :: x
-        real(rkind), dimension(size(x,1)), intent(out) :: y
+        class(myfunction),                 intent(inout)  :: this
+        real(rkind), dimension(:),         intent(in)     :: x
+        real(rkind), dimension(size(x,1)), intent(out)    :: y
         
         y = this%a*x**2 + this%b*x + this%c
     end subroutine
@@ -54,7 +54,7 @@ end module
 
 program test_NewtonSolver
     use kind_parameters,  only: rkind
-    use constants,        only: zero,half,one,three
+    use constants,        only: zero,half,one,two,three
     use NewtonSolverProg, only: myfunction
     implicit none
 
@@ -67,6 +67,7 @@ program test_NewtonSolver
     y = [zero, three]    ! Final function value
 
     print*, "Target value: ", y
+    print*, "Exact   x: ", [one, two]
     print*, "Initial x: ", x
 
     call f%newton_solve(x,y)

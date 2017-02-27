@@ -263,7 +263,7 @@ contains
              this%zmetric = .true. 
         end if
         
-        if (present(curvilenear)) then
+        if (present(curvilinear)) then
             if (curvilinear) then
                 call GracefulExit("Code INCOMPLETE! Curvilinear Formulation is &
                 & not supported!",06)
