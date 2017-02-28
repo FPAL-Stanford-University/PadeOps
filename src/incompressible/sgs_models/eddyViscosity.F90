@@ -32,9 +32,10 @@ end subroutine
 
 subroutine get_SGS_kernel(this,duidxjC, duidxjE)
    class(sgs_igrid), intent(inout) :: this
-   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: duidxjC
-   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: duidxjE
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
+   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
 
+   integer :: i
    
    select case(this%mid) 
    case (0)

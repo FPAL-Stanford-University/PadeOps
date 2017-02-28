@@ -48,6 +48,26 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%Re = Re
   this%ThetaRef = ThetaRef
   this%PadeDer => PadeDer
+  this%fiC => fBody
+  this%meanfact = one/(real(gpC%xsz(1),rkind) * real(gpC%ysz(2),rkind))
+  allocate(this%tau_11(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+  allocate(this%tau_12(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+  allocate(this%tau_22(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+  allocate(this%tau_33(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+  allocate(this%tau_13(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+  allocate(this%tau_23(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+
+  ! Link buffers
+  this%cbuffyC => cbuffyC
+  this%cbuffzC => cbuffzC
+  this%cbuffyE => cbuffyE
+  this%cbuffzE => cbuffzE
+  this%rbuffxC => rbuffxC
+  this%rbuffyE => rbuffyE
+  this%rbuffzE => rbuffzE
+  this%rbuffyC => rbuffyC
+  this%rbuffzC => rbuffzC
+
 
   open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
   read(unit=123, NML=SGS_MODEL)
@@ -56,7 +76,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%mid = SGSmodelID
   this%z0 = z0
   this%DynamicProcedureType = DynamicProcedureType
-  this%WallModelType        = WallModelType
+  this%WallModel        = WallModelType
   if (this%WallModel .ne. 0) call this%initWallModel()
 
   select case (SGSmodelID)
@@ -72,24 +92,4 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   
   if (DynamicProcedureType .ne. 0) call this%allocateMemory_DynamicProcedure(computeFbody)
 
-  allocate(this%tau_11(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
-  allocate(this%tau_12(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
-  allocate(this%tau_22(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
-  allocate(this%tau_33(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
-  allocate(this%tau_13(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
-  allocate(this%tau_23(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
-
-  this%fiC => fBody
-  this%meanfact = one/(real(gpC%xsz(1),rkind) * real(gpC%ysz(2),rkind))
-
-  ! Link buffers
-  this%cbuffyC => cbuffyC
-  this%cbuffzC => cbuffzC
-  this%cbuffyE => cbuffyE
-  this%cbuffzE => cbuffzE
-  this%rbuffxC => rbuffxC
-  this%rbuffyE => rbuffyE
-  this%rbuffzE => rbuffzE
-  this%rbuffyC => rbuffyC
-  this%rbuffzC => rbuffzC
 end subroutine

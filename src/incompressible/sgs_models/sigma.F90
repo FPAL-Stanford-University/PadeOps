@@ -28,18 +28,19 @@ subroutine get_sigma_kernel(nu_sgs, duidxj, nxL, nyL, nzL)
    real(rkind) :: sigma1, sigma2, sigma3, sigma1sq
    integer :: i,j,k
 
-   do k = 1,nzL 
+   do k = 1,nzL
       do j = 1,nyL 
          !$omp simd 
-         do i = 1,nxL 
+         do i = 1,nxL
+            !print '(2(i5,1x),9(e19.12,1x))', i, j, duidxj(i,j,k,:) 
             G11=duidxj(i,j,k,1)*duidxj(i,j,k,1)+duidxj(i,j,k,4)*duidxj(i,j,k,4)+duidxj(i,j,k,7)*duidxj(i,j,k,7)
             G12=duidxj(i,j,k,1)*duidxj(i,j,k,2)+duidxj(i,j,k,4)*duidxj(i,j,k,5)+duidxj(i,j,k,7)*duidxj(i,j,k,8)
             G13=duidxj(i,j,k,1)*duidxj(i,j,k,3)+duidxj(i,j,k,4)*duidxj(i,j,k,6)+duidxj(i,j,k,7)*duidxj(i,j,k,9)
             G22=duidxj(i,j,k,2)*duidxj(i,j,k,2)+duidxj(i,j,k,5)*duidxj(i,j,k,5)+duidxj(i,j,k,8)*duidxj(i,j,k,8)
             G23=duidxj(i,j,k,2)*duidxj(i,j,k,3)+duidxj(i,j,k,5)*duidxj(i,j,k,6)+duidxj(i,j,k,8)*duidxj(i,j,k,9)
             G33=duidxj(i,j,k,3)*duidxj(i,j,k,3)+duidxj(i,j,k,6)*duidxj(i,j,k,6)+duidxj(i,j,k,9)*duidxj(i,j,k,9)
-
-            I1   = -G11*G11 - G22*G22 - G33*G33
+            
+            I1   = G11 + G22 + G33
             I1sq = I1*I1
             I1cu = I1sq*I1
 
@@ -57,7 +58,7 @@ subroutine get_sigma_kernel(nu_sgs, duidxj, nxL, nyL, nzL)
             alpha1 = max(alpha1,zero)
 
             alpha2 = I1cu/27._rkind - I1*I2/six + I3/two
-            alpha1sqrt = sqrt(alpha2)
+            alpha1sqrt = sqrt(alpha1)
             alpha1tmp = alpha1*alpha1sqrt
             alpha1tmp = alpha2/(alpha1tmp + 1.d-13)
             alpha1tmp = min(alpha1tmp,one)
@@ -82,8 +83,8 @@ subroutine get_sigma_kernel(nu_sgs, duidxj, nxL, nyL, nzL)
             sigma3 = sqrt(sigma3)
 
             nu_sgs(i,j,k) = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-13)
+
          end do 
       end do 
    end do
-
 end subroutine
