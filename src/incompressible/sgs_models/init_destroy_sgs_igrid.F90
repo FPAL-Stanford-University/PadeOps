@@ -13,7 +13,7 @@ subroutine destroy(this)
   deallocate(this%tau_11, this%tau_12, this%tau_13, this%tau_22, this%tau_23, this%tau_33)
 end subroutine
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, isInviscid, isStratified)
   class(sgs_igrid), intent(inout) :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
@@ -23,18 +23,21 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC
   real(rkind), dimension(:,:,:,:), intent(in), target :: fBody
   logical, intent(out) :: computeFbody
-  integer :: ierr
   real(rkind), dimension(:,:,:,:), intent(in), target :: rbuffxC, rbuffyE, rbuffzE, rbuffyC, rbuffzC
   complex(rkind), dimension(:,:,:,:), intent(in), target :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
   type(Pade6stagg), target, intent(in) :: PadeDer
+  logical, intent(in) :: isInviscid, isStratified
 
   ! Input file variables
-  logical :: useWallDamping = .false.
-  integer :: DynamicProcedureType = 0, SGSmodelID = 0, WallModelType = 0
+  logical :: useWallDamping = .false., useSGSDynamicRestart
+  integer :: DynamicProcedureType = 0, SGSmodelID = 0, WallModelType = 0, DynProcFreq = 1 
   real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0
-  namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, &
-                 useWallDamping, ncWall, Csgs, WallModelType 
+  character(len=clen) :: SGSDynamicRestartFile
+  namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0,  &
+                 useWallDamping, ncWall, Csgs, WallModelType, &
+                 DynProcFreq, useSGSDynamicRestart, SGSDynamicRestartFile
 
+  integer :: ierr
 
   this%gpC => gpC
   this%gpE => gpE
@@ -76,6 +79,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%mid = SGSmodelID
   this%z0 = z0
   this%DynamicProcedureType = DynamicProcedureType
+  this%DynProcFreq = DynProcFreq
   this%WallModel        = WallModelType
   if (this%WallModel .ne. 0) call this%initWallModel()
 
@@ -90,6 +94,62 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
 
   if (this%isEddyViscosityModel) call this%allocateMemory_EddyViscosity()
   
-  if (DynamicProcedureType .ne. 0) call this%allocateMemory_DynamicProcedure(computeFbody)
+  if (DynamicProcedureType .ne. 0) then
+      call this%allocateMemory_DynamicProcedure(computeFbody)
+      if(useSGSDynamicRestart) then
+         call this%readSGSDynamicRestart(SGSDynamicRestartFile)
+      endif
+  endif
+
+  this%isInviscid = isInviscid
+  this%isStratified = isStratified
+
+end subroutine
+
+subroutine readSGSDynamicRestart(this,SGSDynamicRestartFile)
+  class(sgs_igrid), intent(inout) :: this
+  character(len=clen), intent(in) :: SGSDynamicRestartFile 
+  integer :: ierr
+
+  if(this%DynamicProcedureType==1) then
+     ! read mstep
+     open(unit=123, file=trim(SGSDynamicRestartFile), form='FORMATTED', status='old', action='read', iostat=ierr)
+     read(123,*) this%mstep
+     ! read cmodelC, cmodelE
+     !! figure this out later
+     !do k=1,size(cmodelC)
+     !read(123,*)
+     close(123)
+  else
+     ! read cmodel_global, mstep
+     open(unit=123, file=trim(SGSDynamicRestartFile), form='FORMATTED', status='old', action='read', iostat=ierr)
+     read(123,*) this%mstep
+     read(123,*) this%cmodel_global
+     close(123)
+  endif
+
+end subroutine
+
+subroutine dumpSGSDynamicRestart(this, SGSDynamicRestartFile)
+  class(sgs_igrid), intent(in) :: this
+  character(len=clen), intent(in) :: SGSDynamicRestartFile 
+  integer :: ierr
+
+  if(this%DynamicProcedureType==1) then
+     ! write mstep
+     open(unit=123, file=trim(SGSDynamicRestartFile), form='FORMATTED', status='replace', iostat=ierr)
+     write(123,*) this%mstep
+     ! write cmodelC, cmodelE
+     !! figure this out later
+     !do k=1,size(cmodelC)
+     !write(123,*)
+     close(123)
+  else
+     ! write cmodel_global, mstep
+     open(unit=123, file=trim(SGSDynamicRestartFile), form='FORMATTED', status='replace', iostat=ierr)
+     write(123,*) this%mstep
+     write(123,*) this%cmodel_global
+     close(123)
+  endif
 
 end subroutine
