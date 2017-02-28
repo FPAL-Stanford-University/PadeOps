@@ -25,12 +25,14 @@ module sgsmod_igrid
         type(decomp_info), pointer :: gpC, gpE
         type(spectral), pointer :: spectC, spectE
         type(decomp_info), pointer :: sp_gpC, sp_gpE
-        integer :: mid, DynamicProcedureType, WallModel
+        integer :: mid, DynamicProcedureType, WallModel, DynProcFreq
         real(rkind), dimension(:), allocatable :: cmodelC, cmodelE
         real(rkind) :: cmodel_global, cmodel_global_x, cmodel_global_y, cmodel_global_z
         real(rkind), dimension(:,:,:), allocatable :: nu_sgs_C, nu_sgs_E
-        logical :: isEddyViscosityModel = .false. 
-        real(rkind), dimension(:,:,:), allocatable :: tau_11, tau_12, tau_13, tau_22, tau_23, tau_33
+        logical :: isEddyViscosityModel = .false.
+        real(rkind), dimension(:,:,:,:), allocatable :: tau_ij
+        real(rkind), dimension(:,:,:), pointer :: tau_11, tau_12, tau_22, tau_33, tau_13C, tau_23C
+        real(rkind), dimension(:,:,:), allocatable :: tau_13, tau_23
         real(rkind), dimension(:,:,:), allocatable :: q1, q2, q3 
         real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E
         real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffzC, rbuffyC, rbuffxE, rbuffyE, rbuffzE
@@ -57,6 +59,7 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:),   pointer     :: Dsgs
         logical :: isInviscid, isStratified, useDynamicProcedure, useVerticalTfilter = .false. 
         real(rkind) :: invRe, deltaRat
+        integer :: mstep
         contains 
             !! ALL INIT PROCEDURES
             procedure          :: init
@@ -90,12 +93,21 @@ module sgsmod_igrid
             procedure          :: getRHS_SGS
             procedure, private :: get_SGS_kernel
             procedure, private :: multiply_by_model_constant 
-            
+            procedure          :: dumpSGSDynamicRestart
+            procedure, private :: readSGSDynamicRestart
+           
+
             !! ALL DESTROY PROCEDURES
             procedure          :: destroy
             procedure, private :: destroy_smagorinsky 
             procedure, private :: destroy_sigma
             procedure, private :: destroyMemory_EddyViscosity
+
+            !! ACCESSORS (add these in src/incompressible/sgs_models/accessors.F90)
+            procedure          :: getGlobalConstant
+            procedure          :: getustar
+            procedure          :: getInvOblength
+
     end type 
 
 contains
@@ -107,6 +119,7 @@ contains
 #include "sgs_models/standardDynamicProcedure.F90"
 #include "sgs_models/globalDynamicProcedure.F90"
 #include "sgs_models/wallmodel.F90"
+#include "sgs_models/accessors.F90"
 
 subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep)
    class(sgs_igrid), intent(inout), target :: this
@@ -122,7 +135,7 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
    logical, intent(in) :: newTimeStep
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffy3, cbuffz1, cbuffz2
    
-   call this%getTauSGS(duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE)
+   call this%getTauSGS(duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep)
 
    cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
    cbuffz1 => this%cbuffzC(:,:,:,1); cbuffz2 => this%cbuffzE(:,:,:,1) 
@@ -131,26 +144,26 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
    ! ddx(tau11)
    call this%spectC%fft(this%tau_11, cbuffy1)
    call this%spectC%mtimes_ik1_ip(cbuffy1)
-   urhs = urhs + cbuffy1
+   urhs = urhs - cbuffy1
 
    ! ddy(tau22)
    call this%spectC%fft(this%tau_22, cbuffy1)
    call this%spectC%mtimes_ik2_ip(cbuffy1)
-   vrhs = vrhs + cbuffy1
+   vrhs = vrhs - cbuffy1
 
    ! ddz(tau33)
    call this%spectC%fft(this%tau_33, cbuffy1)
    call transpose_y_to_z(cbuffy1, cbuffz1, this%sp_gpC)
    call this%PadeDer%ddz_C2E(cbuffz1, cbuffz2, 0, 0)
-   call transpose_z_to_y(cbuffz2, cbuffz1, this%sp_gpE)
-   wrhs = wrhs + cbuffz1
+   call transpose_z_to_y(cbuffz2, cbuffy2, this%sp_gpE)
+   wrhs = wrhs - cbuffy2
 
    ! ddy(tau12) for urhs, and ddx(tau12) for vrhs
    call this%spectC%fft(this%tau_12, cbuffy1)
    call this%spectC%mtimes_ik1_oop(cbuffy1, cbuffy3)
-   vrhs = vrhs + cbuffy3
+   vrhs = vrhs - cbuffy3
    call this%spectC%mtimes_ik2_ip(cbuffy1)
-   urhs = urhs + cbuffy1
+   urhs = urhs - cbuffy1
 
    ! ddz(tau13) for urhs, ddx(tau13) for wrhs
    call this%spectE%fft(this%tau_13, cbuffy2)
@@ -158,9 +171,9 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
    call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
    call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
-   urhs = urhs + cbuffy1
+   urhs = urhs - cbuffy1
    call this%spectE%mtimes_ik1_ip(cbuffy2)
-   wrhs = wrhs + cbuffy2
+   wrhs = wrhs - cbuffy2
 
    ! ddz(tau23) for vrhs, ddy(tau23) for wrhs
    call this%spectE%fft(this%tau_23, cbuffy2)
@@ -168,13 +181,13 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
    call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
    call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
-   vrhs = vrhs + cbuffy1
+   vrhs = vrhs - cbuffy1
    call this%spectE%mtimes_ik2_ip(cbuffy2)
-   wrhs = wrhs + cbuffy2
+   wrhs = wrhs - cbuffy2
 
 end subroutine
 
-subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE)
+subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
@@ -183,7 +196,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC, ThatC
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: uC, vC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: uE, vE, wE
-
+   logical, intent(in) :: newTimeStep
 
    if (this%useWallModel) call this%computeWallStress( uC, vC, uhatC, vhatC, ThatC) 
 
@@ -197,7 +210,9 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
       call this%get_SGS_kernel(duidxjC, duidxjE)
 
       ! Step 2: Dynamic Procedure ?
-      if (this%useDynamicProcedure) call this%applyDynamicProcedure(uE, vE, wE, uhatE, vhatE, whatE, duidxjE, duidxjEhat)
+      if(newTimeStep .and. this%useDynamicProcedure) then
+          if (mod(this%mstep, this%DynProcFreq ==0)) call this%applyDynamicProcedure(uE, vE, wE, uhatE, vhatE, whatE, duidxjE, duidxjEhat)
+      endif
 
       ! Step 3: Multiply by model constant
       call this%multiply_by_model_constant()
@@ -211,6 +226,8 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
       this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
 
    end if
+   
+   if(newTimeStep) this%mstep = this%mstep + 1
    
 end subroutine
     

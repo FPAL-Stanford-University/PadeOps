@@ -162,7 +162,9 @@ module IncompressibleGrid
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
         real(rkind), dimension(:,:,:)  , pointer :: nu_SGS, tau13, tau23
         real(rkind), dimension(:,:,:)  , pointer :: c_SGS, q1, q2, q3 
-       
+        real(rkind), dimension(:,:,:,:), allocatable :: fbody
+        logical                                      :: computeFbody
+
         ! Wind Turbine stuff 
         type(turbineArray), allocatable :: WindTurbineArr
 
@@ -507,6 +509,9 @@ contains
             allocate(this%d2wdz2hatE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
         end if 
         this%nxZ = size(this%cbuffzE,1); this%nyZ = size(this%cbuffzE,2)
+        allocate(this%fbody(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3),3))
+        this%computeFbody = .true. ! Cant think of a case where this will be false 
+
 
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
         if (useCompactFD) then
@@ -621,8 +626,23 @@ contains
         ! STEP 11: Initialize SGS model
         if (this%useSGS) then
             allocate(this%SGSmodel)
-            call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23, &
-                                this%q1, this%q2, this%q3)
+            
+            ! First get z at edges
+            zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
+            zEinZ => this%rbuffzE(:,:,:,1); zEinY => this%rbuffyE(:,:,:,1)
+            call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
+            call transpose_y_to_z(zinY,zinZ,this%gpC)
+            call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
+            zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
+            call transpose_z_to_y(zEinZ,zEinY,this%gpE)
+            call transpose_y_to_x(zEinY,this%rbuffxE(:,:,:,1), this%gpE)
+
+            call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
+                                    this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody, this%computeFbody, this%Pade6opZ, &
+                                    this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, this%rbuffxC, this%rbuffyC, &
+                                    this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, this%ThetaRef, this%Fr, this%Re, &
+                                    this%isInviscid, this%isStratified)
+            call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3)
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -1427,7 +1447,7 @@ contains
         ! Step 6: SGS Viscous Term
         if (this%useSGS) then
             call this%sgsmodel%getRHS_SGS(this%u_rhs,      this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
-                                          this%duidxjEhat, this%uEhat, this%vEhat,      this%wEhat,   this%uhat,    &
+                                          this%duidxjEhat, this%uEhat, this%vEhat,      this%what,    this%uhat,    &
                                           this%vhat,       this%That,  this%u,          this%v,       this%uE,      &
                                           this%vE,         this%w,     this%newTimeStep                             )
             
