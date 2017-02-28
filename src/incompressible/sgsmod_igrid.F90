@@ -25,7 +25,7 @@ module sgsmod_igrid
         type(decomp_info), pointer :: gpC, gpE
         type(spectral), pointer :: spectC, spectE
         type(decomp_info), pointer :: sp_gpC, sp_gpE
-        integer :: mid, DynamicProcedureType, WallModelType
+        integer :: mid, DynamicProcedureType, WallModel
         real(rkind), dimension(:), allocatable :: cmodelC, cmodelE
         real(rkind) :: cmodel_global, cmodel_global_x, cmodel_global_y, cmodel_global_z
         real(rkind), dimension(:,:,:), allocatable :: nu_sgs_C, nu_sgs_E
@@ -42,7 +42,7 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
         complex(rkind), dimension(:,:,:), allocatable :: Tfilhat, Tfilhatz1, Tfilhatz2
         logical :: useWallModel
-        integer :: WallModel, botBC_temp = 1
+        integer :: botBC_temp = 1
         real(rkind) :: ustar, InvObLength, umn, vmn, uspmn, Tmn, wTh_surf
         real(rkind) :: dz, z0, meanfact, ThetaRef, Fr, WallMfactor, Re
         real(rkind), pointer :: Tsurf
@@ -84,7 +84,8 @@ module sgsmod_igrid
             procedure, private :: DoGlobalDynamicProcedure
 
             !! ALL GET_TAU PROCEDURES
-            procedure, private :: getTauSGS
+            procedure          :: getTauSGS
+            procedure          :: getRHS_SGS
             procedure, private :: get_SGS_kernel
             procedure, private :: multiply_by_model_constant 
             
@@ -194,9 +195,12 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
       
       ! Step 1: Get nuSGS
       call this%get_SGS_kernel(duidxjC, duidxjE)
+print *, 'Done sgs kernel'
 
+print *, 'Computing dyn procedure'
       ! Step 2: Dynamic Procedure ?
       if (this%useDynamicProcedure) call this%applyDynamicProcedure(uE, vE, wE, uhatE, vhatE, whatE, duidxjE, duidxjEhat)
+print *, 'Done dyn procedure'
 
       ! Step 3: Multiply by model constant
       call this%multiply_by_model_constant()

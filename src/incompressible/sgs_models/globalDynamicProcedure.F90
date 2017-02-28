@@ -10,7 +10,7 @@ subroutine DoGlobalDynamicProcedure(this, uhatE, vhatE, whatE, uE, vE, wE, duidx
    do idx = 1,9
       call this%TestFilter_Cmplx_to_Real( duidxjEhat(:,:,:,idx), this%alphaij_filt(:,:,:,idx))
    end do
-
+print *, 1
    call get_Sij_from_duidxj(this%alphaij_filt, this%Sij_filt, size(this%Sij_filt,1),size(this%Sij_filt,2),size(this%Sij_filt,3))
 
    call this%TestFilter_Cmplx_to_Real(uhatE, this%ui_Filt(:,:,:,1))   
@@ -19,11 +19,13 @@ subroutine DoGlobalDynamicProcedure(this, uhatE, vhatE, whatE, uE, vE, wE, duidx
    
    call this%TestFilter_Cmplx_to_Real(whatE, this%ui_Filt(:,:,:,3))   
 
+print *, 2
    call this%interp_bForce_CellToEdge()
    do idx = 1,3
       call this%TestFilter_Real_to_Real(this%fiE(:,:,:,idx),this%fi_filt(:,:,:,idx))
    end do 
 
+print *, 3
    select case (this%mid)
    case (0) ! smagorinsky
       call get_smagorinsky_kernel(this%Sij_filt,this%Dsgs_filt, &
@@ -43,7 +45,9 @@ subroutine DoGlobalDynamicProcedure(this, uhatE, vhatE, whatE, uE, vE, wE, duidx
       this%buff2 = this%buff2 + this%S_ij_E(:,:,:,idx)*this%S_ij_E(:,:,:,idx)
    end do
    this%buff2 = this%buff2*this%Dsgs
+print *, 4, maxval(this%buff2), minval(this%buff2), maxval(abs(this%S_ij_E))
    call this%TestFilter_Real_to_Real_ip(this%buff2)
+print *, 5, maxval(this%buff2), minval(this%buff2)
    
    this%buff1 = this%Sij_filt(:,:,:,1)*this%Sij_filt(:,:,:,1)
    do idx = 2,6
@@ -53,6 +57,8 @@ subroutine DoGlobalDynamicProcedure(this, uhatE, vhatE, whatE, uE, vE, wE, duidx
    this%buff1 = (this%deltaRat*this%deltaRat)*this%buff1
    this%buff2 = this%buff2 - this%buff1
 
+print *, 6, maxval(this%buff1), minval(this%buff1)
+print *, 7, maxval(this%buff2), minval(this%buff2)
    ! Numerator Calculation
    this%buff1 = uE*this%fiE(:,:,:,1)
    this%buff1 = this%buff1 + vE*this%fiE(:,:,:,2)
@@ -86,7 +92,9 @@ subroutine DoGlobalDynamicProcedure(this, uhatE, vhatE, whatE, uE, vE, wE, duidx
    num = p_sum(this%buff1)
    den = p_sum(this%buff2) 
 
-   this%cmodel_global = 0.5d0*max(num/den,0.d0)
+print *, num, den, num/den
+   this%cmodel_global = 0.5d0*max(num/(den+1.0D-15),0.d0)
+print *, this%cmodel_global
 
 end subroutine
 
