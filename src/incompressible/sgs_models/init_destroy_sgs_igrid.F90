@@ -13,8 +13,28 @@ subroutine destroy(this)
   deallocate(this%tau_11, this%tau_12, this%tau_13, this%tau_22, this%tau_23, this%tau_33)
 end subroutine
 
+
+subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
+   class(sgs_igrid), intent(in), target :: this
+   real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: nuSGS
+   real(rkind), dimension(:,:,:)  , pointer, intent(inout), optional :: tau13, tau23
+   real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: tauSGS_ij
+   real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: q1, q2, q3
+
+   nuSGS => this%nu_sgs_C
+   tau13 => this%tau_13
+   tau23 => this%tau_23
+
+   tauSGS_ij => this%tau_ij
+   
+   if (allocated(this%q1)) q1 => this%q1
+   if (allocated(this%q2)) q2 => this%q2
+   if (allocated(this%q3)) q3 => this%q3
+
+end subroutine 
+
 subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, isInviscid, isStratified)
-  class(sgs_igrid), intent(inout) :: this
+  class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
   real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re
@@ -53,12 +73,17 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%PadeDer => PadeDer
   this%fiC => fBody
   this%meanfact = one/(real(gpC%xsz(1),rkind) * real(gpC%ysz(2),rkind))
-  allocate(this%tau_11(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
-  allocate(this%tau_12(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
-  allocate(this%tau_22(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
-  allocate(this%tau_33(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+  
+  allocate(this%tau_ij(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),6))
+  this%tau_11   => this%tau_ij(:,:,:,1)
+  this%tau_12   => this%tau_ij(:,:,:,2)
+  this%tau_13C  => this%tau_ij(:,:,:,3) ! This always going to be zero
+  this%tau_22   => this%tau_ij(:,:,:,4)
+  this%tau_23C  => this%tau_ij(:,:,:,5) ! This always going to be zero 
+  this%tau_33   => this%tau_ij(:,:,:,6)
   allocate(this%tau_13(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
   allocate(this%tau_23(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+  this%tau_ij = zero
 
   ! Link buffers
   this%cbuffyC => cbuffyC
@@ -110,24 +135,40 @@ subroutine readSGSDynamicRestart(this,SGSDynamicRestartFile)
   class(sgs_igrid), intent(inout) :: this
   character(len=clen), intent(in) :: SGSDynamicRestartFile 
   integer :: ierr
+  integer :: oldDynProcType, oldSGSmodel
 
-  if(this%DynamicProcedureType==1) then
-     ! read mstep
-     open(unit=123, file=trim(SGSDynamicRestartFile), form='FORMATTED', status='old', action='read', iostat=ierr)
-     read(123,*) this%mstep
-     ! read cmodelC, cmodelE
-     !! figure this out later
-     !do k=1,size(cmodelC)
-     !read(123,*)
-     close(123)
-  else
-     ! read cmodel_global, mstep
-     open(unit=123, file=trim(SGSDynamicRestartFile), form='FORMATTED', status='old', action='read', iostat=ierr)
-     read(123,*) this%mstep
-     read(123,*) this%cmodel_global
-     close(123)
-  endif
+  ! Open the restart file 
+  open(unit=123, file=trim(SGSDynamicRestartFile), form='FORMATTED', status='old', action='read', iostat=ierr)
+   
+  ! Read in the mstep
+  read(123,*) this%mstep
 
+  ! Read in the old DynamicProcedure type 
+  read(123,*) oldSGSmodel
+  
+  ! Read in the old DynamicProcedure type 
+  read(123,*) oldDynProcType
+
+  if (oldSGSmodel .ne. this%mid) then
+      call message(1,"WARNING: Mismatch in the SGS model type between the restart file and new execution. &
+                      Will regenerate model constants at first new time step.")
+      this%mstep = 0
+  end if
+
+  if (oldDynProcType .ne. this%DynamicProcedureType) then
+      call message(1, "WARNING: Mismatch in the dynamic procedure type between the restart file and new execution.&
+                       Will regenerate model constants at first new time step.")
+      this%mstep = 0
+  else ! Good everything is matching
+      select case( this%DynamicProcedureType ) 
+      case (1) ! Planar averaged standard dynamic procedure
+         ! This one is tricky because of the parallel processors (will complete
+         ! later)
+      case (2)
+         read(123,*) this%mstep
+      end select
+  end if
+  close(123)
 end subroutine
 
 subroutine dumpSGSDynamicRestart(this, SGSDynamicRestartFile)
@@ -135,21 +176,18 @@ subroutine dumpSGSDynamicRestart(this, SGSDynamicRestartFile)
   character(len=clen), intent(in) :: SGSDynamicRestartFile 
   integer :: ierr
 
-  if(this%DynamicProcedureType==1) then
-     ! write mstep
-     open(unit=123, file=trim(SGSDynamicRestartFile), form='FORMATTED', status='replace', iostat=ierr)
-     write(123,*) this%mstep
-     ! write cmodelC, cmodelE
-     !! figure this out later
-     !do k=1,size(cmodelC)
-     !write(123,*)
-     close(123)
-  else
-     ! write cmodel_global, mstep
-     open(unit=123, file=trim(SGSDynamicRestartFile), form='FORMATTED', status='replace', iostat=ierr)
-     write(123,*) this%mstep
-     write(123,*) this%cmodel_global
-     close(123)
-  endif
+  open(unit=123, file=trim(SGSDynamicRestartFile), form='FORMATTED', status='replace', iostat=ierr)
+  write(123,*) this%mstep
+  write(123,*) this%mid
+  write(123,*) this%DynamicProcedureType
+
+  select case (this%DynamicProcedureType) 
+  case (1)
+    ! This one is tricky because of the parallel processors (will complete
+    ! later)
+  case (2)
+      write(123,*) this%cmodel_global
+  end select
+  close(123)
 
 end subroutine

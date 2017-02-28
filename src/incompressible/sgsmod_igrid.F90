@@ -29,8 +29,11 @@ module sgsmod_igrid
         real(rkind), dimension(:), allocatable :: cmodelC, cmodelE
         real(rkind) :: cmodel_global, cmodel_global_x, cmodel_global_y, cmodel_global_z
         real(rkind), dimension(:,:,:), allocatable :: nu_sgs_C, nu_sgs_E
-        logical :: isEddyViscosityModel = .false. 
-        real(rkind), dimension(:,:,:), allocatable :: tau_11, tau_12, tau_13, tau_22, tau_23, tau_33
+        logical :: isEddyViscosityModel = .false.
+        real(rkind), dimension(:,:,:,:), allocatable :: tau_ij
+        real(rkind), dimension(:,:,:), pointer :: tau_11, tau_12, tau_22, tau_33, tau_13C, tau_23C
+        real(rkind), dimension(:,:,:), allocatable :: tau_13, tau_23
+        real(rkind), dimension(:,:,:), allocatable :: q1, q2, q3 
         real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E
         real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffzC, rbuffyC, rbuffxE, rbuffyE, rbuffzE
         complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
@@ -60,6 +63,7 @@ module sgsmod_igrid
         contains 
             !! ALL INIT PROCEDURES
             procedure          :: init
+            procedure          :: link_pointers
             procedure, private :: init_smagorinsky 
             procedure, private :: init_sigma
             procedure, private :: allocateMemory_EddyViscosity
@@ -83,20 +87,27 @@ module sgsmod_igrid
             procedure, private :: interp_bForce_CellToEdge
             procedure, private :: DoStandardDynamicProcedure
             procedure, private :: DoGlobalDynamicProcedure
-            procedure, private :: readSGSDynamicRestart
-            procedure, private :: dumpSGSDynamicRestart
 
             !! ALL GET_TAU PROCEDURES
             procedure          :: getTauSGS
             procedure          :: getRHS_SGS
             procedure, private :: get_SGS_kernel
             procedure, private :: multiply_by_model_constant 
-            
+            procedure          :: dumpSGSDynamicRestart
+            procedure, private :: readSGSDynamicRestart
+           
+
             !! ALL DESTROY PROCEDURES
             procedure          :: destroy
             procedure, private :: destroy_smagorinsky 
             procedure, private :: destroy_sigma
             procedure, private :: destroyMemory_EddyViscosity
+
+            !! ACCESSORS (add these in src/incompressible/sgs_models/accessors.F90)
+            procedure          :: getGlobalConstant
+            procedure          :: getustar
+            procedure          :: getInvOblength
+
     end type 
 
 contains
@@ -108,8 +119,7 @@ contains
 #include "sgs_models/standardDynamicProcedure.F90"
 #include "sgs_models/globalDynamicProcedure.F90"
 #include "sgs_models/wallmodel.F90"
-
-
+#include "sgs_models/accessors.F90"
 
 subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep)
    class(sgs_igrid), intent(inout), target :: this
@@ -123,7 +133,6 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
    complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
    logical, intent(in) :: newTimeStep
-
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffy3, cbuffz1, cbuffz2
    
    call this%getTauSGS(duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep)
@@ -189,9 +198,6 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: uE, vE, wE
    logical, intent(in) :: newTimeStep
 
-
-   if(newTimeStep) this%mstep = this%mstep + 1
-
    if (this%useWallModel) call this%computeWallStress( uC, vC, uhatC, vhatC, ThatC) 
 
    if (this%isEddyViscosityModel) then
@@ -220,6 +226,8 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
       this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
 
    end if
+   
+   if(newTimeStep) this%mstep = this%mstep + 1
    
 end subroutine
     
