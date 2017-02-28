@@ -13,6 +13,20 @@ subroutine destroy(this)
   deallocate(this%tau_11, this%tau_12, this%tau_13, this%tau_22, this%tau_23, this%tau_33)
 end subroutine
 
+
+call link_pointers(nu_SGS, c_SGS, tauSGS_ij, tau13, tau23,q1, q2, q3)
+   class(sgs), intent(in), target :: this
+   real(rkind), dimension(:), pointer, intent(inout) :: c_SGS
+   real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: nuSGS
+   real(rkind), dimension(:,:,:)  , pointer, intent(inout), optional :: tau13, tau23
+   real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: tauSGS_ij
+   real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: q1, q2, q3
+
+
+end subroutine 
+
+
+
 subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re)
   class(sgs_igrid), intent(inout) :: this
   class(decomp_info), intent(in), target :: gpC, gpE

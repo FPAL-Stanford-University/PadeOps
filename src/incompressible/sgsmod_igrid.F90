@@ -31,6 +31,7 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:), allocatable :: nu_sgs_C, nu_sgs_E
         logical :: isEddyViscosityModel = .false. 
         real(rkind), dimension(:,:,:), allocatable :: tau_11, tau_12, tau_13, tau_22, tau_23, tau_33
+        real(rkind), dimension(:,:,:), allocatable :: q1, q2, q3 
         real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E
         real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffzC, rbuffyC, rbuffxE, rbuffyE, rbuffzE
         complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
@@ -59,6 +60,7 @@ module sgsmod_igrid
         contains 
             !! ALL INIT PROCEDURES
             procedure          :: init
+            procedure          :: link_pointers
             procedure, private :: init_smagorinsky 
             procedure, private :: init_sigma
             procedure, private :: allocateMemory_EddyViscosity
@@ -106,9 +108,7 @@ contains
 #include "sgs_models/globalDynamicProcedure.F90"
 #include "sgs_models/wallmodel.F90"
 
-
-
-subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE)
+subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep)
    class(sgs_igrid), intent(inout), target :: this
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
@@ -119,7 +119,7 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: uE, vE, wE
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
    complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
-
+   logical, intent(in) :: newTimeStep
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffy3, cbuffz1, cbuffz2
    
    call this%getTauSGS(duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE)
@@ -195,12 +195,9 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
       
       ! Step 1: Get nuSGS
       call this%get_SGS_kernel(duidxjC, duidxjE)
-print *, 'Done sgs kernel'
 
-print *, 'Computing dyn procedure'
       ! Step 2: Dynamic Procedure ?
       if (this%useDynamicProcedure) call this%applyDynamicProcedure(uE, vE, wE, uhatE, vhatE, whatE, duidxjE, duidxjEhat)
-print *, 'Done dyn procedure'
 
       ! Step 3: Multiply by model constant
       call this%multiply_by_model_constant()

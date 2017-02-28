@@ -13,7 +13,7 @@ module IncompressibleGrid
     use reductions, only: p_maxval, p_sum
     use timer, only: tic, toc
     use PadePoissonMod, only: Padepoisson 
-    use sgsmod, only: sgs
+    use sgsmod_igrid, only: sgs_igrid
     use wallmodelMod, only: wallmodel
     use numerics
     !use cd06staggstuff, only: cd06stagg
@@ -65,7 +65,7 @@ module IncompressibleGrid
         type(decomp_info), pointer :: Sp_gpC, Sp_gpE
         type(spectral), allocatable :: spectE, spectC
         type(staggOps), allocatable :: Ops, OpsPP
-        type(sgs), allocatable :: sgsmodel
+        type(sgs_igrid), allocatable :: sgsmodel
         type(wallmodel), allocatable :: moengWall
 
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsC
@@ -114,7 +114,8 @@ module IncompressibleGrid
         logical :: assume_fplane = .true.
         real(rkind) :: coriolis_cosine, coriolis_sine 
         integer :: nxZ, nyZ
-       
+      
+        logical :: newTimeStep = .true. 
         integer :: timeSteppingScheme = 0 
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
         integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
@@ -259,18 +260,18 @@ contains
         class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
         character(len=clen) :: outputdir, inputdir, turbInfoDir, ksOutputDir, controlDir = "null"
-        integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, SGSModelID = 1
+        integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1, botBC_Temp = 0
-        real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop,ncWall=1.d0
-        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, z0 = 1.d-4, Cs = 0.17d0
+        real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop
+        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, z0 = 1.d-4
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0,Gx=0.d0,Gy=0.d0,Gz=0.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
-        logical ::isStratified=.false.,dumpPlanes = .false., useSGSclipping = .true.,useExtraForcing = .false.
-        logical ::useSGS = .true.,useDynamicProcedure = .false.,useSpongeLayer=.false.,useWindTurbines = .false.
-        logical :: useGeostrophicForcing = .false., useVerticalTfilter = .false., useWallDamping = .true. 
+        logical ::isStratified=.false.,dumpPlanes = .false.,useExtraForcing = .false.
+        logical ::useSGS = .true.,useSpongeLayer=.false.,useWindTurbines = .false.
+        logical :: useGeostrophicForcing = .false.
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10
@@ -289,11 +290,9 @@ contains
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
-        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, &
+        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, &
                           useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz, assume_fplane, latitude
         namelist /BCs/ topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp
-        namelist /LES/ useSGS, useDynamicProcedure, useSGSclipping, SGSmodelID, useVerticalTfilter, &
-                        useWallDamping, ncWall, Cs 
         namelist /WALLMODEL/ z0, wallMType
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
@@ -313,7 +312,6 @@ contains
         read(unit=ioUnit, NML=PHYSICS)
         read(unit=ioUnit, NML=PRESSURE_CALC)
         read(unit=ioUnit, NML=BCs)
-        read(unit=ioUnit, NML=LES)
         read(unit=ioUnit, NML=WALLMODEL)
         read(unit=ioUnit, NML=WINDTURBINES)
         read(unit=ioUnit, NML=KSPREPROCESS)
@@ -338,7 +336,7 @@ contains
         this%t_restartDump = t_restartDump; this%tid_statsDump = tid_statsDump; this%useCoriolis = useCoriolis; 
         this%tSimStartStats = tSimStartStats; this%useWindTurbines = useWindTurbines
         this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS 
-        this%useDynamicProcedure = useDynamicProcedure; this%UseDealiasFilterVert = UseDealiasFilterVert
+        this%UseDealiasFilterVert = UseDealiasFilterVert
         this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; this%fastCalcPressure = fastCalcPressure 
         this%t_start_planeDump = t_start_planeDump; this%t_stop_planeDump = t_stop_planeDump
         this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro; 
@@ -623,10 +621,6 @@ contains
         ! STEP 11: Initialize SGS model
         if (this%useSGS) then
             allocate(this%SGSmodel)
-            call this%SGSmodel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
-                this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3), this%z0, &
-                .true., WallMType, useVerticalTfilter, Pr, useWallDamping, nCWall, Cs, ComputeStokesPressure, &
-                this%isStratified )
             call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23, &
                                 this%q1, this%q2, this%q3)
             call message(0,"SGS model initialized successfully")
@@ -868,7 +862,7 @@ contains
 
         ! Step 0: Compute TimeStep 
         call this%compute_deltaT
-
+        
         !!! STAGE 1
         ! First stage - everything is where it's supposed to be
         if (this%AlreadyHaveRHS) then
@@ -876,6 +870,7 @@ contains
         else
             call this%populate_rhs()
         end if
+        this%newTimeStep = .false. 
         this%uhat1 = this%uhat + this%dt*this%u_rhs 
         this%vhat1 = this%vhat + this%dt*this%v_rhs 
         this%what1 = this%what + this%dt*this%w_rhs 
@@ -915,7 +910,6 @@ contains
         if (this%isStratified) this%That = (1.d0/3.d0)*this%That + (2.d0/3.d0)*this%That1 + (2.d0/3.d0)*this%dt*this%T_rhs
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
-
 
         ! Wrap up this time step 
         call this%wrapup_timestep() 
@@ -1432,27 +1426,11 @@ contains
         ! subroutine. 
         ! Step 6: SGS Viscous Term
         if (this%useSGS) then
-            if (this%isStratified) then
-            !    call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
-            !                                    this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
-            !                                    this%uhat   , this%vhat           , this%whatC      ,&
-            !                                    this%u      , this%v              , this%wC         ,&
-            !                                    this%ustar  , this%Umn            , this%Vmn        ,&
-            !                                    this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
-            !                                    this%max_nuSGS, this%inst_horz_avg)
-
-            !    call this%SGSmodel%getRHS_SGS_Scalar_WallM(this%duidxjC, this%dTdxC, this%dTdyC, this%dTdzE, &
-            !                                               this%dTdzC, this%T_rhs, this%wTh_surf)
-            else
-            !    call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
-            !                                    this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
-            !                                    this%uhat   , this%vhat           , this%whatC      ,&
-            !                                    this%u      , this%v              , this%wC         ,&
-            !                                    this%ustar  , this%Umn            , this%Vmn        ,&
-            !                                    this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
-            !                                    this%max_nuSGS, this%inst_horz_avg)!, this%dTdxC      ,&
-            !                                    !this%dTdyC  , this%dTdzHC)
-            end if 
+            call this%sgsmodel%getRHS_SGS(this%u_rhs,      this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
+                                          this%duidxjEhat, this%uEhat, this%vEhat,      this%wEhat,   this%uhat,    &
+                                          this%vhat,       this%That,  this%u,          this%v,       this%uE,      &
+                                          this%vE,         this%w,     this%newTimeStep                             )
+            
         end if
 
 
@@ -1614,6 +1592,7 @@ contains
 
         ! STEP 1: Update Time, BCs and record probe data
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
+        this%newTimeStep = .true. 
         if (this%isStratified) then
             if (this%botBC_Temp == 0) then
                 this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
