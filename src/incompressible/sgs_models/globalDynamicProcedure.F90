@@ -91,8 +91,6 @@ end subroutine
 
 subroutine interp_bForce_CellToEdge(this)
    class(sgs_igrid), intent(inout) :: this
-   integer :: idx
-
 
    call transpose_x_to_y(this%fxC, this%rbuffyC(:,:,:,1), this%gpC)
    call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
