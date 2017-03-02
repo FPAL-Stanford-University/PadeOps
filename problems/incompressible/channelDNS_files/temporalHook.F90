@@ -24,7 +24,8 @@ contains
 
     subroutine doTemporalStuff(gp)
         class(igrid), intent(inout) :: gp 
-      
+        real(rkind) :: utau
+
         if (mod(gp%step,nt_print2screen) == 0) then
             maxDiv = maxval(gp%divergence)
             DomMaxDiv = p_maxval(maxDiv)
@@ -37,6 +38,9 @@ contains
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 
+            ! compute utau
+            utau = sqrt(2.0d0*sqrt(real(gp%uhat(1,1,1),rkind)**2 + real(gp%vhat(1,1,1),rkind)**2)*gp%meanFact/(gp%dz*gp%Re))
+            call message(1,"utau_lo:", utau)
             call toc()
             call tic()
         end if 

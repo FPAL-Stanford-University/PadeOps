@@ -1,7 +1,7 @@
 subroutine destroy(this)
   class(sgs_igrid), intent(inout) :: this
-  nullify(this%gpC, this%gpE, this%spectC, this%spectE, this%sp_gpC, this%sp_gpE, this%fiC)
-  nullify(this%cbuffyC, this%cbuffzC, this%rbuffxC, this%Tsurf)
+  nullify(this%gpC, this%gpE, this%spectC, this%spectE, this%sp_gpC, this%sp_gpE, this%fxC)
+  nullify(this%cbuffyC, this%cbuffzC, this%rbuffxC, this%Tsurf, this%fyC, this%fzE)
   if (this%isEddyViscosityModel) call this%destroyMemory_EddyViscosity()
   if (this%DynamicProcedureType .ne. 0) call this%destroyMemory_DynamicProcedure()
   select case (this%mid)
@@ -33,7 +33,7 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
 
 end subroutine 
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, isInviscid, isStratified)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, isInviscid, isStratified)
   class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
@@ -41,7 +41,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   real(rkind), intent(in), target :: Tsurf
   character(len=*), intent(in) :: inputfile
   real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC
-  real(rkind), dimension(:,:,:,:), intent(in), target :: fBody
+  real(rkind), dimension(:,:,:), intent(in), target :: fBody_x, fBody_y, fBody_z
   logical, intent(out) :: computeFbody
   real(rkind), dimension(:,:,:,:), intent(in), target :: rbuffxC, rbuffyE, rbuffzE, rbuffyC, rbuffzC
   complex(rkind), dimension(:,:,:,:), intent(in), target :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
@@ -49,13 +49,14 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   logical, intent(in) :: isInviscid, isStratified
 
   ! Input file variables
-  logical :: useWallDamping = .false., useSGSDynamicRestart
+  logical :: useWallDamping = .false., useSGSDynamicRestart = .false., useVerticalTfilter = .false.
   integer :: DynamicProcedureType = 0, SGSmodelID = 0, WallModelType = 0, DynProcFreq = 1 
   real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0
   character(len=clen) :: SGSDynamicRestartFile
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0,  &
                  useWallDamping, ncWall, Csgs, WallModelType, &
-                 DynProcFreq, useSGSDynamicRestart, SGSDynamicRestartFile
+                 DynProcFreq, useSGSDynamicRestart, SGSDynamicRestartFile, &
+                 useVerticalTfilter
 
   integer :: ierr
 
@@ -71,7 +72,9 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%Re = Re
   this%ThetaRef = ThetaRef
   this%PadeDer => PadeDer
-  this%fiC => fBody
+  this%fxC => fBody_x
+  this%fyC => fBody_y
+  this%fzE => fBody_z
   this%meanfact = one/(real(gpC%xsz(1),rkind) * real(gpC%ysz(2),rkind))
   
   allocate(this%tau_ij(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),6))
@@ -105,6 +108,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%z0 = z0
   this%DynamicProcedureType = DynamicProcedureType
   this%DynProcFreq = DynProcFreq
+  this%useVerticalTfilter = useVerticalTfilter
   this%WallModel        = WallModelType
   if (this%WallModel .ne. 0) call this%initWallModel()
 

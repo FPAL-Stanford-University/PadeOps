@@ -55,7 +55,7 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:,:), allocatable :: Mij, Lij, Sij_Filt, alphaij_Filt, tauijWM_Filt
         real(rkind), dimension(:,:,:,:), allocatable :: fi_Filt, ui_Filt, fiE
         real(rkind), dimension(:,:,:),   allocatable :: Dsgs_Filt, buff1, buff2
-        real(rkind), dimension(:,:,:,:), pointer     :: fiC
+        real(rkind), dimension(:,:,:),   pointer     :: fxC, fyC, fzE
         real(rkind), dimension(:,:,:),   pointer     :: Dsgs
         logical :: isInviscid, isStratified, useDynamicProcedure, useVerticalTfilter = .false. 
         real(rkind) :: invRe, deltaRat

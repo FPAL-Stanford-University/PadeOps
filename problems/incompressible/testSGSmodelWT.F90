@@ -13,7 +13,7 @@ program testSGSmodelWT
    implicit none
 
    complex(rkind), dimension(:,:,:), allocatable :: uhatC, vhatC, whatE, uhatE, vhatE, whatC, ThatC,u_rhs,v_rhs,w_rhs
-   real(rkind), dimension(:,:,:), allocatable :: uC, vC, wC, uE, vE, wE
+   real(rkind), dimension(:,:,:), allocatable :: uC, vC, wC, uE, vE, wE, fbody_x, fbody_y, fbody_z
    real(rkind), dimension(:,:,:,:), allocatable, target :: duidxjE, duidxjC,fbody,rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE, duidxjE2
    complex(rkind), dimension(:,:,:,:), allocatable, target :: duidxjEhat,duidxjChat,cbuffyC,cbuffzC,cbuffyE,cbuffzE
    type(sgs_igrid) :: newsgs
@@ -80,7 +80,10 @@ program testSGSmodelWT
    ! Allocate memory
    allocate( mesh(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),3) )
    allocate( zMeshE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)) )
-   allocate( fbody(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),3) )
+   allocate( fbody_x(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)) )
+   allocate( fbody_y(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)) )
+   allocate( fbody_z(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)) )
+
    allocate( duidxjC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),9) )
    allocate( duidxjE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3),9) )
    allocate( duidxjEhat(sp_gpE%ysz(1),sp_gpE%ysz(2),sp_gpE%ysz(3),9) )
@@ -154,7 +157,11 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
 
    ! Initialize sgs
       call sgsold%init(1, spectC, spectE, gpC, gpE, dx, dy, dz, .false., .false., mesh(:,:,:,3), z0init,  .true., 1, .false., 0.7d0, .false., 1.0D0, 1.0d0, .true., .false.)
+<<<<<<< HEAD
    call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody, computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, .false., .false.)
+=======
+   call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, fbody_z, computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, .false., .false.)
+>>>>>>> origin/igridSGS
 
    ! Initialize WT
    call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
@@ -169,12 +176,12 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
    ! Get RHS WT
    u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
    !call turbArray%getForceRHS(dt, uC, vC, wC, u_rhs, v_rhs, w_rhs, inst_horz_avg_turb)
-   call spectC%ifft(u_rhs,fbody(:,:,:,1))
-   call spectC%ifft(v_rhs,fbody(:,:,:,2))
-   call spectC%ifft(w_rhs,fbody(:,:,:,3))
+   call spectC%ifft(u_rhs,fbody_x)
+   call spectC%ifft(v_rhs,fbody_y)
+   call spectC%ifft(w_rhs,fbody_z)
 
    ! Get RHS constant force
-   fbody(:,:,:,1) = fbody(:,:,:,1) + 1.d0 
+   fbody_x = fbody_x + 1.d0 
 
    duidxjE2(:,:,:,1) = duidxjE(:,:,:,7) 
    duidxjE2(:,:,:,2) = duidxjE(:,:,:,8) 
@@ -189,7 +196,7 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
                                    max_nuSGS, inst_horz_avg_turb)
    
    ! get tau_sgs
-   call newsgs%getTauSGS(duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
+   call newsgs%getTauSGS(duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep = .true.)
   
 
 

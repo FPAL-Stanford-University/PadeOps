@@ -31,7 +31,7 @@ subroutine allocateMemory_DynamicProcedure(this, computeFbody)
    allocate(this%Tfilhatz1   (this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
    allocate(this%Tfilhatz2   (this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
 
-   if((.not. associated(this%fiC)) .and. (this%DynamicProcedureType==2)) then
+   if((.not. associated(this%fxC)) .and. (this%DynamicProcedureType==2)) then
       call GracefulExit("Global dynamic procedure needs body force term",1111)
    endif
 
