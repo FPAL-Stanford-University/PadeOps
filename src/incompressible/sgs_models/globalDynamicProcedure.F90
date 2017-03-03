@@ -32,9 +32,11 @@ subroutine DoGlobalDynamicProcedure(this, uhatE, vhatE, whatE, uE, vE, wE, duidx
                               this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3))
    end select
 
-   do idx = 1,2
-      call this%TestFilter_Cmplx_to_Real(this%tauijWMhat_inY(:,:,:,idx),this%tauijWM_filt(:,:,:,idx))
-   end do 
+   if (this%useWallmodel) then
+       do idx = 1,2
+          call this%TestFilter_Cmplx_to_Real(this%tauijWMhat_inY(:,:,:,idx),this%tauijWM_filt(:,:,:,idx))
+       end do 
+   endif 
 
    ! Denominator Calculation
    this%buff2 = this%S_ij_E(:,:,:,1)*this%S_ij_E(:,:,:,1)

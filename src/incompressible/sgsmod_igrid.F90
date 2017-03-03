@@ -21,7 +21,8 @@ module sgsmod_igrid
     real(rkind), parameter :: beta_h = 7.8_rkind, beta_m = 4.8_rkind
 
     type :: sgs_igrid
-        private
+        !private !-- how do I make only DynamicProcedureType and cmodel_gloal
+        !public, so that it can be accessed from problem_files/temporalHooks.F90 ???
         type(decomp_info), pointer :: gpC, gpE
         type(spectral), pointer :: spectC, spectE
         type(decomp_info), pointer :: sp_gpC, sp_gpE

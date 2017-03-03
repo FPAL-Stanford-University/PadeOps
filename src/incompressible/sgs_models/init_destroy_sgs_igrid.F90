@@ -49,7 +49,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   logical, intent(in) :: isInviscid, isStratified
 
   ! Input file variables
-  logical :: useWallDamping = .false., useSGSDynamicRestart
+  logical :: useWallDamping = .false., useSGSDynamicRestart = .false., useVerticalTfilter = .false.
   integer :: DynamicProcedureType = 0, SGSmodelID = 0, WallModelType = 0, DynProcFreq = 1 
   real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0
   character(len=clen) :: SGSDynamicRestartFile
