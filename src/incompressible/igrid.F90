@@ -441,26 +441,20 @@ contains
 
 
         ! STEP 6: ALLOCATE MEMORY FOR FIELD ARRAYS
-        if (this%isStratified) then
-            allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),7))
-            allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4))
-            allocate(this%dTdzE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
-            allocate(this%dTdzC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
-            allocate(this%dTdxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
-            allocate(this%dTdyC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
-            call this%spectC%alloc_r2c_out(this%SfieldsC,4)
-            call this%spectC%alloc_r2c_out(this%dTdxH)
-            call this%spectC%alloc_r2c_out(this%dTdyH)
-            call this%spectE%alloc_r2c_out(this%dTdzH)
-            call this%spectC%alloc_r2c_out(this%dTdzHC)
-            call this%spectC%alloc_r2c_out(this%rhsC,3); 
-            call this%spectC%alloc_r2c_out(this%OrhsC,3)
-        else
-            allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6))
-            allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),3))
-            call this%spectC%alloc_r2c_out(this%SfieldsC,3)
-            call this%spectC%alloc_r2c_out(this%rhsC,2); call this%spectC%alloc_r2c_out(this%OrhsC,2)
-        end if 
+        allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),7))
+        allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4))
+        allocate(this%dTdzE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+        allocate(this%dTdzC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+        allocate(this%dTdxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+        allocate(this%dTdyC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+        call this%spectC%alloc_r2c_out(this%SfieldsC,4)
+        call this%spectC%alloc_r2c_out(this%dTdxH)
+        call this%spectC%alloc_r2c_out(this%dTdyH)
+        call this%spectE%alloc_r2c_out(this%dTdzH)
+        call this%spectC%alloc_r2c_out(this%dTdzHC)
+        call this%spectC%alloc_r2c_out(this%rhsC,3); 
+        call this%spectC%alloc_r2c_out(this%OrhsC,3)
+
         call this%spectE%alloc_r2c_out(this%SfieldsE,4)
         allocate(this%divergence(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
         allocate(this%duidxjC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9))
@@ -482,11 +476,9 @@ contains
 
         this%u_Orhs => this%OrhsC(:,:,:,1); this%v_Orhs => this%OrhsC(:,:,:,2); this%w_Orhs => this%OrhsE(:,:,:,1)
 
-        if (this%isStratified) then
-            this%T => this%PfieldsC(:,:,:,7); this%That => this%SfieldsC(:,:,:,4)
-            this%TE => this%PfieldsE(:,:,:,4); this%T_rhs => this%rhsC(:,:,:,3)
-            this%T_Orhs => this%OrhsC(:,:,:,3); this%TEhat => this%SfieldsE(:,:,:,2)
-        end if
+        this%T => this%PfieldsC(:,:,:,7); this%That => this%SfieldsC(:,:,:,4)
+        this%TE => this%PfieldsE(:,:,:,4); this%T_rhs => this%rhsC(:,:,:,3)
+        this%T_Orhs => this%OrhsC(:,:,:,3); this%TEhat => this%SfieldsE(:,:,:,2)
 
         !allocate(this%cbuffxC(this%sp_gpC%xsz(1),this%sp_gpC%xsz(2),this%sp_gpC%xsz(3),2))
         allocate(this%cbuffyC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),2))

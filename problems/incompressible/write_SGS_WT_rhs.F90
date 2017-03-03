@@ -1,4 +1,4 @@
-program testSGSmodelWT
+program write_SGS_wt_rhs
    use mpi
    use constants
    use kind_parameters,  only: rkind, clen
@@ -32,12 +32,7 @@ program testSGSmodelWT
    type(Pade6stagg) :: Pade6opZ
    integer :: ierr, ix1, ixn, iy1, iyn, iz1, izn, TID, RID
    logical :: computeFbody
-  
-   real(rkind), dimension(:,:,:)  , pointer :: nuSGS
-   real(rkind), dimension(:,:,:)  , pointer :: tau13, tau23
-   real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
-   real(rkind), dimension(:,:,:)  , pointer :: q1, q2, q3
-   real(rkind) :: ustar, LObinv, umn, vmn, uspmn
+   
     integer :: wBC_bottom     = -1, wBC_top     = -1
     integer :: uBC_bottom     =  0, uBC_top     =  1
     integer :: vBC_bottom     =  0, vBC_top     =  1
@@ -70,6 +65,8 @@ program testSGSmodelWT
    read(unit=ioUnit, NML=INPUT)
    close(ioUnit)    
 
+   print*, "1", rid, tid
+   
    call decomp_2d_init(nx, ny, nz, 0, 0)
    call get_decomp_info(gpC)
 
@@ -159,10 +156,9 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
    call Pade6opz%init(gpC, sp_gpC, dz)
 
    ! Initialize sgs
+   call sgsold%init(1, spectC, spectE, gpC, gpE, dx, dy, dz, .false., .false., mesh(:,:,:,3), z0init,  .true., 1, .false., 0.7d0, .false., 1.0D0, 1.0d0, .true., .false.)
    call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, fbody_z, computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, .false., .false.)
 
-   call newsgs%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
-   
    ! Initialize WT
    call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
    
@@ -171,7 +167,7 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
    
    ! duidxj
    call compute_duidxj()
-   if (nrank == 0) print *, "divergence:", maxval(abs(duidxjC(:,:,:,1)+duidxjC(:,:,:,5) + duidxjC(:,:,:,9)))
+   print *, maxval(abs(duidxjC(:,:,:,1)+duidxjC(:,:,:,5) + duidxjC(:,:,:,9)))
 
    ! Get RHS WT
    u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
@@ -188,75 +184,76 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
    ! Get RHS constant force
    fbody_x = fbody_x + 1.d0 
 
+
    u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-
-   call tic()
-   call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
-   call toc()
-
-   umn = newsgs%get_umean()
-   uspmn = newsgs%get_uspeedmean()
-   vmn = newsgs%get_vmean()
-   ustar = newsgs%getustar()
-   LObinv = newsgs%getInvOblength()
   
-   !print*, "umn:", umn
-   !print*, "vmn:", vmn
-   !print*, "uspmean:", uspmn
-   !print*, "ustar:", ustar
-   !print*, "LObinv:", Lobinv
 
+   duidxjE2(:,:,:,1) = duidxjE(:,:,:,7) 
+   duidxjE2(:,:,:,2) = duidxjE(:,:,:,8) 
+   duidxjE2(:,:,:,3) = duidxjE(:,:,:,3) 
+   duidxjE2(:,:,:,4) = duidxjE(:,:,:,6) 
+   call sgsold%getRHS_SGS_WallM(duidxjC, duidxjE2 , duidxjChat ,& 
+                                   u_rhs  , v_rhs          , w_rhs      ,&
+                                   uhatC   , vhatC           , whatC      ,&
+                                   uC      , vC              , wC         ,&
+                                   0.1d0  , 1.0d0            , 0.0d0        ,&
+                                   1.0d0  , filteredSpeedSq, 0.0d0,&
+                                   max_nuSGS, inst_horz_avg_turb)
+   
    call spectC%ifft(u_rhs,fbody_x)
    call spectC%ifft(v_rhs,fbody_y)
    call spectE%ifft(w_rhs,fbody_z)
   
-   !print*, fbody_x(1,1,1:4)
-   !print*, fbody_y(1,1,1:4)
-   !print*, fbody_z(1,1,1:4)
-   if (nrank == 0) then
-      print*, nuSGS(1,1,1:15)
-   end if
+   call dumpFullField(fbody_x,"xsgs")
+   call dumpFullField(fbody_y,"ysgs")
+   !call writeVisualizationFile(tid, rid, fbody_z, gpE, "zsgs", OutputDir)
+   
+   ! get tau_sgs
+   !call newsgs%getTauSGS(duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep = .true.)
+  
+
+
+
+
 
    ! deallocate everything
-   deallocate(wE)
-   deallocate(vE)
-   deallocate(uE)
-   deallocate(wC)
-   deallocate(vC)
-   deallocate(uC)
-   deallocate(ThatC)
-   deallocate(whatC)
-   deallocate(vhatC)
-   deallocate(uhatC)
-   deallocate(whatE)
-   deallocate(vhatE)
-   deallocate(uhatE)
-   deallocate(duidxjEhat)
-   deallocate(duidxjChat)
-   deallocate(duidxjE)
-   deallocate(duidxjC)
-   deallocate(rbuffzE)
-   deallocate(rbuffyE)
-   deallocate(rbuffzC)
-   deallocate(rbuffyC)
-   deallocate(rbuffxC)
-   deallocate(cbuffzC)
-   deallocate(cbuffyC)
-   deallocate(cbuffyE)
-   deallocate(cbuffzE)
-   deallocate(fbody_x)
-   deallocate(fbody_y)
-   deallocate(fbody_z)
-   deallocate(zMeshE)
-   deallocate(mesh)
-   deallocate(w_rhs)
-   deallocate(v_rhs)
-   deallocate(u_rhs)
+   !deallocate(wE)
+   !deallocate(vE)
+   !deallocate(uE)
+   !deallocate(wC)
+   !deallocate(vC)
+   !deallocate(uC)
+   !deallocate(ThatC)
+   !deallocate(whatC)
+   !deallocate(vhatC)
+   !deallocate(uhatC)
+   !deallocate(whatE)
+   !deallocate(vhatE)
+   !deallocate(uhatE)
+   !deallocate(duidxjEhat)
+   !deallocate(duidxjChat)
+   !deallocate(duidxjE)
+   !deallocate(duidxjC)
+   !deallocate(rbuffzE)
+   !deallocate(rbuffyE)
+   !deallocate(rbuffzC)
+   !deallocate(rbuffyC)
+   !deallocate(rbuffxC)
+   !deallocate(cbuffzC)
+   !deallocate(cbuffyC)
+   !deallocate(cbuffyE)
+   !deallocate(cbuffzE)
+   !deallocate(fbody)
+   !deallocate(zMeshE)
+   !deallocate(mesh)
+   !deallocate(w_rhs)
+   !deallocate(v_rhs)
+   !deallocate(u_rhs)
 
-   
-   call mpi_barrier(mpi_comm_world, ierr)
-   stop
-   call MPI_Finalize(ierr)           !<-- Terminate MPI 
+
+
+
+
 
 
 contains

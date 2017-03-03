@@ -6,6 +6,7 @@ subroutine allocateMemory_DynamicProcedure(this, computeFbody)
    this%useDynamicProcedure = .true.
    select case( this%dynamicProcedureType) 
    case (1)
+      this%useCglobal = .false.
       allocate(this%alphaij_Filt(this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),9))
       allocate(this%Mij         (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),6))
       allocate(this%Lij         (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),6))
@@ -14,7 +15,9 @@ subroutine allocateMemory_DynamicProcedure(this, computeFbody)
       allocate(this%Dsgs_Filt   (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3)))
       allocate(this%buff1       (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3)))
       allocate(this%buff2       (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3)))
+      allocate(this%cmodel_allZ(this%gpE%zsz(3)))
    case (2)
+      this%useCglobal = .true.
       allocate(this%Sij_Filt    (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),6))
       allocate(this%alphaij_Filt(this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),9))
       allocate(this%tauijWM_Filt(this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),2))

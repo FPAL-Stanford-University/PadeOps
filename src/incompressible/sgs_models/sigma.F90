@@ -3,6 +3,12 @@ subroutine init_sigma(this, dx, dy, dz, Cs)
    real(rkind), intent(in) :: dx, dy, dz, Cs
    real(rkind) :: deltaLES
 
+   ! Set the type of mnodel constant (default is constant global). 
+   ! Can be reset to false via dynamic procedure initialization, 
+   ! in case the dynamic procedure is planar averages
+   this%useCglobal = .true. 
+   
+   
    deltaLES = (1.5d0*dx*1.5d0*dy*dz)**(1.d0/3.d0)
    this%cmodel_global = (Cs*deltaLES)**2
   

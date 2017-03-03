@@ -21,7 +21,8 @@ module sgsmod_igrid
     real(rkind), parameter :: beta_h = 7.8_rkind, beta_m = 4.8_rkind
 
     type :: sgs_igrid
-        private
+        !private !-- how do I make only DynamicProcedureType and cmodel_gloal
+        !public, so that it can be accessed from problem_files/temporalHooks.F90 ???
         type(decomp_info), pointer :: gpC, gpE
         type(spectral), pointer :: spectC, spectE
         type(decomp_info), pointer :: sp_gpC, sp_gpE
@@ -38,6 +39,8 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffzC, rbuffyC, rbuffxE, rbuffyE, rbuffzE
         complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
         type(Pade6stagg), pointer :: PadeDer
+        logical :: explicitCalcEdgeEddyViscosity = .false.
+      
 
         ! Wall model
         real(rkind), dimension(:,:,:,:), allocatable :: tauijWM
@@ -58,8 +61,11 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:),   pointer     :: fxC, fyC, fzE
         real(rkind), dimension(:,:,:),   pointer     :: Dsgs
         logical :: isInviscid, isStratified, useDynamicProcedure, useVerticalTfilter = .false. 
+        real(rkind), dimension(:), allocatable :: cmodel_allZ
         real(rkind) :: invRe, deltaRat
         integer :: mstep
+        logical :: useCglobal = .false. 
+
         contains 
             !! ALL INIT PROCEDURES
             procedure          :: init
@@ -95,6 +101,7 @@ module sgsmod_igrid
             procedure, private :: multiply_by_model_constant 
             procedure          :: dumpSGSDynamicRestart
             procedure, private :: readSGSDynamicRestart
+            procedure, private :: interpolate_eddy_viscosity
            
 
             !! ALL DESTROY PROCEDURES
@@ -107,6 +114,9 @@ module sgsmod_igrid
             procedure          :: getGlobalConstant
             procedure          :: getustar
             procedure          :: getInvOblength
+            procedure          :: get_umean 
+            procedure          :: get_vmean 
+            procedure          :: get_uspeedmean 
 
     end type 
 
@@ -167,8 +177,11 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
 
    ! ddz(tau13) for urhs, ddx(tau13) for wrhs
    call this%spectE%fft(this%tau_13, cbuffy2)
-   if (this%useWallModel) cbuffy2 = cbuffy2 + this%tauijWMhat_inY(:,:,:,1)
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
+   if (this%useWallModel) then
+      cbuffz2(:,:,1) = this%tauijWMhat_inZ(:,:,1,1)
+      call transpose_z_to_y(cbuffz2,cbuffy2, this%sp_gpE)
+   end if
    call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
    call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
    urhs = urhs - cbuffy1
@@ -177,8 +190,11 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
 
    ! ddz(tau23) for vrhs, ddy(tau23) for wrhs
    call this%spectE%fft(this%tau_23, cbuffy2)
-   if (this%useWallModel) cbuffy2 = cbuffy2 + this%tauijWMhat_inY(:,:,:,2)
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
+   if (this%useWallModel) then
+      cbuffz2(:,:,1) = this%tauijWMhat_inZ(:,:,1,2)
+      call transpose_z_to_y(cbuffz2,cbuffy2, this%sp_gpE)
+   end if
    call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
    call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
    vrhs = vrhs - cbuffy1
@@ -211,7 +227,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
 
       ! Step 2: Dynamic Procedure ?
       if(newTimeStep .and. this%useDynamicProcedure) then
-          if (mod(this%mstep, this%DynProcFreq ==0)) call this%applyDynamicProcedure(uE, vE, wE, uhatE, vhatE, whatE, duidxjE, duidxjEhat)
+          if (mod(this%mstep, this%DynProcFreq) == 0) call this%applyDynamicProcedure(uE, vE, wE, uhatE, vhatE, whatE, duidxjE, duidxjEhat)
       endif
 
       ! Step 3: Multiply by model constant
@@ -224,7 +240,6 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
       this%tau_22 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,4)
       this%tau_23 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,5)
       this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
-
    end if
    
    if(newTimeStep) this%mstep = this%mstep + 1

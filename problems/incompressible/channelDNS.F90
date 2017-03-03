@@ -26,7 +26,6 @@ program channelDNS
     call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
   
     call igp%start_io(.true.)                !<-- Start I/O by creating a header file (see io.F90)
-
     call igp%printDivergence()
   
     call tic() 

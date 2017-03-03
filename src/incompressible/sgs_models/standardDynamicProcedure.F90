@@ -78,8 +78,6 @@ subroutine DoStandardDynamicProcedure(this, uE, vE, wE, uhatE, vhatE, whatE, dui
    !call this%planarAverage(this%buff1)
    !call this%planarAverage(this%buff2)
    call this%planarAverageAndInterpolateToCells(this%buff1, this%buff2, this%rbuffxC(:,:,:,1))
-
-   ! STEP 7: get the fraction and clip
    this%cmodelE = this%buff1(1,1,:)
    this%cmodelC = this%rbuffxC(1,1,:,1)
 end subroutine
@@ -102,8 +100,9 @@ subroutine planarAverageAndInterpolateToCells(this, numE, denE, ratC)
    call transpose_y_to_z(this%rbuffyE(:,:,:,1), this%rbuffzE(:,:,:,2), this%gpE)
    do idx = 1,this%gpE%zsz(3)
       this%rbuffzE(:,:,idx,2) = p_sum(sum(this%rbuffzE(:,:,idx,2)))*this%meanfact
-   end do 
+   end do
    this%rbuffzE(:,:,:,1) = this%rbuffzE(:,:,:,1)/(this%rbuffzE(:,:,:,2) + 1.d-14)
+   this%cmodel_allZ = this%rbuffzE(1,1,:,1)
 
    this%rbuffzC(:,:,1:this%gpC%zsz(3),1) = 0.5d0*(this%rbuffzE(:,:,1:this%gpC%zsz(3),1)+this%rbuffzE(:,:,2:this%gpC%zsz(3)+1,1))
    call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
