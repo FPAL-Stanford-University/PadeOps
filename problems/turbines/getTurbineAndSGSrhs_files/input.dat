@@ -1,0 +1,32 @@
+&INPUT
+nx                            = 192                                           ! Number of points in X
+ny                            = 192                                           ! Number of points in Y
+nz                            = 128                                           ! Number of points in Z
+Lx                            = 3.141592653589793d0                           ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            = 3.141592653589793d0                           ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Lz                            = 1.d0                                          ! Domain Height (appropriate dimesnions/non-dimensionalized)
+z0init                        = 1.d-4                                         ! Roughness scale used to initialize the profile
+inputdir                      = "/home/aditya90/Codes/PadeOps/data/JacobWTrun07"   ! Directory for any input files
+outputdir                     = "/home/aditya90/Codes/PadeOps/data/JacobWTrun07"   ! Directory for all output files
+TID                           = 100000 
+RID                           = 7
+/
+/
+&SGS_MODEL
+DynamicProcedureType          = 0
+SGSModelID                    = 1           ! 0: smagorinsky, 1: sigma, 2: Shear Improved Smagorinsky
+z0                            = 1.0d-4
+useWallDamping                = .FALSE.      ! Use the Wall Damping Function 
+ncWall                        = 3.d0      ! Wall Damping Function Exponent
+Csgs                          = 1.3d0      ! Asymptotic model constant (wall damping function)
+WallModelType                 = 1
+explicitCalcEdgeEddyViscosity = .false.
+useVerticalTfilter            = .false.
+/
+/
+&WINDTURBINES
+useWindTurbines               = .TRUE.
+num_turbines                  = 24
+ADM                           = .TRUE.
+turbInfoDir                   = "/home/aditya90/Codes/PadeOps/problems/turbines/pblwt_files/turbInfo"
+/
