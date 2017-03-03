@@ -6,10 +6,14 @@ subroutine init_smagorinsky(this,dx,dy,dz,Cs,ncWall,z0,useWallDamping, zMeshC, z
    real(rkind) :: deltaLES
    real(rkind), parameter :: kappa = 0.4d0
 
+   ! Set the type of mnodel constant (default is wall function). 
+   ! Can be reset to true via dynamic procedure initialization, 
+   ! in case the global dynamic procedure is used. 
+   this%useCglobal = .false. 
+   
+   
    deltaLES = (1.5d0*dx*1.5d0*dy*dz)**(1.d0/3.d0)
    
-   allocate(this%cmodelC(size(zMeshC)))
-   allocate(this%cmodelE(size(zMeshE)))
    if (useWallDamping) then
       this%cmodelC = ( Cs**(-real(ncWall,rkind)) + (kappa*(zMeshC/deltaLES + &
           & z0/deltaLES))**(-real(ncWall,rkind))  )**(-one/real(ncWall,rkind))

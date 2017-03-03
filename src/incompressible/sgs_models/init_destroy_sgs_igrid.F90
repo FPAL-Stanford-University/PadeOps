@@ -17,7 +17,7 @@ end subroutine
 subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
    class(sgs_igrid), intent(in), target :: this
    real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: nuSGS
-   real(rkind), dimension(:,:,:)  , pointer, intent(inout), optional :: tau13, tau23
+   real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: tau13, tau23
    real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: tauSGS_ij
    real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: q1, q2, q3
 
@@ -53,9 +53,12 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   integer :: DynamicProcedureType = 0, SGSmodelID = 0, WallModelType = 0, DynProcFreq = 1 
   real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0
   character(len=clen) :: SGSDynamicRestartFile
+  logical :: explicitCalcEdgeEddyViscosity = .false.
+  
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0,  &
                  useWallDamping, ncWall, Csgs, WallModelType, &
-                 DynProcFreq, useSGSDynamicRestart, SGSDynamicRestartFile
+                 DynProcFreq, useSGSDynamicRestart,           &
+                 SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity
 
   integer :: ierr
 
@@ -103,12 +106,16 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   read(unit=123, NML=SGS_MODEL)
   close(123)
 
+  this%explicitCalcEdgeEddyViscosity = explicitCalcEdgeEddyViscosity
   this%mid = SGSmodelID
   this%z0 = z0
   this%DynamicProcedureType = DynamicProcedureType
   this%DynProcFreq = DynProcFreq
+
   this%WallModel        = WallModelType
   if (this%WallModel .ne. 0) call this%initWallModel()
+  allocate(this%cmodelC(size(zMeshC)))
+  allocate(this%cmodelE(size(zMeshE)))
 
   select case (SGSmodelID)
   case (0)
