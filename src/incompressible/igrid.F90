@@ -13,7 +13,7 @@ module IncompressibleGrid
     use reductions, only: p_maxval, p_sum
     use timer, only: tic, toc
     use PadePoissonMod, only: Padepoisson 
-    use sgsmod, only: sgs
+    use sgsmod_igrid, only: sgs_igrid
     use wallmodelMod, only: wallmodel
     use numerics
     !use cd06staggstuff, only: cd06stagg
@@ -65,7 +65,7 @@ module IncompressibleGrid
         type(decomp_info), pointer :: Sp_gpC, Sp_gpE
         type(spectral), allocatable :: spectE, spectC
         type(staggOps), allocatable :: Ops, OpsPP
-        type(sgs), allocatable :: sgsmodel
+        type(sgs_igrid), allocatable :: sgsmodel
         type(wallmodel), allocatable :: moengWall
 
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsC
@@ -83,7 +83,7 @@ module IncompressibleGrid
         real(rkind), dimension(:,:,:), allocatable :: divergence
 
         real(rkind), dimension(:,:,:), pointer :: u, v, wC, w, uE, vE, T, TE
-        complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what, That, TEhat
+        complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what, That, TEhat, uEhat, vEhat
         
         complex(rkind), dimension(:,:,:), pointer :: uhat1, vhat1, what1, That1
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC2, SfieldsE2
@@ -102,19 +102,20 @@ module IncompressibleGrid
 
         complex(rkind), dimension(:,:,:,:), allocatable :: rhsC, rhsE, OrhsC, OrhsE 
         real(rkind), dimension(:,:,:,:), allocatable :: duidxjC, duidxjE 
-        complex(rkind), dimension(:,:,:,:), allocatable :: duidxjChat
+        complex(rkind), dimension(:,:,:,:), allocatable :: duidxjChat, duidxjEhat
         complex(rkind), dimension(:,:,:), allocatable :: d2udz2hatC, d2vdz2hatC,d2wdz2hatE
         complex(rkind), dimension(:,:,:), pointer:: u_rhs, v_rhs, wC_rhs, w_rhs 
         complex(rkind), dimension(:,:,:), pointer:: u_Orhs, v_Orhs, w_Orhs
 
         real(rkind), dimension(:,:,:), allocatable :: rDampC, rDampE         
-        real(rkind) :: Re, Gx, Gy, Gz, dtby2, meanfact, Tref
+        real(rkind) :: Re, Gx, Gy, Gz, dtby2, meanfact, Tref, dPfdx, dPfdy, dPfdz
         complex(rkind), dimension(:,:,:), allocatable :: GxHat, GyHat 
         real(rkind) :: Ro = 1.d5, Fr = 1000.d0
         logical :: assume_fplane = .true.
         real(rkind) :: coriolis_cosine, coriolis_sine 
         integer :: nxZ, nyZ
-       
+      
+        logical :: newTimeStep = .true. 
         integer :: timeSteppingScheme = 0 
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
         integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
@@ -154,12 +155,16 @@ module IncompressibleGrid
         integer :: tidSUM, tid_StatsDump, tid_compStats, tprev2, tprev1
         logical :: normByustar
         real(rkind) :: tSimStartStats
+        real(rkind), dimension(:,:,:,:), allocatable :: F_rhs_sgs
+        logical :: computeForcingTerm = .false. 
 
         ! Pointers linked to SGS stuff
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
         real(rkind), dimension(:,:,:)  , pointer :: nu_SGS, tau13, tau23
         real(rkind), dimension(:,:,:)  , pointer :: c_SGS, q1, q2, q3 
-       
+        real(rkind), dimension(:,:,:), allocatable :: fbody_x, fbody_y, fbody_z
+        logical                                      :: storeFbody
+
         ! Wind Turbine stuff 
         type(turbineArray), allocatable :: WindTurbineArr
 
@@ -223,19 +228,19 @@ module IncompressibleGrid
             procedure, private :: addCoriolisTerm
             procedure, private :: addSponge
             procedure, private :: addExtraForcingTerm 
-            procedure, private :: compute_and_bcast_surface_Mn
+            !procedure, private :: compute_and_bcast_surface_Mn
             procedure, private :: dumpRestartFile
             procedure, private :: readRestartFile
             procedure, private :: compute_z_mean 
             procedure, private :: compute_z_fluct
             procedure, private :: compute_deltaT
-            procedure, private :: getfilteredSpeedSqAtWall
+            !procedure, private :: getfilteredSpeedSqAtWall
             procedure, private :: dump_pointProbes
             procedure, private :: dump_stats
             procedure, private :: compute_stats 
             procedure, private :: dump_stats3D
             procedure, private :: compute_stats3D 
-            procedure, private :: getSurfaceQuantities 
+            !procedure, private :: getSurfaceQuantities 
             procedure, private :: ApplyCompactFilter 
             procedure, private :: addNonLinearTerm_skewSymm
             procedure, private :: populate_rhs
@@ -257,18 +262,18 @@ contains
         class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
         character(len=clen) :: outputdir, inputdir, turbInfoDir, ksOutputDir, controlDir = "null"
-        integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1, SGSModelID = 1
+        integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = -1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1, botBC_Temp = 0
-        real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop,ncWall=1.d0
-        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, z0 = 1.d-4, Cs = 0.17d0
+        real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop
+        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, z0 = 1.d-4
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0,Gx=0.d0,Gy=0.d0,Gz=0.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
-        logical ::isStratified=.false.,dumpPlanes = .false., useSGSclipping = .true.,useExtraForcing = .false.
-        logical ::useSGS = .true.,useDynamicProcedure = .false.,useSpongeLayer=.false.,useWindTurbines = .false.
-        logical :: useGeostrophicForcing = .false., useVerticalTfilter = .false., useWallDamping = .true. 
+        logical ::isStratified=.false.,dumpPlanes = .false.,useExtraForcing = .false.
+        logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false.
+        logical :: useGeostrophicForcing = .false.
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10
@@ -287,11 +292,9 @@ contains
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
-        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, &
+        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, &
                           useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz, assume_fplane, latitude
         namelist /BCs/ topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp
-        namelist /LES/ useSGS, useDynamicProcedure, useSGSclipping, SGSmodelID, useVerticalTfilter, &
-                        useWallDamping, ncWall, Cs 
         namelist /WALLMODEL/ z0, wallMType
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
@@ -311,7 +314,6 @@ contains
         read(unit=ioUnit, NML=PHYSICS)
         read(unit=ioUnit, NML=PRESSURE_CALC)
         read(unit=ioUnit, NML=BCs)
-        read(unit=ioUnit, NML=LES)
         read(unit=ioUnit, NML=WALLMODEL)
         read(unit=ioUnit, NML=WINDTURBINES)
         read(unit=ioUnit, NML=KSPREPROCESS)
@@ -336,14 +338,14 @@ contains
         this%t_restartDump = t_restartDump; this%tid_statsDump = tid_statsDump; this%useCoriolis = useCoriolis; 
         this%tSimStartStats = tSimStartStats; this%useWindTurbines = useWindTurbines
         this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS 
-        this%useDynamicProcedure = useDynamicProcedure; this%UseDealiasFilterVert = UseDealiasFilterVert
+        this%UseDealiasFilterVert = UseDealiasFilterVert
         this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; this%fastCalcPressure = fastCalcPressure 
         this%t_start_planeDump = t_start_planeDump; this%t_stop_planeDump = t_stop_planeDump
         this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro; 
         this%PreProcessForKS = preprocessForKS; this%KSOutputDir = KSoutputDir;this%t_dumpKSprep = t_dumpKSprep 
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
         this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; 
-        this%t_pointProbe = t_pointProbe
+        this%t_pointProbe = t_pointProbe; this%dPfdx = dPfdx; this%dPfdy = dPfdy; this%dPfdz = dPfdz
 
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
@@ -439,7 +441,7 @@ contains
 
 
         ! STEP 6: ALLOCATE MEMORY FOR FIELD ARRAYS
-        if (this%isStratified) then
+        !if (this%isStratified) then
             allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),7))
             allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4))
             allocate(this%dTdzE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
@@ -451,19 +453,20 @@ contains
             call this%spectC%alloc_r2c_out(this%dTdyH)
             call this%spectE%alloc_r2c_out(this%dTdzH)
             call this%spectC%alloc_r2c_out(this%dTdzHC)
-            call this%spectC%alloc_r2c_out(this%rhsC,3); call this%spectC%alloc_r2c_out(this%OrhsC,3)
-            call this%spectE%alloc_r2c_out(this%SfieldsE,2)
-        else
-            allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6))
-            allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),3))
-            call this%spectC%alloc_r2c_out(this%SfieldsC,3)
-            call this%spectC%alloc_r2c_out(this%rhsC,2); call this%spectC%alloc_r2c_out(this%OrhsC,2)
-            call this%spectE%alloc_r2c_out(this%SfieldsE,1)
-        end if 
+            call this%spectC%alloc_r2c_out(this%rhsC,3); 
+            call this%spectC%alloc_r2c_out(this%OrhsC,3)
+        !else
+        !    allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6))
+        !    allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),3))
+        !    call this%spectC%alloc_r2c_out(this%SfieldsC,3)
+        !    call this%spectC%alloc_r2c_out(this%rhsC,2); call this%spectC%alloc_r2c_out(this%OrhsC,2)
+        !end if 
+        call this%spectE%alloc_r2c_out(this%SfieldsE,4)
         allocate(this%divergence(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
         allocate(this%duidxjC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9))
-        allocate(this%duidxjE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4))
+        allocate(this%duidxjE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9))
         call this%spectC%alloc_r2c_out(this%duidxjChat,9)
+        call this%spectC%alloc_r2c_out(this%duidxjEhat,9)
         call this%spectE%alloc_r2c_out(this%rhsE,1); call this%spectE%alloc_r2c_out(this%OrhsE,1)
         
         this%u => this%PfieldsC(:,:,:,1) ; this%v => this%PfieldsC(:,:,:,2) ; this%wC => this%PfieldsC(:,:,:,3) 
@@ -471,6 +474,7 @@ contains
         
         this%uhat => this%SfieldsC(:,:,:,1); this%vhat => this%SfieldsC(:,:,:,2); 
         this%whatC => this%SfieldsC(:,:,:,3); this%what => this%SfieldsE(:,:,:,1)
+        this%uEhat => this%SfieldsE(:,:,:,3); this%vEhat => this%SfieldsE(:,:,:,4)
 
         this%ox => this%PfieldsC(:,:,:,4); this%oy => this%PfieldsC(:,:,:,5); this%oz => this%PfieldsC(:,:,:,6)
 
@@ -478,11 +482,11 @@ contains
 
         this%u_Orhs => this%OrhsC(:,:,:,1); this%v_Orhs => this%OrhsC(:,:,:,2); this%w_Orhs => this%OrhsE(:,:,:,1)
 
-        if (this%isStratified) then
-            this%T => this%PfieldsC(:,:,:,7); this%That => this%SfieldsC(:,:,:,4)
-            this%TE => this%PfieldsE(:,:,:,4); this%T_rhs => this%rhsC(:,:,:,3)
-            this%T_Orhs => this%OrhsC(:,:,:,3); this%TEhat => this%SfieldsE(:,:,:,2)
-        end if
+        !if (this%isStratified) then
+        this%T => this%PfieldsC(:,:,:,7); this%That => this%SfieldsC(:,:,:,4)
+        this%TE => this%PfieldsE(:,:,:,4); this%T_rhs => this%rhsC(:,:,:,3)
+        this%T_Orhs => this%OrhsC(:,:,:,3); this%TEhat => this%SfieldsE(:,:,:,2)
+        !end if
 
         !allocate(this%cbuffxC(this%sp_gpC%xsz(1),this%sp_gpC%xsz(2),this%sp_gpC%xsz(3),2))
         allocate(this%cbuffyC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),2))
@@ -505,6 +509,11 @@ contains
             allocate(this%d2wdz2hatE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
         end if 
         this%nxZ = size(this%cbuffzE,1); this%nyZ = size(this%cbuffzE,2)
+        allocate(this%fbody_x(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+        allocate(this%fbody_y(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+        allocate(this%fbody_z(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)))
+        this%storeFbody = .true. ! Cant think of a case where this will be false 
+
 
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
         if (useCompactFD) then
@@ -572,9 +581,9 @@ contains
         if (this%isStratified) call this%spectC%ifft(this%That,this%T)
 
         ! STEP 8: Interpolate the cell center values of w
-        if (this%useSGS) then
-            call this%compute_and_bcast_surface_Mn()
-        end if
+        !if (this%useSGS) then
+        !    call this%compute_and_bcast_surface_Mn()
+        !end if
 
         call this%interp_PrimitiveVars()
         call message(1,"Max KE:",P_MAXVAL(this%getMaxKE()))
@@ -619,12 +628,23 @@ contains
         ! STEP 11: Initialize SGS model
         if (this%useSGS) then
             allocate(this%SGSmodel)
-            call this%SGSmodel%init(SGSModelID, this%spectC, this%spectE, this%gpC, this%gpE, this%dx, & 
-                this%dy, this%dz, useDynamicProcedure, useSGSclipping, this%mesh(:,:,:,3), this%z0, &
-                .true., WallMType, useVerticalTfilter, Pr, useWallDamping, nCWall, Cs, ComputeStokesPressure, &
-                this%isStratified )
-            call this%sgsModel%link_pointers(this%nu_SGS, this%c_SGS, this%tauSGS_ij, this%tau13, this%tau23, &
-                                this%q1, this%q2, this%q3)
+            
+            ! First get z at edges
+            zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
+            zEinZ => this%rbuffzE(:,:,:,1); zEinY => this%rbuffyE(:,:,:,1)
+            call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
+            call transpose_y_to_z(zinY,zinZ,this%gpC)
+            call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
+            zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
+            call transpose_z_to_y(zEinZ,zEinY,this%gpE)
+            call transpose_y_to_x(zEinY,this%rbuffxE(:,:,:,1), this%gpE)
+
+            call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
+                                    this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
+                                    this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
+                                    this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
+                                    this%ThetaRef, this%Fr, this%Re, this%isInviscid, this%isStratified)
+            call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3)
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -864,7 +884,7 @@ contains
 
         ! Step 0: Compute TimeStep 
         call this%compute_deltaT
-
+        
         !!! STAGE 1
         ! First stage - everything is where it's supposed to be
         if (this%AlreadyHaveRHS) then
@@ -872,6 +892,7 @@ contains
         else
             call this%populate_rhs()
         end if
+        this%newTimeStep = .false. 
         this%uhat1 = this%uhat + this%dt*this%u_rhs 
         this%vhat1 = this%vhat + this%dt*this%v_rhs 
         this%what1 = this%what + this%dt*this%w_rhs 
@@ -911,7 +932,6 @@ contains
         if (this%isStratified) this%That = (1.d0/3.d0)*this%That + (2.d0/3.d0)*this%That1 + (2.d0/3.d0)*this%dt*this%T_rhs
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
-
 
         ! Wrap up this time step 
         call this%wrapup_timestep() 
@@ -983,59 +1003,35 @@ contains
 
     subroutine interp_PrimitiveVars(this)
         class(igrid), intent(inout), target :: this
-        complex(rkind), dimension(:,:,:), pointer :: ybuffC, ybuffE, zbuffC, zbuffE
+        complex(rkind), dimension(:,:,:), pointer :: ybuffC, zbuffC, zbuffE
         
-        ybuffE => this%cbuffyE(:,:,:,1)
         zbuffE => this%cbuffzE(:,:,:,1)
         zbuffC => this%cbuffzC(:,:,:,1)
         ybuffC => this%cbuffyC(:,:,:,1)
 
         ! Step 1: Interpolate w -> wC
         call transpose_y_to_z(this%what,zbuffE,this%sp_gpE)
-        if (useCompactFD) then
-            call this%Pade6opZ%interpz_E2C(zbuffE,zbuffC,wBC_bottom, wBC_top)
-        else
-            call this%Ops%InterpZ_Edge2Cell(zbuffE,zbuffC)
-        end if
+        call this%Pade6opZ%interpz_E2C(zbuffE,zbuffC,wBC_bottom, wBC_top)
         call transpose_z_to_y(zbuffC,this%whatC,this%sp_gpC)
         call this%spectC%ifft(this%whatC,this%wC)
 
         ! Step 2: Interpolate u -> uE
         call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
-        if (useCompactFD) then
-            call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,uBC_bottom, uBC_top)
-        else
-            call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
-            zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
-            zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
-        end if 
+        call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,uBC_bottom, uBC_top)
+        call transpose_z_to_y(zbuffE,this%uEhat, this%sp_gpE)
+        call this%spectE%ifft(this%uEhat, this%uE)
 
-        call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
-        call this%spectE%ifft(ybuffE,this%uE)
-        
         ! Step 3: Interpolate v -> vE
         call transpose_y_to_z(this%vhat,zbuffC,this%sp_gpC)
-        if (useCompactFD) then
-            call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,vBC_bottom, vBC_top)
-        else
-            call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
-            zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
-            zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
-        end if 
+        call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,vBC_bottom, vBC_top)
+        call transpose_z_to_y(zbuffE,this%vEhat, this%sp_gpE)
+        call this%spectE%ifft(this%vEhat, this%vE)
         
-        
-        call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
-        call this%spectE%ifft(ybuffE,this%vE)
 
         ! Step 4: Interpolate T
         if (this%isStratified) then
             call transpose_y_to_z(this%That,zbuffC,this%sp_gpC)
-            if (useCompactFD) then
-                call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,TBC_bottom, TBC_top)
-            else
-                call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
-                zbuffE(:,:,this%nz + 1) = two*zbuffC(:,:,this%nz) - zbuffE(:,:,this%nz)
-            end if
+            call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,TBC_bottom, TBC_top)
             if (this%botBC_Temp == 0) then 
                 zbuffE(:,:,1) = zero 
                 if (nrank == 0) then
@@ -1094,8 +1090,11 @@ contains
         dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
         dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
 
-        dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
-        dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
+        !dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
+        !dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
+
+        dwdx => this%duidxjE(:,:,:,7); dwdy => this%duidxjE(:,:,:,8);
+        dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,6);
 
         T1C => this%rbuffxC(:,:,:,1); T2C => this%rbuffxC(:,:,:,2)
         T1E => this%rbuffxE(:,:,:,1); T2E => this%rbuffxE(:,:,:,2)
@@ -1168,8 +1167,10 @@ contains
         dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
         dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
 
-        dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
-        dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
+        !dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
+        !dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
+        dwdx => this%duidxjE(:,:,:,7); dwdy => this%duidxjE(:,:,:,8);
+        dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,6);
 
         T1C => this%rbuffxC(:,:,:,1); T2C => this%rbuffxC(:,:,:,2)
         T1E => this%rbuffxE(:,:,:,1); T2E => this%rbuffxE(:,:,:,2)
@@ -1328,17 +1329,22 @@ contains
 
     subroutine addCoriolisTerm(this)
         class(igrid), intent(inout), target :: this
-        complex(rkind), dimension(:,:,:), pointer :: ybuffE, zbuffC, zbuffE
+        complex(rkind), dimension(:,:,:), pointer :: ybuffE, ybuffC1, ybuffC2, zbuffC, zbuffE
 
         ybuffE => this%cbuffyE(:,:,:,1)
+        ybuffC1 => this%cbuffyC(:,:,:,1)
+        ybuffC2 => this%cbuffyC(:,:,:,2)
         zbuffE => this%cbuffzE(:,:,:,1)
         zbuffC => this%cbuffzC(:,:,:,1)
 
+
         ! u equation 
-        this%u_rhs = this%u_rhs - (this%coriolis_cosine*this%what &
-                            + this%coriolis_sine*(this%GyHat - this%vhat))/this%Ro
-        ! v equation 
-        this%v_rhs = this%v_rhs + this%coriolis_sine*(this%GxHat - this%uhat)/this%Ro
+        ybuffC1 = -(this%coriolis_cosine*this%what + this%coriolis_sine*(this%GyHat - this%vhat))/this%Ro 
+        this%u_rhs = this%u_rhs  + ybuffC1!- (this%coriolis_cosine*this%what &
+                            !+ this%coriolis_sine*(this%GyHat - this%vhat))/this%Ro
+        ! v equation
+        ybuffC2 = this%coriolis_sine*(this%GxHat - this%uhat)/this%Ro
+        this%v_rhs = this%v_rhs + ybuffC2 
         
         ! w equation 
         ! The real equation is given as:
@@ -1355,16 +1361,23 @@ contains
         zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
         if (nrank == 0) zbuffE(1,1,:) = cmplx(zero,zero,rkind)
         call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
-         
-        this%w_rhs = this%w_rhs + this%coriolis_cosine*ybuffE/this%Ro
+        
+        ybuffE = ybuffE*this%coriolis_cosine/this%Ro
+        this%w_rhs = this%w_rhs + ybuffE 
         ! The residual quantity (Gx - <u>)*cos(alpha)/Ro is accomodated in
         ! pressure
 
+        if (this%storeFbody) then
+            call this%spectC%ifft(ybuffC1,this%fbody_x)
+            call this%spectC%ifft(ybuffC2,this%fbody_y)
+            call this%spectE%ifft(ybuffE ,this%fbody_z)
+        end if
     end subroutine  
 
     subroutine addSponge(this)
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: deviationC
+
         deviationC => this%cbuffyC(:,:,:,1)
         
         deviationC = this%uhat - this%ubase
@@ -1372,12 +1385,11 @@ contains
 
         deviationC = this%vhat - this%vbase
         this%v_rhs = this%v_rhs - (this%RdampC/this%dt)*deviationC
-        !this%v_rhs = this%v_rhs - (this%RdampC/this%dt)*this%vhat ! base value for v is zero
         
         this%w_rhs = this%w_rhs - (this%RdampE/this%dt)*this%what ! base value for w is zero  
 
-        !deviationC = this%That - this%Tbase
-        !this%T_rhs = this%T_rhs - (this%RdampC/this%dt)*deviationC
+        deviationC = this%That - this%Tbase
+        this%T_rhs = this%T_rhs - (this%RdampC/this%dt)*deviationC
 
     end subroutine
 
@@ -1387,13 +1399,19 @@ contains
         !    this%dpF_dxhat(1,1,:) = cmplx(this%ustar*this%ustar*this%nx*this%ny,zero)
         !end if
         this%u_rhs = this%u_rhs + this%dpF_dxhat
+        if (this%storeFbody) then
+            this%fbody_x = this%fbody_x + this%dpFdx 
+        end if
     end subroutine
 
     subroutine AddBuoyancyTerm(this)
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: fT1E 
-   
+        real(rkind), dimension(:,:,:), pointer :: rbuffE
+
         fT1E => this%cbuffyE(:,:,:,1)
+        rbuffE => this%rbuffxE(:,:,:,1)
+
         fT1E = (this%TEhat)/(this%ThetaRef*this%Fr*this%Fr)
         if (this%spectE%carryingZeroK) then
             fT1E(1,1,:) = cmplx(zero,zero,rkind)
@@ -1402,7 +1420,13 @@ contains
         
         if (this%useSponge) then
             call this%addSponge
-        end if 
+        end if
+
+        if (this%storeFbody) then
+            call this%spectE%ifft(fT1E, rbuffE)
+            this%fbody_z = this%fbody_z + rbuffE
+        end if
+
     end subroutine
 
     subroutine populate_rhs(this)
@@ -1447,27 +1471,11 @@ contains
         ! subroutine. 
         ! Step 6: SGS Viscous Term
         if (this%useSGS) then
-            if (this%isStratified) then
-                call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
-                                                this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
-                                                this%uhat   , this%vhat           , this%whatC      ,&
-                                                this%u      , this%v              , this%wC         ,&
-                                                this%ustar  , this%Umn            , this%Vmn        ,&
-                                                this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
-                                                this%max_nuSGS, this%inst_horz_avg)
-
-                call this%SGSmodel%getRHS_SGS_Scalar_WallM(this%duidxjC, this%dTdxC, this%dTdyC, this%dTdzE, &
-                                                           this%dTdzC, this%T_rhs, this%wTh_surf)
-            else
-                call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
-                                                this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
-                                                this%uhat   , this%vhat           , this%whatC      ,&
-                                                this%u      , this%v              , this%wC         ,&
-                                                this%ustar  , this%Umn            , this%Vmn        ,&
-                                                this%Uspmn  , this%filteredSpeedSq, this%InvObLength,&
-                                                this%max_nuSGS, this%inst_horz_avg)!, this%dTdxC      ,&
-                                                !this%dTdyC  , this%dTdzHC)
-            end if 
+            call this%sgsmodel%getRHS_SGS(this%u_rhs,      this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
+                                          this%duidxjEhat, this%uEhat, this%vEhat,      this%what,    this%uhat,    &
+                                          this%vhat,       this%That,  this%u,          this%v,       this%uE,      &
+                                          this%vE,         this%w,     this%newTimeStep                             )
+            
         end if
 
 
@@ -1476,15 +1484,42 @@ contains
 
     subroutine addViscousTerm(this)
         class(igrid), intent(inout) :: this
+        integer :: i, j, k
+        real(rkind) :: oneByRe
+        complex(rkind) :: tmp1, tmp2
 
-        this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%uhat + this%d2udz2hatC
-        this%u_rhs = this%u_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
+        oneByRe = one/this%Re
 
-        this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%vhat + this%d2vdz2hatC
-        this%v_rhs = this%v_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
+        do k = 1,size(this%u_rhs,3)
+           do j = 1,size(this%u_rhs,2)
+              !$omp simd
+              do i = 1,size(this%u_rhs,1)
+                  tmp1 = -this%spectC%kabs_sq(i,j,k)*this%uhat(i,j,k) + this%d2udz2hatC(i,j,k)
+                  tmp2 = -this%spectC%kabs_sq(i,j,k)*this%vhat(i,j,k) + this%d2vdz2hatC(i,j,k)
+                  this%u_rhs(i,j,k) = this%u_rhs(i,j,k) + oneByRe*tmp1
+                  this%v_rhs(i,j,k) = this%v_rhs(i,j,k) + oneByRe*tmp2
+               end do
+            end do
+         end do
 
-        this%cbuffyE(:,:,:,1) = -this%spectE%kabs_sq*this%what + this%d2wdz2hatE
-        this%w_rhs = this%w_rhs + (one/this%Re)*this%cbuffyE(:,:,:,1)
+        do k = 1,size(this%w_rhs,3)
+           do j = 1,size(this%w_rhs,2)
+              !$omp simd
+              do i = 1,size(this%w_rhs,1)
+                  tmp1 = -this%spectE%kabs_sq(i,j,k)*this%what(i,j,k) + this%d2wdz2hatE(i,j,k)
+                  this%w_rhs(i,j,k) = this%w_rhs(i,j,k) + oneByRe*tmp1
+               end do
+            end do
+         end do
+
+        !this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%uhat + this%d2udz2hatC
+        !this%u_rhs = this%u_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
+
+        !this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%vhat + this%d2vdz2hatC
+        !this%v_rhs = this%v_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
+
+        !this%cbuffyE(:,:,:,1) = -this%spectE%kabs_sq*this%what + this%d2wdz2hatE
+        !this%w_rhs = this%w_rhs + (one/this%Re)*this%cbuffyE(:,:,:,1)
 
     end subroutine
 
@@ -1524,7 +1559,7 @@ contains
         if (this%isStratified) call this%spectC%ifft(this%That,this%T)
     
         ! STEP 4: Interpolate the cell center values of w
-        call this%compute_and_bcast_surface_Mn()
+        !call this%compute_and_bcast_surface_Mn()
         call this%interp_PrimitiveVars()
 
         ! STEP 5: Compute duidxjC 
@@ -1602,6 +1637,7 @@ contains
 
         ! STEP 1: Update Time, BCs and record probe data
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
+        this%newTimeStep = .true. 
         if (this%isStratified) then
             if (this%botBC_Temp == 0) then
                 this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
@@ -1870,8 +1906,11 @@ contains
         dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
         dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
 
-        dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
-        dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
+        !dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
+        !dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
+        
+        dwdx => this%duidxjE(:,:,:,7); dwdy => this%duidxjE(:,:,:,8);
+        dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,6);
 
         rbuff => this%rbuffxC(:,:,:,1); cbuff => this%cbuffyC(:,:,:,1)
         dvdzH => this%duidxjChat(:,:,:,6) 
@@ -1918,8 +1957,6 @@ contains
     end subroutine
 
 
-
-
     subroutine compute_duidxj(this)
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
@@ -1928,76 +1965,97 @@ contains
         real(rkind),    dimension(:,:,:), pointer :: dudx, dudy, dudz
         real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
         real(rkind),    dimension(:,:,:), pointer :: dwdx, dwdy, dwdz
-        real(rkind),    dimension(:,:,:), pointer :: dvdzC, dudzC
+        real(rkind),    dimension(:,:,:), pointer :: dvdzC, dudzC 
         real(rkind),    dimension(:,:,:), pointer :: dwdxC, dwdyC
+        real(rkind),    dimension(:,:,:), pointer :: dwdzE, dudxE
+        real(rkind),    dimension(:,:,:), pointer :: dudyE, dvdxE 
+        real(rkind),    dimension(:,:,:), pointer :: dvdyE
         
         complex(rkind), dimension(:,:,:), pointer :: dudxH, dudyH, dudzH 
         complex(rkind), dimension(:,:,:), pointer :: dvdxH, dvdyH, dvdzH
         complex(rkind), dimension(:,:,:), pointer :: dwdxH, dwdyH, dwdzH
+        
+        complex(rkind), dimension(:,:,:), pointer :: dudxEH, dudyEH, dudzEH 
+        complex(rkind), dimension(:,:,:), pointer :: dvdxEH, dvdyEH, dvdzEH
+        complex(rkind), dimension(:,:,:), pointer :: dwdxEH, dwdyEH, dwdzEH
 
-        dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
-        dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
-        dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
+        dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3) 
+        dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6) 
+        dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9) 
 
         dudxH => this%duidxjChat(:,:,:,1); dudyH => this%duidxjChat(:,:,:,2); dudzH => this%duidxjChat(:,:,:,3) 
         dvdxH => this%duidxjChat(:,:,:,4); dvdyH => this%duidxjChat(:,:,:,5); dvdzH => this%duidxjChat(:,:,:,6) 
-        dwdxH => this%duidxjChat(:,:,:,7); dwdyH => this%duidxjChat(:,:,:,8); dwdzH => this%duidxjChat(:,:,:,9); 
+        dwdxH => this%duidxjChat(:,:,:,7); dwdyH => this%duidxjChat(:,:,:,8); dwdzH => this%duidxjChat(:,:,:,9) 
+        
+        dudxEH => this%duidxjEhat(:,:,:,1); dudyEH => this%duidxjEhat(:,:,:,2); dudzEH => this%duidxjEhat(:,:,:,3) 
+        dvdxEH => this%duidxjEhat(:,:,:,4); dvdyEH => this%duidxjEhat(:,:,:,5); dvdzEH => this%duidxjEhat(:,:,:,6) 
+        dwdxEH => this%duidxjEhat(:,:,:,7); dwdyEH => this%duidxjEhat(:,:,:,8); dwdzEH => this%duidxjEhat(:,:,:,9)
        
-        dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
-        dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
+        dudxE => this%duidxjE(:,:,:,1); dudyE => this%duidxjE(:,:,:,2); dudz  => this%duidxjE(:,:,:,3)
+        dvdxE => this%duidxjE(:,:,:,4); dvdyE => this%duidxjE(:,:,:,5); dvdz  => this%duidxjE(:,:,:,6)
+        dwdx  => this%duidxjE(:,:,:,7); dwdy  => this%duidxjE(:,:,:,8); dwdzE => this%duidxjE(:,:,:,9)
 
         ctmpz1 => this%cbuffzC(:,:,:,1); ctmpz2 => this%cbuffzE(:,:,:,1); 
         ctmpz3 => this%cbuffzC(:,:,:,2); ctmpz4 => this%cbuffzE(:,:,:,2)
         ctmpy1 => this%cbuffyC(:,:,:,1); ctmpy2 => this%cbuffyE(:,:,:,1)
 
-
-        if ((this%useSGS) .or. (useSkewSymm)) then
-            call this%spectC%mTimes_ik1_oop(this%uhat,dudxH)
-            call this%spectC%ifft(dudxH,dudx)
-        end if
-
+      
+        ! dudx
+        call this%spectC%mTimes_ik1_oop(this%uhat,dudxH)
+        call this%spectC%ifft(dudxH,dudx)
+        call this%spectE%mTimes_ik1_oop(this%uEhat,dudxEH)
+        call this%spectE%ifft(dudxEH,dudxE)
+         
+        ! dudy
         call this%spectC%mTimes_ik2_oop(this%uhat,dudyH)
         call this%spectC%ifft(dudyH,dudy)
+        call this%spectE%mTimes_ik2_oop(this%uEhat,dudyEH)
+        call this%spectE%ifft(dudyEH,dudyE)
 
+        ! dvdx 
         call this%spectC%mTimes_ik1_oop(this%vhat,dvdxH)
         call this%spectC%ifft(dvdxH,dvdx)
+        call this%spectE%mTimes_ik1_oop(this%vEhat,dvdxEH)
+        call this%spectE%ifft(dvdxEH,dvdxE)
 
-        if ((this%useSGS) .or. (useSkewSymm)) then
-            call this%spectC%mTimes_ik2_oop(this%vhat,dvdyH)
-            call this%spectC%ifft(dvdyH,dvdy)
-        end if
+        ! dvdy
+        call this%spectC%mTimes_ik2_oop(this%vhat,dvdyH)
+        call this%spectC%ifft(dvdyH,dvdy)
+        call this%spectE%mTimes_ik2_oop(this%vEhat,dvdyEH)
+        call this%spectE%ifft(dvdyEH,dvdyE)
 
-        if ((this%useSGS) .or. (useSkewSymm)) then
-            call this%spectC%mTimes_ik1_oop(this%whatC,dwdxH)
-            call this%spectC%ifft(dwdxH,dwdxC)
+        ! dwdx
+        call this%spectC%mTimes_ik1_oop(this%whatC,dwdxH)
+        call this%spectC%ifft(dwdxH,dwdxC)
+        call this%spectE%mTimes_ik1_oop(this%what, dwdxEH)
+        call this%spectE%ifft(dwdxEH,dwdx)
 
-            call this%spectC%mTimes_ik2_oop(this%whatC,dwdyH)
-            call this%spectC%ifft(dwdyH,dwdyC)
-        end if
-
-        call this%spectE%mTimes_ik1_oop(this%what,ctmpy2)
-        call this%spectE%ifft(ctmpy2,dwdx)
-
-        call this%spectE%mTimes_ik2_oop(this%what,ctmpy2)
-        call this%spectE%ifft(ctmpy2,dwdy)
-        
+        ! dwdy
+        call this%spectC%mTimes_ik2_oop(this%whatC,dwdyH)
+        call this%spectC%ifft(dwdyH,dwdyC)
+        call this%spectE%mTimes_ik2_oop(this%what,dwdyEH)
+        call this%spectE%ifft(dwdyEH,dwdy)
+       
+        ! dwdz
         call transpose_y_to_z(this%what,ctmpz2,this%sp_gpE)
-        if ((this%useSGS) .or. (useSkewSymm)) then
-            call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,wBC_bottom,wBC_top)
-            call transpose_z_to_y(ctmpz1,dwdzH,this%sp_gpC)
-            call this%spectC%ifft(dwdzH,dwdz)
-        end if
+        call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,wBC_bottom,wBC_top)
+        call transpose_z_to_y(ctmpz1,dwdzH,this%sp_gpC)
+        call this%spectC%ifft(dwdzH,dwdz)
+        call this%Pade6opZ%interpz_C2E(ctmpz1,ctmpz4,dWdzBC_bottom, dWdzBC_top)
+        call transpose_z_to_y(ctmpz4,dwdzEH,this%sp_gpE)
+        call this%spectE%ifft(dwdzEH,dwdzE)
 
+        ! d2wdz2
         if(.not. this%isinviscid) then
            call this%Pade6opZ%d2dz2_E2E(ctmpz2,ctmpz4,wBC_bottom,wBC_top)
            call transpose_z_to_y(ctmpz4,this%d2wdz2hatE,this%sp_gpE)
         end if
 
-        ! Compute dudz
+        ! dudz and d2udz2
         call transpose_y_to_z(this%uhat,ctmpz1,this%sp_gpC)
         call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,uBC_bottom,uBC_top)
-        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
-        call this%spectE%ifft(ctmpy2,dudz)
+        call transpose_z_to_y(ctmpz2,dudzEH,this%sp_gpE)
+        call this%spectE%ifft(dudzEH,dudz)
         if (.not. this%isinviscid) then
                if ((uBC_top == 0) .or. (uBC_bottom == 0)) then
                   call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz4,uBC_bottom,uBC_top)
@@ -2007,16 +2065,15 @@ contains
                end if
                call transpose_z_to_y(ctmpz3,this%d2udz2hatC,this%sp_gpC)
         end if 
-
         call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dUdzBC_bottom,dUdzBC_top)
         call transpose_z_to_y(ctmpz1,dudzH,this%sp_gpC)
         call this%spectC%ifft(dudzH,dudzC)
       
-        ! Compute dvdz 
+        ! dvdz and d2vdz2
         call transpose_y_to_z(this%vhat,ctmpz1,this%sp_gpC)
         call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,vBC_bottom,vBC_top)
-        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
-        call this%spectE%ifft(ctmpy2,dvdz)
+        call transpose_z_to_y(ctmpz2,dvdzEH,this%sp_gpE)
+        call this%spectE%ifft(dvdzEH,dvdz)
         if (.not. this%isinviscid) then
             if ((vBC_top == 0) .or. (vBC_bottom == 0)) then
                call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz4,vBC_bottom,vBC_top)
@@ -2026,7 +2083,6 @@ contains
             end if
             call transpose_z_to_y(ctmpz3,this%d2vdz2hatC,this%sp_gpC)
         end if 
-      
         call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dVdzBC_bottom,dVdzBC_top)
         call transpose_z_to_y(ctmpz1,dvdzH,this%sp_gpC)
         call this%spectC%ifft(dvdzH,dvdzC)
@@ -2069,77 +2125,77 @@ contains
     end subroutine
     
     
-    subroutine compute_and_bcast_surface_Mn(this)
-        use mpi
-        !use constants, only: four
-        use kind_parameters, only: mpirkind
-        class(igrid), intent(inout), target :: this
-        real(rkind), dimension(:,:,:), pointer :: rbuff
-        complex(rkind), dimension(:,:,:), pointer :: cbuff
-        integer :: ierr
+    !subroutine compute_and_bcast_surface_Mn(this)
+    !    use mpi
+    !    !use constants, only: four
+    !    use kind_parameters, only: mpirkind
+    !    class(igrid), intent(inout), target :: this
+    !    real(rkind), dimension(:,:,:), pointer :: rbuff
+    !    complex(rkind), dimension(:,:,:), pointer :: cbuff
+    !    integer :: ierr
 
-        rbuff => this%rbuffxC(:,:,:,1)
-        cbuff => this%cbuffyC(:,:,:,1)
-        rbuff = this%u*this%u
-        rbuff = rbuff + this%v*this%v
-        rbuff = sqrt(rbuff)
-        call this%spectC%fft(rbuff,cbuff)
+    !    rbuff => this%rbuffxC(:,:,:,1)
+    !    cbuff => this%cbuffyC(:,:,:,1)
+    !    rbuff = this%u*this%u
+    !    rbuff = rbuff + this%v*this%v
+    !    rbuff = sqrt(rbuff)
+    !    call this%spectC%fft(rbuff,cbuff)
 
-        if (nrank == 0) then
-            this%Umn = real(this%uhat(1,1,1),rkind)*this%meanFact
-            this%Vmn = real(this%vhat(1,1,1),rkind)*this%meanFact
-            this%Uspmn = real(cbuff(1,1,1),rkind)*this%meanFact
-            if (this%isStratified) this%Tmn = real(this%That(1,1,1),rkind)*this%meanFact
-        end if
-        call mpi_bcast(this%Umn,1,mpirkind,0,mpi_comm_world,ierr)
-        call mpi_bcast(this%Vmn,1,mpirkind,0,mpi_comm_world,ierr)
-        call mpi_bcast(this%Uspmn,1,mpirkind,0,mpi_comm_world,ierr)
-        if (this%isStratified) call mpi_bcast(this%Tmn,1,mpirkind,0,mpi_comm_world,ierr)
+    !    if (nrank == 0) then
+    !        this%Umn = real(this%uhat(1,1,1),rkind)*this%meanFact
+    !        this%Vmn = real(this%vhat(1,1,1),rkind)*this%meanFact
+    !        this%Uspmn = real(cbuff(1,1,1),rkind)*this%meanFact
+    !        if (this%isStratified) this%Tmn = real(this%That(1,1,1),rkind)*this%meanFact
+    !    end if
+    !    call mpi_bcast(this%Umn,1,mpirkind,0,mpi_comm_world,ierr)
+    !    call mpi_bcast(this%Vmn,1,mpirkind,0,mpi_comm_world,ierr)
+    !    call mpi_bcast(this%Uspmn,1,mpirkind,0,mpi_comm_world,ierr)
+    !    if (this%isStratified) call mpi_bcast(this%Tmn,1,mpirkind,0,mpi_comm_world,ierr)
 
-        call this%getfilteredSpeedSqAtWall()
-        if (this%isStratified) then
-            call this%getSurfaceQuantities() 
-        else
-            this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
-            this%invObLength = zero
-        end if 
-    end subroutine
-    
-    subroutine getSurfaceQuantities(this)
-        class(igrid), intent(inout) :: this
-        integer :: idx
-        integer, parameter :: itermax = 100 
-        real(rkind) :: ustarNew, ustarDiff, dTheta, ustar
-        real(rkind) :: a, b, c, PsiH, PsiM, wTh, z, u, Linv
-        real(rkind), parameter :: beta_h = 7.8_rkind, beta_m = 4.8_rkind
-      
-        select case (this%botBC_Temp)
-        case(0)
-            if (this%useSGS) then
-               dTheta = this%Tsurf - this%Tmn; Linv = zero
-               z = this%dz/two ; ustarDiff = one; wTh = zero
-               a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
-               PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
-       
-               ! Inside the do loop all the used variables are on the stored on the stack
-               ! After the while loop these variables are copied to their counterparts
-               ! on the heap (variables part of the derived type)
-               do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
-                   ustarNew = u*kappa/(a - PsiM)
-                   wTh = dTheta*ustarNew*kappa/(a - PsiH) 
-                   Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
-                   PsiM = -c*Linv; PsiH = -b*Linv;
-                   ustarDiff = abs((ustarNew - ustar)/ustarNew)
-                   ustar = ustarNew; idx = idx + 1
-               end do 
-               this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
-            end if
-        case(1)
-            this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
-            this%invObLength = zero
-            this%wTh_surf = zero
-        end select
-    end subroutine
+    !    call this%getfilteredSpeedSqAtWall()
+    !    if (this%isStratified) then
+    !        call this%getSurfaceQuantities() 
+    !    else
+    !        this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
+    !        this%invObLength = zero
+    !    end if 
+    !end subroutine
+    !
+    !subroutine getSurfaceQuantities(this)
+    !    class(igrid), intent(inout) :: this
+    !    integer :: idx
+    !    integer, parameter :: itermax = 100 
+    !    real(rkind) :: ustarNew, ustarDiff, dTheta, ustar
+    !    real(rkind) :: a, b, c, PsiH, PsiM, wTh, z, u, Linv
+    !    real(rkind), parameter :: beta_h = 7.8_rkind, beta_m = 4.8_rkind
+    !  
+    !    select case (this%botBC_Temp)
+    !    case(0)
+    !        if (this%useSGS) then
+    !           dTheta = this%Tsurf - this%Tmn; Linv = zero
+    !           z = this%dz/two ; ustarDiff = one; wTh = zero
+    !           a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
+    !           PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
+    !   
+    !           ! Inside the do loop all the used variables are on the stored on the stack
+    !           ! After the while loop these variables are copied to their counterparts
+    !           ! on the heap (variables part of the derived type)
+    !           do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
+    !               ustarNew = u*kappa/(a - PsiM)
+    !               wTh = dTheta*ustarNew*kappa/(a - PsiH) 
+    !               Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
+    !               PsiM = -c*Linv; PsiH = -b*Linv;
+    !               ustarDiff = abs((ustarNew - ustar)/ustarNew)
+    !               ustar = ustarNew; idx = idx + 1
+    !           end do 
+    !           this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
+    !        end if
+    !    case(1)
+    !        this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
+    !        this%invObLength = zero
+    !        this%wTh_surf = zero
+    !    end select
+    !end subroutine
 
     subroutine readRestartFile(this, tid, rid)
         use decomp_2d_io
@@ -3917,32 +3973,32 @@ contains
 
 
 
-    subroutine getfilteredSpeedSqAtWall(this)
-        class(igrid), intent(inout), target :: this
+    !subroutine getfilteredSpeedSqAtWall(this)
+    !    class(igrid), intent(inout), target :: this
 
-        real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2
-        complex(rkind), dimension(:,:,:), pointer :: cbuffy, tauWallH
+    !    real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2
+    !    complex(rkind), dimension(:,:,:), pointer :: cbuffy, tauWallH
 
-        if (this%useSGS) then
-            cbuffy => this%cbuffyC(:,:,:,1); tauWallH => this%cbuffzC(:,:,:,1)     
-            rbuffx1 => this%filteredSpeedSq; rbuffx2 => this%rbuffxC(:,:,:,1)
+    !    if (this%useSGS) then
+    !        cbuffy => this%cbuffyC(:,:,:,1); tauWallH => this%cbuffzC(:,:,:,1)     
+    !        rbuffx1 => this%filteredSpeedSq; rbuffx2 => this%rbuffxC(:,:,:,1)
 
-            call transpose_y_to_z(this%uhat,tauWallH,this%sp_gpC)
-            call this%spectC%SurfaceFilter_ip(tauWallH(:,:,1))
-            call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
-            call this%spectC%ifft(cbuffy,rbuffx1)
+    !        call transpose_y_to_z(this%uhat,tauWallH,this%sp_gpC)
+    !        call this%spectC%SurfaceFilter_ip(tauWallH(:,:,1))
+    !        call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
+    !        call this%spectC%ifft(cbuffy,rbuffx1)
 
-            call transpose_y_to_z(this%vhat,tauWallH,this%sp_gpC)
-            call this%spectC%SurfaceFilter_ip(tauWallH(:,:,1))
-            call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
-            call this%spectC%ifft(cbuffy,rbuffx2)
+    !        call transpose_y_to_z(this%vhat,tauWallH,this%sp_gpC)
+    !        call this%spectC%SurfaceFilter_ip(tauWallH(:,:,1))
+    !        call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
+    !        call this%spectC%ifft(cbuffy,rbuffx2)
 
-            rbuffx1 = rbuffx1*rbuffx1
-            rbuffx2 = rbuffx2*rbuffx2
-            rbuffx1 = rbuffx1 + rbuffx2
-        end if 
+    !        rbuffx1 = rbuffx1*rbuffx1
+    !        rbuffx2 = rbuffx2*rbuffx2
+    !        rbuffx1 = rbuffx1 + rbuffx2
+    !    end if 
 
-    end subroutine  
+    !end subroutine  
 
 
     subroutine start_io(this, dumpInitField)

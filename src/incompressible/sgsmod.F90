@@ -375,7 +375,8 @@ contains
           tau13 = this%nuSGSE * S13
           tau23 = this%nuSGSE * S23
         endif
-      
+     
+
         !if(nrank==0) then
         !  print *, "delta", this%deltaFilter, this%mconst
         !  print*, "duidxj:", dudx(3,2,3), dudy(3,2,3), dudzC(3,2,3)
@@ -397,7 +398,9 @@ contains
             call transpose_y_to_z(uhat,this%ctmpCz,this%sp_gp) ! <- send uhat to z decomp (wallmodel)
             call this%spectE%fft(tau13,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
+            
             this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1)
+            
             if(nrank==0) inst_horz_avg(2) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
@@ -418,7 +421,9 @@ contains
 
             call this%spectE%fft(tau23,this%ctmpEy)
             call transpose_y_to_z(this%ctmpEy,this%ctmpEz,this%sp_gpE)
+            
             this%ctmpEz(:,:,1) = this%WallMFactor*this%ctmpCz(:,:,1)
+            
             if(nrank==0) inst_horz_avg(3) = real(this%ctmpEz(1,1,1), rkind)*this%MeanFact
             if(useCompactFD) then
                 call this%derZ_SS%ddz_E2C(this%ctmpEz,this%ctmpCz,size(this%ctmpEz,1),size(this%ctmpEz,2))
