@@ -57,8 +57,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0,  &
                  useWallDamping, ncWall, Csgs, WallModelType, &
-                 DynProcFreq, useSGSDynamicRestart, SGSDynamicRestartFile, &
-                 useVerticalTfilter, explicitCalcEdgeEddyViscosity
+                 DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,           &
+                 SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity
 
   integer :: ierr
 
@@ -112,6 +112,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%DynamicProcedureType = DynamicProcedureType
   this%DynProcFreq = DynProcFreq
   this%useVerticalTfilter = useVerticalTfilter
+
   this%WallModel        = WallModelType
   if (this%WallModel .ne. 0) call this%initWallModel()
   allocate(this%cmodelC(size(zMeshC)))
