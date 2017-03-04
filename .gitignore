@@ -5,6 +5,7 @@ build*
 *.F90.swp
 *.F90~
 dependencies/*[^gz]
+*.dat.swp
 data/*
 tags
 pbsfiles
