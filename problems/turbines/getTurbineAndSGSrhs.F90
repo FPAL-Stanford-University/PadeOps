@@ -29,7 +29,7 @@ program testSGSmodelWT
    type(decomp_info) :: gpC, gpE
    type(decomp_info), pointer :: sp_gpC, sp_gpE
    type(Pade6stagg) :: Pade6opZ
-   integer :: ierr, ix1, ixn, iy1, iyn, iz1, izn, TID, RID
+   integer :: ierr, ix1, ixn, iy1, iyn, iz1, izn, RID
    logical :: computeFbody
   
    real(rkind), dimension(:,:,:)  , pointer :: nuSGS
@@ -44,10 +44,9 @@ program testSGSmodelWT
    integer :: dWdzBC_bottom  =  1, dWdzBC_top  =  1
 
    character(len=clen) :: inputdir, outputdir, inputFile 
-   integer :: nx, ny, nz, ioUnit, i, j, k, nvis = 0, tid_initial, tid_final, dtid, ind
+   integer :: nx, ny, nz, ioUnit, i, j, k, nvis = 0, tid_initial, tid_final, dtid, ind=0
    real(rkind) :: z0init, dt, inst_horz_avg_turb(8), tsim
-   namelist /INPUT/ Lx, Ly, Lz, z0init, outputdir, inputdir, nx, ny, nz, TID, RID
-
+   namelist /INPUT/ Lx, Ly, Lz, z0init, outputdir, inputdir, nx, ny, nz, RID, tid_initial, tid_final, dtid
 
    ! Do MPI stuff
    call MPI_Init(ierr)               
@@ -74,11 +73,7 @@ program testSGSmodelWT
 
    call initializeEverything()
   
-!!!!! dummy inputs for testing do loop
-   tid_initial = tid
-   tid_final = tid
-   dtid = 4000
-!!!!!!
+   print*, RID, tid_initial, tid_final, dtid
 
    ! DO LOOP START HERE
    do ind = tid_initial, tid_final, dtid 
@@ -90,7 +85,8 @@ program testSGSmodelWT
         
         
         ! READ FIELDS)
-        call readVisualizationFile(TID, RID)
+        call readVisualizationFile(ind, RID)
+        print *, ind
         call spectC%fft(uC, uhatC)
         call spectC%fft(vC, vhatC)
         call spectE%fft(wE, whatE)
@@ -151,7 +147,6 @@ program testSGSmodelWT
    call dumpFullField(fx_sgs_store/real(nvis,rkind),"xsgs")
    call dumpFullField(fy_sgs_store/real(nvis,rkind),"ysgs")
    call dumpFullField(fz_sgs_store/real(nvis,rkind),"zsgs")
-
 
    call mpi_barrier(mpi_comm_world, ierr)
    stop
@@ -432,50 +427,50 @@ contains
         real(rkind), dimension(:,:,:), intent(in) :: arr
         character(len=4), intent(in) :: label
 
-        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",rid, "_",label,"_t",tid,".out"
+        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",rid, "_",label,"_t",tid_final,".out"
         fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
         call decomp_2d_write_one(1,arr,fname, gpC)
 
     end subroutine
 
-    subroutine readRestartFile(tid, rid)
-        use decomp_2d_io
-        use mpi
-        use exits, only: message
-        integer, intent(in) :: tid, rid
-        character(len=clen) :: tempname, fname
-        integer :: ierr
-
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_u.",tid
-        fname = trim(InputDir)//"/"//trim(tempname)
-        call decomp_2d_read_one(1,uC,fname, gpC)
-
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_v.",tid
-        fname = trim(InputDir)//"/"//trim(tempname)
-        call decomp_2d_read_one(1,vC,fname, gpC)
-
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_w.",tid
-        fname = trim(InputDir)//"/"//trim(tempname)
-        call decomp_2d_read_one(1,wE,fname, gpE)
-
+!    subroutine readRestartFile(tid, rid)
+!        use decomp_2d_io
+!       use mpi
+!        use exits, only: message
+!        integer, intent(in) :: tid, rid
+!        character(len=clen) :: tempname, fname
+!        integer :: ierr
+!
+!        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_u.",tid
+!        fname = trim(InputDir)//"/"//trim(tempname)
+!        call decomp_2d_read_one(1,uC,fname, gpC)
+!
+!        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_v.",tid
+!        fname = trim(InputDir)//"/"//trim(tempname)
+!        call decomp_2d_read_one(1,vC,fname, gpC)
+!
+!        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_w.",tid
+!        fname = trim(InputDir)//"/"//trim(tempname)
+!        call decomp_2d_read_one(1,wE,fname, gpE)
+!
         !if (this%isStratified) then
         !    write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_T.",tid
         !    fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
         !    call decomp_2d_read_one(1,this%T,fname, this%gpC)
         !end if 
 
-        write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
-        fname = trim(InputDir)//"/"//trim(tempname)
-        open(unit=10,file=fname,access='sequential',form='formatted')
-        read (10, *)  tsim
-        close(10)
+!        write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
+!        fname = trim(InputDir)//"/"//trim(tempname)
+!        open(unit=10,file=fname,access='sequential',form='formatted')
+!        read (10, *)  tsim
+!        close(10)
 
-        call mpi_barrier(mpi_comm_world, ierr)
-        call message("================= RESTART FILE USED ======================")
-        call message(0, "Simulation Time at restart:", tsim)
-        call message("=================================== ======================")
+!        call mpi_barrier(mpi_comm_world, ierr)
+!        call message("================= RESTART FILE USED ======================")
+!        call message(0, "Simulation Time at restart:", tsim)
+!        call message("=================================== ======================")
 
-    end subroutine
+!    end subroutine
     
     subroutine readVisualizationFile(tid, rid)
         use decomp_2d_io
@@ -485,7 +480,7 @@ contains
         character(len=clen) :: tempname, fname
         integer :: ierr
         character(len=4) :: label
-        
+        print *, 'inside readVisualizationFile, ind=', tid
         label = "uVel"
         write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",rid, "_",label,"_t",tid,".out"
         fname = trim(InputDir)//"/"//trim(tempname)
@@ -504,7 +499,7 @@ contains
         call decomp_2d_read_one(1,wC,fname, gpC)
 
         !if (this%isStratified) then
-        !    write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_T.",tid
+        !    write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_T.",ind
         !    fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
         !    call decomp_2d_read_one(1,this%T,fname, this%gpC)
         !end if 
@@ -523,4 +518,3 @@ contains
     end subroutine
 
 end program 
-
