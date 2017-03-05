@@ -1416,7 +1416,9 @@ contains
             call this%addNonLinearTerm_skewSymm()
         else
             call this%AddNonLinearTerm_Rot()
-        end if 
+        end if
+
+        
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
@@ -1470,7 +1472,8 @@ contains
                                                 this%max_nuSGS, this%inst_horz_avg)!, this%dTdxC      ,&
                                                 !this%dTdyC  , this%dTdzHC)
             end if 
-        end if 
+        end if
+
     end subroutine
 
     subroutine addViscousTerm(this)

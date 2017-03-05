@@ -197,8 +197,8 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
    umn = newsgs%get_umean()
    uspmn = newsgs%get_uspeedmean()
    vmn = newsgs%get_vmean()
-   ustar = newsgs%getustar()
-   LObinv = newsgs%getInvOblength()
+   ustar = newsgs%get_ustar()
+   LObinv = newsgs%get_InvOblength()
   
    !print*, "umn:", umn
    !print*, "vmn:", vmn
