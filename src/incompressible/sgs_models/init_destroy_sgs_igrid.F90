@@ -10,7 +10,8 @@ subroutine destroy(this)
   case (1)
      call this%destroy_sigma()
   end select
-  deallocate(this%tau_11, this%tau_12, this%tau_13, this%tau_22, this%tau_23, this%tau_33)
+  nullify(this%tau_11, this%tau_12, this%tau_22, this%tau_33)
+  deallocate(this%tau_13, this%tau_23)
 end subroutine
 
 
@@ -54,13 +55,13 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0
   character(len=clen) :: SGSDynamicRestartFile
   logical :: explicitCalcEdgeEddyViscosity = .false.
+  integer :: ierr
   
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0,  &
                  useWallDamping, ncWall, Csgs, WallModelType, &
                  DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,           &
                  SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity
 
-  integer :: ierr
 
   this%gpC => gpC
   this%gpE => gpE

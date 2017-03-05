@@ -21,6 +21,7 @@ module IncompressibleGrid
     use TurbineMod, only: TurbineArray 
     use kspreprocessing, only: ksprep  
     use PadeDerOps, only: Pade6Stagg
+    use Fringemethod, only: fringe
 
     implicit none
 
@@ -56,10 +57,20 @@ module IncompressibleGrid
     integer :: dWdzBC_bottom  =  1, dWdzBC_top  =  1
     integer :: dTdzBC_bottom  =  -1, dTdzBC_top  =  -1
 
-    type, extends(grid) :: igrid
+    type :: igrid
         
         character(clen) :: inputDir
         integer :: headerfid = 12345   
+
+        ! Variables common to grid
+        integer :: nx, ny, nz, t_datadump, t_restartdump
+        real(rkind) :: dt, tstop, CFL, dx, dy, dz, tsim
+        character(len=clen) ::  outputdir
+        real(rkind), dimension(:,:,:,:), allocatable :: mesh
+        character(len=clen) :: filter_x          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+        character(len=clen) :: filter_y          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
+        character(len=clen) :: filter_z          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
+        integer      :: step, nsteps
 
         type(decomp_info), allocatable :: gpC, gpE
         type(decomp_info), pointer :: Sp_gpC, Sp_gpE
@@ -131,7 +142,7 @@ module IncompressibleGrid
 
         real(rkind) :: max_nuSGS, invObLength, Tsurf0, Tsurf, dTsurf_dt, ThetaRef
 
-        real(rkind) :: z0, ustar = zero, Umn, Vmn, Uspmn, dtOld, dtRat, Tmn, wTh_surf
+        real(rkind) :: dtOld, dtRat, Tmn, wTh_surf
         real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
         integer :: wallMType, botBC_Temp 
 
@@ -205,6 +216,10 @@ module IncompressibleGrid
         real(rkind), dimension(:,:,:), allocatable :: probe_data
         integer :: tpro
 
+
+        ! Fringe
+        logical                           :: useFringe = .false.
+        type(fringe), allocatable, public :: fringe_x
         contains
             procedure          :: init
             procedure          :: destroy
@@ -258,7 +273,7 @@ module IncompressibleGrid
 
 contains 
 
-    subroutine init(this,inputfile)
+    subroutine init(this,inputfile, initialize2decomp)
         class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
         character(len=clen) :: outputdir, inputdir, turbInfoDir, ksOutputDir, controlDir = "null"
@@ -268,7 +283,7 @@ contains
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1, botBC_Temp = 0
         real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop
-        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, z0 = 1.d-4
+        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0,Gx=0.d0,Gy=0.d0,Gz=0.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
         logical ::isStratified=.false.,dumpPlanes = .false.,useExtraForcing = .false.
@@ -279,13 +294,15 @@ contains
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
         real(rkind) :: Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0
-        logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true.
+        logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true.  
         logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true. 
         real(rkind), dimension(:,:), allocatable :: probe_locs
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
+        logical, intent(in), optional :: initialize2decomp
+        logical :: reset2decomp 
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -294,8 +311,7 @@ contains
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, &
                           useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz, assume_fplane, latitude
-        namelist /BCs/ topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp
-        namelist /WALLMODEL/ z0, wallMType
+        namelist /BCs/ topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme
@@ -314,12 +330,11 @@ contains
         read(unit=ioUnit, NML=PHYSICS)
         read(unit=ioUnit, NML=PRESSURE_CALC)
         read(unit=ioUnit, NML=BCs)
-        read(unit=ioUnit, NML=WALLMODEL)
         read(unit=ioUnit, NML=WINDTURBINES)
         read(unit=ioUnit, NML=KSPREPROCESS)
         close(ioUnit)
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
-        this%dt = dt; this%dtby2 = dt/two ; this%z0 = z0 ; this%Re = Re; this%useSponge = useSpongeLayer
+        this%dt = dt; this%dtby2 = dt/two ; this%Re = Re; this%useSponge = useSpongeLayer
         this%outputdir = outputdir; this%inputdir = inputdir; this%isStratified = isStratified 
         this%WallMtype = WallMType; this%runID = runID; this%tstop = tstop; this%t_dataDump = t_dataDump
         this%CFL = CFL; this%dumpPlanes = dumpPlanes; this%useGeostrophicForcing = useGeostrophicForcing
@@ -328,7 +343,7 @@ contains
         this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq; this%timeAvgFullFields = timeAvgFullFields
         this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp; this%isInviscid = isInviscid
         this%assume_fplane = assume_fplane; this%useProbes = useProbes
-        this%KSinitType = KSinitType; this%KSFilFact = KSFilFact
+        this%KSinitType = KSinitType; this%KSFilFact = KSFilFact; this%useFringe = useFringe
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -350,9 +365,20 @@ contains
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC); allocate(this%gpE)
-        periodicbcs(1) = .true.; periodicbcs(2) = .true.; periodicbcs(3) = .false.    ! hard coded for now
-        call decomp_2d_init(nx, ny, nz, prow, pcol, periodicbcs)
-        call get_decomp_info(this%gpC)
+        if (present(initialize2decomp)) then
+            reset2decomp = initialize2decomp
+         else
+            reset2decomp = .true.
+        end if
+
+        if (reset2decomp) then
+            periodicbcs(1) = .true.; periodicbcs(2) = .true.; periodicbcs(3) = .false.    ! hard coded for now
+            call decomp_2d_init(nx, ny, nz, prow, pcol, periodicbcs)
+            call get_decomp_info(this%gpC)
+        else
+            call decomp_info_init(nx, ny, nz, this%gpC)    
+        end if
+
         call decomp_info_init(nx,ny,nz+1,this%gpE)
         
         if (this%useSystemInteractions) then
@@ -819,11 +845,23 @@ contains
             call this%init_stats()
         end if
 
-        ! STEP 17: Set up storage for Pressure
+        
+        ! STEP 17: Set Fringe
+        if (this%useFringe) then
+            allocate(this%fringe_x)
+            call this%fringe_x%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
+                                    this%spectC, this%spectE, this%gpC, this%gpE, &
+                                    this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE)   
+        end if
+        
+        ! STEP 18: Set up storage for Pressure
         if ((this%storePressure) .or. (this%fastCalcPressure)) then
             allocate(this%Pressure(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             call this%ComputePressure()
         end if 
+
+
+      
 
         if ((this%fastCalcPressure) .and. (.not. useCompactFD)) then
             call GracefulExit("fastCalcPressure feature is only supported with CD06 scheme.",123)
@@ -854,6 +892,7 @@ contains
 
 
     end subroutine
+
 
     subroutine timeAdvance(this)
         class(igrid), intent(inout) :: this
@@ -1395,9 +1434,6 @@ contains
 
     subroutine addExtraForcingTerm(this)
         class(igrid), intent(inout) :: this
-        !if (this%spectC%carryingZeroK) then
-        !    this%dpF_dxhat(1,1,:) = cmplx(this%ustar*this%ustar*this%nx*this%ny,zero)
-        !end if
         this%u_rhs = this%u_rhs + this%dpF_dxhat
         if (this%storeFbody) then
             this%fbody_x = this%fbody_x + this%dpFdx 
@@ -1440,6 +1476,7 @@ contains
             call this%AddNonLinearTerm_Rot()
         end if
         
+        
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
@@ -1464,11 +1501,7 @@ contains
         if (.not. this%isInviscid) then
             call this%addViscousTerm()
         end if
-
-        ! WARNING: the duidxjChat tensor changes state after this subroutine, so
-        ! you must not assume that the values in it are correct after this
-        ! state. Therefore, if you need to use it, use it BEFORE calling this
-        ! subroutine. 
+        
         ! Step 6: SGS Viscous Term
         if (this%useSGS) then
             call this%sgsmodel%getRHS_SGS(this%u_rhs,      this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
@@ -1477,7 +1510,12 @@ contains
                                           this%vE,         this%w,     this%newTimeStep                             )
             
         end if
-
+       
+        ! Step 7: Fringe source term if fringe is being used (non-periodic)
+        if (this%useFringe) then
+            call this%fringe_x%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
+        end if 
+   
 
         !if (nrank == 0) print*, maxval(abs(this%u_rhs)), maxval(abs(this%v_rhs)), maxval(abs(this%w_rhs))
     end subroutine
@@ -2125,78 +2163,6 @@ contains
     end subroutine
     
     
-    !subroutine compute_and_bcast_surface_Mn(this)
-    !    use mpi
-    !    !use constants, only: four
-    !    use kind_parameters, only: mpirkind
-    !    class(igrid), intent(inout), target :: this
-    !    real(rkind), dimension(:,:,:), pointer :: rbuff
-    !    complex(rkind), dimension(:,:,:), pointer :: cbuff
-    !    integer :: ierr
-
-    !    rbuff => this%rbuffxC(:,:,:,1)
-    !    cbuff => this%cbuffyC(:,:,:,1)
-    !    rbuff = this%u*this%u
-    !    rbuff = rbuff + this%v*this%v
-    !    rbuff = sqrt(rbuff)
-    !    call this%spectC%fft(rbuff,cbuff)
-
-    !    if (nrank == 0) then
-    !        this%Umn = real(this%uhat(1,1,1),rkind)*this%meanFact
-    !        this%Vmn = real(this%vhat(1,1,1),rkind)*this%meanFact
-    !        this%Uspmn = real(cbuff(1,1,1),rkind)*this%meanFact
-    !        if (this%isStratified) this%Tmn = real(this%That(1,1,1),rkind)*this%meanFact
-    !    end if
-    !    call mpi_bcast(this%Umn,1,mpirkind,0,mpi_comm_world,ierr)
-    !    call mpi_bcast(this%Vmn,1,mpirkind,0,mpi_comm_world,ierr)
-    !    call mpi_bcast(this%Uspmn,1,mpirkind,0,mpi_comm_world,ierr)
-    !    if (this%isStratified) call mpi_bcast(this%Tmn,1,mpirkind,0,mpi_comm_world,ierr)
-
-    !    call this%getfilteredSpeedSqAtWall()
-    !    if (this%isStratified) then
-    !        call this%getSurfaceQuantities() 
-    !    else
-    !        this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
-    !        this%invObLength = zero
-    !    end if 
-    !end subroutine
-    !
-    !subroutine getSurfaceQuantities(this)
-    !    class(igrid), intent(inout) :: this
-    !    integer :: idx
-    !    integer, parameter :: itermax = 100 
-    !    real(rkind) :: ustarNew, ustarDiff, dTheta, ustar
-    !    real(rkind) :: a, b, c, PsiH, PsiM, wTh, z, u, Linv
-    !    real(rkind), parameter :: beta_h = 7.8_rkind, beta_m = 4.8_rkind
-    !  
-    !    select case (this%botBC_Temp)
-    !    case(0)
-    !        if (this%useSGS) then
-    !           dTheta = this%Tsurf - this%Tmn; Linv = zero
-    !           z = this%dz/two ; ustarDiff = one; wTh = zero
-    !           a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
-    !           PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
-    !   
-    !           ! Inside the do loop all the used variables are on the stored on the stack
-    !           ! After the while loop these variables are copied to their counterparts
-    !           ! on the heap (variables part of the derived type)
-    !           do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
-    !               ustarNew = u*kappa/(a - PsiM)
-    !               wTh = dTheta*ustarNew*kappa/(a - PsiH) 
-    !               Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
-    !               PsiM = -c*Linv; PsiH = -b*Linv;
-    !               ustarDiff = abs((ustarNew - ustar)/ustarNew)
-    !               ustar = ustarNew; idx = idx + 1
-    !           end do 
-    !           this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
-    !        end if
-    !    case(1)
-    !        this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
-    !        this%invObLength = zero
-    !        this%wTh_surf = zero
-    !    end select
-    !end subroutine
-
     subroutine readRestartFile(this, tid, rid)
         use decomp_2d_io
         use mpi
@@ -2476,16 +2442,16 @@ contains
 
         ! Compute u,v,wC - mean
         if(this%normByUstar) then
-            this%u_mean3D = this%u_mean3D + this%u/this%ustar
-            this%v_mean3D = this%v_mean3D + this%v/this%ustar
-            this%w_mean3D = this%w_mean3D + this%wC/this%ustar
+            this%u_mean3D = this%u_mean3D + this%u/this%sgsmodel%get_ustar()
+            this%v_mean3D = this%v_mean3D + this%v/this%sgsmodel%get_ustar()
+            this%w_mean3D = this%w_mean3D + this%wC/this%sgsmodel%get_ustar()
 
-            this%uu_mean3D = this%uu_mean3D + this%u * this%u /this%ustar**2
-            this%uv_mean3D = this%uv_mean3D + this%u * this%v /this%ustar**2
-            this%uw_mean3D = this%uw_mean3D + rbuff1          /this%ustar**2
-            this%vv_mean3D = this%vv_mean3D + this%v * this%v /this%ustar**2
-            this%vw_mean3D = this%vw_mean3D + rbuff0          /this%ustar**2
-            this%ww_mean3D = this%ww_mean3D + this%wC* this%wC/this%ustar**2
+            this%uu_mean3D = this%uu_mean3D + this%u * this%u /this%sgsmodel%get_ustar()**2
+            this%uv_mean3D = this%uv_mean3D + this%u * this%v /this%sgsmodel%get_ustar()**2
+            this%uw_mean3D = this%uw_mean3D + rbuff1          /this%sgsmodel%get_ustar()**2
+            this%vv_mean3D = this%vv_mean3D + this%v * this%v /this%sgsmodel%get_ustar()**2
+            this%vw_mean3D = this%vw_mean3D + rbuff0          /this%sgsmodel%get_ustar()**2
+            this%ww_mean3D = this%ww_mean3D + this%wC* this%wC/this%sgsmodel%get_ustar()**2
         else
             this%u_mean3D = this%u_mean3D + this%u
             this%v_mean3D = this%v_mean3D + this%v
@@ -2509,11 +2475,11 @@ contains
             call transpose_y_to_x(rbuff2,rbuff0,this%gpC)
 
             if(this%normByUstar) then
-                this%T_mean3D = this%T_mean3D + this%T*this%ustar/this%wTh_surf
+                this%T_mean3D = this%T_mean3D + this%T*this%sgsmodel%get_ustar()/this%wTh_surf
                 this%uT_mean3D = this%uT_mean3D + this%T * this%u /this%wTh_surf
                 this%vT_mean3D = this%vT_mean3D + this%T * this%v /this%wTh_surf
                 this%wT_mean3D = this%wT_mean3D + rbuff0          /this%wTh_surf
-                this%TT_mean3D = this%TT_mean3D + this%T * this%T*(this%ustar/this%wTh_surf)**2
+                this%TT_mean3D = this%TT_mean3D + this%T * this%T*(this%sgsmodel%get_ustar()/this%wTh_surf)**2
             else
                 this%T_mean3D = this%T_mean3D + this%T
                 this%uT_mean3D = this%uT_mean3D + this%T * this%u
@@ -2525,10 +2491,10 @@ contains
 
         if(this%fastCalcPressure .or. this%storePressure) then
             if(this%normByUstar) then
-                this%p_mean3D  = this%p_mean3D  + this%pressure          /this%ustar**2
-                this%pu_mean3D = this%pu_mean3D + this%pressure * this%u /this%ustar**3
-                this%pv_mean3D = this%pv_mean3D + this%pressure * this%v /this%ustar**3
-                this%pw_mean3D = this%pw_mean3D + this%pressure * this%wC/this%ustar**3
+                this%p_mean3D  = this%p_mean3D  + this%pressure          /this%sgsmodel%get_ustar()**2
+                this%pu_mean3D = this%pu_mean3D + this%pressure * this%u /this%sgsmodel%get_ustar()**3
+                this%pv_mean3D = this%pv_mean3D + this%pressure * this%v /this%sgsmodel%get_ustar()**3
+                this%pw_mean3D = this%pw_mean3D + this%pressure * this%wC/this%sgsmodel%get_ustar()**3
             else
                 this%p_mean3D  = this%p_mean3D  + this%pressure
                 this%pu_mean3D = this%pu_mean3D + this%pressure * this%u
@@ -2547,13 +2513,12 @@ contains
             ! interpolate tau13 from E to C
             call transpose_x_to_y(this%tau13,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-            !rbuff3E(:,:,1) = -(this%ustar**2)
             !if(nrank==0) then
             !    write(*,*) '-----------------'
             !    write(*,*) rbuff3E(1,1,1:2)
             !endif
             !write(200+nrank,*) 1, this%tsim, this%inst_horz_avg(2)
-            rbuff3E(:,:,1) = this%inst_horz_avg(2)     !--- =-(this%ustar**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model
+            rbuff3E(:,:,1) = this%inst_horz_avg(2)     !--- =-(this%sgsmodel%get_ustar()**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model
             !if(nrank==0) then
             !    write(*,*) rbuff3E(1,1,1:2)
             !endif
@@ -2575,8 +2540,7 @@ contains
             ! interpolate tau13 from E to C
             call transpose_x_to_y(this%tau23,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-            !rbuff3E(:,:,1) = -(this%ustar**2)*this%Vmn/this%Umn
-            rbuff3E(:,:,1) = this%inst_horz_avg(3)     !--- =-(this%ustar**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model
+            rbuff3E(:,:,1) = this%inst_horz_avg(3)     !--- =-(this%sgsmodel%get_ustar()**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model
             call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
             call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,5),this%gpC)
@@ -2598,25 +2562,25 @@ contains
             !       + half*( (dudy + dvdx)**2 + (dudzC + dwdxC)**2 + (dvdzC + dwdyC)**2)
 
             if(this%normByUstar) then
-                this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%ustar**2)
-                this%tau12_mean3D = this%tau12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%ustar**2)
-                this%tau13_mean3D = this%tau13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%ustar**2)
-                this%tau22_mean3D = this%tau22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%ustar**2)
-                this%tau23_mean3D = this%tau23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%ustar**2)
-                this%tau33_mean3D = this%tau33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%ustar**2)
+                this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%sgsmodel%get_ustar()**2)
+                this%tau12_mean3D = this%tau12_mean3D + this%tauSGS_ij(:,:,:,2)/(this%sgsmodel%get_ustar()**2)
+                this%tau13_mean3D = this%tau13_mean3D + this%tauSGS_ij(:,:,:,3)/(this%sgsmodel%get_ustar()**2)
+                this%tau22_mean3D = this%tau22_mean3D + this%tauSGS_ij(:,:,:,4)/(this%sgsmodel%get_ustar()**2)
+                this%tau23_mean3D = this%tau23_mean3D + this%tauSGS_ij(:,:,:,5)/(this%sgsmodel%get_ustar()**2)
+                this%tau33_mean3D = this%tau33_mean3D + this%tauSGS_ij(:,:,:,6)/(this%sgsmodel%get_ustar()**2)
 
                 ! factor of H in normalization is missing from all statistics below
-                this%sgsdissp_mean3D = this%sgsdissp_mean3D - rbuff1/(this%ustar**3)
+                this%sgsdissp_mean3D = this%sgsdissp_mean3D - rbuff1/(this%sgsmodel%get_ustar()**3)
 
                 !!rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)
-                !this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff2/(this%ustar**3)
+                !this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff2/(this%sgsmodel%get_ustar()**3)
 
-                this%S11_mean3D = this%S11_mean3D + dudx                /this%ustar
-                this%S12_mean3D = this%S12_mean3D + half*(dudy  + dvdx )/this%ustar
-                this%S13_mean3D = this%S13_mean3D + half*(dudzC + dwdxC)/this%ustar
-                this%S22_mean3D = this%S22_mean3D + dvdy                /this%ustar
-                this%S23_mean3D = this%S23_mean3D + half*(dvdZC + dwdyC)/this%ustar
-                this%S33_mean3D = this%S33_mean3D + dwdz                /this%ustar
+                this%S11_mean3D = this%S11_mean3D + dudx                /this%sgsmodel%get_ustar()
+                this%S12_mean3D = this%S12_mean3D + half*(dudy  + dvdx )/this%sgsmodel%get_ustar()
+                this%S13_mean3D = this%S13_mean3D + half*(dudzC + dwdxC)/this%sgsmodel%get_ustar()
+                this%S22_mean3D = this%S22_mean3D + dvdy                /this%sgsmodel%get_ustar()
+                this%S23_mean3D = this%S23_mean3D + half*(dvdZC + dwdyC)/this%sgsmodel%get_ustar()
+                this%S33_mean3D = this%S33_mean3D + dwdz                /this%sgsmodel%get_ustar()
             else
                 this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)
                 this%tau12_mean3D = this%tau12_mean3D + this%tauSGS_ij(:,:,:,2)
@@ -2717,7 +2681,7 @@ contains
         end if 
 
         ! instantaneous horizontal averages of some quantities
-        this%inst_horz_avg(1) = this%ustar
+        this%inst_horz_avg(1) = this%sgsmodel%get_ustar()
         ! this%inst_horz(2) and (3) are computed on nrank==0 proc in getRHS_SGS_WallM
         ! broadcast to all other procs above in this subroutine
         ! do nothing about inst_horz_avg(2:3) herre
@@ -3447,19 +3411,19 @@ contains
         call transpose_x_to_y(this%u,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
         call this%compute_z_mean(rbuff3, this%u_mean)
-        if (this%normByustar) this%u_mean = this%u_mean/this%ustar
+        if (this%normByustar) this%u_mean = this%u_mean/this%sgsmodel%get_ustar()
 
         ! Compute v - mean 
         call transpose_x_to_y(this%v,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff4,this%gpC)
         call this%compute_z_mean(rbuff4, this%v_mean)
-        if (this%normByustar)this%v_mean = this%v_mean/this%ustar
+        if (this%normByustar)this%v_mean = this%v_mean/this%sgsmodel%get_ustar()
 
         ! Compute wC - mean 
         call transpose_x_to_y(this%wC,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff5,this%gpC)
         call this%compute_z_mean(rbuff5, this%w_mean)
-        if (this%normByustar)this%w_mean = this%w_mean/this%ustar
+        if (this%normByustar)this%w_mean = this%w_mean/this%sgsmodel%get_ustar()
 
         ! take w from x -> z decomp
         call transpose_x_to_y(this%w,rbuff2E,this%gpE)
@@ -3476,34 +3440,34 @@ contains
         ! uu mean
         rbuff6 = rbuff3*rbuff3
         call this%compute_z_mean(rbuff6, this%uu_mean)
-        if (this%normByustar)this%uu_mean = this%uu_mean/(this%ustar**2)
+        if (this%normByustar)this%uu_mean = this%uu_mean/(this%sgsmodel%get_ustar()**2)
 
         ! uv mean
         rbuff6 = rbuff3*rbuff4
         call this%compute_z_mean(rbuff6, this%uv_mean)
-        if (this%normByustar)this%uv_mean = this%uv_mean/(this%ustar**2)
+        if (this%normByustar)this%uv_mean = this%uv_mean/(this%sgsmodel%get_ustar()**2)
 
         ! uw mean
         rbuff6E = rbuff3E*rbuff5E
         call this%OpsPP%InterpZ_Edge2Cell(rbuff6E,rbuff6)
         call this%compute_z_mean(rbuff6, this%uw_mean)
-        if (this%normByustar)this%uw_mean = this%uw_mean/(this%ustar**2)
+        if (this%normByustar)this%uw_mean = this%uw_mean/(this%sgsmodel%get_ustar()**2)
 
         ! vv mean 
         rbuff6 = rbuff4*rbuff4
         call this%compute_z_mean(rbuff6, this%vv_mean)
-        if (this%normByustar)this%vv_mean = this%vv_mean/(this%ustar**2)
+        if (this%normByustar)this%vv_mean = this%vv_mean/(this%sgsmodel%get_ustar()**2)
 
         ! vw mean 
         rbuff6E = rbuff4E*rbuff5E
         call this%OpsPP%InterpZ_Edge2Cell(rbuff6E,rbuff6)
         call this%compute_z_mean(rbuff6, this%vw_mean)
-        if (this%normByustar)this%vw_mean = this%vw_mean/(this%ustar**2)
+        if (this%normByustar)this%vw_mean = this%vw_mean/(this%sgsmodel%get_ustar()**2)
 
         ! ww mean 
         rbuff6 = rbuff5*rbuff5
         call this%compute_z_mean(rbuff6, this%ww_mean)
-        if (this%normByustar)this%ww_mean = this%ww_mean/(this%ustar**2)
+        if (this%normByustar)this%ww_mean = this%ww_mean/(this%sgsmodel%get_ustar()**2)
 
         ! Statified Stuff
         if (this%isStratified) then
@@ -3535,45 +3499,45 @@ contains
             call transpose_x_to_y(this%tauSGS_ij(:,:,:,1),rbuff2,this%gpC)
             call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
             call this%compute_z_mean(rbuff3, this%tau11_mean)
-            if (this%normByustar)this%tau11_mean = this%tau11_mean/(this%ustar**2)
+            if (this%normByustar)this%tau11_mean = this%tau11_mean/(this%sgsmodel%get_ustar()**2)
 
             ! tau_12
             call transpose_x_to_y(this%tauSGS_ij(:,:,:,2),rbuff2,this%gpC)
             call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
             call this%compute_z_mean(rbuff3, this%tau12_mean)
-            if (this%normByustar)this%tau12_mean = this%tau12_mean/(this%ustar**2)
+            if (this%normByustar)this%tau12_mean = this%tau12_mean/(this%sgsmodel%get_ustar()**2)
 
             ! tau_13
             call transpose_x_to_y(this%tau13,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-            rbuff3E(:,:,1) = -(this%ustar**2)
+            rbuff3E(:,:,1) = -(this%sgsmodel%get_ustar()**2)
             call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
             call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,3),this%gpC)
             call this%compute_z_mean(rbuff3, this%tau13_mean)
-            if (this%normByustar)this%tau13_mean = this%tau13_mean/(this%ustar**2)
+            if (this%normByustar)this%tau13_mean = this%tau13_mean/(this%sgsmodel%get_ustar()**2)
 
             ! tau_22
             call transpose_x_to_y(this%tauSGS_ij(:,:,:,4),rbuff2,this%gpC)
             call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
             call this%compute_z_mean(rbuff3, this%tau22_mean)
-            if (this%normByustar)this%tau22_mean = this%tau22_mean/(this%ustar**2)
+            if (this%normByustar)this%tau22_mean = this%tau22_mean/(this%sgsmodel%get_ustar()**2)
 
             ! tau_23
             call transpose_x_to_y(this%tau23,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-            rbuff3E(:,:,1) = -(this%ustar**2)*this%Vmn/this%Umn
+            rbuff3E(:,:,1) = -(this%sgsmodel%get_ustar()**2)*this%sgsmodel%get_vmean()/this%sgsmodel%get_umean()
             call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
             call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,5),this%gpC)
             call this%compute_z_mean(rbuff3, this%tau23_mean)
-            if (this%normByustar)this%tau23_mean = this%tau23_mean/(this%ustar**2)
+            if (this%normByustar)this%tau23_mean = this%tau23_mean/(this%sgsmodel%get_ustar()**2)
 
             ! tau_33
             call transpose_x_to_y(this%tauSGS_ij(:,:,:,6),rbuff2,this%gpC)
             call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
             call this%compute_z_mean(rbuff3, this%tau33_mean)
-            if (this%normByustar)this%tau33_mean = this%tau33_mean/(this%ustar**2)
+            if (this%normByustar)this%tau33_mean = this%tau33_mean/(this%sgsmodel%get_ustar()**2)
 
 
             ! sgs dissipation
@@ -3663,7 +3627,7 @@ contains
         call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
         call this%compute_z_mean(rbuff3, this%PhiM)
-        this%PhiM = this%PhiM*kappa/this%ustar
+        this%PhiM = this%PhiM*kappa/this%sgsmodel%get_ustar()
 
         this%runningSum = this%runningSum + this%zStats2dump
 
@@ -3673,7 +3637,7 @@ contains
         !write(*,*) 'wmean', maxval(this%w_mean), minval(this%w_mean)
 
         ! instantaneous horizontal averages of some quantities
-        this%inst_horz_avg(1) = this%ustar
+        this%inst_horz_avg(1) = this%sgsmodel%get_ustar()
         ! this%inst_horz(2) and (3) are computed in getRHS_SGS_WallM
         if(this%isStratified) then
             this%inst_horz_avg(4) = this%invObLength
@@ -4169,4 +4133,6 @@ contains
          dTdzBC_bottom = -1; dTdzBC_top = 0;
          WTBC_bottom = -1; WTBC_top = -1;
     end subroutine
+
+
 end module 

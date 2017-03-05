@@ -3,6 +3,7 @@ module temporalHook
     use IncompressibleGrid, only: igrid
     use reductions,         only: P_MAXVAL, p_minval
     use exits,              only: message, message_min_max
+    !use pbl_IO,           only: output_tecplot!dumpData4Matlab 
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
@@ -28,12 +29,16 @@ contains
             maxDiv = maxval(gp%divergence)
             DomMaxDiv = p_maxval(maxDiv)
             call message(0,"Time",gp%tsim)
+            call message(1,"u_star:",gp%sgsmodel%get_ustar())
             call message(1,"TIDX:",gp%step)
             call message(1,"MaxDiv:",DomMaxDiv)
             call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
+            call message_min_max(1,"Bounds for v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
+            call message_min_max(1,"Bounds for w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
-            end if 
+            end if
+            call message("==========================================================")
             call toc()
             call tic()
         end if 

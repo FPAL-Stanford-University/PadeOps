@@ -1,18 +1,22 @@
-pure function getGlobalConstant(this) result(val)
+pure function get_GlobalConstant(this) result(val)
    class(sgs_igrid), intent(in) :: this
    real(rkind)                     :: val
    
    val = this%cmodel_global
 end function
 
-pure function getUstar(this) result(val)
+pure function get_Ustar(this) result(val)
    class(sgs_igrid), intent(in) :: this
    real(rkind)                     :: val
-   
-   val = this%ustar
+  
+   if (this%useWallModel) then
+      val = this%ustar
+   else
+      val = 1.d0
+   end if
 end function
 
-pure function getInvObLength(this) result(val)
+pure function get_InvObLength(this) result(val)
    class(sgs_igrid), intent(in) :: this
    real(rkind)                     :: val
    
