@@ -101,7 +101,9 @@ contains
       call message(0, "Fringe targets successfully associated.")
    end subroutine
 
-   subroutine init(this, inputfile, dx, x, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE)
+   subroutine init(this, inputfile, dx, x, dy, y, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE)
+      use reductions, only: p_maxval
+
       class(fringe), intent(inout) :: this
       character(len=clen), intent(in) :: inputfile 
       type(decomp_info), intent(in), target :: gpC, gpE
@@ -111,11 +113,12 @@ contains
       real(rkind),    dimension(:,:,:,:), target, intent(in) :: rbuffxC, rbuffxE
       complex(rkind), dimension(:,:,:,:), target, intent(in) :: cbuffyC, cbuffyE
 
-      real(rkind) :: Lx, LambdaFact = 2.45d0
+      real(rkind) :: Lx, LambdaFact = 2.45d0, Fringe_ystR = 0.8d0, Fringe_yenL = 0.2d0, Fringe_delta_y = 0.175d0
       real(rkind) :: Fringe_xst = 0.75d0, Fringe_xen = 1.d0, Fringe_delta_st = 0.2d0, Fringe_delta_en = 0.05d0
       integer :: ioUnit = 10, j, k, nx, ierr
-      real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2
-      namelist /FRINGE/ Fringe_xst, Fringe_xen, Fringe_delta_st, Fringe_delta_en, LambdaFact 
+      real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2
+      namelist /FRINGE/ Fringe_xst, Fringe_xen, Fringe_delta_st, Fringe_delta_en, LambdaFact, Fringe_yenL, &
+                        Fringe_ystR, Fringe_delta_y
      
       nx = gpC%xsz(1)
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -123,6 +126,8 @@ contains
       close(ioUnit)
 
       Lx = maxval(x) + dx
+      Ly = p_maxval(maxval(y)) + dy
+
       Fringe_xst      = Fringe_xst*Lx
       Fringe_xen      = Fringe_xen*Lx
       Fringe_delta_st = Fringe_delta_st*Lx
@@ -149,7 +154,8 @@ contains
       this%rbuffxE => rbuffxE
       this%cbuffyC => cbuffyC 
       this%cbuffyE => cbuffyE
-      
+     
+      ! x - direction fringe
       x1 = ((x -  Fringe_xst)/Fringe_delta_st)
       x2 = ((x -  Fringe_xen)/Fringe_delta_en) + 1.d0
       call S_fringe(x1, S1)
@@ -169,7 +175,43 @@ contains
       end do
       deallocate(x1, x2, S1, S2, Fringe_func)
 
+      ! y direction fringe 1
+      Fringe_ystR = Fringe_ystR*Ly
+      Fringe_yenL = Fringe_yenL*Ly
+      Fringe_delta_y = Fringe_delta_y*Ly
+
+      allocate(y1(this%gpC%xsz(2)))
+      allocate(y2(this%gpC%xsz(2)))
+      allocate(S1(this%gpC%xsz(2)))
+      allocate(S2(this%gpC%xsz(2)))
+     
+      y1 = (y - Fringe_ystR)/Fringe_delta_y
+      y2 = (Fringe_yenL - y)/Fringe_delta_y
+      call S_Fringe(y1, S1)
+      call S_Fringe(y2, S2)
+
+      do k = 1,this%gpC%xsz(3)
+         do i = 1,this%gpC%xsz(1)
+            this%Fringe_kernel_cells(i,:,k) = this%Fringe_kernel_cells(i,:,k) + S1 + S2
+         end do 
+      end do
       
+      do k = 1,this%gpE%xsz(3)
+         do i = 1,this%gpE%xsz(1)
+            this%Fringe_kernel_edges(i,:,k) = this%Fringe_kernel_edges(i,:,k) + S1 + S2
+         end do 
+      end do
+     
+      where(this%Fringe_kernel_edges > 1.d0) 
+         this%Fringe_kernel_edges = 1.d0
+      end where
+
+      where(this%Fringe_kernel_cells > 1.d0) 
+         this%Fringe_kernel_cells = 1.d0
+      end where
+
+      deallocate(y1, y2, S1, S2)
+
       call message(0, "Fringe initialized successfully.")
 
    end subroutine
