@@ -44,7 +44,7 @@ program testSGSmodelWT
    integer :: dWdzBC_bottom  =  1, dWdzBC_top  =  1
 
    character(len=clen) :: inputdir, outputdir, inputFile 
-   integer :: nx, ny, nz, ioUnit, i, j, k, nvis = 0
+   integer :: nx, ny, nz, ioUnit, i, j, k, nvis = 0, tid_initial, tid_final, dtid, ind
    real(rkind) :: z0init, dt, inst_horz_avg_turb(8), tsim
    namelist /INPUT/ Lx, Ly, Lz, z0init, outputdir, inputdir, nx, ny, nz, TID, RID
 
@@ -73,69 +73,76 @@ program testSGSmodelWT
    sp_gpE => spectE%spectdecomp
 
    call initializeEverything()
-   
+  
+!!!!! dummy inputs for testing do loop
+   tid_initial = tid
+   tid_final = tid
+   dtid = 4000
+!!!!!!
+
    ! DO LOOP START HERE
-   
-   call tic()
-   
-   ! Initialize WT
-   allocate(turbArray)
-   call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
-   
-   
-   ! READ FIELDS)
-   call readVisualizationFile(TID, RID)
-   call spectC%fft(uC, uhatC)
-   call spectC%fft(vC, vhatC)
-   call spectE%fft(wE, whatE)
-   
-   ! PREPROCESS FIELDS
-   call interp_primitivevars()
-   call compute_duidxj()
+   do ind = tid_initial, tid_final, dtid 
+        call tic()
+        
+        ! Initialize WT
+        allocate(turbArray)
+        call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
+        
+        
+        ! READ FIELDS)
+        call readVisualizationFile(TID, RID)
+        call spectC%fft(uC, uhatC)
+        call spectC%fft(vC, vhatC)
+        call spectE%fft(wE, whatE)
+        
+        ! PREPROCESS FIELDS
+        call interp_primitivevars()
+        call compute_duidxj()
 
-   ! WIND TURBINE STUFF
-   u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-   call turbArray%getForceRHS(dt, uC, vC, wC, u_rhs, v_rhs, w_rhs, inst_horz_avg_turb)
-   call spectC%ifft(u_rhs,fbody_x)
-   call spectC%ifft(v_rhs,fbody_y)
-   call spectE%ifft(w_rhs,fbody_z)
-   
-   call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
-   call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
-   call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
-   call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
-   call transpose_y_to_x(rbuffyC(:,:,:,1),fbody_zC,gpC)
+        ! WIND TURBINE STUFF
+        u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
+        call turbArray%getForceRHS(dt, uC, vC, wC, u_rhs, v_rhs, w_rhs, inst_horz_avg_turb)
+        call spectC%ifft(u_rhs,fbody_x)
+        call spectC%ifft(v_rhs,fbody_y)
+        call spectE%ifft(w_rhs,fbody_z)
+        
+        call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
+        call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
+        call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
+        call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
+        call transpose_y_to_x(rbuffyC(:,:,:,1),fbody_zC,gpC)
 
-   fx_turb_store = fx_turb_store + fbody_x 
-   fy_turb_store = fy_turb_store + fbody_y
-   fz_turb_store = fz_turb_store + fbody_zC 
-
-
-   ! SGS MODEL STUFF
-   u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-   call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
-   call spectC%ifft(u_rhs,fbody_x)
-   call spectC%ifft(v_rhs,fbody_y)
-   call spectE%ifft(w_rhs,fbody_z)
-   
-   call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
-   call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
-   call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
-   call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
-   call transpose_y_to_x(rbuffyC(:,:,:,1),fbody_zC,gpC)
+        fx_turb_store = fx_turb_store + fbody_x 
+        fy_turb_store = fy_turb_store + fbody_y
+        fz_turb_store = fz_turb_store + fbody_zC 
 
 
-   fx_sgs_store = fx_sgs_store + fbody_x 
-   fy_sgs_store = fy_sgs_store + fbody_y
-   fz_sgs_store = fz_sgs_store + fbody_zC 
+        ! SGS MODEL STUFF
+        u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
+        call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
+        call spectC%ifft(u_rhs,fbody_x)
+        call spectC%ifft(v_rhs,fbody_y)
+        call spectE%ifft(w_rhs,fbody_z)
+        
+        call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
+        call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
+        call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
+        call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
+        call transpose_y_to_x(rbuffyC(:,:,:,1),fbody_zC,gpC)
 
-   ! WRAP UP 
-   deallocate(turbArray)
-   call toc()
 
-   nvis = nvis + 1
-   
-   ! END DO LOOP
+        fx_sgs_store = fx_sgs_store + fbody_x 
+        fy_sgs_store = fy_sgs_store + fbody_y
+        fz_sgs_store = fz_sgs_store + fbody_zC 
+
+        ! WRAP UP 
+        deallocate(turbArray)
+        call toc()
+
+        nvis = nvis + 1
+        
+        ! END DO LOOP
+   end do
 
    call dumpFullField(fx_turb_store/real(nvis,rkind),"xtrb")
    call dumpFullField(fy_turb_store/real(nvis,rkind),"ytrb")
