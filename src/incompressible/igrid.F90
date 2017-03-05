@@ -849,8 +849,9 @@ contains
         ! STEP 17: Set Fringe
         if (this%useFringe) then
             allocate(this%fringe_x)
-            call this%fringe_x%init(inputfile, this%dx, this%mesh(:,1,1,1), this%spectC, this%spectE, this%gpC, this%gpE, &
-                              this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE)   
+            call this%fringe_x%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
+                                    this%spectC, this%spectE, this%gpC, this%gpE, &
+                                    this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE)   
         end if
         
         ! STEP 18: Set up storage for Pressure

@@ -11,7 +11,7 @@ module fringeMethod
       private
       logical                                       :: TargetsAssociated = .false. 
       real(rkind), dimension(:,:,:), pointer        :: u_target, v_target, w_target, T_target
-      real(rkind), dimension(:,:,:), allocatable    :: Fringe_kernel_cells_x, Fringe_kernel_edges_x
+      real(rkind), dimension(:,:,:), allocatable    :: Fringe_kernel_cells, Fringe_kernel_edges
       real(rkind)                                   :: Fringe_Lambda_x
       type(spectral),    pointer                    :: spectC, spectE
       type(decomp_info), pointer                    :: gpC, gpE, sp_gpC, sp_gpE
@@ -56,17 +56,17 @@ contains
 
       if (this%targetsAssociated) then
          ! u velocity source term 
-         this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells_x)*(this%u_target - uC)
+         this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%u_target - uC)
          call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
          urhs = urhs + this%cbuffyC(:,:,:,1)
 
          ! v velocity source term 
-         this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells_x)*(this%v_target - vC)
+         this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%v_target - vC)
          call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
          vrhs = vrhs + this%cbuffyC(:,:,:,1)
          
          ! w velocity source term 
-         this%rbuffxE(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_edges_x)*(this%w_target - wE)
+         this%rbuffxE(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_edges)*(this%w_target - wE)
          call this%spectE%fft(this%rbuffxE(:,:,:,1), this%cbuffyE(:,:,:,1))      
          wrhs = wrhs + this%cbuffyE(:,:,:,1)
       end if 
@@ -77,8 +77,8 @@ contains
    subroutine destroy(this)
       class(fringe), intent(inout) :: this
 
-      deallocate(this%Fringe_kernel_cells_x)
-      deallocate(this%Fringe_kernel_edges_x)
+      deallocate(this%Fringe_kernel_cells)
+      deallocate(this%Fringe_kernel_edges)
       this%TargetsAssociated = .false.
    end subroutine
 
@@ -103,19 +103,20 @@ contains
 
    subroutine init(this, inputfile, dx, x, dy, y, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE)
       use reductions, only: p_maxval
-
+      use mpi
       class(fringe), intent(inout) :: this
       character(len=clen), intent(in) :: inputfile 
       type(decomp_info), intent(in), target :: gpC, gpE
       real(rkind), dimension(gpC%xsz(1)), intent(in) :: x
-      real(rkind), intent(in) :: dx
+      real(rkind), dimension(gpC%xsz(2)), intent(in) :: y
+      real(rkind), intent(in) :: dx, dy
       type(spectral), intent(in), target :: spectC, spectE
       real(rkind),    dimension(:,:,:,:), target, intent(in) :: rbuffxC, rbuffxE
       complex(rkind), dimension(:,:,:,:), target, intent(in) :: cbuffyC, cbuffyE
 
-      real(rkind) :: Lx, LambdaFact = 2.45d0, Fringe_ystR = 0.8d0, Fringe_yenL = 0.2d0, Fringe_delta_y = 0.175d0
+      real(rkind) :: Lx, Ly, LambdaFact = 2.45d0, Fringe_ystR = 0.8d0, Fringe_yenL = 0.2d0, Fringe_delta_y = 0.175d0
       real(rkind) :: Fringe_xst = 0.75d0, Fringe_xen = 1.d0, Fringe_delta_st = 0.2d0, Fringe_delta_en = 0.05d0
-      integer :: ioUnit = 10, j, k, nx, ierr
+      integer :: ioUnit = 10, i, j, k, nx, ierr
       real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2
       namelist /FRINGE/ Fringe_xst, Fringe_xen, Fringe_delta_st, Fringe_delta_en, LambdaFact, Fringe_yenL, &
                         Fringe_ystR, Fringe_delta_y
@@ -134,8 +135,8 @@ contains
       Fringe_delta_en = Fringe_delta_en*Lx
       this%LambdaFact = LambdaFact
       
-      allocate(this%Fringe_kernel_cells_x(nx, gpC%xsz(2), gpC%xsz(3)))
-      allocate(this%Fringe_kernel_edges_x(nx, gpE%xsz(2), gpE%xsz(3)))
+      allocate(this%Fringe_kernel_cells(nx, gpC%xsz(2), gpC%xsz(3)))
+      allocate(this%Fringe_kernel_edges(nx, gpE%xsz(2), gpE%xsz(3)))
         
       allocate(x1         (nx))
       allocate(x2         (nx))
@@ -164,13 +165,13 @@ contains
 
       do k = 1,this%gpC%xsz(3)
          do j = 1,this%gpC%xsz(2)
-             this%Fringe_kernel_cells_x(:,j,k) = Fringe_func    
+             this%Fringe_kernel_cells(:,j,k) = Fringe_func    
          end do 
       end do
 
       do k = 1,this%gpE%xsz(3)
          do j = 1,this%gpE%xsz(2)
-             this%Fringe_kernel_edges_x(:,j,k) = Fringe_func    
+             this%Fringe_kernel_edges(:,j,k) = Fringe_func    
          end do 
       end do
       deallocate(x1, x2, S1, S2, Fringe_func)
@@ -202,13 +203,13 @@ contains
          end do 
       end do
      
-      where(this%Fringe_kernel_edges > 1.d0) 
-         this%Fringe_kernel_edges = 1.d0
-      end where
+      !where(this%Fringe_kernel_edges > 1.d0) 
+      !   this%Fringe_kernel_edges = 1.d0
+      !end where
 
-      where(this%Fringe_kernel_cells > 1.d0) 
-         this%Fringe_kernel_cells = 1.d0
-      end where
+      !where(this%Fringe_kernel_cells > 1.d0) 
+      !   this%Fringe_kernel_cells = 1.d0
+      !end where
 
       deallocate(y1, y2, S1, S2)
 
@@ -233,6 +234,5 @@ contains
       end do
 
    end subroutine
-
 
 end module 
