@@ -193,7 +193,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
     real(rkind), dimension(8) :: fparams
+    real(rkind) :: fac
     integer, dimension(2) :: iparams
+    logical :: adjustRgas = .FALSE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
+    logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
@@ -225,7 +228,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
           ! if rhoRatio is negative, all quantities except Rgas need to be
           ! specified in input file. Rgas is then set such
           ! that Temperature equilibrium condition is satisfied
-          Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
+          if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
+
+          ! determine p_amb that guarantees T equilibrium
+          if(adjustPamb) then
+            fac = Rgas_2*rho_0_2/Rgas/rho_0
+            p_amb = (fac*p_infty - p_infty_2)/(one - fac)
+          endif
         endif
 
         ! write material properties
@@ -236,6 +245,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             print *, '---Material 2---'
             write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0_2, ', gam  = ', gamma_2, ', p_infty = ', p_infty_2
             write(*,'(3(a,e12.5))') 'mu    = ', mu_2,    ', Rgas = ', Rgas_2
+
+            write(*,*) '(Rgas2*rho02)/(Rgas*rho0) = ', fac
+            write(*,*) 'p_mb = ', p_amb
         end if
 
         ! Set materials
