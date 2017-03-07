@@ -23,7 +23,7 @@ This   README would normally document whatever steps are necessary to get your a
          * Lib_VTK_IO
               * Extract the Lib_VTK_IO.tar.gz file and `cd` into the created directory. Make a build directory and move to it using `mkdir build; cd build`. Then build the library using `cmake ..; make`. Now, set the VTK_IO_PATH to the current directory in your SetupEnv.sh script. 
          * HDF5
-              * Extract the hdf5-1.8.18.tar.gz file and `cd` into the directory created. Configure the build using `CC=</path/to/mpicc> FC=</path/to/mpif90> CXX=</path/to/mpic++> ./configure --enable-parallel --enable-fortran --enable-production --prefix=<current directory>`. Build HDF5 using `make; make install`. Set the `HDF5_PATH` variable in the `SetupEnv_<MACHINE>_<COMPILER>.sh` script to the directory that you built HDF5 in.
+              * Extract the hdf5-1.8.18.tar.gz file and `cd` into the directory created. Configure the build using `CC=</path/to/mpicc> FC=</path/to/mpif90> CXX=</path/to/mpic++> ./configure --enable-parallel --enable-fortran --enable-build-mode=production --prefix=<current directory>`. Build HDF5 using `make; make install`. Set the `HDF5_PATH` variable in the `SetupEnv_<MACHINE>_<COMPILER>.sh` script to the directory that you built HDF5 in.
 
     * To build the code, run the following commands:
 ~~~
