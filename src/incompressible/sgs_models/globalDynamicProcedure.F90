@@ -83,11 +83,23 @@ subroutine DoGlobalDynamicProcedure(this, uhatE, vhatE, whatE, uE, vE, wE, duidx
          this%buff1 = this%buff1 - this%tauijWM_filt(:,:,:,1)*this%Sij_filt(:,:,:,3) 
          this%buff1 = this%buff1 - this%tauijWM_filt(:,:,:,2)*this%Sij_filt(:,:,:,5) 
    end if
-  
+
+   !print '(6(i5,1x))', nrank, this%gpE%xst(3), this%gpE%xen(3), this%gpE%xsz(3), this%gpE%zsz(3), nz_global
+   ! first and last CV in z is half the CVs in the center
+   if(this%gpE%xst(3) == 1) then
+     this%buff1(:,:,1) = half*this%buff1(:,:,1)
+     this%buff2(:,:,1) = half*this%buff2(:,:,1)
+   endif
+   if(this%gpE%xen(3) == this%gpE%zsz(3)) then
+     this%buff1(:,:,this%gpE%xsz(3)) = half*this%buff1(:,:,this%gpE%xsz(3))
+     this%buff2(:,:,this%gpE%xsz(3)) = half*this%buff2(:,:,this%gpE%xsz(3))
+   endif
+
    num = p_sum(this%buff1)
    den = p_sum(this%buff2) 
 
    this%cmodel_global = 0.5d0*max(num/(den+1.0D-15),0.d0)
+   write(*,*) this%cmodel_global
 end subroutine
 
 
