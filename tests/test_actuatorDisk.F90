@@ -15,7 +15,7 @@ program test_actuatorDisk
     !type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
     type(actuatorDisk), dimension(:), allocatable :: hawts
     integer, parameter :: nx = 192, ny = 192, nz = 128
-    character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/ActuatorDisk/"
+    character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/problems/turbines/pblwt/turbInfo/"
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
     real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs, rhsv, rhsw
     real(rkind), parameter :: Lx = pi, Ly = pi, Lz = one
