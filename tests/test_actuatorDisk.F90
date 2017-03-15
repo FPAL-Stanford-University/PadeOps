@@ -14,7 +14,7 @@ program test_actuatorDisk
 
     !type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
     type(actuatorDisk), dimension(:), allocatable :: hawts
-    integer, parameter :: nx = 192, ny = 192, nz = 128
+    integer, parameter :: nx = 192, ny = 512, nz = 512
     character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/ActuatorDisk/"
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
     real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs, rhsv, rhsw
@@ -24,6 +24,7 @@ program test_actuatorDisk
     integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0 
     real(rkind) :: xPeriods = 2.d0, yPeriods = 2.d0, zpeak = 0.3d0, epsnd = 5.d0, z0init = 1.d-4 
     real(rkind) :: inst_val(8)
+    real(rkind) :: comp1, comp2
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -69,10 +70,12 @@ program test_actuatorDisk
    
     call decomp_2d_write_one(1,rhs,"temp.bin", gp)
     
-    call message(2,"Computed Source:", p_sum(sum(rhs)) * dx*dy*dz)
-    call message(2,"Expected Source:", (6.d0*0.5d0*(pi/4.d0)*(0.08d0**2)*0.65d0))
+    comp1 = p_sum(sum(rhs))*dx*dy*dz
+    comp2 = -(6.d0*0.5d0*(pi/4.d0)*(0.1d0**2)*1.33d0)
+    call message(2,"Computed Source:", comp1)
+    call message(2,"Expected Source:", comp2)
 
-    call message(2,"error:", 100.d0*abs(p_sum(sum(rhs)) * dx*dy*dz - 6.d0*0.5d0*(pi/4.d0)*(0.08d0**2)*0.65d0) / (6.d0*0.5d0*(pi/4.d0)*(0.08d0**2)*0.65d0))
+    call message(2,"error:", abs(abs(comp1 - comp2)/comp2)) 
     do idx = 1,6
     call hawts(idx)%destroy()
     end do 
