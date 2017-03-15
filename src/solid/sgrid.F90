@@ -82,6 +82,7 @@ module SolidGrid
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
        
         real(rkind) :: Cmu, Cbeta, Ckap
+        real(rkind) :: Re_num, Pr_num
 
         real(rkind) :: rho0
 
@@ -196,6 +197,7 @@ contains
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
         real(rkind) :: etafac = zero
         logical     :: gfilttimes = .TRUE.
+        real(rkind) :: Re_num = -1._rkind, Pr_num = -1._rkind
 
         character(len=clen) :: charout
         real(rkind), dimension(:,:,:,:), allocatable :: finger, fingersq
@@ -215,7 +217,7 @@ contains
         namelist /SINPUT/  rho0, eostype, eosparams, plastic, &
                            explPlast, Cmu, Cbeta, Ckap,            &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn,     &
-                           gfilttimes, etafac
+                           gfilttimes, etafac, Re_num, Pr_num
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -239,6 +241,11 @@ contains
         this%rho0 = rho0
 
         this%eostype = eostype
+
+        this%Re_num = Re_num
+        this%Pr_num = Pr_num
+        print *, "Reynolds number = ", Re_num
+        print *, "Prandtl  number = ", Pr_num
 
         this%Cmu = Cmu
         this%Cbeta = Cbeta
@@ -712,8 +719,6 @@ contains
         if ( (this%tstop <= zero) .AND. (this%nsteps <= 0) ) then
             call GracefulExit('No stopping criterion set. Set either tstop or nsteps to be positive.', 345)
         end if
-        write(*,*) this%dt
-        write(*,*) stability
 
         ! Start the simulation while loop
         do while ( tcond .AND. stepcond .AND. (.NOT. hookcond) )
@@ -761,11 +766,6 @@ contains
                 stepcond = .FALSE.
             end if
 
-        write(*,*) '---At end of time loop---'
-        write(*,*) this%dt
-        write(*,*) stability
-        write(*,*) vizcond
-        write(*,*) '---At end of time loop---'
         end do
 
     end subroutine
@@ -1072,14 +1072,7 @@ contains
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
 
-        write(*,*) '--------' 
-        write(*,*) this%etafac, this%dt, this%rho0
-        write(*,*) maxval(this%rho), minval(this%rho)
-        write(*,*) maxval(detg), minval(detg)
-        write(*,*) '--------' 
         penalty = (this%etafac/this%dt)*(this%rho/detg/this%rho0-one)
-        !write(*,*) this%rho/detg
-        write(*,*) '--------' 
 
         tmp = -this%u*this%g11-this%v*this%g12-this%w*this%g13
         call this%gradient(tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-this%x_bc,this%y_bc,this%z_bc)
@@ -1477,9 +1470,19 @@ contains
         class(sgrid), intent(inout) :: this
 
         ! If inviscid set everything to zero (otherwise use a model)
-        this%mu = zero
+        if (this%Re_num > zero) then
+            this%mu = one / this%Re_num
+        else
+            this%mu = zero
+        end if
+
         this%bulk = zero
-        this%kap = zero
+
+        if (this%Pr_num > zero) then
+            this%kap = (this%sgas%gam*this%sgas%Rgas*this%sgas%onebygam_m1) * this%mu / this%Pr_num
+        else
+            this%kap = zero
+        end if
 
     end subroutine  
 
