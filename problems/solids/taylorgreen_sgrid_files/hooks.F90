@@ -233,6 +233,10 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
                g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
+        g11 = one;  g12 = zero; g13 = zero
+        g21 = zero; g22 = one;  g23 = zero
+        g31 = zero; g32 = zero; g33 = one
+
     end associate
 end subroutine
 

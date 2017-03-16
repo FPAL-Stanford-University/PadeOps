@@ -300,11 +300,16 @@ contains
             if ( allocated(this%sgas) ) deallocate(this%sgas)
             allocate(this%sgas)
             call this%sgas%init(gam,Rgas,PInf)
+            print *, "gamma = ", gam
+            print *, "Rgas  = ", Rgas
+            print *, "Pinf  = ", Pinf
 
             ! Allocate elastic
             if ( allocated(this%elastic) ) deallocate(this%elastic)
             allocate(this%elastic)
             call this%elastic%init(shmod,yield)
+            print *, "shmod = ", shmod
+            print *, "yield = ", yield
         else
             ! general eos
             this%tau0 = eosparams(9)    ! maybe move this to elastic or geneos
@@ -525,6 +530,7 @@ contains
         varnames(25) = 'Syz'
         varnames(26) = 'Szz'
         varnames(27) = 'Entr'
+        varnames(28) = 'sos'
 
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
