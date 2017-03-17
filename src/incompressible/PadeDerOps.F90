@@ -3,7 +3,7 @@ module PadeDerOps
    use cd06staggstuff, only: cd06stagg
    use decomp_2d
    use staggOpsMod, only: staggOps
-   use constants, only: zero, one, two
+   use constants, only: zero, one, two, three, five
    use exits, only: gracefulExit, message
 
    implicit none
@@ -21,9 +21,11 @@ module PadeDerOps
       type(staggOps) :: fd02_ss, fd02_ns, fd02_sn, fd02_nn
       type(decomp_info), pointer :: gp, sp_gp
       integer :: scheme = 1
+      real(rkind) :: dz
       contains
       procedure          :: init
       procedure          :: destroy
+      procedure          :: getModifiedWavenumbers
       procedure, private :: ddz_C2E_real
       procedure, private :: ddz_C2E_cmplx
       procedure, private :: ddz_E2C_real
@@ -54,6 +56,7 @@ subroutine init(this, gpC, sp_gpC, gpE, sp_gpE, dz, scheme)
    this%gp => gpC
    this%sp_gp => sp_gpC
    this%scheme = scheme
+   this%dz = dz
 
    select case(this%scheme)
    case(cd06)
@@ -822,4 +825,68 @@ subroutine interpz_E2C_cmplx(this,input,output,bot,top)
       end select
    end select
 end subroutine
+
+
+subroutine getModifiedWavenumbers(this, k, kp)
+    class(Pade6stagg), intent(in) :: this
+    real(rkind), dimension(:), intent(in)  :: k
+    real(rkind), dimension(:), intent(out) :: kp
+
+
+    select case(this%scheme)
+    case (cd06)
+       call getmodCD06stagg(k,this%dz,kp)
+    case (fd02)
+       call getmodFD02stagg(k,this%dz,kp)
+    case default
+       call GracefulExit("You have not provided the modified wavenumber function &
+                        & for the chosen stagerred scheme",23)
+    end select
+
+
+end subroutine
+
+pure subroutine getmodCD06stagg(k,dx,kp)
+    real(rkind), dimension(:), intent(in)  :: k
+    real(rkind), intent(in) :: dx
+    real(rkind), dimension(:), intent(out) :: kp
+    real(rkind), dimension(:), allocatable :: omega
+    real(rkind), parameter :: alpha = 9._rkind/62._rkind
+    real(rkind), parameter :: beta = 0._rkind
+    real(rkind), parameter :: a = 63._rkind/62._rkind
+    real(rkind), parameter :: b = 17._rkind/62._rkind
+    real(rkind), parameter :: c = 0._rkind
+
+    allocate(omega(size(k)))
+    omega = k*dx
+    kp = (two*a*sin(omega/two) + (two/three)*b*sin(three*omega/two) + &
+         (two/five)*c*sin(five*omega/two))/(one + two*alpha*cos(omega) +&
+          two*beta*cos(two*omega))
+    kp = kp/dx
+    deallocate(omega)
+
+end subroutine
+
+pure subroutine getmodFD02stagg(k,dx,kp)
+    real(rkind), dimension(:), intent(in)  :: k
+    real(rkind), intent(in) :: dx
+    real(rkind), dimension(:), intent(out) :: kp
+    real(rkind), dimension(:), allocatable :: omega
+    real(rkind), parameter :: alpha = 0._rkind
+    real(rkind), parameter :: beta = 0._rkind
+    real(rkind), parameter :: a = 1._rkind
+    real(rkind), parameter :: b = 0._rkind 
+    real(rkind), parameter :: c = 0._rkind
+
+    allocate(omega(size(k)))
+    omega = k*dx
+    kp = (two*a*sin(omega/two) + (two/three)*b*sin(three*omega/two) + &
+         (two/five)*c*sin(five*omega/two))/(one + two*alpha*cos(omega) +&
+          two*beta*cos(two*omega))
+    kp = kp/dx
+    deallocate(omega)
+
+end subroutine
+
+
 end module 

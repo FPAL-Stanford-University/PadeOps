@@ -112,7 +112,9 @@ contains
         k1 = GetWaveNums(sp%nx_g, dx)
         k2 = GetWaveNums(sp%ny_g, dy)
         k3 = GetWaveNums(nzExt, dz)
-        call getmodCD06stagg(k3, dz, k3mod)
+        !call getmodCD06stagg(k3, dz, k3mod)
+        call this%derivZ%getModifiedWavenumbers(k3,k3mod)
+
         tfm = exp(imi*(-dz/two)*k3); tfp = exp(imi*( dz/two)*k3)
 
         allocate(this%k3modcm(nzExt), this%k3modcp(nzExt))
@@ -958,7 +960,8 @@ contains
 
         ! Step 1: Compute dwdz
         call transpose_y_to_z(what, this%w2, this%sp_gpE)
-        call this%derZ%ddz_E2C(this%w2,this%f2d, size(this%w2,1),size(this%w2,2))
+        !call this%derZ%ddz_E2C(this%w2,this%f2d, size(this%w2,1),size(this%w2,2))
+        call this%derivZ%ddz_E2C(this%w2,this%f2d,-1,-1)
         call transpose_z_to_y(this%f2d,this%f2dy, this%sp_gp)
         
         ! Step 2: compute and add dudx + dvdy
@@ -984,7 +987,8 @@ contains
                 call this%PressureProjection(uhat,vhat,what)
                 ! Step 1: Compute dwdz
                 call transpose_y_to_z(what, this%w2, this%sp_gpE)
-                call this%derZ%ddz_E2C(this%w2,this%f2d, size(this%w2,1),size(this%w2,2))
+                !call this%derZ%ddz_E2C(this%w2,this%f2d, size(this%w2,1),size(this%w2,2))
+                call this%derivZ%ddz_E2C(this%w2,this%f2d,-1,-1)
                 call transpose_z_to_y(this%f2d,this%f2dy, this%sp_gp)
                 ! Step 2: compute and add dudx + dvdy
                 do kk = 1,size(uhat,3)
@@ -1016,25 +1020,25 @@ contains
 
     end subroutine
 
-    pure subroutine getmodCD06stagg(k,dx,kp)
-        real(rkind), dimension(:), intent(in)  :: k
-        real(rkind), intent(in) :: dx
-        real(rkind), dimension(:), intent(out) :: kp
-        real(rkind), dimension(:), allocatable :: omega
-        real(rkind), parameter :: alpha = 9._rkind/62._rkind
-        real(rkind), parameter :: beta = 0._rkind
-        real(rkind), parameter :: a = 63._rkind/62._rkind
-        real(rkind), parameter :: b = 17._rkind/62._rkind
-        real(rkind), parameter :: c = 0._rkind
+    !pure subroutine getmodCD06stagg(k,dx,kp)
+    !    real(rkind), dimension(:), intent(in)  :: k
+    !    real(rkind), intent(in) :: dx
+    !    real(rkind), dimension(:), intent(out) :: kp
+    !    real(rkind), dimension(:), allocatable :: omega
+    !    real(rkind), parameter :: alpha = 9._rkind/62._rkind
+    !    real(rkind), parameter :: beta = 0._rkind
+    !    real(rkind), parameter :: a = 63._rkind/62._rkind
+    !    real(rkind), parameter :: b = 17._rkind/62._rkind
+    !    real(rkind), parameter :: c = 0._rkind
 
-        allocate(omega(size(k)))
-        omega = k*dx
-        kp = (two*a*sin(omega/two) + (two/three)*b*sin(three*omega/two) + &
-             (two/five)*c*sin(five*omega/two))/(one + two*alpha*cos(omega) +&
-              two*beta*cos(two*omega))
-        kp = kp/dx
-        deallocate(omega)
+    !    allocate(omega(size(k)))
+    !    omega = k*dx
+    !    kp = (two*a*sin(omega/two) + (two/three)*b*sin(three*omega/two) + &
+    !         (two/five)*c*sin(five*omega/two))/(one + two*alpha*cos(omega) +&
+    !          two*beta*cos(two*omega))
+    !    kp = kp/dx
+    !    deallocate(omega)
 
-    end subroutine
+    !end subroutine
 
 end module 

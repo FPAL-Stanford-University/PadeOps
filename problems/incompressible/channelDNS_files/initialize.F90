@@ -90,7 +90,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind) :: epsnd = 0.2
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE, k
-    real(rkind) :: periods = 3.d0, randscale = 0.01
+    real(rkind) :: periods = 1.d0, randscale = 0.01
     real(rkind) :: zpeak = 0.2d0
     real(rkind)  :: Lx = one, Ly = one, Lz = one
     namelist /channelDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale

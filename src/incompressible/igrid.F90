@@ -8,7 +8,7 @@ module IncompressibleGrid
     use StaggOpsMod, only: staggOps  
     use exits, only: GracefulExit, message, check_exit
     use spectralMod, only: spectral  
-    use PoissonMod, only: poisson
+    !use PoissonMod, only: poisson
     use mpi 
     use reductions, only: p_maxval, p_sum
     use timer, only: tic, toc
@@ -89,7 +89,6 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsE
 
 
-        type(poisson), allocatable :: poiss
         type(padepoisson), allocatable :: padepoiss
         real(rkind), dimension(:,:,:), allocatable :: divergence
 
@@ -536,15 +535,10 @@ contains
 
 
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
-        if (useCompactFD) then
-            allocate(this%padepoiss)
-            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, .true., this%gpC, &
-                                     this%Pade6opz) 
-        else    
-            allocate(this%poiss)
-            call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE, computeStokesPressure, this%gpC)  
-        end if 
-               
+        allocate(this%padepoiss)
+        call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, .true., this%gpC, &
+                                 this%Pade6opz) 
+           
         ! STEP 7: INITIALIZE THE FIELDS
         if (useRestartFile) then
             call this%readRestartFile(restartfile_TID, restartfile_RID)
@@ -587,13 +581,8 @@ contains
 
 
         ! Pressure projection
-        if (useCompactFD) then
-            call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
-            !call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
-        else
-            call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
-            call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
-        end if 
+        call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
+        !call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
 
         ! Take it back to physical fields
         call this%spectC%ifft(this%uhat,this%u)
@@ -856,19 +845,13 @@ contains
         end if 
 
 
-      
-
-        if ((this%fastCalcPressure) .and. (.not. useCompactFD)) then
-            call GracefulExit("fastCalcPressure feature is only supported with CD06 scheme.",123)
-        end if 
+        ! STEP 19: Safeguard against user invalid user inputs
         if ((this%fastCalcPressure) .and. (TimeSteppingScheme .ne. 1)) then
             call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 time stepping.",123)
         end if 
         if ((this%fastCalcPressure) .and. (useDealiasFilterVert)) then
             call GracefulExit("fastCalcPressure feature is not supported if useDealiasFilterVert is TRUE",123) 
         end if 
-
-
 
         if ((this%isStratified) .and. (.not. ComputeStokesPressure )) then
             call GracefulExit("You must set ComputeStokesPressure to TRUE if &
@@ -983,11 +966,7 @@ contains
         if (this%fastCalcPressure) then
             call this%Padepoiss%getPressureAndUpdateRHS(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
         else
-            if (useCompactFD) then
-                call this%padepoiss%getPressure(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
-            else
-                call this%poiss%getPressure(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
-            end if 
+            call this%padepoiss%getPressure(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
         end if 
 
         ! STEP 3: Inform the other subroutines that you already have RHS
@@ -1079,11 +1058,7 @@ contains
 
     subroutine printDivergence(this)
         class(igrid), intent(inout) :: this
-        if (useCompactFD) then
-            call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
-        else
-            call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
-        end if 
+        call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
     end subroutine 
 
     subroutine destroy(this)
@@ -1222,11 +1197,7 @@ contains
         call this%spectC%fft(T1C,fT1C)
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,tzE, this%sp_gpE)
-        if (useCompactFD) then
-            call this%Pade6opZ%interpz_E2C(tzE,tzC,WdUdzBC_bottom,WdUdzBC_top)
-        else
-            call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
-        end if 
+        call this%Pade6opZ%interpz_E2C(tzE,tzC,WdUdzBC_bottom,WdUdzBC_top)
         call transpose_z_to_y(tzC,this%u_rhs, this%sp_gpC)
         this%u_rhs = this%u_rhs + fT1C
         
@@ -1237,11 +1208,7 @@ contains
         call this%spectC%fft(T1C,fT1C)
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,tzE, this%sp_gpE)
-        if (useCompactFD) then
-            call this%Pade6opZ%interpz_E2C(tzE,tzC,WdVdzBC_bottom,WdVdzBC_top)
-        else
-            call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
-        end if 
+        call this%Pade6opZ%interpz_E2C(tzE,tzC,WdVdzBC_bottom,WdVdzBC_top)
         call transpose_z_to_y(tzC,this%v_rhs, this%sp_gpC)
         this%v_rhs = this%v_rhs + fT1C
         
@@ -1252,11 +1219,7 @@ contains
         T1C = dwdz*this%wC
         call this%spectC%fft(T1C,fT1C)
         call transpose_y_to_z(fT1C,tzC, this%sp_gpC)
-        if (useCompactFD) then
-            call this%Pade6opZ%interpz_C2E(tzC,tzE,WdWdzBC_bottom,WdWdzBC_top)
-        else
-            call this%Ops%InterpZ_Cell2Edge(tzC,tzE,zeroC,zeroC)
-        end if 
+        call this%Pade6opZ%interpz_C2E(tzC,tzE,WdWdzBC_bottom,WdWdzBC_top)
         call transpose_z_to_y(tzE,this%w_rhs, this%sp_gpE)
         this%w_rhs = this%w_rhs + fT2E
 
@@ -1273,11 +1236,7 @@ contains
         T1C = this%wC*this%wC
         call this%spectC%fft(T1C,fT1C)
         call transpose_y_to_z(fT1C,tzC,this%sp_gpC)
-        if (useCompactFD) then
-            call this%Pade6opZ%ddz_C2E(tzC,tzE,WWBC_bottom,WWBC_top)
-        else
-            call this%Ops%ddz_C2E(tzC,tzE,.true.,.true.)
-        end if
+        call this%Pade6opZ%ddz_C2E(tzC,tzE,WWBC_bottom,WWBC_top)
         call transpose_z_to_y(tzE,fT1E,this%sp_gpE)
         this%w_rhs = this%w_rhs + fT1E
 
@@ -1291,11 +1250,7 @@ contains
         T1E = this%uE*this%w
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
-        if (useCompactFD) then
-            call this%Pade6opZ%ddz_E2C(tzE,tzC,UWBC_bottom,UWBC_top)
-        else
-            call this%Ops%ddz_E2C(tzE,tzC)
-        end if 
+        call this%Pade6opZ%ddz_E2C(tzE,tzC,UWBC_bottom,UWBC_top)
         call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
         this%u_rhs = this%u_rhs + fT1C
         
@@ -1306,11 +1261,7 @@ contains
         T1E = this%vE*this%w
         call this%spectE%fft(T1E,fT1E)
         call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
-        if (useCompactFD) then
-            call this%Pade6opZ%ddz_E2C(tzE,tzC,VWBC_bottom,VWBC_top)
-        else
-            call this%Ops%ddz_E2C(tzE,tzC)
-        end if 
+        call this%Pade6opZ%ddz_E2C(tzE,tzC,VWBC_bottom,VWBC_top)
         call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
         this%v_rhs = this%v_rhs + fT1C
 
@@ -1348,11 +1299,7 @@ contains
             T1E = -this%w * this%TE
             call this%spectE%fft(T1E,fT1E)
             call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
-            if (useCompactFD) then
-                call this%Pade6opZ%ddz_E2C(tzE,tzC,WTBC_bottom,WTBC_top)
-            else
-                call this%Ops%ddz_E2C(tzE,tzC)
-            end if 
+            call this%Pade6opZ%ddz_E2C(tzE,tzC,WTBC_bottom,WTBC_top)
             call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
             this%T_rhs = this%T_rhs + fT1C
         
@@ -1385,13 +1332,7 @@ contains
         ! this%w_rhs = this%w_rhs - this%coriolis_cosine*(this%GxHat - this%uhat)/this%Ro
         ! But we evaluate this term as:
         call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
-        if (useCompactFD) then
-            !call this%derSE%InterpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
-            call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,uBC_bottom,uBC_top)
-        else
-            call this%Ops%InterpZ_Cell2Edge(zbuffC,zbuffE,zeroC,zeroC)
-            zbuffE(:,:,this%nz + 1) = zbuffC(:,:,this%nz)
-        end if 
+        call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,uBC_bottom,uBC_top)
         zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
         if (nrank == 0) zbuffE(1,1,:) = cmplx(zero,zero,rkind)
         call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
@@ -1572,16 +1513,9 @@ contains
        
         ! Step 2: Pressure projection
         if (.not. AlreadyProjected) then
-            if (useCompactFD) then
-                call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
-                if (mod(this%step,this%t_DivergenceCheck) == 0) then
-                    call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
-                end if 
-            else
-                call this%poiss%PressureProjNP(this%uhat,this%vhat,this%what)
-                if (mod(this%step,this%t_DivergenceCheck) == 0) then
-                    call this%poiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
-                end if 
+            call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
+            if (mod(this%step,this%t_DivergenceCheck) == 0) then
+                call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
             end if 
         end if 
 
@@ -2139,15 +2073,8 @@ contains
    
         call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
        
-        if (useCompactFD) then
-            call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,TBC_bottom,TBC_top)
-            call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dTdzBC_bottom,dTdzBC_top)
-        else 
-            call this%OpsPP%ddz_C2E(ctmpz1,ctmpz2,.true.,.true.)
-            ctmpz2(:,:,this%nz+1) = ctmpz2(:,:,this%nz)
-            ctmpz2(:,:,1) = two*ctmpz2(:,:,2) - ctmpz2(:,:,3) 
-            call this%OpsPP%InterpZ_Edge2Cell(ctmpz2,ctmpz1)
-        end if 
+        call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,TBC_bottom,TBC_top)
+        call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dTdzBC_bottom,dTdzBC_top)
 
         call transpose_z_to_y(ctmpz2, this%dTdzH, this%sp_gpE)
         call this%spectE%ifft(this%dTdzH,this%dTdzE)

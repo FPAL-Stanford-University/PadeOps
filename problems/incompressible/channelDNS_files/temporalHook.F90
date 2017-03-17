@@ -41,9 +41,11 @@ contains
             ! compute utau
             utau = sqrt(2.0d0*sqrt(real(gp%uhat(1,1,1),rkind)**2 + real(gp%vhat(1,1,1),rkind)**2)*gp%meanFact/(gp%dz*gp%Re))
             call message(1,"utau_lo:", utau)
-            if (gp%useSGS .and. (gp%sgsModel%DynamicProcedureType==2)) then
-                gdcoeff = gp%sgsModel%cmodel_global/(1.5d0*gp%dx*1.5d0*gp%dy*gp%dz)**(1.d0/3.d0)
-                call message(1,"Glob Dyn Coeff:",gdcoeff)
+            if (gp%useSGS) then
+               if ((gp%sgsModel%DynamicProcedureType==2)) then
+                  gdcoeff = gp%sgsModel%cmodel_global/(1.5d0*gp%dx*1.5d0*gp%dy*gp%dz)**(1.d0/3.d0)
+                  call message(1,"Glob Dyn Coeff:",gdcoeff)
+               end if
             end if 
             call toc()
             call tic()
