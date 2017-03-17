@@ -115,7 +115,13 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%useVerticalTfilter = useVerticalTfilter
 
   this%WallModel        = WallModelType
-  if (this%WallModel .ne. 0) call this%initWallModel()
+  
+  if (this%WallModel .ne. 0) then
+      call this%initWallModel()
+  else
+      this%useWallModel = .false. 
+  end if
+
   allocate(this%cmodelC(size(zMeshC)))
   allocate(this%cmodelE(size(zMeshE)))
 

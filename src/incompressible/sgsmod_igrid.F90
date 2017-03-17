@@ -49,7 +49,7 @@ module sgsmod_igrid
         complex(rkind), dimension(:,:,:), allocatable :: Tfilhat, Tfilhatz1, Tfilhatz2
         logical :: useWallModel = .false. 
         integer :: botBC_temp = 1
-        real(rkind) :: ustar, InvObLength, umn, vmn, uspmn, Tmn, wTh_surf
+        real(rkind) :: ustar = 1.d0, InvObLength = 0.d0, umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0, wTh_surf = 0.d0
         real(rkind) :: dz, z0, meanfact, ThetaRef, Fr, WallMfactor, Re
         real(rkind), pointer :: Tsurf
 
