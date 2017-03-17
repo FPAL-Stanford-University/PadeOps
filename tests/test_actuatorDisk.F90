@@ -24,6 +24,7 @@ program test_actuatorDisk
     integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0, num_turbines 
     real(rkind) :: xPeriods = 2.d0, yPeriods = 2.d0, zpeak = 0.3d0, epsnd = 5.d0, z0init = 1.d-4 
     real(rkind) :: inst_val(8)
+    real(rkind) :: comp1, comp2
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -75,7 +76,7 @@ program test_actuatorDisk
     call message(2,"Expected Source:", (num_turbines*0.5d0*(pi/4.d0)*(1.0d0**2)*1.33d0))
 
     do idx = 1,num_turbines
-    call hawts(idx)%destroy()
+      call hawts(idx)%destroy()
     end do 
     deallocate(hawts)
     deallocate(xG, yG, zG, u, v, w, rhs)

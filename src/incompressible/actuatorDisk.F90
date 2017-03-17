@@ -15,7 +15,7 @@ module actuatorDiskmod
     
     real(rkind), parameter :: alpha_Smooth = 0.9d0 ! Exonential smoothing constant
     integer, parameter :: xReg = 4, yReg = 7, zReg = 7
-    integer :: ntry = 10
+    integer :: ntry = 20
 
     type :: CloudMod
        real(rkind) :: xTurbLoc, yTurbLoc
@@ -78,6 +78,8 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
     !integer :: xLc(1), yLc(1), zLc(1)
     integer :: icl
     logical :: periodicY = .true., periodicX = .true. ! hard coded for now
+    integer :: ntry
+
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
     ! Read input file for this turbine    
@@ -96,6 +98,7 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
 
     this%delta = epsFact * (dx*dy*dz)**(1.d0/3.d0)
     this%OneByDelSq = 1.d0/(this%delta**2)
+   
 
     allocate(tmp(size(xG,2),size(xG,3)))
     allocate(tmpGhLo(size(xG,2),size(xG,3)))
@@ -170,6 +173,8 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
 
     
     if (this%Am_I_Active) then
+        ! Get the number of turbine points: 
+        !ntry = ntrymin!max(floor(diam/(sqrt(dy*dz))),ntrymin)
         allocate(this%rbuff(size(xG,2),size(xG,3)))
         ntry = 2*ceiling(diam/min(dx, dy, dz))
         call sample_on_circle(diam/2.d0,yLoc,zLoc, this%ys,this%zs,ntry)
