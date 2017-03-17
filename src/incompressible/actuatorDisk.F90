@@ -15,7 +15,7 @@ module actuatorDiskmod
     
     real(rkind), parameter :: alpha_Smooth = 0.9d0 ! Exonential smoothing constant
     integer, parameter :: xReg = 4, yReg = 7, zReg = 7
-    integer :: ntry = 20
+    integer :: ntry = 10
 
     type :: CloudMod
        real(rkind) :: xTurbLoc, yTurbLoc
