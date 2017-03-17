@@ -31,7 +31,8 @@ program testSGSmodelWT
    type(Pade6stagg) :: Pade6opZ
    integer :: ierr, ix1, ixn, iy1, iyn, iz1, izn, RID
    logical :: computeFbody
-  
+   integer :: scheme = 1
+
    real(rkind), dimension(:,:,:)  , pointer :: nuSGS
    real(rkind), dimension(:,:,:)  , pointer :: tau13, tau23
    real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
@@ -234,7 +235,7 @@ contains
       computeFbody = .true.
 
       ! Initialize Padeder
-      call Pade6opz%init(gpC, sp_gpC, dz)
+      call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme)
 
       ! Initialize sgs
       call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, &

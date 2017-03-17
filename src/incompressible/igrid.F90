@@ -265,7 +265,7 @@ module IncompressibleGrid
             procedure, private :: finalize_stats
             procedure, private :: finalize_stats3D
             procedure, private :: dump_planes
-            procedure, private :: dumpFullField 
+            procedure          :: dumpFullField 
             procedure, private :: DeletePrevStats3DFiles
             procedure, private :: updateProbes 
             procedure, private :: dumpProbes 
@@ -446,15 +446,9 @@ contains
         this%sp_gpE => this%spectE%spectdecomp
 
 
-        ! STEP 5: ALLOCATE/INITIALIZE THE OPERATORS DERIVED TYPE
-        if (useCompactFD) then
-            allocate(this%Pade6OpZ)
-            call this%Pade6OpZ%init(this%gpC,this%sp_gpC,this%dz)
-        else
-            allocate(this%Ops)
-            call this%Ops%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp, &
-                    this%spectE%spectdecomp, .false., .false.)
-        end if        
+        ! STEP 5: ALLOCATE/INITIALIZE THE DERIVATIVE DERIVED TYPE
+        allocate(this%Pade6OpZ)
+        call this%Pade6OpZ%init(this%gpC,this%sp_gpC, this%gpE, this%sp_gpE,this%dz,NumericalSchemeVert)
         allocate(this%OpsPP)
         call this%OpsPP%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp, &
                     this%spectE%spectdecomp, .false., .false.)
@@ -544,7 +538,8 @@ contains
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
         if (useCompactFD) then
             allocate(this%padepoiss)
-            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, this%storePressure, this%gpC) 
+            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, .true., this%gpC, &
+                                     this%Pade6opz) 
         else    
             allocate(this%poiss)
             call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE, computeStokesPressure, this%gpC)  
@@ -3407,23 +3402,24 @@ contains
 
         this%tidSUM = this%tidSUM + 1
 
+
         ! Compute u - mean 
         call transpose_x_to_y(this%u,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
         call this%compute_z_mean(rbuff3, this%u_mean)
-        if (this%normByustar) this%u_mean = this%u_mean/this%sgsmodel%get_ustar()
+        !if (this%normByustar) this%u_mean = this%u_mean/this%sgsmodel%get_ustar()
 
         ! Compute v - mean 
         call transpose_x_to_y(this%v,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff4,this%gpC)
         call this%compute_z_mean(rbuff4, this%v_mean)
-        if (this%normByustar)this%v_mean = this%v_mean/this%sgsmodel%get_ustar()
+        !if (this%normByustar)this%v_mean = this%v_mean/this%sgsmodel%get_ustar()
 
         ! Compute wC - mean 
         call transpose_x_to_y(this%wC,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff5,this%gpC)
         call this%compute_z_mean(rbuff5, this%w_mean)
-        if (this%normByustar)this%w_mean = this%w_mean/this%sgsmodel%get_ustar()
+        !if (this%normByustar)this%w_mean = this%w_mean/this%sgsmodel%get_ustar()
 
         ! take w from x -> z decomp
         call transpose_x_to_y(this%w,rbuff2E,this%gpE)
@@ -3440,34 +3436,34 @@ contains
         ! uu mean
         rbuff6 = rbuff3*rbuff3
         call this%compute_z_mean(rbuff6, this%uu_mean)
-        if (this%normByustar)this%uu_mean = this%uu_mean/(this%sgsmodel%get_ustar()**2)
+        !if (this%normByustar)this%uu_mean = this%uu_mean/(this%sgsmodel%get_ustar()**2)
 
         ! uv mean
         rbuff6 = rbuff3*rbuff4
         call this%compute_z_mean(rbuff6, this%uv_mean)
-        if (this%normByustar)this%uv_mean = this%uv_mean/(this%sgsmodel%get_ustar()**2)
+        !if (this%normByustar)this%uv_mean = this%uv_mean/(this%sgsmodel%get_ustar()**2)
 
         ! uw mean
         rbuff6E = rbuff3E*rbuff5E
         call this%OpsPP%InterpZ_Edge2Cell(rbuff6E,rbuff6)
         call this%compute_z_mean(rbuff6, this%uw_mean)
-        if (this%normByustar)this%uw_mean = this%uw_mean/(this%sgsmodel%get_ustar()**2)
+        !if (this%normByustar)this%uw_mean = this%uw_mean/(this%sgsmodel%get_ustar()**2)
 
         ! vv mean 
         rbuff6 = rbuff4*rbuff4
         call this%compute_z_mean(rbuff6, this%vv_mean)
-        if (this%normByustar)this%vv_mean = this%vv_mean/(this%sgsmodel%get_ustar()**2)
+        !if (this%normByustar)this%vv_mean = this%vv_mean/(this%sgsmodel%get_ustar()**2)
 
         ! vw mean 
         rbuff6E = rbuff4E*rbuff5E
         call this%OpsPP%InterpZ_Edge2Cell(rbuff6E,rbuff6)
         call this%compute_z_mean(rbuff6, this%vw_mean)
-        if (this%normByustar)this%vw_mean = this%vw_mean/(this%sgsmodel%get_ustar()**2)
+        !if (this%normByustar)this%vw_mean = this%vw_mean/(this%sgsmodel%get_ustar()**2)
 
         ! ww mean 
         rbuff6 = rbuff5*rbuff5
         call this%compute_z_mean(rbuff6, this%ww_mean)
-        if (this%normByustar)this%ww_mean = this%ww_mean/(this%sgsmodel%get_ustar()**2)
+        !if (this%normByustar)this%ww_mean = this%ww_mean/(this%sgsmodel%get_ustar()**2)
 
         ! Statified Stuff
         if (this%isStratified) then
@@ -3627,7 +3623,9 @@ contains
         call transpose_x_to_y(rbuff1,rbuff2,this%gpC)
         call transpose_y_to_z(rbuff2,rbuff3,this%gpC)
         call this%compute_z_mean(rbuff3, this%PhiM)
-        this%PhiM = this%PhiM*kappa/this%sgsmodel%get_ustar()
+        if (this%useSGS) then
+         this%PhiM = this%PhiM*kappa/this%sgsmodel%get_ustar()
+        end if
 
         this%runningSum = this%runningSum + this%zStats2dump
 
@@ -3637,7 +3635,7 @@ contains
         !write(*,*) 'wmean', maxval(this%w_mean), minval(this%w_mean)
 
         ! instantaneous horizontal averages of some quantities
-        this%inst_horz_avg(1) = this%sgsmodel%get_ustar()
+        if (this%useSGS) this%inst_horz_avg(1) = this%sgsmodel%get_ustar()
         ! this%inst_horz(2) and (3) are computed in getRHS_SGS_WallM
         if(this%isStratified) then
             this%inst_horz_avg(4) = this%invObLength

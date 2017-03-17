@@ -10,7 +10,7 @@ module TaylorGreenDNS_parameters
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
    
-    real(rkind), dimension(:,:,:), allocatable :: uexact, vexact, wexact
+    real(rkind), dimension(:,:,:), allocatable :: uexact, vexact, wexact, pexact
 
     real(rkind), parameter :: xdim = 1000._rkind, udim = 0.45_rkind
     real(rkind), parameter :: timeDim = xdim/udim
@@ -130,6 +130,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
   
     allocate(uexact(size(u,1),size(u,2), size(u,3)))
     allocate(vexact(size(v,1),size(v,2), size(v,3)))
+    allocate(pexact(size(u,1),size(u,2), size(u,3)))
     allocate(wexact(size(wC,1),size(wC,2), size(wC,3)))
 
 

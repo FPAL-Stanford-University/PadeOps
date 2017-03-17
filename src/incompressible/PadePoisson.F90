@@ -9,6 +9,7 @@ module PadePoissonMod
     use reductions, only: p_maxval   
     use gridtools, only: linspace 
     use timer, only: tic, toc
+    use PadeDerOps, only: Pade6stagg  
     implicit none 
 
     private
@@ -24,6 +25,7 @@ module PadePoissonMod
         integer :: nzG, nx_in, ny_in, nz_in
         integer ::      nxE_in, nyE_in, nzE_in
         type(cd06stagg), allocatable :: derZ
+        type(Pade6stagg), pointer :: derivZ 
         type(spectral), pointer :: sp, spE
         type(decomp_info), pointer :: sp_gp, sp_gpE
 
@@ -64,7 +66,7 @@ module PadePoissonMod
 contains
 
 
-    subroutine init(this, dx, dy, dz, sp, spE, computeStokesPressure, Lz, storePressure, gpC)
+    subroutine init(this, dx, dy, dz, sp, spE, computeStokesPressure, Lz, storePressure, gpC, derivZ)
         class(padepoisson), intent(inout) :: this
         real(rkind), intent(in) :: dx, dy, dz
         !class(cd06stagg), intent(in), target :: derZ
@@ -74,11 +76,12 @@ contains
         complex(rkind), dimension(:), allocatable :: tfm, tfp
         real(rkind) :: kradsq
         integer     :: myxst, myyst, ii, jj, kk
-        logical, intent(in), optional :: computeStokesPressure, storePressure
+        logical, intent(in) :: computeStokesPressure, storePressure
         real(rkind), intent(in), optional :: Lz 
         integer :: i, j, k
         real(rkind), dimension(:,:), allocatable :: temp 
-        type(decomp_info), intent(in), optional, target :: gpC
+        type(decomp_info), intent(in), target :: gpC
+        type(Pade6stagg), intent(in), target :: derivZ
 
         call  message("=========================================")
         call  message(0,"Initializing PADEPOISSON derived type")
@@ -89,13 +92,14 @@ contains
         this%spE => spE
         this%sp_gp => sp%spectdecomp
         this%sp_gpE => spE%spectdecomp
+        this%derivZ => derivZ
 
         this%nzG = sp%spectdecomp%zsz(3)
         nxExt = sp%spectdecomp%zsz(1)
         nyExt = sp%spectdecomp%zsz(2)
         nzExt = 2*sp%spectdecomp%zsz(3)
 
-        if (present(computeStokesPressure)) this%computeStokesPressure = computeStokesPressure
+        this%computeStokesPressure = computeStokesPressure
         this%k1_2d => sp%k1; this%k2_2d => sp%k2
         allocate( this%f2dext(nxExt,nyExt,nzExt), this%wext(nxExt, nyExt, nzExt) )
    
@@ -168,11 +172,7 @@ contains
             allocate(this%cosh_top(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
             allocate(this%sinh_bot(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)+1))
             allocate(this%cosh_bot(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-            if (present(Lz)) then
-                this%Lz = Lz
-            else
-                call GracefulExit("You need to pass in LZ if you wish to computeStokesPressure",334)
-            end if 
+            this%Lz = Lz
             allocate(this%zCell(this%nzG), this%zEdge(this%nzG+1))
             this%zEdge = linspace(0.d0, Lz, this%nzG+1)
             this%zCell = 0.5d0*(this%zEdge(1:this%nzG) + this%zEdge(2:this%nzG+1))
@@ -230,18 +230,11 @@ contains
             deallocate(temp)
             call message(1,"STOKES PRESSURE calculation enabled with the CD06 Poisson solver")
         end if 
-        if (present(storePressure)) then
-            if (storePressure) then
-                allocate(this%phat_z1(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-                allocate(this%phat_z2(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-                if (present(gpC)) then
-                    this%gpC => gpC
-                else
-                    call GracefulExit("If you wish to store pressure, you need & 
-                        & to pass in gpC while initialize PadePoisson",12)
-                end if 
-            end if
-        end if 
+        if (storePressure) then
+            allocate(this%phat_z1(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+            allocate(this%phat_z2(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+            this%gpC => gpC
+        end if
 
         deallocate(k1, k2, k3, k3mod, tfm, tfp)
 
@@ -745,6 +738,7 @@ contains
         complex(rkind), dimension(this%nxE_in, this%nyE_in, this%nzE_in), intent(inout) :: what
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: pressure
         integer :: ii, jj, kk
+        complex :: ctemp
 
         ! Step 0: Project out the stokes pressure which will fix the wall BCs
         ! for velocity
@@ -898,9 +892,10 @@ contains
                do jj = 1,size(this%uhatinZ,2)
                   !$omp simd
                   do ii = 1,size(this%uhatinZ,1)
-                     this%f2d(ii,jj,kk) = dcmplx(-dimag(this%f2d(ii,jj,kk)),dreal(this%f2d(ii,jj,kk)))
-                     this%uhatinZ(ii,jj,kk) = this%uhatinZ(ii,jj,kk) - this%f2d(ii,jj,kk)*this%k1inZ(ii,jj)
-                     this%vhatinZ(ii,jj,kk) = this%vhatinZ(ii,jj,kk) - this%f2d(ii,jj,kk)*this%k2inZ(ii,jj)
+                     !this%f2d(ii,jj,kk) = dcmplx(-dimag(this%f2d(ii,jj,kk)),dreal(this%f2d(ii,jj,kk)))
+                     ctemp  = dcmplx(-dimag(this%f2d(ii,jj,kk)),dreal(this%f2d(ii,jj,kk)))
+                     this%uhatinZ(ii,jj,kk) = this%uhatinZ(ii,jj,kk) - ctemp*this%k1inZ(ii,jj)
+                     this%vhatinZ(ii,jj,kk) = this%vhatinZ(ii,jj,kk) - ctemp*this%k2inZ(ii,jj)
                   end do
                end do
             end do 

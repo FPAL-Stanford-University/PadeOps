@@ -18,19 +18,21 @@ program test_Pade6ops
     complex(rkind), dimension(nx/2+1,ny,nz) :: uhat, wChat, vhat, cbuffC1, cbuffC2
     complex(rkind), dimension(nx/2+1,ny,nz+1) :: what, cbuffE1, cbuffE2
     type(padepoisson) :: padepoiss
-    type(decomp_info) :: gpC
-    type(decomp_info), pointer :: sp_gpC
+    type(decomp_info) :: gpC, gpE
+    type(decomp_info), pointer :: sp_gpC, sp_gpE
     type(spectral), target :: spectC, spectE
     integer :: ierr, k, i, j 
     real(rkind) :: dx, dy, dz
     type(Pade6stagg) :: Pade6opsZ
     real(rkind), parameter :: Re = 10.d0, dt = 1.d-4
     real(rkind) :: t 
+    integer, parameter :: scheme = 1
 
     !! STEP 0: initialize mesh and fields
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, 0, 0)
     call get_decomp_info(gpC)
+    call decomp_info_init(nx,ny,nz+1,gpE)
 
     if (nproc>1) call gracefulExit("Meant to be a serial execution",13)
     
@@ -41,7 +43,8 @@ program test_Pade6ops
     call spectC%init("x", nx, ny, nz  , dx, dy, dz, "four", "2/3rd", 2, .false.)
     call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", "2/3rd", 2, .false.)
     sp_gpC => spectC%spectdecomp
-    call Pade6opsZ%init(gpC, sp_gpC, dz)
+    sp_gpE => spectE%spectdecomp
+    call Pade6opsZ%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme)
     
     do k=1,nz
         do j=1,ny
@@ -61,7 +64,7 @@ program test_Pade6ops
     wC = -cos(x)*sin(z) 
     v  = 0.d0
     call Pade6opsZ%interpz_C2E(wC,w,-1,-1)
-    call padepoiss%init(dx,dy,dz, spectC, spectE, .true., two*pi, .true., gpC) 
+    call padepoiss%init(dx,dy,dz, spectC, spectE, .true., two*pi, .true., gpC, Pade6opsZ) 
 
     call spectC%fft(u,uhat)
     call spectC%fft(v,vhat)
