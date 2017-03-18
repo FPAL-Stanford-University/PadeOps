@@ -267,7 +267,8 @@ module IncompressibleGrid
             procedure          :: dumpFullField 
             procedure, private :: DeletePrevStats3DFiles
             procedure, private :: updateProbes 
-            procedure, private :: dumpProbes 
+            procedure, private :: dumpProbes
+            procedure, private :: correctPressureRotationalForm
     end type
 
 contains 
@@ -485,7 +486,7 @@ contains
         allocate(this%duidxjC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9))
         allocate(this%duidxjE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9))
         call this%spectC%alloc_r2c_out(this%duidxjChat,9)
-        call this%spectC%alloc_r2c_out(this%duidxjEhat,9)
+        call this%spectE%alloc_r2c_out(this%duidxjEhat,9)
         call this%spectE%alloc_r2c_out(this%rhsE,1); call this%spectE%alloc_r2c_out(this%OrhsE,1)
         
         this%u => this%PfieldsC(:,:,:,1) ; this%v => this%PfieldsC(:,:,:,2) ; this%wC => this%PfieldsC(:,:,:,3) 
@@ -969,6 +970,14 @@ contains
             call this%padepoiss%getPressure(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
         end if 
 
+        if (.not. useSkewSymm) then 
+            ! You are using the rotational form. 
+            ! This means that the pressure is really 
+            ! the Bernoulli pressure. Need to subtract 
+            ! out the kinetic energy. 
+            call this%correctPressureRotationalForm()
+        end if
+
         ! STEP 3: Inform the other subroutines that you already have RHS
         this%AlreadyHaveRHS = .true. 
 
@@ -1121,7 +1130,6 @@ contains
         T2E = T2E*this%w
         call this%spectE%fft(T2E,fT2E)
         call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
-        !call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
         call this%Pade6opZ%interpz_E2C(tzE,tzC,0,0)
         call transpose_z_to_y(tzC,this%u_rhs, this%sp_gpC)
         this%u_rhs = this%u_rhs + fT1C
@@ -1134,7 +1142,6 @@ contains
         T2E = T2E*this%w
         call this%spectE%fft(T2E,fT2E)
         call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
-        !call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
         call this%Pade6opZ%interpz_E2C(tzE,tzC,0,0)
         call transpose_z_to_y(tzC,this%v_rhs, this%sp_gpC)
         this%v_rhs = this%v_rhs + fT1C
@@ -4060,4 +4067,14 @@ contains
     end subroutine
 
 
+    subroutine correctPressureRotationalForm(this)
+        class(igrid), intent(inout) :: this 
+        real(rkind) :: mfact, meanK
+
+        this%rbuffxC(:,:,:,1) = 0.5d0*(this%u*this%u + this%v*this%v + this%wC*this%wC)
+        mfact = one/(real(this%nx,rkind)*real(this%ny,rkind)*real(this%nz,rkind))
+        meanK = p_sum(sum(this%rbuffxC(:,:,:,1)))*mfact
+        this%pressure = this%pressure + meanK
+        this%pressure = this%pressure - this%rbuffxC(:,:,:,1)
+    end subroutine
 end module 
