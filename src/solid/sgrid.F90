@@ -311,7 +311,7 @@ contains
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
         allocate(this%mix)
-        call this%mix%init(this%decomp,this%der,this%fil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot)
+        call this%mix%init(this%decomp,this%der,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot)
         !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields

@@ -23,6 +23,7 @@ module SolidMixtureMod
         type(decomp_info), pointer :: decomp
         type(derivatives), pointer :: der
         type(filters),     pointer :: fil
+        type(filters),     pointer :: gfil
         type(ladobject),   pointer :: LAD
 
         logical :: SOSmodel = .FALSE.           ! is sound speed given by `equilibrium' model? Alternative is `frozen' model. Check Saurel et al., JCP 2009.
@@ -73,11 +74,11 @@ module SolidMixtureMod
 contains
 
     !function init(decomp,der,fil,LAD,ns) result(this)
-    subroutine init(this,decomp,der,fil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot)
+    subroutine init(this,decomp,der,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot)
         !type(solid_mixture)      , intent(inout) :: this
         class(solid_mixture)      , intent(inout) :: this
         type(decomp_info), target, intent(in)    :: decomp
-        type(filters),     target, intent(in)    :: fil
+        type(filters),     target, intent(in)    :: fil, gfil
         type(derivatives), target, intent(in)    :: der
         type(ladobject),   target, intent(in)    :: LAD
         integer,                   intent(in)    :: ns
@@ -104,18 +105,19 @@ contains
         this%nzp = decomp%ysz(3)
 
         this%decomp => decomp
-        this%der => der
-        this%fil => fil
-        this%LAD => LAD
+        this%der  => der
+        this%fil  => fil
+        this%gfil => gfil
+        this%LAD  => LAD
 
         ! Allocate array of solid objects (Use a dummy to avoid memory leaks)
         allocate(dummy)
-        call dummy%init(decomp,der,fil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%updateEtot)
+        call dummy%init(decomp,der,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%updateEtot)
 
         if (allocated(this%material)) deallocate(this%material)
         allocate(this%material(this%ns))!, source=dummy)
         do i=1,this%ns
-            call this%material(i)%init(decomp,der,fil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%updateEtot)
+            call this%material(i)%init(decomp,der,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%updateEtot)
         end do
         deallocate(dummy)
 
@@ -137,6 +139,7 @@ contains
 
         nullify(this%LAD)
         nullify(this%fil)
+        nullify(this%gfil)
         nullify(this%der)
         nullify(this%decomp)
 
@@ -767,6 +770,8 @@ stop
     end subroutine 
 
     subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+        use operators, only: filter3D
+        use reductions, only: P_SUM
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
@@ -776,11 +781,39 @@ stop
 
         integer :: imat
 
+        real(rkind) :: v_corr
+        integer :: maskExponent = 10
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp, mask, u_mod, v_mod, w_mod
+
+        where( (this%material(1)%VF < 0.9) )
+            mask = one
+        elsewhere
+            mask = zero
+        end where
+        call filter3D(this%decomp, this%gfil, mask, 1, x_bc, y_bc, z_bc)
+
+        where( (this%material(1)%VF > 0.9) .and. (this%material(1)%VF < 0.99) )
+            tmp = one
+        elsewhere
+            tmp = zero
+        end where
+
         do imat = 1, this%ns
             if (this%use_gTg) then
                 call this%material(imat)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
             else
-                call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+                u_mod = u
+                w_mod = w
+                ! Hard code velocity extension for now
+                if (imat == 1) then
+                    v_corr = P_SUM(tmp*v)/P_SUM(tmp)
+                    print*, "v_corr = ", v_corr
+                    v_mod = v + ( one-this%material(1)%VF )*(half + half) !<<<---- See here
+                    print*, "v_mod = ", P_SUM(tmp*v_mod)/P_SUM(tmp)
+                else
+                    v_mod = -half !<<<---- See here
+                end if
+                call this%material(imat)%update_g(isub,dt,rho,u_mod,v_mod,w_mod,x,y,z,src,tsim,x_bc,y_bc,z_bc)
             end if
         end do
 

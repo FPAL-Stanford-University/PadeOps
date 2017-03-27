@@ -26,6 +26,7 @@ module SolidMod
         type(decomp_info), pointer :: decomp
         type(derivatives), pointer :: der
         type(filters),     pointer :: fil
+        type(filters),     pointer :: gfil
 
         real(rkind), dimension(:,:,:), allocatable :: Ys
         real(rkind), dimension(:,:,:), allocatable :: VF
@@ -173,17 +174,18 @@ module SolidMod
 contains
 
     !function init(decomp,der,fil,hydro,elastic) result(this)
-    subroutine init(this,decomp,der,fil,PTeqb,pEqb,pRelax,use_gTg,updateEtot)
+    subroutine init(this,decomp,der,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,updateEtot)
         class(solid), target, intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der
-        type(filters),     target, intent(in) :: fil
+        type(filters),     target, intent(in) :: fil, gfil
         logical, intent(in) :: PTeqb,pEqb,pRelax,updateEtot
         logical, intent(in) :: use_gTg
 
         this%decomp => decomp
-        this%der => der
-        this%fil => fil
+        this%der  => der
+        this%fil  => fil
+        this%gfil => gfil
        
         this%PTeqb  = PTeqb
         this%pEqb   = pEqb
@@ -347,6 +349,7 @@ contains
         if ( allocated(this%elastic) ) deallocate(this%elastic)
 
         nullify( this%fil    )
+        nullify( this%gfil   )
         nullify( this%der    )
         nullify( this%decomp )
     end subroutine
@@ -429,7 +432,7 @@ contains
     subroutine getRHS_g(this,rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
         use decomp_2d, only: nrank
         use constants, only: eps
-        use operators, only: gradient, curl
+        use operators, only: gradient, curl, filter3D
         use reductions, only: P_MAXLOC
         class(solid),                                         intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
@@ -827,37 +830,46 @@ contains
 
     end subroutine
 
-    subroutine filter(this, iflag, x_bc, y_bc, z_bc)
+    subroutine filter(this, iflag, x_bc, y_bc, z_bc, fil)
         use operators, only: filter3D
         class(solid),  intent(inout) :: this
         integer,       intent(in)    :: iflag
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        type(filters), target, optional, intent(in) :: fil
+
+        type(filters), pointer :: fil_
+
+        if (present(fil)) then
+            fil_ => fil
+        else
+            fil_ => this%fil
+        end if
 
         ! filter g
-        call filter3D(this%decomp, this%fil, this%g11, iflag, x_bc, y_bc, z_bc)
-        call filter3D(this%decomp, this%fil, this%g12, iflag,-x_bc,-y_bc, z_bc)
-        call filter3D(this%decomp, this%fil, this%g13, iflag,-x_bc, y_bc,-z_bc)
-        call filter3D(this%decomp, this%fil, this%g21, iflag,-x_bc,-y_bc, z_bc)
-        call filter3D(this%decomp, this%fil, this%g22, iflag, x_bc, y_bc, z_bc)
-        call filter3D(this%decomp, this%fil, this%g23, iflag, x_bc,-y_bc,-z_bc)
-        call filter3D(this%decomp, this%fil, this%g31, iflag,-x_bc, y_bc,-z_bc)
-        call filter3D(this%decomp, this%fil, this%g32, iflag, x_bc,-y_bc,-z_bc)
-        call filter3D(this%decomp, this%fil, this%g33, iflag, x_bc, y_bc, z_bc)
+        call filter3D(this%decomp, fil_, this%g11, iflag, x_bc, y_bc, z_bc)
+        call filter3D(this%decomp, fil_, this%g12, iflag,-x_bc,-y_bc, z_bc)
+        call filter3D(this%decomp, fil_, this%g13, iflag,-x_bc, y_bc,-z_bc)
+        call filter3D(this%decomp, fil_, this%g21, iflag,-x_bc,-y_bc, z_bc)
+        call filter3D(this%decomp, fil_, this%g22, iflag, x_bc, y_bc, z_bc)
+        call filter3D(this%decomp, fil_, this%g23, iflag, x_bc,-y_bc,-z_bc)
+        call filter3D(this%decomp, fil_, this%g31, iflag,-x_bc, y_bc,-z_bc)
+        call filter3D(this%decomp, fil_, this%g32, iflag, x_bc,-y_bc,-z_bc)
+        call filter3D(this%decomp, fil_, this%g33, iflag, x_bc, y_bc, z_bc)
 
         ! filter Ys
-        call filter3D(this%decomp, this%fil, this%consrv(:,:,:,1), iflag, x_bc, y_bc, z_bc)
+        call filter3D(this%decomp, fil_, this%consrv(:,:,:,1), iflag, x_bc, y_bc, z_bc)
 
         if(this%pEqb) then
             ! filter VF
-            call filter3D(this%decomp, this%fil, this%VF, iflag, x_bc, y_bc,z_bc)
+            call filter3D(this%decomp, fil_, this%VF, iflag, x_bc, y_bc,z_bc)
         endif
 
         if(this%pRelax) then
             ! filter eh
-            call filter3D(this%decomp, this%fil, this%consrv(:,:,:,2), iflag,x_bc, y_bc, z_bc)
+            call filter3D(this%decomp, fil_, this%consrv(:,:,:,2), iflag,x_bc, y_bc, z_bc)
 
             ! filter VF
-            call filter3D(this%decomp, this%fil, this%VF, iflag, x_bc, y_bc,z_bc)
+            call filter3D(this%decomp, fil_, this%VF, iflag, x_bc, y_bc,z_bc)
         endif
 
     end subroutine
