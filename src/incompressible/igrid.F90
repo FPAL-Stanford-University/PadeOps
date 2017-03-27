@@ -2486,9 +2486,9 @@ contains
                    + this%tauSGS_ij(:,:,:,2)*(dudy + dvdx) + this%tauSGS_ij(:,:,:,3)*(dudzC + dwdxC) &
                    + this%tauSGS_ij(:,:,:,5)*(dvdzC + dwdyC)
 
-            ! -- this is for viscous dissipation. figure that out later
-            !rbuff2 = dudx*dudx + dvdy*dvdy + dwdz*dwdz &
-            !       + half*( (dudy + dvdx)**2 + (dudzC + dwdxC)**2 + (dvdzC + dwdyC)**2)
+            ! for viscous dissipation
+            rbuff0 = dudx*dudx + dvdy*dvdy + dwdz*dwdz &
+                   + half*( (dudy + dvdx)**2 + (dudzC + dwdxC)**2 + (dvdzC + dwdyC)**2) ! half here is two/four
 
             if(this%normByUstar) then
                 this%tau11_mean3D = this%tau11_mean3D + this%tauSGS_ij(:,:,:,1)/(this%sgsmodel%get_ustar()**2)
@@ -2502,7 +2502,7 @@ contains
                 this%sgsdissp_mean3D = this%sgsdissp_mean3D - rbuff1/(this%sgsmodel%get_ustar()**3)
 
                 !!rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)
-                !this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff2/(this%sgsmodel%get_ustar()**3)
+                this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff0/(this%sgsmodel%get_ustar()**3)
 
                 this%S11_mean3D = this%S11_mean3D + dudx                /this%sgsmodel%get_ustar()
                 this%S12_mean3D = this%S12_mean3D + half*(dudy  + dvdx )/this%sgsmodel%get_ustar()
@@ -2521,7 +2521,7 @@ contains
                 this%sgsdissp_mean3D = this%sgsdissp_mean3D - rbuff1
 
                 !!rbuff1 = rbuff1/(this%nu_SGS + 1.0d-14)
-                !this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff2
+                this%viscdisp_mean3D = this%viscdisp_mean3D + rbuff0
 
                 this%S11_mean3D = this%S11_mean3D + dudx
                 this%S12_mean3D = this%S12_mean3D + half*(dudy + dvdx)
@@ -3048,8 +3048,8 @@ contains
       
             ! viscdissp_avg -- after all derivative averages
             rbuff1 = this%viscdisp_mean3D/tidSumreal     - &
-                     (     this%S11_mean3D**2 + this%S12_mean3D**2 + this%S13_mean3D**2 + &
-                      two*(this%S22_mean3D**2 + this%S23_mean3D**2 + this%S33_mean3D**2)  ) / tidSumreal**2 
+                     (     this%S11_mean3D**2 + this%S22_mean3D**2 + this%S33_mean3D**2 + &
+                      two*(this%S12_mean3D**2 + this%S13_mean3D**2 + this%S23_mean3D**2)  ) / tidSumreal**2 
             rbuff1 = half*rbuff1/this%Re     ! note: this is actually 2/Re*(..)/4
             call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
             call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
