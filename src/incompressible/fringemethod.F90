@@ -114,12 +114,15 @@ contains
       real(rkind),    dimension(:,:,:,:), target, intent(in) :: rbuffxC, rbuffxE
       complex(rkind), dimension(:,:,:,:), target, intent(in) :: cbuffyC, cbuffyE
 
-      real(rkind) :: Lx, Ly, LambdaFact = 2.45d0, Fringe_ystR = 0.8d0, Fringe_yenL = 0.2d0, Fringe_delta_y = 0.175d0
-      real(rkind) :: Fringe_xst = 0.75d0, Fringe_xen = 1.d0, Fringe_delta_st = 0.2d0, Fringe_delta_en = 0.05d0
+      real(rkind) :: Lx, Ly, LambdaFact = 2.45d0
+      real(rkind) :: Fringe_yst = 1.d0, Fringe_yen = 1.d0
+      real(rkind) :: Fringe_xst = 0.75d0, Fringe_xen = 1.d0
+      real(rkind) :: Fringe_delta_st_x = 1.d0, Fringe_delta_st_y = 1.d0, Fringe_delta_en_x = 1.d0, Fringe_delta_en_y = 1.d0
       integer :: ioUnit = 10, i, j, k, nx, ierr
       real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2
-      namelist /FRINGE/ Fringe_xst, Fringe_xen, Fringe_delta_st, Fringe_delta_en, LambdaFact, Fringe_yenL, &
-                        Fringe_ystR, Fringe_delta_y
+      logical :: Apply_x_fringe = .true., Apply_y_fringe = .false.
+      namelist /FRINGE/ Apply_x_fringe, Apply_y_fringe, Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, Fringe_yen, &
+                        Fringe_yst
      
       nx = gpC%xsz(1)
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -128,23 +131,6 @@ contains
 
       Lx = maxval(x) + dx
       Ly = p_maxval(maxval(y)) + dy
-
-      Fringe_xst      = Fringe_xst*Lx
-      Fringe_xen      = Fringe_xen*Lx
-      Fringe_delta_st = Fringe_delta_st*Lx
-      Fringe_delta_en = Fringe_delta_en*Lx
-      this%LambdaFact = LambdaFact
-      
-      allocate(this%Fringe_kernel_cells(nx, gpC%xsz(2), gpC%xsz(3)))
-      allocate(this%Fringe_kernel_edges(nx, gpE%xsz(2), gpE%xsz(3)))
-        
-      allocate(x1         (nx))
-      allocate(x2         (nx))
-      allocate(S1         (nx))
-      allocate(S2         (nx))
-      allocate(Fringe_func(nx))
-     
-
       this%gpC => gpC
       this%gpE => gpE
       this%spectC => spectC
@@ -155,54 +141,83 @@ contains
       this%rbuffxE => rbuffxE
       this%cbuffyC => cbuffyC 
       this%cbuffyE => cbuffyE
-     
-      ! x - direction fringe
-      x1 = ((x -  Fringe_xst)/Fringe_delta_st)
-      x2 = ((x -  Fringe_xen)/Fringe_delta_en) + 1.d0
-      call S_fringe(x1, S1)
-      call S_fringe(x2, S2)
-      Fringe_func = S1 - S2
 
-      do k = 1,this%gpC%xsz(3)
-         do j = 1,this%gpC%xsz(2)
-             this%Fringe_kernel_cells(:,j,k) = Fringe_func    
-         end do 
-      end do
-
-      do k = 1,this%gpE%xsz(3)
-         do j = 1,this%gpE%xsz(2)
-             this%Fringe_kernel_edges(:,j,k) = Fringe_func    
-         end do 
-      end do
-      deallocate(x1, x2, S1, S2, Fringe_func)
-
-      ! y direction fringe 1
-      Fringe_ystR = Fringe_ystR*Ly
-      Fringe_yenL = Fringe_yenL*Ly
-      Fringe_delta_y = Fringe_delta_y*Ly
-
-      allocate(y1(this%gpC%xsz(2)))
-      allocate(y2(this%gpC%xsz(2)))
-      allocate(S1(this%gpC%xsz(2)))
-      allocate(S2(this%gpC%xsz(2)))
-     
-      y1 = (y - Fringe_ystR)/Fringe_delta_y
-      y2 = (Fringe_yenL - y)/Fringe_delta_y
-      call S_Fringe(y1, S1)
-      call S_Fringe(y2, S2)
-
-      do k = 1,this%gpC%xsz(3)
-         do i = 1,this%gpC%xsz(1)
-            this%Fringe_kernel_cells(i,:,k) = this%Fringe_kernel_cells(i,:,k) + S1 + S2
-         end do 
-      end do
       
-      do k = 1,this%gpE%xsz(3)
-         do i = 1,this%gpE%xsz(1)
-            this%Fringe_kernel_edges(i,:,k) = this%Fringe_kernel_edges(i,:,k) + S1 + S2
-         end do 
-      end do
+      allocate(this%Fringe_kernel_cells(nx, gpC%xsz(2), gpC%xsz(3)))
+      allocate(this%Fringe_kernel_edges(nx, gpE%xsz(2), gpE%xsz(3)))
+      
+      this%Fringe_kernel_cells = 0.d0
+      this%Fringe_kernel_edges = 0.d0
+      this%LambdaFact   = LambdaFact
+
+      if (Apply_x_fringe) then
+         Fringe_xst        = Fringe_xst*Lx
+         Fringe_xen        = Fringe_xen*Lx
+         Fringe_delta_st_x = Fringe_delta_st_x*Lx
+         Fringe_delta_en_x = Fringe_delta_en_x*Lx
+         ! x - direction fringe
+         allocate(x1         (nx))
+         allocate(x2         (nx))
+         allocate(S1         (nx))
+         allocate(S2         (nx))
+         allocate(Fringe_func(nx))
      
+         x1 = ((x -  Fringe_xst)/Fringe_delta_st_x)
+         x2 = ((x -  Fringe_xen)/Fringe_delta_en_x) + 1.d0
+         call S_fringe(x1, S1)
+         call S_fringe(x2, S2)
+         Fringe_func = S1 - S2
+
+         do k = 1,this%gpC%xsz(3)
+            do j = 1,this%gpC%xsz(2)
+                this%Fringe_kernel_cells(:,j,k) = Fringe_func    
+            end do 
+         end do
+
+         do k = 1,this%gpE%xsz(3)
+            do j = 1,this%gpE%xsz(2)
+                this%Fringe_kernel_edges(:,j,k) = Fringe_func    
+            end do 
+         end do
+         deallocate(x1, x2, S1, S2, Fringe_func)
+      end if 
+
+      if (Apply_y_fringe) then
+         Fringe_yst        = Fringe_yst*Ly
+         Fringe_yen        = Fringe_yen*Ly
+         Fringe_delta_st_y = Fringe_delta_st_y*Ly
+         Fringe_delta_en_y = Fringe_delta_en_y*Ly
+         ! y direction fringe 1
+         allocate(y1         (this%gpC%xsz(2)))
+         allocate(y2         (this%gpC%xsz(2)))
+         allocate(S1         (this%gpC%xsz(2)))
+         allocate(S2         (this%gpC%xsz(2)))
+         allocate(Fringe_func(this%gpC%xsz(2)))
+     
+         y1 = ((y -  Fringe_yst)/Fringe_delta_st_y)
+         y2 = ((y -  Fringe_yen)/Fringe_delta_en_y) + 1.d0
+         call S_fringe(y1, S1)
+         call S_fringe(y2, S2)
+         Fringe_func = S1 - S2
+
+         do k = 1,this%gpC%xsz(3)
+            do j = 1,this%gpC%xsz(2)
+               do i = 1,nx
+                  this%Fringe_kernel_cells(i,j,k) = this%Fringe_kernel_cells(i,j,k) + Fringe_func(j)
+               end do 
+            end do 
+         end do
+
+         do k = 1,this%gpE%xsz(3)
+            do j = 1,this%gpE%xsz(2)
+               do i = 1,nx
+                  this%Fringe_kernel_edges(i,j,k) = this%Fringe_kernel_edges(i,j,k) + Fringe_func(j)
+               end do 
+            end do 
+         end do
+         deallocate(y1, y2, S1, S2, Fringe_func)
+      end if 
+      
       !where(this%Fringe_kernel_edges > 1.d0) 
       !   this%Fringe_kernel_edges = 1.d0
       !end where
@@ -210,8 +225,6 @@ contains
       !where(this%Fringe_kernel_cells > 1.d0) 
       !   this%Fringe_kernel_cells = 1.d0
       !end where
-
-      deallocate(y1, y2, S1, S2)
 
       call message(0, "Fringe initialized successfully.")
 
