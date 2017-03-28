@@ -1,9 +1,9 @@
 &INPUT
 inputdir                      = "/home/aditya90/Codes/PadeOps/data/isolatedTurbine/"   ! Directory for any input files
 outputdir                     = "/home/aditya90/Codes/PadeOps/data/isolatedTurbine/"   ! Directory for all output files
-nx                            = 512          ! Number of points in X
-ny                            = 128          ! Number of points in Y
-nz                            = 128          ! Number of points in Z
+nx                            = 256          ! Number of points in X
+ny                            = 64          ! Number of points in Y
+nz                            = 64          ! Number of points in Z
 tstop                         = 1000.D0       ! Physical time to stop the simulation
 CFL                           = 0.75D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
@@ -107,8 +107,12 @@ turbInfoDir                   = "/home/aditya90/Codes/PadeOps/problems/turbines/
 &FRINGE
 Fringe_xst                    = 0.75d0         
 Fringe_xen                    = 1.00d0
-Fringe_delta_st               = 0.20d0
-Fringe_delta_en               = 0.05d0
+Fringe_delta_st_x             = 0.20d0
+Fringe_delta_en_x             = 0.05d0
+Fringe_yst                    = 0.75d0         
+Fringe_yen                    = 1.00d0
+Fringe_delta_st_y             = 0.20d0
+Fringe_delta_en_y             = 0.05d0
 LambdaFact                    = 0.75d0 
 /
 /
