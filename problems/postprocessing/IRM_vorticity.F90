@@ -908,15 +908,12 @@ contains
                             Dyy => diss(:,:,4); Dyz => diss(:,:,5);
                                                 Dzz => diss(:,:,6);
 
-        call message(2,"Getting fluctuation velocity gradients")
         call get_duidxj(upp,vpp,wpp,duidxj)
 
-        call message(2,"Getting fluctuation pressure")
         do i = 1,mir%gp%ysz(3)
             p_prime(:,:,i) = p(:,:,i) - p_avg
         end do
 
-        call message(2,"Getting pressure-strain correlation")
         ytmp1 = p_prime * ( dudx + dudx )
         call P_AVGZ( mir%gp, ytmp1, PSxx )
 
@@ -936,7 +933,6 @@ contains
         call P_AVGZ( mir%gp, ytmp1, PSzz )
 
         ! Get favre( tauij )
-        call message(2,"Getting Favre averaged viscous stress")
         call P_AVGZ( mir%gp, rho*tauij(:,:,:,1), Dxx )
         call P_AVGZ( mir%gp, rho*tauij(:,:,:,2), Dxy )
         call P_AVGZ( mir%gp, rho*tauij(:,:,:,3), Dxz )
@@ -944,7 +940,6 @@ contains
         call P_AVGZ( mir%gp, rho*tauij(:,:,:,5), Dyz )
         call P_AVGZ( mir%gp, rho*tauij(:,:,:,6), Dzz )
 
-        call message(2,"Getting fluctuation viscous stress")
         do i = 1,mir%gp%ysz(3)
             tauxx_pp(:,:,i) = tauij(:,:,i,1) - Dxx/rho_avg
             tauxy_pp(:,:,i) = tauij(:,:,i,2) - Dxy/rho_avg
@@ -954,7 +949,6 @@ contains
             tauzz_pp(:,:,i) = tauij(:,:,i,6) - Dzz/rho_avg
         end do
 
-        call message(2,"Getting dissipation tensor")
         ! Dxx
         ytmp1 = -(tauxx_pp*dudx + tauxy_pp*dudy + tauxz_pp*dudz) - (tauxx_pp*dudx + tauxy_pp*dudy + tauxz_pp*dudz)
         call P_AVGZ( mir%gp, ytmp1, Dxx )
@@ -979,7 +973,6 @@ contains
         ytmp1 = -(tauxz_pp*dwdx + tauyz_pp*dwdy + tauzz_pp*dwdz) - (tauxz_pp*dwdx + tauyz_pp*dwdy + tauzz_pp*dwdz)
         call P_AVGZ( mir%gp, ytmp1, Dzz )
 
-        call message(2,"Finished getting dissipation tensor")
     end subroutine
 
 end module

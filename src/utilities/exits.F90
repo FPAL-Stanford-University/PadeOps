@@ -40,12 +40,12 @@ contains
 
     subroutine message_char(mess)
         character(len=*), intent(in) :: mess
-        if (nrank == 0) write(stdout,*) mess
+        if (nrank == 0) write(stdout,'(A)') mess
     end subroutine
     
     subroutine warning_char(mess)
         character(len=*), intent(in) :: mess
-        if (nrank == 0) write(stderr,*) mess
+        if (nrank == 0) write(stderr,'(A)') mess
     end subroutine
     
     subroutine message_char_double(mess,val)
@@ -72,7 +72,7 @@ contains
         end do
 
         full_message = full_message // "> " // mess
-        if (nrank == 0) write(stdout,*) full_message
+        if (nrank == 0) write(stdout,'(A)') full_message
 
     end subroutine
    
@@ -89,7 +89,7 @@ contains
         end do
 
         full_message = full_message // "> " // mess
-        if (nrank == 0) write(stdout,*) full_message, " = ", val
+        if (nrank == 0) write(stdout,'(A,A,ES26.16)') full_message, " = ", val
     end subroutine
     
     subroutine message_level_char_int(level,mess,val)
@@ -105,7 +105,7 @@ contains
         end do
 
         full_message = full_message // "> " // mess
-        if (nrank == 0) write(stdout,*) full_message, " = ", val
+        if (nrank == 0) write(stdout,'(A,A,I0)') full_message, " = ", val
     end subroutine
 
     subroutine message_minmax_int(level,mess,valmin, valmax)
@@ -121,7 +121,7 @@ contains
         end do
 
         full_message = full_message // "> " // mess
-        if (nrank == 0) write(stdout,*) full_message, " = (", valmin,",",valmax,")"
+        if (nrank == 0) write(stdout,'(A,A,2(I0,A))') full_message, " = (", valmin,",",valmax,")"
     end subroutine
 
 
@@ -138,7 +138,7 @@ contains
         end do
 
         full_message = full_message // "> " // mess
-        if (nrank == 0) write(stdout,*) full_message, " = (", valmin,",",valmax,")"
+        if (nrank == 0) write(stdout,'(A,A,2(ES26.16,A))') full_message, " = (", valmin,",",valmax,")"
     end subroutine
 
 
