@@ -37,6 +37,7 @@ module IncompressibleGrid
     integer :: topWall = 1, botWall = 1
 
     !! BC convention: 
+
     !! +1: even extension
     !! -1: odd extension
     !!  0: sided stencil
