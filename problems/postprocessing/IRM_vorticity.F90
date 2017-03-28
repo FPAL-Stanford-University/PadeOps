@@ -572,7 +572,7 @@ contains
             do i = 1,mir%gp%ysz(1)
                 rtmp = R11(i,j) + R22(i,j) + R33(i,j)
                 
-                if ( rtmp/rmax .GE. inv_cutoff ) then
+                if ((rmax .GT. zero) .and. ( rtmp/rmax .GE. inv_cutoff )) then
                     ! Anisotropy tensor
                     b(1,1) = R11(i,j)/rtmp - one/three
                     b(1,2) = R12(i,j)/rtmp
@@ -889,7 +889,7 @@ contains
         
         real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) :: p_prime, ytmp1
         real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) :: tauxx_pp, tauxy_pp, tauxz_pp, tauyy_pp, tauyz_pp, tauzz_pp
-        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 6), target :: duidxj
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 9), target :: duidxj
         real(rkind), dimension(:,:), pointer :: PSxx, PSxy, PSxz, PSyy, PSyz, PSzz
         real(rkind), dimension(:,:), pointer :: Dxx, Dxy, Dxz, Dyy, Dyz, Dzz
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
@@ -908,12 +908,15 @@ contains
                             Dyy => diss(:,:,4); Dyz => diss(:,:,5);
                                                 Dzz => diss(:,:,6);
 
+        call message(2,"Getting fluctuation velocity gradients")
         call get_duidxj(upp,vpp,wpp,duidxj)
 
+        call message(2,"Getting fluctuation pressure")
         do i = 1,mir%gp%ysz(3)
             p_prime(:,:,i) = p(:,:,i) - p_avg
         end do
 
+        call message(2,"Getting pressure-strain correlation")
         ytmp1 = p_prime * ( dudx + dudx )
         call P_AVGZ( mir%gp, ytmp1, PSxx )
 
@@ -933,6 +936,7 @@ contains
         call P_AVGZ( mir%gp, ytmp1, PSzz )
 
         ! Get favre( tauij )
+        call message(2,"Getting Favre averaged viscous stress")
         call P_AVGZ( mir%gp, rho*tauij(:,:,:,1), Dxx )
         call P_AVGZ( mir%gp, rho*tauij(:,:,:,2), Dxy )
         call P_AVGZ( mir%gp, rho*tauij(:,:,:,3), Dxz )
@@ -940,6 +944,7 @@ contains
         call P_AVGZ( mir%gp, rho*tauij(:,:,:,5), Dyz )
         call P_AVGZ( mir%gp, rho*tauij(:,:,:,6), Dzz )
 
+        call message(2,"Getting fluctuation viscous stress")
         do i = 1,mir%gp%ysz(3)
             tauxx_pp(:,:,i) = tauij(:,:,i,1) - Dxx/rho_avg
             tauxy_pp(:,:,i) = tauij(:,:,i,2) - Dxy/rho_avg
@@ -949,6 +954,7 @@ contains
             tauzz_pp(:,:,i) = tauij(:,:,i,6) - Dzz/rho_avg
         end do
 
+        call message(2,"Getting dissipation tensor")
         ! Dxx
         ytmp1 = -(tauxx_pp*dudx + tauxy_pp*dudy + tauxz_pp*dudz) - (tauxx_pp*dudx + tauxy_pp*dudy + tauxz_pp*dudz)
         call P_AVGZ( mir%gp, ytmp1, Dxx )
@@ -973,6 +979,7 @@ contains
         ytmp1 = -(tauxz_pp*dwdx + tauyz_pp*dwdy + tauzz_pp*dwdz) - (tauxz_pp*dwdx + tauyz_pp*dwdy + tauzz_pp*dwdz)
         call P_AVGZ( mir%gp, ytmp1, Dzz )
 
+        call message(2,"Finished getting dissipation tensor")
     end subroutine
 
 end module
@@ -1411,6 +1418,7 @@ program IRM_vorticity
 
         !!!! =============================================
         !!!! Energetics ----------------------------------
+        call message(1,"Computing energetics")
         
         call get_duidxj(mir%u,mir%v,mir%w,duidxj)
         call get_tauij(duidxj,mir%mu,mir%bulk,tauij)
@@ -1419,32 +1427,39 @@ program IRM_vorticity
         call get_duidxj2D(u_avg,v_avg,w_avg,duidxj2D)
 
         ! Pressure-dilatation correlation
+        call message(1,"Getting pressure-dilatation")
         call P_AVGZ( mir%gp, mir%p, p_avg )
         pdil = p_avg*(duidxj2D(:,:,1) + duidxj2D(:,:,5))
         
         call get_gradp2D(p_avg,gradp2D)
 
         ! Mean-dissipation
+        call message(1,"Getting mean dissipation")
         call get_meandiss(tauij_avg,duidxj2D,meandiss)
 
         ! Shear-production
+        call message(1,"Getting production")
         call get_production(R11,R12,R13,R22,R23,R33,duidxj2D,rho_avg,production)
 
         ! Turbulent dissipation and fluctuation pressure-dilatation
+        call message(1,"Getting turbulent dissipation")
         call get_dissipation(upp,vpp,wpp,tauij,dissipation,pdil_fluct, tke_visc_transport)
 
         ! Get model form of pressure-strain tensor and dissipation tensor
+        call message(1,"Getting pressure-strain and dissipation tensors")
         call get_PS_diss(upp,vpp,wpp,mir%p,p_avg,tauij,mir%rho,rho_avg,PSij,diss_tensor)
 
         !!!! Energetics ----------------------------------
         !!!! =============================================
 
+        call message(1,"Writing scalars to file")
         if(nrank == 0) then
             write(iounit,'(10ES26.16)') real(step*1.0d-4,rkind), mwidth, vortz_int, vortz_pos, vortz_neg, TKE_int, chi_int, chi_art, MMF_int, rhop_sq_int
         end if
 
         ! Write out visualization files
         if ( writeviz ) then
+            call message(1,"Writing visualization files")
             ! Set vizcount to be same as Miranda step
             call viz%SetVizcount(step)
             call viz%WriteViz(mir%gp, mir%mesh, buffer(:,:,:,1:nVTKvars), secondary=Xs, secondary_names=['volume_fraction_1','volume_fraction_2'])
