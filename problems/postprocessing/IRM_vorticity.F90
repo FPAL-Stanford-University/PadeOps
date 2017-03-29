@@ -69,12 +69,13 @@ contains
     subroutine write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
                             R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi, &
                             pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport, mix_pdil, mix_pdil_fluct, &
-                            duidxj2D, gradp2D, PSij, diss_tensor)
+                            duidxj2D, gradp2D, PSij, diss_tensor, pdil_LL, pdil_LS, pdil_SL, pdil_SS)
         integer, intent(in) :: step
         real(rkind), dimension(:,:,:), intent(in) :: vort_avgz
         real(rkind), dimension(:,:),   intent(in) :: TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation
         real(rkind), dimension(:,:),   intent(in) :: R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi
         real(rkind), dimension(:,:),   intent(in) :: pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport, mix_pdil, mix_pdil_fluct
+        real(rkind), dimension(:,:),   intent(in) :: pdil_LL, pdil_LS, pdil_SL, pdil_SS
         real(rkind), dimension(:,:,:), intent(in) :: duidxj2D, gradp2D, PSij, diss_tensor
 
         character(len=clen) :: post2d_file
@@ -138,6 +139,12 @@ contains
                     do idx=1,6
                         write(iounit2d) diss_tensor(:,:,idx)
                     end do
+
+                    write(iounit2d) pdil_LL
+                    write(iounit2d) pdil_LS
+                    write(iounit2d) pdil_SL
+                    write(iounit2d) pdil_SS
+
                     close(iounit2d)
                 end if
             end if
@@ -798,6 +805,32 @@ contains
 
     end subroutine
 
+    subroutine get_pdil_fluct_filter(upp,vpp,wpp,pdil_LL,pdil_LS,pdil_SL,pdil_SS)
+        use operators, only: gradient, divergence, filter3D
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)   ),         intent(in)  :: upp,vpp,wpp
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)),                           intent(out) :: pdil_LL, pdil_LS, pdil_SL, pdil_SS
+        
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) :: divu, divu_L, divu_S, p_L, p_S
+
+        call divergence( mir%gp, der, upp, vpp, wpp, divu )
+        
+        ! Get filtered divergence
+        divu_L = divu
+        call filter3D( mir%gp, gfil, divu_L, 1 )
+        divu_S = divu - divu_L
+
+        ! Get filtered pressure
+        p_L = mir%p
+        call filter3D( mir%gp, gfil, p_L, 1 )
+        p_S = mir%p - p_L
+
+        call P_AVGZ( mir%gp, p_L*divu_L, pdil_LL )
+        call P_AVGZ( mir%gp, p_L*divu_S, pdil_LS )
+        call P_AVGZ( mir%gp, p_S*divu_L, pdil_SL )
+        call P_AVGZ( mir%gp, p_S*divu_S, pdil_SS )
+
+    end subroutine
+
     subroutine get_production(R11,R12,R13,R22,R23,R33,duidxj2D,rho_avg,production)
         real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)   ),         intent(in)  :: R11,R12,R13,R22,R23,R33,rho_avg
         real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), 9), target, intent(in)  :: duidxj2D
@@ -1011,6 +1044,7 @@ program IRM_vorticity
     real(rkind), dimension(:,:), pointer :: R11, R12, R13, R22, R23, R33
     real(rkind), dimension(:,:), pointer :: a_x, a_y, a_z, rhop_sq, eta, xi
     real(rkind), dimension(:,:), pointer :: p_avg, pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport, mix_pdil, mix_pdil_fluct
+    real(rkind), dimension(:,:), pointer :: pdil_LL, pdil_LS, pdil_SL, pdil_SS
 
     real(rkind), dimension(:,:,:,:), allocatable :: duidxj, tauij
     real(rkind), dimension(:,:,:),   allocatable :: duidxj2D, tauij_avg, gradp2D, PSij, diss_tensor
@@ -1093,7 +1127,7 @@ program IRM_vorticity
     ierr = fftz%init( mir%nz, 'z', mir%gp%zsz(1), mir%gp%zsz(2), mir%dz, fftw_exhaustive )
 
     ! Allocate 3D buffer and associate pointers for convenience
-    call alloc_buffs(buffer, 13+2*mir%ns, 'y', mir%gp)
+    call alloc_buffs(buffer, 13+2*mir%ns, 'y', mir%gp); buffer = zero
     i = 1
     vort   => buffer(:,:,:,i:i+2);        i = i+3
     upp    => buffer(:,:,:,i);            i = i+1
@@ -1110,7 +1144,7 @@ program IRM_vorticity
     Rij    => buffer(:,:,:,i)
 
     ! Allocate 2D buffer and associate pointers for convenience
-    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 34 ) )
+    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 38 ) ); buffer2d = zero
     vort_avgz                => buffer2d(:,:,1:3)
     rho_avg                  => buffer2d(:,:,4 )
     u_avg                    => buffer2d(:,:,5 )
@@ -1143,6 +1177,10 @@ program IRM_vorticity
     tke_visc_transport       => buffer2d(:,:,32)
     mix_pdil                 => buffer2d(:,:,33)
     mix_pdil_fluct           => buffer2d(:,:,34)
+    pdil_LL                  => buffer2d(:,:,35)
+    pdil_LS                  => buffer2d(:,:,36)
+    pdil_SL                  => buffer2d(:,:,37)
+    pdil_SS                  => buffer2d(:,:,38)
     
     allocate( xtmp1( mir%gp%xsz(1), mir%gp%xsz(2), 1 ) )
     allocate( xtmp2( mir%gp%xsz(1), mir%gp%xsz(2), 1 ) )
@@ -1437,6 +1475,7 @@ program IRM_vorticity
         ! Turbulent dissipation and fluctuation pressure-dilatation
         call message(1,"Getting turbulent dissipation")
         call get_dissipation(upp,vpp,wpp,tauij,dissipation,pdil_fluct, tke_visc_transport)
+        call get_pdil_fluct_filter(upp,vpp,wpp,pdil_LL,pdil_LS,pdil_SL,pdil_SS)
 
         ! Get model form of pressure-strain tensor and dissipation tensor
         call message(1,"Getting pressure-strain and dissipation tensors")
@@ -1462,7 +1501,7 @@ program IRM_vorticity
         call write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
                           R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi, &
                           pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport, mix_pdil, mix_pdil_fluct, &
-                          duidxj2D, gradp2D, PSij, diss_tensor)
+                          duidxj2D, gradp2D, PSij, diss_tensor, pdil_LL, pdil_LS, pdil_SL, pdil_SS)
 
         write(time_message,'(A,I4,A)') "Time to postprocess step ", step, " :"
         call toc(trim(time_message))
