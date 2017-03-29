@@ -34,7 +34,7 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
 
 end subroutine 
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, isInviscid, isStratified)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, isInviscid, isStratified, botBC_temp)
   class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
@@ -48,6 +48,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   complex(rkind), dimension(:,:,:,:), intent(in), target :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
   type(Pade6stagg), target, intent(in) :: PadeDer
   logical, intent(in) :: isInviscid, isStratified
+  integer, intent(in), optional :: botBC_temp
 
   ! Input file variables
   logical :: useWallDamping = .false., useSGSDynamicRestart = .false., useVerticalTfilter = .false.
@@ -79,7 +80,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%fyC => fBody_y
   this%fzE => fBody_z
   this%meanfact = one/(real(gpC%xsz(1),rkind) * real(gpC%ysz(2),rkind))
-  
+  if (present(botBC_Temp)) this%botBC_Temp = botBC_Temp
+
   allocate(this%tau_ij(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),6))
   this%tau_11   => this%tau_ij(:,:,:,1)
   this%tau_12   => this%tau_ij(:,:,:,2)
