@@ -1,0 +1,3 @@
+&concurrent
+precInputFile = "/home/nghaisas/PadeOps/concurrentSimulation/input_prec.dat"
+mainInputFile = "/home/nghaisas/PadeOps/concurrentSimulation/input_main.dat"

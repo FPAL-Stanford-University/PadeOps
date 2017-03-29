@@ -228,6 +228,7 @@ module IncompressibleGrid
             procedure          :: timeAdvance
             procedure          :: start_io
             procedure          :: finalize_io
+            procedure          :: get_dt
             procedure, private :: init_stats
             procedure, private :: debug
             procedure, private :: init_stats3D
@@ -874,14 +875,19 @@ contains
     end subroutine
 
 
-    subroutine timeAdvance(this)
+    subroutine timeAdvance(this, dtforced)
         class(igrid), intent(inout) :: this
+        real(rkind), intent(in), optional :: dtforced
 
         select case (this%timeSteppingScheme)
         case(0)
             call this%AdamsBashforth()
         case(1)
-            call this%TVD_rk3()
+            if(present(dtforced)) then
+              call this%TVD_rk3(dtforced)
+            else
+              call this%TVD_rk3()
+            endif
         end select
 
     end subroutine
@@ -898,11 +904,16 @@ contains
     end subroutine
 
     
-    subroutine TVD_RK3(this)
+    subroutine TVD_RK3(this, dtforced)
         class(igrid), intent(inout), target :: this
+        real(rkind), intent(in), optional :: dtforced
 
-        ! Step 0: Compute TimeStep 
-        call this%compute_deltaT
+        if(present(dtforced)) then
+          this%dt = dtforced
+        else
+          ! Step 0: Compute TimeStep 
+          call this%compute_deltaT
+        endif
         
         !!! STAGE 1
         ! First stage - everything is where it's supposed to be
@@ -4078,4 +4089,10 @@ contains
         this%pressure = this%pressure + meanK
         this%pressure = this%pressure - this%rbuffxC(:,:,:,1)
     end subroutine
+
+    pure function get_dt(this) result(val)
+        class(igrid), intent(in) :: this 
+        real(rkind) :: val
+        val = this%dt
+    end function
 end module 
