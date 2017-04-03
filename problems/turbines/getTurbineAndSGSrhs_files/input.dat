@@ -6,8 +6,8 @@ Lx                            = 3.141592653589793d0                           ! 
 Ly                            = 3.141592653589793d0                           ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Lz                            = 1.d0                                          ! Domain Height (appropriate dimesnions/non-dimensionalized)
 z0init                        = 1.d-4                                         ! Roughness scale used to initialize the profile
-inputdir                      = "/home/aditya90/Codes/PadeOps/data/JacobWTrun07"   ! Directory for any input files
-outputdir                     = "/home/aditya90/Codes/PadeOps/data/JacobWTrun07"   ! Directory for all output files
+inputdir                      = "/home/jrwest/Codes/PadeOps/data/runs/run07"   ! Directory for any input files
+outputdir                     = "/home/jrwest/Codes/PadeOps/data/runs/run07"   ! Directory for all output files
 TID                           = 100000 
 RID                           = 7
 /
@@ -28,5 +28,5 @@ useVerticalTfilter            = .false.
 useWindTurbines               = .TRUE.
 num_turbines                  = 24
 ADM                           = .TRUE.
-turbInfoDir                   = "/home/aditya90/Codes/PadeOps/problems/turbines/pblwt_files/turbInfo"
+turbInfoDir                   = "/home/jrwest/Codes/PadeOps/problems/turbines/pblwt_files/turbInfo"
 /

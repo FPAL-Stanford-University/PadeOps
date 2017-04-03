@@ -20,6 +20,7 @@ module IncompressibleGridWallM
     use cf90stuff, only: cf90
     use TurbineMod, only: TurbineArray 
     use kspreprocessing, only: ksprep  
+    use PadeDerOps, only: Pade6stagg  
 
     implicit none
 
@@ -59,6 +60,7 @@ module IncompressibleGridWallM
         type(poisson), allocatable :: poiss
         type(padepoisson), allocatable :: padepoiss
         real(rkind), dimension(:,:,:), allocatable :: divergence
+        type(Pade6stagg), allocatable :: derivZ 
 
         real(rkind), dimension(:,:,:), pointer :: u, v, wC, w, uE, vE, T, TE
         complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what, That, TEhat
@@ -408,6 +410,7 @@ contains
         ! STEP 5: ALLOCATE/INITIALIZE THE OPERATORS DERIVED TYPE
         if (useCompactFD) then
             allocate(this%derSE, this%derSO, this%derW, this%derWW, this%derT, this%derOE) 
+            call this%derivZ%init(this%gpC,this%sp_gpC, this%gpE, this%sp_gpE,this%dz, 1)
             call this%derSE%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
                              isTopSided = .false., isBotSided = .true.) 
             call this%derSO%init( this%gpC%zsz(3), this%dz, isTopEven = .false., isBotEven = .false., & 
@@ -511,7 +514,7 @@ contains
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
         if (useCompactFD) then
             allocate(this%padepoiss)
-            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, this%storePressure, this%gpC) 
+            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, this%storePressure, this%gpC, this%derivZ) 
         else    
             allocate(this%poiss)
             call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE, computeStokesPressure, this%gpC)  
@@ -1416,7 +1419,9 @@ contains
             call this%addNonLinearTerm_skewSymm()
         else
             call this%AddNonLinearTerm_Rot()
-        end if 
+        end if
+
+        
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
@@ -1470,7 +1475,8 @@ contains
                                                 this%max_nuSGS, this%inst_horz_avg)!, this%dTdxC      ,&
                                                 !this%dTdyC  , this%dTdzHC)
             end if 
-        end if 
+        end if
+
     end subroutine
 
     subroutine addViscousTerm(this)

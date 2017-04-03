@@ -54,6 +54,7 @@ program testSGSmodelWT
     integer :: dWdzBC_bottom  =  1, dWdzBC_top  =  1
     !integer :: dTdzBC_bottom  =  -1, dTdzBC_top  =  -1
 
+    integer :: scheme = 1
    character(len=clen) :: inputdir, outputdir, inputFile 
    integer :: nx, ny, nz, ioUnit, i, j, k
    real(rkind) :: z0init, dt, inst_horz_avg_turb(8), tsim, max_nuSGS
@@ -156,7 +157,7 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
    call spectE%fft(wE, whatE)
 
    ! Initialize Padeder
-   call Pade6opz%init(gpC, sp_gpC, dz)
+   call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme)
 
    ! Initialize sgs
    call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, fbody_z, computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, .false., .false.)
@@ -197,8 +198,8 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
    umn = newsgs%get_umean()
    uspmn = newsgs%get_uspeedmean()
    vmn = newsgs%get_vmean()
-   ustar = newsgs%getustar()
-   LObinv = newsgs%getInvOblength()
+   ustar = newsgs%get_ustar()
+   LObinv = newsgs%get_InvOblength()
   
    !print*, "umn:", umn
    !print*, "vmn:", vmn

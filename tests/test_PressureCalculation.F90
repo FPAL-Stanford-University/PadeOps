@@ -11,6 +11,9 @@ program test_pressureCalculation
     use decomp_2d_io, only: decomp_2d_write_one
     use reductions, only: p_maxval
     use exits, only: message
+    use PadeDerOps, only: Pade6stagg
+
+    implicit none
 
     type(spectral) :: spectC, spectE
     type(decomp_info) :: gpC, gpE
@@ -23,7 +26,9 @@ program test_pressureCalculation
     type(poisson) :: poiss2ndOrder
     type(padepoisson) :: poiss6thOrder
     type(cd06stagg) :: derZ
+    type(Pade6stagg) :: Pade6opsZ
 
+    integer :: scheme = 1
     real(rkind) :: dx, dy, dz, maxE
 
     call MPI_Init(ierr)
@@ -91,8 +96,9 @@ program test_pressureCalculation
     call spectC%fft(vrhs,vrhshat)
     call spectE%fft(wrhs,wrhshat)
 
+    call Pade6opsZ%init(gpC, spectC%spectdecomp, gpE, spectE%spectdecomp, dz, scheme)
     call poiss2ndOrder%init(spectC,.false.,dx,dy,dz,Ops,spectE,.true.,gpC) 
-    call poiss6thOrder%init(dx, dy, dz, spectC, spectE,.true.,2.d0*pi,.true.,gpC)
+    call poiss6thOrder%init(dx, dy, dz, spectC, spectE,.true.,2.d0*pi,.true.,gpC, Pade6opsZ)
 
     call poiss2ndOrder%getPressure(urhshat,vrhshat,wrhshat,p)
     maxE = p_maxval(abs(p - pexact))

@@ -47,9 +47,9 @@ module sgsmod_igrid
         complex(rkind),dimension(:,:,:,:), allocatable :: tauijWMhat_inZ, tauijWMhat_inY
         real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
         complex(rkind), dimension(:,:,:), allocatable :: Tfilhat, Tfilhatz1, Tfilhatz2
-        logical :: useWallModel
+        logical :: useWallModel = .false. 
         integer :: botBC_temp = 1
-        real(rkind) :: ustar, InvObLength, umn, vmn, uspmn, Tmn, wTh_surf
+        real(rkind) :: ustar = 1.d0, InvObLength = 0.d0, umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0, wTh_surf = 0.d0
         real(rkind) :: dz, z0, meanfact, ThetaRef, Fr, WallMfactor, Re
         real(rkind), pointer :: Tsurf
 
@@ -111,9 +111,9 @@ module sgsmod_igrid
             procedure, private :: destroyMemory_EddyViscosity
 
             !! ACCESSORS (add these in src/incompressible/sgs_models/accessors.F90)
-            procedure          :: getGlobalConstant
-            procedure          :: getustar
-            procedure          :: getInvOblength
+            procedure          :: get_GlobalConstant
+            procedure          :: get_ustar
+            procedure          :: get_InvOblength
             procedure          :: get_umean 
             procedure          :: get_vmean 
             procedure          :: get_uspeedmean 

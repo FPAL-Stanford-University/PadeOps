@@ -1,4 +1,4 @@
-module channelDNS_parameters
+module isolatedTurbine_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
@@ -16,7 +16,7 @@ module channelDNS_parameters
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use channelDNS_parameters    
+    use isolatedTurbine_parameters    
     use kind_parameters,  only: rkind
     use constants,        only: one,two
     use decomp_2d,        only: decomp_info
@@ -28,12 +28,12 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, epsnd, zpeak, periods, randscale
-    namelist /channelDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    namelist /isolatedTurbineINPUT/ Lx, Ly, Lz
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=channelDNSINPUT)
+    read(unit=ioUnit, NML=isolatedTurbineINPUT)
     close(ioUnit)    
 
     !Lx = two*pi; Ly = two*pi; Lz = one
@@ -70,7 +70,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use channelDNS_parameters
+    use isolatedTurbine_parameters
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
@@ -87,17 +87,14 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind) :: epsnd = 0.2
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: nz, nzE, k
-    real(rkind) :: periods = 1.d0, randscale = 0.01
-    real(rkind) :: zpeak = 0.2d0
+    integer :: nz, nzE
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /channelDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    namelist /isolatedTurbineINPUT/ Lx, Ly, Lz
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=channelDNSINPUT)
+    read(unit=ioUnit, NML=isolatedTurbineINPUT)
     close(ioUnit)    
 
 
@@ -111,20 +108,20 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     x => mesh(:,:,:,1)
  
    
-    u = z*(2 - z) + epsnd*(z/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
-      + epsnd*((2-z)/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
+    u = one!z*(2 - z) + epsnd*(z/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
+      !+ epsnd*((2-z)/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
     
-    v = - epsnd*(z/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
-        - epsnd*((2-z)/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
+    v = zero!- epsnd*(z/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
+        !- epsnd*((2-z)/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
     
     wC= zero  
     
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
     call gaussian_random(randArr,-one,one,seedu + 10*nrank)
-    do k = 1,size(randArr,3)
-         u(:,:,k) = u(:,:,k) + randscale*randArr(:,:,k)
-    end do
-
+    !do k = 1,size(randArr,3)
+    !     u(:,:,k) = u(:,:,k) + randscale*randArr(:,:,k)
+    !end do
+    deallocate(randArr)
 
     call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
     call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
@@ -197,16 +194,16 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    real(rkind) :: ThetaRef, Lx, Ly, Lz
     integer :: iounit
-    namelist /channelDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    namelist /isolatedTurbineINPUT/ Lx, Ly, Lz
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=channelDNSINPUT)
+    read(unit=ioUnit, NML=isolatedTurbineINPUT)
     close(ioUnit)    
 
     ! Do nothing really since this is an unstratified simulation
@@ -218,14 +215,14 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    real(rkind) :: Lx, Ly, Lz
     integer :: iounit
     
-    namelist /channelDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    namelist /isolatedTurbineINPUT/ Lx, Ly, Lz
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=channelDNSINPUT)
+    read(unit=ioUnit, NML=isolatedTurbineINPUT)
     close(ioUnit)    
      
     Tref = 0.d0
@@ -250,6 +247,7 @@ subroutine hook_probes(inputfile, probe_locs)
     ! Add probes here if needed
     ! Example code: The following allocates 2 probes at (0.1,0.1,0.1) and
     ! (0.2,0.2,0.2)  
+    print*, inputfile
     allocate(probe_locs(3,nprobes))
     probe_locs(1,1) = 0.1d0; probe_locs(2,1) = 0.1d0; probe_locs(3,1) = 0.1d0;
     probe_locs(1,2) = 0.2d0; probe_locs(2,2) = 0.2d0; probe_locs(3,2) = 0.2d0;

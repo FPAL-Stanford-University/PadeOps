@@ -13,6 +13,8 @@ program test_projection
     use basic_io, only: write_binary
     use gaussianstuff, only: gaussian 
     use staggOpsMod
+    use PadeDerOps, only: Pade6stagg
+    
     implicit none
    
     real(rkind), dimension(:,:,:), allocatable :: x, y, z, u, v, w, wE
@@ -36,6 +38,8 @@ program test_projection
     !type(gaussian) :: testFiltC, testFiltE
     type(staggops) :: der2nd
     logical :: computeStokesPressure = .true. 
+    type(Pade6stagg) :: Pade6opZ
+    integer :: scheme = 1
 
     call MPI_Init(ierr)
     
@@ -101,7 +105,8 @@ program test_projection
     allocate(cbuffzC(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3),2))
     allocate(cbuffzE(spectE%spectdecomp%zsz(1),spectE%spectdecomp%zsz(2),spectE%spectdecomp%zsz(3),1))
     
-    call poiss%init(dx, dy, dz, spect, spectE, computeStokesPressure, Lz)
+    call Pade6opz%init(gpC, spect%spectdecomp, gpE, spectE%spectdecomp, dz, scheme)
+    call poiss%init(dx, dy, dz, spect, spectE, computeStokesPressure, Lz, .false., gpC, Pade6opz)
     
     allocate(ctmp1(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3)))
     allocate(ctmp2(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3)))

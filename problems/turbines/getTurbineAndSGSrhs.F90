@@ -29,9 +29,10 @@ program testSGSmodelWT
    type(decomp_info) :: gpC, gpE
    type(decomp_info), pointer :: sp_gpC, sp_gpE
    type(Pade6stagg) :: Pade6opZ
-   integer :: ierr, ix1, ixn, iy1, iyn, iz1, izn, TID, RID
+   integer :: ierr, ix1, ixn, iy1, iyn, iz1, izn, RID
    logical :: computeFbody
-  
+   integer :: scheme = 1
+
    real(rkind), dimension(:,:,:)  , pointer :: nuSGS
    real(rkind), dimension(:,:,:)  , pointer :: tau13, tau23
    real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
@@ -44,10 +45,9 @@ program testSGSmodelWT
    integer :: dWdzBC_bottom  =  1, dWdzBC_top  =  1
 
    character(len=clen) :: inputdir, outputdir, inputFile 
-   integer :: nx, ny, nz, ioUnit, i, j, k, nvis = 0
+   integer :: nx, ny, nz, ioUnit, i, j, k, nvis = 0, tid_initial, tid_final, dtid, ind=0
    real(rkind) :: z0init, dt, inst_horz_avg_turb(8), tsim
-   namelist /INPUT/ Lx, Ly, Lz, z0init, outputdir, inputdir, nx, ny, nz, TID, RID
-
+   namelist /INPUT/ Lx, Ly, Lz, z0init, outputdir, inputdir, nx, ny, nz, RID, tid_initial, tid_final, dtid
 
    ! Do MPI stuff
    call MPI_Init(ierr)               
@@ -73,69 +73,73 @@ program testSGSmodelWT
    sp_gpE => spectE%spectdecomp
 
    call initializeEverything()
-   
+  
+   print*, RID, tid_initial, tid_final, dtid
+
    ! DO LOOP START HERE
-   
-   call tic()
-   
-   ! Initialize WT
-   allocate(turbArray)
-   call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
-   
-   
-   ! READ FIELDS)
-   call readVisualizationFile(TID, RID)
-   call spectC%fft(uC, uhatC)
-   call spectC%fft(vC, vhatC)
-   call spectE%fft(wE, whatE)
-   
-   ! PREPROCESS FIELDS
-   call interp_primitivevars()
-   call compute_duidxj()
+   do ind = tid_initial, tid_final, dtid 
+        call tic()
+        
+        ! Initialize WT
+        allocate(turbArray)
+        call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
+        
+        
+        ! READ FIELDS)
+        call readVisualizationFile(ind, RID)
+        print *, ind
+        call spectC%fft(uC, uhatC)
+        call spectC%fft(vC, vhatC)
+        call spectE%fft(wE, whatE)
+        
+        ! PREPROCESS FIELDS
+        call interp_primitivevars()
+        call compute_duidxj()
 
-   ! WIND TURBINE STUFF
-   u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-   call turbArray%getForceRHS(dt, uC, vC, wC, u_rhs, v_rhs, w_rhs, inst_horz_avg_turb)
-   call spectC%ifft(u_rhs,fbody_x)
-   call spectC%ifft(v_rhs,fbody_y)
-   call spectE%ifft(w_rhs,fbody_z)
-   
-   call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
-   call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
-   call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
-   call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
-   call transpose_y_to_x(rbuffyC(:,:,:,1),fbody_zC,gpC)
+        ! WIND TURBINE STUFF
+        u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
+        call turbArray%getForceRHS(dt, uC, vC, wC, u_rhs, v_rhs, w_rhs, inst_horz_avg_turb)
+        call spectC%ifft(u_rhs,fbody_x)
+        call spectC%ifft(v_rhs,fbody_y)
+        call spectE%ifft(w_rhs,fbody_z)
+        
+        call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
+        call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
+        call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
+        call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
+        call transpose_y_to_x(rbuffyC(:,:,:,1),fbody_zC,gpC)
 
-   fx_turb_store = fx_turb_store + fbody_x 
-   fy_turb_store = fy_turb_store + fbody_y
-   fz_turb_store = fz_turb_store + fbody_zC 
-
-
-   ! SGS MODEL STUFF
-   u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-   call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
-   call spectC%ifft(u_rhs,fbody_x)
-   call spectC%ifft(v_rhs,fbody_y)
-   call spectE%ifft(w_rhs,fbody_z)
-   
-   call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
-   call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
-   call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
-   call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
-   call transpose_y_to_x(rbuffyC(:,:,:,1),fbody_zC,gpC)
+        fx_turb_store = fx_turb_store + fbody_x 
+        fy_turb_store = fy_turb_store + fbody_y
+        fz_turb_store = fz_turb_store + fbody_zC 
 
 
-   fx_sgs_store = fx_sgs_store + fbody_x 
-   fy_sgs_store = fy_sgs_store + fbody_y
-   fz_sgs_store = fz_sgs_store + fbody_zC 
+        ! SGS MODEL STUFF
+        u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
+        call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
+        call spectC%ifft(u_rhs,fbody_x)
+        call spectC%ifft(v_rhs,fbody_y)
+        call spectE%ifft(w_rhs,fbody_z)
+        
+        call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
+        call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
+        call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
+        call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
+        call transpose_y_to_x(rbuffyC(:,:,:,1),fbody_zC,gpC)
 
-   ! WRAP UP 
-   deallocate(turbArray)
-   call toc()
 
-   nvis = nvis + 1
-   
-   ! END DO LOOP
+        fx_sgs_store = fx_sgs_store + fbody_x 
+        fy_sgs_store = fy_sgs_store + fbody_y
+        fz_sgs_store = fz_sgs_store + fbody_zC 
+
+        ! WRAP UP 
+        deallocate(turbArray)
+        call toc()
+
+        nvis = nvis + 1
+        
+        ! END DO LOOP
+   end do
 
    call dumpFullField(fx_turb_store/real(nvis,rkind),"xtrb")
    call dumpFullField(fy_turb_store/real(nvis,rkind),"ytrb")
@@ -144,7 +148,6 @@ program testSGSmodelWT
    call dumpFullField(fx_sgs_store/real(nvis,rkind),"xsgs")
    call dumpFullField(fy_sgs_store/real(nvis,rkind),"ysgs")
    call dumpFullField(fz_sgs_store/real(nvis,rkind),"zsgs")
-
 
    call mpi_barrier(mpi_comm_world, ierr)
    stop
@@ -232,7 +235,7 @@ contains
       computeFbody = .true.
 
       ! Initialize Padeder
-      call Pade6opz%init(gpC, sp_gpC, dz)
+      call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme)
 
       ! Initialize sgs
       call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, &
@@ -425,50 +428,50 @@ contains
         real(rkind), dimension(:,:,:), intent(in) :: arr
         character(len=4), intent(in) :: label
 
-        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",rid, "_",label,"_t",tid,".out"
+        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",rid, "_",label,"_t",tid_final,".out"
         fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
         call decomp_2d_write_one(1,arr,fname, gpC)
 
     end subroutine
 
-    subroutine readRestartFile(tid, rid)
-        use decomp_2d_io
-        use mpi
-        use exits, only: message
-        integer, intent(in) :: tid, rid
-        character(len=clen) :: tempname, fname
-        integer :: ierr
-
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_u.",tid
-        fname = trim(InputDir)//"/"//trim(tempname)
-        call decomp_2d_read_one(1,uC,fname, gpC)
-
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_v.",tid
-        fname = trim(InputDir)//"/"//trim(tempname)
-        call decomp_2d_read_one(1,vC,fname, gpC)
-
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_w.",tid
-        fname = trim(InputDir)//"/"//trim(tempname)
-        call decomp_2d_read_one(1,wE,fname, gpE)
-
+!    subroutine readRestartFile(tid, rid)
+!        use decomp_2d_io
+!       use mpi
+!        use exits, only: message
+!        integer, intent(in) :: tid, rid
+!        character(len=clen) :: tempname, fname
+!        integer :: ierr
+!
+!        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_u.",tid
+!        fname = trim(InputDir)//"/"//trim(tempname)
+!        call decomp_2d_read_one(1,uC,fname, gpC)
+!
+!        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_v.",tid
+!        fname = trim(InputDir)//"/"//trim(tempname)
+!        call decomp_2d_read_one(1,vC,fname, gpC)
+!
+!        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_w.",tid
+!        fname = trim(InputDir)//"/"//trim(tempname)
+!        call decomp_2d_read_one(1,wE,fname, gpE)
+!
         !if (this%isStratified) then
         !    write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_T.",tid
         !    fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
         !    call decomp_2d_read_one(1,this%T,fname, this%gpC)
         !end if 
 
-        write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
-        fname = trim(InputDir)//"/"//trim(tempname)
-        open(unit=10,file=fname,access='sequential',form='formatted')
-        read (10, *)  tsim
-        close(10)
+!        write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
+!        fname = trim(InputDir)//"/"//trim(tempname)
+!        open(unit=10,file=fname,access='sequential',form='formatted')
+!        read (10, *)  tsim
+!        close(10)
 
-        call mpi_barrier(mpi_comm_world, ierr)
-        call message("================= RESTART FILE USED ======================")
-        call message(0, "Simulation Time at restart:", tsim)
-        call message("=================================== ======================")
+!        call mpi_barrier(mpi_comm_world, ierr)
+!        call message("================= RESTART FILE USED ======================")
+!        call message(0, "Simulation Time at restart:", tsim)
+!        call message("=================================== ======================")
 
-    end subroutine
+!    end subroutine
     
     subroutine readVisualizationFile(tid, rid)
         use decomp_2d_io
@@ -478,7 +481,7 @@ contains
         character(len=clen) :: tempname, fname
         integer :: ierr
         character(len=4) :: label
-        
+        print *, 'inside readVisualizationFile, ind=', tid
         label = "uVel"
         write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",rid, "_",label,"_t",tid,".out"
         fname = trim(InputDir)//"/"//trim(tempname)
@@ -497,7 +500,7 @@ contains
         call decomp_2d_read_one(1,wC,fname, gpC)
 
         !if (this%isStratified) then
-        !    write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_T.",tid
+        !    write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_T.",ind
         !    fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
         !    call decomp_2d_read_one(1,this%T,fname, this%gpC)
         !end if 
@@ -516,4 +519,3 @@ contains
     end subroutine
 
 end program 
-

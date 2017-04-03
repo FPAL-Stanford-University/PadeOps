@@ -1,4 +1,4 @@
-module channelDNS_parameters
+module pbl_igrid_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
@@ -16,7 +16,7 @@ module channelDNS_parameters
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use channelDNS_parameters    
+    use pbl_igrid_parameters    
     use kind_parameters,  only: rkind
     use constants,        only: one,two
     use decomp_2d,        only: decomp_info
@@ -25,15 +25,16 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     type(decomp_info),                                          intent(in)    :: decomp
     real(rkind),                                                intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
+    real(rkind) :: z0init
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, epsnd, zpeak, periods, randscale
-    namelist /channelDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=channelDNSINPUT)
+    read(unit=ioUnit, NML=PBLINPUT)
     close(ioUnit)    
 
     !Lx = two*pi; Ly = two*pi; Lz = one
@@ -70,14 +71,13 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use channelDNS_parameters
+    use pbl_igrid_parameters
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
     use random,             only: gaussian_random
     use decomp_2d          
-    use reductions,         only: p_maxval, p_minval
-    use exits,              only: message_min_max
+    use reductions,         only: p_maxval
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -87,17 +87,17 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind) :: epsnd = 0.2
-    real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: nz, nzE, k
-    real(rkind) :: periods = 1.d0, randscale = 0.01
+    real(rkind) :: z0init, epsnd = 0.1
+    real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
+    integer :: nz, nzE
+    real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0!, Zperiods = 1.d0
     real(rkind) :: zpeak = 0.2d0
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /channelDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=channelDNSINPUT)
+    read(unit=ioUnit, NML=PBLINPUT)
     close(ioUnit)    
 
 
@@ -110,29 +110,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-   
-    u = z*(2 - z) + epsnd*(z/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
-      + epsnd*((2-z)/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
-    
-    v = - epsnd*(z/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
-        - epsnd*((2-z)/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
-    
+    epsnd = 5.d0
+
+    u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     wC= zero  
-    
-    allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    call gaussian_random(randArr,-one,one,seedu + 10*nrank)
-    do k = 1,size(randArr,3)
-         u(:,:,k) = u(:,:,k) + randscale*randArr(:,:,k)
-    end do
-
-
-    call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
-    call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
-    call message_min_max(1,"Bounds for w:", p_minval(minval(w)), p_maxval(maxval(w)))
-    
-    !u = one!1.6d0*z*(2.d0 - z) 
-    !v = zero;
-    !w = zero;
+   
 
     ! Interpolate wC to w
     allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
@@ -150,7 +133,6 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
     call transpose_z_to_y(zbuffE,ybuffE,decompE)
     call transpose_y_to_x(ybuffE,w,decompE) 
-    
     
 
     deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
@@ -197,16 +179,16 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init
     integer :: iounit
-    namelist /channelDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=channelDNSINPUT)
+    read(unit=ioUnit, NML=PBLINPUT)
     close(ioUnit)    
 
     ! Do nothing really since this is an unstratified simulation
@@ -218,14 +200,14 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    real(rkind) :: Lx, Ly, Lz, z0init
     integer :: iounit
     
-    namelist /channelDNSINPUT/ Lx, Ly, Lz, epsnd, zpeak, periods, randscale
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=channelDNSINPUT)
+    read(unit=ioUnit, NML=PBLINPUT)
     close(ioUnit)    
      
     Tref = 0.d0
