@@ -215,8 +215,8 @@ stop
         integer, dimension(1)             :: iparams
         real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
 
-        integer :: i,j,k,imat
-        real(rkind) :: maxp, peqb, peqb2
+        integer :: i,j,k,imat,minlc(1),thisind,othrind
+        real(rkind) :: refp, peqb, peqb2, minvf
 
         real(rkind), dimension(1:this%ns) :: fac
 
@@ -232,40 +232,77 @@ stop
         psph => fparams(2*this%ns+1:3*this%ns)
         pinf => fparams(3*this%ns+1:4*this%ns)
         
+        do imat=1,this%ns
+          fparams(  this%ns+imat) = this%material(imat)%hydro%gam    ! gamma
+          fparams(3*this%ns+imat) = this%material(imat)%hydro%PInf   ! PInf
+        enddo
+
+        ! Set reference pressure
+        refp = maxval(fparams(3*this%ns+1:4*this%ns)) ! max over all PInfs
+        if(refp < 1.0D-5) refp = 1.0D0
+
         do k=1,this%nzp
          do j=1,this%nyp
           do i=1,this%nxp
+
             do imat=1,this%ns
                 ! set fparams
                 fparams(          imat) = this%material(imat)%VF(i,j,k)    ! volume fractions
-                fparams(  this%ns+imat) = this%material(imat)%hydro%gam    ! gamma
                 fparams(2*this%ns+imat) = this%material(imat)%p(i,j,k)     ! pressure before eqb
-                fparams(3*this%ns+imat) = this%material(imat)%hydro%PInf   ! PInf
+                !print '(1(i4,1x),3(e19.12,1x))', i, fparams(2*this%ns+imat), fparams(imat), this%material(1)%VF(i,j,k) + this%material(2)%VF(i,j,k)
             end do
 
-            ! set iparams
-            iparams(1) = 1     !   used in fnumden; 2 for PTeqb 
+            !minvf = minval(vf(1:this%ns));     minlc = minloc(vf(1:this%ns))
+            !if(minvf < zero) then
+            !    ! do not solve non-linear problem. assume relaxed pressure is
+            !    ! equal to the pressure of the dominant species
+            !    thisind = minlc(1);  othrind = mod(thisind, 2) + 1
+            !    psph = this%material(othrind)%p(i,j,k)
+            !    do imat=1,this%ns
+            !        vf(imat) = this%material(imat)%Ys(i,j,k)* this%material(imat)%eh(i,j,k)*rho(i,j,k)*(gam(imat)-one)/ &
+            !                   (psph(imat)+gam(imat)*pinf(imat))
+            !    end do
+            !    peqb = psph(1)
+            !    peqb2 = peqb
+            !    
+            !else
+                ! solve non-linear problem for relaxed pressure
 
-            ! scale all pressures by max over all PInfs
-            maxp = maxval(fparams(3*this%ns+1:4*this%ns))
-            fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)/maxp
+                ! set iparams
+                iparams(1) = 1     !   used in fnumden; 2 for PTeqb 
 
-            ! set initial guess
-            peqb = sum(fparams(1:this%ns)*fparams(2*this%ns+1:3*this%ns))
+                ! scale all pressures by pref
+                fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)/refp
 
-            ! solve non-linear equation
-            call this%rootfind_nr_1d(peqb,fparams,iparams)
+                ! set initial guess
+                peqb = sum(fparams(1:this%ns)*fparams(2*this%ns+1:3*this%ns))
+                ! solve non-linear equation
+                call this%rootfind_nr_1d(peqb,fparams,iparams)
 
-            ! rescale all pressures by maxp
-            fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*maxp
-            peqb = peqb*maxp
+                ! rescale all pressures by refp
+                fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*refp
+                peqb = peqb*refp
 
-            ! update species VF, eh, ...
-            fac = (psph + gam*pinf + (gam-one)*peqb)/(gam*(pinf+peqb))
-            vf = vf*fac
-            !this%material(1:this%ns)%g = this%material(1:this%ns)%g*fac**third        !! --- not clear if this is needed or if it works
-            peqb2 = (rho(i,j,k)*ehmix(i,j,k) - sum(vf*gam*pinf/(gam-one))) / sum(vf/(gam-one))
-            psph = peqb2
+                ! update species VF, eh, ...
+                fac = (psph + gam*pinf + (gam-one)*peqb)/(gam*(pinf+peqb))
+                vf = vf*fac
+                !this%material(1:this%ns)%g = this%material(1:this%ns)%g*fac**third        !! --- not clear if this is needed or if it works
+                peqb2 = (rho(i,j,k)*ehmix(i,j,k) - sum(vf*gam*pinf/(gam-one))) / sum(vf/(gam-one))
+                psph = peqb2
+            !endif
+                !print *, 'peqb = ', peqb
+                !if(peqb2 < zero) then
+                !    write(*,*) i, peqb2, peqb
+                !    write(*,*) 'rho: ', rho(i,j,k)
+                !    write(*,*) 'eh: ', ehmix(i,j,k)
+                !    write(*,*) 'vf : ', vf
+                !    write(*,*) 'gam: ', gam
+                !    write(*,*) 'fac: ', fac
+                !    write(*,*) 'Ys : ', this%material(1)%Ys(i,j,k), this%material(2)%Ys(i,j,k)
+                !    write(*,*) 'eh : ', this%material(1)%eh(i,j,k), this%material(2)%eh(i,j,k)
+                !    write(*,*) '-----------------------------------'
+                !    write(*,*) '-----------------------------------'
+                !endif
 
             mixP(i,j,k) = peqb2
             do imat=1,this%ns
@@ -273,10 +310,11 @@ stop
               this%material(imat)%p(i,j,k) = psph(imat)
             enddo
 
+            
+
           enddo
          enddo
         enddo
-
         ! get species energy from species pressure
         do imat = 1, this%ns
             call this%material(imat)%get_ehydroT_from_p(rho)
@@ -762,6 +800,9 @@ stop
             call gradient(this%decomp,this%der,mat2%VF,tmp1,tmp2,tmp3)
             Fsource = Fsource - p*(u*tmp1 + v*tmp2 + w*tmp3)
 
+            call gradient(this%decomp,this%der,p,tmp1,tmp2,tmp3)
+            Fsource = Fsource - mat1%VF*mat2%VF/rho*(mat1%rhom-mat2%rhom)*(u*tmp1 + v*tmp2 + w*tmp3)
+
         endif
 
     end subroutine 
@@ -868,11 +909,13 @@ stop
                 sos = sos + this%material(i)%Ys*sosm
             endif
         end do
+!print *, 'sos2 = ', maxval(sos), minval(sos)
         if(this%SOSmodel) then
             sos = one / (sqrt(rho*sos) + epssmall)
         else
-            sos = sqrt(sos)
+            sos = sqrt(abs(sos))
         endif
+!print *, 'sos  = ', maxval(sos), minval(sos)
 
     end subroutine
 
@@ -892,7 +935,7 @@ stop
         !  call this%material(imat)%update_VF(this%material( 2-mod(imat+1,2) ),isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc)
         !end do
         call this%material(1)%update_VF(this%material(2),isub,dt,rho,u,v,w,x,y,z,tsim,divu, src,x_bc,y_bc,z_bc)
-        ! call this%material(2)%update_VF(this%material(1),isub,dt,rho,u,v,w,x,y,z,tsim,divu,-src,x_bc,y_bc,z_bc)
+        !call this%material(2)%update_VF(this%material(1),isub,dt,rho,u,v,w,x,y,z,tsim,divu,-src,x_bc,y_bc,z_bc)
 
         this%material(2)%VF = one - this%material(1)%VF
 
@@ -930,7 +973,9 @@ stop
             do im = 1, this%ns
               fac = vf(im)/gam(im)/(pinf(im)+pf)
               num = num + fac*(psph(im)-pf)
-              den = den + fac*(psph(im)-pinf(im)-two*pf)/(pinf(im)+pf)
+              !den = den + fac*(psph(im)-pinf(im)-two*pf)/(pinf(im)+pf)
+              den = den - fac*(psph(im)+pinf(im))/(pinf(im)+pf)
+              !write(*,*) im, psph(im), pf!-pinf(im)-two*pf, -(psph(im)+pinf(im))
             enddo
             nullify(vf,gam,psph,pinf)
         elseif(iparams(1)==2) then

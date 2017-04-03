@@ -3,10 +3,10 @@ module Multispecies_shocktube_data
     use constants,        only: one,two,eight,three
     implicit none
 
-    real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
+    real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one
     real(rkind) :: minVF = 0.2_rkind, thick = one
-    real(rkind) :: rhoRatio = one, pRatio = two
+    real(rkind) :: pRatio = two
     logical     :: sharp = .FALSE.
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
     real(rkind) :: rho1_2,rho2_2,u1_2,u2_2,g11_1_2,g11_2_2,grho1_2,grho2_2,a1_2,a2_2
@@ -14,7 +14,7 @@ module Multispecies_shocktube_data
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = one, Lx = three, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    real(rkind) :: Ly = one, Lx = one, interface_init = 0.5_rkind
 
 contains
 
@@ -188,13 +188,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
     real(rkind), dimension(8) :: fparams
     integer, dimension(2) :: iparams
 
-    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
-                          p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
-                          plastic2, explPlast2, yield2, interface_init, kwave
+    namelist /PROBINPUT/  p_infty,   Rgas,   gamma,   mu,   rho_0,   plastic,  yield,  explPlast,  &
+                          p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic2, yield2, explPlast2, &
+                          interface_init, minVF, thick, & ! interface properties
+                          p1, p2, u1, u2                  ! shocktube init conditions
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -208,18 +209,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
         end if
 
-        if(rhoRatio > 0) then
-          ! if rhoRatio is positive, only rho_0 is different. Rgas is set such
-          ! that Temperature equilibrium condition is satisfied
-          gamma_2 = gamma; Rgas_2 = Rgas/rhoRatio; p_infty_2 = p_infty; 
-          rho_0_2 = rho_0*rhoRatio; mu_2 = mu
-        else
-          ! if rhoRatio is negative, all quantities except Rgas need to be
-          ! specified in input file. Rgas is then set such
-          ! that Temperature equilibrium condition is satisfied
-          Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
-        endif
-
         ! write material properties
         write(*,*) '---Material 1---'
         write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0, ', gam  = ', gamma, ', p_infty = ', p_infty
@@ -227,6 +216,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         write(*,*) '---Material 2---'
         write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0_2, ', gam  = ', gamma_2, ', p_infty = ', p_infty_2
         write(*,'(3(a,e12.5))') 'mu    = ', mu_2,    ', Rgas = ', Rgas_2
+
+        ! Evaluate implied temperatures
+        print *, 'Temperatures left = ', (p1+p_infty)/(rho_0*Rgas), (p1+p_infty_2)/(rho_0_2*Rgas_2)
+        print *, 'Temperatures right = ', (p2+p_infty)/(rho_0*Rgas), (p2+p_infty_2)/(rho_0_2*Rgas_2)
+
+        print *, 'Change Rgas_2 to ', Rgas*(p1+p_infty_2)/(p1+p_infty)*(rho_0/rho_0_2), ' for T eqb on left'
+        print *, 'Change Rgas_2 to ', Rgas*(p2+p_infty_2)/(p2+p_infty)*(rho_0/rho_0_2), ' for T eqb on right'
 
         ! Set materials
         call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10))
@@ -236,109 +232,23 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%plast = plastic; mix%material(1)%explPlast = explPlast
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
 
-        ! determine jump conditions for material 1
-        p1 = p_amb
-        rho1 = rho_0
-        p2 = p1 * pRatio
-        u1 = zero
-        fparams(1) = rho1; fparams(2) = u1; fparams(3) = p1
-        ! fparams(4) = rho_0; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = zero;
-        fparams(4) = rho1; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = mu;
-        fparams(8) = p2
-        rho2 = rho1*min(one + p1/p_infty, one) ! Init guess
-        call rootfind_nr_1d(rho2,fparams,iparams)
-        write(*,*) 'After root finding: ', rho2
-        g11_1 = fparams(1)/fparams(4);   grho1 = g11_1**real(11.D0/3.D0,rkind) - g11_1**(-third) - g11_1**(seven*third) + g11_1**third
-        g11_2 = rho2/fparams(4);         grho2 = g11_2**real(11.D0/3.D0,rkind) - g11_2**(-third) - g11_2**(seven*third) + g11_2**third
-        ! u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*zero*(grho1-grho2)))
-        u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*mu*(grho1-grho2)))
-        u1 = rho2*u2/rho1
+        tmp = half * ( one - erf( (x-interface_init)/(thick*dx) ) ) ! backstep
 
-        ! speed of sound
-        a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
-        a2 = sqrt((gamma*(p2+p_infty) + 4.0d0/3.0d0*mu)/rho2)
-
-        write(*,*) '----Shock Initialization-----'
-        print*, "Mass flux: ", rho1*u1, rho2*u2
-        print*, "Momentum flux: ", rho1*u1*u1+p1, rho2*u2*u2+p2
-        print*, "g flux: ", g11_1*u1, g11_2*u2
-        
-        print*, "rho1, rho2 = ", rho1, rho2
-        print*, "u1, u2 = ", u1, u2
-        print*, "p1, p2 = ", p1, p2
-        print*, "a1, a2 = ", a1, a2
-        print*, "M1, M2 = ", u1/a1, u2/a2
-        print*, "p_infty = ", p_infty
-        print*, "rhoRatio = ", rhoRatio
-
-        ! determine jump conditions for material 2
-        p1 = p_amb
-        rho1_2 = rho_0_2
-        p2 = p1 * pRatio
-        u1_2 = zero
-        fparams(1) = rho1_2; fparams(2) = u1_2; fparams(3) = p1
-        ! fparams(4) = rho_0; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = zero;
-        fparams(4) = rho1_2; fparams(5) = gamma_2; fparams(6) = p_infty_2; fparams(7) = mu_2;
-        fparams(8) = p2
-        rho2_2 = rho1_2*min(one + p1/p_infty_2, one) ! Init guess
-        call rootfind_nr_1d(rho2_2,fparams,iparams)
-        write(*,*) 'After root finding: ', rho2_2
-        g11_1_2 = fparams(1)/fparams(4);   grho1_2 = g11_1_2**real(11.D0/3.D0,rkind) - g11_1_2**(-third) - g11_1_2**(seven*third) + g11_1_2**third
-        g11_2_2 = rho2_2/fparams(4);         grho2_2 = g11_2_2**real(11.D0/3.D0,rkind) - g11_2_2**(-third) - g11_2_2**(seven*third) + g11_2_2**third
-        u2_2 = -sqrt(rho1_2/rho2_2/(rho1_2-rho2_2)*(p1-p2+twothird*mu_2*(grho1_2-grho2_2)))
-        u1_2 = rho2_2*u2_2/rho1_2
-
-        ! speed of sound
-        a1_2 = sqrt((gamma_2*(p1+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho1_2)
-        a2_2 = sqrt((gamma_2*(p2+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho2_2)
-
-        write(*,*) '----Shock Initialization-----'
-        print*, "Mass flux: ", rho1_2*u1_2, rho2_2*u2_2
-        print*, "Momentum flux: ", rho1_2*u1_2*u1_2+p1, rho2_2*u2_2*u2_2+p2
-        print*, "g flux: ", g11_1_2*u1_2, g11_2_2*u2_2
-        
-        print*, "rho1, rho2 = ", rho1_2, rho2_2
-        print*, "u1, u2 = ", u1_2, u2_2
-        print*, "p1, p2 = ", p1, p2
-        print*, "a1, a2 = ", a1_2, a2_2
-        print*, "M1, M2 = ", u1_2/a1_2, u2_2/a2_2
-        print*, "p_infty = ", p_infty_2
-        print*, "rhoRatio = ", rhoRatio
-
-        ! Get mixture momentum (put in u1 and u2)
-        u1 = (one-minVF)*rho1*u1 + minVF*rho1_2*u1_2
-        u2 = (one-minVF)*rho2*u2 + minVF*rho2_2*u2_2
-        
-        ! Get mixture density
-        rho1 = (one-minVF)*rho1 + minVF*rho1_2
-        rho2 = (one-minVF)*rho2 + minVF*rho2_2
-
-        ! Get mixture velocity
-        u1 = u1 / rho1
-        u2 = u2 / rho2
-
-        shock_init = interface_init - eta0k/(2.0_rkind*kwave*pi) - (thick*dx)*10.0_rkind  ! (10*thick) grid points away from the interface
-        dum = half * ( one - erf( (x-shock_init)/(dx) ) )
-
-        u   = (u2-u1)*dum
+        u   = u2 + tmp*(u1-u2)
         v   = zero
         w   = zero
-
-        tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
         mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
         
-        mix%material(1)%g11 = (rho2*dum + rho1*(one-dum))/rho_0
-
         mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
         mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
         mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
         mix%material(2)%g11 = mix%material(1)%g11
 
-        mix%material(1)%p  = p2*dum + p1*(one-dum)
+        mix%material(1)%p  = p2 + tmp*(p1-p2)
         mix%material(2)%p  = mix%material(1)%p
 
         mix%material(1)%VF = minVF + (one-two*minVF)*tmp
@@ -359,12 +269,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
 end subroutine
 
-subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
+subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,eps,half,one,two,pi,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
                                 sxx_index,syy_index,szz_index,sxy_index,sxz_index,syz_index,sos_index
     use decomp_2d,        only: decomp_info, nrank
+    use derivativesMod,   only: derivatives
     use SolidMixtureMod,  only: solid_mixture
 
     use Multispecies_shocktube_data
@@ -372,11 +283,13 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     implicit none
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
     real(rkind),                     intent(in) :: dx,dy,dz,tsim
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
     type(solid_mixture),             intent(in) :: mix
+    integer, dimension(2),           intent(in) :: x_bc, y_bc, z_bc
     integer                                     :: outputunit=229
 
     character(len=clen) :: outputfile, str
@@ -393,16 +306,12 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3),       &
                  sos  => fields(:,:,:,sos_index) )
 
-        if (rhoRatio > 0) then
-            write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2)') nrank, "_", minVF, "_", rhoRatio
-        else
-            write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2)') nrank, "_", minVF, "_", rho_0_2/rho_0
-        end if
+        write(str,'(I4.4,A,ES7.1E2,A,ES7.1E2)') nrank, "_", minVF, "_", rho_0_2/rho_0
 
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_shock_"//trim(str)//"_", vizcount, ".dat"
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_ST_"//trim(str)//"_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
-        write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rhoRatio
+        write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rho_0_2/rho_0
         do i=1,decomp%ysz(1)
             write(outputunit,'(23ES27.16E3)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
                                            mix%material(1)%p (i,1,1), mix%material(2)%p (i,1,1), &
@@ -416,7 +325,7 @@ subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
         end do
         close(outputunit)
 
-        write(outputfile,'(4A)') trim(outputdir),"/tec_MultSpecGauss_"//trim(str),".dat"
+        write(outputfile,'(4A)') trim(outputdir),"/tec_MultSpecST_"//trim(str),".dat"
         if(vizcount==0) then
           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='replace')
           write(outputunit,'(350a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p", &
@@ -554,7 +463,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use exits,            only: message
-    use reductions,       only: P_MAXVAL
+    use reductions,       only: P_MAXVAL, P_MINVAL
     use SolidMixtureMod,  only: solid_mixture
 
     use Multispecies_shocktube_data
@@ -573,6 +482,12 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+        call message("Min. VF1",P_MINVAL(mix%material(1)%VF))
+        call message("Min. VF2",P_MINVAL(mix%material(2)%VF))
+        call message("Max. VF1",P_MAXVAL(mix%material(1)%VF))
+        call message("Max. VF2",P_MAXVAL(mix%material(2)%VF))
+
     end associate
 end subroutine
 
