@@ -21,7 +21,7 @@ program testSGSmodelWT
    type(turbineArray) :: turbArray
 
    complex(rkind), parameter :: zeroC = dcmplx(0.0D0, 0.0D0)
-   real(rkind), parameter :: Re = 1.d10, Fr = 1.d10
+   real(rkind), parameter :: Re = 1.d10, Fr = 1.d10, Pr = 1.d0
    real(rkind), parameter :: Tsurf = 1.d0, ThetaRef = 1.d0
    real(rkind) :: dx, dy, dz, Lx, Ly, Lz
    real(rkind), dimension(:,:,:,:), allocatable :: mesh
@@ -160,7 +160,7 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
    call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme)
 
    ! Initialize sgs
-   call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, fbody_z, computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, .false., .false.)
+   call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, fbody_z, computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, .false., .false.)
 
    call newsgs%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
    

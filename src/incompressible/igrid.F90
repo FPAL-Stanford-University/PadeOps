@@ -656,7 +656,7 @@ contains
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
-                                    this%ThetaRef, this%Fr, this%Re, this%isInviscid, this%isStratified, this%botBC_Temp)
+                                    this%ThetaRef, this%Fr, this%Re, Pr, this%isInviscid, this%isStratified, this%botBC_Temp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3)
             call message(0,"SGS model initialized successfully")
         end if 
@@ -1438,6 +1438,10 @@ contains
                                           this%duidxjEhat, this%uEhat, this%vEhat,      this%what,    this%uhat,    &
                                           this%vhat,       this%That,  this%u,          this%v,       this%uE,      &
                                           this%vE,         this%w,     this%newTimeStep                             )
+
+            if (this%isStratified) then
+               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzE)
+            end if
             
         end if
        

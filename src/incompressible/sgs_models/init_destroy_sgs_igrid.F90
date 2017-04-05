@@ -27,18 +27,19 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
    tau23 => this%tau_23
 
    tauSGS_ij => this%tau_ij
-   
-   if (allocated(this%q1)) q1 => this%q1
-   if (allocated(this%q2)) q2 => this%q2
-   if (allocated(this%q3)) q3 => this%q3
-
+  
+   if (this%isStratified) then
+      q1 => this%q1C
+      q2 => this%q2C
+      q3 => this%q3E
+   end if 
 end subroutine 
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, isInviscid, isStratified, botBC_temp)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, isInviscid, isStratified, botBC_temp)
   class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
-  real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re
+  real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re, Pr
   real(rkind), intent(in), target :: Tsurf
   character(len=*), intent(in) :: inputfile
   real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC
@@ -74,12 +75,14 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%Tsurf => Tsurf
   this%Fr = Fr
   this%Re = Re
+  this%Pr = Pr
   this%ThetaRef = ThetaRef
   this%PadeDer => PadeDer
   this%fxC => fBody_x
   this%fyC => fBody_y
   this%fzE => fBody_z
   this%meanfact = one/(real(gpC%xsz(1),rkind) * real(gpC%ysz(2),rkind))
+  this%isStratified = isStratified
   if (present(botBC_Temp)) this%botBC_Temp = botBC_Temp
 
   allocate(this%tau_ij(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),6))
@@ -92,6 +95,14 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   allocate(this%tau_13(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
   allocate(this%tau_23(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
   this%tau_ij = zero
+
+  if (this%isStratified) then
+     allocate(this%q1C(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+     allocate(this%q2C(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+     allocate(this%q3E(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+     this%q1C = zero; this%q2C = zero; this%q3E = zero
+  end if 
+
 
   ! Link buffers
   this%cbuffyC => cbuffyC
@@ -115,6 +126,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%DynamicProcedureType = DynamicProcedureType
   this%DynProcFreq = DynProcFreq
   this%useVerticalTfilter = useVerticalTfilter
+  
+  this%isInviscid = isInviscid
 
   this%WallModel        = WallModelType
   
@@ -145,8 +158,6 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
       endif
   endif
 
-  this%isInviscid = isInviscid
-  this%isStratified = isStratified
 
 end subroutine
 
