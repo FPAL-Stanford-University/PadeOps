@@ -613,12 +613,12 @@ contains
             if (this%assume_fplane) then
                 this%coriolis_sine   = sin(latitude*pi/180.d0)
                 this%coriolis_cosine = 0.d0
-                call message(1, "Making the f-plane assumption (Lattitude effect &
+                call message(1, "Making the f-plane assumption (latitude effect &
                 & ignored in w equation)")
             else
                 this%coriolis_sine   = sin(latitude*pi/180.d0)
                 this%coriolis_cosine = cos(latitude*pi/180.d0)
-                call message(1,"Lattitude used for Coriolis (degrees)",latitude)
+                call message(1,"Latitude used for Coriolis (degrees)",latitude)
             end if
         end if
 
