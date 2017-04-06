@@ -259,7 +259,7 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzE)
 
       this%q1C = -this%kappa_sgs_C*dTdxC
       this%q2C = -this%kappa_sgs_C*dTdyC
-      this%q3E = -this%kappa_sgs_C*dTdzE
+      this%q3E = -this%kappa_sgs_E*dTdzE
    end if
 
 end subroutine

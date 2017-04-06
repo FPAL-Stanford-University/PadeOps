@@ -79,7 +79,7 @@ end subroutine
 
 subroutine computeWall_PotTFlux(this)
    class(sgs_igrid), intent(inout) :: this
-  
+ 
    if (nrank == 0) then
       this%q3HAT_AtWall(1,1) = cmplx(this%wTh_surf/this%MeanFact,zero,rkind)
    end if
