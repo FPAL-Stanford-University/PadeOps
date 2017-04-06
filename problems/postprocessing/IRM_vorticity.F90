@@ -69,13 +69,13 @@ contains
     subroutine write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
                             R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi, &
                             pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport, mix_pdil, mix_pdil_fluct, &
-                            duidxj2D, gradp2D, PSij, diss_tensor, pdil_LL, pdil_LS, pdil_SL, pdil_SS)
+                            duidxj2D, gradp2D, PSij, diss_tensor, pdil_LL, pdil_LS, pdil_SL, pdil_SS, pdil_reavg, pdil_refluct, baropycnal)
         integer, intent(in) :: step
         real(rkind), dimension(:,:,:), intent(in) :: vort_avgz
         real(rkind), dimension(:,:),   intent(in) :: TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation
         real(rkind), dimension(:,:),   intent(in) :: R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi
         real(rkind), dimension(:,:),   intent(in) :: pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport, mix_pdil, mix_pdil_fluct
-        real(rkind), dimension(:,:),   intent(in) :: pdil_LL, pdil_LS, pdil_SL, pdil_SS
+        real(rkind), dimension(:,:),   intent(in) :: pdil_LL, pdil_LS, pdil_SL, pdil_SS, pdil_reavg, pdil_refluct, baropycnal
         real(rkind), dimension(:,:,:), intent(in) :: duidxj2D, gradp2D, PSij, diss_tensor
 
         character(len=clen) :: post2d_file
@@ -144,6 +144,9 @@ contains
                     write(iounit2d) pdil_LS
                     write(iounit2d) pdil_SL
                     write(iounit2d) pdil_SS
+                    write(iounit2d) pdil_reavg
+                    write(iounit2d) pdil_refluct
+                    write(iounit2d) baropycnal
 
                     close(iounit2d)
                 end if
@@ -830,6 +833,66 @@ contains
         call P_AVGZ( mir%gp, p_S*divu_S, pdil_SS )
 
     end subroutine
+    
+    subroutine get_pdil_re(u,v,w,p,p_avg,pdil_reavg,pdil_refluct)
+        use operators, only: divergence
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)   ),         intent(in)  :: u,v,w,p
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)),                           intent(in)  :: p_avg
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)),                           intent(out) :: pdil_reavg, pdil_refluct
+        
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) :: uprime, vprime, wprime, pprime, divuprime
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2))                :: u_avg, v_avg, w_avg, dudx, dvdy
+        real(rkind), dimension(mir%gp%xsz(1),mir%gp%xsz(2),1)               :: xbuf1, xbuf2
+
+        integer :: k
+
+        call P_AVGZ( mir%gp, u, u_avg )
+        call P_AVGZ( mir%gp, v, v_avg )
+        call P_AVGZ( mir%gp, w, w_avg )
+
+        ! dudx
+        call gp2D%transpose_y_to_x(u_avg,xbuf1)
+        call der2D%ddx(xbuf1,xbuf2)
+        call gp2D%transpose_x_to_y(xbuf2,dudx)
+
+        ! dvdy
+        call der2D%ddy(v_avg,dvdy)
+
+        ! Reynolds averaged mean pressure-dilatation
+        pdil_reavg = p_avg*(dudx+dvdy)
+
+        do k = 1,mir%gp%ysz(3)
+            uprime(:,:,k) = u(:,:,k) - u_avg
+        end do
+        do k = 1,mir%gp%ysz(3)
+            vprime(:,:,k) = v(:,:,k) - v_avg
+        end do
+        do k = 1,mir%gp%ysz(3)
+            wprime(:,:,k) = w(:,:,k) - w_avg
+        end do
+        do k = 1,mir%gp%ysz(3)
+            pprime(:,:,k) = p(:,:,k) - p_avg
+        end do
+
+        call divergence( mir%gp, der, uprime, vprime, wprime, divuprime )
+
+        ! Reynolds averaged fluctuation pressure-dilatation
+        call P_AVGZ( mir%gp, pprime*divuprime, pdil_refluct )
+
+    end subroutine
+
+    subroutine get_baropycnal(gradp2D,a_x,a_y,a_z,baropycnal)
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)),           intent(in)  :: a_x, a_y, a_z
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2),3), target, intent(in)  :: gradp2D
+        real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)),           intent(out) :: baropycnal
+
+        real(rkind), dimension(:,:), pointer :: dpdx, dpdy, dpdz
+
+        dpdx => gradp2D(:,:,1); dpdy => gradp2D(:,:,2); dpdz => gradp2D(:,:,3);
+        
+        baropycnal = - dpdx*a_x - dpdy*a_y - dpdz*a_z ! Last term is zero by definition
+
+    end subroutine
 
     subroutine get_production(R11,R12,R13,R22,R23,R33,duidxj2D,rho_avg,production)
         real(rkind), dimension(mir%gp%ysz(1), mir%gp%ysz(2)   ),         intent(in)  :: R11,R12,R13,R22,R23,R33,rho_avg
@@ -1044,7 +1107,7 @@ program IRM_vorticity
     real(rkind), dimension(:,:), pointer :: R11, R12, R13, R22, R23, R33
     real(rkind), dimension(:,:), pointer :: a_x, a_y, a_z, rhop_sq, eta, xi
     real(rkind), dimension(:,:), pointer :: p_avg, pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport, mix_pdil, mix_pdil_fluct
-    real(rkind), dimension(:,:), pointer :: pdil_LL, pdil_LS, pdil_SL, pdil_SS
+    real(rkind), dimension(:,:), pointer :: pdil_LL, pdil_LS, pdil_SL, pdil_SS, pdil_reavg, pdil_refluct, baropycnal
 
     real(rkind), dimension(:,:,:,:), allocatable :: duidxj, tauij
     real(rkind), dimension(:,:,:),   allocatable :: duidxj2D, tauij_avg, gradp2D, PSij, diss_tensor
@@ -1144,7 +1207,7 @@ program IRM_vorticity
     Rij    => buffer(:,:,:,i)
 
     ! Allocate 2D buffer and associate pointers for convenience
-    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 38 ) ); buffer2d = zero
+    allocate( buffer2d( mir%gp%ysz(1), mir%gp%ysz(2), 41 ) ); buffer2d = zero
     vort_avgz                => buffer2d(:,:,1:3)
     rho_avg                  => buffer2d(:,:,4 )
     u_avg                    => buffer2d(:,:,5 )
@@ -1181,6 +1244,9 @@ program IRM_vorticity
     pdil_LS                  => buffer2d(:,:,36)
     pdil_SL                  => buffer2d(:,:,37)
     pdil_SS                  => buffer2d(:,:,38)
+    pdil_reavg               => buffer2d(:,:,39)
+    pdil_refluct             => buffer2d(:,:,40)
+    baropycnal               => buffer2d(:,:,41)
     
     allocate( xtmp1( mir%gp%xsz(1), mir%gp%xsz(2), 1 ) )
     allocate( xtmp2( mir%gp%xsz(1), mir%gp%xsz(2), 1 ) )
@@ -1421,6 +1487,9 @@ program IRM_vorticity
         !     TKE(:,:,i) = TKE(:,:,i) / rho_avg
         ! end do
         
+        ! Get maximum fluctuation mach number
+        call message(1, "Maximum Favre fluctuation mach number", P_MAXVAL( sqrt(upp*upp + vpp*vpp + wpp*wpp)/mir%c ) )
+
         ! Get integrated TKE
         TKE_int = P_SUM(TKE)*mir%dx*mir%dy*mir%dz
         call message(1,"TKE_int",TKE_int)
@@ -1477,6 +1546,9 @@ program IRM_vorticity
         call get_dissipation(upp,vpp,wpp,tauij,dissipation,pdil_fluct, tke_visc_transport)
         call get_pdil_fluct_filter(upp,vpp,wpp,pdil_LL,pdil_LS,pdil_SL,pdil_SS)
 
+        call get_pdil_re(mir%u,mir%v,mir%w,mir%p,p_avg,pdil_reavg,pdil_refluct)
+        call get_baropycnal(gradp2D,a_x,a_y,a_z,baropycnal)
+
         ! Get model form of pressure-strain tensor and dissipation tensor
         call message(1,"Getting pressure-strain and dissipation tensors")
         call get_PS_diss(upp,vpp,wpp,mir%p,p_avg,tauij,mir%rho,rho_avg,PSij,diss_tensor)
@@ -1501,7 +1573,7 @@ program IRM_vorticity
         call write_post2d(step, vort_avgz, TKE_avg, div_avg, rho_avg, chi_avg, MMF_avg, CO2_avg, density_self_correlation, &
                           R11, R12, R13, R22, R23, R33, a_x, a_y, a_z, rhop_sq, eta, xi, &
                           pdil, meandiss, production, dissipation, pdil_fluct, tke_visc_transport, mix_pdil, mix_pdil_fluct, &
-                          duidxj2D, gradp2D, PSij, diss_tensor, pdil_LL, pdil_LS, pdil_SL, pdil_SS)
+                          duidxj2D, gradp2D, PSij, diss_tensor, pdil_LL, pdil_LS, pdil_SL, pdil_SS, pdil_reavg, pdil_refluct, baropycnal)
 
         write(time_message,'(A,I4,A)') "Time to postprocess step ", step, " :"
         call toc(trim(time_message))
