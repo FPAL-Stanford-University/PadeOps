@@ -1,6 +1,7 @@
 module temporalHook
     use kind_parameters,    only: rkind
-    use IncompressibleGridWallM, only: igridWallM
+    !use IncompressibleGridWallM, only: igridWallM
+    use IncompressibleGrid, only: igrid
     use reductions,         only: P_MAXVAL, p_minval
     use exits,              only: message, message_min_max
     !use pblwt_IO,           only: output_tecplot!dumpData4Matlab 
@@ -23,13 +24,14 @@ module temporalHook
 contains
 
     subroutine doTemporalStuff(gp)
-        class(igridWallM), intent(inout) :: gp 
+        !class(igridWallM), intent(inout) :: gp 
+        class(igrid), intent(inout) :: gp 
       
         if (mod(gp%step,nt_print2screen) == 0) then
             maxDiv = maxval(gp%divergence)
             DomMaxDiv = p_maxval(maxDiv)
             call message(0,"Time",gp%tsim)
-            call message(1,"u_star:",gp%ustar)
+            call message(1,"u_star:",gp%sgsmodel%get_ustar())
             call message(1,"TIDX:",gp%step)
             call message(1,"MaxDiv:",DomMaxDiv)
             call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))

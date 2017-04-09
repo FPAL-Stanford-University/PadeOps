@@ -12,10 +12,12 @@ module pblwt_IO
 contains
 
     subroutine start_io(gp)
-        use IncompressibleGridWallM, only: igridWallM
+        !use IncompressibleGridWallM, only: igridWallM
+        use IncompressibleGrid, only: igrid
         use mpi 
         
-        class(igridWallM), target, intent(in) :: gp 
+        !class(igridWallM), target, intent(in) :: gp 
+        class(igrid), target, intent(in) :: gp 
         character(len=clen) :: fname
         character(len=clen) :: tempname
         !character(len=clen) :: command
@@ -103,11 +105,13 @@ contains
     end subroutine
 
     subroutine dumpData4Matlab(gp)
-        use IncompressibleGridWallM, only: igridWallM
+        !use IncompressibleGridWallM, only: igridWallM
+        use IncompressibleGrid, only: igrid
         use gridtools,          only: alloc_buffs
         use decomp_2d,        only: transpose_y_to_x
         
-        class(igridWallM), target, intent(in) :: gp 
+        !class(igridWallM), target, intent(in) :: gp 
+        class(igrid), target, intent(in) :: gp 
         integer :: tid, runIDX
         character(len=clen) :: fname
         character(len=clen) :: tempname
