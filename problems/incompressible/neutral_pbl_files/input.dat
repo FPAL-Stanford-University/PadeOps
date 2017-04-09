@@ -1,9 +1,9 @@
 &INPUT
 inputdir                      = "/home/aditya90/Codes/PadeOps/data/neutral_pbl/"   ! Directory for any input files
 outputdir                     = "/home/aditya90/Codes/PadeOps/data/neutral_pbl/"   ! Directory for all output files
-nx                            = 128         ! Number of points in X
-ny                            = 128         ! Number of points in Y
-nz                            = 128         ! Number of points in Z
+nx                            = 192         ! Number of points in X
+ny                            = 192         ! Number of points in Y
+nz                            = 256         ! Number of points in Z
 tstop                         = 100.D0      ! Physical time to stop the simulation
 CFL                           = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
@@ -113,14 +113,14 @@ t_dumpKSprep                  = 10         ! Dumping Frequency for KS files
 /
 /
 &PROBLEM_INPUT
-Lx                            =  4.d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            =  4.d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
-Lz                            =  2.d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
+Lx                            =  3.14159265d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            =  3.14159265d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
+Lz                            =  3.d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
 Tref                          =  288.15d0   ! Reference Temp. 
 z0init                        =  1.d-4      ! Roughness scale used to initialize the profile
 aTemp                         =  1.000d0    ! Inversion Layer temp slope parameter (for temp initialization)
 bTemp                         =  0.040d0    ! Stable Free atmosphere temp slope parameter (for temp initialization)
-h0Temp                        =  0.41667d0  ! Inversion Layer Start Height (for temp initialization)
-h1Temp                        =  0.45833d0  ! Inversion Layer Middle Height (for temp initialization)
-h2Temp                        =  0.500d0    ! Inversion Layer Top    Height (for temp initialization)
+h0Temp                        =  1.d0       ! Inversion Layer Start Height (for temp initialization)
+h1Temp                        =  1.075d0   ! Inversion Layer Middle Height (for temp initialization)
+h2Temp                        =  1.15d0    ! Inversion Layer Top    Height (for temp initialization)
 /
