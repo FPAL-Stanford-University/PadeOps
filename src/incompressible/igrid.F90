@@ -31,10 +31,8 @@ module IncompressibleGrid
     complex(rkind), parameter :: zeroC = zero + imi*zero 
 
     ! Allow non-zero value (isEven) 
-    logical :: topBC_u = .true.  , topBC_v = .true. 
-    logical, parameter :: topBC_w = .false. , botBC_w = .false. 
     integer :: ierr 
-    integer :: topWall = 1, botWall = 1
+    integer :: topWall = 1, botWall = 1, botBC_Temp = 1
 
     !! BC convention: 
 
@@ -56,7 +54,9 @@ module IncompressibleGrid
     integer :: dUdzBC_bottom  =  0, dUdzBC_top  =  -1
     integer :: dVdzBC_bottom  =  0, dVdzBC_top  =  -1
     integer :: dWdzBC_bottom  =  1, dWdzBC_top  =  1
-    integer :: dTdzBC_bottom  =  -1, dTdzBC_top  =  -1
+    integer :: dTdzBC_bottom  =  -1, dTdzBC_top  =  0
+    integer :: WdTdzBC_bottom =   1, WdTdzBC_top = 0
+
 
     type :: igrid
         
@@ -283,7 +283,7 @@ contains
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
-        integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1, botBC_Temp = 0
+        integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1
         real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0,Gx=0.d0,Gy=0.d0,Gz=0.d0
@@ -463,26 +463,19 @@ contains
 
 
         ! STEP 6: ALLOCATE MEMORY FOR FIELD ARRAYS
-        !if (this%isStratified) then
-            allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),7))
-            allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4))
-            allocate(this%dTdzE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
-            allocate(this%dTdzC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
-            allocate(this%dTdxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
-            allocate(this%dTdyC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
-            call this%spectC%alloc_r2c_out(this%SfieldsC,4)
-            call this%spectC%alloc_r2c_out(this%dTdxH)
-            call this%spectC%alloc_r2c_out(this%dTdyH)
-            call this%spectE%alloc_r2c_out(this%dTdzH)
-            call this%spectC%alloc_r2c_out(this%dTdzHC)
-            call this%spectC%alloc_r2c_out(this%rhsC,3); 
-            call this%spectC%alloc_r2c_out(this%OrhsC,3)
-        !else
-        !    allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6))
-        !    allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),3))
-        !    call this%spectC%alloc_r2c_out(this%SfieldsC,3)
-        !    call this%spectC%alloc_r2c_out(this%rhsC,2); call this%spectC%alloc_r2c_out(this%OrhsC,2)
-        !end if 
+        allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),7))
+        allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4))
+        allocate(this%dTdzE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+        allocate(this%dTdzC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+        allocate(this%dTdxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+        allocate(this%dTdyC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+        call this%spectC%alloc_r2c_out(this%SfieldsC,4)
+        call this%spectC%alloc_r2c_out(this%dTdxH)
+        call this%spectC%alloc_r2c_out(this%dTdyH)
+        call this%spectE%alloc_r2c_out(this%dTdzH)
+        call this%spectC%alloc_r2c_out(this%dTdzHC)
+        call this%spectC%alloc_r2c_out(this%rhsC,3); 
+        call this%spectC%alloc_r2c_out(this%OrhsC,3)
         call this%spectE%alloc_r2c_out(this%SfieldsE,4)
         allocate(this%divergence(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
         allocate(this%duidxjC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9))
@@ -620,12 +613,12 @@ contains
             if (this%assume_fplane) then
                 this%coriolis_sine   = sin(latitude*pi/180.d0)
                 this%coriolis_cosine = 0.d0
-                call message(1, "Making the f-plane assumption (Lattitude effect &
+                call message(1, "Making the f-plane assumption (latitude effect &
                 & ignored in w equation)")
             else
                 this%coriolis_sine   = sin(latitude*pi/180.d0)
                 this%coriolis_cosine = cos(latitude*pi/180.d0)
-                call message(1,"Lattitude used for Coriolis (degrees)",latitude)
+                call message(1,"Latitude used for Coriolis (degrees)",latitude)
             end if
         end if
 
@@ -656,7 +649,7 @@ contains
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
-                                    this%ThetaRef, this%Fr, this%Re, this%isInviscid, this%isStratified)
+                                    this%ThetaRef, this%Fr, this%Re, Pr, this%isInviscid, this%isStratified, this%botBC_Temp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3)
             call message(0,"SGS model initialized successfully")
         end if 
@@ -861,12 +854,6 @@ contains
             & there is stratification in the problem", 323)
         end if 
 
-        
-
-        if ((.not. useCompactFD).and.(this%isStratified).and.(botBC_Temp .ne. 0)) then
-            call GracefulExit("If you use 2nd order FD in the vertical, you &
-                & cannot specify botBC_Temp to be anything other than 0, at this time.",434)
-        end if 
 
         call message("IGRID initialized successfully!")
         call message("===========================================================")
@@ -1067,7 +1054,7 @@ contains
             call transpose_y_to_z(this%That,zbuffC,this%sp_gpC)
             call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,TBC_bottom, TBC_top)
             if (this%botBC_Temp == 0) then 
-                zbuffE(:,:,1) = zero 
+                !zbuffE(:,:,1) = zero 
                 if (nrank == 0) then
                     zbuffE(1,1,1) = this%Tsurf*real(this%nx,rkind)*real(this%ny,rkind)
                 end if 
@@ -1173,7 +1160,7 @@ contains
             T1E = -this%w*this%dTdzE
             call this%spectE%fft(T1E,fT1E)
             call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
-            call this%Ops%InterpZ_Edge2Cell(tzE,tzC)
+            call this%Pade6opZ%interpz_E2C(tzE,tzC,WdTdzBC_bottom,WdTdzBC_top)
             call transpose_z_to_y(tzC,this%T_rhs, this%sp_gpC)
             this%T_rhs = this%T_rhs + fT1C
         end if
@@ -1195,8 +1182,6 @@ contains
         dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
         dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9); 
 
-        !dwdx => this%duidxjE(:,:,:,1); dwdy => this%duidxjE(:,:,:,2);
-        !dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,4);
         dwdx => this%duidxjE(:,:,:,7); dwdy => this%duidxjE(:,:,:,8);
         dudz => this%duidxjE(:,:,:,3); dvdz => this%duidxjE(:,:,:,6);
 
@@ -1293,21 +1278,6 @@ contains
 
 
         if (this%isStratified) then
-            !T1C = -this%u*this%dTdxC 
-            !T2C = -this%v*this%dTdyC
-            !T1C = T1C + T2C
-            !call this%spectC%fft(T1C,this%T_rhs) 
-            !T1E = -this%w * this%dTdzE    
-            !call this%spectC%fft(T1E,fT1E)
-            !call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
-            !if (useCompactFD) then
-            !    call this%derW%InterpZ_E2C(tzE,tzC,size(tzE,1),size(tzE,2))
-            !else
-            !    call this%Ops%InterpZ_edge2cell(tzE,tzC)
-            !end if 
-            !call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
-            !this%T_rhs = this%T_rhs + fT1C
-
             T1C = -this%u*this%T
             call this%spectC%fft(T1C,this%T_rhs)
             call this%spectC%mtimes_ik1_ip(this%T_rhs)
@@ -1321,8 +1291,6 @@ contains
             call this%Pade6opZ%ddz_E2C(tzE,tzC,WTBC_bottom,WTBC_top)
             call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
             this%T_rhs = this%T_rhs + fT1C
-        
-            
         end if 
 
     end subroutine
@@ -1463,6 +1431,10 @@ contains
                                           this%duidxjEhat, this%uEhat, this%vEhat,      this%what,    this%uhat,    &
                                           this%vhat,       this%That,  this%u,          this%v,       this%uE,      &
                                           this%vE,         this%w,     this%newTimeStep                             )
+
+            if (this%isStratified) then
+               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzE)
+            end if
             
         end if
        
@@ -4072,10 +4044,17 @@ contains
             call gracefulExit("Invalid choice for TOP WALL BCs",13)
          end select
          
-         !!! NEEDS UPDATING !!! 
-         TBC_bottom = +1; TBC_top =  0;
-         dTdzBC_bottom = -1; dTdzBC_top = 0;
-         WTBC_bottom = -1; WTBC_top = -1;
+         !!! NEEDS UPDATING !!!
+         TBC_top = 0; dTdzBC_top = 0; WTBC_top = -1;
+         WdTdzBC_top = 0;
+         select case (botBC_Temp)
+         case (0) ! Dirichlet BC for temperature at the bottom
+            TBC_bottom = 0; dTdzBC_bottom = 0; WTBC_bottom = -1; 
+            WdTdzBC_bottom = 0;      
+         case(1)  ! Homogenenous Neumann BC at the bottom
+            TBC_bottom = +1; dTdzBC_bottom = -1; WTBC_bottom = -1;
+            WdTdzBC_bottom = +1
+         end select
     end subroutine
 
 

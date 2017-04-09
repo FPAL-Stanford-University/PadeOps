@@ -6,14 +6,16 @@
 program pblwt
     use mpi
     use kind_parameters,  only: clen
-    use IncompressibleGridWallM, only: igridWallM
+    use IncompressibleGrid, only: igrid
+    !use IncompressibleGridWallM, only: igridWallM
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
     use exits, only: message
 
     implicit none
 
-    type(igridWallM), allocatable, target :: igp
+    !type(igridWallM), allocatable, target :: igp
+    type(igrid), allocatable, target :: igp
     character(len=clen) :: inputfile
     integer :: ierr
 
@@ -32,7 +34,7 @@ program pblwt
     call tic() 
     do while (igp%tsim < igp%tstop) 
        
-       call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
+       call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90 or igrid.F90)
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
        
     end do 
