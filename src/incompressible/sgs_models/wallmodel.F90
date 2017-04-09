@@ -23,6 +23,10 @@ subroutine initWallModel(this)
       call gracefulExit("Invalid choice of Wallmodel.",324)
    end select
 
+   if (this%isStratified) then
+      allocate(this%q3HAT_AtWall(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2)))
+      this%q3HAT_AtWall = dcmplx(0.d0, 0.d0)
+   end if 
 end subroutine
 
 
@@ -72,6 +76,15 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
 
 end subroutine
 
+
+subroutine computeWall_PotTFlux(this)
+   class(sgs_igrid), intent(inout) :: this
+ 
+   if (nrank == 0) then
+      this%q3HAT_AtWall(1,1) = cmplx(this%wTh_surf/this%MeanFact,zero,rkind)
+   end if
+
+end subroutine
 
 subroutine compute_and_bcast_surface_Mn(this, u, v, uhat, vhat, That )
     use mpi

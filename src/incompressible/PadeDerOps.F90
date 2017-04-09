@@ -10,7 +10,7 @@ module PadeDerOps
    
    private
 
-   public :: Pade6stagg
+   public :: Pade6stagg, fd02, cd06
 
    integer, parameter :: fd02 = 0
    integer, parameter :: cd06 = 1

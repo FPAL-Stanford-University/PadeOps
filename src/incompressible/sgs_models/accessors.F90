@@ -42,3 +42,11 @@ pure function get_uspeedmean(this) result(val)
    val = this%uspmn
 
 end function
+
+pure function get_dynamicProcedureType(this) result(val)
+   class(sgs_igrid), intent(in) :: this
+   integer                     :: val
+  
+   val = this%DynamicProcedureType 
+
+end function
