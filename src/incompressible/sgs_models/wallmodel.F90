@@ -148,29 +148,35 @@ subroutine getSurfaceQuantities(this)
     integer, parameter :: itermax = 100 
     real(rkind) :: ustarNew, ustarDiff, dTheta, ustar
     real(rkind) :: a, b, c, PsiH, PsiM, wTh, z, u, Linv
-  
-    select case (this%botBC_Temp)
-    case(0) ! Dirichlet BC for temperature 
-        dTheta = this%Tsurf - this%Tmn; Linv = zero
-        z = this%dz/two ; ustarDiff = one; wTh = zero
-        a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
-        PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
+ 
+    if (this%isStratified) then
+      select case (this%botBC_Temp)
+      case(0) ! Dirichlet BC for temperature 
+          dTheta = this%Tsurf - this%Tmn; Linv = zero
+          z = this%dz/two ; ustarDiff = one; wTh = zero
+          a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
+          PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
    
-        ! Inside the do loop all the used variables are on the stored on the stack
-        ! After the while loop these variables are copied to their counterparts
-        ! on the heap (variables part of the derived type)
-        do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
-            ustarNew = u*kappa/(a - PsiM)
-            wTh = dTheta*ustarNew*kappa/(a - PsiH) 
-            Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
-            PsiM = -c*Linv; PsiH = -b*Linv;
-            ustarDiff = abs((ustarNew - ustar)/ustarNew)
-            ustar = ustarNew; idx = idx + 1
-        end do 
-        this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
-    case(1) ! Homogeneous Neumann BC for temperature
-        this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
-        this%invObLength = zero
-        this%wTh_surf = zero
-    end select
+          ! Inside the do loop all the used variables are on the stored on the stack
+          ! After the while loop these variables are copied to their counterparts
+          ! on the heap (variables part of the derived type)
+          do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
+              ustarNew = u*kappa/(a - PsiM)
+              wTh = dTheta*ustarNew*kappa/(a - PsiH) 
+              Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
+              PsiM = -c*Linv; PsiH = -b*Linv;
+              ustarDiff = abs((ustarNew - ustar)/ustarNew)
+              ustar = ustarNew; idx = idx + 1
+          end do 
+          this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
+      case(1) ! Homogeneous Neumann BC for temperature
+          this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
+          this%invObLength = zero
+          this%wTh_surf = zero
+      end select
+   else
+          this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
+          this%invObLength = zero
+          this%wTh_surf = zero
+   end if 
 end subroutine
