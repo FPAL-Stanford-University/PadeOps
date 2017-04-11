@@ -1,0 +1,28 @@
+&INPUT
+
+inputdir  = "/scratch/users/akshays/BW/IRM_30MODES_128_CORRECTED"                ! Directory for input files
+outputdir = "/scratch/users/akshays/BW/postprocessing/IRM_30MODES_128_CORRECTED" ! Directory for output files
+
+writeviz = .TRUE.         ! Write out post-processed visualization files?
+vizsteps = 35, 50, 55, 65, 72, 90  ! Write out post-processed visualization files at these steps
+
+periodicx = .FALSE.       ! Periodic in X?
+periodicy = .FALSE.       ! Periodic in Y?
+periodicz = .TRUE.        ! Periodic in Z?
+
+x_bc1     = 0             ! Boundary condition if non-periodic (0 => general, 1 => symmetric)
+x_bcn     = 0             ! Boundary condition if non-periodic (0 => general, 1 => symmetric)
+y_bc1     = 1             ! Boundary condition if non-periodic (0 => general, 1 => symmetric)
+y_bcn     = 1             ! Boundary condition if non-periodic (0 => general, 1 => symmetric)
+z_bc1     = 0             ! Boundary condition if non-periodic (0 => general, 1 => symmetric)
+z_bcn     = 0             ! Boundary condition if non-periodic (0 => general, 1 => symmetric)
+
+derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
+
+prow = 8                  ! Number of X processors (has to be an exact factor of Miranda run)
+pcol = 1                  ! Number of Z processors (has to be an exact factor of Miranda run)
+
+num_filter  = 4           ! Number of times to filter (n^2 => k_max = 2*pi / (n*4*dx) )
+/
