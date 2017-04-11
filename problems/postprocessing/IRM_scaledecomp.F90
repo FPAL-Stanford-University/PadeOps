@@ -672,7 +672,7 @@ program IRM_scaledecomp
     end if
     
     ! Open file for scalar outputs
-    write(outputfile,'(2A)') trim(outputdir), "/post_scalar.dat"
+    write(outputfile,'(2A,I4.4,A)') trim(outputdir), "/post_scalar_", num_filter,".dat"
     if(nrank == 0) then
         open(unit=iounit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
         write(iounit,'(A,A25,8A26)') "#", "Time", "KE_L_int", "KE_S_int", "production_int", "baropycnal_int", "pdil_L_int", "pdil_S_int", "diss_L_int", "diss_S_int"
