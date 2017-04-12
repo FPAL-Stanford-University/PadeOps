@@ -54,11 +54,27 @@ module turbineMod
         procedure :: halo_communication
         procedure :: destroy_halo_communication
         procedure :: getForceRHS 
+        procedure :: reset_turbArray 
         !procedure :: dumpFullField
 
     end type
 
 contains
+
+subroutine reset_turbArray(this)
+    class(TurbineArray), intent(inout), target :: this
+    integer :: i
+
+    if(ADM) then
+      do i = 1, this%nTurbines
+        ! CHANGED to allow avoiding inst_horz_avg calculations - useful for
+        ! testing/debugging
+        call this%turbArrayADM(i)%reset_turbine()
+      end do 
+    endif
+
+end subroutine
+
 
 subroutine init(this, inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffYE, cbuffzC, cbuffzE, mesh, dx, dy, dz)
     class(TurbineArray), intent(inout), target :: this
