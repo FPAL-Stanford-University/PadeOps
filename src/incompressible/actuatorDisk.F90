@@ -53,12 +53,20 @@ module actuatorDiskmod
         procedure :: destroy
         procedure, private :: getMeanU
         procedure :: get_RHS
+        procedure :: reset_turbine
         !procedure, private :: smear_this_source 
     end type
 
 
 contains
 
+subroutine reset_turbine(this)
+    class(actuatorDisk), intent(inout) :: this
+   
+    this%alpha_tau = 1.d0
+
+end subroutine
+   
 subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
     class(actuatorDisk), intent(inout) :: this
     real(rkind), intent(in), dimension(:,:,:), target :: xG, yG, zG

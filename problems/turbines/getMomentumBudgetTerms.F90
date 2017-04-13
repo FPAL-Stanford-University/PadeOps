@@ -76,14 +76,14 @@ program budgetTerms
    call initializeEverything()
   
    print*, RID, tid_initial, tid_final, dtid
+   allocate(turbArray)
+   ! Initialize WT
+   call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
 
    ! DO LOOP START HERE
    do ind = tid_initial, tid_final, dtid 
         call tic()
         
-        ! Initialize WT
-        allocate(turbArray)
-        call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
         
         
         ! READ FIELDS)
@@ -155,14 +155,16 @@ program budgetTerms
         ! derivative of P: dP/dx
         P_store = P_store + pC
 
+        call turbArray%reset_turbArray()
         ! WRAP UP 
-        deallocate(turbArray)
         call toc()
 
         nvis = nvis + 1
         
         ! END DO LOOP
    end do
+   
+   deallocate(turbArray)
 
         ! Turbine Force
    call dumpFullField(fx_turb_store/real(nvis,rkind),"xtrb")
@@ -282,7 +284,7 @@ contains
       allocate( wE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)) )
       allocate( u_rhs(sp_gpC%ysz(1),sp_gpC%ysz(2),sp_gpC%ysz(3))) ! -- what should this size be?
       allocate( v_rhs(sp_gpC%ysz(1),sp_gpC%ysz(2),sp_gpC%ysz(3))) ! -- what should this size be?
-      allocate( w_rhs(sp_gpC%ysz(1),sp_gpC%ysz(2),sp_gpC%ysz(3))) ! -- what should this size be?
+      allocate( w_rhs(sp_gpE%ysz(1),sp_gpE%ysz(2),sp_gpE%ysz(3))) ! -- what should this size be?
       allocate(filteredSpeedSq(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
       allocate( duidxjE2(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3),4) )
 
