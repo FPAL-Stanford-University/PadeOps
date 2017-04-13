@@ -3,12 +3,12 @@ module IRM_scaledecomp_mod
     use kind_parameters,  only: rkind, clen, mpirkind, mpickind
     use constants,        only: zero, eps, half, one, three
     use miranda_tools,    only: miranda_reader
-    use io_hdf5_stuff,    only: io_hdf5
     use DerivativesMod,   only: derivatives
     use FiltersMod,       only: filters
     use decomp_2d,        only: nrank, nproc, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y, &
                                 decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize
     use exits,            only: message
+    use io_hdf5_stuff,    only: io_hdf5
 
     implicit none
 
@@ -590,7 +590,7 @@ program IRM_scaledecomp
     character(len=clen) :: outputfile
     integer :: iounit = 93
 
-    integer :: ierr, step, i
+    integer :: ierr, istep, step, i
 
     !======================================================================================================!
     ! Note about usage: All 3D arrays are in Y decomposition.
@@ -681,7 +681,15 @@ program IRM_scaledecomp
     call toc("Time to initialize everything: ")
 
     ! Loop through viz dumps
-    do step = 0,mir%nsteps-1
+    do istep = 1,size(vizsteps,1)
+        step = vizsteps(istep)
+
+        if ( ( step < 0 ) .or. (step > mir%nsteps-1) ) then
+            if (nrank == 0) then
+                print '(A,I0,A)', "WARNING: Step ", step, " not available in the Miranda viz files. Check your input file for correctness."
+            end if
+        end if
+
         call tic()  ! Start timer
 
         call message(0,"Reading in data for step",step)
