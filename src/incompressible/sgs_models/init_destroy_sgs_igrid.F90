@@ -35,7 +35,7 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
    end if 
 end subroutine 
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, isInviscid, isStratified, botBC_temp)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, isInviscid, isStratified, botBC_temp, initSpinUp)
   class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
@@ -49,7 +49,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   complex(rkind), dimension(:,:,:,:), intent(in), target :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
   type(Pade6stagg), target, intent(in) :: PadeDer
   logical, intent(in) :: isInviscid, isStratified
-  integer, intent(in), optional :: botBC_temp
+  integer, intent(in) :: botBC_temp
+  logical, intent(in), optional :: initSpinUp
 
   ! Input file variables
   logical :: useWallDamping = .false., useSGSDynamicRestart = .false., useVerticalTfilter = .false.
@@ -83,7 +84,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%fzE => fBody_z
   this%meanfact = one/(real(gpC%xsz(1),rkind) * real(gpC%ysz(2),rkind))
   this%isStratified = isStratified
-  if (present(botBC_Temp)) this%botBC_Temp = botBC_Temp
+  !if (present(botBC_Temp)) 
+  this%botBC_Temp = botBC_Temp
 
   allocate(this%tau_ij(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),6))
   this%tau_11   => this%tau_ij(:,:,:,1)
@@ -96,12 +98,17 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   allocate(this%tau_23(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
   this%tau_ij = zero
 
-  if (this%isStratified) then
+  if (present(initSpinUp)) then
+      this%initSpinUp = initSpinUp
+  end if
+
+  if (this%isStratified .or. this%initSpinUp) then
      allocate(this%q1C(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
      allocate(this%q2C(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
      allocate(this%q3E(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
      this%q1C = zero; this%q2C = zero; this%q3E = zero
   end if 
+
 
 
   ! Link buffers
