@@ -1,12 +1,12 @@
 module sliding_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,two,eight,three,six
+    use constants,        only: one,two,three,eight,three,six
     use FiltersMod,       only: filters
     implicit none
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one
-    real(rkind) :: minVF = 1.D-6, thick = two
+    real(rkind) :: minVF = 1.D-6, thick = three, shock_thick = two
     real(rkind) :: yield = 1.D9, yield2 = 1.D9
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
@@ -186,19 +186,19 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(8) :: fparams
     integer, dimension(2) :: iparams
 
-    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, shock_init, interface_init
+    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, shock_thick, minVF, shock_init, interface_init
     
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PROBINPUT)
+    close(ioUnit)
+
     ! Make both materials the same
     p_infty_2 = p_infty
     Rgas_2    = Rgas
     gamma_2   = gamma
     mu_2      = mu
     rho_0_2   = rho_0
-
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PROBINPUT)
-    close(ioUnit)
 
     ! Initialize mygfil
     call mygfil%init(                        decomp, &
@@ -230,7 +230,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%plast = plastic;  mix%material(1)%explPlast = explPlast
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
 
-        dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
+        dum = half * ( one - erf( (x-shock_init)/(shock_thick*dx) ) )
 
         u   = zero
         v   = half*dum -half*(one-dum)

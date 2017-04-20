@@ -781,39 +781,11 @@ stop
 
         integer :: imat
 
-        real(rkind) :: v_corr
-        integer :: maskExponent = 10
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp, mask, u_mod, v_mod, w_mod
-
-        where( (this%material(1)%VF < 0.9) )
-            mask = one
-        elsewhere
-            mask = zero
-        end where
-        call filter3D(this%decomp, this%gfil, mask, 1, x_bc, y_bc, z_bc)
-
-        where( (this%material(1)%VF > 0.9) .and. (this%material(1)%VF < 0.99) )
-            tmp = one
-        elsewhere
-            tmp = zero
-        end where
-
         do imat = 1, this%ns
             if (this%use_gTg) then
                 call this%material(imat)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
             else
-                u_mod = u
-                w_mod = w
-                ! Hard code velocity extension for now
-                if (imat == 1) then
-                    v_corr = P_SUM(tmp*v)/P_SUM(tmp)
-                    print*, "v_corr = ", v_corr
-                    v_mod = v + ( one-this%material(1)%VF )*(half + half) !<<<---- See here
-                    print*, "v_mod = ", P_SUM(tmp*v_mod)/P_SUM(tmp)
-                else
-                    v_mod = -half !<<<---- See here
-                end if
-                call this%material(imat)%update_g(isub,dt,rho,u_mod,v_mod,w_mod,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+                call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
             end if
         end do
 
