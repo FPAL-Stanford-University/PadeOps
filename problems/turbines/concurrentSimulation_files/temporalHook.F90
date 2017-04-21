@@ -9,7 +9,7 @@ module temporalHook
 
     implicit none 
 
-    integer :: nt_print2screen = 1
+    integer :: nt_print2screen = 20
     integer :: tid_statsDump = 5000
     integer :: tid_compStats = 100
     real(rkind) :: maxDiv, DomMaxDiv
@@ -20,8 +20,8 @@ module temporalHook
 
 contains
 
-    subroutine doTemporalStuff(gp)
-        class(igrid), intent(inout) :: gp 
+    subroutine doTemporalStuff(prec, gp)
+        class(igrid), intent(inout) :: prec, gp 
 
         if (mod(gp%step,nt_print2screen) == 0) then
             maxDiv = maxval(gp%divergence)
@@ -29,6 +29,8 @@ contains
             call message(0,"Time",gp%tsim)
             call message(1,"TIDX:",gp%step)
             call message(1,"MaxDiv:",DomMaxDiv)
+            call message(1,"Prec u_star:",prec%sgsmodel%get_ustar())
+            call message(1,"Main u_star:",gp%sgsmodel%get_ustar())
             call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
             call message_min_max(1,"Bounds for v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
             call message_min_max(1,"Bounds for w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))

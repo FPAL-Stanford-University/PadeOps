@@ -463,26 +463,19 @@ contains
 
 
         ! STEP 6: ALLOCATE MEMORY FOR FIELD ARRAYS
-        !if (this%isStratified) then
-            allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),7))
-            allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4))
-            allocate(this%dTdzE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
-            allocate(this%dTdzC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
-            allocate(this%dTdxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
-            allocate(this%dTdyC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
-            call this%spectC%alloc_r2c_out(this%SfieldsC,4)
-            call this%spectC%alloc_r2c_out(this%dTdxH)
-            call this%spectC%alloc_r2c_out(this%dTdyH)
-            call this%spectE%alloc_r2c_out(this%dTdzH)
-            call this%spectC%alloc_r2c_out(this%dTdzHC)
-            call this%spectC%alloc_r2c_out(this%rhsC,3); 
-            call this%spectC%alloc_r2c_out(this%OrhsC,3)
-        !else
-        !    allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6))
-        !    allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),3))
-        !    call this%spectC%alloc_r2c_out(this%SfieldsC,3)
-        !    call this%spectC%alloc_r2c_out(this%rhsC,2); call this%spectC%alloc_r2c_out(this%OrhsC,2)
-        !end if 
+        allocate(this%PfieldsC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),7))
+        allocate(this%PfieldsE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),4))
+        allocate(this%dTdzE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+        allocate(this%dTdzC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+        allocate(this%dTdxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+        allocate(this%dTdyC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+        call this%spectC%alloc_r2c_out(this%SfieldsC,4)
+        call this%spectC%alloc_r2c_out(this%dTdxH)
+        call this%spectC%alloc_r2c_out(this%dTdyH)
+        call this%spectE%alloc_r2c_out(this%dTdzH)
+        call this%spectC%alloc_r2c_out(this%dTdzHC)
+        call this%spectC%alloc_r2c_out(this%rhsC,3); 
+        call this%spectC%alloc_r2c_out(this%OrhsC,3)
         call this%spectE%alloc_r2c_out(this%SfieldsE,4)
         allocate(this%divergence(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
         allocate(this%duidxjC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9))
@@ -620,12 +613,12 @@ contains
             if (this%assume_fplane) then
                 this%coriolis_sine   = sin(latitude*pi/180.d0)
                 this%coriolis_cosine = 0.d0
-                call message(1, "Making the f-plane assumption (Lattitude effect &
+                call message(1, "Making the f-plane assumption (latitude effect &
                 & ignored in w equation)")
             else
                 this%coriolis_sine   = sin(latitude*pi/180.d0)
                 this%coriolis_cosine = cos(latitude*pi/180.d0)
-                call message(1,"Lattitude used for Coriolis (degrees)",latitude)
+                call message(1,"Latitude used for Coriolis (degrees)",latitude)
             end if
         end if
 
@@ -656,7 +649,7 @@ contains
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
-                                    this%ThetaRef, this%Fr, this%Re, this%isInviscid, this%isStratified, this%botBC_Temp)
+                                    this%ThetaRef, this%Fr, this%Re, Pr, this%isInviscid, this%isStratified, this%botBC_Temp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3)
             call message(0,"SGS model initialized successfully")
         end if 
@@ -1438,6 +1431,10 @@ contains
                                           this%duidxjEhat, this%uEhat, this%vEhat,      this%what,    this%uhat,    &
                                           this%vhat,       this%That,  this%u,          this%v,       this%uE,      &
                                           this%vE,         this%w,     this%newTimeStep                             )
+
+            if (this%isStratified) then
+               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzE)
+            end if
             
         end if
        

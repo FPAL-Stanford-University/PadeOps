@@ -21,7 +21,7 @@ module sgsmod_igrid
     real(rkind), parameter :: beta_h = 7.8_rkind, beta_m = 4.8_rkind
 
     type :: sgs_igrid
-        !private !-- how do I make only DynamicProcedureType and cmodel_gloal
+        private !-- how do I make only DynamicProcedureType and cmodel_gloal
         !public, so that it can be accessed from problem_files/temporalHooks.F90 ???
         type(decomp_info), pointer :: gpC, gpE
         type(spectral), pointer :: spectC, spectE
@@ -30,17 +30,18 @@ module sgsmod_igrid
         real(rkind), dimension(:), allocatable :: cmodelC, cmodelE
         real(rkind) :: cmodel_global, cmodel_global_x, cmodel_global_y, cmodel_global_z
         real(rkind), dimension(:,:,:), allocatable :: nu_sgs_C, nu_sgs_E
+        real(rkind), dimension(:,:,:), allocatable :: kappa_sgs_C, kappa_sgs_E
         logical :: isEddyViscosityModel = .false.
         real(rkind), dimension(:,:,:,:), allocatable :: tau_ij
         real(rkind), dimension(:,:,:), pointer :: tau_11, tau_12, tau_22, tau_33, tau_13C, tau_23C
         real(rkind), dimension(:,:,:), allocatable :: tau_13, tau_23
-        real(rkind), dimension(:,:,:), allocatable :: q1, q2, q3 
         real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E
         real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffzC, rbuffyC, rbuffxE, rbuffyE, rbuffzE
         complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
         type(Pade6stagg), pointer :: PadeDer
         logical :: explicitCalcEdgeEddyViscosity = .false.
-      
+        real(rkind), dimension(:,:,:), allocatable :: q1C, q2C, q3E 
+
 
         ! Wall model
         real(rkind), dimension(:,:,:,:), allocatable :: tauijWM
@@ -50,8 +51,9 @@ module sgsmod_igrid
         logical :: useWallModel = .false. 
         integer :: botBC_temp = 1
         real(rkind) :: ustar = 1.d0, InvObLength = 0.d0, umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0, wTh_surf = 0.d0
-        real(rkind) :: dz, z0, meanfact, ThetaRef, Fr, WallMfactor, Re
+        real(rkind) :: dz, z0, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr
         real(rkind), pointer :: Tsurf
+        complex(rkind), dimension(:,:), allocatable :: q3HAT_AtWall
 
         ! for dynamic procedures - all are at edges
         type(gaussian) :: gaussianTestFilterZ
@@ -81,6 +83,7 @@ module sgsmod_igrid
             procedure, private :: computeWallStress
             procedure, private :: compute_and_bcast_surface_Mn
             procedure, private :: getSurfaceQuantities
+            procedure, private :: computeWall_PotTFlux
          
             !! ALL DYNAMIC PROCEDURE SUBROUTINES
             procedure, private :: allocateMemory_DynamicProcedure
@@ -94,9 +97,11 @@ module sgsmod_igrid
             procedure, private :: DoStandardDynamicProcedure
             procedure, private :: DoGlobalDynamicProcedure
 
-            !! ALL GET_TAU PROCEDURES
+            !! ALL SGS SOURCE/SINK PROCEDURES
+            procedure          :: getQjSGS
             procedure          :: getTauSGS
             procedure          :: getRHS_SGS
+            procedure          :: getRHS_SGS_Scalar
             procedure, private :: get_SGS_kernel
             procedure, private :: multiply_by_model_constant 
             procedure          :: dumpSGSDynamicRestart
@@ -117,7 +122,7 @@ module sgsmod_igrid
             procedure          :: get_umean 
             procedure          :: get_vmean 
             procedure          :: get_uspeedmean 
-
+            procedure          :: get_DynamicProcedureType
     end type 
 
 contains
@@ -202,6 +207,63 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
    wrhs = wrhs - cbuffy2
 
 end subroutine
+
+subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzE)
+   class(sgs_igrid), intent(inout), target :: this
+   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: Trhs
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC
+   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdzE
+   complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffz1, cbuffz2
+
+   cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
+   cbuffz1 => this%cbuffzC(:,:,:,1); cbuffz2 => this%cbuffzE(:,:,:,1) 
+
+   ! First get qj's 
+   call this%getQjSGS(dTdxC, dTdyC, dTdzE)
+
+   ! ddx(q1)
+   call this%spectC%fft(this%q1C, cbuffy1)
+   call this%spectC%mtimes_ik1_ip(cbuffy1)
+   Trhs = Trhs - cbuffy1
+
+   ! ddy(q2)
+   call this%spectC%fft(this%q2C, cbuffy1)
+   call this%spectC%mtimes_ik2_ip(cbuffy1)
+   Trhs = Trhs - cbuffy1
+
+   ! ddz(q3)
+   call this%spectE%fft(this%q3E, cbuffy2)
+   call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
+   if (this%useWallModel) then
+      cbuffz2(:,:,1) = this%q3HAT_AtWall
+   end if 
+   call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
+   call transpose_z_to_y(cbuffz1,cbuffy1,this%sp_gpC)
+   Trhs = Trhs - cbuffy1
+
+end subroutine
+
+subroutine getQjSGS(this,dTdxC, dTdyC, dTdzE)
+   class(sgs_igrid), intent(inout), target :: this
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC
+   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdzE
+
+   if (this%useWallModel) call this%computeWall_PotTFlux()
+
+   if (this%isEddyViscosityModel) then
+      this%kappa_sgs_C = this%nu_sgs_C/this%Pr
+      this%kappa_sgs_E = this%nu_sgs_E/this%Pr
+
+      ! No dynamic procedure as of now, so make sure that you provide a Prandtl
+      ! number for initialization.
+
+      this%q1C = -this%kappa_sgs_C*dTdxC
+      this%q2C = -this%kappa_sgs_C*dTdyC
+      this%q3E = -this%kappa_sgs_E*dTdzE
+   end if
+
+end subroutine
+
 
 subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep)
    class(sgs_igrid), intent(inout) :: this
