@@ -52,7 +52,7 @@ program concurrentSimulation
        
        call prec%timeAdvance()                                           !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
        call igp%timeAdvance(prec%get_dt())                                !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
-       call doTemporalStuff(igp)                                        !<-- Go to the temporal hook (see temporalHook.F90)
+       call doTemporalStuff(prec, igp)                                        !<-- Go to the temporal hook (see temporalHook.F90)
        
     end do 
  

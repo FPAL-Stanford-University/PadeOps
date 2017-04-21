@@ -86,10 +86,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    !real(rkind), dimension(:,:,:), allocatable :: randArr
-    real(rkind) :: z0init, epsnd = 0.1
+    real(rkind), dimension(:,:,:), allocatable :: randArr
+    real(rkind) :: z0init, epsnd = 0.1, sig
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: nz, nzE, ioUnit
+    integer :: nz, nzE, ioUnit, k
     real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0
     real(rkind) :: zpeak = 0.2d0
     real(rkind)  :: Lx = one, Ly = one, Lz = one
@@ -110,28 +110,28 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    epsnd = 0.0d0
+    epsnd = 0.1d0
 
     u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     wC= zero  
    
-    ! Add random numbers
-    !allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
-    !do k = 1,size(u,3)
-    !    sig = randomScaleFact*(one/kappa)*log(z(1,1,k)/z0nd)
-    !    u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
-    !end do  
-    !deallocate(randArr)
-    !
-    !allocate(randArr(size(v,1),size(v,2),size(v,3)))
-    !call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
-    !do k = 1,size(v,3)
-    !    sig = randomScaleFact*z(1,1,k)*exp(-half*(z(1,1,k)/zpeak/Lz)**2)
-    !    v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
-    !end do  
-    !deallocate(randArr)
+    !Add random numbers
+    allocate(randArr(size(u,1),size(u,2),size(u,3)))
+    call gaussian_random(randArr,zero,one,seedu + 10*nrank)
+    do k = 1,size(u,3)
+        sig = randomScaleFact*(one/kappa)*log(z(1,1,k)/z0init)
+        u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
+    end do  
+    deallocate(randArr)
+    
+    allocate(randArr(size(v,1),size(v,2),size(v,3)))
+    call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
+    do k = 1,size(v,3)
+        sig = randomScaleFact*z(1,1,k)*exp(-half*(z(1,1,k)/zpeak/Lz)**2)
+        v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
+    end do  
+    deallocate(randArr)
 
 
     ! Interpolate wC to w
