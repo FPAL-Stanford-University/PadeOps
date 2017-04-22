@@ -28,7 +28,7 @@ subroutine allocateMemory_EddyViscosity(this)
   allocate(this%S_ij_C(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6))
   allocate(this%S_ij_E(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),6))
 
-  if (this%isStratified) then
+  if (this%isStratified .or. this%initspinup) then
       allocate(this%kappa_sgs_C(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
       allocate(this%kappa_sgs_E(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
   end if
