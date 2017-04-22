@@ -41,7 +41,7 @@ module sgsmod_igrid
         type(Pade6stagg), pointer :: PadeDer
         logical :: explicitCalcEdgeEddyViscosity = .false.
         real(rkind), dimension(:,:,:), allocatable :: q1C, q2C, q3E 
-
+        logical :: initspinup = .false. 
 
         ! Wall model
         real(rkind), dimension(:,:,:,:), allocatable :: tauijWM
@@ -50,7 +50,8 @@ module sgsmod_igrid
         complex(rkind), dimension(:,:,:), allocatable :: Tfilhat, Tfilhatz1, Tfilhatz2
         logical :: useWallModel = .false. 
         integer :: botBC_temp = 1
-        real(rkind) :: ustar = 1.d0, InvObLength = 0.d0, umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0, wTh_surf = 0.d0
+        real(rkind), public :: ustar = 1.d0, InvObLength = 0.d0
+        real(rkind) :: umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0, wTh_surf = 0.d0
         real(rkind) :: dz, z0, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr
         real(rkind), pointer :: Tsurf
         complex(rkind), dimension(:,:), allocatable :: q3HAT_AtWall
@@ -257,6 +258,9 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzE)
       ! No dynamic procedure as of now, so make sure that you provide a Prandtl
       ! number for initialization.
 
+      !print*, dTdxC(10,10,10)
+      !print*, this%kappa_sgs_C(10,10,10)
+      !print*, this%q1C(10,10,10)
       this%q1C = -this%kappa_sgs_C*dTdxC
       this%q2C = -this%kappa_sgs_C*dTdyC
       this%q3E = -this%kappa_sgs_E*dTdzE

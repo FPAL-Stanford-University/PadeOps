@@ -1,4 +1,4 @@
-program budgetTerms
+program getEnergyBudgetTerms
    use mpi
    use constants
    use kind_parameters,  only: rkind, clen
@@ -19,13 +19,14 @@ program budgetTerms
    type(turbineArray), allocatable :: turbArray
 
    complex(rkind), parameter :: zeroC = dcmplx(0.0D0, 0.0D0)
-   real(rkind), parameter :: Re = 1.d10, Fr = 1.d10, Pr = 1.d0
+   real(rkind), parameter :: Re = 1.d10, Fr = 1.d10, Pr = 1.d10
    real(rkind), parameter :: Tsurf = 1.d0, ThetaRef = 1.d0
    real(rkind) :: dx, dy, dz, Lx, Ly, Lz
    real(rkind), dimension(:,:,:,:), allocatable :: mesh
    real(rkind), dimension(:,:,:), allocatable :: zMeshE, filteredSpeedSq, fx_turb_store, fy_turb_store, fz_turb_store 
    real(rkind), dimension(:,:,:), allocatable :: dPdx_store, dPdy_store, dPdz_store, u_store, v_store, w_store, P_store, uu_store, uv_store, uw_store, vv_store, vw_store, ww_store
    real(rkind), dimension(:,:,:), allocatable :: u_bar, v_bar, w_bar, p_bar, uprime_uprime_bar, uprime_vprime_bar, uprime_wprime_bar, vprime_vprime_bar, vprime_wprime_bar, wprime_wprime_bar
+   real(rkind), dimension(:,:,:), allocatable :: K_bar, fx_turb_bar, fy_turb_bar, fz_turb_bar, fx_sgs_bar, fy_sgs_bar, fz_sgs_bar
    real(rkind), dimension(:,:,:), allocatable :: fx_sgs_store, fy_sgs_store, fz_sgs_store
    type(spectral), target  :: spectE, spectC
    type(decomp_info) :: gpC, gpE
@@ -47,8 +48,8 @@ program budgetTerms
 
    character(len=clen) :: inputdir, outputdir, inputFile 
    integer :: nx, ny, nz, ioUnit, i, j, k, nvis = 0, tid_initial, tid_final, dtid, ind=0
-   real(rkind) :: z0init, dt, inst_horz_avg_turb(8), tsim
-   namelist /INPUT/ Lx, Ly, Lz, z0init, outputdir, inputdir, nx, ny, nz, RID, tid_initial, tid_final, dtid
+   real(rkind) :: dt, inst_horz_avg_turb(8), tsim
+   namelist /INPUT/ Lx, Ly, Lz, outputdir, inputdir, nx, ny, nz, RID, tid_initial, tid_final, dtid
 
    ! Do MPI stuff
    call MPI_Init(ierr)               
@@ -74,16 +75,14 @@ program budgetTerms
    sp_gpE => spectE%spectdecomp
 
    call initializeEverything()
-  
-   print*, RID, tid_initial, tid_final, dtid
-   allocate(turbArray)
-   ! Initialize WT
-   call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
 
    ! DO LOOP START HERE
    do ind = tid_initial, tid_final, dtid 
         call tic()
         
+        ! Initialize WT
+        allocate(turbArray)
+        call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
         
         
         ! READ FIELDS)
@@ -155,8 +154,8 @@ program budgetTerms
         ! derivative of P: dP/dx
         P_store = P_store + pC
 
-        call turbArray%reset_turbArray()
         ! WRAP UP 
+        deallocate(turbArray)
         call toc()
 
         nvis = nvis + 1
@@ -164,22 +163,33 @@ program budgetTerms
         ! END DO LOOP
    end do
    
-   deallocate(turbArray)
-
-        ! Turbine Force
-   call dumpFullField(fx_turb_store/real(nvis,rkind),"xtrb")
-   call dumpFullField(fy_turb_store/real(nvis,rkind),"ytrb")
-   call dumpFullField(fz_turb_store/real(nvis,rkind),"ztrb")
-   
-        ! SGS Force
-   call dumpFullField(fx_sgs_store/real(nvis,rkind),"xsgs")
-   call dumpFullField(fy_sgs_store/real(nvis,rkind),"ysgs")
-   call dumpFullField(fz_sgs_store/real(nvis,rkind),"zsgs")
-
    u_bar = u_store/real(nvis,rkind)
    v_bar = v_store/real(nvis,rkind)
    w_bar = w_store/real(nvis,rkind)
    p_bar = P_store/real(nvis,rkind)
+   K_bar = 0.5*(u_bar**2 +v_bar**2 +w_bar**2)
+   fx_turb_bar = fx_turb_store/real(nvis,rkind)
+   fy_turb_bar = fy_turb_store/real(nvis,rkind)
+   fz_turb_bar = fz_turb_store/real(nvis,rkind)
+   fx_sgs_bar  = fx_sgs_store/real(nvis,rkind)
+   fy_sgs_bar  = fy_sgs_store/real(nvis,rkind)
+   fz_sgs_bar  = fz_sgs_store/real(nvis,rkind)
+
+        ! Turbine Force
+   call dumpFullField(fx_turb_bar,"xtrb")
+   call dumpFullField(fy_turb_bar,"ytrb")
+   call dumpFullField(fz_turb_bar,"ztrb")
+   
+        ! SGS Force
+   call dumpFullField(fx_sgs_bar,"xsgs")
+   call dumpFullField(fy_sgs_bar,"ysgs")
+   call dumpFullField(fz_sgs_bar,"zsgs")
+        
+        !Advection of Mean Kinetic Energy
+   call getddx(K_bar*u_bar,rbuffxC(:,:,:,1))
+   call getddy(K_bar*v_bar,rbuffxC(:,:,:,2))
+   call getddz(K_bar*w_bar,rbuffxC(:,:,:,3))
+   call dumpFullField(rbuffxC(:,:,:,1)+rbuffxC(:,:,:,2)+rbuffxC(:,:,:,3),"mken")
 
         !Pressure Gradient
    call getddx(p_bar,rbuffxC(:,:,:,1))
@@ -212,6 +222,41 @@ program budgetTerms
    vprime_wprime_bar = vw_store/real(nvis,rkind)-v_bar*w_bar
    wprime_wprime_bar = ww_store/real(nvis,rkind)-w_bar*w_bar
 
+        !Advection of Turbulent Kinetic Energy (Turbulent Transport))
+   call getddx(u_bar*uprime_uprime_bar+v_bar*uprime_vprime_bar+w_bar*uprime_wprime_bar,rbuffxC(:,:,:,1))
+   call getddy(u_bar*uprime_vprime_bar+v_bar*vprime_vprime_bar+w_bar*vprime_wprime_bar,rbuffxC(:,:,:,2))
+   call getddz(u_bar*uprime_wprime_bar+v_bar*vprime_wprime_bar+w_bar*wprime_wprime_bar,rbuffxC(:,:,:,3))
+   call dumpFullField(rbuffxC(:,:,:,1)+rbuffxC(:,:,:,2)+rbuffxC(:,:,:,3),"tken")
+
+        !Body Forces
+   call dumpFullField(u_bar*fx_turb_bar+v_bar*fy_turb_bar+w_bar*fz_turb_bar,"etrb")
+   call dumpFullField(u_bar*fx_sgs_bar +v_bar*fy_sgs_bar +w_bar*fz_sgs_bar ,"esgs")
+   call dumpFullField(u_bar*1          +v_bar*1          +w_bar*1          ,"egrd")
+
+        ! Pressure Diffusion
+   call getddx(u_bar*P_bar,rbuffxC(:,:,:,1))
+   call getddy(v_bar*P_bar,rbuffxC(:,:,:,2))
+   call getddz(w_bar*P_bar,rbuffxC(:,:,:,3))
+   call dumpFullField((rbuffxC(:,:,:,1)+rbuffxC(:,:,:,2)+rbuffxC(:,:,:,3)),"pdif")
+        
+        !Production
+   call getddx(u_bar,rbuffxC(:,:,:,1))
+   call getddy(u_bar,rbuffxC(:,:,:,2))
+   call getddz(u_bar,rbuffxC(:,:,:,3))
+   rbuffxC(:,:,:,4) = uprime_uprime_bar*rbuffxC(:,:,:,1)+uprime_vprime_bar*rbuffxC(:,:,:,2)+uprime_wprime_bar*rbuffxC(:,:,:,3)
+
+   call getddx(v_bar,rbuffxC(:,:,:,1))
+   call getddy(v_bar,rbuffxC(:,:,:,2))
+   call getddz(v_bar,rbuffxC(:,:,:,3))
+   rbuffxC(:,:,:,4) = rbuffxC(:,:,:,4)+uprime_vprime_bar*rbuffxC(:,:,:,1)+vprime_vprime_bar*rbuffxC(:,:,:,2)+vprime_wprime_bar*rbuffxC(:,:,:,3)
+
+   call getddx(w_bar,rbuffxC(:,:,:,1))
+   call getddy(w_bar,rbuffxC(:,:,:,2))
+   call getddz(w_bar,rbuffxC(:,:,:,3))
+   rbuffxC(:,:,:,4) = rbuffxC(:,:,:,4)+uprime_wprime_bar*rbuffxC(:,:,:,1)+vprime_wprime_bar*rbuffxC(:,:,:,2)+wprime_wprime_bar*rbuffxC(:,:,:,3)
+
+   call dumpFullField(rbuffxC(:,:,:,4),"prod")
+        
         !Reynolds stress gradient
    call getddx(uprime_uprime_bar,rbuffxC(:,:,:,1))
    call getddy(uprime_vprime_bar,rbuffxC(:,:,:,2))
@@ -284,7 +329,7 @@ contains
       allocate( wE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)) )
       allocate( u_rhs(sp_gpC%ysz(1),sp_gpC%ysz(2),sp_gpC%ysz(3))) ! -- what should this size be?
       allocate( v_rhs(sp_gpC%ysz(1),sp_gpC%ysz(2),sp_gpC%ysz(3))) ! -- what should this size be?
-      allocate( w_rhs(sp_gpE%ysz(1),sp_gpE%ysz(2),sp_gpE%ysz(3))) ! -- what should this size be?
+      allocate( w_rhs(sp_gpC%ysz(1),sp_gpC%ysz(2),sp_gpC%ysz(3))) ! -- what should this size be?
       allocate(filteredSpeedSq(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
       allocate( duidxjE2(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3),4) )
 
@@ -302,10 +347,16 @@ contains
       allocate(fx_turb_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
       allocate(fy_turb_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
       allocate(fz_turb_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(fx_turb_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(fy_turb_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(fz_turb_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
       
       allocate(fx_sgs_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
       allocate(fy_sgs_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
       allocate(fz_sgs_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(fx_sgs_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(fy_sgs_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(fz_sgs_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
 
       allocate(dPdx_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
       allocate(dPdy_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
@@ -326,6 +377,7 @@ contains
       allocate(v_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
       allocate(w_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
       allocate(p_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(K_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
 
       allocate(uprime_uprime_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
       allocate(uprime_vprime_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
@@ -390,10 +442,11 @@ contains
       ! Initialize sgs
       call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, &
                       fbody_z, computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, &
-                      rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, .false., .false., 1)
+                      rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, .false., .false.,1)
       call newsgs%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
 
 
+!subroutine init(Re, Pr, isInviscid, isStratified, botBC_temp)
 
    end subroutine
 

@@ -36,7 +36,7 @@ module turbineMod
         type(spectral), pointer :: spectC, spectE
         type(staggOps), allocatable :: OpsNU
  
-        real(rkind), dimension(:,:,:), allocatable :: local_rbuffxC
+        real(rkind), dimension(:,:,:,:), allocatable :: local_rbuffxC
         real(rkind), dimension(:,:,:), pointer :: fx, fy, fz
         complex(rkind), dimension(:,:,:), pointer :: fChat, fEhat, zbuffC, zbuffE
 
@@ -105,9 +105,9 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbu
     this%spectE => spectE
     this%sp_gpE => this%spectE%spectdecomp
 
-    allocate(this%local_rbuffxC(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+    allocate(this%local_rbuffxC(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3), 3))
 
-    this%fx => rbuffxC(:,:,:,1); this%fy => rbuffxC(:,:,:,2);  this%fz => this%local_rbuffxC(:,:,:)
+    this%fx => this%local_rbuffxC(:,:,:,1); this%fy => this%local_rbuffxC(:,:,:,2);  this%fz => this%local_rbuffxC(:,:,:,3)
     this%fChat => cbuffyC(:,:,:,1); this%fEhat => cbuffyE(:,:,:,1)
     this%zbuffC => cbuffzC(:,:,:,1); this%zbuffE => cbuffzE(:,:,:,1)
 

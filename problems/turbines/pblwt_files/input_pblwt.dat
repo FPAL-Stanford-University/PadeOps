@@ -1,6 +1,6 @@
 &INPUT
-inputdir              = "/home/aditya90/Codes/PadeOps/data/pblwt/"   ! Directory for any input files
-outputdir             = "/home/aditya90/Codes/PadeOps/data/pblwt/"   ! Directory for all output files
+inputdir              = "/home/aditya90/PadeOps/data/pblwt/"   ! Directory for any input files
+outputdir             = "/home/aditya90/PadeOps/data/pblwt/"   ! Directory for all output files
 nx                    = 128          ! Number of points in X
 ny                    = 128          ! Number of points in Y
 nz                    = 128          ! Number of points in Z
@@ -21,6 +21,7 @@ NumericalSchemeVert   = 1           ! 0: Second order FD, 1: Sixth order Compact
 ComputeStokesPressure = .TRUE.      ! This would be FALSE only is very special circumstances.  
 useDealiasFilterVert  = .FALSE.     ! Dealiasing filter used in vertical direction
 t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproject if needed.
+useExhaustiveFFT      = .TRUE.      ! Do you want to perform an exhaustive search for the best FFT algorithm?
 /
 /
 &IO
@@ -66,6 +67,7 @@ Gz                    = 0.D0        ! Geostrophic wind in x; used if useGeostrop
 dPfdx                 = 1.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
+useSGS                = .true.      ! Do you want to use the SGS model?  
 /
 /
 &PRESSURE_CALC
@@ -76,33 +78,33 @@ P_compFreq            = 10          ! How often (timesteps) do you want to compu
 /
 /
 &BCs
-topWall               = 2           ! no_slip = 1, slip = 2
-useSpongeLayer        = .FALSE.     ! Use a sponge layer at the top 
+botWall               = 3           ! no_slip = 1, slip = 2, wall model = 3 
+topWall               = 2           ! no_slip = 1, slip = 2, wall model = 3
+useSpongeLayer        = .FALSE.      ! Use a sponge layer at the top 
 zstSponge             = 0.8d0       ! Height above which the sponge layer is active
 SpongeTscale          = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
+useFringe             = .false.     ! This is false if simulation is periodic. 
+botBC_Temp            = 1           ! 0: Dirichlet (could be time dependent),  1: Homog. Neumann (no-flux)
 /
 /
-&LES
-useSGS                = .TRUE.      ! Use a subgrid scale model? 
-SGSModelID            = 1           ! 0: smagorinsky, 1: sigma, 2: Shear Improved Smagorinsky
-useDynamicProcedure   = .FALSE.     ! Use the standard dynamic procedure 
-useSGSClipping        = .TRUE.      ! Clip the constant values when they are negative
-useVerticalTfilter    = .FALSE.     ! Test filter in the vertical direction? Used for Dynamic Procedure
-useWallDamping        = .FALSE.      ! Use the Wall Damping Function 
-ncWall                = 3.d0      ! Wall Damping Function Exponent
-Cs                    = 0.14d0      ! Asymptotic model constant (wall damping function)
-/
-/
-&WALLMODEL 
-wallMType             = 1           ! 0: Moeng's original model, 1: Bou-Zeid's fully local model
-z0                    = 1.d-4       ! Roughness length scale (CAREFUL: This is a non-dimensionalized number)
+&SGS_MODEL
+SGSModelID                    = 1           ! 0: smagorinsky (w/ wall function), 1: sigma
+Csgs                          = 1.3d0       ! Model constant (asymptotic value in case wall function is used) 
+WallModelType                 = 2           ! 1: Moeng, 2: Bou-zeid et. al.  
+z0                            = 1.0d-4      ! Roughness length scale (CAUTION: this assumes appropriate non-dimensionalization)
+DynamicProcedureType          = 0           ! 0: No dynamic procedure, 1: Planar Avg. Dynamic Proc., 2: Global Dynamic Proc.  
+useVerticalTfilter            = .false.     ! Use test filtering in vertical direction for dynamic procedure? 
+DynProcFreq                   = 5           ! Dynamic procedure used every DYNPROCFREQ timesteps. 
+useWallDamping                = .FALSE.     ! Use the Wall Damping Function 
+ncWall                        = 3.d0        ! Wall Damping Function Exponent
+explicitCalcEdgeEddyViscosity = .true.      ! Explicitly calculate or interpolate edge values for eddy viscosity? 
 /
 /
 &WINDTURBINES
 useWindTurbines       = .TRUE.
 num_turbines          = 24
 ADM                   = .TRUE.
-turbInfoDir           = "/home/aditya90/Codes/PadeOps/problems/turbines/pblwt_files/turbInfo/"
+turbInfoDir           = "/home/aditya90/PadeOps/problems/turbines/pblwt_files/turbInfo/"
 /
 /
 &KSPREPROCESS

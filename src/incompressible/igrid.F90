@@ -155,12 +155,14 @@ module IncompressibleGrid
         real(rkind), dimension(:), pointer :: tau11_mean, tau12_mean, tau13_mean, tau22_mean, tau23_mean, tau33_mean
         real(rkind), dimension(:), pointer :: S11_mean, S12_mean, S13_mean, S22_mean, S23_mean, S33_mean
         real(rkind), dimension(:), pointer :: viscdisp_mean, sgsdissp_mean, sgscoeff_mean, PhiM, q1_mean, q2_mean, q3_mean
+        real(rkind), dimension(:), pointer :: tketurbtransp_mean, tkemeanadvec_mean, uturbf_mean
         real(rkind), dimension(:), pointer :: TT_mean, wT_mean, vT_mean, uT_mean, T_mean, disperuw_mean, dispervw_mean
         real(rkind), dimension(:), pointer :: p_mean, pw_mean, pv_mean, pu_mean
         real(rkind), dimension(:,:,:), pointer :: u_mean3D, v_mean3D, w_mean3D, uu_mean3D, uv_mean3D, uw_mean3D, vv_mean3D, vw_mean3D, ww_mean3D
         real(rkind), dimension(:,:,:), pointer :: tau11_mean3D, tau12_mean3D, tau13_mean3D, tau22_mean3D, tau23_mean3D, tau33_mean3D
         real(rkind), dimension(:,:,:), pointer :: S11_mean3D, S12_mean3D, S13_mean3D, S22_mean3D, S23_mean3D, S33_mean3D
         real(rkind), dimension(:,:,:), pointer :: viscdisp_mean3D, sgsdissp_mean3D, q1_mean3D, q2_mean3D, q3_mean3D
+        real(rkind), dimension(:,:,:), pointer :: tketurbtranspx_mean3D, tketurbtranspy_mean3D, tketurbtranspz_mean3D, turbfx_mean3D, turbfy_mean3D, turbfz_mean3D, uturbf_mean3D
         real(rkind), dimension(:,:,:), pointer :: TT_mean3D, wT_mean3D, vT_mean3D, uT_mean3D, T_mean3D
         real(rkind), dimension(:,:,:), pointer :: p_mean3D, pw_mean3D, pv_mean3D, pu_mean3D
         integer :: tidSUM, tid_StatsDump, tid_compStats, tprev2, tprev1
@@ -216,6 +218,9 @@ module IncompressibleGrid
         real(rkind), dimension(:,:,:), allocatable :: probe_data
         integer :: tpro
 
+        ! Spin up for initialization
+        logical :: InitSpinUp = .false. 
+        real(rkind) :: Tstop_InitSpinUp
 
         ! Fringe
         logical                           :: useFringe = .false.
@@ -271,6 +276,7 @@ module IncompressibleGrid
             procedure, private :: updateProbes 
             procedure, private :: dumpProbes
             procedure, private :: correctPressureRotationalForm
+            procedure, private :: initialize_scalar_for_InitSpinUp
     end type
 
 contains 
@@ -304,7 +310,7 @@ contains
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
         logical, intent(in), optional :: initialize2decomp
-        logical :: reset2decomp 
+        logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true.  
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -316,7 +322,7 @@ contains
         namelist /BCs/ topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
-                            UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme
+                            UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, useExhaustiveFFT
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, KSdoZfilter, nKSvertFilt
         namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq            
         namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir
@@ -363,7 +369,7 @@ contains
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
         this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; 
         this%t_pointProbe = t_pointProbe; this%dPfdx = dPfdx; this%dPfdy = dPfdy; this%dPfdz = dPfdz
-
+        this%InitSpinUp = InitSpinUp
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC); allocate(this%gpE)
@@ -440,10 +446,10 @@ contains
         ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
         allocate(this%spectC)
         call this%spectC%init("x", nx, ny, nz, this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , .false.)
+                "four", this%filter_x, 2 , .false., exhaustiveFFT=useExhaustiveFFT)
         allocate(this%spectE)
         call this%spectE%init("x", nx, ny, nz+1, this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , .false.)
+                "four", this%filter_x, 2 , .false., exhaustiveFFT=useExhaustiveFFT)
         this%sp_gpC => this%spectC%spectdecomp
         this%sp_gpE => this%spectE%spectdecomp
 
@@ -561,6 +567,14 @@ contains
             call message(1,"Reference Temperature set to:",this%ThetaRef) 
         end if 
 
+        if (this%initspinup) then
+           if (this%isStratified) then
+            call GracefulExit("InitSpinUp not permitted when stratification is ON",3124)
+           else
+            call this%Initialize_Scalar_for_InitSpinUp(useRestartFile, inputfile, restartfile_TID, restartfile_RID)
+           end if
+        end if
+
         call this%spectC%fft(this%u,this%uhat)   
         call this%spectC%fft(this%v,this%vhat)   
         call this%spectE%fft(this%w,this%what)   
@@ -633,7 +647,6 @@ contains
 
         ! STEP 11: Initialize SGS model
         if (this%useSGS) then
-            allocate(this%SGSmodel)
             
             ! First get z at edges
             zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
@@ -645,11 +658,13 @@ contains
             call transpose_z_to_y(zEinZ,zEinY,this%gpE)
             call transpose_y_to_x(zEinY,this%rbuffxE(:,:,:,1), this%gpE)
 
+            allocate(this%SGSmodel)
             call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
-                                    this%ThetaRef, this%Fr, this%Re, Pr, this%isInviscid, this%isStratified, this%botBC_Temp)
+                                    this%ThetaRef, this%Fr, this%Re, Pr, this%isInviscid, this%isStratified, this%botBC_Temp, &
+                                    this%initSpinUp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3)
             call message(0,"SGS model initialized successfully")
         end if 
@@ -799,7 +814,7 @@ contains
 
         ! STEP 15: Set up extra buffers for RK3
         if (timeSteppingScheme == 1) then
-            if (this%isStratified) then
+            if (this%isStratified .or. this%initspinup) then
                 call this%spectC%alloc_r2c_out(this%SfieldsC2,3)
                 call this%spectE%alloc_r2c_out(this%SfieldsE2,2)
             else
@@ -809,7 +824,7 @@ contains
             this%uhat1 => this%SfieldsC2(:,:,:,1); 
             this%vhat1 => this%SfieldsC2(:,:,:,2); 
             this%what1 => this%SfieldsE2(:,:,:,1); 
-            if (this%isStratified) then
+            if (this%isStratified .or. this%initspinup) then
                 this%That1 => this%SfieldsC2(:,:,:,3); 
             end if 
         end if 
@@ -849,7 +864,7 @@ contains
             call GracefulExit("fastCalcPressure feature is not supported if useDealiasFilterVert is TRUE",123) 
         end if 
 
-        if ((this%isStratified) .and. (.not. ComputeStokesPressure )) then
+        if ((this%isStratified .or. this%initspinup) .and. (.not. ComputeStokesPressure )) then
             call GracefulExit("You must set ComputeStokesPressure to TRUE if &
             & there is stratification in the problem", 323)
         end if 
@@ -885,7 +900,7 @@ contains
         this%uhat => this%SfieldsC(:,:,:,1); 
         this%vhat => this%SfieldsC(:,:,:,2); 
         this%what => this%SfieldsE(:,:,:,1)
-        if (this%isStratified) then
+        if ((this%isStratified) .or. (this%initspinup)) then
             this%That => this%SfieldsC(:,:,:,4)
         end if
     end subroutine
@@ -913,10 +928,11 @@ contains
         this%uhat1 = this%uhat + this%dt*this%u_rhs 
         this%vhat1 = this%vhat + this%dt*this%v_rhs 
         this%what1 = this%what + this%dt*this%w_rhs 
-        if (this%isStratified) this%That1 = this%That + this%dt*this%T_rhs
+        if (this%isStratified .or. this%initspinup) this%That1 = this%That + this%dt*this%T_rhs
         ! Now set pointers so that things operate on uhat1, vhat1, etc.
         this%uhat => this%SfieldsC2(:,:,:,1); this%vhat => this%SfieldsC2(:,:,:,2); this%what => this%SfieldsE2(:,:,:,1); 
-        if (this%isStratified) this%That => this%SfieldsC2(:,:,:,3)
+        if (this%isStratified .or. this%initspinup) this%That => this%SfieldsC2(:,:,:,3)
+        
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(this%fastCalcPressure)
 
@@ -929,10 +945,10 @@ contains
         this%uhat1 = (3.d0/4.d0)*this%uhat + (1.d0/4.d0)*this%uhat1 + (1.d0/4.d0)*this%dt*this%u_rhs
         this%vhat1 = (3.d0/4.d0)*this%vhat + (1.d0/4.d0)*this%vhat1 + (1.d0/4.d0)*this%dt*this%v_rhs
         this%what1 = (3.d0/4.d0)*this%what + (1.d0/4.d0)*this%what1 + (1.d0/4.d0)*this%dt*this%w_rhs
-        if (this%isStratified) this%That1 = (3.d0/4.d0)*this%That + (1.d0/4.d0)*this%That1 + (1.d0/4.d0)*this%dt*this%T_rhs
+        if (this%isStratified .or. this%initspinup) this%That1 = (3.d0/4.d0)*this%That + (1.d0/4.d0)*this%That1 + (1.d0/4.d0)*this%dt*this%T_rhs
         ! now set the u, v, w, pointers to u1, v1, w1
         this%uhat => this%SfieldsC2(:,:,:,1); this%vhat => this%SfieldsC2(:,:,:,2); this%what => this%SfieldsE2(:,:,:,1); 
-        if (this%isStratified) this%That => this%SfieldsC2(:,:,:,3)
+        if (this%isStratified .or. this%initspinup) this%That => this%SfieldsC2(:,:,:,3)
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(.false.)
 
@@ -946,7 +962,7 @@ contains
         this%uhat = (1.d0/3.d0)*this%uhat + (2.d0/3.d0)*this%uhat1 + (2.d0/3.d0)*this%dt*this%u_rhs
         this%vhat = (1.d0/3.d0)*this%vhat + (2.d0/3.d0)*this%vhat1 + (2.d0/3.d0)*this%dt*this%v_rhs
         this%what = (1.d0/3.d0)*this%what + (2.d0/3.d0)*this%what1 + (2.d0/3.d0)*this%dt*this%w_rhs
-        if (this%isStratified) this%That = (1.d0/3.d0)*this%That + (2.d0/3.d0)*this%That1 + (2.d0/3.d0)*this%dt*this%T_rhs
+        if (this%isStratified .or. this%initspinup) this%That = (1.d0/3.d0)*this%That + (2.d0/3.d0)*this%That1 + (2.d0/3.d0)*this%dt*this%T_rhs
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
 
@@ -1050,7 +1066,7 @@ contains
         
 
         ! Step 4: Interpolate T
-        if (this%isStratified) then
+        if (this%isStratified .or. this%initspinup) then
             call transpose_y_to_z(this%That,zbuffC,this%sp_gpC)
             call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,TBC_bottom, TBC_top)
             if (this%botBC_Temp == 0) then 
@@ -1152,7 +1168,7 @@ contains
         T1E = T1E + T2E
         call this%spectE%fft(T1E,this%w_rhs)
 
-        if (this%isStratified) then
+        if (this%isStratified .or. this%initspinup) then
             T1C = -this%u*this%dTdxC 
             T2C = -this%v*this%dTdyC
             T1C = T1C + T2C
@@ -1277,7 +1293,7 @@ contains
         this%w_rhs = -half*this%w_rhs
 
 
-        if (this%isStratified) then
+        if (this%isStratified .or. this%initspinup) then
             T1C = -this%u*this%T
             call this%spectC%fft(T1C,this%T_rhs)
             call this%spectC%mtimes_ik1_ip(this%T_rhs)
@@ -1416,7 +1432,7 @@ contains
         end if 
 
         ! Step 4: Buoyance + Sponge (inside Buoyancy)
-        if (this%isStratified) then
+        if (this%isStratified .or. this%initspinup) then
             call this%addBuoyancyTerm()
         end if 
 
@@ -1432,7 +1448,7 @@ contains
                                           this%vhat,       this%That,  this%u,          this%v,       this%uE,      &
                                           this%vE,         this%w,     this%newTimeStep                             )
 
-            if (this%isStratified) then
+            if (this%isStratified .or. this%initspinup) then
                call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzE)
             end if
             
@@ -1497,7 +1513,7 @@ contains
         call this%spectC%dealias(this%uhat)
         call this%spectC%dealias(this%vhat)
         call this%spectE%dealias(this%what)
-        if (this%isStratified) call this%spectC%dealias(this%That)
+        if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
         if (this%UseDealiasFilterVert) then
             call this%ApplyCompactFilter()
         end if
@@ -1514,7 +1530,7 @@ contains
         call this%spectC%ifft(this%uhat,this%u)
         call this%spectC%ifft(this%vhat,this%v)
         call this%spectE%ifft(this%what,this%w)
-        if (this%isStratified) call this%spectC%ifft(this%That,this%T)
+        if (this%isStratified .or. this%initspinup) call this%spectC%ifft(this%That,this%T)
     
         ! STEP 4: Interpolate the cell center values of w
         !call this%compute_and_bcast_surface_Mn()
@@ -1522,7 +1538,7 @@ contains
 
         ! STEP 5: Compute duidxjC 
         call this%compute_duidxj()
-        if (this%isStratified) call this%compute_dTdxi() 
+        if (this%isStratified .or. this%initspinup) call this%compute_dTdxi() 
 
     end subroutine
 
@@ -1747,7 +1763,7 @@ contains
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
-           if (this%isStratified) call this%dumpFullField(this%T,'potT')
+           if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            if (this%useWindTurbines) then
                this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
@@ -1780,7 +1796,7 @@ contains
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
-           if (this%isStratified) call this%dumpFullField(this%T,'potT')
+           if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            if (this%useWindTurbines) then
                this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
@@ -1798,6 +1814,12 @@ contains
            !call output_tecplot(gp)
         end if
 
+        if (this%initspinup) then
+         if (this%tsim > this%Tstop_initspinup) then
+             this%initspinup = .false.
+             call message(0,"Initialization spin up turned off. No active scalar in the problem.")
+         end if 
+        end if 
         ! Exit if the exitpdo file was detected earlier at the beginning of this
         ! subroutine
         if(exitstat) call GracefulExit("Found exitpdo file in control directory",1234)
@@ -1824,7 +1846,7 @@ contains
             this%uhat = this%uhat + this%dt*this%u_rhs 
             this%vhat = this%vhat + this%dt*this%v_rhs 
             this%what = this%what + this%dt*this%w_rhs 
-            if (this%isStratified) then
+            if (this%isStratified .or. this%initspinup) then
                 this%That = this%That + this%dt*this%T_rhs
             end if
         else
@@ -1833,7 +1855,7 @@ contains
             this%uhat = this%uhat + abf1*this%u_rhs + abf2*this%u_Orhs
             this%vhat = this%vhat + abf1*this%v_rhs + abf2*this%v_Orhs
             this%what = this%what + abf1*this%w_rhs + abf2*this%w_Orhs
-            if (this%isStratified) then
+            if (this%isStratified .or. this%initspinup) then
                 this%That = this%That + abf1*this%T_rhs + abf2*this%T_Orhs
             end if 
         end if 
@@ -1843,7 +1865,7 @@ contains
 
         ! Step 4: Store the RHS values for the next use
         this%u_Orhs = this%u_rhs; this%v_Orhs = this%v_rhs; this%w_Orhs = this%w_rhs
-        if (this%isStratified) this%T_Orhs = this%T_rhs
+        if (this%isStratified .or. this%initspinup) this%T_Orhs = this%T_rhs
         this%dtOld = this%dt
 
         ! Step 5: Do end of time step operations (I/O, stats, etc.)
@@ -1905,7 +1927,7 @@ contains
         call this%filzC%filter3(zbuff3,zbuff4,this%nxZ, this%nyZ)
         call transpose_z_to_y(zbuff4,this%what, this%sp_gpE)
 
-        if (this%isStratified) then
+        if (this%isStratified .or. this%initspinup) then
             call transpose_y_to_z(this%That,zbuff1, this%sp_gpC)
             call this%filzC%filter3(zbuff1,zbuff2,this%nxZ, this%nyZ)
             call transpose_z_to_y(zbuff1,this%That, this%sp_gpC)
@@ -2142,7 +2164,7 @@ contains
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
         call decomp_2d_write_one(1,this%w,fname, this%gpE)
 
-        if (this%isStratified) then
+        if (this%isStratified .or. this%initspinup) then
             write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_T.",this%step
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
             call decomp_2d_write_one(1,this%T,fname, this%gpE)
@@ -2195,6 +2217,8 @@ contains
         if(this%fastCalcPressure .or. this%storePressure) then
            nstatsvar = nstatsvar + 4
         endif
+        nstatsvar = nstatsvar + 3 ! for turb transport of TKE
+        if(this%useWindTurbines) nstatsvar = nstatsvar + 4
 
         allocate(this%debugavg(5),this%debuginst(5))
         allocate(this%inst_horz_avg(nhorzavgvars))
@@ -2250,6 +2274,19 @@ contains
            nstv = nstv + 4
         endif
 
+        this%tketurbtranspx_mean3D => this%stats3D(:,:,:,nstv+1)
+        this%tketurbtranspy_mean3D => this%stats3D(:,:,:,nstv+2)
+        this%tketurbtranspz_mean3D => this%stats3D(:,:,:,nstv+3)
+        nstv = nstv + 3
+
+        if(this%useWindTurbines)  then
+           this%turbfx_mean3D => this%stats3D(:,:,:,nstv+1)
+           this%turbfy_mean3D => this%stats3D(:,:,:,nstv+2)
+           this%turbfz_mean3D => this%stats3D(:,:,:,nstv+3)
+           this%uturbf_mean3D => this%stats3D(:,:,:,nstv+4)
+           nstv = nstv + 4
+        endif
+
         ! horizontal averages
         ! mean velocities
         this%u_mean   => this%horzavgstats(:,1);  this%v_mean    => this%horzavgstats(:,2);  this%w_mean   => this%horzavgstats(:,3) 
@@ -2281,6 +2318,15 @@ contains
             this%q2_mean => this%horzavgstats(:,nhzv+7);  this%q3_mean => this%horzavgstats(:,nhzv+8)
             nhzv = 33
         end if 
+
+        this%tketurbtransp_mean => this%horzavgstats(:,nhzv+1)
+        this%tkemeanadvec_mean => this%horzavgstats(:,nhzv+2)
+        nhzv = nhzv + 2
+
+        if(this%useWindTurbines) then
+           this%uturbf_mean => this%horzavgstats(:,nhzv+1)
+           nhzv = nhzv + 1
+        endif
 
         if(this%fastCalcPressure .or. this%storePressure) then
            this%p_mean  => this%horzavgstats(:,nhzv+1)
@@ -2537,6 +2583,21 @@ contains
 
         endif
 
+        ! triple correlation for transport term in TKE budget
+        rbuff0 = this%u*this%u + this%v*this%v + this%wC*this%wC
+        this%tketurbtranspx_mean3D = this%tketurbtranspx_mean3D + this%u *rbuff0
+        this%tketurbtranspy_mean3D = this%tketurbtranspy_mean3D + this%v *rbuff0
+        this%tketurbtranspz_mean3D = this%tketurbtranspz_mean3D + this%wC*rbuff0
+
+        if(this%useWindTurbines) then
+           this%turbfx_mean3D = this%turbfx_mean3D + this%WindTurbineArr%fx
+           this%turbfy_mean3D = this%turbfy_mean3D + this%WindTurbineArr%fy
+           this%turbfz_mean3D = this%turbfz_mean3D + this%WindTurbineArr%fz
+           this%uturbf_mean3D = this%uturbf_mean3D + this%u *this%WindTurbineArr%fx + &
+                                                     this%v *this%WindTurbineArr%fy + &
+                                                     this%wC*this%WindTurbineArr%fz
+        endif
+
         if (this%computeSpectra) then
             ! compute 1D spectra ---- make sure that number of variables for which spectra are computed is smaller than nyg
             ! For each variable, at each y, z, location, x-spectrum is computed first, and then averaged over time and y-direction
@@ -2766,6 +2827,35 @@ contains
                 open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
               endif
           endif
+
+          ! -- tktt
+          write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_tktt_t",this%tprev2,".3Dstt"
+          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+          open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+
+          ! -- tkma
+          write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_tkma_t",this%tprev2,".3Dstt"
+          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+          open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+
+          if(this%useWindTurbines) then
+              ! -- turbfx
+              write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trbx_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- turbfy
+              write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trby_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- turbfz
+              write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trbz_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- uturbf
+              write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_utrbf_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+          endif
         endif
     end subroutine
 
@@ -2776,7 +2866,8 @@ contains
         class(igrid), intent(inout), target :: this
       ! compute horizontal averages and dump .stt files
       ! overwrite previously written out 3D stats dump
-        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3, rbuff4, rbuff5, rbuff6
+        real(rkind), dimension(:,:,:), pointer :: rbuff0, rbuff1, rbuff2, rbuff3, rbuff4, rbuff5, rbuff6, rbuff3E, rbuff4E
+        complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2
         real(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)) :: tmpvar
         character(len=clen) :: tempname, fname
         real(rkind) :: tidSUMreal, normfac
@@ -2792,9 +2883,13 @@ contains
         this%tprev2 = this%tprev1
         this%tprev1 = this%step
 
+        rbuff0 => this%rbuffxC(:,:,:,2);
         rbuff1 => this%rbuffxC(:,:,:,1);  rbuff2 => this%rbuffyC(:,:,:,1)
         rbuff3 => this%rbuffzC(:,:,:,1);  rbuff4 => this%rbuffzC(:,:,:,2)
         rbuff5 => this%rbuffzC(:,:,:,3);  rbuff6 => this%rbuffzC(:,:,:,4)
+
+        cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyC(:,:,:,2)
+        rbuff3E => this%rbuffzE(:,:,:,1); rbuff4E => this%rbuffzE(:,:,:,2);
 
         tidSUMreal = real(this%tidSUM, rkind)
 
@@ -3120,9 +3215,131 @@ contains
                 call decomp_2d_write_one(3, rbuff3, fname)
             endif
         endif
+
+        !-----Turbulent transport of TKE budget-------
+        ! triple correlation for transport term in TKE budget
+        ! x term in xdecomp
+        !rbuff1 = this%u_mean3D*this%u_mean3D + this%v_mean3D*this%v_mean3D + this%w_mean3D*this%w_mean3D
+        rbuff1 = this%tketurbtranspx_mean3D/tidSUMreal - two*(this%u_mean3D*this%uu_mean3D + this%v_mean3D*this%uv_mean3D + this%w_mean3D*this%uw_mean3D)/(tidSumreal**2) &
+               + ( two*(this%u_mean3D*this%u_mean3D + this%v_mean3D*this%v_mean3D + this%w_mean3D*this%w_mean3D)/tidSUMreal**2 - (this%uu_mean3D + this%vv_mean3D + this%ww_mean3D)/tidSUMreal )*(this%u_mean3D/tidSUMreal)
+        call this%spectC%fft(rbuff1,cbuffy1)   
+        call this%spectC%mTimes_ik1_ip(cbuffy1)
+        call this%spectC%ifft(cbuffy1,rbuff0)
+
+        ! add y term in x decomp
+        rbuff1 = this%tketurbtranspy_mean3D/tidSUMreal - two*(this%u_mean3D*this%uv_mean3D + this%v_mean3D*this%vv_mean3D + this%w_mean3D*this%vw_mean3D)/(tidSumreal**2) &
+               + ( two*(this%u_mean3D*this%u_mean3D + this%v_mean3D*this%v_mean3D + this%w_mean3D*this%w_mean3D)/tidSUMreal**2 - (this%uu_mean3D + this%vv_mean3D + this%ww_mean3D)/tidSUMreal )*(this%v_mean3D/tidSUMreal)
+        call this%spectC%fft(rbuff1,cbuffy1)   
+        call this%spectC%mTimes_ik2_ip(cbuffy1)
+        call this%spectC%ifft(cbuffy1,rbuff1)
+        rbuff0 = rbuff0 + rbuff1
+
+        ! take sum of x and y terms to z decomp
+        call transpose_x_to_y(rbuff0, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2, rbuff4, this%gpC)
+
+        ! compute z term in z decomp
+        rbuff1 = this%tketurbtranspz_mean3D/tidSUMreal - two*(this%u_mean3D*this%uw_mean3D + this%v_mean3D*this%vw_mean3D + this%w_mean3D*this%ww_mean3D)/(tidSumreal**2) &
+               + ( two*(this%u_mean3D*this%u_mean3D + this%v_mean3D*this%v_mean3D + this%w_mean3D*this%w_mean3D)/tidSUMreal**2 - (this%uu_mean3D + this%vv_mean3D + this%ww_mean3D)/tidSUMreal )*(this%w_mean3D/tidSUMreal)
+        call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+        ! interpolate rbuff3 from C to E
+        call this%Pade6opZ%interpz_C2E(rbuff3, rbuff3E, 0,0)
+        call this%Pade6opZ%ddz_E2C(rbuff3E,rbuff3,0,0)
+
+        ! add x and y terms to z term
+        rbuff3 = rbuff3 + rbuff4
+        rbuff3 = half*rbuff3
+
+        call this%compute_z_mean(rbuff3, this%tketurbtransp_mean)
+        write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_tktt_t",this%step,".3Dstt"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(3, rbuff3, fname)
+        !-----Done turbulent transport of TKE budget-------
+
+        !-----Mean advection term of TKE budget------
+        ! compute tke first
+        rbuff1 = this%u_mean3D*this%u_mean3D + this%v_mean3D*this%v_mean3D + this%w_mean3D*this%w_mean3D
+        rbuff1 = -rbuff1/tidSUMreal**2
+        rbuff1 = rbuff1 + (this%uu_mean3D + this%vv_mean3D + this%ww_mean3D)/tidSUMreal
+
+        ! transpose to z and take z derivative
+        call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+        call this%Pade6opZ%ddz_C2E(rbuff3,rbuff3E,0,0)
+        
+        ! transpose w_mean3D to z, interpolate to E and multiply
+        call transpose_x_to_y(this%w_mean3D/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,                   rbuff4, this%gpC)
+        call this%Pade6opZ%interpz_C2E(rbuff4,rbuff4E,0,0)
+        rbuff4E = rbuff4E * rbuff3E
+
+        ! interpolate E to C
+        call this%Pade6opZ%interpz_E2C(rbuff4E, rbuff4, 0,0)
+
+
+        ! x derivative
+        call this%spectC%fft(rbuff1,cbuffy1)   
+        call this%spectC%mTimes_ik1_oop(cbuffy1, cbuffy2)
+        call this%spectC%ifft(cbuffy2,rbuff0)
+
+        ! y derivative
+        call this%spectC%fft(rbuff1,cbuffy1)   
+        call this%spectC%mTimes_ik2_oop(cbuffy1, cbuffy2)
+        call this%spectC%ifft(cbuffy2,rbuff1)
+        rbuff0 = this%u_mean3D*rbuff0 + this%v_mean3D*rbuff1
+
+        ! transpose sum of x and y parts to z and add z part
+        call transpose_x_to_y(rbuff0/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,            rbuff3, this%gpC)
+        rbuff3 = rbuff3 + rbuff4
+        rbuff3 = half*rbuff3
+
+        ! write outputs
+        call this%compute_z_mean(rbuff3, this%tkemeanadvec_mean)
+        write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_tkma_t",this%step,".3Dstt"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(3, rbuff3, fname)
+        !-----Done mean advection term of TKE budget------
+
+
+        if(this%useWindTurbines) then
+           !----Turbine work term in TKE budget-------
+           rbuff1 = this%uturbf_mean3D/tidSUMreal -  ( this%u_mean3D*this%turbfx_mean3D + &
+                    this%v_mean3D*this%turbfy_mean3D + this%w_mean3D*this%turbfy_mean3D ) / tidSUMreal**2
+           call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+           call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+           call this%compute_z_mean(rbuff3, this%uturbf_mean)
+           write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trbu_t",this%step,".3Dstt"
+           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+           call decomp_2d_write_one(3, rbuff3, fname)
+           !----Done turbine work term in TKE budget-------
+
+           ! write out turbfx_mean3D
+           call transpose_x_to_y(this%turbfx_mean3D/tidSUMreal, rbuff2, this%gpC)
+           call transpose_y_to_z(rbuff2,                        rbuff3, this%gpC)
+           write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trbx_t",this%step,".3Dstt"
+           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+           call decomp_2d_write_one(3, rbuff3, fname)
+
+           ! write out turbfy_mean3D
+           call transpose_x_to_y(this%turbfy_mean3D/tidSUMreal, rbuff2, this%gpC)
+           call transpose_y_to_z(rbuff2,                        rbuff3, this%gpC)
+           write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trby_t",this%step,".3Dstt"
+           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+           call decomp_2d_write_one(3, rbuff3, fname)
+
+           ! write out turbfz_mean3D
+           call transpose_x_to_y(this%turbfz_mean3D/tidSUMreal, rbuff2, this%gpC)
+           call transpose_y_to_z(rbuff2,                        rbuff3, this%gpC)
+           write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trbz_t",this%step,".3Dstt"
+           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+           call decomp_2d_write_one(3, rbuff3, fname)
+        endif
+
         call message(1, "Dumped 3D stats files")
 
-        nullify(rbuff1,rbuff2,rbuff3,rbuff4,rbuff5,rbuff6)
+        nullify(rbuff1,rbuff2,rbuff3,rbuff4,rbuff5,rbuff6, rbuff0, cbuffy1, cbuffy2, rbuff3E, rbuff4E)
 
         ! dump horizontal averages
         if(this%useWindTurbines) then
@@ -3217,6 +3434,12 @@ contains
         if(this%isStratified) then
             nullify(this%T_mean, this%uT_mean, this%vT_mean, this%wT_mean, this%TT_mean, this%q1_mean, this%q2_mean, this%q3_mean)
             nullify(this%T_mean3D, this%uT_mean3D, this%vT_mean3D, this%wT_mean3D, this%TT_mean3D, this%q1_mean3D, this%q2_mean3D, this%q3_mean3D)
+        endif
+
+        nullify(this%tketurbtranspx_mean3D, this%tketurbtranspy_mean3D, this%tketurbtranspz_mean3D, this%tketurbtransp_mean, this%tkemeanadvec_mean)
+
+        if(this%useWindTurbines) then
+            nullify(this%turbfx_mean3D, this%turbfy_mean3D, this%turbfz_mean3D, this%uturbf_mean3D, this%uturbf_mean)
         endif
 
         if(this%fastCalcPressure .or. this%storePressure) then
@@ -3895,10 +4118,10 @@ contains
         logical, optional, intent(in) :: dumpInitField
 
         ! Create data sharing info
-        if (nrank == 0) then
+        !if (nrank == 0) then
             allocate(xst(0:nproc-1,3),xen(0:nproc-1,3),xsz(0:nproc-1,3))
             xst = 0; xen = 0; xsz = 0;
-        end if
+        !end if
 
 
         ! communicate local processor grid info (Assume x-decomposition)
@@ -3956,9 +4179,9 @@ contains
         end if
         call mpi_barrier(mpi_comm_world,ierr)
         
-        if (nrank == 0) then
+        !if (nrank == 0) then
             deallocate(xst, xen, xsz)
-        end if 
+        !end if 
 
         if (present(dumpInitField)) then
             if (dumpInitField) then
@@ -3966,7 +4189,7 @@ contains
                 call this%dumpFullField(this%u,'uVel')
                 call this%dumpFullField(this%v,'vVel')
                 call this%dumpFullField(this%wC,'wVel')
-                if (this%isStratified) call this%dumpFullField(this%T,'potT')
+                if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
                 if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
                 if (this%useWindTurbines) then
                     this%WindTurbineArr%dumpTurbField = .true.
@@ -4055,8 +4278,61 @@ contains
             TBC_bottom = +1; dTdzBC_bottom = -1; WTBC_bottom = -1;
             WdTdzBC_bottom = +1
          end select
+
     end subroutine
 
+
+    subroutine initialize_scalar_for_initspinup(this,useRestartFile, inputfile, tid, rid)
+        use random,             only: gaussian_random
+        use decomp_2d_io
+        class(igrid), intent(inout) :: this 
+        real(rkind), dimension(:,:,:), allocatable :: randArr
+        real(rkind)  :: ScalarRef = 290.d0, sigma_purt = 0.1d0 
+        real(rkind)  :: Froude_Scalar = 0.08d0
+        real(rkind)  :: zcutoff = 0.25d0, Tstop_initSpinUp = 10.d0
+        logical, intent(in) :: useRestartFile
+        character(len=clen), intent(in) :: inputfile
+        character(len=clen) :: fname, tempname
+        integer, intent(in) :: tid, rid
+        integer :: seed = 2123122
+
+        namelist /INIT_SPINUP/ Tstop_InitSpinUp, Zcutoff, ScalarRef, Sigma_purt, Froude_Scalar, seed
+
+        
+        open(unit=11, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+        read(unit=11, NML=INIT_SPINUP)
+        close(11)
+
+        this%Tstop_InitSpinUp = Tstop_InitSpinUp 
+        this%Fr = Froude_Scalar
+        this%ThetaRef = ScalarRef
+        if (useRestartFile) then
+            write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_T.",tid
+            fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+            call decomp_2d_read_one(1,this%T,fname, this%gpC)
+            call message(0,"Read the spinup scalar field from the restart file")
+        else
+            allocate(randArr(size(this%T,1),size(this%T,2),size(this%T,3)))
+            this%T = ScalarRef
+            call gaussian_random(randArr,zero,one,seed + 10*nrank)
+            randArr = sigma_purt*randArr
+            ! Set random numbers in z > 0.25 to zero 
+            where (this%mesh(:,:,:,3) > Zcutoff)
+                randArr = zero
+            end where
+            
+            ! Add Temperature purturbations 
+            this%T = this%T + randArr
+            call message(0,"Initialized the spinup scalar field") 
+            deallocate(randArr)
+        end if
+
+        TBC_bottom = +1; dTdzBC_bottom = -1; WTBC_bottom = -1;
+        WdTdzBC_bottom = +1
+        TBC_top = +1; dTdzBC_top = -1; WTBC_top = -1;
+        WdTdzBC_top = +1
+
+    end subroutine 
 
     subroutine correctPressureRotationalForm(this)
         class(igrid), intent(inout) :: this 

@@ -1,6 +1,6 @@
 module PadePoissonMod
     use kind_parameters, only: rkind
-    use spectralMod, only: spectral, GetWaveNums 
+    use spectralMod, only: spectral, GetWaveNums, useExhaustiveFFT 
     use constants, only: pi, zero, one, three, five, two, imi
     use exits, only: message, GracefulExit
     use decomp_2d
@@ -18,7 +18,7 @@ module PadePoissonMod
     
     include "fftw3.f"
 
-    integer :: fft_planning = FFTW_PATIENT
+    integer :: fft_planning 
     complex(rkind), parameter :: czero = zero + imi*zero
     
     type :: Padepoisson
@@ -103,6 +103,11 @@ contains
         this%k1_2d => sp%k1; this%k2_2d => sp%k2
         allocate( this%f2dext(nxExt,nyExt,nzExt), this%wext(nxExt, nyExt, nzExt) )
    
+        if (useExhaustiveFFT) then
+            fft_planning = FFTW_EXHAUSTIVE
+        else
+            fft_planning = FFTW_MEASURE
+        end if
 
         ! Prep modified wavenumbers
         allocate(k3(nzExt), k3mod(nzExt))
@@ -740,7 +745,7 @@ contains
         complex(rkind), dimension(this%nxE_in, this%nyE_in, this%nzE_in), intent(inout) :: what
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: pressure
         integer :: ii, jj, kk
-        complex :: ctemp
+        complex(rkind) :: ctemp
 
         ! Step 0: Project out the stokes pressure which will fix the wall BCs
         ! for velocity
