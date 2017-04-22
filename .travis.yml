@@ -2,7 +2,9 @@ language: generic
 
 notifications:
   email: false
-  slack: false
+  slack:
+    rooms:
+      - padeops:BL9Z4HoxfW6KHcHSILMFYD6M#travis
 
 sudo: required
 
