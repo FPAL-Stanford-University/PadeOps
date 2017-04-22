@@ -188,13 +188,13 @@ subroutine readSGSDynamicRestart(this,SGSDynamicRestartFile)
 
   if (oldSGSmodel .ne. this%mid) then
       call message(1,"WARNING: Mismatch in the SGS model type between the restart file and new execution. &
-                      Will regenerate model constants at first new time step.")
+                      & Will regenerate model constants at first new time step.")
       this%mstep = 0
   end if
 
   if (oldDynProcType .ne. this%DynamicProcedureType) then
       call message(1, "WARNING: Mismatch in the dynamic procedure type between the restart file and new execution.&
-                       Will regenerate model constants at first new time step.")
+                       & Will regenerate model constants at first new time step.")
       this%mstep = 0
   else ! Good everything is matching
       select case( this%DynamicProcedureType ) 

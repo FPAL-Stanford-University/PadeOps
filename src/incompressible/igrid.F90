@@ -308,7 +308,7 @@ contains
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
         logical, intent(in), optional :: initialize2decomp
-        logical :: reset2decomp, InitSpinUp = .false. 
+        logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true.  
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -320,7 +320,7 @@ contains
         namelist /BCs/ topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
-                            UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp
+                            UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, useExhaustiveFFT
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, KSdoZfilter, nKSvertFilt
         namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq            
         namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir
@@ -444,10 +444,10 @@ contains
         ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
         allocate(this%spectC)
         call this%spectC%init("x", nx, ny, nz, this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , .false.)
+                "four", this%filter_x, 2 , .false., exhaustiveFFT=useExhaustiveFFT)
         allocate(this%spectE)
         call this%spectE%init("x", nx, ny, nz+1, this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , .false.)
+                "four", this%filter_x, 2 , .false., exhaustiveFFT=useExhaustiveFFT)
         this%sp_gpC => this%spectC%spectdecomp
         this%sp_gpE => this%spectE%spectdecomp
 
@@ -645,7 +645,6 @@ contains
 
         ! STEP 11: Initialize SGS model
         if (this%useSGS) then
-            allocate(this%SGSmodel)
             
             ! First get z at edges
             zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
@@ -657,6 +656,7 @@ contains
             call transpose_z_to_y(zEinZ,zEinY,this%gpE)
             call transpose_y_to_x(zEinY,this%rbuffxE(:,:,:,1), this%gpE)
 
+            allocate(this%SGSmodel)
             call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
@@ -3915,10 +3915,10 @@ contains
         logical, optional, intent(in) :: dumpInitField
 
         ! Create data sharing info
-        if (nrank == 0) then
+        !if (nrank == 0) then
             allocate(xst(0:nproc-1,3),xen(0:nproc-1,3),xsz(0:nproc-1,3))
             xst = 0; xen = 0; xsz = 0;
-        end if
+        !end if
 
 
         ! communicate local processor grid info (Assume x-decomposition)
@@ -3976,9 +3976,9 @@ contains
         end if
         call mpi_barrier(mpi_comm_world,ierr)
         
-        if (nrank == 0) then
+        !if (nrank == 0) then
             deallocate(xst, xen, xsz)
-        end if 
+        !end if 
 
         if (present(dumpInitField)) then
             if (dumpInitField) then

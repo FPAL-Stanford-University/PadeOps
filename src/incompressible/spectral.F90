@@ -13,7 +13,7 @@ module spectralMod
  
     implicit none
     private
-    public :: spectral, GetWaveNums 
+    public :: spectral, GetWaveNums, useExhaustiveFFT 
 
     logical :: useExhaustiveFFT = .true. 
 
@@ -236,7 +236,7 @@ contains
     end subroutine
 
 
-    subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK) 
+    subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK, exhaustiveFFT) 
         class(spectral),  intent(inout)         :: this
         character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction
         integer,          intent(in)            :: nx_g, ny_g, nz_g    ! Global data size
@@ -248,6 +248,7 @@ contains
         logical,                      optional  :: use2decompFFT       ! Use the 3d fft procedures defined in 2decomp - default is TRUE
         logical,                      optional  :: useConsrvD2         ! Use the conservative form of 2nd derivative - default is TRUE
         logical, intent(in),          optional  :: createK 
+        logical, intent(in),          optional  :: exhaustiveFFT 
 
         if (present(createK)) then
                 this%storeK = createK
@@ -257,6 +258,10 @@ contains
             call GracefulExit("You are trying to reinitialize SPECTRAL derived type. This is not allowed", 111)
         end if
         
+        if (present(exhaustiveFFT)) then
+            useExhaustiveFFT = exhaustiveFFT
+        end if
+
         this%nx_g = nx_g
         this%ny_g = ny_g
         this%nz_g = nz_g
