@@ -155,12 +155,14 @@ module IncompressibleGrid
         real(rkind), dimension(:), pointer :: tau11_mean, tau12_mean, tau13_mean, tau22_mean, tau23_mean, tau33_mean
         real(rkind), dimension(:), pointer :: S11_mean, S12_mean, S13_mean, S22_mean, S23_mean, S33_mean
         real(rkind), dimension(:), pointer :: viscdisp_mean, sgsdissp_mean, sgscoeff_mean, PhiM, q1_mean, q2_mean, q3_mean
+        real(rkind), dimension(:), pointer :: tketurbtransp_mean, tkemeanadvec_mean, uturbf_mean
         real(rkind), dimension(:), pointer :: TT_mean, wT_mean, vT_mean, uT_mean, T_mean, disperuw_mean, dispervw_mean
         real(rkind), dimension(:), pointer :: p_mean, pw_mean, pv_mean, pu_mean
         real(rkind), dimension(:,:,:), pointer :: u_mean3D, v_mean3D, w_mean3D, uu_mean3D, uv_mean3D, uw_mean3D, vv_mean3D, vw_mean3D, ww_mean3D
         real(rkind), dimension(:,:,:), pointer :: tau11_mean3D, tau12_mean3D, tau13_mean3D, tau22_mean3D, tau23_mean3D, tau33_mean3D
         real(rkind), dimension(:,:,:), pointer :: S11_mean3D, S12_mean3D, S13_mean3D, S22_mean3D, S23_mean3D, S33_mean3D
         real(rkind), dimension(:,:,:), pointer :: viscdisp_mean3D, sgsdissp_mean3D, q1_mean3D, q2_mean3D, q3_mean3D
+        real(rkind), dimension(:,:,:), pointer :: tketurbtranspx_mean3D, tketurbtranspy_mean3D, tketurbtranspz_mean3D, turbfx_mean3D, turbfy_mean3D, turbfz_mean3D, uturbf_mean3D
         real(rkind), dimension(:,:,:), pointer :: TT_mean3D, wT_mean3D, vT_mean3D, uT_mean3D, T_mean3D
         real(rkind), dimension(:,:,:), pointer :: p_mean3D, pw_mean3D, pv_mean3D, pu_mean3D
         integer :: tidSUM, tid_StatsDump, tid_compStats, tprev2, tprev1
@@ -2215,6 +2217,8 @@ contains
         if(this%fastCalcPressure .or. this%storePressure) then
            nstatsvar = nstatsvar + 4
         endif
+        nstatsvar = nstatsvar + 3 ! for turb transport of TKE
+        if(this%useWindTurbines) nstatsvar = nstatsvar + 4
 
         allocate(this%debugavg(5),this%debuginst(5))
         allocate(this%inst_horz_avg(nhorzavgvars))
@@ -2270,6 +2274,19 @@ contains
            nstv = nstv + 4
         endif
 
+        this%tketurbtranspx_mean3D => this%stats3D(:,:,:,nstv+1)
+        this%tketurbtranspy_mean3D => this%stats3D(:,:,:,nstv+2)
+        this%tketurbtranspz_mean3D => this%stats3D(:,:,:,nstv+3)
+        nstv = nstv + 3
+
+        if(this%useWindTurbines)  then
+           this%turbfx_mean3D => this%stats3D(:,:,:,nstv+1)
+           this%turbfy_mean3D => this%stats3D(:,:,:,nstv+2)
+           this%turbfz_mean3D => this%stats3D(:,:,:,nstv+3)
+           this%uturbf_mean3D => this%stats3D(:,:,:,nstv+4)
+           nstv = nstv + 4
+        endif
+
         ! horizontal averages
         ! mean velocities
         this%u_mean   => this%horzavgstats(:,1);  this%v_mean    => this%horzavgstats(:,2);  this%w_mean   => this%horzavgstats(:,3) 
@@ -2301,6 +2318,15 @@ contains
             this%q2_mean => this%horzavgstats(:,nhzv+7);  this%q3_mean => this%horzavgstats(:,nhzv+8)
             nhzv = 33
         end if 
+
+        this%tketurbtransp_mean => this%horzavgstats(:,nhzv+1)
+        this%tkemeanadvec_mean => this%horzavgstats(:,nhzv+2)
+        nhzv = nhzv + 2
+
+        if(this%useWindTurbines) then
+           this%uturbf_mean => this%horzavgstats(:,nhzv+1)
+           nhzv = nhzv + 1
+        endif
 
         if(this%fastCalcPressure .or. this%storePressure) then
            this%p_mean  => this%horzavgstats(:,nhzv+1)
@@ -2557,6 +2583,21 @@ contains
 
         endif
 
+        ! triple correlation for transport term in TKE budget
+        rbuff0 = this%u*this%u + this%v*this%v + this%wC*this%wC
+        this%tketurbtranspx_mean3D = this%tketurbtranspx_mean3D + this%u *rbuff0
+        this%tketurbtranspy_mean3D = this%tketurbtranspy_mean3D + this%v *rbuff0
+        this%tketurbtranspz_mean3D = this%tketurbtranspz_mean3D + this%wC*rbuff0
+
+        if(this%useWindTurbines) then
+           this%turbfx_mean3D = this%turbfx_mean3D + this%WindTurbineArr%fx
+           this%turbfy_mean3D = this%turbfy_mean3D + this%WindTurbineArr%fy
+           this%turbfz_mean3D = this%turbfz_mean3D + this%WindTurbineArr%fz
+           this%uturbf_mean3D = this%uturbf_mean3D + this%u *this%WindTurbineArr%fx + &
+                                                     this%v *this%WindTurbineArr%fy + &
+                                                     this%wC*this%WindTurbineArr%fz
+        endif
+
         if (this%computeSpectra) then
             ! compute 1D spectra ---- make sure that number of variables for which spectra are computed is smaller than nyg
             ! For each variable, at each y, z, location, x-spectrum is computed first, and then averaged over time and y-direction
@@ -2786,6 +2827,35 @@ contains
                 open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
               endif
           endif
+
+          ! -- tktt
+          write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_tktt_t",this%tprev2,".3Dstt"
+          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+          open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+
+          ! -- tkma
+          write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_tkma_t",this%tprev2,".3Dstt"
+          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+          open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+
+          if(this%useWindTurbines) then
+              ! -- turbfx
+              write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trbx_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- turbfy
+              write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trby_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- turbfz
+              write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trbz_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+              ! -- uturbf
+              write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_utrbf_t",this%tprev2,".3Dstt"
+              fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+              open(unit=11, file=fname, status='old',iostat=ierr); if(ierr == 0) close(11, status='delete')
+          endif
         endif
     end subroutine
 
@@ -2796,7 +2866,8 @@ contains
         class(igrid), intent(inout), target :: this
       ! compute horizontal averages and dump .stt files
       ! overwrite previously written out 3D stats dump
-        real(rkind), dimension(:,:,:), pointer :: rbuff1, rbuff2, rbuff3, rbuff4, rbuff5, rbuff6
+        real(rkind), dimension(:,:,:), pointer :: rbuff0, rbuff1, rbuff2, rbuff3, rbuff4, rbuff5, rbuff6, rbuff3E, rbuff4E
+        complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2
         real(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)) :: tmpvar
         character(len=clen) :: tempname, fname
         real(rkind) :: tidSUMreal, normfac
@@ -2812,9 +2883,13 @@ contains
         this%tprev2 = this%tprev1
         this%tprev1 = this%step
 
+        rbuff0 => this%rbuffxC(:,:,:,2);
         rbuff1 => this%rbuffxC(:,:,:,1);  rbuff2 => this%rbuffyC(:,:,:,1)
         rbuff3 => this%rbuffzC(:,:,:,1);  rbuff4 => this%rbuffzC(:,:,:,2)
         rbuff5 => this%rbuffzC(:,:,:,3);  rbuff6 => this%rbuffzC(:,:,:,4)
+
+        cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyC(:,:,:,2)
+        rbuff3E => this%rbuffzE(:,:,:,1); rbuff4E => this%rbuffzE(:,:,:,2);
 
         tidSUMreal = real(this%tidSUM, rkind)
 
@@ -3140,9 +3215,131 @@ contains
                 call decomp_2d_write_one(3, rbuff3, fname)
             endif
         endif
+
+        !-----Turbulent transport of TKE budget-------
+        ! triple correlation for transport term in TKE budget
+        ! x term in xdecomp
+        !rbuff1 = this%u_mean3D*this%u_mean3D + this%v_mean3D*this%v_mean3D + this%w_mean3D*this%w_mean3D
+        rbuff1 = this%tketurbtranspx_mean3D/tidSUMreal - two*(this%u_mean3D*this%uu_mean3D + this%v_mean3D*this%uv_mean3D + this%w_mean3D*this%uw_mean3D)/(tidSumreal**2) &
+               + ( two*(this%u_mean3D*this%u_mean3D + this%v_mean3D*this%v_mean3D + this%w_mean3D*this%w_mean3D)/tidSUMreal**2 - (this%uu_mean3D + this%vv_mean3D + this%ww_mean3D)/tidSUMreal )*(this%u_mean3D/tidSUMreal)
+        call this%spectC%fft(rbuff1,cbuffy1)   
+        call this%spectC%mTimes_ik1_ip(cbuffy1)
+        call this%spectC%ifft(cbuffy1,rbuff0)
+
+        ! add y term in x decomp
+        rbuff1 = this%tketurbtranspy_mean3D/tidSUMreal - two*(this%u_mean3D*this%uv_mean3D + this%v_mean3D*this%vv_mean3D + this%w_mean3D*this%vw_mean3D)/(tidSumreal**2) &
+               + ( two*(this%u_mean3D*this%u_mean3D + this%v_mean3D*this%v_mean3D + this%w_mean3D*this%w_mean3D)/tidSUMreal**2 - (this%uu_mean3D + this%vv_mean3D + this%ww_mean3D)/tidSUMreal )*(this%v_mean3D/tidSUMreal)
+        call this%spectC%fft(rbuff1,cbuffy1)   
+        call this%spectC%mTimes_ik2_ip(cbuffy1)
+        call this%spectC%ifft(cbuffy1,rbuff1)
+        rbuff0 = rbuff0 + rbuff1
+
+        ! take sum of x and y terms to z decomp
+        call transpose_x_to_y(rbuff0, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2, rbuff4, this%gpC)
+
+        ! compute z term in z decomp
+        rbuff1 = this%tketurbtranspz_mean3D/tidSUMreal - two*(this%u_mean3D*this%uw_mean3D + this%v_mean3D*this%vw_mean3D + this%w_mean3D*this%ww_mean3D)/(tidSumreal**2) &
+               + ( two*(this%u_mean3D*this%u_mean3D + this%v_mean3D*this%v_mean3D + this%w_mean3D*this%w_mean3D)/tidSUMreal**2 - (this%uu_mean3D + this%vv_mean3D + this%ww_mean3D)/tidSUMreal )*(this%w_mean3D/tidSUMreal)
+        call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+        ! interpolate rbuff3 from C to E
+        call this%Pade6opZ%interpz_C2E(rbuff3, rbuff3E, 0,0)
+        call this%Pade6opZ%ddz_E2C(rbuff3E,rbuff3,0,0)
+
+        ! add x and y terms to z term
+        rbuff3 = rbuff3 + rbuff4
+        rbuff3 = half*rbuff3
+
+        call this%compute_z_mean(rbuff3, this%tketurbtransp_mean)
+        write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_tktt_t",this%step,".3Dstt"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(3, rbuff3, fname)
+        !-----Done turbulent transport of TKE budget-------
+
+        !-----Mean advection term of TKE budget------
+        ! compute tke first
+        rbuff1 = this%u_mean3D*this%u_mean3D + this%v_mean3D*this%v_mean3D + this%w_mean3D*this%w_mean3D
+        rbuff1 = -rbuff1/tidSUMreal**2
+        rbuff1 = rbuff1 + (this%uu_mean3D + this%vv_mean3D + this%ww_mean3D)/tidSUMreal
+
+        ! transpose to z and take z derivative
+        call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+        call this%Pade6opZ%ddz_C2E(rbuff3,rbuff3E,0,0)
+        
+        ! transpose w_mean3D to z, interpolate to E and multiply
+        call transpose_x_to_y(this%w_mean3D/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,                   rbuff4, this%gpC)
+        call this%Pade6opZ%interpz_C2E(rbuff4,rbuff4E,0,0)
+        rbuff4E = rbuff4E * rbuff3E
+
+        ! interpolate E to C
+        call this%Pade6opZ%interpz_E2C(rbuff4E, rbuff4, 0,0)
+
+
+        ! x derivative
+        call this%spectC%fft(rbuff1,cbuffy1)   
+        call this%spectC%mTimes_ik1_oop(cbuffy1, cbuffy2)
+        call this%spectC%ifft(cbuffy2,rbuff0)
+
+        ! y derivative
+        call this%spectC%fft(rbuff1,cbuffy1)   
+        call this%spectC%mTimes_ik2_oop(cbuffy1, cbuffy2)
+        call this%spectC%ifft(cbuffy2,rbuff1)
+        rbuff0 = this%u_mean3D*rbuff0 + this%v_mean3D*rbuff1
+
+        ! transpose sum of x and y parts to z and add z part
+        call transpose_x_to_y(rbuff0/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,            rbuff3, this%gpC)
+        rbuff3 = rbuff3 + rbuff4
+        rbuff3 = half*rbuff3
+
+        ! write outputs
+        call this%compute_z_mean(rbuff3, this%tkemeanadvec_mean)
+        write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_tkma_t",this%step,".3Dstt"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        call decomp_2d_write_one(3, rbuff3, fname)
+        !-----Done mean advection term of TKE budget------
+
+
+        if(this%useWindTurbines) then
+           !----Turbine work term in TKE budget-------
+           rbuff1 = this%uturbf_mean3D/tidSUMreal -  ( this%u_mean3D*this%turbfx_mean3D + &
+                    this%v_mean3D*this%turbfy_mean3D + this%w_mean3D*this%turbfy_mean3D ) / tidSUMreal**2
+           call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+           call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+           call this%compute_z_mean(rbuff3, this%uturbf_mean)
+           write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trbu_t",this%step,".3Dstt"
+           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+           call decomp_2d_write_one(3, rbuff3, fname)
+           !----Done turbine work term in TKE budget-------
+
+           ! write out turbfx_mean3D
+           call transpose_x_to_y(this%turbfx_mean3D/tidSUMreal, rbuff2, this%gpC)
+           call transpose_y_to_z(rbuff2,                        rbuff3, this%gpC)
+           write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trbx_t",this%step,".3Dstt"
+           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+           call decomp_2d_write_one(3, rbuff3, fname)
+
+           ! write out turbfy_mean3D
+           call transpose_x_to_y(this%turbfy_mean3D/tidSUMreal, rbuff2, this%gpC)
+           call transpose_y_to_z(rbuff2,                        rbuff3, this%gpC)
+           write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trby_t",this%step,".3Dstt"
+           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+           call decomp_2d_write_one(3, rbuff3, fname)
+
+           ! write out turbfz_mean3D
+           call transpose_x_to_y(this%turbfz_mean3D/tidSUMreal, rbuff2, this%gpC)
+           call transpose_y_to_z(rbuff2,                        rbuff3, this%gpC)
+           write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_trbz_t",this%step,".3Dstt"
+           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+           call decomp_2d_write_one(3, rbuff3, fname)
+        endif
+
         call message(1, "Dumped 3D stats files")
 
-        nullify(rbuff1,rbuff2,rbuff3,rbuff4,rbuff5,rbuff6)
+        nullify(rbuff1,rbuff2,rbuff3,rbuff4,rbuff5,rbuff6, rbuff0, cbuffy1, cbuffy2, rbuff3E, rbuff4E)
 
         ! dump horizontal averages
         if(this%useWindTurbines) then
@@ -3237,6 +3434,12 @@ contains
         if(this%isStratified) then
             nullify(this%T_mean, this%uT_mean, this%vT_mean, this%wT_mean, this%TT_mean, this%q1_mean, this%q2_mean, this%q3_mean)
             nullify(this%T_mean3D, this%uT_mean3D, this%vT_mean3D, this%wT_mean3D, this%TT_mean3D, this%q1_mean3D, this%q2_mean3D, this%q3_mean3D)
+        endif
+
+        nullify(this%tketurbtranspx_mean3D, this%tketurbtranspy_mean3D, this%tketurbtranspz_mean3D, this%tketurbtransp_mean, this%tkemeanadvec_mean)
+
+        if(this%useWindTurbines) then
+            nullify(this%turbfx_mean3D, this%turbfy_mean3D, this%turbfz_mean3D, this%uturbf_mean3D, this%uturbf_mean)
         endif
 
         if(this%fastCalcPressure .or. this%storePressure) then
