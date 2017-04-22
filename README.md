@@ -47,7 +47,7 @@ This   README would normally document whatever steps are necessary to get your a
 * To merge a branch "dev" to master, use the following commands:
 ```bash
 git merge --no-commit dev
-git checkout .travis.yml
+git checkout origin/master -- .travis.yml
 git commit -m "merge dev into master"
 ```
 
