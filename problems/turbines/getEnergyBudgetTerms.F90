@@ -442,7 +442,7 @@ contains
       ! Initialize sgs
       call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, &
                       fbody_z, computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, &
-                      rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, .false., .false.)
+                      rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, .false., .false.,1)
       call newsgs%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
 
 
