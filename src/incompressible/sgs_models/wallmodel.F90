@@ -23,7 +23,7 @@ subroutine initWallModel(this)
       call gracefulExit("Invalid choice of Wallmodel.",324)
    end select
 
-   if (this%isStratified) then
+   if (this%isStratified .or. this%initspinup) then
       allocate(this%q3HAT_AtWall(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2)))
       this%q3HAT_AtWall = dcmplx(0.d0, 0.d0)
    end if 
@@ -106,12 +106,12 @@ subroutine compute_and_bcast_surface_Mn(this, u, v, uhat, vhat, That )
         this%Umn = real(uhat(1,1,1),rkind)*this%meanFact
         this%Vmn = real(vhat(1,1,1),rkind)*this%meanFact
         this%Uspmn = real(cbuff(1,1,1),rkind)*this%meanFact
-        if (this%isStratified) this%Tmn = real(That(1,1,1),rkind)*this%meanFact
+        if (this%isStratified .or. this%initSpinUp) this%Tmn = real(That(1,1,1),rkind)*this%meanFact
     end if
     call mpi_bcast(this%Umn,1,mpirkind,0,mpi_comm_world,ierr)
     call mpi_bcast(this%Vmn,1,mpirkind,0,mpi_comm_world,ierr)
     call mpi_bcast(this%Uspmn,1,mpirkind,0,mpi_comm_world,ierr)
-    if (this%isStratified) call mpi_bcast(this%Tmn,1,mpirkind,0,mpi_comm_world,ierr)
+    if (this%isStratified .or. this%initSpinup) call mpi_bcast(this%Tmn,1,mpirkind,0,mpi_comm_world,ierr)
 
     call this%getSurfaceQuantities() 
 end subroutine

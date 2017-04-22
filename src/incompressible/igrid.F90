@@ -216,6 +216,9 @@ module IncompressibleGrid
         real(rkind), dimension(:,:,:), allocatable :: probe_data
         integer :: tpro
 
+        ! Spin up for initialization
+        logical :: InitSpinUp = .false. 
+        real(rkind) :: Tstop_InitSpinUp
 
         ! Fringe
         logical                           :: useFringe = .false.
@@ -271,6 +274,7 @@ module IncompressibleGrid
             procedure, private :: updateProbes 
             procedure, private :: dumpProbes
             procedure, private :: correctPressureRotationalForm
+            procedure, private :: initialize_scalar_for_InitSpinUp
     end type
 
 contains 
@@ -304,7 +308,7 @@ contains
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
         logical, intent(in), optional :: initialize2decomp
-        logical :: reset2decomp 
+        logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true.  
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -316,7 +320,7 @@ contains
         namelist /BCs/ topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
-                            UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme
+                            UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, useExhaustiveFFT
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, KSdoZfilter, nKSvertFilt
         namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq            
         namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir
@@ -363,7 +367,7 @@ contains
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
         this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; 
         this%t_pointProbe = t_pointProbe; this%dPfdx = dPfdx; this%dPfdy = dPfdy; this%dPfdz = dPfdz
-
+        this%InitSpinUp = InitSpinUp
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC); allocate(this%gpE)
@@ -440,10 +444,10 @@ contains
         ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
         allocate(this%spectC)
         call this%spectC%init("x", nx, ny, nz, this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , .false.)
+                "four", this%filter_x, 2 , .false., exhaustiveFFT=useExhaustiveFFT)
         allocate(this%spectE)
         call this%spectE%init("x", nx, ny, nz+1, this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , .false.)
+                "four", this%filter_x, 2 , .false., exhaustiveFFT=useExhaustiveFFT)
         this%sp_gpC => this%spectC%spectdecomp
         this%sp_gpE => this%spectE%spectdecomp
 
@@ -561,6 +565,14 @@ contains
             call message(1,"Reference Temperature set to:",this%ThetaRef) 
         end if 
 
+        if (this%initspinup) then
+           if (this%isStratified) then
+            call GracefulExit("InitSpinUp not permitted when stratification is ON",3124)
+           else
+            call this%Initialize_Scalar_for_InitSpinUp(useRestartFile, inputfile, restartfile_TID, restartfile_RID)
+           end if
+        end if
+
         call this%spectC%fft(this%u,this%uhat)   
         call this%spectC%fft(this%v,this%vhat)   
         call this%spectE%fft(this%w,this%what)   
@@ -633,7 +645,6 @@ contains
 
         ! STEP 11: Initialize SGS model
         if (this%useSGS) then
-            allocate(this%SGSmodel)
             
             ! First get z at edges
             zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
@@ -645,11 +656,13 @@ contains
             call transpose_z_to_y(zEinZ,zEinY,this%gpE)
             call transpose_y_to_x(zEinY,this%rbuffxE(:,:,:,1), this%gpE)
 
+            allocate(this%SGSmodel)
             call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
-                                    this%ThetaRef, this%Fr, this%Re, Pr, this%isInviscid, this%isStratified, this%botBC_Temp)
+                                    this%ThetaRef, this%Fr, this%Re, Pr, this%isInviscid, this%isStratified, this%botBC_Temp, &
+                                    this%initSpinUp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3)
             call message(0,"SGS model initialized successfully")
         end if 
@@ -799,7 +812,7 @@ contains
 
         ! STEP 15: Set up extra buffers for RK3
         if (timeSteppingScheme == 1) then
-            if (this%isStratified) then
+            if (this%isStratified .or. this%initspinup) then
                 call this%spectC%alloc_r2c_out(this%SfieldsC2,3)
                 call this%spectE%alloc_r2c_out(this%SfieldsE2,2)
             else
@@ -809,7 +822,7 @@ contains
             this%uhat1 => this%SfieldsC2(:,:,:,1); 
             this%vhat1 => this%SfieldsC2(:,:,:,2); 
             this%what1 => this%SfieldsE2(:,:,:,1); 
-            if (this%isStratified) then
+            if (this%isStratified .or. this%initspinup) then
                 this%That1 => this%SfieldsC2(:,:,:,3); 
             end if 
         end if 
@@ -849,7 +862,7 @@ contains
             call GracefulExit("fastCalcPressure feature is not supported if useDealiasFilterVert is TRUE",123) 
         end if 
 
-        if ((this%isStratified) .and. (.not. ComputeStokesPressure )) then
+        if ((this%isStratified .or. this%initspinup) .and. (.not. ComputeStokesPressure )) then
             call GracefulExit("You must set ComputeStokesPressure to TRUE if &
             & there is stratification in the problem", 323)
         end if 
@@ -885,7 +898,7 @@ contains
         this%uhat => this%SfieldsC(:,:,:,1); 
         this%vhat => this%SfieldsC(:,:,:,2); 
         this%what => this%SfieldsE(:,:,:,1)
-        if (this%isStratified) then
+        if ((this%isStratified) .or. (this%initspinup)) then
             this%That => this%SfieldsC(:,:,:,4)
         end if
     end subroutine
@@ -913,10 +926,11 @@ contains
         this%uhat1 = this%uhat + this%dt*this%u_rhs 
         this%vhat1 = this%vhat + this%dt*this%v_rhs 
         this%what1 = this%what + this%dt*this%w_rhs 
-        if (this%isStratified) this%That1 = this%That + this%dt*this%T_rhs
+        if (this%isStratified .or. this%initspinup) this%That1 = this%That + this%dt*this%T_rhs
         ! Now set pointers so that things operate on uhat1, vhat1, etc.
         this%uhat => this%SfieldsC2(:,:,:,1); this%vhat => this%SfieldsC2(:,:,:,2); this%what => this%SfieldsE2(:,:,:,1); 
-        if (this%isStratified) this%That => this%SfieldsC2(:,:,:,3)
+        if (this%isStratified .or. this%initspinup) this%That => this%SfieldsC2(:,:,:,3)
+        
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(this%fastCalcPressure)
 
@@ -929,10 +943,10 @@ contains
         this%uhat1 = (3.d0/4.d0)*this%uhat + (1.d0/4.d0)*this%uhat1 + (1.d0/4.d0)*this%dt*this%u_rhs
         this%vhat1 = (3.d0/4.d0)*this%vhat + (1.d0/4.d0)*this%vhat1 + (1.d0/4.d0)*this%dt*this%v_rhs
         this%what1 = (3.d0/4.d0)*this%what + (1.d0/4.d0)*this%what1 + (1.d0/4.d0)*this%dt*this%w_rhs
-        if (this%isStratified) this%That1 = (3.d0/4.d0)*this%That + (1.d0/4.d0)*this%That1 + (1.d0/4.d0)*this%dt*this%T_rhs
+        if (this%isStratified .or. this%initspinup) this%That1 = (3.d0/4.d0)*this%That + (1.d0/4.d0)*this%That1 + (1.d0/4.d0)*this%dt*this%T_rhs
         ! now set the u, v, w, pointers to u1, v1, w1
         this%uhat => this%SfieldsC2(:,:,:,1); this%vhat => this%SfieldsC2(:,:,:,2); this%what => this%SfieldsE2(:,:,:,1); 
-        if (this%isStratified) this%That => this%SfieldsC2(:,:,:,3)
+        if (this%isStratified .or. this%initspinup) this%That => this%SfieldsC2(:,:,:,3)
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(.false.)
 
@@ -946,7 +960,7 @@ contains
         this%uhat = (1.d0/3.d0)*this%uhat + (2.d0/3.d0)*this%uhat1 + (2.d0/3.d0)*this%dt*this%u_rhs
         this%vhat = (1.d0/3.d0)*this%vhat + (2.d0/3.d0)*this%vhat1 + (2.d0/3.d0)*this%dt*this%v_rhs
         this%what = (1.d0/3.d0)*this%what + (2.d0/3.d0)*this%what1 + (2.d0/3.d0)*this%dt*this%w_rhs
-        if (this%isStratified) this%That = (1.d0/3.d0)*this%That + (2.d0/3.d0)*this%That1 + (2.d0/3.d0)*this%dt*this%T_rhs
+        if (this%isStratified .or. this%initspinup) this%That = (1.d0/3.d0)*this%That + (2.d0/3.d0)*this%That1 + (2.d0/3.d0)*this%dt*this%T_rhs
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
 
@@ -1050,7 +1064,7 @@ contains
         
 
         ! Step 4: Interpolate T
-        if (this%isStratified) then
+        if (this%isStratified .or. this%initspinup) then
             call transpose_y_to_z(this%That,zbuffC,this%sp_gpC)
             call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,TBC_bottom, TBC_top)
             if (this%botBC_Temp == 0) then 
@@ -1152,7 +1166,7 @@ contains
         T1E = T1E + T2E
         call this%spectE%fft(T1E,this%w_rhs)
 
-        if (this%isStratified) then
+        if (this%isStratified .or. this%initspinup) then
             T1C = -this%u*this%dTdxC 
             T2C = -this%v*this%dTdyC
             T1C = T1C + T2C
@@ -1277,7 +1291,7 @@ contains
         this%w_rhs = -half*this%w_rhs
 
 
-        if (this%isStratified) then
+        if (this%isStratified .or. this%initspinup) then
             T1C = -this%u*this%T
             call this%spectC%fft(T1C,this%T_rhs)
             call this%spectC%mtimes_ik1_ip(this%T_rhs)
@@ -1416,7 +1430,7 @@ contains
         end if 
 
         ! Step 4: Buoyance + Sponge (inside Buoyancy)
-        if (this%isStratified) then
+        if (this%isStratified .or. this%initspinup) then
             call this%addBuoyancyTerm()
         end if 
 
@@ -1432,7 +1446,7 @@ contains
                                           this%vhat,       this%That,  this%u,          this%v,       this%uE,      &
                                           this%vE,         this%w,     this%newTimeStep                             )
 
-            if (this%isStratified) then
+            if (this%isStratified .or. this%initspinup) then
                call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzE)
             end if
             
@@ -1497,7 +1511,7 @@ contains
         call this%spectC%dealias(this%uhat)
         call this%spectC%dealias(this%vhat)
         call this%spectE%dealias(this%what)
-        if (this%isStratified) call this%spectC%dealias(this%That)
+        if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
         if (this%UseDealiasFilterVert) then
             call this%ApplyCompactFilter()
         end if
@@ -1514,7 +1528,7 @@ contains
         call this%spectC%ifft(this%uhat,this%u)
         call this%spectC%ifft(this%vhat,this%v)
         call this%spectE%ifft(this%what,this%w)
-        if (this%isStratified) call this%spectC%ifft(this%That,this%T)
+        if (this%isStratified .or. this%initspinup) call this%spectC%ifft(this%That,this%T)
     
         ! STEP 4: Interpolate the cell center values of w
         !call this%compute_and_bcast_surface_Mn()
@@ -1522,7 +1536,7 @@ contains
 
         ! STEP 5: Compute duidxjC 
         call this%compute_duidxj()
-        if (this%isStratified) call this%compute_dTdxi() 
+        if (this%isStratified .or. this%initspinup) call this%compute_dTdxi() 
 
     end subroutine
 
@@ -1747,7 +1761,7 @@ contains
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
-           if (this%isStratified) call this%dumpFullField(this%T,'potT')
+           if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            if (this%useWindTurbines) then
                this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
@@ -1780,7 +1794,7 @@ contains
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
-           if (this%isStratified) call this%dumpFullField(this%T,'potT')
+           if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            if (this%useWindTurbines) then
                this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
@@ -1798,6 +1812,12 @@ contains
            !call output_tecplot(gp)
         end if
 
+        if (this%initspinup) then
+         if (this%tsim > this%Tstop_initspinup) then
+             this%initspinup = .false.
+             call message(0,"Initialization spin up turned off. No active scalar in the problem.")
+         end if 
+        end if 
         ! Exit if the exitpdo file was detected earlier at the beginning of this
         ! subroutine
         if(exitstat) call GracefulExit("Found exitpdo file in control directory",1234)
@@ -1824,7 +1844,7 @@ contains
             this%uhat = this%uhat + this%dt*this%u_rhs 
             this%vhat = this%vhat + this%dt*this%v_rhs 
             this%what = this%what + this%dt*this%w_rhs 
-            if (this%isStratified) then
+            if (this%isStratified .or. this%initspinup) then
                 this%That = this%That + this%dt*this%T_rhs
             end if
         else
@@ -1833,7 +1853,7 @@ contains
             this%uhat = this%uhat + abf1*this%u_rhs + abf2*this%u_Orhs
             this%vhat = this%vhat + abf1*this%v_rhs + abf2*this%v_Orhs
             this%what = this%what + abf1*this%w_rhs + abf2*this%w_Orhs
-            if (this%isStratified) then
+            if (this%isStratified .or. this%initspinup) then
                 this%That = this%That + abf1*this%T_rhs + abf2*this%T_Orhs
             end if 
         end if 
@@ -1843,7 +1863,7 @@ contains
 
         ! Step 4: Store the RHS values for the next use
         this%u_Orhs = this%u_rhs; this%v_Orhs = this%v_rhs; this%w_Orhs = this%w_rhs
-        if (this%isStratified) this%T_Orhs = this%T_rhs
+        if (this%isStratified .or. this%initspinup) this%T_Orhs = this%T_rhs
         this%dtOld = this%dt
 
         ! Step 5: Do end of time step operations (I/O, stats, etc.)
@@ -1905,7 +1925,7 @@ contains
         call this%filzC%filter3(zbuff3,zbuff4,this%nxZ, this%nyZ)
         call transpose_z_to_y(zbuff4,this%what, this%sp_gpE)
 
-        if (this%isStratified) then
+        if (this%isStratified .or. this%initspinup) then
             call transpose_y_to_z(this%That,zbuff1, this%sp_gpC)
             call this%filzC%filter3(zbuff1,zbuff2,this%nxZ, this%nyZ)
             call transpose_z_to_y(zbuff1,this%That, this%sp_gpC)
@@ -2142,7 +2162,7 @@ contains
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
         call decomp_2d_write_one(1,this%w,fname, this%gpE)
 
-        if (this%isStratified) then
+        if (this%isStratified .or. this%initspinup) then
             write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_T.",this%step
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
             call decomp_2d_write_one(1,this%T,fname, this%gpE)
@@ -3895,10 +3915,10 @@ contains
         logical, optional, intent(in) :: dumpInitField
 
         ! Create data sharing info
-        if (nrank == 0) then
+        !if (nrank == 0) then
             allocate(xst(0:nproc-1,3),xen(0:nproc-1,3),xsz(0:nproc-1,3))
             xst = 0; xen = 0; xsz = 0;
-        end if
+        !end if
 
 
         ! communicate local processor grid info (Assume x-decomposition)
@@ -3956,9 +3976,9 @@ contains
         end if
         call mpi_barrier(mpi_comm_world,ierr)
         
-        if (nrank == 0) then
+        !if (nrank == 0) then
             deallocate(xst, xen, xsz)
-        end if 
+        !end if 
 
         if (present(dumpInitField)) then
             if (dumpInitField) then
@@ -3966,7 +3986,7 @@ contains
                 call this%dumpFullField(this%u,'uVel')
                 call this%dumpFullField(this%v,'vVel')
                 call this%dumpFullField(this%wC,'wVel')
-                if (this%isStratified) call this%dumpFullField(this%T,'potT')
+                if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
                 if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
                 if (this%useWindTurbines) then
                     this%WindTurbineArr%dumpTurbField = .true.
@@ -4055,8 +4075,61 @@ contains
             TBC_bottom = +1; dTdzBC_bottom = -1; WTBC_bottom = -1;
             WdTdzBC_bottom = +1
          end select
+
     end subroutine
 
+
+    subroutine initialize_scalar_for_initspinup(this,useRestartFile, inputfile, tid, rid)
+        use random,             only: gaussian_random
+        use decomp_2d_io
+        class(igrid), intent(inout) :: this 
+        real(rkind), dimension(:,:,:), allocatable :: randArr
+        real(rkind)  :: ScalarRef = 290.d0, sigma_purt = 0.1d0 
+        real(rkind)  :: Froude_Scalar = 0.08d0
+        real(rkind)  :: zcutoff = 0.25d0, Tstop_initSpinUp = 10.d0
+        logical, intent(in) :: useRestartFile
+        character(len=clen), intent(in) :: inputfile
+        character(len=clen) :: fname, tempname
+        integer, intent(in) :: tid, rid
+        integer :: seed = 2123122
+
+        namelist /INIT_SPINUP/ Tstop_InitSpinUp, Zcutoff, ScalarRef, Sigma_purt, Froude_Scalar, seed
+
+        
+        open(unit=11, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+        read(unit=11, NML=INIT_SPINUP)
+        close(11)
+
+        this%Tstop_InitSpinUp = Tstop_InitSpinUp 
+        this%Fr = Froude_Scalar
+        this%ThetaRef = ScalarRef
+        if (useRestartFile) then
+            write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_T.",tid
+            fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+            call decomp_2d_read_one(1,this%T,fname, this%gpC)
+            call message(0,"Read the spinup scalar field from the restart file")
+        else
+            allocate(randArr(size(this%T,1),size(this%T,2),size(this%T,3)))
+            this%T = ScalarRef
+            call gaussian_random(randArr,zero,one,seed + 10*nrank)
+            randArr = sigma_purt*randArr
+            ! Set random numbers in z > 0.25 to zero 
+            where (this%mesh(:,:,:,3) > Zcutoff)
+                randArr = zero
+            end where
+            
+            ! Add Temperature purturbations 
+            this%T = this%T + randArr
+            call message(0,"Initialized the spinup scalar field") 
+            deallocate(randArr)
+        end if
+
+        TBC_bottom = +1; dTdzBC_bottom = -1; WTBC_bottom = -1;
+        WdTdzBC_bottom = +1
+        TBC_top = +1; dTdzBC_top = -1; WTBC_top = -1;
+        WdTdzBC_top = +1
+
+    end subroutine 
 
     subroutine correctPressureRotationalForm(this)
         class(igrid), intent(inout) :: this 

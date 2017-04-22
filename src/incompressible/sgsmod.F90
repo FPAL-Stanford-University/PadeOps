@@ -320,7 +320,7 @@ contains
             if (this%isStratified) then
                 if ((present(dTdx)).and.(present(dTdy)).and.(present(dTdzHC))) then
                     if (this%spectC%carryingZeroK) then
-                        dTdzHC(1,1,:) = cmplx(0.d0,0.d0)
+                        dTdzHC(1,1,:) = dcmplx(0.d0,0.d0)
                     end if
                     call this%spectC%ifft(dTdzHC,this%dTdzC_diff)
                     call this%get_AMD_Op_strat(this%nuSGS,dudx, dudy, dudzC, dvdx, dvdy, dvdzC, dwdxC, dwdyC, &
