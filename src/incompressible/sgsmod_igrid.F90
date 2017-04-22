@@ -258,9 +258,6 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzE)
       ! No dynamic procedure as of now, so make sure that you provide a Prandtl
       ! number for initialization.
 
-      !print*, dTdxC(10,10,10)
-      !print*, this%kappa_sgs_C(10,10,10)
-      !print*, this%q1C(10,10,10)
       this%q1C = -this%kappa_sgs_C*dTdxC
       this%q2C = -this%kappa_sgs_C*dTdyC
       this%q3E = -this%kappa_sgs_E*dTdzE
