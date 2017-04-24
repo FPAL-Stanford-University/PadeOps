@@ -1,9 +1,9 @@
 &INPUT
 
-inputdir  = "/home/akshays/Data/miranda/BW/IRM_30MODES_128_CORRECTED"                ! Directory for input files
-outputdir = "/home/akshays/Data/miranda/BW/IRM_30MODES_128_CORRECTED/vorticity"      ! Directory for output files
+inputdir  = "/scratch/users/akshays/BW/IRM_30MODES_128_CORRECTED"                ! Directory for input files
+outputdir = "/scratch/users/akshays/BW/postprocessing/IRM_30MODES_128_CORRECTED" ! Directory for output files
 
-writeviz = .TRUE.         ! Write out post-processed visualization files?
+writeviz = .FALSE.         ! Write out post-processed visualization files?
 
 periodicx = .FALSE.       ! Periodic in X?
 periodicy = .FALSE.       ! Periodic in Y?

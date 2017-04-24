@@ -25,14 +25,19 @@ set(VTK_IO_PATH $ENV{VTK_IO_PATH})
 set(VTK_IO_LIBRARY_PATH "${VTK_IO_PATH}/lib")
 set(VTK_IO_INCLUDE_PATH "${VTK_IO_PATH}/modules")
 
+# Where to look for HDF5
+set(HDF5_PATH $ENV{HDF5_PATH})
+set(HDF5_LIBRARY_PATH "${HDF5_PATH}/lib")
+set(HDF5_INCLUDE_PATH "${HDF5_PATH}/include")
+
 set(CMAKE_Fortran_COMPILER_ID $ENV{COMPILER_ID})
 
 # Intel compiler suite
 if ( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
     if ( CMAKE_BUILD_TYPE MATCHES "Release" )
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -mkl -warn all -xhost -dynamic -qopt-report=2 -qopt-report-phase=vec -qoverride-limits -qopenmp")
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -mkl -heap-arrays 1024 -warn all -xhost -dynamic -qopt-report=2 -qopt-report-phase=vec -qoverride-limits -qopenmp")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -traceback -pg -mkl -check all -check noarg-temp-created -fpe0 -warn -traceback -debug extended -assume realloc_lhs -fstack-protector -assume protect_parens -implicitnone")
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -traceback -pg -mkl -heap-arrays 1024 -check all -check noarg-temp-created -fpe0 -warn -traceback -debug extended -assume realloc_lhs -fstack-protector -assume protect_parens -implicitnone")
     endif()
 
 # GNU compiler on OSX
@@ -40,7 +45,7 @@ elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "GNU_OSX")
     if ( CMAKE_BUILD_TYPE MATCHES "Release" )
         set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -Wall -Wconversion -Wextra -Waliasing -ffree-form -ffree-line-length-none -ffast-math -funroll-loops -fno-protect-parens -fno-unsafe-math-optimizations -frounding-math -fsignaling-nans")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
-        set(CMAKE_Fortran_FLAGS "-Og -g -fbacktrace -pg -llapack -ffree-form -ffree-line-length-none -fbounds-check -ffpe-trap=zero,overflow,underflow -Wall -Wconversion -Wextra -Waliasing -Wsurprising -fbacktrace -fno-unsafe-math-optimizations -frounding-math -fsignaling-nans")
+        set(CMAKE_Fortran_FLAGS "-Og -g -fbacktrace -pg -llapack -ffree-form -ffree-line-length-none -fbounds-check -ffpe-trap=zero,overflow -Wall -Wconversion -Wextra -Waliasing -Wsurprising -fno-unsafe-math-optimizations -frounding-math -fsignaling-nans")
     endif()
 
 # Standard GNU compilers
@@ -48,7 +53,7 @@ elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
     if ( CMAKE_BUILD_TYPE MATCHES "Release" )
         set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -Wall -Wconversion -Wextra -Waliasing -ffree-form -ffree-line-length-none -ffast-math -march=native -funroll-loops -fno-protect-parens -fopenmp")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
-        set(CMAKE_Fortran_FLAGS "-Og -g -fbacktrace -pg -llapack -ffree-form -ffree-line-length-none -fcheck=all -fbounds-check -ffpe-trap=zero,overflow,underflow -Wall -Wconversion -Wextra -Waliasing -Wsurprising -fbacktrace")
+        set(CMAKE_Fortran_FLAGS "-Og -g -fbacktrace -pg -llapack -ffree-form -ffree-line-length-none -fcheck=all -fbounds-check -ffpe-trap=zero,overflow -Wall -Wconversion -Wextra -Waliasing -Wsurprising")
     endif()
 endif()
 
