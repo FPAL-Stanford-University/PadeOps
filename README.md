@@ -8,6 +8,13 @@ This   README would normally document whatever steps are necessary to get your a
 * Version : 0.1
 * Tutorials : TBD/Incomplete
 
+### Current build status ###
+* `master:` [![Build Status](https://travis-ci.com/akshaysubr/PadeOps.svg?token=pw8NM711GSaRntPLSzsL&branch=master)](https://travis-ci.com/akshaysubr/PadeOps)
+* `devel :`
+* `cgrid :`
+* `igrid :`
+* `sgrid :`
+
 ### How do I get set up? ###
 
 * Summary of set up
