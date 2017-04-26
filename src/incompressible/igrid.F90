@@ -97,7 +97,12 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what, That, TEhat, uEhat, vEhat
         
         complex(rkind), dimension(:,:,:), pointer :: uhat1, vhat1, what1, That1
+        complex(rkind), dimension(:,:,:), pointer :: uhat2, vhat2, what2, That2
+        complex(rkind), dimension(:,:,:), pointer :: uhat3, vhat3, what3, That3
+        complex(rkind), dimension(:,:,:), pointer :: uhat4, vhat4, what4, That4
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC2, SfieldsE2
+        complex(rkind), dimension(:,:,:,:), allocatable :: uExtra, vExtra, wExtra, TExtra 
+        complex(rkind), dimension(:,:,:,:), allocatable :: uRHSExtra, vRHSExtra, wRHSExtra, TRHSExtra 
 
         real(rkind), dimension(:,:,:), pointer :: ox,oy,oz
         complex(rkind), dimension(:,:,:), pointer :: T_rhs, T_Orhs
@@ -239,6 +244,7 @@ module IncompressibleGrid
             procedure, private :: init_stats3D
             procedure, private :: AdamsBashforth
             procedure, private :: TVD_RK3
+            procedure, private :: SSP_RK45
             procedure, private :: ComputePressure
             procedure, private :: interp_primitiveVars
             procedure, private :: compute_duidxj
@@ -827,9 +833,18 @@ contains
             if (this%isStratified .or. this%initspinup) then
                 this%That1 => this%SfieldsC2(:,:,:,3); 
             end if 
-        end if 
+         else if (timeSteppingScheme == 2) then
+            call this%spectC%alloc_r2c_out(this%uExtra,3)
+            call this%spectC%alloc_r2c_out(this%uRHSExtra,1)
+            call this%spectC%alloc_r2c_out(this%vExtra,3)
+            call this%spectC%alloc_r2c_out(this%vRHSExtra,1)
+            call this%spectE%alloc_r2c_out(this%wExtra,3)
+            call this%spectE%alloc_r2c_out(this%wRHSExtra,1)
+            call this%spectC%alloc_r2c_out(this%TExtra,3)
+            call this%spectC%alloc_r2c_out(this%TRHSExtra,1)
+         end if 
 
-        if ((timeSteppingScheme .ne. 0) .and. (timeSteppingScheme .ne. 1)) then
+        if ((timeSteppingScheme .ne. 0) .and. (timeSteppingScheme .ne. 1) .and. (timeSteppingScheme .ne. 2)) then
             call GracefulExit("Invalid choice of TIMESTEPPINGSCHEME.",5235)
         end if 
 
@@ -857,8 +872,8 @@ contains
 
 
         ! STEP 19: Safeguard against user invalid user inputs
-        if ((this%fastCalcPressure) .and. (TimeSteppingScheme .ne. 1)) then
-            call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 time stepping.",123)
+        if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
+            call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 or SSP RK45 time stepping.",123)
         end if 
         if ((this%fastCalcPressure) .and. (useDealiasFilterVert)) then
             call GracefulExit("fastCalcPressure feature is not supported if useDealiasFilterVert is TRUE",123) 
@@ -890,12 +905,19 @@ contains
             else
               call this%TVD_rk3()
             endif
+         case(2) 
+            if(present(dtforced)) then
+              call this%SSP_rk45(dtforced)
+            else
+              call this%SSP_rk45()
+            endif
         end select
 
     end subroutine
 
-    subroutine reset_pointers(this)
+    subroutine reset_pointers(this, resetRHS)
         class(igrid), intent(inout), target :: this
+        logical, intent(in), optional :: resetRHS 
 
         this%uhat => this%SfieldsC(:,:,:,1); 
         this%vhat => this%SfieldsC(:,:,:,2); 
@@ -903,6 +925,18 @@ contains
         if ((this%isStratified) .or. (this%initspinup)) then
             this%That => this%SfieldsC(:,:,:,4)
         end if
+
+        if (present(resetRHS)) then
+            if (resetRHS) then
+               this%u_rhs => this%rhsC(:,:,:,1); 
+               this%v_rhs => this%rhsC(:,:,:,2); 
+               this%w_rhs => this%rhsE(:,:,:,1)
+               if ((this%isStratified) .or. (this%initspinup)) then
+                   this%T_rhs =>  this%rhsC(:,:,:,3)
+               end if
+            end if 
+        end if 
+
     end subroutine
 
     
@@ -916,7 +950,7 @@ contains
           ! Step 0: Compute TimeStep 
           call this%compute_deltaT
         endif
-        
+       
         !!! STAGE 1
         ! First stage - everything is where it's supposed to be
         if (this%AlreadyHaveRHS) then
@@ -963,6 +997,132 @@ contains
         this%vhat = (1.d0/3.d0)*this%vhat + (2.d0/3.d0)*this%vhat1 + (2.d0/3.d0)*this%dt*this%v_rhs
         this%what = (1.d0/3.d0)*this%what + (2.d0/3.d0)*this%what1 + (2.d0/3.d0)*this%dt*this%w_rhs
         if (this%isStratified .or. this%initspinup) this%That = (1.d0/3.d0)*this%That + (2.d0/3.d0)*this%That1 + (2.d0/3.d0)*this%dt*this%T_rhs
+        ! Now perform the projection and prep for next time step
+        call this%project_and_prep(.false.)
+
+        ! Wrap up this time step 
+        call this%wrapup_timestep() 
+
+    end subroutine
+
+
+    subroutine SSP_RK45(this, dtforced)
+        class(igrid), intent(inout), target :: this
+        real(rkind), intent(in), optional :: dtforced
+        real(rkind), parameter :: b01 = 0.39175222657189d0 , b12 = 0.368410593050371d0, b23 = 0.25189177427169d0, b34 = 0.54497475022852d0
+        real(rkind), parameter :: b35 = 0.06369246866629d0 , b45 = 0.22600748323690d0
+        
+        real(rkind), parameter :: a20 = 0.444370493651235d0, a21 = 0.555629506348765d0
+        real(rkind), parameter :: a30 = 0.620101851488403d0, a32 = 0.379898148511597d0
+        real(rkind), parameter :: a40 = 0.17807995439313d0 , a43 = 0.821920045606868d0
+        real(rkind), parameter :: a52 = 0.517231671970585d0, a53 = 0.096059710526147d0, a54 = 0.386708617503269d0
+
+        if(present(dtforced)) then
+          this%dt = dtforced
+        else
+          ! Step 0: Compute TimeStep 
+          call this%compute_deltaT
+        endif
+        
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !!! STAGE 1 !!!!!!!!!!!!!!!!!!!!!!!!
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        ! First stage - everything is where it's supposed to be
+        if (this%AlreadyHaveRHS) then
+            this%AlreadyHaveRHS = .false.
+        else
+            call this%populate_rhs()
+        end if
+        this%newTimeStep = .false.
+        ! Set the pointers 
+        this%uhat1 => this%uExtra(:,:,:,1); this%vhat1 => this%vExtra(:,:,:,1);
+        this%what1 => this%wExtra(:,:,:,1); this%That1 => this%TExtra(:,:,:,1);
+        ! Do the time step
+        this%uhat1 = this%uhat + b01*this%dt*this%u_rhs 
+        this%vhat1 = this%vhat + b01*this%dt*this%v_rhs 
+        this%what1 = this%what + b01*this%dt*this%w_rhs 
+        if (this%isStratified .or. this%initspinup) this%That1 = this%That + b01*this%dt*this%T_rhs
+        ! Now set pointers so that things operate on uhat1, vhat1, etc.
+        this%uhat => this%uExtra(:,:,:,1); this%vhat => this%vExtra(:,:,:,1)
+        this%what => this%wExtra(:,:,:,1); this%That => this%TExtra(:,:,:,1)
+        ! Now perform the projection and prep for next stage
+        call this%project_and_prep(this%fastCalcPressure)
+
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !!! STAGE 2 !!!!!!!!!!!!!!!!!!!!!!!!
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        call this%populate_rhs()
+        ! reset u, v, w pointers
+        call this%reset_pointers()
+        ! Set the new pointers
+        this%uhat2 => this%uExtra(:,:,:,2); this%vhat2 => this%vExtra(:,:,:,2)
+        this%what2 => this%wExtra(:,:,:,2); this%That2 => this%TExtra(:,:,:,2)
+        ! Do the time step
+        this%uhat2 = a20*this%uhat + a21*this%uhat1 + b12*this%dt*this%u_rhs
+        this%vhat2 = a20*this%vhat + a21*this%vhat1 + b12*this%dt*this%v_rhs
+        this%what2 = a20*this%what + a21*this%what1 + b12*this%dt*this%w_rhs
+        if (this%isStratified .or. this%initspinup) this%That2 = a20*this%That + a21*this%That1 + b12*this%dt*this%T_rhs
+        ! now set the u, v, w, pointers to u2, v2, w2
+        this%uhat => this%uExtra(:,:,:,2); this%vhat => this%vExtra(:,:,:,2)
+        this%what => this%wExtra(:,:,:,2); this%That => this%TExtra(:,:,:,2)
+        ! Now perform the projection and prep for next stage
+        call this%project_and_prep(.false.)
+
+
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !!! STAGE 3 !!!!!!!!!!!!!!!!!!!!!!!!
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        call this%populate_rhs()
+        ! reset u, v, w pointers
+        call this%reset_pointers()
+        ! Set the pointers 
+        this%uhat3 => this%uExtra(:,:,:,3); this%vhat3 => this%vExtra(:,:,:,3)
+        this%what3 => this%wExtra(:,:,:,3); this%That3 => this%TExtra(:,:,:,3)
+        ! Do the time step 
+        this%uhat3 = a30*this%uhat + a32*this%uhat2 + b23*this%dt*this%u_rhs
+        this%vhat3 = a30*this%vhat + a32*this%vhat2 + b23*this%dt*this%v_rhs
+        this%what3 = a30*this%what + a32*this%what2 + b23*this%dt*this%w_rhs
+        if (this%isStratified .or. this%initspinup) this%That3 = a30*this%That + a32*this%That2 + b23*this%dt*this%T_rhs
+        ! now set u, v, w pointers to point to u3, v3, w3
+        this%uhat => this%uExtra(:,:,:,3); this%vhat => this%vExtra(:,:,:,3)
+        this%what => this%wExtra(:,:,:,3); this%That => this%TExtra(:,:,:,3)
+        ! Now perform the projection and prep for next time step
+        call this%project_and_prep(.false.)
+
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !!! STAGE 4 !!!!!!!!!!!!!!!!!!!!!!!!
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        call this%populate_rhs()
+        ! reset u, v, w pointers
+        call this%reset_pointers()
+        ! Set the pointers 
+        this%uhat4 => this%uhat; this%vhat4 => this%vhat
+        this%what4 => this%what; this%That4 => this%That
+        ! Do the time step 
+        this%uhat4 = a40*this%uhat + a43*this%uhat3 + b34*this%dt*this%u_rhs
+        this%vhat4 = a40*this%vhat + a43*this%vhat3 + b34*this%dt*this%v_rhs
+        this%what4 = a40*this%what + a43*this%what3 + b34*this%dt*this%w_rhs
+        if (this%isStratified .or. this%initspinup) this%That4 = a40*this%That + a43*this%That2 + b34*this%dt*this%T_rhs
+        ! now set u, v, w pointers to point to u4, v4, w4
+        ! < no need to do anything here since u4 is already pointing to u > 
+        ! Now perform the projection and prep for next time step
+        call this%project_and_prep(.false.)
+
+
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !!! STAGE 5 !!!!!!!!!!!!!!!!!!!!!!!!
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        ! First reset urhs pointers to point to spare buffers
+        this%u_rhs => this%uRHSExtra(:,:,:,1); this%v_rhs => this%vRHSExtra(:,:,:,1);
+        this%w_rhs => this%wRHSExtra(:,:,:,1); this%T_rhs => this%TRHSExtra(:,:,:,1);
+        call this%populate_rhs()
+        ! Reset pointers
+        call this%reset_pointers(resetRHS=.true.)
+        ! Do the time step 
+        this%uhat = a52*this%uhat2 + a53*this%uhat3 + b35*this%dt*this%u_rhs + a54*this%uhat + b45*this%dt*this%uRHSExtra(:,:,:,1)
+        this%vhat = a52*this%vhat2 + a53*this%vhat3 + b35*this%dt*this%v_rhs + a54*this%vhat + b45*this%dt*this%vRHSExtra(:,:,:,1)
+        this%what = a52*this%what2 + a53*this%what3 + b35*this%dt*this%w_rhs + a54*this%what + b45*this%dt*this%wRHSExtra(:,:,:,1)
+        if (this%isStratified .or. this%initspinup) this%That = a52*this%That2 + a53*this%That3 + b35*this%dt*this%T_rhs + a54*this%That + b45*this%dt*this%TRHSExtra(:,:,:,1) 
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
 
