@@ -1102,7 +1102,7 @@ contains
         this%uhat4 = a40*this%uhat + a43*this%uhat3 + b34*this%dt*this%u_rhs
         this%vhat4 = a40*this%vhat + a43*this%vhat3 + b34*this%dt*this%v_rhs
         this%what4 = a40*this%what + a43*this%what3 + b34*this%dt*this%w_rhs
-        if (this%isStratified .or. this%initspinup) this%That4 = a40*this%That + a43*this%That2 + b34*this%dt*this%T_rhs
+        if (this%isStratified .or. this%initspinup) this%That4 = a40*this%That + a43*this%That3 + b34*this%dt*this%T_rhs
         ! now set u, v, w pointers to point to u4, v4, w4
         ! < no need to do anything here since u4 is already pointing to u > 
         ! Now perform the projection and prep for next time step
