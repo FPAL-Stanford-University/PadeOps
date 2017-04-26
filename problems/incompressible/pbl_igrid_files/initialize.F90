@@ -164,7 +164,7 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
     xplanes = [64]
     yplanes = [64]
-    zplanes = [20]
+    zplanes = [13]
 
 end subroutine
 
