@@ -585,13 +585,13 @@ contains
         call this%spectC%fft(this%u,this%uhat)   
         call this%spectC%fft(this%v,this%vhat)   
         call this%spectE%fft(this%w,this%what)   
-        if (this%isStratified) call this%spectC%fft(this%T,this%That)   
+        if (this%isStratified .or. this%initspinup) call this%spectC%fft(this%T,this%That)   
 
         ! Dealias and filter before projection
         call this%spectC%dealias(this%uhat)
         call this%spectC%dealias(this%vhat)
         call this%spectE%dealias(this%what)
-        if (this%isStratified) call this%spectC%dealias(this%That)
+        if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
         if (this%UseDealiasFilterVert) then
             call this%ApplyCompactFilter()
         end if
@@ -967,7 +967,6 @@ contains
         ! Now set pointers so that things operate on uhat1, vhat1, etc.
         this%uhat => this%SfieldsC2(:,:,:,1); this%vhat => this%SfieldsC2(:,:,:,2); this%what => this%SfieldsE2(:,:,:,1); 
         if (this%isStratified .or. this%initspinup) this%That => this%SfieldsC2(:,:,:,3)
-        
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(this%fastCalcPressure)
 
@@ -4493,6 +4492,7 @@ contains
         TBC_top = +1; dTdzBC_top = -1; WTBC_top = -1;
         WdTdzBC_top = +1
 
+        if (this%tsim > Tstop_InitSpinUp) this%initspinup = .false. 
     end subroutine 
 
     subroutine correctPressureRotationalForm(this)
