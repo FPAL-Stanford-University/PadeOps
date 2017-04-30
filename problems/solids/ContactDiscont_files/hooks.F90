@@ -1,6 +1,7 @@
 module ContactDiscont_data
     use kind_parameters,  only: rkind
     use constants,        only: one,third,half,twothird,two,three,four,seven
+    use FiltersMod,       only: filters
     implicit none
     
     real(rkind) :: kparam = real(0.1D0,rkind)
@@ -10,6 +11,10 @@ module ContactDiscont_data
     real(rkind) :: Ckap
 
     real(rkind), parameter :: eleventhird = real(11.D0/3.D0,rkind), seventhird = real(7.D0/3.D0,rkind)
+
+    type(filters) :: mygfil
+
+    real(rkind) :: Lx = four
 
 contains
 
@@ -118,7 +123,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = one/real(nx-1,rkind)
+        dx = Lx/real(nx-1,rkind)
         dy = dx
         dz = dx
 
@@ -156,7 +161,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, grho
     integer, dimension(2) :: iparams
     real(rkind), dimension(8) :: fparams
     integer :: nx
@@ -168,6 +173,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
+    ! Initialize mygfil
+    call mygfil%init(                        decomp, &
+                     .FALSE.,     .TRUE.,    .TRUE., &
+                  "gaussian", "gaussian", "gaussian" )
 
     write(*,*) 'eostype = ', eostype
     write(*,*) 'eosparams = ', eosparams
@@ -201,13 +210,16 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         p1 = p2 + mu*(grho2-grho1)
 
         ! initialize contact discontinuity at 0.5
-        tmp = half * ( one + erf( (x-half)/(thick*dx) ) )
+        tmp = half * ( one + erf( (x-half*Lx)/(thick*dx) ) )
 
         u   = zero
         v   = zero
         w   = zero
         rho = (one-tmp)*rho1 + tmp*rho2
-        p   = (one-tmp)*  p1 + tmp*  p2
+
+        grho = twothird*((rho/rho0)**eleventhird - (rho/rho0)**(-third) - (rho/rho0)**seventhird + (rho/rho0)**third)
+        p = p2 + mu*(grho2-grho)
+        ! p   = (one-tmp)*  p1 + tmp*  p2
 
         !rho1 = rho(decomp%yen(1),1,1)
         !u1   = u  (decomp%yen(1),1,1)
@@ -338,6 +350,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
+    use operators,        only: filter3D
 
     use ContactDiscont_data
 
@@ -346,9 +359,11 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-    real(rkind), dimension(2),       intent(in)    :: x_bc, y_bc, z_bc
+    integer,     dimension(2),       intent(in)    :: x_bc, y_bc, z_bc
 
-    integer :: nx
+    integer :: nx, i, j
+    real(rkind) :: dx, xspng, tspng
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
 
     nx = decomp%ysz(1)
 
@@ -357,13 +372,14 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+                 g => fields(:,:,:,g11_index:g33_index), &
                g11 => fields(:,:,:,g11_index), g12 => fields(:,:,:,g12_index), g13 => fields(:,:,:,g13_index), & 
                g21 => fields(:,:,:,g21_index), g22 => fields(:,:,:,g22_index), g23 => fields(:,:,:,g23_index), &
                g31 => fields(:,:,:,g31_index), g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         rho( 1,:,:) = rho2
-        u  ( 1,:,:) = u2
+        ! u  ( 1,:,:) = u2
         v  ( 1,:,:) = zero
         w  ( 1,:,:) = zero
         p  ( 1,:,:) = p2
@@ -372,8 +388,45 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
         g21( 1,:,:) = zero; g22( 1,:,:) = one;  g23( 1,:,:) = zero
         g31( 1,:,:) = zero; g32( 1,:,:) = zero; g33( 1,:,:) = one
 
+        xspng = 0.1_rkind*Lx
+        tspng = 0.05_rkind*Lx
+        dx = x(2,1,1) - x(1,1,1)
+        dum = half*(one - tanh( (x-xspng)/(tspng) ))
+
+        do i=1,4
+            tmp = u
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            u = u + dum*(tmp - u)
+
+            tmp = v
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            v = v + dum*(tmp - v)
+
+            tmp = w
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            w = w + dum*(tmp - w)
+
+            tmp = e
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            e = e + dum*(tmp - e)
+
+            tmp = rho
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            rho = rho + dum*(tmp - rho)
+
+            tmp = p
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            p = p + dum*(tmp - p)
+
+            do j = 1,9
+                tmp = g(:,:,:,j)
+                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+                g(:,:,:,j) = g(:,:,:,j) + dum*(tmp - g(:,:,:,j))
+            end do
+        end do
+
         rho(nx,:,:) = rho1
-        u  (nx,:,:) = u1
+        ! u  (nx,:,:) = u1
         v  (nx,:,:) = zero
         w  (nx,:,:) = zero
         p  (nx,:,:) = p1
@@ -381,6 +434,42 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
         g11(nx,:,:) = rho1/rho_0; g12(nx,:,:) = zero; g13(nx,:,:) = zero
         g21(nx,:,:) = zero; g22(nx,:,:) = one;  g23(nx,:,:) = zero
         g31(nx,:,:) = zero; g32(nx,:,:) = zero; g33(nx,:,:) = one
+
+        xspng = 0.9_rkind*Lx
+        tspng = 0.05_rkind*Lx
+        dum = half*(one + tanh( (x-xspng)/(tspng) ))
+
+        do i=1,4
+            tmp = u
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            u = u + dum*(tmp - u)
+
+            tmp = v
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            v = v + dum*(tmp - v)
+
+            tmp = w
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            w = w + dum*(tmp - w)
+
+            tmp = e
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            e = e + dum*(tmp - e)
+
+            tmp = rho
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            rho = rho + dum*(tmp - rho)
+
+            tmp = p
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            p = p + dum*(tmp - p)
+
+            do j = 1,9
+                tmp = g(:,:,:,j)
+                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+                g(:,:,:,j) = g(:,:,:,j) + dum*(tmp - g(:,:,:,j))
+            end do
+        end do
 
     end associate
 end subroutine
@@ -408,7 +497,8 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
 
     integer :: nx, istart, iend, i
     real(rkind), dimension(decomp%ysz(1)) :: dedx, drdx
-    real(rkind) :: dx, sthick, mwa, e_lo, e_hi, sthick_r, mwa_r, rho_hi, rho_lo
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
+    real(rkind) :: dx, sthick, mwa, e_lo, e_hi, sthick_r, mwa_r, rho_hi, rho_lo, rhowidth
     integer :: iounit = 229
     character(len=clen) :: outputfile
 
@@ -452,14 +542,17 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
           mwa_r = mwa_r / max(rho_hi-rho_lo, 1.0D-32)
         ! ----- rho oscillations -----
 
+        tmp = (rho - rho2)/(rho1 - rho2)
+        rhowidth = four * sum( tmp*(one - tmp) ) * dx
+
         write(outputfile,'(A)') "ContactDiscont_stats.dat"
         if (step == 1) then
             open(unit=iounit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-            write(iounit,'(5A26)') '"Time", "E thickness", "MWA", "R thickness", "R MWA"'
+            write(iounit,'(6A26)') "Time", "E thickness", "MWA", "R thickness", "R MWA", "Rwidth"
         else
             open(unit=iounit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
         end if
-        write(iounit,'(5ES26.16)') tsim, sthick, mwa,sthick_r,mwa_r
+        write(iounit,'(6ES26.16)') tsim, sthick, mwa,sthick_r,mwa_r, rhowidth
         close(iounit)
 
     end associate
