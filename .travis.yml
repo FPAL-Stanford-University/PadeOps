@@ -4,7 +4,7 @@ notifications:
   email: false
   slack:
     rooms:
-      - padeops:BL9Z4HoxfW6KHcHSILMFYD6M#travis
+      - padeops:BL9Z4HoxfW6KHcHSILMFYD6M#travis-cgrid
 
 sudo: required
 
