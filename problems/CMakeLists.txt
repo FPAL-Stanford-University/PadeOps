@@ -2,6 +2,7 @@ file(GLOB problems_source_files *.F90)
 file(GLOB cproblems_source_files compressible/*.F90)
 file(GLOB iproblems_source_files incompressible/*.F90)
 file(GLOB turbproblems_source_files turbines/*.F90)
+file(GLOB me451b_source_files me451b/*.F90)
 
 # Include directories
 include_directories( ${FFTW_INCLUDE_PATH} ${DECOMP_INCLUDE_PATH} ${PadeOps_BINARY_DIR}/src  )
@@ -26,6 +27,7 @@ endforeach()
 
 add_subdirectory(compressible)
 add_subdirectory(incompressible)
+add_subdirectory(me451b)
 add_subdirectory(turbines)
 add_subdirectory(postprocessing)
 add_subdirectory(solids)
