@@ -1289,10 +1289,21 @@ contains
     subroutine getPhysicalProperties(this)
         class(cgrid), intent(inout) :: this
 
+        ! TODO
+        ! Hard code these values for now. Need to make a better interface for this later
+        real(rkind) :: mu_ref = 0.6_rkind * half / (100._rkind * sqrt(3._rkind))
+        real(rkind) :: T_ref = 1._rkind / 1.4_rkind
+        real(rkind) :: Pr = 0.7_rkind
+
         ! If inviscid set everything to zero (otherwise use a model)
-        this%mu = zero
+        ! this%mu = zero
+        ! this%bulk = zero
+        ! this%kap = zero
+        ! this%diff = zero
+
+        this%mu   = mu_ref * (this%T / T_ref)**(three/four)
         this%bulk = zero
-        this%kap = zero
+        this%kap  = Pr * this%mix%material(1)%mat%gam / (this%mix%material(1)%mat%gam - one) * this%mix%material(1)%mat%Rgas * this%mu
         this%diff = zero
 
     end subroutine  
