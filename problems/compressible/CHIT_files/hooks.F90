@@ -4,7 +4,7 @@ module CHIT_data
     implicit none
     
     real(rkind) :: Mt = 0.1_rkind, gam = 1.4_rkind, k0 = four
-    real(rkind) :: tke0, enstrophy0, u_rms0, lambda0, tau
+    real(rkind) :: tke0, enstrophy0, dilatation_var0, u_rms0, lambda0, tau
 
 end module
 
@@ -156,7 +156,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use decomp_2d,        only: decomp_info, nrank
     use DerivativesMod,   only: derivatives
     use MixtureEOSMod,    only: mixture
-    use operators,        only: curl
+    use operators,        only: curl, divergence
     use reductions,       only: P_MEAN
 
     use CHIT_data
@@ -173,7 +173,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     
     integer                                     :: outputunit=229
     character(len=clen) :: outputfile, str
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tke, enstrophy
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tke, enstrophy, dilatation
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),3) :: vorticity
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
@@ -184,9 +184,11 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         ! Get TKE and Enstrophy to output to file
-        tke = half*rho*(u*u + v*v + w*w)
+        tke = u*u + v*v + w*w
         call curl(decomp, der, u, v, w, vorticity)
         enstrophy = vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2
+
+        call divergence(decomp, der, u, v, w, dilatation)
 
         write(str,'(I4.4)') decomp%ysz(2)
         write(outputfile,'(2A)') trim(outputdir),"/CHIT_"//trim(str)//".dat"
@@ -194,12 +196,13 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
         if (vizcount == 0) then
             tke0 = P_MEAN( tke )
             enstrophy0 = P_MEAN( vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2 )
+            dilatation_var0 = P_MEAN( dilatation**2 )
             open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-            write(outputunit,'(3A26)') "Time", "TKE", "Enstrophy"
+            write(outputunit,'(4A26)') "Time", "Velocity Var", "Enstrophy", "Dilatation Var"
         else
             open(unit=outputunit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
         end if
-        write(outputunit,'(3ES26.16)') tsim, P_MEAN(tke)/tke0, P_MEAN(enstrophy)/enstrophy0
+        write(outputunit,'(4ES26.16)') tsim, P_MEAN(tke)/tke0, P_MEAN(enstrophy)/(u_rms0**2 / lambda0**2), P_MEAN(dilatation**2)/(u_rms0**2 / lambda0**2)
         close(outputunit)
         
         write(str,'(I4.4,A,I4.4,A,I6.6)') decomp%ysz(2), "_", vizcount, "_", nrank
@@ -216,6 +219,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
         write(outputunit) vorticity(:,:,:,1)
         write(outputunit) vorticity(:,:,:,2)
         write(outputunit) vorticity(:,:,:,3)
+        write(outputunit) dilatation
         write(outputunit) p
         close(outputunit)
 
