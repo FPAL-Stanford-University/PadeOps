@@ -278,6 +278,7 @@ module IncompressibleGrid
             procedure, private :: finalize_stats3D
             procedure, private :: dump_planes
             procedure          :: dumpFullField 
+            procedure, private :: dumpVisualizationInfo
             procedure, private :: DeletePrevStats3DFiles
             procedure, private :: updateProbes 
             procedure, private :: dumpProbes
@@ -559,7 +560,7 @@ contains
             this%tsim = zero
             call this%dumpRestartfile()
         end if 
-      
+    
         if (this%isStratified) then
             call set_Reference_Temperature(inputfile,this%ThetaRef)
             if (botBC_Temp == 0) then
@@ -599,6 +600,7 @@ contains
 
 
         ! Pressure projection
+        call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
         call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
         !call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
 
@@ -1926,6 +1928,7 @@ contains
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
+           call this%dumpVisualizationInfo()
            if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            if (this%useWindTurbines) then
@@ -1959,6 +1962,7 @@ contains
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
+           call this%dumpVisualizationInfo()
            if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            if (this%useWindTurbines) then
@@ -2363,6 +2367,22 @@ contains
     end subroutine
 
 
+    subroutine dumpVisualizationInfo(this)
+        class(igrid), intent(in) :: this
+        character(len=clen) :: tempname, fname
+
+        
+      if (nrank == 0) then
+            write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_","info","_t",this%step,".out"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            OPEN(UNIT=10, FILE=trim(fname))
+            write(10,"(100g17.9)") this%tsim
+            write(10,"(100g17.9)") real(this%nx,rkind)
+            write(10,"(100g17.9)") real(this%ny,rkind)
+            write(10,"(100g17.9)") real(this%nz,rkind)
+            close(10)
+        end if 
+    end subroutine 
     !! STATISTICS !!
 
     !--------------------------------Beginning 3D Statistics----------------------------------------------
@@ -4352,6 +4372,7 @@ contains
                 call this%dumpFullField(this%u,'uVel')
                 call this%dumpFullField(this%v,'vVel')
                 call this%dumpFullField(this%wC,'wVel')
+                call this%dumpVisualizationInfo()
                 if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
                 if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
                 if (this%useWindTurbines) then

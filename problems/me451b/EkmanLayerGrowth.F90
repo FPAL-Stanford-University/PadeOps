@@ -1,5 +1,6 @@
 ! Template for PadeOps
 
+#include "EkmanLayerGrowth_files/io.F90"       
 #include "EkmanLayerGrowth_files/initialize.F90"       
 #include "EkmanLayerGrowth_files/temporalHook.F90"  
 
@@ -24,7 +25,7 @@ program EkmanLayerGrowth
     allocate(igp)                     !<-- Initialize hit_grid with defaults
 
     call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
-  
+ 
     call igp%start_io(.true.)                !<-- Start I/O by creating a header file (see io.F90)
 
     call igp%printDivergence()
