@@ -55,12 +55,12 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     fname = InitFileDirectory(:len_trim(InitFileDirectory))//"/"//trim(InitFileTag)//"_domain_info.dat"
     call read_Domain_info(Lx,Ly,Lz,trim(fname))
     case (2)
-      if (decomp%xsz(1) .ne. 192) then
-         call GracefulExit("Incorrect value set for NX. Needs to be 192",213)
+      if (decomp%xsz(1) .ne. 256) then
+         call GracefulExit("Incorrect value set for NX. Needs to be 256",213)
       end if 
 
-      if (decomp%ysz(2) .ne. 192) then
-         call GracefulExit("Incorrect value set for NY. Needs to be 192",213)
+      if (decomp%ysz(2) .ne. 256) then
+         call GracefulExit("Incorrect value set for NY. Needs to be 256",213)
       end if 
 
       if (decomp%zsz(3) .ne. 512) then
