@@ -124,8 +124,8 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:), pointer:: u_Orhs, v_Orhs, w_Orhs
 
         real(rkind), dimension(:,:,:), allocatable :: rDampC, rDampE         
-        real(rkind) :: Re, Gx, Gy, Gz, dtby2, meanfact, Tref, dPfdx, dPfdy, dPfdz
-        complex(rkind), dimension(:,:,:), allocatable :: GxHat, GyHat 
+        real(rkind) :: Re, G_Geostrophic, G_alpha, dtby2, meanfact, Tref, dPfdx, dPfdy, dPfdz
+        complex(rkind), dimension(:,:,:), allocatable :: GxHat, GyHat, GxHat_Edge
         real(rkind) :: Ro = 1.d5, Fr = 1000.d0
         logical :: assume_fplane = .true.
         real(rkind) :: coriolis_cosine, coriolis_sine 
@@ -278,6 +278,7 @@ module IncompressibleGrid
             procedure, private :: finalize_stats3D
             procedure, private :: dump_planes
             procedure          :: dumpFullField 
+            procedure, private :: dumpVisualizationInfo
             procedure, private :: DeletePrevStats3DFiles
             procedure, private :: updateProbes 
             procedure, private :: dumpProbes
@@ -297,8 +298,8 @@ contains
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1
         real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop
-        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero
-        real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0,Gx=0.d0,Gy=0.d0,Gz=0.d0
+        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0
+        real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
         logical ::isStratified=.false.,dumpPlanes = .false.,useExtraForcing = .false.
         logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false.
@@ -324,7 +325,7 @@ contains
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, &
-                          useGeostrophicForcing, Gx, Gy, Gz, dpFdx, dpFdy, dpFdz, assume_fplane, latitude
+                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude
         namelist /BCs/ topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
@@ -369,7 +370,8 @@ contains
         this%tSimStartStats = tSimStartStats; this%useWindTurbines = useWindTurbines
         this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS 
         this%UseDealiasFilterVert = UseDealiasFilterVert
-        this%Gx = Gx; this%Gy = Gy; this%Gz = Gz; this%Fr = Fr; this%fastCalcPressure = fastCalcPressure 
+        this%G_geostrophic = G_geostrophic; this%G_alpha = G_alpha; this%Fr = Fr; 
+        this%fastCalcPressure = fastCalcPressure 
         this%t_start_planeDump = t_start_planeDump; this%t_stop_planeDump = t_stop_planeDump
         this%t_planeDump = t_planeDump; this%BotBC_temp = BotBC_temp; this%Ro = Ro; 
         this%PreProcessForKS = preprocessForKS; this%KSOutputDir = KSoutputDir;this%t_dumpKSprep = t_dumpKSprep 
@@ -558,7 +560,7 @@ contains
             this%tsim = zero
             call this%dumpRestartfile()
         end if 
-      
+    
         if (this%isStratified) then
             call set_Reference_Temperature(inputfile,this%ThetaRef)
             if (botBC_Temp == 0) then
@@ -598,6 +600,7 @@ contains
 
 
         ! Pressure projection
+        call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
         call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
         !call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
 
@@ -622,15 +625,19 @@ contains
         ! STEP 10a: Compute Coriolis Term
         if (this%useCoriolis) then
             call message(0, "Turning on Coriolis with Geostrophic Forcing")
-            call message(1, "Geostrophic Velocity (East-West)  :", this%Gx) 
-            call message(1, "Geostrophic Velocity (South-North):", this%Gy)
-            call message(1, "Rossby Number       :", this%Ro) 
+            call message(1, "Geostrophic Velocity Magnitude  :", this%G_geostrophic) 
+            call message(1, "Geostrophic Velocity Direction  :", this%G_alpha)
+            call message(1, "Rossby Number:", this%Ro) 
             call this%spectC%alloc_r2c_out(this%GxHat)
             call this%spectC%alloc_r2c_out(this%GyHat)
-            this%rbuffxC(:,:,:,1) = this%Gx
+            call this%spectE%alloc_r2c_out(this%GxHat_Edge)
+            this%rbuffxC(:,:,:,1) = this%G_GEOSTROPHIC*cos(G_ALPHA*pi/180.d0)
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gxhat)
-            this%rbuffxC(:,:,:,1) = this%Gy
+            this%rbuffxE(:,:,:,1) = this%G_GEOSTROPHIC*cos(G_ALPHA*pi/180.d0)
+            call this%spectE%fft(this%rbuffxE(:,:,:,1),this%Gxhat_Edge)
+            this%rbuffxC(:,:,:,1) = this%G_GEOSTROPHIC*sin(G_ALPHA*pi/180.d0)
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gyhat)
+            
             if (this%assume_fplane) then
                 this%coriolis_sine   = sin(latitude*pi/180.d0)
                 this%coriolis_cosine = 0.d0
@@ -701,9 +708,9 @@ contains
             call this%spectC%alloc_r2c_out(this%uBase)
             call this%spectC%alloc_r2c_out(this%vBase)
             call this%spectC%alloc_r2c_out(this%TBase)
-            this%rbuffxC(:,:,:,1) = this%Gx
+            this%rbuffxC(:,:,:,1) = this%G_Geostrophic*cos(this%G_alpha*pi/180.d0)
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%uBase)
-            this%rbuffxC(:,:,:,1) = this%Gy
+            this%rbuffxC(:,:,:,1) = this%G_Geostrophic*sin(this%G_alpha*pi/180.d0)
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%vBase)
             this%rbuffxC(:,:,:,1) = this%T
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%TBase)
@@ -1483,25 +1490,23 @@ contains
 
 
         ! u equation 
-        ybuffC1 = -(this%coriolis_cosine*this%what + this%coriolis_sine*(this%GyHat - this%vhat))/this%Ro 
-        this%u_rhs = this%u_rhs  + ybuffC1!- (this%coriolis_cosine*this%what &
-                            !+ this%coriolis_sine*(this%GyHat - this%vhat))/this%Ro
+        ybuffC1    = (two/this%Ro)*(-this%coriolis_cosine*this%what - this%coriolis_sine*(this%GyHat - this%vhat))
+        this%u_rhs = this%u_rhs  + ybuffC1
+        
         ! v equation
-        ybuffC2 = this%coriolis_sine*(this%GxHat - this%uhat)/this%Ro
+        ybuffC2    = (two/this%Ro)*(this%coriolis_sine*(this%GxHat - this%uhat))
         this%v_rhs = this%v_rhs + ybuffC2 
         
         ! w equation 
         ! The real equation is given as:
         ! this%w_rhs = this%w_rhs - this%coriolis_cosine*(this%GxHat - this%uhat)/this%Ro
         ! But we evaluate this term as:
-        call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
-        call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,uBC_bottom,uBC_top)
-        zbuffE(:,:,1) = (three/two)*zbuffC(:,:,1) - half*zbuffC(:,:,2)
-        if (nrank == 0) zbuffE(1,1,:) = cmplx(zero,zero,rkind)
-        call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
-        
-        ybuffE = ybuffE*this%coriolis_cosine/this%Ro
+      
+        ybuffE = (two/this%Ro)*(-this%coriolis_cosine*(this%Gxhat_Edge - this%uEhat)) 
         this%w_rhs = this%w_rhs + ybuffE 
+        if (this%spectE%CarryingZeroK) then
+            ybuffE(1,1,:) = cmplx(zero,zero,rkind)
+        end if
         ! The residual quantity (Gx - <u>)*cos(alpha)/Ro is accomodated in
         ! pressure
 
@@ -1923,6 +1928,7 @@ contains
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
+           call this%dumpVisualizationInfo()
            if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            if (this%useWindTurbines) then
@@ -1956,6 +1962,7 @@ contains
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
+           call this%dumpVisualizationInfo()
            if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            if (this%useWindTurbines) then
@@ -2360,6 +2367,22 @@ contains
     end subroutine
 
 
+    subroutine dumpVisualizationInfo(this)
+        class(igrid), intent(in) :: this
+        character(len=clen) :: tempname, fname
+
+        
+      if (nrank == 0) then
+            write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_","info","_t",this%step,".out"
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            OPEN(UNIT=10, FILE=trim(fname))
+            write(10,"(100g17.9)") this%tsim
+            write(10,"(100g17.9)") real(this%nx,rkind)
+            write(10,"(100g17.9)") real(this%ny,rkind)
+            write(10,"(100g17.9)") real(this%nz,rkind)
+            close(10)
+        end if 
+    end subroutine 
     !! STATISTICS !!
 
     !--------------------------------Beginning 3D Statistics----------------------------------------------
@@ -4349,6 +4372,7 @@ contains
                 call this%dumpFullField(this%u,'uVel')
                 call this%dumpFullField(this%v,'vVel')
                 call this%dumpFullField(this%wC,'wVel')
+                call this%dumpVisualizationInfo()
                 if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
                 if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
                 if (this%useWindTurbines) then
@@ -4372,20 +4396,24 @@ contains
 
     subroutine get_boundary_conditions_stencil()
 
-         wBC_bottom   = -1; wBC_top   = -1;  
+         wBC_bottom     = -1; wBC_top     = -1;  
          WdWdzBC_bottom = -1; WdWdzBC_top = -1;
-         WWBC_bottom  = +1; WWBC_top  = +1;
-         dWdzBC_bottom =  0; dWdzBC_top =  0;
+         WWBC_bottom    = +1; WWBC_top    = +1;
+         dWdzBC_bottom  =  0; dWdzBC_top  =  0;
 
          !! Bottom wall 
          call message(0,"Bottom Wall Boundary Condition is:")
          select case (botWall)
          case(1)
             call message(1,"No-Slip Wall")
+            ! NOTE: no-slip wall requires both w = 0 and dwdz = 0. Therefore, w
+            ! is an even extension, which also satisfies w = 0.
             uBC_bottom      = -1; vBC_bottom      = -1;
             dUdzBC_bottom   =  0; dVdzBC_bottom   =  0;
             WdUdzBC_bottom  =  0; WdVdzBC_bottom  =  0;
-            UWBC_bottom     = +1; VWBC_bottom     = +1;   
+            UWBC_bottom     = +1; VWBC_bottom     = +1;
+            wBC_bottom      = +1; WdWdzBC_bottom  = -1; 
+            WWBC_bottom     = +1; dwdzBC_bottom   = -1;
          case(2) 
             call message(1,"Slip Wall")
             uBC_bottom      = +1; vBC_bottom      = +1;
@@ -4407,10 +4435,14 @@ contains
          select case (TopWall)
          case(1)
             call message(1,"No-Slip Wall")
+            ! NOTE: no-slip wall requires both w = 0 and dwdz = 0. Therefore, w
+            ! is an even extension, which also satisfies w = 0.
             uBC_top      = -1; vBC_top      = -1;
             dUdzBC_top   =  0; dVdzBC_top   =  0;
             WdUdzBC_top  =  0; WdVdzBC_top  =  0;
             UWBC_top     = +1; VWBC_top     = +1;   
+            wBC_top      = +1; WdWdzBC_top  = -1; 
+            WWBC_top     = +1; dwdzBC_top   = -1;
          case(2) 
             call message(1,"Slip Wall")
             uBC_top      = +1; vBC_top      = +1;
