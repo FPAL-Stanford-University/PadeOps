@@ -38,7 +38,7 @@ program concurrentSimulation
     call igp%init(mainInputFile, .false.)                                            !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
     call igp%start_io(.true.)                                           !<-- Start I/O by creating a header file (see io.F90)
     call igp%printDivergence()
- 
+
     ! Fringe associations for non-periodic BCs in x
     call igp%fringe_x%associateFringeTargets(prec%u, prec%v, prec%w) !<-- Link the target velocity array to igp 
 
