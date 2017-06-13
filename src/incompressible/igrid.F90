@@ -2502,8 +2502,8 @@ contains
         endif
 
         allocate(this%debugavg(5),this%debuginst(5))
-        allocate(this%inst_horz_avg(nhorzavgvars))
-        allocate(this%runningSum_sc(nhorzavgvars))
+        allocate(this%inst_horz_avg(5)) ! [ustar, uw, vw, Linv, wT]
+        allocate(this%runningSum_sc(5))
         allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),nstatsvar))
         allocate(this%horzavgstats(this%nz,nhorzavgvars))
 
@@ -2807,7 +2807,7 @@ contains
             !    write(*,*) rbuff3E(1,1,1:2)
             !endif
             !write(200+nrank,*) 1, this%tsim, this%inst_horz_avg(2)
-            rbuff3E(:,:,1) = this%inst_horz_avg(2)     !--- =-(this%sgsmodel%get_ustar()**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model
+            !rbuff3E(:,:,1) = this%sgsmodel%tauijWMhat_in_Z(:,:,1,1)    !this%inst_horz_avg(2)     !--- =-(this%sgsmodel%get_ustar()**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model
             !if(nrank==0) then
             !    write(*,*) rbuff3E(1,1,1:2)
             !endif
@@ -2829,7 +2829,7 @@ contains
             ! interpolate tau23 from E to C
             call transpose_x_to_y(this%tau23,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-            rbuff3E(:,:,1) = this%inst_horz_avg(3)     !--- =-(this%sgsmodel%get_ustar()**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model
+            !rbuff3E(:,:,1) = this%sgsmodel%tauijWMhat_in_Z(:,:,1,2)    !this%inst_horz_avg(3)     !--- =-(this%sgsmodel%get_ustar()**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model
             call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
             call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
             call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,5),this%gpC)
@@ -3262,7 +3262,7 @@ contains
 
           ! add x and y terms to z term
           rbuff3 = rbuff3 + rbuff4
-          rbuff3 = half*rbuff3
+          rbuff3 = -half*rbuff3
 
           call this%compute_z_mean(rbuff3, this%tkett_mean)
           write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_tktt_t",this%step,".3Dstt"
