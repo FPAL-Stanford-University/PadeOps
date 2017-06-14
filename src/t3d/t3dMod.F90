@@ -24,10 +24,12 @@ module t3dMod
         integer :: px_y, px_z
         integer :: py_x, py_z
         integer :: pz_y, pz_x
-        integer, dimension(3), public :: sz3d, st3d, en3d 
-        integer, dimension(3), public :: szX , stX , enX  
-        integer, dimension(3), public :: szY , stY , enY  
-        integer, dimension(3), public :: szZ , stZ , enZ  
+        integer, dimension(3), public :: nghosts              ! Number of ghost points in each direction
+        integer, dimension(3), public :: sz3D, st3D, en3D     ! Size of arrays in 3D decomposition
+        integer, dimension(3), public :: sz3Dg, st3Dg, en3Dg  ! Size of arrays with ghost cells in 3D decomposition
+        integer, dimension(3), public :: szX , stX , enX      ! Size of arrays in X decomposition
+        integer, dimension(3), public :: szY , stY , enY      ! Size of arrays in Y decomposition
+        integer, dimension(3), public :: szZ , stZ , enZ      ! Size of arrays in Z decomposition
         integer, dimension(:,:), allocatable :: sz3DX, sz3DY, sz3DZ 
         integer, dimension(:,:), allocatable :: st3DX, st3DY, st3DZ 
         integer, dimension(:,:), allocatable :: en3DX, en3DY, en3DZ 
@@ -41,6 +43,7 @@ module t3dMod
         integer :: xleft, xright 
         integer :: yleft, yright 
         integer :: zleft, zright
+        integer :: mpi_halo_x = MPI_DATATYPE_NULL, mpi_halo_y = MPI_DATATYPE_NULL, mpi_halo_z = MPI_DATATYPE_NULL ! MPI derived datatypes for halo communication
         
         integer, dimension(:), allocatable :: splitx_y, splitx_z
         integer, dimension(:), allocatable :: splity_x, splity_z
@@ -70,7 +73,9 @@ module t3dMod
         procedure :: wait_transpose_3d_to_z
         procedure :: initiate_transpose_z_to_3d
         procedure :: wait_transpose_z_to_3d
-        
+
+        procedure :: fill_halo_x
+
         procedure :: print_summary
         procedure, private :: timed_transpose
         procedure :: time
@@ -83,18 +88,19 @@ module t3dMod
 
 contains 
 
-    function init(comm3d, nx, ny, nz, px, py, pz, periodic_, reorder, fail, createCrossCommunicators) result(this)
+    function init(comm3d, nx, ny, nz, px, py, pz, periodic_, reorder, fail, nghosts, createCrossCommunicators) result(this)
         use reductions, only: P_OR, P_MAXVAL
         type(t3d) :: this
         integer, intent(in) :: comm3d, nx, ny, nz, px, py, pz
         logical, dimension(3), intent(in) :: periodic_
         logical, intent(in) :: reorder
         logical, intent(out) :: fail
+        integer, dimension(3), optional, intent(in) :: nghosts
         logical, optional, intent(in) :: createCrossCommunicators
         logical, dimension(0:2) :: remain
         logical, dimension(0:2) :: periodic
         integer, dimension(0:2) :: procgrid
-        integer :: ierr, dummycomm, proc
+        integer :: ierr, dummycomm, proc, newtype
         integer, dimension(0:px-1) :: splitx
         integer, dimension(0:py-1) :: splity
         integer, dimension(0:pz-1) :: splitz
@@ -194,6 +200,31 @@ contains
         this%sz3d(3) = splitz( this%coords3D(perm(2)) )
         this%st3d(3) = sum( splitz(0:this%coords3D(perm(2))-1) ) + 1
         this%en3d(3) = sum( splitz(0:this%coords3D(perm(2))  ) )
+
+        ! Now set nghosts and compute the size with the ghosts in 3D decomposition
+        this%nghosts = [0, 0, 0]
+        if (present(nghosts)) this%nghosts = nghosts
+
+        this%sz3Dg = [this%sz3D(1) + 2*this%nghosts(1), this%sz3D(2) + 2*this%nghosts(2), this%sz3D(3) + 2*this%nghosts(3)]
+        this%st3Dg = [this%st3D(1) -   this%nghosts(1), this%st3D(2) -   this%nghosts(2), this%st3D(3) -   this%nghosts(3)]
+        this%en3Dg = [this%en3D(1) +   this%nghosts(1), this%en3D(2) +   this%nghosts(2), this%en3D(3) +   this%nghosts(3)]
+
+        ! Create MPI datatypes for halo communication
+        ! X halo datatype
+        call mpi_type_vector(this%sz3Dg(2)*this%sz3Dg(3), this%nghosts(1), this%sz3Dg(1), mpirkind, this%mpi_halo_x, ierr)
+        call mpi_type_commit(this%mpi_halo_x, ierr)
+        if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_x == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
+
+        ! Y halo datatype
+        call mpi_type_contiguous(this%sz3Dg(1), mpirkind, newtype, ierr)
+        call mpi_type_vector(this%sz3Dg(3), this%nghosts(2), this%sz3Dg(2), newtype, this%mpi_halo_y, ierr)
+        call mpi_type_commit(this%mpi_halo_y, ierr)
+        if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_y == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
+
+        ! Z halo datatype
+        call mpi_type_contiguous(this%sz3Dg(1)*this%sz3Dg(2)*this%nghosts(3), mpirkind, this%mpi_halo_z, ierr)
+        call mpi_type_commit(this%mpi_halo_z, ierr)
+        if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_z == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
 
         ! tind = tind + 1; times(tind) = this%time(barrier=.true.)
 
@@ -431,8 +462,9 @@ contains
     end function
    
 
-    pure elemental subroutine destroy(this)
+    impure elemental subroutine destroy(this)
         type(t3d), intent(inout) :: this
+        integer :: ierr
 
         if ( allocated(this%splitx_y) ) deallocate( this%splitx_y )
         if ( allocated(this%splitx_z) ) deallocate( this%splitx_z )
@@ -442,6 +474,10 @@ contains
 
         if ( allocated(this%splitz_y) ) deallocate( this%splitz_y )
         if ( allocated(this%splitz_x) ) deallocate( this%splitz_x )
+        
+        if (this%mpi_halo_x /= MPI_DATATYPE_NULL) call mpi_type_free(this%mpi_halo_x, ierr)
+        if (this%mpi_halo_y /= MPI_DATATYPE_NULL) call mpi_type_free(this%mpi_halo_y, ierr)
+        if (this%mpi_halo_z /= MPI_DATATYPE_NULL) call mpi_type_free(this%mpi_halo_z, ierr)
     end subroutine
 
     subroutine transpose_3d_to_x(this, input, output)
@@ -451,9 +487,9 @@ contains
         real(rkind), dimension(this%sz3d(1)*this%sz3d(2)*this%sz3d(3))              :: buffer3D
         real(rkind), dimension(this%szX (1)*this%szX (2)*this%szX (3))              :: bufferX
         integer :: proc, i, j, k, pos, ierr
-         real(rkind) :: start, endt
+        ! real(rkind) :: start, endt
 
-         start = this%time(barrier=.false.)
+        ! start = this%time(barrier=.false.)
         do proc = 0,this%px-1
             do k = this%stXall(3,proc),this%enXall(3,proc)
                 do j = this%stXall(2,proc),this%enXall(2,proc)
@@ -465,10 +501,10 @@ contains
                 end do
             end do
         end do
-        endt = this%time(start,reduce=.false.)
-        if (this%rank3d == 0) print*, "Do 1", endt
+        ! endt = this%time(start,reduce=.false.)
+        ! if (this%rank3d == 0) print*, "Do 1", endt
 
-        start = this%time(barrier=.false.)
+        ! start = this%time(barrier=.false.)
         select case(this%unequalX)
         case (.true.)
             call mpi_alltoallv(buffer3D,this%count3DX,this%disp3DX,mpirkind, &
@@ -477,10 +513,10 @@ contains
             call mpi_alltoall (buffer3D,this%count3DX(0), mpirkind, &
                                bufferX, this%countX  (0), mpirkind, this%commX, ierr)
         end select
-        endt = this%time(start,reduce=.false.)
-        if (this%rank3d == 0) print*, "2", endt
+        ! endt = this%time(start,reduce=.false.)
+        ! if (this%rank3d == 0) print*, "2", endt
 
-        start = this%time(barrier=.false.)
+        ! start = this%time(barrier=.false.)
         do proc = 0,this%px-1
             do k = this%stX(3),this%enX(3)
                 do j = this%stX(2),this%enX(2)
@@ -493,8 +529,8 @@ contains
                 end do
             end do
         end do
-        endt = this%time(start,reduce=.false.)
-        if (this%rank3d == 0) print*, "Do 3", endt
+        ! endt = this%time(start,reduce=.false.)
+        ! if (this%rank3d == 0) print*, "Do 3", endt
 
     end subroutine 
 
@@ -1083,6 +1119,78 @@ contains
 
     end subroutine 
 
+    subroutine fill_halo_x(this, array)
+        class(t3d), intent(in) :: this
+        real(rkind), dimension(this%st3Dg(1):this%en3Dg(1),this%st3D(2):this%en3D(2),this%st3D(3):this%en3D(3)), intent(inout) :: array
+        integer :: recv_request_left, recv_request_right
+        integer :: send_request_left, send_request_right
+        integer, dimension(MPI_STATUS_SIZE) :: status
+        integer :: i,j,k,ierr
+
+        real(rkind), dimension(this%nghosts(1),this%sz3D(2),this%sz3D(3)) :: sendbuf_l, sendbuf_r, recvbuf_l, recvbuf_r
+
+        ! TODO: Need to rewrite this to use mpi_halo_x derived datatype instead
+        ! of copying
+
+        ! print*, "In fill_halo_x"
+        ! print*, "nghosts = ", this%nghosts
+
+        ! print*, this%rank3D, ": lbound = ", lbound(array)
+        ! print*, this%rank3D, ": ubound = ", ubound(array)
+        ! print*, this%rank3D, ": st3Dg  = ", this%st3Dg
+        ! print*, this%rank3D, ": en3Dg  = ", this%en3Dg
+
+        ! call mpi_irecv( array(this%st3Dg(1),this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_x, this%xleft, 0, this%commX, recv_request_left, ierr)
+        ! call mpi_irecv( array(this%en3Dg(1)-this%nghosts(1)+1,this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_x, this%xright, 1, this%commX, recv_request_right, ierr)
+
+        ! call mpi_isend( array(this%st3Dg(1)+this%nghosts(1),this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_x, this%xleft, 1, this%commX, send_request_left, ierr)
+        ! call mpi_isend( array(this%en3Dg(1)-2*this%nghosts(1)+1,this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_x, this%xright, 0, this%commX, send_request_right, ierr)
+
+        call mpi_irecv( recvbuf_l, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xleft,  0, this%commX, recv_request_left,  ierr)
+        call mpi_irecv( recvbuf_r, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xright, 1, this%commX, recv_request_right, ierr)
+
+        do k=1,this%sz3D(3)
+            do j=1,this%sz3D(2)
+                do i = 1,this%nghosts(1)
+                    sendbuf_r(i,j,k) = array( this%en3D(1)-this%nghosts(1)+i, this%st3D(2)+j-1, this%st3D(3)+k-1 )
+                end do
+            end do
+        end do
+
+        do k=1,this%sz3D(3)
+            do j=1,this%sz3D(2)
+                do i = 1,this%nghosts(1)
+                    sendbuf_l(i,j,k) = array( this%st3D(1)+i-1, this%st3D(2)+j-1, this%st3D(3)+k-1 )
+                end do
+            end do
+        end do
+
+        call mpi_isend( sendbuf_r, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xright, 0, this%commX, send_request_right, ierr)
+        call mpi_isend( sendbuf_l, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xleft,  1, this%commX, send_request_left,  ierr)
+
+        call mpi_wait(recv_request_left,  status, ierr)
+        call mpi_wait(recv_request_right, status, ierr)
+        call mpi_wait(send_request_left,  status, ierr)
+        call mpi_wait(send_request_right, status, ierr)
+
+        do k=1,this%sz3D(3)
+            do j=1,this%sz3D(2)
+                do i = 1,this%nghosts(1)
+                    array( this%en3D(1)+i, this%st3D(2)+j-1, this%st3D(3)+k-1 ) = recvbuf_r(i,j,k)
+                end do
+            end do
+        end do
+
+        do k=1,this%sz3D(3)
+            do j=1,this%sz3D(2)
+                do i = 1,this%nghosts(1)
+                    array( this%st3Dg(1)+i-1, this%st3D(2)+j-1, this%st3D(3)+k-1 ) = recvbuf_l(i,j,k)
+                end do
+            end do
+        end do
+
+    end subroutine
+
     logical function square_factor(nprocs,nrow,ncol,prow,pcol) result(fail)
         use constants, only: eps
         integer, intent(in) :: nprocs, nrow, ncol
@@ -1124,12 +1232,14 @@ contains
         end do
     end subroutine
 
-    function optimize_decomposition(comm3d, nx, ny, nz, periodic) result(this)
+    function optimize_decomposition(comm3d, nx, ny, nz, periodic, nghosts) result(this)
         use constants,       only: rhuge
         use kind_parameters, only: stdout
         type(t3d) :: this
         integer, intent(in)  :: comm3d, nx, ny, nz
         logical, dimension(3), intent(in) :: periodic
+        integer, dimension(3), optional, intent(in) :: nghosts
+        integer, dimension(3) :: nghosts_
         integer :: px, py, pz, pxopt, pyopt, pzopt
         real(rkind) :: t, topt
         integer :: pypz, nprocs, ierr, rank, niters, siters
@@ -1138,6 +1248,9 @@ contains
 
         call mpi_comm_size(comm3d,nprocs,ierr)
         call mpi_comm_rank(comm3d,rank  ,ierr)
+
+        nghosts_ = [0,0,0]
+        if (present(nghosts)) nghosts_ = nghosts
 
         if (rank == 0) then
             write(stdout,'(A)') " "
@@ -1155,7 +1268,7 @@ contains
                
                 niters = niters + 1
                 call mpi_barrier(comm3d,ierr)
-                this = t3d(comm3d, nx, ny, nz, px, py, pz, periodic, reorder, fail, createCrossCommunicators=.false.)
+                this = t3d(comm3d, nx, ny, nz, px, py, pz, periodic, reorder, fail, nghosts=nghosts_, createCrossCommunicators=.false.)
                 if (.not. fail) then
                     siters = siters + 1
                     t = this%timed_transpose()
@@ -1179,7 +1292,7 @@ contains
             end do
         end do
 
-        this = t3d(comm3d, nx, ny, nz, pxopt, pyopt, pzopt, periodic, reorder, fail, createCrossCommunicators=.true.)
+        this = t3d(comm3d, nx, ny, nz, pxopt, pyopt, pzopt, periodic, reorder, fail, nghosts=nghosts_, createCrossCommunicators=.true.)
         if (fail) then
             print*, pxopt, pyopt, pzopt
             call GracefulExit("Couldn't find a working decomposition for t3d.",457)
@@ -1194,6 +1307,11 @@ contains
         if (rank == 0) then
             write(stdout,'(A)') " ================================================ "
             write(stdout,'(A)') " "
+            ! write(stdout,'(A,3(I0,X))') "nghosts = ", this%nghosts(1), this%nghosts(2), this%nghosts(3)
+            ! write(stdout,'(A,3(I0,X))') "sz3Dg   = ", this%sz3Dg(1), this%sz3Dg(2), this%sz3Dg(3)
+            ! write(stdout,'(A,3(I0,X))') "st3Dg   = ", this%st3Dg(1), this%st3Dg(2), this%st3Dg(3)
+            ! write(stdout,'(A,3(I0,X))') "en3Dg   = ", this%en3Dg(1), this%en3Dg(2), this%en3Dg(3)
+            ! write(stdout,'(A)') " "
         end if
 
     end function

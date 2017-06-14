@@ -12,13 +12,13 @@ program test_t3d
     type(cd10) :: xcd10, ycd10, zcd10
     real(rkind), dimension(:,:,:), allocatable :: input, output, ninput, der, exder, eyder, ezder
     real(rkind), dimension(:,:,:), allocatable :: buffx, buffy, buffz, buff3d 
-    integer :: nx = 1024, ny = 1024, nz = 1024
-    integer :: px = 4, py = 4, pz = 4
+    integer :: nx = 256, ny = 256, nz = 256
+    integer :: px = 2, py = 2, pz = 2
     integer :: i, j, k, ierr, idx
     logical :: fail
     real(rkind) :: dererr, omega = 1._rkind, dx, dy, dz
     real(rkind) :: start, tx, txd, t3dx, ty, tyd, t3dy, tz, tzd, t3dz
-    logical :: optimize = .false.
+    logical :: optimize = .true.
 
     call MPI_Init(ierr)
 
@@ -26,7 +26,7 @@ program test_t3d
         gp = t3d(MPI_COMM_WORLD, nx, ny, nz, px, py, pz, [.TRUE., .TRUE., .TRUE.], .TRUE., fail)
         if (fail) call GracefulExit("t3d initialization failed",45)
     else
-        gp = t3d(MPI_COMM_WORLD, nx, ny, nz, [.TRUE., .TRUE., .TRUE.])
+        gp = t3d(MPI_COMM_WORLD, nx, ny, nz, [.TRUE., .TRUE., .TRUE.], nghosts=[1,1,1])
     end if
 
     dx = two*pi/real(nx,rkind)

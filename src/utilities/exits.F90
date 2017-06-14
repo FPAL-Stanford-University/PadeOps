@@ -38,7 +38,6 @@ contains
             write(stderr,'(A)') message
             write(stderr,'(A)') '==========================='
         end if 
-        call mpi_barrier(mpi_comm_world, ierr)
         call mpi_abort(mpi_comm_world, errCode, ierr)
         if (ierr /= 0) then
             print*, "SHIT! It won't abort!"
