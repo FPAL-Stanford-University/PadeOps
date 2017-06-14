@@ -372,7 +372,7 @@ contains
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         this%eostype, eosparams, rho0=this%rho0,&
                         tstop=this%tstop, dt=this%dtfixed, tviz=tviz)
-       
+
         ! Get hydrodynamic and elastic energies 
         if(this%eostype == 1) then
             ! get hydrodynamic energy from rho, p
@@ -425,7 +425,7 @@ contains
             !call this%geneos%get_T(this%e, this%T) -- all clubbed together in get_p_devstress_T_sos
         endif
 
-        if (P_MAXVAL(abs( this%rho/this%rho0/(detG) - one )) > 10._rkind*eps) then
+        if (P_MAXVAL(abs( this%rho/this%rho0/sqrt(detG) - one )) > 10._rkind*eps) then
             call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
         end if
 
