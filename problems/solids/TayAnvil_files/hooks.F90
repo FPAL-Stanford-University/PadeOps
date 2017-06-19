@@ -1,4 +1,4 @@
-module Multispecies_VortTest_data
+module TayAnvil_data
     use kind_parameters,  only: rkind
     use constants,        only: one,two,eight,three,six
     use FiltersMod,       only: filters
@@ -6,8 +6,8 @@ module Multispecies_VortTest_data
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one
-    real(rkind) :: minVF = 0.2_rkind, thick = one
-    real(rkind) :: rhoRatio = one, pRatio = two
+    real(rkind) :: minVF = 0.2_rkind, thick = one, vimpact = 1.0d0, xint = 2.133d0, yint = 21.6667d0
+    real(rkind) :: rhoRatio = -one, pRatio = two
     logical     :: sharp = .FALSE.
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
     real(rkind) :: rho1_2,rho2_2,u1_2,u2_2,g11_1_2,g11_2_2,grho1_2,grho2_2,a1_2,a2_2
@@ -15,7 +15,7 @@ module Multispecies_VortTest_data
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = one, Lx = six, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    real(rkind) :: Ly = 30.0d0, Lx = 10.0d0, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
 
     type(filters) :: mygfil
 
@@ -125,7 +125,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use decomp_2d,        only: decomp_info
     use exits,            only: warning
 
-    use Multispecies_VortTest_data
+    use TayAnvil_data
 
     implicit none
 
@@ -137,8 +137,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
     real(rkind) :: xa, xb, yc, yd
 
-    xa = -1.0D0; xb = 1.0D0
-    yc = -1.0D0; yd = 1.0D0
+    xa = 0.0D0; xb = Lx
+    yc = 0.0D0; yd = Ly
 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
@@ -183,7 +183,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
     
-    use Multispecies_VortTest_data
+    use TayAnvil_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -197,12 +197,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     integer :: ioUnit, i, j, k
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
     real(rkind), dimension(8) :: fparams
-    real(rkind) :: fac, omega, stp_x, bkstp_x, bkstp_y, phiang, u1vrt, u2vrt, v1vrt, v2vrt, regfrac, rad, dxdy, dxdyfixed, stp_r1
+    real(rkind) :: marker, fac, omega, stp_x, bkstp_x, bkstp_y, phiang, u1vrt, u2vrt, v1vrt, v2vrt, regfrac, rad, dxdy, dxdyfixed, stp_r1
     integer, dimension(2) :: iparams
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, plastic, explPlast, yield, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic2, explPlast2, yield2,   &
-                          interface_init, kwave, minVF, thick, omega, dxdyfixed 
+                          p_amb, xint, yint, minVF, thick, dxdyfixed, vimpact 
 
     ioUnit = 16
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -211,7 +211,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     ! Initialize mygfil
     call mygfil%init(                        decomp, &
-                     .FALSE.,     .TRUE.,    .TRUE., &
+                     .FALSE.,     .FALSE.,    .TRUE., &
                   "gaussian", "gaussian", "gaussian" )
 
     associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
@@ -250,61 +250,33 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! set logicals for plasticity
         mix%material(1)%plast = plastic; mix%material(1)%explPlast = explPlast
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
-!mix%material(1)%intsign = 1
-!mix%material(2)%intsign = -1
-!print *, 1
+
         do k=1,decomp%ysz(3)
          do j=1,decomp%ysz(2)
           do i=1,decomp%ysz(1)
-              stp_x = half*(tanh((x(i,j,k)-zero)/dx) + one)
-              bkstp_x = one - half*(tanh((x(i,j,k)-zero)/dx) + one)
-              bkstp_y = one - half*(tanh((y(i,j,k)-zero)/dx) + one)
+              if(dxdyfixed>zero) then
+                dxdy = dxdyfixed
+              else
+                if(thick<0) then
+                  call GracefulExit("Either thick or dxdyfixed must be positive",928)
+                else
+                  dxdy = thick*sqrt(dx**2+dy**2)
+                endif
+              endif
 
-              !phiang = atan(y(i,j,k)/(x(i,j,k)+1.0D-32)) + pi*bkstp_x + two*pi*stp_x*bkstp_y
-              phiang = atan2(y(i,j,k), (x(i,j,k)+1.0D-32))
+              bkstp_x = one - half*(tanh((x(i,j,k)-xint)/dxdy) + one)
+              bkstp_y = one - half*(tanh((y(i,j,k)-yint)/dxdy) + one)
+              marker = bkstp_x * bkstp_y
 
-              u1vrt = -omega*y(i,j,k); u2vrt = zero
-              v1vrt = omega*x(i,j,k); v2vrt = zero
-
-              rad = sqrt(x(i,j,k)**2+y(i,j,k)**2);
-              dxdy = sqrt(dx**2+dy**2)
-              if(dxdyfixed>zero) dxdy = dxdyfixed
-
-              stp_r1 = half*(tanh((rad-(interface_init+two*dxdy))/dxdy) + one)
-              regfrac = stp_r1
-
-              u(i,j,k) = u(i,j,k) + (u1vrt+regfrac*(u2vrt-u1vrt))
-              v(i,j,k) = v(i,j,k) + (v1vrt+regfrac*(v2vrt-v1vrt))
-
-              stp_r1 = half*(tanh((rad-(interface_init+two*dxdy))/dxdy) + one)
-              mix%material(1)%VF(i,j,k) = minVF + (one-two*minVF)*stp_r1
+              u(i,j,k) = zero
+              v(i,j,k) = -vimpact*marker
+              mix%material(1)%VF(i,j,k) = minVF + (one-two*minVF)*marker
               mix%material(2)%VF(i,j,k) = one - mix%material(1)%VF(i,j,k)
           end do
          end do
         end do 
         w = zero
-print *, 2
-
-        !! Get mixture momentum (put in u1 and u2)
-        !u1 = (one-minVF)*rho1*u1 + minVF*rho1_2*u1_2
-        !u2 = (one-minVF)*rho2*u2 + minVF*rho2_2*u2_2
-        !
-        !! Get mixture density
-        !rho1 = (one-minVF)*rho1 + minVF*rho1_2
-        !rho2 = (one-minVF)*rho2 + minVF*rho2_2
-
-        !! Get mixture velocity
-        !u1 = u1 / rho1
-        !u2 = u2 / rho2
-
-        !shock_init = interface_init - 1.0_rkind  ! (10*thick) grid points away from the interface
-        !dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
-
-        !u   = (u2-u1)*dum
-        !v   = zero
-        !w   = zero
-
-        !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
+        if(nrank==0) print *, 2, maxval(v), minval(v)
 
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
@@ -322,7 +294,7 @@ print *, 2
         else
             tmp = rho_0*mix%material(1)%VF*mix%material(1)%g11 + rho_0_2*mix%material(2)%g11*(one-mix%material(1)%VF) ! Mixture density
         end if
-print *, 'tmp = ', maxval(tmp), minval(tmp)
+        if(nrank==0) print *, 'tmp = ', maxval(tmp), minval(tmp)
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / tmp
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
@@ -332,7 +304,7 @@ print *, 'tmp = ', maxval(tmp), minval(tmp)
         YsR  = mix%material(1)%Ys(decomp%ysz(1),1,1)
         VFL  = mix%material(1)%VF(1,1,1)
         VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
-print *, 'Done Init'
+        if(nrank==0) print *, 'Done Init'
     end associate
 
 end subroutine
@@ -347,8 +319,9 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use SolidMixtureMod,  only: solid_mixture
     use operators,        only: curl
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
+    use exits,            only: message
 
-    use Multispecies_VortTest_data
+    use TayAnvil_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -393,7 +366,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        end if
 
        if (decomp%ysz(2) == 1) then
-           write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_VortTest_"//trim(str)//"_", vizcount, ".dat"
+           write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/TayAnvil_"//trim(str)//"_", vizcount, ".dat"
 
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
            write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rhoRatio
@@ -411,51 +384,51 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
            close(outputunit)
        end if
 
-       call curl(decomp, der, u, v, w, vort, x_bc, y_bc, z_bc)
-       
-       tmp = zero
-       where (vort(:,:,:,3) .GE. zero)
-           tmp = vort(:,:,:,3)
-       end where
-       vort_pos = P_MEAN(tmp)*six*one
-       
-       tmp = zero
-       where (vort(:,:,:,3) .LE. zero)
-           tmp = vort(:,:,:,3)
-       end where
-       vort_neg = P_MEAN(tmp)*six*one
+       !call curl(decomp, der, u, v, w, vort, x_bc, y_bc, z_bc)
+       !
+       !tmp = zero
+       !where (vort(:,:,:,3) .GE. zero)
+       !    tmp = vort(:,:,:,3)
+       !end where
+       !vort_pos = P_MEAN(tmp)*six*one
+       !
+       !tmp = zero
+       !where (vort(:,:,:,3) .LE. zero)
+       !    tmp = vort(:,:,:,3)
+       !end where
+       !vort_neg = P_MEAN(tmp)*six*one
 
-       Ys1_mean = SUM(mix%material(1)%Ys(:,:,1),2) / real(decomp%ysz(2),rkind)
-       Ys2_mean = SUM(mix%material(2)%Ys(:,:,1),2) / real(decomp%ysz(2),rkind)
+       !Ys1_mean = SUM(mix%material(1)%Ys(:,:,1),2) / real(decomp%ysz(2),rkind)
+       !Ys2_mean = SUM(mix%material(2)%Ys(:,:,1),2) / real(decomp%ysz(2),rkind)
 
-       Ys1_mean = four * Ys1_mean * Ys2_mean
-       mixwidth = P_SUM(Ys1_mean) * dx
+       !Ys1_mean = four * Ys1_mean * Ys2_mean
+       !mixwidth = P_SUM(Ys1_mean) * dx
 
-       Al_mass = P_MEAN(rho*mix%material(2)%Ys)*six*one
+       !Al_mass = P_MEAN(rho*mix%material(2)%Ys)*six*one
 
-       xspike_proc = -two
-       xbubbl_proc = four
-       do j = 1,decomp%ysz(2)
-           do i = 1,decomp%ysz(1)
-               if (mix%material(1)%Ys(i,j,1) .GE. half) xspike_proc = max(xspike_proc,x(i,j,1))
-               if (mix%material(1)%Ys(i,j,1) .LE. half) xbubbl_proc = min(xbubbl_proc,x(i,j,1))
-           end do
-       end do
-       xspike = P_MAXVAL(xspike_proc)
-       xbubbl = P_MINVAL(xbubbl_proc)
-           
-       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_VortTest_statistics.dat"
+       !xspike_proc = -two
+       !xbubbl_proc = four
+       !do j = 1,decomp%ysz(2)
+       !    do i = 1,decomp%ysz(1)
+       !        if (mix%material(1)%Ys(i,j,1) .GE. half) xspike_proc = max(xspike_proc,x(i,j,1))
+       !        if (mix%material(1)%Ys(i,j,1) .LE. half) xbubbl_proc = min(xbubbl_proc,x(i,j,1))
+       !    end do
+       !end do
+       !xspike = P_MAXVAL(xspike_proc)
+       !xbubbl = P_MINVAL(xbubbl_proc)
+       !    
+       !write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/TayAnvil_statistics.dat"
 
-       if (vizcount == 0) then
-           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-           write(outputunit,'(7A27)') 'tsim', 'mixwidth', 'vort_pos', 'vort_neg', 'Al_mass', 'xspike', 'xbubbl'
-       else
-           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', action='WRITE', status='OLD', position='APPEND')
-       end if
-       write(outputunit,'(7ES27.16E3)') tsim, mixwidth, vort_pos, vort_neg, Al_mass, xspike, xbubbl
-       close(outputunit)
+       !if (vizcount == 0) then
+       !    open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
+       !    write(outputunit,'(7A27)') 'tsim', 'mixwidth', 'vort_pos', 'vort_neg', 'Al_mass', 'xspike', 'xbubbl'
+       !else
+       !    open(unit=outputunit, file=trim(outputfile), form='FORMATTED', action='WRITE', status='OLD', position='APPEND')
+       !end if
+       !write(outputunit,'(7ES27.16E3)') tsim, mixwidth, vort_pos, vort_neg, Al_mass, xspike, xbubbl
+       !close(outputunit)
 
-       write(outputfile,'(4A)') trim(outputdir),"/tec_MultSpecVortTest_"//trim(str),".dat"
+       write(outputfile,'(4A)') trim(outputdir),"/tec_TayAnvil_"//trim(str),".dat"
        if(vizcount==0) then
          open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='replace')
          write(outputunit,'(350a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p", &
@@ -504,7 +477,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
          end do
          close(outputunit)
        endif
-
+       call message(2,"Done writing tecplot data")
 
     end associate
 end subroutine
@@ -517,7 +490,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use SolidMixtureMod,  only: solid_mixture
     use operators,        only: filter3D
 
-    use Multispecies_VortTest_data
+    use TayAnvil_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -528,8 +501,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
     integer :: nx, i, j
-    real(rkind) :: dx, xspng, tspng
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
+    real(rkind) :: dx, xspng, tspng, dy, yspng
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dumx, dumy
     
     nx = decomp%ysz(1)
 
@@ -540,10 +513,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        !!! Hack to stop liquid's g from blowing up
-        !mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
-        !mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
-        !mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
+        !! Hack to stop liquid's g from blowing up
+        mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
+        mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
+        mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
         !if(decomp%yst(1)==1) then
         !  if(x_bc(1)==0) then
@@ -572,50 +545,106 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         !  end if
         !endif
 
-        !xspng = -two + half
-        !tspng = 0.2_rkind
-        !dx = x(2,1,1) - x(1,1,1)
-        !dum = half*(one - tanh( (x-xspng)/(tspng) ))
+        ! sponge on the top; right
+        xspng = 0.0d0 + Lx - one
+        tspng = 0.2_rkind
+        dx = x(2,1,1) - x(1,1,1)
+        dumx = half*(one - tanh( (x-xspng)/(tspng) )) ! backstep at xspng
 
+        yspng = 0.0d0 + Ly - one
+        dy = y(1,2,1) - y(1,1,1)
+        dumy = half*(one - tanh( (y-yspng)/(tspng) ))  ! backstep at yspng
+
+        dumx = one-dumx*dumy   ! step for ((x>xspng) .or. (y>yspng))
+
+        do i=1,4
+            tmp = u
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            u = u + dumx*(tmp - u)
+
+            tmp = v
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            v = v + dumx*(tmp - v)
+
+            tmp = w
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            w = w + dumx*(tmp - w)
+
+            tmp = e
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            e = e + dumx*(tmp - e)
+
+            tmp = rho
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            rho = rho + dumx*(tmp - rho)
+
+            tmp = mix%material(1)%p
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            mix%material(1)%p = mix%material(1)%p + dumx*(tmp - mix%material(1)%p)
+
+            tmp = mix%material(2)%p
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            mix%material(2)%p = mix%material(2)%p + dumx*(tmp - mix%material(2)%p)
+
+            do j = 1,9
+                tmp = mix%material(1)%g(:,:,:,j)
+                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+                mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dumx*(tmp - mix%material(1)%g(:,:,:,j))
+
+                tmp = mix%material(2)%g(:,:,:,j)
+                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+                mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dumx*(tmp - mix%material(2)%g(:,:,:,j))
+            end do
+        end do
+
+        
         !do i=1,4
         !    tmp = u
         !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        !    u = u + dum*(tmp - u)
+        !    u = u + dumy*(tmp - u)
 
         !    tmp = v
         !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        !    v = v + dum*(tmp - v)
+        !    v = v + dumy*(tmp - v)
 
         !    tmp = w
         !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        !    w = w + dum*(tmp - w)
+        !    w = w + dumy*(tmp - w)
 
         !    tmp = e
         !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        !    e = e + dum*(tmp - e)
+        !    e = e + dumy*(tmp - e)
 
         !    tmp = rho
         !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        !    rho = rho + dum*(tmp - rho)
+        !    rho = rho + dumy*(tmp - rho)
 
         !    tmp = mix%material(1)%p
         !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        !    mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
+        !    mix%material(1)%p = mix%material(1)%p + dumy*(tmp - mix%material(1)%p)
 
         !    tmp = mix%material(2)%p
         !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        !    mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
+        !    mix%material(2)%p = mix%material(2)%p + dumy*(tmp - mix%material(2)%p)
 
         !    do j = 1,9
         !        tmp = mix%material(1)%g(:,:,:,j)
         !        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        !        mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dum*(tmp - mix%material(1)%g(:,:,:,j))
+        !        mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dumy*(tmp - mix%material(1)%g(:,:,:,j))
 
         !        tmp = mix%material(2)%g(:,:,:,j)
         !        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        !        mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dum*(tmp - mix%material(2)%g(:,:,:,j))
+        !        mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dumy*(tmp - mix%material(2)%g(:,:,:,j))
         !    end do
         !end do
+
+        ! reflecting on bottom
+        if(decomp%yst(2)==1) then
+          v(:,1,:) = zero
+          !if(y_bc(1)==0) then
+          !  rho
+          !endif
+        endif
 
         !if(decomp%yen(1)==decomp%xsz(1)) then
         !  if(x_bc(2)==0) then
@@ -650,10 +679,10 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use exits,            only: message
-    use reductions,       only: P_MAXVAL
+    use reductions,       only: P_MAXVAL, P_MINVAL
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_VortTest_data
+    use TayAnvil_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -663,6 +692,8 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
     type(solid_mixture),             intent(in) :: mix
     integer                                     :: imin, ind(1)
+
+    real(rkind) :: vmax, vmin
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -679,6 +710,11 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
         ! !  vfdiffloc = mix%material(1)%VF(i,1,1) - half
         ! !  if
         ! write(975,*) tsim, x(imin,1,1), u(imin,1,1)
+       !vmax = P_MAXVAL(v)
+       !vmin = P_MINVAL(v)
+       !call message(1,"Max v:",vmax)
+       !call message(1,"Min v:",vmin)
+
 
     end associate
 end subroutine
@@ -691,7 +727,7 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use Multispecies_VortTest_data
+    use TayAnvil_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -717,7 +753,7 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_VortTest_data
+    use TayAnvil_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -737,7 +773,7 @@ subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Y
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_VortTest_data
+    use TayAnvil_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -757,7 +793,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_VortTest_data
+    use TayAnvil_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -777,7 +813,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Multispecies_VortTest_data
+    use TayAnvil_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
