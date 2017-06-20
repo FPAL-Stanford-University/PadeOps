@@ -91,7 +91,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE, k
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind) ::  z0init = 1.0d-4, epsnd, yperiods = 3.0d0, zpeak = 0.3d0, xperiods = 3.0d0
+    real(rkind) ::  z0init = 1.0d-4, epsnd, yperiods = 3.0d0, zpeak = 0.2d0, xperiods = 3.0d0
     namelist /concurrentSimulationINPUT/ Lx, Ly, Lz
 
     ioUnit = 11
@@ -110,7 +110,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     x => mesh(:,:,:,1)
  
     if(isPrecursor) then
-       epsnd = 0.3_rkind 
+       epsnd = 5.0_rkind 
        u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
        v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
        wC= zero  
@@ -174,13 +174,13 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 2
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [64]
-    yplanes = [64]
-    zplanes = [20]
+    xplanes = [32]
+    yplanes = [32]
+    zplanes = [10, 20]
 
 end subroutine
 
