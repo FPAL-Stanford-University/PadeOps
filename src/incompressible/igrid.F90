@@ -2465,9 +2465,6 @@ contains
             write(10,"(100g17.9)") real(this%nx,rkind)
             write(10,"(100g17.9)") real(this%ny,rkind)
             write(10,"(100g17.9)") real(this%nz,rkind)
-            write(10,"(100g17.9)") real(this%Lx,rkind)
-            write(10,"(100g17.9)") real(this%Ly,rkind)
-            write(10,"(100g17.9)") real(this%Lz,rkind)
             close(10)
         end if 
     end subroutine 
