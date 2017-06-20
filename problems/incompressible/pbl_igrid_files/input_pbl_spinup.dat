@@ -86,7 +86,7 @@ useFringe                     = .false.     ! This is false if simulation is per
 /
 &SGS_MODEL
 SGSModelID                    = 1            ! 0: smagorinsky, 1: sigma, 2: Shear Improved Smagorinsky
-DynamicProcedureType          = 0
+DynamicProcedureType          = 0            ! 0: no dynamic proc, 1: standard dynamic proc, 2: global dynamic proc
 z0                            = 1.0d-4
 useWallDamping                = .FALSE.      ! Use the Wall Damping Function 
 ncWall                        = 3.d0         ! Wall Damping Function Exponent
