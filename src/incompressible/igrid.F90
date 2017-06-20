@@ -337,8 +337,10 @@ contains
         namelist /BCs/ topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
-                            UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, useExhaustiveFFT
-        namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, KSdoZfilter, nKSvertFilt
+                            UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
+                                 useExhaustiveFFT
+        namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, &
+                                 KSdoZfilter, nKSvertFilt
         namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq            
         namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir
 
@@ -2463,6 +2465,9 @@ contains
             write(10,"(100g17.9)") real(this%nx,rkind)
             write(10,"(100g17.9)") real(this%ny,rkind)
             write(10,"(100g17.9)") real(this%nz,rkind)
+            write(10,"(100g17.9)") real(this%Lx,rkind)
+            write(10,"(100g17.9)") real(this%Ly,rkind)
+            write(10,"(100g17.9)") real(this%Lz,rkind)
             close(10)
         end if 
     end subroutine 
