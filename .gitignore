@@ -4,9 +4,11 @@ build*
 *.mod
 *.F90.swp
 *.F90~
+dependencies/install_dependencies.sh
 dependencies/*[^gz]
 *.dat.swp
 data/*
 tags
 pbsfiles
 batch_scripts
+pp

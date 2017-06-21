@@ -385,7 +385,7 @@ contains
         edgeArr(:,:,1          ) = BotVal
         edgeArr(:,:,2:this%nzE-1) = cellArr(:,:,1:this%nzC-1) 
         edgeArr(:,:,2:this%nzE-1) = edgeArr(:,:,2:this%nzE-1) + cellArr(:,:,2:this%nzC)
-        edgeArr = half*edgeArr
+        edgeArr(:,:,2:this%nzE-1) = half*edgeArr(:,:,2:this%nzE-1)
     end subroutine
 
     pure subroutine InterpZ_Cell2Edge_REAL(this, cellArr, edgeArr, BotVal, TopVal)
@@ -398,7 +398,7 @@ contains
         edgeArr(:,:,1          ) = BotVal
         edgeArr(:,:,2:this%nzE-1) = cellArr(:,:,1:this%nzC-1) 
         edgeArr(:,:,2:this%nzE-1) = edgeArr(:,:,2:this%nzE-1) + cellArr(:,:, 2:this%nzC)
-        edgeArr(:,:,2:this%nzE-1) = half*edgeArr(:,:,2:this%nzE)
+        edgeArr(:,:,2:this%nzE-1) = half*edgeArr(:,:,2:this%nzE-1)
     end subroutine
 
 end module 

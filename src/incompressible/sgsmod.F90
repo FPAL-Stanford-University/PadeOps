@@ -237,9 +237,9 @@ contains
         end if 
 
         
-        do k = 1,size(this%nuSGS,3)
-            !print*, sum(this%nuSGS(:,:,k))/(size(this%nuSGS,1)*size(this%nuSGS,2))
-        end do 
+        !do k = 1,size(this%nuSGS,3)
+        !    !print*, sum(this%nuSGS(:,:,k))/(size(this%nuSGS,1)*size(this%nuSGS,2))
+        !end do 
 
         tau11 = -two*this%nuSGS*S11; tau12 = -two*this%nuSGS*S12; tau13 = -two*this%nuSGS*S13
         tau22 = -two*this%nuSGS*S22; tau23 = -two*this%nuSGS*S23; tau33 = -two*this%nuSGS*S33
@@ -320,7 +320,7 @@ contains
             if (this%isStratified) then
                 if ((present(dTdx)).and.(present(dTdy)).and.(present(dTdzHC))) then
                     if (this%spectC%carryingZeroK) then
-                        dTdzHC(1,1,:) = cmplx(0.d0,0.d0)
+                        dTdzHC(1,1,:) = dcmplx(0.d0,0.d0)
                     end if
                     call this%spectC%ifft(dTdzHC,this%dTdzC_diff)
                     call this%get_AMD_Op_strat(this%nuSGS,dudx, dudy, dudzC, dvdx, dvdy, dvdzC, dwdxC, dwdyC, &

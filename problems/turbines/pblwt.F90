@@ -32,7 +32,7 @@ program pblwt
     call igp%printDivergence()
   
     call tic() 
-    do while (igp%tsim < igp%tstop) 
+    do while ((igp%tsim < igp%tstop) .and. (igp%step < igp%nsteps))
        
        call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90 or igrid.F90)
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)

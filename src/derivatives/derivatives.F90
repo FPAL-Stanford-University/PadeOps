@@ -156,14 +156,18 @@ contains
         logical           , intent(in),   optional :: zmetric
         logical           , intent(in),   optional :: curvilinear
         
-
-
        
         if (this%initialized) then
             call message("WARNING: Reinitializing the DERIVATIVE class!")
             call this%destroy
         end if  
-       
+      
+        if (present(xmetric)) this%xmetric = xmetric
+        if (present(ymetric)) this%ymetric = ymetric
+        if (present(zmetric)) this%zmetric = zmetric
+
+        if (present(curvilinear)) this%curvilinear = curvilinear
+
         this%nxg = nx
         this%nyg = ny
         this%nzg = nz
@@ -174,20 +178,10 @@ contains
         call this%init_procedures (dx, dy, dz, periodic_x, periodic_y, periodic_z,&
                                             method_x,method_y,method_z)
 
-        if (present(xmetric)) then
-            if (present(ymetric)) then
-                if (present(zmetric)) then
-                    if (present(curvilinear)) then
-                        call this%init_curvilinear(xMetric, yMetric, zMetric, curvilinear)
-                    else
-                        call this%init_curvilinear(xMetric, yMetric, zMetric)
-                    end if 
-                else
-                    call this%init_curvilinear(xMetric, yMetric)
-                end if 
-            else
-                call this%init_curvilinear(xMetric)
-            end if
+        if (present(curvilinear)) then
+            call this%init_curvilinear(this%xmetric, this%ymetric, this%zmetric, this%curvilinear)
+        else
+            call this%init_curvilinear(this%xmetric, this%ymetric, this%zmetric)
         end if 
 
     end subroutine
@@ -210,7 +204,6 @@ contains
         logical           , intent(in),   optional :: ymetric
         logical           , intent(in),   optional :: zmetric
         logical           , intent(in),   optional :: curvilinear
-        
 
        
         if (this%initialized) then
@@ -218,6 +211,12 @@ contains
             call this%destroy
         end if  
        
+        if (present(xmetric)) this%xmetric = xmetric
+        if (present(ymetric)) this%ymetric = ymetric
+        if (present(zmetric)) this%zmetric = zmetric
+
+        if (present(curvilinear)) this%curvilinear = curvilinear
+
         this%nxg = gp%xsz(1)
         this%nyg = gp%ysz(2)
         this%nzg = gp%zsz(3)
@@ -228,57 +227,49 @@ contains
         call this%init_procedures (dx, dy, dz, periodic_x, periodic_y, periodic_z,&
                                             method_x,method_y,method_z)
 
-        if (present(xmetric)) then
-            if (present(ymetric)) then
-                if (present(zmetric)) then
-                    if (present(curvilinear)) then
-                        call this%init_curvilinear(xMetric, yMetric, zMetric, curvilinear)
-                    else
-                        call this%init_curvilinear(xMetric, yMetric, zMetric)
-                    end if 
-                else
-                    call this%init_curvilinear(xMetric, yMetric)
-                end if 
-            else
-                call this%init_curvilinear(xMetric)
-            end if
+        if (present(curvilinear)) then
+            call this%init_curvilinear(this%xmetric, this%ymetric, this%zmetric, this%curvilinear)
+        else
+            call this%init_curvilinear(this%xmetric, this%ymetric, this%zmetric)
         end if 
 
     end subroutine
 
 
-    subroutine init_curvilinear(this, xMetric, yMetric, zMetric, Curvilinear)
+    subroutine init_curvilinear(this, xmetric, ymetric, zmetric, curvilinear)
         class(derivatives), intent(inout)        :: this
         logical           , intent(in)           :: xmetric
-        logical           , intent(in), optional :: ymetric
-        logical           , intent(in), optional :: zmetric
+        logical           , intent(in)           :: ymetric
+        logical           , intent(in)           :: zmetric
         logical           , intent(in), optional :: curvilinear
         
 
         ! Metrics
-            if (xMetric) then
-                call GracefulExit("Code INCOMPLETE! Metric terms are not &
-                 &   supported in x direction!",04)
-                 this%xMetric = .true. 
-            end if
+        if (xmetric) then
+            call GracefulExit("Code INCOMPLETE! Metric terms are not &
+             &   supported in x direction!",04)
+             this%xmetric = .true. 
+        end if
 
-            if (yMetric) then
-                call GracefulExit("Code INCOMPLETE! Metric terms are not &
-                 &   supported in y direction!",05)
-                 this%yMetric = .true. 
-            end if
+        if (ymetric) then
+            call GracefulExit("Code INCOMPLETE! Metric terms are not &
+             &   supported in y direction!",05)
+             this%ymetric = .true. 
+        end if
         
-            if (zMetric) then
-                call GracefulExit("Code INCOMPLETE! Metric terms are not &
-                 &   supported in z direction!",06)
-                 this%zMetric = .true. 
-            end if
+        if (zmetric) then
+            call GracefulExit("Code INCOMPLETE! Metric terms are not &
+             &   supported in z direction!",06)
+             this%zmetric = .true. 
+        end if
         
-            if (Curvilinear) then
+        if (present(curvilinear)) then
+            if (curvilinear) then
                 call GracefulExit("Code INCOMPLETE! Curvilinear Formulation is &
                 & not supported!",06)
-                this%Curvilinear = .true. 
+                this%curvilinear = .true. 
             end if
+        end if
 
     end subroutine
 

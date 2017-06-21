@@ -4,7 +4,7 @@ notifications:
   email: false
   slack:
     rooms:
-      - padeops:BL9Z4HoxfW6KHcHSILMFYD6M#travis_igrid
+      - padeops:padeops:BL9Z4HoxfW6KHcHSILMFYD6M#travis_igrid
 
 sudo: required
 
@@ -34,6 +34,7 @@ before_install:
   - sh ./travis/install-fftw.sh
   - sh ./travis/install-2decomp.sh
   - sh ./travis/install-Lib_VTK_IO.sh
+  - sh ./travis/install-hdf5.sh
 
 install:
   - |
