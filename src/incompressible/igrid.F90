@@ -56,7 +56,7 @@ module IncompressibleGrid
     integer :: dWdzBC_bottom  =  1, dWdzBC_top  =  1
     integer :: dTdzBC_bottom  =  -1, dTdzBC_top  =  0
     integer :: WdTdzBC_bottom =   1, WdTdzBC_top = 0
-    integer :: tauBC_bottom   = -1, tauBC_top   = -1
+    integer :: tauBC_bottom   =  0, tauBC_top   =  0
 
     type :: igrid
         
@@ -2029,21 +2029,21 @@ contains
     !!! Added by Mike to interpolate tau13
     subroutine interpTau(this)
         class(igrid), intent(inout), target :: this
-        complex(rkind), dimension(:,:,:), pointer :: ybuffC, zbuffC, zbuffE
+        complex(rkind), dimension(:,:,:), pointer :: ybuffC, zbuffC, zbuffE, ybuffE
 
         zbuffE => this%cbuffzE(:,:,:,1)
         zbuffC => this%cbuffzC(:,:,:,1)
         ybuffC => this%cbuffyC(:,:,:,1)
-
+        ybuffE => this%cbuffyE(:,:,:,1)
         
-        call this%spectC%fft(this%tau13,zbuffE)
-        call transpose_y_to_z(zbuffE,zbuffE,this%sp_gpE)
+        call this%spectE%fft(this%tau13,ybuffE)
+        call transpose_y_to_z(ybuffE,zbuffE,this%sp_gpE)
         call this%Pade6opZ%interpz_E2C(zbuffE,zbuffC, tauBC_bottom,tauBC_top)
         !this%sgsmodel%get_ustar()**2, 0)
-        call transpose_z_to_y(zbuffC,zbuffC,this%sp_gpC)
+        call transpose_z_to_y(zbuffC,ybuffC,this%sp_gpC)
         !allocate(this%tau13_save, source=zbuffC)
         allocate(this%tau13_save(this%gpC%xsz(1), this%gpC%xsz(2),this%gpC%xsz(3)))
-        call this%spectC%ifft(zbuffC,this%tau13_save)
+        call this%spectC%ifft(ybuffC,this%tau13_save)
 
 
     end subroutine
