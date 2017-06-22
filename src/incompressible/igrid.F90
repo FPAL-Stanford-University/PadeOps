@@ -2013,7 +2013,19 @@ contains
     subroutine interpTau(this)
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ybuffC, zbuffC, zbuffE, ybuffE
-        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)) :: tau13_save
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)) :: tau13_save 
+        
+        ! NOTES from AG --> MH
+        ! 1. instead of creating a stack variable tau13_save, just use a buffer that's free. 
+        !    For example this%rbuffxC(:,:,:,1) is available. 
+        ! 2. The string label that you pass into dumpFullField must be exactly 4
+        !    characters long, otherwise everything after the 4th character will
+        !    get ignored. 
+        ! 3. You cannot dump this%tau13 using dumpFillField without passing in
+        !    the optional 3rd argument. Check the comment above dumpFullField for
+        !    further instructions. 
+        ! 
+        ! Once, you have fixed all this, get rid of this entire comment. 
 
         zbuffE => this%cbuffzE(:,:,:,1)
         zbuffC => this%cbuffzC(:,:,:,1)
@@ -2026,8 +2038,9 @@ contains
         call transpose_z_to_y(zbuffC,ybuffC,this%sp_gpC)
         call this%spectC%ifft(ybuffC,tau13_save)
         ! Dump the interpolated and non-interpolated tau13
-        call this%dumpFullField(tau13_save,'tinterp')
-        call this%dumpFullField(this%tau13,'torig')
+        
+        call this%dumpFullField(tau13_save,'tinterp')  ! <-- Fix this guy, the string label must be exactly 4 characters
+        call this%dumpFullField(this%tau13,'torig')    ! <-- Fix this guy, the string label must be exactly 4 characters
 
     end subroutine
 
