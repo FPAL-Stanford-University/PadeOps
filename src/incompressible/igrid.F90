@@ -183,8 +183,6 @@ module IncompressibleGrid
         logical :: computeForcingTerm = .false. 
 
         ! Pointers linked to SGS stuff
-        ! Add by Mike to save tau13 interpolated onto cell center
-        real(rkind), dimension(:,:,:), allocatable :: tau13_save
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
         real(rkind), dimension(:,:,:)  , pointer :: nu_SGS, tau13, tau23
         real(rkind), dimension(:,:,:)  , pointer :: c_SGS, q1, q2, q3 
@@ -1231,16 +1229,6 @@ contains
         call transpose_z_to_y(zbuffC,this%whatC,this%sp_gpC)
         call this%spectC%ifft(this%whatC,this%wC)
 
-        ! Interpolate tau for output
-        !call this%spectC%fft(this%tauSGS_ij(:,:,:,3),zbuffE)
-        !call transpose_y_to_z(zbuffE,zbuffE,this%sp_gpE)
-        !call this%Pade6opZ%interpz_E2C(zbuffE,zbuffC, tauBC_bottom,tauBC_top)
-        !this%sgsmodel%get_ustar()**2, 0)
-        !call transpose_z_to_y(zbuffC,zbuffC,this%sp_gpC)
-        !call this%spectC%ifft(zbuffC,this%tau13_save)
-        !call this%Pade6opZ%interpz_E2C(this%tau13,this%tau13_save,this%sgsmodel%get_ustar()**2,0)
-
-
         ! Step 2: Interpolate u -> uE
         call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
         call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,uBC_bottom, uBC_top)
@@ -1952,14 +1940,9 @@ contains
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
            ! Dump the tau_13 values
-           !call transpose_y_to_z(this%tau13,zbuffE,this%sp_gpE)
-           !call this%Pade6opZ%interpz_E2C(this%tau13,this%tau13_save,this%sgsmodel%get_ustar()**2, 0)
-           !call transpose_z_to_y(zbuffC,this%whatC,this%sp_gpC)
-           !call this%spectC%ifft(this%whatC,this%wC)
-           !call this%dumpFullField(this%wC,'tau13interp')
            call interpTau(this)
-           call this%dumpFullField(this%tau13_save,'tinterp')
-           call this%dumpFullField(this%tau13,'torig')
+           !call this%dumpFullField(this%tau13_save,'tinterp')
+           !call this%dumpFullField(this%tau13,'torig')
            !
            call this%dumpVisualizationInfo()
            if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
@@ -2030,6 +2013,7 @@ contains
     subroutine interpTau(this)
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ybuffC, zbuffC, zbuffE, ybuffE
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)) :: tau13_save
 
         zbuffE => this%cbuffzE(:,:,:,1)
         zbuffC => this%cbuffzC(:,:,:,1)
@@ -2039,12 +2023,11 @@ contains
         call this%spectE%fft(this%tau13,ybuffE)
         call transpose_y_to_z(ybuffE,zbuffE,this%sp_gpE)
         call this%Pade6opZ%interpz_E2C(zbuffE,zbuffC, tauBC_bottom,tauBC_top)
-        !this%sgsmodel%get_ustar()**2, 0)
         call transpose_z_to_y(zbuffC,ybuffC,this%sp_gpC)
-        !allocate(this%tau13_save, source=zbuffC)
-        allocate(this%tau13_save(this%gpC%xsz(1), this%gpC%xsz(2),this%gpC%xsz(3)))
-        call this%spectC%ifft(ybuffC,this%tau13_save)
-
+        call this%spectC%ifft(ybuffC,tau13_save)
+        ! Dump the interpolated and non-interpolated tau13
+        call this%dumpFullField(tau13_save,'tinterp')
+        call this%dumpFullField(this%tau13,'torig')
 
     end subroutine
 
@@ -2852,10 +2835,7 @@ contains
             ! interpolate tau13 from E to C
             call transpose_x_to_y(this%tau13,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-            !!! Added to output tau13 interpolated onto the cell centers to
-            !check budget 
-            !this%tau13_save = rbuff3E
-            !!!
+            
             !if(nrank==0) then
             !    write(*,*) '-----------------'
             !    write(*,*) rbuff3E(1,1,1:2)
@@ -2879,8 +2859,6 @@ contains
             !endif
             call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
             call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,3),this%gpC)
-            !call this%dumpFullField(this%tauSGS_ij(:,:,:,3),'tau13interp')
-            !this%tau13_save = this%tauSGS_ij(:,:,:,3)
 
             ! interpolate tau23 from E to C
             call transpose_x_to_y(this%tau23,rbuff2E,this%gpE)
@@ -3165,7 +3143,6 @@ contains
       ! compute horizontal averages and dump .stt files
       ! overwrite previously written out 3D stats dump
         real(rkind), dimension(:,:,:), pointer :: rbuff0, rbuff1, rbuff2, rbuff3, rbuff4, rbuff5, rbuff6, rbuff3E, rbuff4E
-        !real(rkind), dimension(:,:,:), pointer :: tau13_save
         real(rkind), dimension(:,:,:), pointer :: S11_mean3D, S12_mean3D, S13_mean3D, S22_mean3D, S23_mean3D, S33_mean3D
         complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2
         real(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)) :: tmpvar
