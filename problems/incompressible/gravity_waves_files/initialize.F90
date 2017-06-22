@@ -1,4 +1,4 @@
-module neutral_pbl_parameters
+module gravity_waves_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
@@ -17,7 +17,7 @@ end module
 
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use neutral_pbl_parameters
+    use gravity_waves_parameters
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
@@ -111,7 +111,7 @@ end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
-    use neutral_pbl_parameters
+    use gravity_waves_parameters
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     real(rkind) :: Gx0, Gy0, Lx, Ly, Lz, z0init, Tref
@@ -174,7 +174,7 @@ end subroutine
 
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use neutral_pbl_parameters    
+    use gravity_waves_parameters    
     use kind_parameters,  only: rkind
     use constants,        only: one,two
     use decomp_2d,        only: decomp_info
@@ -243,7 +243,6 @@ subroutine set_Reference_Temperature(inputfile, Thetaref)
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBLEM_INPUT)
     close(ioUnit)    
-
     Thetaref = Tref
     ! This will set the value of Tref.     
 

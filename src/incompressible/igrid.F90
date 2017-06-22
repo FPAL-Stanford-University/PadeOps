@@ -57,7 +57,6 @@ module IncompressibleGrid
     integer :: dTdzBC_bottom  =  -1, dTdzBC_top  =  0
     integer :: WdTdzBC_bottom =   1, WdTdzBC_top = 0
 
-
     type :: igrid
         
         character(clen) :: inputDir
@@ -2436,7 +2435,10 @@ contains
     end subroutine 
 
 
-    subroutine dumpFullField(this,arr,label)
+    ! NOTE: If you want to dump an edge field, you need to call in dumpFullField
+    ! routine with this%gpE passed in as the 3rd argument. If it's a cell field,
+    ! then you don't need to pass in any gp since the default gp is this%gpC
+    subroutine dumpFullField(this,arr,label,gp2use)
         use decomp_2d_io
         use mpi
         use exits, only: message
@@ -2444,10 +2446,15 @@ contains
         character(len=clen) :: tempname, fname
         real(rkind), dimension(:,:,:), intent(in) :: arr
         character(len=4), intent(in) :: label
+        type(decomp_info), intent(in), optional :: gp2use
 
-        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
-        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-        call decomp_2d_write_one(1,arr,fname)
+         write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
+         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+         if (present(gp2use)) then
+            call decomp_2d_write_one(1,arr,fname,gp2use)
+         else
+            call decomp_2d_write_one(1,arr,fname)
+         end if
 
     end subroutine
 
@@ -2803,7 +2810,7 @@ contains
 
             ! interpolate tau13 from E to C
             call transpose_x_to_y(this%tau13,rbuff2E,this%gpE)
-            call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+            call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE) 
             !if(nrank==0) then
             !    write(*,*) '-----------------'
             !    write(*,*) rbuff3E(1,1,1:2)
@@ -4789,6 +4796,19 @@ contains
         real(rkind) :: mfact, meanK
 
         this%rbuffxC(:,:,:,1) = 0.5d0*(this%u*this%u + this%v*this%v + this%wC*this%wC)
+        !use mpi
+        !use constants
+        !use kind_parameters,  only: rkind, clen
+        !use timer, only: tic, toc
+        !use sgsmod_igrid, only: sgs_igrid
+        !use PadeDerOps, only: Pade6stagg, cd06
+        !use spectralMod, only: spectral
+        !use decomp_2d
+        !use decomp_2d_io
+        !use turbineMod, only: turbineArray
+        !implicit none
+
+!his%wC)
         mfact = one/(real(this%nx,rkind)*real(this%ny,rkind)*real(this%nz,rkind))
         meanK = p_sum(sum(this%rbuffxC(:,:,:,1)))*mfact
         this%pressure = this%pressure + meanK
