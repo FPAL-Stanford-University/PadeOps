@@ -56,7 +56,6 @@ module IncompressibleGrid
     integer :: dWdzBC_bottom  =  1, dWdzBC_top  =  1
     integer :: dTdzBC_bottom  =  -1, dTdzBC_top  =  0
     integer :: WdTdzBC_bottom =   1, WdTdzBC_top = 0
-    integer :: tauBC_bottom   =  0, tauBC_top   =  0
 
     type :: igrid
         
@@ -1278,7 +1277,6 @@ contains
         call this%spectC%destroy()
         call this%spectE%destroy()
         deallocate(this%spectC, this%spectE)
-        !call this%dumpFullField(this%tauSGS_ij(:,:,:,3),'tau13interp')
         nullify(this%nu_SGS, this%c_SGS, this%tauSGS_ij)
         if (this%useSGS) then
            call this%sgsModel%destroy()
@@ -2812,8 +2810,7 @@ contains
 
             ! interpolate tau13 from E to C
             call transpose_x_to_y(this%tau13,rbuff2E,this%gpE)
-            call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-            
+            call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE) 
             !if(nrank==0) then
             !    write(*,*) '-----------------'
             !    write(*,*) rbuff3E(1,1,1:2)
