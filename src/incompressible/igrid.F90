@@ -1939,11 +1939,6 @@ contains
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
-           ! Dump the tau_13 values
-           call interpTau(this)
-           !call this%dumpFullField(this%tau13_save,'tinterp')
-           !call this%dumpFullField(this%tau13,'torig')
-           !
            call this%dumpVisualizationInfo()
            if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
@@ -2008,33 +2003,6 @@ contains
         if(exitstat) call GracefulExit("Found exitpdo file in control directory",1234)
 
     end subroutine
-
-    !!! Added by Mike to interpolate tau13
-    subroutine interpTau(this)
-        class(igrid), intent(inout), target :: this
-        complex(rkind), dimension(:,:,:), pointer :: ybuffC, zbuffC, zbuffE, ybuffE     
-        real(rkind), dimension(:,:,:), pointer :: rbuff
-        
-        zbuffE => this%cbuffzE(:,:,:,1)
-        zbuffC => this%cbuffzC(:,:,:,1)
-        ybuffC => this%cbuffyC(:,:,:,1)
-        ybuffE => this%cbuffyE(:,:,:,1)
-        rbuff => this%rbuffxC(:,:,:,1)
-        
-        call this%spectE%fft(this%tau13,ybuffE)
-        call transpose_y_to_z(ybuffE,zbuffE,this%sp_gpE)
-        call this%Pade6opZ%interpz_E2C(zbuffE,zbuffC, tauBC_bottom,tauBC_top)
-        call transpose_z_to_y(zbuffC,ybuffC,this%sp_gpC)
-        call this%spectC%ifft(ybuffC,rbuff)
-        ! Dump the interpolated and non-interpolated tau13
-        
-        call this%dumpFullField(rbuff,'tauC')
-        call this%dumpFullField(this%tau13,'tauE',this%gpE)
-
-    end subroutine
-
-
-
 
     subroutine AdamsBashforth(this)
         class(igrid), intent(inout) :: this
