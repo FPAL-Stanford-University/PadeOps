@@ -60,6 +60,7 @@ module cd06staggstuff
 
         private
 
+        logical     :: AmIPeriodic = .false. 
         integer     :: n
         integer     :: nE
         real(rkind) :: dx
@@ -80,11 +81,16 @@ module cd06staggstuff
         real(rkind), allocatable, dimension(:,:) :: TriD2_E2E
         real(rkind), allocatable, dimension(:,:) :: TriInterp_E2C
         real(rkind), allocatable, dimension(:,:) :: TriInterp_C2E
+        real(rkind), allocatable, dimension(:,:) :: LU_D1
+        real(rkind), allocatable, dimension(:,:) :: LU_D2
+        real(rkind), allocatable, dimension(:,:) :: LU_interp
 
         contains
 
-        procedure :: init
-        procedure :: destroy
+        procedure, private :: init_nonperiodic
+        procedure, private :: init_periodic
+        generic            :: init => init_periodic, init_nonperiodic
+        
         procedure, private :: ComputeD1RHS_E2C_REAL 
         procedure, private :: ComputeD1RHS_C2E_REAL
         procedure, private :: ComputeD1RHS_E2E_REAL
@@ -125,6 +131,7 @@ module cd06staggstuff
         procedure, private :: ddz_E2E_CMPLX
         procedure, private :: d2dz2_C2C_CMPLX
         procedure, private :: d2dz2_E2E_CMPLX
+        procedure          :: destroy
         
         generic :: ddz_E2C => ddz_E2C_REAL, ddz_E2C_CMPLX
         generic :: ddz_C2E => ddz_C2E_REAL, ddz_C2E_CMPLX
@@ -144,7 +151,35 @@ module cd06staggstuff
     end type
 
 contains
-    subroutine init(this, nx, dx, isTopEven, isBotEven, isTopSided, isBotSided) 
+
+    subroutine init_periodic(this, nx, dx)
+        class( cd06stagg ), intent(inout) :: this
+        integer, intent(in) :: nx
+        real(rkind), intent(in) :: dx
+        real(rkind), parameter :: alpha06stagg_d1     = 9._rkind/62._rkind 
+        real(rkind), parameter :: alpha06stagg_d2     = 2._rkind/11._rkind
+        real(rkind), parameter :: alpha06stagg_interp = 3._rkind/10._rkind
+
+        this%n = nx; this%nE = nx + 1
+        this%dx = dx; this%onebydx = one/dx; this%onebydx2 = this%onebydx/dx
+        this%AmIPeriodic = .true. 
+        
+        if (nx .LE. 4) then
+            call GracefulExit("CD06_stagg requires at least 4 points",21)
+        end if  
+         
+        if(allocated( this%LU_D1 )) deallocate( this%LU_D1 ); allocate( this%LU_D1(this%n,5) )
+        call ComputeLU(this%LU_D1,nx,alpha06stagg_d1,one,alpha06stagg_d1)
+
+        if(allocated( this%LU_D2 )) deallocate( this%LU_D2 ); allocate( this%LU_D2(this%n,5) )
+        call ComputeLU(this%LU_D2,nx,alpha06stagg_d2,one,alpha06stagg_d2)
+
+        if(allocated( this%LU_interp )) deallocate( this%LU_interp ); allocate( this%LU_interp(this%n,5) )
+        call ComputeLU(this%LU_interp,nx,alpha06stagg_interp,one,alpha06stagg_interp)
+
+    end subroutine 
+
+    subroutine init_nonperiodic(this, nx, dx, isTopEven, isBotEven, isTopSided, isBotSided) 
         class( cd06stagg ), intent(inout) :: this
         integer, intent(in) :: nx
         real(rkind), intent(in) :: dx
@@ -178,18 +213,123 @@ contains
         call this%ComputeTriD2_E2E(); call this%ComputeTriD2_C2C()
     
         call this%ComputeTriInterp_E2C(); call this%ComputeTriInterp_C2E()
+        this%AmIPeriodic = .false. 
     end subroutine
 
     subroutine destroy(this)
         class( cd06stagg ), intent(inout) :: this
-        deallocate( this%TriD1_E2C, this%TriD1_C2E, this%TriD1_E2E, this%TriD1_C2C )
-        deallocate( this%TriInterp_E2C, this%TriInterp_C2E)
-        deallocate( this%TriD2_E2E, this%TriD2_C2C)
+        if (this%AmIperiodic) then
+            deallocate(this%LU_D1, this%LU_D2, this%LU_interp)
+        else
+            deallocate( this%TriD1_E2C, this%TriD1_C2E, this%TriD1_E2E, this%TriD1_C2C )
+            deallocate( this%TriInterp_E2C, this%TriInterp_C2E)
+            deallocate( this%TriD2_E2E, this%TriD2_C2C)
+        end if 
     end subroutine
     
 #include "STAGG_CD06_files/ComputeTri_allRoutines.F90"
 #include "STAGG_CD06_files/TridiagSolver_allRoutines.F90"
 
+    subroutine SolveZLU(this,y,n1,n2,LU)
+        
+        class (cd06stagg), intent(in) :: this
+        integer, intent(in) :: n1,n2
+        real(rkind), dimension(this%n,5), intent(in) :: LU
+        real(rkind), dimension(n1,n2,this%n), intent(inout) :: y  ! Take in RHS and put solution into it
+        integer ::  k
+        real(rkind), dimension(n1,n2) :: sum1 
+
+        ! Step 2
+        sum1 = LU(1,2)*y(:,:,1)
+        do k = 2,this%n-1
+            y(:,:,k) = y(:,:,k) - LU(k,1)*y(:,:,k-1)
+            sum1 = sum1 + LU(k,2)*y(:,:,k)
+        end do
+        y(:,:,this%n) = y(:,:,this%n) - sum1
+    
+        ! Step 3
+        y(:,:,this%n)   = y(:,:,this%n) * LU(this%n,3)
+
+        y(:,:,this%n-1) =  y(:,:,this%n-1) * LU(this%n-1,3) - y(:,:,this%n) * LU(this%n-1,5) 
+        do k = this%n-2,1,-1
+            y(:,:,k) =  y(:,:,k) * LU(k,3)- y(:,:,k+1) * LU(k,4)- y(:,:,this%n) * LU(k,5)
+        end do
+    
+    end subroutine
+      
+    pure subroutine ComputeZD1RHS_periodic(this,f, RHS, n1, n2) 
+         
+        class( cd06stagg ), intent(in) :: this
+        integer, intent(in) :: n1, n2
+        real(rkind), dimension(n1,n2,this%n), intent(in) :: f
+        real(rkind), dimension(n1,n2,this%n), intent(out) :: RHS
+        real(rkind), parameter :: a = (63._rkind/62._rkind)/one , b = (17._rkind/62._rkind)/three
+        real(rkind) :: a06, b06
+
+        a06 = a * this%onebydx
+        b06 = b * this%onebydx
+        
+        RHS(:,:,1         ) = a06 * ( f(:,:,2)          - f(:,:,this%n  ) ) &
+                            + b06 * ( f(:,:,3)          - f(:,:,this%n-1) ) 
+        
+        RHS(:,:,2         ) = a06 * ( f(:,:,3)          - f(:,:,1       ) ) &
+                            + b06 * ( f(:,:,4)          - f(:,:,this%n  ) )
+
+        RHS(:,:,3:this%n-2) = a06 * ( f(:,:,4:this%n-1) - f(:,:,2:this%n-3) ) &
+                            + b06 * ( f(:,:,5:this%n  ) - f(:,:,1:this%n-4) ) 
+        
+        RHS(:,:,this%n-1  ) = a06 * ( f(:,:,this%n)     - f(:,:,this%n-2) ) &
+                            + b06 * ( f(:,:,1)          - f(:,:,this%n-3) ) 
+        
+        RHS(:,:,this%n    ) = a06 * ( f(:,:,1)          - f(:,:,this%n-1) ) &
+                            + b06 * ( f(:,:,2)          - f(:,:,this%n-2) )
+
+   end subroutine  
+
+
+   subroutine ComputeLU(LU,n,b,d,a)
+    
+        integer, intent(in) :: n
+        real(rkind), intent(in) :: d,a,b
+        real(rkind), dimension(n,5), intent(out) :: LU
+        integer :: i
+    
+        LU = 0.0_rkind
+    
+        associate ( bc=>LU(:,1), h=>LU(:,2), c=>LU(:,3), aa=>LU(:,4), v=>LU(:,5) )
+    
+            ! Step 0
+            c(1) = d
+            v(1) = b
+            h(1) = a/c(1)
+    
+            ! Step 1
+            do i = 2,n-1
+                c(i) = d - ( b/c(i-1) )*a
+            end do
+            do i = 2,n-2
+                v(i) = -( b/c(i-1) )*v(i-1)
+                h(i) = -( a/c(i) )*h(i-1)
+            end do
+            v(n-1) = a - ( b/c(n-2) )*v(n-2)
+            h(n-1) = ( b - h(n-2)*a ) / c(n-1)
+            c(n)   = d - SUM( h(1:n-1)*v(1:n-1) )
+    
+            bc(2:n-1) = b / c(1:n-2)
+            aa(1:n-2) = a
+    
+            ! Set c = 1/c
+            c = 1._rkind/c
+   
+            ! Overwrite aa by aa*c
+            aa = aa*c
+            
+            ! Overwrite v by v*c
+            v = v*c 
+        end associate
+    
+    end subroutine
+    
     pure subroutine ComputeD1RHS_E2C_REAL(this, fE, rhs, n1, n2) 
         class( cd06stagg ), intent(in) :: this
         integer, intent(in) :: n1, n2
