@@ -4796,19 +4796,6 @@ contains
         real(rkind) :: mfact, meanK
 
         this%rbuffxC(:,:,:,1) = 0.5d0*(this%u*this%u + this%v*this%v + this%wC*this%wC)
-        !use mpi
-        !use constants
-        !use kind_parameters,  only: rkind, clen
-        !use timer, only: tic, toc
-        !use sgsmod_igrid, only: sgs_igrid
-        !use PadeDerOps, only: Pade6stagg, cd06
-        !use spectralMod, only: spectral
-        !use decomp_2d
-        !use decomp_2d_io
-        !use turbineMod, only: turbineArray
-        !implicit none
-
-!his%wC)
         mfact = one/(real(this%nx,rkind)*real(this%ny,rkind)*real(this%nz,rkind))
         meanK = p_sum(sum(this%rbuffxC(:,:,:,1)))*mfact
         this%pressure = this%pressure + meanK
