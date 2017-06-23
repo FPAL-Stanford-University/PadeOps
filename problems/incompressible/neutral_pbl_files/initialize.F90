@@ -40,8 +40,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind) :: zpeak = 0.2d0, sig
     real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, Gx0 = one, Gy0 = zero;
     real(rkind) :: thetam = 15._rkind + 273.15_rkind
-    real(rkind) :: cTemp = 1.d0/3.d0, aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
+    real(rkind) :: cTemp = 0.5d0, aTemp = 2.45d0, bTemp = 0.05d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
     real(rkind), dimension(:,:,:), allocatable :: randArr, Tpurt, eta
+    ! New parameters added by MH, 6/22/17
+    real(rkind), dimension(:,:,:), allocatable :: fu, fv, signf
+    real(rkind), dimension(:,:,:), pointer :: ub, vb
+    real(rkind) :: ustar = 0.28d0, kappaInit = 0.41d0
     
     namelist /PROBLEM_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
 
@@ -59,15 +63,36 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     allocate(eta(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     allocate(randArr(size(T,1),size(T,2),size(T,3)))
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
- 
+
+    ! MH allocate new variables
+    allocate(fu(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3))) 
+    allocate(fv(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    allocate(signf(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    ub => fieldsC(:,:,:,1); vb => fieldsC(:,:,:,2)
+
+    ! Compute initial velocity field
+    fu = 1.57d0 * (z/h0Temp) - 2.68d0 * (z/h0Temp)**2
+    fv = 13.2d0 * (z/h0Temp) - 8.70d0 * (z/h0Temp)**2
+    ub = (ustar/kappaInit) * (log(z/z0init) + fu)
+    vb = -(ustar/kappaInit) * fv * sign(fv,signf)
+    u = ub*((1.d0-tanh(((z/z0init)-0.5d0)*2.d0*h0Temp/100.d0))/2.d0) + &
+        Gx0 * ((1.d0+tanh((z/z0init)*2.d0*h0Temp/100.d0))/2.d0)
+    v = vb*((1.d0-tanh(((z/z0init)-0.5d0)*2.d0*h0Temp/100.d0))/2.d0) + &
+        Gy0 * ((1.d0+tanh((z/z0init)*2.d0*h0Temp/100.d0))/2.d0)
 
     ! Provide initial conditions for Velocities and Potential Temperature
-    u = Gx0           ! Could be a function of (x,y,z)
-    v = Gy0           ! Could be a function of (x,y,z)
+    !u = Gx0           ! Could be a function of (x,y,z)
+    !v = Gy0           ! Could be a function of (x,y,z)
     wC = zero         ! Could be a function of (x,y,z) 
    
     eta = (z - h1Temp)/(cTemp*(h2Temp - h0Temp))
     T = thetam + aTemp*(tanh(eta) + 1.d0)/2.d0 + bTemp*(log(2.d0*cosh(eta)) + eta)/2.d0 
+
+    ! write the variables to a file to test
+!    open(unit=1, file="T")
+!    write(1,*) T
+!    close(unit=1)
+
 
     ! Generate Temperature perturbations 
     call gaussian_random(randArr,zero,one,seedu + 10*nrank)
