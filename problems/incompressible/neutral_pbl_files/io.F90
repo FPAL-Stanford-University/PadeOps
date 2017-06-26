@@ -99,6 +99,7 @@ contains
         !call gp%dumpFullField(gp%u,'uVel')
         !call gp%dumpFullField(gp%v,'vVel')
         !call gp%dumpFullField(gp%wC,'wVel')
+        !call gp%dumpFullField(gp%PfieldsC(:,:,:,7),'Tout')
         !call output_tecplot(gp)
     end subroutine
 
@@ -137,6 +138,13 @@ contains
         open(fid,file=trim(fname),form='unformatted',status='replace')
         write(fid) fieldsPhys(:,:,:,3)
         close(fid)
+
+        write(tempname,"(A3,I2.2,A2,I4.4,A2,I6.6,A5,A4)") "Run", RunIDX, "_p",nrank,"_t",tid,"_Tout",".out"
+        fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+        open(fid,file=trim(fname),form='unformatted',status='replace')
+        write(fid) fieldsPhys(:,:,:,7)
+        close(fid)
+
         
         if (nrank == 0) then
             write(headerfid,"(I8)") tid
