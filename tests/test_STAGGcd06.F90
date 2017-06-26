@@ -63,8 +63,9 @@ program testSTAGGcd06
     !call der%InterpZ_E2C(fE,dfC,nx,ny)
     print*, dfC(1,1,:)
     print*, "-------------------"
-    print*, dfEt(1,1,:)
+    print*, dfCt(1,1,:)
 
+    print*, "Max Error:", maxval(abs(dfC - dfCt))
 
     !print*, "==================================================="
     !print*, dfCt(1,1,:)
