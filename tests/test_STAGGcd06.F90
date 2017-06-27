@@ -9,8 +9,7 @@ program testSTAGGcd06
     use mpi
         
     real(rkind), dimension(:,:,:), allocatable :: zE, zC
-    !complex(rkind), dimension(:,:,:), allocatable :: fE, fC, dfEt, dfE, dfCt, dfC
-    real(rkind), dimension(:,:,:), allocatable :: fE, fC, dfEt, dfE, dfCt, dfC
+    complex(rkind), dimension(:,:,:), allocatable :: fE, fC, dfEt, dfE, dfCt, dfC
     integer :: nx = 1, ny = 1, nz = 16
     real(rkind) :: omega = 1._rkind, dz
     logical :: isTopEven, isBotEven
@@ -49,23 +48,29 @@ program testSTAGGcd06
     zC = 0.5_rkind*(zE(:,:,2:nz+1) + zE(:,:,1:nz))
 
     print*, zC
-    fE = cos(two*pi*omega*zE) !+ imi*cos(two*pi*omega*zE)
-    fC = cos(two*pi*omega*zC) !+ imi*cos(two*pi*omega*zC)
+    fE = 1*cos(two*pi*omega*zE) + 1*imi*cos(two*pi*omega*zE)
+    fC = 1*cos(two*pi*omega*zC) + 1*imi*cos(two*pi*omega*zC)
 
-    dfEt = -omega*two*pi*sin(two*pi*omega*zE) !+ imi*(-omega*two*pi*sin(two*pi*omega*zE))
-    dfCt = -omega*two*pi*sin(two*pi*omega*zC) !+ imi*(-omega*two*pi*sin(two*pi*omega*zC))
+    dfEt = 1*(-omega*two*pi)*sin(two*pi*omega*zE) + 1*imi*(-omega*two*pi*sin(two*pi*omega*zE))
+    dfCt = 1*(-omega*two*pi)*sin(two*pi*omega*zC) + 1*imi*(-omega*two*pi*sin(two*pi*omega*zC))
+
     
     allocate(der)
     !call der%init(nz, dz, isTopEven, isBotEven,.true.,.true.)
     call der%init(nz, dz)
     call der%ddz_E2C(fE,dfC,nx,ny)
+    call der%ddz_C2E(fC,dfE,nx,ny)
    
     !call der%InterpZ_E2C(fE,dfC,nx,ny)
+     print*,'computed derivative at cells'
     print*, dfC(1,1,:)
     print*, "-------------------"
-    print*, dfCt(1,1,:)
+    
+    print*, "computed derivative at edges"
+    print*, dfE(1,1,:)
 
-    print*, "Max Error:", maxval(abs(dfC - dfCt))
+    print*, "Max Error for 1st Deriv: E2C:", maxval(abs(dfC - dfCt))
+    print*, "Max Error for 1st Deriv: C2E:", maxval(abs(dfE - dfEt))
 
     !print*, "==================================================="
     !print*, dfCt(1,1,:)
