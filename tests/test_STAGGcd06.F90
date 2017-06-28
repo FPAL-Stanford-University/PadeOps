@@ -62,7 +62,7 @@ program testSTAGGcd06
     call der%ddz_C2E(fC,dfE,nx,ny)
    
     !call der%InterpZ_E2C(fE,dfC,nx,ny)
-     print*,'computed derivative at cells'
+    print*,'computed derivative at cells'
     print*, dfC(1,1,:)
     print*, "-------------------"
     
