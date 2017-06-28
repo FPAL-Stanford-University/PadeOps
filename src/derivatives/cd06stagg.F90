@@ -118,6 +118,8 @@ module cd06staggstuff
 
         procedure, private :: ComputeZD1RHS_E2C_REAL_periodic
         procedure, private :: ComputeZD1RHS_E2C_CMPLX_periodic
+        procedure, private :: ComputeZD1RHS_C2E_REAL_periodic
+        procedure, private :: ComputeZD1RHS_C2E_CMPLX_periodic
         procedure, private :: SolveZLU_REAL
         procedure, private :: SolveZLU_CMPLX
 
@@ -269,7 +271,7 @@ contains
         real(rkind), dimension(this%n,5), intent(in) :: LU
         complex(rkind), dimension(n1,n2,this%n), intent(inout) :: y  ! Take in RHS and put solution into it
         integer ::  k
-        real(rkind), dimension(n1,n2) :: sum1 
+        complex(rkind), dimension(n1,n2) :: sum1 
 
         ! Step 2
         sum1 = LU(1,2)*y(:,:,1)
@@ -277,7 +279,7 @@ contains
             y(:,:,k) = y(:,:,k) - LU(k,1)*y(:,:,k-1)
             sum1 = sum1 + LU(k,2)*y(:,:,k)
         end do
-        y(:,:,this%n) = y(:,:,this%n) - sum1
+        y(:,:,this%n) = y(:,:,this%n) - sum1  !something happens here so that imaginary and real parts are treated differently
     
         ! Step 3
         y(:,:,this%n)   = y(:,:,this%n) * LU(this%n,3)
@@ -297,7 +299,7 @@ contains
         real(rkind), dimension(n1,n2,this%n) , intent(out) :: RHS
         real(rkind), parameter :: a = (63._rkind/62._rkind) , b = (17._rkind/62._rkind)/three
         real(rkind) :: a06, b06
-
+        
         a06 = a * this%onebydx
         b06 = b * this%onebydx
         
@@ -333,6 +335,62 @@ contains
         RHS(:,:,this%n    ) = a06 * ( f(:,:,this%n+1)   - f(:,:,this%n  ) ) &
                             + b06 * ( f(:,:,2)          - f(:,:,this%n-1) )
 
+   end subroutine  
+
+    pure subroutine ComputeZD1RHS_C2E_REAL_periodic(this,f, RHS, n1, n2) 
+         
+        class( cd06stagg ), intent(in) :: this
+        integer, intent(in) :: n1, n2
+        real(rkind), dimension(n1,n2,this%n), intent(in)  :: f
+        real(rkind), dimension(n1,n2,this%nE) , intent(out) :: RHS
+        real(rkind), parameter :: a = (63._rkind/62._rkind) , b = (17._rkind/62._rkind)/three
+        real(rkind) :: a06, b06
+
+        a06 = a * this%onebydx
+        b06 = b * this%onebydx
+        
+        RHS(:,:,1         ) = a06 * ( f(:,:,1)          - f(:,:,this%n       ) ) &
+                            + b06 * ( f(:,:,2)          - f(:,:,this%n-1 ) ) 
+        
+        RHS(:,:,2         ) = a06 * ( f(:,:,2 ) - f(:,:,1) ) &
+                            + b06 * ( f(:,:,3) - f(:,:,this%n) ) 
+        
+        RHS(:,:,3:this%n-1) = a06 * ( f(:,:,3:this%n-1) - f(:,:,2:this%n-2) ) &
+                            + b06 * ( f(:,:,4:this%n) - f(:,:,1:this%n-3) ) 
+        
+        RHS(:,:,this%n) = a06 * ( f(:,:,this%n) - f(:,:,this%n-1) ) &
+                            + b06 * ( f(:,:,1) - f(:,:,this%n-2) ) 
+        
+        RHS(:,:,this%n+1) = a06 * ( f(:,:,1) - f(:,:,this%n) ) &
+                            + b06 * ( f(:,:,2) - f(:,:,this%n-1) ) 
+   end subroutine  
+
+    pure subroutine ComputeZD1RHS_C2E_CMPLX_periodic(this,f, RHS, n1, n2) 
+         
+        class( cd06stagg ), intent(in) :: this
+        integer, intent(in) :: n1, n2
+        complex(rkind), dimension(n1,n2,this%n), intent(in)  :: f
+        complex(rkind), dimension(n1,n2,this%nE) , intent(out) :: RHS
+        real(rkind), parameter :: a = (63._rkind/62._rkind) , b = (17._rkind/62._rkind)/three
+        complex(rkind) :: a06, b06
+
+        a06 = a * this%onebydx
+        b06 = b * this%onebydx
+        
+        RHS(:,:,1         ) = a06 * ( f(:,:,1)          - f(:,:,this%n       ) ) &
+                            + b06 * ( f(:,:,2)          - f(:,:,this%n-1 ) ) 
+        
+        RHS(:,:,2         ) = a06 * ( f(:,:,2 ) - f(:,:,1) ) &
+                            + b06 * ( f(:,:,3) - f(:,:,this%n) ) 
+        
+        RHS(:,:,3:this%n-1) = a06 * ( f(:,:,3:this%n-1) - f(:,:,2:this%n-2) ) &
+                            + b06 * ( f(:,:,4:this%n) - f(:,:,1:this%n-3) ) 
+        
+        RHS(:,:,this%n) = a06 * ( f(:,:,this%n) - f(:,:,this%n-1) ) &
+                            + b06 * ( f(:,:,1) - f(:,:,this%n-2) ) 
+        
+        RHS(:,:,this%n+1) = a06 * ( f(:,:,1) - f(:,:,this%n) ) &
+                            + b06 * ( f(:,:,2) - f(:,:,this%n-1) ) 
    end subroutine  
 
    subroutine ComputeLU(LU,n,b,d,a)
@@ -537,7 +595,7 @@ contains
         else
             call this%ComputeD1RHS_E2C_REAL(fE, dfC, n1, n2)
             call SolveZTriREAL(this%n,this%TriD1_E2C, dfC,n1,n2)
-        end if 
+        end if
     end subroutine
    
     subroutine ddz_E2C_CMPLX(this, fE, dfC, n1, n2)
@@ -561,9 +619,14 @@ contains
         real(rkind), dimension(n1,n2,this%n), intent(in)  :: fC
         real(rkind), dimension(n1,n2,this%nE) , intent(out) :: dfE
 
-        call this%ComputeD1RHS_C2E_REAL(fC, dfE, n1, n2)
-        call SolveZTriREAL(this%nE,this%TriD1_C2E, dfE,n1,n2)
 
+        if (this%AmIPeriodic) then
+            call this%ComputeZD1RHS_C2E_REAL_periodic(fC(:,:,1:this%n), dfE, n1, n2)
+            call this%SolveZLU_REAL(dfE,n1,n2,this%LU_D1)
+        else
+            call this%ComputeD1RHS_C2E_REAL(fC, dfE, n1, n2)
+            call SolveZTriREAL(this%nE,this%TriD1_C2E, dfE,n1,n2)
+        end if 
     end subroutine
     
     subroutine ddz_C2E_CMPLX(this, fC, dfE, n1, n2)
@@ -572,8 +635,13 @@ contains
         complex(rkind), dimension(n1,n2,this%n), intent(in)  :: fC
         complex(rkind), dimension(n1,n2,this%nE) , intent(out) :: dfE
 
-        call this%ComputeD1RHS_C2E_CMPLX(fC, dfE, n1, n2)
-        call SolveZTriCMPLX(this%nE,this%TriD1_C2E, dfE,n1,n2)
+        if (this%AmIPeriodic) then
+            call this%ComputeZD1RHS_C2E_CMPLX_periodic(fC(:,:,1:this%n), dfE, n1, n2)
+            call this%SolveZLU_CMPLX(dfE,n1,n2,this%LU_D1)
+        else
+            call this%ComputeD1RHS_C2E_CMPLX(fC, dfE, n1, n2)
+            call SolveZTriCMPLX(this%nE,this%TriD1_C2E, dfE,n1,n2)
+        end if 
 
     end subroutine
 
