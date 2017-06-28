@@ -120,6 +120,10 @@ module cd06staggstuff
         procedure, private :: ComputeZD1RHS_E2C_CMPLX_periodic
         procedure, private :: ComputeZD1RHS_C2E_REAL_periodic
         procedure, private :: ComputeZD1RHS_C2E_CMPLX_periodic
+        procedure, private :: ComputeZInterpRHS_E2C_REAL_periodic
+        procedure, private :: ComputeZInterpRHS_E2C_CMPLX_periodic
+        procedure, private :: ComputeZInterpRHS_C2E_REAL_periodic
+        procedure, private :: ComputeZInterpRHS_C2E_CMPLX_periodic
         procedure, private :: SolveZLU_REAL
         procedure, private :: SolveZLU_CMPLX
 
@@ -279,8 +283,7 @@ contains
             y(:,:,k) = y(:,:,k) - LU(k,1)*y(:,:,k-1)
             sum1 = sum1 + LU(k,2)*y(:,:,k)
         end do
-        y(:,:,this%n) = y(:,:,this%n) - sum1  !something happens here so that imaginary and real parts are treated differently
-    
+        y(:,:,this%n) = y(:,:,this%n) - sum1  
         ! Step 3
         y(:,:,this%n)   = y(:,:,this%n) * LU(this%n,3)
 
@@ -336,6 +339,8 @@ contains
                             + b06 * ( f(:,:,2)          - f(:,:,this%n-1) )
 
    end subroutine  
+
+
 
     pure subroutine ComputeZD1RHS_C2E_REAL_periodic(this,f, RHS, n1, n2) 
          
@@ -393,6 +398,111 @@ contains
                             + b06 * ( f(:,:,2) - f(:,:,this%n-1) ) 
    end subroutine  
 
+    pure subroutine ComputeZInterpRHS_E2C_REAL_periodic(this,f, RHS, n1, n2) 
+         
+        class( cd06stagg ), intent(in) :: this
+        integer, intent(in) :: n1, n2
+        real(rkind), dimension(n1,n2,this%nE), intent(in)  :: f
+        real(rkind), dimension(n1,n2,this%n) , intent(out) :: RHS
+        real(rkind), parameter :: a = (3._rkind/2._rkind) , b = (1._rkind/10._rkind)
+        real(rkind) :: a06, b06
+        
+        a06 = a * (1._rkind/2._rkind)
+        b06 = b * (1._rkind/2._rkind)
+
+        RHS(:,:,1         ) = a06 * ( f(:,:,2)          + f(:,:,1       ) ) &
+                            + b06 * ( f(:,:,3)          + f(:,:,this%n  ) ) 
+        
+        RHS(:,:,2:this%n-1) = a06 * ( f(:,:,3:this%n  ) + f(:,:,2:this%n-1) ) &
+                            + b06 * ( f(:,:,4:this%n+1) + f(:,:,1:this%n-2) ) 
+        
+        RHS(:,:,this%n    ) = a06 * ( f(:,:,this%n+1)   + f(:,:,this%n  ) ) &
+                            + b06 * ( f(:,:,2)          + f(:,:,this%n-1) )
+
+   end subroutine  
+
+    pure subroutine ComputeZInterpRHS_E2C_CMPLX_periodic(this,f, RHS, n1, n2) 
+         
+        class( cd06stagg ), intent(in) :: this
+        integer, intent(in) :: n1, n2
+        complex(rkind), dimension(n1,n2,this%nE), intent(in)  :: f
+        complex(rkind), dimension(n1,n2,this%n) , intent(out) :: RHS
+        real(rkind), parameter :: a = (3._rkind/2._rkind) , b = (1._rkind/10._rkind)
+        real(rkind) :: a06, b06
+        
+        a06 = a * (1._rkind/2._rkind)
+        b06 = b * (1._rkind/2._rkind)
+
+        RHS(:,:,1         ) = a06 * ( f(:,:,2)          + f(:,:,1       ) ) &
+                            + b06 * ( f(:,:,3)          + f(:,:,this%n  ) ) 
+        
+        RHS(:,:,2:this%n-1) = a06 * ( f(:,:,3:this%n  ) + f(:,:,2:this%n-1) ) &
+                            + b06 * ( f(:,:,4:this%n+1) + f(:,:,1:this%n-2) ) 
+        
+        RHS(:,:,this%n    ) = a06 * ( f(:,:,this%n+1)   + f(:,:,this%n  ) ) &
+                            + b06 * ( f(:,:,2)          + f(:,:,this%n-1) )
+
+   end subroutine  
+
+
+    pure subroutine ComputeZInterpRHS_C2E_REAL_periodic(this,f,RHS,n1,n2)
+        class( cd06stagg ), intent(in) :: this
+        integer, intent(in) :: n1, n2
+        real(rkind), dimension(n1,n2,this%n), intent(in)  :: f
+        real(rkind), dimension(n1,n2,this%nE) , intent(out) :: RHS
+        real(rkind), parameter :: a = (3._rkind/2._rkind) , b = (1._rkind/10._rkind)
+        real(rkind) :: a06, b06
+        
+        a06 = a * (1._rkind/2._rkind)
+        b06 = b * (1._rkind/2._rkind)
+
+
+        RHS(:,:,1         ) = a06 * ( f(:,:,1)          + f(:,:,this%n       ) ) &
+                            + b06 * ( f(:,:,2)          + f(:,:,this%n-1 ) ) 
+        
+        RHS(:,:,2         ) = a06 * ( f(:,:,2 ) + f(:,:,1) ) &
+                            + b06 * ( f(:,:,3) + f(:,:,this%n) ) 
+        
+        RHS(:,:,3:this%n-1) = a06 * ( f(:,:,3:this%n-1) + f(:,:,2:this%n-2) ) &
+                            + b06 * ( f(:,:,4:this%n) + f(:,:,1:this%n-3) ) 
+        
+        RHS(:,:,this%n) = a06 * ( f(:,:,this%n) + f(:,:,this%n-1) ) &
+                            + b06 * ( f(:,:,1) + f(:,:,this%n-2) ) 
+        
+        RHS(:,:,this%n+1) = a06 * ( f(:,:,1) + f(:,:,this%n) ) &
+                            + b06 * ( f(:,:,2) + f(:,:,this%n-1) )
+ 
+    end subroutine
+   
+    pure subroutine ComputeZInterpRHS_C2E_CMPLX_periodic(this,f,RHS,n1,n2)
+        class( cd06stagg ), intent(in) :: this
+        integer, intent(in) :: n1, n2
+        complex(rkind), dimension(n1,n2,this%n), intent(in)  :: f
+        complex(rkind), dimension(n1,n2,this%nE) , intent(out) :: RHS
+        real(rkind), parameter :: a = (3._rkind/2._rkind) , b = (1._rkind/10._rkind)
+        real(rkind) :: a06, b06
+        
+        a06 = a * (1._rkind/2._rkind)
+        b06 = b * (1._rkind/2._rkind)
+
+
+        RHS(:,:,1         ) = a06 * ( f(:,:,1)          + f(:,:,this%n       ) ) &
+                            + b06 * ( f(:,:,2)          + f(:,:,this%n-1 ) ) 
+        
+        RHS(:,:,2         ) = a06 * ( f(:,:,2 ) + f(:,:,1) ) &
+                            + b06 * ( f(:,:,3) + f(:,:,this%n) ) 
+        
+        RHS(:,:,3:this%n-1) = a06 * ( f(:,:,3:this%n-1) + f(:,:,2:this%n-2) ) &
+                            + b06 * ( f(:,:,4:this%n) + f(:,:,1:this%n-3) ) 
+        
+        RHS(:,:,this%n) = a06 * ( f(:,:,this%n) + f(:,:,this%n-1) ) &
+                            + b06 * ( f(:,:,1) + f(:,:,this%n-2) ) 
+        
+        RHS(:,:,this%n+1) = a06 * ( f(:,:,1) + f(:,:,this%n) ) &
+                            + b06 * ( f(:,:,2) + f(:,:,this%n-1) )
+ 
+    end subroutine
+ 
    subroutine ComputeLU(LU,n,b,d,a)
     
         integer, intent(in) :: n
@@ -472,7 +582,6 @@ contains
     
 #include "STAGG_CD06_files/D1RHS_C2E_common.F90"
     end subroutine
-
 
     pure subroutine ComputeD1RHS_C2C_REAL(this, fC, rhs, n1, n2) 
         class( cd06stagg ), intent(in) :: this
@@ -619,10 +728,10 @@ contains
         real(rkind), dimension(n1,n2,this%n), intent(in)  :: fC
         real(rkind), dimension(n1,n2,this%nE) , intent(out) :: dfE
 
-
         if (this%AmIPeriodic) then
             call this%ComputeZD1RHS_C2E_REAL_periodic(fC(:,:,1:this%n), dfE, n1, n2)
             call this%SolveZLU_REAL(dfE,n1,n2,this%LU_D1)
+            dfE(:,:,this%nE) = dfE(:,:,1) !needed so that SolveZLU can work for C2E and E2C
         else
             call this%ComputeD1RHS_C2E_REAL(fC, dfE, n1, n2)
             call SolveZTriREAL(this%nE,this%TriD1_C2E, dfE,n1,n2)
@@ -638,6 +747,7 @@ contains
         if (this%AmIPeriodic) then
             call this%ComputeZD1RHS_C2E_CMPLX_periodic(fC(:,:,1:this%n), dfE, n1, n2)
             call this%SolveZLU_CMPLX(dfE,n1,n2,this%LU_D1)
+            dfE(:,:,this%nE) = dfE(:,:,1) !needed so that SolveZLU can work for C2E and E2C
         else
             call this%ComputeD1RHS_C2E_CMPLX(fC, dfE, n1, n2)
             call SolveZTriCMPLX(this%nE,this%TriD1_C2E, dfE,n1,n2)
@@ -696,8 +806,13 @@ contains
         real(rkind), dimension(n1,n2,this%nE), intent(in)  :: fE
         real(rkind), dimension(n1,n2,this%n) , intent(out) :: IfC
 
-        call this%ComputeInterpRHS_E2C_REAL(fE, IfC, n1, n2)
-        call SolveZTriREAL(this%n,this%TriInterp_E2C, IfC,n1,n2)
+        if (this%AmIPeriodic) then
+            call this%ComputeZInterpRHS_E2C_REAL_periodic(fE(:,:,1:this%n), IfC, n1, n2)
+            call this%SolveZLU_REAL(IfC,n1,n2,this%LU_Interp)
+        else
+            call this%ComputeInterpRHS_E2C_REAL(fE, IfC, n1, n2)
+            call SolveZTriREAL(this%n,this%TriInterp_E2C, IfC,n1,n2)
+        end if
 
     end subroutine
     
@@ -707,11 +822,15 @@ contains
         complex(rkind), dimension(n1,n2,this%nE), intent(in)  :: fE
         complex(rkind), dimension(n1,n2,this%n) , intent(out) :: IfC
 
-        call this%ComputeInterpRHS_E2C_CMPLX(fE, IfC, n1, n2)
-        call SolveZTriCMPLX(this%n,this%TriInterp_E2C, IfC,n1,n2)
+        if (this%AmIPeriodic) then
+            call this%ComputeZInterpRHS_E2C_CMPLX_periodic(fE(:,:,1:this%n), IfC, n1, n2)
+            call this%SolveZLU_CMPLX(IfC,n1,n2,this%LU_Interp)
+        else
+            call this%ComputeInterpRHS_E2C_CMPLX(fE, IfC, n1, n2)
+            call SolveZTriCMPLX(this%n,this%TriInterp_E2C, IfC,n1,n2)
+        end if
 
     end subroutine
-
 
     subroutine InterpZ_C2E_REAL(this, fC, IfE, n1, n2)
         class( cd06stagg ), intent(in) :: this
@@ -719,8 +838,14 @@ contains
         real(rkind), dimension(n1,n2,this%n), intent(in)  :: fC
         real(rkind), dimension(n1,n2,this%nE) , intent(out) :: IfE
 
-        call this%ComputeInterpRHS_C2E_REAL(fC, IfE, n1, n2)
-        call SolveZTriREAL(this%nE,this%TriInterp_C2E, IfE,n1,n2)
+        if (this%AmIPeriodic) then
+            call this%ComputeZInterpRHS_C2E_REAL_periodic(fC, IfE, n1, n2)
+            call this%SolveZLU_REAL(IfE,n1,n2,this%LU_Interp)
+            IfE(:,:,this%nE) = IfE(:,:,1) !needed so that SolveZLU can work for C2E and E2C
+        else
+            call this%ComputeInterpRHS_C2E_REAL(fC, IfE, n1, n2)
+            call SolveZTriREAL(this%nE,this%TriInterp_C2E, IfE,n1,n2)
+        end if
 
     end subroutine
     
@@ -730,8 +855,15 @@ contains
         complex(rkind), dimension(n1,n2,this%n), intent(in)  :: fC
         complex(rkind), dimension(n1,n2,this%nE) , intent(out) :: IfE
 
-        call this%ComputeInterpRHS_C2E_CMPLX(fC, IfE, n1, n2)
-        call SolveZTriCMPLX(this%nE,this%TriInterp_C2E, IfE,n1,n2)
+        
+        if (this%AmIPeriodic) then
+            call this%ComputeZInterpRHS_C2E_CMPLX_periodic(fC(:,:,1:this%n), IfE, n1, n2)
+            call this%SolveZLU_CMPLX(IfE,n1,n2,this%LU_Interp)
+            IfE(:,:,this%nE) = IfE(:,:,1) !needed so that SolveZLU can work for C2E and E2C
+        else
+            call this%ComputeInterpRHS_C2E_CMPLX(fC, IfE, n1, n2)
+            call SolveZTriCMPLX(this%nE,this%TriInterp_C2E, IfE,n1,n2)
+        end if
 
     end subroutine
 
