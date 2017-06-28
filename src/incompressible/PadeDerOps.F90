@@ -69,8 +69,9 @@ subroutine init(this, gpC, sp_gpC, gpE, sp_gpE, dz, scheme, isPeriodic)
    end if
 
    if (this%isPeriodic) then
-      ! ADITYA -> JACOB: Allocate this%derPeriodic, and then initialize it (look
-      ! up the routine in cd06stagg).
+      ! ADITYA --> JACOB: You will need to use the this%derPeriodic operator to computer derivatives in the subroutines later. 
+      allocate(this%derPeriodic)
+      call this%derPeriodic%init(this%gp%zsz(3),dz)
    else
       select case(this%scheme)
       case(cd06)
@@ -113,7 +114,7 @@ subroutine destroy(this)
    class(Pade6stagg), intent(inout) :: this
   
    if (this%isPeriodic) then
-      ! ADITYA --> JACOB: deallocate the periodic operator here. 
+      deallocate(this%derPeriodic)
    else
       if (this%scheme == cd06) then
          deallocate(this%derES, this%derSE, this%derOS, this%derSO, this%derSS, this%derEE, this%derOO, this%derEO, this%derOE)
