@@ -65,7 +65,6 @@ program testSTAGGcd06
 !    print*,'computed derivative at cells'
 !    print*, dfC(1,1,:)
 !    print*, "-------------------"
-    
 !    print*, "computed derivative at edges"
 !    print*, dfE(1,1,:)
 

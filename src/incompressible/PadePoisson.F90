@@ -52,6 +52,9 @@ module PadePoissonMod
 
         type(decomp_info), pointer :: gpC
         logical :: computeStokesPressure = .false.
+        
+        logical :: PeriodicInZ = .false. 
+
         contains
             procedure :: init
             procedure :: PressureProjection
@@ -66,7 +69,7 @@ module PadePoissonMod
 contains
 
 
-    subroutine init(this, dx, dy, dz, sp, spE, computeStokesPressure, Lz, storePressure, gpC, derivZ)
+    subroutine init(this, dx, dy, dz, sp, spE, computeStokesPressure, Lz, storePressure, gpC, derivZ, PeriodicInZ)
         class(padepoisson), intent(inout) :: this
         real(rkind), intent(in) :: dx, dy, dz
         !class(cd06stagg), intent(in), target :: derZ
@@ -82,6 +85,7 @@ contains
         real(rkind), dimension(:,:), allocatable :: temp 
         type(decomp_info), intent(in), target :: gpC
         type(Pade6stagg), intent(in), target :: derivZ
+        logical, intent(in) :: PeriodicInZ
 
         call  message("=========================================")
         call  message(0,"Initializing PADEPOISSON derived type")
@@ -93,6 +97,7 @@ contains
         this%sp_gp => sp%spectdecomp
         this%sp_gpE => spE%spectdecomp
         this%derivZ => derivZ
+        this%PeriodicInZ = PeriodicInZ
 
         this%nzG = sp%spectdecomp%zsz(3)
         nxExt = sp%spectdecomp%zsz(1)
