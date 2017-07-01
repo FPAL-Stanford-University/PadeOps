@@ -1,9 +1,9 @@
 &INPUT
-inputdir              = "/home/aditya90/Codes/PadeOps/data/TaylorGreen/"   ! Directory for any input files
-outputdir             = "/home/aditya90/Codes/PadeOps/data/TaylorGreen/"   ! Directory for all output files
-nx                    = 16          ! Number of points in X
-ny                    = 16          ! Number of points in Y
-nz                    = 16          ! Number of points in Z
+inputdir              = "/home/aghate/Codes/PadeOps/build/problems/incompressible/tmp_dump/"   ! Directory for any input files
+outputdir             = "/home/aghate/Codes/PadeOps/build/problems/incompressible/tmp_dump/"   ! Directory for all output files
+nx                    = 256          ! Number of points in X
+ny                    = 256          ! Number of points in Y
+nz                    = 256          ! Number of points in Z
 tstop                 = 10.D0       ! Physical time to stop the simulation
 CFL                   = 1.D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = -0.1D0     ! Fixed time step value (only used if CFL is set to negative)
@@ -59,9 +59,8 @@ Pr                    = 0.6D0       ! Turbulent Prandtl Number; used when
 Ro                    = 1.D10       ! Rossby Number used when Coriolis is ON
 Re                    = 100.D0       ! Reynolds Number; used when isInvisid is FALSE
 Fr                    = 1.D10       ! Froude number; used when isStratified is TRUE
-Gx                    = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gy                    = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gz                    = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+G_geostrophic         = 1.D0        ! Geostrophic wind speed 
+G_alpha               = 0.D0        ! Geostrophic wind angle (degrees, from +x axis)
 dPfdx                 = 0.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
