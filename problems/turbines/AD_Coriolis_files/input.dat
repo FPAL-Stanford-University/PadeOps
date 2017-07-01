@@ -1,6 +1,6 @@
 &INPUT
-inputdir                      = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/"   ! Directory for any input files
-outputdir                     = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/"   ! Directory for all output files
+inputdir                      = "/home/aghate/Codes/PadeOps/data/AD_Coriolis/output"   ! Directory for any input files
+outputdir                     = "/home/aghate/Codes/PadeOps/data/AD_Coriolis/output"   ! Directory for all output files
 nx                            = 256          ! Number of points in X
 ny                            = 64          ! Number of points in Y
 nz                            = 64          ! Number of points in Z
@@ -51,17 +51,16 @@ controlDir                    = "null"          ! Check in this directory for co
 /
 &PHYSICS
 isInviscid                    = .TRUE.      ! Is this an inviscid simulation?
-useCoriolis                   = .TRUE.     ! Activate the coriolis term? 
-useExtraForcing               = .FALSE.      ! Is an extra forcing term being used? (non-Geostrophic forcing only)
-useGeostrophicForcing         = .TRUE.     ! This is true if forcing is provided using the coriolis term  
+useCoriolis                   = .TRUE.      ! Activate the coriolis term? 
+useExtraForcing               = .FALSE.     ! Is an extra forcing term being used? (non-Geostrophic forcing only)
+useGeostrophicForcing         = .TRUE.      ! This is true if forcing is provided using the coriolis term  
 isStratified                  = .FALSE.     ! Use Stratification / active scalar in momentum
 Pr                            = 0.6D0       ! Turbulent Prandtl Number; used when 
 Ro                            = 1.371D3     ! Rossby Number used when Coriolis is ON
 Re                            = 1.D10       ! Reynolds Number; used when isInvisid is FALSE
 Fr                            = 1.D10       ! Froude number; used when isStratified is TRUE
-Gx                            = 1.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gy                            = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gz                            = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+G_geostrophic                 = 1.D0        ! Geostrophic wind speed 
+G_alpha                       = 0.D0        ! Geostrophic wind angle (degrees, from +x axis)
 dPfdx                         = 0.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                         = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                         = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
@@ -70,7 +69,7 @@ useSGS                        = .true.      ! Do you want to use the SGS model?
 /
 &PRESSURE_CALC
 fastCalcPressure              = .TRUE.      ! Compute and store pressure at every time step using the faster algorithm?
-storePressure                 = .TRUE.     ! Would you like to compute and store pressure?
+storePressure                 = .TRUE.      ! Would you like to compute and store pressure?
 P_dumpFreq                    = 100         ! How often (timesteps) do you want to dump pressure?
 P_compFreq                    = 10          ! How often (timesteps) do you want to compute pressure? 
 /
@@ -98,7 +97,7 @@ DynProcFreq                   = 5          ! Frequency of dynamic procedure
 /
 /
 &WINDTURBINES
-useWindTurbines               = .TRUE.             ! Do you want to use Wind turbines ?
+useWindTurbines               = .FALSE.    ! Do you want to use Wind turbines ?
 num_turbines                  = 1
 ADM                           = .TRUE.
 turbInfoDir                   = "/home/aditya90/Codes/PadeOps/problems/turbines/AD_Coriolis_files/turbInfo/"
@@ -123,8 +122,8 @@ KSRunID                       = 99             ! RunID tag for KS files
 t_dumpKSprep                  = 10             ! Dumping Frequency for KS files
 /
 /
-&isolatedTurbineINPUT
+&AD_CoriolisINPUT
 Lx                            = 50.d0                        ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            = 6.2831853071795.d0           ! Domain Width  (appropriate dimesions/non-dimensionalized)
-Lz                            = 6.2831853071795.d0           ! Domain Height (appropriate dimesnions/non-dimensionalized)
+Ly                            = 6.2831853071795d0           ! Domain Width  (appropriate dimesions/non-dimensionalized)
+Lz                            = 6.2831853071795d0           ! Domain Height (appropriate dimesnions/non-dimensionalized)
 /
