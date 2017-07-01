@@ -75,7 +75,7 @@ contains
          real(rkind), dimension(:), allocatable :: k3_loc
 
          allocate(this%kradsq_inv(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-         allocate(this%k3_loc(this%sp_gp%zsz(3)))
+         !allocate(this%k3_loc(this%sp_gp%zsz(3)))
 
 
     end subroutine 
