@@ -57,6 +57,7 @@ module PadePoissonMod
 
         contains
             procedure :: init
+            procedure, private :: InitPeriodicPoissonSolver
             procedure :: PressureProjection
             procedure, private :: ProjectStokesPressure
             procedure, private :: GetStokesPressure
@@ -68,6 +69,16 @@ module PadePoissonMod
 
 contains
 
+    subroutine InitPeriodicPoissonSolver(this)
+         class(padepoisson), intent(inout) :: this
+         integer :: i, j, k
+         real(rkind), dimension(:), allocatable :: k3_loc
+
+         allocate(this%kradsq_inv(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+         allocate(this%k3_loc(this%sp_gp%zsz(3)))
+
+
+    end subroutine 
 
     subroutine init(this, dx, dy, dz, sp, spE, computeStokesPressure, Lz, storePressure, gpC, derivZ, PeriodicInZ)
         class(padepoisson), intent(inout) :: this
@@ -114,142 +125,145 @@ contains
             fft_planning = FFTW_MEASURE
         end if
 
-        ! Prep modified wavenumbers
-        allocate(k3(nzExt), k3mod(nzExt))
-        allocate(tfm(nzExt), tfp(nzExt))
-        allocate(k1(sp%nx_g), k2(sp%ny_g))
+        if (this%PeriodicInZ) then
+            call this%InitPeriodicPoissonSolver()
+        else
+            ! Prep modified wavenumbers
+            allocate(k3(nzExt), k3mod(nzExt))
+            allocate(tfm(nzExt), tfp(nzExt))
+            allocate(k1(sp%nx_g), k2(sp%ny_g))
 
-        k1 = GetWaveNums(sp%nx_g, dx)
-        k2 = GetWaveNums(sp%ny_g, dy)
-        k3 = GetWaveNums(nzExt, dz)
-        !call getmodCD06stagg(k3, dz, k3mod)
-        call this%derivZ%getModifiedWavenumbers(k3,k3mod)
+            k1 = GetWaveNums(sp%nx_g, dx)
+            k2 = GetWaveNums(sp%ny_g, dy)
+            k3 = GetWaveNums(nzExt, dz)
+            !call getmodCD06stagg(k3, dz, k3mod)
+            call this%derivZ%getModifiedWavenumbers(k3,k3mod)
 
-        tfm = exp(imi*(-dz/two)*k3); tfp = exp(imi*( dz/two)*k3)
+            tfm = exp(imi*(-dz/two)*k3); tfp = exp(imi*( dz/two)*k3)
 
-        allocate(this%k3modcm(nzExt), this%k3modcp(nzExt))
-        this%k3modcm = k3mod*tfm; this%k3modcp = k3mod*tfp
+            allocate(this%k3modcm(nzExt), this%k3modcp(nzExt))
+            this%k3modcm = k3mod*tfm; this%k3modcp = k3mod*tfp
 
-        allocate(this%kradsq_inv(nxExt, nyExt, nzExt))
-        
-        myxst = this%sp_gp%zst(1); myyst = this%sp_gp%zst(2)
-        if ((myxst .ne. this%sp_gpE%zst(1)).or.(myyst .ne. this%sp_gpE%zst(2))) then
-            call GracefulExit("Failed at initializing Padepoisson. sp_gp and sp_gpE &
-                        & have different x and y starts in z-decomp",423)
-        end if 
-        
-        do kk = 1,nzExt
-            do jj = 1,nyExt
-                do ii = 1, nxExt
-                    kradsq = k1(ii-1+myxst)**2 + k2(jj-1+myyst)**2 + k3mod(kk)**2
-                    if (kradsq .le. 1d-14) then
-                        this%kradsq_inv(ii,jj,kk) = zero
-                    else
-                        this%kradsq_inv(ii,jj,kk) = one/kradsq
-                    end if  
+            allocate(this%kradsq_inv(nxExt, nyExt, nzExt))
+            
+            myxst = this%sp_gp%zst(1); myyst = this%sp_gp%zst(2)
+            if ((myxst .ne. this%sp_gpE%zst(1)).or.(myyst .ne. this%sp_gpE%zst(2))) then
+                call GracefulExit("Failed at initializing Padepoisson. sp_gp and sp_gpE &
+                            & have different x and y starts in z-decomp",423)
+            end if 
+            
+            do kk = 1,nzExt
+                do jj = 1,nyExt
+                    do ii = 1, nxExt
+                        kradsq = k1(ii-1+myxst)**2 + k2(jj-1+myyst)**2 + k3mod(kk)**2
+                        if (kradsq .le. 1d-14) then
+                            this%kradsq_inv(ii,jj,kk) = zero
+                        else
+                            this%kradsq_inv(ii,jj,kk) = one/kradsq
+                        end if  
+                    end do 
                 end do 
             end do 
-        end do 
      
-        
-        ! Prep for fft fwd and fft bwd
-        call  message(1,"Generating Plans for FFT in PadePoisson. This could take a while ...")
-        call dfftw_plan_many_dft(this%plan_c2c_fwd_z, 1, nzExt,nxExt*nyExt, this%f2dext, nzExt, &
-                     nxExt*nyExt, 1, this%f2dext, nzExt,nxExt*nyExt, 1, FFTW_FORWARD, fft_planning)   
-
-        call dfftw_plan_many_dft(this%plan_c2c_bwd_z, 1, nzExt,nxExt*nyExt, this%f2dext, nzExt, &
-                     nxExt*nyExt, 1, this%f2dext, nzExt,nxExt*nyExt, 1, FFTW_BACKWARD, fft_planning)   
-        
-        
-        this%mfact = one/real(nzExt,rkind)
-        ! Prep for input array info and buffers 
-        this%nx_in = this%sp_gp%ysz(1);  this%ny_in = this%sp_gp%ysz(2);  this%nz_in = this%sp_gp%ysz(3);  
-        this%nxE_in = this%sp_gpE%ysz(1);  this%nyE_in = this%sp_gpE%ysz(2);  this%nzE_in = this%sp_gpE%ysz(3);  
-        
-        allocate(this%f2d(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-        allocate(this%f2dy(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)))
-        allocate(this%w2(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
-
-        if (this%computeStokesPressure) then
-            allocate(this%lambda(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
-            allocate(this%k1inZ(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
-            allocate(this%k2inZ(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
-            allocate(this%chat(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
-            allocate(this%phat(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
-            allocate(this%dpdzhat(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
-            allocate(this%denFact(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
-            allocate(temp(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
             
-            allocate(this%sinh_top(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)+1))
-            allocate(this%cosh_top(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-            allocate(this%sinh_bot(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)+1))
-            allocate(this%cosh_bot(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-            this%Lz = Lz
-            allocate(this%zCell(this%nzG), this%zEdge(this%nzG+1))
-            this%zEdge = linspace(0.d0, Lz, this%nzG+1)
-            this%zCell = 0.5d0*(this%zEdge(1:this%nzG) + this%zEdge(2:this%nzG+1))
+            ! Prep for fft fwd and fft bwd
+            call  message(1,"Generating Plans for FFT in PadePoisson. This could take a while ...")
+            call dfftw_plan_many_dft(this%plan_c2c_fwd_z, 1, nzExt,nxExt*nyExt, this%f2dext, nzExt, &
+                         nxExt*nyExt, 1, this%f2dext, nzExt,nxExt*nyExt, 1, FFTW_FORWARD, fft_planning)   
 
-            do j = 1,this%sp_gp%zsz(2)!this%sp_gp%zst(2),this%sp_gp%zen(2)
-                do i = 1,this%sp_gp%zsz(1)!this%sp_gp%zst(1),this%sp_gp%zen(1)
-                    this%k1inZ(i,j) = k1(this%sp_gp%zst(1) - 1 + i)
-                    this%k2inZ(i,j) = k2(this%sp_gp%zst(2) - 1 + j)
+            call dfftw_plan_many_dft(this%plan_c2c_bwd_z, 1, nzExt,nxExt*nyExt, this%f2dext, nzExt, &
+                         nxExt*nyExt, 1, this%f2dext, nzExt,nxExt*nyExt, 1, FFTW_BACKWARD, fft_planning)   
+            
+            
+            this%mfact = one/real(nzExt,rkind)
+            ! Prep for input array info and buffers 
+            this%nx_in = this%sp_gp%ysz(1);  this%ny_in = this%sp_gp%ysz(2);  this%nz_in = this%sp_gp%ysz(3);  
+            this%nxE_in = this%sp_gpE%ysz(1);  this%nyE_in = this%sp_gpE%ysz(2);  this%nzE_in = this%sp_gpE%ysz(3);  
+            
+            allocate(this%f2d(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+            allocate(this%f2dy(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)))
+            allocate(this%w2(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
+
+            if (this%computeStokesPressure) then
+                allocate(this%lambda(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
+                allocate(this%k1inZ(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
+                allocate(this%k2inZ(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
+                allocate(this%chat(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
+                allocate(this%phat(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
+                allocate(this%dpdzhat(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
+                allocate(this%denFact(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
+                allocate(temp(this%sp_gp%zsz(1),this%sp_gp%zsz(2)))
+                
+                allocate(this%sinh_top(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)+1))
+                allocate(this%cosh_top(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+                allocate(this%sinh_bot(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)+1))
+                allocate(this%cosh_bot(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+                this%Lz = Lz
+                allocate(this%zCell(this%nzG), this%zEdge(this%nzG+1))
+                this%zEdge = linspace(0.d0, Lz, this%nzG+1)
+                this%zCell = 0.5d0*(this%zEdge(1:this%nzG) + this%zEdge(2:this%nzG+1))
+
+                do j = 1,this%sp_gp%zsz(2)!this%sp_gp%zst(2),this%sp_gp%zen(2)
+                    do i = 1,this%sp_gp%zsz(1)!this%sp_gp%zst(1),this%sp_gp%zen(1)
+                        this%k1inZ(i,j) = k1(this%sp_gp%zst(1) - 1 + i)
+                        this%k2inZ(i,j) = k2(this%sp_gp%zst(2) - 1 + j)
+                    end do 
+                end do
+                this%lambda = sqrt(this%k1inZ**2 + this%k2inZ**2)
+                temp = this%lambda*Lz
+                where (temp < 500.d0) 
+                    this%denFact = 1.d0/(this%lambda*sinh(this%lambda*Lz) + 1.d-13)
+                elsewhere
+                    this%denFact = zero
+                end where
+                where(this%denFact<1d-16)
+                    this%denFact = 0.d0
+                end where
+                if (nrank == 0) this%denFact(1,1) = 0.d0
+                
+
+                do k = 1,this%sp_gp%zsz(3)
+                    temp = this%lambda*(Lz - this%zCell(k))
+                    where (temp < 32.d0)
+                        this%cosh_bot(:,:,k) =  cosh(temp)
+                    elsewhere
+                        this%cosh_bot(:,:,k) = 4.d13
+                    end where
+                    temp = this%lambda*this%zCell(k)
+                    where (temp < 32.d0) 
+                        this%cosh_top(:,:,k) =  cosh(temp)
+                    elsewhere
+                        this%cosh_top(:,:,k) = 1.d13
+                    end where
                 end do 
-            end do
-            this%lambda = sqrt(this%k1inZ**2 + this%k2inZ**2)
-            temp = this%lambda*Lz
-            where (temp < 500.d0) 
-                this%denFact = 1.d0/(this%lambda*sinh(this%lambda*Lz) + 1.d-13)
-            elsewhere
-                this%denFact = zero
-            end where
-            where(this%denFact<1d-16)
-                this%denFact = 0.d0
-            end where
-            if (nrank == 0) this%denFact(1,1) = 0.d0
-            
 
-            do k = 1,this%sp_gp%zsz(3)
-                temp = this%lambda*(Lz - this%zCell(k))
-                where (temp < 32.d0)
-                    this%cosh_bot(:,:,k) =  cosh(temp)
-                elsewhere
-                    this%cosh_bot(:,:,k) = 4.d13
-                end where
-                temp = this%lambda*this%zCell(k)
-                where (temp < 32.d0) 
-                    this%cosh_top(:,:,k) =  cosh(temp)
-                elsewhere
-                    this%cosh_top(:,:,k) = 1.d13
-                end where
-            end do 
+                do k = 1,this%sp_gp%zsz(3)+1
+                    temp = this%lambda*(Lz - this%zEdge(k))
+                    where(temp<32.d0)
+                        this%sinh_bot(:,:,k) = -this%lambda*sinh(temp)
+                    elsewhere
+                        this%sinh_bot(:,:,k) = -4.d13
+                    end where
+                    temp = this%lambda*(this%zEdge(k))
+                    where(temp<32.d0) 
+                        this%sinh_top(:,:,k) =  this%lambda*sinh(temp)
+                    elsewhere
+                        this%sinh_top(:,:,k) = 4.d13
+                    end where
+                end do 
+                allocate(this%uhatinZ(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+                allocate(this%vhatinZ(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+                deallocate(temp)
+                call message(1,"STOKES PRESSURE calculation enabled with the CD06 Poisson solver")
+            end if 
+            if (storePressure) then
+                allocate(this%phat_z1(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+                allocate(this%phat_z2(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+                this%gpC => gpC
+            end if
 
-            do k = 1,this%sp_gp%zsz(3)+1
-                temp = this%lambda*(Lz - this%zEdge(k))
-                where(temp<32.d0)
-                    this%sinh_bot(:,:,k) = -this%lambda*sinh(temp)
-                elsewhere
-                    this%sinh_bot(:,:,k) = -4.d13
-                end where
-                temp = this%lambda*(this%zEdge(k))
-                where(temp<32.d0) 
-                    this%sinh_top(:,:,k) =  this%lambda*sinh(temp)
-                elsewhere
-                    this%sinh_top(:,:,k) = 4.d13
-                end where
-            end do 
-            allocate(this%uhatinZ(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-            allocate(this%vhatinZ(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-            deallocate(temp)
-            call message(1,"STOKES PRESSURE calculation enabled with the CD06 Poisson solver")
+            deallocate(k1, k2, k3, k3mod, tfm, tfp)
         end if 
-        if (storePressure) then
-            allocate(this%phat_z1(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-            allocate(this%phat_z2(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-            this%gpC => gpC
-        end if
-
-        deallocate(k1, k2, k3, k3mod, tfm, tfp)
-
         call  message(0,"PADEPOISSON derived type initialized successfully.")
         call  message("=========================================")
 
