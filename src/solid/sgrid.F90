@@ -683,10 +683,10 @@ contains
         Qtmpt = zero
 
         do isub = 1,RK45_steps
-            print *, '----', nrank, isub
+            !print *, '----', nrank, isub
             call this%get_conserved()
 
-            print *, nrank, 1
+            !print *, nrank, 1
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
                 call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
                 write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (Wcnsrv) at &
@@ -694,29 +694,29 @@ contains
                 call GracefulExit(trim(charout), 999)
             end if
             call this%mix%checkNaN()
-            print *, nrank, 2
+            !print *, nrank, 2
 
             ! Pre-compute stress, LAD, J, etc.
             ! call this%mix%getSOS(this%rho,this%p,this%sos)
             call this%mix%getLAD(this%rho,this%e,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
-            print *, nrank, 3
+            !print *, nrank, 3
 
             ! Update total mixture conserved variables
             call this%getRHS(rhs,divu,viscwork)
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
-            print *, nrank, 4
+            !print *, nrank, 4
 
             ! calculate sources if they are needed
             if(.not. this%PTeqb) call this%mix%calculate_source(this%rho,divu,this%u,this%v,this%w,this%p,Fsource,this%x_bc,this%y_bc,this%z_bc) ! -- actually, source terms should be included for PTeqb as well --NSG
-            print *, nrank, 5
+            !print *, nrank, 5
 
             ! Now update all the individual species variables
             call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,Fsource,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
             call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
-            print *, nrank, 6
+            !print *, nrank, 6
             !if (.NOT. this%PTeqb) then
             if(this%pEqb) then
                 call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
@@ -724,25 +724,25 @@ contains
                 call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
                 call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%devstress,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
             end if
-            print *, nrank, 7
+            !print *, nrank, 7
 
             ! Integrate simulation time to keep it in sync with RK substep
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
-            print *, nrank, 8
+            !print *, nrank, 8
 
             ! Filter the conserved variables
             call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
             call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
             call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
             call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
-            print *, nrank, 9
+            !print *, nrank, 9
 
             ! Filter the individual species variables
             call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
             
             call this%get_primitive()
-            print *, nrank, 10
+            !print *, nrank, 10
 
             ! if (.NOT. this%explPlast) then
             !     if (this%plastic) then
@@ -770,11 +770,11 @@ contains
                 call this%mix%relaxPressure(this%rho, this%e, this%p)
                 !call this%mix%relaxPressure_os(this%rho, this%u, this%v, this%w, this%e, this%dt, this%p)
             end if
-            print *, nrank, 11
+            !print *, nrank, 11
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             call this%post_bc()
-            print *, nrank, 12
+            !print *, nrank, 12
         end do
 
         this%step = this%step + 1

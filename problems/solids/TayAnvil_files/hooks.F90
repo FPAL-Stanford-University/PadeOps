@@ -364,7 +364,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        else
            str = trim(str)//'_g'
        end if
-
+       print *, nrank, trim(str)
        if (decomp%ysz(2) == 1) then
            write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/TayAnvil_"//trim(str)//"_", vizcount, ".dat"
 
