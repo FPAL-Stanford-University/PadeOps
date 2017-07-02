@@ -514,7 +514,7 @@ contains
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
         if (useCompactFD) then
             allocate(this%padepoiss)
-            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, this%storePressure, this%gpC, this%derivZ) 
+            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, this%storePressure, this%gpC, this%derivZ, .false. ) 
         else    
             allocate(this%poiss)
             call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE, computeStokesPressure, this%gpC)  

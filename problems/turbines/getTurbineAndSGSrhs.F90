@@ -115,22 +115,22 @@ program testSGSmodelWT
 
 
         ! SGS MODEL STUFF
-        u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-        call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
-        call spectC%ifft(u_rhs,fbody_x)
-        call spectC%ifft(v_rhs,fbody_y)
-        call spectE%ifft(w_rhs,fbody_z)
-        
-        call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
-        call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
-        call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
-        call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
-        call transpose_y_to_x(rbuffyC(:,:,:,1),fbody_zC,gpC)
+        !u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
+        !call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
+        !call spectC%ifft(u_rhs,fbody_x)
+        !call spectC%ifft(v_rhs,fbody_y)
+        !call spectE%ifft(w_rhs,fbody_z)
+        !
+        !call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
+        !call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
+        !call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
+        !call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
+        !call transpose_y_to_x(rbuffyC(:,:,:,1),fbody_zC,gpC)
 
 
-        fx_sgs_store = fx_sgs_store + fbody_x 
-        fy_sgs_store = fy_sgs_store + fbody_y
-        fz_sgs_store = fz_sgs_store + fbody_zC 
+        !fx_sgs_store = fx_sgs_store + fbody_x 
+        !fy_sgs_store = fy_sgs_store + fbody_y
+        !fz_sgs_store = fz_sgs_store + fbody_zC 
 
         ! WRAP UP 
         deallocate(turbArray)
@@ -145,9 +145,9 @@ program testSGSmodelWT
    call dumpFullField(fy_turb_store/real(nvis,rkind),"ytrb")
    call dumpFullField(fz_turb_store/real(nvis,rkind),"ztrb")
    
-   call dumpFullField(fx_sgs_store/real(nvis,rkind),"xsgs")
-   call dumpFullField(fy_sgs_store/real(nvis,rkind),"ysgs")
-   call dumpFullField(fz_sgs_store/real(nvis,rkind),"zsgs")
+   !call dumpFullField(fx_sgs_store/real(nvis,rkind),"xsgs")
+   !call dumpFullField(fy_sgs_store/real(nvis,rkind),"ysgs")
+   !call dumpFullField(fz_sgs_store/real(nvis,rkind),"zsgs")
 
    call mpi_barrier(mpi_comm_world, ierr)
    stop

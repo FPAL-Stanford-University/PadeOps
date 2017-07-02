@@ -64,7 +64,7 @@ program test_Pade6ops
     wC = -cos(x)*sin(z) 
     v  = 0.d0
     call Pade6opsZ%interpz_C2E(wC,w,-1,-1)
-    call padepoiss%init(dx,dy,dz, spectC, spectE, .true., two*pi, .true., gpC, Pade6opsZ) 
+    call padepoiss%init(dx,dy,dz, spectC, spectE, .true., two*pi, .true., gpC, Pade6opsZ, .false.) 
 
     call spectC%fft(u,uhat)
     call spectC%fft(v,vhat)

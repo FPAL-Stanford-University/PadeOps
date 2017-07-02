@@ -1,4 +1,4 @@
-module pblwt_parameters
+module AD_Coriolis_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
@@ -16,25 +16,24 @@ module pblwt_parameters
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use pblwt_parameters    
+    use AD_Coriolis_parameters    
     use kind_parameters,  only: rkind
-    use constants,        only: one, two
+    use constants,        only: one,two
     use decomp_2d,        only: decomp_info
     implicit none
 
     type(decomp_info),                                          intent(in)    :: decomp
     real(rkind),                                                intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
-    real(rkind) :: z0init
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PBLINPUT)
+    read(unit=ioUnit, NML=AD_CoriolisINPUT)
     close(ioUnit)    
 
     !Lx = two*pi; Ly = two*pi; Lz = one
@@ -71,13 +70,14 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use pblwt_parameters
+    use AD_Coriolis_parameters
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
     use random,             only: gaussian_random
     use decomp_2d          
-    use reductions,         only: p_maxval
+    use reductions,         only: p_maxval, p_minval
+    use exits,              only: message_min_max
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -85,19 +85,16 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
+    integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind), dimension(:,:,:), allocatable :: randArr
-    real(rkind) :: z0init, epsnd = 0.1, sig
-    real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: nz, nzE, ioUnit, k
-    real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0
-    real(rkind) :: zpeak = 0.2d0
+    real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
+    integer :: nz, nzE
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PBLINPUT)
+    read(unit=ioUnit, NML=AD_CoriolisINPUT)
     close(ioUnit)    
 
 
@@ -110,30 +107,29 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    epsnd = 5.0d0
-
-    u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-    wC= zero  
    
-    !Add random numbers
-    randomScaleFact = 0.0d0
-    allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    call gaussian_random(randArr,zero,one,seedu + 10*nrank)
-    do k = 1,size(u,3)
-        sig = randomScaleFact*(one/kappa)*log(z(1,1,k)/z0init)
-        u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
-    end do  
-    deallocate(randArr)
+    u = one!z*(2 - z) + epsnd*(z/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
+      !+ epsnd*((2-z)/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
     
-    allocate(randArr(size(v,1),size(v,2),size(v,3)))
-    call gaussian_random(randArr,zero,one,seedv+ 10*nrank)
-    do k = 1,size(v,3)
-        sig = randomScaleFact*z(1,1,k)*exp(-half*(z(1,1,k)/zpeak/Lz)**2)
-        v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
-    end do  
+    v = zero!- epsnd*(z/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
+        !- epsnd*((2-z)/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
+    
+    wC= zero  
+    
+    allocate(randArr(size(u,1),size(u,2),size(u,3)))
+    call gaussian_random(randArr,-one,one,seedu + 10*nrank)
+    !do k = 1,size(randArr,3)
+    !     u(:,:,k) = u(:,:,k) + randscale*randArr(:,:,k)
+    !end do
     deallocate(randArr)
 
+    call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
+    call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
+    call message_min_max(1,"Bounds for w:", p_minval(minval(w)), p_maxval(maxval(w)))
+    
+    !u = one!1.6d0*z*(2.d0 - z) 
+    !v = zero;
+    !w = zero;
 
     ! Interpolate wC to w
     allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
@@ -151,6 +147,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
     call transpose_z_to_y(zbuffE,ybuffE,decompE)
     call transpose_y_to_x(ybuffE,w,decompE) 
+    
     
 
     deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
@@ -171,12 +168,11 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
     integer, parameter :: nxplanes = 5, nyplanes = 1, nzplanes = 1
 
-    allocate(xplanes(nxplanes))
-    !allocate(yplanes(nxplanes))
-    allocate(zplanes(nxplanes))
+    allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [109,151,193,235,277]
-    zplanes = [50]
+    xplanes = [300,400,500,600,700]
+    yplanes = [128]
+    zplanes = [128]
 
 end subroutine
 
@@ -190,6 +186,7 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 
 end subroutine
 
+
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
     use constants,          only: zero, one
@@ -197,56 +194,35 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init
+    real(rkind) :: ThetaRef, Lx, Ly, Lz
     integer :: iounit
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PBLINPUT)
+    read(unit=ioUnit, NML=AD_CoriolisINPUT)
     close(ioUnit)    
 
     ! Do nothing really since this is an unstratified simulation
 end subroutine
+
 
 subroutine set_Reference_Temperature(inputfile, Tref)
     use kind_parameters,    only: rkind
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, z0init
+    real(rkind) :: Lx, Ly, Lz
     integer :: iounit
     
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PBLINPUT)
-    close(ioUnit)    
-     
-    Tref = 0.d0
-    
-    ! Do nothing really since this is an unstratified simulation
-
-end subroutine
-
-subroutine set_Reference_Temperatur(inputfile, Tref)
-    use kind_parameters,    only: rkind
-    use constants,          only: one, zero
-    implicit none 
-    character(len=*),                intent(in)    :: inputfile
-    real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, z0init
-    integer :: iounit
-    
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
-
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PBLINPUT)
+    read(unit=ioUnit, NML=AD_CoriolisINPUT)
     close(ioUnit)    
      
     Tref = 0.d0
@@ -256,81 +232,25 @@ subroutine set_Reference_Temperatur(inputfile, Tref)
 end subroutine
 
 subroutine hook_probes(inputfile, probe_locs)
-    use kind_parameters,    only: rkind, clen
-    use exits, only: message
-    implicit none
-
-    character(len=*),                intent(in)    :: inputfile
+    use kind_parameters,    only: rkind
     real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
+    character(len=*),                intent(in)    :: inputfile
+    integer, parameter :: nprobes = 2
     
-    ! This code is specific to turbines where i am placing probes in front of
-    ! each turbine. For a more generic implementation of probes check the
-    ! initialization.F90 files for other igridWallM problems. 
+    ! IMPORTANT : Convention is to allocate probe_locs(3,nprobes)
+    ! Example: If you have at least 3 probes:
+    ! probe_locs(1,3) : x -location of the third probe
+    ! probe_locs(2,3) : y -location of the third probe
+    ! probe_locs(3,3) : z -location of the third probe
 
-    integer :: num_Turbines, nprobes = 2, ActuatorDiskID, ioUnit, ii 
-    logical :: useWindTurbines, ADM
-    real(rkind) :: xloc, yloc, zloc, diam, ct, yaw, tilt
-    real(rkind) :: upstreamdisplacement = 0.05d0 ! Place the probes this far upstream of the turbine centers
-    character(len=clen) :: turbInfoDir, fname, tempname
 
-    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
-    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir
-    
-    
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=WINDTURBINES)
-    close(ioUnit)    
-    
-   
-    nprobes = 4*num_turbines
+    ! Add probes here if needed
+    ! Example code: The following allocates 2 probes at (0.1,0.1,0.1) and
+    ! (0.2,0.2,0.2)  
+    print*, inputfile
     allocate(probe_locs(3,nprobes))
-    probe_locs = 0.d0   
-   
+    probe_locs(1,1) = 0.1d0; probe_locs(2,1) = 0.1d0; probe_locs(3,1) = 0.1d0;
+    probe_locs(1,2) = 0.2d0; probe_locs(2,2) = 0.2d0; probe_locs(3,2) = 0.2d0;
 
-    ! Set 1: Located at Hub height 
-    do ActuatorDiskID = 1,num_turbines
-        write(tempname,"(A13,I3.3,A10)") "ActuatorDisk_", ActuatorDiskID, "_input.inp"
-        fname = turbInfoDir(:len_trim(turbInfoDir))//"/"//trim(tempname)
-
-        ioUnit = 55
-        open(unit=ioUnit, file=trim(fname), form='FORMATTED')
-        read(unit=ioUnit, NML=ACTUATOR_DISK)
-        close(ioUnit)
-        
-        probe_locs(1,ActuatorDiskID) = xLoc - upstreamdisplacement; 
-        probe_locs(2,ActuatorDiskID) = yLoc; 
-        probe_locs(3,ActuatorDiskID) = zLoc;
-    end do 
-
-    ! Set 2: Located 0.045 down from the hub 
-    ii = 1 
-    do ActuatorDiskID = num_turbines+1,2*num_turbines
-        probe_locs(1,ActuatorDiskID) = probe_locs(1,ii)
-        probe_locs(2,ActuatorDiskID) = probe_locs(2,ii)
-        probe_locs(3,ActuatorDiskID) = probe_locs(3,ii) - 0.045d0
-        ii = ii + 1
-    end do  
-        
-    ! Set 3: Located 0.045 right from the hub 
-    ii = 1 
-    do ActuatorDiskID = 2*num_turbines+1,3*num_turbines
-        probe_locs(1,ActuatorDiskID) = probe_locs(1,ii)
-        probe_locs(2,ActuatorDiskID) = probe_locs(2,ii) + 0.045d0
-        probe_locs(3,ActuatorDiskID) = probe_locs(3,ii) 
-        ii = ii + 1
-    end do  
-
-    ! Set 4: Located 0.045 up from the hub 
-    ii = 1 
-    do ActuatorDiskID = 3*num_turbines+1,4*num_turbines
-        probe_locs(1,ActuatorDiskID) = probe_locs(1,ii)
-        probe_locs(2,ActuatorDiskID) = probe_locs(2,ii) 
-        probe_locs(3,ActuatorDiskID) = probe_locs(3,ii) + 0.045d0 
-        ii = ii + 1
-    end do  
-
- 
-    call message(0,"Total number of probes desired:", nprobes)
 
 end subroutine
