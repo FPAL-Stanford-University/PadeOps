@@ -1,17 +1,17 @@
 &INPUT
-inputdir              = "/home/nghaisas/runs/PadeOps/pblwt/al00/budgetnew/"   ! Directory for any input files
-outputdir             = "/home/nghaisas/runs/PadeOps/pblwt/al00/budgetnew/"   ! Directory for all output files
+inputdir              = "/scratch/nghaisas/PadeRuns/pblwt/al00/budgetnew3/"   ! Directory for any input files
+outputdir             = "/home/nghaisas/PadeRuns/igridSGS/statstest/f_0"   !  /scratch/nghaisas/PadeRuns/pblwt/al00/budgetnew3/"   ! Directory for all output files
 nx                    = 96         ! Number of points in X
 ny                    = 96         ! Number of points in Y
 nz                    = 64         ! Number of points in Z
-tstop                 = 100.D0     ! Physical time to stop the simulation
+tstop                 = 32.24D0     ! Physical time to stop the simulation
 dt                    = -0.0001D0   ! Fixed time step value (only used if CFL is set to negative)
 CFL                   = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .TRUE.     ! Set to false if it's a fresh simulation 
-restartFile_TID       = 194069      ! TimeID of the restart file being used
-restartFile_RID       = 10          ! RunID of the restart file being used
+useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
+restartFile_TID       = 210000      ! TimeID of the restart file being used
+restartFile_RID       = 1          ! RunID of the restart file being used
 /
 /
 &NUMERICS
@@ -26,7 +26,7 @@ t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproj
 &IO
 RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump         = 30000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 20000        ! Data dumping frequency (# of timesteps)
+t_dataDump            = 10        ! Data dumping frequency (# of timesteps)
 ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 12500         ! Plane dumping frequency (# of timesteps)
@@ -41,6 +41,7 @@ tSimStartStats        = 20.d0       ! Simulation time for starting stats calcula
 normStatsByUstar      = .FALSE.      ! Normalize Statistics by ustar at each instant
 computeSpectra        = .TRUE.
 timeAvgFullFields     = .TRUE.
+edgeStats             = .FALSE.
 /
 /
 &OS_INTERACTIONS
@@ -103,7 +104,7 @@ SGSDynamicRestartFile = "null"      ! Clip the constant values when they are neg
 useWindTurbines       = .TRUE.
 num_turbines          = 32
 ADM                   = .TRUE.
-turbInfoDir           = "/home/nghaisas/runs/PadeOps/pblwt/al00/budgetnew/turbInfo"
+turbInfoDir           = "/scratch/nghaisas/PadeRuns/pblwt/al00/budgetnew3/turbInfo"
 /
 /
 &FRINGE
@@ -132,4 +133,11 @@ Lx                    = 3.141592653589793d0 ! Domain Length (appropriate dimesni
 Ly                    = 3.141592653589793d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Lz                    = 1.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
 z0init                = 1.d-4               ! Roughness scale used to initialize the profile
+/
+/
+&STATSCOMPINPUT
+tStatStartIn          = 210000
+tStatEndIn            = 219770
+dtStatsIn             = 10
+dtStatsDumpIn         = 219770
 /
