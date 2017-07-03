@@ -142,6 +142,7 @@ module IncompressibleGrid
         logical :: useDynamicProcedure 
         logical :: useCFL = .false.  
         logical :: dumpPlanes = .false., useWindTurbines = .false. 
+        logical :: edgeStats = .false.
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
@@ -154,7 +155,7 @@ module IncompressibleGrid
         ! Statistics to compute 
         real(rkind), dimension(:), allocatable :: runningSum_sc, inst_horz_avg, runningSum_sc_turb, runningSum_turb, inst_horz_avg_turb, debugavg, debuginst
         real(rkind), dimension(:,:), allocatable :: zStats2dump, runningSum, TemporalMnNOW, horzavgstats
-        real(rkind), dimension(:,:,:,:), allocatable :: stats3D
+        real(rkind), dimension(:,:,:,:), allocatable :: stats3D, statsE3D
         real(rkind), dimension(:,:,:),   allocatable :: xspectra_mean
         !---pointers for horizontally- and time-averaged statistics; linked to horzavgstats------
         real(rkind), dimension(:), pointer :: u_mean, v_mean, w_mean, uu_mean, uv_mean, uw_mean, vv_mean, vw_mean, ww_mean, disperuw_mean, dispervw_mean
@@ -164,7 +165,7 @@ module IncompressibleGrid
         real(rkind), dimension(:), pointer :: mkevdif_mean, mkevdsp_mean, tkevdif_mean, tkevdsp_mean
         real(rkind), dimension(:), pointer :: mkesgst_mean, mkesgsd_mean, tkesgst_mean, tkesgsd_mean
         real(rkind), dimension(:), pointer :: tau11_mean, tau12_mean, tau13_mean, tau22_mean, tau23_mean, tau33_mean
-        real(rkind), dimension(:), pointer :: q1_mean, q2_mean, q3_mean
+        real(rkind), dimension(:), pointer :: q1_mean, q2_mean, q3_mean, mom1_mean, mom2_mean
         real(rkind), dimension(:), pointer :: turbfx_mean, turbfy_mean, turbfz_mean, tketurbf_mean, mketurbf_mean
         !---pointers for horizontally- and time-averaged statistics; linked to horzavgstats------
         !---pointers for time-averaged statistics; linked to stats3D------
@@ -175,6 +176,7 @@ module IncompressibleGrid
         real(rkind), dimension(:,:,:), pointer :: tau11_mean3D, tau12_mean3D, tau13_mean3D, tau22_mean3D, tau23_mean3D, tau33_mean3D
         real(rkind), dimension(:,:,:), pointer :: sgsdissp_mean3D, tauu1_mean3D, tauu2_mean3D, tauu3_mean3D, q1_mean3D, q2_mean3D, q3_mean3D
         real(rkind), dimension(:,:,:), pointer :: turbfx_mean3D, turbfy_mean3D, turbfz_mean3D, uturbf_mean3D
+        real(rkind), dimension(:,:,:), pointer :: uwE_mean3D, vwE_mean3D, wwE_mean3D, tau13E_mean3D, tau23E_mean3D
         !---pointers for time-averaged statistics; linked to stats3D------
         integer :: tidSUM, tid_StatsDump, tid_compStats, tprev2, tprev1
         logical :: normByustar
@@ -272,19 +274,20 @@ module IncompressibleGrid
             procedure, private :: dump_pointProbes
             !procedure, private :: dump_stats
             !procedure, private :: compute_stats 
-            procedure, private :: dump_stats3D
-            procedure, private :: compute_stats3D 
+            procedure          :: dump_stats3D
+            procedure          :: compute_stats3D 
             !procedure, private :: getSurfaceQuantities 
             procedure, private :: ApplyCompactFilter 
             procedure, private :: addNonLinearTerm_skewSymm
-            procedure, private :: populate_rhs
-            procedure, private :: project_and_prep
+            procedure          :: populate_rhs
+            procedure          :: project_and_prep
             procedure, private :: wrapup_timestep
             procedure, private :: reset_pointers
             !procedure, private :: finalize_stats
             procedure, private :: finalize_stats3D
             procedure, private :: dump_planes
             procedure          :: dumpFullField 
+            procedure          :: readFullField 
             procedure, private :: dumpVisualizationInfo
             procedure, private :: DeletePrevStats3DFiles
             procedure, private :: Delete_file_if_present
@@ -319,7 +322,7 @@ contains
         real(rkind) :: Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1
-        logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true.  
+        logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., edgeStats = .false.  
         logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true. 
         real(rkind), dimension(:,:), allocatable :: probe_locs
         real(rkind), dimension(:), allocatable :: temp
@@ -331,7 +334,7 @@ contains
                          useRestartFile, restartFile_TID, restartFile_RID 
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
-        namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
+        namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields,edgeStats
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, &
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude
         namelist /BCs/ topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe
@@ -363,7 +366,7 @@ contains
         this%CFL = CFL; this%dumpPlanes = dumpPlanes; this%useGeostrophicForcing = useGeostrophicForcing
         this%timeSteppingScheme = timeSteppingScheme; this%useSystemInteractions = useSystemInteractions
         this%tSystemInteractions = tSystemInteractions; this%storePressure = storePressure
-        this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq; this%timeAvgFullFields = timeAvgFullFields
+        this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq; this%timeAvgFullFields = timeAvgFullFields; this%edgeStats = edgeStats
         this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp; this%isInviscid = isInviscid
         this%assume_fplane = assume_fplane; this%useProbes = useProbes
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact; this%useFringe = useFringe
@@ -2111,13 +2114,15 @@ contains
         nullify(zbuff1, zbuff2, zbuff3, zbuff4)
     end subroutine
 
-    subroutine compute_Sijmean(this, Stmp)
+    subroutine compute_Sijmean(this, Stmp, SEtmp)
         class(igrid), intent(inout), target :: this
         real(rkind),    dimension(this%gpC%xsz(1),   this%gpC%xsz(2),   this%gpC%xsz(3),   6), intent(out), target :: Stmp
+        real(rkind),    dimension(this%gpE%xsz(1),   this%gpE%xsz(2),   this%gpE%xsz(3),   2), intent(out), target :: SEtmp
 
         complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),3), target :: SfCtmp
-        complex(rkind), dimension(:,:,:), pointer :: u_mean3Dhat, v_mean3Dhat, w_mean3Dhat, ctmpz1, ctmpz2, ctmpy1
+        complex(rkind), dimension(:,:,:), pointer :: u_mean3Dhat, v_mean3Dhat, w_mean3Dhat, ctmpz1, ctmpz2, ctmpy1, ctmpy2, ctmpy3
         real(rkind),    dimension(:,:,:), pointer :: S11_mean3D, S12_mean3D, S13_mean3D, S22_mean3D, S23_mean3D, S33_mean3D, rbuff1
+        real(rkind),    dimension(:,:,:), pointer :: S13E_mean3D, S23E_mean3D, rbuff1E
         real(rkind) :: tidSUMreal
 
         u_mean3Dhat => SfCtmp(:,:,:,1); v_mean3Dhat => SfCtmp(:,:,:,2); w_mean3Dhat => SfCtmp(:,:,:,3)
@@ -2126,6 +2131,11 @@ contains
                                                                         S33_mean3D  => Stmp(:,:,:,6) 
         ctmpy1 => this%cbuffyC(:,:,:,1); ctmpz1  => this%cbuffzC(:,:,:,1)
         ctmpz2 => this%cbuffzE(:,:,:,1); rbuff1 => this%rbuffxC(:,:,:,1);
+
+        ! for edge stats
+        S13E_mean3D  => SEtmp(:,:,:,1);   S23E_mean3D  => SEtmp(:,:,:,2)
+        ctmpy2 => this%cbuffyE(:,:,:,1);  ctmpy3 => this%cbuffyE(:,:,:,2)
+        rbuff1E => this%rbuffxE(:,:,:,1)
 
 
         tidSUMreal = real(this%tidSUM, rkind)
@@ -2155,11 +2165,22 @@ contains
         ! dwdx
         call this%spectC%mTimes_ik1_oop(w_mean3Dhat, ctmpy1)
         call this%spectC%ifft(ctmpy1, S13_mean3D)
-         
+        
+        ! dwdxE 
+        call transpose_y_to_z(w_mean3Dhat, ctmpz1, this%sp_gpC)
+        call this%Pade6opZ%interpz_C2E(ctmpz1, ctmpz2, wBC_bottom, wBC_top)
+        call transpose_z_to_y(ctmpz2, ctmpy2, this%sp_gpE)
+        call this%spectE%mTimes_ik1_oop(ctmpy2, ctmpy3)
+        call this%spectE%ifft(ctmpy3,S13E_mean3D)
+
         ! dwdy
         call this%spectC%mTimes_ik2_oop(w_mean3Dhat, ctmpy1)
         call this%spectC%ifft(ctmpy1, S23_mean3D)
         
+        ! dwyxE 
+        call this%spectE%mTimes_ik2_oop(ctmpy2, ctmpy3)
+        call this%spectE%ifft(ctmpy3,S23E_mean3D)
+
         ! dudz 
         call transpose_y_to_z(u_mean3Dhat, ctmpz1, this%sp_gpC)
         call this%Pade6opZ%ddz_C2E(ctmpz1, ctmpz2, uBC_bottom, uBC_top)
@@ -2167,6 +2188,10 @@ contains
         call transpose_z_to_y(ctmpz1, u_mean3Dhat, this%sp_gpC)
         call this%spectC%ifft(u_mean3Dhat, rbuff1)
         S13_mean3D = half*(S13_mean3D + rbuff1)
+
+        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
+        call this%spectE%ifft(ctmpy2, rbuff1E)
+        S13E_mean3D = half*(S13E_mean3D + rbuff1E)
 
         ! dvdz 
         call transpose_y_to_z(v_mean3Dhat, ctmpz1, this%sp_gpC)
@@ -2176,6 +2201,10 @@ contains
         call this%spectC%ifft(v_mean3Dhat, rbuff1)
         S23_mean3D = half*(S23_mean3D + rbuff1)
 
+        call transpose_z_to_y(ctmpz2,ctmpy2,this%sp_gpE)
+        call this%spectE%ifft(ctmpy2, rbuff1E)
+        S23E_mean3D = half*(S23E_mean3D + rbuff1E)
+
         ! dwdz 
         call transpose_y_to_z(w_mean3Dhat, ctmpz1, this%sp_gpC)
         call this%Pade6opZ%ddz_C2E(ctmpz1, ctmpz2, wBC_bottom, wBC_top)
@@ -2183,7 +2212,7 @@ contains
         call transpose_z_to_y(ctmpz1, w_mean3Dhat, this%sp_gpC)
         call this%spectC%ifft(w_mean3Dhat, S33_mean3D)
 
-        nullify(u_mean3Dhat, v_mean3Dhat, w_mean3Dhat, rbuff1, ctmpy1, ctmpz1, ctmpz2, S11_mean3D, S12_mean3D, S13_mean3D, S22_mean3D, S23_mean3D, S33_mean3D)
+        nullify(u_mean3Dhat, v_mean3Dhat, w_mean3Dhat, rbuff1, ctmpy1, ctmpz1, ctmpz2, S11_mean3D, S12_mean3D, S13_mean3D, S22_mean3D, S23_mean3D, S33_mean3D, rbuff1E, S13E_mean3D, S23E_mean3D, ctmpy3)
 
    end subroutine 
 
@@ -2449,6 +2478,21 @@ contains
 
     end subroutine
 
+    subroutine readFullField(this,arr,label)
+        use decomp_2d_io
+        use mpi
+        use exits, only: message
+        class(igrid), intent(inout) :: this
+        character(len=clen) :: tempname, fname
+        real(rkind), dimension(:,:,:), intent(out) :: arr
+        character(len=4), intent(in) :: label
+
+        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
+        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+        call decomp_2d_read_one(1,arr,fname)
+
+    end subroutine
+
 
     subroutine dumpVisualizationInfo(this)
         class(igrid), intent(in) :: this
@@ -2472,10 +2516,12 @@ contains
     subroutine init_stats3D(this)
         use exits, only: message
         class(igrid), intent(inout), target :: this
-        integer :: nstatsvar, nhorzavgvars, nstv, nhzv
+        integer :: nstatsvar, nhorzavgvars, nstv, nhzv, nstatsEvar, nstvE
 
 
         nstatsvar = 12; nhorzavgvars = 17
+        nstatsEvar = 0
+        if(this%edgeStats) nstatsEvar = 3
         if(this%fastCalcPressure .or. this%storePressure) then
            nstatsvar = nstatsvar + 4
            nhorzavgvars = nhorzavgvars + 3
@@ -2487,6 +2533,7 @@ contains
         if(this%useSGS) then
            nstatsvar = nstatsvar + 10
            nhorzavgvars = nhorzavgvars + 10
+           if(this%edgeStats) nstatsEvar = nstatsEvar + 2
         endif
         if(this%useWindTurbines) then
            nstatsvar = nstatsvar + 4
@@ -2500,12 +2547,16 @@ contains
               nhorzavgvars = nhorzavgvars + 3
            endif
         endif
+        nhorzavgvars = nhorzavgvars + 2
 
         allocate(this%debugavg(5),this%debuginst(5))
         allocate(this%inst_horz_avg(5)) ! [ustar, uw, vw, Linv, wT]
         allocate(this%runningSum_sc(5))
         allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),nstatsvar))
         allocate(this%horzavgstats(this%nz,nhorzavgvars))
+        if(this%edgeStats) then
+          allocate(this%statsE3D(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),nstatsEvar))
+        endif
 
         if(this%useWindTurbines) then
             allocate(this%inst_horz_avg_turb(8*this%WindTurbineArr%nTurbines))
@@ -2529,6 +2580,13 @@ contains
         this%tketurbtranspy_mean3D => this%stats3D(:,:,:,11)
         this%tketurbtranspz_mean3D => this%stats3D(:,:,:,12)
         nstv = 3 + 6 + 3
+
+        nstvE = 0
+        if(this%edgeStats) then
+           this%uwE_mean3D => this%statsE3D(:,:,:,1); this%vwE_mean3D => this%statsE3D(:,:,:,2)
+           this%wwE_mean3D => this%statsE3D(:,:,:,3)
+           nstvE = 3
+        endif
 
         if(this%fastCalcPressure .or. this%storePressure) then
            this%p_mean3D  => this%stats3D(:,:,:,nstv+1)
@@ -2560,6 +2618,10 @@ contains
 
            nstv = nstv + 10
 
+           if(this%edgeStats) then
+             this%tau13E_mean3D => this%statsE3D(:,:,:,nstvE+1); this%tau23E_mean3D => this%statsE3D(:,:,:,nstvE+2)
+             nstvE = nstvE + 2
+           endif
         endif
 
         if(this%useWindTurbines)  then
@@ -2643,10 +2705,14 @@ contains
               nhzv = nhzv + 3
            endif
         end if 
+        this%mom1_mean => this%horzavgstats(:,nhzv+1); this%mom2_mean => this%horzavgstats(:,nhzv+2);
 
         this%tidSUM = 0
         this%tprev2 = -1; this%tprev1 = -1;
         this%stats3D = zero
+        if(this%edgeStats) then
+          this%statsE3D = zero
+        endif
         this%horzavgstats = zero
         this%debugavg = zero
         this%debuginst = zero
@@ -2659,10 +2725,11 @@ contains
         endif
         this%xspectra_mean = zero
 
-        if((nhzv .ne. nhorzavgvars) .or. (nstv .ne. nstatsvar)) then
+        if((nhzv .ne. nhorzavgvars) .or. (nstv .ne. nstatsvar) .or. (nstvE .ne. nstatsEvar)) then
             call message(0,"Error in init_stats3D")
             write(*,*) 'nhzv = ', nhzv, nhorzavgvars
             write(*,*) 'nstv = ', nstv, nstatsvar
+            write(*,*) 'nstvE = ', nstvE, nstatsEvar
         endif
 
         call message(0,"Done init_stats3D")
@@ -2695,7 +2762,9 @@ contains
         rbuff1E = this%uE * this%w
         call transpose_x_to_y(rbuff1E,rbuff2E,this%gpE)
         call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-        call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+        !--call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+        !--call this%Pade6opZ%interpz_E2C(rbuff3E, rbuff3, uwBC_bottom, uwBC_top)
+        call this%Pade6opZ%interpz_E2C(rbuff3E, rbuff3, 0, 0)
         call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
         call transpose_y_to_x(rbuff2,rbuff1,this%gpC)
 
@@ -2703,7 +2772,9 @@ contains
         rbuff1E = this%vE * this%w
         call transpose_x_to_y(rbuff1E,rbuff2E,this%gpE)
         call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-        call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+        !--call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+        !--call this%Pade6opZ%interpz_E2C(rbuff3E, rbuff3, vwBC_bottom, vwBC_top)
+        call this%Pade6opZ%interpz_E2C(rbuff3E, rbuff3, 0, 0)
         call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
         call transpose_y_to_x(rbuff2,rbuff0,this%gpC)
 
@@ -2730,6 +2801,12 @@ contains
             this%vv_mean3D = this%vv_mean3D + this%v * this%v
             this%vw_mean3D = this%vw_mean3D + rbuff0
             this%ww_mean3D = this%ww_mean3D + this%wC* this%wC
+        endif
+
+        if(this%edgeStats) then
+          this%uwE_mean3D = this%uwE_mean3D + this%uE * this%w
+          this%vwE_mean3D = this%vwE_mean3D + this%vE * this%w
+          this%wwE_mean3D = this%wwE_mean3D + this%w  * this%w
         endif
 
         ! triple correlation for transport term in TKE budget -- triple product should be dealiased
@@ -2807,7 +2884,7 @@ contains
             !    write(*,*) rbuff3E(1,1,1:2)
             !endif
             !write(200+nrank,*) 1, this%tsim, this%inst_horz_avg(2)
-            !rbuff3E(:,:,1) = this%sgsmodel%tauijWMhat_in_Z(:,:,1,1)    !this%inst_horz_avg(2)     !--- =-(this%sgsmodel%get_ustar()**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model
+            !rbuff3E(:,:,1) = this%sgsmodel%tauijWM_inZ(:,:,1,1)    !this%inst_horz_avg(2)     !--- =-(this%sgsmodel%get_ustar()**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model WMContrib
             !if(nrank==0) then
             !    write(*,*) rbuff3E(1,1,1:2)
             !endif
@@ -2815,7 +2892,8 @@ contains
             !write(200+nrank,*) 2, this%tsim, this%debuginst(1)
             !this%debuginst(2) = p_sum(sum(rbuff3E(:,:,2)))*this%meanFact
             !this%debuginst(3) = p_sum(sum(rbuff3E(:,:,3)))*this%meanFact
-            call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            !--call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            call this%Pade6opZ%interpz_E2C(rbuff3E, rbuff3, 0, 0)
             !this%debuginst(4) = p_sum(sum(rbuff3(:,:,1)))*this%meanFact
             !this%debuginst(5) = p_sum(sum(rbuff3(:,:,2)))*this%meanFact
             !this%debugavg(:) = this%debugavg(:) + this%debuginst(:)
@@ -2829,8 +2907,9 @@ contains
             ! interpolate tau23 from E to C
             call transpose_x_to_y(this%tau23,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-            !rbuff3E(:,:,1) = this%sgsmodel%tauijWMhat_in_Z(:,:,1,2)    !this%inst_horz_avg(3)     !--- =-(this%sgsmodel%get_ustar()**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model
-            call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            !rbuff3E(:,:,1) = this%sgsmodel%tauijWM_inZ(:,:,1,2)    !this%inst_horz_avg(3)     !--- =-(this%sgsmodel%get_ustar()**2) is correct only for Moeng's Wall Model, not for Bou-Zeid's model WMContrib
+            !--call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            call this%Pade6opZ%interpz_E2C(rbuff3E, rbuff3, 0, 0)
             call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
             call transpose_y_to_x(rbuff2,this%tauSGS_ij(:,:,:,5),this%gpC)
 
@@ -2889,6 +2968,11 @@ contains
                 this%tauu3_mean3D = this%tauu3_mean3D + (this%tauSGS_ij(:,:,:,3)*this%u + &
                                                          this%tauSGS_ij(:,:,:,5)*this%v + &
                                                          this%tauSGS_ij(:,:,:,6)*this%wC)
+
+                if(this%edgeStats) then
+                  this%tau13E_mean3D = this%tau13E_mean3D + this%tau13
+                  this%tau23E_mean3D = this%tau23E_mean3D + this%tau23
+                endif
             endif
 
         endif
@@ -2916,7 +3000,9 @@ contains
             rbuff1E = this%TE * this%w
             call transpose_x_to_y(rbuff1E,rbuff2E,this%gpE)
             call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-            call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            !--call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+            !--call this%Pade6opZ%interpz_E2C(rbuff3E, rbuff3, wTBC_bottom, wTBC_top)
+            call this%Pade6opZ%interpz_E2C(rbuff3E, rbuff3, 0, 0)
             call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
             call transpose_y_to_x(rbuff2,rbuff0,this%gpC)
 
@@ -2938,7 +3024,8 @@ contains
                 call transpose_x_to_y(this%q3,rbuff2E,this%gpE)
                 call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
                 rbuff3E(:,:,1) = this%wTh_surf
-                call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+                !--call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+                call this%Pade6opZ%interpz_E2C(rbuff3E, rbuff3, 0, 0)
                 call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
                 call transpose_y_to_x(rbuff2,rbuff1,this%gpC)
 
@@ -3108,11 +3195,14 @@ contains
         class(igrid), intent(inout), target :: this
       ! compute horizontal averages and dump .stt files
       ! overwrite previously written out 3D stats dump
-        real(rkind), dimension(:,:,:), pointer :: rbuff0, rbuff1, rbuff2, rbuff3, rbuff4, rbuff5, rbuff6, rbuff3E, rbuff4E
+        real(rkind), dimension(:,:,:), pointer :: rbuff0, rbuff1, rbuff2, rbuff3, rbuff4, rbuff5, rbuff6
+        real(rkind), dimension(:,:,:), pointer :: rbuffx1E, rbuffx2E, rbuffy1E, rbuffz1E, rbuffz2E, rbuffz3E, rbuffz4E
         real(rkind), dimension(:,:,:), pointer :: S11_mean3D, S12_mean3D, S13_mean3D, S22_mean3D, S23_mean3D, S33_mean3D
+        real(rkind), dimension(:,:,:), pointer :: S13E_mean3D, S23E_mean3D
         complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2
         real(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)) :: tmpvar
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6), target :: Stmp
+        real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2), target :: SEtmp
         character(len=clen) :: tempname, fname
         real(rkind) :: tidSUMreal, normfac
         integer :: tid, dirid, decompdir, jindx, nspectra
@@ -3132,8 +3222,11 @@ contains
         rbuff3 => this%rbuffzC(:,:,:,1);  rbuff4 => this%rbuffzC(:,:,:,2)
         rbuff5 => this%rbuffzC(:,:,:,3);  rbuff6 => this%rbuffzC(:,:,:,4)
 
-        cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyC(:,:,:,2)
-        rbuff3E => this%rbuffzE(:,:,:,1); rbuff4E => this%rbuffzE(:,:,:,2);
+        cbuffy1 => this%cbuffyC(:,:,:,1);  cbuffy2 => this%cbuffyC(:,:,:,2)
+        rbuffz1E => this%rbuffzE(:,:,:,1);  rbuffz2E => this%rbuffzE(:,:,:,2);
+        rbuffz3E => this%rbuffzE(:,:,:,3);  rbuffz4E => this%rbuffzE(:,:,:,4);
+        rbuffx1E => this%rbuffxE(:,:,:,1); rbuffx2E => this%rbuffxE(:,:,:,1); 
+        rbuffy1E => this%rbuffyE(:,:,:,2);
 
         tidSUMreal = real(this%tidSUM, rkind)
 
@@ -3257,8 +3350,10 @@ contains
           call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
           call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
           ! interpolate rbuff3 from C to E
-          call this%Pade6opZ%interpz_C2E(rbuff3, rbuff3E, 0,0)
-          call this%Pade6opZ%ddz_E2C(rbuff3E,rbuff3,0,0)
+          !--call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, wBC_bottom, wBC_top) ! --(u_i'*u_i') is even so w' dictates sign 
+          !--call this%Pade6opZ%ddz_E2C(rbuffz1E,rbuff3, wBC_bottom, wBC_top)
+          call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, 0, 0)
+          call this%Pade6opZ%ddz_E2C(rbuffz1E,rbuff3, 0, 0)
 
           ! add x and y terms to z term
           rbuff3 = rbuff3 + rbuff4
@@ -3279,16 +3374,18 @@ contains
           ! transpose to z and take z derivative
           call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
           call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
-          call this%Pade6opZ%ddz_C2E(rbuff3,rbuff3E,0,0)
+          !--call this%Pade6opZ%ddz_C2E(rbuff3,rbuffz1E,1,1)
+          call this%Pade6opZ%ddz_C2E(rbuff3,rbuffz1E,0,0)
           
           ! transpose w_mean3D to z, interpolate to E and multiply
           call transpose_x_to_y(this%w_mean3D/tidSUMreal, rbuff2, this%gpC)
           call transpose_y_to_z(rbuff2,                   rbuff4, this%gpC)
-          call this%Pade6opZ%interpz_C2E(rbuff4,rbuff4E,0,0)
-          rbuff4E = rbuff4E * rbuff3E
+          call this%Pade6opZ%interpz_C2E(rbuff4,rbuffz2E,wBC_bottom,wBC_top)
+          rbuffz2E = rbuffz2E * rbuffz1E
 
           ! interpolate E to C
-          call this%Pade6opZ%interpz_E2C(rbuff4E, rbuff4, 0,0)
+          !--call this%Pade6opZ%interpz_E2C(rbuffz2E, rbuff4, wBC_bottom, wBC_top)
+          call this%Pade6opZ%interpz_E2C(rbuffz2E, rbuff4, 0, 0)
 
 
           ! x derivative
@@ -3318,19 +3415,68 @@ contains
         S11_mean3D => Stmp(:,:,:,1);   S12_mean3D => Stmp(:,:,:,2);    S13_mean3D => Stmp(:,:,:,3) 
                                        S22_mean3D => Stmp(:,:,:,4);    S23_mean3D => Stmp(:,:,:,5) 
                                                                        S33_mean3D => Stmp(:,:,:,6) 
-        call this%compute_Sijmean(Stmp)
+        S13E_mean3D => SEtmp(:,:,:,1);   S23E_mean3D => SEtmp(:,:,:,2)
+        call this%compute_Sijmean(Stmp, SEtmp)
 
         ! ---- Shear production in TKE budget equation-------
-          rbuff1 = - (this%uu_mean3D/tidSUMreal - this%u_mean3D*this%u_mean3D/tidSUMreal**2)*S11_mean3D &
-                   - (this%vv_mean3D/tidSUMreal - this%v_mean3D*this%v_mean3D/tidSUMreal**2)*S22_mean3D &
-                   - (this%ww_mean3D/tidSUMreal - this%w_mean3D*this%w_mean3D/tidSUMreal**2)*S33_mean3D
-          rbuff1 = rbuff1 - two*( &
-                   + (this%uv_mean3D/tidSUMreal - this%u_mean3D*this%v_mean3D/tidSUMreal**2)*S12_mean3D &
-                   + (this%uw_mean3D/tidSUMreal - this%u_mean3D*this%w_mean3D/tidSUMreal**2)*S13_mean3D &
-                   + (this%vw_mean3D/tidSUMreal - this%v_mean3D*this%w_mean3D/tidSUMreal**2)*S23_mean3D )
+          if(this%edgeStats) then
+            rbuff1 = - (this%uu_mean3D/tidSUMreal - this%u_mean3D*this%u_mean3D/tidSUMreal**2)*S11_mean3D &
+                     - (this%vv_mean3D/tidSUMreal - this%v_mean3D*this%v_mean3D/tidSUMreal**2)*S22_mean3D &
+                     - (this%ww_mean3D/tidSUMreal - this%w_mean3D*this%w_mean3D/tidSUMreal**2)*S33_mean3D &
+                 - two*(this%uv_mean3D/tidSUMreal - this%u_mean3D*this%v_mean3D/tidSUMreal**2)*S12_mean3D
 
+            ! interpolate u_mean3D to uE_mean3D
+            call transpose_x_to_y(this%u_mean3D, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, uBC_bottom ,uBC_top)
+
+            ! interpolate w_mean3D to wE_mean3D
+            call transpose_x_to_y(this%w_mean3D, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz2E, wBC_bottom, wBC_top)
+
+            ! transpose uwE_mean3D to z decomp and compute (u'w')
+            call transpose_x_to_y(this%uwE_mean3D, rbuffy1E, this%gpE)
+            call transpose_y_to_z(rbuffy1E, rbuffz4E, this%gpE)
+            rbuffz3E = -(rbuffz4E/tidSUMreal - rbuffz1E*rbuffz2E/tidSUMreal**2)
+
+            ! transpose S13E_mean3D to z decomp and multiply to (u'w')
+            call transpose_x_to_y(S13E_mean3D, rbuffy1E, this%gpE)
+            call transpose_y_to_z(rbuffy1E, rbuffz4E, this%gpE)
+            rbuffz3E = rbuffz3E*rbuffz4E
+
+            ! interpolate v_mean3D to vE_mean3D
+            call transpose_x_to_y(this%v_mean3D, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, vBC_bottom, vBC_top)
+
+            ! transpose vwE_mean3D to z decomp and compute (v'w')
+            call transpose_x_to_y(this%vwE_mean3D, rbuffy1E, this%gpE)
+            call transpose_y_to_z(rbuffy1E, rbuffz4E, this%gpE)
+            rbuffz4E = -(rbuffz4E/tidSUMreal - rbuffz1E*rbuffz2E/tidSUMreal**2)
+
+            ! transpose S23E_mean3D to z decomp and multiply to (v'w') and add
+            call transpose_x_to_y(S23E_mean3D, rbuffy1E, this%gpE)
+            call transpose_y_to_z(rbuffy1E, rbuffz2E, this%gpE)
+            rbuffz3E = rbuffz3E + rbuffz4E*rbuffz2E
+            rbuffz3E = two*rbuffz3E
+
+            !--call this%Pade6opZ%interpz_E2C(rbuffz3E, rbuff4, wdUdzBC_bottom, wdUdzBC_top)
+            call this%Pade6opZ%interpz_E2C(rbuffz3E, rbuff4, 0, 0)
+          else
+            rbuff1 = - (this%uu_mean3D/tidSUMreal - this%u_mean3D*this%u_mean3D/tidSUMreal**2)*S11_mean3D &
+                     - (this%vv_mean3D/tidSUMreal - this%v_mean3D*this%v_mean3D/tidSUMreal**2)*S22_mean3D &
+                     - (this%ww_mean3D/tidSUMreal - this%w_mean3D*this%w_mean3D/tidSUMreal**2)*S33_mean3D
+            rbuff1 = rbuff1 - two*( &
+                       (this%uv_mean3D/tidSUMreal - this%u_mean3D*this%v_mean3D/tidSUMreal**2)*S12_mean3D &
+                     + (this%uw_mean3D/tidSUMreal - this%u_mean3D*this%w_mean3D/tidSUMreal**2)*S13_mean3D &
+                     + (this%vw_mean3D/tidSUMreal - this%v_mean3D*this%w_mean3D/tidSUMreal**2)*S23_mean3D )
+          endif
           call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
           call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+          if(this%edgeStats) then
+            rbuff3 = rbuff3 + rbuff4
+          endif
           call this%compute_z_mean(rbuff3, this%tkeprod_mean)
           write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_tkpr_t",this%step,".3Dstt"
           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
@@ -3344,17 +3490,67 @@ contains
         
         !-----Transport of turbulent stresses in MKE budget-------
           ! x term in xdecomp
-          rbuff1 = - (this%uu_mean3D/tidSUMreal - this%u_mean3D*this%u_mean3D/tidSUMreal**2)*this%u_mean3D/tidSUMreal &
-                   - (this%uv_mean3D/tidSUMreal - this%u_mean3D*this%v_mean3D/tidSUMreal**2)*this%v_mean3D/tidSUMreal &
-                   - (this%uw_mean3D/tidSUMreal - this%u_mean3D*this%w_mean3D/tidSUMreal**2)*this%w_mean3D/tidSUMreal
+          if(this%edgeStats) then
+            ! interpolate u_mean3D to uE_mean3D
+            call transpose_x_to_y(this%u_mean3D, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, uBC_bottom, uBC_top)
+
+            ! interpolate w_mean3D to wE_mean3D
+            call transpose_x_to_y(this%w_mean3D, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz2E,  wBC_top, wBC_top)
+
+            ! transpose uwE_mean3D to z decomp
+            call transpose_x_to_y(this%uwE_mean3D, rbuffy1E, this%gpE)
+            call transpose_y_to_z(rbuffy1E, rbuffz4E, this%gpE)
+
+            rbuffz3E = -(rbuffz4E/tidSUMreal - rbuffz1E*rbuffz2E/tidSUMreal**2)*rbuffz2E/tidSUMreal
+            !--call this%Pade6opZ%interpz_E2C(rbuffz3E, rbuff3, uwBC_bottom*wBC_bottom, uwBC_top*wBC_top)
+            call this%Pade6opZ%interpz_E2C(rbuffz3E, rbuff3, 0, 0)
+            call transpose_z_to_y(rbuff3, rbuff2, this%gpC)
+            call transpose_y_to_x(rbuff2, rbuff1, this%gpC)
+
+            rbuff1 = rbuff1 - (this%uu_mean3D/tidSUMreal - this%u_mean3D*this%u_mean3D/tidSUMreal**2)*this%u_mean3D/tidSUMreal &
+                            - (this%uv_mean3D/tidSUMreal - this%u_mean3D*this%v_mean3D/tidSUMreal**2)*this%v_mean3D/tidSUMreal
+          else
+            rbuff1 = - (this%uu_mean3D/tidSUMreal - this%u_mean3D*this%u_mean3D/tidSUMreal**2)*this%u_mean3D/tidSUMreal &
+                     - (this%uv_mean3D/tidSUMreal - this%u_mean3D*this%v_mean3D/tidSUMreal**2)*this%v_mean3D/tidSUMreal &
+                     - (this%uw_mean3D/tidSUMreal - this%u_mean3D*this%w_mean3D/tidSUMreal**2)*this%w_mean3D/tidSUMreal
+          endif
           call this%spectC%fft(rbuff1,cbuffy1)   
           call this%spectC%mTimes_ik1_ip(cbuffy1)
           call this%spectC%ifft(cbuffy1,rbuff0)
 
           ! y term in xdecomp
-          rbuff1 = - (this%uv_mean3D/tidSUMreal - this%u_mean3D*this%v_mean3D/tidSUMreal**2)*this%u_mean3D/tidSUMreal &
-                   - (this%vv_mean3D/tidSUMreal - this%v_mean3D*this%v_mean3D/tidSUMreal**2)*this%v_mean3D/tidSUMreal &
-                   - (this%vw_mean3D/tidSUMreal - this%v_mean3D*this%w_mean3D/tidSUMreal**2)*this%w_mean3D/tidSUMreal
+          if(this%edgeStats) then
+            ! interpolate v_mean3D to vE_mean3D
+            call transpose_x_to_y(this%v_mean3D, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, vBC_bottom, vBC_top)
+
+            !! interpolate w_mean3D to wE_mean3D - reuse rbuffz2E from previous step
+            !call transpose_x_to_y(this%w_mean3D, rbuff2, this%gpC)
+            !call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            !call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz2E, 0,0)
+
+            ! transpose vwE_mean3D to z decomp
+            call transpose_x_to_y(this%vwE_mean3D, rbuffy1E, this%gpE)
+            call transpose_y_to_z(rbuffy1E, rbuffz4E, this%gpE)
+
+            rbuffz3E = -(rbuffz4E/tidSUMreal - rbuffz1E*rbuffz2E/tidSUMreal**2)*rbuffz2E/tidSUMreal
+            !--call this%Pade6opZ%interpz_E2C(rbuffz3E, rbuff3, vwBC_bottom*wBC_bottom, vwBC_top*wBC_top)
+            call this%Pade6opZ%interpz_E2C(rbuffz3E, rbuff3, 0, 0)
+            call transpose_z_to_y(rbuff3, rbuff2, this%gpC)
+            call transpose_y_to_x(rbuff2, rbuff1, this%gpC)
+
+            rbuff1 = rbuff1 - (this%uv_mean3D/tidSUMreal - this%u_mean3D*this%v_mean3D/tidSUMreal**2)*this%u_mean3D/tidSUMreal &
+                            - (this%vv_mean3D/tidSUMreal - this%v_mean3D*this%v_mean3D/tidSUMreal**2)*this%v_mean3D/tidSUMreal
+          else
+            rbuff1 = - (this%uv_mean3D/tidSUMreal - this%u_mean3D*this%v_mean3D/tidSUMreal**2)*this%u_mean3D/tidSUMreal &
+                     - (this%vv_mean3D/tidSUMreal - this%v_mean3D*this%v_mean3D/tidSUMreal**2)*this%v_mean3D/tidSUMreal &
+                     - (this%vw_mean3D/tidSUMreal - this%v_mean3D*this%w_mean3D/tidSUMreal**2)*this%w_mean3D/tidSUMreal
+          endif
           call this%spectC%fft(rbuff1,cbuffy1)   
           call this%spectC%mTimes_ik2_oop(cbuffy1, cbuffy2)
           call this%spectC%ifft(cbuffy2,rbuff1)
@@ -3364,17 +3560,51 @@ contains
           call transpose_y_to_z(rbuff2,        rbuff4, this%gpC)
 
           ! compute z term in z decomp
-          rbuff1 = - (this%uw_mean3D/tidSUMreal - this%u_mean3D*this%w_mean3D/tidSUMreal**2)*this%u_mean3D/tidSUMreal &
-                   - (this%vw_mean3D/tidSUMreal - this%v_mean3D*this%w_mean3D/tidSUMreal**2)*this%v_mean3D/tidSUMreal &
-                   - (this%ww_mean3D/tidSUMreal - this%w_mean3D*this%w_mean3D/tidSUMreal**2)*this%w_mean3D/tidSUMreal
-          call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
-          call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
-          ! interpolate rbuff3 from C to E
-          call this%Pade6opZ%interpz_C2E(rbuff3, rbuff3E, 0,0)
-          call this%Pade6opZ%ddz_E2C(rbuff3E,rbuff3,0,0)
+          if(this%edgeStats) then
+            ! u_mean3D to uE_mean3D
+            call transpose_x_to_y(this%u_mean3D, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, uBC_bottom, uBC_top)
+            ! w_mean3D to wE_mean3D
+            call transpose_x_to_y(this%w_mean3D, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz2E,  wBC_bottom, wBC_top)
+            ! uwE_mean3D to z decomp
+            call transpose_x_to_y(this%uwE_mean3D, rbuffy1E, this%gpE)
+            call transpose_y_to_z(rbuffy1E, rbuffz4E, this%gpE)
+            rbuffz3E = -(rbuffz4E/tidSUMreal - rbuffz1E*rbuffz2E/tidSUMreal**2)*rbuffz1E/tidSUMreal
+
+            ! v_mean3D to vE_mean3D
+            call transpose_x_to_y(this%v_mean3D, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E,  vBC_bottom, vBC_top)
+            ! vwE_mean3D to z decomp
+            call transpose_x_to_y(this%vwE_mean3D, rbuffy1E, this%gpE)
+            call transpose_y_to_z(rbuffy1E, rbuffz4E, this%gpE)
+            rbuffz3E = rbuffz3E - (rbuffz4E/tidSUMreal - rbuffz1E*rbuffz2E/tidSUMreal**2)*rbuffz1E/tidSUMreal
+
+            ! wwE_mean3D to z decomp
+            call transpose_x_to_y(this%wwE_mean3D, rbuffy1E, this%gpE)
+            call transpose_y_to_z(rbuffy1E, rbuffz4E, this%gpE)
+            rbuffz3E = rbuffz3E - (rbuffz4E/tidSUMreal - rbuffz2E*rbuffz2E/tidSUMreal**2)*rbuffz2E/tidSUMreal
+
+            !--call this%Pade6opZ%ddz_E2C(rbuffz3E,rbuff3,wBC_bottom,wBC_top)
+            call this%Pade6opZ%ddz_E2C(rbuffz3E,rbuff3,0,0)
+          else
+            rbuff1 = - (this%uw_mean3D/tidSUMreal - this%u_mean3D*this%w_mean3D/tidSUMreal**2)*this%u_mean3D/tidSUMreal &
+                     - (this%vw_mean3D/tidSUMreal - this%v_mean3D*this%w_mean3D/tidSUMreal**2)*this%v_mean3D/tidSUMreal &
+                     - (this%ww_mean3D/tidSUMreal - this%w_mean3D*this%w_mean3D/tidSUMreal**2)*this%w_mean3D/tidSUMreal
+            call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            ! interpolate rbuff3 from C to E
+            !--call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, wBC_bottom, wBC_top)
+            !--call this%Pade6opZ%ddz_E2C(rbuffz1E,rbuff3,wBC_bottom,wBC_top)
+            call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, 0, 0)
+            call this%Pade6opZ%ddz_E2C(rbuffz1E,rbuff3,0,0)
+          endif
 
           ! add x and y terms to z term
-          rbuff3 = rbuff3 + rbuff4
+          rbuff3 = rbuff3 + 0.0*rbuff4
 
           call this%compute_z_mean(rbuff3, this%mkett_mean)
           write(tempname,"(A3,I2.2,A7,I6.6,A6)") "Run",this%runID, "_mktt_t",this%step,".3Dstt"
@@ -3387,20 +3617,36 @@ contains
           rbuff1 = this%u_mean3D*this%u_mean3D + this%v_mean3D*this%v_mean3D + this%w_mean3D*this%w_mean3D
           rbuff1 = rbuff1/tidSUMreal**2
 
-          ! transpose to z and take z derivative
-          call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
-          call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
-          call this%Pade6opZ%ddz_C2E(rbuff3,rbuff3E,0,0)
-          
-          ! transpose w_mean3D to z, interpolate to E and multiply
-          call transpose_x_to_y(this%w_mean3D/tidSUMreal, rbuff2, this%gpC)
-          call transpose_y_to_z(rbuff2,                   rbuff4, this%gpC)
-          call this%Pade6opZ%interpz_C2E(rbuff4,rbuff4E,0,0)
-          rbuff4E = rbuff4E * rbuff3E
+          if(this%edgeStats) then
+            ! transpose to z and take z derivative
+            call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            !--call this%Pade6opZ%ddz_C2E(rbuff3,rbuffz1E,1,1)
+            call this%Pade6opZ%ddz_C2E(rbuff3,rbuffz1E,0,0)
+            
+            ! transpose w_mean3D to z, interpolate to E and multiply
+            call transpose_x_to_y(this%w_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                   rbuff4, this%gpC)
+            call this%Pade6opZ%interpz_C2E(rbuff4,rbuffz2E,wBC_bottom,wBC_top)
+            rbuffz2E = rbuffz2E * rbuffz1E
 
-          ! interpolate E to C
-          call this%Pade6opZ%interpz_E2C(rbuff4E, rbuff4, 0,0)
+            ! interpolate E to C
+            !--call this%Pade6opZ%interpz_E2C(rbuffz2E, rbuff4, wBC_bottom, wBC_top)
+            call this%Pade6opZ%interpz_E2C(rbuffz2E, rbuff4, 0, 0)
+          else
+            ! transpose to z, interpolate to E and take z derivative to C
+            call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            !--call this%Pade6opZ%interpz_E2C(rbuff3,rbuffz1E,1,1)
+            !--call this%Pade6opZ%ddz_E2C(rbuffz1E,rbuff3,1,1)
+            call this%Pade6opZ%interpz_E2C(rbuff3,rbuffz1E,0,0)
+            call this%Pade6opZ%ddz_E2C(rbuffz1E,rbuff3,0,0)
 
+            ! transpose w_mean3D to z and multiply
+            call transpose_x_to_y(this%w_mean3D/tidSUMreal, rbuff2, this%gpC)
+            call transpose_y_to_z(rbuff2,                   rbuff4, this%gpC)
+            rbuff4 = rbuff4 * rbuff3
+          endif
 
           ! x derivative
           call this%spectC%fft(rbuff1,cbuffy1)   
@@ -3458,8 +3704,10 @@ contains
               ! transpose to z and take z derivative
               call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
               call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
-              call this%Pade6opZ%ddz_C2E(rbuff3,rbuff3E,0,0)
-              call this%Pade6opZ%interpz_E2C(rbuff3E, rbuff3, 0,0)       
+              !--call this%Pade6opZ%ddz_C2E(rbuff3,rbuffz1E,wBC_bottom,wBC_top)
+              !--call this%Pade6opZ%interpz_E2C(rbuffz1E, rbuff3, wBC_bottom, wBC_top)       
+              call this%Pade6opZ%ddz_C2E(rbuff3,rbuffz1E,0,0)
+              call this%Pade6opZ%interpz_E2C(rbuffz1E, rbuff3, 0, 0)       
 
               rbuff3 = -(rbuff3 + rbuff4)
 
@@ -3492,8 +3740,10 @@ contains
               rbuff1 = this%pw_mean3D/tidSUMreal - this%w_mean3D * this%p_mean3D / tidSUMreal**2
               call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
               call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
-              call this%Pade6opZ%ddz_C2E(rbuff3,rbuff3E,0,0)
-              call this%Pade6opZ%interpz_E2C(rbuff3E, rbuff3, 0,0)       
+              !--call this%Pade6opZ%ddz_C2E(rbuff3,rbuffz1E,wBC_bottom,wBC_top)
+              !--call this%Pade6opZ%interpz_E2C(rbuffz1E, rbuff3, wBC_bottom,wBC_top)       
+              call this%Pade6opZ%ddz_C2E(rbuff3,rbuffz1E,0,0)
+              call this%Pade6opZ%interpz_E2C(rbuffz1E, rbuff3, 0, 0)       
 
               rbuff3 = -(rbuff3 + rbuff4)
 
@@ -3559,17 +3809,31 @@ contains
             call decomp_2d_write_one(3, rbuff3, fname)
       
             ! SGS dissipation in MKE equation
-            rbuff1 = (    this%tau11_mean3D*S11_mean3D + this%tau22_mean3D*S22_mean3D + this%tau33_mean3D*S33_mean3D + & 
-                     two*(this%tau12_mean3D*S12_mean3D + this%tau13_mean3D*S13_mean3D + this%tau23_mean3D*S23_mean3D)  )/tidSUMreal
+            if(this%edgeStats) then
+              rbuff1 =     this%tau11_mean3D*S11_mean3D + this%tau22_mean3D*S22_mean3D + this%tau33_mean3D*S33_mean3D + & 
+                       two*this%tau12_mean3D*S12_mean3D 
+              rbuffx1E = two*(this%tau13E_mean3D*S13E_mean3D + this%tau23E_mean3D*S23E_mean3D)
+              call transpose_x_to_y(rbuffx1E, rbuffy1E, this%gpE)
+              call transpose_y_to_z(rbuffy1E, rbuffz1E, this%gpE)
+              call this%Pade6opZ%interpz_E2C(rbuffz1E, rbuff4, 0,0)       
+            else
+              rbuff1 = (    this%tau11_mean3D*S11_mean3D + this%tau22_mean3D*S22_mean3D + this%tau33_mean3D*S33_mean3D + & 
+                       two*(this%tau12_mean3D*S12_mean3D + this%tau13_mean3D*S13_mean3D + this%tau23_mean3D*S23_mean3D)  )!/tidSUMreal
+            endif
             call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
             call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+            if(this%edgeStats) then
+              rbuff3 = (rbuff3 + rbuff4)/tidSUMreal
+            else
+              rbuff3 = rbuff3/tidSUMreal
+            endif
             call this%compute_z_mean(rbuff3, this%mkesgsd_mean)
             write(tempname,"(A3,I2.2,A9,I6.6,A6)") "Run",this%runID, "_mksgsd_t",this%step,".3Dstt"
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
             call decomp_2d_write_one(3, rbuff3, fname)
 
             ! SGS dissipation in TKE equation
-            rbuff1 = this%sgsdissp_mean3D/tidSUMreal - rbuff1
+            rbuff1 = (this%sgsdissp_mean3D-rbuff1)/tidSUMreal
             call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
             call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
             call this%compute_z_mean(rbuff3, this%tkesgsd_mean)
@@ -3579,13 +3843,41 @@ contains
       
             ! Mean transport of SGS stress in MKE equation
               ! x term in xdecomp
-              rbuff1 = (this%u_mean3D*this%tau11_mean3D + this%v_mean3D*this%tau12_mean3D + this%w_mean3D*this%tau13_mean3D)/tidSUMreal**2
+              if(this%edgeStats) then
+                call transpose_x_to_y(this%w_mean3D, rbuff2, this%gpC)
+                call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+                call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, wBC_bottom, wBC_top)
+                call transpose_x_to_y(this%tau13E_mean3D, rbuffy1E, this%gpE)
+                call transpose_y_to_z(rbuffy1E, rbuffz2E, this%gpE)
+                rbuffz3E = rbuffz1E*rbuffz2E
+                call this%Pade6opZ%interpz_E2C(rbuffz3E, rbuff3, 0,0)
+                call transpose_z_to_y(rbuff3, rbuff2, this%gpC)
+                call transpose_y_to_x(rbuff2, rbuff1, this%gpC)
+
+                rbuff1 = (rbuff1 + this%u_mean3D*this%tau11_mean3D + this%v_mean3D*this%tau12_mean3D)/tidSUMreal**2
+              else
+                rbuff1 = (this%u_mean3D*this%tau11_mean3D + this%v_mean3D*this%tau12_mean3D + this%w_mean3D*this%tau13_mean3D)/tidSUMreal**2
+              endif
               call this%spectC%fft(rbuff1,cbuffy1)   
               call this%spectC%mTimes_ik1_oop(cbuffy1, cbuffy2)
               call this%spectC%ifft(cbuffy2,rbuff0)
 
               ! y term in xdecomp
-              rbuff1 = (this%u_mean3D*this%tau12_mean3D + this%v_mean3D*this%tau22_mean3D + this%w_mean3D*this%tau23_mean3D)/tidSUMreal**2
+              if(this%edgeStats) then
+                !call transpose_x_to_y(this%w_mean3D, rbuff2, this%gpC) !--reuse rbuffz1E
+                !call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+                !call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, wBC_bottom, wBC_top)
+                call transpose_x_to_y(this%tau23E_mean3D, rbuffy1E, this%gpE)
+                call transpose_y_to_z(rbuffy1E, rbuffz2E, this%gpE)
+                rbuffz3E = rbuffz1E*rbuffz2E
+                call this%Pade6opZ%interpz_E2C(rbuffz3E, rbuff3, 0,0)
+                call transpose_z_to_y(rbuff3, rbuff2, this%gpC)
+                call transpose_y_to_x(rbuff2, rbuff1, this%gpC)
+
+                rbuff1 = (rbuff1 + this%u_mean3D*this%tau12_mean3D + this%v_mean3D*this%tau22_mean3D)/tidSUMreal**2
+              else
+                rbuff1 = (this%u_mean3D*this%tau12_mean3D + this%v_mean3D*this%tau22_mean3D + this%w_mean3D*this%tau23_mean3D)/tidSUMreal**2
+              endif
               call this%spectC%fft(rbuff1,cbuffy1)   
               call this%spectC%mTimes_ik2_oop(cbuffy1, cbuffy2)
               call this%spectC%ifft(cbuffy2,rbuff1)
@@ -3596,11 +3888,37 @@ contains
               call transpose_y_to_z(rbuff2, rbuff4, this%gpC)
 
               ! z term in zdecomp
-              rbuff1 = (this%u_mean3D*this%tau13_mean3D + this%v_mean3D*this%tau23_mean3D + this%w_mean3D*this%tau33_mean3D)/tidSUMreal**2
-              call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
-              call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
-              call this%Pade6opZ%ddz_C2E(rbuff3,rbuff3E,0,0)
-              call this%Pade6opZ%interpz_E2C(rbuff3E, rbuff3, 0,0)       
+              if(this%edgeStats) then
+                call transpose_x_to_y(this%u_mean3D, rbuff2, this%gpC)
+                call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+                call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, uBC_bottom, uBC_top)
+                call transpose_x_to_y(this%tau13E_mean3D, rbuffy1E, this%gpE)
+                call transpose_y_to_z(rbuffy1E, rbuffz2E, this%gpE)
+                rbuffz3E = rbuffz1E*rbuffz2E
+
+                call transpose_x_to_y(this%v_mean3D, rbuff2, this%gpC)
+                call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+                call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, vBC_bottom, vBC_top)
+                call transpose_x_to_y(this%tau23E_mean3D, rbuffy1E, this%gpE)
+                call transpose_y_to_z(rbuffy1E, rbuffz2E, this%gpE)
+                rbuffz3E = rbuffz3E + rbuffz1E*rbuffz2E
+
+                call transpose_x_to_y(this%w_mean3D, rbuff2, this%gpC)
+                call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+                call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, wBC_bottom, wBC_top)
+                call transpose_x_to_y(this%tau33_mean3D, rbuff2, this%gpC)
+                call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+                call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz2E, 0,0)
+                rbuffz3E = rbuffz3E + rbuffz1E*rbuffz2E
+
+                call this%Pade6opZ%ddz_E2C(rbuffz3E/tidSUMreal**2,rbuff3,0,0)
+              else
+                rbuff1 = (this%u_mean3D*this%tau13_mean3D + this%v_mean3D*this%tau23_mean3D + this%w_mean3D*this%tau33_mean3D)/tidSUMreal**2
+                call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
+                call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
+                call this%Pade6opZ%ddz_C2E(rbuff3,rbuffz1E,0,0)
+                call this%Pade6opZ%interpz_E2C(rbuffz1E, rbuff3, 0,0)       
+              endif
 
               rbuff3 = -(rbuff3 + rbuff4)
 
@@ -3632,8 +3950,8 @@ contains
               rbuff1 = this%tauu3_mean3D/tidSUMreal - (this%u_mean3D*this%tau13_mean3D + this%v_mean3D*this%tau23_mean3D + this%w_mean3D*this%tau33_mean3D)/tidSUMreal**2
               call transpose_x_to_y(rbuff1, rbuff2, this%gpC)
               call transpose_y_to_z(rbuff2, rbuff3, this%gpC)
-              call this%Pade6opZ%ddz_C2E(rbuff3,rbuff3E,0,0)
-              call this%Pade6opZ%interpz_E2C(rbuff3E, rbuff3, 0,0)       
+              call this%Pade6opZ%ddz_C2E(rbuff3,rbuffz1E,0,0)
+              call this%Pade6opZ%interpz_E2C(rbuffz1E, rbuff3, 0,0)       
 
               rbuff3 = -(rbuff3 + rbuff4)
 
@@ -3763,9 +4081,23 @@ contains
             endif
         endif
 
+        ! axial momentum equation
+        call transpose_x_to_y(-(this%uw_mean3D/tidSUMreal-this%u_mean3D*this%w_mean3D/tidSUMreal**2), rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,                   rbuff3, this%gpC)
+        call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, 0,0)       
+        call this%Pade6opZ%ddz_E2C(rbuffz1E,rbuff3,0,0)
+        call this%compute_z_mean(rbuff3, this%mom1_mean)
+
+        call transpose_x_to_y(-this%tau13_mean3D/tidSUMreal, rbuff2, this%gpC)
+        call transpose_y_to_z(rbuff2,                   rbuff3, this%gpC)
+        call this%Pade6opZ%interpz_C2E(rbuff3, rbuffz1E, 0,0)       
+        call this%Pade6opZ%ddz_E2C(rbuffz1E,rbuff3,0,0)
+        call this%compute_z_mean(rbuff3, this%mom2_mean)
+        ! done axial momentum equation
+
         call message(1, "Dumped 3D stats files")
 
-        nullify(rbuff1,rbuff2,rbuff3,rbuff4,rbuff5,rbuff6, rbuff0, cbuffy1, cbuffy2, rbuff3E, rbuff4E)
+        nullify(rbuff1,rbuff2,rbuff3,rbuff4,rbuff5,rbuff6, rbuff0, cbuffy1, cbuffy2, rbuffx1E, rbuffx2E, rbuffy1E, rbuffz1E, rbuffz2E, rbuffz3E, rbuffz4E)
 
         ! dump horizontal averages
         if(this%useWindTurbines) then
@@ -3843,7 +4175,7 @@ contains
             endif
         end if 
 
-        nullify(S11_mean3D, S12_mean3D, S13_mean3D, S22_mean3D, S23_mean3D, S33_mean3D)
+        nullify(S11_mean3D, S12_mean3D, S13_mean3D, S22_mean3D, S23_mean3D, S33_mean3D, S13E_mean3D, S23E_mean3D)
 
     end subroutine
 
@@ -3865,6 +4197,7 @@ contains
         endif
 
         if(this%useSGS) then
+           nullify(this%tau13E_mean3D, this%tau23E_mean3D)
            nullify(this%mkesgst_mean, this%mkesgsd_mean, this%tkesgst_mean, this%tkesgsd_mean)
            nullify(this%tau11_mean, this%tau12_mean, this%tau13_mean, this%tau22_mean, this%tau23_mean, this%tau33_mean)
            nullify(this%tau11_mean3D, this%tau12_mean3D, this%tau13_mean3D, this%tau22_mean3D, this%tau23_mean3D, this%tau33_mean3D)
@@ -3885,6 +4218,9 @@ contains
            endif
         endif
 
+        if(this%edgeStats) then
+          deallocate(this%statsE3D)
+        endif
         deallocate(this%stats3D, this%horzavgstats, this%inst_horz_avg, this%runningSum_sc, this%xspectra_mean)
         if(this%useWindTurbines) deallocate(this%inst_horz_avg_turb, this%runningSum_sc_turb, this%runningSum_turb)
     end subroutine

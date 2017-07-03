@@ -1,6 +1,6 @@
 subroutine destroyWallModel(this)
    class(sgs_igrid), intent(inout) :: this
-   deallocate(this%tauijWM, this%tauijWMhat_inZ, this%tauijWMhat_inY)
+   deallocate(this%tauijWM, this%tauijWMhat_inZ, this%tauijWMhat_inY, this%tauijWM_inZ)
    if (allocated(this%filteredSpeedSq)) deallocate(this%filteredSpeedSq)
 end subroutine
 
@@ -9,6 +9,7 @@ subroutine initWallModel(this)
 
    this%useWallModel = .true.
    allocate(this%tauijWM(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2))
+   allocate(this%tauijWM_inZ(this%gpE%zsz(1),this%gpE%zsz(2),this%gpE%zsz(3),2))
    allocate(this%tauijWMhat_inZ(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3),2))
    allocate(this%tauijWMhat_inY(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3),2))
    this%tauijWM = 0.d0
@@ -73,6 +74,12 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
       call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,2), this%tauijWMhat_inY(:,:,:,2), this%sp_gpE)
       call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,2), this%tauijWM(:,:,:,2))
    end select
+
+   call transpose_x_to_y(this%tauijWM(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
+   call transpose_y_to_z(this%rbuffyE(:,:,:,1), this%tauijWM_inZ(:,:,:,1), this%gpE)
+
+   call transpose_x_to_y(this%tauijWM(:,:,:,2), this%rbuffyE(:,:,:,1), this%gpE)
+   call transpose_y_to_z(this%rbuffyE(:,:,:,1), this%tauijWM_inZ(:,:,:,2), this%gpE)
 
 end subroutine
 

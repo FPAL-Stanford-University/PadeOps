@@ -45,7 +45,8 @@ module sgsmod_igrid
 
         ! Wall model
         real(rkind), dimension(:,:,:,:), allocatable :: tauijWM
-        complex(rkind),dimension(:,:,:,:), allocatable :: tauijWMhat_inZ, tauijWMhat_inY
+        real(rkind), dimension(:,:,:,:), allocatable, public :: tauijWM_inZ
+        complex(rkind),dimension(:,:,:,:), allocatable, public :: tauijWMhat_inZ, tauijWMhat_inY
         real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
         complex(rkind), dimension(:,:,:), allocatable :: Tfilhat, Tfilhatz1, Tfilhatz2
         logical :: useWallModel = .false. 
@@ -184,7 +185,7 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
    ! ddz(tau13) for urhs, ddx(tau13) for wrhs
    call this%spectE%fft(this%tau_13, cbuffy2)
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
-   !if (this%useWallModel) then ---adding to tau13 in getTauSGS. Does this break anything (e.g. dynamic procedure)??? Adding to tau13 makes stats computation very convenient.
+   !if (this%useWallModel) then !---adding to tau13 in getTauSGS. Does this break anything (e.g. dynamic procedure)??? Adding to tau13 makes stats computation very convenient WMContrib.
    !   cbuffz2(:,:,1) = this%tauijWMhat_inZ(:,:,1,1)
    !   call transpose_z_to_y(cbuffz2,cbuffy2, this%sp_gpE)
    !end if
@@ -197,7 +198,7 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
    ! ddz(tau23) for vrhs, ddy(tau23) for wrhs
    call this%spectE%fft(this%tau_23, cbuffy2)
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
-   !if (this%useWallModel) then ---adding to tau23 in getTauSGS. Does this break anything (e.g. dynamic procedure)??? Adding to tau23 makes stats computation very convenient.
+   !if (this%useWallModel) then !---adding to tau23 in getTauSGS. Does this break anything (e.g. dynamic procedure)??? Adding to tau23 makes stats computation very convenient. WMContrib
    !   cbuffz2(:,:,1) = this%tauijWMhat_inZ(:,:,1,2)
    !   call transpose_z_to_y(cbuffz2,cbuffy2, this%sp_gpE)
    !end if
@@ -309,7 +310,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
       this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
    end if
  
-   if(this%gpE%xst(3)==1) then
+   if(this%gpE%xst(3)==1) then !!! WMContrib
      this%tau_13(:,:,1) = this%tauijWM(:,:,1,1)
      this%tau_23(:,:,1) = this%tauijWM(:,:,1,2)
    endif

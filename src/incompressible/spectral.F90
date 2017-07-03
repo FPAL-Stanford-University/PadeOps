@@ -5,7 +5,7 @@ module spectralMod
                     transpose_y_to_z, transpose_z_to_y, nrank 
     use decomp_2d_fft, only: decomp_2d_fft_init, decomp_2d_fft_finalize, decomp_2d_fft_get_size
     use exits, only: GracefulExit, message 
-    use constants, only: pi, one, zero, two, three, four, eight 
+    use constants, only: pi, one, zero, two, three, four, eight, half
     use fft_3d_stuff, only: fft_3d
     use mpi
     use reductions, only: p_sum 
@@ -514,8 +514,8 @@ contains
            ! case default
            !     call GracefulExit("The dealiasing filter specified is incorrect.",104)
            ! end select
-            kdealiasx = ((two/three)*pi/dx)
-            kdealiasy = ((two/three)*pi/dy)
+            kdealiasx = half*pi/dx  !------TRUNCATING TO HALF----((two/three)*pi/dx)
+            kdealiasy = half*pi/dy  !------TRUNCATING TO HALF----((two/three)*pi/dy)
             do k = 1,size(this%k1,3)
                 do j = 1,size(this%k1,2)
                     do i = 1,size(this%k1,1)
