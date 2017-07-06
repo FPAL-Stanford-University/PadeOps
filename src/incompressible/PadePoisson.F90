@@ -174,6 +174,7 @@ contains
         ! Prep for input array info and buffers 
         this%nx_in = this%sp_gp%ysz(1);  this%ny_in = this%sp_gp%ysz(2);  this%nz_in = this%sp_gp%ysz(3);  
         this%nxE_in = this%sp_gpE%ysz(1);  this%nyE_in = this%sp_gpE%ysz(2);  this%nzE_in = this%sp_gpE%ysz(3);  
+        this%gpC => gpC
 
         if (this%PeriodicInZ) then
             call this%InitPeriodicPoissonSolver(dx,dy,dz)
@@ -307,7 +308,6 @@ contains
             if (storePressure) then
                 allocate(this%phat_z1(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
                 allocate(this%phat_z2(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
-                this%gpC => gpC
             end if
 
             deallocate(k1, k2, k3, k3mod, tfm, tfp)
@@ -721,6 +721,7 @@ contains
 
         integer :: ii, jj, kk
 
+        print*, shape(pressure)
         do kk = 1,size(uhat,3)
             do jj = 1,size(uhat,2)
                 !$omp simd
@@ -758,7 +759,9 @@ contains
         integer :: ii, jj, kk
 
 
+        print*, this%PeriodicInZ
         if (this%PeriodicInZ) then
+           print*, "here"
             call this%Periodic_getPressure(uhat, vhat, what, pressure)
         else
             ! Step 0: compute the stokes pressure which will fix the wall BCs

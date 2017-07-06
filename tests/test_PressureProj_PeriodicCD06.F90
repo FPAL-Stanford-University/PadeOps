@@ -10,7 +10,7 @@ program test_PressureProj_PeriodicCD06
    use PadeDerOps, only: Pade6stagg
 
    implicit none
-   real   (rkind), dimension(:,:,:), allocatable :: u, v, w, uTrue, vTrue, wTrue
+   real   (rkind), dimension(:,:,:), allocatable :: Pressure, u, v, w, uTrue, vTrue, wTrue
    complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what
    logical, parameter :: isPeriodic = .true. 
    integer, parameter :: scheme = 1
@@ -35,6 +35,7 @@ program test_PressureProj_PeriodicCD06
    allocate(uTrue(gp %xsz(1), gp %xsz(2), gp %xsz(3)))
    allocate(vTrue(gp %xsz(1), gp %xsz(2), gp %xsz(3)))
    allocate(wTrue(gpE%xsz(1), gpE%xsz(2), gpE%xsz(3)))
+   allocate(Pressure(gp%xsz(1), gp%xsz(2), gp%xsz(3)))
 
 
    call decomp_2d_read_one(1,uTrue,'/home/aditya90/Codes/PadeOps/data/HIT_u_PostProj.dat',gp )
@@ -64,9 +65,10 @@ program test_PressureProj_PeriodicCD06
    call spectC%fft(v, vhat)
    call spectE%fft(w, what)
 
-
-   call poiss%PressureProjection(uhat, vhat, what)
-
+   !call poiss%getPressure(uhat, vhat, what, pressure)
+   !call poiss%PressureProjection(uhat, vhat, what)
+   
+   call poiss%getPressureAndUpdateRHS(uhat, vhat, what, pressure)
 
    call spectC%ifft(uhat, u)
    call spectC%ifft(vhat, v)
