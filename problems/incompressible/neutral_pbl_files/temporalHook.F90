@@ -2,7 +2,7 @@ module temporalHook
     use kind_parameters,    only: rkind
     use IncompressibleGrid, only: igrid
     use reductions,         only: P_MAXVAL, p_minval
-    use exits,              only: message, message_min_max
+    use exits,              only: message, message_min_max, GracefulExit
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
@@ -36,6 +36,15 @@ contains
             call message("==========================================================")
             call toc()
             call tic()
+            ! Added by MH, debugging blowup in neutral BL simulation
+            if (p_maxval(maxval(igp%u))>2.) then
+                call message(1, "this step has blown up", igp%tsim)
+                call igp%dumpFullField(igp%u,"uVel")
+                call igp%dumpFullField(igp%v,"vVel")
+                call igp%dumpFullField(igp%wC,"wVel")
+                call igp%dumpFullField(igp%T, "potT")
+                call GracefulExit("u-velocity has blown up",1)
+            end if
         end if 
 
     end subroutine
