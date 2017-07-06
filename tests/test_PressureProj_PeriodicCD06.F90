@@ -65,23 +65,13 @@ program test_PressureProj_PeriodicCD06
    call spectE%fft(w, what)
 
 
-   print*, shape(uhat)
-   print*, shape(u)
-
    call poiss%PressureProjection(uhat, vhat, what)
-
-   print*, u(12,12,12)
-   print*, v(12,12,12)
-   print*, w(12,12,12)
 
 
    call spectC%ifft(uhat, u)
    call spectC%ifft(vhat, v)
    call spectE%ifft(what, w)
 
-   print*, u(12,12,12), uTrue(12,12,12)
-   print*, v(12,12,12), vTrue(12,12,12)
-   print*, w(12,12,12), wTrue(12,12,12)
 
 
 

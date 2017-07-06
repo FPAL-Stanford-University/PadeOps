@@ -109,11 +109,11 @@ contains
          end do 
          call  message(1,"Generating Plans for FFT in PadePoisson. This could take a while ...")
          
-      
+     
          call dfftw_plan_many_dft(this%plan_c2c_fwd_z, 1, nz,nxT*nyT, this%f2d, nz, &
                       nxT*nyT, 1, this%f2d, nz,nxT*nyT, 1, FFTW_FORWARD , fft_planning)   
 
-         call dfftw_plan_many_dft(this%plan_c2c_fwd_z, 1, nz,nxT*nyT, this%f2d, nz, &
+         call dfftw_plan_many_dft(this%plan_c2c_bwd_z, 1, nz,nxT*nyT, this%f2d, nz, &
                       nxT*nyT, 1, this%f2d, nz,nxT*nyT, 1, FFTW_BACKWARD, fft_planning)   
          
          this%mfact = one/real(nz,rkind)
@@ -404,14 +404,7 @@ contains
         call this%derivZ%ddz_E2C(this%w2, this%f2d, 0, 0)  ! Periodic dwdz
         
         this%f2d = this%f2d + this%uhatInZ
-        print*, "-----------------------------"
-        print*, this%f2d(23,23,:)
-        print*, "-----------------------------"
         call dfftw_execute_dft(this%plan_c2c_fwd_z, this%f2d    , this%f2d    )  
-
-        print*, "------------------------"
-        print*, this%f2d(23,23,:)
-        print*, "------------------------"
 
         this%f2d = -this%kradsq_inv*this%f2d
         call dfftw_execute_dft(this%plan_c2c_bwd_z, this%f2d    , this%f2d    )  
@@ -442,7 +435,6 @@ contains
         complex(rkind), dimension(this%nxE_in, this%nyE_in, this%nzE_in), intent(inout) :: what
         integer :: ii, jj, kk
      
-        print*, this%nx_in, this%ny_in, this%nz_in
         if (this%PeriodicInZ) then
             call this%PeriodicProjection(uhat, vhat, what)
         else
