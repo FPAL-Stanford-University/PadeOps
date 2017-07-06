@@ -73,8 +73,6 @@ program test_PressureProj_PeriodicCD06
    call spectE%ifft(what, w)
 
 
-
-
    if ((maxval(abs(u - uTrue)) > 1.d-12) .or. (maxval(abs(v - vTrue)) > 1.d-12) .or. (maxval(abs(w - wTrue)) > 1.d-12)) then
       call message(0,"TEST FAILED")
    else 
