@@ -63,6 +63,8 @@ module PadePoissonMod
             procedure :: PressureProjection
             procedure, private :: ProjectStokesPressure
             procedure, private :: GetStokesPressure
+            procedure, private :: Periodic_getPressure
+            procedure, private :: Periodic_getPressureAndUpdateRHS
             procedure :: destroy
             procedure :: DivergenceCheck
             procedure :: getPressure
@@ -711,6 +713,42 @@ contains
         
     end subroutine
 
+    subroutine Periodic_getPressure(this, uhat, vhat, what, pressure)
+        class(PadePoisson), intent(inout) :: this
+        complex(rkind), dimension(this%nx_in, this%ny_in, this%nz_in), intent(in) :: uhat, vhat
+        complex(rkind), dimension(this%nxE_in, this%nyE_in, this%nzE_in), intent(in) :: what
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: pressure
+
+        integer :: ii, jj, kk
+
+        do kk = 1,size(uhat,3)
+            do jj = 1,size(uhat,2)
+                !$omp simd
+                do ii = 1,size(uhat,1)
+                    this%f2dy(ii,jj,kk) = this%k1_2d(ii,jj,kk)*uhat(ii,jj,kk)
+                    this%f2dy(ii,jj,kk) = this%f2dy(ii,jj,kk) + this%k2_2d(ii,jj,kk)*vhat(ii,jj,kk)
+                    this%f2dy(ii,jj,kk) = dcmplx(-dimag(this%f2dy(ii,jj,kk)),dreal(this%f2dy(ii,jj,kk)))
+                end do
+            end do 
+        end do  
+
+        call transpose_y_to_z(this%f2dy,this%uhatInZ,this%sp_gp)
+        call transpose_y_to_z(what, this%w2, this%sp_gpE)
+        
+        call this%derivZ%ddz_E2C(this%w2, this%f2d, 0, 0)  ! Periodic dwdz
+        
+        this%f2d = this%f2d + this%uhatInZ
+        call dfftw_execute_dft(this%plan_c2c_fwd_z, this%f2d    , this%f2d    )  
+
+        this%f2d = -this%kradsq_inv*this%f2d
+        call dfftw_execute_dft(this%plan_c2c_bwd_z, this%f2d    , this%f2d    )  
+        this%f2d = this%f2d*this%mfact 
+
+        call transpose_z_to_y(this%f2d, this%f2dy, this%sp_gp)
+        call this%sp%ifft(this%f2dy, pressure)
+
+    end subroutine 
+
     subroutine getPressure(this, uhat, vhat, what, pressure)
         !! NOTE :: uhat is really urhshat, vhat is really vrhshat, ...
         class(PadePoisson), intent(inout) :: this
@@ -719,141 +757,198 @@ contains
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: pressure
         integer :: ii, jj, kk
 
-        ! Step 0: compute the stokes pressure which will fix the wall BCs
-        ! for velocity rhs
-        if (this%computeStokesPressure) then
-            call this%GetStokesPressure(uhat, vhat, what)
-            do kk = 1,this%nzG
-               do jj = 1,size(this%f2d,2)
-                  !$omp simd
-                  do ii = 1,size(this%f2d,1)
-                     this%f2d(ii,jj,kk) = this%k1inZ(ii,jj)*this%uhatInZ(ii,jj,kk)
-                     this%f2d(ii,jj,kk) = this%f2d(ii,jj,kk) + this%k2inZ(ii,jj)*this%vhatInZ(ii,jj,kk)
-                     this%f2d(ii,jj,kk) = dcmplx(-dimag(this%f2d(ii,jj,kk)),dreal(this%f2d(ii,jj,kk)))
-                  end do
-               end do 
-            end do 
+
+        if (this%PeriodicInZ) then
+            call this%Periodic_getPressure(uhat, vhat, what, pressure)
         else
-            ! Step 1: compute dudx + dvdy
-            do kk = 1,size(uhat,3)
-                do jj = 1,size(uhat,2)
-                    !$omp simd
-                    do ii = 1,size(uhat,1)
-                        this%f2dy(ii,jj,kk) = this%k1_2d(ii,jj,kk)*uhat(ii,jj,kk)
-                        this%f2dy(ii,jj,kk) = this%f2dy(ii,jj,kk) + this%k2_2d(ii,jj,kk)*vhat(ii,jj,kk)
-                        this%f2dy(ii,jj,kk) = dcmplx(-dimag(this%f2dy(ii,jj,kk)),dreal(this%f2dy(ii,jj,kk)))
-                    end do
+            ! Step 0: compute the stokes pressure which will fix the wall BCs
+            ! for velocity rhs
+            if (this%computeStokesPressure) then
+                call this%GetStokesPressure(uhat, vhat, what)
+                do kk = 1,this%nzG
+                   do jj = 1,size(this%f2d,2)
+                      !$omp simd
+                      do ii = 1,size(this%f2d,1)
+                         this%f2d(ii,jj,kk) = this%k1inZ(ii,jj)*this%uhatInZ(ii,jj,kk)
+                         this%f2d(ii,jj,kk) = this%f2d(ii,jj,kk) + this%k2inZ(ii,jj)*this%vhatInZ(ii,jj,kk)
+                         this%f2d(ii,jj,kk) = dcmplx(-dimag(this%f2d(ii,jj,kk)),dreal(this%f2d(ii,jj,kk)))
+                      end do
+                   end do 
                 end do 
-            end do  
+            else
+                ! Step 1: compute dudx + dvdy
+                do kk = 1,size(uhat,3)
+                    do jj = 1,size(uhat,2)
+                        !$omp simd
+                        do ii = 1,size(uhat,1)
+                            this%f2dy(ii,jj,kk) = this%k1_2d(ii,jj,kk)*uhat(ii,jj,kk)
+                            this%f2dy(ii,jj,kk) = this%f2dy(ii,jj,kk) + this%k2_2d(ii,jj,kk)*vhat(ii,jj,kk)
+                            this%f2dy(ii,jj,kk) = dcmplx(-dimag(this%f2dy(ii,jj,kk)),dreal(this%f2dy(ii,jj,kk)))
+                        end do
+                    end do 
+                end do  
 
-            ! Step 2: Transpose from y -> z
-            call transpose_y_to_z(this%f2dy,this%f2d,this%sp_gp)
-            call transpose_y_to_z(what, this%w2, this%sp_gpE)
-        end if
+                ! Step 2: Transpose from y -> z
+                call transpose_y_to_z(this%f2dy,this%f2d,this%sp_gp)
+                call transpose_y_to_z(what, this%w2, this%sp_gpE)
+            end if
 
-        ! Step 3: Create Extensions
-        !do kk = 1,this%nzG
-        !    this%f2dext(:,:,kk) = this%f2d(:,:,this%nzG-kk+1)
-        !end do
-        !this%f2dext(:,:,this%nzG+1:2*this%nzG) = this%f2d
-        !do kk = 2,this%nzG
-        !    this%wext(:,:,kk-1) = -this%w2(:,:,this%nzG-kk+2)
-        !end do 
-        !this%wext(:,:,this%nzG:2*this%nzG) = this%w2
+            ! Step 3: Create Extensions
+            !do kk = 1,this%nzG
+            !    this%f2dext(:,:,kk) = this%f2d(:,:,this%nzG-kk+1)
+            !end do
+            !this%f2dext(:,:,this%nzG+1:2*this%nzG) = this%f2d
+            !do kk = 2,this%nzG
+            !    this%wext(:,:,kk-1) = -this%w2(:,:,this%nzG-kk+2)
+            !end do 
+            !this%wext(:,:,this%nzG:2*this%nzG) = this%w2
 
-        ! Step 3: Create Extensions
-        do kk = 1,this%nzG
-            do jj = 1,size(this%f2dext,2)
-               !$omp simd
-               do ii = 1,size(this%f2dext,1)
-                  this%f2dext(ii,jj,kk) = this%f2d(ii,jj,this%nzG-kk+1)
-               end do 
+            ! Step 3: Create Extensions
+            do kk = 1,this%nzG
+                do jj = 1,size(this%f2dext,2)
+                   !$omp simd
+                   do ii = 1,size(this%f2dext,1)
+                      this%f2dext(ii,jj,kk) = this%f2d(ii,jj,this%nzG-kk+1)
+                   end do 
+                end do 
+            end do
+            do kk = 1,size(this%f2d,3)
+                do jj = 1,size(this%f2d,2)
+                   !$omp simd
+                   do ii = 1,size(this%f2d,1)
+                      !this%f2dext(ii,jj,this%nzG+1:2*this%nzG) = this%f2d
+                      this%f2dext(ii,jj,this%nzG+kk) = this%f2d(ii,jj,kk)
+                   end do
+                end do
+             end do
+
+            do kk = 2,this%nzG
+                do jj = 1,size(this%wext,2)
+                   !$omp simd
+                   do ii = 1,size(this%wext,1)
+                      this%wext(ii,jj,kk-1) = -this%w2(ii,jj,this%nzG-kk+2)
+                   end do 
+                end do
             end do 
-        end do
-        do kk = 1,size(this%f2d,3)
-            do jj = 1,size(this%f2d,2)
-               !$omp simd
-               do ii = 1,size(this%f2d,1)
-                  !this%f2dext(ii,jj,this%nzG+1:2*this%nzG) = this%f2d
-                  this%f2dext(ii,jj,this%nzG+kk) = this%f2d(ii,jj,kk)
-               end do
-            end do
-         end do
+            do kk = 1,size(this%w2,3)
+                do jj = 1,size(this%w2,2)
+                   !$omp simd
+                   do ii = 1,size(this%w2,1)
+                      !this%wext(:,:,this%nzG:2*this%nzG) = this%w2
+                      this%wext(ii,jj,this%nzG+kk-1) = this%w2(ii,jj,kk)
+                   end do
+                end do
+             end do
 
-        do kk = 2,this%nzG
-            do jj = 1,size(this%wext,2)
-               !$omp simd
-               do ii = 1,size(this%wext,1)
-                  this%wext(ii,jj,kk-1) = -this%w2(ii,jj,this%nzG-kk+2)
-               end do 
-            end do
-        end do 
-        do kk = 1,size(this%w2,3)
-            do jj = 1,size(this%w2,2)
-               !$omp simd
-               do ii = 1,size(this%w2,1)
-                  !this%wext(:,:,this%nzG:2*this%nzG) = this%w2
-                  this%wext(ii,jj,this%nzG+kk-1) = this%w2(ii,jj,kk)
-               end do
-            end do
-         end do
-
-        ! Step 4: Take Fourier Transform 
-        call dfftw_execute_dft(this%plan_c2c_fwd_z, this%f2dext, this%f2dext)  
-        call dfftw_execute_dft(this%plan_c2c_fwd_z, this%wext  , this%wext  )  
+            ! Step 4: Take Fourier Transform 
+            call dfftw_execute_dft(this%plan_c2c_fwd_z, this%f2dext, this%f2dext)  
+            call dfftw_execute_dft(this%plan_c2c_fwd_z, this%wext  , this%wext  )  
       
-        ! Step 5: Solve the Poisson System and project out w velocity
-        do kk = 1,size(this%f2dext,3) 
-            do jj = 1,size(this%f2dext,2) 
-                !$omp simd
-                do ii = 1,size(this%f2dext,1) 
-                    this%f2dext(ii,jj,kk) = this%f2dext(ii,jj,kk) + imi*this%k3modcm(kk)*this%wext(ii,jj,kk)
-                    this%f2dext(ii,jj,kk) = -this%f2dext(ii,jj,kk)*this%kradsq_inv(ii,jj,kk)
+            ! Step 5: Solve the Poisson System and project out w velocity
+            do kk = 1,size(this%f2dext,3) 
+                do jj = 1,size(this%f2dext,2) 
+                    !$omp simd
+                    do ii = 1,size(this%f2dext,1) 
+                        this%f2dext(ii,jj,kk) = this%f2dext(ii,jj,kk) + imi*this%k3modcm(kk)*this%wext(ii,jj,kk)
+                        this%f2dext(ii,jj,kk) = -this%f2dext(ii,jj,kk)*this%kradsq_inv(ii,jj,kk)
+                    end do 
                 end do 
             end do 
+
+            ! Step 6: Take inverse Fourier Transform
+            call dfftw_execute_dft(this%plan_c2c_bwd_z, this%f2dext, this%f2dext)  
+            !this%f2dext = this%f2dext*this%mfact
+            do kk = 1,size(this%f2dext,3)
+                do jj = 1,size(this%f2dext,2)
+                   !$omp simd
+                   do ii = 1,size(this%f2dext,1)
+                      this%f2dext(ii,jj,kk) = this%mfact*this%f2dext(ii,jj,kk)
+                   end do
+                end do
+            end do
+            
+            
+            !this%f2d = this%f2dext(:,:,this%nzG+1:2*this%nzG)
+            do kk = 1,size(this%f2d,3)
+                do jj = 1,size(this%f2d,2)
+                   !$omp simd
+                   do ii = 1,size(this%f2d,1)
+                      this%f2d(ii,jj,kk) = this%f2dext(ii,jj,this%nzG+kk)
+                   end do
+                end do
+            end do
+
+            if (this%computeStokesPressure) then
+               do kk = 1,size(this%f2d,3)
+                   do jj = 1,size(this%f2d,2)
+                      !$omp simd
+                      do ii = 1,size(this%f2d,1)
+                         this%f2d(ii,jj,kk) = this%f2d(ii,jj,kk) + this%phat_z1(ii,jj,kk) + this%phat_z2(ii,jj,kk)
+                      end do
+                   end do
+               end do
+            end if 
+
+            ! Step 8: Transpose back from z -> y
+            call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
+
+            ! Step 9: Get pressure by ifft
+            call this%sp%ifft(this%f2dy,pressure)
+
+         end if 
+    end subroutine 
+
+    subroutine Periodic_getPressureAndUpdateRHS(this, uhat, vhat, what, pressure)
+        class(PadePoisson), intent(inout) :: this
+        complex(rkind), dimension(this%nx_in, this%ny_in, this%nz_in), intent(inout) :: uhat, vhat
+        complex(rkind), dimension(this%nxE_in, this%nyE_in, this%nzE_in), intent(inout) :: what
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: pressure
+
+        integer :: ii, jj, kk
+
+        do kk = 1,size(uhat,3)
+            do jj = 1,size(uhat,2)
+                !$omp simd
+                do ii = 1,size(uhat,1)
+                    this%f2dy(ii,jj,kk) = this%k1_2d(ii,jj,kk)*uhat(ii,jj,kk)
+                    this%f2dy(ii,jj,kk) = this%f2dy(ii,jj,kk) + this%k2_2d(ii,jj,kk)*vhat(ii,jj,kk)
+                    this%f2dy(ii,jj,kk) = dcmplx(-dimag(this%f2dy(ii,jj,kk)),dreal(this%f2dy(ii,jj,kk)))
+                end do
+            end do 
+        end do  
+
+        call transpose_y_to_z(this%f2dy,this%uhatInZ,this%sp_gp)
+        call transpose_y_to_z(what, this%w2, this%sp_gpE)
+        
+        call this%derivZ%ddz_E2C(this%w2, this%f2d, 0, 0)  ! Periodic dwdz
+        
+        this%f2d = this%f2d + this%uhatInZ
+        call dfftw_execute_dft(this%plan_c2c_fwd_z, this%f2d    , this%f2d    )  
+
+        this%f2d = -this%kradsq_inv*this%f2d
+        call dfftw_execute_dft(this%plan_c2c_bwd_z, this%f2d    , this%f2d    )  
+        this%f2d = this%f2d*this%mfact 
+
+        call this%derivZ%ddz_C2E(this%f2d, this%dwdzHATz_Periodic, 0, 0)
+        this%w2 = this%w2 - this%dwdzHATz_Periodic
+        call transpose_z_to_y(this%w2,what, this%sp_gpE)
+        call transpose_z_to_y(this%f2d, this%f2dy, this%sp_gp)
+
+
+        do kk = 1,size(uhat,3)
+           do jj = 1,size(uhat,2)
+              !$omp simd
+              do ii = 1,size(uhat,1)
+                  uhat(ii,jj,kk) = uhat(ii,jj,kk) - imi*this%k1_2d(ii,jj,kk)*this%f2dy(ii,jj,kk)
+                  vhat(ii,jj,kk) = vhat(ii,jj,kk) - imi*this%k2_2d(ii,jj,kk)*this%f2dy(ii,jj,kk)
+              end do 
+           end do 
         end do 
 
-        ! Step 6: Take inverse Fourier Transform
-        call dfftw_execute_dft(this%plan_c2c_bwd_z, this%f2dext, this%f2dext)  
-        !this%f2dext = this%f2dext*this%mfact
-        do kk = 1,size(this%f2dext,3)
-            do jj = 1,size(this%f2dext,2)
-               !$omp simd
-               do ii = 1,size(this%f2dext,1)
-                  this%f2dext(ii,jj,kk) = this%mfact*this%f2dext(ii,jj,kk)
-               end do
-            end do
-        end do
-        
-        
-        !this%f2d = this%f2dext(:,:,this%nzG+1:2*this%nzG)
-        do kk = 1,size(this%f2d,3)
-            do jj = 1,size(this%f2d,2)
-               !$omp simd
-               do ii = 1,size(this%f2d,1)
-                  this%f2d(ii,jj,kk) = this%f2dext(ii,jj,this%nzG+kk)
-               end do
-            end do
-        end do
-
-        if (this%computeStokesPressure) then
-           do kk = 1,size(this%f2d,3)
-               do jj = 1,size(this%f2d,2)
-                  !$omp simd
-                  do ii = 1,size(this%f2d,1)
-                     this%f2d(ii,jj,kk) = this%f2d(ii,jj,kk) + this%phat_z1(ii,jj,kk) + this%phat_z2(ii,jj,kk)
-                  end do
-               end do
-           end do
-        end if 
-
-        ! Step 8: Transpose back from z -> y
-        call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
-
-        ! Step 9: Get pressure by ifft
-        call this%sp%ifft(this%f2dy,pressure)
+        call this%sp%ifft(this%f2dy, pressure)
 
     end subroutine 
+
 
     subroutine getPressureAndUpdateRHS(this, uhat, vhat, what, pressure)
         !! NOTE :: uhat is really urhshat, vhat is really vrhshat, ...
@@ -863,202 +958,208 @@ contains
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: pressure
         integer :: ii, jj, kk
         complex(rkind) :: ctemp
-
-        ! Step 0: Project out the stokes pressure which will fix the wall BCs
-        ! for velocity
-        if (this%computeStokesPressure) then
-            call this%ProjectStokesPressure(uhat, vhat, what)
-            do kk = 1,this%nzG
-               do jj = 1,this%sp_gp%zsz(2)
-                  !$omp simd
-                  do ii = 1,this%sp_gp%zsz(1)
-                     this%f2d(ii,jj,kk) = this%k1inZ(ii,jj)*this%uhatInZ(ii,jj,kk)
-                     this%f2d(ii,jj,kk) = this%f2d(ii,jj,kk) + this%k2inZ(ii,jj)*this%vhatInZ(ii,jj,kk)
-                     this%f2d(ii,jj,kk) = dcmplx(-dimag(this%f2d(ii,jj,kk)),dreal(this%f2d(ii,jj,kk)))
-                  end do 
-               end do
-            end do 
-            !this%f2d = imi*this%f2d
-        else
-            ! Step 1: compute dudx + dvdy
-            do kk = 1,size(uhat,3)
-                do jj = 1,size(uhat,2)
-                    !$omp simd
-                    do ii = 1,size(uhat,1)
-                        this%f2dy(ii,jj,kk) = this%k1_2d(ii,jj,kk)*uhat(ii,jj,kk)
-                        this%f2dy(ii,jj,kk) = this%f2dy(ii,jj,kk) + this%k2_2d(ii,jj,kk)*vhat(ii,jj,kk)
-                        this%f2dy(ii,jj,kk) = dcmplx(-dimag(this%f2dy(ii,jj,kk)),dreal(this%f2dy(ii,jj,kk)))
-                    end do
-                end do 
-            end do  
-            !this%f2dy = imi*this%f2dy
-
-            ! Step 2: Transpose from y -> z
-            call transpose_y_to_z(this%f2dy,this%f2d,this%sp_gp)
-            call transpose_y_to_z(what, this%w2, this%sp_gpE)
-        end if
-
-        ! Step 3: Create Extensions
-        do kk = 1,this%nzG
-            do jj = 1,size(this%f2dext,2)
-               !$omp simd
-               do ii = 1,size(this%f2dext,1)
-                  this%f2dext(ii,jj,kk) = this%f2d(ii,jj,this%nzG-kk+1)
-               end do 
-            end do 
-        end do
-        do kk = 1,size(this%f2d,3)
-            do jj = 1,size(this%f2d,2)
-               !$omp simd
-               do ii = 1,size(this%f2d,1)
-                  !this%f2dext(ii,jj,this%nzG+1:2*this%nzG) = this%f2d
-                  this%f2dext(ii,jj,this%nzG+kk) = this%f2d(ii,jj,kk)
-               end do
-            end do
-         end do
-
-        do kk = 2,this%nzG
-            do jj = 1,size(this%wext,2)
-               !$omp simd
-               do ii = 1,size(this%wext,1)
-                  this%wext(ii,jj,kk-1) = -this%w2(ii,jj,this%nzG-kk+2)
-               end do 
-            end do
-        end do 
-        do kk = 1,size(this%w2,3)
-            do jj = 1,size(this%w2,2)
-               !$omp simd
-               do ii = 1,size(this%w2,1)
-                  !this%wext(:,:,this%nzG:2*this%nzG) = this%w2
-                  this%wext(ii,jj,this%nzG+kk-1) = this%w2(ii,jj,kk)
-               end do
-            end do
-         end do
-
         
-        ! Step 4: Take Fourier Transform 
-        call dfftw_execute_dft(this%plan_c2c_fwd_z, this%f2dext, this%f2dext)  
-        call dfftw_execute_dft(this%plan_c2c_fwd_z, this%wext  , this%wext  )  
+        if (this%PeriodicInZ) then
+            call this%Periodic_getPressureAndUpdateRHS(uhat, vhat, what, pressure)
+        else
+
+            ! Step 0: Project out the stokes pressure which will fix the wall BCs
+            ! for velocity
+            if (this%computeStokesPressure) then
+                call this%ProjectStokesPressure(uhat, vhat, what)
+                do kk = 1,this%nzG
+                   do jj = 1,this%sp_gp%zsz(2)
+                      !$omp simd
+                      do ii = 1,this%sp_gp%zsz(1)
+                         this%f2d(ii,jj,kk) = this%k1inZ(ii,jj)*this%uhatInZ(ii,jj,kk)
+                         this%f2d(ii,jj,kk) = this%f2d(ii,jj,kk) + this%k2inZ(ii,jj)*this%vhatInZ(ii,jj,kk)
+                         this%f2d(ii,jj,kk) = dcmplx(-dimag(this%f2d(ii,jj,kk)),dreal(this%f2d(ii,jj,kk)))
+                      end do 
+                   end do
+                end do 
+                !this%f2d = imi*this%f2d
+            else
+                ! Step 1: compute dudx + dvdy
+                do kk = 1,size(uhat,3)
+                    do jj = 1,size(uhat,2)
+                        !$omp simd
+                        do ii = 1,size(uhat,1)
+                            this%f2dy(ii,jj,kk) = this%k1_2d(ii,jj,kk)*uhat(ii,jj,kk)
+                            this%f2dy(ii,jj,kk) = this%f2dy(ii,jj,kk) + this%k2_2d(ii,jj,kk)*vhat(ii,jj,kk)
+                            this%f2dy(ii,jj,kk) = dcmplx(-dimag(this%f2dy(ii,jj,kk)),dreal(this%f2dy(ii,jj,kk)))
+                        end do
+                    end do 
+                end do  
+                !this%f2dy = imi*this%f2dy
+
+                ! Step 2: Transpose from y -> z
+                call transpose_y_to_z(this%f2dy,this%f2d,this%sp_gp)
+                call transpose_y_to_z(what, this%w2, this%sp_gpE)
+            end if
+
+            ! Step 3: Create Extensions
+            do kk = 1,this%nzG
+                do jj = 1,size(this%f2dext,2)
+                   !$omp simd
+                   do ii = 1,size(this%f2dext,1)
+                      this%f2dext(ii,jj,kk) = this%f2d(ii,jj,this%nzG-kk+1)
+                   end do 
+                end do 
+            end do
+            do kk = 1,size(this%f2d,3)
+                do jj = 1,size(this%f2d,2)
+                   !$omp simd
+                   do ii = 1,size(this%f2d,1)
+                      !this%f2dext(ii,jj,this%nzG+1:2*this%nzG) = this%f2d
+                      this%f2dext(ii,jj,this%nzG+kk) = this%f2d(ii,jj,kk)
+                   end do
+                end do
+             end do
+
+            do kk = 2,this%nzG
+                do jj = 1,size(this%wext,2)
+                   !$omp simd
+                   do ii = 1,size(this%wext,1)
+                      this%wext(ii,jj,kk-1) = -this%w2(ii,jj,this%nzG-kk+2)
+                   end do 
+                end do
+            end do 
+            do kk = 1,size(this%w2,3)
+                do jj = 1,size(this%w2,2)
+                   !$omp simd
+                   do ii = 1,size(this%w2,1)
+                      !this%wext(:,:,this%nzG:2*this%nzG) = this%w2
+                      this%wext(ii,jj,this%nzG+kk-1) = this%w2(ii,jj,kk)
+                   end do
+                end do
+             end do
+
+            
+            ! Step 4: Take Fourier Transform 
+            call dfftw_execute_dft(this%plan_c2c_fwd_z, this%f2dext, this%f2dext)  
+            call dfftw_execute_dft(this%plan_c2c_fwd_z, this%wext  , this%wext  )  
       
 
-        ! Step 5: Solve the Poisson System and project out w velocity
-        do kk = 1,size(this%f2dext,3) 
-            do jj = 1,size(this%f2dext,2) 
-                !$omp simd
-                do ii = 1,size(this%f2dext,1) 
-                    this%f2dext(ii,jj,kk) = this%f2dext(ii,jj,kk) + imi*this%k3modcm(kk)*this%wext(ii,jj,kk)
-                    this%f2dext(ii,jj,kk) = -this%f2dext(ii,jj,kk)*this%kradsq_inv(ii,jj,kk)
-                end do 
-            end do 
-        end do 
-
-        ! Step 6: add -dpdz to wrhs 
-        do kk = 1,size(this%f2dext,3) 
-            do jj = 1,size(this%f2dext,2) 
-                !$omp simd
-                do ii = 1,size(this%f2dext,1) 
-                    this%wext(ii,jj,kk) = this%wext(ii,jj,kk) - imi*this%k3modcp(kk)*this%f2dext(ii,jj,kk)
-                end do 
-            end do 
-        end do
-        
-        ! Step 7: Take inverse Fourier Transform
-        call dfftw_execute_dft(this%plan_c2c_bwd_z, this%f2dext, this%f2dext)  
-        call dfftw_execute_dft(this%plan_c2c_bwd_z, this%wext  , this%wext  )  
-        do kk = 1,size(this%f2dext,3)
-            do jj = 1,size(this%f2dext,2)
-               !$omp simd
-               do ii = 1,size(this%f2dext,1)
-                  this%f2dext(ii,jj,kk) = this%mfact*this%f2dext(ii,jj,kk)
-               end do
-            end do
-        end do
-
-        do kk = 1,size(this%wext,3)
-            do jj = 1,size(this%wext,2)
-               !$omp simd
-               do ii = 1,size(this%wext,1)
-                  this%wext(ii,jj,kk) = this%wext(ii,jj,kk)*this%mfact
-               end do
-            end do
-        end do
-
-        
-        do kk = 1,size(this%f2d,3)
-            do jj = 1,size(this%f2d,2)
-               !$omp simd
-               do ii = 1,size(this%f2d,1)
-                  this%f2d(ii,jj,kk) = this%f2dext(ii,jj,this%nzG+kk)
-               end do
-            end do
-        end do
-        
-        do kk = 1,size(this%w2,3)
-            do jj = 1,size(this%w2,2)
-               !$omp simd
-               do ii = 1,size(this%w2,1)
-                  this%w2(ii,jj,kk)  = this%wext(ii,jj,this%nzG+kk-1)
-               end do
-            end do
-        end do
-
-        this%w2(:,:,1) = czero; 
-        this%w2(:,:,this%nzG+1) = czero; 
-
-
-        ! Step 8: Transpose back from z -> y
-        call transpose_z_to_y(this%w2,what,this%sp_gpE)
-        
-        ! Step 9: Update the RHS for u and v
-        if (this%computeStokesPressure) then
-            !this%f2d = imi*this%f2d
-            do kk = 1,this%nzG
-               do jj = 1,size(this%uhatinZ,2)
-                  !$omp simd
-                  do ii = 1,size(this%uhatinZ,1)
-                     !this%f2d(ii,jj,kk) = dcmplx(-dimag(this%f2d(ii,jj,kk)),dreal(this%f2d(ii,jj,kk)))
-                     ctemp  = dcmplx(-dimag(this%f2d(ii,jj,kk)),dreal(this%f2d(ii,jj,kk)))
-                     this%uhatinZ(ii,jj,kk) = this%uhatinZ(ii,jj,kk) - ctemp*this%k1inZ(ii,jj)
-                     this%vhatinZ(ii,jj,kk) = this%vhatinZ(ii,jj,kk) - ctemp*this%k2inZ(ii,jj)
-                  end do
-               end do
-            end do 
-            call transpose_z_to_y(this%uhatinZ,uhat,this%sp_gp) 
-            call transpose_z_to_y(this%vhatinZ,vhat,this%sp_gp) 
-        else
-            call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
-            do kk = 1,size(uhat,3)
-                do jj = 1,size(uhat,2)
+            ! Step 5: Solve the Poisson System and project out w velocity
+            do kk = 1,size(this%f2dext,3) 
+                do jj = 1,size(this%f2dext,2) 
                     !$omp simd
-                    do ii = 1,size(uhat,1)
-                        uhat(ii,jj,kk) = uhat(ii,jj,kk) - imi*this%k1_2d(ii,jj,kk)*this%f2dy(ii,jj,kk)
+                    do ii = 1,size(this%f2dext,1) 
+                        this%f2dext(ii,jj,kk) = this%f2dext(ii,jj,kk) + imi*this%k3modcm(kk)*this%wext(ii,jj,kk)
+                        this%f2dext(ii,jj,kk) = -this%f2dext(ii,jj,kk)*this%kradsq_inv(ii,jj,kk)
                     end do 
                 end do 
             end do 
 
-            do kk = 1,size(vhat,3)
-                do jj = 1,size(vhat,2)
+            ! Step 6: add -dpdz to wrhs 
+            do kk = 1,size(this%f2dext,3) 
+                do jj = 1,size(this%f2dext,2) 
                     !$omp simd
-                    do ii = 1,size(vhat,1)
-                        vhat(ii,jj,kk) = vhat(ii,jj,kk) - imi*this%k2_2d(ii,jj,kk)*this%f2dy(ii,jj,kk)
+                    do ii = 1,size(this%f2dext,1) 
+                        this%wext(ii,jj,kk) = this%wext(ii,jj,kk) - imi*this%k3modcp(kk)*this%f2dext(ii,jj,kk)
                     end do 
                 end do 
-            end do 
-        end if 
-
-        ! Step 10: Get pressure by ifft
-        if (this%computeStokesPressure) then
-           do kk = 1,size(this%f2d,3)
-               do jj = 1,size(this%f2d,2)
-                  !$omp simd
-                  do ii = 1,size(this%f2d,1)
-                     this%f2d(ii,jj,kk) = this%f2d(ii,jj,kk) + this%phat_z1(ii,jj,kk) + this%phat_z2(ii,jj,kk)
-                  end do
-               end do
             end do
-            call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
-        end if 
-        call this%sp%ifft(this%f2dy,pressure)
+            
+            ! Step 7: Take inverse Fourier Transform
+            call dfftw_execute_dft(this%plan_c2c_bwd_z, this%f2dext, this%f2dext)  
+            call dfftw_execute_dft(this%plan_c2c_bwd_z, this%wext  , this%wext  )  
+            do kk = 1,size(this%f2dext,3)
+                do jj = 1,size(this%f2dext,2)
+                   !$omp simd
+                   do ii = 1,size(this%f2dext,1)
+                      this%f2dext(ii,jj,kk) = this%mfact*this%f2dext(ii,jj,kk)
+                   end do
+                end do
+            end do
+
+            do kk = 1,size(this%wext,3)
+                do jj = 1,size(this%wext,2)
+                   !$omp simd
+                   do ii = 1,size(this%wext,1)
+                      this%wext(ii,jj,kk) = this%wext(ii,jj,kk)*this%mfact
+                   end do
+                end do
+            end do
+
+            
+            do kk = 1,size(this%f2d,3)
+                do jj = 1,size(this%f2d,2)
+                   !$omp simd
+                   do ii = 1,size(this%f2d,1)
+                      this%f2d(ii,jj,kk) = this%f2dext(ii,jj,this%nzG+kk)
+                   end do
+                end do
+            end do
+            
+            do kk = 1,size(this%w2,3)
+                do jj = 1,size(this%w2,2)
+                   !$omp simd
+                   do ii = 1,size(this%w2,1)
+                      this%w2(ii,jj,kk)  = this%wext(ii,jj,this%nzG+kk-1)
+                   end do
+                end do
+            end do
+
+            this%w2(:,:,1) = czero; 
+            this%w2(:,:,this%nzG+1) = czero; 
+
+
+            ! Step 8: Transpose back from z -> y
+            call transpose_z_to_y(this%w2,what,this%sp_gpE)
+            
+            ! Step 9: Update the RHS for u and v
+            if (this%computeStokesPressure) then
+                !this%f2d = imi*this%f2d
+                do kk = 1,this%nzG
+                   do jj = 1,size(this%uhatinZ,2)
+                      !$omp simd
+                      do ii = 1,size(this%uhatinZ,1)
+                         !this%f2d(ii,jj,kk) = dcmplx(-dimag(this%f2d(ii,jj,kk)),dreal(this%f2d(ii,jj,kk)))
+                         ctemp  = dcmplx(-dimag(this%f2d(ii,jj,kk)),dreal(this%f2d(ii,jj,kk)))
+                         this%uhatinZ(ii,jj,kk) = this%uhatinZ(ii,jj,kk) - ctemp*this%k1inZ(ii,jj)
+                         this%vhatinZ(ii,jj,kk) = this%vhatinZ(ii,jj,kk) - ctemp*this%k2inZ(ii,jj)
+                      end do
+                   end do
+                end do 
+                call transpose_z_to_y(this%uhatinZ,uhat,this%sp_gp) 
+                call transpose_z_to_y(this%vhatinZ,vhat,this%sp_gp) 
+            else
+                call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
+                do kk = 1,size(uhat,3)
+                    do jj = 1,size(uhat,2)
+                        !$omp simd
+                        do ii = 1,size(uhat,1)
+                            uhat(ii,jj,kk) = uhat(ii,jj,kk) - imi*this%k1_2d(ii,jj,kk)*this%f2dy(ii,jj,kk)
+                        end do 
+                    end do 
+                end do 
+
+                do kk = 1,size(vhat,3)
+                    do jj = 1,size(vhat,2)
+                        !$omp simd
+                        do ii = 1,size(vhat,1)
+                            vhat(ii,jj,kk) = vhat(ii,jj,kk) - imi*this%k2_2d(ii,jj,kk)*this%f2dy(ii,jj,kk)
+                        end do 
+                    end do 
+                end do 
+            end if 
+
+            ! Step 10: Get pressure by ifft
+            if (this%computeStokesPressure) then
+               do kk = 1,size(this%f2d,3)
+                   do jj = 1,size(this%f2d,2)
+                      !$omp simd
+                      do ii = 1,size(this%f2d,1)
+                         this%f2d(ii,jj,kk) = this%f2d(ii,jj,kk) + this%phat_z1(ii,jj,kk) + this%phat_z2(ii,jj,kk)
+                      end do
+                   end do
+                end do
+                call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
+            end if 
+            call this%sp%ifft(this%f2dy,pressure)
+
+         end if 
 
     end subroutine 
 
