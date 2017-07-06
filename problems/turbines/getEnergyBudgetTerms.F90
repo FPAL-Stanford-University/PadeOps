@@ -437,7 +437,7 @@ contains
       computeFbody = .true.
 
       ! Initialize Padeder
-      call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, cd06)
+      call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, cd06,.false.)
 
       ! Initialize sgs
       call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, &

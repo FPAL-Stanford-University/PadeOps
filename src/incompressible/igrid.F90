@@ -474,7 +474,7 @@ contains
 
         ! STEP 5: ALLOCATE/INITIALIZE THE DERIVATIVE DERIVED TYPE
         allocate(this%Pade6OpZ)
-        call this%Pade6OpZ%init(this%gpC,this%sp_gpC, this%gpE, this%sp_gpE,this%dz,NumericalSchemeVert)
+        call this%Pade6OpZ%init(this%gpC,this%sp_gpC, this%gpE, this%sp_gpE,this%dz,NumericalSchemeVert,PeriodicInZ)
         allocate(this%OpsPP)
         call this%OpsPP%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp, &
                     this%spectE%spectdecomp, .false., .false.)

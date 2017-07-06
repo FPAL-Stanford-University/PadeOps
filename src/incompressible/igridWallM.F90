@@ -410,7 +410,7 @@ contains
         ! STEP 5: ALLOCATE/INITIALIZE THE OPERATORS DERIVED TYPE
         if (useCompactFD) then
             allocate(this%derSE, this%derSO, this%derW, this%derWW, this%derT, this%derOE) 
-            call this%derivZ%init(this%gpC,this%sp_gpC, this%gpE, this%sp_gpE,this%dz, 1)
+            call this%derivZ%init(this%gpC,this%sp_gpC, this%gpE, this%sp_gpE,this%dz, 1, .false.)
             call this%derSE%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
                              isTopSided = .false., isBotSided = .true.) 
             call this%derSO%init( this%gpC%zsz(3), this%dz, isTopEven = .false., isBotEven = .false., & 

@@ -55,18 +55,18 @@ subroutine init(this, gpC, sp_gpC, gpE, sp_gpE, dz, scheme, isPeriodic)
    type(decomp_info), intent(in), target :: gpC, sp_gpC, gpE, sp_gpE
    integer, intent(in) :: scheme 
    real(rkind), intent(in) :: dz
-   logical, intent(in), optional :: isPeriodic 
+   logical, intent(in) :: isPeriodic 
 
    this%gp => gpC
    this%sp_gp => sp_gpC
    this%scheme = scheme
    this%dz = dz
 
-   if (present(isPeriodic)) then
+   !if (present(isPeriodic)) then
       this%isPeriodic = isPeriodic
-   else
-      this%isPeriodic = .false. 
-   end if
+   !else
+   !   this%isPeriodic = .false. 
+   !end if
 
    if (this%isPeriodic) then
       allocate(this%derPeriodic)

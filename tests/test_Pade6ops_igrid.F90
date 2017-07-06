@@ -44,7 +44,7 @@ program test_Pade6ops
     call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", "2/3rd", 2, .false.)
     sp_gpC => spectC%spectdecomp
     sp_gpE => spectE%spectdecomp
-    call Pade6opsZ%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme)
+    call Pade6opsZ%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme,.false.)
     
     do k=1,nz
         do j=1,ny

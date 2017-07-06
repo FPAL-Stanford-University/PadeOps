@@ -105,7 +105,7 @@ program test_projection
     allocate(cbuffzC(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3),2))
     allocate(cbuffzE(spectE%spectdecomp%zsz(1),spectE%spectdecomp%zsz(2),spectE%spectdecomp%zsz(3),1))
     
-    call Pade6opz%init(gpC, spect%spectdecomp, gpE, spectE%spectdecomp, dz, scheme)
+    call Pade6opz%init(gpC, spect%spectdecomp, gpE, spectE%spectdecomp, dz, scheme,.false.)
     call poiss%init(dx, dy, dz, spect, spectE, computeStokesPressure, Lz, .false., gpC, Pade6opz, .false. )
     
     allocate(ctmp1(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3)))
