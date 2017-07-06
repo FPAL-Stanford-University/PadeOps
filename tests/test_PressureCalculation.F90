@@ -96,9 +96,9 @@ program test_pressureCalculation
     call spectC%fft(vrhs,vrhshat)
     call spectE%fft(wrhs,wrhshat)
 
-    call Pade6opsZ%init(gpC, spectC%spectdecomp, gpE, spectE%spectdecomp, dz, scheme)
+    call Pade6opsZ%init(gpC, spectC%spectdecomp, gpE, spectE%spectdecomp, dz, scheme, .false.)
     call poiss2ndOrder%init(spectC,.false.,dx,dy,dz,Ops,spectE,.true.,gpC) 
-    call poiss6thOrder%init(dx, dy, dz, spectC, spectE,.true.,2.d0*pi,.true.,gpC, Pade6opsZ)
+    call poiss6thOrder%init(dx, dy, dz, spectC, spectE,.true.,2.d0*pi,.true.,gpC, Pade6opsZ,.false.)
 
     call poiss2ndOrder%getPressure(urhshat,vrhshat,wrhshat,p)
     maxE = p_maxval(abs(p - pexact))

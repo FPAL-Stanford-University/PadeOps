@@ -44,7 +44,7 @@ program test_Pade6ops
     call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", "2/3rd", 2, .false.)
     sp_gpC => spectC%spectdecomp
     sp_gpE => spectE%spectdecomp
-    call Pade6opsZ%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme)
+    call Pade6opsZ%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme,.false.)
     
     do k=1,nz
         do j=1,ny
@@ -64,7 +64,7 @@ program test_Pade6ops
     wC = -cos(x)*sin(z) 
     v  = 0.d0
     call Pade6opsZ%interpz_C2E(wC,w,-1,-1)
-    call padepoiss%init(dx,dy,dz, spectC, spectE, .true., two*pi, .true., gpC, Pade6opsZ) 
+    call padepoiss%init(dx,dy,dz, spectC, spectE, .true., two*pi, .true., gpC, Pade6opsZ, .false.) 
 
     call spectC%fft(u,uhat)
     call spectC%fft(v,vhat)

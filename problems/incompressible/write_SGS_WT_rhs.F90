@@ -154,7 +154,7 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
    call spectE%fft(wE, whatE)
 
    ! Initialize Padeder
-   call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme)
+   call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme,.false.)
 
    ! Initialize sgs
    call sgsold%init(1, spectC, spectE, gpC, gpE, dx, dy, dz, .false., .false., mesh(:,:,:,3), z0init,  .true., 1, .false., 0.7d0, .false., 1.0D0, 1.0d0, .true., .false.)
