@@ -514,8 +514,10 @@ contains
            ! case default
            !     call GracefulExit("The dealiasing filter specified is incorrect.",104)
            ! end select
-            kdealiasx = half*pi/dx  !------TRUNCATING TO HALF----((two/three)*pi/dx)
-            kdealiasy = half*pi/dy  !------TRUNCATING TO HALF----((two/three)*pi/dy)
+            !kdealiasx = half*pi/dx  !------TRUNCATING TO HALF----((two/three)*pi/dx)
+            !kdealiasy = half*pi/dy  !------TRUNCATING TO HALF----((two/three)*pi/dy)
+            kdealiasx = ((two/three)*pi/dx)
+            kdealiasy = ((two/three)*pi/dy)
             do k = 1,size(this%k1,3)
                 do j = 1,size(this%k1,2)
                     do i = 1,size(this%k1,1)
