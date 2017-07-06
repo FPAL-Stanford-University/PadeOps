@@ -69,7 +69,6 @@ subroutine init(this, gpC, sp_gpC, gpE, sp_gpE, dz, scheme, isPeriodic)
    end if
 
    if (this%isPeriodic) then
-      ! ADITYA --> JACOB: You will need to use the this%derPeriodic operator to computer derivatives in the subroutines later. 
       allocate(this%derPeriodic)
       call this%derPeriodic%init(this%gp%zsz(3),dz)
    else
@@ -114,6 +113,7 @@ subroutine destroy(this)
    class(Pade6stagg), intent(inout) :: this
   
    if (this%isPeriodic) then
+      call this%derPeriodic%destroy()
       deallocate(this%derPeriodic)
    else
       if (this%scheme == cd06) then
@@ -241,7 +241,6 @@ subroutine d2dz2_C2C_cmplx(this,input,output,bot,top)
 
 end subroutine 
 
-
 subroutine d2dz2_E2E_real(this,input,output,bot,top)
    class(Pade6stagg), intent(in) :: this
    real(rkind), dimension(this%gp%zsz(1),this%gp%zsz(2),this%gp%zsz(3) + 1), intent(in)  :: input
@@ -366,8 +365,9 @@ subroutine ddz_C2E_real(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      ! ADITYA --> JACOB: write the call to the periodic operator (just cd06 for
-      ! now)
+      ! ADITYA --> JACOB: I finished this call. Carefully check it. Then, delete
+      ! this comment
+      call this%derPeriodic%ddz_C2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
    else
       select case (this%scheme) 
       case(fd02)
@@ -444,8 +444,9 @@ subroutine ddz_C2E_cmplx(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      ! ADITYA --> JACOB: write the call to the periodic operator (just cd06 for
-      ! now)
+      ! ADITYA --> JACOB: I finished this call. Carefully check it. Then, delete
+      ! this comment
+      call this%derPeriodic%ddz_C2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
    else
       select case (this%scheme) 
       case(fd02)
@@ -522,8 +523,9 @@ subroutine ddz_E2C_real(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      ! ADITYA --> JACOB: write the call to the periodic operator (just cd06 for
-      ! now)
+      ! ADITYA --> JACOB: I finished this call. Carefully check it. Then, delete
+      ! this comment
+      call this%derPeriodic%ddz_E2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
    else
       select case(this%scheme)
       case(fd02)
@@ -575,8 +577,9 @@ subroutine ddz_E2C_cmplx(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      ! ADITYA --> JACOB: write the call to the periodic operator (just cd06 for
-      ! now)
+      ! ADITYA --> JACOB: I finished this call. Carefully check it. Then, delete
+      ! this comment
+      call this%derPeriodic%ddz_E2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
    else
       select case(this%scheme)
       case(fd02)
