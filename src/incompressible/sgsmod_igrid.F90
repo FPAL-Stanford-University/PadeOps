@@ -263,9 +263,10 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzE)
       this%q3E = -this%kappa_sgs_E*dTdzE
    end if
 
-   if(this%gpE%xst(3)==1) then
-     this%q3E(:,:,1) = this%wTh_surf
-   endif
+   ! MH 7/9/17, segfaults with no WM
+   !if(this%gpE%xst(3)==1) then
+   !  this%q3E(:,:,1) = this%wTh_surf
+   !endif
  
 end subroutine
 
@@ -309,6 +310,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
       this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
    end if
 
+   ! MH 7/9/17 segfaults with no WM
    !if(this%gpE%xst(3)==1) then
    !   this%tau_13(:,:,1) = this%tauijWM(:,:,1,1)
    !   this%tau_23(:,:,1) = this%tauijWM(:,:,1,2)
