@@ -308,11 +308,11 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
       this%tau_23 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,5)
       this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
    end if
- 
-   if(this%gpE%xst(3)==1) then
-     this%tau_13(:,:,1) = this%tauijWM(:,:,1,1)
-     this%tau_23(:,:,1) = this%tauijWM(:,:,1,2)
-   endif
+
+   !if(this%gpE%xst(3)==1) then
+   !   this%tau_13(:,:,1) = this%tauijWM(:,:,1,1)
+   !   this%tau_23(:,:,1) = this%tauijWM(:,:,1,2)
+   !endif
  
    if(newTimeStep) this%mstep = this%mstep + 1
    
