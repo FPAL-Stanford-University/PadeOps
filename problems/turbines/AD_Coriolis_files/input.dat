@@ -61,6 +61,8 @@ Re                            = 1.D10       ! Reynolds Number; used when isInvis
 Fr                            = 1.D10       ! Froude number; used when isStratified is TRUE
 G_geostrophic                 = 1.D0        ! Geostrophic wind speed 
 G_alpha                       = 0.D0        ! Geostrophic wind angle (degrees, from +x axis)
+latitude                      = 90.d0       ! Latitude 
+use
 dPfdx                         = 0.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                         = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                         = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON

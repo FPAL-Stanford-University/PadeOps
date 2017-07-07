@@ -446,7 +446,6 @@ contains
         case default
             call gracefulExit("Invalid choice for ADVECTIONTERM",423)
         end select
-
         
         ! STEP 3: GENERATE MESH (CELL CENTERED) 
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
@@ -498,7 +497,7 @@ contains
         call this%spectC%alloc_r2c_out(this%dTdyH)
         call this%spectE%alloc_r2c_out(this%dTdzH)
         call this%spectC%alloc_r2c_out(this%dTdzHC)
-        call this%spectC%alloc_r2c_out(this%rhsC,3); 
+        call this%spectC%alloc_r2c_out(this%rhsC,3) 
         call this%spectC%alloc_r2c_out(this%OrhsC,3)
         call this%spectE%alloc_r2c_out(this%SfieldsE,4)
         allocate(this%divergence(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))

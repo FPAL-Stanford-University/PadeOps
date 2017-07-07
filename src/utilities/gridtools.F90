@@ -14,10 +14,19 @@ module gridtools
     end interface
 
 contains
+    
+   pure function mytrapz(x,f) result(intf)
+        real(rkind), dimension(:), intent(in) :: x, f
+        real(rkind) :: intf
+        real(rkind) :: dx
 
-    pure subroutine logspace(x,x_min,x_max,n)
+        dx = x(2) - x(1)
+        intf = sum(f)*dx
+    end function 
+
+    pure function logspace(x_min,x_max,n) result(x)
         integer, intent(in) :: n                    ! Desired size
-        real(rkind), dimension(n), intent(out) :: x ! Output array
+        real(rkind), dimension(n) :: x ! Output array
         real(rkind), intent(in) :: x_min, x_max     ! Left and Right bounds in POWERS OF 10
 
         real(rkind) :: step
@@ -37,7 +46,7 @@ contains
 
          x = (ten)**(xtemp)
 
-    end subroutine 
+    end function
 
     pure function linspace(x_min,x_max,n) result(x)
         integer, intent(in) :: n
