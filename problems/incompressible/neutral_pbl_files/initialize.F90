@@ -44,7 +44,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: randArr, Tpurt, eta
     ! New parameters added by MH, 6/22/17
     real(rkind), dimension(:,:,:), allocatable :: fu, fv, signf
-    real(rkind), dimension(:,:,:), pointer :: ub, vb
+    real(rkind), dimension(:,:,:), allocatable :: ub, vb
     real(rkind) :: ustar = 0.28d0, kappaInit = 0.41d0
     
     namelist /PROBLEM_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
@@ -68,7 +68,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     allocate(fu(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3))) 
     allocate(fv(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     allocate(signf(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    ub => fieldsC(:,:,:,1); vb => fieldsC(:,:,:,2)
+    allocate(ub(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    allocate(vb(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    !ub => fieldsC(:,:,:,1); vb => fieldsC(:,:,:,2)
 
     ! Compute initial velocity field
     fu = 1.57d0 * (z/h0Temp) - 2.68d0 * (z/h0Temp)**2
@@ -79,6 +81,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
         Gx0 * ((1.d0+tanh((z/z0init)*2.d0*h0Temp/100.d0))/2.d0)
     v = vb*((1.d0-tanh(((z/z0init)-0.5d0)*2.d0*h0Temp/100.d0))/2.d0) + &
         Gy0 * ((1.d0+tanh((z/z0init)*2.d0*h0Temp/100.d0))/2.d0)
+    deallocate(ub, vb, fu, fv, signf)
 
     ! Provide initial conditions for Velocities and Potential Temperature
     !u = Gx0           ! Could be a function of (x,y,z)
@@ -167,7 +170,7 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
     xplanes = [64]
     yplanes = [64]
-    zplanes = [20]
+    zplanes = [256]
 
 end subroutine
 
