@@ -76,6 +76,23 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
 
 end subroutine
 
+subroutine embed_WM_stress(this)
+   class(sgs_igrid), intent(inout) :: this
+   
+   if(this%gpE%xst(3)==1) then
+      this%tau_13(:,:,1) = this%tauijWM(:,:,1,1)
+      this%tau_23(:,:,1) = this%tauijWM(:,:,1,2)
+   endif
+end subroutine 
+
+subroutine embed_WM_PotTflux(this)
+   class(sgs_igrid), intent(inout) :: this
+
+   if(this%gpE%xst(3)==1) then
+      this%q3E(:,:,1) = this%wTh_surf
+   endif
+end subroutine 
+
 
 subroutine computeWall_PotTFlux(this)
    class(sgs_igrid), intent(inout) :: this

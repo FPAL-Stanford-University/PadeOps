@@ -85,7 +85,9 @@ module sgsmod_igrid
             procedure, private :: compute_and_bcast_surface_Mn
             procedure, private :: getSurfaceQuantities
             procedure, private :: computeWall_PotTFlux
-         
+            procedure, private :: embed_WM_stress
+            procedure, private :: embed_WM_PotTFlux
+
             !! ALL DYNAMIC PROCEDURE SUBROUTINES
             procedure, private :: allocateMemory_DynamicProcedure
             procedure, private :: destroyMemory_DynamicProcedure
@@ -184,10 +186,6 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
    ! ddz(tau13) for urhs, ddx(tau13) for wrhs
    call this%spectE%fft(this%tau_13, cbuffy2)
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
-   !if (this%useWallModel) then ---adding to tau13 in getTauSGS. Does this break anything (e.g. dynamic procedure)??? Adding to tau13 makes stats computation very convenient.
-   !   cbuffz2(:,:,1) = this%tauijWMhat_inZ(:,:,1,1)
-   !   call transpose_z_to_y(cbuffz2,cbuffy2, this%sp_gpE)
-   !end if
    call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
    call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
    urhs = urhs - cbuffy1
@@ -197,10 +195,6 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
    ! ddz(tau23) for vrhs, ddy(tau23) for wrhs
    call this%spectE%fft(this%tau_23, cbuffy2)
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
-   !if (this%useWallModel) then ---adding to tau23 in getTauSGS. Does this break anything (e.g. dynamic procedure)??? Adding to tau23 makes stats computation very convenient.
-   !   cbuffz2(:,:,1) = this%tauijWMhat_inZ(:,:,1,2)
-   !   call transpose_z_to_y(cbuffz2,cbuffy2, this%sp_gpE)
-   !end if
    call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
    call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
    vrhs = vrhs - cbuffy1
@@ -235,9 +229,6 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzE)
    ! ddz(q3)
    call this%spectE%fft(this%q3E, cbuffy2)
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
-   !if (this%useWallModel) then ---adding to q3E in getQjSGS. Does this break anything (e.g. dynamic procedure)??? Adding to q3E makes stats computation very convenient.
-   !   cbuffz2(:,:,1) = this%q3HAT_AtWall
-   !end if 
    call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
    call transpose_z_to_y(cbuffz1,cbuffy1,this%sp_gpC)
    Trhs = Trhs - cbuffy1
@@ -263,10 +254,7 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzE)
       this%q3E = -this%kappa_sgs_E*dTdzE
    end if
 
-   ! MH 7/9/17, segfaults with no WM
-   !if(this%gpE%xst(3)==1) then
-   !  this%q3E(:,:,1) = this%wTh_surf
-   !endif
+   if (this%useWallModel) call this%embed_WM_PotTflux()
  
 end subroutine
 
@@ -310,11 +298,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
       this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
    end if
 
-   ! MH 7/9/17 segfaults with no WM
-   !if(this%gpE%xst(3)==1) then
-   !   this%tau_13(:,:,1) = this%tauijWM(:,:,1,1)
-   !   this%tau_23(:,:,1) = this%tauijWM(:,:,1,2)
-   !endif
+   if (this%useWallModel) call this%embed_WM_stress()
  
    if(newTimeStep) this%mstep = this%mstep + 1
    
