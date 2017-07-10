@@ -29,13 +29,13 @@ module ElasticEOSMod
             real(rkind), dimension(:,:,:),   intent(out), optional :: trG, trG2, detG
         end subroutine
 
-        pure subroutine get_devstress_interface(this,finger,fingersq,trG,trG2,detG,devstress)
+        pure subroutine get_devstress_interface(this,finger,fingersq,trG,trG2,detG,rhoByRho0,devstress)
             import :: elasticeos
             import :: rkind
             class(elasticeos), intent(in) :: this
             real(rkind), dimension(:,:,:,:), intent(in)  :: finger
             real(rkind), dimension(:,:,:,:), intent(in)  :: fingersq
-            real(rkind), dimension(:,:,:),   intent(in)  :: trG, trG2, detG
+            real(rkind), dimension(:,:,:),   intent(in)  :: trG, trG2, detG, rhoByRho0
             real(rkind), dimension(:,:,:,:), intent(out) :: devstress
         end subroutine
 
