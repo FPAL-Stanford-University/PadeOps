@@ -76,12 +76,12 @@ contains
 
     end subroutine
 
-    pure subroutine get_devstress(this,finger,fingersq,trG,trG2,detG,rhoByRho0,devstress)
+    pure subroutine get_devstress(this,finger,fingersq,trG,trG2,detG,devstress)
         use exits, only: GracefulExit
         class(sep1solid), intent(in) :: this
         real(rkind), dimension(:,:,:,:), intent(in)  :: finger
         real(rkind), dimension(:,:,:,:), intent(in)  :: fingersq
-        real(rkind), dimension(:,:,:),   intent(in)  :: trG, trG2, detG, rhoByrho0
+        real(rkind), dimension(:,:,:),   intent(in)  :: trG, trG2, detG
         real(rkind), dimension(:,:,:,:), intent(out) :: devstress
 
         real(rkind), dimension(size(finger,1),size(finger,2),size(finger,3)) :: devstmp
@@ -89,17 +89,11 @@ contains
 
         ! if(.not.present(fingersq)) call GracefulExit("fingersq required for devstress",1111)
        
-        !--Non-scaled g version--- 
-        !do i = 1,6
-        !    devstress(:,:,:,i) = -this%mu*(detG**(-sixth)*fingersq(:,:,:,i) - detG**sixth*finger(:,:,:,i))
-        !end do
-        !devstmp = third*this%mu*(detG**(-sixth)*trG2 - detG**sixth*trG)
-
-        !--For scaled g as well as non-scaled g version--- 
         do i = 1,6
-            devstress(:,:,:,i) = -this%mu*rhoByRho0*(detG**(-sixth)*fingersq(:,:,:,i) - detG**sixth*finger(:,:,:,i))
+            devstress(:,:,:,i) = -this%mu*(detG**(-sixth)*fingersq(:,:,:,i) - detG**sixth*finger(:,:,:,i))
         end do
-        devstmp = third*this%mu*rhoByRho0*(detG**(-sixth)*trG2 - detG**sixth*trG)
+        devstmp = third*this%mu*(detG**(-sixth)*trG2 - detG**sixth*trG)
+
         devstress(:,:,:,1) = devstress(:,:,:,1) + devstmp
         devstress(:,:,:,4) = devstress(:,:,:,4) + devstmp
         devstress(:,:,:,6) = devstress(:,:,:,6) + devstmp
