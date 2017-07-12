@@ -1,4 +1,4 @@
-module sliding_data
+module sliding_circular_data
     use kind_parameters,  only: rkind
     use constants,        only: one,two,three,eight,three,six
     use FiltersMod,       only: filters
@@ -10,8 +10,7 @@ module sliding_data
     real(rkind) :: yield = 1.D9, yield2 = 1.D9
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: interface_init = 0.65_rkind, shock_init = 0.5_rkind
-    logical     :: normal = .false.
+    real(rkind) :: interface_init = 0.65_rkind, shock_init = 0.5_rkind, omega = 0.1_rkind
     logical     :: sliding = .false.
 
     type(filters) :: mygfil
@@ -122,7 +121,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use decomp_2d,        only: decomp_info
     use exits,            only: warning
 
-    use sliding_data
+    use sliding_circular_data
 
     implicit none
 
@@ -144,16 +143,16 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = one/real(nx,rkind)
+        dx = one/real(nx-1,rkind)
         dy = dx
         dz = dx
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
-                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
+                    x(i,j,k) = - half + real( ix1 - 1 + i - 1, rkind ) * dx
+                    y(i,j,k) = - half + real( iy1 - 1 + j - 1, rkind ) * dy
+                    z(i,j,k) = - half + real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
         end do
@@ -172,7 +171,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
     
-    use sliding_data
+    use sliding_circular_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -184,11 +183,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, rad, theta
     real(rkind), dimension(8) :: fparams
     integer, dimension(2) :: iparams
 
-    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, shock_thick, minVF, shock_init, interface_init, normal, sliding
+    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, shock_thick, minVF, shock_init, interface_init, sliding, omega
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -236,19 +235,16 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%sliding = sliding
         mix%material(2)%sliding = sliding
 
-        dum = half * ( one - erf( (x-shock_init)/(shock_thick*dx) ) )
+        ! dum = half * ( one - erf( (x-shock_init)/(shock_thick*dx) ) )
 
-        if (normal) then
-            u   = half*dum -half*(one-dum)
-            v   = zero
-            w   = zero
-        else
-            u   = zero
-            v   = half*dum -half*(one-dum)
-            w   = zero
-        end if
+        rad = sqrt(x**2 + y**2)
+        theta = atan2(y,x)
+        dum = half * ( one - erf( (rad-interface_init)/(half*thick*dx) ) )
+        tmp = half * ( one - erf( (rad-interface_init)/(thick*dx) ) )
 
-        tmp = half * ( one - erf( (x-interface_init)/(thick*dx) ) )
+        u   =-sin(theta) * rad * omega * dum
+        v   = cos(theta) * rad * omega * dum
+        w   = zero
 
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
@@ -287,7 +283,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use operators,        only: curl
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
 
-    use sliding_data
+    use sliding_circular_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -324,7 +320,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        end if
 
        if (decomp%ysz(2) == 1) then
-           write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/sliding_"//trim(str)//"_", vizcount, ".dat"
+           write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/sliding_circular_"//trim(str)//"_", vizcount, ".dat"
 
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
            write(outputunit,'(4ES27.16E3)') tsim, minVF, thick
@@ -353,7 +349,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use SolidMixtureMod,  only: solid_mixture
     use operators,        only: filter3D
 
-    use sliding_data
+    use sliding_circular_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -363,11 +359,12 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     type(solid_mixture),             intent(inout) :: mix
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
-    integer :: nx, i, j
-    real(rkind) :: dx, xspng, tspng
+    integer :: nx, ny, i, j
+    real(rkind) :: dy, yspng, tspng
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
     
     nx = decomp%ysz(1)
+    ny = decomp%ysz(2)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -375,19 +372,6 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-        if (normal) then
-            rho(1,:,:) = rho_0
-            u  (1,:,:) = half
-            v  (1,:,:) = zero
-            w  (1,:,:) = zero
-            p  (1,:,:) = p_amb
-
-            rho(nx,:,:) = rho_0_2
-            u  (nx,:,:) = -half
-            v  (nx,:,:) = zero
-            w  (nx,:,:) = zero
-            p  (nx,:,:) = p_amb
-        end if
 
     end associate
 end subroutine
@@ -400,7 +384,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use reductions,       only: P_MAXVAL
     use SolidMixtureMod,  only: solid_mixture
 
-    use sliding_data
+    use sliding_circular_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -429,7 +413,7 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use sliding_data
+    use sliding_circular_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -455,7 +439,7 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use sliding_data
+    use sliding_circular_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -475,7 +459,7 @@ subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Y
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use sliding_data
+    use sliding_circular_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -495,7 +479,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use sliding_data
+    use sliding_circular_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -515,7 +499,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use sliding_data
+    use sliding_circular_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp

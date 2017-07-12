@@ -15,6 +15,7 @@ module SolidMod
     type :: solid
         integer :: nxp, nyp, nzp
 
+        logical :: sliding = .FALSE.
         logical :: plast = .FALSE.
         logical :: explPlast = .FALSE.
         logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .TRUE., includeSources = .FALSE.
@@ -404,7 +405,7 @@ contains
         call this%elastic%make_tensor_SPD(this%g)
 
         ! Sliding treatment using plasticity (Using zero yield everywhere for now)
-        call this%sliding_deformation()
+        if (this%sliding) call this%sliding_deformation()
 
         if(this%plast) then
             if (.NOT. this%explPlast) then
@@ -435,21 +436,29 @@ contains
 
     subroutine getRHS_g(this,rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
         use decomp_2d, only: nrank
-        use constants, only: eps
+        use constants, only: eps, pi
         use operators, only: gradient, curl
-        use reductions, only: P_MAXLOC
+        use reductions, only: P_MAXVAL
         class(solid),                                         intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
         real(rkind),                                          intent(in)  :: dt
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
+        real(rkind), dimension(:,:,:), pointer :: dutdx,dutdy,dutdz,dvtdx,dvtdy,dvtdz,dwtdx,dwtdy,dwtdz
+
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg, mask, ut, vt, wt, rad, theta
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg, normal
         real(rkind), parameter :: etafac = one/6._rkind
+        integer, parameter :: mask_exponent = 40
+
+        real(rkind) :: dx, dy, x, y
+        ! real(rkind), parameter :: theta = 45._rkind * pi / 180._rkind
 
         real(rkind) :: pmax
         integer :: imax, jmax, kmax, rmax
+        integer :: i,j,k
 
         ! Symmetry and anti-symmetry properties of g are assumed as below
         ! In x g_{ij}: [S A A; A S S; A S S]
@@ -457,6 +466,62 @@ contains
         ! In z g_{ij}: [S S A; S S A; A A S]
 
         rhsg = zero
+
+        if (this%sliding) then
+            mask = this%VF*(one - this%VF)
+            mask = mask/P_MAXVAL(mask)
+            mask = one - (one - mask)**mask_exponent
+        else
+            mask = zero
+        end if
+
+        dx = one/real(this%decomp%xsz(1)-1,rkind)
+        dy = dx
+
+        do k=1,this%decomp%ysz(3)
+            do j=1,this%decomp%ysz(2)
+                do i=1,this%decomp%ysz(1)
+                    x = - half + real( this%decomp%yst(1) - 1 + i - 1, rkind ) * dx
+                    y = - half + real( this%decomp%yst(2) - 1 + j - 1, rkind ) * dy
+                    rad(i,j,k) = sqrt(x**2 + y**2)
+                    theta(i,j,k) = atan2(y,x)
+                    ! if ((i == 39) .and. (j == 83)) then
+                    !     print *, "x = ", x
+                    !     print *, "y = ", y
+                    !     print *, "radius = ", rad(39,83,1)
+                    !     print *, "theta  = ", theta(39,83,1)
+                    ! end if
+                end do
+            end do
+        end do
+
+        ! Set normal to be aligned with the x direction
+        ! normal(:,:,:,1) = one; normal(:,:,:,2) = zero; normal(:,:,:,3) = zero
+        ! normal(:,:,:,1) = cos(theta); normal(:,:,:,2) =-sin(theta); normal(:,:,:,3) = zero
+        normal(:,:,:,1) = cos(theta); normal(:,:,:,2) = sin(theta); normal(:,:,:,3) = zero
+
+        ! print *, "mask = ", mask(39,83,1)
+        ! print *, "normal = ", normal(39,83,1,:)
+
+        ! Magnitude of normal velocity
+        wt = u*normal(:,:,:,1) + v*normal(:,:,:,2) + w*normal(:,:,:,3)
+
+        ! print *, "normal velocity = ", wt(39,83,1)
+
+        ! Get tangential velocity
+        ut = u - normal(:,:,:,1)*wt
+        vt = v - normal(:,:,:,2)*wt
+        wt = w - normal(:,:,:,3)*wt
+
+        ! print *, "tangential velocity = ", sqrt(ut(39,83,1)**2 + vt(39,83,1)**2 + wt(39,83,1)**2)
+
+        dutdx => duidxj(:,:,:,1); dutdy => duidxj(:,:,:,2); dutdz => duidxj(:,:,:,3);
+        dvtdx => duidxj(:,:,:,4); dvtdy => duidxj(:,:,:,5); dvtdz => duidxj(:,:,:,6);
+        dwtdx => duidxj(:,:,:,7); dwtdy => duidxj(:,:,:,8); dwtdz => duidxj(:,:,:,9);
+        
+        call gradient(this%decomp, this%der, ut, dutdx, dutdy, dutdz, -x_bc,  y_bc,  z_bc)
+        call gradient(this%decomp, this%der, vt, dvtdx, dvtdy, dvtdz,  x_bc, -y_bc,  z_bc)
+        call gradient(this%decomp, this%der, wt, dwtdx, dwtdy, dwtdz,  x_bc,  y_bc, -z_bc)
 
         detg = this%g11*(this%g22*this%g33-this%g23*this%g32) &
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
@@ -495,25 +560,25 @@ contains
         !     print*, "        VF           = ", this%VF(imax,jmax,kmax)
         !     print*, ""
         ! end if
-        rhsg(:,:,:,1) = rhsg(:,:,:,1) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g11
-        rhsg(:,:,:,2) = rhsg(:,:,:,2) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g12
-        rhsg(:,:,:,3) = rhsg(:,:,:,3) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g13
+        rhsg(:,:,:,1) = rhsg(:,:,:,1) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g11 + mask*(this%g11*dutdx + this%g12*dvtdx + this%g13*dwtdx)
+        rhsg(:,:,:,2) = rhsg(:,:,:,2) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g12 + mask*(this%g11*dutdy + this%g12*dvtdy + this%g13*dwtdy)
+        rhsg(:,:,:,3) = rhsg(:,:,:,3) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g13 + mask*(this%g11*dutdz + this%g12*dvtdz + this%g13*dwtdz)
  
         tmp = -u*this%g21-v*this%g22-w*this%g23
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6), x_bc,-y_bc, z_bc)   
         
         call curl(this%decomp, this%der, this%g21, this%g22, this%g23, curlg, x_bc, -y_bc, z_bc)
-        rhsg(:,:,:,4) = rhsg(:,:,:,4) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g21
-        rhsg(:,:,:,5) = rhsg(:,:,:,5) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g22
-        rhsg(:,:,:,6) = rhsg(:,:,:,6) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g23
+        rhsg(:,:,:,4) = rhsg(:,:,:,4) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g21 + mask*(this%g21*dutdx + this%g22*dvtdx + this%g23*dwtdx)
+        rhsg(:,:,:,5) = rhsg(:,:,:,5) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g22 + mask*(this%g21*dutdy + this%g22*dvtdy + this%g23*dwtdy)
+        rhsg(:,:,:,6) = rhsg(:,:,:,6) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g23 + mask*(this%g21*dutdz + this%g22*dvtdz + this%g23*dwtdz)
  
         tmp = -u*this%g31-v*this%g32-w*this%g33
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,7),rhsg(:,:,:,8),rhsg(:,:,:,9), x_bc, y_bc,-z_bc)
 
         call curl(this%decomp, this%der, this%g31, this%g32, this%g33, curlg, x_bc, y_bc, -z_bc)
-        rhsg(:,:,:,7) = rhsg(:,:,:,7) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g31
-        rhsg(:,:,:,8) = rhsg(:,:,:,8) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g32
-        rhsg(:,:,:,9) = rhsg(:,:,:,9) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g33
+        rhsg(:,:,:,7) = rhsg(:,:,:,7) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g31 + mask*(this%g31*dutdx + this%g32*dvtdx + this%g33*dwtdx)
+        rhsg(:,:,:,8) = rhsg(:,:,:,8) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g32 + mask*(this%g31*dutdy + this%g32*dvtdy + this%g33*dwtdy)
+        rhsg(:,:,:,9) = rhsg(:,:,:,9) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g33 + mask*(this%g31*dutdz + this%g32*dvtdz + this%g33*dwtdz)
 
         if (this%plast) then
             if(this%explPlast) then
@@ -1012,7 +1077,7 @@ contains
 
     subroutine sliding_deformation(this)
         use kind_parameters, only: clen
-        use constants,       only: zero, eps, third, twothird
+        use constants,       only: zero, eps, third, twothird, pi
         use decomp_2d,       only: nrank
         use operators,       only: filter3D
         use exits,           only: GracefulExit, nancheck, message
@@ -1022,7 +1087,7 @@ contains
         real(rkind) :: yield = zero
         integer, parameter :: mask_exponent = 40
 
-        real(rkind), dimension(3,3) :: g, u, vt, gradf, gradf_new
+        real(rkind), dimension(3,3) :: g, u, vt, gradf, gradf_new, sigma, sigma_tilde, v_tilde
         real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new, dbeta_new
         real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t
         real(rkind) :: tol = real(1.D-12,rkind), residual, residual_new
@@ -1035,6 +1100,10 @@ contains
         character(len=clen) :: charout
 
         real(rkind), dimension(:), allocatable :: svdwork     ! Work array for SVD stuff
+
+        real(rkind) :: dx, dy, x, y, rad, theta = 45._rkind * pi / 180._rkind
+
+        print *, "In sliding_deformation"
 
         ! where ((this%VF > 0.01) .and. (this%VF < 0.99))
         !     mask = one
@@ -1067,97 +1136,144 @@ contains
             call message("NaN found in g during plastic relaxation.")
         end if
 
+        dx = one/real(this%decomp%xsz(1)-1,rkind)
+        dy = dx
+
         do k = 1,this%nzp
             do j = 1,this%nyp
                 do i = 1,this%nxp
 
-                    yield = (one-mask(i,j,k))*this%elastic%yield
+                    if (abs(mask(i,j,k)) > 0.9_rkind) then
+                        ! yield = zero
+                        yield = (one-mask(i,j,k))*this%elastic%yield
 
-                    g(1,1) = this%g(i,j,k,1); g(1,2) = this%g(i,j,k,2); g(1,3) = this%g(i,j,k,3)
-                    g(2,1) = this%g(i,j,k,4); g(2,2) = this%g(i,j,k,5); g(2,3) = this%g(i,j,k,6)
-                    g(3,1) = this%g(i,j,k,7); g(3,2) = this%g(i,j,k,8); g(3,3) = this%g(i,j,k,9)
+                        g(1,1) = this%g(i,j,k,1); g(1,2) = this%g(i,j,k,2); g(1,3) = this%g(i,j,k,3)
+                        g(2,1) = this%g(i,j,k,4); g(2,2) = this%g(i,j,k,5); g(2,3) = this%g(i,j,k,6)
+                        g(3,1) = this%g(i,j,k,7); g(3,2) = this%g(i,j,k,8); g(3,3) = this%g(i,j,k,9)
 
-                    if (this%use_gTg) then
-                        ! Get eigenvalues and eigenvectors of G
-                        call dsyev('V', 'U', 3, G, 3, sval, svdwork, lwork, info)
-                        if(info .ne. 0) print '(A,I6,A)', 'proc ', nrank, ': Problem with DSYEV. Please check.'
-                        sval = sqrt(sval)  ! Get singular values of g
-                    else
-                        ! Get SVD of g
-                        call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, svdwork, lwork, info)
-                        if(info .ne. 0) then
-                            write(charout, '(A,I0,A)') 'proc ', nrank, ': Problem with SVD. Please check.'
-                            call GracefulExit(charout,3475)
-                        end if
-                    end if
+                        !!!! HACK !!!
+                        ! Hard code v_tilde for now as the cartesian basis
+                        ! Should eventually set v_tilde(:,1) to the interface normal and the rest as orthogonal directions
 
-                    sqrt_om = sval(1)*sval(2)*sval(3)
-                    beta = sval**two / sqrt_om**(two/three)
+                        ! 1D
+                        ! v_tilde(1,1) = one;  v_tilde(1,2) = zero; v_tilde(1,3) = zero
+                        ! v_tilde(2,1) = zero; v_tilde(2,2) = one;  v_tilde(2,3) = zero
+                        ! v_tilde(3,1) = zero; v_tilde(3,2) = zero; v_tilde(3,3) = one
 
-                    betasum = sum( beta*(beta-one) ) / three
-                    Sa = -this%elastic%mu*sqrt_om * ( beta*(beta-one) - betasum )
+                        ! 2D oblique
+                        ! v_tilde(1,1) = cos(theta); v_tilde(1,2) = sin(theta); v_tilde(1,3) = zero
+                        ! v_tilde(2,1) =-sin(theta); v_tilde(2,2) = cos(theta); v_tilde(2,3) = zero
+                        ! v_tilde(3,1) = zero;       v_tilde(3,2) = zero;       v_tilde(3,3) = one
 
-                    Sabymu_sq = sum(Sa**two) / this%elastic%mu**two
-                    ycrit = Sabymu_sq - (two/three)*(yield/this%elastic%mu)**two
+                        ! 2D circular
+                        x = - half + real( this%decomp%yst(1) - 1 + i - 1, rkind ) * dx
+                        y = - half + real( this%decomp%yst(2) - 1 + j - 1, rkind ) * dy
+                        rad = sqrt(x**2 + y**2)
+                        theta = atan2(y,x)
 
-                    if (ycrit .LE. zero) then
-                        ! print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
-                        cycle
-                    end if
+                        v_tilde(1,1) = cos(theta); v_tilde(1,2) =-sin(theta); v_tilde(1,3) = zero
+                        v_tilde(2,1) = sin(theta); v_tilde(2,2) = cos(theta); v_tilde(2,3) = zero
+                        v_tilde(3,1) = zero;       v_tilde(3,2) = zero;       v_tilde(3,3) = one
 
-                    C0 = Sabymu_sq / ycrit
-                    Sa = Sa*( sqrt(C0 - one)/sqrt(C0) )
-
-                    ! Now get new beta
-                    f = Sa / (this%elastic%mu*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
-                    
-                    betasum = sum( beta*(beta-one) ) / three
-                    f1 = -( beta*(beta-one) - betasum ); f1(3) = beta(1)*beta(2)*beta(3)   ! Original function value
-
-                    ! Get newton step
-                    gradf(1,1) = -twothird*(two*beta(1)-one); gradf(1,2) =     third*(two*beta(2)-one); gradf(1,3) = third*(two*beta(3)-one)
-                    gradf(2,1) =     third*(two*beta(1)-one); gradf(2,2) = -twothird*(two*beta(2)-one); gradf(2,3) = third*(two*beta(3)-one)
-                    gradf(3,1) = beta(2)*beta(3);             gradf(3,2) = beta(3)*beta(1);             gradf(3,3) = beta(1)*beta(2)
-
-                    dbeta = (f-f1)
-                    call dgesv(3, 1, gradf, 3, ipiv, dbeta, 3, info)
-                   
-                    ! Compute residual
-                    residual = -sum( (f1-f)*dbeta )                                    ! lambda**2
-                    iters = 0
-                    t = 1._rkind
-                    do while ( (iters < niters) .AND. (abs(residual) .GT. tol) )
-                        ! Backtracking line search
-                        t = 1._rkind
-                        beta_new = beta + t * dbeta
-
-                        ! Get new residual
-                        gradf_new(1,1) = -twothird*(two*beta_new(1)-one);
-                        gradf_new(1,2) =     third*(two*beta_new(2)-one);
-                        gradf_new(1,3) = third*(two*beta_new(3)-one)
-
-                        gradf_new(2,1) =     third*(two*beta_new(1)-one);
-                        gradf_new(2,2) = -twothird*(two*beta_new(2)-one);
-                        gradf_new(2,3) = third*(two*beta_new(3)-one)
-
-                        gradf_new(3,1) = beta_new(2)*beta_new(3);
-                        gradf_new(3,2) = beta_new(3)*beta_new(1);
-                        gradf_new(3,3) = beta_new(1)*beta_new(2)
-
-                        betasum = sum( beta_new*(beta_new-one) ) / three
-                        f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
-                        dbeta_new = (f-f2)
-                        call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
-                        residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
-
-                        do while ( (abs(residual_new) .GE. abs(residual)) .AND. (t > eps) )
-                            if (iters .GT. (niters - 10)) then
-                                print '(A,I0,3(A,ES15.5))', 'iters = ', iters, ', t = ', t, ', residual_new = ', residual_new, ', residual = ', residual
+                        if (this%use_gTg) then
+                            ! Get eigenvalues and eigenvectors of G
+                            call dsyev('V', 'U', 3, G, 3, sval, svdwork, lwork, info)
+                            if(info .ne. 0) print '(A,I6,A)', 'proc ', nrank, ': Problem with DSYEV. Please check.'
+                            sval = sqrt(sval)  ! Get singular values of g
+                        else
+                            ! Get SVD of g
+                            call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, svdwork, lwork, info)
+                            if(info .ne. 0) then
+                                write(charout, '(A,I0,A)') 'proc ', nrank, ': Problem with SVD. Please check.'
+                                call GracefulExit(charout,3475)
                             end if
+                        end if
 
-                            t = half*t
+                        sqrt_om = sval(1)*sval(2)*sval(3)
+                        beta = sval**two / sqrt_om**(two/three)
+
+                        betasum = sum( beta*(beta-one) ) / three
+                        Sa = -this%elastic%mu*sqrt_om * ( beta*(beta-one) - betasum )
+
+                        ! Get the actual stress
+                        sigma = zero
+                        sigma(1,1) = Sa(1); sigma(2,2) = Sa(2); sigma(3,3) = Sa(3)
+                        sigma = matmul(sigma, transpose(vt))
+                        sigma = matmul(vt, sigma)
+
+                        if ((i == 108) .and. (j == 2)) then
+                            print *, "V:"
+                            print *, "   ",  vt(1,1), vt(2,1), vt(3,1)
+                            print *, "   ",  vt(1,2), vt(2,2), vt(3,2)
+                            print *, "   ",  vt(1,3), vt(2,3), vt(3,3)
+                        end if
+
+                        if ((i == 108) .and. (j == 2)) then
+                            print *, "sigma:"
+                            print *, "   ",  sigma(1,1), sigma(1,2), sigma(1,3)
+                            print *, "   ",  sigma(2,1), sigma(2,2), sigma(2,3)
+                            print *, "   ",  sigma(3,1), sigma(3,2), sigma(3,3)
+                        end if
+
+                        ! Get new stress
+                        sigma_tilde = zero
+                        sigma_tilde(1,1) = sum( v_tilde(:,1) * matmul( sigma, v_tilde(:,1) ) )
+                        sigma_tilde(2,2) = sum( v_tilde(:,2) * matmul( sigma, v_tilde(:,2) ) )
+                        sigma_tilde(2,3) = sum( v_tilde(:,3) * matmul( sigma, v_tilde(:,2) ) ) ! Need this off-diagonal term
+                                                                                                 ! since v_tilde(:,2:3) are not
+                                                                                                 ! the singular vectors but just
+                                                                                                 ! the basis for the interface
+                                                                                                 ! tangential singular vectors
+                        sigma_tilde(3,2) = sigma_tilde(2,3) ! Symmetric
+                        sigma_tilde(3,3) = sum( v_tilde(:,3) * matmul( sigma, v_tilde(:,3) ) )
+
+                        sigma_tilde = matmul(sigma_tilde, v_tilde)
+                        sigma_tilde = matmul(transpose(v_tilde), sigma_tilde)
+
+                        if ((i == 108) .and. (j == 2)) then
+                            print *, "sigma_tilde:"
+                            print *, "   ",  sigma_tilde(1,1), sigma_tilde(1,2), sigma_tilde(1,3)
+                            print *, "   ",  sigma_tilde(2,1), sigma_tilde(2,2), sigma_tilde(2,3)
+                            print *, "   ",  sigma_tilde(3,1), sigma_tilde(3,2), sigma_tilde(3,3)
+                        end if
+
+                        ! sigma_tilde = mask(i,j,k)*sigma_tilde + (one - mask(i,j,k))*sigma
+
+                        ! Get eigenvalues and eigenvectors of sigma
+                        call dsyev('V', 'U', 3, sigma_tilde, 3, Sa, svdwork, lwork, info)
+                        if(info .ne. 0) print '(A,I6,A)', 'proc ', nrank, ': Problem with DSYEV. Please check.'
+
+                        if ((i == 108) .and. (j == 2)) then
+                            print *, "v_tilde_new:"
+                            print *, "   ",  sigma_tilde(1,1), sigma_tilde(1,2), sigma_tilde(1,3)
+                            print *, "   ",  sigma_tilde(2,1), sigma_tilde(2,2), sigma_tilde(2,3)
+                            print *, "   ",  sigma_tilde(3,1), sigma_tilde(3,2), sigma_tilde(3,3)
+                        end if
+
+                        ! Now get new beta
+                        f = Sa / (this%elastic%mu*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
+                        
+                        betasum = sum( beta*(beta-one) ) / three
+                        f1 = -( beta*(beta-one) - betasum ); f1(3) = beta(1)*beta(2)*beta(3)   ! Original function value
+
+                        ! Get newton step
+                        gradf(1,1) = -twothird*(two*beta(1)-one); gradf(1,2) =     third*(two*beta(2)-one); gradf(1,3) = third*(two*beta(3)-one)
+                        gradf(2,1) =     third*(two*beta(1)-one); gradf(2,2) = -twothird*(two*beta(2)-one); gradf(2,3) = third*(two*beta(3)-one)
+                        gradf(3,1) = beta(2)*beta(3);             gradf(3,2) = beta(3)*beta(1);             gradf(3,3) = beta(1)*beta(2)
+
+                        dbeta = (f-f1)
+                        call dgesv(3, 1, gradf, 3, ipiv, dbeta, 3, info)
+                   
+                        ! Compute residual
+                        residual = -sum( (f1-f)*dbeta )                                    ! lambda**2
+                        iters = 0
+                        t = 1._rkind
+                        do while ( (iters < niters) .AND. (abs(residual) .GT. tol) )
+                            ! Backtracking line search
+                            t = 1._rkind
                             beta_new = beta + t * dbeta
 
+                            ! Get new residual
                             gradf_new(1,1) = -twothird*(two*beta_new(1)-one);
                             gradf_new(1,2) =     third*(two*beta_new(2)-one);
                             gradf_new(1,3) = third*(two*beta_new(3)-one)
@@ -1172,56 +1288,85 @@ contains
 
                             betasum = sum( beta_new*(beta_new-one) ) / three
                             f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
-
                             dbeta_new = (f-f2)
                             call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
                             residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
+
+                            do while ( (abs(residual_new) .GE. abs(residual)) .AND. (t > eps) )
+                                if (iters .GT. (niters - 10)) then
+                                    print '(A,I0,3(A,ES15.5))', 'iters = ', iters, ', t = ', t, ', residual_new = ', residual_new, ', residual = ', residual
+                                end if
+
+                                t = half*t
+                                beta_new = beta + t * dbeta
+
+                                gradf_new(1,1) = -twothird*(two*beta_new(1)-one);
+                                gradf_new(1,2) =     third*(two*beta_new(2)-one);
+                                gradf_new(1,3) = third*(two*beta_new(3)-one)
+
+                                gradf_new(2,1) =     third*(two*beta_new(1)-one);
+                                gradf_new(2,2) = -twothird*(two*beta_new(2)-one);
+                                gradf_new(2,3) = third*(two*beta_new(3)-one)
+
+                                gradf_new(3,1) = beta_new(2)*beta_new(3);
+                                gradf_new(3,2) = beta_new(3)*beta_new(1);
+                                gradf_new(3,3) = beta_new(1)*beta_new(2)
+
+                                betasum = sum( beta_new*(beta_new-one) ) / three
+                                f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
+
+                                dbeta_new = (f-f2)
+                                call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
+                                residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
+                            end do
+                            beta = beta_new
+                            f1 = f2
+                            dbeta = dbeta_new
+                            residual = residual_new
+
+                            iters = iters + 1
+                            if (t <= eps) then
+                                print '(A)', 'Newton solve in plastic_deformation did not converge'
+                                exit
+                            end if
                         end do
-                        beta = beta_new
-                        f1 = f2
-                        dbeta = dbeta_new
-                        residual = residual_new
+                        if ((iters >= niters) .OR. (t <= eps)) then
+                            write(charout,'(4(A,I0))') 'Newton solve in plastic_deformation did not converge at index ',i,',',j,',',k,' of process ',nrank
+                            print '(A)', charout
+                            print '(A)', 'g = '
+                            print '(4X,3(ES15.5))', this%g(i,j,k,1), this%g(i,j,k,2), this%g(i,j,k,3)
+                            print '(4X,3(ES15.5))', this%g(i,j,k,4), this%g(i,j,k,5), this%g(i,j,k,6)
+                            print '(4X,3(ES15.5))', this%g(i,j,k,7), this%g(i,j,k,8), this%g(i,j,k,9)
+                            print '(A,ES15.5)', '( ||S||^2 - (2/3) sigma_Y^2 )/mu^2 = ', ycrit
 
-                        iters = iters + 1
-                        if (t <= eps) then
-                            print '(A)', 'Newton solve in plastic_deformation did not converge'
-                            exit
+                            print '(A,ES15.5)', 'Relaxation, t = ', t
+                            print '(A,ES15.5)', 'Residual = ', residual
+                            call GracefulExit(charout,6382)
                         end if
-                    end do
-                    if ((iters >= niters) .OR. (t <= eps)) then
-                        write(charout,'(4(A,I0))') 'Newton solve in plastic_deformation did not converge at index ',i,',',j,',',k,' of process ',nrank
-                        print '(A)', charout
-                        print '(A)', 'g = '
-                        print '(4X,3(ES15.5))', this%g(i,j,k,1), this%g(i,j,k,2), this%g(i,j,k,3)
-                        print '(4X,3(ES15.5))', this%g(i,j,k,4), this%g(i,j,k,5), this%g(i,j,k,6)
-                        print '(4X,3(ES15.5))', this%g(i,j,k,7), this%g(i,j,k,8), this%g(i,j,k,9)
-                        print '(A,ES15.5)', '( ||S||^2 - (2/3) sigma_Y^2 )/mu^2 = ', ycrit
 
-                        print '(A,ES15.5)', 'Relaxation, t = ', t
-                        print '(A,ES15.5)', 'Residual = ', residual
-                        call GracefulExit(charout,6382)
+                        ! Then get new svals
+                        sval = sqrt(beta) * sqrt_om**(one/three)
+
+                        if (this%use_gTg) then
+                            sval = sval*sval ! New eigenvalues of G
+                            
+                            ! Get g = v*sval*vt
+                            u = sigma_tilde; vt = transpose(u)
+                            vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! eigval*vt
+                            G = MATMUL(u,vt) ! v*eigval*vt
+                        else
+                            ! Get g = u*sval*vt
+                            u = sigma_tilde; vt = transpose(u)
+                            vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! sval*vt
+                            g = MATMUL(u,vt) ! u*sval*vt
+                        end if
+
+
+                        this%g(i,j,k,1) = g(1,1); this%g(i,j,k,2) = g(1,2); this%g(i,j,k,3) = g(1,3)
+                        this%g(i,j,k,4) = g(2,1); this%g(i,j,k,5) = g(2,2); this%g(i,j,k,6) = g(2,3)
+                        this%g(i,j,k,7) = g(3,1); this%g(i,j,k,8) = g(3,2); this%g(i,j,k,9) = g(3,3)
+
                     end if
-
-                    ! Then get new svals
-                    sval = sqrt(beta) * sqrt_om**(one/three)
-
-                    if (this%use_gTg) then
-                        sval = sval*sval ! New eigenvalues of G
-                        
-                        ! Get g = v*sval*vt
-                        u = G; vt = transpose(u)
-                        vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! eigval*vt
-                        G = MATMUL(u,vt) ! v*eigval*vt
-                    else
-                        ! Get g = u*sval*vt
-                        vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! sval*vt
-                        g = MATMUL(u,vt) ! u*sval*vt
-                    end if
-
-
-                    this%g(i,j,k,1) = g(1,1); this%g(i,j,k,2) = g(1,2); this%g(i,j,k,3) = g(1,3)
-                    this%g(i,j,k,4) = g(2,1); this%g(i,j,k,5) = g(2,2); this%g(i,j,k,6) = g(2,3)
-                    this%g(i,j,k,7) = g(3,1); this%g(i,j,k,8) = g(3,2); this%g(i,j,k,9) = g(3,3)
                 end do
             end do
         end do

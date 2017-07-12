@@ -531,6 +531,10 @@ stop
 
         do imat = 1, this%ns
           call this%material(imat)%get_eelastic_devstress()
+          ! print *, "Material ", imat, " sigma:"
+          ! print *, "   ",  this%material(imat)%devstress(200,1,1,1), this%material(imat)%devstress(200,1,1,2), this%material(imat)%devstress(200,1,1,3)
+          ! print *, "   ",  this%material(imat)%devstress(200,1,1,2), this%material(imat)%devstress(200,1,1,4), this%material(imat)%devstress(200,1,1,5)
+          ! print *, "   ",  this%material(imat)%devstress(200,1,1,3), this%material(imat)%devstress(200,1,1,5), this%material(imat)%devstress(200,1,1,6)
           devstress(:,:,:,1) = devstress(:,:,:,1) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,1)
           devstress(:,:,:,2) = devstress(:,:,:,2) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,2)
           devstress(:,:,:,3) = devstress(:,:,:,3) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,3)
