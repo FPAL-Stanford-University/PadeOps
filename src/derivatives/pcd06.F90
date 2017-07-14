@@ -3,7 +3,8 @@
 
 module pcd06stuff
 
-    use kind_parameters, only: rkind
+    use mpi
+    use kind_parameters, only: rkind, mpirkind
     use constants,       only: zero,one,two
     use t3dMod,          only: t3d
     use exits,           only: GracefulExit
@@ -51,6 +52,9 @@ module pcd06stuff
         procedure, private :: ComputeLU
         procedure, private :: get_u_ii
         procedure, private :: get_l_ii
+
+        procedure :: SolveLU
+        procedure, private :: jacobi_iteration
         
     end type
 
@@ -108,28 +112,28 @@ contains
             call GracefulExit("Non-periodic pcd06 yet to be implemented.",435)
         end if 
         
-        if (this%gp%rank3D == 0) then
-            print*, "LU: "
-            print*, "    ", this%LU(:,1)
-            print*, "    ", this%LU(:,2)
-            print*, "    ", this%LU(:,3)
-            print*, ""
-            print*, "u_ii: "
-            print*, "    ", this%u_ii
-            print*, ""
-            print*, "l_ii: "
-            print*, "    ", this%l_ii
-            print*, ""
-            print*, "u_iip1: "
-            print*, "    ", this%u_iip1
-            print*, ""
-            print*, "l_iip1: "
-            print*, "    ", this%l_iip1
-            print*, ""
-            print*, "e, f, g: "
-            print*, "    ", this%e, this%f, this%g
-            print*, ""
-        end if
+        ! if (this%gp%rank3D == 0) then
+        !     print*, "LU: "
+        !     print*, "    ", this%LU(:,1)
+        !     print*, "    ", this%LU(:,2)
+        !     print*, "    ", this%LU(:,3)
+        !     print*, ""
+        !     print*, "u_ii: "
+        !     print*, "    ", this%u_ii
+        !     print*, ""
+        !     print*, "l_ii: "
+        !     print*, "    ", this%l_ii
+        !     print*, ""
+        !     print*, "u_iip1: "
+        !     print*, "    ", this%u_iip1
+        !     print*, ""
+        !     print*, "l_iip1: "
+        !     print*, "    ", this%l_iip1
+        !     print*, ""
+        !     print*, "e, f, g: "
+        !     print*, "    ", this%e, this%f, this%g
+        !     print*, ""
+        ! end if
 
         ! If everything passes
         ierr = 0
@@ -186,7 +190,6 @@ contains
     end subroutine
     
     subroutine ComputeXD1RHS(this,f, RHS, n2, n3) 
-         
         class( pcd06 ), intent(in) :: this
         integer, intent(in) :: n2, n3
         real(rkind), dimension(this%n,n2,n3), intent(in) :: f
@@ -218,4 +221,106 @@ contains
     
     end subroutine
    
+    subroutine jacobi_iteration(this, df, n2, n3, niters, recvbuf_l, recvbuf_r)
+        class(pcd06), intent(in) :: this
+        integer, intent(in) :: n2, n3
+        real(rkind), dimension(0:this%n+1,n2,n3), intent(inout) :: df
+        real(rkind), dimension(n2,n3), intent(out) :: recvbuf_l, recvbuf_r
+        integer, intent(in) ::  niters
+        integer ::  iters, ierr
+        real(rkind), dimension(n2,n3) :: sendbuf
+        integer :: recv_request_left, recv_request_right
+        integer :: send_request_left, send_request_right
+        integer, dimension(MPI_STATUS_SIZE) :: status
+
+        df(1,:,:) = df(1,:,:) / this%e
+        sendbuf = df(1,:,:)
+
+        do iters = 1,niters
+            ! Communicate updated iterations of the reduced system
+            call mpi_irecv( recvbuf_l, n2*n3, mpirkind, this%gp%xleft,  0, this%gp%commX, recv_request_left,  ierr)
+            call mpi_irecv( recvbuf_r, n2*n3, mpirkind, this%gp%xright, 1, this%gp%commX, recv_request_right, ierr)
+
+            call mpi_isend( sendbuf, n2*n3, mpirkind, this%gp%xright, 0, this%gp%commX, send_request_right, ierr)
+            call mpi_isend( sendbuf, n2*n3, mpirkind, this%gp%xleft,  1, this%gp%commX, send_request_left,  ierr)
+
+            call mpi_wait(recv_request_left,  status, ierr)
+            call mpi_wait(recv_request_right, status, ierr)
+            call mpi_wait(send_request_left,  status, ierr)
+            call mpi_wait(send_request_right, status, ierr)
+
+            sendbuf = -(recvbuf_l*this%g + recvbuf_r*this%f)/this%e + df(1,:,:)
+        end do
+
+        ! Communicate updated iterations of the reduced system
+        call mpi_irecv( recvbuf_l, n2*n3, mpirkind, this%gp%xleft,  0, this%gp%commX, recv_request_left,  ierr)
+        call mpi_irecv( recvbuf_r, n2*n3, mpirkind, this%gp%xright, 1, this%gp%commX, recv_request_right, ierr)
+
+        call mpi_isend( sendbuf, n2*n3, mpirkind, this%gp%xright, 0, this%gp%commX, send_request_right, ierr)
+        call mpi_isend( sendbuf, n2*n3, mpirkind, this%gp%xleft,  1, this%gp%commX, send_request_left,  ierr)
+
+        call mpi_wait(recv_request_left,  status, ierr)
+        call mpi_wait(recv_request_right, status, ierr)
+        call mpi_wait(send_request_left,  status, ierr)
+        call mpi_wait(send_request_right, status, ierr)
+
+        df(1,:,:) = sendbuf
+
+    end subroutine
+
+    subroutine SolveLU(this, df, n2, n3, niters)
+        class( pcd06 ), intent(in) :: this
+        integer, intent(in) :: n2, n3, niters
+        real(rkind), dimension(0:this%n+1,n2,n3), intent(inout) :: df
+        real(rkind), dimension(n2,n3) :: recvbuf_l, recvbuf_r
+        integer ::  i, j, k, ierr
+
+        real(rkind), dimension(n2,n3) :: sendbuf
+        integer :: recv_request_left
+        integer :: send_request_right
+        integer, dimension(MPI_STATUS_SIZE) :: status
+
+        ! L y_i = rhs_i
+        do k = 1,n3
+            do j = 1,n2
+                do i = 3,this%n
+                    df(i,j,k) = df(i,j,k) - this%LU(i-1,1)*df(i-1,j,k)
+                end do
+            end do
+        end do
+
+        ! Communicate last cell data to the processor to the right and recv from left
+        call mpi_irecv( recvbuf_l, n2*n3, mpirkind, this%gp%xleft,  0, this%gp%commX, recv_request_left,  ierr)
+        sendbuf = df(this%n,:,:)
+        call mpi_isend( sendbuf, n2*n3, mpirkind, this%gp%xright, 0, this%gp%commX, send_request_right, ierr)
+        call mpi_wait(recv_request_left,  status, ierr)
+        call mpi_wait(send_request_right, status, ierr)
+
+        ! get y_r
+        do k = 1,n3
+            do j = 1,n2
+                df(1,j,k) = df(i,j,k) - sum(this%l_ii*df(2:this%n,j,k)) - this%l_iip1*recvbuf_l(j,k)
+            end do
+        end do
+
+        ! Solve the reduced system
+        call this%jacobi_iteration( df, n2, n3, niters, recvbuf_l, recvbuf_r )
+
+
+        ! Solve for the rest of the solution vector
+        do k = 1,n3
+            do j = 1,n2
+                df(2:this%n,j,k) = df(2:this%n,j,k) - df(1,j,k)*this%u_ii 
+                df(this%n,j,k) = df(this%n,j,k) - recvbuf_r(j,k)*this%u_iip1
+
+                df(this%n,j,k) = df(this%n,j,k) / this%LU(this%n-1,2)
+                do i = this%n-1,2,-1
+                    df(i,j,k) = (df(i,j,k) - this%LU(i-1,3)*df(i+1,j,k)) / this%LU(i-1,2)
+                end do
+
+            end do
+        end do
+
+    end subroutine
+
 end module

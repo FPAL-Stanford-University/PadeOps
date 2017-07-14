@@ -11,11 +11,13 @@ program test_pcd06
     type(t3d) :: gp
     type(pcd06) :: xpcd06
     real(rkind), dimension(:,:,:), allocatable :: input
-    integer :: nx = 16, ny = 16, nz = 16
-    integer :: px = 4, py = 1, pz = 1
+    integer :: nx = 128, ny = 128, nz = 128
+    integer :: px = 64, py = 1, pz = 1
+    integer :: niters = 26
     integer :: i, j, k, ierr
     logical :: fail
     real(rkind) :: omega = 1._rkind, dx, dy, dz
+    real(rkind) :: start, tx
     logical :: optimize = .false.
 
     call MPI_Init(ierr)
@@ -33,7 +35,7 @@ program test_pcd06
 
     ierr = xpcd06%init(gp, dx, .true., 0, 0)
 
-    allocate(  input(gp%sz3D(1), gp%sz3D(2), gp%sz3D(3)) )
+    allocate(  input(0:gp%sz3D(1)+1, gp%sz3D(2), gp%sz3D(3)) )
 
     do k=1,gp%sz3d(3)
         do j=1,gp%sz3d(2)  
@@ -44,6 +46,15 @@ program test_pcd06
             end do
         end do
     end do
+
+    input = 1._rkind
+
+    start = gp%time(barrier=.true.)
+    call xpcd06%SolveLU(input, ny, nz, niters)
+    tx = gp%time(start,reduce=.true.)
+    if (gp%rank3d == 0) print*, "Time to get solution = ", tx
+
+    call print_array(input(1:gp%sz3D(1),1:1,1:1), "solution")
 
     deallocate(  input )
 

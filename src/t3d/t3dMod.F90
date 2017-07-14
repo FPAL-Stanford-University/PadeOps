@@ -40,9 +40,9 @@ module t3dMod
         integer, dimension(:), allocatable :: disp3DY, count3DY, dispY, countY
         integer, dimension(:), allocatable :: disp3DZ, count3DZ, dispZ, countZ
         logical :: unequalX = .true., unequalY = .true., unequalZ = .true.
-        integer :: xleft, xright 
-        integer :: yleft, yright 
-        integer :: zleft, zright
+        integer, public :: xleft, xright 
+        integer, public :: yleft, yright 
+        integer, public :: zleft, zright
         integer :: mpi_halo_x = MPI_DATATYPE_NULL, mpi_halo_y = MPI_DATATYPE_NULL, mpi_halo_z = MPI_DATATYPE_NULL ! MPI derived datatypes for halo communication
         
         integer, dimension(:), allocatable :: splitx_y, splitx_z
@@ -211,20 +211,20 @@ contains
 
         ! Create MPI datatypes for halo communication
         ! X halo datatype
-        call mpi_type_vector(this%sz3Dg(2)*this%sz3Dg(3), this%nghosts(1), this%sz3Dg(1), mpirkind, this%mpi_halo_x, ierr)
+        call mpi_type_vector(this%sz3D(2)*this%sz3D(3), this%nghosts(1), this%sz3Dg(1), mpirkind, this%mpi_halo_x, ierr)
         call mpi_type_commit(this%mpi_halo_x, ierr)
         if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_x == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
 
-        ! Y halo datatype
-        call mpi_type_contiguous(this%sz3Dg(1), mpirkind, newtype, ierr)
-        call mpi_type_vector(this%sz3Dg(3), this%nghosts(2), this%sz3Dg(2), newtype, this%mpi_halo_y, ierr)
-        call mpi_type_commit(this%mpi_halo_y, ierr)
-        if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_y == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
+        ! ! Y halo datatype
+        ! call mpi_type_contiguous(this%sz3Dg(1), mpirkind, newtype, ierr)
+        ! call mpi_type_vector(this%sz3Dg(3), this%nghosts(2), this%sz3Dg(2), newtype, this%mpi_halo_y, ierr)
+        ! call mpi_type_commit(this%mpi_halo_y, ierr)
+        ! if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_y == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
 
-        ! Z halo datatype
-        call mpi_type_contiguous(this%sz3Dg(1)*this%sz3Dg(2)*this%nghosts(3), mpirkind, this%mpi_halo_z, ierr)
-        call mpi_type_commit(this%mpi_halo_z, ierr)
-        if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_z == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
+        ! ! Z halo datatype
+        ! call mpi_type_contiguous(this%sz3Dg(1)*this%sz3Dg(2)*this%nghosts(3), mpirkind, this%mpi_halo_z, ierr)
+        ! call mpi_type_commit(this%mpi_halo_z, ierr)
+        ! if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_z == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
 
         ! tind = tind + 1; times(tind) = this%time(barrier=.true.)
 
@@ -1132,62 +1132,62 @@ contains
         ! TODO: Need to rewrite this to use mpi_halo_x derived datatype instead
         ! of copying
 
-        ! print*, "In fill_halo_x"
-        ! print*, "nghosts = ", this%nghosts
+        print*, "In fill_halo_x"
+        print*, "nghosts = ", this%nghosts
 
-        ! print*, this%rank3D, ": lbound = ", lbound(array)
-        ! print*, this%rank3D, ": ubound = ", ubound(array)
-        ! print*, this%rank3D, ": st3Dg  = ", this%st3Dg
-        ! print*, this%rank3D, ": en3Dg  = ", this%en3Dg
+        print*, this%rank3D, ": lbound = ", lbound(array)
+        print*, this%rank3D, ": ubound = ", ubound(array)
+        print*, this%rank3D, ": st3Dg  = ", this%st3Dg
+        print*, this%rank3D, ": en3Dg  = ", this%en3Dg
 
-        ! call mpi_irecv( array(this%st3Dg(1),this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_x, this%xleft, 0, this%commX, recv_request_left, ierr)
-        ! call mpi_irecv( array(this%en3Dg(1)-this%nghosts(1)+1,this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_x, this%xright, 1, this%commX, recv_request_right, ierr)
+        call mpi_irecv( array(this%st3Dg(1),this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xleft, 0, this%commX, recv_request_left, ierr)
+        call mpi_irecv( array(this%en3Dg(1)-this%nghosts(1)+1,this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xright, 1, this%commX, recv_request_right, ierr)
 
-        ! call mpi_isend( array(this%st3Dg(1)+this%nghosts(1),this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_x, this%xleft, 1, this%commX, send_request_left, ierr)
-        ! call mpi_isend( array(this%en3Dg(1)-2*this%nghosts(1)+1,this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_x, this%xright, 0, this%commX, send_request_right, ierr)
+        call mpi_isend( array(this%st3Dg(1)+this%nghosts(1),this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xleft, 1, this%commX, send_request_left, ierr)
+        call mpi_isend( array(this%en3Dg(1)-2*this%nghosts(1)+1,this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xright, 0, this%commX, send_request_right, ierr)
 
-        call mpi_irecv( recvbuf_l, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xleft,  0, this%commX, recv_request_left,  ierr)
-        call mpi_irecv( recvbuf_r, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xright, 1, this%commX, recv_request_right, ierr)
+        ! call mpi_irecv( recvbuf_l, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xleft,  0, this%commX, recv_request_left,  ierr)
+        ! call mpi_irecv( recvbuf_r, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xright, 1, this%commX, recv_request_right, ierr)
 
-        do k=1,this%sz3D(3)
-            do j=1,this%sz3D(2)
-                do i = 1,this%nghosts(1)
-                    sendbuf_r(i,j,k) = array( this%en3D(1)-this%nghosts(1)+i, this%st3D(2)+j-1, this%st3D(3)+k-1 )
-                end do
-            end do
-        end do
+        ! do k=1,this%sz3D(3)
+        !     do j=1,this%sz3D(2)
+        !         do i = 1,this%nghosts(1)
+        !             sendbuf_r(i,j,k) = array( this%en3D(1)-this%nghosts(1)+i, this%st3D(2)+j-1, this%st3D(3)+k-1 )
+        !         end do
+        !     end do
+        ! end do
 
-        do k=1,this%sz3D(3)
-            do j=1,this%sz3D(2)
-                do i = 1,this%nghosts(1)
-                    sendbuf_l(i,j,k) = array( this%st3D(1)+i-1, this%st3D(2)+j-1, this%st3D(3)+k-1 )
-                end do
-            end do
-        end do
+        ! do k=1,this%sz3D(3)
+        !     do j=1,this%sz3D(2)
+        !         do i = 1,this%nghosts(1)
+        !             sendbuf_l(i,j,k) = array( this%st3D(1)+i-1, this%st3D(2)+j-1, this%st3D(3)+k-1 )
+        !         end do
+        !     end do
+        ! end do
 
-        call mpi_isend( sendbuf_r, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xright, 0, this%commX, send_request_right, ierr)
-        call mpi_isend( sendbuf_l, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xleft,  1, this%commX, send_request_left,  ierr)
+        ! call mpi_isend( sendbuf_r, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xright, 0, this%commX, send_request_right, ierr)
+        ! call mpi_isend( sendbuf_l, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xleft,  1, this%commX, send_request_left,  ierr)
 
         call mpi_wait(recv_request_left,  status, ierr)
         call mpi_wait(recv_request_right, status, ierr)
         call mpi_wait(send_request_left,  status, ierr)
         call mpi_wait(send_request_right, status, ierr)
 
-        do k=1,this%sz3D(3)
-            do j=1,this%sz3D(2)
-                do i = 1,this%nghosts(1)
-                    array( this%en3D(1)+i, this%st3D(2)+j-1, this%st3D(3)+k-1 ) = recvbuf_r(i,j,k)
-                end do
-            end do
-        end do
+        ! do k=1,this%sz3D(3)
+        !     do j=1,this%sz3D(2)
+        !         do i = 1,this%nghosts(1)
+        !             array( this%en3D(1)+i, this%st3D(2)+j-1, this%st3D(3)+k-1 ) = recvbuf_r(i,j,k)
+        !         end do
+        !     end do
+        ! end do
 
-        do k=1,this%sz3D(3)
-            do j=1,this%sz3D(2)
-                do i = 1,this%nghosts(1)
-                    array( this%st3Dg(1)+i-1, this%st3D(2)+j-1, this%st3D(3)+k-1 ) = recvbuf_l(i,j,k)
-                end do
-            end do
-        end do
+        ! do k=1,this%sz3D(3)
+        !     do j=1,this%sz3D(2)
+        !         do i = 1,this%nghosts(1)
+        !             array( this%st3Dg(1)+i-1, this%st3D(2)+j-1, this%st3D(3)+k-1 ) = recvbuf_l(i,j,k)
+        !         end do
+        !     end do
+        ! end do
 
     end subroutine
 
