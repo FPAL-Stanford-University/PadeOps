@@ -402,7 +402,7 @@ contains
 
         call transpose_y_to_z(this%f2dy,this%uhatInZ,this%sp_gp)
         call transpose_y_to_z(what, this%w2, this%sp_gpE)
-        
+
         call this%derivZ%ddz_E2C(this%w2, this%f2d, 0, 0)  ! Periodic dwdz
         
         this%f2d = this%f2d + this%uhatInZ
@@ -761,7 +761,6 @@ contains
 
         print*, this%PeriodicInZ
         if (this%PeriodicInZ) then
-           print*, "here"
             call this%Periodic_getPressure(uhat, vhat, what, pressure)
         else
             ! Step 0: compute the stokes pressure which will fix the wall BCs

@@ -480,8 +480,8 @@ contains
         
         if (this%UseDealiasFilterVert) then
             allocate(this%filzC, this%filzE)
-            ierr = this%filzC%init(nz  , .false.)
-            ierr = this%filzE%init(nz+1, .false.)
+            ierr = this%filzC%init(nz  , PeriodicInZ)
+            ierr = this%filzE%init(nz+1, PeriodicInZ)
         end if
 
 
@@ -2099,7 +2099,7 @@ contains
         call transpose_z_to_y(zbuff1,this%vhat, this%sp_gpC)
 
         call transpose_y_to_z(this%what,zbuff3, this%sp_gpE)
-        call this%filzC%filter3(zbuff3,zbuff4,this%nxZ, this%nyZ)
+        call this%filzE%filter3(zbuff3,zbuff4,this%nxZ, this%nyZ)
         call transpose_z_to_y(zbuff4,this%what, this%sp_gpE)
 
         if (this%isStratified .or. this%initspinup) then
@@ -4635,7 +4635,7 @@ contains
                 call this%dumpFullField(this%u,'uVel')
                 call this%dumpFullField(this%v,'vVel')
                 call this%dumpFullField(this%wC,'wVel')
-                call this%dumpFullField(this%T, 'Tini')
+                !call this%dumpFullField(this%T, 'Tini')
                 call this%dumpVisualizationInfo()
                 if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
                 if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
