@@ -1,6 +1,6 @@
 module ShockEntropy_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,third,half,twothird,two,three,four,seven
+    use constants,        only: one,third,half,twothird,two,three,four,seven,pi
     implicit none
     
     real(rkind) :: pRatio = real(1.96D3,rkind)
@@ -140,7 +140,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         dx = real(20.D0,rkind)/real(nx-1,rkind)
-        dy = dx
+        dy = pi/real(ny, rkind)
         dz = dx
 
         do k=1,size(mesh,3)
@@ -243,13 +243,16 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         p   = (one-tmp)*  p2 + tmp*  p1
 
         ! set location of impact if this is to be used instead of normal shock
-        tmp = half * ( one + erf( (x-ximp)/(thick*dx) ) )
-        u = (one-tmp)*two*uimpact
+        if(ximp > -10.0d0 .and. ximp < (-10.0d0 + 20.0d0)) then
+          tmp = half * ( one + erf( (x-ximp)/(thick*dx) ) )
+          u = (one-tmp)*two*uimpact
+        endif
 
         ! add vorticity/entropy fluctuations starting from xe
         tmp = half * ( one + erf( (x-xe)/(eps*dx) ) )
 
-        rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe)))
+        !rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe)))  ! 1D fluctuations
+        rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe))*sin(4.0d0*y))
         
         rho1 = rho(decomp%yen(1),1,1)
         u1   = u  (decomp%yen(1),1,1)

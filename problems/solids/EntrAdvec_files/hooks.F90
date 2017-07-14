@@ -228,7 +228,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
 
         ! set pressure fluctutations to get constant sig11 - naturally reduces
         ! to constant pressure for gases and liquids since shear modulus is zero
-        p = p - tmp*twothird*mu*(g11**(-third)*(g11**4-one) - g11**third*(g11**2-one))
+        p = p - twothird*mu*(g11**(-third)*(g11**4-one) - g11**third*(g11**2-one))
   
         ! Get rho compatible with det(g) and rho0
         tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)

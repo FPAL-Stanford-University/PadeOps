@@ -749,7 +749,7 @@ contains
             ! Get the new time step
             call this%get_dt(stability)
             call message(2,"Stability limit: "//trim(stability))
-            
+
             ! Check for visualization condition and adjust time step
             if ( (this%tviz > zero) .AND. ((this%tsim + this%dt)*(one + eps) >= this%tviz * this%viz%vizcount) ) then
                 this%dt = this%tviz * this%viz%vizcount - this%tsim
