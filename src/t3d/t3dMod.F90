@@ -5,6 +5,7 @@ module t3dMod
     use mpi
 
     implicit none
+    ! include 'mpif.h'
     private
     public :: t3d, square_factor, roundrobin_split, xnumbering
         
@@ -215,16 +216,16 @@ contains
         call mpi_type_commit(this%mpi_halo_x, ierr)
         if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_x == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
 
-        ! ! Y halo datatype
-        ! call mpi_type_contiguous(this%sz3Dg(1), mpirkind, newtype, ierr)
-        ! call mpi_type_vector(this%sz3Dg(3), this%nghosts(2), this%sz3Dg(2), newtype, this%mpi_halo_y, ierr)
-        ! call mpi_type_commit(this%mpi_halo_y, ierr)
-        ! if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_y == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
+        ! Y halo datatype
+        call mpi_type_contiguous(this%sz3D(1), mpirkind, newtype, ierr)
+        call mpi_type_vector(this%sz3D(3), this%nghosts(2), this%sz3Dg(2), newtype, this%mpi_halo_y, ierr)
+        call mpi_type_commit(this%mpi_halo_y, ierr)
+        if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_y == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
 
-        ! ! Z halo datatype
-        ! call mpi_type_contiguous(this%sz3Dg(1)*this%sz3Dg(2)*this%nghosts(3), mpirkind, this%mpi_halo_z, ierr)
-        ! call mpi_type_commit(this%mpi_halo_z, ierr)
-        ! if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_z == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
+        ! Z halo datatype
+        call mpi_type_contiguous(this%sz3D(1)*this%sz3D(2)*this%nghosts(3), mpirkind, this%mpi_halo_z, ierr)
+        call mpi_type_commit(this%mpi_halo_z, ierr)
+        if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_z == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
 
         ! tind = tind + 1; times(tind) = this%time(barrier=.true.)
 
@@ -812,10 +813,10 @@ contains
 
     subroutine wait_transpose_3d_to_x(this, output, bufferX, request, status)
         class(t3d), intent(in) :: this
-        real(rkind), dimension(this%szX (1),this%szX (2),this%szX (3)), intent(out) :: output
-        real(rkind), dimension(this%szX (1)*this%szX (2)*this%szX (3)), intent(in)  :: bufferX
-        integer,                                                        intent(in)  :: request
-        integer, dimension(mpi_status_size),                            intent(out) :: status
+        real(rkind), dimension(this%szX (1),this%szX (2),this%szX (3)), intent(out)   :: output
+        real(rkind), dimension(this%szX (1)*this%szX (2)*this%szX (3)), intent(in)    :: bufferX
+        integer,                                                        intent(inout) :: request
+        integer, dimension(MPI_STATUS_SIZE),                            intent(out)   :: status
         integer :: proc, i, j, k, pos, ierr
 
         call mpi_wait(request, status, ierr)
@@ -861,7 +862,7 @@ contains
         select case(this%unequalX)
         case (.true.)
             call mpi_Ialltoallv(bufferX, this%countX,  this%dispX,  mpirkind, &
-                               buffer3D,this%count3DX,this%disp3DX,mpirkind, this%commX, ierr)
+                               buffer3D,this%count3DX,this%disp3DX,mpirkind, this%commX, request, ierr)
         case (.false.)
             call mpi_Ialltoall (bufferX ,this%countX  (0), mpirkind, &
                                buffer3D,this%count3DX(0), mpirkind, this%commX, request, ierr)
@@ -871,10 +872,10 @@ contains
     
     subroutine wait_transpose_x_to_3d(this, output, buffer3D, request, status)
         class(t3d), intent(in) :: this
-        real(rkind), dimension(this%sz3D(1),this%sz3D(2),this%sz3D(3)), intent(out) :: output
-        real(rkind), dimension(this%sz3D(1)*this%sz3D(2)*this%sz3D(3)), intent(in)  :: buffer3D
-        integer,                                                        intent(in)  :: request
-        integer, dimension(mpi_status_size),                            intent(out) :: status
+        real(rkind), dimension(this%sz3D(1),this%sz3D(2),this%sz3D(3)), intent(out)   :: output
+        real(rkind), dimension(this%sz3D(1)*this%sz3D(2)*this%sz3D(3)), intent(in)    :: buffer3D
+        integer,                                                        intent(inout) :: request
+        integer, dimension(mpi_status_size),                            intent(out)   :: status
         integer :: proc, i, j, k, pos, ierr
 
         call mpi_wait(request, status, ierr)
@@ -927,10 +928,10 @@ contains
 
     subroutine wait_transpose_3d_to_y(this, output, bufferY, request, status)
         class(t3d), intent(in) :: this
-        real(rkind), dimension(this%szY(1)*this%szY(2)*this%szY(3)), intent(in)  :: bufferY
-        real(rkind), dimension(this%szY(1),this%szY(2),this%szY(3)), intent(out) :: output
-        integer,                                                     intent(in)  :: request
-        integer, dimension(mpi_status_size),                         intent(out) :: status
+        real(rkind), dimension(this%szY(1)*this%szY(2)*this%szY(3)), intent(in)    :: bufferY
+        real(rkind), dimension(this%szY(1),this%szY(2),this%szY(3)), intent(out)   :: output
+        integer,                                                     intent(inout) :: request
+        integer, dimension(mpi_status_size),                         intent(out)   :: status
         integer :: proc, i, j, k, pos, ierr
         
         call mpi_wait(request, status, ierr)
@@ -984,10 +985,10 @@ contains
     
     subroutine wait_transpose_y_to_3d(this, output, buffer3D, request, status)
         class(t3d), intent(in) :: this
-        real(rkind), dimension(this%sz3D(1)*this%sz3D(2)*this%sz3D(3)), intent(in)  :: buffer3D
-        real(rkind), dimension(this%sz3D(1),this%sz3D(2),this%sz3D(3)), intent(out) :: output
-        integer,                                                        intent(in)  :: request
-        integer, dimension(mpi_status_size),                            intent(out) :: status
+        real(rkind), dimension(this%sz3D(1)*this%sz3D(2)*this%sz3D(3)), intent(in)    :: buffer3D
+        real(rkind), dimension(this%sz3D(1),this%sz3D(2),this%sz3D(3)), intent(out)   :: output
+        integer,                                                        intent(inout) :: request
+        integer, dimension(mpi_status_size),                            intent(out)   :: status
         integer :: proc, i, j, k, pos, ierr
 
         call mpi_wait(request, status, ierr)
@@ -1040,10 +1041,10 @@ contains
         
     subroutine wait_transpose_3d_to_z(this, output, bufferZ, request, status)
         class(t3d), intent(in) :: this
-        real(rkind), dimension(this%szZ(1)*this%szZ(2)*this%szZ(3)), intent(in)  :: bufferZ
-        real(rkind), dimension(this%szZ(1),this%szZ(2),this%szZ(3)), intent(out) :: output
-        integer,                                                     intent(in)  :: request
-        integer, dimension(mpi_status_size),                            intent(out) :: status
+        real(rkind), dimension(this%szZ(1)*this%szZ(2)*this%szZ(3)), intent(in)    :: bufferZ
+        real(rkind), dimension(this%szZ(1),this%szZ(2),this%szZ(3)), intent(out)   :: output
+        integer,                                                     intent(inout) :: request
+        integer, dimension(mpi_status_size),                         intent(out)   :: status
         integer :: proc, i, j, k, pos, ierr
         
         call mpi_wait(request, status, ierr)
@@ -1097,10 +1098,10 @@ contains
 
     subroutine wait_transpose_z_to_3d(this, output, buffer3D, request, status)
         class(t3d), intent(in) :: this
-        real(rkind), dimension(this%sz3D(1)*this%sz3D(2)*this%sz3D(3)), intent(in)  :: buffer3D
-        real(rkind), dimension(this%sz3D(1),this%sz3D(2),this%sz3D(3)), intent(out) :: output
-        integer,                                                        intent(in)  :: request
-        integer, dimension(mpi_status_size),                            intent(out) :: status
+        real(rkind), dimension(this%sz3D(1)*this%sz3D(2)*this%sz3D(3)), intent(in)    :: buffer3D
+        real(rkind), dimension(this%sz3D(1),this%sz3D(2),this%sz3D(3)), intent(out)   :: output
+        integer,                                                        intent(inout) :: request
+        integer, dimension(mpi_status_size),                            intent(out)   :: status
         integer :: proc, i, j, k, pos, ierr
 
         call mpi_wait(request, status, ierr)
@@ -1125,26 +1126,31 @@ contains
         integer :: recv_request_left, recv_request_right
         integer :: send_request_left, send_request_right
         integer, dimension(MPI_STATUS_SIZE) :: status
-        integer :: i,j,k,ierr
+        ! integer :: i,j,k
+        integer :: ierr
 
-        real(rkind), dimension(this%nghosts(1),this%sz3D(2),this%sz3D(3)) :: sendbuf_l, sendbuf_r, recvbuf_l, recvbuf_r
+        ! real(rkind), dimension(this%nghosts(1),this%sz3D(2),this%sz3D(3)) :: sendbuf_l, sendbuf_r, recvbuf_l, recvbuf_r
 
         ! TODO: Need to rewrite this to use mpi_halo_x derived datatype instead
         ! of copying
 
-        print*, "In fill_halo_x"
-        print*, "nghosts = ", this%nghosts
+        ! print*, "In fill_halo_x"
+        ! print*, "nghosts = ", this%nghosts
 
-        print*, this%rank3D, ": lbound = ", lbound(array)
-        print*, this%rank3D, ": ubound = ", ubound(array)
-        print*, this%rank3D, ": st3Dg  = ", this%st3Dg
-        print*, this%rank3D, ": en3Dg  = ", this%en3Dg
+        ! print*, this%rank3D, ": lbound = ", lbound(array)
+        ! print*, this%rank3D, ": ubound = ", ubound(array)
+        ! print*, this%rank3D, ": st3Dg  = ", this%st3Dg
+        ! print*, this%rank3D, ": en3Dg  = ", this%en3Dg
 
         call mpi_irecv( array(this%st3Dg(1),this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xleft, 0, this%commX, recv_request_left, ierr)
         call mpi_irecv( array(this%en3Dg(1)-this%nghosts(1)+1,this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xright, 1, this%commX, recv_request_right, ierr)
 
         call mpi_isend( array(this%st3Dg(1)+this%nghosts(1),this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xleft, 1, this%commX, send_request_left, ierr)
         call mpi_isend( array(this%en3Dg(1)-2*this%nghosts(1)+1,this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xright, 0, this%commX, send_request_right, ierr)
+
+
+        ! TODO: Use preprocessor flags to choose between explicit copies and MPI derived data types for systems that don't support
+        ! MPI derived data tyes
 
         ! call mpi_irecv( recvbuf_l, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xleft,  0, this%commX, recv_request_left,  ierr)
         ! call mpi_irecv( recvbuf_r, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xright, 1, this%commX, recv_request_right, ierr)

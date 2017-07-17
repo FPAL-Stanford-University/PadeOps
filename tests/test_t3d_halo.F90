@@ -11,7 +11,7 @@ program test_t3d_halo
     type(t3d) :: gp
     real(rkind), dimension(:,:,:), allocatable :: input
     integer :: nx = 6, ny = 4, nz = 4
-    integer :: px = 1, py = 1, pz = 1
+    integer :: px = 3, py = 1, pz = 1
     integer :: i, j, k, ierr
     integer :: ii, jj, kk
     real(rkind) :: dx, dy, dz
@@ -66,7 +66,7 @@ program test_t3d_halo
     call MPI_Reduce(mycorrect, correct, 1, MPI_LOGICAL, MPI_LAND, 0, MPI_COMM_WORLD, ierr)
 
     if (gp%rank3D == 0) then
-        if (correct == .true.) then
+        if (correct .eqv. .true.) then
             print *, "Halo cells communicated correctly! :)"
         else
             print *, "ERROR: Halo cells not communicated correctly!"
