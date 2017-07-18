@@ -91,9 +91,9 @@ contains
          nyT = this%sp_gp%zsz(2)
          nz  = this%sp_gp%zsz(3)
          
-         k3_loc = GetWaveNums(nz, dz)
          k1 = GetWaveNums(this%sp%nx_g, dx)
          k2 = GetWaveNums(this%sp%ny_g, dy)
+         k3_loc = GetWaveNums(nz, dz)
          call this%derivZ%getModifiedWavenumbers(k3_loc,k3_loc_mod)
          
          myxst = this%sp_gp%zst(1); myyst = this%sp_gp%zst(2)
@@ -758,8 +758,6 @@ contains
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: pressure
         integer :: ii, jj, kk
 
-
-        print*, this%PeriodicInZ
         if (this%PeriodicInZ) then
             call this%Periodic_getPressure(uhat, vhat, what, pressure)
         else
@@ -1171,6 +1169,7 @@ contains
         complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: what
 
         real(rkind), dimension(this%sp_gp%xsz(1),this%sp_gp%xsz(2),this%sp_gp%xsz(3)), intent(out) :: divergence
+        !real(rkind), dimension(:,:,:), intent(out) :: divergence
 
         real(rkind) :: maxDiv, myMaxDiv
         integer :: ii, jj, kk, ierr
