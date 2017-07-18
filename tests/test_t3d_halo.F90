@@ -1,17 +1,17 @@
 program test_t3d_halo
     use mpi
     use kind_parameters, only: rkind
-    use constants,       only: two, pi
+    use constants,       only: eps, two, pi
     use exits,           only: GracefulExit
-    use reductions,      only: P_MAXVAL
-    use t3dMod,          only: t3d, square_factor, roundrobin_split
-    use cd10stuff,       only: cd10
+    use t3dMod,          only: t3d
     implicit none
 
     type(t3d) :: gp
     real(rkind), dimension(:,:,:), allocatable :: input
-    integer :: nx = 6, ny = 4, nz = 4
-    integer :: px = 3, py = 1, pz = 1
+    integer :: nx = 16, ny = 16, nz = 16
+    integer :: px = 4, py = 4, pz = 4
+    integer, dimension(3) :: nghosts = [3,2,1]
+    logical, dimension(3) :: periodic = [.false., .true., .true.]
     integer :: i, j, k, ierr
     integer :: ii, jj, kk
     real(rkind) :: dx, dy, dz
@@ -22,18 +22,27 @@ program test_t3d_halo
     call MPI_Init(ierr)
 
     if (.not. optimize) then
-        gp = t3d(MPI_COMM_WORLD, nx, ny, nz, px, py, pz, [.TRUE., .TRUE., .TRUE.], .TRUE., fail, nghosts=[1,1,1])
+        gp = t3d(MPI_COMM_WORLD, nx, ny, nz, px, py, pz, periodic, .TRUE., fail, nghosts=nghosts)
         if (fail) call GracefulExit("t3d initialization failed",45)
     else
-        gp = t3d(MPI_COMM_WORLD, nx, ny, nz, [.TRUE., .TRUE., .TRUE.], nghosts=[1,1,1])
+        gp = t3d(MPI_COMM_WORLD, nx, ny, nz, periodic, nghosts=nghosts)
     end if
-
-    allocate( input(gp%st3Dg(1):gp%en3Dg(1), gp%st3D(2):gp%en3D(2), gp%st3D(3):gp%en3D(3)) )
-    input = 0._rkind
 
     dx = two*pi/real(nx,rkind)
     dy = two*pi/real(ny,rkind)
     dz = two*pi/real(nz,rkind)
+
+    if (gp%rank3D == 0) then
+        print *, "st3D  = ", gp%st3D
+        print *, "en3D  = ", gp%en3D
+        print *, "st3Dg = ", gp%st3Dg
+        print *, "en3Dg = ", gp%en3Dg
+    end if
+
+    !!!! ============================== !!!!
+    !!!! X-direction halo communication
+    allocate( input(gp%st3Dg(1):gp%en3Dg(1), gp%st3D(2):gp%en3D(2), gp%st3D(3):gp%en3D(3)) )
+    input = 0._rkind
 
     do k=gp%st3D(3),gp%en3D(3)
         do j=gp%st3D(2),gp%en3D(2)  
@@ -43,7 +52,6 @@ program test_t3d_halo
         end do
     end do
 
-    call mpi_barrier(MPI_COMM_WORLD, ierr)
     call gp%fill_halo_x( input )
 
     mycorrect = .true.
@@ -51,14 +59,10 @@ program test_t3d_halo
         do jj=gp%st3D(2),gp%en3D(2)  
             do ii=gp%st3Dg(1),gp%en3Dg(1)
                 i = mod(ii-1+nx,nx)+1
-                j = mod(jj-1+nx,nx)+1
-                k = mod(kk-1+nx,nx)+1
-                if ( input(ii,jj,kk) /= (i-1) + (j-1)*nx + (k-1)*nx*ny ) then
+                j = mod(jj-1+ny,ny)+1
+                k = mod(kk-1+nz,nz)+1
+                if ( abs(input(ii,jj,kk) - ( (i-1) + (j-1)*nx + (k-1)*nx*ny ) ) > eps ) then
                     mycorrect = .false.
-                    print *, gp%rank3D, ": ", ii, jj, kk, i, j, k
-                    exit
-                    exit
-                    exit
                 end if
             end do
         end do
@@ -67,13 +71,93 @@ program test_t3d_halo
 
     if (gp%rank3D == 0) then
         if (correct .eqv. .true.) then
-            print *, "Halo cells communicated correctly! :)"
+            print '(A)', "Halo cells in X communicated correctly! :)"
         else
-            print *, "ERROR: Halo cells not communicated correctly!"
+            print '(A)', "ERROR: Halo cells in X not communicated correctly!"
         end if
     end if
-
     deallocate( input )
+    !!!! ============================== !!!!
+
+    !!!! ============================== !!!!
+    !!!! Y-direction halo communication
+    allocate( input(gp%st3D(1):gp%en3D(1), gp%st3Dg(2):gp%en3Dg(2), gp%st3D(3):gp%en3D(3)) )
+    input = 0._rkind
+
+    do k=gp%st3D(3),gp%en3D(3)
+        do j=gp%st3D(2),gp%en3D(2)  
+            do i=gp%st3D(1),gp%en3D(1)
+                input(i,j,k) = (i-1) + (j-1)*nx + (k-1)*nx*ny
+            end do
+        end do
+    end do
+
+    call gp%fill_halo_y( input )
+
+    mycorrect = .true.
+    do kk=gp%st3D(3),gp%en3D(3)
+        do jj=gp%st3Dg(2),gp%en3Dg(2)  
+            do ii=gp%st3D(1),gp%en3D(1)
+                i = mod(ii-1+nx,nx)+1
+                j = mod(jj-1+ny,ny)+1
+                k = mod(kk-1+nz,nz)+1
+                if ( abs(input(ii,jj,kk) - ( (i-1) + (j-1)*nx + (k-1)*nx*ny ) ) > eps ) then
+                    mycorrect = .false.
+                end if
+            end do
+        end do
+    end do
+    call MPI_Reduce(mycorrect, correct, 1, MPI_LOGICAL, MPI_LAND, 0, MPI_COMM_WORLD, ierr)
+
+    if (gp%rank3D == 0) then
+        if (correct .eqv. .true.) then
+            print '(A)', "Halo cells in Y communicated correctly! :)"
+        else
+            print '(A)', "ERROR: Halo cells in Y not communicated correctly!"
+        end if
+    end if
+    deallocate( input )
+    !!!! ============================== !!!!
+
+    !!!! ============================== !!!!
+    !!!! Z-direction halo communication
+    allocate( input(gp%st3D(1):gp%en3D(1), gp%st3D(2):gp%en3D(2), gp%st3Dg(3):gp%en3Dg(3)) )
+    input = 0._rkind
+
+    do k=gp%st3D(3),gp%en3D(3)
+        do j=gp%st3D(2),gp%en3D(2)  
+            do i=gp%st3D(1),gp%en3D(1)
+                input(i,j,k) = (i-1) + (j-1)*nx + (k-1)*nx*ny
+            end do
+        end do
+    end do
+
+    call gp%fill_halo_z( input )
+
+    mycorrect = .true.
+    do kk=gp%st3Dg(3),gp%en3Dg(3)
+        do jj=gp%st3D(2),gp%en3D(2)  
+            do ii=gp%st3D(1),gp%en3D(1)
+                i = mod(ii-1+nx,nx)+1
+                j = mod(jj-1+ny,ny)+1
+                k = mod(kk-1+nz,nz)+1
+                if ( abs(input(ii,jj,kk) - ( (i-1) + (j-1)*nx + (k-1)*nx*ny ) ) > eps ) then
+                    mycorrect = .false.
+                end if
+            end do
+        end do
+    end do
+    call MPI_Reduce(mycorrect, correct, 1, MPI_LOGICAL, MPI_LAND, 0, MPI_COMM_WORLD, ierr)
+
+    if (gp%rank3D == 0) then
+        if (correct .eqv. .true.) then
+            print '(A)', "Halo cells in Z communicated correctly! :)"
+        else
+            print '(A)', "ERROR: Halo cells in Z not communicated correctly!"
+        end if
+    end if
+    deallocate( input )
+    !!!! ============================== !!!!
 
     call MPI_Finalize(ierr)
 contains
