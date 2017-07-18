@@ -129,7 +129,8 @@ module IncompressibleGrid
         logical :: assume_fplane = .true.
         real(rkind) :: coriolis_cosine, coriolis_sine 
         integer :: nxZ, nyZ
-      
+     
+        logical :: periodicInZ  = .false. 
         logical :: newTimeStep = .true. 
         integer :: timeSteppingScheme = 0 
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
@@ -274,6 +275,7 @@ module IncompressibleGrid
             procedure, private :: dump_stats3D
             procedure, private :: compute_stats3D 
             !procedure, private :: getSurfaceQuantities 
+            procedure, private :: dealiasFields
             procedure, private :: ApplyCompactFilter 
             procedure, private :: addNonLinearTerm_skewSymm
             procedure, private :: populate_rhs
@@ -368,7 +370,7 @@ contains
         this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp; this%isInviscid = isInviscid
         this%assume_fplane = assume_fplane; this%useProbes = useProbes
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact; this%useFringe = useFringe
-        this%nsteps = nsteps
+        this%nsteps = nsteps; this%PeriodicinZ = periodicInZ 
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -463,11 +465,11 @@ contains
 
         ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
         allocate(this%spectC)
-        call this%spectC%init("x", nx, ny, nz, this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , .false., exhaustiveFFT=useExhaustiveFFT)
+        call this%spectC%init("x", nx, ny, nz  , this%dx, this%dy, this%dz, &
+                "four", this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=periodicinZ)
         allocate(this%spectE)
         call this%spectE%init("x", nx, ny, nz+1, this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , .false., exhaustiveFFT=useExhaustiveFFT)
+                "four", this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=.false.)
         this%sp_gpC => this%spectC%spectdecomp
         this%sp_gpE => this%spectE%spectdecomp
 
@@ -599,13 +601,7 @@ contains
         if (this%isStratified .or. this%initspinup) call this%spectC%fft(this%T,this%That)   
 
         ! Dealias and filter before projection
-        call this%spectC%dealias(this%uhat)
-        call this%spectC%dealias(this%vhat)
-        call this%spectE%dealias(this%what)
-        if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
-        if (this%UseDealiasFilterVert) then
-            call this%ApplyCompactFilter()
-        end if
+        call this%dealiasFields()
 
 
         ! Pressure projection
@@ -908,6 +904,24 @@ contains
 
     end subroutine
 
+    subroutine dealiasFields(this)
+        class(igrid), intent(inout) :: this
+
+        call this%spectC%dealias(this%uhat)
+        call this%spectC%dealias(this%vhat)
+        if (this%PeriodicInZ) then
+            call transpose_y_to_z(this%what, this%cbuffzE(:,:,:,1), this%sp_gpE)
+            call this%spectC%dealias_edgeField(this%cbuffzE(:,:,:,1))
+            call transpose_z_to_y(this%cbuffzE(:,:,:,1),this%what,this%sp_gpE)
+        else
+            call this%spectE%dealias(this%what)
+        end if 
+        if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
+        if (this%UseDealiasFilterVert) then
+            call this%ApplyCompactFilter()
+        end if
+
+    end subroutine 
 
     subroutine timeAdvance(this, dtforced)
         class(igrid), intent(inout) :: this
@@ -1589,7 +1603,6 @@ contains
             call this%AddNonLinearTerm_Rot()
         end if
         
-        
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
@@ -1684,14 +1697,15 @@ contains
         logical, intent(in) :: AlreadyProjected
 
         ! Step 1: Dealias
-        call this%spectC%dealias(this%uhat)
-        call this%spectC%dealias(this%vhat)
-        call this%spectE%dealias(this%what)
-        if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
-        if (this%UseDealiasFilterVert) then
-            call this%ApplyCompactFilter()
-        end if
-       
+        !call this%spectC%dealias(this%uhat)
+        !call this%spectC%dealias(this%vhat)
+        !call this%spectE%dealias(this%what)
+        !if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
+        !if (this%UseDealiasFilterVert) then
+        !    call this%ApplyCompactFilter()
+        !end if
+        call this%dealiasFields()
+
         ! Step 2: Pressure projection
         if (.not. AlreadyProjected) then
             call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
