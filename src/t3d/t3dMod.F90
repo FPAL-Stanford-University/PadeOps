@@ -503,7 +503,7 @@ contains
 
     impure elemental subroutine destroy(this)
         type(t3d), intent(inout) :: this
-        integer :: ierr
+        ! integer :: ierr
 
         if ( allocated(this%splitx_y) ) deallocate( this%splitx_y )
         if ( allocated(this%splitx_z) ) deallocate( this%splitx_z )
@@ -514,9 +514,9 @@ contains
         if ( allocated(this%splitz_y) ) deallocate( this%splitz_y )
         if ( allocated(this%splitz_x) ) deallocate( this%splitz_x )
         
-        if (this%mpi_halo_x /= MPI_DATATYPE_NULL) call mpi_type_free(this%mpi_halo_x, ierr)
-        if (this%mpi_halo_y /= MPI_DATATYPE_NULL) call mpi_type_free(this%mpi_halo_y, ierr)
-        if (this%mpi_halo_z /= MPI_DATATYPE_NULL) call mpi_type_free(this%mpi_halo_z, ierr)
+        ! if (this%mpi_halo_x /= MPI_DATATYPE_NULL) call mpi_type_free(this%mpi_halo_x, ierr)
+        ! if (this%mpi_halo_y /= MPI_DATATYPE_NULL) call mpi_type_free(this%mpi_halo_y, ierr)
+        ! if (this%mpi_halo_z /= MPI_DATATYPE_NULL) call mpi_type_free(this%mpi_halo_z, ierr)
     end subroutine
 
     subroutine transpose_3D_to_x(this, input, output)
@@ -1179,6 +1179,7 @@ contains
         ! print*, this%rank3D, ": ubound = ", ubound(array)
         ! print*, this%rank3D, ": st3Dg  = ", this%st3Dg
         ! print*, this%rank3D, ": en3Dg  = ", this%en3Dg
+
 
         call mpi_irecv( array(this%st3Dg(1),this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xleft, 0, this%commX, recv_request_left, ierr)
         call mpi_irecv( array(this%en3Dg(1)-this%nghosts(1)+1,this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xright, 1, this%commX, recv_request_right, ierr)

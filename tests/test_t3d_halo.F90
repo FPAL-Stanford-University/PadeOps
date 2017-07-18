@@ -9,7 +9,7 @@ program test_t3d_halo
     type(t3d) :: gp
     real(rkind), dimension(:,:,:), allocatable :: input
     integer :: nx = 16, ny = 16, nz = 16
-    integer :: px = 4, py = 4, pz = 4
+    integer :: px = 2, py = 2, pz = 2
     integer, dimension(3) :: nghosts = [3,2,1]
     logical, dimension(3) :: periodic = [.false., .true., .true.]
     integer :: i, j, k, ierr
