@@ -16,7 +16,7 @@ program test_padeder_periodic
    type(decomp_info), pointer :: sp_gpC, sp_gpE
    type(Pade6stagg) :: derZ
    real(rkind) :: dx, dy, dz
-   integer, parameter :: scheme = 1
+   integer, parameter :: scheme = 2
    integer :: i, j, k, ierr
 
    
