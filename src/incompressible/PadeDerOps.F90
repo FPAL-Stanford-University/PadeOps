@@ -27,11 +27,12 @@ module PadeDerOps
       type(spectral), pointer :: spectC
       integer :: scheme = 1
       real(rkind) :: dz
-      logical :: isPeriodic = .false. 
+      logical, public :: isPeriodic = .false. 
       contains
       procedure          :: init
       procedure          :: destroy
       procedure          :: getModifiedWavenumbers
+      procedure          :: getApproxPoincareConstant 
       procedure, private :: ddz_C2E_real
       procedure, private :: ddz_C2E_cmplx
       procedure, private :: ddz_E2C_real
@@ -73,6 +74,7 @@ subroutine init(this, gpC, sp_gpC, gpE, sp_gpE, dz, scheme, isPeriodic, spectC)
       case(fourierColl)
          if (present(spectC)) then
             this%spectC => spectC
+            call message(0,"Fourier collocation successfully initialized in Z")
          else
             call GracefulExit("You need to pass in a spectral derived type if you want to use Fourier differentiation in z", 43)
          end if
@@ -144,7 +146,12 @@ subroutine d2dz2_C2C_real(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      call this%derPeriodic%d2dz2_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      select case(this%scheme) 
+      case (fourierColl) 
+         call this%spectC%d2dz2_C2C_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%d2dz2_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      end select
    else
       select case (this%scheme) 
       case(fd02)
@@ -264,7 +271,12 @@ subroutine d2dz2_E2E_real(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      call this%derPeriodic%d2dz2_E2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      select case(this%scheme) 
+      case (fourierColl) 
+         call this%spectC%d2dz2_E2E_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%d2dz2_E2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      end select 
    else
       select case (this%scheme)
       case(fd02)
@@ -384,7 +396,12 @@ subroutine ddz_C2E_real(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      call this%derPeriodic%ddz_C2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      select case(this%scheme) 
+      case (fourierColl)
+         call this%spectC%ddz_C2E_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%ddz_C2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      end select
    else
       select case (this%scheme) 
       case(fd02)
@@ -543,7 +560,12 @@ subroutine ddz_E2C_real(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      call this%derPeriodic%ddz_E2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      select case(this%scheme) 
+      case (fourierColl) 
+         call this%spectC%ddz_E2C_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%ddz_E2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      end select 
    else
       select case(this%scheme)
       case(fd02)
@@ -651,7 +673,12 @@ subroutine interpz_C2E_real(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      call this%derPeriodic%interpz_C2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      select case(this%scheme) 
+      case (fourierColl) 
+         call this%spectC%interp_C2E_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%interpz_C2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      end select 
    else
       select case(this%scheme)
       case (fd02)
@@ -833,7 +860,12 @@ subroutine interpz_E2C_real(this,input,output,bot,top)
 
 
    if (this%isPeriodic) then
-      call this%derPeriodic%interpz_E2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      select case(this%scheme) 
+      case (fourierColl) 
+         call this%spectC%interp_E2C_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%interpz_E2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      end select 
    else
       select case(this%scheme)
       case(fd02)
@@ -954,6 +986,22 @@ subroutine getModifiedWavenumbers(this, k, kp)
 
 
 end subroutine
+
+pure function getApproxPoincareConstant(this) result(const)
+   class(Pade6stagg), intent(in) :: this
+   real(rkind) :: const   
+
+   select case(this%scheme)
+   case (fourierColl)
+      const = 1.d0/sqrt(12.d0)
+   case (cd06)
+      const = 1.d0/sqrt(10.d0)
+   case (fd02)
+      const = 1.d0/sqrt(3.d0)
+   end select 
+
+end function
+
 
 pure subroutine getmodCD06stagg(k,dx,kp)
     real(rkind), dimension(:), intent(in)  :: k

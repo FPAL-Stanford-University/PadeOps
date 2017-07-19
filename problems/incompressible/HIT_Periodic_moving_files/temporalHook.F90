@@ -56,7 +56,9 @@ contains
             call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
             call message_min_max(1,"Bounds for v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
             call message_min_max(1,"Bounds for w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
-            call message_min_max(1,"Bounds for P:", p_minval(minval(gp%pressure)), p_maxval(maxval(gp%pressure)))
+            if (allocated(gp%pressure)) then
+               call message_min_max(1,"Bounds for P:", p_minval(minval(gp%pressure)), p_maxval(maxval(gp%pressure)))
+            end if 
             !call message(1,"Max Error u:",p_maxval(maxval(abs(gp%u  - uexact))))
             !call message(1,"Max Error v:",p_maxval(maxval(abs(gp%v  - vexact))))
             !call message(1,"Max Error w:",p_maxval(maxval(abs(gp%wC - wexact))))

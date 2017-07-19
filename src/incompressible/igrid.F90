@@ -400,7 +400,7 @@ contains
         end if
 
         if (reset2decomp) then
-            periodicbcs(1) = .true.; periodicbcs(2) = .true.; periodicbcs(3) = .false.    ! hard coded for now
+            periodicbcs(1) = .true.; periodicbcs(2) = .true.; periodicbcs(3) = PeriodicInZ   
             call decomp_2d_init(nx, ny, nz, prow, pcol, periodicbcs)
             call get_decomp_info(this%gpC)
         else
@@ -436,6 +436,11 @@ contains
             useCompactFD = .false.
         case(1)
             useCompactFD = .true.
+        case(2)
+            useCompactFD = .false.
+            if (.not. PeriodicInZ) then
+               call gracefulExit("If you use Fourier Collocation in Z, the problem must be periodic in Z.",123)
+            end if
         case default
             call gracefulExit("Invalid choice for NUMERICALSCHEMEVERT",423)
         end select
@@ -475,7 +480,7 @@ contains
 
         ! STEP 5: ALLOCATE/INITIALIZE THE DERIVATIVE DERIVED TYPE
         allocate(this%Pade6OpZ)
-        call this%Pade6OpZ%init(this%gpC,this%sp_gpC, this%gpE, this%sp_gpE,this%dz,NumericalSchemeVert,PeriodicInZ)
+        call this%Pade6OpZ%init(this%gpC,this%sp_gpC, this%gpE, this%sp_gpE,this%dz,NumericalSchemeVert,PeriodicInZ,this%spectC)
         allocate(this%OpsPP)
         call this%OpsPP%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp, &
                     this%spectE%spectdecomp, .false., .false.)

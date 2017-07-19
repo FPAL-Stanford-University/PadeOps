@@ -83,7 +83,9 @@ program test_padeder_periodic
    call derZ%ddz_C2E(fhatzC, fhatzE, 0, 0)
    call transpose_z_to_y(fhatzE, fhatE, sp_gpE)
    call spectE%ifft(fhatE, tmpE)
-   print*, "max error (ddz_C2E):", maxval(abs(tmpE - (-cos(xE)*cos(yE)*sin(zE)) ))
+   print*, "max error (ddz_C2E_CMPLX):", maxval(abs(tmpE - (-cos(xE)*cos(yE)*sin(zE)) ))
+   call derZ%ddz_C2E(fC,tmpE,0,0)
+   print*, "max error (ddz_C2E_REAL):", maxval(abs(tmpE - (-cos(xE)*cos(yE)*sin(zE)) ))
 
    ! interp_C2E(fC)
    call spectC%fft(fC, fhatC)
@@ -91,7 +93,9 @@ program test_padeder_periodic
    call derZ%interpz_C2E(fhatzC, fhatzE, 0, 0)
    call transpose_z_to_y(fhatzE, fhatE, sp_gpE)
    call spectE%ifft(fhatE, tmpE)
-   print*, "max error (interpz_C2E):", maxval(abs(tmpE - (cos(xE)*cos(yE)*cos(zE)) ))
+   print*, "max error (interpz_C2E_CMPLX):", maxval(abs(tmpE - (cos(xE)*cos(yE)*cos(zE)) ))
+   call derZ%interpz_C2E(fC,tmpE,0,0)
+   print*, "max error (interpz_C2E_REAL):", maxval(abs(tmpE - (cos(xE)*cos(yE)*cos(zE)) ))
 
 
    ! d2dz2_C2C(fC)
@@ -100,7 +104,10 @@ program test_padeder_periodic
    call derZ%d2dz2_C2C(fhatzC, fhatzC2, 0, 0)
    call transpose_z_to_y(fhatzC2, fhatC, sp_gpC)
    call spectE%ifft(fhatC, tmpC)
-   print*, "max error (d2dz2_C2C):", maxval(abs(tmpC - (-cos(x)*cos(y)*cos(z)) ))
+   print*, "max error (d2dz2_C2C_CMPLX):", maxval(abs(tmpC - (-cos(x)*cos(y)*cos(z)) ))
+   call derZ%d2dz2_C2C(fC, tmpC,0,0)
+   print*, "max error (d2dz2_C2C_REAL):", maxval(abs(tmpC - (-cos(x)*cos(y)*cos(z)) ))
+
 
 
    ! ddz_E2C(fE)
@@ -109,7 +116,9 @@ program test_padeder_periodic
    call derZ%ddz_E2C(fhatzE, fhatzC, 0, 0)
    call transpose_z_to_y(fhatzC, fhatC, sp_gpC)
    call spectC%ifft(fhatC, tmpC)
-   print*, "max error (ddz_E2C):", maxval(abs(tmpC - (-cos(x)*cos(y)*sin(z)) ))
+   print*, "max error (ddz_E2C_REAL):", maxval(abs(tmpC - (-cos(x)*cos(y)*sin(z)) ))
+   call derZ%ddz_E2C(fE, tmpC,0,0)
+   print*, "max error (ddz_E2C_REAL):", maxval(abs(tmpC - (-cos(x)*cos(y)*sin(z)) ))
 
    ! interp_E2C(fE)
    call spectE%fft(fE, fhatE)
@@ -117,7 +126,10 @@ program test_padeder_periodic
    call derZ%interpz_E2C(fhatzE, fhatzC, 0, 0)
    call transpose_z_to_y(fhatzC, fhatC, sp_gpC)
    call spectC%ifft(fhatC, tmpC)
-   print*, "max error (interpz_E2C):", maxval(abs(tmpC - (cos(x)*cos(y)*cos(z)) ))
+   print*, "max error (interpz_E2C_CMPLX):", maxval(abs(tmpC - (cos(x)*cos(y)*cos(z)) ))
+   call derZ%interpz_E2C(fE, tmpC, 0, 0)
+   print*, "max error (interpz_E2C_REAL):", maxval(abs(tmpC - (cos(x)*cos(y)*cos(z)) ))
+
 
    ! d2dz2_E2E(fE)
    call spectE%fft(fE, fhatE)
@@ -125,7 +137,9 @@ program test_padeder_periodic
    call derZ%d2dz2_E2E(fhatzE, fhatzE2, 0, 0)
    call transpose_z_to_y(fhatzE2, fhatE, sp_gpE)
    call spectE%ifft(fhatE, tmpE)
-   print*, "max error (d2dz2_E2E):", maxval(abs(tmpE - (-cos(xE)*cos(yE)*cos(zE)) ))
+   print*, "max error (d2dz2_E2E_REAL):", maxval(abs(tmpE - (-cos(xE)*cos(yE)*cos(zE)) ))
+   call derZ%d2dz2_E2E(fE, tmpE,0,0)
+   print*, "max error (d2dz2_E2E_REAL):", maxval(abs(tmpE - (-cos(xE)*cos(yE)*cos(zE)) ))
 
    call derZ%destroy()
    nullify(sp_gpC, sp_gpE)

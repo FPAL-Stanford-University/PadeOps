@@ -7,7 +7,7 @@ module sgsmod_igrid
     use mpi 
     use reductions, only: p_maxval, p_sum, p_minval
     use numerics, only: useCompactFD 
-    use StaggOpsMod, only: staggOps  
+    !use StaggOpsMod, only: staggOps  
     use gaussianstuff, only: gaussian
     use lstsqstuff, only: lstsq
     use PadeDerOps, only: Pade6stagg
@@ -67,6 +67,9 @@ module sgsmod_igrid
         real(rkind), dimension(:), allocatable :: cmodel_allZ
         real(rkind) :: invRe, deltaRat
         integer :: mstep
+
+        ! model constant values/properties
+        real(rkind) :: camd_x, camd_y, camd_z
         logical :: useCglobal = .false. 
 
         contains 
@@ -75,6 +78,7 @@ module sgsmod_igrid
             procedure          :: link_pointers
             procedure, private :: init_smagorinsky 
             procedure, private :: init_sigma
+            procedure, private :: init_amd
             procedure, private :: allocateMemory_EddyViscosity
 
             !! ALL WALL MODEL PROCEDURE
@@ -116,6 +120,7 @@ module sgsmod_igrid
             procedure          :: destroy
             procedure, private :: destroy_smagorinsky 
             procedure, private :: destroy_sigma
+            procedure, private :: destroy_amd
             procedure, private :: destroyMemory_EddyViscosity
 
             !! ACCESSORS (add these in src/incompressible/sgs_models/accessors.F90)
@@ -132,6 +137,7 @@ contains
 #include "sgs_models/init_destroy_sgs_igrid.F90"
 #include "sgs_models/smagorinsky.F90"
 #include "sgs_models/sigma.F90"
+#include "sgs_models/AMD.F90"
 #include "sgs_models/eddyViscosity.F90"
 #include "sgs_models/dynamicProcedure_sgs_igrid.F90"
 #include "sgs_models/standardDynamicProcedure.F90"
