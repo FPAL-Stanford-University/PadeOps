@@ -11,7 +11,7 @@ module HITGrid
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
     use PoissonMod, only: poisson
-    use ForcingMod, only: Forcing
+    use ForcingMod, only: HIT_shell_forcing
     use mpi 
 
     implicit none
@@ -63,6 +63,7 @@ module HITGrid
         ! Types specific to Incompressible Flow 
         type(spectral), allocatable :: spect
         type(poisson), allocatable :: poiss
+        type(decomp_info), pointer :: sp_gpC
 
         ! LES mode
         logical :: useSGS
@@ -80,7 +81,7 @@ module HITGrid
 
         logical :: forcedTurbulence = .FALSE.
         real(rkind) :: kfmax  
-        type(forcing), allocatable :: force
+        type(HIT_shell_forcing), allocatable :: force
 
         character(len=clen) :: inputdir 
         logical :: use2DecompFFT
@@ -322,7 +323,9 @@ contains
             this%forcedTurbulence = .true.
             this%KFmax = kfmax
             allocate(this%force)
-            call this%force%init(this%spect,kfmax,nx, ny, nz, nu)
+            !call this%force%init(this%spect,kfmax,nx, ny, nz, nu)
+            this%sp_gpC => this%spect%spectdecomp
+            call this%force%init(inputfile, this%sp_gpC)
         end if 
 
     end subroutine
@@ -414,7 +417,8 @@ contains
 
         ! STEP 2b: Add the forcing function
         if (this%forcedTurbulence) then
-            call this%force%addForcing(this%Sfields,this%duidxj,this%rhs)
+            !call this%force%addForcing(this%Sfields,this%duidxj,this%rhs)
+            call this%force%getRHS_HITForcing(this%rhs(:,:,:,1), this%rhs(:,:,:,2), this%rhs(:,:,:,3), this%uhat, this%vhat, this%what)
         end if 
 
         ! STEP 3: Check if 1st time step - if yes, do Euler time step, if no, do Adams-Bash
