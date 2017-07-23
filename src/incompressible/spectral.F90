@@ -86,7 +86,11 @@ module spectralMod
             procedure           :: dealiasedSquare_oop
             procedure           :: KSprepFilter2
             procedure           :: KSprepFilter1
-         
+    
+            procedure           :: take_fft1d_z2z_ip
+            procedure           :: take_ifft1d_z2z_ip
+            procedure           :: shiftz_E2C
+            procedure           :: shiftz_C2E
             procedure, private  :: ddz_E2C_spect_cmplx
             procedure, private  :: ddz_C2E_spect_cmplx
             procedure, private  :: d2dz2_C2C_spect_cmplx
@@ -306,6 +310,36 @@ contains
          arr_out = arr_out*this%normfactz
       end if
 
+    end subroutine 
+
+    subroutine shiftz_E2C(this, arr_inout)
+      class(spectral), intent(in) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(inout)  :: arr_inout
+      integer :: i, j, k
+
+      do k = 1,this%spectdecomp%zsz(3) 
+         do j = 1,this%spectdecomp%zsz(2)
+            !$omp simd
+            do i = 1,this%spectdecomp%zsz(1)
+               arr_inout(i,j,k) = arr_inout(i,j,k)*this%E2Cshift(k) 
+            end do 
+         end do 
+      end do
+    end subroutine 
+
+    subroutine shiftz_C2E(this, arr_inout)
+      class(spectral), intent(in) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(inout)  :: arr_inout
+      integer :: i, j, k
+
+      do k = 1,this%spectdecomp%zsz(3) 
+         do j = 1,this%spectdecomp%zsz(2)
+            !$omp simd
+            do i = 1,this%spectdecomp%zsz(1)
+               arr_inout(i,j,k) = arr_inout(i,j,k)*this%C2Eshift(k) 
+            end do 
+         end do 
+      end do
     end subroutine 
 
     subroutine interp_E2C_spect_real(this, arr_in, arr_out)
@@ -1263,7 +1297,21 @@ contains
       call dfftw_execute_dft(this%plan_c2c_fwd_z_ip, this%ctmpz , this%ctmpz)  
 
     end subroutine 
-   
+  
+
+    subroutine take_fft1d_z2z_ip(this, arr_inout)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(inout)  :: arr_inout
+      call dfftw_execute_dft(this%plan_c2c_fwd_z_ip, arr_inout , arr_inout)  
+    end subroutine 
+
+    subroutine take_ifft1d_z2z_ip(this, arr_inout)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(inout)  :: arr_inout
+      call dfftw_execute_dft(this%plan_c2c_bwd_z_ip, arr_inout , arr_inout)  
+      arr_inout = this%normfactz*arr_inout
+    end subroutine 
+
 
     subroutine take_ifftz(this, arr_out)
       class(spectral), intent(inout) :: this

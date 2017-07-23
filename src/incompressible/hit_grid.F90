@@ -325,7 +325,7 @@ contains
             allocate(this%force)
             !call this%force%init(this%spect,kfmax,nx, ny, nz, nu)
             this%sp_gpC => this%spect%spectdecomp
-            call this%force%init(inputfile, this%sp_gpC)
+            !call this%force%init(inputfile, this%sp_gpC)
         end if 
 
     end subroutine
@@ -418,7 +418,7 @@ contains
         ! STEP 2b: Add the forcing function
         if (this%forcedTurbulence) then
             !call this%force%addForcing(this%Sfields,this%duidxj,this%rhs)
-            call this%force%getRHS_HITForcing(this%rhs(:,:,:,1), this%rhs(:,:,:,2), this%rhs(:,:,:,3), this%uhat, this%vhat, this%what)
+            !call this%force%getRHS_HITForcing(this%rhs(:,:,:,1), this%rhs(:,:,:,2), this%rhs(:,:,:,3), this%uhat, this%vhat, this%what)
         end if 
 
         ! STEP 3: Check if 1st time step - if yes, do Euler time step, if no, do Adams-Bash
