@@ -22,6 +22,7 @@ module IncompressibleGrid
     use kspreprocessing, only: ksprep  
     use PadeDerOps, only: Pade6Stagg
     use Fringemethod, only: fringe
+    use forcingmod,   only: HIT_shell_forcing
 
     implicit none
 
@@ -236,6 +237,11 @@ module IncompressibleGrid
         ! Fringe
         logical                           :: useFringe = .false.
         type(fringe), allocatable, public :: fringe_x
+
+        ! HIT Forcing
+        logical :: useHITForcing = .false.
+        type(HIT_shell_forcing), allocatable :: hitforce
+
         contains
             procedure          :: init
             procedure          :: destroy
@@ -318,7 +324,7 @@ contains
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
         real(rkind) :: Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0
-        logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false.
+        logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true.  
         logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true. 
@@ -334,7 +340,7 @@ contains
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, &
-                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude
+                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude, useHITForcing
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
@@ -371,6 +377,7 @@ contains
         this%assume_fplane = assume_fplane; this%useProbes = useProbes
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact; this%useFringe = useFringe
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ 
+        this%useHITForcing = useHITForcing
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -881,14 +888,20 @@ contains
                                     this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE)   
         end if
         
-        ! STEP 18: Set up storage for Pressure
+        ! STEP 18: Set HIT Forcing
+        if (this%useHITForcing) then
+            allocate(this%hitforce)
+            call this%hitforce%init(inputfile, this%sp_gpC)
+        end if
+        
+        ! STEP 19: Set up storage for Pressure
         if ((this%storePressure) .or. (this%fastCalcPressure)) then
             allocate(this%Pressure(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             call this%ComputePressure()
         end if 
 
 
-        ! STEP 19: Safeguard against user invalid user inputs
+        ! STEP 20: Safeguard against user invalid user inputs
         if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
             call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 or SSP RK45 time stepping.",123)
         end if 
@@ -1281,7 +1294,11 @@ contains
 
     subroutine destroy(this)
         class(igrid), intent(inout) :: this
-       
+      
+        if(this%useHITForcing) then
+          !this%hitforce%destroy()
+          deallocate(this%hitforce)
+        endif 
         if (this%timeAvgFullFields) then
             call this%finalize_stats3d()
         else
@@ -1650,6 +1667,10 @@ contains
             call this%fringe_x%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
         end if 
    
+        ! Step 8: HIT forcing source term
+        if (this%useHITForcing) then
+            call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, this%w_rhs, this%uhat, this%vhat, this%what)
+        end if 
 
         !if (nrank == 0) print*, maxval(abs(this%u_rhs)), maxval(abs(this%v_rhs)), maxval(abs(this%w_rhs))
     end subroutine
