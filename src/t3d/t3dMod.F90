@@ -250,18 +250,18 @@ contains
 
         ! Create MPI datatypes for halo communication
         ! X halo datatype
-        call mpi_type_vector(this%sz3D(2)*this%sz3D(3), this%nghosts(1), this%sz3Dg(1), mpirkind, this%mpi_halo_x, ierr)
+        call mpi_type_vector(this%sz3Dg(2)*this%sz3Dg(3), this%nghosts(1), this%sz3Dg(1), mpirkind, this%mpi_halo_x, ierr)
         call mpi_type_commit(this%mpi_halo_x, ierr)
         if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_x == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
 
         ! Y halo datatype
-        call mpi_type_contiguous(this%sz3D(1), mpirkind, newtype, ierr)
-        call mpi_type_vector(this%sz3D(3), this%nghosts(2), this%sz3Dg(2), newtype, this%mpi_halo_y, ierr)
+        call mpi_type_contiguous(this%sz3Dg(1), mpirkind, newtype, ierr)
+        call mpi_type_vector(this%sz3Dg(3), this%nghosts(2), this%sz3Dg(2), newtype, this%mpi_halo_y, ierr)
         call mpi_type_commit(this%mpi_halo_y, ierr)
         if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_y == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
 
         ! Z halo datatype
-        call mpi_type_contiguous(this%sz3D(1)*this%sz3D(2)*this%nghosts(3), mpirkind, this%mpi_halo_z, ierr)
+        call mpi_type_contiguous(this%sz3Dg(1)*this%sz3Dg(2)*this%nghosts(3), mpirkind, this%mpi_halo_z, ierr)
         call mpi_type_commit(this%mpi_halo_z, ierr)
         if ( (ierr /= MPI_SUCCESS) .or. (this%mpi_halo_z == MPI_DATATYPE_NULL) ) call mpi_abort(this%comm3D, 14, ierr)
 
@@ -458,7 +458,11 @@ contains
 
         if ( (maxval(this%count3DX) == minval(this%count3DX)) .and. &
              (maxval(this%countX  ) == minval(this%countX  )) .and. &
-             (maxval(this%count3DX) == minval(this%countX  )) ) this%unequalX = .false.
+             (maxval(this%count3DX) == minval(this%countX  )) ) then
+            this%unequalX = .false.
+        else
+            this%unequalX = .true.
+        end if
 
         ! Allocate Y displacements and counts
         if ( allocated(this%disp3DY) ) deallocate(this%disp3DY); allocate( this%disp3DY(0:this%py-1) )
@@ -477,7 +481,11 @@ contains
 
         if ( (maxval(this%count3DY) == minval(this%count3DY)) .and. &
              (maxval(this%countY  ) == minval(this%countY  )) .and. &
-             (maxval(this%count3DY) == minval(this%countY  )) ) this%unequalY = .false.
+             (maxval(this%count3DY) == minval(this%countY  )) ) then
+            this%unequalY = .false.
+        else
+            this%unequalY = .true.
+        end if
 
         ! Allocate Z displacements and counts
         if ( allocated(this%disp3DZ) ) deallocate(this%disp3DZ); allocate( this%disp3DZ(0:this%pz-1) )
@@ -496,7 +504,11 @@ contains
 
         if ( (maxval(this%count3DZ) == minval(this%count3DZ)) .and. &
              (maxval(this%countZ  ) == minval(this%countZ  )) .and. &
-             (maxval(this%count3DZ) == minval(this%countZ  )) ) this%unequalZ = .false.
+             (maxval(this%count3DZ) == minval(this%countZ  )) ) then
+            this%unequalZ = .false.
+        else
+            this%unequalZ = .true.
+        end if
 
     end function
    
@@ -1160,95 +1172,39 @@ contains
 
     subroutine fill_halo_x(this, array)
         class(t3d), intent(in) :: this
-        real(rkind), dimension(this%st3Dg(1):this%en3Dg(1),this%st3D(2):this%en3D(2),this%st3D(3):this%en3D(3)), intent(inout) :: array
+        real(rkind), dimension(this%st3Dg(1):this%en3Dg(1),this%st3Dg(2):this%en3Dg(2),this%st3Dg(3):this%en3Dg(3)), intent(inout) :: array
         integer :: recv_request_left, recv_request_right
         integer :: send_request_left, send_request_right
         integer, dimension(MPI_STATUS_SIZE) :: status
-        ! integer :: i,j,k
         integer :: ierr
 
-        ! real(rkind), dimension(this%nghosts(1),this%sz3D(2),this%sz3D(3)) :: sendbuf_l, sendbuf_r, recvbuf_l, recvbuf_r
+        call mpi_irecv( array(this%st3Dg(1),this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_x, this%xleft, 0, this%commX, recv_request_left, ierr)
+        call mpi_irecv( array(this%en3Dg(1)-this%nghosts(1)+1,this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_x, this%xright, 1, this%commX, recv_request_right, ierr)
 
-        ! TODO: Need to rewrite this to use mpi_halo_x derived datatype instead
-        ! of copying
+        call mpi_isend( array(this%st3Dg(1)+this%nghosts(1),this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_x, this%xleft, 1, this%commX, send_request_left, ierr)
+        call mpi_isend( array(this%en3Dg(1)-2*this%nghosts(1)+1,this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_x, this%xright, 0, this%commX, send_request_right, ierr)
 
-        ! print*, "In fill_halo_x"
-        ! print*, "nghosts = ", this%nghosts
-
-        ! print*, this%rank3D, ": lbound = ", lbound(array)
-        ! print*, this%rank3D, ": ubound = ", ubound(array)
-        ! print*, this%rank3D, ": st3Dg  = ", this%st3Dg
-        ! print*, this%rank3D, ": en3Dg  = ", this%en3Dg
-
-
-        call mpi_irecv( array(this%st3Dg(1),this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xleft, 0, this%commX, recv_request_left, ierr)
-        call mpi_irecv( array(this%en3Dg(1)-this%nghosts(1)+1,this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xright, 1, this%commX, recv_request_right, ierr)
-
-        call mpi_isend( array(this%st3Dg(1)+this%nghosts(1),this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xleft, 1, this%commX, send_request_left, ierr)
-        call mpi_isend( array(this%en3Dg(1)-2*this%nghosts(1)+1,this%st3D(2),this%st3D(3)), 1, this%mpi_halo_x, this%xright, 0, this%commX, send_request_right, ierr)
-
-
-        ! TODO: Use preprocessor flags to choose between explicit copies and MPI derived data types for systems that don't support
-        ! MPI derived data tyes
-
-        ! call mpi_irecv( recvbuf_l, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xleft,  0, this%commX, recv_request_left,  ierr)
-        ! call mpi_irecv( recvbuf_r, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xright, 1, this%commX, recv_request_right, ierr)
-
-        ! do k=1,this%sz3D(3)
-        !     do j=1,this%sz3D(2)
-        !         do i = 1,this%nghosts(1)
-        !             sendbuf_r(i,j,k) = array( this%en3D(1)-this%nghosts(1)+i, this%st3D(2)+j-1, this%st3D(3)+k-1 )
-        !         end do
-        !     end do
-        ! end do
-
-        ! do k=1,this%sz3D(3)
-        !     do j=1,this%sz3D(2)
-        !         do i = 1,this%nghosts(1)
-        !             sendbuf_l(i,j,k) = array( this%st3D(1)+i-1, this%st3D(2)+j-1, this%st3D(3)+k-1 )
-        !         end do
-        !     end do
-        ! end do
-
-        ! call mpi_isend( sendbuf_r, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xright, 0, this%commX, send_request_right, ierr)
-        ! call mpi_isend( sendbuf_l, this%nghosts(1)*this%sz3D(2)*this%sz3D(3), mpirkind, this%xleft,  1, this%commX, send_request_left,  ierr)
 
         call mpi_wait(recv_request_left,  status, ierr)
         call mpi_wait(recv_request_right, status, ierr)
         call mpi_wait(send_request_left,  status, ierr)
         call mpi_wait(send_request_right, status, ierr)
 
-        ! do k=1,this%sz3D(3)
-        !     do j=1,this%sz3D(2)
-        !         do i = 1,this%nghosts(1)
-        !             array( this%en3D(1)+i, this%st3D(2)+j-1, this%st3D(3)+k-1 ) = recvbuf_r(i,j,k)
-        !         end do
-        !     end do
-        ! end do
-
-        ! do k=1,this%sz3D(3)
-        !     do j=1,this%sz3D(2)
-        !         do i = 1,this%nghosts(1)
-        !             array( this%st3Dg(1)+i-1, this%st3D(2)+j-1, this%st3D(3)+k-1 ) = recvbuf_l(i,j,k)
-        !         end do
-        !     end do
-        ! end do
-
     end subroutine
 
     subroutine fill_halo_y(this, array)
         class(t3d), intent(in) :: this
-        real(rkind), dimension(this%st3D(1):this%en3D(1),this%st3Dg(2):this%en3Dg(2),this%st3D(3):this%en3D(3)), intent(inout) :: array
+        real(rkind), dimension(this%st3Dg(1):this%en3Dg(1),this%st3Dg(2):this%en3Dg(2),this%st3Dg(3):this%en3Dg(3)), intent(inout) :: array
         integer :: recv_request_left, recv_request_right
         integer :: send_request_left, send_request_right
         integer, dimension(MPI_STATUS_SIZE) :: status
         integer :: ierr
 
-        call mpi_irecv( array(this%st3D(1),this%st3Dg(2),this%st3D(3)), 1, this%mpi_halo_y, this%yleft, 0, this%commY, recv_request_left, ierr)
-        call mpi_irecv( array(this%st3D(1),this%en3Dg(2)-this%nghosts(2)+1,this%st3D(3)), 1, this%mpi_halo_y, this%yright, 1, this%commY, recv_request_right, ierr)
+        call mpi_irecv( array(this%st3Dg(1),this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_y, this%yleft, 0, this%commY, recv_request_left, ierr)
+        call mpi_irecv( array(this%st3Dg(1),this%en3Dg(2)-this%nghosts(2)+1,this%st3Dg(3)), 1, this%mpi_halo_y, this%yright, 1, this%commY, recv_request_right, ierr)
 
-        call mpi_isend( array(this%st3D(1),this%st3Dg(2)+this%nghosts(2),this%st3D(3)), 1, this%mpi_halo_y, this%yleft, 1, this%commY, send_request_left, ierr)
-        call mpi_isend( array(this%st3D(1),this%en3Dg(2)-2*this%nghosts(2)+1,this%st3D(3)), 1, this%mpi_halo_y, this%yright, 0, this%commY, send_request_right, ierr)
+        call mpi_isend( array(this%st3Dg(1),this%st3Dg(2)+this%nghosts(2),this%st3Dg(3)), 1, this%mpi_halo_y, this%yleft, 1, this%commY, send_request_left, ierr)
+        call mpi_isend( array(this%st3Dg(1),this%en3Dg(2)-2*this%nghosts(2)+1,this%st3Dg(3)), 1, this%mpi_halo_y, this%yright, 0, this%commY, send_request_right, ierr)
 
 
         call mpi_wait(recv_request_left,  status, ierr)
@@ -1260,17 +1216,17 @@ contains
 
     subroutine fill_halo_z(this, array)
         class(t3d), intent(in) :: this
-        real(rkind), dimension(this%st3D(1):this%en3D(1),this%st3D(2):this%en3D(2),this%st3Dg(3):this%en3Dg(3)), intent(inout) :: array
+        real(rkind), dimension(this%st3Dg(1):this%en3Dg(1),this%st3Dg(2):this%en3Dg(2),this%st3Dg(3):this%en3Dg(3)), intent(inout) :: array
         integer :: recv_request_left, recv_request_right
         integer :: send_request_left, send_request_right
         integer, dimension(MPI_STATUS_SIZE) :: status
         integer :: ierr
 
-        call mpi_irecv( array(this%st3D(1),this%st3D(2),this%st3Dg(3)), 1, this%mpi_halo_z, this%zleft, 0, this%commZ, recv_request_left, ierr)
-        call mpi_irecv( array(this%st3D(1),this%st3D(2),this%en3Dg(3)-this%nghosts(3)+1), 1, this%mpi_halo_z, this%zright, 1, this%commZ, recv_request_right, ierr)
+        call mpi_irecv( array(this%st3Dg(1),this%st3Dg(2),this%st3Dg(3)), 1, this%mpi_halo_z, this%zleft, 0, this%commZ, recv_request_left, ierr)
+        call mpi_irecv( array(this%st3Dg(1),this%st3Dg(2),this%en3Dg(3)-this%nghosts(3)+1), 1, this%mpi_halo_z, this%zright, 1, this%commZ, recv_request_right, ierr)
 
-        call mpi_isend( array(this%st3D(1),this%st3D(2),this%st3Dg(3)+this%nghosts(3)), 1, this%mpi_halo_z, this%zleft, 1, this%commZ, send_request_left, ierr)
-        call mpi_isend( array(this%st3D(1),this%st3D(2),this%en3Dg(3)-2*this%nghosts(3)+1), 1, this%mpi_halo_z, this%zright, 0, this%commZ, send_request_right, ierr)
+        call mpi_isend( array(this%st3Dg(1),this%st3Dg(2),this%st3Dg(3)+this%nghosts(3)), 1, this%mpi_halo_z, this%zleft, 1, this%commZ, send_request_left, ierr)
+        call mpi_isend( array(this%st3Dg(1),this%st3Dg(2),this%en3Dg(3)-2*this%nghosts(3)+1), 1, this%mpi_halo_z, this%zright, 0, this%commZ, send_request_right, ierr)
 
 
         call mpi_wait(recv_request_left,  status, ierr)

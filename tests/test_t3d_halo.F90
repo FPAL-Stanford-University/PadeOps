@@ -39,9 +39,7 @@ program test_t3d_halo
         print *, "en3Dg = ", gp%en3Dg
     end if
 
-    !!!! ============================== !!!!
-    !!!! X-direction halo communication
-    allocate( input(gp%st3Dg(1):gp%en3Dg(1), gp%st3D(2):gp%en3D(2), gp%st3D(3):gp%en3D(3)) )
+    allocate( input(gp%st3Dg(1):gp%en3Dg(1), gp%st3Dg(2):gp%en3Dg(2), gp%st3Dg(3):gp%en3Dg(3)) )
     input = 0._rkind
 
     do k=gp%st3D(3),gp%en3D(3)
@@ -51,6 +49,9 @@ program test_t3d_halo
             end do
         end do
     end do
+
+    !!!! ============================== !!!!
+    !!!! X-direction halo communication
 
     call gp%fill_halo_x( input )
 
@@ -76,28 +77,17 @@ program test_t3d_halo
             print '(A)', "ERROR: Halo cells in X not communicated correctly!"
         end if
     end if
-    deallocate( input )
     !!!! ============================== !!!!
 
     !!!! ============================== !!!!
     !!!! Y-direction halo communication
-    allocate( input(gp%st3D(1):gp%en3D(1), gp%st3Dg(2):gp%en3Dg(2), gp%st3D(3):gp%en3D(3)) )
-    input = 0._rkind
-
-    do k=gp%st3D(3),gp%en3D(3)
-        do j=gp%st3D(2),gp%en3D(2)  
-            do i=gp%st3D(1),gp%en3D(1)
-                input(i,j,k) = (i-1) + (j-1)*nx + (k-1)*nx*ny
-            end do
-        end do
-    end do
 
     call gp%fill_halo_y( input )
 
     mycorrect = .true.
     do kk=gp%st3D(3),gp%en3D(3)
         do jj=gp%st3Dg(2),gp%en3Dg(2)  
-            do ii=gp%st3D(1),gp%en3D(1)
+            do ii=gp%st3Dg(1),gp%en3Dg(1)
                 i = mod(ii-1+nx,nx)+1
                 j = mod(jj-1+ny,ny)+1
                 k = mod(kk-1+nz,nz)+1
@@ -116,28 +106,17 @@ program test_t3d_halo
             print '(A)', "ERROR: Halo cells in Y not communicated correctly!"
         end if
     end if
-    deallocate( input )
     !!!! ============================== !!!!
 
     !!!! ============================== !!!!
     !!!! Z-direction halo communication
-    allocate( input(gp%st3D(1):gp%en3D(1), gp%st3D(2):gp%en3D(2), gp%st3Dg(3):gp%en3Dg(3)) )
-    input = 0._rkind
-
-    do k=gp%st3D(3),gp%en3D(3)
-        do j=gp%st3D(2),gp%en3D(2)  
-            do i=gp%st3D(1),gp%en3D(1)
-                input(i,j,k) = (i-1) + (j-1)*nx + (k-1)*nx*ny
-            end do
-        end do
-    end do
 
     call gp%fill_halo_z( input )
 
     mycorrect = .true.
     do kk=gp%st3Dg(3),gp%en3Dg(3)
-        do jj=gp%st3D(2),gp%en3D(2)  
-            do ii=gp%st3D(1),gp%en3D(1)
+        do jj=gp%st3Dg(2),gp%en3Dg(2)  
+            do ii=gp%st3Dg(1),gp%en3Dg(1)
                 i = mod(ii-1+nx,nx)+1
                 j = mod(jj-1+ny,ny)+1
                 k = mod(kk-1+nz,nz)+1
@@ -156,9 +135,9 @@ program test_t3d_halo
             print '(A)', "ERROR: Halo cells in Z not communicated correctly!"
         end if
     end if
-    deallocate( input )
     !!!! ============================== !!!!
 
+    deallocate( input )
     call MPI_Finalize(ierr)
 contains
 
