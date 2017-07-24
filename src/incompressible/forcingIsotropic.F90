@@ -51,9 +51,9 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    complex(rkind), dimension(:,:,:,:), intent(inout), target :: cbuffzC
    class(spectral), intent(in), target :: spectC
    real(rkind), dimension(:,:,:), allocatable :: rbuffzC
-   integer :: RandSeedToAdd = 0
+   integer :: RandSeedToAdd = 0, ierr
 
-   integer :: nWaves = 20, ierr
+   integer :: nWaves = 20
    real(rkind) :: kmin = 2.d0, kmax = 10.d0, EpsAmplitude = 0.1d0
    namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd 
 
@@ -132,7 +132,6 @@ end subroutine
 subroutine pick_random_wavenumbers(this)
    use random, only: uniform_random 
    class(HIT_shell_forcing), intent(inout) :: this
-   integer :: ierr
 
    call uniform_random(this%kabs_sample, this%kmin, this%kmax, this%seed1)
    call uniform_random(this%zeta_sample, -one, one, this%seed2)
@@ -213,7 +212,7 @@ end subroutine
 
 subroutine compute_forcing(this)
    class(HIT_shell_forcing), intent(inout) :: this
-   integer :: ik, ierr
+   integer :: ik
 
    this%fxhat = im0
    this%fyhat = im0
@@ -229,7 +228,7 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
    
    real(rkind) :: den, fac
    integer :: gid_x, gid_y, gid_yC, gid_z, gid_zC
-   integer :: lid_x, lid_y, lid_yC, ierr
+   integer :: lid_x, lid_y, lid_yC
 
    ! Get global ID of the mode and conjugate
    gid_x  = kx + 1
@@ -251,14 +250,14 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
                abs(this%what(lid_x,lid_y,gid_z))**2 + 1.d-14
          
          fac = this%normfact*this%EpsAmplitude/den/this%Nwaves_rkind
-         this%fxhat(lid_x, lid_y, gid_z ) = this%fxhat(lid_x, lid_y, gid_z ) + fac*conjg(this%uhat(lid_x, lid_y, gid_z ))
-         this%fxhat(lid_x, lid_y, gid_zC) = this%fxhat(lid_x, lid_y, gid_zC) + fac*conjg(this%uhat(lid_x, lid_y, gid_zC))
+         this%fxhat(lid_x, lid_y, gid_z ) = this%fxhat(lid_x, lid_y, gid_z ) + fac*(this%uhat(lid_x, lid_y, gid_z ))
+         this%fxhat(lid_x, lid_y, gid_zC) = this%fxhat(lid_x, lid_y, gid_zC) + fac*(this%uhat(lid_x, lid_y, gid_zC))
                                             
-         this%fyhat(lid_x, lid_y, gid_z ) = this%fyhat(lid_x, lid_y, gid_z ) + fac*conjg(this%vhat(lid_x, lid_y, gid_z ))
-         this%fyhat(lid_x, lid_y, gid_zC) = this%fyhat(lid_x, lid_y, gid_zC) + fac*conjg(this%vhat(lid_x, lid_y, gid_zC))
+         this%fyhat(lid_x, lid_y, gid_z ) = this%fyhat(lid_x, lid_y, gid_z ) + fac*(this%vhat(lid_x, lid_y, gid_z ))
+         this%fyhat(lid_x, lid_y, gid_zC) = this%fyhat(lid_x, lid_y, gid_zC) + fac*(this%vhat(lid_x, lid_y, gid_zC))
                                             
-         this%fzhat(lid_x, lid_y, gid_z ) = this%fzhat(lid_x, lid_y, gid_z ) + fac*conjg(this%what(lid_x, lid_y, gid_z ))
-         this%fzhat(lid_x, lid_y, gid_zC) = this%fzhat(lid_x, lid_y, gid_zC) + fac*conjg(this%what(lid_x, lid_y, gid_zC))
+         this%fzhat(lid_x, lid_y, gid_z ) = this%fzhat(lid_x, lid_y, gid_z ) + fac*(this%what(lid_x, lid_y, gid_z ))
+         this%fzhat(lid_x, lid_y, gid_zC) = this%fzhat(lid_x, lid_y, gid_zC) + fac*(this%what(lid_x, lid_y, gid_zC))
          
       end if
 
@@ -268,14 +267,14 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
                abs(this%what(lid_x,lid_yC,gid_z))**2 + 1.d-14
          
          fac = this%normfact*this%EpsAmplitude/den/this%Nwaves_rkind
-         this%fxhat(lid_x, lid_yC, gid_z ) = this%fxhat(lid_x, lid_yC, gid_z ) + fac*conjg(this%uhat(lid_x, lid_yC, gid_z ))
-         this%fxhat(lid_x, lid_yC, gid_zC) = this%fxhat(lid_x, lid_yC, gid_zC) + fac*conjg(this%uhat(lid_x, lid_yC, gid_zC))
+         this%fxhat(lid_x, lid_yC, gid_z ) = this%fxhat(lid_x, lid_yC, gid_z ) + fac*(this%uhat(lid_x, lid_yC, gid_z ))
+         this%fxhat(lid_x, lid_yC, gid_zC) = this%fxhat(lid_x, lid_yC, gid_zC) + fac*(this%uhat(lid_x, lid_yC, gid_zC))
                                              
-         this%fyhat(lid_x, lid_yC, gid_z ) = this%fyhat(lid_x, lid_yC, gid_z ) + fac*conjg(this%vhat(lid_x, lid_yC, gid_z ))
-         this%fyhat(lid_x, lid_yC, gid_zC) = this%fyhat(lid_x, lid_yC, gid_zC) + fac*conjg(this%vhat(lid_x, lid_yC, gid_zC))
+         this%fyhat(lid_x, lid_yC, gid_z ) = this%fyhat(lid_x, lid_yC, gid_z ) + fac*(this%vhat(lid_x, lid_yC, gid_z ))
+         this%fyhat(lid_x, lid_yC, gid_zC) = this%fyhat(lid_x, lid_yC, gid_zC) + fac*(this%vhat(lid_x, lid_yC, gid_zC))
                                              
-         this%fzhat(lid_x, lid_yC, gid_z ) = this%fzhat(lid_x, lid_yC, gid_z ) + fac*conjg(this%what(lid_x, lid_yC, gid_z ))
-         this%fzhat(lid_x, lid_yC, gid_zC) = this%fzhat(lid_x, lid_yC, gid_zC) + fac*conjg(this%what(lid_x, lid_yC, gid_zC))
+         this%fzhat(lid_x, lid_yC, gid_z ) = this%fzhat(lid_x, lid_yC, gid_z ) + fac*(this%what(lid_x, lid_yC, gid_z ))
+         this%fzhat(lid_x, lid_yC, gid_zC) = this%fzhat(lid_x, lid_yC, gid_zC) + fac*(this%what(lid_x, lid_yC, gid_zC))
          
       end if
    end if 
