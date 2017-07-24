@@ -42,6 +42,7 @@ module spectralMod
         logical, public :: carryingZeroK = .false.
         integer, public :: zeroK_i = 123456, zeroK_j = 123456
         real(rkind), dimension(:,:), allocatable :: GsurfaceFilter 
+        real(rkind) :: dealiasFact = 2.d0/3.d0
 
         integer, dimension(:,:,:), allocatable :: Gfilter_PostProcess
         logical :: initPostProcessor = .false.
@@ -642,9 +643,9 @@ contains
          
          this%Gdealias = one 
 
-         kdealiasx = ((two/three)*pi/dx)
-         kdealiasy = ((two/three)*pi/dy)
-         kdealiasz = ((two/three)*pi/dz)
+         kdealiasx = (this%dealiasFact*pi/dx)
+         kdealiasy = (this%dealiasFact*pi/dy)
+         kdealiasz = (this%dealiasFact*pi/dz)
 
          call transpose_y_to_z(this%k1, rbuffz, this%spectdecomp)
          where (abs(rbuffz) >= kdealiasx)    
@@ -709,7 +710,7 @@ contains
          deallocate(rbuffz, cbuffz, rbuffz1)
       end subroutine 
 
-    subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK, exhaustiveFFT, init_periodicInZ) 
+    subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK, exhaustiveFFT, init_periodicInZ, dealiasF) 
         class(spectral),  intent(inout)         :: this
         character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction
         integer,          intent(in)            :: nx_g, ny_g, nz_g    ! Global data size
@@ -723,6 +724,7 @@ contains
         logical, intent(in),          optional  :: createK 
         logical, intent(in),          optional  :: exhaustiveFFT 
         logical, intent(in),          optional  :: init_periodicInZ 
+        real(rkind), intent(in),      optional  :: dealiasF
 
         if (present(createK)) then
             this%storeK = createK
@@ -740,6 +742,7 @@ contains
         this%ny_g = ny_g
         this%nz_g = nz_g
 
+        if (present(dealiasF)) this%dealiasFact = dealiasF
         if (present(fixOddball)) this%fixOddball = fixOddball
         if (present(use2decompFFT)) this%use2decompFFT = use2decompFFT 
         if (present(useConsrvD2)) this%useConsrvD2 = useConsrvD2

@@ -31,9 +31,9 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one
     character(len=clen)  :: dir_init_files
-    real(rkind) :: TI = 0.1
+    real(rkind) :: TI = 0.1, uadv = 1.d0
     character(len=clen)  :: ufname, vfname, wfname 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv
 
 
     !Lx = two*pi; Ly = two*pi; Lz = one
@@ -96,8 +96,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     type(cd06stagg), allocatable :: der
     integer :: nz, nzE, k
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: TI = 0.1
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI
+    real(rkind) :: TI = 0.1, uadv = 0.d0
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -121,7 +121,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     call decomp_2d_read_one(1,v ,vfname, decompC)
     call decomp_2d_read_one(1,wC,wfname, decompC)
   
-    u  = one + TI*u
+    u  = uadv + TI*u
     v  = TI*v
     wC = TI*wC
 
@@ -202,8 +202,8 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind) :: ThetaRef
     integer :: iounit 
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: TI = 0.1
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI
+    real(rkind) :: TI = 0.1, uadv = 1.d0
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -224,8 +224,8 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     real(rkind), intent(out) :: Tref
     integer :: iounit
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: TI = 0.1
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI
+    real(rkind) :: TI = 0.1, uadv = 1.d0
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
