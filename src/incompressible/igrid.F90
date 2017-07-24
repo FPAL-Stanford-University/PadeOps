@@ -22,7 +22,7 @@ module IncompressibleGrid
     use kspreprocessing, only: ksprep  
     use PadeDerOps, only: Pade6Stagg
     use Fringemethod, only: fringe
-    use forcingmod,   only: HIT_shell_forcing
+    !use forcingmod,   only: HIT_shell_forcing
 
     implicit none
 
@@ -240,7 +240,7 @@ module IncompressibleGrid
 
         ! HIT Forcing
         logical :: useHITForcing = .false.
-        type(HIT_shell_forcing), allocatable :: hitforce
+        !type(HIT_shell_forcing), allocatable :: hitforce
 
         contains
             procedure          :: init
@@ -890,9 +890,9 @@ contains
         
         ! STEP 18: Set HIT Forcing
         if (this%useHITForcing) then
-            allocate(this%hitforce)
-            call this%hitforce%init(inputfile, this%sp_gpC, this%sp_gpE, this%spectC, this%cbuffyE(:,:,:,1), &
-                           this%cbuffyC(:,:,:,1), this%cbuffzE(:,:,:,1), this%cbuffzC, this%step)
+            !allocate(this%hitforce)
+            !call this%hitforce%init(inputfile, this%sp_gpC, this%sp_gpE, this%spectC, this%cbuffyE(:,:,:,1), &
+            !               this%cbuffyC(:,:,:,1), this%cbuffzE(:,:,:,1), this%cbuffzC, this%step)
         end if
         
         ! STEP 19: Set up storage for Pressure
@@ -1297,8 +1297,8 @@ contains
         class(igrid), intent(inout) :: this
       
         if(this%useHITForcing) then
-          !this%hitforce%destroy()
-          deallocate(this%hitforce)
+          !!this%hitforce%destroy()
+          !deallocate(this%hitforce)
         endif 
         if (this%timeAvgFullFields) then
             call this%finalize_stats3d()
@@ -1670,7 +1670,7 @@ contains
    
         ! Step 8: HIT forcing source term
         if (this%useHITForcing) then
-            call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep)
+            !call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep)
         end if 
 
         !if (nrank == 0) print*, maxval(abs(this%u_rhs)), maxval(abs(this%v_rhs)), maxval(abs(this%w_rhs))

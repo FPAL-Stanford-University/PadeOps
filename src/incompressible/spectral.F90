@@ -663,16 +663,16 @@ contains
    
          
          call dfftw_plan_many_dft(this%plan_c2c_fwd_z_ip, 1, nz,nxT*nyT, this%ctmpz, nz, &
-                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_FORWARD , FFTW_EXHAUSTIVE)   
+                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_FORWARD , FFTW_MEASURE)   
          
          call dfftw_plan_many_dft(this%plan_c2c_fwd_z_oop, 1, nz,nxT*nyT, cbuffz, nz, &
-                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_FORWARD , FFTW_EXHAUSTIVE)   
+                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_FORWARD , FFTW_MEASURE)   
          
          call dfftw_plan_many_dft(this%plan_c2c_bwd_z_ip, 1, nz,nxT*nyT, this%ctmpz, nz, &
-                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_BACKWARD , FFTW_EXHAUSTIVE)   
+                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_BACKWARD , FFTW_MEASURE)   
          
          call dfftw_plan_many_dft(this%plan_c2c_bwd_z_oop, 1, nz,nxT*nyT, cbuffz, nz, &
-                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_BACKWARD , FFTW_EXHAUSTIVE)   
+                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_BACKWARD , FFTW_MEASURE)   
 
          allocate(rbuffz1(this%physdecomp%zsz(1), this%physdecomp%zsz(2), this%physdecomp%zsz(3)      ))
          allocate(this%fhatz(this%physdecomp%zsz(1), this%physdecomp%zsz(2), this%physdecomp%zsz(3)/2 + 1))
@@ -680,12 +680,12 @@ contains
          call dfftw_plan_many_dft_r2c(this%plan_r2c_z, 1, this%physdecomp%zsz(3), &
                  this%physdecomp%zsz(1)*this%physdecomp%zsz(2),rbuffz1 , this%physdecomp%zsz(3), &
                  this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, this%fhatz, this%physdecomp%zsz(3)/2 + 1, &
-                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, FFTW_EXHAUSTIVE)
+                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, FFTW_MEASURE)
 
          call dfftw_plan_many_dft_c2r(this%plan_c2r_z, 1, this%physdecomp%zsz(3), &
                  this%physdecomp%zsz(1)*this%physdecomp%zsz(2), this%fhatz , this%physdecomp%zsz(3)/2 + 1, &
                  this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, rbuffz1, this%physdecomp%zsz(3), &
-                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, FFTW_EXHAUSTIVE)
+                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, FFTW_MEASURE)
 
          allocate(this%k3_C2Eshift(nz))
          allocate(this%k3_E2Cshift(nz))
@@ -861,28 +861,21 @@ contains
             end if 
             if (allocated(this%kabs_sq)) deallocate(this%kabs_sq)
             allocate (this%kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            !if (allocated(this%k1_der2)) deallocate(this%k1_der2)
-            !allocate (this%k1_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            !if (allocated(this%k2_der2)) deallocate(this%k2_der2)
-            !allocate (this%k2_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            !if (allocated(this%k3_der2)) deallocate(this%k3_der2)
-            !allocate (this%k3_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            !if (allocated(this%one_by_kabs_sq)) deallocate(this%one_by_kabs_sq)
-            !allocate(this%one_by_kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
             if (allocated(this%Gdealias)) deallocate(this%Gdealias)
             allocate (this%Gdealias(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             if (allocated(this%GTestFilt)) deallocate(this%GTestFilt)
             allocate (this%GTestFilt(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             
-            !allocate(k1four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
-            !allocate(k2four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
-            !allocate(k3four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
-
             ! STEP 3: Generate 1d wavenumbers 
             k1_1d = GetWaveNums(nx_g,dx) 
             k2_1d = GetWaveNums(ny_g,dy) 
             k3_1d = GetWaveNums(nz_g,dz) 
-       
+            ! flip the sign of the oddball (helps later)
+            k1_1d(nx_g/2+1) = -k1_1d(nx_g/2+1)
+            k2_1d(ny_g/2+1) = -k2_1d(ny_g/2+1)
+            k3_1d(nz_g/2+1) = -k3_1d(nz_g/2+1)
+
+
        
             ! STEP 4: Create temporary array for k1 and transpose it to the appropriate dimension
             allocate(tmp1(spectdecomp%xsz(1),spectdecomp%xsz(2),spectdecomp%xsz(3)))

@@ -26,6 +26,7 @@ module forcingmod
       integer :: seed0, seed1, seed2, seed3
       integer :: myk1min, myk1max, myk2min, myk2max
       real(rkind) :: Nwaves_rkind
+      real(rkind), dimension(:), allocatable :: tmpModes
 
       contains
       procedure          :: init
@@ -50,7 +51,7 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    real(rkind), dimension(:,:,:), allocatable :: rbuffzC
    integer :: RandSeedToAdd = 0
 
-   integer :: nWaves = 20, ierr, seed0 = 12345
+   integer :: nWaves = 20, ierr
    real(rkind) :: kmin = 2.d0, kmax = 10.d0, EpsAmplitude = 0.1d0
    namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd 
 
@@ -64,6 +65,7 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    this%Nwaves = Nwaves
    this%sp_gpC => sp_gpC
    this%sp_gpE => sp_gpE
+   this%spectC => spectC
 
    allocate(this%uhat (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%vhat (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
@@ -78,12 +80,16 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
 
    this%seed0 = tidStart + RandSeedToAdd
    call this%update_seeds()
-   if (nrank == 0) then
-      !allocate(this%randNums(Nwaves))
-      allocate(this%kabs_sample(Nwaves))
-      allocate(this%theta_sample(Nwaves))
-      allocate(this%zeta_sample(Nwaves))
-   end if
+   
+   
+   allocate(this%kabs_sample(Nwaves))
+   allocate(this%theta_sample(Nwaves))
+   allocate(this%zeta_sample(Nwaves))
+   allocate(this%tmpModes(Nwaves))
+
+   allocate(this%wave_x(Nwaves))
+   allocate(this%wave_y(Nwaves))
+   allocate(this%wave_z(Nwaves))
 
    allocate(rbuffzC(sp_gpC%zsz(1), sp_gpC%zsz(2), sp_gpC%zsz(3)))
    allocate(this%k1inZ(sp_gpC%zsz(1)))
@@ -95,7 +101,8 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    
    call transpose_y_to_z(spectC%k2, rbuffzC, sp_gpC)
    this%k2inZ = nint(rbuffzC(1,:,1)) 
-   
+  
+   print*, spectC%k3(1,1,:)
    call transpose_y_to_z(spectC%k3, rbuffzC, sp_gpC)
    this%k3inZ = nint(rbuffzC(1,1,:))
 
@@ -125,18 +132,22 @@ subroutine pick_random_wavenumbers(this)
    class(HIT_shell_forcing), intent(inout) :: this
    integer :: ierr
 
-   if (nrank == 0) then
-      call uniform_random(this%kabs_sample, this%kmin, this%kmax, this%seed1)
-      call uniform_random(this%zeta_sample, -one, one, this%seed2)
-      call uniform_random(this%theta_sample, zero, two*pi, this%seed3)
-      this%wave_x = ceiling(this%kabs_sample*sqrt(1 - this%zeta_sample**2)*cos(this%theta_sample))
-      this%wave_y = ceiling(this%kabs_sample*sqrt(1 - this%zeta_sample**2)*sin(this%theta_sample))
-      this%wave_z = ceiling(this%kabs_sample*this%zeta_sample)
-   end if 
+   call uniform_random(this%kabs_sample, this%kmin, this%kmax, this%seed1)
+   call uniform_random(this%zeta_sample, -one, one, this%seed2)
+   call uniform_random(this%theta_sample, zero, two*pi, this%seed3)
+   
+   this%tmpModes = this%kabs_sample*sqrt(1 - this%zeta_sample**2)*cos(this%theta_sample)
+   where(this%tmpModes < 0) this%tmpModes = -this%tmpModes
+   this%wave_x = ceiling(this%tmpModes)
+   
+   this%tmpModes = this%kabs_sample*sqrt(1 - this%zeta_sample**2)*sin(this%theta_sample)
+   where(this%tmpModes < 0) this%tmpModes = -this%tmpModes
+   this%wave_y = ceiling(this%tmpModes)
+   
+   this%tmpModes = this%kabs_sample*this%zeta_sample
+   where(this%tmpModes < 0) this%tmpModes = -this%tmpModes
+   this%wave_z = ceiling(this%tmpModes)
 
-   call mpi_bcast(this%wave_x, this%Nwaves, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
-   call mpi_bcast(this%wave_y, this%Nwaves, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
-   call mpi_bcast(this%wave_z, this%Nwaves, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
 
 end subroutine 
 
@@ -200,16 +211,13 @@ end subroutine
 
 subroutine compute_forcing(this)
    class(HIT_shell_forcing), intent(inout) :: this
-   integer :: ik
+   integer :: ik, ierr
 
    this%fxhat = im0
    this%fyhat = im0
    this%fzhat = im0
    do ik = 1,this%Nwaves
       call this%embed_forcing_mode(this%wave_x(ik),  this%wave_y(ik),  this%wave_z(ik))
-      call this%embed_forcing_mode(this%wave_x(ik), -this%wave_y(ik),  this%wave_z(ik))
-      call this%embed_forcing_mode(this%wave_x(ik),  this%wave_y(ik), -this%wave_z(ik))
-      call this%embed_forcing_mode(this%wave_x(ik), -this%wave_y(ik), -this%wave_z(ik))
    end do 
 end subroutine 
 
@@ -217,28 +225,70 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
    class(HIT_shell_forcing), intent(inout) :: this
    integer, intent(in) :: kx, ky, kz
    
-   integer :: locator(1), indx, indy, indz
    real(rkind) :: den, fac
+   integer :: gid_x, gid_y, gid_yC, gid_z, gid_zC
+   integer :: lid_x, lid_y, lid_yC, ierr
 
-   if ((kx >= this%myk1min) .and. (kx <= this%myk1max) .and. (ky >= this%myk2min) .and. (ky <= this%myk2max)) then
-      ! I own this wave
-      
-      ! NOTE: the following step can be determined more efficiently 
-      ! using O(1) ops instead of O(N) operations
-      locator = minloc(this%k1inZ - kx); indx = locator(1)
-      locator = minloc(this%k2inZ - ky); indy = locator(1)
-      locator = minloc(this%k3inZ - kz); indz = locator(1)
-      
-      den = abs(this%uhat(indx, indy, indz))**2 + &
-            abs(this%vhat(indx, indy, indz))**2 + &
-            abs(this%what(indx, indy, indz))**2
-      fac = this%EpsAmplitude/den/this%Nwaves_rkind
-      
-      this%fxhat(indx, indy, indz) = this%fxhat(indx, indy, indz) + fac*conjg(this%uhat(indx,indy,indz))
-      this%fyhat(indx, indy, indz) = this%fyhat(indx, indy, indz) + fac*conjg(this%vhat(indx,indy,indz))
-      this%fzhat(indx, indy, indz) = this%fzhat(indx, indy, indz) + fac*conjg(this%what(indx,indy,indz))
-   end if
+   ! Get global ID of the mode and conjugate
+   gid_x  = kx + 1
+   gid_y  = ky + 1
+   gid_yC = this%sp_gpC%ysz(2) - ky + 1 
+   gid_z  = kz + 1
+   gid_zC = this%sp_gpC%zsz(3) - kz + 1 
 
+   ! Get local ID of the mode and conjugate
+   lid_x  = gid_x  - this%sp_gpC%zst(1) + 1
+   lid_y  = gid_y  - this%sp_gpC%zst(2) + 1
+   lid_yC = gid_yC - this%sp_gpC%zst(2) + 1
+   
+
+   if ((lid_x >= 1).and.(lid_x <= this%sp_gpC%zsz(1))) then
+      if ((lid_y >= 1).and.(lid_y <= this%sp_gpC%zsz(2))) then
+         den = abs(this%uhat(lid_x,lid_y,gid_z))**2 + &
+               abs(this%vhat(lid_x,lid_y,gid_z))**2 + &
+               abs(this%what(lid_x,lid_y,gid_z))**2 + 1.d-14
+         
+         fac = this%EpsAmplitude/den/this%Nwaves_rkind
+         this%fxhat(lid_x, lid_y, gid_z ) = fac*conjg(this%uhat(lid_x, lid_y, gid_z ))
+         this%fxhat(lid_x, lid_y, gid_zC) = fac*conjg(this%uhat(lid_x, lid_y, gid_zC))
+         
+         this%fyhat(lid_x, lid_y, gid_z ) = fac*conjg(this%vhat(lid_x, lid_y, gid_z ))
+         this%fyhat(lid_x, lid_y, gid_zC) = fac*conjg(this%vhat(lid_x, lid_y, gid_zC))
+         
+         this%fzhat(lid_x, lid_y, gid_z ) = fac*conjg(this%what(lid_x, lid_y, gid_z ))
+         this%fzhat(lid_x, lid_y, gid_zC) = fac*conjg(this%what(lid_x, lid_y, gid_zC))
+         
+         print*, "kx:", kx, "indx:", lid_x, "k1(indx):", this%k1inZ(lid_x) 
+         print*, "ky:", ky, "indy:", lid_y, "k2(indy):", this%k2inZ(lid_y) 
+         print*, "kz:", kz, "indz:", gid_z, "k3(indz):", this%k3inZ(gid_z)
+      end if
+
+
+      if ((lid_yC >= 1).and.(lid_yC <= this%sp_gpC%zsz(2))) then
+         den = abs(this%uhat(lid_x,lid_yC,gid_z))**2 + &
+               abs(this%vhat(lid_x,lid_yC,gid_z))**2 + &
+               abs(this%what(lid_x,lid_yC,gid_z))**2 + 1.d-14
+         
+         fac = this%EpsAmplitude/den/this%Nwaves_rkind
+         this%fxhat(lid_x, lid_yC, gid_z ) = fac*conjg(this%uhat(lid_x, lid_yC, gid_z ))
+         this%fxhat(lid_x, lid_yC, gid_zC) = fac*conjg(this%uhat(lid_x, lid_yC, gid_zC))
+         
+         this%fyhat(lid_x, lid_yC, gid_z ) = fac*conjg(this%vhat(lid_x, lid_yC, gid_z ))
+         this%fyhat(lid_x, lid_yC, gid_zC) = fac*conjg(this%vhat(lid_x, lid_yC, gid_zC))
+         
+         this%fzhat(lid_x, lid_yC, gid_z ) = fac*conjg(this%what(lid_x, lid_yC, gid_z ))
+         this%fzhat(lid_x, lid_yC, gid_zC) = fac*conjg(this%what(lid_x, lid_yC, gid_zC))
+         
+         print*, "kx:", kx, "indx: ", lid_x , "k1(indx) :", this%k1inZ(lid_x ) 
+         print*, "ky:", ky, "indyC:", lid_yC, "k2C(indy):", this%k2inZ(lid_yC) 
+         print*, "kz:", kz, "indzC:", gid_zC, "k3C(indz):", this%k3inZ(gid_zC)
+      end if
+   end if 
+
+   print*, this%k3inZ
+   print*, nrank, shape(this%wave_x)
+   call mpi_barrier(mpi_comm_world, ierr)
+   stop 
 end subroutine 
 
 
@@ -252,8 +302,6 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, 
    
    logical, intent(in) :: newTimestep
 
-   integer :: idx
-
 
    ! STEP 1: Populate wave_x, wave_y, wave_z
    if (newTimestep) then
@@ -265,7 +313,7 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, 
    ! STEP 2: Take FFTz
    call transpose_y_to_z(uhat_xy, this%uhat, this%sp_gpC)
    call this%spectC%take_fft1d_z2z_ip(this%uhat)
-   
+
    call transpose_y_to_z(vhat_xy, this%vhat, this%sp_gpC)
    call this%spectC%take_fft1d_z2z_ip(this%vhat)
 
