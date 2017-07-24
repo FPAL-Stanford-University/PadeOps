@@ -28,6 +28,8 @@ module forcingmod
       real(rkind) :: Nwaves_rkind
       real(rkind), dimension(:), allocatable :: tmpModes
 
+      real(rkind) :: normfact = 1.d0
+
       contains
       procedure          :: init
       procedure          :: destroy
@@ -80,7 +82,8 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
 
    this%seed0 = tidStart + RandSeedToAdd
    call this%update_seeds()
-   
+  
+   this%normfact = real(spectC%physdecomp%xsz(1),rkind)*real(spectC%physdecomp%ysz(2),rkind)*real(spectC%physdecomp%zsz(3),rkind)
    
    allocate(this%kabs_sample(Nwaves))
    allocate(this%theta_sample(Nwaves))
@@ -247,7 +250,7 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
                abs(this%vhat(lid_x,lid_y,gid_z))**2 + &
                abs(this%what(lid_x,lid_y,gid_z))**2 + 1.d-14
          
-         fac = this%EpsAmplitude/den/this%Nwaves_rkind
+         fac = this%normfact*this%EpsAmplitude/den/this%Nwaves_rkind
          this%fxhat(lid_x, lid_y, gid_z ) = fac*conjg(this%uhat(lid_x, lid_y, gid_z ))
          this%fxhat(lid_x, lid_y, gid_zC) = fac*conjg(this%uhat(lid_x, lid_y, gid_zC))
          
@@ -265,7 +268,7 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
                abs(this%vhat(lid_x,lid_yC,gid_z))**2 + &
                abs(this%what(lid_x,lid_yC,gid_z))**2 + 1.d-14
          
-         fac = this%EpsAmplitude/den/this%Nwaves_rkind
+         fac = this%normfact*this%EpsAmplitude/den/this%Nwaves_rkind
          this%fxhat(lid_x, lid_yC, gid_z ) = fac*conjg(this%uhat(lid_x, lid_yC, gid_z ))
          this%fxhat(lid_x, lid_yC, gid_zC) = fac*conjg(this%uhat(lid_x, lid_yC, gid_zC))
          

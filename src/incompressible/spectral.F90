@@ -663,16 +663,16 @@ contains
    
          
          call dfftw_plan_many_dft(this%plan_c2c_fwd_z_ip, 1, nz,nxT*nyT, this%ctmpz, nz, &
-                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_FORWARD , FFTW_MEASURE)   
+                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_FORWARD , FFTW_EXHAUSTIVE)   
          
          call dfftw_plan_many_dft(this%plan_c2c_fwd_z_oop, 1, nz,nxT*nyT, cbuffz, nz, &
-                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_FORWARD , FFTW_MEASURE)   
+                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_FORWARD , FFTW_EXHAUSTIVE)   
          
          call dfftw_plan_many_dft(this%plan_c2c_bwd_z_ip, 1, nz,nxT*nyT, this%ctmpz, nz, &
-                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_BACKWARD , FFTW_MEASURE)   
+                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_BACKWARD , FFTW_EXHAUSTIVE)   
          
          call dfftw_plan_many_dft(this%plan_c2c_bwd_z_oop, 1, nz,nxT*nyT, cbuffz, nz, &
-                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_BACKWARD , FFTW_MEASURE)   
+                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_BACKWARD , FFTW_EXHAUSTIVE)   
 
          allocate(rbuffz1(this%physdecomp%zsz(1), this%physdecomp%zsz(2), this%physdecomp%zsz(3)      ))
          allocate(this%fhatz(this%physdecomp%zsz(1), this%physdecomp%zsz(2), this%physdecomp%zsz(3)/2 + 1))
@@ -680,12 +680,12 @@ contains
          call dfftw_plan_many_dft_r2c(this%plan_r2c_z, 1, this%physdecomp%zsz(3), &
                  this%physdecomp%zsz(1)*this%physdecomp%zsz(2),rbuffz1 , this%physdecomp%zsz(3), &
                  this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, this%fhatz, this%physdecomp%zsz(3)/2 + 1, &
-                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, FFTW_MEASURE)
+                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, FFTW_EXHAUSTIVE)
 
          call dfftw_plan_many_dft_c2r(this%plan_c2r_z, 1, this%physdecomp%zsz(3), &
                  this%physdecomp%zsz(1)*this%physdecomp%zsz(2), this%fhatz , this%physdecomp%zsz(3)/2 + 1, &
                  this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, rbuffz1, this%physdecomp%zsz(3), &
-                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, FFTW_MEASURE)
+                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, FFTW_EXHAUSTIVE)
 
          allocate(this%k3_C2Eshift(nz))
          allocate(this%k3_E2Cshift(nz))
