@@ -102,7 +102,6 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    call transpose_y_to_z(spectC%k2, rbuffzC, sp_gpC)
    this%k2inZ = nint(rbuffzC(1,:,1)) 
   
-   print*, spectC%k3(1,1,:)
    call transpose_y_to_z(spectC%k3, rbuffzC, sp_gpC)
    this%k3inZ = nint(rbuffzC(1,1,:))
 
@@ -258,9 +257,6 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
          this%fzhat(lid_x, lid_y, gid_z ) = fac*conjg(this%what(lid_x, lid_y, gid_z ))
          this%fzhat(lid_x, lid_y, gid_zC) = fac*conjg(this%what(lid_x, lid_y, gid_zC))
          
-         print*, "kx:", kx, "indx:", lid_x, "k1(indx):", this%k1inZ(lid_x) 
-         print*, "ky:", ky, "indy:", lid_y, "k2(indy):", this%k2inZ(lid_y) 
-         print*, "kz:", kz, "indz:", gid_z, "k3(indz):", this%k3inZ(gid_z)
       end if
 
 
@@ -279,16 +275,9 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
          this%fzhat(lid_x, lid_yC, gid_z ) = fac*conjg(this%what(lid_x, lid_yC, gid_z ))
          this%fzhat(lid_x, lid_yC, gid_zC) = fac*conjg(this%what(lid_x, lid_yC, gid_zC))
          
-         print*, "kx:", kx, "indx: ", lid_x , "k1(indx) :", this%k1inZ(lid_x ) 
-         print*, "ky:", ky, "indyC:", lid_yC, "k2C(indy):", this%k2inZ(lid_yC) 
-         print*, "kz:", kz, "indzC:", gid_zC, "k3C(indz):", this%k3inZ(gid_zC)
       end if
    end if 
 
-   print*, this%k3inZ
-   print*, nrank, shape(this%wave_x)
-   call mpi_barrier(mpi_comm_world, ierr)
-   stop 
 end subroutine 
 
 

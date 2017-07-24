@@ -54,17 +54,14 @@ program test_HITforcing
    call message(0, "Completed data read")
 
    allocate(spectC, spectE)
-   call spectC%init("x", nx, ny, nz  , dx, dy, dz, "four", "2/3rd", 2, exhaustiveFFT=.false., fixOddball=.false., init_periodicInZ=.true. )
-   call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", "2/3rd", 2, exhaustiveFFT=.false., fixOddball=.false., init_periodicInZ=.false.)
+   call spectC%init("x", nx, ny, nz  , dx, dy, dz, "four", "2/3rd", 2,  fixOddball=.false., init_periodicInZ=.true. )
+   call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", "2/3rd", 2,  fixOddball=.false., init_periodicInZ=.false.)
 
    allocate(der)
    call der%init( gp, spectC%spectdecomp, gpE, spectE%spectdecomp, dz, scheme, isPeriodic, spectC)
    allocate(poiss)
    call poiss%init(dx, dy, dz, spectC, spectE, .false., two*pi, .true., gp, der, isPeriodic)
   
-   print*, spectC%k3(1,1,:)
-   call HITForce%init("/home/aditya90/Codes/PadeOps/data/HIT_testing/HIT_forcing_input_test.dat", spectC%spectdecomp, spectE%spectdecomp, spectC, cbuffyE, cbuffyC, cbuffzE1, cbuffzC, tidStart)  
-   call message(0, "Initialized HIT Forcing")
 
    call spectC%alloc_r2c_out(uhat)
    call spectC%alloc_r2c_out(vhat)
@@ -83,6 +80,8 @@ program test_HITforcing
    allocate(cbuffyE(spectE%spectdecomp%ysz(1),spectE%spectdecomp%ysz(2), spectE%spectdecomp%ysz(3)  ))
    allocate(cbuffyC(spectC%spectdecomp%ysz(1),spectC%spectdecomp%ysz(2), spectC%spectdecomp%ysz(3)  ))
 
+   call HITForce%init("/home/aditya90/Codes/PadeOps/data/HIT_testing/HIT_forcing_input_test.dat", spectC%spectdecomp, spectE%spectdecomp, spectC, cbuffyE, cbuffyC, cbuffzE1, cbuffzC, tidStart)  
+   call message(0, "Initialized HIT Forcing")
 
    urhs = im0; vrhs = im0; wrhs = im0
 

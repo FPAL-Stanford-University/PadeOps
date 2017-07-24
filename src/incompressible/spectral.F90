@@ -854,11 +854,8 @@ contains
             allocate (this%k1(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             if (allocated(this%k2)) deallocate(this%k2)
             allocate (this%k2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            if (.not. TwoPeriodic) then
-                call gracefulExit("3D fft using the SPECTRAL derived type has been temporarily switched off",32)
-                if (allocated(this%k3)) deallocate(this%k3)
-                allocate (this%k3(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            end if 
+            if (allocated(this%k3)) deallocate(this%k3)
+            allocate (this%k3(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             if (allocated(this%kabs_sq)) deallocate(this%kabs_sq)
             allocate (this%kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             if (allocated(this%Gdealias)) deallocate(this%Gdealias)
@@ -1178,7 +1175,7 @@ contains
         class(spectral), intent(inout) :: this
       
         if (.not. this%isInitialized) then
-            call GracefulExit("You are trying to destroy a SPECTRAL derived type befire initializing it",110)
+            call GracefulExit("You are trying to destroy a SPECTRAL derived type before initializing it",110)
         end if 
         if (this%use2decompFFT) then
             call decomp_2d_fft_finalize 
@@ -1466,7 +1463,6 @@ contains
         kxd = (two/three)*pi/dx
         kyd = (two/three)*pi/dy
         kdealias = min(kxd,kyd)
-        print*, kxd, kyd 
         Tf = one
         where(abs(k1)>kdealias)
                 Tf = zero
