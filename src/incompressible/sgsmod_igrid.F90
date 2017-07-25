@@ -41,7 +41,7 @@ module sgsmod_igrid
         type(Pade6stagg), pointer :: PadeDer
         logical :: explicitCalcEdgeEddyViscosity = .false.
         real(rkind), dimension(:,:,:), allocatable :: q1C, q2C, q3E 
-        logical :: initspinup = .false. 
+        logical :: initspinup = .false., isPeriodic = .false.  
 
         ! Wall model
         real(rkind), dimension(:,:,:,:), allocatable :: tauijWM

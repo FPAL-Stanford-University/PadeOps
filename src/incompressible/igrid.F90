@@ -247,6 +247,7 @@ module IncompressibleGrid
             procedure          :: destroy
             procedure          :: printDivergence 
             procedure          :: getMaxKE
+            procedure          :: getMeanKE
             procedure          :: timeAdvance
             procedure          :: start_io
             procedure          :: finalize_io
@@ -1245,6 +1246,15 @@ contains
         maxKE = half*p_maxval(maxval(this%rbuffxC))
 
     end function
+
+   function getMeanKE(this) result(meanTKE)
+        class(igrid), intent(inout) :: this
+        real(rkind)  :: meanTKE
+
+        this%rbuffxC(:,:,:,1) = this%u**2 + this%v**2 + this%wC**2
+        meanTKE = half*p_sum(sum(this%rbuffxC))/(real(this%nx)*real(this%ny)*real(this%nz))
+
+   end function
 
     subroutine interp_PrimitiveVars(this)
         class(igrid), intent(inout), target :: this

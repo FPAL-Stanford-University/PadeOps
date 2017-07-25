@@ -109,6 +109,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
      this%q1C = zero; this%q2C = zero; this%q3E = zero
   end if 
 
+  this%isPeriodic = this%PadeDer%isPeriodic
 
 
   ! Link buffers
@@ -156,7 +157,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   case (1)
      call this%init_sigma(dx, dy, dz, Csgs)
   case (2)
-     call this%init_AMD(dx, dy, dz)
+     call this%init_AMD(dx, dy, dz, Csgs)
   case default
      call GracefulExit("Incorrect choice for SGS model ID.", 213)
   end select

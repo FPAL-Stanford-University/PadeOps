@@ -8,8 +8,12 @@ subroutine init_sigma(this, dx, dy, dz, Cs)
    ! in case the dynamic procedure is planar averages
    this%useCglobal = .true. 
    
-   
-   deltaLES = (1.5d0*dx*1.5d0*dy*dz)**(1.d0/3.d0)
+  
+   if (.not. this%isPeriodic) then
+      deltaLES = (1.5d0*dx*1.5d0*dy*dz)**(1.d0/3.d0)
+   else
+      deltaLES =  (1.5d0*dx*1.5d0*dy*1.5d0*dz)**(1.d0/3.d0)
+   end if 
    this%cmodel_global = (Cs*deltaLES)**2
   
    this%isEddyViscosityModel = .true. 
