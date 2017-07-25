@@ -74,6 +74,7 @@ P_compFreq            = 10          ! How often (timesteps) do you want to compu
 /
 /
 &BCs
+PeriodicInZ           = .TRUE.      ! Is the problem periodic in Z? If yes, then everything below is ignored. 
 topWall               = 2           ! no_slip = 1, slip = 2
 botWall               = 2           ! no_slip = 1, slip = 2
 useSpongeLayer        = .FALSE.     ! Use a sponge layer at the top 
@@ -111,6 +112,6 @@ KSRunID               = 99             ! RunID tag for KS files
 t_dumpKSprep          = 10             ! Dumping Frequency for KS files
 /
 /
-&TaylorGreenDNSINPUT
+&TaylorGreenPeriodicINPUT
 directionID          = 1
 /

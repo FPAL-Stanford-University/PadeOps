@@ -1,9 +1,9 @@
 ! Template for PadeOps
 
-#include "neutral_pbl_files/initialize.F90"       
-#include "neutral_pbl_files/temporalHook.F90"  
+#include "TaylorGreenPeriodic_files/initialize.F90"       
+#include "TaylorGreenPeriodic_files/temporalHook.F90"  
 
-program neutral_pbl
+program TaylorGreenPeriodic
     use mpi
     use kind_parameters,  only: clen
     use IncompressibleGrid, only: igrid
@@ -26,13 +26,13 @@ program neutral_pbl
     call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
   
     call igp%start_io(.true.)                !<-- Start I/O by creating a header file (see io.F90)
-    
+
     call igp%printDivergence()
   
     call tic() 
     do while (igp%tsim < igp%tstop) 
        
-       call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
+       call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
        
     end do 

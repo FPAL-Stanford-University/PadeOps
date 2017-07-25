@@ -54,17 +54,20 @@ contains
     end subroutine
 
 
-    !!! Added by Mike to interpolate tau13
+    !!! Added by Mike to interpolate tau13 and multiply and interpolate u'w'
     subroutine interpTau(this)
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ybuffC, zbuffC, zbuffE, ybuffE
-        real(rkind), dimension(:,:,:), pointer :: rbuff
+        real(rkind), dimension(:,:,:), pointer :: rbuff, rbuffE
 
         zbuffE => this%cbuffzE(:,:,:,1)
         zbuffC => this%cbuffzC(:,:,:,1)
         ybuffC => this%cbuffyC(:,:,:,1)
         ybuffE => this%cbuffyE(:,:,:,1)
         rbuff => this%rbuffxC(:,:,:,1)
+        rbuffE => this%rbuffxE(:,:,:,1)
+        !rbuffv => this%rbuffxC(1,1,:,1)
+        !rbuffEv => this%rbuffxE(1,1,:,1)
 
         call this%spectE%fft(this%tau13,ybuffE)
         call transpose_y_to_z(ybuffE,zbuffE,this%sp_gpE)
@@ -75,6 +78,34 @@ contains
 
         call this%dumpFullField(rbuff,'tauC')
         call this%dumpFullField(this%tau13,'tauE',this%gpE)
+
+        ! Create u'w'
+        call this%spectC%fft(this%u,ybuffC)
+        call transpose_y_to_z(ybuffC,zbuffC,this%sp_gpC)
+        call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,0,1)
+        call transpose_z_to_y(zbuffE,ybuffE,this%sp_gpE)
+        call this%spectE%ifft(ybuffE,rbuffE)
+        rbuffE = rbuffE * this%w
+        call this%spectE%fft(rbuffE,ybuffE)
+        call transpose_y_to_z(ybuffE,zbuffE,this%sp_gpE)
+        call this%Pade6opZ%interpz_E2C(zbuffE,zbuffC,0,0)
+        call transpose_z_to_y(zbuffC,ybuffC,this%sp_gpC)
+        call this%spectC%ifft(ybuffC,rbuff)
+        ! Get spatial mean
+        !rbuffv = zero
+        !rbuffEv = zero
+        !do i = 1, this%nx
+        !   do j = 1, this%ny
+        !       rbuffv = rbuffv + this%u(i,j,:)
+        !       rbuffEv = rbuffEv + this%w(i,j,:)
+        !   end do
+        !end do 
+        !call this%spect 
+        ! Print u'w'
+        call this%dumpFullField(rbuff,'upwp')
+
+
+
 
     end subroutine
 

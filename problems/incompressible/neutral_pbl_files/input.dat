@@ -1,21 +1,21 @@
 &INPUT
-inputdir                      = "/home/aditya90/Codes/PadeOps/data/neutral_pbl/"   ! Directory for any input files
-outputdir                     = "/home/aditya90/Codes/PadeOps/data/neutral_pbl/"   ! Directory for all output files
+inputdir                      = "/home/mhowland/Lele/data/neutral_pbl/Run_5"   ! Directory for any input files
+outputdir                     = "/home/mhowland/Lele/data/neutral_pbl/Run_7"   ! Directory for all output files
 nx                            = 192         ! Number of points in X
 ny                            = 192         ! Number of points in Y
 nz                            = 256         ! Number of points in Z
-tstop                         = 100.D0      ! Physical time to stop the simulation
-CFL                           = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+tstop                         = 130.D0      ! Physical time to stop the simulation
+CFL                           = 1.5D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile                = .FALSE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 8000        ! TimeID of the restart file being used
-restartFile_RID               = 11          ! RunID of the restart file being used
+useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
+restartFile_TID               = 3305        ! TimeID of the restart file being used
+restartFile_RID               = 5          ! RunID of the restart file being used
 /
 /
 &NUMERICS
-TimeSteppingScheme            = 1           ! 0: Adams-Bashforth, 1: TVD-RK3 (use this)
+TimeSteppingScheme            = 2           ! 0: Adams-Bashforth, 1: TVD-RK3 (use this)
 AdvectionTerm                 = 1           ! 0: Rotational Form, 1: Skew-Symmetric Form (use this for Compact Scheme)
 NumericalSchemeVert           = 1           ! 0: Second order FD, 1: Sixth order Compact Difference (CD06)
 ComputeStokesPressure         = .TRUE.      ! This would be FALSE only is very special circumstances.  
@@ -24,13 +24,13 @@ t_DivergenceCheck             = 100         ! Check divergence every $ timesteps
 /
 /
 &IO
-RunID                         = 11          ! Run Label (All output files will be tagged with this nubber)
+RunID                         = 7          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump                 = 1000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump                    = 500         ! Data dumping frequency (# of timesteps)
+t_dataDump                    = 1000         ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
-dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
+dumpPlanes                    = .TRUE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump                   = 100         ! Plane dumping frequency (# of timesteps)
-t_start_planeDump             = 1           ! When do you want to start dumping planes?
+t_start_planeDump             = 3500           ! When do you want to start dumping planes?
 t_stop_planeDump              = 5000        ! When do you want to stop dumping planes?
 /
 /
@@ -56,16 +56,15 @@ useExtraForcing               = .FALSE.     ! Is an extra forcing term being use
 useGeostrophicForcing         = .TRUE.      ! This is true if forcing is provided using the coriolis term  
 isStratified                  = .TRUE.      ! Use Stratification / active scalar in momentum
 Pr                            = 0.6D0       ! Turbulent Prandtl Number; used when 
-Ro                            = 55.02d0 ! Rossby Number used when Coriolis is ON
+Ro                            = 68.5674d0 ! Rossby Number used when Coriolis is ON
 Re                            = 1.D10       ! Reynolds Number; used when isInvisid is FALSE
 Fr                            = 0.08081D0 ! Froude number; used when isStratified is TRUE
-Gx                            = 1.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gy                            = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gz                            = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+G_geostrophic                 = 1.D0        ! Geostrophic wind speed
+G_alpha                       = 0.D0        ! Geostrophic wind angle (degrees, from +x axis)
 dPfdx                         = 0.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                         = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                         = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
-useSGS                        = .true.      ! Do you want to use the SGS model?  
+useSGS                        = .true.      ! Do you want to use the SGS model?
 /
 /
 &PRESSURE_CALC
@@ -79,7 +78,7 @@ P_compFreq                    = 10          ! How often (timesteps) do you want 
 botWall                       = 3           ! no_slip = 1, slip = 2, wall model = 3 
 topWall                       = 2           ! no_slip = 1, slip = 2, wall model = 3
 useSpongeLayer                = .TRUE.      ! Use a sponge layer at the top 
-zstSponge                     = 0.8d0       ! Height above which the sponge layer is active
+zstSponge                     = 1.5d0       ! Height above which the sponge layer is active
 SpongeTscale                  = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
 useFringe                     = .false.     ! This is false if simulation is periodic. 
 botBC_Temp                    = 1           ! 0: Dirichlet (could be time dependent),  1: Homog. Neumann (no-flux)
@@ -89,7 +88,7 @@ botBC_Temp                    = 1           ! 0: Dirichlet (could be time depend
 SGSModelID                    = 1           ! 0: smagorinsky (w/ wall function), 1: sigma
 Csgs                          = 1.3d0       ! Model constant (asymptotic value in case wall function is used) 
 WallModelType                 = 1           ! 1: Moeng, 2: Bou-zeid et. al.  
-z0                            = 1.0d-4      ! Roughness length scale (CAUTION: this assumes appropriate non-dimensionalization)
+z0                            = 2.0d-7      ! Roughness length scale (CAUTION: this assumes appropriate non-dimensionalization)
 DynamicProcedureType          = 0           ! 0: No dynamic procedure, 1: Planar Avg. Dynamic Proc., 2: Global Dynamic Proc.  
 useVerticalTfilter            = .false.     ! Use test filtering in vertical direction for dynamic procedure? 
 DynProcFreq                   = 5           ! Dynamic procedure used every DYNPROCFREQ timesteps. 
@@ -113,14 +112,14 @@ t_dumpKSprep                  = 10         ! Dumping Frequency for KS files
 /
 /
 &PROBLEM_INPUT
-Lx                            =  3.14159265d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Lx                            =  6.28318531d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Ly                            =  3.14159265d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
-Lz                            =  3.d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
+Lz                            =  2.d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
 Tref                          =  288.15d0   ! Reference Temp. 
-z0init                        =  1.d-4      ! Roughness scale used to initialize the profile
-aTemp                         =  1.000d0    ! Inversion Layer temp slope parameter (for temp initialization)
-bTemp                         =  0.040d0    ! Stable Free atmosphere temp slope parameter (for temp initialization)
-h0Temp                        =  1.d0       ! Inversion Layer Start Height (for temp initialization)
-h1Temp                        =  1.075d0   ! Inversion Layer Middle Height (for temp initialization)
-h2Temp                        =  1.15d0    ! Inversion Layer Top    Height (for temp initialization)
+z0init                        =  2.d-7      ! Roughness scale used to initialize the profile
+aTemp                         =  2.45d0    ! Inversion Layer temp slope parameter (for temp initialization)
+bTemp                         =  0.050d0    ! Stable Free atmosphere temp slope parameter (for temp initialization)
+h0Temp                        =  0.5d0       ! Inversion Layer Start Height (for temp initialization)
+h1Temp                        =  0.55d0   ! Inversion Layer Middle Height (for temp initialization)
+h2Temp                        =  0.6d0    ! Inversion Layer Top    Height (for temp initialization)
 /

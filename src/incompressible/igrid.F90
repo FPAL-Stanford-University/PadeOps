@@ -129,7 +129,8 @@ module IncompressibleGrid
         logical :: assume_fplane = .true.
         real(rkind) :: coriolis_cosine, coriolis_sine 
         integer :: nxZ, nyZ
-      
+     
+        logical :: periodicInZ  = .false. 
         logical :: newTimeStep = .true. 
         integer :: timeSteppingScheme = 0 
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
@@ -274,6 +275,7 @@ module IncompressibleGrid
             procedure, private :: dump_stats3D
             procedure, private :: compute_stats3D 
             !procedure, private :: getSurfaceQuantities 
+            procedure, private :: dealiasFields
             procedure, private :: ApplyCompactFilter 
             procedure, private :: addNonLinearTerm_skewSymm
             procedure, private :: populate_rhs
@@ -310,7 +312,7 @@ contains
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
         logical ::isStratified=.false.,dumpPlanes = .false.,useExtraForcing = .false.
         logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false.
-        logical :: useGeostrophicForcing = .false.
+        logical :: useGeostrophicForcing = .false., PeriodicInZ = .false. 
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10
@@ -333,7 +335,7 @@ contains
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, &
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude
-        namelist /BCs/ topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe
+        namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
@@ -368,7 +370,7 @@ contains
         this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp; this%isInviscid = isInviscid
         this%assume_fplane = assume_fplane; this%useProbes = useProbes
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact; this%useFringe = useFringe
-        this%nsteps = nsteps
+        this%nsteps = nsteps; this%PeriodicinZ = periodicInZ 
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -463,18 +465,18 @@ contains
 
         ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
         allocate(this%spectC)
-        call this%spectC%init("x", nx, ny, nz, this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , .false., exhaustiveFFT=useExhaustiveFFT)
+        call this%spectC%init("x", nx, ny, nz  , this%dx, this%dy, this%dz, &
+                "four", this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=periodicinZ)
         allocate(this%spectE)
         call this%spectE%init("x", nx, ny, nz+1, this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , .false., exhaustiveFFT=useExhaustiveFFT)
+                "four", this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=.false.)
         this%sp_gpC => this%spectC%spectdecomp
         this%sp_gpE => this%spectE%spectdecomp
 
 
         ! STEP 5: ALLOCATE/INITIALIZE THE DERIVATIVE DERIVED TYPE
         allocate(this%Pade6OpZ)
-        call this%Pade6OpZ%init(this%gpC,this%sp_gpC, this%gpE, this%sp_gpE,this%dz,NumericalSchemeVert)
+        call this%Pade6OpZ%init(this%gpC,this%sp_gpC, this%gpE, this%sp_gpE,this%dz,NumericalSchemeVert,PeriodicInZ)
         allocate(this%OpsPP)
         call this%OpsPP%init(this%gpC,this%gpE,0,this%dx,this%dy,this%dz,this%spectC%spectdecomp, &
                     this%spectE%spectdecomp, .false., .false.)
@@ -556,8 +558,8 @@ contains
 
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
         allocate(this%padepoiss)
-        call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, .true., this%gpC, &
-                                 this%Pade6opz) 
+        call this%padepoiss%init(this%dx , this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, .true., &
+                                 this%gpC, this%Pade6opz, PeriodicInZ) 
            
         ! STEP 7: INITIALIZE THE FIELDS
         if (useRestartFile) then
@@ -599,13 +601,7 @@ contains
         if (this%isStratified .or. this%initspinup) call this%spectC%fft(this%T,this%That)   
 
         ! Dealias and filter before projection
-        call this%spectC%dealias(this%uhat)
-        call this%spectC%dealias(this%vhat)
-        call this%spectE%dealias(this%what)
-        if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
-        if (this%UseDealiasFilterVert) then
-            call this%ApplyCompactFilter()
-        end if
+        call this%dealiasFields()
 
 
         ! Pressure projection
@@ -908,6 +904,24 @@ contains
 
     end subroutine
 
+    subroutine dealiasFields(this)
+        class(igrid), intent(inout) :: this
+
+        call this%spectC%dealias(this%uhat)
+        call this%spectC%dealias(this%vhat)
+        if (this%PeriodicInZ) then
+            call transpose_y_to_z(this%what, this%cbuffzE(:,:,:,1), this%sp_gpE)
+            call this%spectC%dealias_edgeField(this%cbuffzE(:,:,:,1))
+            call transpose_z_to_y(this%cbuffzE(:,:,:,1),this%what,this%sp_gpE)
+        else
+            call this%spectE%dealias(this%what)
+        end if 
+        if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
+        if (this%UseDealiasFilterVert) then
+            call this%ApplyCompactFilter()
+        end if
+
+    end subroutine 
 
     subroutine timeAdvance(this, dtforced)
         class(igrid), intent(inout) :: this
@@ -1589,7 +1603,6 @@ contains
             call this%AddNonLinearTerm_Rot()
         end if
         
-        
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
@@ -1684,14 +1697,15 @@ contains
         logical, intent(in) :: AlreadyProjected
 
         ! Step 1: Dealias
-        call this%spectC%dealias(this%uhat)
-        call this%spectC%dealias(this%vhat)
-        call this%spectE%dealias(this%what)
-        if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
-        if (this%UseDealiasFilterVert) then
-            call this%ApplyCompactFilter()
-        end if
-       
+        !call this%spectC%dealias(this%uhat)
+        !call this%spectC%dealias(this%vhat)
+        !call this%spectE%dealias(this%what)
+        !if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
+        !if (this%UseDealiasFilterVert) then
+        !    call this%ApplyCompactFilter()
+        !end if
+        call this%dealiasFields()
+
         ! Step 2: Pressure projection
         if (.not. AlreadyProjected) then
             call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
@@ -4796,19 +4810,6 @@ contains
         real(rkind) :: mfact, meanK
 
         this%rbuffxC(:,:,:,1) = 0.5d0*(this%u*this%u + this%v*this%v + this%wC*this%wC)
-        !use mpi
-        !use constants
-        !use kind_parameters,  only: rkind, clen
-        !use timer, only: tic, toc
-        !use sgsmod_igrid, only: sgs_igrid
-        !use PadeDerOps, only: Pade6stagg, cd06
-        !use spectralMod, only: spectral
-        !use decomp_2d
-        !use decomp_2d_io
-        !use turbineMod, only: turbineArray
-        !implicit none
-
-!his%wC)
         mfact = one/(real(this%nx,rkind)*real(this%ny,rkind)*real(this%nz,rkind))
         meanK = p_sum(sum(this%rbuffxC(:,:,:,1)))*mfact
         this%pressure = this%pressure + meanK
