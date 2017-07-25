@@ -48,11 +48,14 @@ contains
         ! end select
        
 
+         call toc()
          if (mod(gp%step,gp%t_dataDump) == 0) then
             if (useBandpassFilter) then 
+               call tic()
                call gp%spectC%bandpassFilter(gp%uhat , uTarget)
                call gp%spectC%bandpassFilter(gp%vhat , vTarget)
                call gp%spectC%bandpassFilter(gp%whatC, wTarget)
+               call toc()
                call gp%dumpFullField(uTarget,'uBPF')
                call gp%dumpFullField(vTarget,'vBPF')
                call gp%dumpFullField(wTarget,'wBPF')

@@ -14,8 +14,8 @@ module actuatorDisk_T2mod
     public :: actuatorDisk_T2
     
     real(rkind), parameter :: alpha_Smooth = 0.9d0 ! Exonential smoothing constant
-    integer, parameter :: xReg = 5, yReg = 8, zReg = 8
-    integer, parameter :: ntry = 10
+    integer, parameter :: xReg = 8, yReg = 8, zReg = 8
+    integer  :: ntry = 100
 
     type :: actuatorDisk_T2
         ! Actuator Disk_T2 Info
@@ -146,7 +146,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     
     if (this%Am_I_Active) then
         allocate(this%rbuff(size(xG,2),size(xG,3)))
-
+        ntry = 2*ceiling(diam/min(dx, dy, dz))
         call sample_on_circle(diam/2.d0,yLoc,zLoc, this%ys,this%zs,ntry)
         allocate(this%xs(size(this%ys)))
         this%xs = xLoc
@@ -239,7 +239,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals)
 
     call this%getMeanU(u,v,w)
     usp_sq = this%uface**2 + this%vface**2 + this%wface**2
-    force = this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
+    force = -this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
     do j = 1,size(this%xs)
             call this%smear_this_source(rhsxvals,this%xs(j),this%ys(j),this%zs(j), force, this%startEnds(1,j), &
                                 this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &

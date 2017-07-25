@@ -116,12 +116,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     
     wC= zero  
     
-    allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    call gaussian_random(randArr,-one,one,seedu + 10*nrank)
-    !do k = 1,size(randArr,3)
-    !     u(:,:,k) = u(:,:,k) + randscale*randArr(:,:,k)
-    !end do
-    deallocate(randArr)
+    !allocate(randArr(size(u,1),size(u,2),size(u,3)))
+    !call gaussian_random(randArr,-one,one,seedu + 10*nrank)
+    !!do k = 1,size(randArr,3)
+    !!     u(:,:,k) = u(:,:,k) + randscale*randArr(:,:,k)
+    !!end do
+    !deallocate(randArr)
 
     call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
     call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))

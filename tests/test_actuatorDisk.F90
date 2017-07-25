@@ -12,13 +12,13 @@ program test_actuatorDisk
 
     implicit none 
 
-    !type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
+    type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
     type(actuatorDisk), dimension(:), allocatable :: hawts
-    integer, parameter :: nx = 192, ny = 192, nz = 128
-    character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/problems/turbines/pblwt/turbInfo/"
+    integer, parameter :: nx = 512, ny = 128, nz = 128
+    character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/"
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
     real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs, rhsv, rhsw
-    real(rkind), parameter :: Lx = 10.0, Ly = 2.0*pi, Lz = 2.0*pi
+    real(rkind), parameter :: Lx = 4.0*pi, Ly = 2.0*pi, Lz = 2.0*pi, diam = 2.d0
     real(rkind) :: dx, dy, dz
     type(decomp_info) :: gp 
     integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0, num_turbines 
@@ -53,30 +53,43 @@ program test_actuatorDisk
     end do
     xG = xG - dx; yG = yG - dy; zG = zG - dz 
 
-    u = (one/kappa)*log(zG/z0init) + epsnd*cos(Yperiods*two*pi*yG/Ly)*exp(-half*(zG/zpeak/Lz)**2)
-    v = epsnd*(zG/Lz)*cos(Xperiods*two*pi*xG/Lx)*exp(-half*(zG/zpeak/Lz)**2)
-    w= zero  
+    u = one 
+    v = zero 
+    w = zero  
     u = one; v = zero; w = zero
     allocate(hawts(num_turbines))
+    allocate(hawts_T2(num_turbines))
     do idx = 1,num_turbines
         call hawts(idx)%init(inputDir, idx, xG, yG, zG, gp)
+        call hawts_T2(idx)%init(inputDir, idx, xG, yG, zG)
     end do 
+    
     rhs = 0.d0
     call mpi_barrier(mpi_comm_world, ierr)
     call tic()
     do idx = 1,num_turbines
-        call hawts(idx)%get_RHS(u, v, w, rhs, rhsv, rhsw, inst_val)
+        call hawts(idx)%get_RHS(u, v, w, rhs, rhsv, rhsw)
     end do 
     call mpi_barrier(mpi_comm_world, ierr)
     call toc()
-   
-    call decomp_2d_write_one(1,rhs,"temp.bin", gp)
+    call decomp_2d_write_one(1,rhs,"temp_T1.bin", gp)
+    call message(2,"Computed Source (T1):", p_sum(sum(rhs)) * dx*dy*dz)
     
-    call message(2,"Computed Source:", p_sum(sum(rhs)) * dx*dy*dz)
-    call message(2,"Expected Source:", (num_turbines*0.5d0*(pi/4.d0)*(1.0d0**2)*1.33d0))
+    rhs = 0.d0
+    call mpi_barrier(mpi_comm_world, ierr)
+    call tic()
+    do idx = 1,num_turbines
+        call hawts_T2(idx)%get_RHS(u, v, w, rhs, rhsv, rhsw)
+    end do 
+    call mpi_barrier(mpi_comm_world, ierr)
+    call toc()
+    call decomp_2d_write_one(1,rhs,"temp_T2.bin", gp)
+    
+    call message(2,"Computed Source (T2):", p_sum(sum(rhs)) * dx*dy*dz)
+    call message(2,"Expected Source:", -(num_turbines*0.5d0*(pi/4.d0)*(diam**2)*1.33d0))
 
     do idx = 1,num_turbines
-      call hawts(idx)%destroy()
+    !  call hawts(idx)%destroy()
     end do 
     deallocate(hawts)
     deallocate(xG, yG, zG, u, v, w, rhs)

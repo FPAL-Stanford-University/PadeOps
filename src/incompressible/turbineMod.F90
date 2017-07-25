@@ -3,7 +3,7 @@ module turbineMod
     use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa
     use decomp_2d
     use StaggOpsMod, only: staggOps  
-    use actuatorDiskMod, only: actuatorDisk
+    !use actuatorDiskMod, only: actuatorDisk
     use actuatorLineMod, only: actuatorLine
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
@@ -29,7 +29,7 @@ module turbineMod
     type :: TurbineArray
         integer :: nTurbines
         integer :: myProc
-        type(actuatorDisk), allocatable, dimension(:) :: turbArrayADM
+        !type(actuatorDisk), allocatable, dimension(:) :: turbArrayADM
         type(actuatorLine), allocatable, dimension(:) :: turbArrayALM
 
         type(decomp_info), pointer :: gpC, sp_gpC, gpE, sp_gpE
@@ -69,20 +69,20 @@ subroutine reset_turbArray(this)
       do i = 1, this%nTurbines
         ! CHANGED to allow avoiding inst_horz_avg calculations - useful for
         ! testing/debugging
-        call this%turbArrayADM(i)%reset_turbine()
+        !call this%turbArrayADM(i)%reset_turbine()
       end do 
     endif
 
 end subroutine
 
 
-subroutine init(this, inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffYE, cbuffzC, cbuffzE, mesh, dx, dy, dz)
+subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbuffzC, cbuffzE, mesh, dx, dy, dz)
     class(TurbineArray), intent(inout), target :: this
     character(len=*),    intent(in)            :: inputFile
-    type(spectral), target :: spectC, spectE
-    type(decomp_info), target :: gpC, gpE!, sp_gpC, sp_gpE
-    real(rkind), dimension(:,:,:,:), target :: rbuffxC   ! actually 3 are required
-    complex(rkind), dimension(:,:,:,:), target :: cbuffyC, cbuffyE, cbuffzC, cbuffzE
+    type(spectral), target, intent(in) :: spectC, spectE
+    type(decomp_info), target, intent(in) :: gpC, gpE!, sp_gpC, sp_gpE
+    !real(rkind), dimension(:,:,:,:), target, intent(inout) :: rbuffxC   ! actually 3 are required
+    complex(rkind), dimension(:,:,:,:), target, intent(inout) :: cbuffyC, cbuffyE, cbuffzC, cbuffzE
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), intent(in) :: dx, dy, dz
     logical :: useWindTurbines = .TRUE. ! .FALSE. implies ALM
@@ -117,11 +117,15 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbu
     ! set number of turbines
     this%nTurbines = num_turbines;
 
+    if (nrank == 0) print*, "num turbs:", this%nTurbines 
     if(ADM) then
-      allocate (this%turbArrayADM(this%nTurbines))
+      call gracefulExit("ADM temporarily disabled",423)
+      !allocate (this%turbArrayADM(this%nTurbines))
       do i = 1, this%nTurbines
-        call this%turbArrayADM(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3),this%gpC)
+      
+      !  call this%turbArrayADM(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3),this%gpC)
       end do
+      call mpi_barrier(mpi_comm_world, ierr)
       call message(1,"WIND TURBINE ADM model initialized")
     else
        call mpi_barrier(mpi_comm_world, ierr); call message(1,"Initializing WIND TURBINE ALM model")
@@ -158,9 +162,9 @@ subroutine destroy(this)
 
     if(ADM) then
       do i = 1, this%nTurbines
-        call this%turbArrayADM(i)%destroy()
+        !call this%turbArrayADM(i)%destroy()
       end do
-      deallocate(this%turbArrayADM)
+      !deallocate(this%turbArrayADM)
     else
       call this%destroy_halo_communication()
       do i = 1, this%nTurbines
@@ -329,7 +333,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, inst_horz_avg)
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs 
     real(rkind),    dimension(:),                                                        intent(out), optional   :: inst_horz_avg
-    integer :: i
+    integer :: i, ierr
     !integer :: ierr
 
     this%fx = zero; this%fy = zero; this%fz = zero
@@ -338,9 +342,9 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, inst_horz_avg)
         ! CHANGED to allow avoiding inst_horz_avg calculations - useful for
         ! testing/debugging
         if (present(inst_horz_avg)) then
-            call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz,inst_horz_avg(8*i-7:8*i))
+            !call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz,inst_horz_avg(8*i-7:8*i))
         else
-            call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)   
+            !call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)   
         end if 
       end do
     else
