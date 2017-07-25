@@ -46,6 +46,19 @@ contains
         !    wexact  = -cos(y)*sin(z)*exp(-(2.d0/gp%Re)*gp%tsim)
         !    pexact  = 0.25d0*(cos(2.d0*y) + cos(2.d0*z))*((exp(-(2.d0/gp%Re)*gp%tsim))**2)
         ! end select
+       
+
+         if (mod(gp%step,gp%t_dataDump) == 0) then
+            if (useBandpassFilter) then 
+               call gp%spectC%bandpassFilter(gp%uhat , uTarget)
+               call gp%spectC%bandpassFilter(gp%vhat , vTarget)
+               call gp%spectC%bandpassFilter(gp%whatC, wTarget)
+               call gp%dumpFullField(uTarget,'uBPF')
+               call gp%dumpFullField(vTarget,'vBPF')
+               call gp%dumpFullField(wTarget,'wBPF')
+               call message(0, "Just dumped bandpass filtered fields")
+            end if 
+         end if 
         
          if (mod(gp%step,nt_print2screen) == 0) then
             maxDiv = maxval(gp%divergence)

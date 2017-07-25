@@ -6,7 +6,9 @@
 program HIT_Periodic
     use mpi
     use kind_parameters,  only: clen
+    use HIT_periodic_parameters, only: useBandpassFilter 
     use IncompressibleGrid, only: igrid
+    use HIT_Periodic_parameters, only: k_bp_left, k_bp_right
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
     use exits, only: message
@@ -28,7 +30,12 @@ program HIT_Periodic
     call igp%start_io(.true.)                !<-- Start I/O by creating a header file (see io.F90)
 
     call igp%printDivergence()
-  
+
+    ! Initialize bandpass filtering 
+    if (useBandpassFilter) then
+         call igp%spectC%init_bandpass_filter(k_bp_left, k_bp_right, igp%cbuffzC(:,:,:,1), igp%cbuffyC(:,:,:,1))
+    end if 
+
     call tic() 
     do while (igp%tsim < igp%tstop) 
        

@@ -44,7 +44,11 @@ module spectralMod
         real(rkind), dimension(:,:), allocatable :: GsurfaceFilter 
         real(rkind) :: dealiasFact = 2.d0/3.d0
 
-        integer, dimension(:,:,:), allocatable :: Gfilter_PostProcess
+        logical, dimension(:,:,:), allocatable :: G_bandpass
+        integer, dimension(:,:,:), allocatable :: G_PostProcess
+        complex(rkind), dimension(:,:,:), pointer :: cbuffz_bp, cbuffy_bp
+        
+        logical :: BandPassFilterInitialized = .false. 
         logical :: initPostProcessor = .false.
         integer(kind=8) :: plan_c2c_fwd_z_oop
         integer(kind=8) :: plan_c2c_fwd_z_ip
@@ -56,6 +60,7 @@ module spectralMod
 
         contains
             procedure           :: init
+            procedure           :: init_bandpass_filter
             procedure           :: destroy
             procedure, private  :: alloc_r2c_out_Rank3
             procedure, private  :: alloc_r2c_out_Rank4
@@ -87,7 +92,8 @@ module spectralMod
             procedure           :: dealiasedSquare_oop
             procedure           :: KSprepFilter2
             procedure           :: KSprepFilter1
-    
+            procedure           :: bandpassFilter
+
             procedure           :: take_fft1d_z2z_ip
             procedure           :: take_ifft1d_z2z_ip
             procedure           :: shiftz_E2C
@@ -115,6 +121,7 @@ module spectralMod
 
             procedure           :: initPP
             procedure           :: destroyPP
+            procedure           :: destroy_bandpass_filter
             procedure           :: spectralFilter_ip
             !procedure, private  :: upsample_Fhat
             !procedure, private  :: downsample_Fhat
@@ -123,7 +130,70 @@ module spectralMod
 
 contains
 
+      subroutine bandpassFilter(this, uhat, uFilt) 
+         class(spectral),  intent(inout)         :: this
+         complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in) :: uhat 
+         real(rkind)   , dimension(this%physdecomp%xsz(1),this%physdecomp%xsz(2), this%physdecomp%xsz(3)), intent(out) :: uFilt
 
+         call transpose_y_to_z(uhat, this%cbuffz_bp, this%spectdecomp)
+         call this%take_fft1d_z2z_ip(this%cbuffz_bp)
+
+         where (this%G_bandpass == .false. ) 
+            this%cbuffz_bp = zero
+         end where
+
+         call this%take_ifft1d_z2z_ip(this%cbuffz_bp)
+         call transpose_z_to_y(this%cbuffz_bp, this%cbuffy_bp, this%spectdecomp)
+         call this%ifft(this%cbuffy_bp, uFilt)
+
+      end subroutine 
+
+      subroutine init_bandpass_filter(this, kleft, kright, cbuffz, cbuffy)
+         class(spectral),  intent(inout)         :: this
+         real(rkind), intent(in) :: kleft, kright
+         complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in), target :: cbuffy
+         complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(in), target :: cbuffz
+         real(rkind), dimension(:,:,:), allocatable :: rbuffz1, rbuffz2
+        
+         this%cbuffz_bp => cbuffz
+         this%cbuffy_bp => cbuffy
+         allocate(rbuffz1(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+         allocate(rbuffz2(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+         allocate(this%G_bandpass(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+
+         call transpose_y_to_z(this%k1, rbuffz1, this%spectdecomp)
+         rbuffz2 = rbuffz1**2 
+
+         call transpose_y_to_z(this%k2, rbuffz1, this%spectdecomp)
+         rbuffz2 = rbuffz2 + rbuffz1**2
+
+         call transpose_y_to_z(this%k3, rbuffz1, this%spectdecomp)
+         rbuffz2 = rbuffz2 + rbuffz1**2
+
+         rbuffz2 = sqrt(rbuffz2)
+
+         this%G_bandpass = .true. 
+         where (rbuffz2 < kleft)
+            this%G_bandpass = .false. 
+         end where
+
+         where (rbuffz2 > kright) 
+            this%G_bandpass = .false. 
+         end where
+
+         this%BandPassFilterInitialized = .true. 
+         deallocate(rbuffz1, rbuffz2)
+         call message(0, "Band pass filter initialized")
+      end subroutine
+
+    subroutine destroy_bandpass_filter(this)
+        class(spectral),  intent(inout)         :: this
+
+        if (this%BandPassFilterInitialized) then
+            deallocate(this%G_bandpass)
+        end if
+
+    end subroutine
 
     subroutine KSprepFilter1(this, finout)
         class(spectral),  intent(in)         :: this
@@ -640,7 +710,7 @@ contains
          allocate(this%ctmpz(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
          allocate(rbuffz(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
          allocate(cbuffz(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
-         
+
          this%Gdealias = one 
 
          kdealiasx = (this%dealiasFact*pi/dx)
@@ -651,6 +721,7 @@ contains
          where (abs(rbuffz) >= kdealiasx)    
             this%Gdealias = zero
          end where
+      
 
          call transpose_y_to_z(this%k2, rbuffz, this%spectdecomp)
          where (abs(rbuffz) >= kdealiasy)    
@@ -661,7 +732,6 @@ contains
          where (abs(rbuffz) >= kdealiasz)
             this%Gdealias = zero 
          end where
-   
          
          call dfftw_plan_many_dft(this%plan_c2c_fwd_z_ip, 1, nz,nxT*nyT, this%ctmpz, nz, &
                       nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_FORWARD , FFTW_EXHAUSTIVE)   
@@ -1603,22 +1673,22 @@ contains
       kfilx = ffactx*pi/dx
       kfily = ffacty*pi/dy
 
-      allocate(this%Gfilter_PostProcess(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2),this%spectdecomp%ysz(3)))
+      allocate(this%G_PostProcess(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2),this%spectdecomp%ysz(3)))
       do k = 1,this%spectdecomp%ysz(3)
           do j = 1,this%spectdecomp%ysz(2)
               do i = 1,this%spectdecomp%ysz(1)
                   if ((abs(this%k1(i,j,k)) < kfilx) .and. (abs(this%k2(i,j,k))< kfily)) then
-                      this%Gfilter_PostProcess(i,j,k) = 1
+                      this%G_PostProcess(i,j,k) = 1
                   else
-                      this%Gfilter_PostProcess(i,j,k) = 0
+                      this%G_PostProcess(i,j,k) = 0
                   end if
               end do 
           end do 
       end do 
 
       call message(0,"Post-processing filter initialized")
-      call message(1,"Size of G:",p_sum(size(this%Gfilter_PostProcess)))
-      call message(2,"Number of non-zeros:",p_sum(sum(this%Gfilter_PostProcess)))
+      call message(1,"Size of G:",p_sum(size(this%G_PostProcess)))
+      call message(2,"Number of non-zeros:",p_sum(sum(this%G_PostProcess)))
       this%initPostProcessor = .true.
     end subroutine
 
@@ -1626,7 +1696,7 @@ contains
       class(spectral), intent(inout) :: this
 
       this%initPostProcessor = .false.
-      if (allocated(this%Gfilter_PostProcess)) deallocate(this%Gfilter_PostProcess)
+      if (allocated(this%G_PostProcess)) deallocate(this%G_PostProcess)
 
     end subroutine
 
@@ -1634,6 +1704,6 @@ contains
       class(spectral), intent(in) :: this
       complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2),this%spectdecomp%ysz(3)), intent(inout) :: arr
 
-      arr = this%Gfilter_PostProcess*arr
+      arr = this%G_PostProcess*arr
     end subroutine
 end module 

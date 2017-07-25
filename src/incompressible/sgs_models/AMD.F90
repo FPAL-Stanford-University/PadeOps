@@ -66,7 +66,7 @@ subroutine get_amd_kernel(nu_sgs, camd_x, camd_y, camd_z, duidxj, Sij, nxL, nyL,
                  + duidxj(i,j,k,4)*duidxj(i,j,k,4) +  duidxj(i,j,k,5)*duidxj(i,j,k,5) + duidxj(i,j,k,6)*duidxj(i,j,k,6) &
                  + duidxj(i,j,k,7)*duidxj(i,j,k,7) +  duidxj(i,j,k,8)*duidxj(i,j,k,8) + duidxj(i,j,k,9)*duidxj(i,j,k,9) 
                      
-            nu_sgs(i,j,k) = max(-num/den,zero) 
+            nu_sgs(i,j,k) = max(-num/(den + 1.d-32),zero) 
          end do 
       end do
    end do 
