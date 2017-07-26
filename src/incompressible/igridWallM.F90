@@ -667,7 +667,7 @@ contains
 
         if (this%useWindTurbines) then
             allocate(this%WindTurbineArr)
-            call this%WindTurbineArr%init(inputFile, this%gpC, this%gpE, this%spectC, this%spectE, this%rbuffxC, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
+            call this%WindTurbineArr%init(inputFile, this%gpC, this%gpE, this%spectC, this%spectE, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
         end if 
 
         ! STEP 12: Set visualization planes for io
@@ -1434,7 +1434,7 @@ contains
         !if (this%useWindTurbines .and. (RKstage==1)) then
         if (this%useWindTurbines) then
             call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
-                                    this%u_rhs, this%v_rhs, this%w_rhs, this%inst_horz_avg_turb)
+                                    this%u_rhs, this%v_rhs, this%w_rhs, .true., this%inst_horz_avg_turb)
         end if 
 
         ! Step 4: Buoyance + Sponge (inside Buoyancy)

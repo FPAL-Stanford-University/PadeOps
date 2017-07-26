@@ -14,6 +14,8 @@ module spectralMod
     implicit none
     private
     public :: spectral, GetWaveNums, useExhaustiveFFT 
+    
+    include "fftw3.f"
 
     logical :: useExhaustiveFFT = .true. 
 
@@ -22,6 +24,8 @@ module spectralMod
         real(rkind), dimension(:,:,:), allocatable, public :: k1, k2, k3, kabs_sq, k1_der2, k2_der2, k3_der2, one_by_kabs_sq
         integer, dimension(3) :: fft_start, fft_end, fft_size
         real(rkind), dimension(:,:,:), allocatable, public :: Gdealias, GtestFilt, arr1Up, arr2Up, GksPrep1, GksPrep2
+        !real(rkind), dimension(:,:,:), allocatable :: k3inZ
+        complex(rkind), dimension(:,:,:), allocatable :: fhatz, ctmpz
         integer :: rPencil ! Pencil dimension for the real input
         logical :: is3dFFT = .true. ! use 3d FFTs
         logical :: isInitialized = .false.
@@ -32,28 +36,46 @@ module spectralMod
         type(fft_3d), allocatable :: FT
         logical :: use2decompFFT = .false. 
         logical :: useConsrvD2 = .true. 
-        real(rkind) :: normfact 
-        type(decomp_info), allocatable, public :: spectdecomp, dealiasdecomp
-        logical                                 :: StoreK = .true.
+        real(rkind) :: normfact, normfactZ 
+        type(decomp_info), allocatable, public :: spectdecomp, physdecomp, dealiasdecomp
+        logical                                :: StoreK = .true., init_periodicInZ = .false. 
         logical, public :: carryingZeroK = .false.
         integer, public :: zeroK_i = 123456, zeroK_j = 123456
         real(rkind), dimension(:,:), allocatable :: GsurfaceFilter 
+        real(rkind) :: dealiasFact = 2.d0/3.d0
 
-
-        integer, dimension(:,:,:), allocatable :: Gfilter_PostProcess
+        logical, dimension(:,:,:), allocatable :: G_bandpass
+        integer, dimension(:,:,:), allocatable :: G_PostProcess
+        complex(rkind), dimension(:,:,:), pointer :: cbuffz_bp, cbuffy_bp
+        
+        logical :: BandPassFilterInitialized = .false. 
         logical :: initPostProcessor = .false.
+        integer(kind=8) :: plan_c2c_fwd_z_oop
+        integer(kind=8) :: plan_c2c_fwd_z_ip
+        integer(kind=8) :: plan_c2c_bwd_z_oop
+        integer(kind=8) :: plan_c2c_bwd_z_ip
+        integer(kind=8) :: plan_r2c_z, plan_c2r_z 
+        complex(rkind), dimension(:), allocatable :: k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift
+        real(rkind), dimension(:), allocatable :: mk3sq
 
         contains
             procedure           :: init
+            procedure           :: init_bandpass_filter
             procedure           :: destroy
             procedure, private  :: alloc_r2c_out_Rank3
             procedure, private  :: alloc_r2c_out_Rank4
             generic             :: alloc_r2c_out => alloc_r2c_out_Rank4, alloc_r2c_out_Rank3
+            procedure           :: fft_y2z
+            procedure           :: ifft_z2y
+            procedure, private  :: take_fftz
+            procedure, private  :: take_ifftz
+            procedure, private  :: init_periodic_inZ_procedures 
             procedure           :: fft
             procedure           :: ifft
             procedure           :: fft1_x2y
             procedure, private  :: initializeEverything
             procedure           :: dealias
+            procedure           :: dealias_edgeField
             procedure           :: mTimes_ik1_oop
             procedure           :: mTimes_ik1_ip
             procedure           :: mTimes_ik2_oop
@@ -70,9 +92,36 @@ module spectralMod
             procedure           :: dealiasedSquare_oop
             procedure           :: KSprepFilter2
             procedure           :: KSprepFilter1
+            procedure           :: bandpassFilter
+
+            procedure           :: take_fft1d_z2z_ip
+            procedure           :: take_ifft1d_z2z_ip
+            procedure           :: shiftz_E2C
+            procedure           :: shiftz_C2E
+            procedure, private  :: ddz_E2C_spect_cmplx
+            procedure, private  :: ddz_C2E_spect_cmplx
+            procedure, private  :: d2dz2_C2C_spect_cmplx
+            procedure, private  :: d2dz2_E2E_spect_cmplx
+            procedure, private  :: interp_E2C_spect_cmplx
+            procedure, private  :: interp_C2E_spect_cmplx
+
+            procedure, private  :: ddz_E2C_spect_real
+            procedure, private  :: ddz_C2E_spect_real
+            procedure, private  :: d2dz2_C2C_spect_real
+            procedure, private  :: d2dz2_E2E_spect_real
+            procedure, private  :: interp_E2C_spect_real
+            procedure, private  :: interp_C2E_spect_real
+            
+            generic             :: ddz_E2C_spect => ddz_E2C_spect_cmplx, ddz_E2C_spect_real
+            generic             :: ddz_C2E_spect => ddz_C2E_spect_cmplx, ddz_C2E_spect_real
+            generic             :: interp_E2C_spect => interp_E2C_spect_cmplx, interp_E2C_spect_real
+            generic             :: interp_C2E_spect => interp_C2E_spect_cmplx, interp_C2E_spect_real
+            generic             :: d2dz2_C2C_spect => d2dz2_C2C_spect_cmplx, d2dz2_C2C_spect_real
+            generic             :: d2dz2_E2E_spect => d2dz2_E2E_spect_cmplx, d2dz2_E2E_spect_real
 
             procedure           :: initPP
             procedure           :: destroyPP
+            procedure           :: destroy_bandpass_filter
             procedure           :: spectralFilter_ip
             !procedure, private  :: upsample_Fhat
             !procedure, private  :: downsample_Fhat
@@ -80,6 +129,72 @@ module spectralMod
     end type
 
 contains
+
+      subroutine bandpassFilter(this, uhat, uFilt) 
+         class(spectral),  intent(inout)         :: this
+         complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in) :: uhat 
+         real(rkind)   , dimension(this%physdecomp%xsz(1),this%physdecomp%xsz(2), this%physdecomp%xsz(3)), intent(out) :: uFilt
+
+         call transpose_y_to_z(uhat, this%cbuffz_bp, this%spectdecomp)
+         call this%take_fft1d_z2z_ip(this%cbuffz_bp)
+
+         where (this%G_bandpass == .false. ) 
+            this%cbuffz_bp = zero
+         end where
+
+         call this%take_ifft1d_z2z_ip(this%cbuffz_bp)
+         call transpose_z_to_y(this%cbuffz_bp, this%cbuffy_bp, this%spectdecomp)
+         call this%ifft(this%cbuffy_bp, uFilt)
+
+      end subroutine 
+
+      subroutine init_bandpass_filter(this, kleft, kright, cbuffz, cbuffy)
+         class(spectral),  intent(inout)         :: this
+         real(rkind), intent(in) :: kleft, kright
+         complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in), target :: cbuffy
+         complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(in), target :: cbuffz
+         real(rkind), dimension(:,:,:), allocatable :: rbuffz1, rbuffz2
+        
+         this%cbuffz_bp => cbuffz
+         this%cbuffy_bp => cbuffy
+         allocate(rbuffz1(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+         allocate(rbuffz2(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+         allocate(this%G_bandpass(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+
+         call transpose_y_to_z(this%k1, rbuffz1, this%spectdecomp)
+         rbuffz2 = rbuffz1**2 
+
+         call transpose_y_to_z(this%k2, rbuffz1, this%spectdecomp)
+         rbuffz2 = rbuffz2 + rbuffz1**2
+
+         call transpose_y_to_z(this%k3, rbuffz1, this%spectdecomp)
+         rbuffz2 = rbuffz2 + rbuffz1**2
+
+         rbuffz2 = sqrt(rbuffz2)
+
+         this%G_bandpass = .true. 
+         where (rbuffz2 < kleft)
+            this%G_bandpass = .false. 
+         end where
+
+         where (rbuffz2 > kright) 
+            this%G_bandpass = .false. 
+         end where
+
+         this%BandPassFilterInitialized = .true. 
+         deallocate(rbuffz1, rbuffz2)
+         call message(0, "Band pass filter initialized")
+      end subroutine
+
+    subroutine destroy_bandpass_filter(this)
+        class(spectral),  intent(inout)         :: this
+
+        if (this%BandPassFilterInitialized) then
+            deallocate(this%G_bandpass)
+        end if
+
+    end subroutine
+
     subroutine KSprepFilter1(this, finout)
         class(spectral),  intent(in)         :: this
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: finout
@@ -93,6 +208,7 @@ contains
 
         finout = this%GksPrep2*finout
     end subroutine
+
     subroutine mTimes_ik1_oop(this, fin, fout)
         class(spectral),  intent(in)         :: this
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(in) :: fin
@@ -173,21 +289,353 @@ contains
     end subroutine
 
     subroutine dealias(this, fhat)
-        class(spectral),  intent(in)         :: this
+        class(spectral),  intent(inout)         :: this
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fhat
         integer :: i, j, k
 
-        do k = 1,this%fft_size(3)
-            do j = 1,this%fft_size(2)
-                !$omp simd 
-                do i = 1,this%fft_size(1)
-                    fhat(i,j,k) = fhat(i,j,k)*this%Gdealias(i,j,k)
-                end do 
+        if (this%init_periodicinZ) then
+            call this%take_fftz(fhat)
+            do k = 1,this%spectdecomp%zsz(3)
+               do j = 1,this%spectdecomp%zsz(2)
+                  !$omp simd
+                  do i = 1,this%spectdecomp%zsz(1)
+                     this%ctmpz(i,j,k) = this%ctmpz(i,j,k)*this%Gdealias(i,j,k)
+                  end do 
+               end do 
             end do 
-        end do 
+            call this%take_ifftz(fhat)
+        else
+         do k = 1,this%fft_size(3)
+             do j = 1,this%fft_size(2)
+                 !$omp simd 
+                 do i = 1,this%fft_size(1)
+                     fhat(i,j,k) = fhat(i,j,k)*this%Gdealias(i,j,k)
+                 end do 
+             end do 
+         end do 
+        end if 
          
     end subroutine
+  
+    subroutine dealias_edgeField(this, fhat)
+        class(spectral),  intent(inout)         :: this
+        complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)+1), intent(inout) :: fhat
+        integer :: i, j, k
+
+        if (this%init_periodicInZ) then
+            call dfftw_execute_dft(this%plan_c2c_fwd_z_ip, fhat(:,:,1:this%spectdecomp%zsz(3)) , fhat(:,:,1:this%spectdecomp%zsz(3)))  
+            do k = 1,this%spectdecomp%zsz(3)
+               do j = 1,this%spectdecomp%zsz(2)
+                  !$omp simd
+                  do i = 1,this%spectdecomp%zsz(1)
+                     fhat(i,j,k) = fhat(i,j,k)*this%Gdealias(i,j,k)
+                  end do 
+               end do 
+            end do 
+            call dfftw_execute_dft(this%plan_c2c_bwd_z_ip, fhat(:,:,1:this%spectdecomp%zsz(3)) , fhat(:,:,1:this%spectdecomp%zsz(3)))  
+            fhat(:,:,1:this%spectdecomp%zsz(3)) = this%normfactz*fhat(:,:,1:this%spectdecomp%zsz(3))
+            fhat(:,:,this%spectdecomp%zsz(3)+1) = fhat(:,:,1)
+        end if 
+
+    end subroutine 
    
+    subroutine ddz_E2C_spect_real(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)+1), intent(in)  :: arr_in
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)),   intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft_r2c(this%plan_r2c_z, arr_in(:,:,1:this%physdecomp%zsz(3)), this%fhatz)
+         do k = 1,this%physdecomp%zsz(3)/2 ! Note that the oddball is ignored 
+            do j = 1,this%physdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%physdecomp%zsz(1)
+                  this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%k3_E2Cshift(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft_c2r(this%plan_c2r_z, this%fhatz, arr_out)
+         arr_out = arr_out*this%normfactz
+      end if
+
+    end subroutine 
+    
+    subroutine ddz_E2C_spect_cmplx(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)+1), intent(in)  :: arr_in
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)),   intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft(this%plan_c2c_fwd_z_oop, arr_in(:,:,1:this%spectdecomp%zsz(3)), arr_out(:,:,1:this%spectdecomp%zsz(3)))
+         do k = 1,this%spectdecomp%zsz(3)
+            do j = 1,this%spectdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%spectdecomp%zsz(1)
+                  arr_out(i,j,k) = arr_out(i,j,k)*this%k3_E2Cshift(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft(this%plan_c2c_bwd_z_ip, arr_out(:,:,1:this%spectdecomp%zsz(3)), arr_out(:,:,1:this%spectdecomp%zsz(3)))
+         arr_out = arr_out*this%normfactz
+      end if
+
+    end subroutine 
+
+    subroutine shiftz_E2C(this, arr_inout)
+      class(spectral), intent(in) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(inout)  :: arr_inout
+      integer :: i, j, k
+
+      do k = 1,this%spectdecomp%zsz(3) 
+         do j = 1,this%spectdecomp%zsz(2)
+            !$omp simd
+            do i = 1,this%spectdecomp%zsz(1)
+               arr_inout(i,j,k) = arr_inout(i,j,k)*this%E2Cshift(k) 
+            end do 
+         end do 
+      end do
+    end subroutine 
+
+    subroutine shiftz_C2E(this, arr_inout)
+      class(spectral), intent(in) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(inout)  :: arr_inout
+      integer :: i, j, k
+
+      do k = 1,this%spectdecomp%zsz(3) 
+         do j = 1,this%spectdecomp%zsz(2)
+            !$omp simd
+            do i = 1,this%spectdecomp%zsz(1)
+               arr_inout(i,j,k) = arr_inout(i,j,k)*this%C2Eshift(k) 
+            end do 
+         end do 
+      end do
+    end subroutine 
+
+    subroutine interp_E2C_spect_real(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)+1), intent(in)  :: arr_in
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)),   intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft_r2c(this%plan_r2c_z, arr_in(:,:,1:this%physdecomp%zsz(3)), this%fhatz)
+         do k = 1,this%physdecomp%zsz(3)/2 ! Note that the oddball is ignored 
+            do j = 1,this%physdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%physdecomp%zsz(1)
+                  this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%E2Cshift(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft_c2r(this%plan_c2r_z, this%fhatz, arr_out)
+         arr_out = arr_out*this%normfactz
+      end if
+
+    end subroutine 
+
+
+    subroutine interp_E2C_spect_cmplx(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)+1), intent(in)  :: arr_in
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)),   intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft(this%plan_c2c_fwd_z_oop, arr_in(:,:,1:this%spectdecomp%zsz(3)), arr_out(:,:,1:this%spectdecomp%zsz(3)))
+         do k = 1,this%spectdecomp%zsz(3)
+            do j = 1,this%spectdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%spectdecomp%zsz(1)
+                  arr_out(i,j,k) = arr_out(i,j,k)*this%E2Cshift(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft(this%plan_c2c_bwd_z_ip, arr_out(:,:,1:this%spectdecomp%zsz(3)), arr_out(:,:,1:this%spectdecomp%zsz(3)))
+         arr_out = arr_out*this%normfactz
+      end if
+
+    end subroutine 
+
+    subroutine ddz_C2E_spect_real(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)  ), intent(in)  :: arr_in
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)+1), intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft_r2c(this%plan_r2c_z, arr_in, this%fhatz)
+         do k = 1,this%physdecomp%zsz(3)/2 ! Note that the oddball is ignored 
+            do j = 1,this%physdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%physdecomp%zsz(1)
+                  this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%k3_C2Eshift(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft_c2r(this%plan_c2r_z, this%fhatz, arr_out(:,:,1:this%physdecomp%zsz(3)))
+         arr_out(:,:,1:this%physdecomp%zsz(3)) = arr_out(:,:,1:this%physdecomp%zsz(3))*this%normfactz
+         arr_out(:,:,this%physdecomp%zsz(3)+1) = arr_out(:,:,1)
+      end if
+
+    end subroutine 
+
+    subroutine ddz_C2E_spect_cmplx(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)  ), intent(in )  :: arr_in
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)+1), intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft(this%plan_c2c_fwd_z_oop, arr_in, this%ctmpz)
+         do k = 1,this%spectdecomp%zsz(3)
+            do j = 1,this%spectdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%spectdecomp%zsz(1)
+                  this%ctmpz(i,j,k) = this%ctmpz(i,j,k)*this%k3_C2Eshift(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft(this%plan_c2c_bwd_z_oop, this%ctmpz, arr_out(:,:,1:this%spectdecomp%zsz(3)))
+         arr_out(:,:,1:this%spectdecomp%zsz(3)) =  this%normfactz*arr_out(:,:,1:this%spectdecomp%zsz(3))
+         arr_out(:,:,this%spectdecomp%zsz(3)+1) =  arr_out(:,:,1)
+      end if
+
+    end subroutine 
+
+    subroutine interp_C2E_spect_real(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)  ), intent(in)  :: arr_in
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)+1), intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft_r2c(this%plan_r2c_z, arr_in, this%fhatz)
+         do k = 1,this%physdecomp%zsz(3)/2 ! Note that the oddball is ignored 
+            do j = 1,this%physdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%physdecomp%zsz(1)
+                  this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%C2Eshift(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft_c2r(this%plan_c2r_z, this%fhatz, arr_out(:,:,1:this%physdecomp%zsz(3)))
+         arr_out(:,:,1:this%physdecomp%zsz(3)) = arr_out(:,:,1:this%physdecomp%zsz(3))*this%normfactz
+         arr_out(:,:,this%physdecomp%zsz(3)+1) = arr_out(:,:,1)
+      end if
+
+    end subroutine 
+    
+    subroutine interp_C2E_spect_cmplx(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)  ), intent(in )  :: arr_in
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)+1), intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft(this%plan_c2c_fwd_z_oop, arr_in, this%ctmpz)
+         do k = 1,this%spectdecomp%zsz(3)
+            do j = 1,this%spectdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%spectdecomp%zsz(1)
+                  this%ctmpz(i,j,k) = this%ctmpz(i,j,k)*this%C2Eshift(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft(this%plan_c2c_bwd_z_oop, this%ctmpz, arr_out(:,:,1:this%spectdecomp%zsz(3)))
+         arr_out(:,:,1:this%spectdecomp%zsz(3)) =  this%normfactz*arr_out(:,:,1:this%spectdecomp%zsz(3))
+         arr_out(:,:,this%spectdecomp%zsz(3)+1) =  arr_out(:,:,1)
+      end if
+
+    end subroutine 
+
+    subroutine d2dz2_C2C_spect_cmplx(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(in )  :: arr_in
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft(this%plan_c2c_fwd_z_oop, arr_in, arr_out)
+         do k = 1,this%spectdecomp%zsz(3)
+            do j = 1,this%spectdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%spectdecomp%zsz(1)
+                  arr_out(i,j,k) = arr_out(i,j,k)*this%mk3sq(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft(this%plan_c2c_bwd_z_ip,arr_out, arr_out)
+         arr_out = arr_out*this%normfactz
+      end if 
+    end subroutine 
+    
+    subroutine d2dz2_C2C_spect_real(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)), intent(in )  :: arr_in
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)), intent(out)  :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft_r2c(this%plan_r2c_z, arr_in, this%fhatz)
+         do k = 1,this%physdecomp%zsz(3)/2
+            do j = 1,this%physdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%physdecomp%zsz(1)
+                  this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%mk3sq(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft_c2r(this%plan_c2r_z,this%fhatz, arr_out)
+         arr_out = arr_out*this%normfactz
+      end if 
+    end subroutine 
+    
+    subroutine d2dz2_E2E_spect_cmplx(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)+1), intent(in )  :: arr_in
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)+1), intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft(this%plan_c2c_fwd_z_oop, arr_in(:,:,1:this%spectdecomp%zsz(3)), arr_out(:,:,1:this%spectdecomp%zsz(3)))
+         do k = 1,this%spectdecomp%zsz(3)
+            do j = 1,this%spectdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%spectdecomp%zsz(1)
+                  arr_out(i,j,k) = arr_out(i,j,k)*this%mk3sq(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft(this%plan_c2c_bwd_z_ip,arr_out(:,:,1:this%spectdecomp%zsz(3)), arr_out(:,:,1:this%spectdecomp%zsz(3)))
+         arr_out(:,:,1:this%spectdecomp%zsz(3)) = arr_out(:,:,1:this%spectdecomp%zsz(3))*this%normfactz
+         arr_out(:,:,this%spectdecomp%zsz(3)+1) = arr_out(:,:,1)
+      end if 
+    end subroutine 
+
+    subroutine d2dz2_E2E_spect_real(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)+1), intent(in )  :: arr_in
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)+1), intent(out)  :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft_r2c(this%plan_r2c_z, arr_in(:,:,1:this%physdecomp%zsz(3)), this%fhatz)
+         do k = 1,this%physdecomp%zsz(3)/2
+            do j = 1,this%physdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%physdecomp%zsz(1)
+                  this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%mk3sq(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft_c2r(this%plan_c2r_z,this%fhatz, arr_out(:,:,1:this%physdecomp%zsz(3)))
+         arr_out(:,:,1:this%physdecomp%zsz(3)) = arr_out(:,:,1:this%physdecomp%zsz(3))*this%normfactz
+         arr_out(:,:,this%physdecomp%zsz(3)+1) = arr_out(:,:,1)
+      end if 
+    end subroutine 
+
     subroutine TestFilter_ip(this, fhat)
         class(spectral),  intent(in)         :: this
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fhat
@@ -235,8 +683,104 @@ contains
          
     end subroutine
 
+      subroutine init_periodic_inZ_procedures(this, dx, dy, dz)
+         use constants, only: imi
+         class(spectral),  intent(inout)         :: this
+         real(rkind), intent(in) :: dx, dy, dz
+         real(rkind), dimension(:,:,:),  allocatable :: rbuffz, rbuffz1
+         real(rkind), dimension(:), allocatable :: k3_1d
+         complex(rkind), dimension(:,:,:), allocatable :: cbuffz
+         real(rkind) :: kdealiasx, kdealiasy, kdealiasz
+         integer :: nz, nxT, nyT
 
-    subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK, exhaustiveFFT) 
+         if (.not. this%isinitialized) then
+            call gracefulExit("You cannot call INIT_PERIODIC_INZ_PROCEDURES before initializing the spectral derived type",103) 
+         end if 
+
+         deallocate(this%Gdealias)
+         
+         nxT = this%spectdecomp%zsz(1)
+         nyT = this%spectdecomp%zsz(2)
+         nz = this%spectdecomp%zsz(3)
+         if (mod(nz,2) .ne. 0) then
+            call gracefulExit("You cannot initialize a periodic_inZ spectral type with an odd values nz",104)
+         end if
+         
+         allocate(this%Gdealias(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+         allocate(this%ctmpz(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+         allocate(rbuffz(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+         allocate(cbuffz(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+
+         this%Gdealias = one 
+
+         kdealiasx = (this%dealiasFact*pi/dx)
+         kdealiasy = (this%dealiasFact*pi/dy)
+         kdealiasz = (this%dealiasFact*pi/dz)
+
+         call transpose_y_to_z(this%k1, rbuffz, this%spectdecomp)
+         where (abs(rbuffz) >= kdealiasx)    
+            this%Gdealias = zero
+         end where
+      
+
+         call transpose_y_to_z(this%k2, rbuffz, this%spectdecomp)
+         where (abs(rbuffz) >= kdealiasy)    
+            this%Gdealias = zero
+         end where
+
+         call transpose_y_to_z(this%k3, rbuffz, this%spectdecomp)
+         where (abs(rbuffz) >= kdealiasz)
+            this%Gdealias = zero 
+         end where
+         
+         call dfftw_plan_many_dft(this%plan_c2c_fwd_z_ip, 1, nz,nxT*nyT, this%ctmpz, nz, &
+                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_FORWARD , FFTW_EXHAUSTIVE)   
+         
+         call dfftw_plan_many_dft(this%plan_c2c_fwd_z_oop, 1, nz,nxT*nyT, cbuffz, nz, &
+                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_FORWARD , FFTW_EXHAUSTIVE)   
+         
+         call dfftw_plan_many_dft(this%plan_c2c_bwd_z_ip, 1, nz,nxT*nyT, this%ctmpz, nz, &
+                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_BACKWARD , FFTW_EXHAUSTIVE)   
+         
+         call dfftw_plan_many_dft(this%plan_c2c_bwd_z_oop, 1, nz,nxT*nyT, cbuffz, nz, &
+                      nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_BACKWARD , FFTW_EXHAUSTIVE)   
+
+         allocate(rbuffz1(this%physdecomp%zsz(1), this%physdecomp%zsz(2), this%physdecomp%zsz(3)      ))
+         allocate(this%fhatz(this%physdecomp%zsz(1), this%physdecomp%zsz(2), this%physdecomp%zsz(3)/2 + 1))
+                      
+         call dfftw_plan_many_dft_r2c(this%plan_r2c_z, 1, this%physdecomp%zsz(3), &
+                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2),rbuffz1 , this%physdecomp%zsz(3), &
+                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, this%fhatz, this%physdecomp%zsz(3)/2 + 1, &
+                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, FFTW_EXHAUSTIVE)
+
+         call dfftw_plan_many_dft_c2r(this%plan_c2r_z, 1, this%physdecomp%zsz(3), &
+                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2), this%fhatz , this%physdecomp%zsz(3)/2 + 1, &
+                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, rbuffz1, this%physdecomp%zsz(3), &
+                 this%physdecomp%zsz(1)*this%physdecomp%zsz(2), 1, FFTW_EXHAUSTIVE)
+
+         allocate(this%k3_C2Eshift(nz))
+         allocate(this%k3_E2Cshift(nz))
+         allocate(this%C2Eshift(nz))
+         allocate(this%E2Cshift(nz))
+         allocate(this%mk3sq(nz))
+         allocate(k3_1d(nz))
+         k3_1d = GetWaveNums(nz,dz) 
+         this%mk3sq = -(k3_1d**2)
+         this%k3_C2Eshift = imi*k3_1d*exp(-imi*k3_1d*dz/two)
+         this%k3_E2Cshift = imi*k3_1d*exp( imi*k3_1d*dz/two)
+         this%C2Eshift = exp(-imi*k3_1d*dz/two)
+         this%E2Cshift = exp( imi*k3_1d*dz/two)
+
+         deallocate(k3_1d)
+         this%normfactZ = one/real(nz,rkind)
+
+         this%fhatz = cmplx(zero,zero,rkind)
+         this%init_periodicinZ = .true. 
+
+         deallocate(rbuffz, cbuffz, rbuffz1)
+      end subroutine 
+
+    subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK, exhaustiveFFT, init_periodicInZ, dealiasF) 
         class(spectral),  intent(inout)         :: this
         character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction
         integer,          intent(in)            :: nx_g, ny_g, nz_g    ! Global data size
@@ -249,9 +793,11 @@ contains
         logical,                      optional  :: useConsrvD2         ! Use the conservative form of 2nd derivative - default is TRUE
         logical, intent(in),          optional  :: createK 
         logical, intent(in),          optional  :: exhaustiveFFT 
+        logical, intent(in),          optional  :: init_periodicInZ 
+        real(rkind), intent(in),      optional  :: dealiasF
 
         if (present(createK)) then
-                this%storeK = createK
+            this%storeK = createK
         end if 
 
         if (this%isInitialized) then
@@ -266,6 +812,7 @@ contains
         this%ny_g = ny_g
         this%nz_g = nz_g
 
+        if (present(dealiasF)) this%dealiasFact = dealiasF
         if (present(fixOddball)) this%fixOddball = fixOddball
         if (present(use2decompFFT)) this%use2decompFFT = use2decompFFT 
         if (present(useConsrvD2)) this%useConsrvD2 = useConsrvD2
@@ -286,7 +833,12 @@ contains
       
         this%normfact = one/real(nx_g)/real(ny_g)/real(nz_g) 
         this%isInitialized = .true.  
- 
+
+        if (present(init_periodicInZ)) then
+            if (init_periodicInZ) then
+               call this%init_periodic_inZ_procedures(dx, dy, dz)
+            end if
+        end if 
     end subroutine 
 
 
@@ -304,7 +856,7 @@ contains
         type(decomp_info), allocatable :: spectdecomp
         real(rkind), dimension(:,:,:), allocatable :: tmp1, tmp2
         integer :: i, j, k, rPencil, ierr  
-        real(rkind), dimension(:,:,:), allocatable :: k1four, k2four, k3four
+        !real(rkind), dimension(:,:,:), allocatable :: k1four, k2four, k3four
         logical, optional, intent(in) :: nonPeriodic
         logical :: TwoPeriodic = .false. 
         real(rkind) ::kdealiasx, kdealiasy 
@@ -346,6 +898,8 @@ contains
         ! STEP 2: Allocate wavenumbers and temporary decomp for spectral transposes
         allocate(spectdecomp)
         allocate(this%spectdecomp)
+        allocate(this%physdecomp)
+        call decomp_info_init(this%nx_g, this%ny_g, this%nz_g, this%physdecomp)
         select case (rPencil)
         case(1)
            call decomp_info_init(nx_g/2+1, ny_g, nz_g, spectdecomp)
@@ -373,35 +927,25 @@ contains
             allocate (this%k1(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             if (allocated(this%k2)) deallocate(this%k2)
             allocate (this%k2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            if (.not. TwoPeriodic) then
-                call gracefulExit("3D fft using the SPECTRAL derived type has been temporarily switched off",32)
-                if (allocated(this%k3)) deallocate(this%k3)
-                allocate (this%k3(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            end if 
+            if (allocated(this%k3)) deallocate(this%k3)
+            allocate (this%k3(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             if (allocated(this%kabs_sq)) deallocate(this%kabs_sq)
             allocate (this%kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            !if (allocated(this%k1_der2)) deallocate(this%k1_der2)
-            !allocate (this%k1_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            !if (allocated(this%k2_der2)) deallocate(this%k2_der2)
-            !allocate (this%k2_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            !if (allocated(this%k3_der2)) deallocate(this%k3_der2)
-            !allocate (this%k3_der2(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            !if (allocated(this%one_by_kabs_sq)) deallocate(this%one_by_kabs_sq)
-            !allocate(this%one_by_kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
             if (allocated(this%Gdealias)) deallocate(this%Gdealias)
             allocate (this%Gdealias(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             if (allocated(this%GTestFilt)) deallocate(this%GTestFilt)
             allocate (this%GTestFilt(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             
-            !allocate(k1four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
-            !allocate(k2four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
-            !allocate(k3four(this%fft_size(1),this%fft_size(2),this%fft_size(3)))
-
             ! STEP 3: Generate 1d wavenumbers 
             k1_1d = GetWaveNums(nx_g,dx) 
             k2_1d = GetWaveNums(ny_g,dy) 
             k3_1d = GetWaveNums(nz_g,dz) 
-       
+            ! flip the sign of the oddball (helps later)
+            k1_1d(nx_g/2+1) = -k1_1d(nx_g/2+1)
+            k2_1d(ny_g/2+1) = -k2_1d(ny_g/2+1)
+            k3_1d(nz_g/2+1) = -k3_1d(nz_g/2+1)
+
+
        
             ! STEP 4: Create temporary array for k1 and transpose it to the appropriate dimension
             allocate(tmp1(spectdecomp%xsz(1),spectdecomp%xsz(2),spectdecomp%xsz(3)))
@@ -704,7 +1248,7 @@ contains
         class(spectral), intent(inout) :: this
       
         if (.not. this%isInitialized) then
-            call GracefulExit("You are trying to destroy a SPECTRAL derived type befire initializing it",110)
+            call GracefulExit("You are trying to destroy a SPECTRAL derived type before initializing it",110)
         end if 
         if (this%use2decompFFT) then
             call decomp_2d_fft_finalize 
@@ -785,6 +1329,63 @@ contains
             end if
         end if 
     end subroutine
+   
+    subroutine fft_y2z(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%ysz(1), this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in)  :: arr_in
+      complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(out) :: arr_out
+
+      call transpose_y_to_z(arr_in, arr_out, this%spectdecomp)
+      call dfftw_execute_dft(this%plan_c2c_fwd_z_ip, arr_out , arr_out)  
+
+    end subroutine 
+
+
+    subroutine ifft_z2y(this, arr_in, arr_out) 
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%ysz(1), this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in)  :: arr_in
+      complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(out) :: arr_out
+
+      call dfftw_execute_dft(this%plan_c2c_bwd_z_oop, arr_in , this%ctmpz)  
+      this%ctmpz = this%normfactz*this%ctmpz
+      call transpose_z_to_y(this%ctmpz, arr_out, this%spectdecomp)
+
+    end subroutine 
+
+    subroutine take_fftz(this, arr_in)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%ysz(1), this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in)  :: arr_in
+
+      call transpose_y_to_z(arr_in, this%ctmpz, this%spectdecomp)
+      call dfftw_execute_dft(this%plan_c2c_fwd_z_ip, this%ctmpz , this%ctmpz)  
+
+    end subroutine 
+  
+
+    subroutine take_fft1d_z2z_ip(this, arr_inout)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(inout)  :: arr_inout
+      call dfftw_execute_dft(this%plan_c2c_fwd_z_ip, arr_inout , arr_inout)  
+    end subroutine 
+
+    subroutine take_ifft1d_z2z_ip(this, arr_inout)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(inout)  :: arr_inout
+      call dfftw_execute_dft(this%plan_c2c_bwd_z_ip, arr_inout , arr_inout)  
+      arr_inout = this%normfactz*arr_inout
+    end subroutine 
+
+
+    subroutine take_ifftz(this, arr_out)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%ysz(1), this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(out)  :: arr_out
+
+      call dfftw_execute_dft(this%plan_c2c_bwd_z_ip, this%ctmpz , this%ctmpz)  
+      this%ctmpz = this%normfactz*this%ctmpz
+      call transpose_z_to_y(this%ctmpz, arr_out, this%spectdecomp)
+
+    end subroutine 
+
 
     !!!!!!!!!!!!!!!!!!!!!! DEALISED MULTIPLICATIONS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     subroutine dealiasedMult_oop(this,arr1,arr2,arrout)
@@ -935,7 +1536,6 @@ contains
         kxd = (two/three)*pi/dx
         kyd = (two/three)*pi/dy
         kdealias = min(kxd,kyd)
-        print*, kxd, kyd 
         Tf = one
         where(abs(k1)>kdealias)
                 Tf = zero
@@ -1073,22 +1673,22 @@ contains
       kfilx = ffactx*pi/dx
       kfily = ffacty*pi/dy
 
-      allocate(this%Gfilter_PostProcess(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2),this%spectdecomp%ysz(3)))
+      allocate(this%G_PostProcess(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2),this%spectdecomp%ysz(3)))
       do k = 1,this%spectdecomp%ysz(3)
           do j = 1,this%spectdecomp%ysz(2)
               do i = 1,this%spectdecomp%ysz(1)
                   if ((abs(this%k1(i,j,k)) < kfilx) .and. (abs(this%k2(i,j,k))< kfily)) then
-                      this%Gfilter_PostProcess(i,j,k) = 1
+                      this%G_PostProcess(i,j,k) = 1
                   else
-                      this%Gfilter_PostProcess(i,j,k) = 0
+                      this%G_PostProcess(i,j,k) = 0
                   end if
               end do 
           end do 
       end do 
 
       call message(0,"Post-processing filter initialized")
-      call message(1,"Size of G:",p_sum(size(this%Gfilter_PostProcess)))
-      call message(2,"Number of non-zeros:",p_sum(sum(this%Gfilter_PostProcess)))
+      call message(1,"Size of G:",p_sum(size(this%G_PostProcess)))
+      call message(2,"Number of non-zeros:",p_sum(sum(this%G_PostProcess)))
       this%initPostProcessor = .true.
     end subroutine
 
@@ -1096,7 +1696,7 @@ contains
       class(spectral), intent(inout) :: this
 
       this%initPostProcessor = .false.
-      if (allocated(this%Gfilter_PostProcess)) deallocate(this%Gfilter_PostProcess)
+      if (allocated(this%G_PostProcess)) deallocate(this%G_PostProcess)
 
     end subroutine
 
@@ -1104,6 +1704,6 @@ contains
       class(spectral), intent(in) :: this
       complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2),this%spectdecomp%ysz(3)), intent(inout) :: arr
 
-      arr = this%Gfilter_PostProcess*arr
+      arr = this%G_PostProcess*arr
     end subroutine
 end module 

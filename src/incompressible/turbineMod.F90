@@ -4,6 +4,7 @@ module turbineMod
     use decomp_2d
     use StaggOpsMod, only: staggOps  
     use actuatorDiskMod, only: actuatorDisk
+    use actuatorDisk_T2Mod, only: actuatorDisk_T2
     use actuatorLineMod, only: actuatorLine
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
@@ -18,7 +19,6 @@ module turbineMod
 
     ! default initializations
     integer :: num_turbines = 1
-    logical :: ADM = .TRUE. ! .FALSE. implies ALM
     character(len=clen) :: turbInfoDir
 
     integer :: ioUnit
@@ -30,14 +30,14 @@ module turbineMod
         integer :: nTurbines
         integer :: myProc
         type(actuatorDisk), allocatable, dimension(:) :: turbArrayADM
+        type(actuatorDisk_T2), allocatable, dimension(:) :: turbArrayADM_T2
         type(actuatorLine), allocatable, dimension(:) :: turbArrayALM
 
         type(decomp_info), pointer :: gpC, sp_gpC, gpE, sp_gpE
         type(spectral), pointer :: spectC, spectE
         type(staggOps), allocatable :: OpsNU
  
-        real(rkind), dimension(:,:,:,:), allocatable :: local_rbuffxC
-        real(rkind), dimension(:,:,:), pointer :: fx, fy, fz
+        real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz
         complex(rkind), dimension(:,:,:), pointer :: fChat, fEhat, zbuffC, zbuffE
 
         ! variables needed for halo communication
@@ -45,7 +45,7 @@ module turbineMod
         real(rkind), allocatable, dimension(:,:,:) :: ySendBuf, zSendBuf, yRightHalo, zRightHalo, zLeftHalo
 
         logical :: dumpTurbField = .false.
-        integer :: step = 0
+        integer :: step = 0, ADM_Type 
     contains
 
         procedure :: init
@@ -65,32 +65,33 @@ subroutine reset_turbArray(this)
     class(TurbineArray), intent(inout), target :: this
     integer :: i
 
-    if(ADM) then
+    !if(ADM) then
       do i = 1, this%nTurbines
         ! CHANGED to allow avoiding inst_horz_avg calculations - useful for
         ! testing/debugging
-        call this%turbArrayADM(i)%reset_turbine()
+        !call this%turbArrayADM(i)%reset_turbine()
       end do 
-    endif
+    !endif
 
 end subroutine
 
 
-subroutine init(this, inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffYE, cbuffzC, cbuffzE, mesh, dx, dy, dz)
+subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbuffzC, cbuffzE, mesh, dx, dy, dz)
     class(TurbineArray), intent(inout), target :: this
     character(len=*),    intent(in)            :: inputFile
-    type(spectral), target :: spectC, spectE
-    type(decomp_info), target :: gpC, gpE!, sp_gpC, sp_gpE
-    real(rkind), dimension(:,:,:,:), target :: rbuffxC   ! actually 3 are required
-    complex(rkind), dimension(:,:,:,:), target :: cbuffyC, cbuffyE, cbuffzC, cbuffzE
+    type(spectral), target, intent(in) :: spectC, spectE
+    type(decomp_info), target, intent(in) :: gpC, gpE!, sp_gpC, sp_gpE
+    !real(rkind), dimension(:,:,:,:), target, intent(inout) :: rbuffxC   ! actually 3 are required
+    complex(rkind), dimension(:,:,:,:), target, intent(inout) :: cbuffyC, cbuffyE, cbuffzC, cbuffzE
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), intent(in) :: dx, dy, dz
     logical :: useWindTurbines = .TRUE. ! .FALSE. implies ALM
     real(rkind) :: xyzPads(6)
+    logical :: ADM = .TRUE. ! .FALSE. implies ALM
 
-    integer :: i, ierr
+    integer :: i, ierr, ADM_Type = 2
 
-    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir
+    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -105,9 +106,10 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbu
     this%spectE => spectE
     this%sp_gpE => this%spectE%spectdecomp
 
-    allocate(this%local_rbuffxC(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3), 3))
+    allocate(this%fx(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+    allocate(this%fy(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+    allocate(this%fz(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
 
-    this%fx => this%local_rbuffxC(:,:,:,1); this%fy => this%local_rbuffxC(:,:,:,2);  this%fz => this%local_rbuffxC(:,:,:,3)
     this%fChat => cbuffyC(:,:,:,1); this%fEhat => cbuffyE(:,:,:,1)
     this%zbuffC => cbuffzC(:,:,:,1); this%zbuffE => cbuffzE(:,:,:,1)
 
@@ -118,13 +120,24 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbu
     this%nTurbines = num_turbines;
 
     if(ADM) then
-      allocate (this%turbArrayADM(this%nTurbines))
-      do i = 1, this%nTurbines
-        call this%turbArrayADM(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3),this%gpC)
-      end do
-      call message(1,"WIND TURBINE ADM model initialized")
+      this%ADM_Type = ADM_Type
+      select case (ADM_Type)
+      case (1)
+         allocate (this%turbArrayADM(this%nTurbines))
+         do i = 1, this%nTurbines
+            call this%turbArrayADM(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3),this%gpC)
+         end do
+         call message(0,"WIND TURBINE ADM (Type 1) array initialized")
+      case (2)
+         allocate (this%turbArrayADM_T2(this%nTurbines))
+         do i = 1, this%nTurbines
+            call this%turbArrayADM_T2(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
+         end do
+         call message(0,"WIND TURBINE ADM (Type 2) array initialized")
+      end select 
     else
-       call mpi_barrier(mpi_comm_world, ierr); call message(1,"Initializing WIND TURBINE ALM model")
+      call GracefulExit("Actuator Line implementation temporarily disabled. Talk to Aditya if you want to know why.",423)
+      call mpi_barrier(mpi_comm_world, ierr); call message(1,"Initializing WIND TURBINE ALM model")
       call mpi_barrier(mpi_comm_world, ierr); call message(1,"Setting up for halo communication")
       call this%init_halo_communication(mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3), dx, dy, dz, xyzPads)
       call mpi_barrier(mpi_comm_world, ierr); call message(1,"Done setting up for halo communication")
@@ -150,24 +163,31 @@ subroutine destroy(this)
     class(TurbineArray), intent(inout) :: this
     integer :: i
 
-    nullify(this%gpC, this%gpE, this%spectC, this%sp_gpC, this%fx, this%fy, this%fz)
+    nullify(this%gpC, this%gpE, this%spectC, this%sp_gpC)
     nullify(this%zbuffC, this%zbuffE, this%fChat, this%fEhat)
-    deallocate(this%local_rbuffxC)
+    deallocate(this%fx, this%fy, this%fz)
 
     deallocate(this%OpsNU)
 
-    if(ADM) then
+    !if(ADM) then
+    select case (this%ADM_Type)
+    case (0)
       do i = 1, this%nTurbines
         call this%turbArrayADM(i)%destroy()
       end do
-      deallocate(this%turbArrayADM)
-    else
-      call this%destroy_halo_communication()
+    case (1)
       do i = 1, this%nTurbines
-        call this%turbArrayALM(i)%destroy()
+        call this%turbArrayADM_T2(i)%destroy()
       end do
-      deallocate(this%turbArrayALM)
-    endif
+    end select
+      !deallocate(this%turbArrayADM)
+    !else
+    !  call this%destroy_halo_communication()
+    !  do i = 1, this%nTurbines
+    !    call this%turbArrayALM(i)%destroy()
+    !  end do
+    !  deallocate(this%turbArrayALM)
+    !endif
 
 end subroutine
 
@@ -322,44 +342,52 @@ subroutine halo_communication(this, u, v, wC)
 
 end subroutine
 
-subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, inst_horz_avg)
+subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_horz_avg)
     class(TurbineArray), intent(inout), target :: this
     real(rkind),                                                                         intent(in) :: dt
     real(rkind),    dimension(this%gpC%xsz(1),   this%gpC%xsz(2),   this%gpC%xsz(3)),    intent(in) :: u, v, wC
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs 
+    logical,                                                                             intent(in) :: newTimestep
     real(rkind),    dimension(:),                                                        intent(out), optional   :: inst_horz_avg
-    integer :: i
+    integer :: i, ierr
     !integer :: ierr
 
-    this%fx = zero; this%fy = zero; this%fz = zero
-    if(ADM) then
-      do i = 1, this%nTurbines
-        ! CHANGED to allow avoiding inst_horz_avg calculations - useful for
-        ! testing/debugging
-        if (present(inst_horz_avg)) then
-            call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz,inst_horz_avg(8*i-7:8*i))
-        else
-            call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)   
-        end if 
-      end do
-    else
-       !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Starting halo communication"); call mpi_barrier(mpi_comm_world, ierr)
-      call this%halo_communication(u, v, wC)
-       !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Done halo communication"); call mpi_barrier(mpi_comm_world, ierr)
-      do i = 1, this%nTurbines
-        ! CHANGED to allow avoiding inst_horz_avg calculations - useful for
-        ! testing/debugging
-        if (present(inst_horz_avg)) then
-            call this%turbArrayALM(i)%get_RHS(dt, u, v, wC, this%yRightHalo, this%zLeftHalo, this%zRightHalo, this%fx, this%fy, this%fz, inst_horz_avg(8*i-7:8*i))
-        else
-            call this%turbArrayALM(i)%get_RHS(dt, u, v, wC, this%yRightHalo, this%zLeftHalo, this%zRightHalo, this%fx, this%fy, this%fz)   
-        end if 
-      end do
-    endif
-       !call mpi_barrier(mpi_comm_world, ierr)
-       !write(*,'(i5,6(e19.12,1x))') nrank, maxval(this%fx), minval(this%fx), maxval(this%fy), minval(this%fy), maxval(this%fz), minval(this%fz) 
-       !call mpi_barrier(mpi_comm_world, ierr)
+    if (newTimeStep) then
+         this%fx = zero; this%fy = zero; this%fz = zero
+         !if(ADM) then
+           select case (this%ADM_Type)
+           case(1)
+              do i = 1, this%nTurbines
+              ! CHANGED to allow avoiding inst_horz_avg calculations - useful for
+              ! testing/debugging
+                 if (present(inst_horz_avg)) then
+                    call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz,inst_horz_avg(8*i-7:8*i))
+                 else
+                    call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)   
+                 end if 
+              end do
+           case(2)
+               do i = 1, this%nTurbines
+                  call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
+               end do
+               call mpi_barrier(mpi_comm_world, ierr)
+           end select 
+         !else
+         !   !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Starting halo communication"); call mpi_barrier(mpi_comm_world, ierr)
+         !  call this%halo_communication(u, v, wC)
+         !   !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Done halo communication"); call mpi_barrier(mpi_comm_world, ierr)
+         !  do i = 1, this%nTurbines
+         !    ! CHANGED to allow avoiding inst_horz_avg calculations - useful for
+         !    ! testing/debugging
+         !    if (present(inst_horz_avg)) then
+         !        call this%turbArrayALM(i)%get_RHS(dt, u, v, wC, this%yRightHalo, this%zLeftHalo, this%zRightHalo, this%fx, this%fy, this%fz, inst_horz_avg(8*i-7:8*i))
+         !    else
+         !        call this%turbArrayALM(i)%get_RHS(dt, u, v, wC, this%yRightHalo, this%zLeftHalo, this%zRightHalo, this%fx, this%fy, this%fz)   
+         !    end if 
+         !  end do
+         !endif
+    end if 
 
     ! add forces to rhs
     call this%spectC%fft(this%fx,this%fChat)
@@ -374,20 +402,6 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, inst_horz_avg)
     call this%OpsNU%InterpZ_Cell2Edge(this%zbuffC,this%zbuffE,zeroC,zeroC)
     call transpose_z_to_y(this%zbuffE,this%fEhat,this%sp_gpE)
     wrhs = wrhs + this%fEhat
-
-    !if(this%dumpTurbField) then
-    !  !if(ADM) then
-    !  !else
-    !  !  do i = 1, this%nTurbines
-    !  !    call this%turbArrayALM(i)%dumpTurbineField()
-    !  !  enddo
-    !  !endif
-    !  this%step = this%step + 1
-    !  call this%dumpFullField(this%fx, 'wtfx')
-    !  call this%dumpFullField(this%fy, 'wtfy')
-    !  call this%dumpFullField(this%fz, 'wtfz')
-    !  this%dumpTurbField = .false.
-    !endif
 
 end subroutine 
 

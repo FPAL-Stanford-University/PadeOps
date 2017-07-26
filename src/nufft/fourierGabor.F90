@@ -46,7 +46,7 @@ subroutine init(this, kmin, kmax, nk, ntheta, xcenter, ycenter, zcenter, xwidth,
 
    this%nx = size(xline); this%ny = size(yline); this%nz = size(zline)  
    allocate(this%window(this%nx, this%ny, this%nz))
-   call get_window(xline,yline,zline,[xcenter,ycenter,zcenter],[xwidth,ywidth,zwidth], this%window, this%isActive)
+   call get_window(xline,yline,zline,[xcenter,ycenter,zcenter],[two*xwidth,two*ywidth,two*zwidth], this%window, this%isActive)
    
    if (this%isActive) then
       allocate(this%wavenums(nk*ntheta,3), this%velhats(nk*ntheta,3))
@@ -73,7 +73,6 @@ subroutine init(this, kmin, kmax, nk, ntheta, xcenter, ycenter, zcenter, xwidth,
    end if 
 
 end subroutine 
-
 
 subroutine getField(this, field, fid)
    class(fourierGabor), intent(inout) :: this

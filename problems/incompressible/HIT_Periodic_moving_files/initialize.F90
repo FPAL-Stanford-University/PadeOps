@@ -1,4 +1,4 @@
-module AD_Coriolis_parameters
+module HIT_Periodic_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
@@ -9,16 +9,17 @@ module AD_Coriolis_parameters
     integer :: seedw = 131344
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
-    
-    real(rkind), parameter :: xdim = 1000._rkind, udim = 0.45_rkind
-    real(rkind), parameter :: timeDim = xdim/udim
+ 
+    logical :: useBandpassFilter = .false. 
+    real(rkind) :: k_bp_left, k_bp_right
+    real(rkind), dimension(:,:,:), allocatable :: uTarget, vTarget, wTarget
 
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use AD_Coriolis_parameters    
-    use kind_parameters,  only: rkind
-    use constants,        only: one,two
+    use HIT_Periodic_parameters    
+    use kind_parameters,  only: rkind, clen
+    use constants,        only: one,two, pi
     use decomp_2d,        only: decomp_info
     implicit none
 
@@ -29,15 +30,19 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
-
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=AD_CoriolisINPUT)
-    close(ioUnit)    
+    character(len=clen)  :: dir_init_files
+    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    character(len=clen)  :: ufname, vfname, wfname
+    logical :: BandpassFilterFields = .false. 
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
 
     !Lx = two*pi; Ly = two*pi; Lz = one
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=HIT_PeriodicINPUT)
+    close(ioUnit)    
 
+    Lx = two*pi; Ly = two*pi; Lz = two*pi
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
     ! If base decomposition is in Y
@@ -67,17 +72,32 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 
     end associate
 
+    k_bp_left = kleft
+    k_bp_right = kright
+
+    useBandPassFilter = BandpassFilterFields
+    if (useBandPassFilter) then
+      allocate(uTarget(size(mesh,1), size(mesh,2), size(mesh,3)))
+      allocate(vTarget(size(mesh,1), size(mesh,2), size(mesh,3)))
+      allocate(wTarget(size(mesh,1), size(mesh,2), size(mesh,3)))
+      uTarget = 0.d0
+      vTarget = 0.d0
+      wTarget = 0.d0
+    end if 
 end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use AD_Coriolis_parameters
-    use kind_parameters,    only: rkind
+    use HIT_Periodic_parameters
+    use PadeDerOps, only: Pade6Stagg
+    use kind_parameters,    only: rkind, clen 
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
     use random,             only: gaussian_random
     use decomp_2d          
+    use decomp_2d_io
     use reductions,         only: p_maxval, p_minval
-    use exits,              only: message_min_max
+    use cd06staggstuff,     only: cd06stagg
+    use exits,              only: gracefulExit,message_min_max
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -87,14 +107,18 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
+    real(rkind) :: dz
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: nz, nzE
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
+    type(cd06stagg), allocatable :: der
+    integer :: nz, nzE, k
+    character(len=clen)  :: ufname, vfname, wfname 
+    real(rkind) :: TI = 0.1, uadv = 0.d0, kleft = 10.d0, kright = 64.d0
+    logical :: BandpassFilterFields = .false. 
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=AD_CoriolisINPUT)
+    read(unit=ioUnit, NML=HIT_PeriodicINPUT)
     close(ioUnit)    
 
 
@@ -107,25 +131,20 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-   
-    u = one!z*(2 - z) + epsnd*(z/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
-      !+ epsnd*((2-z)/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
+    dz = z(1,1,2) - z(1,1,1)
+
     
-    v = zero!- epsnd*(z/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
-        !- epsnd*((2-z)/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
-    
-    wC= zero  
-    
-    !allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    !call gaussian_random(randArr,-one,one,seedu + 10*nrank)
-    !!do k = 1,size(randArr,3)
-    !!     u(:,:,k) = u(:,:,k) + randscale*randArr(:,:,k)
-    !!end do
-    !deallocate(randArr)
+    call decomp_2d_read_one(1,u ,ufname, decompC)
+    call decomp_2d_read_one(1,v ,vfname, decompC)
+    call decomp_2d_read_one(1,wC,wfname, decompC)
+  
+    u  = uadv + TI*u
+    v  = TI*v
+    wC = TI*wC
 
     call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
     call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
-    call message_min_max(1,"Bounds for w:", p_minval(minval(w)), p_maxval(maxval(w)))
+    call message_min_max(1,"Bounds for w:", p_minval(minval(wC)), p_maxval(maxval(wC)))
     
     !u = one!1.6d0*z*(2.d0 - z) 
     !v = zero;
@@ -144,7 +163,11 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     call transpose_x_to_y(wC,ybuffC,decompC)
     call transpose_y_to_z(ybuffC,zbuffC,decompC)
     zbuffE = zero
-    zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
+    allocate(der)
+    call der%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .false., &
+                             isTopSided = .false., isBotSided = .false.)
+    call der%interpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))                         
+    deallocate(der)
     call transpose_z_to_y(zbuffE,ybuffE,decompE)
     call transpose_y_to_x(ybuffE,w,decompE) 
     
@@ -155,7 +178,6 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
       
     nullify(u,v,w,x,y,z)
    
-
     call message(0,"Velocity Field Initialized")
 
 end subroutine
@@ -166,13 +188,13 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 5, nyplanes = 1, nzplanes = 1
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [128, 256, 384]
-    yplanes = [256]
-    zplanes = [96]
+    xplanes = [64]
+    yplanes = [64]
+    zplanes = [20]
 
 end subroutine
 
@@ -188,22 +210,25 @@ end subroutine
 
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
-    use kind_parameters,    only: rkind
+    use kind_parameters,    only: rkind, clen 
     use constants,          only: zero, one
     implicit none
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz
-    integer :: iounit
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
+    real(rkind) :: ThetaRef
+    integer :: iounit 
+    character(len=clen)  :: ufname, vfname, wfname 
+    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    logical :: BandpassFilterFields = .false. 
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=AD_CoriolisINPUT)
+    read(unit=ioUnit, NML=HIT_PeriodicINPUT)
     close(ioUnit)    
 
     ! Do nothing really since this is an unstratified simulation
@@ -211,18 +236,19 @@ end subroutine
 
 
 subroutine set_Reference_Temperature(inputfile, Tref)
-    use kind_parameters,    only: rkind
+    use kind_parameters,    only: rkind, clen 
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz
     integer :: iounit
+    character(len=clen)  :: ufname, vfname, wfname 
+    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    logical :: BandpassFilterFields = .false. 
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
     
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
-
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=AD_CoriolisINPUT)
+    read(unit=ioUnit, NML=HIT_PeriodicINPUT)
     close(ioUnit)    
      
     Tref = 0.d0
@@ -232,7 +258,7 @@ subroutine set_Reference_Temperature(inputfile, Tref)
 end subroutine
 
 subroutine hook_probes(inputfile, probe_locs)
-    use kind_parameters,    only: rkind
+    use kind_parameters,    only: rkind, clen 
     real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
     character(len=*),                intent(in)    :: inputfile
     integer, parameter :: nprobes = 2
@@ -247,7 +273,6 @@ subroutine hook_probes(inputfile, probe_locs)
     ! Add probes here if needed
     ! Example code: The following allocates 2 probes at (0.1,0.1,0.1) and
     ! (0.2,0.2,0.2)  
-    print*, inputfile
     allocate(probe_locs(3,nprobes))
     probe_locs(1,1) = 0.1d0; probe_locs(2,1) = 0.1d0; probe_locs(3,1) = 0.1d0;
     probe_locs(1,2) = 0.2d0; probe_locs(2,2) = 0.2d0; probe_locs(3,2) = 0.2d0;

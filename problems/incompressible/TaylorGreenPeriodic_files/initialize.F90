@@ -88,10 +88,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind) :: epsnd = 0.2, dz
-    real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
+    real(rkind) :: dz
+    real(rkind), dimension(:,:,:), allocatable :: xE, yE, zE, ybuffC, ybuffE, zbuffC, zbuffE
     type(cd06stagg), allocatable :: der
-    integer :: nz, nzE, k, directionID
+    integer :: directionID
     namelist /TaylorGreenPeriodicINPUT/ directionID
 
     ioUnit = 11
@@ -111,19 +111,53 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     x => mesh(:,:,:,1)
  
     dz = z(1,1,2) - z(1,1,1)
+    allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
+    allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
+
+    allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
+    allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
+    allocate(zE(decompE%xsz(1),decompE%xsz(2), decompE%xsz(3)))
+    allocate(xE(decompE%xsz(1),decompE%xsz(2), decompE%xsz(3)))
+    allocate(yE(decompE%xsz(1),decompE%xsz(2), decompE%xsz(3)))
+    allocate(der)
+    call der%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .false., &
+                             isTopSided = .true., isBotSided = .true.)
+  
+
+    call transpose_x_to_y(z,ybuffC,decompC)
+    call transpose_y_to_z(ybuffC,zbuffC,decompC)
+    call der%interpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))                         
+    call transpose_z_to_y(zbuffE,ybuffE,decompE)
+    call transpose_y_to_x(ybuffE,zE,decompE) 
+    
+    call transpose_x_to_y(x,ybuffC,decompC)
+    call transpose_y_to_z(ybuffC,zbuffC,decompC)
+    call der%interpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))                         
+    call transpose_z_to_y(zbuffE,ybuffE,decompE)
+    call transpose_y_to_x(ybuffE,xE,decompE) 
+
+    call transpose_x_to_y(y,ybuffC,decompC)
+    call transpose_y_to_z(ybuffC,zbuffC,decompC)
+    call der%interpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))                         
+    call transpose_z_to_y(zbuffE,ybuffE,decompE)
+    call transpose_y_to_x(ybuffE,yE,decompE) 
+    
     select case(directionID)
     case(1) 
       u  =  sin(x)*cos(y)
       v  = -cos(x)*sin(y)
-      wC = zero
+      w  = zero
+      wC = zero 
     case(2)
       u  =  sin(x)*cos(z)
       v  =  zero
-      wC = -cos(x)*sin(z)
+      w  = -cos(xE)*sin(zE)
+      wC = -cos(x) *sin(z )
     case(3)
       u  =  zero
       v  =  sin(y)*cos(z)
-      wC = -cos(y)*sin(z)
+      w  = -cos(yE)*sin(zE)
+      wC = -cos(y )*sin(z )
     case default
       call gracefulExit("Invalid choice of directionID.",32)
     end select
@@ -138,36 +172,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
     call message_min_max(1,"Bounds for w:", p_minval(minval(wC)), p_maxval(maxval(wC)))
     
-    !u = one!1.6d0*z*(2.d0 - z) 
-    !v = zero;
-    !w = zero;
-
-    ! Interpolate wC to w
-    allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
-    allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
-
-    allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
-    allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
-   
-    nz = decompC%zsz(3)
-    nzE = nz + 1
-
-    call transpose_x_to_y(wC,ybuffC,decompC)
-    call transpose_y_to_z(ybuffC,zbuffC,decompC)
-    zbuffE = zero
-    allocate(der)
-    call der%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .false., &
-                             isTopSided = .false., isBotSided = .false.)
-    call der%interpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))                         
-    deallocate(der)
-    call transpose_z_to_y(zbuffE,ybuffE,decompE)
-    call transpose_y_to_x(ybuffE,w,decompE) 
-    
-    
-
-    deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
-  
-      
+    deallocate(zE, xE, yE, ybuffC,ybuffE,zbuffC, zbuffE) 
     nullify(u,v,w,x,y,z)
    
     call message(0,"Velocity Field Initialized")

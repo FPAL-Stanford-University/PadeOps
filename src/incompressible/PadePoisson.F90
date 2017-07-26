@@ -91,9 +91,9 @@ contains
          nyT = this%sp_gp%zsz(2)
          nz  = this%sp_gp%zsz(3)
          
-         k3_loc = GetWaveNums(nz, dz)
          k1 = GetWaveNums(this%sp%nx_g, dx)
          k2 = GetWaveNums(this%sp%ny_g, dy)
+         k3_loc = GetWaveNums(nz, dz)
          call this%derivZ%getModifiedWavenumbers(k3_loc,k3_loc_mod)
          
          myxst = this%sp_gp%zst(1); myyst = this%sp_gp%zst(2)
@@ -402,7 +402,7 @@ contains
 
         call transpose_y_to_z(this%f2dy,this%uhatInZ,this%sp_gp)
         call transpose_y_to_z(what, this%w2, this%sp_gpE)
-        
+
         call this%derivZ%ddz_E2C(this%w2, this%f2d, 0, 0)  ! Periodic dwdz
         
         this%f2d = this%f2d + this%uhatInZ
@@ -758,10 +758,7 @@ contains
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(inout) :: pressure
         integer :: ii, jj, kk
 
-
-        print*, this%PeriodicInZ
         if (this%PeriodicInZ) then
-           print*, "here"
             call this%Periodic_getPressure(uhat, vhat, what, pressure)
         else
             ! Step 0: compute the stokes pressure which will fix the wall BCs
@@ -1172,6 +1169,7 @@ contains
         complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: what
 
         real(rkind), dimension(this%sp_gp%xsz(1),this%sp_gp%xsz(2),this%sp_gp%xsz(3)), intent(out) :: divergence
+        !real(rkind), dimension(:,:,:), intent(out) :: divergence
 
         real(rkind) :: maxDiv, myMaxDiv
         integer :: ii, jj, kk, ierr
