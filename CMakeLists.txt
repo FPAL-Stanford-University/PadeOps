@@ -30,6 +30,12 @@ set(HDF5_PATH $ENV{HDF5_PATH})
 set(HDF5_LIBRARY_PATH "${HDF5_PATH}/lib")
 set(HDF5_INCLUDE_PATH "${HDF5_PATH}/include")
 
+# Where to look for fftpack
+set(FFTPACK_PATH $ENV{FFTPACK_PATH})
+set(FFTPACK_LIBRARY_PATH "${FFTPACK_PATH}/lib")
+set(FFTPACK_INCLUDE_PATH "${FFTPACK_PATH}/include")
+
+
 set(CMAKE_Fortran_COMPILER_ID $ENV{COMPILER_ID})
 
 # Intel compiler suite
