@@ -174,7 +174,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
         deallocate(this%dsq, this%tag_face)
     end if 
 
-    call message(1, "Initializing Actuator Disk (ADM Type=1) number", ActuatorDisk_T2ID)
+    call message(1, "Initializing Actuator Disk (ADM Type=2) number", ActuatorDisk_T2ID)
     call tic()
     allocate(this%smearing_base(size(xG,1), size(xG,2), size(xG,3))) 
     this%smearing_base = 0.d0

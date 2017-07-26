@@ -89,7 +89,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     real(rkind) :: xyzPads(6)
     logical :: ADM = .TRUE. ! .FALSE. implies ALM
 
-    integer :: i, ierr, ADM_Type = 1
+    integer :: i, ierr, ADM_Type = 2
 
     namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type
 
@@ -122,18 +122,18 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     if(ADM) then
       this%ADM_Type = ADM_Type
       select case (ADM_Type)
-      case (0)
+      case (1)
          allocate (this%turbArrayADM(this%nTurbines))
          do i = 1, this%nTurbines
             call this%turbArrayADM(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3),this%gpC)
          end do
-         call message(0,"WIND TURBINE ADM (Type 0) array initialized")
-      case (1)
+         call message(0,"WIND TURBINE ADM (Type 1) array initialized")
+      case (2)
          allocate (this%turbArrayADM_T2(this%nTurbines))
          do i = 1, this%nTurbines
             call this%turbArrayADM_T2(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
          end do
-         call message(0,"WIND TURBINE ADM (Type 1) array initialized")
+         call message(0,"WIND TURBINE ADM (Type 2) array initialized")
       end select 
     else
       call GracefulExit("Actuator Line implementation temporarily disabled. Talk to Aditya if you want to know why.",423)
@@ -357,7 +357,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
          this%fx = zero; this%fy = zero; this%fz = zero
          !if(ADM) then
            select case (this%ADM_Type)
-           case(0)
+           case(1)
               do i = 1, this%nTurbines
               ! CHANGED to allow avoiding inst_horz_avg calculations - useful for
               ! testing/debugging
@@ -367,7 +367,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                     call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)   
                  end if 
               end do
-           case(1)
+           case(2)
                do i = 1, this%nTurbines
                   call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
                end do
