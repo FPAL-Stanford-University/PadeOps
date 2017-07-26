@@ -4,13 +4,13 @@ outputdir             = "/home/aditya90/Codes/PadeOps/data/HIT_testing/output"  
 nx                    = 256          ! Number of points in X
 ny                    = 256          ! Number of points in Y
 nz                    = 256          ! Number of points in Z
-tstop                 = 200.D0       ! Physical time to stop the simulation
+tstop                 = 500.D0       ! Physical time to stop the simulation
 CFL                   = 1.4D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = -0.1D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.     ! Set to false if it's a fresh simulation 
-restartFile_TID       = 6240        ! TimeID of the restart file being used
+restartFile_TID       = 33000        ! TimeID of the restart file being used
 restartFile_RID       = 75          ! RunID of the restart file being used
 /
 /
@@ -58,10 +58,11 @@ useGeostrophicForcing = .FALSE.     ! This is true if forcing is provided using 
 isStratified          = .FALSE.     ! Use Stratification / active scalar in momentum
 Pr                    = 0.6D0       ! Turbulent Prandtl Number; used when 
 Ro                    = 1.D10       ! Rossby Number used when Coriolis is ON
-Re                    = 100.D0       ! Reynolds Number; used when isInvisid is FALSE
+Re                    = 1.D10       ! Reynolds Number; used when isInvisid is FALSE
 Fr                    = 1.D10       ! Froude number; used when isStratified is TRUE
 G_geostrophic         = 1.D0        ! Geostrophic wind speed 
 G_alpha               = 0.D0        ! Geostrophic wind angle (degrees, from +x axis)
+latitude              = 90.d0       ! Latitude 
 dPfdx                 = 0.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
@@ -77,6 +78,7 @@ P_compFreq            = 10          ! How often (timesteps) do you want to compu
 /
 /
 &BCs
+useFringe             = .FALSE.      ! This is false if simulation is periodic. 
 PeriodicInZ           = .TRUE.      ! Is the problem periodic in Z? If yes, then everything below is ignored. 
 topWall               = 2           ! no_slip = 1, slip = 2
 botWall               = 2           ! no_slip = 1, slip = 2
@@ -113,8 +115,8 @@ t_dumpKSprep          = 10             ! Dumping Frequency for KS files
 /
 &HIT_Forcing 
 Nwaves = 20
-kmin = 6.d0
-kmax = 7.d0
+kmin = 4.d0
+kmax = 5.d0
 EpsAmplitude = 0.05d0
 RandSeedToAdd = 0
 /
@@ -125,4 +127,7 @@ uadv                  = 0.d0
 ufname                = "/home/aditya90/Codes/PadeOps/data/HIT_testing/u_HIT_init_256_kmin_3.dat"
 vfname                = "/home/aditya90/Codes/PadeOps/data/HIT_testing/v_HIT_init_256_kmin_3.dat"
 wfname                = "/home/aditya90/Codes/PadeOps/data/HIT_testing/w_HIT_init_256_kmin_3.dat"
+kleft                 = 10.d0
+kright                = 64.d0 
+BandpassFilterFields  = .TRUE. 
 /
