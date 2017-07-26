@@ -326,7 +326,7 @@ contains
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
         real(rkind) :: Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false.
-        integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1
+        integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true.  
         logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true. 
         real(rkind), dimension(:,:), allocatable :: probe_locs
@@ -343,7 +343,7 @@ contains
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, &
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude, useHITForcing
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe
-        namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir  
+        namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
                                  useExhaustiveFFT, dealiasFact 
@@ -1626,42 +1626,35 @@ contains
         class(igrid), intent(inout) :: this
         !integer,           intent(in)    :: RKstage
 
-        call tic()
         ! Step 1: Non Linear Term 
         if (useSkewSymm) then
             call this%addNonLinearTerm_skewSymm()
         else
             call this%AddNonLinearTerm_Rot()
         end if
-        call toc("Advective term", mpi_comm_world)
 
-        call tic()
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
         end if 
-        call toc("Coriolis term", mpi_comm_world)
         
         ! Step 3a: Extra Forcing 
         if (this%useExtraForcing) then
             call this%addExtraForcingTerm()
         end if
 
-        call tic()
         ! Step 3b: Wind Turbines
         !if (this%useWindTurbines .and. (RKstage==1)) then
         if (this%useWindTurbines) then
            if (allocated(this%inst_horz_avg_turb)) then
                call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
-                                    this%u_rhs, this%v_rhs, this%w_rhs, this%inst_horz_avg_turb)
+                                    this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep, this%inst_horz_avg_turb)
            else
                call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
-                                    this%u_rhs, this%v_rhs, this%w_rhs)
+                                    this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep)
            end if
         end if 
-        call toc("Wind Turbines", mpi_comm_world)
        
-        call tic()
         ! Step 4: Buoyance + Sponge (inside Buoyancy)
         if (this%isStratified .or. this%initspinup) then
             call this%addBuoyancyTerm()
@@ -1671,9 +1664,7 @@ contains
         if (.not. this%isInviscid) then
             call this%addViscousTerm()
         end if
-        call toc("Buoyancy + Visc", mpi_comm_world)
 
-        call tic()
         ! Step 6: SGS Viscous Term
         if (this%useSGS) then
             call this%sgsmodel%getRHS_SGS(this%u_rhs,      this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
@@ -1686,9 +1677,7 @@ contains
             end if
             
         end if
-        call toc("SGS term", mpi_comm_world)
 
-        call tic()
         ! Step 7: Fringe source term if fringe is being used (non-periodic)
         if (this%useFringe) then
             call this%fringe_x%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
@@ -1699,7 +1688,6 @@ contains
             call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep)
         end if 
 
-        call toc("Fringe + HIT", mpi_comm_world)
         !if (nrank == 0) print*, maxval(abs(this%u_rhs)), maxval(abs(this%v_rhs)), maxval(abs(this%w_rhs))
     end subroutine
 

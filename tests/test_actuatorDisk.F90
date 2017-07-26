@@ -14,17 +14,17 @@ program test_actuatorDisk
 
     type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
     type(actuatorDisk), dimension(:), allocatable :: hawts
-    integer, parameter :: nx = 512, ny = 128, nz = 128
+    integer, parameter :: nx = 1024, ny = 256, nz = 256
     character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/"
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
-    real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs, rhsv, rhsw
-    real(rkind), parameter :: Lx = 4.0*pi, Ly = 2.0*pi, Lz = 2.0*pi, diam = 2.d0
+    real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs1, rhsv, rhsw, rhs2
+    real(rkind), parameter :: Lx = 8.0d0*pi, Ly = 2.0d0*pi, Lz = 2.0d0*pi, diam = 2.d0
     real(rkind) :: dx, dy, dz
     type(decomp_info) :: gp 
     integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0, num_turbines 
     real(rkind) :: xPeriods = 2.d0, yPeriods = 2.d0, zpeak = 0.3d0, epsnd = 5.d0, z0init = 1.d-4 
     real(rkind) :: inst_val(8)
-    real(rkind) :: comp1, comp2
+    real(rkind) :: comp1, comp2, maxdiff
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -33,7 +33,8 @@ program test_actuatorDisk
     allocate(xG(gp%xsz(1),gp%xsz(2),gp%xsz(3))); allocate(yG(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
     allocate(zG(gp%xsz(1),gp%xsz(2),gp%xsz(3))); allocate(u(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
     allocate(v(gp%xsz(1),gp%xsz(2),gp%xsz(3))); allocate(w(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
-    allocate(rhs(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(rhs1(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(rhs2(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
     allocate(rhsv(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
     allocate(rhsw(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
 
@@ -64,34 +65,36 @@ program test_actuatorDisk
         call hawts_T2(idx)%init(inputDir, idx, xG, yG, zG)
     end do 
     
-    rhs = 0.d0
+    rhs1 = 0.d0
     call mpi_barrier(mpi_comm_world, ierr)
     call tic()
     do idx = 1,num_turbines
-        call hawts(idx)%get_RHS(u, v, w, rhs, rhsv, rhsw)
+        call hawts(idx)%get_RHS(u, v, w, rhs1, rhsv, rhsw)
     end do 
     call mpi_barrier(mpi_comm_world, ierr)
     call toc()
-    call decomp_2d_write_one(1,rhs,"temp_T1.bin", gp)
-    call message(2,"Computed Source (T1):", p_sum(sum(rhs)) * dx*dy*dz)
+    call decomp_2d_write_one(1,rhs1,"temp_T1.bin", gp)
+    call message(2,"Computed Source (T1):", p_sum(sum(rhs1)) * dx*dy*dz)
     
-    rhs = 0.d0
+    rhs2 = 0.d0
     call mpi_barrier(mpi_comm_world, ierr)
     call tic()
     do idx = 1,num_turbines
-        call hawts_T2(idx)%get_RHS(u, v, w, rhs, rhsv, rhsw)
+        call hawts_T2(idx)%get_RHS(u, v, w, rhs2, rhsv, rhsw)
     end do 
     call mpi_barrier(mpi_comm_world, ierr)
     call toc()
-    call decomp_2d_write_one(1,rhs,"temp_T2.bin", gp)
+    call decomp_2d_write_one(1,rhs2,"temp_T2.bin", gp)
     
-    call message(2,"Computed Source (T2):", p_sum(sum(rhs)) * dx*dy*dz)
+    call message(2,"Computed Source (T2):", p_sum(sum(rhs2)) * dx*dy*dz)
     call message(2,"Expected Source:", -(num_turbines*0.5d0*(pi/4.d0)*(diam**2)*1.33d0))
 
+    maxDiff = p_maxval(abs(rhs2 - rhs1))
+    if (nrank == 0) print*, "maximum difference=", maxDiff
     do idx = 1,num_turbines
     !  call hawts(idx)%destroy()
     end do 
     deallocate(hawts)
-    deallocate(xG, yG, zG, u, v, w, rhs)
+    deallocate(xG, yG, zG, u, v, w, rhs1, rhs2)
     call MPI_Finalize(ierr)
 end program 

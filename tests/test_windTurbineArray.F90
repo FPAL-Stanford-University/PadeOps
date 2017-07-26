@@ -100,7 +100,7 @@ program test_wtarray
 
     call mpi_barrier(mpi_comm_world, ierr); print *, '--',1, size(mesh,1), size(mesh,2), size(mesh,3), size(mesh,4);     call mpi_barrier(mpi_comm_world, ierr)
     allocate(WindTurbineArr)
-    call WindTurbineArr%init(inputFile, gp, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz)
+    call WindTurbineArr%init(inputFile, gp, gpE, spectC, spectE, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz)
     allocate(inst_horz_avg_turb (8*WindTurbineArr%nTurbines))
     call mpi_barrier(mpi_comm_world, ierr); print *, '--',2;     call mpi_barrier(mpi_comm_world, ierr)
 
@@ -146,7 +146,7 @@ program test_wtarray
       call mpi_barrier(mpi_comm_world, ierr)
       if(nrank==0) write(*,*) 'Time Step No.', tid
       call tic()
-      call WindTurbineArr%getForceRHS(dt, u, v, wC, rhsu, rhsv, rhsw, inst_horz_avg_turb)
+      call WindTurbineArr%getForceRHS(dt, u, v, wC, rhsu, rhsv, rhsw, .true., inst_horz_avg_turb)
       call mpi_barrier(mpi_comm_world, ierr)
       call toc()
   
