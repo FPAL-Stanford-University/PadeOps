@@ -11,7 +11,7 @@ module HIT_Periodic_parameters
     integer :: nxg, nyg, nzg
  
     logical :: useBandpassFilter = .false. 
-    real(rkind) :: k_bp_left, k_bp_right
+    real(rkind) :: k_bp_left, k_bp_right, uadvect = 10.0, x_shift 
     real(rkind), dimension(:,:,:), allocatable :: uTarget, vTarget, wTarget
 
 end module     
@@ -74,7 +74,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 
     k_bp_left = kleft
     k_bp_right = kright
-
+    uadvect = uadv
     useBandPassFilter = BandpassFilterFields
     if (useBandPassFilter) then
       allocate(uTarget(size(mesh,1), size(mesh,2), size(mesh,3)))
@@ -138,7 +138,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     call decomp_2d_read_one(1,v ,vfname, decompC)
     call decomp_2d_read_one(1,wC,wfname, decompC)
   
-    u  = uadv + TI*u
+    u  = TI*u
     v  = TI*v
     wC = TI*wC
 
@@ -170,8 +170,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     deallocate(der)
     call transpose_z_to_y(zbuffE,ybuffE,decompE)
     call transpose_y_to_x(ybuffE,w,decompE) 
-    
-    
+   
 
     deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
   

@@ -18,6 +18,8 @@ module fringeMethod
       real(rkind),    dimension(:,:,:,:), pointer   :: rbuffxC, rbuffxE
       complex(rkind), dimension(:,:,:,:), pointer   :: cbuffyC, cbuffyE
       real(rkind)                                   :: LambdaFact
+      integer :: myFringeID = 1
+      logical :: useTwoFringex = .false. 
       contains
          procedure :: init
          procedure :: destroy
@@ -101,7 +103,7 @@ contains
       call message(0, "Fringe targets successfully associated.")
    end subroutine
 
-   subroutine init(this, inputfile, dx, x, dy, y, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE)
+   subroutine init(this, inputfile, dx, x, dy, y, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE, fringeID)
       use reductions, only: p_maxval
       use mpi
       class(fringe), intent(inout) :: this
@@ -113,17 +115,29 @@ contains
       type(spectral), intent(in), target :: spectC, spectE
       real(rkind),    dimension(:,:,:,:), target, intent(in) :: rbuffxC, rbuffxE
       complex(rkind), dimension(:,:,:,:), target, intent(in) :: cbuffyC, cbuffyE
+      integer, intent(in), optional :: fringeID
 
       real(rkind) :: Lx, Ly, LambdaFact = 2.45d0
       real(rkind) :: Fringe_yst = 1.d0, Fringe_yen = 1.d0
       real(rkind) :: Fringe_xst = 0.75d0, Fringe_xen = 1.d0
       real(rkind) :: Fringe_delta_st_x = 1.d0, Fringe_delta_st_y = 1.d0, Fringe_delta_en_x = 1.d0, Fringe_delta_en_y = 1.d0
+      
+      real(rkind) :: Fringe1_delta_st_x = 1.d0, Fringe1_delta_en_x = 1.d0
+      real(rkind) :: Fringe2_delta_st_x = 1.d0, Fringe2_delta_en_x = 1.d0
+      real(rkind) :: Fringe1_xst = 0.75d0, Fringe1_xen = 1.d0
+      real(rkind) :: Fringe2_xst = 0.75d0, Fringe2_xen = 1.d0
+      
       integer :: ioUnit = 10, i, j, k, nx, ierr
       real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2
       logical :: Apply_x_fringe = .true., Apply_y_fringe = .false.
-      namelist /FRINGE/ Apply_x_fringe, Apply_y_fringe, Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, Fringe_yen, &
-                        Fringe_yst
-     
+      namelist /FRINGE/ Apply_x_fringe, Apply_y_fringe, Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, &
+                        Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, Fringe_yen, Fringe_yst, Fringe1_delta_st_x, &
+                        Fringe2_delta_st_x, Fringe1_delta_en_x, Fringe2_delta_en_x, Fringe1_xst, Fringe2_xst, Fringe1_xen, Fringe2_xen
+    
+      if (present(fringeID)) then
+         this%myFringeID = fringeID
+         this%useTwoFringex = .true. 
+      end if
       nx = gpC%xsz(1)
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
       read(unit=ioUnit, NML=FRINGE)
@@ -149,12 +163,28 @@ contains
       this%Fringe_kernel_cells = 0.d0
       this%Fringe_kernel_edges = 0.d0
       this%LambdaFact   = LambdaFact
-
+   
+      if (this%usetwoFringex) then
+         select case (this%myFringeID)
+         case(1)
+            Fringe_xst        = Fringe1_xst*Lx
+            Fringe_xen        = Fringe1_xen*Lx
+            Fringe_delta_st_x = Fringe1_delta_st_x*Lx
+            Fringe_delta_en_x = Fringe1_delta_en_x*Lx
+         case(2)
+            Fringe_xst        = Fringe2_xst*Lx
+            Fringe_xen        = Fringe2_xen*Lx
+            Fringe_delta_st_x = Fringe2_delta_st_x*Lx
+            Fringe_delta_en_x = Fringe2_delta_en_x*Lx
+         end select
+      else
+            Fringe_xst        = Fringe_xst*Lx
+            Fringe_xen        = Fringe_xen*Lx
+            Fringe_delta_st_x = Fringe_delta_st_x*Lx
+            Fringe_delta_en_x = Fringe_delta_en_x*Lx
+      end if 
+      
       if (Apply_x_fringe) then
-         Fringe_xst        = Fringe_xst*Lx
-         Fringe_xen        = Fringe_xen*Lx
-         Fringe_delta_st_x = Fringe_delta_st_x*Lx
-         Fringe_delta_en_x = Fringe_delta_en_x*Lx
          ! x - direction fringe
          allocate(x1         (nx))
          allocate(x2         (nx))
@@ -217,14 +247,6 @@ contains
          end do
          deallocate(y1, y2, S1, S2, Fringe_func)
       end if 
-      
-      !where(this%Fringe_kernel_edges > 1.d0) 
-      !   this%Fringe_kernel_edges = 1.d0
-      !end where
-
-      !where(this%Fringe_kernel_cells > 1.d0) 
-      !   this%Fringe_kernel_cells = 1.d0
-      !end where
 
       call message(0, "Fringe initialized successfully.")
 

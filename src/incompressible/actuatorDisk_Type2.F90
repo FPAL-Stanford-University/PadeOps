@@ -14,7 +14,7 @@ module actuatorDisk_T2mod
     public :: actuatorDisk_T2
     
     real(rkind), parameter :: alpha_Smooth = 0.9d0 ! Exonential smoothing constant
-    integer, parameter :: xReg = 5, yReg = 5, zReg = 5
+    integer, parameter :: xReg = 8, yReg = 8, zReg = 8
 
     type :: actuatorDisk_T2
         ! Actuator Disk_T2 Info

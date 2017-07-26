@@ -6,7 +6,7 @@ module temporalHook
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
-    use HIT_Periodic_parameters
+    use HIT_Periodic_parameters, only: uTarget, vTarget, wTarget, x_shift, uadvect, useBandpassFilter
 
     implicit none 
 
@@ -47,14 +47,14 @@ contains
         !    pexact  = 0.25d0*(cos(2.d0*y) + cos(2.d0*z))*((exp(-(2.d0/gp%Re)*gp%tsim))**2)
         ! end select
        
+         x_shift = x_shift + uadvect*gp%get_dt()
 
-         call toc()
          if (mod(gp%step,gp%t_dataDump) == 0) then
-            if (useBandpassFilter) then 
-               call tic()
-               call gp%spectC%bandpassFilter(gp%uhat , uTarget)
-               call gp%spectC%bandpassFilter(gp%vhat , vTarget)
-               call gp%spectC%bandpassFilter(gp%whatC, wTarget)
+            if (useBandpassFilter) then
+               call message(0,"Shifting solution by", x_shift)
+               call gp%spectC%bandpassFilter_and_PhaseShift(gp%uhat , uTarget, x_shift)
+               call gp%spectC%bandpassFilter_and_PhaseShift(gp%vhat , vTarget, x_shift)
+               call gp%spectC%bandpassFilter_and_PhaseShift(gp%whatC, wTarget, x_shift)
                call toc()
                call gp%dumpFullField(uTarget,'uBPF')
                call gp%dumpFullField(vTarget,'vBPF')
@@ -73,6 +73,8 @@ contains
             call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
             call message_min_max(1,"Bounds for v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
             call message_min_max(1,"Bounds for w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
+            call message("uadvect:", uadvect)
+            call message("x_shift:", x_shift)
             if (allocated(gp%pressure)) then
                call message_min_max(1,"Bounds for P:", p_minval(minval(gp%pressure)), p_maxval(maxval(gp%pressure)))
             end if 

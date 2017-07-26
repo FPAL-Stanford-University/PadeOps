@@ -55,7 +55,7 @@ module spectralMod
         integer(kind=8) :: plan_c2c_bwd_z_oop
         integer(kind=8) :: plan_c2c_bwd_z_ip
         integer(kind=8) :: plan_r2c_z, plan_c2r_z 
-        complex(rkind), dimension(:), allocatable :: k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift
+        complex(rkind), dimension(:), allocatable :: k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact, k1inZ
         real(rkind), dimension(:), allocatable :: mk3sq
 
         contains
@@ -92,7 +92,7 @@ module spectralMod
             procedure           :: dealiasedSquare_oop
             procedure           :: KSprepFilter2
             procedure           :: KSprepFilter1
-            procedure           :: bandpassFilter
+            procedure           :: bandpassFilter_and_PhaseShift
 
             procedure           :: take_fft1d_z2z_ip
             procedure           :: take_ifft1d_z2z_ip
@@ -130,10 +130,13 @@ module spectralMod
 
 contains
 
-      subroutine bandpassFilter(this, uhat, uFilt) 
+      subroutine bandpassFilter_and_PhaseShift(this, uhat, uFilt, xshift)
+         use constants, only: imi
          class(spectral),  intent(inout)         :: this
          complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in) :: uhat 
          real(rkind)   , dimension(this%physdecomp%xsz(1),this%physdecomp%xsz(2), this%physdecomp%xsz(3)), intent(out) :: uFilt
+         real(rkind), intent(in) :: xShift 
+         integer :: k, j
 
          call transpose_y_to_z(uhat, this%cbuffz_bp, this%spectdecomp)
          call this%take_fft1d_z2z_ip(this%cbuffz_bp)
@@ -141,6 +144,13 @@ contains
          where (this%G_bandpass == .false. ) 
             this%cbuffz_bp = zero
          end where
+        
+         this%xshiftfact = exp(-imi*this%k1inZ*xshift)
+         do k = 1,size(this%cbuffz_bp,3)
+            do j = 1,size(this%cbuffz_bp,2)
+               this%cbuffz_bp(:,j,k) = this%cbuffz_bp(:,j,k)*this%xshiftfact
+            end do 
+         end do 
 
          call this%take_ifft1d_z2z_ip(this%cbuffz_bp)
          call transpose_z_to_y(this%cbuffz_bp, this%cbuffy_bp, this%spectdecomp)
@@ -721,7 +731,10 @@ contains
          where (abs(rbuffz) >= kdealiasx)    
             this%Gdealias = zero
          end where
-      
+     
+         allocate(this%k1inZ(size(this%k1,1)))
+         allocate(this%xshiftfact(size(this%k1,1)))
+         this%k1inZ = this%k1(:,1,1)
 
          call transpose_y_to_z(this%k2, rbuffz, this%spectdecomp)
          where (abs(rbuffz) >= kdealiasy)    

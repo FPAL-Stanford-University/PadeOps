@@ -50,22 +50,22 @@ program concurrentSimulation
     call tic() 
     do while (igp%tsim < igp%tstop) 
        
-       call prec%timeAdvance()                                           !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
-       call igp%timeAdvance(prec%get_dt())                                !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
-       call doTemporalStuff(prec, igp)                                        !<-- Go to the temporal hook (see temporalHook.F90)
+       call prec%timeAdvance()                                           !<- Time stepping scheme + Pressure Proj. (see igrid.F90)
+       call igp%timeAdvance(prec%get_dt())                               !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
+       call doTemporalStuff(prec, igp)                                   !<-- Go to the temporal hook (see temporalHook.F90)
        
     end do 
  
     call prec%finalize_io()                                              !<-- Close the header file (wrap up i/o)
-    call igp%finalize_io()                                              !<-- Close the header file (wrap up i/o)
+    call igp%finalize_io()                                               !<-- Close the header file (wrap up i/o)
 
     call prec%destroy()                                                  !<-- Destroy the IGRID derived type 
-    call igp%destroy()                                                  !<-- Destroy the IGRID derived type 
+    call igp%destroy()                                                   !<-- Destroy the IGRID derived type 
    
 
     deallocate(prec)                                                     !<-- Deallocate all the memory associated with scalar defaults
-    deallocate(igp)                                                     !<-- Deallocate all the memory associated with scalar defaults
+    deallocate(igp)                                                      !<-- Deallocate all the memory associated with scalar defaults
     
-    call MPI_Finalize(ierr)                                             !<-- Terminate MPI 
+    call MPI_Finalize(ierr)                                              !<-- Terminate MPI 
 
 end program

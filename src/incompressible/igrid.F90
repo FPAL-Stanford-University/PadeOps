@@ -235,8 +235,8 @@ module IncompressibleGrid
         real(rkind) :: Tstop_InitSpinUp
 
         ! Fringe
-        logical                           :: useFringe = .false.
-        type(fringe), allocatable, public :: fringe_x
+        logical                           :: useFringe = .false., usedoublefringex = .false. 
+        type(fringe), allocatable, public :: fringe_x, fringe_x1, fringe_x2
 
         ! HIT Forcing
         logical :: useHITForcing = .false.
@@ -252,6 +252,7 @@ module IncompressibleGrid
             procedure          :: start_io
             procedure          :: finalize_io
             procedure          :: get_dt
+            procedure          :: interpolate_cellField_to_edgeField 
             !procedure, private :: init_stats
             procedure, private :: debug
             procedure, private :: init_stats3D
@@ -327,7 +328,7 @@ contains
         real(rkind) :: Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
-        logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true.  
+        logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
         logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true. 
         real(rkind), dimension(:,:), allocatable :: probe_locs
         real(rkind), dimension(:), allocatable :: temp
@@ -342,7 +343,7 @@ contains
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, &
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude, useHITForcing
-        namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe
+        namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe, usedoublefringex
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
@@ -377,7 +378,7 @@ contains
         this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp; this%isInviscid = isInviscid
         this%assume_fplane = assume_fplane; this%useProbes = useProbes
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact; this%useFringe = useFringe
-        this%nsteps = nsteps; this%PeriodicinZ = periodicInZ 
+        this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
         this%useHITForcing = useHITForcing
 
         if (this%CFL > zero) this%useCFL = .true. 
@@ -880,12 +881,24 @@ contains
         end if
        
         ! STEP 17: Set Fringe
-        if (this%useFringe) then
-            allocate(this%fringe_x)
-            call this%fringe_x%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
-                                    this%spectC, this%spectE, this%gpC, this%gpE, &
-                                    this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE)   
-        end if
+        call mpi_barrier(mpi_comm_world, ierr)
+        if (this%usedoublefringex) then
+            allocate(this%fringe_x1, this%fringe_x2)
+            call this%fringe_x1%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
+                                        this%spectC, this%spectE, this%gpC, this%gpE, &
+                                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, fringeID=1)   
+            call this%fringe_x2%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
+                                        this%spectC, this%spectE, this%gpC, this%gpE, &
+                                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, fringeID=2)   
+
+        else
+            if (this%useFringe) then
+                allocate(this%fringe_x)
+                call this%fringe_x%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
+                                        this%spectC, this%spectE, this%gpC, this%gpE, &
+                                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE)   
+            end if
+        end if 
         
         ! STEP 18: Set HIT Forcing
         if (this%useHITForcing) then
@@ -898,6 +911,7 @@ contains
         if ((this%storePressure) .or. (this%fastCalcPressure)) then
             allocate(this%Pressure(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             call this%ComputePressure()
+            call message(1, "Done allocating storage for pressure")
         end if 
 
 
@@ -1679,10 +1693,15 @@ contains
         end if
 
         ! Step 7: Fringe source term if fringe is being used (non-periodic)
-        if (this%useFringe) then
-            call this%fringe_x%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
+        if (this%usedoublefringex) then
+                call this%fringe_x1%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
+                call this%fringe_x2%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
+        else
+            if (this%useFringe) then
+                call this%fringe_x%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
+            end if 
         end if 
-   
+
         ! Step 8: HIT forcing source term
         if (this%useHITForcing) then
             call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep)
@@ -4857,9 +4876,28 @@ contains
         this%pressure = this%pressure - this%rbuffxC(:,:,:,1)
     end subroutine
 
-    pure function get_dt(this) result(val)
-        class(igrid), intent(in) :: this 
+    function get_dt(this, recompute) result(val)
+        class(igrid), intent(inout) :: this 
+        logical, intent(in), optional :: recompute
         real(rkind) :: val
+
+        if (present(recompute)) then
+           if (recompute) call this%compute_deltaT
+        end if
         val = this%dt
     end function
+
+    subroutine interpolate_cellField_to_edgeField(this, rxC, rxE, bc1, bc2)
+        class(igrid), intent(inout) :: this 
+        real(rkind), intent(in),  dimension(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)) :: rxC 
+        real(rkind), intent(out), dimension(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)) :: rxE
+        integer, intent(in) :: bc1, bc2
+
+        call transpose_x_to_y(rxC, this%rbuffyC(:,:,:,1), this%gpC)
+        call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+        call this%Pade6opZ%interpz_E2C(this%rbuffzC(:,:,:,1), this%rbuffzE(:,:,:,1), bc1,bc2) 
+        call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
+        call transpose_y_to_x(this%rbuffyE(:,:,:,1), rxE, this%gpE)
+
+    end subroutine 
 end module 

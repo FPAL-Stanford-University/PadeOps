@@ -82,7 +82,7 @@ program getEnergyBudgetTerms
         
         ! Initialize WT
         allocate(turbArray)
-        call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
+        call turbArray%init(inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
         
         
         ! READ FIELDS)
@@ -99,7 +99,7 @@ program getEnergyBudgetTerms
 
         ! WIND TURBINE STUFF
         u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-        call turbArray%getForceRHS(dt, uC, vC, wC, u_rhs, v_rhs, w_rhs, inst_horz_avg_turb)
+        call turbArray%getForceRHS(dt, uC, vC, wC, u_rhs, v_rhs, w_rhs, .true., inst_horz_avg_turb)
         call spectC%ifft(u_rhs,fbody_x)
         call spectC%ifft(v_rhs,fbody_y)
         call spectE%ifft(w_rhs,fbody_z)
