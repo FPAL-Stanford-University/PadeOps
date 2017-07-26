@@ -258,7 +258,8 @@ subroutine smear_this_source(this,rhsfield, xC, yC, zC, valSource, xst, xen, yst
     integer :: jj, kk
 
     if (this%Am_I_Active) then
-        do concurrent (kk = zst:zen)
+        do kk = zst,zen
+            !$omp simd 
             do jj = yst,yen
                 this%dline(1:xlen) = (this%xG(xst:xen,jj,kk) - xC)**2 &
                                    + (this%yG(xst:xen,jj,kk) - yC)**2 & 
