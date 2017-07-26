@@ -13,11 +13,10 @@ module timer
 
 contains 
 
-        subroutine tocall(message, comm)
-            character(len=*), intent(in) :: message
+        subroutine tocall(comm, val)
             integer, intent(in) :: comm
             integer :: ierr
-            real(rkind) :: val
+            real(rkind), intent(out) :: val
             real(rkind) :: myval
             
             call mpi_barrier(comm, ierr)
@@ -25,10 +24,6 @@ contains
             myval = real(finish - start,rkind)
             val = P_MAXVAL(myval)
             
-            if (nrank == 0) then    
-                print*, message, val, " seconds"
-            end if 
-
         end subroutine 
 
         subroutine tic 

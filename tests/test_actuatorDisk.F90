@@ -14,7 +14,7 @@ program test_actuatorDisk
 
     type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
     type(actuatorDisk), dimension(:), allocatable :: hawts
-    integer, parameter :: nx = 1024, ny = 256, nz = 256
+    integer, parameter :: nx = 512, ny = 256, nz = 256
     character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/"
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
     real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs1, rhsv, rhsw, rhs2

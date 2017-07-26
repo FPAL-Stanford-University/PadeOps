@@ -127,13 +127,13 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
          do i = 1, this%nTurbines
             call this%turbArrayADM(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3),this%gpC)
          end do
-         call message(1,"WIND TURBINE ADM (Type 0) model initialized")
+         call message(0,"WIND TURBINE ADM (Type 0) array initialized")
       case (1)
          allocate (this%turbArrayADM_T2(this%nTurbines))
          do i = 1, this%nTurbines
             call this%turbArrayADM_T2(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
          end do
-         call message(1,"WIND TURBINE ADM (Type 1) model initialized")
+         call message(0,"WIND TURBINE ADM (Type 1) array initialized")
       end select 
     else
       call GracefulExit("Actuator Line implementation temporarily disabled. Talk to Aditya if you want to know why.",423)
@@ -370,7 +370,8 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
            case(1)
                do i = 1, this%nTurbines
                   call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
-               end do 
+               end do
+               call mpi_barrier(mpi_comm_world, ierr)
            end select 
          !else
          !   !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Starting halo communication"); call mpi_barrier(mpi_comm_world, ierr)
