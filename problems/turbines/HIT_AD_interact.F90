@@ -10,7 +10,7 @@ program HIT_AD_interact
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
     use exits, only: message
-    use constants, only: one
+    use constants, only: one, zero
     use HIT_AD_interact_parameters, only: simulationID
     use decomp_2d,                only: nrank
     implicit none
@@ -82,23 +82,20 @@ program HIT_AD_interact
 
        call hit%timeAdvance(dt)
        
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
+       call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), zero)
        call hit%interpolate_cellField_to_edgeField(uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:),0,0)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
+       call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), zero)
+       call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), zero)
       
        ! Now scale rhw HIT field appropriately
-       uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = HIT_scalefact*uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
+       uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = HIT_scalefact*uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) + one 
        vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = HIT_scalefact*vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
        wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = HIT_scalefact*wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
      
-       ! Finally add the bulk velocity to HIT field
-       uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) + one
 
        call doTemporalStuff(adsim, 1)                                        
        call doTemporalStuff(hit   , 2)                                        
       
-       x_shift = x_shift + dt*one
     end do 
  
     call hit%finalize_io()          
