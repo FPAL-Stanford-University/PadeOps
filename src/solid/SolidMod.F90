@@ -474,6 +474,7 @@ contains
         else
             mask = zero
         end if
+        ! mask = zero
 
         dx = one/real(this%decomp%xsz(1)-1,rkind)
         dy = dx
@@ -1090,7 +1091,7 @@ contains
         real(rkind), dimension(3,3) :: g, u, vt, gradf, gradf_new, sigma, sigma_tilde, v_tilde
         real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new, dbeta_new
         real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t
-        real(rkind) :: tol = real(1.D-12,rkind), residual, residual_new
+        real(rkind) :: tol = real(1.D-14,rkind), residual, residual_new
         integer :: i,j,k
         integer :: iters
         integer, parameter :: niters = 500
@@ -1143,7 +1144,7 @@ contains
             do j = 1,this%nyp
                 do i = 1,this%nxp
 
-                    if (abs(mask(i,j,k)) > 0.9_rkind) then
+                    ! if (abs(mask(i,j,k)) > 0.9_rkind) then
                         ! yield = zero
                         yield = (one-mask(i,j,k))*this%elastic%yield
 
@@ -1170,6 +1171,7 @@ contains
                         y = - half + real( this%decomp%yst(2) - 1 + j - 1, rkind ) * dy
                         rad = sqrt(x**2 + y**2)
                         theta = atan2(y,x)
+                        this%kap(i,j,k) = theta
 
                         v_tilde(1,1) = cos(theta); v_tilde(1,2) =-sin(theta); v_tilde(1,3) = zero
                         v_tilde(2,1) = sin(theta); v_tilde(2,2) = cos(theta); v_tilde(2,3) = zero
@@ -1198,22 +1200,24 @@ contains
                         ! Get the actual stress
                         sigma = zero
                         sigma(1,1) = Sa(1); sigma(2,2) = Sa(2); sigma(3,3) = Sa(3)
-                        sigma = matmul(sigma, transpose(vt))
-                        sigma = matmul(vt, sigma)
+                        ! sigma = matmul(sigma, transpose(vt))
+                        ! sigma = matmul(vt, sigma)
+                        sigma = matmul(sigma, vt)
+                        sigma = matmul(transpose(vt), sigma)
 
-                        if ((i == 108) .and. (j == 2)) then
-                            print *, "V:"
-                            print *, "   ",  vt(1,1), vt(2,1), vt(3,1)
-                            print *, "   ",  vt(1,2), vt(2,2), vt(3,2)
-                            print *, "   ",  vt(1,3), vt(2,3), vt(3,3)
-                        end if
+                        ! if ((i == 108) .and. (j == 2)) then
+                        !     print *, "V:"
+                        !     print *, "   ",  vt(1,1), vt(2,1), vt(3,1)
+                        !     print *, "   ",  vt(1,2), vt(2,2), vt(3,2)
+                        !     print *, "   ",  vt(1,3), vt(2,3), vt(3,3)
+                        ! end if
 
-                        if ((i == 108) .and. (j == 2)) then
-                            print *, "sigma:"
-                            print *, "   ",  sigma(1,1), sigma(1,2), sigma(1,3)
-                            print *, "   ",  sigma(2,1), sigma(2,2), sigma(2,3)
-                            print *, "   ",  sigma(3,1), sigma(3,2), sigma(3,3)
-                        end if
+                        ! if ((i == 21) .and. (j == 64)) then
+                        !     print *, "sigma:"
+                        !     print *, "   ",  sigma(1,1), sigma(1,2), sigma(1,3)
+                        !     print *, "   ",  sigma(2,1), sigma(2,2), sigma(2,3)
+                        !     print *, "   ",  sigma(3,1), sigma(3,2), sigma(3,3)
+                        ! end if
 
                         ! Get new stress
                         sigma_tilde = zero
@@ -1227,28 +1231,34 @@ contains
                         sigma_tilde(3,2) = sigma_tilde(2,3) ! Symmetric
                         sigma_tilde(3,3) = sum( v_tilde(:,3) * matmul( sigma, v_tilde(:,3) ) )
 
-                        sigma_tilde = matmul(sigma_tilde, v_tilde)
-                        sigma_tilde = matmul(transpose(v_tilde), sigma_tilde)
+                        ! sigma_tilde = matmul(sigma_tilde, v_tilde)
+                        ! sigma_tilde = matmul(transpose(v_tilde), sigma_tilde)
+                        sigma_tilde = matmul(sigma_tilde, transpose(v_tilde))
+                        sigma_tilde = matmul(v_tilde, sigma_tilde)
 
-                        if ((i == 108) .and. (j == 2)) then
-                            print *, "sigma_tilde:"
-                            print *, "   ",  sigma_tilde(1,1), sigma_tilde(1,2), sigma_tilde(1,3)
-                            print *, "   ",  sigma_tilde(2,1), sigma_tilde(2,2), sigma_tilde(2,3)
-                            print *, "   ",  sigma_tilde(3,1), sigma_tilde(3,2), sigma_tilde(3,3)
-                        end if
+                        ! if ((i == 21) .and. (j == 64)) then
+                        !     print *, "theta = ", theta
+                        !     print *, "sigma_tilde:"
+                        !     print *, "   ",  sigma_tilde(1,1), sigma_tilde(1,2), sigma_tilde(1,3)
+                        !     print *, "   ",  sigma_tilde(2,1), sigma_tilde(2,2), sigma_tilde(2,3)
+                        !     print *, "   ",  sigma_tilde(3,1), sigma_tilde(3,2), sigma_tilde(3,3)
+                        !     print *, "tangential: ", sum( v_tilde(:,1) * matmul( sigma_tilde, v_tilde(:,2) ) ), &
+                        !                              sum( v_tilde(:,1) * matmul( sigma_tilde, v_tilde(:,3) ) )
+                        ! end if
 
+                        ! Try to make it a smoother transition to sliding
                         ! sigma_tilde = mask(i,j,k)*sigma_tilde + (one - mask(i,j,k))*sigma
 
                         ! Get eigenvalues and eigenvectors of sigma
                         call dsyev('V', 'U', 3, sigma_tilde, 3, Sa, svdwork, lwork, info)
                         if(info .ne. 0) print '(A,I6,A)', 'proc ', nrank, ': Problem with DSYEV. Please check.'
 
-                        if ((i == 108) .and. (j == 2)) then
-                            print *, "v_tilde_new:"
-                            print *, "   ",  sigma_tilde(1,1), sigma_tilde(1,2), sigma_tilde(1,3)
-                            print *, "   ",  sigma_tilde(2,1), sigma_tilde(2,2), sigma_tilde(2,3)
-                            print *, "   ",  sigma_tilde(3,1), sigma_tilde(3,2), sigma_tilde(3,3)
-                        end if
+                        ! if ((i == 108) .and. (j == 2)) then
+                        !     print *, "v_tilde_new:"
+                        !     print *, "   ",  sigma_tilde(1,1), sigma_tilde(1,2), sigma_tilde(1,3)
+                        !     print *, "   ",  sigma_tilde(2,1), sigma_tilde(2,2), sigma_tilde(2,3)
+                        !     print *, "   ",  sigma_tilde(3,1), sigma_tilde(3,2), sigma_tilde(3,3)
+                        ! end if
 
                         ! Now get new beta
                         f = Sa / (this%elastic%mu*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
@@ -1362,14 +1372,49 @@ contains
                         end if
 
 
-                        this%g(i,j,k,1) = g(1,1); this%g(i,j,k,2) = g(1,2); this%g(i,j,k,3) = g(1,3)
-                        this%g(i,j,k,4) = g(2,1); this%g(i,j,k,5) = g(2,2); this%g(i,j,k,6) = g(2,3)
-                        this%g(i,j,k,7) = g(3,1); this%g(i,j,k,8) = g(3,2); this%g(i,j,k,9) = g(3,3)
+                        ! Try to make it a smoother transition to sliding
+                        this%g(i,j,k,1) = mask(i,j,k)*g(1,1) + (one - mask(i,j,k))*this%g(i,j,k,1)
+                        this%g(i,j,k,2) = mask(i,j,k)*g(1,2) + (one - mask(i,j,k))*this%g(i,j,k,2)
+                        this%g(i,j,k,3) = mask(i,j,k)*g(1,3) + (one - mask(i,j,k))*this%g(i,j,k,3)
+                        this%g(i,j,k,4) = mask(i,j,k)*g(2,1) + (one - mask(i,j,k))*this%g(i,j,k,4)
+                        this%g(i,j,k,5) = mask(i,j,k)*g(2,2) + (one - mask(i,j,k))*this%g(i,j,k,5)
+                        this%g(i,j,k,6) = mask(i,j,k)*g(2,3) + (one - mask(i,j,k))*this%g(i,j,k,6)
+                        this%g(i,j,k,7) = mask(i,j,k)*g(3,1) + (one - mask(i,j,k))*this%g(i,j,k,7)
+                        this%g(i,j,k,8) = mask(i,j,k)*g(3,2) + (one - mask(i,j,k))*this%g(i,j,k,8)
+                        this%g(i,j,k,9) = mask(i,j,k)*g(3,3) + (one - mask(i,j,k))*this%g(i,j,k,9)
 
-                    end if
+                        ! this%g(i,j,k,1) = g(1,1); this%g(i,j,k,2) = g(1,2); this%g(i,j,k,3) = g(1,3)
+                        ! this%g(i,j,k,4) = g(2,1); this%g(i,j,k,5) = g(2,2); this%g(i,j,k,6) = g(2,3)
+                        ! this%g(i,j,k,7) = g(3,1); this%g(i,j,k,8) = g(3,2); this%g(i,j,k,9) = g(3,3)
+
+                    ! end if
                 end do
             end do
         end do
+
+        ! ! Get devstress for debugging
+        ! call this%get_eelastic_devstress()
+        ! sigma(1,1) = this%sxx(21,64,1); sigma(1,2) = this%sxy(21,64,1); sigma(1,3) = this%sxz(21,64,1);
+        ! sigma(2,1) = this%sxy(21,64,1); sigma(2,2) = this%syy(21,64,1); sigma(2,3) = this%syz(21,64,1);
+        ! sigma(3,1) = this%sxz(21,64,1); sigma(3,2) = this%syz(21,64,1); sigma(3,3) = this%szz(21,64,1);
+        ! print *, "New sigma:"
+        ! print *, "   ",  sigma(1,1), sigma(1,2), sigma(1,3)
+        ! print *, "   ",  sigma(2,1), sigma(2,2), sigma(2,3)
+        ! print *, "   ",  sigma(3,1), sigma(3,2), sigma(3,3)
+
+        ! ! 2D circular
+        ! x = - half + real( this%decomp%yst(1) - 1 + 21 - 1, rkind ) * dx
+        ! y = - half + real( this%decomp%yst(2) - 1 + 64 - 1, rkind ) * dy
+        ! rad = sqrt(x**2 + y**2)
+        ! theta = atan2(y,x)
+
+        ! v_tilde(1,1) = cos(theta); v_tilde(1,2) =-sin(theta); v_tilde(1,3) = zero
+        ! v_tilde(2,1) = sin(theta); v_tilde(2,2) = cos(theta); v_tilde(2,3) = zero
+        ! v_tilde(3,1) = zero;       v_tilde(3,2) = zero;       v_tilde(3,3) = one
+
+        ! print *, "tangential: ", sum( v_tilde(:,1) * matmul( sigma, v_tilde(:,2) ) ), &
+        !                          sum( v_tilde(:,1) * matmul( sigma, v_tilde(:,3) ) )
+
 
         deallocate(svdwork)
     end subroutine

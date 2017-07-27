@@ -239,7 +239,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         rad = sqrt(x**2 + y**2)
         theta = atan2(y,x)
-        dum = half * ( one - erf( (rad-interface_init)/(half*thick*dx) ) )
+        dum = half * ( one - erf( (rad-shock_init)/(half*thick*dx) ) )
         tmp = half * ( one - erf( (rad-interface_init)/(thick*dx) ) )
 
         u   =-sin(theta) * rad * omega * dum
