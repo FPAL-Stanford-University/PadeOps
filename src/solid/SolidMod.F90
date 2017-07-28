@@ -382,7 +382,11 @@ contains
     end subroutine
 
     subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+        use constants,  only: eps
         use RKCoeffs,   only: RK45_A,RK45_B
+        use reductions, only: P_MAXVAL
+        use operators,  only: gradient
+        use exits,      only : nancheck
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
@@ -390,10 +394,50 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for g tensor equation
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg   ! RHS for g tensor equation
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: normal ! Interface normal for sliding treatment
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: mask, theta
         real(rkind) :: max_modDevSigma
+        integer :: i,j,k,l
+        character(len=clen) :: charout
+        integer, parameter :: mask_exponent = 40
 
-        call this%getRHS_g(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
+        ! ! Set normal to be radially outwards for a cylindrical interface
+        ! theta = atan2(y,x)
+        ! normal(:,:,:,1) = cos(theta); normal(:,:,:,2) = sin(theta); normal(:,:,:,3) = zero
+
+        ! Set normal to be the maximal volume fraction gradient direction
+        call gradient(this%decomp, this%der, this%VF, normal(:,:,:,1), normal(:,:,:,2), normal(:,:,:,3), x_bc, y_bc, z_bc)
+        ! Normalize to magnitude 1
+        mask = sqrt( normal(:,:,:,1)*normal(:,:,:,1) + normal(:,:,:,2)*normal(:,:,:,2) + normal(:,:,:,3)*normal(:,:,:,3) )
+        do l = 1,3
+            do k = 1,this%nzp
+                do j = 1,this%nyp
+                    do i = 1,this%nxp
+                        if (mask(i,j,k) > eps) then
+                            normal(i,j,k,l) = normal(i,j,k,l) / mask(i,j,k)
+                        else
+                            normal(i,j,k,:) = [one, zero, zero] ! This is arbitrary but should not affect anything
+                        end if
+                    end do
+                end do
+            end do
+        end do
+        if ( nancheck(normal,i,j,k,l) ) then
+            write(charout,'(A,4(I0,A))') "NaN encountered in interface normal at (",i,", ",j,", ",k,", ",l,")"
+            call GracefulExit(charout,4809)
+        end if
+
+        ! Get the mask function to apply sliding treatment
+        if (this%sliding) then
+            mask = this%VF*(one - this%VF)
+            mask = mask/P_MAXVAL(mask)
+            mask = one - (one - mask)**mask_exponent
+        else
+            mask = zero
+        end if
+
+        call this%getRHS_g(rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc)
         call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
         ! advance sub-step
@@ -405,7 +449,7 @@ contains
         call this%elastic%make_tensor_SPD(this%g)
 
         ! Sliding treatment using plasticity (Using zero yield everywhere for now)
-        if (this%sliding) call this%sliding_deformation()
+        if (this%sliding) call this%sliding_deformation(normal, mask)
 
         if(this%plast) then
             if (.NOT. this%explPlast) then
@@ -434,24 +478,24 @@ contains
 
     end subroutine
 
-    subroutine getRHS_g(this,rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
+    subroutine getRHS_g(this,rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc)
         use decomp_2d, only: nrank
         use constants, only: eps, pi
         use operators, only: gradient, curl
         use reductions, only: P_MAXVAL
         class(solid),                                         intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src,mask
         real(rkind),                                          intent(in)  :: dt
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in)  :: normal
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dutdx,dutdy,dutdz,dvtdx,dvtdy,dvtdz,dwtdx,dwtdy,dwtdz
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg, mask, ut, vt, wt, rad, theta
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg, normal
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg, ut, vt, wt, rad, theta
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
         real(rkind), parameter :: etafac = one/6._rkind
-        integer, parameter :: mask_exponent = 40
 
         real(rkind) :: dx, dy, x, y
         ! real(rkind), parameter :: theta = 45._rkind * pi / 180._rkind
@@ -467,39 +511,43 @@ contains
 
         rhsg = zero
 
-        if (this%sliding) then
-            mask = this%VF*(one - this%VF)
-            mask = mask/P_MAXVAL(mask)
-            mask = one - (one - mask)**mask_exponent
-        else
-            mask = zero
-        end if
+        ! if (this%sliding) then
+        !     mask = this%VF*(one - this%VF)
+        !     mask = mask/P_MAXVAL(mask)
+        !     mask = one - (one - mask)**mask_exponent
+        ! else
+        !     mask = zero
+        ! end if
         ! mask = zero
-
-        dx = one/real(this%decomp%xsz(1)-1,rkind)
-        dy = dx
-
-        do k=1,this%decomp%ysz(3)
-            do j=1,this%decomp%ysz(2)
-                do i=1,this%decomp%ysz(1)
-                    x = - half + real( this%decomp%yst(1) - 1 + i - 1, rkind ) * dx
-                    y = - half + real( this%decomp%yst(2) - 1 + j - 1, rkind ) * dy
-                    rad(i,j,k) = sqrt(x**2 + y**2)
-                    theta(i,j,k) = atan2(y,x)
-                    ! if ((i == 39) .and. (j == 83)) then
-                    !     print *, "x = ", x
-                    !     print *, "y = ", y
-                    !     print *, "radius = ", rad(39,83,1)
-                    !     print *, "theta  = ", theta(39,83,1)
-                    ! end if
-                end do
-            end do
-        end do
 
         ! Set normal to be aligned with the x direction
         ! normal(:,:,:,1) = one; normal(:,:,:,2) = zero; normal(:,:,:,3) = zero
+
+        ! Set normal to be normal to the specified oblique interface
         ! normal(:,:,:,1) = cos(theta); normal(:,:,:,2) =-sin(theta); normal(:,:,:,3) = zero
-        normal(:,:,:,1) = cos(theta); normal(:,:,:,2) = sin(theta); normal(:,:,:,3) = zero
+
+        ! Set normal to be radially outwards for a cylindrical interface
+        ! dx = one/real(this%decomp%xsz(1)-1,rkind)
+        ! dy = dx
+        ! do k=1,this%decomp%ysz(3)
+        !     do j=1,this%decomp%ysz(2)
+        !         do i=1,this%decomp%ysz(1)
+        !             x = - half + real( this%decomp%yst(1) - 1 + i - 1, rkind ) * dx
+        !             y = - half + real( this%decomp%yst(2) - 1 + j - 1, rkind ) * dy
+        !             rad(i,j,k) = sqrt(x**2 + y**2)
+        !             theta(i,j,k) = atan2(y,x)
+        !         end do
+        !     end do
+        ! end do
+        ! normal(:,:,:,1) = cos(theta); normal(:,:,:,2) = sin(theta); normal(:,:,:,3) = zero
+
+        ! ! Set normal to be the maximal volume fraction gradient direction
+        ! call gradient(this%decomp, this%der, this%VF, normal(:,:,:,1), normal(:,:,:,2), normal(:,:,:,3), x_bc, y_bc, z_bc)
+        ! ! Normalize to magnitude 1
+        ! tmp = sqrt( normal(:,:,:,1)*normal(:,:,:,1) + normal(:,:,:,2)*normal(:,:,:,2) + normal(:,:,:,3)*normal(:,:,:,3) )
+        ! do i = 1,3
+        !     normal(:,:,:,i) = normal(:,:,:,i) / tmp
+        ! end do
 
         ! print *, "mask = ", mask(39,83,1)
         ! print *, "normal = ", normal(39,83,1,:)
@@ -1076,23 +1124,23 @@ contains
 
     end subroutine
 
-    subroutine sliding_deformation(this)
+    subroutine sliding_deformation(this, normal, mask)
         use kind_parameters, only: clen
         use constants,       only: zero, eps, third, twothird, pi
         use decomp_2d,       only: nrank
         use operators,       only: filter3D
         use exits,           only: GracefulExit, nancheck, message
-        class(solid),                    intent(inout) :: this
-
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: mask
+        class(solid),                                         intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in)    :: normal ! Interface normal for sliding treatment
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)    :: mask   ! Mask to avoid sliding away from interface
         real(rkind) :: yield = zero
-        integer, parameter :: mask_exponent = 40
 
         real(rkind), dimension(3,3) :: g, u, vt, gradf, gradf_new, sigma, sigma_tilde, v_tilde
         real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new, dbeta_new
         real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t
         real(rkind) :: tol = real(1.D-14,rkind), residual, residual_new
         integer :: i,j,k
+        integer, dimension(1) :: min_norm
         integer :: iters
         integer, parameter :: niters = 500
         integer :: lwork, info
@@ -1112,9 +1160,9 @@ contains
         !     mask = zero
         ! end where
         ! call filter3D(this%decomp, this%gfil, mask, 1)
-        mask = this%VF*(one - this%VF)
-        mask = mask/maxval(mask)
-        mask = one - (one - mask)**mask_exponent
+        ! mask = this%VF*(one - this%VF)
+        ! mask = mask/maxval(mask)
+        ! mask = one - (one - mask)**mask_exponent
 
         allocate(svdwork(1))
         if (this%use_gTg) then
@@ -1167,15 +1215,44 @@ contains
                         ! v_tilde(3,1) = zero;       v_tilde(3,2) = zero;       v_tilde(3,3) = one
 
                         ! 2D circular
-                        x = - half + real( this%decomp%yst(1) - 1 + i - 1, rkind ) * dx
-                        y = - half + real( this%decomp%yst(2) - 1 + j - 1, rkind ) * dy
-                        rad = sqrt(x**2 + y**2)
-                        theta = atan2(y,x)
-                        this%kap(i,j,k) = theta
+                        ! x = - half + real( this%decomp%yst(1) - 1 + i - 1, rkind ) * dx
+                        ! y = - half + real( this%decomp%yst(2) - 1 + j - 1, rkind ) * dy
+                        ! rad = sqrt(x**2 + y**2)
+                        ! theta = atan2(y,x)
+                        ! this%kap(i,j,k) = theta
+                        ! v_tilde(1,1) = cos(theta); v_tilde(1,2) =-sin(theta); v_tilde(1,3) = zero
+                        ! v_tilde(2,1) = sin(theta); v_tilde(2,2) = cos(theta); v_tilde(2,3) = zero
+                        ! v_tilde(3,1) = zero;       v_tilde(3,2) = zero;       v_tilde(3,3) = one
 
-                        v_tilde(1,1) = cos(theta); v_tilde(1,2) =-sin(theta); v_tilde(1,3) = zero
-                        v_tilde(2,1) = sin(theta); v_tilde(2,2) = cos(theta); v_tilde(2,3) = zero
-                        v_tilde(3,1) = zero;       v_tilde(3,2) = zero;       v_tilde(3,3) = one
+                        ! General interface normal
+                        v_tilde(:,1) = normal(i,j,k,:) ! Assume normalized
+
+                        ! Get a vector not parallel to v_tilde(:,1)
+                        min_norm = minloc(abs(normal(i,j,k,:)))
+                        v_tilde(:,3) = zero; v_tilde(min_norm(1),3) = one 
+                        ! if ((i == 44) .and. (j == 2)) then
+                        !     print *, "normal = ", normal(i,j,k,:)
+                        !     print *, "2nd vector = ", v_tilde(:,3)
+                        ! end if
+
+                        ! Get an othogonal vector to v_tilde(:,1) through a crossproduct with a non-parallel vector
+                        v_tilde(1,2) = v_tilde(2,1)*v_tilde(3,3) - v_tilde(3,1)*v_tilde(2,3)
+                        v_tilde(2,2) = v_tilde(3,1)*v_tilde(1,3) - v_tilde(1,1)*v_tilde(3,3)
+                        v_tilde(3,2) = v_tilde(1,1)*v_tilde(2,3) - v_tilde(2,1)*v_tilde(1,3)
+                        v_tilde(:,2) = v_tilde(:,2)/sqrt(v_tilde(1,2)**2 + v_tilde(2,2)**2 + v_tilde(3,2)**2) ! Normalize
+
+                        ! Get third orthogonal vector through a crossproduct of the first two
+                        v_tilde(1,3) = v_tilde(2,1)*v_tilde(3,2) - v_tilde(3,1)*v_tilde(2,2)
+                        v_tilde(2,3) = v_tilde(3,1)*v_tilde(1,2) - v_tilde(1,1)*v_tilde(3,2)
+                        v_tilde(3,3) = v_tilde(1,1)*v_tilde(2,2) - v_tilde(2,1)*v_tilde(1,2)
+                        v_tilde(:,3) = v_tilde(:,3)/sqrt(v_tilde(1,3)**2 + v_tilde(2,3)**2 + v_tilde(3,3)**2) ! Normalize
+
+                        ! if ((i == 44) .and. (j == 2)) then
+                        !     print *, "v_tilde:"
+                        !     print *, "   ",  v_tilde(1,1), v_tilde(1,2), v_tilde(1,3)
+                        !     print *, "   ",  v_tilde(2,1), v_tilde(2,2), v_tilde(2,3)
+                        !     print *, "   ",  v_tilde(3,1), v_tilde(3,2), v_tilde(3,3)
+                        ! end if
 
                         if (this%use_gTg) then
                             ! Get eigenvalues and eigenvectors of G
@@ -1205,14 +1282,14 @@ contains
                         sigma = matmul(sigma, vt)
                         sigma = matmul(transpose(vt), sigma)
 
-                        ! if ((i == 108) .and. (j == 2)) then
+                        ! if ((i == 44) .and. (j == 2)) then
                         !     print *, "V:"
                         !     print *, "   ",  vt(1,1), vt(2,1), vt(3,1)
                         !     print *, "   ",  vt(1,2), vt(2,2), vt(3,2)
                         !     print *, "   ",  vt(1,3), vt(2,3), vt(3,3)
                         ! end if
 
-                        ! if ((i == 21) .and. (j == 64)) then
+                        ! if ((i == 44) .and. (j == 2)) then
                         !     print *, "sigma:"
                         !     print *, "   ",  sigma(1,1), sigma(1,2), sigma(1,3)
                         !     print *, "   ",  sigma(2,1), sigma(2,2), sigma(2,3)
@@ -1251,7 +1328,15 @@ contains
 
                         ! Get eigenvalues and eigenvectors of sigma
                         call dsyev('V', 'U', 3, sigma_tilde, 3, Sa, svdwork, lwork, info)
-                        if(info .ne. 0) print '(A,I6,A)', 'proc ', nrank, ': Problem with DSYEV. Please check.'
+                        if(info .ne. 0) then
+                            print '(A,I6,A)', 'proc ', nrank, ': Problem with DSYEV. Please check.'
+                            print *, "sigma:"
+                            print *, "   ",  sigma(1,1), sigma(1,2), sigma(1,3)
+                            print *, "   ",  sigma(2,1), sigma(2,2), sigma(2,3)
+                            print *, "   ",  sigma(3,1), sigma(3,2), sigma(3,3)
+                            print *, "tangential: ", sum( v_tilde(:,1) * matmul( sigma, v_tilde(:,2) ) ), &
+                                                     sum( v_tilde(:,1) * matmul( sigma, v_tilde(:,3) ) )
+                        end if
 
                         ! if ((i == 108) .and. (j == 2)) then
                         !     print *, "v_tilde_new:"
