@@ -136,7 +136,7 @@ contains
          complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in) :: uhat 
          real(rkind)   , dimension(this%physdecomp%xsz(1),this%physdecomp%xsz(2), this%physdecomp%xsz(3)), intent(out) :: uFilt
          real(rkind), intent(in) :: xShift 
-         integer :: k, j
+         integer :: k, j, i
 
          call transpose_y_to_z(uhat, this%cbuffz_bp, this%spectdecomp)
          call this%take_fft1d_z2z_ip(this%cbuffz_bp)
@@ -148,7 +148,10 @@ contains
          this%xshiftfact = exp(-imi*this%k1inZ*xshift)
          do k = 1,size(this%cbuffz_bp,3)
             do j = 1,size(this%cbuffz_bp,2)
-               this%cbuffz_bp(:,j,k) = this%cbuffz_bp(:,j,k)*this%xshiftfact
+               !$omp simd 
+	    	      do i = 1,size(this%cbuffz_bp,1)
+                  this%cbuffz_bp(i,j,k) = this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
+	       	   end do 
             end do 
          end do 
 
