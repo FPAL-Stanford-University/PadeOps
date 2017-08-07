@@ -303,10 +303,10 @@ contains
 
     subroutine init(this, gpC, gpE, stagg_scheme , dx, dy, dz, gpCspect, gpEspect, isTopSided, isBotSided, isPeriodic)
         class(staggOps), intent(inout) :: this
-        class(decomp_info), intent(in), target:: gpC, gpE
+        type(decomp_info), intent(in), target:: gpC, gpE
         integer, intent(in) :: stagg_scheme
         real(rkind), intent(in) :: dx, dy, dz
-        class(decomp_info), intent(in), optional, target:: gpCspect, gpEspect
+        type(decomp_info), intent(in), optional, target:: gpCspect, gpEspect
         logical, intent(in), optional :: isTopSided, isBotSided, isPeriodic
 
         if ((present(isTopSided)) .and. (present(isBotSided))) then

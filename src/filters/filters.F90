@@ -275,7 +275,7 @@ contains
                                      periodicx, periodicy, periodicz, & 
                                      methodx  , methody  , methodz    )
         class( filters )   , intent(inout) :: this
-        class( decomp_info), intent(in)  :: gp 
+        type( decomp_info), intent(in)  :: gp 
         character(len=*)   , intent(in)    :: methodx, methody, methodz 
         logical            , intent(in)    :: periodicx, periodicy, periodicz
         

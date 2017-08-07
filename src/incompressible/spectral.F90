@@ -141,7 +141,7 @@ contains
          call transpose_y_to_z(uhat, this%cbuffz_bp, this%spectdecomp)
          call this%take_fft1d_z2z_ip(this%cbuffz_bp)
 
-         where (this%G_bandpass == .false. ) 
+         where (this%G_bandpass .eqv. .false. ) 
             this%cbuffz_bp = zero
          end where
         
@@ -1191,7 +1191,7 @@ contains
                         if ((i .ne. 1) .and. (j .ne. 1)) then
                             print*, nrank, i, j
                             call GracefulExit("Catastrophic failure while initializing spectral &
-                                    derived type. Unable to isolate k1 = 0 and k2 = 0 wavenumbers.",312)
+                                    & derived type. Unable to isolate k1 = 0 and k2 = 0 wavenumbers.",312)
                         end if
                         !print*,  "Identified ZERO wavenumber on process:", nrank
                         !print*,  "i - index:", i

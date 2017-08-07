@@ -130,7 +130,7 @@ contains
       integer :: ioUnit = 10, i, j, k, nx, ierr
       real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2
       logical :: Apply_x_fringe = .true., Apply_y_fringe = .false.
-      namelist /FRINGE/ Apply_x_fringe, Apply_y_fringe, Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, &
+      namelist /FRINGE_PARAMS/ Apply_x_fringe, Apply_y_fringe, Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, &
                         Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, Fringe_yen, Fringe_yst, Fringe1_delta_st_x, &
                         Fringe2_delta_st_x, Fringe1_delta_en_x, Fringe2_delta_en_x, Fringe1_xst, Fringe2_xst, Fringe1_xen, Fringe2_xen
     
@@ -140,7 +140,7 @@ contains
       end if
       nx = gpC%xsz(1)
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
-      read(unit=ioUnit, NML=FRINGE)
+      read(unit=ioUnit, NML=FRINGE_PARAMS)
       close(ioUnit)
 
       Lx = maxval(x) + dx

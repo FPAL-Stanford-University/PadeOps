@@ -86,8 +86,9 @@ contains
             iters = iters + 1
 
             if ((iters >= f%niters) .or. (t <= eps)) then
-                write(charout,'(A,I0.0,A,I0.0,A,e19.12)'),'Newton solve did not converge. ', iters, ' of ', f%niters, ' t =', t
-                call GracefulExit(trim(charout),6382)
+                !write(charout,'(A,I0.0,A,I0.0,A,E19.12)'),'Newton solve did not converge. ', iters, ' of ', f%niters, ' t =', t
+                !write(charout,*),'Newton solve did not converge. ', iters, ' of ', f%niters, ' t =', t
+                call GracefulExit("Newton solve did not converge",6382)
             end if
         end do
         !write(*,'(a,4(e19.12,1x))') '   residual = ', residual

@@ -582,7 +582,7 @@ contains
             call initfields_wallM(this%gpC, this%gpE, inputfile, this%mesh, this%PfieldsC, this%PfieldsE)! <-- this procedure is part of user defined HOOKS
             this%step = 0
             this%tsim = zero
-            call this%dumpRestartfile()
+            !call this%dumpRestartfile()
         end if 
     
         if (this%isStratified) then
@@ -4682,54 +4682,54 @@ contains
         OutputDir = this%outputdir
         runIDX = this%runID
         
-        inquire(FILE=trim(OutputDir), exist=isThere)
-        if (nrank == 0) then
-            write(tempname,"(A3,I2.2,A6,A4)") "Run", runIDX, "HEADER",".txt"
-            fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+        !inquire(FILE=trim(OutputDir), exist=isThere)
+        !if (nrank == 0) then
+        !    write(tempname,"(A3,I2.2,A6,A4)") "Run", runIDX, "HEADER",".txt"
+        !    fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
 
-            open (this%headerfid, file=trim(fname), FORM='formatted', STATUS='replace',ACTION='write')
-            write(this%headerfid,*)"========================================================================="
-            write(this%headerfid,*)"---------------------  Header file for MATLAB ---------------------------"
-            write(this%headerfid,"(A9,A10,A10,A10,A10,A10,A10)") "PROC", "xst", "xen", "yst", "yen","zst","zen"
-            write(this%headerfid,*)"-------------------------------------------------------------------------"
-            do idx = 0,nproc-1
-                write(this%headerfid,"(I8,6I10)") idx, xst(idx,1), xen(idx,1), xst(idx,2), xen(idx,2), xst(idx,3), xen(idx,3)
-            end do 
-            write(this%headerfid,*)"-------------------------------------------------------------------------"
-            write(this%headerfid,*)"Dumps made at:"
-        end if
-        call mpi_barrier(mpi_comm_world,ierr)
-        
+        !    open (this%headerfid, file=trim(fname), FORM='formatted', STATUS='replace',ACTION='write')
+        !    write(this%headerfid,*)"========================================================================="
+        !    write(this%headerfid,*)"---------------------  Header file for MATLAB ---------------------------"
+        !    write(this%headerfid,"(A9,A10,A10,A10,A10,A10,A10)") "PROC", "xst", "xen", "yst", "yen","zst","zen"
+        !    write(this%headerfid,*)"-------------------------------------------------------------------------"
+        !    do idx = 0,nproc-1
+        !        write(this%headerfid,"(I8,6I10)") idx, xst(idx,1), xen(idx,1), xst(idx,2), xen(idx,2), xst(idx,3), xen(idx,3)
+        !    end do 
+        !    write(this%headerfid,*)"-------------------------------------------------------------------------"
+        !    write(this%headerfid,*)"Dumps made at:"
+        !end if
+        !call mpi_barrier(mpi_comm_world,ierr)
+        !
         !if (nrank == 0) then
             deallocate(xst, xen, xsz)
         !end if 
 
-        if (present(dumpInitField)) then
-            if (dumpInitField) then
-                call message(0,"Performing initialization data dump.")
-                call this%dumpFullField(this%u,'uVel')
-                call this%dumpFullField(this%v,'vVel')
-                call this%dumpFullField(this%wC,'wVel')
-                call this%dumpVisualizationInfo()
-                if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
-                if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
-                if (this%useWindTurbines) then
-                    this%WindTurbineArr%dumpTurbField = .true.
-                    this%WindTurbineArr%step = this%step-1
-                endif
-                call message(0,"Done with the initialization data dump.")
-            end if
-        end if
+        !if (present(dumpInitField)) then
+        !    if (dumpInitField) then
+        !        call message(0,"Performing initialization data dump.")
+        !        call this%dumpFullField(this%u,'uVel')
+        !        call this%dumpFullField(this%v,'vVel')
+        !        call this%dumpFullField(this%wC,'wVel')
+        !        call this%dumpVisualizationInfo()
+        !        if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
+        !        if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
+        !        if (this%useWindTurbines) then
+        !            this%WindTurbineArr%dumpTurbField = .true.
+        !            this%WindTurbineArr%step = this%step-1
+        !        endif
+        !        call message(0,"Done with the initialization data dump.")
+        !    end if
+        !end if
     end subroutine
     
     subroutine finalize_io(this)
         class(igrid), intent(in) :: this
 
-        if (nrank == 0) then
-            write(this%headerfid,*) "--------------------------------------------------------------"
-            write(this%headerfid,*) "------------------ END OF HEADER FILE ------------------------"
-            close(this%headerfid)
-        end if 
+        !if (nrank == 0) then
+        !    write(this%headerfid,*) "--------------------------------------------------------------"
+        !    write(this%headerfid,*) "------------------ END OF HEADER FILE ------------------------"
+        !    close(this%headerfid)
+        !end if 
     end subroutine 
 
     subroutine get_boundary_conditions_stencil()

@@ -11,7 +11,12 @@ module io_VTK_stuff
     use io_stuff, only: io
     implicit none
 
-    type, extends(io) :: io_VTK
+    type :: io_VTK
+        integer :: nprimary
+        integer :: vizcount
+        character(len=clen) :: file_prefix
+        character(len=clen) :: vizdir
+        character(len=clen), dimension(:), allocatable :: primary_names
 
     contains
 
@@ -74,12 +79,15 @@ contains
 
     subroutine WriteViz(this, gp, mesh, primary, tsim, secondary, secondary_names)
         class(io_VTK), intent(inout) :: this
-        class(decomp_info), intent(in) :: gp
+        type(decomp_info), intent(in) :: gp
         real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),3), intent(in) :: mesh
         real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3),this%nprimary), intent(in) :: primary
-        real(rkind), intent(in), optional :: tsim
-        real(rkind), dimension(:,:,:,:), intent(in), optional :: secondary
-        character(len=*), dimension(:), intent(in), optional :: secondary_names
+        !real(rkind), intent(in), optional :: tsim
+        real(rkind), intent(in) :: tsim
+        !real(rkind), dimension(:,:,:,:), intent(in), optional :: secondary
+        !character(len=*), dimension(:), intent(in), optional :: secondary_names
+        real(rkind), dimension(:,:,:,:), intent(in) :: secondary
+        character(len=*), dimension(:), intent(in) :: secondary_names
 
         real(rkind), dimension(:,:,:), allocatable :: tmp1,tmp2,tmp3
         integer :: nx1,nx2,ny1,ny2,nz1,nz2,nn
@@ -93,15 +101,15 @@ contains
         write(dummy,'(I4)') this%vizcount
         call message("Writing viz dump "//trim(dummy)//" to " //trim(this%vizdir)//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'.pvts')
 
-        if (present(secondary)) then
-            if (.not. present(secondary_names)) then
-                call GracefulExit("Cannot specify secondary array without secondary variable names in VTK IO",982)
-            else
+        !if (present(secondary)) then
+         !   if (.not. present(secondary_names)) then
+         !       call GracefulExit("Cannot specify secondary array without secondary variable names in VTK IO",982)
+         !   else
                 if (size(secondary,4) .ne. size(secondary_names,1)) then
                     call GracefulExit("Number of secondary output arrays not equal to the number of secondary variable names",983)
                 end if
-            end if
-        end if
+         !   end if
+        !end if
 
         nx = gp%xsz(1); ny = gp%ysz(2); nz = gp%zsz(3)
 
@@ -127,9 +135,9 @@ contains
                            mesh_topology='StructuredGrid', nx1=nx1, nx2=nx2, ny1=ny1, ny2=ny2, nz1=nz1, nz2=nz2)
         
         E_IO = VTK_FLD_XML(fld_action='open')
-        if (present(tsim)) then
+        !if (present(tsim)) then
             E_IO = VTK_FLD_XML(fld=tsim,fname='TIME')
-        end if
+        !end if
         E_IO = VTK_FLD_XML(fld=this%vizcount,fname='CYCLE')
         E_IO = VTK_FLD_XML(fld_action='close')
 
@@ -155,13 +163,13 @@ contains
             if( allocated(tmp1) ) deallocate(tmp1)
         end do
 
-        if (present(secondary)) then
+       ! if (present(secondary)) then
             do i=1,size(secondary,4)
                 call update_halo(secondary(:,:,:,i),tmp1,1,gp,.FALSE.)
                 E_IO = VTK_VAR_XML(NC_NN=nn,varname=trim(secondary_names(i)),var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
                 if( allocated(tmp1) ) deallocate(tmp1)
             end do
-        end if
+       ! end if
 
         E_IO = VTK_DAT_XML(var_location='node',var_block_action='close')
         E_IO = VTK_GEO_XML_WRITE()
@@ -193,11 +201,11 @@ contains
                 E_IO = PVTK_VAR_XML(varname=trim(this%primary_names(i)),tp='Float64')
             end do
             
-            if (present(secondary)) then 
+         !   if (present(secondary)) then 
                 do i=1,size(secondary,4)
                     E_IO = PVTK_VAR_XML(varname=trim(secondary_names(i)),tp='Float64')
                 end do
-            end if
+         !   end if
             
             E_IO = PVTK_DAT_XML(var_location='node',var_block_action='close')
             

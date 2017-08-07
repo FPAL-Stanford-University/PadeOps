@@ -83,7 +83,7 @@ contains
 
     subroutine alloc_buffs_real(buff,vars,dir,decomp)
         character(len=1), intent(in) :: dir
-        class(decomp_info), intent(in) :: decomp
+        type(decomp_info), intent(in) :: decomp
         integer, intent(in) :: vars
         real(rkind), dimension(:,:,:,:), allocatable, intent(out) :: buff
 
@@ -104,7 +104,7 @@ contains
 
     subroutine alloc_buffs_complex(buff,vars,dir,decomp)
         character(len=1), intent(in) :: dir
-        class(decomp_info), intent(in) :: decomp
+        type(decomp_info), intent(in) :: decomp
         integer, intent(in) :: vars
         complex(rkind), dimension(:,:,:,:), allocatable, intent(out) :: buff
 

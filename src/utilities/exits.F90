@@ -145,7 +145,8 @@ contains
     logical function nancheck_std(f) result(nancheck)
         real(rkind), dimension(:,:,:,:), intent(in) :: f
         integer :: i,j,k,l
-        
+        logical :: isnan
+
         nancheck = .FALSE.
         do l = 1,size(f,4)
             do k = 1,size(f,3)
@@ -168,6 +169,7 @@ contains
     logical function nancheck_std_arr3(f) result(nancheck)
         real(rkind), dimension(:,:,:), intent(in) :: f
         integer :: i,j,k
+        logical :: isnan
         
         nancheck = .FALSE.
         do k = 1,size(f,3)
@@ -188,6 +190,8 @@ contains
     logical function nancheck_ind(f,i,j,k,l) result(nancheck)
         real(rkind), dimension(:,:,:,:), intent(in) :: f
         integer, intent(out) :: i,j,k,l
+        logical :: isnan
+        
         
         nancheck = .FALSE.
         do l = 1,size(f,4)

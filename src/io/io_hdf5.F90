@@ -63,7 +63,7 @@ contains
     subroutine init(this, comm_, gp, pencil_, vizdir_, filename_, read_only)
         class(io_hdf5),     intent(inout) :: this
         integer,            intent(in)    :: comm_
-        class(decomp_info), intent(in)    :: gp
+        type(decomp_info), intent(in)    :: gp
         character(len=1),   intent(in)    :: pencil_
         character(len=*),   intent(in)    :: vizdir_
         character(len=*),   intent(in)    :: filename_

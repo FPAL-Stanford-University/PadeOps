@@ -191,12 +191,13 @@ contains
     subroutine init_random_seed()
         ! Taken from GNU 
         use iso_fortran_env, only: int64
-        use ifport
+        ! use ifport
         implicit none
         integer, allocatable :: iseed(:)
         integer :: i, n, un, istat, dt(8), pid
         integer(int64) :: t
-        
+        integer :: getpid
+
         call random_seed(size = n)
         allocate(iseed(n))
         ! First try if the OS provides a random number generator

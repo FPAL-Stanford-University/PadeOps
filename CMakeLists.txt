@@ -71,7 +71,7 @@ elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
  
  elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "IBM")
     if ( CMAKE_BUILD_TYPE MATCHES "Release" )
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O5 -qsuffix=cpp=f90 -qxlf2003=polymorphic")
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O5 -qreport -qmaxmem=-1 -qsuffix=cpp=f90 -qxlf2003=polymorphic")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
         set(CMAKE_Fortran_FLAGS "-O0 -qsuffix=cpp=f90 -qxlf2003=polymorphic")
     endif()

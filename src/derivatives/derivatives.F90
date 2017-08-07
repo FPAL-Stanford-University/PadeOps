@@ -194,7 +194,7 @@ contains
                        curvilinear)
         
         class(derivatives), intent(inout)          :: this
-        class(decomp_info), intent(in)             :: gp 
+        type(decomp_info), intent(in)             :: gp 
         real(rkind)       , intent(in)             :: dx, dy, dz
         logical           , intent(in)             :: periodic_x, periodic_y, periodic_z
         character(len=*)  , intent(in)             :: method_x
