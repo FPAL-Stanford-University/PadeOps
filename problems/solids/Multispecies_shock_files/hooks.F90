@@ -16,6 +16,7 @@ module Multispecies_shock_data
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
     real(rkind) :: Ly = one, Lx = six, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    logical     :: sliding = .false.
 
     type(filters) :: mygfil
 
@@ -197,7 +198,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
-                          plastic2, explPlast2, yield2, interface_init, kwave
+                          plastic2, explPlast2, yield2, interface_init, kwave, sliding
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -245,6 +246,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! set logicals for plasticity
         mix%material(1)%plast = plastic; mix%material(1)%explPlast = explPlast
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
+
+        ! Set logicals for sliding
+        mix%material(1)%sliding = sliding
+        mix%material(2)%sliding = sliding
 
         ! determine jump conditions for material 1
         p1 = p_amb

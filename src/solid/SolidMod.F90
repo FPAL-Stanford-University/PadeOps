@@ -385,7 +385,7 @@ contains
         use constants,  only: eps
         use RKCoeffs,   only: RK45_A,RK45_B
         use reductions, only: P_MAXVAL
-        use operators,  only: gradient
+        use operators,  only: gradient, filter3D
         use exits,      only : nancheck
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
@@ -396,7 +396,8 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg   ! RHS for g tensor equation
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: normal ! Interface normal for sliding treatment
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: mask, theta
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: mask, auxVF
+        real(rkind), parameter :: auxVF_exponent = 0.5_rkind
         real(rkind) :: max_modDevSigma
         integer :: i,j,k,l
         character(len=clen) :: charout
@@ -406,8 +407,19 @@ contains
         ! theta = atan2(y,x)
         ! normal(:,:,:,1) = cos(theta); normal(:,:,:,2) = sin(theta); normal(:,:,:,3) = zero
 
-        ! Set normal to be the maximal volume fraction gradient direction
-        call gradient(this%decomp, this%der, this%VF, normal(:,:,:,1), normal(:,:,:,2), normal(:,:,:,3), x_bc, y_bc, z_bc)
+        ! Set normal to be the maximal gradient direction of the volume fraction
+        ! Use auxiliary function as in Shukla, Pantano and Freund (JCP 2010)
+        auxVF = this%VF
+        where (auxVF < zero)
+            auxVF = zero
+        end where
+        where (auxVF > one)
+            auxVF = one
+        end where
+        call filter3D(this%decomp, this%gfil, auxVF, 1)
+        auxVF = (auxVF**auxVF_exponent) / ( auxVF**auxVF_exponent + (one - auxVF)**auxVF_exponent )
+        this%kap = auxVF
+        call gradient(this%decomp, this%der, auxVF, normal(:,:,:,1), normal(:,:,:,2), normal(:,:,:,3), x_bc, y_bc, z_bc)
         ! Normalize to magnitude 1
         mask = sqrt( normal(:,:,:,1)*normal(:,:,:,1) + normal(:,:,:,2)*normal(:,:,:,2) + normal(:,:,:,3)*normal(:,:,:,3) )
         do l = 1,3
@@ -1138,7 +1150,7 @@ contains
         real(rkind), dimension(3,3) :: g, u, vt, gradf, gradf_new, sigma, sigma_tilde, v_tilde
         real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new, dbeta_new
         real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t
-        real(rkind) :: tol = real(1.D-14,rkind), residual, residual_new
+        real(rkind) :: tol = real(1.D-12,rkind), residual, residual_new
         integer :: i,j,k
         integer, dimension(1) :: min_norm
         integer :: iters
@@ -1152,7 +1164,7 @@ contains
 
         real(rkind) :: dx, dy, x, y, rad, theta = 45._rkind * pi / 180._rkind
 
-        print *, "In sliding_deformation"
+        ! print *, "In sliding_deformation"
 
         ! where ((this%VF > 0.01) .and. (this%VF < 0.99))
         !     mask = one
@@ -1192,7 +1204,7 @@ contains
             do j = 1,this%nyp
                 do i = 1,this%nxp
 
-                    ! if (abs(mask(i,j,k)) > 0.9_rkind) then
+                    if (abs(mask(i,j,k)) > real(1.0D-2,rkind)) then
                         ! yield = zero
                         yield = (one-mask(i,j,k))*this%elastic%yield
 
@@ -1421,13 +1433,14 @@ contains
 
                             iters = iters + 1
                             if (t <= eps) then
-                                print '(A)', 'Newton solve in plastic_deformation did not converge'
+                                print '(A)', 'Newton solve in sliding_deformation did not converge'
                                 exit
                             end if
                         end do
                         if ((iters >= niters) .OR. (t <= eps)) then
-                            write(charout,'(4(A,I0))') 'Newton solve in plastic_deformation did not converge at index ',i,',',j,',',k,' of process ',nrank
+                            write(charout,'(4(A,I0))') 'Newton solve in sliding_deformation did not converge at index ',i,',',j,',',k,' of process ',nrank
                             print '(A)', charout
+                            print '(A,3(X,I0))', 'sty = ', this%decomp%yst
                             print '(A)', 'g = '
                             print '(4X,3(ES15.5))', this%g(i,j,k,1), this%g(i,j,k,2), this%g(i,j,k,3)
                             print '(4X,3(ES15.5))', this%g(i,j,k,4), this%g(i,j,k,5), this%g(i,j,k,6)
@@ -1472,7 +1485,7 @@ contains
                         ! this%g(i,j,k,4) = g(2,1); this%g(i,j,k,5) = g(2,2); this%g(i,j,k,6) = g(2,3)
                         ! this%g(i,j,k,7) = g(3,1); this%g(i,j,k,8) = g(3,2); this%g(i,j,k,9) = g(3,3)
 
-                    ! end if
+                    end if
                 end do
             end do
         end do
