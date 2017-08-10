@@ -1,6 +1,6 @@
 program test_io_hdf5
     use mpi
-    use kind_parameters, only : rkind
+    use kind_parameters, only : rkind, single_kind
     use decomp_2d
     use constants,       only: eps, two, pi
     use exits,           only: message
@@ -22,6 +22,9 @@ program test_io_hdf5
     real(rkind) :: dx, dy, dz
     real(rkind) :: time
     real(rkind), dimension(1) :: time_arr
+
+    logical :: reduce_precision = .true.
+    real(rkind) :: tolerance = 10._rkind*eps
 
     ! double precision :: t0, t1
 
@@ -55,7 +58,7 @@ program test_io_hdf5
     end do
 
     ! Initialize everything
-    call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', read_only=.false.)
+    call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', reduce_precision=reduce_precision, read_only=.false.)
 
     ! Write mesh coordinates to file
     call viz%write_coords(coords)
@@ -87,9 +90,10 @@ program test_io_hdf5
     call message("")
     call message("Now reading in the file written out")
 
-    call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', read_only=.true.)
+    tolerance = 10._rkind*epsilon(real(1.0,single_kind))
+    call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', reduce_precision=reduce_precision, read_only=.true.)
     call viz%read_dataset(dfdx, '0003/f')
-    if ( P_MAXVAL(abs(f - dfdx)) > 10.D0*eps ) then
+    if ( P_MAXVAL(abs(f - dfdx)) > tolerance ) then
         call message("ERROR:")
         call message("  Array '0003/f' read in has incorrect values")
     end if

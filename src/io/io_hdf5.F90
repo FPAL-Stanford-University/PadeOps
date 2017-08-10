@@ -1,12 +1,14 @@
 module io_hdf5_stuff
     use hdf5
     use mpi
-    use kind_parameters, only: rkind, clen
+    use kind_parameters, only: rkind, single_kind, clen
     use decomp_2d,       only: decomp_info, nrank, nproc
     use exits,           only: GracefulExit
     implicit none
 
     type :: io_hdf5
+
+        logical :: reduce_precision = .false. ! Reduce precision to single for I/O?
 
         integer :: vizcount
         character(len=clen) :: filename
@@ -60,14 +62,14 @@ module io_hdf5_stuff
 
 contains
 
-    subroutine init(this, comm_, gp, pencil_, vizdir_, filename_, read_only)
+    subroutine init(this, comm_, gp, pencil_, vizdir_, filename_, reduce_precision, read_only)
         class(io_hdf5),     intent(inout) :: this
         integer,            intent(in)    :: comm_
         class(decomp_info), intent(in)    :: gp
         character(len=1),   intent(in)    :: pencil_
         character(len=*),   intent(in)    :: vizdir_
         character(len=*),   intent(in)    :: filename_
-        logical, optional,  intent(in)    :: read_only
+        logical, optional,  intent(in)    :: reduce_precision, read_only
 
         integer :: nrank
         integer :: info
@@ -80,6 +82,9 @@ contains
 
         this%comm = comm_
         this%pencil = pencil_
+
+        this%reduce_precision = .false.
+        if (present(reduce_precision)) this%reduce_precision = reduce_precision
 
         this%vizcount = 0
         this%vizdir = adjustl(trim(vizdir_))
@@ -168,6 +173,7 @@ contains
         class(io_hdf5), intent(inout) :: this
         real(rkind), dimension(this%chunk_dims(1),this%chunk_dims(2),this%chunk_dims(3)), intent(in) :: field
         character(len=*), intent(in) :: dsetname
+        real(single_kind), dimension(this%chunk_dims(1),this%chunk_dims(2),this%chunk_dims(3)) :: field_single
 
         integer :: error
 
@@ -178,8 +184,13 @@ contains
         ! Create chunked dataset
         call h5pcreate_f(H5P_DATASET_CREATE_F, this%plist_id, error)
         call h5pset_chunk_f(this%plist_id, this%rank, this%chunk_dims, error)
-        call h5dcreate_f(this%file_id, adjustl(trim(dsetname)), H5T_NATIVE_DOUBLE, this%filespace, &
-                         this%dset_id, error, this%plist_id, this%lcpl_id)
+        if (this%reduce_precision) then
+            call h5dcreate_f(this%file_id, adjustl(trim(dsetname)), H5T_NATIVE_REAL,   this%filespace, &
+                             this%dset_id, error, this%plist_id, this%lcpl_id)
+        else
+            call h5dcreate_f(this%file_id, adjustl(trim(dsetname)), H5T_NATIVE_DOUBLE, this%filespace, &
+                             this%dset_id, error, this%plist_id, this%lcpl_id)
+        end if
         call h5sclose_f(this%filespace, error)
 
         ! Select hyperslab in file
@@ -192,8 +203,14 @@ contains
         call h5pset_dxpl_mpio_f(this%plist_id, H5FD_MPIO_COLLECTIVE_F, error)
 
         ! Write dataset collectively
-        call h5dwrite_f(this%dset_id, H5T_NATIVE_DOUBLE, field, this%dimsf, error, &
-                        file_space_id = this%filespace, mem_space_id = this%memspace, xfer_prp = this%plist_id)
+        if (this%reduce_precision) then
+            field_single = real(field, single_kind)
+            call h5dwrite_f(this%dset_id, H5T_NATIVE_REAL, field_single, this%dimsf, error, &
+                            file_space_id = this%filespace, mem_space_id = this%memspace, xfer_prp = this%plist_id)
+        else
+            call h5dwrite_f(this%dset_id, H5T_NATIVE_DOUBLE, field, this%dimsf, error, &
+                            file_space_id = this%filespace, mem_space_id = this%memspace, xfer_prp = this%plist_id)
+        end if
 
         ! Close dataspaces
         call h5sclose_f(this%filespace, error)
@@ -211,6 +228,7 @@ contains
         class(io_hdf5), intent(inout) :: this
         real(rkind), dimension(this%chunk_dims(1),this%chunk_dims(2),this%chunk_dims(3)), intent(out) :: field
         character(len=*), intent(in) :: dsetname
+        real(single_kind), dimension(this%chunk_dims(1),this%chunk_dims(2),this%chunk_dims(3)) :: field_single
 
         integer :: error
 
@@ -233,9 +251,15 @@ contains
         call h5pcreate_f(H5P_DATASET_XFER_F, this%plist_id, error)
         call h5pset_dxpl_mpio_f(this%plist_id, H5FD_MPIO_COLLECTIVE_F, error)
 
-        ! Write dataset collectively
-        call h5dread_f(this%dset_id, H5T_NATIVE_DOUBLE, field, this%dimsf, error, &
-                       file_space_id = this%filespace, mem_space_id = this%memspace, xfer_prp = this%plist_id)
+        ! Read dataset collectively
+        if (this%reduce_precision) then
+            call h5dread_f(this%dset_id, H5T_NATIVE_REAL, field_single, this%dimsf, error, &
+                           file_space_id = this%filespace, mem_space_id = this%memspace, xfer_prp = this%plist_id)
+            field = real(field_single, rkind)
+        else
+            call h5dread_f(this%dset_id, H5T_NATIVE_DOUBLE, field, this%dimsf, error, &
+                           file_space_id = this%filespace, mem_space_id = this%memspace, xfer_prp = this%plist_id)
+        end if
 
         ! Close dataspaces
         call h5sclose_f(this%filespace, error)
