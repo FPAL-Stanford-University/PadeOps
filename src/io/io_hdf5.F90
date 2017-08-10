@@ -43,20 +43,22 @@ module io_hdf5_stuff
 
     contains
 
-        procedure :: init
-        procedure :: write_dataset
-        procedure :: read_dataset
-        procedure :: write_attribute_integer
-        procedure :: read_attribute_integer
-        procedure :: write_attribute_double
-        procedure :: read_attribute_double
-        generic   :: write_attribute => write_attribute_integer, write_attribute_double
-        generic   :: read_attribute => read_attribute_integer, read_attribute_double
-        procedure :: write_coords
-        procedure :: start_viz
-        procedure :: end_viz
-        procedure :: write_variable
-        procedure :: destroy
+        procedure          :: init
+        procedure          :: write_dataset
+        procedure          :: read_dataset
+        procedure, private :: write_attribute_integer
+        procedure, private :: read_attribute_integer
+        procedure, private :: write_attribute_double
+        procedure, private :: read_attribute_double
+        generic            :: write_attribute => write_attribute_integer, write_attribute_double
+        generic            :: read_attribute => read_attribute_integer, read_attribute_double
+        procedure          :: write_coords
+        procedure          :: start_viz
+        procedure          :: end_viz
+        procedure          :: start_reading
+        procedure          :: end_reading
+        procedure          :: write_variable
+        procedure          :: destroy
 
     end type
 
@@ -121,6 +123,9 @@ contains
         end if
         call h5pclose_f(this%plist_id, error)
 
+        ! Close the file
+        call h5fclose_f(this%file_id, error)
+
         ! Create group creation property list and set it to allow creation of intermediate groups
         call h5pcreate_f(H5P_LINK_CREATE_F, this%lcpl_id, error)
         call h5pset_create_inter_group_f(this%lcpl_id, 1, error)
@@ -162,8 +167,8 @@ contains
         ! Close the link creation property list
         call h5pclose_f(this%lcpl_id, error)
 
-        ! Close the file
-        call h5fclose_f(this%file_id, error)
+        ! ! Close the file
+        ! call h5fclose_f(this%file_id, error)
 
         ! Close Fortran interfaces and HDF5 library
         call h5close_f(error)
@@ -224,13 +229,16 @@ contains
 
     end subroutine
 
-    subroutine read_dataset(this,field,dsetname)
+    subroutine read_dataset(this,field,varname)
         class(io_hdf5), intent(inout) :: this
         real(rkind), dimension(this%chunk_dims(1),this%chunk_dims(2),this%chunk_dims(3)), intent(out) :: field
-        character(len=*), intent(in) :: dsetname
+        character(len=*), intent(in) :: varname
         real(single_kind), dimension(this%chunk_dims(1),this%chunk_dims(2),this%chunk_dims(3)) :: field_single
 
+        character(len=clen) :: dsetname
         integer :: error
+
+        write(dsetname,'(I4.4,A,A)') this%vizcount, '/', adjustl(trim(varname))
 
         ! Create the dataspace for the dataset
         call h5screate_simple_f(this%rank, this%dimsf, this%filespace, error)
@@ -309,13 +317,13 @@ contains
 
     end subroutine
 
-    subroutine read_attribute_integer(this, dims, adata, aname, grpname)
+    subroutine read_attribute_integer(this, dims, adata, aname)
         class(io_hdf5),           intent(inout) :: this
         integer,                  intent(in)    :: dims    ! Attribute dimensions
         integer, dimension(dims), intent(out)   :: adata   ! Attribute data
         character(len=*),         intent(in)    :: aname   ! Attribute name
-        character(len=*),         intent(in)    :: grpname ! Group name to attach attribute to
-        
+
+        character(len=clen) :: grpname ! Group name to attach attribute to
         integer :: error
         integer(hid_t) :: attr_id   ! Attribute identifier
         integer(hid_t) :: atype_id  ! Attribute datatype identifier
@@ -323,6 +331,8 @@ contains
         
         adims = [dims]
         atype_id = H5T_NATIVE_INTEGER
+
+        write(grpname,'(I4.4)') this%vizcount
 
         call h5gopen_f(this%file_id, adjustl(trim(grpname)), this%group_id, error)
 
@@ -376,13 +386,13 @@ contains
 
     end subroutine
 
-    subroutine read_attribute_double(this, dims, adata, aname, grpname)
+    subroutine read_attribute_double(this, dims, adata, aname)
         class(io_hdf5),               intent(inout) :: this
         integer,                      intent(in)    :: dims    ! Attribute dimensions
         real(rkind), dimension(dims), intent(out)   :: adata   ! Attribute data
         character(len=*),             intent(in)    :: aname   ! Attribute name
-        character(len=*),             intent(in)    :: grpname ! Group name to attach attribute to
         
+        character(len=clen) :: grpname ! Group name to attach attribute to
         integer :: error
         integer(hid_t) :: attr_id   ! Attribute identifier
         integer(hid_t) :: atype_id  ! Attribute datatype identifier
@@ -390,6 +400,8 @@ contains
         
         adims = [dims]
         atype_id = H5T_NATIVE_DOUBLE
+
+        write(grpname,'(I4.4)') this%vizcount
 
         call h5gopen_f(this%file_id, adjustl(trim(grpname)), this%group_id, error)
 
@@ -411,20 +423,56 @@ contains
         class(io_hdf5), intent(inout) :: this
         real(rkind), dimension(this%chunk_dims(1),this%chunk_dims(2),this%chunk_dims(3),3), intent(in) :: coords
 
+        integer :: info
+        integer :: error
+
+        info = mpi_info_null
+
+        ! Setup file access property list with parallel I/O access.
+        call h5pcreate_f(H5P_FILE_ACCESS_F, this%plist_id, error)
+        call h5pset_fapl_mpio_f(this%plist_id, this%comm, info, error)
+
+        ! Create the file collectively
+        if (this%read_only) then
+            call GracefulExit("Cannot start writing HDF5 data in read only mode!", 756)
+        else
+            ! call h5fcreate_f(this%filename, H5F_ACC_TRUNC_F, this%file_id, error, access_prp = this%plist_id)
+            call h5fopen_f(this%filename, H5F_ACC_RDWR_F, this%file_id, error, access_prp = this%plist_id)
+        end if
+        call h5pclose_f(this%plist_id, error)
+
         call this%write_dataset(coords(:,:,:,1), 'coords/X')
         call this%write_dataset(coords(:,:,:,2), 'coords/Y')
         call this%write_dataset(coords(:,:,:,3), 'coords/Z')
 
         call this%write_attribute(3, int(this%dimsf), 'GridSize', 'coords')
 
+        ! Close the file
+        call h5fclose_f(this%file_id, error)
     end subroutine
 
     subroutine start_viz(this, time)
         class(io_hdf5), intent(inout) :: this
         real(rkind),    intent(in)    :: time
 
+        integer :: info
         integer :: error
         character(len=clen) :: grpname
+
+        info = mpi_info_null
+
+        ! Setup file access property list with parallel I/O access.
+        call h5pcreate_f(H5P_FILE_ACCESS_F, this%plist_id, error)
+        call h5pset_fapl_mpio_f(this%plist_id, this%comm, info, error)
+
+        ! Create the file collectively
+        if (this%read_only) then
+            call GracefulExit("Cannot start writing HDF5 data in read only mode!", 756)
+        else
+            ! call h5fcreate_f(this%filename, H5F_ACC_TRUNC_F, this%file_id, error, access_prp = this%plist_id)
+            call h5fopen_f(this%filename, H5F_ACC_RDWR_F, this%file_id, error, access_prp = this%plist_id)
+        end if
+        call h5pclose_f(this%plist_id, error)
 
         write(grpname,'(I4.4)') this%vizcount
 
@@ -483,6 +531,11 @@ contains
     subroutine end_viz(this)
         class(io_hdf5), intent(inout) :: this
 
+        integer :: error
+
+        ! Close the file
+        call h5fclose_f(this%file_id, error)
+
         if (this%master) then
             write(this%xdmf_file_id,'(A)')           '   </Grid>'
             write(this%xdmf_file_id,'(A)')           ' </Domain>'
@@ -492,6 +545,41 @@ contains
         end if
 
         this%vizcount = this%vizcount + 1
+    end subroutine
+
+    subroutine start_reading(this, vizcount)
+        class(io_hdf5), intent(inout) :: this
+        integer,        intent(in)    :: vizcount
+
+        integer :: info
+        integer :: error
+
+        info = mpi_info_null
+
+        ! Setup file access property list with parallel I/O access.
+        call h5pcreate_f(H5P_FILE_ACCESS_F, this%plist_id, error)
+        call h5pset_fapl_mpio_f(this%plist_id, this%comm, info, error)
+
+        ! Create the file collectively
+        if (this%read_only) then
+            this%vizcount = vizcount
+            call h5fopen_f(this%filename, H5F_ACC_RDONLY_F, this%file_id, error, access_prp = this%plist_id)
+            if (error /= 0) call GracefulExit("Could not open HDF5 file " // adjustl(trim(this%filename)), 7356)
+        else
+            call GracefulExit("Use read only mode to read HDF5 data and avoid corruption", 756)
+        end if
+        call h5pclose_f(this%plist_id, error)
+
+    end subroutine
+
+    subroutine end_reading(this)
+        class(io_hdf5), intent(inout) :: this
+
+        integer :: error
+
+        ! Close the file
+        call h5fclose_f(this%file_id, error)
+
     end subroutine
 
 end module

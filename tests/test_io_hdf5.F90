@@ -92,18 +92,21 @@ program test_io_hdf5
 
     tolerance = 10._rkind*epsilon(real(1.0,single_kind))
     call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', reduce_precision=reduce_precision, read_only=.true.)
-    call viz%read_dataset(dfdx, '0003/f')
+
+    call viz%start_reading(3)
+    call viz%read_dataset(dfdx, 'f')
     if ( P_MAXVAL(abs(f - dfdx)) > tolerance ) then
         call message("ERROR:")
         call message("  Array '0003/f' read in has incorrect values")
     end if
 
-    call viz%read_attribute(1, time_arr, 'Time', '0003')
+    call viz%read_attribute(1, time_arr, 'Time')
     if ( abs(time_arr(1) - time) > 10.D0*eps ) then
         call message("ERROR:")
         call message("  Wrong value of time read in. Expected time",time)
         call message("  Got time",time_arr(1))
     end if
+    call viz%end_reading
 
     deallocate(coords, f, dfdx,dfdy, dfdz)
     nullify(x, y, z)
