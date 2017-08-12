@@ -22,6 +22,7 @@ module staggOpsMod
         real(rkind) :: dx, dy, dz
         logical :: isBotSided = .false. 
         logical :: isTopSided = .false. 
+        logical :: isPeriodic = .false. 
         contains
             procedure :: init
             procedure :: destroy
@@ -84,17 +85,22 @@ contains
         OneByDz = one/(this%dz)
         dfdzE(:,:,2:this%nzE-1) =  fC(:,:,2:this%nzC) - fC(:,:,1:this%nzC-1) 
 
-        if (isBotEven) then
-            dfdzE(:,:,1) = zero
-        else 
-            dfdzE(:,:,1) = two*fc(:,:,1)
-        end if
+        if (this%isPeriodic) then
+           dfdzE(:,:,1) = fC(:,:,1) - fC(:,:,this%nzC)
+           dfdzE(:,:,this%nzE) = dfdzE(:,:,1)
+        else
+            if (isBotEven) then
+                dfdzE(:,:,1) = zero
+            else 
+                dfdzE(:,:,1) = two*fc(:,:,1)
+            end if
 
-        if (isTopEven) then
-            dfdzE(:,:,this%nzE) = zero
-        else 
-            dfdzE(:,:,this%nzE) = -two*fC(:,:,this%nzC)
-        end if
+            if (isTopEven) then
+                dfdzE(:,:,this%nzE) = zero
+            else 
+                dfdzE(:,:,this%nzE) = -two*fC(:,:,this%nzC)
+            end if
+        end if 
 
         dfdzE = dfdzE*OneByDz
 
@@ -295,17 +301,20 @@ contains
     end subroutine
 
 
-    subroutine init(this, gpC, gpE, stagg_scheme , dx, dy, dz, gpCspect, gpEspect, isTopSided, isBotSided)
+    subroutine init(this, gpC, gpE, stagg_scheme , dx, dy, dz, gpCspect, gpEspect, isTopSided, isBotSided, isPeriodic)
         class(staggOps), intent(inout) :: this
         class(decomp_info), intent(in), target:: gpC, gpE
         integer, intent(in) :: stagg_scheme
         real(rkind), intent(in) :: dx, dy, dz
         class(decomp_info), intent(in), optional, target:: gpCspect, gpEspect
-        logical, intent(in), optional :: isTopSided, isBotSided
+        logical, intent(in), optional :: isTopSided, isBotSided, isPeriodic
 
         if ((present(isTopSided)) .and. (present(isBotSided))) then
             this%isTopSided = isTopSided; this%isBotSided = isBotSided
-        end if 
+        end if
+
+        if (present(isPeriodic)) this%isPeriodic = isPeriodic
+
         this%nxC = gpC%zsz(1)
         this%nyC = gpC%zsz(2)
         this%nzC = gpC%zsz(3)
@@ -394,11 +403,16 @@ contains
         real(rkind), intent(out), dimension(this%nxE, this%nyE, this%nzE) :: edgeArr
         real(rkind), intent(in) :: BotVal, TopVal
 
-        edgeArr(:,:,this%nzE) = TopVal
-        edgeArr(:,:,1          ) = BotVal
         edgeArr(:,:,2:this%nzE-1) = cellArr(:,:,1:this%nzC-1) 
         edgeArr(:,:,2:this%nzE-1) = edgeArr(:,:,2:this%nzE-1) + cellArr(:,:, 2:this%nzC)
         edgeArr(:,:,2:this%nzE-1) = half*edgeArr(:,:,2:this%nzE-1)
+        
+        if (this%isPeriodic) then
+            edgeArr(:,:,1) = half*(cellArr(:,:,1) + cellArr(:,:,this%nzC)) 
+        else
+            edgeArr(:,:,this%nzE) = TopVal
+            edgeArr(:,:,1       ) = BotVal
+        end if 
     end subroutine
 
 end module 

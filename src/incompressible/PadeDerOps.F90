@@ -22,7 +22,7 @@ module PadeDerOps
    type Pade6stagg
       type(cd06stagg), allocatable :: derOO, derEE, derOE, derEO, derOS, derSO, derSE, derES, derSS
       type(cd06stagg), allocatable :: derPeriodic
-      type(staggOps) :: fd02_ss, fd02_ns, fd02_sn, fd02_nn
+      type(staggOps) :: fd02_ss, fd02_ns, fd02_sn, fd02_nn, fd02_periodic
       type(decomp_info), pointer :: gp, sp_gp
       type(spectral), pointer :: spectC
       integer :: scheme = 1
@@ -81,7 +81,11 @@ subroutine init(this, gpC, sp_gpC, gpE, sp_gpE, dz, scheme, isPeriodic, spectC)
       case(cd06)
          allocate(this%derPeriodic)
          call this%derPeriodic%init(this%gp%zsz(3),dz)
-   end select
+      case(fd02)
+         call this%fd02_periodic%init(gpC, gpE, 1, one, one, dz, sp_gpC, sp_gpE,.true.,.true.,isPeriodic)
+      case default
+         call GracefulExit("Invalid choice of numerical scheme in vertical",434)
+      end select
    else
       select case(this%scheme)
       case(cd06)
@@ -678,6 +682,8 @@ subroutine interpz_C2E_real(this,input,output,bot,top)
          call this%spectC%interp_C2E_spect(input, output)
       case (cd06)
          call this%derPeriodic%interpz_C2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      case (fd02)
+         call this%fd02_periodic%InterpZ_Cell2Edge(input, output,0.d0,0.d0)
       end select 
    else
       select case(this%scheme)
