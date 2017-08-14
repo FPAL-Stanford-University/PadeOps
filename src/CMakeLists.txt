@@ -7,24 +7,23 @@ file(GLOB compressible_source_files compressible/*.F90)
 file(GLOB solid_source_files solid/*.F90)
 file(GLOB poisson_source_files incompressible/poisson/*.F90)
 file(GLOB incompressible_source_files incompressible/*.F90)
-file(GLOB nufft_source_files nufft/*.F90)
 
 # Where to look for FFTW
 set(FFTW_LIBRARY_PATH "${FFTW_PATH}/lib")
 set(FFTW_INCLUDE_PATH "${FFTW_PATH}/include")
 
 # Include directories
-include_directories(${MPI_INCLUDE_PATH} ${FFTW_INCLUDE_PATH} ${DECOMP_INCLUDE_PATH} ${VTK_IO_INCLUDE_PATH} ${HDF5_INCLUDE_PATH} ${FFTPACK_INCLUDE_PATH})
+include_directories(${MPI_INCLUDE_PATH} ${FFTW_INCLUDE_PATH} ${DECOMP_INCLUDE_PATH} ${VTK_IO_INCLUDE_PATH} ${HDF5_INCLUDE_PATH})
 
 # Link directories
-link_directories(${FFTW_LIBRARY_PATH} ${DECOMP_LIBRARY_PATH} ${VTK_IO_LIBRARY_PATH} ${HDF5_LIBRARY_PATH} ${FFTPACK_LIBRARY_PATH})
+link_directories(${FFTW_LIBRARY_PATH} ${DECOMP_LIBRARY_PATH} ${VTK_IO_LIBRARY_PATH} ${HDF5_LIBRARY_PATH})
 
 # Create a library called PadeOps
 add_library(PadeOps STATIC ${utilities_source_files} ${derivatives_source_files} ${filters_source_files} ${io_source_files} )
 if ( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
-   target_link_libraries(PadeOps fftw3 2decomp_fft fftpack ${VTK_IO_LIBRARY_PATH}/libVTK_IO.a ${HDF5_LIBRARY_PATH}/libhdf5hl_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5_hl.a ${HDF5_LIBRARY_PATH}/libhdf5_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5.a ${MPI_LIBRARIES} -lz -ldl -lm -Wl,-rpath -Wl,${HDF5_LIBRARY_PATH})
+   target_link_libraries(PadeOps fftw3 2decomp_fft ${VTK_IO_LIBRARY_PATH}/libVTK_IO.a ${HDF5_LIBRARY_PATH}/libhdf5hl_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5_hl.a ${HDF5_LIBRARY_PATH}/libhdf5_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5.a ${MPI_LIBRARIES} -lz -ldl -lm -Wl,-rpath -Wl,${HDF5_LIBRARY_PATH})
 else()
-   target_link_libraries(PadeOps fftw3 2decomp_fft fftpack blas lapack ${VTK_IO_LIBRARY_PATH}/libVTK_IO.a ${HDF5_LIBRARY_PATH}/libhdf5hl_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5_hl.a ${HDF5_LIBRARY_PATH}/libhdf5_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5.a ${MPI_LIBRARIES} -lz -ldl -lm -Wl,-rpath -Wl,${HDF5_LIBRARY_PATH})
+   target_link_libraries(PadeOps fftw3 2decomp_fft blas lapack ${VTK_IO_LIBRARY_PATH}/libVTK_IO.a ${HDF5_LIBRARY_PATH}/libhdf5hl_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5_hl.a ${HDF5_LIBRARY_PATH}/libhdf5_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5.a ${MPI_LIBRARIES} -lz -ldl -lm -Wl,-rpath -Wl,${HDF5_LIBRARY_PATH})
 endif()
 
 if ( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
@@ -56,7 +55,7 @@ if (MPI_Fortran_COMPILER_FLAGS)
 endif()
 
 # Create a library called IncompressibleOps
-add_library(IncompressibleOps STATIC ${grid_source_files} ${poisson_source_files} ${incompressible_source_files} ${nufft_source_files})
+add_library(IncompressibleOps STATIC ${grid_source_files} ${poisson_source_files} ${incompressible_source_files})
 target_link_libraries(IncompressibleOps PadeOps ${MPI_LIBRARIES})
 
 if (MPI_Fortran_COMPILER_FLAGS)
