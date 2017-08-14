@@ -4489,6 +4489,12 @@ contains
                     call decomp_2d_write_plane(1,this%T,dirid, pid, fname)
                 end if
 
+                if (this%fastCalcPressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plP"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname)
+                end if 
+
                 ! planes for KS preprocess
                 if (this%PreProcessForKS) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".ksu"
@@ -4530,6 +4536,12 @@ contains
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                     call decomp_2d_write_plane(1,this%T,dirid, pid, fname)
                 end if
+                
+                if (this%fastCalcPressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plP"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname)
+                end if 
 
                 ! planes for KS preprocess
                 if (this%PreProcessForKS) then
@@ -4574,6 +4586,12 @@ contains
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                     call decomp_2d_write_plane(1,this%T,dirid, pid, fname)
                 end if
+                
+                if (this%fastCalcPressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plP"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname)
+                end if 
 
 
                 ! planes for KS preprocess
