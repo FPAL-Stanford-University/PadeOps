@@ -42,7 +42,7 @@ program upsampleFields
 
     !!!!!!!!!!!!! CELL FIELDS !!!!!!!!!!!!!!!
     allocate(f(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
-    
+   
     write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",inputFile_RID, "_u.",inputFile_TID
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
     call decomp_2d_read_one(1,f,fname, gpC)
@@ -54,15 +54,23 @@ program upsampleFields
     mean_f = p_sum(sum(f))/(real(n)**3)
     call message(0, "New frame speed", mean_f)
     call decomp_2d_write_one(1,f,fname, gpC)
+    call message(0, "Done writing u")
    
     write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",inputFile_RID, "_v.",inputFile_TID
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
+    print*, fname
     call decomp_2d_read_one(1,f,fname, gpC)
+    print*, "read v"
     write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",outputFile_RID, "_v.",outputFile_TID
     fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+    print*, 1
+    print*, "Shape:", shape(f)
+    print*, fname
     call decomp_2d_write_one(1,f,fname, gpC)
+    print*, 2
     
     deallocate(f)
+    call message(0, "Done writing v")
     
     allocate(f(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
     
@@ -75,6 +83,7 @@ program upsampleFields
     
     deallocate(f)
 
+    call message(0, "Done writing w")
     !!!!!! WRITE HEADER !!!!!!!!!!!
     if (nrank == 0) then
         write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",outputFile_RID, "_info.",outputFile_TID
@@ -84,6 +93,7 @@ program upsampleFields
         close(10)
     end if 
 
+    call message(0, "Done writing header")
     call MPI_Finalize(ierr)           !<-- Terminate MPI 
 
 end program 
