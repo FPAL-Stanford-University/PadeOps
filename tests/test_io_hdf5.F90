@@ -26,7 +26,9 @@ program test_io_hdf5
     logical :: reduce_precision = .true.
     real(rkind) :: tolerance = 10._rkind*eps
 
-    ! double precision :: t0, t1
+    double precision :: t0, t1, t2, t3
+    real(rkind) :: gbytes
+    integer :: elemsize
 
     call MPI_Init(ierr)
 
@@ -57,6 +59,13 @@ program test_io_hdf5
         end do
     end do
 
+    if (reduce_precision) then
+        elemsize = storage_size(1._single_kind)
+    else
+        elemsize = storage_size(1._rkind)
+    end if
+    gbytes = ( real(elemsize, rkind) * nx * ny * nz * 4 ) / ( real(8, rkind) * 1024 * 1024 * 1024 )
+
     ! Initialize everything
     call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', reduce_precision=reduce_precision, read_only=.false.)
 
@@ -72,8 +81,14 @@ program test_io_hdf5
         dfdy =  sin(iter*x)*cos(iter*y)*cos(iter*z)*iter
         dfdz = -sin(iter*x)*sin(iter*y)*sin(iter*z)*iter
 
+        call mpi_barrier(mpi_comm_world, ierr)
+        t0 = mpi_wtime()
+
         ! Start vizualization dump
         call viz%start_viz(time)
+
+        call mpi_barrier(mpi_comm_world, ierr)
+        t1 = mpi_wtime()
 
         ! Add variables to file
         call viz%write_variable(f,    'f'   )
@@ -81,8 +96,23 @@ program test_io_hdf5
         call viz%write_variable(dfdy, 'dfdy')
         call viz%write_variable(dfdz, 'dfdz')
 
+        call mpi_barrier(mpi_comm_world, ierr)
+        t2 = mpi_wtime()
+
         ! End vizualization dump
         call viz%end_viz()
+
+        call mpi_barrier(mpi_comm_world, ierr)
+        t3 = mpi_wtime()
+
+        if (nrank == 0) then
+            print '(A,ES10.3,A)', "    Time to start viz       = ", t1-t0, " seconds"
+            print '(A,ES10.3,A)', "    Time to write variables = ", t2-t1, " seconds"
+            print '(A,ES10.3,A)', "    Time to end viz         = ", t3-t2, " seconds"
+            print '(A,ES10.3,A)', ""
+            print '(A,ES10.3,A)', "    Effective I/O bandwidth = ", gbytes/(t2-t1), " GB/s"
+            print '(A,ES10.3,A)', ""
+        end if
     end do
 
     call viz%destroy()
