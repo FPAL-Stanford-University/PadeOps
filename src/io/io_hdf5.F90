@@ -104,7 +104,8 @@ contains
         end if
 
         ! Create vizdir if it does not exist
-        call system('mkdir -p ' // adjustl(trim(this%vizdir)))
+        if (this%master) call system('mkdir -p ' // adjustl(trim(this%vizdir)))
+        call mpi_barrier(mpi_comm_world, error)
 
         ! Initialize the HDF5 library and Fortran interfaces
         call h5open_f(error)
@@ -112,7 +113,9 @@ contains
 
         ! Setup file access property list with parallel I/O access.
         call h5pcreate_f(H5P_FILE_ACCESS_F, this%plist_id, error)
+        if (error /= 0) call GracefulExit("Could not create HDF5 file access property list.", 7356)
         call h5pset_fapl_mpio_f(this%plist_id, this%comm, info, error)
+        if (error /= 0) call GracefulExit("Could not set collective MPI I/O HDF5 file access property.", 7356)
 
         ! Create the file collectively
         if (this%read_only) then
