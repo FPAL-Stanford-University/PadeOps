@@ -124,11 +124,11 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:), pointer:: u_Orhs, v_Orhs, w_Orhs
 
         real(rkind), dimension(:,:,:), allocatable :: rDampC, rDampE         
-        real(rkind) :: Re, G_Geostrophic, G_alpha, dtby2, meanfact, Tref, dPfdx, dPfdy, dPfdz
-        complex(rkind), dimension(:,:,:), allocatable :: GxHat, GyHat, GxHat_Edge
+        real(rkind) :: Re, G_Geostrophic, G_alpha, frameAngle, dtby2, meanfact, Tref, dPfdx, dPfdy, dPfdz
+        complex(rkind), dimension(:,:,:), allocatable :: GxHat, GyHat, GxHat_Edge, GyHat_Edge
         real(rkind) :: Ro = 1.d5, Fr = 1000.d0
         logical :: assume_fplane = .true.
-        real(rkind) :: coriolis_cosine, coriolis_sine 
+        real(rkind) :: coriolis_omegaY, coriolis_omegaZ, coriolis_omegaX 
         integer :: nxZ, nyZ
      
         logical :: periodicInZ  = .false. 
@@ -324,7 +324,7 @@ contains
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
-        real(rkind) :: Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0
+        real(rkind) :: Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true.  
@@ -341,7 +341,7 @@ contains
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, &
-                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude, useHITForcing
+                          useGeostrophicForcing, G_geostrophic, G_alpha, frameAngle, dpFdx, dpFdy, dpFdz, assume_fplane, latitude, useHITForcing
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
@@ -379,6 +379,7 @@ contains
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact; this%useFringe = useFringe
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ 
         this%useHITForcing = useHITForcing
+        this%frameAngle = frameAngle
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -648,21 +649,27 @@ contains
             call this%spectC%alloc_r2c_out(this%GxHat)
             call this%spectC%alloc_r2c_out(this%GyHat)
             call this%spectE%alloc_r2c_out(this%GxHat_Edge)
+            call this%spectE%alloc_r2c_out(this%GyHat_Edge)
             this%rbuffxC(:,:,:,1) = this%G_GEOSTROPHIC*cos(G_ALPHA*pi/180.d0)
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gxhat)
             this%rbuffxE(:,:,:,1) = this%G_GEOSTROPHIC*cos(G_ALPHA*pi/180.d0)
             call this%spectE%fft(this%rbuffxE(:,:,:,1),this%Gxhat_Edge)
             this%rbuffxC(:,:,:,1) = this%G_GEOSTROPHIC*sin(G_ALPHA*pi/180.d0)
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gyhat)
+            this%rbuffxE(:,:,:,1) = this%G_GEOSTROPHIC*sin(G_ALPHA*pi/180.d0)
+            call this%spectE%fft(this%rbuffxE(:,:,:,1),this%Gyhat_Edge)
+
             
             if (this%assume_fplane) then
-                this%coriolis_sine   = sin(latitude*pi/180.d0)
-                this%coriolis_cosine = 0.d0
+                this%coriolis_omegaZ   = sin(latitude*pi/180.d0)
+                this%coriolis_omegaY = 0.d0
+                this%coriolis_omegaX = 0.d0
                 call message(1, "Making the f-plane assumption (latitude effect &
                 & ignored in w equation)")
             else
-                this%coriolis_sine   = sin(latitude*pi/180.d0)
-                this%coriolis_cosine = cos(latitude*pi/180.d0)
+                this%coriolis_omegaX = cos(latitude*pi/180.d0)*sin(frameAngle*pi/180.d0)
+                this%coriolis_omegaZ = sin(latitude*pi/180.d0)
+                this%coriolis_omegaY = cos(latitude*pi/180.d0)*cos(frameAngle*pi/180.d0)
                 call message(1,"Latitude used for Coriolis (degrees)",latitude)
             end if
         end if
@@ -1543,23 +1550,24 @@ contains
 
 
         ! u equation 
-        ybuffC1    = (two/this%Ro)*(-this%coriolis_cosine*this%what - this%coriolis_sine*(this%GyHat - this%vhat))
+        ybuffC1    = (two/this%Ro)*(-this%coriolis_omegaY*this%whatC - this%coriolis_omegaZ*(this%GyHat - this%vhat))
         this%u_rhs = this%u_rhs  + ybuffC1
         
         ! v equation
-        ybuffC2    = (two/this%Ro)*(this%coriolis_sine*(this%GxHat - this%uhat))
+        !ybuffC2    = (two/this%Ro)*(this%coriolis_omegaZ*(this%GxHat - this%uhat))
+        ybuffC2    = (two/this%Ro)*(this%coriolis_omegaZ*(this%GxHat - this%uhat) + this%coriolis_omegaX*this%whatC)
         this%v_rhs = this%v_rhs + ybuffC2 
         
         ! w equation 
         ! The real equation is given as:
-        ! this%w_rhs = this%w_rhs - this%coriolis_cosine*(this%GxHat - this%uhat)/this%Ro
+        ! this%w_rhs = this%w_rhs - this%coriolis_omegaY*(this%GxHat - this%uhat)/this%Ro
         ! But we evaluate this term as:
       
-        ybuffE = (two/this%Ro)*(-this%coriolis_cosine*(this%Gxhat_Edge - this%uEhat)) 
-        this%w_rhs = this%w_rhs + ybuffE 
+        ybuffE = (two/this%Ro)*(-this%coriolis_omegaY*(this%Gxhat_Edge - this%uEhat) + this%coriolis_omegaY*(this%Gyhat_Edge - this%vEhat)) 
         if (this%spectE%CarryingZeroK) then
             ybuffE(1,1,:) = cmplx(zero,zero,rkind)
-        end if
+        end if 
+        this%w_rhs = this%w_rhs + ybuffE 
         ! The residual quantity (Gx - <u>)*cos(alpha)/Ro is accomodated in
         ! pressure
 
