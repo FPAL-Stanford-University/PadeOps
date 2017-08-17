@@ -115,4 +115,5 @@ program testSTAGGcd06
     deallocate(der)
     deallocate(zE, zC, fE, fC, dfEt, dfE, dfCt, dfC, IfC, IfE, d2fC, d2fE, d2fEt, d2fCt)
 
+    call MPI_Finalize(ierr)
 end program 
