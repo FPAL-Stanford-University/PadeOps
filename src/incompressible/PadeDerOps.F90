@@ -128,7 +128,7 @@ subroutine destroy(this)
    class(Pade6stagg), intent(inout) :: this
   
    if (this%isPeriodic) then
-      if (this%scheme == cd06) then
+      if (this%scheme == cd06 .OR. this%scheme == fd02) then
          Call this%derPeriodic%destroy()
          Deallocate(this%derPeriodic)
       else if (this%scheme == fourierColl) then
@@ -155,6 +155,8 @@ subroutine d2dz2_C2C_real(this,input,output,bot,top)
          call this%spectC%d2dz2_C2C_spect(input, output)
       case (cd06)
          call this%derPeriodic%d2dz2_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      case (fd02)
+         call this%fd02_periodic%d2dz2_C2C(input, output,.false.,.false.)
       end select
    else
       select case (this%scheme) 
@@ -218,6 +220,8 @@ subroutine d2dz2_C2C_cmplx(this,input,output,bot,top)
          call this%spectC%d2dz2_C2C_spect(input, output)
       case (cd06)
          call this%derPeriodic%d2dz2_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      case (fd02)
+         call this%fd02_periodic%d2dz2_C2C(input, output,.false.,.false.)
       end select
    else
       select case (this%scheme) 
@@ -280,6 +284,8 @@ subroutine d2dz2_E2E_real(this,input,output,bot,top)
          call this%spectC%d2dz2_E2E_spect(input, output)
       case (cd06)
          call this%derPeriodic%d2dz2_E2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      case (fd02)
+         call this%fd02_periodic%d2dz2_E2E(input, output,.false.,.false.)
       end select 
    else
       select case (this%scheme)
@@ -342,6 +348,8 @@ subroutine d2dz2_E2E_cmplx(this,input,output,bot,top)
          call this%spectC%d2dz2_E2E_spect(input, output)
       case (cd06)
          call this%derPeriodic%d2dz2_E2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      case (fd02)
+         call this%fd02_periodic%d2dz2_E2E(input, output,.false.,.false.)
       end select 
    else
       select case (this%scheme)
@@ -405,6 +413,8 @@ subroutine ddz_C2E_real(this,input,output,bot,top)
          call this%spectC%ddz_C2E_spect(input, output)
       case (cd06)
          call this%derPeriodic%ddz_C2E(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      case (fd02)    
+         call this%fd02_periodic%ddz_C2E(input, output,.false.,.false.)
       end select
    else
       select case (this%scheme) 
@@ -487,6 +497,8 @@ subroutine ddz_C2E_cmplx(this,input,output,bot,top)
          call this%spectC%ddz_C2E_spect(input, output)
       case (cd06)
          call this%derPeriodic%ddz_C2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      case (fd02)    
+         call this%fd02_periodic%ddz_C2E(input, output,.false.,.false.)
       end select 
    else
       select case (this%scheme) 
@@ -569,6 +581,8 @@ subroutine ddz_E2C_real(this,input,output,bot,top)
          call this%spectC%ddz_E2C_spect(input, output)
       case (cd06)
          call this%derPeriodic%ddz_E2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      case (fd02)    
+         call this%fd02_periodic%ddz_E2C(input, output)
       end select 
    else
       select case(this%scheme)
@@ -626,6 +640,8 @@ subroutine ddz_E2C_cmplx(this,input,output,bot,top)
          call this%spectC%ddz_E2C_spect(input, output)
       case (cd06)
          call this%derPeriodic%ddz_E2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      case (fd02)    
+         call this%fd02_periodic%ddz_E2C(input, output)
       end select 
    else
       select case(this%scheme)
@@ -777,6 +793,8 @@ subroutine interpz_C2E_cmplx(this,input,output,bot,top)
          call this%spectC%interp_C2E_spect(input, output)
       case (cd06)
          call this%derPeriodic%interpz_C2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      case (fd02)
+         call this%fd02_periodic%InterpZ_Cell2Edge(input, output, (0.d0,0.d0), (0.d0,0.d0))
       end select 
    else
       select case(this%scheme)
@@ -871,6 +889,8 @@ subroutine interpz_E2C_real(this,input,output,bot,top)
          call this%spectC%interp_E2C_spect(input, output)
       case (cd06)
          call this%derPeriodic%interpz_E2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      case (fd02)
+         call this%fd02_periodic%InterpZ_Edge2Cell(input, output)
       end select 
    else
       select case(this%scheme)
@@ -928,6 +948,8 @@ subroutine interpz_E2C_cmplx(this,input,output,bot,top)
          call this%spectC%interp_E2C_spect(input, output)
       case (cd06)
          call this%derPeriodic%interpz_E2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      case (fd02)
+         call this%fd02_periodic%InterpZ_Edge2Cell(input, output)
       end select 
    else
       select case(this%scheme)
