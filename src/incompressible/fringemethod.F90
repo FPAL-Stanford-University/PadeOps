@@ -117,7 +117,7 @@ contains
       complex(rkind), dimension(:,:,:,:), target, intent(in) :: cbuffyC, cbuffyE
       integer, intent(in), optional :: fringeID
 
-      real(rkind) :: Lx, Ly, LambdaFact = 2.45d0
+      real(rkind) :: Lx, Ly, LambdaFact = 2.45d0, LambdaFact2 = 2.45d0
       real(rkind) :: Fringe_yst = 1.d0, Fringe_yen = 1.d0
       real(rkind) :: Fringe_xst = 0.75d0, Fringe_xen = 1.d0
       real(rkind) :: Fringe_delta_st_x = 1.d0, Fringe_delta_st_y = 1.d0, Fringe_delta_en_x = 1.d0, Fringe_delta_en_y = 1.d0
@@ -131,7 +131,7 @@ contains
       real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2
       logical :: Apply_x_fringe = .true., Apply_y_fringe = .false.
       namelist /FRINGE/ Apply_x_fringe, Apply_y_fringe, Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, &
-                        Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, Fringe_yen, Fringe_yst, Fringe1_delta_st_x, &
+                        Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, LambdaFact2, Fringe_yen, Fringe_yst, Fringe1_delta_st_x, &
                         Fringe2_delta_st_x, Fringe1_delta_en_x, Fringe2_delta_en_x, Fringe1_xst, Fringe2_xst, Fringe1_xen, Fringe2_xen
     
       if (present(fringeID)) then
@@ -162,22 +162,25 @@ contains
       
       this%Fringe_kernel_cells = 0.d0
       this%Fringe_kernel_edges = 0.d0
-      this%LambdaFact   = LambdaFact
+
    
       if (this%usetwoFringex) then
          select case (this%myFringeID)
          case(1)
+            this%LambdaFact   = LambdaFact
             Fringe_xst        = Fringe1_xst*Lx
             Fringe_xen        = Fringe1_xen*Lx
             Fringe_delta_st_x = Fringe1_delta_st_x*Lx
             Fringe_delta_en_x = Fringe1_delta_en_x*Lx
          case(2)
+            this%LambdaFact   = LambdaFact2
             Fringe_xst        = Fringe2_xst*Lx
             Fringe_xen        = Fringe2_xen*Lx
             Fringe_delta_st_x = Fringe2_delta_st_x*Lx
             Fringe_delta_en_x = Fringe2_delta_en_x*Lx
          end select
       else
+            this%LambdaFact    = LambdaFact
             Fringe_xst        = Fringe_xst*Lx
             Fringe_xen        = Fringe_xen*Lx
             Fringe_delta_st_x = Fringe_delta_st_x*Lx
