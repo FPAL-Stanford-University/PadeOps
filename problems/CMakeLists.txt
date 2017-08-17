@@ -4,10 +4,10 @@ file(GLOB iproblems_source_files incompressible/*.F90)
 file(GLOB turbproblems_source_files turbines/*.F90)
 
 # Include directories
-include_directories( ${FFTW_INCLUDE_PATH} ${FFTPACK_INCLUDE_PATH} ${DECOMP_INCLUDE_PATH} ${PadeOps_BINARY_DIR}/src  )
+include_directories( ${FFTW_INCLUDE_PATH} ${DECOMP_INCLUDE_PATH} ${PadeOps_BINARY_DIR}/src  )
 
 # Link directories
-link_directories( ${FFTW_LIBRARY_PATH} ${FFTPACK_LIBRARY_PATH} ${DECOMP_LIBRARY_PATH} ${PadeOps_BINARY_DIR}/src )
+link_directories( ${FFTW_LIBRARY_PATH} ${DECOMP_LIBRARY_PATH} ${PadeOps_BINARY_DIR}/src )
 
 # Create the problem executables
 foreach ( problemfile ${problems_source_files} )

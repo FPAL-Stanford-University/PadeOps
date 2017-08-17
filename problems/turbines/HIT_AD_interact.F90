@@ -70,6 +70,18 @@ program HIT_AD_interact
 
     call hit%spectC%init_bandpass_filter(k_bandpass_left, k_bandpass_right, hit%cbuffzC(:,:,:,1), hit%cbuffyC(:,:,:,1))
 
+    ! Set the true target field for AD simulation 
+    call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), zero)
+    call hit%interpolate_cellField_to_edgeField(uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:),0,0)
+    call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), zero)
+    call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), zero)
+    
+    ! Now scale rhw HIT field appropriately
+    ! Note that the bandpass filtered velocity field has zero mean 
+    uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = HIT_scalefact*uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) + one 
+    vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = HIT_scalefact*vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
+    wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = HIT_scalefact*wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
+    
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
     call tic() 

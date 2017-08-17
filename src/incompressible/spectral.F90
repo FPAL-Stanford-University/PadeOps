@@ -44,7 +44,7 @@ module spectralMod
         real(rkind), dimension(:,:), allocatable :: GsurfaceFilter 
         real(rkind) :: dealiasFact = 2.d0/3.d0
 
-        logical, dimension(:,:,:), allocatable :: G_bandpass
+        real(rkind), dimension(:,:,:), allocatable :: G_bandpass
         integer, dimension(:,:,:), allocatable :: G_PostProcess
         complex(rkind), dimension(:,:,:), pointer :: cbuffz_bp, cbuffy_bp
         
@@ -136,19 +136,25 @@ contains
          complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in) :: uhat 
          real(rkind)   , dimension(this%physdecomp%xsz(1),this%physdecomp%xsz(2), this%physdecomp%xsz(3)), intent(out) :: uFilt
          real(rkind), intent(in) :: xShift 
-         integer :: k, j
+         integer :: k, j, i
 
          call transpose_y_to_z(uhat, this%cbuffz_bp, this%spectdecomp)
          call this%take_fft1d_z2z_ip(this%cbuffz_bp)
 
-         where (this%G_bandpass == .false. ) 
-            this%cbuffz_bp = zero
-         end where
-        
+         !this%cbuffz_bp = one
+         !where (this%G_bandpass .eqv. .false. ) 
+         !   this%cbuffz_bp = zero
+         !end where
+      
+
          this%xshiftfact = exp(-imi*this%k1inZ*xshift)
          do k = 1,size(this%cbuffz_bp,3)
             do j = 1,size(this%cbuffz_bp,2)
-               this%cbuffz_bp(:,j,k) = this%cbuffz_bp(:,j,k)*this%xshiftfact
+               !$omp simd 
+	    	      do i = 1,size(this%cbuffz_bp,1)
+                  !this%cbuffz_bp(i,j,k) = this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
+                  this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
+	       	   end do 
             end do 
          end do 
 
@@ -182,13 +188,13 @@ contains
 
          rbuffz2 = sqrt(rbuffz2)
 
-         this%G_bandpass = .true. 
+         this%G_bandpass = one 
          where (rbuffz2 < kleft)
-            this%G_bandpass = .false. 
+            this%G_bandpass = zero
          end where
 
          where (rbuffz2 > kright) 
-            this%G_bandpass = .false. 
+            this%G_bandpass = zero 
          end where
 
          this%BandPassFilterInitialized = .true. 
@@ -1188,7 +1194,7 @@ contains
                         if ((i .ne. 1) .and. (j .ne. 1)) then
                             print*, nrank, i, j
                             call GracefulExit("Catastrophic failure while initializing spectral &
-                                    derived type. Unable to isolate k1 = 0 and k2 = 0 wavenumbers.",312)
+                                    & derived type. Unable to isolate k1 = 0 and k2 = 0 wavenumbers.",312)
                         end if
                         !print*,  "Identified ZERO wavenumber on process:", nrank
                         !print*,  "i - index:", i

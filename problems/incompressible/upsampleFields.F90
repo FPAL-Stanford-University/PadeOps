@@ -88,10 +88,26 @@ module RoutinesUpsampling
             arrOut(:,:,2*k) = 0.5d0*(arrOut(:,:,2*k-1) + arrOut(:,:,2*k+1))
         end do 
 
-        arrOut(:,:,2*nz+1) = 0.d0
-        arrOut(:,:,1) = 0.d0
+        !arrOut(:,:,2*nz+1) = 0.d0
+        !arrOut(:,:,1) = 0.d0
     end subroutine
 
+    subroutine upsampleZ_periodic(fC, fE, fupC, fupE)
+        real(rkind), dimension(:,:,:), intent(in) :: fC, fE
+        real(rkind), dimension(:,:,:), intent(out) :: fupC, fupE
+        integer :: k, nz 
+
+        nz = size(fC,3)
+        do k = 1,nz+1
+            fupE(:,:,2*k-1) = fE(:,:,k)
+        end do 
+
+        do k = 1,nz
+            fupE(:,:,2*k) = fC(:,:,k)
+        end do 
+
+        fupC = 0.5d0*(fupE(:,:,2:2*nz+1) + fupE(:,:,1:2*nz))
+    end subroutine 
 end module
 
 
@@ -113,13 +129,14 @@ program upsampleFields
     integer :: ioUnit, nx, ny, nz, ierr, inputFile_TID, inputFile_RID, outputFile_TID, outputFile_RID
     logical :: upsampleInZ = .false., isStratified = .false. 
     type(decomp_info) :: gpC, gpE, gpC_upX, gpC_upXY, gpC_upXYZ, gpE_upX, gpE_upXY, gpE_upXYZ 
-    real(rkind), dimension(:,:,:), allocatable :: f
+    real(rkind), dimension(:,:,:), allocatable :: f, fxyupE_inZ, fxyzupE_inZ
     real(rkind), dimension(:,:,:), allocatable :: fxup_inX, fxup_inY, fxyup_inY 
     real(rkind), dimension(:,:,:), allocatable :: fxyup_inZ, fxyup_inX, fxyzup_inZ, fxyzup_inY, fxyzup_inX
     character(len=clen) :: tempname, fname
     real(rkind) :: tsim 
+    logical :: periodicInZ = .false. 
     namelist /INPUT/ nx, ny, nz, inputdir, outputdir, inputFile_TID, inputFile_RID, &
-    outputFile_TID, outputFile_RID, UpsampleInZ, isStratified 
+    outputFile_TID, outputFile_RID, UpsampleInZ, isStratified, PeriodicInZ 
 
     call MPI_Init(ierr)               !<-- Begin MPI
     call GETARG(1,inputfile)          !<-- Get the location of the input file
@@ -158,9 +175,11 @@ program upsampleFields
     
     if (UpsampleInZ) then
         allocate(fxyup_inZ(gpC_upXY%zsz(1),gpC_upXY%zsz(2),gpC_upXY%zsz(3)))
+        allocate(fxyupE_inZ(gpC_upXY%zsz(1),gpC_upXY%zsz(2),gpC_upXY%zsz(3)+1))
         allocate(fxyzup_inX(gpC_upXYZ%xsz(1),gpC_upXYZ%xsz(2),gpC_upXYZ%xsz(3))) 
         allocate(fxyzup_inY(gpC_upXYZ%ysz(1),gpC_upXYZ%ysz(2),gpC_upXYZ%ysz(3))) 
         allocate(fxyzup_inZ(gpC_upXYZ%zsz(1),gpC_upXYZ%zsz(2),gpC_upXYZ%zsz(3)))
+        allocate(fxyzupE_inZ(gpE_upXYZ%zsz(1),gpE_upXYZ%zsz(2),gpE_upXYZ%zsz(3)))
     else
         allocate(fxyup_inX(gpC_upXY%xsz(1),gpC_upXY%xsz(2),gpC_upXY%xsz(3))) 
     end if 
@@ -178,7 +197,18 @@ program upsampleFields
 
     if (UpsampleInZ) then
         call transpose_y_to_z(fxyup_inY,fxyup_inZ,gpC_upXY)
-        call upsampleZ_cells(fxyup_inZ,fxyzup_inZ)
+        fxyupE_inZ(:,:,2:nz) = 0.5d0*(fxyup_inZ(:,:,1:nz-1) + fxyup_inZ(:,:,2:nz))
+        fxyupE_inZ(:,:,1)    = 0.5d0*(fxyup_inZ(:,:,1) + fxyup_inZ(:,:,nz))
+        fxyupE_inZ(:,:,nz+1) = fxyupE_inZ(:,:,1)
+
+        if (PeriodicInZ) then
+           call upsampleZ_periodic(fxyup_inZ, fxyupE_inZ, fxyzup_inZ, fxyzupE_inZ)
+        else
+           call upsampleZ_cells(fxyup_inZ,fxyzup_inZ)
+        end if 
+
+        print*, fxyzup_inZ(2,3,1:5)
+        print*, fxyzupE_inZ(2,3,1:5)
         call transpose_z_to_y(fxyzup_inZ,fxyzup_inY,gpC_upXYZ)
         call transpose_y_to_x(fxyzup_inY,fxyzup_inX,gpC_upXYZ)
         call decomp_2d_write_one(1,fxyzup_inX,fname, gpC_upXYZ)
@@ -200,7 +230,15 @@ program upsampleFields
 
     if (UpsampleInZ) then
         call transpose_y_to_z(fxyup_inY,fxyup_inZ,gpC_upXY)
-        call upsampleZ_cells(fxyup_inZ,fxyzup_inZ)
+        fxyupE_inZ(:,:,2:nz) = 0.5d0*(fxyup_inZ(:,:,1:nz-1) + fxyup_inZ(:,:,2:nz))
+        fxyupE_inZ(:,:,1)    = 0.5d0*(fxyup_inZ(:,:,1) + fxyup_inZ(:,:,nz))
+        fxyupE_inZ(:,:,nz+1) = fxyupE_inZ(:,:,1)
+
+        if (PeriodicInZ) then
+           call upsampleZ_periodic(fxyup_inZ, fxyupE_inZ, fxyzup_inZ, fxyzupE_inZ)
+        else
+           call upsampleZ_cells(fxyup_inZ,fxyzup_inZ)
+        end if 
         call transpose_z_to_y(fxyzup_inZ,fxyzup_inY,gpC_upXYZ)
         call transpose_y_to_x(fxyzup_inY,fxyzup_inX,gpC_upXYZ)
         call decomp_2d_write_one(1,fxyzup_inX,fname, gpC_upXYZ)
@@ -223,7 +261,15 @@ program upsampleFields
 
         if (UpsampleInZ) then
             call transpose_y_to_z(fxyup_inY,fxyup_inZ,gpC_upXY)
-            call upsampleZ_cells(fxyup_inZ,fxyzup_inZ)
+            fxyupE_inZ(:,:,2:nz) = 0.5d0*(fxyup_inZ(:,:,1:nz-1) + fxyup_inZ(:,:,2:nz))
+            fxyupE_inZ(:,:,1)    = 0.5d0*(fxyup_inZ(:,:,1) + fxyup_inZ(:,:,nz))
+            fxyupE_inZ(:,:,nz+1) = fxyupE_inZ(:,:,1)
+
+            if (PeriodicInZ) then
+               call upsampleZ_periodic(fxyup_inZ, fxyupE_inZ, fxyzup_inZ, fxyzupE_inZ)
+            else
+               call upsampleZ_cells(fxyup_inZ,fxyzup_inZ)
+            end if 
             call transpose_z_to_y(fxyzup_inZ,fxyzup_inY,gpC_upXYZ)
             call transpose_y_to_x(fxyzup_inY,fxyzup_inX,gpC_upXYZ)
             call decomp_2d_write_one(1,fxyzup_inX,fname, gpC_upXYZ)

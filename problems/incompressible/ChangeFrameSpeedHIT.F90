@@ -15,9 +15,9 @@ program upsampleFields
     type(decomp_info) :: gpC, gpE
     real(rkind), dimension(:,:,:), allocatable :: f
     character(len=clen) :: tempname, fname
-    real(rkind) :: setSimTime, tsim, mean_f, newFrameSpeed 
+    real(rkind) :: setSimTime, tsim, mean_f, newFrameSpeed , ScalingFact = 1.d0
     namelist /INPUT/ n, inputdir, outputdir, inputFile_TID, inputFile_RID, &
-    outputFile_TID, outputFile_RID, newFrameSpeed, setSimTime
+    outputFile_TID, outputFile_RID, newFrameSpeed, setSimTime, scalingFact
 
     call MPI_Init(ierr)               !<-- Begin MPI
     call GETARG(1,inputfile)          !<-- Get the location of the input file
@@ -42,7 +42,7 @@ program upsampleFields
 
     !!!!!!!!!!!!! CELL FIELDS !!!!!!!!!!!!!!!
     allocate(f(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
-    
+   
     write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",inputFile_RID, "_u.",inputFile_TID
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
     call decomp_2d_read_one(1,f,fname, gpC)
@@ -50,19 +50,27 @@ program upsampleFields
     fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
     mean_f = p_sum(sum(f))/(real(n)**3)
     call message(0, "Original frame speed", mean_f)
-    f = f + (newFrameSpeed - mean_f)
+    !f = f + (newFrameSpeed - mean_f)
+    f = f - mean_f
+    f = f*scalingfact
+    f = f + newFrameSpeed
     mean_f = p_sum(sum(f))/(real(n)**3)
     call message(0, "New frame speed", mean_f)
     call decomp_2d_write_one(1,f,fname, gpC)
+    call message(0, "Done writing u")
    
     write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",inputFile_RID, "_v.",inputFile_TID
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
     call decomp_2d_read_one(1,f,fname, gpC)
     write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",outputFile_RID, "_v.",outputFile_TID
     fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+    f = f*scalingfact
+    mean_f = p_sum(sum(f))/(real(n)**3)
+    f = f - mean_f
     call decomp_2d_write_one(1,f,fname, gpC)
     
     deallocate(f)
+    call message(0, "Done writing v")
     
     allocate(f(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
     
@@ -70,11 +78,15 @@ program upsampleFields
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
     call decomp_2d_read_one(1,f,fname, gpE)
     write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",outputFile_RID, "_w.",outputFile_TID
+    f = f*scalingfact
+    mean_f = p_sum(sum(f))/(real(n)**3)
+    f = f - mean_f
     fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
     call decomp_2d_write_one(1,f,fname, gpE)
     
     deallocate(f)
 
+    call message(0, "Done writing w")
     !!!!!! WRITE HEADER !!!!!!!!!!!
     if (nrank == 0) then
         write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",outputFile_RID, "_info.",outputFile_TID
@@ -84,6 +96,7 @@ program upsampleFields
         close(10)
     end if 
 
+    call message(0, "Done writing header")
     call MPI_Finalize(ierr)           !<-- Terminate MPI 
 
 end program 

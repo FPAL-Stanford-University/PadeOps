@@ -13,7 +13,7 @@ module forcingmod
       private
       type(decomp_info), pointer :: sp_gpC, sp_gpE
       real(rkind) :: kmin, kmax
-      real(rkind) :: Nwaves
+      integer(rkind) :: Nwaves
       real(rkind) :: EpsAmplitude
       class(spectral), pointer :: spectC
 
@@ -53,7 +53,7 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    real(rkind), dimension(:,:,:), allocatable :: rbuffzC
    integer :: RandSeedToAdd = 0, ierr
 
-   integer :: nWaves = 20
+   integer :: Nwaves = 20
    real(rkind) :: kmin = 2.d0, kmax = 10.d0, EpsAmplitude = 0.1d0
    namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd 
 
