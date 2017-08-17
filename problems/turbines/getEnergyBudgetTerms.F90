@@ -26,8 +26,9 @@ program getEnergyBudgetTerms
    real(rkind), dimension(:,:,:), allocatable :: zMeshE, filteredSpeedSq, fx_turb_store, fy_turb_store, fz_turb_store 
    real(rkind), dimension(:,:,:), allocatable :: dPdx_store, dPdy_store, dPdz_store, u_store, v_store, w_store, P_store, uu_store, uv_store, uw_store, vv_store, vw_store, ww_store
    real(rkind), dimension(:,:,:), allocatable :: u_bar, v_bar, w_bar, p_bar, uprime_uprime_bar, uprime_vprime_bar, uprime_wprime_bar, vprime_vprime_bar, vprime_wprime_bar, wprime_wprime_bar
+   real(rkind), dimension(:,:,:), allocatable :: xtrbprime_uprime_bar, xsgsprime_uprime_bar, ysgsprime_vprime_bar, zsgsprime_wprime_bar
    real(rkind), dimension(:,:,:), allocatable :: K_bar, fx_turb_bar, fy_turb_bar, fz_turb_bar, fx_sgs_bar, fy_sgs_bar, fz_sgs_bar
-   real(rkind), dimension(:,:,:), allocatable :: fx_sgs_store, fy_sgs_store, fz_sgs_store
+   real(rkind), dimension(:,:,:), allocatable :: fx_sgs_store, fy_sgs_store, fz_sgs_store, xtrbu_store, xsgsu_store, ysgsv_store, zsgsw_store
    type(spectral), target  :: spectE, spectC
    type(decomp_info) :: gpC, gpE
    type(decomp_info), pointer :: sp_gpC, sp_gpE
@@ -114,7 +115,8 @@ program getEnergyBudgetTerms
         fy_turb_store = fy_turb_store + fbody_y
         fz_turb_store = fz_turb_store + fbody_zC 
 
-
+        xtrbu_store = xtrbu_store + fbody_x*uC       
+ 
         ! SGS MODEL STUFF
         u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
         call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
@@ -128,10 +130,13 @@ program getEnergyBudgetTerms
         call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
         call transpose_y_to_x(rbuffyC(:,:,:,1),fbody_zC,gpC)
 
-
         fx_sgs_store = fx_sgs_store + fbody_x 
         fy_sgs_store = fy_sgs_store + fbody_y
         fz_sgs_store = fz_sgs_store + fbody_zC 
+
+        xsgsu_store = xsgsu_store + fbody_x*uC        
+        ysgsv_store = ysgsv_store + fbody_y*vC        
+        zsgsw_store = zsgsw_store + fbody_zC*wC        
 
         ! GRADIENT OF  ADVECTION TERM
         ! need to compute avg(ui)avg(uj)
@@ -221,6 +226,17 @@ program getEnergyBudgetTerms
    vprime_vprime_bar = vv_store/real(nvis,rkind)-v_bar*v_bar
    vprime_wprime_bar = vw_store/real(nvis,rkind)-v_bar*w_bar
    wprime_wprime_bar = ww_store/real(nvis,rkind)-w_bar*w_bar
+
+      !Body Force Fluctuation terms
+   xtrbprime_uprime_bar = xtrbu_store/real(nvis,rkind)-fx_turb_bar*u_bar
+   xsgsprime_uprime_bar = xsgsu_store/real(nvis,rkind)-fx_sgs_bar*u_bar
+   ysgsprime_vprime_bar = ysgsv_store/real(nvis,rkind)-fy_sgs_bar*v_bar
+   zsgsprime_wprime_bar = zsgsw_store/real(nvis,rkind)-fz_sgs_bar*w_bar
+
+   call dumpFullField(xtrbprime_uprime_bar,"xtup")
+   call dumpFullField(xsgsprime_uprime_bar,"xsup")
+   call dumpFullField(ysgsprime_vprime_bar,"ysvp")
+   call dumpFullField(zsgsprime_wprime_bar,"zswp")
 
         !Advection of Turbulent Kinetic Energy (Turbulent Transport))
    call getddx(u_bar*uprime_uprime_bar+v_bar*uprime_vprime_bar+w_bar*uprime_wprime_bar,rbuffxC(:,:,:,1))
@@ -386,6 +402,15 @@ contains
       allocate(vprime_wprime_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
       allocate(wprime_wprime_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
 
+      allocate(xtrbu_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(xsgsu_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(ysgsv_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(zsgsw_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(xtrbprime_uprime_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(xsgsprime_uprime_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(ysgsprime_vprime_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+      allocate(zsgsprime_wprime_bar(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
+        
         !initialize all stored quantitites to zero
       fx_turb_store = 0
       fy_turb_store = 0
@@ -409,7 +434,12 @@ contains
       vv_store = 0
       vw_store = 0
       ww_store = 0
-      
+     
+      xtrbu_store = 0
+      xsgsu_store = 0
+      ysgsv_store = 0
+      zsgsw_store = 0
+ 
         ! Create Mesh
       ix1 = gpC%xst(1); iy1 = gpC%xst(2); iz1 = gpC%xst(3)
       ixn = gpC%xen(1); iyn = gpC%xen(2); izn = gpC%xen(3)

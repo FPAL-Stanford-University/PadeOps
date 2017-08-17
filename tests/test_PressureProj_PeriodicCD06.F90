@@ -12,6 +12,7 @@ program test_PressureProj_PeriodicCD06
    implicit none
    real   (rkind), dimension(:,:,:), allocatable :: Pressure, u, v, w, uTrue, vTrue, wTrue
    complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what
+   real(rkind),    dimension(:,:,:), allocatable :: divergence
    logical, parameter :: isPeriodic = .true. 
    integer, parameter :: scheme = 1
 
@@ -36,7 +37,9 @@ program test_PressureProj_PeriodicCD06
    allocate(vTrue(gp %xsz(1), gp %xsz(2), gp %xsz(3)))
    allocate(wTrue(gpE%xsz(1), gpE%xsz(2), gpE%xsz(3)))
    allocate(Pressure(gp%xsz(1), gp%xsz(2), gp%xsz(3)))
+   allocate(divergence(gp %xsz(1), gp %xsz(2), gp %xsz(3)))
 
+   divergence = 0.d0
 
    call decomp_2d_read_one(1,uTrue,'/home/aditya90/Codes/PadeOps/data/HIT_u_PostProj.dat',gp )
    call decomp_2d_read_one(1,vTrue,'/home/aditya90/Codes/PadeOps/data/HIT_v_PostProj.dat',gp )
@@ -67,6 +70,9 @@ program test_PressureProj_PeriodicCD06
 
    !call poiss%getPressure(uhat, vhat, what, pressure)
    !call poiss%PressureProjection(uhat, vhat, what)
+   print*, uhat(3:4,34,43)
+   call poiss%DivergenceCheck(uhat, vhat, what, divergence)
+   print*, maxval(abs(divergence))
    
    call poiss%getPressureAndUpdateRHS(uhat, vhat, what, pressure)
 

@@ -5,23 +5,26 @@ module PadeDerOps
    use staggOpsMod, only: staggOps
    use constants, only: zero, one, two, three, five
    use exits, only: gracefulExit, message
+   use spectralMod, only: spectral
 
    implicit none
    
    private
 
-   public :: Pade6stagg, fd02, cd06
+   public :: Pade6stagg, fd02, cd06, fourierColl
 
    integer, parameter :: fd02 = 0
    integer, parameter :: cd06 = 1
+   integer, parameter :: fourierColl = 2
    complex(rkind), parameter :: zeroC = dcmplx(zero,zero)
-   logical :: isPeriodic = .false. 
+   !logical :: isPeriodic = .false. 
 
    type Pade6stagg
       type(cd06stagg), allocatable :: derOO, derEE, derOE, derEO, derOS, derSO, derSE, derES, derSS
       type(cd06stagg), allocatable :: derPeriodic
       type(staggOps) :: fd02_ss, fd02_ns, fd02_sn, fd02_nn
       type(decomp_info), pointer :: gp, sp_gp
+      type(spectral), pointer :: spectC
       integer :: scheme = 1
       real(rkind) :: dz
       logical :: isPeriodic = .false. 
@@ -50,27 +53,33 @@ module PadeDerOps
    end type
 contains
 
-subroutine init(this, gpC, sp_gpC, gpE, sp_gpE, dz, scheme, isPeriodic)
+subroutine init(this, gpC, sp_gpC, gpE, sp_gpE, dz, scheme, isPeriodic, spectC)
    class(Pade6stagg), intent(out) :: this
    type(decomp_info), intent(in), target :: gpC, sp_gpC, gpE, sp_gpE
    integer, intent(in) :: scheme 
    real(rkind), intent(in) :: dz
    logical, intent(in) :: isPeriodic 
+   type(spectral), intent(in), target, optional :: spectC
 
    this%gp => gpC
    this%sp_gp => sp_gpC
    this%scheme = scheme
    this%dz = dz
 
-   !if (present(isPeriodic)) then
-      this%isPeriodic = isPeriodic
-   !else
-   !   this%isPeriodic = .false. 
-   !end if
+   this%isPeriodic = isPeriodic
 
    if (this%isPeriodic) then
-      allocate(this%derPeriodic)
-      call this%derPeriodic%init(this%gp%zsz(3),dz)
+      select case(this%scheme) 
+      case(fourierColl)
+         if (present(spectC)) then
+            this%spectC => spectC
+         else
+            call GracefulExit("You need to pass in a spectral derived type if you want to use Fourier differentiation in z", 43)
+         end if
+      case(cd06)
+         allocate(this%derPeriodic)
+         call this%derPeriodic%init(this%gp%zsz(3),dz)
+   end select
    else
       select case(this%scheme)
       case(cd06)
@@ -113,8 +122,12 @@ subroutine destroy(this)
    class(Pade6stagg), intent(inout) :: this
   
    if (this%isPeriodic) then
-      call this%derPeriodic%destroy()
-      deallocate(this%derPeriodic)
+      if (this%scheme == cd06) then
+         Call this%derPeriodic%destroy()
+         Deallocate(this%derPeriodic)
+      else if (this%scheme == fourierColl) then
+         nullify(this%spectC)
+      end if
    else
       if (this%scheme == cd06) then
          deallocate(this%derES, this%derSE, this%derOS, this%derSO, this%derSS, this%derEE, this%derOO, this%derEO, this%derOE)
@@ -189,7 +202,12 @@ subroutine d2dz2_C2C_cmplx(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      call this%derPeriodic%d2dz2_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      select case(this%scheme) 
+      case (fourierColl) 
+         call this%spectC%d2dz2_C2C_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%d2dz2_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      end select
    else
       select case (this%scheme) 
       case(fd02)
@@ -303,7 +321,12 @@ subroutine d2dz2_E2E_cmplx(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      call this%derPeriodic%d2dz2_E2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      select case(this%scheme) 
+      case (fourierColl) 
+         call this%spectC%d2dz2_E2E_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%d2dz2_E2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      end select 
    else
       select case (this%scheme)
       case(fd02)
@@ -438,7 +461,12 @@ subroutine ddz_C2E_cmplx(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      call this%derPeriodic%ddz_C2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      select case(this%scheme) 
+      case (fourierColl)
+         call this%spectC%ddz_C2E_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%ddz_C2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      end select 
    else
       select case (this%scheme) 
       case(fd02)
@@ -567,7 +595,12 @@ subroutine ddz_E2C_cmplx(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      call this%derPeriodic%ddz_E2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      select case(this%scheme) 
+      case (fourierColl) 
+         call this%spectC%ddz_E2C_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%ddz_E2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      end select 
    else
       select case(this%scheme)
       case(fd02)
@@ -706,7 +739,12 @@ subroutine interpz_C2E_cmplx(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      call this%derPeriodic%interpz_C2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      select case(this%scheme) 
+      case (fourierColl) 
+         call this%spectC%interp_C2E_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%interpz_C2E(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      end select 
    else
       select case(this%scheme)
       case (fd02)
@@ -847,7 +885,12 @@ subroutine interpz_E2C_cmplx(this,input,output,bot,top)
    integer, intent(in) :: bot, top
 
    if (this%isPeriodic) then
-      call this%derPeriodic%interpz_E2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      select case(this%scheme) 
+      case (fourierColl) 
+         call this%spectC%interp_E2C_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%interpz_E2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      end select 
    else
       select case(this%scheme)
       case(fd02)
@@ -898,6 +941,8 @@ subroutine getModifiedWavenumbers(this, k, kp)
 
 
     select case(this%scheme)
+    case (fourierColl) 
+       kp = k
     case (cd06)
        call getmodCD06stagg(k,this%dz,kp)
     case (fd02)
