@@ -1,0 +1,34 @@
+#!/bin/bash
+
+#PBS -N Coriolis_3x3
+#PBS -e stderr
+#PBS -o stdout
+#PBS -m be
+#PBS -q long 
+#PBS -M mhowland@stanford.edu
+#PBS -l nodes=4:ppn=32
+#PBS -l walltime=100:00:00
+
+###PBS_O_WORKDIR='/home/aditya90/Codes/PadeOps/data/EkmanLayerGrowth'
+PBS_O_WORKDIR='/home/mhowland/Lele/build/problems/turbines'
+LOG_DIR='/home/mhowland/Lele/build/problems/turbines/logs'
+###LOG_DIR='/home/aditya90/Codes/PadeOps/data/EkmanLayerGrowth'
+export PBS_O_WORKDIR
+export LOG_DIR
+
+PROG="./AD_Coriolis"
+ARGS="AD_Coriolis_files/input_compact.dat"
+
+### ---------------------------------------
+### BEGINNING OF EXECUTION
+### ---------------------------------------
+
+echo The master node of this job is `hostname`
+echo The working directory is `echo $PBS_O_WORKDIR`
+echo This job runs on the following nodes:
+echo `cat $PBS_NODEFILE`
+
+cd $PBS_O_WORKDIR
+cmd="mpiexec -n 64 -ppn 16 $PROG $ARGS"
+echo "Running: $cmd in directory: "`pwd`
+$cmd > $LOG_DIR/log.$PBS_JOBID

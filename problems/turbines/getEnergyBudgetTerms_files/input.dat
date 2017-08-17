@@ -1,15 +1,15 @@
 &INPUT
-nx                            = 192                                           ! Number of points in X
-ny                            = 192                                           ! Number of points in Y
-nz                            = 128                                           ! Number of points in Z
-Lx                            = 3.141592653589793d0                           ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            = 3.141592653589793d0                           ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Lz                            = 1.d0                                          ! Domain Height (appropriate dimesnions/non-dimensionalized)
+nx                            = 512                                           ! Number of points in X
+ny                            = 512                                           ! Number of points in Y
+nz                            = 192                                           ! Number of points in Z
+Lx                            = 50.0d0                           ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            = 12.0d0                           ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Lz                            = 3.0d0                                          ! Domain Height (appropriate dimesnions/non-dimensionalized)
 z0init                        = 1.d-4                                         ! Roughness scale used to initialize the profile
-inputdir                      = "/home/jrwest/Codes/PadeOps/data/runs/run07"   ! Directory for any input files
-outputdir                     = "/home/jrwest/Codes/PadeOps/data/runs/run07"   ! Directory for all output files
-TID                           = 100000 
-RID                           = 7
+inputdir                      = "/home/mhowland/Lele/data/coriolisTurbines/Run_11"   ! Directory for any input files
+outputdir                     = "/home/mhowland/Lele/data/coriolisTurbines/Run_11"   ! Directory for all output files
+TID                           = 6000 
+RID                           = 11
 /
 /
 &SGS_MODEL
@@ -26,7 +26,7 @@ useVerticalTfilter            = .false.
 /
 &WINDTURBINES
 useWindTurbines               = .TRUE.
-num_turbines                  = 24
+num_turbines                  = 9
 ADM                           = .TRUE.
-turbInfoDir                   = "/home/jrwest/Codes/PadeOps/problems/turbines/pblwt_files/turbInfo"
+turbInfoDir                   = "/home/mhowland/Lele/problems/turbines/AD_Coriolis_files/turbInfo/array_3x3_stag"
 /
