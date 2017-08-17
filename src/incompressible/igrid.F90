@@ -2527,7 +2527,7 @@ contains
          if (present(gp2use)) then
             call decomp_2d_write_one(1,arr,fname,gp2use)
          else
-            call decomp_2d_write_one(1,arr,fname)
+            call decomp_2d_write_one(1,arr,fname,this%gpC)
          end if
 
     end subroutine
