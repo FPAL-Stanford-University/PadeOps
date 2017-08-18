@@ -522,7 +522,7 @@ contains
         call this%write_dataset(field, dsetname)
 
         if (this%master) then
-            write(this%xdmf_file_id,'(A)')           '     <Attribute Name="', adjustl(trim(varname)), '" AttributeType="Scalar" Center="Node">'
+            write(this%xdmf_file_id,'(3A)')           '     <Attribute Name="', adjustl(trim(varname)), '" AttributeType="Scalar" Center="Node">'
             write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(1), ' ', this%dimsf(2),' ', this%dimsf(3), '" NumberType="Float" Precision="8" Format="HDF">'
             write(this%xdmf_file_id,'(4A)')          '        ', adjustl(trim(this%basename)), ':/', adjustl(trim(dsetname))
             write(this%xdmf_file_id,'(A)')           '       </DataItem>'
