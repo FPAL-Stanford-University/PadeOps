@@ -8,6 +8,7 @@ module CompressibleGrid
     use decomp_2d,       only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                                transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
+    use io_hdf5_stuff,   only: io_hdf5
     use IdealGasEOS,     only: idealgas
     use MixtureEOSMod,   only: mixture
    
@@ -55,6 +56,8 @@ module CompressibleGrid
         type(filters), allocatable :: gfil
         type(mixture), allocatable :: mix
 
+        type(io_hdf5), allocatable :: viz
+
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
        
@@ -76,7 +79,7 @@ module CompressibleGrid
         real(rkind), dimension(:,:,:), pointer :: kap
         real(rkind), dimension(:,:,:,:), pointer :: Ys
         real(rkind), dimension(:,:,:,:), pointer :: diff
-         
+
         contains
             procedure          :: init
             procedure          :: destroy
