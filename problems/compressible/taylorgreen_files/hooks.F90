@@ -141,22 +141,22 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
         write(outputunit,'(3ES26.16)') tsim, P_MEAN(tke)/tke0, P_MEAN(enstrophy)/enstrophy0
         close(outputunit)
         
-        write(str,'(I4.4,A,I4.4,A,I6.6)') decomp%ysz(2), "_", vizcount, "_", nrank
-        write(outputfile,'(2A)') trim(outputdir),"/taylorgreen_"//trim(str)//".dat"
-        open(unit=outputunit, file=trim(outputfile), form='UNFORMATTED', status='REPLACE')
-        write(outputunit) tsim
-        write(outputunit) decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)
-        write(outputunit) decomp%yst(1), decomp%yst(2), decomp%yst(3)
-        write(outputunit) decomp%yen(1), decomp%yen(2), decomp%yen(3)
-        write(outputunit) rho
-        write(outputunit) u
-        write(outputunit) v
-        write(outputunit) w
-        write(outputunit) vorticity(:,:,:,1)
-        write(outputunit) vorticity(:,:,:,2)
-        write(outputunit) vorticity(:,:,:,3)
-        write(outputunit) p
-        close(outputunit)
+        ! write(str,'(I4.4,A,I4.4,A,I6.6)') decomp%ysz(2), "_", vizcount, "_", nrank
+        ! write(outputfile,'(2A)') trim(outputdir),"/taylorgreen_"//trim(str)//".dat"
+        ! open(unit=outputunit, file=trim(outputfile), form='UNFORMATTED', status='REPLACE')
+        ! write(outputunit) tsim
+        ! write(outputunit) decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)
+        ! write(outputunit) decomp%yst(1), decomp%yst(2), decomp%yst(3)
+        ! write(outputunit) decomp%yen(1), decomp%yen(2), decomp%yen(3)
+        ! write(outputunit) rho
+        ! write(outputunit) u
+        ! write(outputunit) v
+        ! write(outputunit) w
+        ! write(outputunit) vorticity(:,:,:,1)
+        ! write(outputunit) vorticity(:,:,:,2)
+        ! write(outputunit) vorticity(:,:,:,3)
+        ! write(outputunit) p
+        ! close(outputunit)
 
     end associate
 end subroutine

@@ -98,10 +98,12 @@ module CompressibleGrid
             procedure, private :: get_tau
             procedure, private :: get_q
             procedure, private :: get_J
+            procedure, private :: write_viz
     end type
 
 contains
     subroutine init(this, inputfile )
+        use mpi
         use reductions, only: P_MAXVAL, P_MINVAL
         use exits, only: message, nancheck, GracefulExit
         class(cgrid),target, intent(inout) :: this
@@ -112,6 +114,7 @@ contains
         character(len=clen) :: outputdir
         character(len=clen) :: inputdir
         character(len=clen) :: vizprefix = "cgrid"
+        logical :: reduce_precision = .true.
         real(rkind) :: tviz = zero
         character(len=clen), dimension(:), allocatable :: varnames
         logical :: periodicx = .true. 
@@ -144,13 +147,13 @@ contains
         character(len=clen) :: charout
         real(rkind) :: Ys_error
 
-        namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
-                             inputdir, outputdir, vizprefix, tviz, &
-                                  periodicx, periodicy, periodicz, &
-                         derivative_x, derivative_y, derivative_z, &
-                                     filter_x, filter_y, filter_z, &
-                                                       prow, pcol, &
-                                                         SkewSymm  
+        namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
+                         outputdir, vizprefix, tviz, reduce_precision, &
+                                      periodicx, periodicy, periodicz, &
+                             derivative_x, derivative_y, derivative_z, &
+                                         filter_x, filter_y, filter_z, &
+                                                           prow, pcol, &
+                                                             SkewSymm  
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
@@ -352,8 +355,10 @@ contains
         end do
 
         allocate(this%viz)
-        call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
+        call this%viz%init( mpi_comm_world, this%decomp, 'y', this%outputdir, vizprefix, reduce_precision=reduce_precision, read_only=.false.)
         this%tviz = tviz
+        ! Write mesh coordinates to file
+        call this%viz%write_coords(this%mesh)
 
         deallocate(varnames)
 
@@ -534,7 +539,8 @@ contains
 
         ! Write out initial conditions
         call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-        call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+        ! call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+        call this%write_viz()
         vizcond = .FALSE.
         
         ! Check for visualization condition and adjust time step
@@ -578,7 +584,8 @@ contains
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
                 call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+                ! call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+                call this%write_viz()
                 vizcond = .FALSE.
             end if
             
@@ -1293,18 +1300,18 @@ contains
         ! Hard code these values for now. Need to make a better interface for this later
         real(rkind) :: mu_ref = 0.6_rkind * half / (100._rkind * sqrt(3._rkind))
         real(rkind) :: T_ref = 1._rkind / 1.4_rkind
-        real(rkind) :: Pr = 0.7_rkind
+        real(rkind) :: Pr = 0.75_rkind
+
+        this%mu   = mu_ref * (this%T / T_ref)**(three/four)
+        this%bulk = zero
+        this%kap  = this%mix%material(1)%mat%gam / (this%mix%material(1)%mat%gam - one) * this%mix%material(1)%mat%Rgas * this%mu / Pr
+        this%diff = zero
 
         ! If inviscid set everything to zero (otherwise use a model)
         ! this%mu = zero
         ! this%bulk = zero
         ! this%kap = zero
         ! this%diff = zero
-
-        this%mu   = mu_ref * (this%T / T_ref)**(three/four)
-        this%bulk = zero
-        this%kap  = Pr * this%mix%material(1)%mat%gam / (this%mix%material(1)%mat%gam - one) * this%mix%material(1)%mat%Rgas * this%mu
-        this%diff = zero
 
     end subroutine  
 
@@ -1435,6 +1442,44 @@ contains
             dYsdz(:,:,:,i) = -this%rho*( dYsdz(:,:,:,i) - this%Ys(:,:,:,i)*sumJz )
         end do
 
+    end subroutine
+
+    subroutine write_viz(this)
+        use exits, only: message
+        class(cgrid), intent(inout) :: this
+        character(len=clen) :: charout
+        integer :: i
+
+        write(charout,'(A,I0,A,A)') "Writing visualization dump ", this%viz%vizcount, " to ", adjustl(trim(this%viz%filename))
+        call message(charout)
+
+        ! Start visualization dump
+        call this%viz%start_viz(this%tsim)
+
+        ! Write variables
+        call this%viz%write_variable(this%rho , 'rho' ) 
+        call this%viz%write_variable(this%u   , 'u'   )
+        call this%viz%write_variable(this%v   , 'v'   )
+        call this%viz%write_variable(this%w   , 'w'   )
+        call this%viz%write_variable(this%p   , 'p'   )
+        call this%viz%write_variable(this%T   , 'T'   )
+        call this%viz%write_variable(this%e   , 'e'   )
+        call this%viz%write_variable(this%mu  , 'mu'  )
+        call this%viz%write_variable(this%bulk, 'bulk')
+        call this%viz%write_variable(this%kap , 'kap' )
+
+        if (this%mix%ns > 1) then
+            do i = 1,this%mix%ns
+                write(charout,'(I2.2)') i
+                call this%viz%write_variable(this%Ys(:,:,:,i)  , 'Massfraction_'//adjustl(trim(charout)) )
+                call this%viz%write_variable(this%diff(:,:,:,i), 'Diffusivity_'//adjustl(trim(charout)) )
+            end do
+        end if
+
+        ! TODO: Add hook_viz here
+
+        ! End visualization dump
+        call this%viz%end_viz()
     end subroutine
 
 end module 
