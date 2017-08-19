@@ -1,17 +1,17 @@
 &INPUT
-inputdir                      = "/home/aditya90/Codes/PadeOps/data/HIT_AD_interaction/output"   ! Directory for any input files
-outputdir                     = "/home/aditya90/Codes/PadeOps/data/HIT_AD_interaction/output"   ! Directory for all output files
+inputdir                      = "/projects/windFlowModeling/PadeOps/HIT_AD_interact/output"   ! Directory for any input files
+outputdir                     = "/projects/windFlowModeling/PadeOps/HIT_AD_interact/output"   ! Directory for all output files
 nx                            = 1280          ! Number of points in X
 ny                            = 256          ! Number of points in Y
 nz                            = 256          ! Number of points in Z
-tstop                         = 500.D0       ! Physical time to stop the simulation
-CFL                           = 1.4D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+tstop                         = 2000.D0       ! Physical time to stop the simulation
+CFL                           = 1.5D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile                = .FALSE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 1000        ! TimeID of the restart file being used
-restartFile_RID               = 10          ! RunID of the restart file being used
+useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
+restartFile_TID               = 13000        ! TimeID of the restart file being used
+restartFile_RID               = 35          ! RunID of the restart file being used
 /
 /
 &NUMERICS
@@ -25,14 +25,18 @@ dealiasFact                   = 0.6667d0
 /
 /
 &IO
-RunID                         = 10          ! Run Label (All output files will be tagged with this nubber)
+RunID                         = 35          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump                 = 1000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump                    = 20        ! Data dumping frequency (# of timesteps)
+t_dataDump                    = 1000        ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
-dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
-t_planeDump                   = 100         ! Plane dumping frequency (# of timesteps)
+dumpPlanes                    = .TRUE.     ! Dump plane visualations. Select planes in initialize.F90
+t_planeDump                   = 5          ! Plane dumping frequency (# of timesteps)
 t_start_planeDump             = 1           ! When do you want to start dumping planes?
-t_stop_planeDump              = 5000        ! When do you want to stop dumping planes?
+t_stop_planeDump              = 40000        ! When do you want to stop dumping planes?
+useProbes                     = .TRUE.       ! Use probes?
+t_start_pointProbe            = 1            ! When do you want to start recording data?
+t_stop_pointProbe             = 40000        ! When do you want to end recording data?
+t_pointProbe                  = 1000         ! How often do you want to write probe data to disk? 
 /
 /
 &STATS
@@ -42,6 +46,7 @@ tSimStartStats                = 20.d0       ! Simulation time for starting stats
 normStatsByUstar              = .TRUE.      ! Normalize Statistics by ustar at each instant
 computeSpectra                = .FALSE.     ! Compute and time average x - spectra on the run
 timeAvgFullFields             = .FALSE.     ! Time average and store fields on the run
+computeVorticity              = .TRUE.
 /
 /
 &OS_INTERACTIONS
@@ -103,20 +108,21 @@ DynProcFreq                   = 5          ! Frequency of dynamic procedure
 useWindTurbines               = .TRUE.    ! Do you want to use Wind turbines ?
 num_turbines                  = 1
 ADM                           = .TRUE.
-turbInfoDir                   = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/"
+turbInfoDir                   = "/projects/windFlowModeling/PadeOps/HIT_AD_interact/"
 ADM_Type                      = 2
 /
 /
 &FRINGE
-Fringe1_xst                    = 0.70d0         
+Fringe1_xst                    = 0.75d0         
 Fringe1_xen                    = 0.90d0
 Fringe1_delta_st_x             = 0.100d0
-Fringe1_delta_en_x             = 0.075d0
+Fringe1_delta_en_x             = 0.05d0
 Fringe2_xst                    = 0.800d0         
 Fringe2_xen                    = 1.000d0
 Fringe2_delta_st_x             = 0.025d0
 Fringe2_delta_en_x             = 0.05d0
-LambdaFact                    = 0.75d0 
+LambdaFact                     = 0.60d0 
+LambdaFact2                    = 0.90d0
 /
 /
 &KSPREPROCESS
@@ -130,4 +136,5 @@ t_dumpKSprep                  = 10             ! Dumping Frequency for KS files
 Lx                            = 31.415926535897d0                        ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Ly                            = 6.2831853071795d0           ! Domain Width  (appropriate dimesions/non-dimensionalized)
 Lz                            = 6.2831853071795d0           ! Domain Height (appropriate dimesnions/non-dimensionalized)
+uInflow                       = 2.d0                        ! What's the inflow velocity? 
 /

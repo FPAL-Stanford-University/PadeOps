@@ -1,8 +1,8 @@
 &concurrent
-HIT_InputFile                 = "/home/aditya90/Codes/PadeOps/data/HIT_AD_interaction/input_hit.dat"
-AD_InputFile                  = "/home/aditya90/Codes/PadeOps/data/HIT_AD_interaction/input_AD.dat"
-HIT_scalefact                 = 0.25d0
-k_bandpass_left               = 10.d0
-k_bandpass_right              = 64.d0
+HIT_InputFile                 = "/projects/windFlowModeling/PadeOps/HIT_AD_interact/input_files/input_hit.dat"
+AD_InputFile                  = "/projects/windFlowModeling/PadeOps/HIT_AD_interact/input_files/input_AD.dat"
+InflowSpeed                   = 2.d0
+k_bandpass_left               = 5.d0
+k_bandpass_right              = 128.d0
 /
 /

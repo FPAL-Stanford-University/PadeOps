@@ -132,7 +132,7 @@ module IncompressibleGrid
         integer :: nxZ, nyZ
      
         logical :: periodicInZ  = .false. 
-        logical :: newTimeStep = .true. 
+        logical :: newTimeStep = .true., computeVorticity = .false.  
         integer :: timeSteppingScheme = 0 
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
         integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
@@ -270,19 +270,13 @@ module IncompressibleGrid
             procedure, private :: addCoriolisTerm
             procedure, private :: addSponge
             procedure, private :: addExtraForcingTerm 
-            !procedure, private :: compute_and_bcast_surface_Mn
             procedure, private :: dumpRestartFile
             procedure, private :: readRestartFile
             procedure, private :: compute_z_mean 
-            !procedure, private :: compute_z_fluct
             procedure, private :: compute_deltaT
-            !procedure, private :: getfilteredSpeedSqAtWall
             procedure, private :: dump_pointProbes
-            !procedure, private :: dump_stats
-            !procedure, private :: compute_stats 
             procedure, private :: dump_stats3D
             procedure, private :: compute_stats3D 
-            !procedure, private :: getSurfaceQuantities 
             procedure, private :: dealiasFields
             procedure, private :: ApplyCompactFilter 
             procedure, private :: addNonLinearTerm_skewSymm
@@ -290,7 +284,7 @@ module IncompressibleGrid
             procedure, private :: project_and_prep
             procedure, private :: wrapup_timestep
             procedure, private :: reset_pointers
-            !procedure, private :: finalize_stats
+            procedure, private :: compute_vorticity
             procedure, private :: finalize_stats3D
             procedure, private :: dump_planes
             procedure          :: dumpFullField 
@@ -329,7 +323,7 @@ contains
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
-        logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true. 
+        logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
         real(rkind), dimension(:,:), allocatable :: probe_locs
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
@@ -340,7 +334,7 @@ contains
                          useRestartFile, restartFile_TID, restartFile_RID 
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
-        namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields
+        namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, &
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude, useHITForcing, frameAngle
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe, usedoublefringex
@@ -380,7 +374,7 @@ contains
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact; this%useFringe = useFringe
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
         this%useHITForcing = useHITForcing
-        this%frameAngle = frameAngle
+        this%frameAngle = frameAngle; this%computeVorticity = computeVorticity
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -782,11 +776,12 @@ contains
             ! If have 1 or more probes, I need to allocate memory for probes
             if (this%nprobes > 0) then
                 allocate(this%probes(4,this%nprobes))
-                if (this%isStratified) then
-                    allocate(this%probe_data(1:5,1:this%nprobes,0:this%probeTimeLimit-1)) ! Store time + 3 fields
-                else                                     
-                    allocate(this%probe_data(1:4,1:this%nprobes,0:this%probeTimeLimit-1)) ! Store time + 3 fields
-                end if
+                !if (this%isStratified) then
+                !    allocate(this%probe_data(1:5,1:this%nprobes,0:this%probeTimeLimit-1)) ! Store time + 3 fields
+                !else                                     
+                !    allocate(this%probe_data(1:4,1:this%nprobes,0:this%probeTimeLimit-1)) ! Store time + 3 fields
+                !end if
+                allocate(this%probe_data(1:6,1:this%nprobes,0:this%probeTimeLimit-1))
                 this%probe_data = 0.d0
                 ii = 1
                 do idx = 1,size(probe_locs,2)
@@ -847,8 +842,6 @@ contains
         end if 
 
 
-        ! STEP 14c: Update the probes
-        if (this%useProbes) call this%updateProbes()
 
         ! STEP 15: Set up extra buffers for RK3
         if (timeSteppingScheme == 1) then
@@ -921,8 +914,10 @@ contains
             call message(1, "Done allocating storage for pressure")
         end if 
 
+        ! STEP 20: Update the probes
+        if (this%useProbes) call this%updateProbes()
 
-        ! STEP 20: Safeguard against user invalid user inputs
+        ! STEP 21: Safeguard against user invalid user inputs
         if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
             call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 or SSP RK45 time stepping.",123)
         end if 
@@ -1812,6 +1807,9 @@ contains
                 if (this%isStratified) then
                     this%probe_data(5,idx,this%step) = this%T(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
                 end if
+                if (this%fastCalcPressure) then
+                    this%probe_data(6,idx,this%step) = this%Pressure(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                end if
             end do 
         end if
 
@@ -1875,7 +1873,7 @@ contains
         end if  
         if (this%PreprocessForKS) this%KSupdated = .false. 
         if (this%useProbes) call this%updateProbes()
-
+        if (this%computevorticity) call this%compute_vorticity
 
         ierr = -1; forceWrite = .FALSE.; exitstat = .FALSE.; forceDumpPressure = .FALSE.; 
         forceDumpProbes = .false.; restartWrite = .FALSE. 
@@ -2022,10 +2020,20 @@ contains
            call this%dumpVisualizationInfo()
            if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
-           if (this%useWindTurbines) then
-               this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
-               this%WindTurbineArr%step = this%step-1
-           endif
+           if (this%computevorticity) then
+               call this%dumpFullField(this%ox,'omgX')
+               call this%dumpFullField(this%oy,'omgY')
+               call this%dumpFullField(this%oz,'omgZ')
+           end if 
+           
+           ! ADITYA -> NIRANJAN : Did you mean to use this for debugging, or do
+           ! you need it to be here? If you do, then it needs to go inside
+           ! turbArr.  
+           !if (this%useWindTurbines) then
+           !    this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
+           !    this%WindTurbineArr%step = this%step-1
+           !endif
+
            if (this%PreProcessForKS) then
                 if (.not. this%KSupdated) then
                     call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
@@ -2056,10 +2064,18 @@ contains
            call this%dumpVisualizationInfo()
            if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
-           if (this%useWindTurbines) then
-               this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
-               this%WindTurbineArr%step = this%step-1
-           endif
+           if (this%computevorticity) then
+               call this%dumpFullField(this%ox,'omgX')
+               call this%dumpFullField(this%oy,'omgY')
+               call this%dumpFullField(this%oz,'omgZ')
+           end if 
+           
+           ! ADITYA -> NIRANJAN : Did you mean to use this for debugging, or do
+           ! you need it to be here? 
+           !if (this%useWindTurbines) then
+           !    this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
+           !    this%WindTurbineArr%step = this%step-1
+           !endif
            if (this%PreProcessForKS) then
                 if (.not. this%KSupdated) then
                     call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
@@ -2270,6 +2286,25 @@ contains
 
    end subroutine 
 
+
+    subroutine compute_vorticity(this)
+         class(igrid), intent(inout), target :: this
+         real(rkind),    dimension(:,:,:), pointer :: dudx , dudy , dudzC
+         real(rkind),    dimension(:,:,:), pointer :: dvdx , dvdy , dvdzC
+         real(rkind),    dimension(:,:,:), pointer :: dwdxC, dwdyC, dwdz
+        
+         
+         dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3) 
+         dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6) 
+         dwdxC => this%duidxjC(:,:,:,7); dwdyC => this%duidxjC(:,:,:,8); dwdz  => this%duidxjC(:,:,:,9) 
+
+
+         this%ox = dwdyC - dvdzC
+         this%oy = dudzC - dwdxC
+         this%oz = dvdx  - dudy
+
+    end subroutine 
+    
     subroutine compute_duidxj(this)
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
@@ -4503,6 +4538,21 @@ contains
                     call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname)
                 end if 
 
+
+                if (this%computevorticity) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".pox"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%ox,dirid, pid, fname)
+                    
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".poy"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%oy,dirid, pid, fname)
+                    
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".poz"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%oz,dirid, pid, fname)
+                end if 
+
                 ! planes for KS preprocess
                 if (this%PreProcessForKS) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".ksu"
@@ -4551,6 +4601,20 @@ contains
                     call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname)
                 end if 
 
+                if (this%computevorticity) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".pox"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%ox,dirid, pid, fname)
+                    
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".poy"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%oy,dirid, pid, fname)
+                    
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".poz"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%oz,dirid, pid, fname)
+                end if 
+                
                 ! planes for KS preprocess
                 if (this%PreProcessForKS) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".ksu"
@@ -4601,6 +4665,19 @@ contains
                     call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname)
                 end if 
 
+                if (this%computevorticity) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".pox"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%ox,dirid, pid, fname)
+                    
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".poy"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%oy,dirid, pid, fname)
+                    
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".poz"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%oz,dirid, pid, fname)
+                end if 
 
                 ! planes for KS preprocess
                 if (this%PreProcessForKS) then

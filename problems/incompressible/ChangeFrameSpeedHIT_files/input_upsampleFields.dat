@@ -1,11 +1,12 @@
 &INPUT
 n                    = 256 
-inputdir              = "/home/aditya90/Codes/PadeOps/data/HIT_testing/output/"   ! Directory for any input files
-outputdir             = "/home/aditya90/Codes/PadeOps/data/HIT_testing/output/"   ! Directory for all output files
-inputFile_TID         = 33000                                                    ! TimeID of the restart file for the original data
-inputFile_RID         = 75          ! RunID of the restart file for the original data
+inputdir              = "/projects/windFlowModeling/PadeOps/HIT_testing/output/"   ! Directory for any input files
+outputdir             = "/projects/windFlowModeling/PadeOps/HIT_testing/output/"   ! Directory for all output files
+inputFile_TID         = 4600                                                    ! TimeID of the restart file for the original data
+inputFile_RID         = 5          ! RunID of the restart file for the original data
 outputFile_TID        = 0           ! TimeID of the restart file with upsampled data
-outputFile_RID        = 50          ! RunID of the restart file with the upsampled data
-newFrameSpeed         = 1.d0        ! frame motion velocity
+outputFile_RID        = 15          ! RunID of the restart file with the upsampled data
+newFrameSpeed         = 0.d0        ! frame motion velocity
 setSimTime            = 0.d0        ! New simulation time 
+scalingfact           = 1.d0        ! Scaling factor
 /

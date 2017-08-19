@@ -44,6 +44,7 @@ contains
             end if 
             call message(0,"------------------------------------------")
             if (simid == 2) then
+               call message(1,"Mean TKE for HIT:",gp%getMeanKE())
                call toc()
                call tic()
             end if 
