@@ -842,8 +842,6 @@ contains
         end if 
 
 
-        ! STEP 14c: Update the probes
-        if (this%useProbes) call this%updateProbes()
 
         ! STEP 15: Set up extra buffers for RK3
         if (timeSteppingScheme == 1) then
@@ -916,8 +914,10 @@ contains
             call message(1, "Done allocating storage for pressure")
         end if 
 
+        ! STEP 20: Update the probes
+        if (this%useProbes) call this%updateProbes()
 
-        ! STEP 20: Safeguard against user invalid user inputs
+        ! STEP 21: Safeguard against user invalid user inputs
         if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
             call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 or SSP RK45 time stepping.",123)
         end if 
