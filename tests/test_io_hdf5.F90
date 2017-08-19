@@ -1,6 +1,6 @@
 program test_io_hdf5
     use mpi
-    use kind_parameters, only : rkind
+    use kind_parameters, only : rkind, single_kind
     use decomp_2d
     use constants,       only: eps, two, pi
     use exits,           only: message
@@ -23,7 +23,12 @@ program test_io_hdf5
     real(rkind) :: time
     real(rkind), dimension(1) :: time_arr
 
-    ! double precision :: t0, t1
+    logical :: reduce_precision = .true.
+    real(rkind) :: tolerance = 10._rkind*eps
+
+    double precision :: t0, t1, t2, t3
+    real(rkind) :: gbytes
+    integer :: elemsize
 
     call MPI_Init(ierr)
 
@@ -54,8 +59,15 @@ program test_io_hdf5
         end do
     end do
 
+    if (reduce_precision) then
+        elemsize = storage_size(1._single_kind)
+    else
+        elemsize = storage_size(1._rkind)
+    end if
+    gbytes = ( real(elemsize, rkind) * nx * ny * nz * 4 ) / ( real(8, rkind) * 1024 * 1024 * 1024 )
+
     ! Initialize everything
-    call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', read_only=.false.)
+    call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', reduce_precision=reduce_precision, read_only=.false.)
 
     ! Write mesh coordinates to file
     call viz%write_coords(coords)
@@ -69,8 +81,14 @@ program test_io_hdf5
         dfdy =  sin(iter*x)*cos(iter*y)*cos(iter*z)*iter
         dfdz = -sin(iter*x)*sin(iter*y)*sin(iter*z)*iter
 
+        call mpi_barrier(mpi_comm_world, ierr)
+        t0 = mpi_wtime()
+
         ! Start vizualization dump
         call viz%start_viz(time)
+
+        call mpi_barrier(mpi_comm_world, ierr)
+        t1 = mpi_wtime()
 
         ! Add variables to file
         call viz%write_variable(f,    'f'   )
@@ -78,8 +96,23 @@ program test_io_hdf5
         call viz%write_variable(dfdy, 'dfdy')
         call viz%write_variable(dfdz, 'dfdz')
 
+        call mpi_barrier(mpi_comm_world, ierr)
+        t2 = mpi_wtime()
+
         ! End vizualization dump
         call viz%end_viz()
+
+        call mpi_barrier(mpi_comm_world, ierr)
+        t3 = mpi_wtime()
+
+        if (nrank == 0) then
+            print '(A,ES10.3,A)', "    Time to start viz       = ", t1-t0, " seconds"
+            print '(A,ES10.3,A)', "    Time to write variables = ", t2-t1, " seconds"
+            print '(A,ES10.3,A)', "    Time to end viz         = ", t3-t2, " seconds"
+            print '(A,ES10.3,A)', ""
+            print '(A,ES10.3,A)', "    Effective I/O bandwidth = ", gbytes/(t2-t1), " GB/s"
+            print '(A,ES10.3,A)', ""
+        end if
     end do
 
     call viz%destroy()
@@ -87,19 +120,23 @@ program test_io_hdf5
     call message("")
     call message("Now reading in the file written out")
 
-    call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', read_only=.true.)
-    call viz%read_dataset(dfdx, '0003/f')
-    if ( P_MAXVAL(abs(f - dfdx)) > 10.D0*eps ) then
+    tolerance = 10._rkind*epsilon(real(1.0,single_kind))
+    call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', reduce_precision=reduce_precision, read_only=.true.)
+
+    call viz%start_reading(3)
+    call viz%read_dataset(dfdx, 'f')
+    if ( P_MAXVAL(abs(f - dfdx)) > tolerance ) then
         call message("ERROR:")
         call message("  Array '0003/f' read in has incorrect values")
     end if
 
-    call viz%read_attribute(1, time_arr, 'Time', '0003')
+    call viz%read_attribute(1, time_arr, 'Time')
     if ( abs(time_arr(1) - time) > 10.D0*eps ) then
         call message("ERROR:")
         call message("  Wrong value of time read in. Expected time",time)
         call message("  Got time",time_arr(1))
     end if
+    call viz%end_reading
 
     deallocate(coords, f, dfdx,dfdy, dfdz)
     nullify(x, y, z)
