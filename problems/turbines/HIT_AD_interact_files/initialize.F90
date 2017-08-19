@@ -22,8 +22,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: nxg, nyg, nzg
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, uInflow = one
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow
     
     select case (simulationID) 
     case (1) 
@@ -85,8 +85,16 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, uInflow = one
+    integer :: ioUnit
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow
     
     if (simulationID == 1) then
+      
+      ioUnit = 11
+      open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+      read(unit=ioUnit, NML=AD_CoriolisINPUT)
+      close(ioUnit)    
 
       u  => fieldsC(:,:,:,1)
       v  => fieldsC(:,:,:,2)
@@ -97,7 +105,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
       y => mesh(:,:,:,2)
       x => mesh(:,:,:,1)
    
-      u = one
+      u = uInflow 
       v = zero
       wC= zero  
       w = zero
@@ -150,9 +158,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, uInflow = 1.d0
     integer :: iounit
-    namelist /HIT_AD_interactINPUT/ Lx, Ly, Lz
+    namelist /HIT_AD_interactINPUT/ Lx, Ly, Lz, uInflow 
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -171,10 +179,10 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz
+    real(rkind) :: Lx, Ly, Lz, uInflow = 1.d0
     integer :: iounit
     
-    namelist /HIT_AD_interactINPUT/ Lx, Ly, Lz
+    namelist /HIT_AD_interactINPUT/ Lx, Ly, Lz, uInflow
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -191,7 +199,7 @@ subroutine hook_probes(inputfile, probe_locs)
     use kind_parameters,    only: rkind
     real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
     character(len=*),                intent(in)    :: inputfile
-    integer, parameter :: nprobes = 2
+    integer, parameter :: nprobes = 9
     
     ! IMPORTANT : Convention is to allocate probe_locs(3,nprobes)
     ! Example: If you have at least 3 probes:
@@ -203,10 +211,50 @@ subroutine hook_probes(inputfile, probe_locs)
     ! Add probes here if needed
     ! Example code: The following allocates 2 probes at (0.1,0.1,0.1) and
     ! (0.2,0.2,0.2)  
-    print*, inputfile
     allocate(probe_locs(3,nprobes))
-    probe_locs(1,1) = 0.1d0; probe_locs(2,1) = 0.1d0; probe_locs(3,1) = 0.1d0;
-    probe_locs(1,2) = 0.2d0; probe_locs(2,2) = 0.2d0; probe_locs(3,2) = 0.2d0;
+    
+    ! Probe 1
+    probe_locs(1,1) = 0.1d0; 
+    probe_locs(2,1) = 3.141592653589d0; 
+    probe_locs(3,1) = 3.141592653589d0; 
+    
+    ! Probe 2 
+    probe_locs(1,2) = 5.783185307179d0; 
+    probe_locs(2,2) = 3.141592653589d0; 
+    probe_locs(3,2) = 3.141592653589d0; 
 
+    ! Probe 3
+    probe_locs(1,3) = 6.783185307179d0; 
+    probe_locs(2,3) = 3.141592653589d0; 
+    probe_locs(3,3) = 3.141592653589d0; 
+    
+    ! Probe 4
+    probe_locs(1,4) = 10.28318530718d0; 
+    probe_locs(2,4) = 3.141592653589d0; 
+    probe_locs(3,4) = 3.141592653589d0; 
 
+    ! Probe 5
+    probe_locs(1,5) = 14.28318530718d0; 
+    probe_locs(2,5) = 3.141592653589d0; 
+    probe_locs(3,5) = 3.141592653589d0;
+
+    ! Probe 6
+    probe_locs(1,6) = 18.28318530718d0; 
+    probe_locs(2,6) = 3.141592653589d0; 
+    probe_locs(3,6) = 3.141592653589d0;
+
+    ! Probe 7
+    probe_locs(1,7) = 10.28318530718d0; 
+    probe_locs(2,7) = 3.141592653589d0; 
+    probe_locs(3,7) = 4.25d0; 
+
+    ! Probe 8
+    probe_locs(1,8) = 14.28318530718d0; 
+    probe_locs(2,8) = 3.141592653589d0; 
+    probe_locs(3,8) = 4.250;
+
+    ! Probe 9
+    probe_locs(1,9) = 18.28318530718d0; 
+    probe_locs(2,9) = 3.141592653589d0; 
+    probe_locs(3,9) = 4.25d0;
 end subroutine

@@ -12,7 +12,7 @@ program HIT_AD_interact
     use exits, only: message
     use constants, only: one, zero
     use HIT_AD_interact_parameters, only: simulationID
-    use decomp_2d,                only: nrank
+    !use decomp_2d,                only: nrank
     implicit none
 
     type(igrid), allocatable, target :: hit, adsim
@@ -20,10 +20,10 @@ program HIT_AD_interact
     integer :: ierr, ioUnit
     real(rkind), dimension(:,:,:), allocatable :: utarget0, vtarget0, wtarget0
     real(rkind), dimension(:,:,:), allocatable :: utarget1, vtarget1, wtarget1
-    real(rkind) :: HIT_scalefact = 0.2d0, HIT_TI = 0.1d0, dt1, dt2, dt
+    real(rkind) :: dt1, dt2, dt, InflowSpeed = 1.d0
     real(rkind) :: k_bandpass_left = 10.d0, k_bandpass_right = 64.d0, x_shift
     integer :: nxADSIM, nxHIT
-    namelist /concurrent/ HIT_InputFile, AD_InputFile, HIT_scalefact, HIT_TI, k_bandpass_left, k_bandpass_right
+    namelist /concurrent/ HIT_InputFile, AD_InputFile, InflowSpeed, k_bandpass_left, k_bandpass_right
 
     call MPI_Init(ierr)                                                
 
@@ -52,7 +52,7 @@ program HIT_AD_interact
     call adsim%fringe_x1%allocateTargetArray_Cells(utarget0)                
     call adsim%fringe_x1%allocateTargetArray_Cells(vtarget0)                
     call adsim%fringe_x1%allocateTargetArray_Edges(wtarget0)                
-    utarget0 = 1.d0                                                      
+    utarget0 = InflowSpeed                                                     
     vtarget0 = 0.d0                                                      
     wtarget0 = 0.d0                                                      
     call adsim%fringe_x1%associateFringeTargets(utarget0, vtarget0, wtarget0) 
@@ -60,7 +60,7 @@ program HIT_AD_interact
     call adsim%fringe_x2%allocateTargetArray_Cells(utarget1)                
     call adsim%fringe_x2%allocateTargetArray_Cells(vtarget1)                
     call adsim%fringe_x2%allocateTargetArray_Edges(wtarget1)                
-    utarget1 = 1.d0
+    utarget1 = InflowSpeed
     vtarget1 = 0.d0
     wtarget1 = 0.d0
     call adsim%fringe_x2%associateFringeTargets(utarget1, vtarget1, wtarget1) 
@@ -70,17 +70,18 @@ program HIT_AD_interact
 
     call hit%spectC%init_bandpass_filter(k_bandpass_left, k_bandpass_right, hit%cbuffzC(:,:,:,1), hit%cbuffyC(:,:,:,1))
 
-    ! Set the true target field for AD simulation 
-    call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), zero)
+    ! Set the true target field for AD simulation
+    x_shift = adsim%tsim*InflowSpeed 
+    call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
     call hit%interpolate_cellField_to_edgeField(uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:),0,0)
-    call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), zero)
-    call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), zero)
+    call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
+    call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
     
     ! Now scale rhw HIT field appropriately
     ! Note that the bandpass filtered velocity field has zero mean 
-    uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = HIT_scalefact*uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) + one 
-    vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = HIT_scalefact*vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
-    wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = HIT_scalefact*wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
+    uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) + InflowSpeed 
+    vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
+    wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
     
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
@@ -94,19 +95,20 @@ program HIT_AD_interact
 
        call hit%timeAdvance(dt)
        
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), zero)
+       x_shift = adsim%tsim*InflowSpeed 
+       call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
        call hit%interpolate_cellField_to_edgeField(uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:),0,0)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), zero)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), zero)
+       call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
+       call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
       
        ! Now scale rhw HIT field appropriately
-       uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = HIT_scalefact*uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) + one 
-       vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = HIT_scalefact*vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
-       wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = HIT_scalefact*wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
+       uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) + InflowSpeed 
+       vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
+       wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
      
 
        call doTemporalStuff(adsim, 1)                                        
-       call doTemporalStuff(hit   , 2)                                        
+       call doTemporalStuff(hit  , 2)                                        
       
     end do 
  
