@@ -2007,10 +2007,12 @@ contains
         !    call this%LES2KS%LES_FOR_KS(this%uE,this%vE,this%w,this%step)
         !end if 
 
-        if ( (forceWrite .or. ((mod(this%step,this%t_pointProbe) == 0) .and. &
-                 (this%step .ge. this%t_start_pointProbe) .and. (this%step .le. this%t_stop_pointProbe))) .and. (this%t_pointProbe > 0)) then
-            call this%dump_pointProbes()
-        end if 
+        ! ADITYA -> NIRANJAN: You need to fix the dump_pointProbes call. For
+        ! some reason, it seems to segfault for some problems. 
+        !if ( (forceWrite .or. ((mod(this%step,this%t_pointProbe) == 0) .and. &
+        !         (this%step .ge. this%t_start_pointProbe) .and. (this%step .le. this%t_stop_pointProbe))) .and. (this%t_pointProbe > 0)) then
+        !    call this%dump_pointProbes()
+        !end if 
 
         if (mod(this%step,this%t_dataDump) == 0) then
            call message(0,"Scheduled visualization dump.")
@@ -4477,22 +4479,25 @@ contains
 
     subroutine dump_pointProbes(this)
         use kind_parameters, only: mpirkind
-        class(igrid), intent(inout) :: this
-        character(len=clen) :: fname
-        character(len=clen) :: tempname
-        integer :: ierr
+        !class(igrid), intent(inout) :: this
+        class(igrid), intent(in) :: this
+        !character(len=clen) :: fname
+        !character(len=clen) :: tempname
+        !integer :: ierr
 
+        ! ADITYA -> NIRANJAN: Why isn't this quantity inside turbarray? It
+        ! segfaults for certain specific casses. 
         if(this%useWindTurbines) then
-            this%runningSum_turb = zero
-            call MPI_reduce(this%inst_horz_avg_turb, this%runningSum_turb, 8*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
-            if(nrank == 0) then
-                write(tempname,"(A3,I2.2,A15)") "Run", this%RunID,"_timeseries.prb"
-                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                open(unit=10,file=fname,status='old',action='write',position='append',iostat=ierr)
-                if(ierr .ne. 0) open(unit=10,file=fname,status='replace')
-                write(10,'(1000(e19.12,1x))') this%tsim, this%inst_horz_avg, this%runningSum_turb
-                close(10)
-            end if
+         !   this%runningSum_turb = zero
+            !call MPI_reduce(this%inst_horz_avg_turb, this%runningSum_turb, 8*this%WindTurbineArr%nTurbines, mpirkind, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+            !if(nrank == 0) then
+            !    write(tempname,"(A3,I2.2,A15)") "Run", this%RunID,"_timeseries.prb"
+            !    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            !    open(unit=10,file=fname,status='old',action='write',position='append',iostat=ierr)
+            !    if(ierr .ne. 0) open(unit=10,file=fname,status='replace')
+            !    write(10,'(1000(e19.12,1x))') this%tsim, this%inst_horz_avg, this%runningSum_turb
+            !    close(10)
+            !end if
         endif
 
     end subroutine 
