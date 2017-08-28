@@ -150,6 +150,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
         dx = (xb-xa)/real(nx-1,rkind)
         dy = (yd-yc)/real(ny,rkind)
+        !dx = real(1.0d0,rkind)/real(nx-1,rkind)
+        !dy = dx
         dz = dx
 
         do k=1,size(mesh,3)
@@ -166,7 +168,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PInf,tau0,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rho0,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,one,two,pi,eight,seven
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
@@ -176,19 +178,23 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     use ShockVortEntr_data
 
     implicit none
-    character(len=*),                                               intent(in)    :: inputfile
-    type(decomp_info),                                              intent(in)    :: decomp
-    real(rkind),                                                    intent(in)    :: dx,dy,dz
-    real(rkind),                                          optional, intent(inout) :: rho0, mu, gam, PInf, tstop, dt, tviz, yield, tau0
-    real(rkind), dimension(:,:,:,:),     intent(in)    :: mesh
+    character(len=*),                intent(in)    :: inputfile
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(in)    :: dx,dy,dz
+    real(rkind), dimension(:),       intent(in)    :: eosparams
+    integer,                         intent(in)    :: eostype
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    real(rkind),           optional, intent(inout) :: rho0, tstop, dt, tviz
 
     integer :: ioUnit, i, j, k, nx
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, entr
     real(rkind) :: stp_x,bkstp_x,bkstp_y,phiang,rad,stp_r1,bkstp_r2,regfrac,dxdy
-    real(rkind) :: p_star, grho1, grho2
+    real(rkind) :: p_star, grho1, grho2, entr1, entr2
     integer, dimension(2) :: iparams
     real(rkind), dimension(8) :: fparams
+    real(rkind) :: gam, PInf, mu, yield, tau0
+    real(rkind), dimension(decomp%ysz(1)) :: mask
 
     namelist /PROBINPUT/  pRatio, p1, thick, xs, Av, Ae, psiang, k1wv, k2wv, tstatstart
     
@@ -196,6 +202,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
+
+    if(eostype==1) then
+        gam   = eosparams(1);                           PInf = eosparams(3);
+        mu = eosparams(4);   yield = eosparams(5);   tau0 = eosparams(6);
+    else
+    endif
 
     ! Initialize mygfil
     call mygfil%init(                        decomp, &
@@ -268,7 +280,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         rho = (one-tmp)*rho1 + tmp*rho2
         v   = zero
         w   = zero
-        p   = (one-tmp)*p1   + tmp*p2
+
+        ! determine p as a function of entropy
+        entr1 = log((p1/p1)**(one/gam)*rho1/rho1) ! zero
+        entr2 = log((p2/p1)**(one/gam)*rho1/rho2) ! non-zero
+        print *, 'entr1 = ', entr1
+        print *, 'entr2 = ', entr2
+        entr   = (one-tmp)*entr1   + tmp*entr2
+        p = p1*(rho/rho1*exp(entr))**gam
 
         rho1 = rho(decomp%yen(1),1,1)
         u1   = u  (decomp%yen(1),1,1)
@@ -304,11 +323,17 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,rho0,mu,yield,gam,PI
         k1wv = k2wv/tan(psiang)
         if(nrank==0) write(*,*) '(k1, k2): ', k1wv, k2wv
 
+        mask = 0.0d0
+        where(x(:,1,1) .lt. xs-one)
+          mask = 1.0d0
+        endwhere
+
         do k=1,decomp%ysz(3)
          do j=1,decomp%ysz(2)
           do i=1,decomp%ysz(1)
 
-             rho(i,j,k) = rho(i,j,k) + rho1 * Ae *          cos(k1wv*x(i,j,k) + k2wv*y(i,j,k))
+             rho(i,j,k) = rho(i,j,k) + mask(i)*(rho1*exp(-Ae* sin(k1wv*x(i,j,k)))  -rho1)
+             !rho(i,j,k) = rho(i,j,k) + rho1 * Ae * mask(i)* cos(k1wv*x(i,j,k) + k2wv*y(i,j,k))
              u(i,j,k)   = u(i,j,k)   +   u1 * Av * sinpsi * cos(k1wv*x(i,j,k) + k2wv*y(i,j,k))
              v(i,j,k)   =            -   u1 * Av * cospsi * cos(k1wv*x(i,j,k) + k2wv*y(i,j,k))
           end do 
@@ -598,7 +623,8 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
             write(outputunit,'(a,ES27.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
             do k=1,decomp%ysz(3)
               do i=1,decomp%ysz(1)
-                  write(outputunit,'(38ES26.16)') x(i,1,k), z(i,1,k), stats(i,k,1)/tavg, stats(i,k,2)/tavg, stats(i,k,1)/stats(1,k,1), stats(i,k,2)/stats(1,k,2)
+                  print *, i, k
+                  write(outputunit,'(38ES26.16)') x(i,1,k), z(i,1,k), stats(i,k,1)/(tavg+1.0D-32), stats(i,k,2)/(tavg+1.0D-32), stats(i,k,1)/(stats(1,k,1)+1.0D-32), stats(i,k,2)/(stats(1,k,2)+1.0D-32)
               enddo
             enddo
           else
@@ -608,7 +634,7 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
             write(outputunit,'(a)') ' VARSHARELIST=([1, 2]=1)'
             do k=1,decomp%ysz(3)
               do i=1,decomp%ysz(1)
-                  write(outputunit,'(38ES26.16)') stats(i,k,1)/tavg, stats(i,k,2)/tavg, stats(i,k,1)/stats(1,k,1), stats(i,k,2)/stats(1,k,2)
+                  write(outputunit,'(38ES26.16)') stats(i,k,1)/(tavg+1.0D-32), stats(i,k,2)/(tavg+1.0D-32), stats(i,k,1)/(stats(1,k,1)+1.0D-32), stats(i,k,2)/(stats(1,k,2)+1.0D-32)
               enddo
             enddo
           endif
@@ -658,7 +684,8 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
          if(x_bc(1)==0) then
             do k=1,decomp%ysz(3)
              do j=1,decomp%ysz(2)
-               rho(1,j,k) = rho1 + rho1 * Ae *          cos(k2wv*y(1,j,k) - k1wv*u1*tsim)
+               rho(1,j,k) = rho1 * exp(-Ae*sin(k1wv*u1*tsim))
+               !rho(1,j,k) = rho1 + rho1 * Ae *          cos(k2wv*y(1,j,k) - k1wv*u1*tsim)
                  u(1,j,k) =   u1 +   u1 * Av * sinpsi * cos(k2wv*y(1,j,k) - k1wv*u1*tsim)
                  v(1,j,k) =      -   u1 * Av * cospsi * cos(k2wv*y(1,j,k) - k1wv*u1*tsim)
                  p(1,:,:) = p1
@@ -779,7 +806,9 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
     integer,     dimension(2),       intent(in) :: x_bc, y_bc, z_bc
 
-    integer :: i, k
+    integer :: i, k, nx
+    real(rkind) :: sthick, mwa, dx
+    real(rkind), dimension(decomp%ysz(1)) :: dpdx
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -792,13 +821,31 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
         call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
         call message(2,"Maximum conductivity",P_MAXVAL(kap))
 
+        ! determine shock statistics
+        dx = x(2,1,1) - x(1,1,1)
+        dpdx = 0.0d0
+        nx = size(dpdx,1)
+        dpdx(2:nx-1) = ( p(3:nx,1,1)-p(1:nx-2,1,1) ) / (two*dx)
+        !call der%ddx(p, dpdx, x_bc(1), x_bc(2))
+        sthick = abs(p2-p1)/maxval(dx*abs(dpdx))
+
+        mwa = maxval(p(:,1,1)-p2)
+        mwa = max(mwa,maxval(p1-p(:,1,1)))
+        mwa = mwa / abs(p2-p1)
+
+        call message(2,"StatNormalShockess", sthick)
+        call message(2,"Maximum Wiggles Amplitude", mwa)
+
+        
+
+        !k = 1
         if(tsim > tstatstart) then
           write(*,*) '------'
           write(*,*) 'vort3: ', maxval(vort(:,:,:,3)), minval(vort(:,:,:,3))
           write(*,*) 'u    : ', maxval(u(:,:,:)), minval(u(:,:,:))
           write(*,*) 'v    : ', maxval(v(:,:,:)), minval(v(:,:,:))
           write(*,*) 'w    : ', maxval(w(:,:,:)), minval(w(:,:,:))
-          write(*,*) 'ke   : ', sum(u(i,:,k)*u(i,:,k) + v(i,:,k)*v(i,:,k) + w(i,:,k)*w(i,:,k))
+          write(*,*) 'ke   : ', sum(u(:,:,:)*u(:,:,:) + v(:,:,:)*v(:,:,:) + w(:,:,:)*w(:,:,:))
           if(.not. istatstart) then
             if(nrank==0) write(*,*) "Started collecting statistics at t = ", tsim
             istatstart = .TRUE.

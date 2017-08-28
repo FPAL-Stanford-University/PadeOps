@@ -252,7 +252,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         tmp = half * ( one + erf( (x-xe)/(eps*dx) ) )
 
         !rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe)))  ! 1D fluctuations
-        rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe))*sin(4.0d0*y))
+        rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe))*cos(4.0d0*y))
         
         rho1 = rho(decomp%yen(1),1,1)
         u1   = u  (decomp%yen(1),1,1)
