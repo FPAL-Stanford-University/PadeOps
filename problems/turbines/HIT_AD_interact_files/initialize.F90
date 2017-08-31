@@ -5,6 +5,7 @@ module HIT_AD_interact_parameters
     use constants, only: kappa 
     implicit none
     integer :: simulationID = 0
+    integer :: nxSize = 256, nySize = 256, nzSize = 256
 
 end module     
 
@@ -65,6 +66,10 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
         z = z - dz 
 
     end associate
+   
+    if (simulationID == 1) then
+      nxSize = nxg; nySize = nyg; nzSize = nzg
+    end if 
 
 end subroutine
 
@@ -125,19 +130,23 @@ end subroutine
 
 
 subroutine set_planes_io(xplanes, yplanes, zplanes)
+    use HIT_AD_interact_parameters
     implicit none
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 0, nyplanes = 1, nzplanes = 1
+    integer, parameter :: nxplanes = 7, nyplanes = 1, nzplanes = 1
 
-    !allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
-    allocate(yplanes(nyplanes))
-    !allocate(zplanes(nzplanes))
-    !xplanes = [300,400,500,600,700]
-    yplanes = [128]
-    !zplanes = [128]
-
+    if (simulationID == 1) then
+         !allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
+         allocate(yplanes(nyplanes))
+         allocate(xplanes(nxplanes))
+         !allocate(zplanes(nzplanes))
+         !xplanes = [300,400,500,600,700]
+         yplanes = [nySize/2]
+         xPlanes = [1, ceiling(nxSize/6.0), ceiling(nxSize/4.85), ceiling(nxSize/4.0), ceiling(nxSize/3.0), ceiling(nxSize/2.0), ceiling(nxSize/1.6)]
+         !zplanes = [128]
+    end if 
 end subroutine
 
 subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
