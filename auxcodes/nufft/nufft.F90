@@ -1,3 +1,8 @@
+!! FFTPACK version of NUFFT adapted from the NYU NUFFT Code at: 
+!! http://www.cims.nyu.edu/cmcl/nufft/nufft.html. Avoid using this version, and
+!! use the FFTW version instead. 
+
+
 module nufftMod
     use kind_parameters, only: rkind
     use constants, only: pi, zero

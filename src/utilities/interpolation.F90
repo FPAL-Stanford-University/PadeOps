@@ -50,7 +50,7 @@ module interpolation
 
     end subroutine binarysearch
 
-    pure function interpolate2d(x_len, x_array, y_len, y_array, f, x, y) result(val)
+    pure function interpolate2d_linear(x_len, x_array, y_len, y_array, f, x, y) result(val)
         ! This function uses bilinear interpolation to estimate the value
         ! of a function f at point (x,y)
         ! f is assumed to be sampled on a regular grid, with the grid x values specified
@@ -81,9 +81,9 @@ module interpolation
         val = (f(i,j)*(x2-x)*(y2-y) + f(i+1,j)*(x-x1)*(y2-y) + &
             f(i,j+1)*(x2-x)*(y-y1) + f(i+1, j+1)*(x-x1)*(y-y1))/denom
 
-    end function interpolate2d
+    end function interpolate2d_linear
 
-    pure subroutine interpolate3d(x_len, x_array, y_len, y_array, z_len, z_array, f, x, y, z, val)
+    pure subroutine interpolate3d_linear(x_len, x_array, y_len, y_array, z_len, z_array, f, x, y, z, val)
         ! This function uses trilinear interpolation to estimate the value
         ! of a function f at point (x,y,z)
         ! f is assumed to be sampled on a regular grid, with the grid x values specified
@@ -141,7 +141,7 @@ module interpolation
 
         val = c0  * (one - zd) + c1  * zd
 
-    end subroutine interpolate3d
+    end subroutine interpolate3d_linear
 
     pure subroutine bilinearInterp(xF,yF, fF, xC, yC, fC)
         real(rkind), dimension(:,:,:), intent(in) :: xC, yC, fC
@@ -169,7 +169,7 @@ module interpolation
         do k = 1,nzF
             do j = 1,nyF
                 do i = 1,nxF
-                    fF(i,j,k) = interpolate2d(nxC, xline, nyC, yline, fC(:,:,1), xF(i,j,k), yF(i,j,k))    
+                    fF(i,j,k) = interpolate2d_linear(nxC, xline, nyC, yline, fC(:,:,1), xF(i,j,k), yF(i,j,k))    
                 end do
             end do
         end do
@@ -205,13 +205,16 @@ module interpolation
         do k = 1,nzF
             do j = 1,nyF
                 do i = 1,nxF
-                    call interpolate3d(nxC, xline, nyC, yline, nzC, zline, fC, xF(i,j,k), yF(i,j,k), zF(i,j,k),fF(i,j,k))    
+                    call interpolate3d_linear(nxC, xline, nyC, yline, nzC, zline, fC, xF(i,j,k), yF(i,j,k), zF(i,j,k),fF(i,j,k))    
                 end do
             end do
         end do
 
     end subroutine
 
+
+   ! The spline functions are taken from the following online source: 
+   ! https://ww2.odu.edu/~agodunov/computing/programs/book2/Ch01/spline.f90
    subroutine spline (x, y, b, c, d, n)
         !======================================================================
         !  Calculate the coefficients b(i), c(i), and d(i), i=1,2,...,n
