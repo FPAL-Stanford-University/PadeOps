@@ -695,7 +695,7 @@ contains
             call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
-                                    this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
+                                    this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffxE, this%rbuffyE, this%rbuffzE, this%Tsurf, &
                                     this%ThetaRef, this%Fr, this%Re, Pr, this%isInviscid, this%isStratified, this%botBC_Temp, &
                                     this%initSpinUp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3)

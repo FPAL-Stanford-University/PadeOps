@@ -35,7 +35,7 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
    end if 
 end subroutine 
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, isInviscid, isStratified, botBC_temp, initSpinUp)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffxE, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, isInviscid, isStratified, botBC_temp, initSpinUp)
   class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
@@ -45,7 +45,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC
   real(rkind), dimension(:,:,:), intent(in), target :: fBody_x, fBody_y, fBody_z
   logical, intent(out) :: computeFbody
-  real(rkind), dimension(:,:,:,:), intent(in), target :: rbuffxC, rbuffyE, rbuffzE, rbuffyC, rbuffzC
+  real(rkind), dimension(:,:,:,:), intent(in), target :: rbuffxC, rbuffyE, rbuffzE, rbuffyC, rbuffzC, rbuffxE
   complex(rkind), dimension(:,:,:,:), intent(in), target :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
   type(Pade6stagg), target, intent(in) :: PadeDer
   logical, intent(in) :: isInviscid, isStratified
@@ -58,12 +58,13 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0
   character(len=clen) :: SGSDynamicRestartFile
   logical :: explicitCalcEdgeEddyViscosity = .false.
-  integer :: ierr
+  integer :: ierr, averageType = 0
   
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0,  &
                  useWallDamping, ncWall, Csgs, WallModelType, &
                  DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,           &
-                 SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity
+                 SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity,
+                 averageType
 
 
   this%gpC => gpC
@@ -86,6 +87,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%isStratified = isStratified
   !if (present(botBC_Temp)) 
   this%botBC_Temp = botBC_Temp
+  this%averageType = averageType
 
   allocate(this%tau_ij(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),6))
   this%tau_11   => this%tau_ij(:,:,:,1)
@@ -118,6 +120,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%cbuffyE => cbuffyE
   this%cbuffzE => cbuffzE
   this%rbuffxC => rbuffxC
+  this%rbuffxE => rbuffxE
   this%rbuffyE => rbuffyE
   this%rbuffzE => rbuffzE
   this%rbuffyC => rbuffyC

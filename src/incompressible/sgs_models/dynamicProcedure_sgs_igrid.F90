@@ -28,6 +28,9 @@ subroutine allocateMemory_DynamicProcedure(this, computeFbody)
          this%modelConstType = 2
          allocate(this%cmodelC_local(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
          allocate(this%cmodelE_local(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+         call this%gfiltx%init(this%gpE%xsz(1), .true.)
+         call this%gfilty%init(this%gpE%ysz(2), .true.)
+         call this%gfiltz%init(this%gpE%zsz(3), this%isPeriodic)
       end select
    case (2)
       !this%useCglobal = .true.
