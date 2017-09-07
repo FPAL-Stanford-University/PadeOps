@@ -107,7 +107,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     tmp = sqrt((yG(1,:,:) - yLoc)**2 + (zG(1,:,:) - zLoc)**2)
     this%tag_face = 0
     tmp_tag = 0
-    where(tmp < (diam/2.d0 + 8.d0*max(dz,dy,dz)))
+    where(tmp < (diam/2.d0 + max(xReg*dx,yReg*dy,zReg*dz)))
         !this%tag_face = 1
         tmp_tag = 1
     end where
