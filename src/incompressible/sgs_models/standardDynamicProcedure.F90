@@ -77,19 +77,35 @@ subroutine DoStandardDynamicProcedure(this, uE, vE, wE, uhatE, vhatE, whatE, dui
      this%cmodelC = this%rbuffxC(1,1,:,1)
    case(2) ! Gaussian Filter
      where(this%buff1 < zero)
-       this%rbuff1 = zero
+       this%buff1 = zero
      end where
      
+     call this%gaussFilter3D(this%buf1)
+     call this%gaussFilter3D(this%buf2)
+     this%cmodelE_local = this%buf1/(this%buf2 + 1.0D-14)
 
+     call transpose_x_to_y(this%cmodelE_local, this%rbuffyE(:,:,:,1), this%gpE)
+     call transpose_y_to_z(this%rbuffyE(:,:,:,1), this%rbuffzE(:,:,:,1), this%gpE)
+     this%rbuffzC(:,:,1:this%gpC%zsz(3),1) = 0.5d0*(this%rbuffzE(:,:,1:this%gpC%zsz(3),1)+this%rbuffzE(:,:,2:this%gpC%zsz(3)+1,1))
+     call transpose_z_to_y(this%rbuffzC(:,:,:,1), this%rbuffyC(:,:,:,1), this%gpC)
+     call transpose_y_to_x(this%rbuffyC(:,:,:,1), cmodelC_local, this%gpC)
 
    end select
 end subroutine
 
 
-subroutine gaussFilter3D(this, fin, fout)
+subroutine gaussFilter3D(this, fin)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), dimension(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)), intent(inout) :: fin
-   real(rkind), dimension(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)), intent(out)    :: fout
+
+   call this%gfiltx%filter1(fin,                   this%rbuffxE(:,:,:,1), this%gpE%xsz(2), this%gpE%xsz(3), 0, 0)
+   call transpose_x_to_y   (this%rbuffxE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
+   call this%gfilty%filter2(this%rbuffyE(:,:,:,1), this%rbuffyE(:,:,:,2), this%gpE%ysz(1), this%gpE%ysz(3), 0, 0)
+   call transpose_y_to_z   (this%rbuffyE(:,:,:,2), this%rbuffzE(:,:,:,1), this%gpE)
+   call this%gfiltz%filter3(this%rbuffzE(:,:,:,1), this%rbuffzE(:,:,:,2), this%gpE%zsz(1), this%gpE%zsz(2), 0, 0)
+
+   call transpose_z_to_y   (this%rbuffzE(:,:,:,2), this%rbuffyE(:,:,:,1), this%gpE)
+   call transpose_y_to_x   (this%rbuffyE(:,:,:,1), fin,                   this%gpE)
 end subroutine 
 
 
@@ -119,7 +135,7 @@ subroutine planarAverageAndInterpolateToCells(this, numE, denE, ratC)
    call transpose_y_to_x(this%rbuffyE(:,:,:,1), numE, this%gpE)
 
    call transpose_z_to_y(this%rbuffzC(:,:,:,1), this%rbuffyC(:,:,:,1), this%gpC)
-   call transpose_y_to_x(this%rbuffyC(:,:,:,1), ratC, this%gpE)
+   call transpose_y_to_x(this%rbuffyC(:,:,:,1), ratC, this%gpC)
 end subroutine
 
 
