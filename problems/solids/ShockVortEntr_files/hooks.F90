@@ -825,8 +825,8 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
         dx = x(2,1,1) - x(1,1,1)
         dpdx = 0.0d0
         nx = size(dpdx,1)
-        dpdx(2:nx-1) = ( p(3:nx,1,1)-p(1:nx-2,1,1) ) / (two*dx)
-        !call der%ddx(p, dpdx, x_bc(1), x_bc(2))
+        !dpdx(2:nx-1) = ( p(3:nx,1,1)-p(1:nx-2,1,1) ) / (two*dx)
+        call der%ddx(p, dpdx, x_bc(1), x_bc(2))
         sthick = abs(p2-p1)/maxval(dx*abs(dpdx))
 
         mwa = maxval(p(:,1,1)-p2)
