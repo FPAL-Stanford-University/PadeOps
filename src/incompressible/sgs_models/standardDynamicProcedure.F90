@@ -69,6 +69,10 @@ subroutine DoStandardDynamicProcedure(this, uE, vE, wE, uhatE, vhatE, whatE, dui
 
    ! STEP 6: Get the planar average and interpolate
    select case(this%AverageType)
+   case(0)
+      tmp1 = p_sum(sum(this%buff1))
+      tmp2 = p_sum(sum(this%buff2))
+      this%cmodel_global = tmp1/(tmp2+1.0D-14)
    case(1) ! Planar Average
      !call this%planarAverage(this%buff1)
      !call this%planarAverage(this%buff2)
@@ -88,8 +92,7 @@ subroutine DoStandardDynamicProcedure(this, uE, vE, wE, uhatE, vhatE, whatE, dui
      call transpose_y_to_z(this%rbuffyE(:,:,:,1), this%rbuffzE(:,:,:,1), this%gpE)
      this%rbuffzC(:,:,1:this%gpC%zsz(3),1) = 0.5d0*(this%rbuffzE(:,:,1:this%gpC%zsz(3),1)+this%rbuffzE(:,:,2:this%gpC%zsz(3)+1,1))
      call transpose_z_to_y(this%rbuffzC(:,:,:,1), this%rbuffyC(:,:,:,1), this%gpC)
-     call transpose_y_to_x(this%rbuffyC(:,:,:,1), cmodelC_local, this%gpC)
-
+     call transpose_y_to_x(this%rbuffyC(:,:,:,1), this%cmodelC_local, this%gpC)
    end select
 end subroutine
 
@@ -115,7 +118,8 @@ subroutine planarAverageAndInterpolateToCells(this, numE, denE, ratC)
    real(rkind), dimension(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)), intent(in)    :: denE
    real(rkind), dimension(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)), intent(out)   :: ratC
    integer :: idx
-   
+   real(rkind) :: tmp1, tmp2  
+ 
    call transpose_x_to_y(numE, this%rbuffyE(:,:,:,1), this%gpE)
    call transpose_y_to_z(this%rbuffyE(:,:,:,1), this%rbuffzE(:,:,:,1), this%gpE)
    do idx = 1,this%gpE%zsz(3)

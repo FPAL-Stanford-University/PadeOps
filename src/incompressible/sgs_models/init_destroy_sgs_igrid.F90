@@ -136,7 +136,12 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%DynamicProcedureType = DynamicProcedureType
   this%DynProcFreq = DynProcFreq
   this%useVerticalTfilter = useVerticalTfilter
-  
+
+  if(this%useVerticalTFilter .and. this%isPeriodic) then
+      call GracefulExit("You cannot use separate vertical test filter if the problem is periodic in Z",12)
+  endif
+
+ 
   this%isInviscid = isInviscid
 
   this%WallModel  = WallModelType
@@ -153,7 +158,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
 
   select case (SGSmodelID)
   case (0)
-     call this%init_smagorinsky(dx,dy,dz,Csgs,ncWall,z0,useWallDamping,zMeshC, zMeshE)
+     call this%init_smagorinsky(dx,dy,dz,Csgs)
   case (1)
      call this%init_sigma(dx, dy, dz, Csgs)
   case (2)
@@ -162,15 +167,45 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
      call GracefulExit("Incorrect choice for SGS model ID.", 213)
   end select
 
+
   if (this%isEddyViscosityModel) call this%allocateMemory_EddyViscosity()
   
   if (DynamicProcedureType .ne. 0) then
-      call this%allocateMemory_DynamicProcedure(computeFbody)
+      call this%allocateMemory_DynamicProcedure(computeFbody, dx, dy, dz)
       if(useSGSDynamicRestart) then
          call this%readSGSDynamicRestart(SGSDynamicRestartFile)
       endif
+  else
+      if(useWallDamping) then
+         call this%initWallDamping(Csgs,z0,ncWall,zMeshC, zMeshE) 
+      endif
   endif
 
+end subroutine
+
+subroutine initWallDamping(this,Cs,z0,ncWall,zMeshC,zMeshE)
+  use constants, only : kappa
+  class(sgs_igrid), intent(inout) :: this
+   real(rkind), intent(in) :: z0, ncWall, Cs!, dx, dy, dz
+   real(rkind), intent(in), dimension(:) :: zMeshC, zMeshE
+   real(rkind) :: deltaLES
+
+   this%modelConstType = 1
+   allocate(this%cmodelC(this%gpC%xsz(3)))
+   allocate(this%cmodelE(this%gpE%xsz(3)))
+
+   if (.not. this%isPeriodic) then
+      deltaLES = (1.5d0*dx*1.5d0*dy*dz)**(1.d0/3.d0)
+   else
+      call GracefulExit("You cannot use wall damping model if the problem is periodic in Z",12)
+   end if 
+
+   this%cmodelC = ( Cs**(-real(ncWall,rkind)) + (kappa*(zMeshC/deltaLES + &
+       & z0/deltaLES))**(-real(ncWall,rkind))  )**(-one/real(ncWall,rkind))
+   this%cmodelE = ( Cs**(-real(ncWall,rkind)) + (kappa*(zMeshE/deltaLES + &
+       & z0/deltaLES))**(-real(ncWall,rkind))  )**(-one/real(ncWall,rkind))
+   this%cmodelC = (deltaLES*this%cmodelC)**2    
+   this%cmodelE = (deltaLES*this%cmodelE)**2    
 
 end subroutine
 

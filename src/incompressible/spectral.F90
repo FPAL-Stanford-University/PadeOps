@@ -80,6 +80,7 @@ module spectralMod
             procedure           :: mTimes_ik1_ip
             procedure           :: mTimes_ik2_oop
             procedure           :: mTimes_ik2_ip
+            procedure           :: init_TestFilt
             procedure           :: TestFilter_ip
             procedure           :: TestFilter_oop
             procedure           :: SurfaceFilter_ip
@@ -657,14 +658,18 @@ contains
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fhat
         integer :: i, j, k
 
-        do k = 1,this%fft_size(3)
-            do j = 1,this%fft_size(2)
-                !$omp simd 
-                do i = 1,this%fft_size(1)
-                    fhat(i,j,k) = fhat(i,j,k)*this%GTestFilt(i,j,k)
-                end do 
-            end do 
-        end do 
+
+        if(this%init_periodicinZ) then
+        else
+          do k = 1,this%fft_size(3)
+              do j = 1,this%fft_size(2)
+                  !$omp simd 
+                  do i = 1,this%fft_size(1)
+                      fhat(i,j,k) = fhat(i,j,k)*this%GTestFilt(i,j,k)
+                  end do 
+              end do 
+          end do 
+        end if 
          
     end subroutine
 
@@ -688,14 +693,17 @@ contains
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(out) :: fhatout
         integer :: i, j, k
 
-        do k = 1,this%fft_size(3)
-            do j = 1,this%fft_size(2)
-                !$omp simd 
-                do i = 1,this%fft_size(1)
-                    fhatout(i,j,k) = fhat(i,j,k)*this%GTestFilt(i,j,k)
-                end do 
-            end do 
-        end do 
+        if(this%init_periodicinZ) then
+        else
+          do k = 1,this%fft_size(3)
+              do j = 1,this%fft_size(2)
+                  !$omp simd 
+                  do i = 1,this%fft_size(1)
+                      fhatout(i,j,k) = fhat(i,j,k)*this%GTestFilt(i,j,k)
+                  end do 
+              end do 
+          end do 
+        end if 
          
     end subroutine
 
@@ -798,6 +806,37 @@ contains
 
          deallocate(rbuffz, cbuffz, rbuffz1)
       end subroutine 
+
+    subroutine init_TestFilter(this,FiltFact,dx,dy,dz)
+        class(spectral),  intent(inout) :: this
+        real(rkind), intent(in)         :: dx, dy, dz, FiltFact
+
+        real(rkind) :: kdealiasx, kdealiasy, ktestfiltx, ktestfilty
+
+
+        if(this%init_periodicinZ) then
+        else
+            if (allocated(this%GTestFilt)) deallocate(this%GTestFilt)
+            allocate (this%GTestFilt(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            kdealiasx = ((two/three)*pi/dx);   ktestfiltx = kdealiasx/FiltFact
+            kdealiasy = ((two/three)*pi/dy);   ktestfilty = kdealiasy/FiltFact
+            do k = 1,size(this%k1,3)
+                do j = 1,size(this%k1,2)
+                    do i = 1,size(this%k1,1)
+                        if ((abs(this%k1(i,j,k)) < ktestfiltx) .and. (abs(this%k2(i,j,k))< ktestfilty)) then
+                            this%GTestFilt(i,j,k) = one
+                        else
+                            this%GTestFilt(i,j,k) = zero
+                        end if
+                    end do 
+                end do  
+            end do 
+            call message(1, "TestFilter Summary:")
+            call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
+           
+        endif
+
+    end subroutine
 
     subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK, exhaustiveFFT, init_periodicInZ, dealiasF) 
         class(spectral),  intent(inout)         :: this
@@ -952,8 +991,8 @@ contains
             allocate (this%kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             if (allocated(this%Gdealias)) deallocate(this%Gdealias)
             allocate (this%Gdealias(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            if (allocated(this%GTestFilt)) deallocate(this%GTestFilt)
-            allocate (this%GTestFilt(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            !if (allocated(this%GTestFilt)) deallocate(this%GTestFilt)
+            !allocate (this%GTestFilt(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             
             ! STEP 3: Generate 1d wavenumbers 
             k1_1d = GetWaveNums(nx_g,dx) 
@@ -1094,21 +1133,23 @@ contains
             call message(2, "Total non zero:", p_sum(sum(this%Gdealias)))
 
 
-            kdealiasx = kdealiasx/3.d0
-            kdealiasy = kdealiasy/3.d0
-            do k = 1,size(this%k1,3)
-                do j = 1,size(this%k1,2)
-                    do i = 1,size(this%k1,1)
-                        if ((abs(this%k1(i,j,k)) < kdealiasx) .and. (abs(this%k2(i,j,k))< kdealiasy)) then
-                            this%GTestFilt(i,j,k) = one
-                        else
-                            this%GTestFilt(i,j,k) = zero
-                        end if
-                    end do 
-                end do  
-            end do 
-            call message(1, "TestFilter Summary:")
-            call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
+            call init_
+
+            !kdealiasx = kdealiasx/3.d0
+            !kdealiasy = kdealiasy/3.d0
+            !do k = 1,size(this%k1,3)
+            !    do j = 1,size(this%k1,2)
+            !        do i = 1,size(this%k1,1)
+            !            if ((abs(this%k1(i,j,k)) < kdealiasx) .and. (abs(this%k2(i,j,k))< kdealiasy)) then
+            !                this%GTestFilt(i,j,k) = one
+            !            else
+            !                this%GTestFilt(i,j,k) = zero
+            !            end if
+            !        end do 
+            !    end do  
+            !end do 
+            !call message(1, "TestFilter Summary:")
+            !call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
 
 
         end if    

@@ -1,10 +1,8 @@
-subroutine init_smagorinsky(this,dx,dy,dz,Cs,ncWall,z0,useWallDamping, zMeshC, zMeshE)
+!subroutine init_smagorinsky(this,dx,dy,dz,Cs,ncWall,z0,useWallDamping, zMeshC, zMeshE)
+subroutine init_smagorinsky(this,dx,dy,dz,Cs)
    class(sgs_igrid), intent(inout) :: this
-   logical, intent(in) :: useWallDamping 
-   real(rkind), intent(in) :: z0, ncWall, Cs, dx, dy, dz
-   real(rkind), intent(in), dimension(:) :: zMeshC, zMeshE
+   real(rkind), intent(in) :: Cs, dx, dy, dz
    real(rkind) :: deltaLES
-   real(rkind), parameter :: kappa = 0.4d0
 
    ! Set the type of mnodel constant (default is wall function). 
    ! Can be reset to true via dynamic procedure initialization, 
@@ -17,18 +15,8 @@ subroutine init_smagorinsky(this,dx,dy,dz,Cs,ncWall,z0,useWallDamping, zMeshC, z
    else
       deltaLES =  (1.5d0*dx*1.5d0*dy*1.5d0*dz)**(1.d0/3.d0)
    end if 
+   this%cmodel_global = (Cs*deltaLES)**2
    
-   if (useWallDamping) then
-      this%cmodelC = ( Cs**(-real(ncWall,rkind)) + (kappa*(zMeshC/deltaLES + &
-          & z0/deltaLES))**(-real(ncWall,rkind))  )**(-one/real(ncWall,rkind))
-      this%cmodelE = ( Cs**(-real(ncWall,rkind)) + (kappa*(zMeshE/deltaLES + &
-          & z0/deltaLES))**(-real(ncWall,rkind))  )**(-one/real(ncWall,rkind))
-      this%cmodelC = (deltaLES*this%cmodelC)**2    
-      this%cmodelE = (deltaLES*this%cmodelE)**2    
-   else
-      this%cmodelC = (Cs*deltaLES)**2
-      this%cmodelE = (Cs*deltaLES)**2
-   end if
    this%isEddyViscosityModel = .true. 
 
    call message(1,"Smagorinsky model initialized")
