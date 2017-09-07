@@ -9,7 +9,7 @@ subroutine init_smagorinsky(this,dx,dy,dz,Cs,ncWall,z0,useWallDamping, zMeshC, z
    ! Set the type of mnodel constant (default is wall function). 
    ! Can be reset to true via dynamic procedure initialization, 
    ! in case the global dynamic procedure is used. 
-   this%useCglobal = .false. 
+   !this%useCglobal = .false. 
    
    
    if (.not. this%isPeriodic) then

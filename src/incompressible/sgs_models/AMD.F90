@@ -2,7 +2,7 @@ subroutine init_amd(this, dx, dy, dz, Csgs)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), intent(in) :: dx, dy, dz, Csgs
 
-   this%useCglobal = .true. 
+   !this%useCglobal = .true. 
    this%isEddyViscosityModel = .true. 
    
    this%camd_x = Csgs*dx*sqrt(1.d0/12.d0)

@@ -34,44 +34,66 @@ subroutine allocateMemory_EddyViscosity(this)
   end if
 end subroutine
 
-subroutine get_SGS_kernel(this,duidxjC, duidxjE)
+subroutine get_SGS_kernel_C(this,duidxjC, Sij_C, nuSGS_C)
    class(sgs_igrid), intent(inout) :: this
-   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
-   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in)  :: duidxjC
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6), intent(in)  :: Sij_C
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)),   intent(out) :: nusgs_C
 
    select case(this%mid) 
    case (0)
       ! Smagorinsky
-      call get_smagorinsky_kernel(this%S_ij_C,this%nu_sgs_C, &
+      call get_smagorinsky_kernel(Sij_C, nusgs_C, &
                                  this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3))
       
-      if (this%explicitCalcEdgeEddyViscosity) then
-         call get_smagorinsky_kernel(this%S_ij_E,this%nu_sgs_E, &
-                              this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3))
-      else
-         call this%interpolate_eddy_viscosity()                     
-      end if
    case (1)
       ! Sigma
-      call get_sigma_kernel(this%nu_sgs_C, duidxjC, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3))
+      call get_sigma_kernel(nusgs_C, duidxjC, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3))
       
-      if (this%explicitCalcEdgeEddyViscosity) then
-         call get_sigma_kernel(this%nu_sgs_E, duidxjE, this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3))
-      else
-         call this%interpolate_eddy_viscosity()                     
-      end if
    case (2)
       ! AMD 
-      call get_amd_kernel(this%nu_sgs_C, this%camd_x, this%camd_y, this%camd_z, duidxjC, this%S_ij_C, &
+      call get_amd_kernel(nusgs_C, this%camd_x, this%camd_y, this%camd_z, duidxjC, Sij_C, &
                                  this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3))
       
-      if (this%explicitCalcEdgeEddyViscosity) then
-         call get_amd_kernel(this%nu_sgs_E, this%camd_x, this%camd_y, this%camd_z, duidxjE, this%S_ij_E, &
-                                 this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3))
-      else
-         call this%interpolate_eddy_viscosity()                     
-      end if
    end select
+
+end subroutine
+
+subroutine get_SGS_kernel_E(this,duidxjE, Sij_E, nusgs_E)
+   class(sgs_igrid), intent(inout) :: this
+   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in)  :: duidxjE
+   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),6), intent(in)  :: Sij_E
+   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)),   intent(out) :: nusgs_E
+
+
+   select case(this%mid)
+   case (0)
+     call get_smagorinsky_kernel(Sij_E, nusgs_E, &
+                          this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3))
+   case (1)
+     call get_sigma_kernel(nusgs_E, duidxjE, this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3))
+   case (2)
+     call get_amd_kernel(nusgs_E, this%camd_x, this%camd_y, this%camd_z, duidxjE, Sij_E, &
+                             this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3))
+   end select
+
+end subroutine
+
+subroutine get_SGS_kernel_all(this, duidxjC, Sij_C, nusgs_C, duidxjE, Sij_E, nusgs_E)
+   class(sgs_igrid), intent(inout) :: this
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in)  :: duidxjC
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6), intent(in)  :: Sij_C
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)),   intent(out) :: nusgs_C
+   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in)  :: duidxjE
+   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),6), intent(in)  :: Sij_E
+   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)),   intent(out) :: nusgs_E
+
+   call this%get_SGS_kernel_C(duidxjC, Sij_C, nusgs_C)
+   if(this%explicitCalcEdgeEddyViscosity) then
+     call this%get_SGS_kernel_E(duidxjE, Sij_E, nusgs_E)
+   else
+     call this%interpolate_eddy_viscosity(nusgs_C, nusgs_E)
+   endif
 
 end subroutine
 
@@ -79,32 +101,38 @@ subroutine multiply_by_model_constant(this)
   class(sgs_igrid), intent(inout) :: this 
   integer :: k
 
-  if (this%useCglobal) then
+  select case(this%modelConstType)
+  case(0)
       this%nu_sgs_C = this%cmodel_global*this%nu_sgs_C
       this%nu_sgs_E = this%cmodel_global*this%nu_sgs_E
-  else
+  case(1)
       do k = 1,size(this%nu_sgs_C,3)
          this%nu_sgs_C(:,:,k) = this%cmodelC(k)*this%nu_sgs_C(:,:,k)
       end do 
       do k = 1,size(this%nu_sgs_E,3)
          this%nu_sgs_E(:,:,k) = this%cmodelE(k)*this%nu_sgs_E(:,:,k)
       end do 
-  end if
+  case(2)
+     this%nu_sgs_E = this%cmodelE_local*this%nu_sgs_E
+     this%nu_sgs_C = this%cmodelC_local*this%nu_sgs_C
+  end select
 
 
 end subroutine
 
-subroutine interpolate_eddy_viscosity(this)
+subroutine interpolate_eddy_viscosity(this, nusgs_C, nusgs_E)
   class(sgs_igrid), intent(inout) :: this 
+  real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: nusgs_C
+  real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(out) :: nusgs_E
 
-  call transpose_x_to_y(this%nu_sgs_C,this%rbuffyC(:,:,:,1), this%gpC)
+  call transpose_x_to_y(nusgs_C,this%rbuffyC(:,:,:,1), this%gpC)
   call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
   call this%PadeDer%interpz_C2E(this%rbuffzC(:,:,:,1), this%rbuffzE(:,:,:,1),0,0)
   call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
-  call transpose_y_to_x(this%rbuffyE(:,:,:,1), this%nu_sgs_E, this%gpE)
+  call transpose_y_to_x(this%rbuffyE(:,:,:,1), nusgs_E, this%gpE)
 
-  where (this%nu_sgs_E < 0.d0) 
-   this%nu_sgs_E = 0.d0
+  where (nusgs_E < 0.d0) 
+   nusgs_E = 0.d0
   end where
 end subroutine
 

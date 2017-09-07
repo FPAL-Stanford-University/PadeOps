@@ -60,7 +60,7 @@ module sgsmod_igrid
         type(gaussian) :: gaussianTestFilterZ
         real(rkind), dimension(:,:,:,:), allocatable :: Mij, Lij, Sij_Filt, alphaij_Filt, tauijWM_Filt
         real(rkind), dimension(:,:,:,:), allocatable :: fi_Filt, ui_Filt, fiE
-        real(rkind), dimension(:,:,:),   allocatable :: Dsgs_Filt, buff1, buff2
+        real(rkind), dimension(:,:,:),   allocatable :: Dsgs_Filt, buff1, buff2, cmodelC_local, cmodelE_local
         real(rkind), dimension(:,:,:),   pointer     :: fxC, fyC, fzE
         real(rkind), dimension(:,:,:),   pointer     :: Dsgs
         logical :: isInviscid, isStratified, useDynamicProcedure, useVerticalTfilter = .false. 
@@ -70,7 +70,8 @@ module sgsmod_igrid
 
         ! model constant values/properties
         real(rkind) :: camd_x, camd_y, camd_z
-        logical :: useCglobal = .false. 
+        !logical :: useCglobal = .false.
+        integer :: modelConstType = 0 ! 0 :: scalar; 1 :: z-vector; 2 :: xyz array
 
         contains 
             !! ALL INIT PROCEDURES
@@ -109,7 +110,9 @@ module sgsmod_igrid
             procedure          :: getTauSGS
             procedure          :: getRHS_SGS
             procedure          :: getRHS_SGS_Scalar
-            procedure, private :: get_SGS_kernel
+            procedure, private :: get_SGS_kernel_all
+            procedure, private :: get_SGS_kernel_C
+            procedure, private :: get_SGS_kernel_E
             procedure, private :: multiply_by_model_constant 
             procedure          :: dumpSGSDynamicRestart
             procedure, private :: readSGSDynamicRestart
@@ -285,14 +288,14 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
       call get_Sij_from_duidxj(duidxjE, this%S_ij_E, this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)) 
       
       ! Step 1: Get nuSGS
-      call this%get_SGS_kernel(duidxjC, duidxjE)
+      call this%get_SGS_kernel_all(duidxjC, this%S_ij_C, this%nu_sgs_C, duidxjE, this%S_ij_E, this%nu_sgs_E)
 
       ! Step 2: Dynamic Procedure ?
       if(newTimeStep .and. this%useDynamicProcedure) then
           if (mod(this%mstep, this%DynProcFreq) == 0) call this%applyDynamicProcedure(uE, vE, wE, uhatE, vhatE, whatE, duidxjE, duidxjEhat)
       endif
 
-      ! Step 3: Multiply by model constant
+      !! Step 3: Multiply by model constant
       call this%multiply_by_model_constant()
 
       ! Step 2: Get tau_sgs

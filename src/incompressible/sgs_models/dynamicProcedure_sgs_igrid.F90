@@ -6,7 +6,7 @@ subroutine allocateMemory_DynamicProcedure(this, computeFbody)
    this%useDynamicProcedure = .true.
    select case( this%dynamicProcedureType) 
    case (1)
-      this%useCglobal = .false.
+      !this%useCglobal = .false.
       allocate(this%alphaij_Filt(this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),9))
       allocate(this%Mij         (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),6))
       allocate(this%Lij         (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),6))
@@ -15,9 +15,23 @@ subroutine allocateMemory_DynamicProcedure(this, computeFbody)
       allocate(this%Dsgs_Filt   (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3)))
       allocate(this%buff1       (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3)))
       allocate(this%buff2       (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3)))
-      allocate(this%cmodel_allZ(this%gpE%zsz(3)))
+
+      select case(this%AverageType)
+      case(0) ! Volume 
+         this%modelConstType = 0
+      case(1) ! Planar
+         this%modelConstType = 1
+         allocate(this%cmodel_allZ(this%gpE%zsz(3)))
+         allocate(this%cmodelC(this%gpC%xsz(3)))
+         allocate(this%cmodelE(this%gpE%xsz(3)))
+      case(2)
+         this%modelConstType = 2
+         allocate(this%cmodelC_local(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+         allocate(this%cmodelE_local(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+      end select
    case (2)
-      this%useCglobal = .true.
+      !this%useCglobal = .true.
+      this%modelConstType = 0
       allocate(this%Sij_Filt    (this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),6))
       allocate(this%alphaij_Filt(this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),9))
       allocate(this%tauijWM_Filt(this%gpE%xsz(1)   ,this%gpE%xsz(2)   ,this%gpE%xsz(3),2))

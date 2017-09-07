@@ -148,9 +148,6 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
       this%useWallModel = .false. 
   end if
 
-  allocate(this%cmodelC(size(zMeshC)))
-  allocate(this%cmodelE(size(zMeshE)))
-
   select case (SGSmodelID)
   case (0)
      call this%init_smagorinsky(dx,dy,dz,Csgs,ncWall,z0,useWallDamping,zMeshC, zMeshE)

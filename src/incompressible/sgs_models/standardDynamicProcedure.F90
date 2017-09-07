@@ -44,14 +44,7 @@ subroutine DoStandardDynamicProcedure(this, uE, vE, wE, uhatE, vhatE, whatE, dui
    ! Part b: Compute \tilde{Sij}, NOTE: Mij is used to store filtered Sij
    call get_Sij_from_duidxj(this%alphaij_Filt, this%Mij, size(this%Mij,1), size(this%Mij,2), size(this%Mij,3))
    ! Part c: Compute \tilde{D_SGS}
-   select case (this%mid)
-   case (0) ! smagorinsky
-      call get_smagorinsky_kernel(this%Mij,this%Dsgs_filt, &
-                              this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3))
-   case (1) ! sigma
-      call get_sigma_kernel(this%Dsgs_filt, this%alphaij_Filt, &
-                              this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3))
-   end select
+   call this%get_SGS_kernel_E(this%alphaij_Filt, this%Mij, this%Dsgs_filt)
    ! Part d: Compute the rest of it
    do idx = 1,6
       this%buff1 = this%Dsgs*this%S_ij_E(:,:,:,idx)
@@ -75,12 +68,29 @@ subroutine DoStandardDynamicProcedure(this, uE, vE, wE, uhatE, vhatE, whatE, dui
    this%buff2 = 2.d0 * this%buff2
 
    ! STEP 6: Get the planar average and interpolate
-   !call this%planarAverage(this%buff1)
-   !call this%planarAverage(this%buff2)
-   call this%planarAverageAndInterpolateToCells(this%buff1, this%buff2, this%rbuffxC(:,:,:,1))
-   this%cmodelE = this%buff1(1,1,:)
-   this%cmodelC = this%rbuffxC(1,1,:,1)
+   select case(this%AverageType)
+   case(1) ! Planar Average
+     !call this%planarAverage(this%buff1)
+     !call this%planarAverage(this%buff2)
+     call this%planarAverageAndInterpolateToCells(this%buff1, this%buff2, this%rbuffxC(:,:,:,1))
+     this%cmodelE = this%buff1(1,1,:)
+     this%cmodelC = this%rbuffxC(1,1,:,1)
+   case(2) ! Gaussian Filter
+     where(this%buff1 < zero)
+       this%rbuff1 = zero
+     end where
+     
+
+
+   end select
 end subroutine
+
+
+subroutine gaussFilter3D(this, fin, fout)
+   class(sgs_igrid), intent(inout) :: this
+   real(rkind), dimension(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)), intent(inout) :: fin
+   real(rkind), dimension(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)), intent(out)    :: fout
+end subroutine 
 
 
 subroutine planarAverageAndInterpolateToCells(this, numE, denE, ratC)

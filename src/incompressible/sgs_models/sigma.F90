@@ -6,7 +6,7 @@ subroutine init_sigma(this, dx, dy, dz, Cs)
    ! Set the type of mnodel constant (default is constant global). 
    ! Can be reset to false via dynamic procedure initialization, 
    ! in case the dynamic procedure is planar averages
-   this%useCglobal = .true. 
+   !this%useCglobal = .true. 
    
   
    if (.not. this%isPeriodic) then
