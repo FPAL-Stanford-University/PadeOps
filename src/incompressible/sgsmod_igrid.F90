@@ -36,7 +36,7 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:), pointer :: tau_11, tau_12, tau_22, tau_33, tau_13C, tau_23C
         real(rkind), dimension(:,:,:), allocatable :: tau_13, tau_23
         real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E
-        real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffzC, rbuffyC, rbuffxE, rbuffyE, rbuffzE
+        real(rkind), dimension(:,:,:,:), pointer :: rbuffxE, rbuffxC, rbuffzC, rbuffyC, rbuffxE, rbuffyE, rbuffzE
         complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
         type(Pade6stagg), pointer :: PadeDer
         logical :: explicitCalcEdgeEddyViscosity = .false.
@@ -57,7 +57,7 @@ module sgsmod_igrid
         complex(rkind), dimension(:,:), allocatable :: q3HAT_AtWall
 
         ! for dynamic procedures - all are at edges
-        type(gaussian) :: gaussianTestFilterZ
+        type(gaussian) :: gaussianTestFilterZ, gfiltx, gfilty, gfiltz
         real(rkind), dimension(:,:,:,:), allocatable :: Mij, Lij, Sij_Filt, alphaij_Filt, tauijWM_Filt
         real(rkind), dimension(:,:,:,:), allocatable :: fi_Filt, ui_Filt, fiE
         real(rkind), dimension(:,:,:),   allocatable :: Dsgs_Filt, buff1, buff2, cmodelC_local, cmodelE_local
@@ -66,7 +66,7 @@ module sgsmod_igrid
         logical :: isInviscid, isStratified, useDynamicProcedure, useVerticalTfilter = .false. 
         real(rkind), dimension(:), allocatable :: cmodel_allZ
         real(rkind) :: invRe, deltaRat
-        integer :: mstep
+        integer :: mstep, averageType = 0
 
         ! model constant values/properties
         real(rkind) :: camd_x, camd_y, camd_z
@@ -104,6 +104,7 @@ module sgsmod_igrid
             procedure, private :: interp_bForce_CellToEdge
             procedure, private :: DoStandardDynamicProcedure
             procedure, private :: DoGlobalDynamicProcedure
+            procedure, private :: gaussFilter3D
 
             !! ALL SGS SOURCE/SINK PROCEDURES
             procedure          :: getQjSGS
