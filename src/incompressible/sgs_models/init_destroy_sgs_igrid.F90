@@ -62,8 +62,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0,  &
                  useWallDamping, ncWall, Csgs, WallModelType, &
-                 DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,           &
-                 SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity,
+                 DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,  &
+                 SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity,    &
                  averageType
 
 
@@ -177,16 +177,16 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
       endif
   else
       if(useWallDamping) then
-         call this%initWallDamping(Csgs,z0,ncWall,zMeshC, zMeshE) 
+         call this%initWallDamping(dx, dy, dz, Csgs,z0,ncWall,zMeshC, zMeshE) 
       endif
   endif
 
 end subroutine
 
-subroutine initWallDamping(this,Cs,z0,ncWall,zMeshC,zMeshE)
+subroutine initWallDamping(this,dx, dy, dz, Cs,z0,ncWall,zMeshC,zMeshE)
   use constants, only : kappa
   class(sgs_igrid), intent(inout) :: this
-   real(rkind), intent(in) :: z0, ncWall, Cs!, dx, dy, dz
+   real(rkind), intent(in) :: z0, ncWall, Cs, dx, dy, dz
    real(rkind), intent(in), dimension(:) :: zMeshC, zMeshE
    real(rkind) :: deltaLES
 

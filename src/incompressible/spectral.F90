@@ -83,6 +83,7 @@ module spectralMod
             procedure           :: init_TestFilt
             procedure           :: TestFilter_ip
             procedure           :: TestFilter_oop
+            procedure           :: TestFilter_ip_periodic
             procedure           :: SurfaceFilter_ip
             procedure           :: SurfaceFilter_oop
             procedure           :: dealiasedMult_ip
@@ -706,6 +707,77 @@ contains
         end if 
          
     end subroutine
+      
+      subroutine testfilter_ip_periodic(this, arr)
+        class(spectral), intent(inout) :: this
+        complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)+1), intent(inout)  :: arr
+        integer :: i, j, k
+
+        if (this%init_periodicInZ) then
+           call dfftw_execute_dft(this%plan_c2c_fwd_z_ip, arr(:,:,1:this%spectdecomp%zsz(3)), arr(:,:,1:this%spectdecomp%zsz(3)))
+           arr(:,:,1:this%spectdecomp%zsz(3)) = arr(:,:,1:this%spectdecomp%zsz(3))*this%GTestFilt
+           call dfftw_execute_dft(this%plan_c2c_bwd_z_ip, arr(:,:,1:this%spectdecomp%zsz(3)), arr(:,:,1:this%spectdecomp%zsz(3)))
+           arr(:,:,1:this%spectdecomp%zsz(3)) = arr(:,:,1:this%spectdecomp%zsz(3))*this%normfactz
+           arr(:,:,this%spectdecomp%zsz(3)+1) = arr(:,:,1) 
+        end if
+
+      end subroutine 
+      
+
+      subroutine init_TestFilt(this,FiltFact,dx,dy,dz)
+         class(spectral),  intent(inout) :: this
+         real(rkind), intent(in)         :: dx, dy, dz, FiltFact
+         real(rkind), dimension(:,:,:),  allocatable :: rbuffz, rbuffz1
+         integer :: i, j, k
+
+         real(rkind) :: kdealiasx, kdealiasy, kdealiasz, ktestfiltx, ktestfilty, ktestfiltz
+
+
+         if(this%init_periodicinZ) then
+            allocate(this%GTestFilt(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+            allocate(rbuffz(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+            this%Gdealias = one 
+            kdealiasx = ((two/three)*pi/dx);   ktestfiltx = kdealiasx/FiltFact
+            kdealiasy = ((two/three)*pi/dy);   ktestfilty = kdealiasy/FiltFact
+            kdealiasz = ((two/three)*pi/dz);   ktestfiltz = kdealiasz/FiltFact
+            
+            call transpose_y_to_z(this%k1, rbuffz, this%spectdecomp)
+            where (abs(rbuffz) >= ktestfiltx)    
+               this%GTestFilt = zero
+            end where
+         
+            call transpose_y_to_z(this%k2, rbuffz, this%spectdecomp)
+            where (abs(rbuffz) >= ktestfilty)    
+               this%GTestFilt = zero
+            end where
+            
+            call transpose_y_to_z(this%k3, rbuffz, this%spectdecomp)
+            where (abs(rbuffz) >= ktestfiltz)    
+               this%GTestFilt = zero
+            end where
+            deallocate(rbuffz)
+         else
+            if (allocated(this%GTestFilt)) deallocate(this%GTestFilt)
+            allocate (this%GTestFilt(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+            kdealiasx = ((two/three)*pi/dx);   ktestfiltx = kdealiasx/FiltFact
+            kdealiasy = ((two/three)*pi/dy);   ktestfilty = kdealiasy/FiltFact
+            do k = 1,size(this%k1,3)
+                do j = 1,size(this%k1,2)
+                    do i = 1,size(this%k1,1)
+                        if ((abs(this%k1(i,j,k)) < ktestfiltx) .and. (abs(this%k2(i,j,k))< ktestfilty)) then
+                            this%GTestFilt(i,j,k) = one
+                        else
+                            this%GTestFilt(i,j,k) = zero
+                        end if
+                    end do 
+                end do  
+            end do 
+            call message(1, "TestFilter Summary:")
+            call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
+         
+         endif
+
+      end subroutine
 
       subroutine init_periodic_inZ_procedures(this, dx, dy, dz)
          use constants, only: imi
@@ -807,36 +879,6 @@ contains
          deallocate(rbuffz, cbuffz, rbuffz1)
       end subroutine 
 
-    subroutine init_TestFilter(this,FiltFact,dx,dy,dz)
-        class(spectral),  intent(inout) :: this
-        real(rkind), intent(in)         :: dx, dy, dz, FiltFact
-
-        real(rkind) :: kdealiasx, kdealiasy, ktestfiltx, ktestfilty
-
-
-        if(this%init_periodicinZ) then
-        else
-            if (allocated(this%GTestFilt)) deallocate(this%GTestFilt)
-            allocate (this%GTestFilt(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            kdealiasx = ((two/three)*pi/dx);   ktestfiltx = kdealiasx/FiltFact
-            kdealiasy = ((two/three)*pi/dy);   ktestfilty = kdealiasy/FiltFact
-            do k = 1,size(this%k1,3)
-                do j = 1,size(this%k1,2)
-                    do i = 1,size(this%k1,1)
-                        if ((abs(this%k1(i,j,k)) < ktestfiltx) .and. (abs(this%k2(i,j,k))< ktestfilty)) then
-                            this%GTestFilt(i,j,k) = one
-                        else
-                            this%GTestFilt(i,j,k) = zero
-                        end if
-                    end do 
-                end do  
-            end do 
-            call message(1, "TestFilter Summary:")
-            call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
-           
-        endif
-
-    end subroutine
 
     subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK, exhaustiveFFT, init_periodicInZ, dealiasF) 
         class(spectral),  intent(inout)         :: this
@@ -1131,25 +1173,6 @@ contains
             end do 
             call message(1, "Dealiasing Summary:")
             call message(2, "Total non zero:", p_sum(sum(this%Gdealias)))
-
-
-            call init_
-
-            !kdealiasx = kdealiasx/3.d0
-            !kdealiasy = kdealiasy/3.d0
-            !do k = 1,size(this%k1,3)
-            !    do j = 1,size(this%k1,2)
-            !        do i = 1,size(this%k1,1)
-            !            if ((abs(this%k1(i,j,k)) < kdealiasx) .and. (abs(this%k2(i,j,k))< kdealiasy)) then
-            !                this%GTestFilt(i,j,k) = one
-            !            else
-            !                this%GTestFilt(i,j,k) = zero
-            !            end if
-            !        end do 
-            !    end do  
-            !end do 
-            !call message(1, "TestFilter Summary:")
-            !call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
 
 
         end if    

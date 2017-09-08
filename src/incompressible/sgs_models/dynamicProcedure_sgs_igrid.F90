@@ -21,9 +21,9 @@ subroutine allocateMemory_DynamicProcedure(this, computeFbody, dx, dy, dz)
       case(0) ! Volume 
          this%modelConstType = 0
          if(this%isPeriodic) then
-           call this%spectC%init_TestFilter(this%deltaRat, dx, dy, dz)
+           call this%spectC%init_TestFilt(this%deltaRat, dx, dy, dz)
          else
-           call this%spectE%init_TestFilter(this%deltaRat, dx, dy, dz)
+           call this%spectE%init_TestFilt(this%deltaRat, dx, dy, dz)
          endif
       case(1) ! Planar
          if(this%isPeriodic) then
@@ -33,18 +33,18 @@ subroutine allocateMemory_DynamicProcedure(this, computeFbody, dx, dy, dz)
          allocate(this%cmodel_allZ(this%gpE%zsz(3)))
          allocate(this%cmodelC(this%gpC%xsz(3)))
          allocate(this%cmodelE(this%gpE%xsz(3)))
-         call this%spectE%init_TestFilter(this%deltaRat, dx, dy, dz)
+         call this%spectE%init_TestFilt(this%deltaRat, dx, dy, dz)
       case(2)
          this%modelConstType = 2
          allocate(this%cmodelC_local(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
          allocate(this%cmodelE_local(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
-         call this%gfiltx%init(this%gpE%xsz(1), .true.)
-         call this%gfilty%init(this%gpE%ysz(2), .true.)
-         call this%gfiltz%init(this%gpE%zsz(3), this%isPeriodic)
+         ierr = this%gfiltx%init(this%gpE%xsz(1), .true.)
+         ierr = this%gfilty%init(this%gpE%ysz(2), .true.)
+         ierr = this%gfiltz%init(this%gpE%zsz(3), this%isPeriodic)
          if(this%isPeriodic) then
-           call this%spectC%init_TestFilter(this%deltaRat, dx, dy, dz)
+           call this%spectC%init_TestFilt(this%deltaRat, dx, dy, dz)
          else
-           call this%spectE%init_TestFilter(this%deltaRat, dx, dy, dz)
+           call this%spectE%init_TestFilt(this%deltaRat, dx, dy, dz)
          endif
       end select
    case (2)

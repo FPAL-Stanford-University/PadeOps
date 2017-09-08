@@ -4,7 +4,8 @@ subroutine DoStandardDynamicProcedure(this, uE, vE, wE, uhatE, vhatE, whatE, dui
    complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3))  , intent(in) :: uhatE, vhatE, whatE
    complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3),9), intent(in) :: duidxjEhat
    integer :: idx
-   
+   real(rkind) :: tmp1, tmp2
+
    ! STEP 1: Test filter velocities (required for Lij)
    call this%TestFilter_Cmplx_to_Real(uhatE, this%ui_Filt(:,:,:,1))   
    call this%TestFilter_Cmplx_to_Real(vhatE, this%ui_Filt(:,:,:,2))   
@@ -84,9 +85,9 @@ subroutine DoStandardDynamicProcedure(this, uE, vE, wE, uhatE, vhatE, whatE, dui
        this%buff1 = zero
      end where
      
-     call this%gaussFilter3D(this%buf1)
-     call this%gaussFilter3D(this%buf2)
-     this%cmodelE_local = this%buf1/(this%buf2 + 1.0D-14)
+     call this%gaussFilter3D(this%buff1)
+     call this%gaussFilter3D(this%buff2)
+     this%cmodelE_local = this%buff1/(this%buff2 + 1.0D-14)
 
      call transpose_x_to_y(this%cmodelE_local, this%rbuffyE(:,:,:,1), this%gpE)
      call transpose_y_to_z(this%rbuffyE(:,:,:,1), this%rbuffzE(:,:,:,1), this%gpE)

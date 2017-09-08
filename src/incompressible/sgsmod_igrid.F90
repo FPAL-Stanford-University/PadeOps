@@ -36,7 +36,7 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:), pointer :: tau_11, tau_12, tau_22, tau_33, tau_13C, tau_23C
         real(rkind), dimension(:,:,:), allocatable :: tau_13, tau_23
         real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E
-        real(rkind), dimension(:,:,:,:), pointer :: rbuffxE, rbuffxC, rbuffzC, rbuffyC, rbuffxE, rbuffyE, rbuffzE
+        real(rkind), dimension(:,:,:,:), pointer :: rbuffxE, rbuffxC, rbuffzC, rbuffyC, rbuffyE, rbuffzE
         complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
         type(Pade6stagg), pointer :: PadeDer
         logical :: explicitCalcEdgeEddyViscosity = .false.
@@ -81,6 +81,7 @@ module sgsmod_igrid
             procedure, private :: init_sigma
             procedure, private :: init_amd
             procedure, private :: allocateMemory_EddyViscosity
+            procedure, private :: initWallDamping
 
             !! ALL WALL MODEL PROCEDURE
             procedure, private :: initWallModel

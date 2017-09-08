@@ -13,7 +13,7 @@ program budgetTerms
 
    complex(rkind), dimension(:,:,:), allocatable :: uhatC, vhatC, whatE, uhatE, vhatE, whatC, ThatC,u_rhs,v_rhs,w_rhs
    real(rkind), dimension(:,:,:), allocatable :: pC, uC, vC, wC, uE, vE, wE, fbody_x, fbody_y, fbody_z, fbody_zC
-   real(rkind), dimension(:,:,:,:), allocatable, target :: duidxjE, duidxjC, rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE, duidxjE2
+   real(rkind), dimension(:,:,:,:), allocatable, target :: rbuffxE, duidxjE, duidxjC, rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE, duidxjE2
    complex(rkind), dimension(:,:,:,:), allocatable, target :: duidxjEhat,duidxjChat,cbuffyC,cbuffzC,cbuffyE,cbuffzE
    type(sgs_igrid) :: newsgs
    type(turbineArray), allocatable :: turbArray
@@ -298,6 +298,7 @@ contains
       allocate(rbuffzC(gpC%zsz(1),gpC%zsz(2),gpC%zsz(3),2)) ! -- what should this size be?
       allocate(rbuffyE(gpE%ysz(1),gpE%ysz(2),gpE%ysz(3),2)) ! -- what should this size be?
       allocate(rbuffzE(gpE%zsz(1),gpE%zsz(2),gpE%zsz(3),2)) ! -- what should this size be?
+      allocate(rbuffxE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3),2)) ! -- what should this size be?
 
       allocate(fx_turb_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
       allocate(fy_turb_store(gpC%xsz(1),gpC%xsz(2), gpC%xsz(3)))
@@ -390,7 +391,7 @@ contains
       ! Initialize sgs
       call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, &
                       fbody_z, computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, &
-                      rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, .false., .false., 1)
+                      rbuffxE, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, .false., .false., 1)
       call newsgs%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
 
 
