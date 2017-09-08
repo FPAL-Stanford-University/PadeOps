@@ -14,7 +14,7 @@ program write_SGS_wt_rhs
 
    complex(rkind), dimension(:,:,:), allocatable :: uhatC, vhatC, whatE, uhatE, vhatE, whatC, ThatC,u_rhs,v_rhs,w_rhs
    real(rkind), dimension(:,:,:), allocatable :: uC, vC, wC, uE, vE, wE, fbody_x, fbody_y, fbody_z
-   real(rkind), dimension(:,:,:,:), allocatable, target :: duidxjE, duidxjC,fbody,rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE, duidxjE2
+   real(rkind), dimension(:,:,:,:), allocatable, target :: rbuffxE, duidxjE, duidxjC,fbody,rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE, duidxjE2
    complex(rkind), dimension(:,:,:,:), allocatable, target :: duidxjEhat,duidxjChat,cbuffyC,cbuffzC,cbuffyE,cbuffzE
    type(sgs_igrid) :: newsgs
    type(sgs) :: sgsold
@@ -159,7 +159,7 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
    ! Initialize sgs
    call sgsold%init(1, spectC, spectE, gpC, gpE, dx, dy, dz, .false., .false., mesh(:,:,:,3), z0init,  .true., 1, .false., 0.7d0, .false., 1.0D0, 1.0d0, .true., .false.)
    call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, fbody_z, &
-      computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, & 
+      computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffxE, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, & 
       Pr, .false., .false.,1)
 
    ! Initialize WT

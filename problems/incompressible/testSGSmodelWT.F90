@@ -14,7 +14,7 @@ program testSGSmodelWT
 
    complex(rkind), dimension(:,:,:), allocatable :: uhatC, vhatC, whatE, uhatE, vhatE, whatC, ThatC,u_rhs,v_rhs,w_rhs
    real(rkind), dimension(:,:,:), allocatable :: uC, vC, wC, uE, vE, wE, fbody_x, fbody_y, fbody_z
-   real(rkind), dimension(:,:,:,:), allocatable, target :: duidxjE, duidxjC,fbody,rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE, duidxjE2
+   real(rkind), dimension(:,:,:,:), allocatable, target :: rbuffxE, duidxjE, duidxjC,fbody,rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE, duidxjE2
    complex(rkind), dimension(:,:,:,:), allocatable, target :: duidxjEhat,duidxjChat,cbuffyC,cbuffzC,cbuffyE,cbuffzE
    type(sgs_igrid) :: newsgs
    type(sgs) :: sgsold
@@ -124,6 +124,7 @@ program testSGSmodelWT
    allocate(rbuffzC(gpC%zsz(1),gpC%zsz(2),gpC%zsz(3),2)) ! -- what should this size be?
    allocate(rbuffyE(gpE%ysz(1),gpE%ysz(2),gpE%ysz(3),2)) ! -- what should this size be?
    allocate(rbuffzE(gpE%zsz(1),gpE%zsz(2),gpE%zsz(3),2)) ! -- what should this size be?
+   allocate(rbuffxE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3),2)) ! -- what should this size be?
 
    ! Create Mesh
    ix1 = gpC%xst(1); iy1 = gpC%xst(2); iz1 = gpC%xst(3)
@@ -161,7 +162,7 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
 
    ! Initialize sgs
    call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, fbody_z, &
-   computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, &
+   computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffxE, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, &
    .false., .false.,1)
 
    call newsgs%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
