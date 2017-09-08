@@ -12,3 +12,6 @@ tags
 pbsfiles
 batch_scripts
 pp
+stdout
+stderr
+*.pbs
