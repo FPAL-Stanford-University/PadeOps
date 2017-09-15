@@ -1,16 +1,17 @@
 module CompressibleGrid
-    use kind_parameters, only: rkind, clen
-    use constants,       only: zero,eps,third,half,one,two,three,four
-    use FiltersMod,      only: filters
-    use GridMod,         only: grid
-    use gridtools,       only: alloc_buffs, destroy_buffs
-    use cgrid_hooks,     only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
-    use decomp_2d,       only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
-                               transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
-    use DerivativesMod,  only: derivatives
-    use io_hdf5_stuff,   only: io_hdf5
-    use IdealGasEOS,     only: idealgas
-    use MixtureEOSMod,   only: mixture
+    use kind_parameters,      only: rkind, clen
+    use constants,            only: zero,eps,third,half,one,two,three,four
+    use FiltersMod,           only: filters
+    use GridMod,              only: grid
+    use gridtools,            only: alloc_buffs, destroy_buffs
+    use cgrid_hooks,          only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
+    use decomp_2d,            only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
+                                    transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
+    use DerivativesMod,       only: derivatives
+    use io_hdf5_stuff,        only: io_hdf5
+    use IdealGasEOS,          only: idealgas
+    use MixtureEOSMod,        only: mixture
+    use PowerLawViscosityMod, only: powerLawViscosity
    
     implicit none
 
@@ -149,6 +150,9 @@ contains
         real(rkind) :: CY = 100.0_rkind
         character(len=clen) :: charout
         real(rkind) :: Ys_error
+        logical     :: inviscid = .true.
+
+        type(powerLawViscosity) :: visc
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
                          outputdir, vizprefix, tviz, reduce_precision, &
@@ -158,6 +162,7 @@ contains
                                                            prow, pcol, &
                                                              SkewSymm  
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
+                           inviscid,                                   &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
 
@@ -227,12 +232,12 @@ contains
         ! Allocate mixture
         if (allocated(this%mix)) deallocate(this%mix)
         allocate(this%mix)
-        call this%mix%init(this%decomp,ns)
+        call this%mix%init(this%decomp,ns,inviscid)
         ! allocate(this%mix , source=mixture(this%decomp,ns))
 
         ! Set default materials with the same gam and Rgas
         do i = 1,ns
-            call this%mix%set_material(i,idealgas(gam,Rgas))
+            call this%mix%set_material(i,idealgas(gam,Rgas),visc)
         end do
 
         nfields = kap_index + 2*ns   ! Add ns massfractions to fields
@@ -515,7 +520,8 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
-        call this%getPhysicalProperties()
+        ! call this%getPhysicalProperties()
+        call this%mix%get_transport_properties(this%rho, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
 
         if (this%mix%ns .GT. 1) then
             dYsdx => gradYs(:,:,:,              1:  this%mix%ns)
@@ -801,7 +807,8 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
-        call this%getPhysicalProperties()
+        ! call this%getPhysicalProperties()
+        call this%mix%get_transport_properties(this%rho, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
 
         if (this%mix%ns .GT. 1) then
             dYsdx => gradYs(:,:,:,1:this%mix%ns); dYsdy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns); dYsdz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);
@@ -1303,7 +1310,7 @@ contains
         ! Hard code these values for now. Need to make a better interface for this later
         real(rkind) :: mu_ref = 0.6_rkind * half / (100._rkind * sqrt(3._rkind))
         real(rkind) :: T_ref = 1._rkind / 1.4_rkind
-        real(rkind) :: Pr = 0.75_rkind
+        real(rkind) :: Pr = 0.70_rkind
 
         this%mu   = mu_ref * (this%T / T_ref)**(three/four)
         this%bulk = zero
