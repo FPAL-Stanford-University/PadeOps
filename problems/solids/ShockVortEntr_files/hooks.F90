@@ -134,7 +134,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
     real(rkind) :: xa, xb, yc, yd
 
-    xa = 0.0D0; xb = 4.0D0*pi+1.0D0
+    xa = 0.0D0; xb = 8.0D0*pi+1.0D0
     yc = -pi; yd = pi
 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
@@ -216,7 +216,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
 
     ! Initialize arrays for statistics
     allocate(vort(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),3))
-    allocate(stats(decomp%ysz(1),decomp%ysz(3),2))
+    allocate(stats(decomp%ysz(1),decomp%ysz(3),4))
     allocate(umean(decomp%ysz(1),3))
     tavg = zero
     stats = zero
@@ -289,9 +289,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         entr   = (one-tmp)*entr1   + tmp*entr2
         p = p1*(rho/rho1*exp(entr))**gam
 
-        rho1 = rho(decomp%yen(1),1,1)
-        u1   = u  (decomp%yen(1),1,1)
-        u2   = u  (            1,1,1)
+        !rho1 = rho(decomp%yen(1),1,1)
+        !u1   = u  (decomp%yen(1),1,1)
+        !u2   = u  (            1,1,1)
 
         g11 = rho/rho0; g12 = zero; g13 = zero
         g21 = zero;     g22 = one;  g23 = zero
@@ -320,7 +320,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         ! Add vorticity/entropy fluctuations
         psiang = psiang*pi/180.0_rkind
         sinpsi = sin(psiang); cospsi = cos(psiang)
-        k1wv = k2wv/tan(psiang)
+        if(tan(psiang)<1.0d-6) then
+            k1wv = 1.0d0; k2wv = 0.0d0
+        elseif(tan(psiang)>1.0d6) then
+            k1wv = 0.0d0; k2wv = 1.0d0
+        else
+            k1wv = k2wv/tan(psiang)
+        endif
         if(nrank==0) write(*,*) '(k1, k2): ', k1wv, k2wv
 
         mask = 0.0d0
@@ -332,8 +338,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
          do j=1,decomp%ysz(2)
           do i=1,decomp%ysz(1)
 
-             rho(i,j,k) = rho(i,j,k) + mask(i)*(rho1*exp(-Ae* sin(k1wv*x(i,j,k)))  -rho1)
-             !rho(i,j,k) = rho(i,j,k) + rho1 * Ae * mask(i)* cos(k1wv*x(i,j,k) + k2wv*y(i,j,k))
+             !rho(i,j,k) = rho(i,j,k) + mask(i)*(rho1*exp(-Ae* sin(k1wv*x(i,j,k)))  -rho1)
+             rho(i,j,k) = rho(i,j,k) + rho1 * Ae *          cos(k1wv*x(i,j,k) + k2wv*y(i,j,k))
              u(i,j,k)   = u(i,j,k)   +   u1 * Av * sinpsi * cos(k1wv*x(i,j,k) + k2wv*y(i,j,k))
              v(i,j,k)   =            -   u1 * Av * cospsi * cos(k1wv*x(i,j,k) + k2wv*y(i,j,k))
           end do 
@@ -618,13 +624,13 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
           if(.not. istatwritestart) then
             istatwritestart = .TRUE.
             open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='unknown')
-            write(outputunit,'(90a)') 'VARIABLES="x","z","vort_sq","ke","vort_sq_norm","ke_norm"'
+            write(outputunit,'(100a)') 'VARIABLES="x","z","vort_sq","ke","vort_fluc_sq","tke"'!,"vort_sq_norm","ke_norm","vort_fluc_sq_norm","tke_norm"'
             write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
             write(outputunit,'(a,ES27.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
             do k=1,decomp%ysz(3)
               do i=1,decomp%ysz(1)
-                  print *, i, k
-                  write(outputunit,'(38ES26.16)') x(i,1,k), z(i,1,k), stats(i,k,1)/(tavg+1.0D-32), stats(i,k,2)/(tavg+1.0D-32), stats(i,k,1)/(stats(1,k,1)+1.0D-32), stats(i,k,2)/(stats(1,k,2)+1.0D-32)
+                  !print *, i, k
+                  write(outputunit,'(38ES26.16)') x(i,1,k), z(i,1,k), stats(i,k,1)/(tavg+1.0D-32), stats(i,k,2)/(tavg+1.0D-32), (stats(i,k,1)-stats(i,k,3)*stats(i,k,3))/(tavg+1.0D-32), stats(i,k,4)/(tavg+1.0d-32)!, stats(i,k,1)/(stats(1,k,1)+1.0D-32), stats(i,k,2)/(stats(1,k,2)+1.0D-32), (stats(i,k,1)-stats(i,k,3)*stats(i,k,3))/(stats(1,k,1)-stats(1,k,3)*stats(1,k,3)+1.0D-32), stats(i,k,4)/stats(1,k,4)
               enddo
             enddo
           else
@@ -634,7 +640,7 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
             write(outputunit,'(a)') ' VARSHARELIST=([1, 2]=1)'
             do k=1,decomp%ysz(3)
               do i=1,decomp%ysz(1)
-                  write(outputunit,'(38ES26.16)') stats(i,k,1)/(tavg+1.0D-32), stats(i,k,2)/(tavg+1.0D-32), stats(i,k,1)/(stats(1,k,1)+1.0D-32), stats(i,k,2)/(stats(1,k,2)+1.0D-32)
+                  write(outputunit,'(38ES26.16)') stats(i,k,1)/(tavg+1.0D-32), stats(i,k,2)/(tavg+1.0D-32), (stats(i,k,1)-stats(i,k,3)*stats(i,k,3))/(tavg+1.0D-32), stats(i,k,4)/(tavg+1.0d-32)!, stats(i,k,1)/(stats(1,k,1)+1.0D-32), stats(i,k,2)/(stats(1,k,2)+1.0D-32), (stats(i,k,1)-stats(i,k,3)*stats(i,k,3))/(stats(1,k,1)-stats(1,k,3)*stats(1,k,3)+1.0D-32), stats(i,k,4)/stats(1,k,4)
               enddo
             enddo
           endif
@@ -684,8 +690,8 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
          if(x_bc(1)==0) then
             do k=1,decomp%ysz(3)
              do j=1,decomp%ysz(2)
-               rho(1,j,k) = rho1 * exp(-Ae*sin(k1wv*u1*tsim))
-               !rho(1,j,k) = rho1 + rho1 * Ae *          cos(k2wv*y(1,j,k) - k1wv*u1*tsim)
+               !rho(1,j,k) = rho1 * exp(-Ae*sin(k1wv*u1*tsim))
+               rho(1,j,k) = rho1 + rho1 * Ae *          cos(k2wv*y(1,j,k) - k1wv*u1*tsim)
                  u(1,j,k) =   u1 +   u1 * Av * sinpsi * cos(k2wv*y(1,j,k) - k1wv*u1*tsim)
                  v(1,j,k) =      -   u1 * Av * cospsi * cos(k2wv*y(1,j,k) - k1wv*u1*tsim)
                  p(1,:,:) = p1
@@ -700,7 +706,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
         endif
         
         ! right x
-        xspng = 4.0*pi+0.5_rkind
+        xspng = 8.0*pi+0.5_rkind
         tspng = 0.5_rkind
         dx = x(2,1,1)-x(1,1,1)
         dum = half*(one + tanh((x-xspng)/tspng))
@@ -821,31 +827,31 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
         call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
         call message(2,"Maximum conductivity",P_MAXVAL(kap))
 
-        ! determine shock statistics
-        dx = x(2,1,1) - x(1,1,1)
-        dpdx = 0.0d0
-        nx = size(dpdx,1)
-        !dpdx(2:nx-1) = ( p(3:nx,1,1)-p(1:nx-2,1,1) ) / (two*dx)
-        call der%ddx(p, dpdx, x_bc(1), x_bc(2))
-        sthick = abs(p2-p1)/maxval(dx*abs(dpdx))
+        !! determine shock statistics
+        !dx = x(2,1,1) - x(1,1,1)
+        !dpdx = 0.0d0
+        !nx = size(dpdx,1)
+        !!dpdx(2:nx-1) = ( p(3:nx,1,1)-p(1:nx-2,1,1) ) / (two*dx)
+        !call der%ddx(p, dpdx, x_bc(1), x_bc(2))
+        !sthick = abs(p2-p1)/maxval(dx*abs(dpdx))
 
-        mwa = maxval(p(:,1,1)-p2)
-        mwa = max(mwa,maxval(p1-p(:,1,1)))
-        mwa = mwa / abs(p2-p1)
+        !mwa = maxval(p(:,1,1)-p2)
+        !mwa = max(mwa,maxval(p1-p(:,1,1)))
+        !mwa = mwa / abs(p2-p1)
 
-        call message(2,"StatNormalShockess", sthick)
-        call message(2,"Maximum Wiggles Amplitude", mwa)
+        !call message(2,"StatNormalShockess", sthick)
+        !call message(2,"Maximum Wiggles Amplitude", mwa)
 
         
 
         !k = 1
         if(tsim > tstatstart) then
-          write(*,*) '------'
-          write(*,*) 'vort3: ', maxval(vort(:,:,:,3)), minval(vort(:,:,:,3))
-          write(*,*) 'u    : ', maxval(u(:,:,:)), minval(u(:,:,:))
-          write(*,*) 'v    : ', maxval(v(:,:,:)), minval(v(:,:,:))
-          write(*,*) 'w    : ', maxval(w(:,:,:)), minval(w(:,:,:))
-          write(*,*) 'ke   : ', sum(u(:,:,:)*u(:,:,:) + v(:,:,:)*v(:,:,:) + w(:,:,:)*w(:,:,:))
+          !write(*,*) '------'
+          !write(*,*) 'vort3: ', maxval(vort(:,:,:,3)), minval(vort(:,:,:,3))
+          !write(*,*) 'u    : ', maxval(u(:,:,:)), minval(u(:,:,:))
+          !write(*,*) 'v    : ', maxval(v(:,:,:)), minval(v(:,:,:))
+          !write(*,*) 'w    : ', maxval(w(:,:,:)), minval(w(:,:,:))
+          !write(*,*) 'ke   : ', sum(u(:,:,:)*u(:,:,:) + v(:,:,:)*v(:,:,:) + w(:,:,:)*w(:,:,:))
           if(.not. istatstart) then
             if(nrank==0) write(*,*) "Started collecting statistics at t = ", tsim
             istatstart = .TRUE.
@@ -855,14 +861,16 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
           do k = 1, decomp%ysz(3)
             do i = 1, decomp%ysz(1)
                 stats(i,k,1) = stats(i,k,1) + dt * sum(vort(i,:,k,3)*vort(i,:,k,3))/real(decomp%ysz(2),rkind)
-                stats(i,k,2) = stats(i,k,2) + dt * sum((u(i,:,k)-umean(i,1))**2 + (v(i,:,k)-umean(i,2))**2 + (w(i,:,k)-umean(i,3))**2)/real(decomp%ysz(2),rkind)
+                stats(i,k,2) = stats(i,k,2) + dt * sum(u(i,:,k)*u(i,:,k) + v(i,:,k)*v(i,:,k) + w(i,:,k)*w(i,:,k))/real(decomp%ysz(2),rkind)
+                stats(i,k,3) = stats(i,k,3) + dt * sum(vort(i,:,k,3))/real(decomp%ysz(2),rkind)
+                stats(i,k,4) = stats(i,k,4) + dt * sum((u(i,:,k)-umean(i,1))**2 + (v(i,:,k)-umean(i,2))**2 + (w(i,:,k)-umean(i,3))**2)/real(decomp%ysz(2),rkind)
             enddo
           enddo
           tavg = tavg + dt
-          write(*,*) 'dtavg: ', dt, tavg
-          write(*,*) 'stat1: ', maxval(stats(:,:,1)), minval(stats(:,:,1))
-          write(*,*) 'stat2: ', maxval(stats(:,:,2)), minval(stats(:,:,2))
-          write(*,*) '------'
+          !write(*,*) 'dtavg: ', dt, tavg
+          !write(*,*) 'stat1: ', maxval(stats(:,:,1)), minval(stats(:,:,1))
+          !write(*,*) 'stat2: ', maxval(stats(:,:,2)), minval(stats(:,:,2))
+          !write(*,*) '------'
         endif
 
     end associate
