@@ -88,11 +88,12 @@ contains
         integer :: i
 
         ! if(.not.present(fingersq)) call GracefulExit("fingersq required for devstress",1111)
-        
+       
         do i = 1,6
             devstress(:,:,:,i) = -this%mu*(detG**(-sixth)*fingersq(:,:,:,i) - detG**sixth*finger(:,:,:,i))
         end do
         devstmp = third*this%mu*(detG**(-sixth)*trG2 - detG**sixth*trG)
+
         devstress(:,:,:,1) = devstress(:,:,:,1) + devstmp
         devstress(:,:,:,4) = devstress(:,:,:,4) + devstmp
         devstress(:,:,:,6) = devstress(:,:,:,6) + devstmp

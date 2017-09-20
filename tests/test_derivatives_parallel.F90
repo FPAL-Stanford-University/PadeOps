@@ -9,7 +9,7 @@ program test_derivatives_parallel
 
     real(rkind), dimension(:,:,:), allocatable :: x, y, z, f,dfdx, dfdy, dfdz, df
     real(rkind), dimension(:,:,:), allocatable :: f_in_x, df_in_x, f_in_z, df_in_z
-    type(derivatives) :: method1, method2, method3
+    type(derivatives) :: method1, method2, method3, method5
     type(decomp_info) :: gp
 
     integer :: nx = 128, ny = 128, nz = 128
@@ -78,6 +78,11 @@ program test_derivatives_parallel
                                 dx,     dy,    dz, &
                             .TRUE., .TRUE.,  .TRUE., &
                             "four", "four", "four" )
+
+    call method5%init(                         gp, &
+                                dx,     dy,    dz, &
+                            .TRUE., .TRUE., .TRUE., &
+                            "ed02", "ed02", "ed02" )
 
     call mpi_barrier(mpi_comm_world, ierr)
     if (nrank == 0) print*, "Initialized all methods"
@@ -211,6 +216,49 @@ program test_derivatives_parallel
     if (nrank == 0) print*, "Maximum error = ", maxerr
     if (nrank == 0) print*, "Time to solve in z:", t1 - t0
     deallocate(df_in_z, f_in_z)
+
+
+    if (nrank == 0) then
+    print*, "==========================================="
+    print*, "Now trying METHOD 5: ED02"
+    print*, "==========================================="
+    end if
+
+    allocate(df_in_x(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
+    allocate(f_in_x(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
+    t0 = MPI_WTIME()
+    call transpose_y_to_x(f,f_in_x,gp)
+    call method5 % ddx(f_in_x,df_in_x)
+    call transpose_x_to_y(df_in_x,df,gp)
+    t1 = MPI_WTIME()
+    mymaxerr = MAXVAL(ABS(df - dfdx))
+    call MPI_Reduce(mymaxerr, maxerr, 1, real_type, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+    if (nrank == 0) print*, "Maximum error = ", maxerr
+    if (nrank == 0) print*, "Time to solve in x:", t1 - t0
+    deallocate (df_in_x, f_in_x)
+
+    call mpi_barrier(mpi_comm_world, ierr)
+    t0 = MPI_WTIME()
+    call method5 % ddy(f,df)
+    t1 = MPI_WTIME()
+    mymaxerr = MAXVAL(ABS(df - dfdy))
+    call MPI_Reduce(mymaxerr, maxerr, 1, real_type, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+    if (nrank == 0) print*, "Maximum error = ", maxerr
+    if (nrank == 0) print*, "Time to solve in y:", t1 - t0
+
+    allocate(df_in_z(gp%zsz(1),gp%zsz(2),gp%zsz(3)))
+    allocate(f_in_z(gp%zsz(1),gp%zsz(2),gp%zsz(3)))
+    call mpi_barrier(mpi_comm_world, ierr)
+    t0 = MPI_WTIME()
+    call transpose_y_to_z(f,f_in_z,gp)
+    call method5 % ddz(f_in_z,df_in_z)
+    call transpose_z_to_y(df_in_z,df,gp)
+    t1 = MPI_WTIME()
+    mymaxerr = MAXVAL(ABS(df - dfdz))
+    call MPI_Reduce(mymaxerr, maxerr, 1, real_type, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+    if (nrank == 0) print*, "Maximum error = ", maxerr
+    if (nrank == 0) print*, "Time to solve in z:", t1 - t0
+    deallocate (df_in_z, f_in_z)
 
 
     deallocate(x, y, z, f, dfdx,dfdy, dfdz)

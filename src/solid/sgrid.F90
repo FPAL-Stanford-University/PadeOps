@@ -126,6 +126,7 @@ module SolidGrid
          
         logical     :: gfilttimes
         real(rkind) :: etafac
+        integer     :: LADder
          
         contains
             procedure          :: init
@@ -198,6 +199,7 @@ contains
         real(rkind) :: etafac = zero
         logical     :: gfilttimes = .TRUE.
         real(rkind) :: Re_num = -1._rkind, Pr_num = -1._rkind
+        integer     :: LADder = 4
 
         character(len=clen) :: charout
         real(rkind), dimension(:,:,:,:), allocatable :: finger, fingersq
@@ -217,7 +219,7 @@ contains
         namelist /SINPUT/  rho0, eostype, eosparams, plastic, &
                            explPlast, Cmu, Cbeta, Ckap,            &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn,     &
-                           gfilttimes, etafac, Re_num, Pr_num
+                           gfilttimes, etafac, Re_num, Pr_num, LADder
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -257,6 +259,7 @@ contains
 
         this%gfilttimes = gfilttimes
         this%etafac = etafac
+        this%LADder = LADder
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -372,7 +375,7 @@ contains
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         this%eostype, eosparams, rho0=this%rho0,&
                         tstop=this%tstop, dt=this%dtfixed, tviz=tviz)
-       
+
         ! Get hydrodynamic and elastic energies 
         if(this%eostype == 1) then
             ! get hydrodynamic energy from rho, p
@@ -425,7 +428,7 @@ contains
             !call this%geneos%get_T(this%e, this%T) -- all clubbed together in get_p_devstress_T_sos
         endif
 
-        if (P_MAXVAL(abs( this%rho/this%rho0/(detG) - one )) > 10._rkind*eps) then
+        if (P_MAXVAL(abs( this%rho/this%rho0/sqrt(detG) - one )) > 10._rkind*eps) then
             call warning("Inconsistent initialization: rho/rho0 and g are not compatible")
         end if
 
@@ -749,7 +752,7 @@ contains
             ! Get the new time step
             call this%get_dt(stability)
             call message(2,"Stability limit: "//trim(stability))
-            
+
             ! Check for visualization condition and adjust time step
             if ( (this%tviz > zero) .AND. ((this%tsim + this%dt)*(one + eps) >= this%tviz * this%viz%vizcount) ) then
                 this%dt = this%tviz * this%viz%vizcount - this%tsim
@@ -1267,23 +1270,56 @@ contains
         
         ! Get 4th derivative in X
         call transpose_y_to_x(func,xtmp1,this%decomp)
-        call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
-        call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
-        xtmp2 = xtmp1*this%dx**6
+        if(this%LADder==2) then
+            call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+            xtmp2 = xtmp2*this%dx**4
+        elseif(this%LADder==4) then
+            call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+            call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
+            xtmp2 = xtmp1*this%dx**6
+        elseif(this%LADder==8) then
+            call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+            call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
+            call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+            call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
+            xtmp2 = xtmp1*this%dx**10
+        endif
         call transpose_x_to_y(xtmp2,mustar,this%decomp)
         
         ! Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
-        call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
-        call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
-        ztmp2 = ztmp1*this%dz**6
+        if(this%LADder==2) then
+            call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+            ztmp2 = ztmp2*this%dz**4
+        elseif(this%LADder==4) then
+            call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+            call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
+            ztmp2 = ztmp1*this%dz**6
+        elseif(this%LADder==8) then
+            call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+            call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
+            call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+            call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
+            ztmp2 = ztmp1*this%dz**10
+        endif
         call transpose_z_to_y(ztmp2,ytmp1,this%decomp)
         mustar = mustar + ytmp1
         
         ! Get 4th derivative in Y
-        call this%der%d2dy2(func,ytmp1,this%y_bc(1),this%y_bc(2))
-        call this%der%d2dy2(ytmp1,ytmp2,this%y_bc(1),this%y_bc(2))
-        ytmp1 = ytmp2*this%dy**6
+        if(this%LADder==2) then
+            call this%der%d2dy2(func,ytmp1,this%y_bc(1),this%y_bc(2))
+            ytmp1 = ytmp1*this%dy**6
+        elseif(this%LADder==4) then
+            call this%der%d2dy2(func,ytmp1,this%y_bc(1),this%y_bc(2))
+            call this%der%d2dy2(ytmp1,ytmp2,this%y_bc(1),this%y_bc(2))
+            ytmp1 = ytmp2*this%dy**6
+        elseif(this%LADder==8) then
+            call this%der%d2dy2(func,ytmp1,this%y_bc(1),this%y_bc(2))
+            call this%der%d2dy2(ytmp1,ytmp2,this%y_bc(1),this%y_bc(2))
+            call this%der%d2dy2(func,ytmp1,this%y_bc(1),this%y_bc(2))
+            call this%der%d2dy2(ytmp1,ytmp2,this%y_bc(1),this%y_bc(2))
+            ytmp1 = ytmp2*this%dy**10
+        endif
         mustar = mustar + ytmp1
 
         mustar = this%Cmu*this%rho*abs(mustar)
@@ -1303,24 +1339,57 @@ contains
 
         ! Step 2: Get 4th derivative in X
         call transpose_y_to_x(func,xtmp1,this%decomp)
-        call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
-        call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
-        xtmp2 = xtmp1*this%dx**4
+        if(this%LADder==2) then
+            call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+            xtmp2 = xtmp2*this%dx**2
+        elseif(this%LADder==4) then
+            call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+            call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
+            xtmp2 = xtmp1*this%dx**4
+        elseif(this%LADder==8) then
+            call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+            call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
+            call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+            call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
+            xtmp2 = xtmp1*this%dx**8
+        endif
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         bulkstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
-        call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
-        call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
-        ztmp2 = ztmp1*this%dz**4
+        if(this%LADder==2) then
+            call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+            ztmp2 = ztmp2*this%dz**2
+        elseif(this%LADder==4) then
+            call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+            call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
+            ztmp2 = ztmp1*this%dz**4
+        elseif(this%LADder==8) then
+            call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+            call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
+            call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+            call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
+            ztmp2 = ztmp1*this%dz**8
+        endif
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
         bulkstar = bulkstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
         ! Step 4: Get 4th derivative in Y
-        call this%der%d2dy2(func,ytmp4,this%y_bc(1),this%y_bc(2))
-        call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
-        ytmp4 = ytmp5*this%dy**4
+        if(this%LADder==2) then
+            call this%der%d2dy2(func,ytmp4,this%y_bc(1),this%y_bc(2))
+            ytmp4 = ytmp4*this%dy**2
+        elseif(this%LADder==4) then
+            call this%der%d2dy2(func,ytmp4,this%y_bc(1),this%y_bc(2))
+            call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
+            ytmp4 = ytmp5*this%dy**4
+        elseif(this%LADder==8) then
+            call this%der%d2dy2(func,ytmp4,this%y_bc(1),this%y_bc(2))
+            call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
+            call this%der%d2dy2(func,ytmp4,this%y_bc(1),this%y_bc(2))
+            call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
+            ytmp4 = ytmp5*this%dy**8
+        endif
         bulkstar = bulkstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
         ! Now, all ytmps are free to use
@@ -1349,24 +1418,57 @@ contains
 
         ! Step 2: Get 4th derivative in X
         call transpose_y_to_x(this%e,xtmp1,this%decomp)
-        call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
-        call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
-        xtmp2 = xtmp1*this%dx**4
+        if(this%LADder==2) then
+            call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+            xtmp2 = xtmp2*this%dx**2
+        elseif(this%LADder==4) then
+            call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+            call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
+            xtmp2 = xtmp1*this%dx**4
+        elseif(this%LADder==8) then
+            call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+            call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
+            call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+            call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
+            xtmp2 = xtmp1*this%dx**8
+        endif
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         kapstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(this%e,ztmp1,this%decomp)
-        call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
-        call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
-        ztmp2 = ztmp1*this%dz**4
+        if(this%LADder==2) then
+            call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+            ztmp2 = ztmp2*this%dz**2
+        elseif(this%LADder==4) then
+            call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+            call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
+            ztmp2 = ztmp1*this%dz**4
+        elseif(this%LADder==8) then
+            call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+            call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
+            call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+            call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
+            ztmp2 = ztmp1*this%dz**8
+        endif
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
         kapstar = kapstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
-        call this%der%d2dy2(this%e,ytmp4,this%y_bc(1),this%y_bc(2))
-        call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
-        ytmp4 = ytmp5*this%dy**4
+        if(this%LADder==2) then
+            call this%der%d2dy2(this%e,ytmp4,this%y_bc(1),this%y_bc(2))
+            ytmp4 = ytmp4*this%dy**2
+        elseif(this%LADder==4) then
+            call this%der%d2dy2(this%e,ytmp4,this%y_bc(1),this%y_bc(2))
+            call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
+            ytmp4 = ytmp5*this%dy**4
+        elseif(this%LADder==8) then
+            call this%der%d2dy2(this%e,ytmp4,this%y_bc(1),this%y_bc(2))
+            call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
+            call this%der%d2dy2(this%e,ytmp4,this%y_bc(1),this%y_bc(2))
+            call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
+            ytmp4 = ytmp5*this%dy**8
+        endif
         kapstar = kapstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Now, all ytmps are free to us

@@ -1,5 +1,5 @@
-module ShockEntropy_data
-    use kind_parameters,  only: rkind, clen
+module StatNormalShock_data
+    use kind_parameters,  only: rkind
     use constants,        only: one,third,half,twothird,two,three,four,seven,pi
     implicit none
     
@@ -9,11 +9,9 @@ module ShockEntropy_data
     real(rkind) :: Cbeta
     real(rkind) :: shmod
     real(rkind) :: xs = real(-9.50D0,rkind)
-    real(rkind) :: xe = real(-8.85D0,rkind)
     real(rkind) :: rho_0
     real(rkind) :: ximp = real(-3.85D0,rkind)
     real(rkind) :: uimpact = real(300.0D0,rkind)
-    character(len=clen) :: multiplier_file = ""
 contains
 
 SUBROUTINE fnumden(pf,fparams,iparams,num,den)
@@ -118,7 +116,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: half,one
     use decomp_2d,        only: decomp_info
 
-    use ShockEntropy_data
+    use StatNormalShock_data
 
     implicit none
 
@@ -140,16 +138,16 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = real(10.D0,rkind)/real(nx,rkind)
-        dy = pi/real(ny, rkind)
+        dx = real(1.D0,rkind)/real(nx-1,rkind)
+        dy = dx
         dz = dx
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = ( real( ix1 - 1 + i - 1, rkind ) + half ) * dx - real(5.D0,rkind)
-                    y(i,j,k) = ( real( iy1 - 1 + j - 1, rkind )        ) * dy
-                    z(i,j,k) = ( real( iz1 - 1 + k - 1, rkind )        ) * dz
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx
+                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
+                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
         end do
@@ -159,13 +157,13 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rho0,tstop,dt,tviz)
-    use kind_parameters,  only: rkind,clen
+    use kind_parameters,  only: rkind
     use constants,        only: zero,eps,third,half,one,two,pi
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
     
-    use ShockEntropy_data
+    use StatNormalShock_data
 
     implicit none
     character(len=*),                                               intent(in)    :: inputfile
@@ -182,11 +180,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
     real(rkind) :: p_star, rhoRatio, tfactor, h1, grho1, grho2
     integer, dimension(2) :: iparams
     real(rkind), dimension(8) :: fparams
-    integer :: nx, i
-    real(rkind) :: mu, gam, PInf, yield, tau0, dummy
-    character(len=clen) :: str
+    integer :: nx
+    real(rkind) :: mu, gam, PInf, yield, tau0
 
-    namelist /PROBINPUT/  pRatio, p1, thick, Cbeta, xs, xe, ximp, uimpact, multiplier_file
+    namelist /PROBINPUT/  pRatio, p1, thick, Cbeta, xs, ximp, uimpact
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -199,8 +196,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
     else
     endif
 
-    nx = decomp%ysz(1)
-
     associate( rho => fields(:,:,:,rho_index),   u => fields(:,:,:,  u_index), &
                  v => fields(:,:,:,  v_index),   w => fields(:,:,:,  w_index), &
                  p => fields(:,:,:,  p_index),   T => fields(:,:,:,  T_index), &
@@ -211,7 +206,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
-        p_star = pRatio*p1
+        p_star = p1
         PInf = PInf / p_star
         mu = mu / p_star
         yield = yield / p_star
@@ -223,12 +218,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         fparams(1) = rho1; fparams(2) = u1; fparams(3) = p1
         fparams(4) = rho0; fparams(5) = gam; fparams(6) = PInf; fparams(7) = mu;
         fparams(8) = p2
-        rho2 = rho1*min(one + p1/PInf, one) ! Init guess
+        rho2 = rho1*min(one + p1/(PInf+1.0D-32), one) ! Init guess
         call rootfind_nr_1d(rho2,fparams,iparams)
         write(*,*) 'After root finding: ', rho2
         g11_1 = fparams(1)/fparams(4);   grho1 = g11_1**real(11.D0/3.D0,rkind) - g11_1**(-third) - g11_1**(seven*third) + g11_1**third
         g11_2 = rho2/fparams(4);         grho2 = g11_2**real(11.D0/3.D0,rkind) - g11_2**(-third) - g11_2**(seven*third) + g11_2**third
-        u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*mu*(grho1-grho2)))
+        u2 = sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*mu*(grho1-grho2)))
         u1 = rho2*u2/rho1
 
         print*, "Mass flux: ", rho1*u1, rho2*u2
@@ -238,38 +233,19 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         print*, "M2 = ", u2/sqrt((gam*(p2+Pinf)+4.0_rkind/3.0_rkind*mu)/rho2)
 
         ! initialize shock at xs
-        tmp = half * ( one + erf( (x-xs)/(thick*dx) ) )
+        tmp = half * ( one - erf( (x-xs)/(thick*dx) ) )
 
-        u   = (one-tmp)*  (u2-u1) ! + tmp*  u1
+        u   = (one-tmp)*  u2 + tmp*  u1
         rho = (one-tmp)*rho2 + tmp*rho1
         v   = zero
         w   = zero
         p   = (one-tmp)*  p2 + tmp*  p1
 
-        if (trim(multiplier_file) == "") then
-            ! set location of impact if this is to be used instead of normal shock
-            if(ximp > -5.0d0 .and. ximp < (-5.0d0 + 10.0d0)) then
-              tmp = half * ( one + erf( (x-ximp)/(thick*dx) ) )
-              u = (one-tmp)*two*uimpact
-            endif
+        if(ximp > -10.0d0 .and. ximp < (-10.0d0 + 20.0d0)) then
+          tmp = half * ( one + erf( (x-ximp)/(thick*dx) ) )
+          u = (one-tmp)*two*uimpact
+        endif
 
-            ! add vorticity/entropy fluctuations starting from xe
-            tmp = half * ( one + erf( (x-xe)/(eps*dx) ) )
-
-            !rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe)))  ! 1D fluctuations
-            rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe))*cos(4.0d0*y))
-        else
-            open(unit=iounit, file=trim(multiplier_file), form='FORMATTED')
-            read(iounit,*), str,str,str
-            do i=1,nx
-                read(iounit,*) dummy, tmp(i,1,1)
-                tmp(i,:,:) = tmp(i,1,1)
-            end do
-            close(iounit)
-
-            rho = rho * tmp
-        end if
-        
         rho1 = rho(decomp%yen(1),1,1)
         u1   = u  (decomp%yen(1),1,1)
         u2   = u  (            1,1,1)
@@ -278,20 +254,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         g21 = zero;     g22 = one;  g23 = zero
         g31 = zero;     g32 = zero; g33 = one
 
-        ! set pressure fluctutations to get constant sig11 - naturally reduces
-        ! to constant pressure for gases and liquids since shear modulus is zero
-        p = p - tmp*twothird*mu*(g11**(-third)*(g11**4-one) - g11**third*(g11**2-one))
-  
-        ! Get rho compatible with det(g) and rho0
-        tmp = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
-        rho = rho0 * tmp
-
         rho_0 = rho0
-
-        ! tmp = sqrt( (gam*(p+pInf) + four/three * mu)/rho )    ! Speed of sound
-        ! tfactor = one / minval(tmp)
-        ! tstop = tstop * tfactor
-        ! tviz = tviz * tfactor
 
         ! write out solution of nonlinear problem, used to initialize the
         ! simulation
@@ -311,6 +274,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         print*, "tstop = ", tstop
 
         ! store state variables at boundaries for use in hooks_bc
+        nx = decomp%ysz(1)
         rho1 = rho(nx,1,1); u1 = u(nx,1,1); p1 = p(nx,1,1)
         rho2 = rho( 1,1,1); u2 = u( 1,1,1); p2 = p( 1,1,1)
 
@@ -329,7 +293,7 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
     use FiltersMod,       only: filters
     use operators,        only: curl
 
-    use ShockEntropy_data
+    use StatNormalShock_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -345,9 +309,6 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
 
     character(len=clen) :: outputfile, str
     integer :: i,j,k
-    real(rkind), allocatable, dimension(:,:,:,:) :: curlg
-    real(rkind), allocatable, dimension(:,:,:) :: detg
-
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -362,7 +323,7 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
                syy => fields(:,:,:, syy_index), syz => fields(:,:,:, syz_index), szz => fields(:,:,:, szz_index)  )
 
         write(str,'(ES7.1E2,A,ES7.1E2)') pRatio, "_", Cbeta
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShockEntropy_"//trim(str)//"_", vizcount, ".dat"
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/StatNormalShock_"//trim(str)//"_", vizcount, ".dat"
 
         open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
         do i=1,decomp%ysz(1)
@@ -373,94 +334,39 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
         close(outputunit)
 
         ! do post-processing stuff
-        allocate(curlg(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),9))
-        allocate(detg(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)))
+        write(outputfile,'(2A)') trim(outputdir),"/tec_StNS_"//trim(str)//".dat"
+        if(vizcount==0) then
 
-        call curl(decomp, der, g11, g12, g13, curlg(:,:,:,1:3),-x_bc, y_bc, z_bc)
-        call curl(decomp, der, g21, g22, g23, curlg(:,:,:,4:6), x_bc,-y_bc, z_bc)
-        call curl(decomp, der, g31, g32, g33, curlg(:,:,:,7:9), x_bc, y_bc,-z_bc)
-
-
-        detg = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
-
-        !! ------debug block------
-        !! check if curlg13 (actually (curl(g^T))_31) is being computed correctly
-        !! Get dv/dx
-        !call transpose_y_to_x( g12, xtmp, decomp)
-        !call der%ddx(xtmp,xdum,-x_bc(1),-x_bc(2))
-        !call transpose_x_to_y(xdum, curlg(:,:,:,1) )
-
-        !! Get du/dy
-        !call der%ddy( g11, curlg(:,:,:,2), y_bc(1), y_bc(2) )
-
-        !curlg(:,:,:,4) = curlg(:,:,:,1) - curlg(:,:,:,2) ! dv/dx - du/dy
-        !write(*,*) 'curlg 2 methods diff: ', maxval(curlg(:,:,:,4)-curlg(:,:,:,3)), minval(curlg(:,:,:,4)-curlg(:,:,:,3))
-
-        !! check commutation of filter and derivative
-        !!filter curlg1 -> curlg3; curlg3 contains filter(ddx(g12))
-        !curlg(:,:,:,3) = curlg(:,:,:,1)
-        !call filter(decomp,curlg(:,:,:,3),fil,1,x_bc,y_bc,z_bc)
-
-        !!filter curlg2 -> curlg4; curlg4 contains filter(ddy(g11))
-        !curlg(:,:,:,4) = curlg(:,:,:,2)
-        !call filter(decomp,curlg(:,:,:,4),fil,1,x_bc,y_bc,z_bc)
-
-        !!filter g12 -> curlg9;
-        !curlg(:,:,:,9) = g12
-        !call filter(decomp,curlg(:,:,:,9),fil,1,x_bc,y_bc,z_bc)
-        !! ddx curlg9 -> curlg5; curlg5 contains ddx(filter(g12))
-        !call transpose_y_to_x( curlg(:,:,:,9), xtmp, decomp)
-        !call der%ddx(xtmp,xdum,-x_bc(1),-x_bc(2))
-        !call transpose_x_to_y(xdum, curlg(:,:,:,5) )
-
-        !!filter g11 -> curlg9; ddy curlg9 -> curlg6; curlg6 contains ddy(filter(g11))
-        !curlg(:,:,:,9) = g11
-        !call filter(decomp,curlg(:,:,:,9),fil,1,x_bc,y_bc,z_bc)
-        !call der%ddy( curlg(:,:,:,9), curlg(:,:,:,6), y_bc(1), y_bc(2) )
-
-        !write(*,*) 'Filter commutation: F(ddx(g12)), ddx(F(g12)): ', maxval(curlg(:,:,:,3)-curlg(:,:,:,5)), minval(curlg(:,:,:,3)-curlg(:,:,:,5))
-        !write(*,*) 'Filter commutation: F(ddy(g11)), ddy(F(g11)): ', maxval(curlg(:,:,:,4)-curlg(:,:,:,6)), minval(curlg(:,:,:,4)-curlg(:,:,:,6))
-        !! ------debug block------
-
-        ! write(outputfile,'(2A)') trim(outputdir),"/tec_ShEn_"//trim(str)//".dat"
-        ! if(vizcount==0) then
-
-        !   open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='unknown')
-        !   write(outputunit,'(290a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar","curlg11","curlg12","curlg13","curlg21","curlg22","curlg23","curlg31","curlg32","curlg33","conterr"'
-        !   write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
-        !   write(outputunit,'(a,ES27.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
-        !   do k=1,decomp%ysz(3)
-        !    do j=1,decomp%ysz(2)
-        !     do i=1,decomp%ysz(1)
-        !         write(outputunit,'(37ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
-        !                                        g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
-        !                                        sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), curlg(i,j,k,1:9), &
-        !                                        rho(i,j,k)-rho_0*detg(i,j,k)
-        !   
-        !     end do
-        !    end do
-        !   end do
-        !   close(outputunit)
-        ! else
-        !   open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='old',ACTION='write',POSITION='append')
-        !   write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
-        !   write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
-        !   write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
-        !   do k=1,decomp%ysz(3)
-        !    do j=1,decomp%ysz(2)
-        !     do i=1,decomp%ysz(1)
-        !         write(outputunit,'(34ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
-        !                                        g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
-        !                                        sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), curlg(i,j,k,1:9), &
-        !                                        rho(i,j,k)-rho_0*detg(i,j,k)
-        !   
-        !     end do
-        !    end do
-        !   end do
-        !   close(outputunit)
-        ! endif
-
-        deallocate(curlg,detg)
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='unknown')
+          write(outputunit,'(290a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar"'
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES27.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                write(outputunit,'(37ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                                               g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
+                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k)
+            end do
+           end do
+          end do
+          close(outputunit)
+        else
+          open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='old',ACTION='write',POSITION='append')
+          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+          write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
+          do k=1,decomp%ysz(3)
+           do j=1,decomp%ysz(2)
+            do i=1,decomp%ysz(1)
+                write(outputunit,'(34ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+                                               g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
+                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k)
+            end do
+           end do
+          end do
+          close(outputunit)
+        endif
     end associate
 end subroutine
 
@@ -471,7 +377,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
     use decomp_2d,        only: decomp_info
 
-    use ShockEntropy_data
+    use StatNormalShock_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -500,7 +406,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
         w  ( 1,:,:) = zero
         p  ( 1,:,:) = p2
         
-        g11( 1,:,:) = rho2; g12( 1,:,:) = zero; g13( 1,:,:) = zero
+        g11( 1,:,:) = rho2/rho_0; g12( 1,:,:) = zero; g13( 1,:,:) = zero
         g21( 1,:,:) = zero; g22( 1,:,:) = one;  g23( 1,:,:) = zero
         g31( 1,:,:) = zero; g32( 1,:,:) = zero; g33( 1,:,:) = one
 
@@ -510,7 +416,7 @@ subroutine hook_bc(decomp,mesh,fields,tsim,x_bc,y_bc,z_bc)
         w  (nx,:,:) = zero
         p  (nx,:,:) = p1
         
-        g11(nx,:,:) = rho1; g12(nx,:,:) = zero; g13(nx,:,:) = zero
+        g11(nx,:,:) = rho1/rho_0; g12(nx,:,:) = zero; g13(nx,:,:) = zero
         g21(nx,:,:) = zero; g22(nx,:,:) = one;  g23(nx,:,:) = zero
         g31(nx,:,:) = zero; g32(nx,:,:) = zero; g33(nx,:,:) = one
 
@@ -526,7 +432,7 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
     use reductions,       only: P_MAXVAL
     use DerivativesMod,   only: derivatives
 
-    use ShockEntropy_data
+    use StatNormalShock_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -555,36 +461,36 @@ subroutine hook_timestep(decomp,der,mesh,fields,step,tsim,dt,x_bc,y_bc,z_bc)
 
         dx = x(2,1,1) - x(1,1,1)
 
-        p_exact = p2
-        where (x(:,1,1) .GT. half)
-            p_exact = p1
-        end where
+        !p_exact = p2
+        !where (x(:,1,1) .GT. half)
+        !    p_exact = p1
+        !end where
 
         dpdx = zero
         dpdx(2:nx-1) = ( p(3:nx,1,1)-p(1:nx-2,1,1) ) / (two*dx)
         sthick = abs(p2-p1)/maxval(dx*abs(dpdx))
 
-        istart = 1
-        do while ( x(istart,1,1) .LT. half-sthick*dx )
-            istart = istart + 1
-        end do
+        !istart = 1
+        !do while ( x(istart,1,1) .LT. half-sthick*dx )
+        !    istart = istart + 1
+        !end do
 
-        iend = nx
-        do while ( x(iend,1,1) .GT. half+sthick*dx )
-            iend = iend - 1
-        end do
+        !iend = nx
+        !do while ( x(iend,1,1) .GT. half+sthick*dx )
+        !    iend = iend - 1
+        !end do
 
-        ! mwa = maxval(abs(p(1:istart,1,1)-p_exact(1:istart)))/abs(p2-p1)
-        ! mwa = max(mwa,maxval(abs(p(1:istart,1,1)-p_exact(1:istart)))/abs(p2-p1))
+        !! mwa = maxval(abs(p(1:istart,1,1)-p_exact(1:istart)))/abs(p2-p1)
+        !! mwa = max(mwa,maxval(abs(p(1:istart,1,1)-p_exact(1:istart)))/abs(p2-p1))
 
         mwa = maxval(p(:,1,1)-p2)
         mwa = max(mwa,maxval(p1-p(:,1,1)))
         mwa = mwa / abs(p2-p1)
 
-        call message(2,"Shock thickness", sthick)
+        call message(2,"StatNormalShockess", sthick)
         call message(2,"Maximum Wiggles Amplitude", mwa)
 
-        write(outputfile,'(A,ES8.2E2,A)') "ShockEntropy_stats_", Cbeta,".dat"
+        write(outputfile,'(A,ES8.2E2,A)') "StatNormalShock_stats_", Cbeta,".dat"
         if (step == 1) then
             open(unit=iounit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
             write(iounit,'(3A26)') "Time", "Shock thickness", "MWA"
