@@ -1022,6 +1022,11 @@ contains
         else
             call this%populate_rhs()
         end if
+        print*, sum(abs(this%u_rhs))
+        print*, sum(abs(this%v_rhs))
+        print*, sum(abs(this%w_rhs))
+        print*, sum(abs(this%T_rhs))
+      
         this%newTimeStep = .false. 
         this%uhat1 = this%uhat + this%dt*this%u_rhs 
         this%vhat1 = this%vhat + this%dt*this%v_rhs 
@@ -1048,6 +1053,8 @@ contains
         if (this%isStratified .or. this%initspinup) this%That => this%SfieldsC2(:,:,:,3)
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(.false.)
+
+        stop
 
 
         !!! STAGE 3 (Final Stage)
@@ -1302,7 +1309,7 @@ contains
             call transpose_y_to_z(this%That,zbuffC,this%sp_gpC)
             call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,TBC_bottom, TBC_top)
             if (this%botBC_Temp == 0) then 
-                !zbuffE(:,:,1) = zero 
+                zbuffE(:,:,1) = zero 
                 if (nrank == 0) then
                     zbuffE(1,1,1) = this%Tsurf*real(this%nx,rkind)*real(this%ny,rkind)
                 end if 
@@ -1601,8 +1608,8 @@ contains
         
         this%w_rhs = this%w_rhs - (this%RdampE/this%dt)*this%what ! base value for w is zero  
 
-        deviationC = this%That - this%Tbase
-        this%T_rhs = this%T_rhs - (this%RdampC/this%dt)*deviationC
+        !deviationC = this%That - this%Tbase
+        !this%T_rhs = this%T_rhs - (this%RdampC/this%dt)*deviationC
 
     end subroutine
 
@@ -1650,10 +1657,22 @@ contains
             call this%AddNonLinearTerm_Rot()
         end if
 
+        print*, "1:" 
+        print*, "urhs:", sum(abs(this%u_rhs))
+        print*, "vrhs:", sum(abs(this%v_rhs))
+        print*, "wrhs:", sum(abs(this%w_rhs))
+        print*, "Trhs:", sum(abs(this%T_rhs))
+
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
         end if 
+        
+        print*, "2:" 
+        print*, "urhs:", sum(abs(this%u_rhs))
+        print*, "vrhs:", sum(abs(this%v_rhs))
+        print*, "wrhs:", sum(abs(this%w_rhs))
+        print*, "Trhs:", sum(abs(this%T_rhs))
         
         ! Step 3a: Extra Forcing 
         if (this%useExtraForcing) then
@@ -1672,15 +1691,35 @@ contains
            end if
         end if 
        
+        print*, "3:" 
+        print*, "urhs:", sum(abs(this%u_rhs))
+        print*, "vrhs:", sum(abs(this%v_rhs))
+        print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
+        print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs))
+
         ! Step 4: Buoyance + Sponge (inside Buoyancy)
         if (this%isStratified .or. this%initspinup) then
             call this%addBuoyancyTerm()
         end if 
+        
+        print*, "4:" 
+        print*, "urhs:", sum(abs(this%u_rhs))
+        print*, "vrhs:", sum(abs(this%v_rhs))
+        print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
+        print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs))      
 
         ! Step 5: Viscous Term (only if simulation if NOT inviscid)
         if (.not. this%isInviscid) then
             call this%addViscousTerm()
         end if
+        
+        print*, "5:" 
+        print*, "urhs:", sum(abs(this%u_rhs))
+        print*, "vrhs:", sum(abs(this%v_rhs))
+        print*, "wrhs:", sum(abs(this%w_rhs))
+        print*, "Trhs:", sum(abs(this%T_rhs))
 
         ! Step 6: SGS Viscous Term
         if (this%useSGS) then
@@ -1694,6 +1733,12 @@ contains
             end if
             
         end if
+        
+        print*, "6:" 
+        print*, "urhs:", sum(abs(this%u_rhs))
+        print*, "vrhs:", sum(abs(this%v_rhs))
+        print*, "wrhs:", sum(abs(this%w_rhs))
+        print*, "Trhs:", sum(abs(this%T_rhs))
 
         ! Step 7: Fringe source term if fringe is being used (non-periodic)
         if (this%usedoublefringex) then
@@ -2455,7 +2500,7 @@ contains
         call this%spectC%ifft(this%dTdyH,this%dTdyC)
    
         call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
-       
+      
         call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,TBC_bottom,TBC_top)
         call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dTdzBC_bottom,dTdzBC_top)
 
@@ -4905,7 +4950,6 @@ contains
             call gracefulExit("Invalid choice for TOP WALL BCs",13)
          end select
          
-         !!! NEEDS UPDATING !!!
          TBC_top = 0; dTdzBC_top = 0; WTBC_top = -1;
          WdTdzBC_top = 0;
          select case (botBC_Temp)

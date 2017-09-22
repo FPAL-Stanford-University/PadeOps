@@ -72,7 +72,7 @@ end subroutine
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use gabls_parameters
     use kind_parameters,    only: rkind
-    use constants,          only: zero, one,  half
+    use constants,          only: pi, zero, one,  half
     use gridtools,          only: alloc_buffs
     use random,             only: gaussian_random
     use decomp_2d          
@@ -133,9 +133,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     end where
     T = T + 0.0001d0*ztmp
 
+    print*, T(12,32,3)
+
     ! Add random numbers
     allocate(randArr(size(T,1),size(T,2),size(T,3)))
-    call gaussian_random(randArr,zero,one,seedu + 10*nrank)
+    !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
+    randArr = cos(4.d0*2.d0*pi*x)*sin(4.d0*2.d0*pi*y)
     do k = 1,size(u,3)
         sig = 0.08
         Tpurt(:,:,k) = sig*randArr(:,:,k)

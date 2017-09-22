@@ -43,7 +43,7 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
    select case (this%WallModel)
    case (1) ! Standard Moeng Wall model
       this%WallMFactor = -this%ustar*this%ustar/(this%Uspmn + 1.D-13)
-     
+
       ! Tau_13
       call transpose_y_to_z(uhat, cbuffz, this%sp_gpC)
       this%tauijWMhat_inZ(:,:,1,1) = this%WallMFactor*cbuffz(:,:,1) 

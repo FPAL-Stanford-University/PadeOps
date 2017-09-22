@@ -392,7 +392,7 @@ contains
         select case(this%wallModel) 
         case(0)
             this%WallMFactor = -ustar*ustar/(Uspmn + 1.D-13)
-            
+           
             ! STEP 4: tau13 -> ddz() in urhs, ddx in wrhs
             call transpose_y_to_z(uhat,this%ctmpCz,this%sp_gp) ! <- send uhat to z decomp (wallmodel)
             call this%spectE%fft(tau13,this%ctmpEy)
