@@ -126,7 +126,12 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBLEM_INPUT)
     close(ioUnit)    
-   
+
+    dTsurf_dt = dTsurf_dt /  3600.d0
+
+    ! Normalize
+    dTsurf_dt = dTsurf_dt * timeDim 
+
     Tsurf = Tsurf0
 end subroutine
 

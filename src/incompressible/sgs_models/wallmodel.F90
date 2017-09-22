@@ -186,7 +186,7 @@ subroutine getSurfaceQuantities(this)
               ustar = ustarNew; idx = idx + 1
           end do 
           this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
-      case(1) ! Homogeneous Neumann BC for temperature
+       case(1) ! Homogeneous Neumann BC for temperature
           this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
           this%invObLength = zero
           this%wTh_surf = zero

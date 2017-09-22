@@ -887,10 +887,10 @@ contains
             call this%populate_rhs()
         end if
 
-        print*, sum(abs(this%u_rhs))
-        print*, sum(abs(this%v_rhs))
-        print*, sum(abs(this%w_rhs))
-        print*, sum(abs(this%T_rhs))    
+        !print*, sum(abs(this%u_rhs))
+        !print*, sum(abs(this%v_rhs))
+        !print*, sum(abs(this%w_rhs))
+        !print*, sum(abs(this%T_rhs))    
 
 
         this%uhat1 = this%uhat + this%dt*this%u_rhs 
@@ -919,7 +919,6 @@ contains
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(.false.)
 
-        stop 
 
         !!! STAGE 3 (Final Stage)
         ! Third stage - u, v, w are really pointing to u2, v2, w2 (which is what
@@ -936,7 +935,7 @@ contains
 
 
         ! Wrap up this time step 
-        call this%wrapup_timestep() 
+        call this%wrapup_timestep()
 
     end subroutine
 
@@ -1430,11 +1429,11 @@ contains
             call this%AddNonLinearTerm_Rot()
         end if
 
-        print*, "1:"
-        print*, "urhs:", sum(abs(this%u_rhs))
-        print*, "vrhs:", sum(abs(this%v_rhs))
-        print*, "wrhs:", sum(abs(this%w_rhs))
-        print*, "Trhs:", sum(abs(this%T_rhs))
+        !print*, "1:"
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
         
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
@@ -1442,11 +1441,11 @@ contains
         end if
 
 
-        print*, "2:"
-        print*, "urhs:", sum(abs(this%u_rhs))
-        print*, "vrhs:", sum(abs(this%v_rhs))
-        print*, "wrhs:", sum(abs(this%w_rhs))
-        print*, "Trhs:", sum(abs(this%T_rhs))
+        !print*, "2:"
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
    
  
         ! Step 3a: Extra Forcing 
@@ -1459,41 +1458,43 @@ contains
             call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
                                     this%u_rhs, this%v_rhs, this%w_rhs, .true., this%inst_horz_avg_turb)
         end if 
-        print*, "3:"
-        print*, "urhs:", sum(abs(this%u_rhs))
-        print*, "vrhs:", sum(abs(this%v_rhs))
-        print*, "wrhs:", sum(abs(this%w_rhs))
-        !print*, "Trhs:", sum(abs(this%T_rhs))
-        print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs)) 
+        !print*, "3:"
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !!print*, "Trhs:", sum(abs(this%T_rhs))
+        !print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs)) 
 
         ! Step 4: Buoyance + Sponge (inside Buoyancy)
         if (this%isStratified) then
             call this%addBuoyancyTerm()
         end if
 
-        print*, "4:"
-        print*, "urhs:", sum(abs(this%u_rhs))
-        print*, "vrhs:", sum(abs(this%v_rhs))
-        print*, "wrhs:", sum(abs(this%w_rhs))
-        print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs)) 
+        !print*, "4:"
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs)) 
 
         ! Step 5: Viscous Term (only if simulation if NOT inviscid)
         if (.not. this%isInviscid) then
             call this%addViscousTerm()
         end if
 
-        print*, "5:"
-        print*, "urhs:", sum(abs(this%u_rhs))
-        print*, "vrhs:", sum(abs(this%v_rhs))
-        print*, "wrhs:", sum(abs(this%w_rhs))
-        print*, "Trhs:", sum(abs(this%T_rhs))
+        !print*, "5:"
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
 
         ! WARNING: the duidxjChat tensor changes state after this subroutine, so
         ! you must not assume that the values in it are correct after this
         ! state. Therefore, if you need to use it, use it BEFORE calling this
         ! subroutine. 
         ! Step 6: SGS Viscous Term
+        
         if (this%useSGS) then
+            call this%compute_and_bcast_surface_Mn()
             if (this%isStratified) then
                 call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
                                                 this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
@@ -1517,11 +1518,11 @@ contains
             end if 
         end if
 
-        print*, "6:"
-        print*, "urhs:", sum(abs(this%u_rhs))
-        print*, "vrhs:", sum(abs(this%v_rhs))
-        print*, "wrhs:", sum(abs(this%w_rhs))
-        print*, "Trhs:", sum(abs(this%T_rhs))
+        !print*, "6:"
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
 
     end subroutine
 
@@ -1573,7 +1574,7 @@ contains
         if (this%isStratified) call this%spectC%ifft(this%That,this%T)
     
         ! STEP 4: Interpolate the cell center values of w
-        call this%compute_and_bcast_surface_Mn()
+        !call this%compute_and_bcast_surface_Mn()
         call this%interp_PrimitiveVars()
 
         ! STEP 5: Compute duidxjC 
@@ -1654,7 +1655,7 @@ contains
         if (this%isStratified) then
             if (this%botBC_Temp == 0) then
                 this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
-            end if 
+            end if
         end if  
         if (this%PreprocessForKS) this%KSupdated = .false. 
         if (this%useProbes) call this%updateProbes()

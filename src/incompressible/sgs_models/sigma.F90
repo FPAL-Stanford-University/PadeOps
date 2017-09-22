@@ -92,9 +92,16 @@ subroutine get_sigma_kernel(nu_sgs, duidxj, nxL, nyL, nzL)
             sigma3 = max(sigma3,zero)
             sigma3 = sqrt(sigma3)
 
-            nu_sgs(i,j,k) = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-13)
+            nu_sgs(i,j,k) = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
 
          end do 
       end do 
    end do
+
+   !print*, duidxj(5,6,3,:)
+   !print*, sum(abs(nu_sgs(:,:,:)))
+   !print*, sum(abs(duidxj(:,:,:,1))), sum(abs(duidxj(:,:,:,2))), sum(abs(duidxj(:,:,:,3)))
+   !print*, sum(abs(duidxj(:,:,:,4))), sum(abs(duidxj(:,:,:,5))), sum(abs(duidxj(:,:,:,6)))
+   !print*, sum(abs(duidxj(:,:,:,7))), sum(abs(duidxj(:,:,:,8))), sum(abs(duidxj(:,:,:,9)))
+
 end subroutine

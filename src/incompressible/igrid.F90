@@ -1022,10 +1022,10 @@ contains
         else
             call this%populate_rhs()
         end if
-        print*, sum(abs(this%u_rhs))
-        print*, sum(abs(this%v_rhs))
-        print*, sum(abs(this%w_rhs))
-        print*, sum(abs(this%T_rhs))
+        !print*, sum(abs(this%u_rhs))
+        !print*, sum(abs(this%v_rhs))
+        !print*, sum(abs(this%w_rhs))
+        !print*, sum(abs(this%T_rhs))
       
         this%newTimeStep = .false. 
         this%uhat1 = this%uhat + this%dt*this%u_rhs 
@@ -1054,8 +1054,6 @@ contains
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(.false.)
 
-        stop
-
 
         !!! STAGE 3 (Final Stage)
         ! Third stage - u, v, w are really pointing to u2, v2, w2 (which is what
@@ -1070,9 +1068,10 @@ contains
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
 
+
         ! Wrap up this time step 
         call this%wrapup_timestep() 
-
+    
     end subroutine
 
 
@@ -1657,22 +1656,22 @@ contains
             call this%AddNonLinearTerm_Rot()
         end if
 
-        print*, "1:" 
-        print*, "urhs:", sum(abs(this%u_rhs))
-        print*, "vrhs:", sum(abs(this%v_rhs))
-        print*, "wrhs:", sum(abs(this%w_rhs))
-        print*, "Trhs:", sum(abs(this%T_rhs))
+        !print*, "1:" 
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
 
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
         end if 
         
-        print*, "2:" 
-        print*, "urhs:", sum(abs(this%u_rhs))
-        print*, "vrhs:", sum(abs(this%v_rhs))
-        print*, "wrhs:", sum(abs(this%w_rhs))
-        print*, "Trhs:", sum(abs(this%T_rhs))
+        !print*, "2:" 
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
         
         ! Step 3a: Extra Forcing 
         if (this%useExtraForcing) then
@@ -1691,35 +1690,35 @@ contains
            end if
         end if 
        
-        print*, "3:" 
-        print*, "urhs:", sum(abs(this%u_rhs))
-        print*, "vrhs:", sum(abs(this%v_rhs))
-        print*, "wrhs:", sum(abs(this%w_rhs))
-        !print*, "Trhs:", sum(abs(this%T_rhs))
-        print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs))
+        !print*, "3:" 
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !!print*, "Trhs:", sum(abs(this%T_rhs))
+        !print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs))
 
         ! Step 4: Buoyance + Sponge (inside Buoyancy)
         if (this%isStratified .or. this%initspinup) then
             call this%addBuoyancyTerm()
         end if 
         
-        print*, "4:" 
-        print*, "urhs:", sum(abs(this%u_rhs))
-        print*, "vrhs:", sum(abs(this%v_rhs))
-        print*, "wrhs:", sum(abs(this%w_rhs))
-        !print*, "Trhs:", sum(abs(this%T_rhs))
-        print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs))      
+        !print*, "4:" 
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !!print*, "Trhs:", sum(abs(this%T_rhs))
+        !print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs))      
 
         ! Step 5: Viscous Term (only if simulation if NOT inviscid)
         if (.not. this%isInviscid) then
             call this%addViscousTerm()
         end if
         
-        print*, "5:" 
-        print*, "urhs:", sum(abs(this%u_rhs))
-        print*, "vrhs:", sum(abs(this%v_rhs))
-        print*, "wrhs:", sum(abs(this%w_rhs))
-        print*, "Trhs:", sum(abs(this%T_rhs))
+        !print*, "5:" 
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
 
         ! Step 6: SGS Viscous Term
         if (this%useSGS) then
@@ -1734,11 +1733,11 @@ contains
             
         end if
         
-        print*, "6:" 
-        print*, "urhs:", sum(abs(this%u_rhs))
-        print*, "vrhs:", sum(abs(this%v_rhs))
-        print*, "wrhs:", sum(abs(this%w_rhs))
-        print*, "Trhs:", sum(abs(this%T_rhs))
+        !print*, "6:" 
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
 
         ! Step 7: Fringe source term if fringe is being used (non-periodic)
         if (this%usedoublefringex) then
@@ -1914,7 +1913,7 @@ contains
         if (this%isStratified) then
             if (this%botBC_Temp == 0) then
                 this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
-            end if 
+            end if
         end if  
         if (this%PreprocessForKS) this%KSupdated = .false. 
         if (this%useProbes) call this%updateProbes()
