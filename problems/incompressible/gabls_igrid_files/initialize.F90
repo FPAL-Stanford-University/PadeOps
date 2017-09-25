@@ -1,5 +1,7 @@
 module gabls_igrid_parameters
 
+      ! TAKE CARE OF TIME NON-DIMENSIONALIZATION IN THIS MODULE
+
     use exits, only: message
     use kind_parameters,  only: rkind
     use constants, only: zero, kappa 
