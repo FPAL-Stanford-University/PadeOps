@@ -1,10 +1,14 @@
 module CHIT_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,four
+    use constants,        only: one,half,four
     implicit none
     
-    real(rkind) :: Mt = 0.1_rkind, gam = 1.4_rkind, k0 = four
+    real(rkind) :: Mt = 0.1_rkind, Re_lambda = 100._rkind, visc_exp = 0.75_rkind, gam = 1.4_rkind, k0 = four
     real(rkind) :: tke0, enstrophy0, dilatation_var0, u_rms0, lambda0, tau
+
+    real(rkind) :: mu_ref
+    real(rkind) :: T_ref = 1._rkind / 1.4_rkind
+    real(rkind) :: Pr = 0.70_rkind
 
 end module
 
@@ -55,12 +59,14 @@ end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use mpi
-    use kind_parameters,  only: rkind, clen
-    use constants,        only: zero,half,one,two,three,pi
-    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
-    use decomp_2d,        only: decomp_info, nrank, nproc
-    use MixtureEOSMod,    only: mixture
-    use exits,            only: GracefulExit
+    use kind_parameters,      only: rkind, clen
+    use constants,            only: zero,half,one,two,three,pi
+    use CompressibleGrid,     only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
+    use decomp_2d,            only: decomp_info, nrank, nproc
+    use MixtureEOSMod,        only: mixture
+    use IdealGasEOS,          only: idealgas
+    use PowerLawViscosityMod, only: powerLawViscosity
+    use exits,                only: GracefulExit
     
     use CHIT_data
 
@@ -80,7 +86,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind) :: u_dat, v_dat, w_dat
     character(len=clen) :: datafile
 
-    namelist /PROBINPUT/  Mt, gam, k0, datafile
+    namelist /PROBINPUT/  Mt, Re_lambda, visc_exp, Pr, gam, k0, datafile
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -97,6 +103,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         
         rho = one
         p   = one / gam
+
+        mu_ref = Mt * half / (Re_lambda * sqrt(three))
+        T_ref = 1._rkind / gam
+
+        ! Set the material property
+        call mix%set_material(1, idealgas(gam,one), powerLawViscosity(mu_ref, T_ref, visc_exp, Pr))
 
         ! Make all processes read the file one by one to avoid file access conflicts
         do rank = 0,nproc-1
