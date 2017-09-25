@@ -43,7 +43,7 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
    select case (this%WallModel)
    case (1) ! Standard Moeng Wall model
       this%WallMFactor = -this%ustar*this%ustar/(this%Uspmn + 1.D-13)
-     
+
       ! Tau_13
       call transpose_y_to_z(uhat, cbuffz, this%sp_gpC)
       this%tauijWMhat_inZ(:,:,1,1) = this%WallMFactor*cbuffz(:,:,1) 
@@ -186,7 +186,7 @@ subroutine getSurfaceQuantities(this)
               ustar = ustarNew; idx = idx + 1
           end do 
           this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
-      case(1) ! Homogeneous Neumann BC for temperature
+       case(1) ! Homogeneous Neumann BC for temperature
           this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
           this%invObLength = zero
           this%wTh_surf = zero

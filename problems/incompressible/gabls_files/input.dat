@@ -1,15 +1,15 @@
 &INPUT
 inputdir              = "/home/aditya90/Codes/PadeOps/data/gabls_checks/output"   ! Directory for any input files
 outputdir             = "/home/aditya90/Codes/PadeOps/data/gabls_checks/output"   ! Directory for all output files
-nx                    = 96          ! Number of points in X
-ny                    = 96          ! Number of points in Y
-nz                    = 96          ! Number of points in Z
+nx                    = 48          ! Number of points in X
+ny                    = 48          ! Number of points in Y
+nz                    = 48          ! Number of points in Z
 tstop                 = 100.D0      ! Physical time to stop the simulation
 CFL                   = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 0.0005D0    ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
+useRestartFile        = .FALSE.      ! Set to false if it's a fresh simulation 
 restartFile_TID       = 60000       ! TimeID of the restart file being used
 restartFile_RID       = 1          ! RunID of the restart file being used
 /
@@ -94,7 +94,7 @@ Cs                    = 0.16d0      ! Asymptotic model constant (wall damping fu
 /
 /
 &WALLMODEL 
-wallMType             = 1            ! 0: Moeng's original model, 1: Bou-Zeid's fully local model
+wallMType             = 0            ! 0: Moeng's original model, 1: Bou-Zeid's fully local model
 z0                    = 2.5d-4       ! Roughness length scale (CAREFUL: This is in appropriate dimensions)
 /
 /

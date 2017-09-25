@@ -207,8 +207,6 @@ program upsampleFields
            call upsampleZ_cells(fxyup_inZ,fxyzup_inZ)
         end if 
 
-        print*, fxyzup_inZ(2,3,1:5)
-        print*, fxyzupE_inZ(2,3,1:5)
         call transpose_z_to_y(fxyzup_inZ,fxyzup_inY,gpC_upXYZ)
         call transpose_y_to_x(fxyzup_inY,fxyzup_inX,gpC_upXYZ)
         call decomp_2d_write_one(1,fxyzup_inX,fname, gpC_upXYZ)

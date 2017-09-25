@@ -131,6 +131,7 @@ module sgsmod_igrid
             procedure          :: get_vmean 
             procedure          :: get_uspeedmean 
             procedure          :: get_DynamicProcedureType
+            procedure          :: get_wTh_surf
     end type 
 
 contains
