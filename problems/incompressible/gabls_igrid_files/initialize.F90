@@ -69,8 +69,6 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     end where
     T = T + 0.0001d0*ztmp
 
-    print*, T(12,32,3)
-
     ! Add random numbers
     allocate(randArr(size(T,1),size(T,2),size(T,3)))
     !call gaussian_random(randArr,zero,one,seedu + 10*nrank)
