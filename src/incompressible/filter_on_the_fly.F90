@@ -3,6 +3,7 @@ module fof_mod
    use spectralMod, only: spectral
    use decomp_2d
    use decomp_2d_io
+   use exits, only: message, gracefulExit
 
 
    implicit none
@@ -12,7 +13,7 @@ module fof_mod
 
    type fof
       private
-      character(len=clen) :: ufname, vfname, wfname, outputdir
+      character(len=clen) :: outputdir
       logical :: PeriodicInZ
       type(decomp_info), pointer :: gpC, sp_gpC
       integer :: fof_id, runID
@@ -124,9 +125,15 @@ subroutine init(this, runID, inputdir, outputdir, fof_id, spectC, cbuffyC, cbuff
    where(abs(this%spectC%k3inZ) > filterfact_z*maxval(abs(this%spectC%k3inZ)))
       this%Gfilt_z = 0.d0
    end where
-  
-   call message(2,"Initialized on-the-fly filter number:", fof_id)
+ 
+   if (.not. this%PeriodicInZ) then
+      call gracefulExit("The problem must be periodic in z, if you use fof derived type", 1324)
+   end if 
 
+   call message(1,"Initialized on-the-fly filter number:", fof_id)
+   call message(2,"Filter factor in x:", filterfact_x)
+   call message(2,"Filter factor in y:", filterfact_y)
+   call message(2,"Filter factor in z:", filterfact_z)
 
 end subroutine 
 
@@ -146,9 +153,9 @@ subroutine filter_Complex2Real(this, fhat, ffilt)
    call transpose_y_to_z(fhat, this%fhatz, this%sp_gpC)
    call this%spectC%take_fft1d_z2z_ip(this%fhatz)
    do k = 1,size(this%fhatz,3)
-      do j = 1,size(this%fhatz,3)
+      do j = 1,size(this%fhatz,2)
          !$omp simd
-         do i = 1,size(this%fhatz,3)
+         do i = 1,size(this%fhatz,1)
             this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%Gfilt_x(i)
             this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%Gfilt_y(j)
             this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%Gfilt_z(k)
@@ -171,9 +178,9 @@ subroutine filter_Real2Real(this, f, ffilt)
    call transpose_y_to_z(this%fhaty, this%fhatz, this%sp_gpC)
    call this%spectC%take_fft1d_z2z_ip(this%fhatz)
    do k = 1,size(this%fhatz,3)
-      do j = 1,size(this%fhatz,3)
+      do j = 1,size(this%fhatz,2)
          !$omp simd
-         do i = 1,size(this%fhatz,3)
+         do i = 1,size(this%fhatz,1)
             this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%Gfilt_x(i)
             this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%Gfilt_y(j)
             this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%Gfilt_z(k)
