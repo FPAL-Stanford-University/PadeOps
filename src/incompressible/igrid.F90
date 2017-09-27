@@ -4565,56 +4565,56 @@ contains
             
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plu"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                call decomp_2d_write_plane(1,this%u,dirid, pid, fname)
+                call decomp_2d_write_plane(1,this%u,dirid, pid, fname, this%gpC)
 
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plv"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                call decomp_2d_write_plane(1,this%v,dirid, pid, fname)
+                call decomp_2d_write_plane(1,this%v,dirid, pid, fname, this%gpC)
 
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plw"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                call decomp_2d_write_plane(1,this%wC,dirid, pid, fname)
+                call decomp_2d_write_plane(1,this%wC,dirid, pid, fname, this%gpC)
                 
                 if (this%isStratified) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plT"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%T,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%T,dirid, pid, fname, this%gpC)
                 end if
 
                 if (this%fastCalcPressure) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plP"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname, this%gpC)
                 end if 
 
 
                 if (this%computevorticity) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".pox"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%ox,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%ox,dirid, pid, fname, this%gpC)
                     
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".poy"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%oy,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%oy,dirid, pid, fname, this%gpC)
                     
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".poz"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%oz,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%oz,dirid, pid, fname, this%gpC)
                 end if 
 
                 ! planes for KS preprocess
                 if (this%PreProcessForKS) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".ksu"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%uFil4KS,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%uFil4KS,dirid, pid, fname, this%gpC)
 
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".ksv"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%vFil4KS,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%vFil4KS,dirid, pid, fname, this%gpC)
 
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".ksw"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%wFil4KS,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%wFil4KS,dirid, pid, fname, this%gpC)
                 end if 
             end do 
         end if 
@@ -4628,55 +4628,55 @@ contains
 
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plu"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                call decomp_2d_write_plane(1,this%u,dirid, pid, fname)
+                call decomp_2d_write_plane(1,this%u,dirid, pid, fname, this%gpC)
 
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plv"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                call decomp_2d_write_plane(1,this%v,dirid, pid, fname)
+                call decomp_2d_write_plane(1,this%v,dirid, pid, fname, this%gpC)
 
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plw"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                call decomp_2d_write_plane(1,this%wC,dirid, pid, fname)
+                call decomp_2d_write_plane(1,this%wC,dirid, pid, fname, this%gpC)
                 
                 if (this%isStratified) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plT"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%T,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%T,dirid, pid, fname, this%gpC)
                 end if
                 
                 if (this%fastCalcPressure) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plP"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname, this%gpC)
                 end if 
 
                 if (this%computevorticity) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".pox"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%ox,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%ox,dirid, pid, fname, this%gpC)
                     
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".poy"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%oy,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%oy,dirid, pid, fname, this%gpC)
                     
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".poz"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%oz,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%oz,dirid, pid, fname, this%gpC)
                 end if 
                 
                 ! planes for KS preprocess
                 if (this%PreProcessForKS) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".ksu"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%uFil4KS,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%uFil4KS,dirid, pid, fname, this%gpC)
 
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".ksv"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%vFil4KS,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%vFil4KS,dirid, pid, fname, this%gpC)
 
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".ksw"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%wFil4KS,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%wFil4KS,dirid, pid, fname, this%gpC)
 
                 end if
 
@@ -4692,55 +4692,55 @@ contains
 
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plu"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                call decomp_2d_write_plane(1,this%u,dirid, pid, fname)
+                call decomp_2d_write_plane(1,this%u,dirid, pid, fname, this%gpC)
 
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plv"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                call decomp_2d_write_plane(1,this%v,dirid, pid, fname)
+                call decomp_2d_write_plane(1,this%v,dirid, pid, fname, this%gpC)
 
                 write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plw"
                 fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                call decomp_2d_write_plane(1,this%wC,dirid, pid, fname)
+                call decomp_2d_write_plane(1,this%wC,dirid, pid, fname, this%gpC)
                 
                 if (this%isStratified) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plT"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%T,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%T,dirid, pid, fname, this%gpC)
                 end if
                 
                 if (this%fastCalcPressure) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plP"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname, this%gpC)
                 end if 
 
                 if (this%computevorticity) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".pox"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%ox,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%ox,dirid, pid, fname, this%gpC)
                     
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".poy"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%oy,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%oy,dirid, pid, fname, this%gpC)
                     
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".poz"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%oz,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%oz,dirid, pid, fname, this%gpC)
                 end if 
 
                 ! planes for KS preprocess
                 if (this%PreProcessForKS) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".ksu"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%uFil4KS,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%uFil4KS,dirid, pid, fname, this%gpC)
 
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".ksv"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%vFil4KS,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%vFil4KS,dirid, pid, fname, this%gpC)
 
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".ksw"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-                    call decomp_2d_write_plane(1,this%wFil4KS,dirid, pid, fname)
+                    call decomp_2d_write_plane(1,this%wFil4KS,dirid, pid, fname, this%gpC)
                 end if
             end do 
         end if 
