@@ -9,7 +9,7 @@ program test_io_hdf5
 
     implicit none
 
-    real(rkind), dimension(:,:,:,:), allocatable, target :: coords
+    real(rkind), dimension(:,:,:,:), allocatable, target :: coords, coords_read
     real(rkind), dimension(:,:,:),   allocatable :: f,dfdx, dfdy, dfdz
     real(rkind), dimension(:,:,:),   pointer     :: x, y, z
     type(decomp_info) :: gp
@@ -36,11 +36,12 @@ program test_io_hdf5
     call get_decomp_info(gp)
 
     ! Initialize input data (y decomposition)
-    allocate( coords    ( gp%ysz(1), gp%ysz(2), gp%ysz(3), 3 ) )
-    allocate( f         ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
-    allocate( dfdx      ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
-    allocate( dfdy      ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
-    allocate( dfdz      ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
+    allocate( coords     ( gp%ysz(1), gp%ysz(2), gp%ysz(3), 3 ) )
+    allocate( coords_read( gp%ysz(1), gp%ysz(2), gp%ysz(3), 3 ) )
+    allocate( f          ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
+    allocate( dfdx       ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
+    allocate( dfdy       ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
+    allocate( dfdz       ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
 
     x => coords(:,:,:,1); y => coords(:,:,:,2); z => coords(:,:,:,3)
 
@@ -61,8 +62,10 @@ program test_io_hdf5
 
     if (reduce_precision) then
         elemsize = storage_size(1._single_kind)
+        tolerance = 10._rkind*epsilon(real(1.0,single_kind))
     else
         elemsize = storage_size(1._rkind)
+        tolerance = 10._rkind*epsilon(real(1.0,rkind))
     end if
     gbytes = ( real(elemsize, rkind) * nx * ny * nz * 4 ) / ( real(8, rkind) * 1024 * 1024 * 1024 )
 
@@ -120,14 +123,20 @@ program test_io_hdf5
     call message("")
     call message("Now reading in the file written out")
 
-    tolerance = 10._rkind*epsilon(real(1.0,single_kind))
     call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', reduce_precision=reduce_precision, read_only=.true.)
+
+    call viz%read_coords(coords_read)
+    if ( P_MAXVAL(abs(coords_read - coords)) > tolerance ) then
+        call message("ERROR:")
+        call message("  Coordinates read in have incorrect values")
+    end if
+
 
     call viz%start_reading(3)
     call viz%read_dataset(dfdx, 'f')
     if ( P_MAXVAL(abs(f - dfdx)) > tolerance ) then
         call message("ERROR:")
-        call message("  Array '0003/f' read in has incorrect values")
+        call message("  Array 'f' read in has incorrect values")
     end if
 
     call viz%read_attribute(1, time_arr, 'Time')
@@ -138,7 +147,7 @@ program test_io_hdf5
     end if
     call viz%end_reading
 
-    deallocate(coords, f, dfdx,dfdy, dfdz)
+    deallocate(coords, coords_read, f, dfdx,dfdy, dfdz)
     nullify(x, y, z)
 
     call viz%destroy()

@@ -12,7 +12,10 @@ module io_hdf5_stuff
 
         integer :: vizcount
         character(len=clen) :: filename
+        character(len=clen) :: coordsfile
+        character(len=clen) :: filename_prefix
         character(len=clen) :: basename
+        character(len=clen) :: basename_prefix
         character(len=clen) :: vizdir
         character(len=clen) :: xdmf_filename
 
@@ -53,6 +56,7 @@ module io_hdf5_stuff
         generic            :: write_attribute => write_attribute_integer, write_attribute_double
         generic            :: read_attribute => read_attribute_integer, read_attribute_double
         procedure          :: write_coords
+        procedure          :: read_coords
         procedure          :: start_viz
         procedure          :: end_viz
         procedure          :: start_reading
@@ -64,13 +68,13 @@ module io_hdf5_stuff
 
 contains
 
-    subroutine init(this, comm_, gp, pencil_, vizdir_, filename_, reduce_precision, read_only)
+    subroutine init(this, comm, gp, pencil, vizdir, filename_prefix, reduce_precision, read_only)
         class(io_hdf5),     intent(inout) :: this
-        integer,            intent(in)    :: comm_
+        integer,            intent(in)    :: comm
         class(decomp_info), intent(in)    :: gp
-        character(len=1),   intent(in)    :: pencil_
-        character(len=*),   intent(in)    :: vizdir_
-        character(len=*),   intent(in)    :: filename_
+        character(len=1),   intent(in)    :: pencil
+        character(len=*),   intent(in)    :: vizdir
+        character(len=*),   intent(in)    :: filename_prefix
         logical, optional,  intent(in)    :: reduce_precision, read_only
 
         integer :: nrank
@@ -82,19 +86,20 @@ contains
 
         info = mpi_info_null
 
-        this%comm = comm_
-        this%pencil = pencil_
+        this%comm = comm
+        this%pencil = pencil
 
         this%reduce_precision = .false.
         if (present(reduce_precision)) this%reduce_precision = reduce_precision
 
         this%vizcount = 0
-        this%vizdir = adjustl(trim(vizdir_))
+        this%vizdir = adjustl(trim(vizdir))
 
-        if (trim(filename_) == '') call GracefulExit("Cannot have empty string for HDF5 output filename. &
-                                                     &Re-run with a non-empty string", 7356)
-        this%filename = adjustl(trim(vizdir_)) // "/" // adjustl(trim(filename_)) // '.h5'
-        this%basename = adjustl(trim(filename_)) // '.h5'
+        if (trim(filename_prefix) == '') call GracefulExit("Cannot have empty string for HDF5 output filename_prefix. &
+                                                           &Re-run with a non-empty string", 7356)
+        this%filename_prefix = adjustl(trim(vizdir)) // "/" // adjustl(trim(filename_prefix))
+        this%basename_prefix = adjustl(trim(filename_prefix))
+        write(this%coordsfile, '(2A)') adjustl(trim(this%filename_prefix)), '_coords.h5'
 
         call mpi_comm_rank(this%comm, nrank, error)
         if (nrank == 0) then
@@ -118,18 +123,18 @@ contains
         if (error /= 0) call GracefulExit("Could not set collective MPI I/O HDF5 file access property.", 7356)
 
         ! Create the file collectively
-        if (this%read_only) then
-            call h5fopen_f(this%filename, H5F_ACC_RDONLY_F, this%file_id, error, access_prp = this%plist_id)
-            if (error /= 0) call GracefulExit("Could not open HDF5 file " // adjustl(trim(this%filename)), 7356)
-        else
-            call h5fcreate_f(this%filename, H5F_ACC_TRUNC_F, this%file_id, error, access_prp = this%plist_id)
-        end if
+        ! if (this%read_only) then
+        !     call h5fopen_f(this%filename, H5F_ACC_RDONLY_F, this%file_id, error, access_prp = this%plist_id)
+        !     if (error /= 0) call GracefulExit("Could not open HDF5 file " // adjustl(trim(this%filename)), 7356)
+        ! else
+        !     call h5fcreate_f(this%filename, H5F_ACC_TRUNC_F, this%file_id, error, access_prp = this%plist_id)
+        ! end if
         call h5pclose_f(this%plist_id, error)
 
         ! Close the file
-        call h5fclose_f(this%file_id, error)
+        ! call h5fclose_f(this%file_id, error)
 
-        ! Create group creation property list and set it to allow creation of intermediate groups
+        ! Create link creation property list and set it to allow creation of intermediate groups
         call h5pcreate_f(H5P_LINK_CREATE_F, this%lcpl_id, error)
         call h5pset_create_inter_group_f(this%lcpl_id, 1, error)
 
@@ -165,6 +170,8 @@ contains
 
         this%vizcount = 0
         this%filename = ''
+        this%filename_prefix = ''
+        this%coordsfile = ''
         this%vizdir = ''
 
         ! Close the link creation property list
@@ -241,7 +248,7 @@ contains
         character(len=clen) :: dsetname
         integer :: error
 
-        write(dsetname,'(I4.4,A,A)') this%vizcount, '/', adjustl(trim(varname))
+        write(dsetname,'(A)') adjustl(trim(varname))
 
         ! Create the dataspace for the dataset
         call h5screate_simple_f(this%rank, this%dimsf, this%filespace, error)
@@ -335,7 +342,8 @@ contains
         adims = [dims]
         atype_id = H5T_NATIVE_INTEGER
 
-        write(grpname,'(I4.4)') this%vizcount
+        ! write(grpname,'(I4.4)') this%vizcount
+        write(grpname,'(A)') '/'
 
         call h5gopen_f(this%file_id, adjustl(trim(grpname)), this%group_id, error)
 
@@ -404,7 +412,8 @@ contains
         adims = [dims]
         atype_id = H5T_NATIVE_DOUBLE
 
-        write(grpname,'(I4.4)') this%vizcount
+        ! write(grpname,'(I4.4)') this%vizcount
+        write(grpname,'(A)') '/'
 
         call h5gopen_f(this%file_id, adjustl(trim(grpname)), this%group_id, error)
 
@@ -439,16 +448,52 @@ contains
         if (this%read_only) then
             call GracefulExit("Cannot start writing HDF5 data in read only mode!", 756)
         else
-            ! call h5fcreate_f(this%filename, H5F_ACC_TRUNC_F, this%file_id, error, access_prp = this%plist_id)
-            call h5fopen_f(this%filename, H5F_ACC_RDWR_F, this%file_id, error, access_prp = this%plist_id)
+            call h5fcreate_f(this%coordsfile, H5F_ACC_TRUNC_F, this%file_id, error, access_prp = this%plist_id)
+            ! call h5fopen_f(this%coordsfile, H5F_ACC_RDWR_F, this%file_id, error, access_prp = this%plist_id)
         end if
         call h5pclose_f(this%plist_id, error)
 
-        call this%write_dataset(coords(:,:,:,1), 'coords/X')
-        call this%write_dataset(coords(:,:,:,2), 'coords/Y')
-        call this%write_dataset(coords(:,:,:,3), 'coords/Z')
+        call this%write_dataset(coords(:,:,:,1), '/X')
+        call this%write_dataset(coords(:,:,:,2), '/Y')
+        call this%write_dataset(coords(:,:,:,3), '/Z')
 
-        call this%write_attribute(3, int(this%dimsf), 'GridSize', 'coords')
+        call this%write_attribute(3, int(this%dimsf), 'GridSize', '/')
+
+        ! Close the file
+        call h5fclose_f(this%file_id, error)
+    end subroutine
+
+    subroutine read_coords(this, coords)
+        class(io_hdf5), intent(inout) :: this
+        real(rkind), dimension(this%chunk_dims(1),this%chunk_dims(2),this%chunk_dims(3),3), intent(out) :: coords
+
+        integer, dimension(3) :: grid_size
+        integer :: i, info
+        integer :: error
+
+        info = mpi_info_null
+
+        ! Setup file access property list with parallel I/O access.
+        call h5pcreate_f(H5P_FILE_ACCESS_F, this%plist_id, error)
+        call h5pset_fapl_mpio_f(this%plist_id, this%comm, info, error)
+
+        ! Create the file collectively
+        if (this%read_only) then
+            call h5fopen_f(this%coordsfile, H5F_ACC_RDONLY_F, this%file_id, error, access_prp = this%plist_id)
+            if (error /= 0) call GracefulExit("Could not open HDF5 file " // adjustl(trim(this%coordsfile)), 7356)
+        else
+            call GracefulExit("Use read only mode to read HDF5 data and avoid corruption", 756)
+        end if
+        call h5pclose_f(this%plist_id, error)
+
+        call this%read_attribute(3, grid_size, 'GridSize')
+        do i = 1,3
+            if (grid_size(i) /= this%dimsf(i)) call GracefulExit("Grid size in file does not match that of the parallelization!",7476)
+        end do
+
+        call this%read_dataset(coords(:,:,:,1), '/X')
+        call this%read_dataset(coords(:,:,:,2), '/Y')
+        call this%read_dataset(coords(:,:,:,3), '/Z')
 
         ! Close the file
         call h5fclose_f(this%file_id, error)
@@ -468,19 +513,23 @@ contains
         call h5pcreate_f(H5P_FILE_ACCESS_F, this%plist_id, error)
         call h5pset_fapl_mpio_f(this%plist_id, this%comm, info, error)
 
+        this%filename = ''
+        this%basename = ''
+        write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
+        write(this%basename, '(2A,I4.4,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+
         ! Create the file collectively
         if (this%read_only) then
             call GracefulExit("Cannot start writing HDF5 data in read only mode!", 756)
         else
-            ! call h5fcreate_f(this%filename, H5F_ACC_TRUNC_F, this%file_id, error, access_prp = this%plist_id)
-            call h5fopen_f(this%filename, H5F_ACC_RDWR_F, this%file_id, error, access_prp = this%plist_id)
+            call h5fcreate_f(this%filename, H5F_ACC_TRUNC_F, this%file_id, error, access_prp = this%plist_id)
+            ! call h5fopen_f(this%filename, H5F_ACC_RDWR_F, this%file_id, error, access_prp = this%plist_id)
         end if
         call h5pclose_f(this%plist_id, error)
 
-        write(grpname,'(I4.4)') this%vizcount
-
-        call h5gcreate_f(this%file_id, adjustl(trim(grpname)), this%group_id, error)
-        call h5gclose_f(this%group_id, error)
+        write(grpname,'(A)') '/'
+        ! call h5gcreate_f(this%file_id, adjustl(trim(grpname)), this%group_id, error)
+        ! call h5gclose_f(this%group_id, error)
         call this%write_attribute(1, [time], 'Time', grpname)
 
         this%xdmf_filename = ''
@@ -492,19 +541,19 @@ contains
             write(this%xdmf_file_id,'(A)')           '<?xml version="1.0" ?>'
             write(this%xdmf_file_id,'(A)')           '<!DOCTYPE Xdmf SYSTEM "Xdmf.dtd" []>'
             write(this%xdmf_file_id,'(A)')           '<Xdmf Version="2.0">'
-            write(this%xdmf_file_id,'(A,ES26.16,A)') '<Time Value="', time, '" />'
             write(this%xdmf_file_id,'(A)')           ' <Domain>'
             write(this%xdmf_file_id,'(A)')           '   <Grid Name="mesh" GridType="Uniform">'
+            write(this%xdmf_file_id,'(A,ES26.16,A)') '     <Time Value="', time, '" />'
             write(this%xdmf_file_id,'(A,3(I0,A))')   '     <Topology TopologyType="3DSMesh" NumberOfElements="', this%dimsf(1), ' ', this%dimsf(2),' ', this%dimsf(3), '"/>'
             write(this%xdmf_file_id,'(A)')           '     <Geometry GeometryType="X_Y_Z">'
             write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(1), ' ', this%dimsf(2),' ', this%dimsf(3), '" NumberType="Float" Precision="8" Format="HDF">'
-            write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename)), ':/coords/X'
+            write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename_prefix)) // '_coords.h5', ':/X'
             write(this%xdmf_file_id,'(A)')           '       </DataItem>'
             write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(1), ' ', this%dimsf(2),' ', this%dimsf(3), '" NumberType="Float" Precision="8" Format="HDF">'
-            write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename)), ':/coords/Y'
+            write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename_prefix)) // '_coords.h5', ':/Y'
             write(this%xdmf_file_id,'(A)')           '       </DataItem>'
             write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(1), ' ', this%dimsf(2),' ', this%dimsf(3), '" NumberType="Float" Precision="8" Format="HDF">'
-            write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename)), ':/coords/Z'
+            write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename_prefix)) // '_coords.h5', ':/Z'
             write(this%xdmf_file_id,'(A)')           '       </DataItem>'
             write(this%xdmf_file_id,'(A)')           '     </Geometry>'
         end if
@@ -518,11 +567,12 @@ contains
 
         character(len=clen) :: dsetname
 
-        write(dsetname,'(I4.4,A,A)') this%vizcount, '/', adjustl(trim(varname))
+        ! write(dsetname,'(I4.4,A,A)') this%vizcount, '/', adjustl(trim(varname))
+        write(dsetname,'(A)') adjustl(trim(varname))
         call this%write_dataset(field, dsetname)
 
         if (this%master) then
-            write(this%xdmf_file_id,'(3A)')           '     <Attribute Name="', adjustl(trim(varname)), '" AttributeType="Scalar" Center="Node">'
+            write(this%xdmf_file_id,'(3A)')          '     <Attribute Name="', adjustl(trim(varname)), '" AttributeType="Scalar" Center="Node">'
             write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(1), ' ', this%dimsf(2),' ', this%dimsf(3), '" NumberType="Float" Precision="8" Format="HDF">'
             write(this%xdmf_file_id,'(4A)')          '        ', adjustl(trim(this%basename)), ':/', adjustl(trim(dsetname))
             write(this%xdmf_file_id,'(A)')           '       </DataItem>'
@@ -559,13 +609,19 @@ contains
 
         info = mpi_info_null
 
+        this%vizcount = vizcount
+
+        this%filename = ''
+        this%basename = ''
+        write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
+        write(this%basename, '(2A,I4.4,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+
         ! Setup file access property list with parallel I/O access.
         call h5pcreate_f(H5P_FILE_ACCESS_F, this%plist_id, error)
         call h5pset_fapl_mpio_f(this%plist_id, this%comm, info, error)
 
         ! Create the file collectively
         if (this%read_only) then
-            this%vizcount = vizcount
             call h5fopen_f(this%filename, H5F_ACC_RDONLY_F, this%file_id, error, access_prp = this%plist_id)
             if (error /= 0) call GracefulExit("Could not open HDF5 file " // adjustl(trim(this%filename)), 7356)
         else
