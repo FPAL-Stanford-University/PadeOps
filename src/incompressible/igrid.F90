@@ -2581,7 +2581,7 @@ contains
         if (this%isStratified .or. this%initspinup) then
             write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_T.",this%step
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-            call decomp_2d_write_one(1,this%T,fname, this%gpE)
+            call decomp_2d_write_one(1,this%T,fname, this%gpC)
         end if 
 
         if (nrank == 0) then
