@@ -5,6 +5,7 @@ program filter_fields_periodic
    use decomp_2d_io
    use fof_mod, only: fof
    use spectralmod, only: spectral
+   use exits, only: message
 
    implicit none
 
@@ -87,21 +88,22 @@ program filter_fields_periodic
 
    ! Do the filtering here, along with plane and full field writing
    do fid = 1,nfilters
+      call message(1,"Now applying filter number:",fid)
       call filt(fid)%filter_Complex2Real(uhat, rbuffx)
-      call filt(fid)%dumpFullField(rbuffx, "uVel",0)
-      call filt(fid)%dumpYplanes(rbuffx, "uVel",pid, 0)
+      call filt(fid)%dumpFullField(rbuffx, "uVel",tid)
+      call filt(fid)%dumpYplanes(rbuffx, "uVel",pid, tid)
 
       call filt(fid)%filter_Complex2Real(vhat, rbuffx)
-      call filt(fid)%dumpFullField(rbuffx, "vVel",0)
-      call filt(fid)%dumpYplanes(rbuffx, "vVel",pid, 0)
+      call filt(fid)%dumpFullField(rbuffx, "vVel",tid)
+      call filt(fid)%dumpYplanes(rbuffx, "vVel",pid, tid)
 
       call filt(fid)%filter_Complex2Real(what, rbuffx)
-      call filt(fid)%dumpFullField(rbuffx, "wVel",0)
-      call filt(fid)%dumpYplanes(rbuffx, "wVel",pid, 0)
+      call filt(fid)%dumpFullField(rbuffx, "wVel",tid)
+      call filt(fid)%dumpYplanes(rbuffx, "wVel",pid, tid)
 
       call filt(fid)%filter_Real2Real(p, rbuffx)
-      call filt(fid)%dumpFullField(rbuffx, "press",0)
-      call filt(fid)%dumpYplanes(rbuffx, "press",pid, 0)
+      call filt(fid)%dumpFullField(rbuffx, "press",tid)
+      call filt(fid)%dumpYplanes(rbuffx, "press",pid, tid)
    end do 
 
 

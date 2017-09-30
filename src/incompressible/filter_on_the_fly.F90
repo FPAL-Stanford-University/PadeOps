@@ -59,7 +59,6 @@ subroutine dumpYPlanes(this, f, label, pid, step)
    integer, intent(in) :: step 
    integer :: j 
 
-
    do j = 1,size(pid)
       write(tempname,"(A3,I2.2,A7,I2.2,A2,I4.4,A1,A4,A2,I6.6,A4)") "Run",this%runID,"_FILTER",this%fof_id,"_y",pid(j),"_",label,"_t",step,".pln"
       fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
@@ -69,6 +68,7 @@ end subroutine
 
 
 subroutine init(this, runID, inputdir, outputdir, fof_id, spectC, cbuffyC, cbuffzC, PeriodicInZ, gpC)
+   use reductions, only: p_maxval
    class(fof), intent(inout) :: this
    character(len=clen), intent(in) :: outputdir, inputdir
    integer, intent(in) :: fof_id, runID
@@ -77,6 +77,7 @@ subroutine init(this, runID, inputdir, outputdir, fof_id, spectC, cbuffyC, cbuff
    logical, intent(in) :: PeriodicInZ
    type(decomp_info), intent(in), target :: gpC
 
+   real(rkind) :: kx_max, ky_max, kz_max
    real(rkind) :: filterfact_x, filterfact_y, filterfact_z
    character(len=clen) :: fname, tempname
    integer :: ioUnit
@@ -111,18 +112,22 @@ subroutine init(this, runID, inputdir, outputdir, fof_id, spectC, cbuffyC, cbuff
    allocate(this%Gfilt_y(size(this%fhatz,2)))
    allocate(this%Gfilt_z(size(this%fhatz,3)))
 
+   kx_max = p_maxval(maxval(abs(this%spectC%k1)))
+   ky_max = p_maxval(maxval(abs(this%spectC%k2)))
+   kz_max = p_maxval(maxval(abs(this%spectC%k3)))
+
    this%Gfilt_x = 1.d0
-   where(abs(this%spectC%k1inZ) > filterfact_x*maxval(abs(this%spectC%k1inZ)))
+   where(abs(this%spectC%k1inZ) > filterfact_x*kx_max)
       this%Gfilt_x = 0.d0
    end where
 
    this%Gfilt_y = 1.d0
-   where(abs(this%spectC%k2inZ) > filterfact_y*maxval(abs(this%spectC%k2inZ)))
+   where(abs(this%spectC%k2inZ) > filterfact_y*ky_max)
       this%Gfilt_y = 0.d0
    end where
    
    this%Gfilt_z = 1.d0
-   where(abs(this%spectC%k3inZ) > filterfact_z*maxval(abs(this%spectC%k3inZ)))
+   where(abs(this%spectC%k3inZ) > filterfact_z*kz_max)
       this%Gfilt_z = 0.d0
    end where
  
@@ -134,6 +139,9 @@ subroutine init(this, runID, inputdir, outputdir, fof_id, spectC, cbuffyC, cbuff
    call message(2,"Filter factor in x:", filterfact_x)
    call message(2,"Filter factor in y:", filterfact_y)
    call message(2,"Filter factor in z:", filterfact_z)
+   call message(2,"Max allowable wave in x:", filterfact_x*kx_max)
+   call message(2,"Max allowable wave in y:", filterfact_x*ky_max)
+   call message(2,"Max allowable wave in z:", filterfact_x*kz_max)
 
 end subroutine 
 
