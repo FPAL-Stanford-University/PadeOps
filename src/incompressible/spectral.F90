@@ -55,7 +55,9 @@ module spectralMod
         integer(kind=8) :: plan_c2c_bwd_z_oop
         integer(kind=8) :: plan_c2c_bwd_z_ip
         integer(kind=8) :: plan_r2c_z, plan_c2r_z 
-        complex(rkind), dimension(:), allocatable :: k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact, k1inZ
+        complex(rkind), dimension(:), allocatable :: k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact
+        real(rkind), dimension(:), allocatable, public :: k1inZ, k2inZ, k3inZ
+
         real(rkind), dimension(:), allocatable :: mk3sq
 
         contains
@@ -738,19 +740,29 @@ contains
             this%Gdealias = zero
          end where
      
-         allocate(this%k1inZ(size(this%k1,1)))
-         allocate(this%xshiftfact(size(this%k1,1)))
-         this%k1inZ = this%k1(:,1,1)
+         !allocate(this%k1inZ(size(this%k1,1)))
+         !allocate(this%xshiftfact(size(this%k1,1)))
+         !this%k1inZ = this%k1(:,1,1)
+
+         allocate(this%k1inZ(size(rbuffz,1)))
+         allocate(this%xshiftfact(size(rbuffz,1)))
+         this%k1inZ = rbuffz(:,1,1)
 
          call transpose_y_to_z(this%k2, rbuffz, this%spectdecomp)
          where (abs(rbuffz) >= kdealiasy)    
             this%Gdealias = zero
          end where
 
+         allocate(this%k2inZ(size(rbuffz,2)))
+         this%k2inZ = rbuffz(1,:,1)
+         
+         
          call transpose_y_to_z(this%k3, rbuffz, this%spectdecomp)
          where (abs(rbuffz) >= kdealiasz)
             this%Gdealias = zero 
          end where
+         allocate(this%k3inZ(size(rbuffz,3)))
+         this%k3inZ = rbuffz(1,1,:)
          
          call dfftw_plan_many_dft(this%plan_c2c_fwd_z_ip, 1, nz,nxT*nyT, this%ctmpz, nz, &
                       nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_FORWARD , FFTW_EXHAUSTIVE)   
