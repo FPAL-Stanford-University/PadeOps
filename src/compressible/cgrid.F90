@@ -1460,11 +1460,11 @@ contains
         character(len=clen) :: charout
         integer :: i
 
-        write(charout,'(A,I0,A,A)') "Writing visualization dump ", this%viz%vizcount, " to ", adjustl(trim(this%viz%filename))
-        call message(charout)
-
         ! Start visualization dump
         call this%viz%start_viz(this%tsim)
+
+        write(charout,'(A,I0,A,A)') "Writing visualization dump ", this%viz%vizcount, " to ", adjustl(trim(this%viz%filename))
+        call message(charout)
 
         ! Write variables
         call this%viz%write_variable(this%rho , 'rho' ) 
