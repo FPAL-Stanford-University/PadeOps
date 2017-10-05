@@ -81,6 +81,9 @@ module fft_3d_stuff
             procedure :: upsample
             procedure :: downsample
             procedure :: alloc_upsampledArr
+            procedure :: get_complex_output_size
+            procedure :: get_complex_output_start_end_indices
+            procedure :: link_spectral_gp
             procedure, private :: alloc_3d_real
             procedure, private :: alloc_3d_cmplx
             procedure, private :: alloc_4d
@@ -90,6 +93,18 @@ module fft_3d_stuff
 
 
 contains
+
+subroutine link_spectral_gp(this, sp_gp)
+   class(fft_3d), intent(in), target :: this
+   type(decomp_info), intent(out), pointer :: sp_gp
+
+   nullify(sp_gp)
+
+   sp_gp => this%spectral
+
+end subroutine 
+
+
 
 function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, exhaustive, fixOddball_, allocK, dodealiasing) result(ierr)
         class(fft_3d), intent(inout) :: this
@@ -771,7 +786,62 @@ function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, exhaus
         end if 
 
     end subroutine
-   
+  
+    pure subroutine get_complex_output_size(this, nxout, nyout, nzout)
+      class(fft_3d), intent(in) :: this
+      integer, intent(out) :: nxout, nyout, nzout
+
+      select case (this%base_pencil)
+      case ("y")
+          !allocate(arr_out(this%spectral%ysz(1), this%spectral%ysz(2), this%spectral%ysz(3)))
+          nxout = this%spectral%ysz(1); nyout = this%spectral%ysz(2); nzout = this%spectral%ysz(3)
+      case ("x")
+          !allocate(arr_out(this%spectral%zsz(1), this%spectral%zsz(2), this%spectral%zsz(3)))
+          nxout = this%spectral%zsz(1); nyout = this%spectral%zsz(2); nzout = this%spectral%zsz(3)
+      case ("z")
+          !allocate(arr_out(this%spectral%xsz(1), this%spectral%xsz(2), this%spectral%xsz(3)))
+          nxout = this%spectral%xsz(1); nyout = this%spectral%xsz(2); nzout = this%spectral%xsz(3)
+      end select 
+
+    end subroutine 
+
+    pure subroutine get_complex_output_start_end_indices(this,xst,xen,yst,yen,zst,zen)
+      class(fft_3d), intent(in) :: this
+      integer, intent(out) :: xst, xen, yst, yen, zst, zen
+
+      
+      select case (this%base_pencil)
+      case("y")
+         xst = this%spectral%yst(1)
+         xen = this%spectral%yen(1)
+         
+         yst = this%spectral%yst(2)
+         yen = this%spectral%yen(2)
+
+         zst = this%spectral%yst(3)
+         zen = this%spectral%yen(3)
+      case("x")
+         xst = this%spectral%zst(1)
+         xen = this%spectral%zen(1)
+         
+         yst = this%spectral%zst(2)
+         yen = this%spectral%zen(2)
+
+         zst = this%spectral%zst(3)
+         zen = this%spectral%zen(3)
+      case("z")
+         xst = this%spectral%xst(1)
+         xen = this%spectral%xen(1)
+         
+         yst = this%spectral%xst(2)
+         yen = this%spectral%xen(2)
+
+         zst = this%spectral%xst(3)
+         zen = this%spectral%xen(3)
+      end select 
+
+    end subroutine 
+
     subroutine alloc_input(this,arr_out)
         class(fft_3d), intent(in) :: this
         real(rkind), dimension(:,:,:), allocatable, intent(inout) :: arr_out
