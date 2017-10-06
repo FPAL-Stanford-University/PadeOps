@@ -109,6 +109,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
      this%q1C = zero; this%q2C = zero; this%q3E = zero
   end if 
 
+  this%isPeriodic = this%PadeDer%isPeriodic
 
 
   ! Link buffers
@@ -121,7 +122,6 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%rbuffzE => rbuffzE
   this%rbuffyC => rbuffyC
   this%rbuffzC => rbuffzC
-
 
   open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
   read(unit=123, NML=SGS_MODEL)
@@ -136,10 +136,14 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   
   this%isInviscid = isInviscid
 
-  this%WallModel        = WallModelType
+  this%WallModel  = WallModelType
   
   if (this%WallModel .ne. 0) then
-      call this%initWallModel()
+      if (this%PadeDer%isPeriodic) then
+         call GracefulExit("You cannot use a wall model if the problem is periodic in Z",12)
+      else
+         call this%initWallModel()
+      end if 
   else
       this%useWallModel = .false. 
   end if
@@ -152,6 +156,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
      call this%init_smagorinsky(dx,dy,dz,Csgs,ncWall,z0,useWallDamping,zMeshC, zMeshE)
   case (1)
      call this%init_sigma(dx, dy, dz, Csgs)
+  case (2)
+     call this%init_AMD(dx, dy, dz, Csgs)
   case default
      call GracefulExit("Incorrect choice for SGS model ID.", 213)
   end select

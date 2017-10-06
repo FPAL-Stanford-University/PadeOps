@@ -30,7 +30,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    logical :: initPurturbations = .false. 
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, initPurturbations
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -87,13 +88,14 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind) :: z0init, epsnd = 0.1
+    real(rkind) :: z0init, epsnd = 0.02
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
     real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0!, Zperiods = 1.d0
     real(rkind) :: zpeak = 0.2d0
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    logical :: initPurturbations = .true. 
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, initPurturbations
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -112,8 +114,13 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
  
     epsnd = 5.d0
 
-    u = (one/kappa)*log(z/z0init) !+ epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    v = zero;!epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    if (initPurturbations) then
+      u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+      v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    else
+      u = (one/kappa)*log(z/z0init) 
+      v = zero  
+    end if 
     wC= zero  
    
 
@@ -151,13 +158,13 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 2
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
     xplanes = [64]
     yplanes = [64]
-    zplanes = [20]
+    zplanes = [13,39]
 
 end subroutine
 
@@ -181,7 +188,8 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init
     integer :: iounit
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    logical :: initPurturbations = .false. 
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, initPurturbations
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -202,8 +210,8 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     real(rkind), intent(out) :: Tref
     real(rkind) :: Lx, Ly, Lz, z0init
     integer :: iounit
-    
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    logical :: initPurturbations = .false. 
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, initPurturbations
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

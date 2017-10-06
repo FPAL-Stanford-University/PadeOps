@@ -29,6 +29,7 @@ module constants
     real(rkind), parameter :: pi=4._rkind*atan(1._rkind)
     
     complex(rkind), parameter :: imi=(zero,one)
+    complex(rkind), parameter :: im0=(zero,zero)
 
     real(rkind), parameter :: kappa = 0.40_rkind ! Kappa used in Turbulent BL wall models
     real(rkind), parameter :: eps = epsilon(real(1.0,rkind))

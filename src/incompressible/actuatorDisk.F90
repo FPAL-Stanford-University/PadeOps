@@ -14,8 +14,7 @@ module actuatorDiskmod
     public :: actuatorDisk
     
     real(rkind), parameter :: alpha_Smooth = 0.9d0 ! Exonential smoothing constant
-    integer, parameter :: xReg = 4, yReg = 7, zReg = 7
-    integer :: ntry = 10
+    integer :: ntry = 100
 
     type :: CloudMod
        real(rkind) :: xTurbLoc, yTurbLoc
@@ -169,7 +168,7 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
 
     tmpSum = sum(this%tag_face)
     this%totPointsOnface = p_sum(tmpSum)
-        
+    
     this%pfactor = one/((this%delta**3)*(pi**(3.d0/2.d0)))
     if (this%Am_I_Split) then
         call MPI_COMM_SPLIT(mpi_comm_world, this%color, nrank, this%mycomm, ierr)
@@ -189,11 +188,12 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
         allocate(this%xs(size(this%ys)))
         this%xs = xLoc
         this%normfactor = (1.d0/(real(size(this%xs),rkind)))*this%pfactor
-        write(turboutfname,'(a,i3.3,a)') 'TurbineInitLog_', ActuatorDiskID, '.out'
-        ioUnit = 100+nrank
-        open(unit=ioUnit, file=trim(turboutfname), form='FORMATTED')
-        write(ioUnit,'(a,i3.3,1x,2(e19.12,1x),i5.5,1x,e19.12)') '----Turbine No.---', ActuatorDiskID, this%normfactor, this%pfactor, size(this%xs), this%delta
-        write(ioUnit,'(a,i3.3,1x,2(e19.12,1x),i5.5,1x,e19.12)') 'No. of points across actuator disk = ', ntry
+        
+        !write(turboutfname,'(a,i3.3,a)') 'TurbineInitLog_', ActuatorDiskID, '.out'
+        !ioUnit = 100+nrank
+        !open(unit=ioUnit, file=trim(turboutfname), form='FORMATTED')
+        !write(ioUnit,'(a,i3.3,1x,2(e19.12,1x),i5.5,1x,e19.12)') '----Turbine No.---', ActuatorDiskID, this%normfactor, this%pfactor, size(this%xs), this%delta
+        !write(ioUnit,'(a,i3.3,1x,2(e19.12,1x),i5.5,1x,e19.12)') 'No. of points across actuator disk = ', ntry
 
         allocate(this%Cloud(this%max_num_clouds))
         allocate(this%xst(this%max_num_clouds),  this%xen(this%max_num_clouds))
@@ -253,26 +253,26 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
           endif
         enddo
 
-        write(ioUnit,*) '-----New Turbine------' 
-        write(ioUnit,*) 'xLoc, yLoc: ', this%Cloud(1)%xTurbLoc, this%Cloud(1)%yTurbLoc 
-        do icl = 1, this%max_num_clouds
-          write(ioUnit,*) '-------Cloud No.------' , icl
-          write(ioUnit,*) 'nlen: ', this%nlen(icl)
-          write(ioUnit,*) 'xTLoc, yTLoc: ', this%Cloud(icl)%xTurbLoc, this%Cloud(icl)%yTurbLoc
-          write(ioUnit,'(a,4(e19.12,1x))') 'xLims: ', this%Cloud(icl)%xTurbLoc - 1.5d0*totProjRadius/2.0d0, this%Cloud(icl)%xTurbLoc + 1.5d0*totProjRadius/2.0d0,minval(xG(:,1,1)), maxval(xG(:,1,1))
-          write(ioUnit,'(a,4(e19.12,1x))') 'yLims: ', this%Cloud(icl)%yTurbLoc - totProjRadius, this%Cloud(icl)%yTurbLoc + totProjRadius, minval(yG(1,:,1)), maxval(yG(1,:,1))
-          write(ioUnit,'(a,4(e19.12,1x))') 'zLims: ', zLoc - totProjRadius, zLoc + totProjRadius, minval(zG(1,1,:)), maxval(zG(1,1,:))
-          write(ioUnit,'(a,2(i5,1x))') 'xst: ', this%xst(icl), this%xen(icl)
-          write(ioUnit,'(a,2(i5,1x))') 'yst: ', this%yst(icl), this%yen(icl)
-          write(ioUnit,'(a,2(i5,1x))') 'zst: ', this%zst(icl), this%zen(icl)
-          if(this%nlen(icl) > 0) then 
-            write(ioUnit,'(a,2(e19.12,1x))') 'x: ', this%Cloud(icl)%xSmall(1,1,1), this%Cloud(icl)%xSmall(this%xlen(icl),1,1)
-            write(ioUnit,'(a,2(e19.12,1x))') 'y: ', this%Cloud(icl)%ySmall(1,1,1), this%Cloud(icl)%ySmall(1,this%ylen(icl),1)
-            write(ioUnit,'(a,2(e19.12,1x))') 'z: ', this%Cloud(icl)%zSmall(1,1,1), this%Cloud(icl)%zSmall(1,1,this%zlen(icl))
-          endif
-        enddo
-        write(ioUnit,*) '-----Done Turbine------' 
-        close(ioUnit)
+        !write(ioUnit,*) '-----New Turbine------' 
+        !write(ioUnit,*) 'xLoc, yLoc: ', this%Cloud(1)%xTurbLoc, this%Cloud(1)%yTurbLoc 
+        !do icl = 1, this%max_num_clouds
+        !  write(ioUnit,*) '-------Cloud No.------' , icl
+        !  write(ioUnit,*) 'nlen: ', this%nlen(icl)
+        !  write(ioUnit,*) 'xTLoc, yTLoc: ', this%Cloud(icl)%xTurbLoc, this%Cloud(icl)%yTurbLoc
+        !  write(ioUnit,'(a,4(e19.12,1x))') 'xLims: ', this%Cloud(icl)%xTurbLoc - 1.5d0*totProjRadius/2.0d0, this%Cloud(icl)%xTurbLoc + 1.5d0*totProjRadius/2.0d0,minval(xG(:,1,1)), maxval(xG(:,1,1))
+        !  write(ioUnit,'(a,4(e19.12,1x))') 'yLims: ', this%Cloud(icl)%yTurbLoc - totProjRadius, this%Cloud(icl)%yTurbLoc + totProjRadius, minval(yG(1,:,1)), maxval(yG(1,:,1))
+        !  write(ioUnit,'(a,4(e19.12,1x))') 'zLims: ', zLoc - totProjRadius, zLoc + totProjRadius, minval(zG(1,1,:)), maxval(zG(1,1,:))
+        !  write(ioUnit,'(a,2(i5,1x))') 'xst: ', this%xst(icl), this%xen(icl)
+        !  write(ioUnit,'(a,2(i5,1x))') 'yst: ', this%yst(icl), this%yen(icl)
+        !  write(ioUnit,'(a,2(i5,1x))') 'zst: ', this%zst(icl), this%zen(icl)
+        !  if(this%nlen(icl) > 0) then 
+        !    write(ioUnit,'(a,2(e19.12,1x))') 'x: ', this%Cloud(icl)%xSmall(1,1,1), this%Cloud(icl)%xSmall(this%xlen(icl),1,1)
+        !    write(ioUnit,'(a,2(e19.12,1x))') 'y: ', this%Cloud(icl)%ySmall(1,1,1), this%Cloud(icl)%ySmall(1,this%ylen(icl),1)
+        !    write(ioUnit,'(a,2(e19.12,1x))') 'z: ', this%Cloud(icl)%zSmall(1,1,1), this%Cloud(icl)%zSmall(1,1,this%zlen(icl))
+        !  endif
+        !enddo
+        !write(ioUnit,*) '-----Done Turbine------' 
+        !close(ioUnit)
 
         !allocate(this%dsq(this%xlen,this%ylen,this%zlen))    
         !allocate(this%source(this%xlen,this%ylen,this%zlen))    

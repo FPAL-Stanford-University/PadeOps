@@ -154,7 +154,7 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
    call spectE%fft(wE, whatE)
 
    ! Initialize Padeder
-   call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme)
+   call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme,.false.)
 
    ! Initialize sgs
    call sgsold%init(1, spectC, spectE, gpC, gpE, dx, dy, dz, .false., .false., mesh(:,:,:,3), z0init,  .true., 1, .false., 0.7d0, .false., 1.0D0, 1.0d0, .true., .false.)
@@ -163,7 +163,7 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
       Pr, .false., .false.,1)
 
    ! Initialize WT
-   call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
+   call turbArray%init(inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
    
    ! Interpolations
    call interp_primitivevars()
@@ -174,7 +174,7 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
 
    ! Get RHS WT
    u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-   call turbArray%getForceRHS(dt, uC, vC, wC, u_rhs, v_rhs, w_rhs, inst_horz_avg_turb)
+   call turbArray%getForceRHS(dt, uC, vC, wC, u_rhs, v_rhs, w_rhs, .true., inst_horz_avg_turb)
    
    call spectC%ifft(u_rhs,fbody_x)
    call spectC%ifft(v_rhs,fbody_y)

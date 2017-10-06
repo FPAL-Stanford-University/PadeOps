@@ -199,7 +199,6 @@ contains
         complex(rkind), dimension(:,:,:), pointer :: tauhat, tauhat2    
         real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz
         real(rkind), intent(out), optional :: max_nuSGS
-        integer :: k
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3)
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6)
@@ -237,9 +236,9 @@ contains
         end if 
 
         
-        do k = 1,size(this%nuSGS,3)
-            !print*, sum(this%nuSGS(:,:,k))/(size(this%nuSGS,1)*size(this%nuSGS,2))
-        end do 
+        !do k = 1,size(this%nuSGS,3)
+        !    !print*, sum(this%nuSGS(:,:,k))/(size(this%nuSGS,1)*size(this%nuSGS,2))
+        !end do 
 
         tau11 = -two*this%nuSGS*S11; tau12 = -two*this%nuSGS*S12; tau13 = -two*this%nuSGS*S13
         tau22 = -two*this%nuSGS*S22; tau23 = -two*this%nuSGS*S23; tau33 = -two*this%nuSGS*S33
@@ -393,7 +392,7 @@ contains
         select case(this%wallModel) 
         case(0)
             this%WallMFactor = -ustar*ustar/(Uspmn + 1.D-13)
-            
+           
             ! STEP 4: tau13 -> ddz() in urhs, ddx in wrhs
             call transpose_y_to_z(uhat,this%ctmpCz,this%sp_gp) ! <- send uhat to z decomp (wallmodel)
             call this%spectE%fft(tau13,this%ctmpEy)

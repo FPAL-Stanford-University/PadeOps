@@ -75,4 +75,12 @@
         sigma3 = sqrt(sigma3)
             
         nuSGS = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
+
+        !print*, dudx(5,6,3), dudy(5,6,3), dudz(5,6,3)
+        !print*, dvdx(5,6,3), dvdy(5,6,3), dvdz(5,6,3)
+        !print*, dwdx(5,6,3), dwdy(5,6,3), dwdz(5,6,3)
+        !print*, sum(abs(nuSGS(:,:,:)))
+        !print*, sum(abs(dudx)), sum(abs(dudy)), sum(abs(dudz)) 
+        !print*, sum(abs(dvdx)), sum(abs(dvdy)), sum(abs(dvdz))
+        !print*, sum(abs(dwdx)), sum(abs(dwdy)), sum(abs(dwdz))
     end subroutine 

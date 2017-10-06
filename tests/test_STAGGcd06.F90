@@ -9,17 +9,15 @@ program testSTAGGcd06
     use mpi
         
     real(rkind), dimension(:,:,:), allocatable :: zE, zC
-    complex(rkind), dimension(:,:,:), allocatable :: fE, fC, dfEt, dfE, dfCt, dfC
-    integer :: nx = 1, ny = 1, nz = 16
+    complex(rkind), dimension(:,:,:), allocatable :: fE, fC, dfEt, dfE, dfCt, dfC, IfC, IfE
+    complex(rkind), dimension(:,:,:), allocatable :: d2fEt, d2fCt, d2fC, d2fE
+    integer :: nx = 1, ny = 1, nz = 8
     real(rkind) :: omega = 1._rkind, dz
     logical :: isTopEven, isBotEven
     type(cd06stagg), allocatable :: der
-    !type(cd06     ), allocatable :: der2
     integer :: i, j, k, ierr
-    real(rkind) :: zzst = 0.1_rkind, zzend = 0.9_rkind
-    !type(staggops) :: ops
+    real(rkind) :: zzst = 0._rkind, zzend = 1._rkind 
     type(decomp_info) :: gp, gpE, sp_gp, sp_gpE
-
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, 0, 0)
@@ -33,8 +31,9 @@ program testSTAGGcd06
     isBotEven = .true. 
 
     allocate(zE(nx, ny, nz + 1), zC(nx, ny, nz), fE(nx, ny, nz+1), fC(nx, ny, nz))
-    allocate(dfE(nx,ny,nz+1), dfC(nx,ny,nz))  
-    allocate(dfEt(nx,ny,nz+1), dfCt(nx,ny,nz))  
+    allocate(IfE(nx, ny, nz+1), IfC(nx, ny, nz))
+    allocate(dfE(nx,ny,nz+1), dfC(nx,ny,nz),d2fE(nx,ny,nz+1), d2fC(nx,ny,nz))  
+    allocate(dfEt(nx,ny,nz+1), dfCt(nx,ny,nz), d2fEt(nx,ny,nz+1), d2fCt(nx,ny,nz))
 
     dz = (zzend - zzst)/real(nz,rkind)
     do k = 1,nz+1
@@ -47,44 +46,74 @@ program testSTAGGcd06
 
     zC = 0.5_rkind*(zE(:,:,2:nz+1) + zE(:,:,1:nz))
 
-    fE = cos(two*pi*omega*zE) + imi*cos(two*pi*omega*zE)
-    fC = cos(two*pi*omega*zC) + imi*cos(two*pi*omega*zC)
+    fE = 1*sin(two*pi*omega*zE) + 1*imi*cos(two*pi*omega*zE)
+    fC = 1*sin(two*pi*omega*zC) + 1*imi*cos(two*pi*omega*zC)
 
-    dfEt = -omega*two*pi*sin(two*pi*omega*zE) + imi*(-omega*two*pi*sin(two*pi*omega*zE))
-    dfCt = -omega*two*pi*sin(two*pi*omega*zC) + imi*(-omega*two*pi*sin(two*pi*omega*zC))
-    
+    dfEt = 1*(omega*two*pi)*cos(two*pi*omega*zE) + 1*imi*(-omega*two*pi*sin(two*pi*omega*zE))
+    dfCt = 1*(omega*two*pi)*cos(two*pi*omega*zC) + 1*imi*(-omega*two*pi*sin(two*pi*omega*zC))
+
+    d2fEt = 1*(-(omega**2)*(two**2)*(pi**2))*sin(two*pi*omega*zE)+1*imi*(-(omega**2)*(two**2)*(pi**2))*cos(two*pi*omega*zE)
+    d2fCt = 1*(-(omega**2)*(two**2)*(pi**2))*sin(two*pi*omega*zC)+1*imi*(-(omega**2)*(two**2)*(pi**2))*cos(two*pi*omega*zC)
+
+   !Compute Derivatives 
     allocate(der)
-    call der%init(nz, dz, isTopEven, isBotEven,.true.,.true.)
+    call der%init(nz, dz)
+    call der%ddz_E2C(fE,dfC,nx,ny)
+    call der%ddz_C2E(fC,dfE,nx,ny)
+    call der%d2dz2_C2C(fC,d2fC,nx,ny)
+    call der%d2dz2_E2E(fE,d2fE,nx,ny)
 
-    call der%InterpZ_E2C(fE,dfC,nx,ny)
-    print*, dfC(1,1,:) - fC(1,1,:)
+!    print*,'computed derivative at cells'
+!    print*, dfC(1,1,:)
+!    print*, "-------------------"
+!    print*, "computed derivative at edges"
+!    print*, dfE(1,1,:)
 
+    print*, "-------------------"
+    print*, "Max Error for 1st Deriv: E2C:", maxval(abs(dfC - dfCt))
+    print*, "Max Error for 1st Deriv: C2E:", maxval(abs(dfE - dfEt))
+    print*, "-------------------"
+    print*, "-------------------"
+    print*, "Max Error for 2nd Deriv: C2C:", maxval(abs(d2fC - d2fCt))
+    print*, "Max Error for 2nd Deriv: E2E:", maxval(abs(d2fE - d2fEt))
+    print*, "-------------------"
 
-    !print*, "==================================================="
-    !print*, dfCt(1,1,:)
-    !print*, "==================================================="
-    !print*, dfCt(1,1,:) - dfC(1,1,:)
-    !print*, "==================================================="
-    !print*, "Second order" 
-    !call ops%ddz_C2C(fC, dfC, .true., .true.)
-
-    !print*, dfC(1,1,:)
-    !print*, "==================================================="
-    !print*, dfCt(1,1,:)
-    !print*, "==================================================="
-    !print*, dfCt(1,1,:) - dfC(1,1,:)
-    !!print*, dfC
-    !!print*, maxval(abs(real(dfCt,rkind) - real(dfC,rkind)))
-
-    !print*, "============================="
-    !call der2%dd3(real(fC,rkind), zC, nx, ny)
-    !print*, zC(1,1,1:5)
-    !print*, zC
-
-    !print*, dfC - dfCt
+   ! Compute Interpolations
+    call der%InterpZ_E2C(fE,IfC,nx,ny)
+    call der%InterpZ_C2E(fC,IfE,nx,ny)
+  
+!    print*,'interpolated value at cells'
+!    print*, IfC(1,1,:)
+!    print*, "-------------------"
+!    print*,'interpolated value at edges'
+!    print*, IfE(1,1,:)
+    print*, "-------------------"
+    print*, "Max Error for Interp: E2C:", maxval(abs(IfC - fC))
+    print*, "Max Error for Interp: C2E:", maxval(abs(IfE - fE))
+    print*, "-------------------"
+    print*, "==================================================="
+!    print*,'true 2nd derivative at edges'
+!    print*, d2fEt(1,1,:)
+!    print*, "-------------------"
+!    print*,'computed 2nd derivative at edges'
+!    print*, d2fE(1,1,:)
+!    print*, "-------------------"
+!    print*,'diff btw 2nd derivatives at edges'
+!    print*, d2fE(1,1,:) -d2fEt(1,1,:)
+!    print*, "-------------------"
+!    print*,'true 2nd derivative at cells'
+!    print*, d2fCt(1,1,:)
+!    print*, "-------------------"
+!    print*,'computed 2nd derivative at cells'
+!    print*, d2fC(1,1,:)
+!    print*, "-------------------"
+!    print*,'diff btw 2nd derivatives at cells'
+!    print*, d2fC(1,1,:) -d2fCt(1,1,:)
+!    print*, "-------------------"
 
     call der%destroy()
     deallocate(der)
-    deallocate(zE, zC, fE, fC, dfEt, dfE, dfCt, dfC)
+    deallocate(zE, zC, fE, fC, dfEt, dfE, dfCt, dfC, IfC, IfE, d2fC, d2fE, d2fEt, d2fCt)
 
+    call MPI_Finalize(ierr)
 end program 

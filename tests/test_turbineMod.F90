@@ -78,7 +78,7 @@ program test_actuatorDisk
     allocate(cbuffzE(sp_gpE%zsz(1),sp_gpE%zsz(2),sp_gpE%zsz(3),1))
 
     allocate(turbArray)
-    call turbArray%init(inputFile, gpC, gpE, spectC, spectE, rbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
+    call turbArray%init(inputFile, gpC, gpE, spectC, spectE,  cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
 
     !namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir
     !ioUnit = 11
@@ -90,7 +90,7 @@ program test_actuatorDisk
     dt = 0.1_rkind
     urhs = zeroc; vrhs = zeroc; wrhs = zeroc
     call tic()
-    call turbArray%getForceRHS(dt, u, v, w, urhs, vrhs, wrhs, inst_turb_avg)
+    call turbArray%getForceRHS(dt, u, v, w, urhs, vrhs, wrhs, .true., inst_turb_avg)
     call toc()
     call spectC%ifft(urhs,rhs_real) 
     call decomp_2d_write_one(1,rhs_real,"ArrayRHS.bin", gpC)

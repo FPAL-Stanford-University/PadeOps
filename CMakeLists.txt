@@ -30,6 +30,12 @@ set(HDF5_PATH $ENV{HDF5_PATH})
 set(HDF5_LIBRARY_PATH "${HDF5_PATH}/lib")
 set(HDF5_INCLUDE_PATH "${HDF5_PATH}/include")
 
+# Where to look for fftpack
+set(FFTPACK_PATH $ENV{FFTPACK_PATH})
+set(FFTPACK_LIBRARY_PATH "${FFTPACK_PATH}/lib")
+set(FFTPACK_INCLUDE_PATH "${FFTPACK_PATH}/include")
+
+
 set(CMAKE_Fortran_COMPILER_ID $ENV{COMPILER_ID})
 
 # Intel compiler suite
@@ -55,6 +61,21 @@ elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
         set(CMAKE_Fortran_FLAGS "-Og -g -fbacktrace -pg -llapack -ffree-form -ffree-line-length-none -fcheck=all -fbounds-check -ffpe-trap=zero,overflow -Wall -Wconversion -Wextra -Waliasing -Wsurprising")
     endif()
+
+ elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
+    if ( CMAKE_BUILD_TYPE MATCHES "Release" )
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -Wall -Wconversion -Wextra -Waliasing -ffree-form -ffree-line-length-none -ffast-math -march=native -funroll-loops -fno-protect-parens -fopenmp")
+    elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
+        set(CMAKE_Fortran_FLAGS "-Og -g -fbacktrace -pg -llapack -ffree-form -ffree-line-length-none -fcheck=all -fbounds-check -ffpe-trap=zero,overflow -Wall -Wconversion -Wextra -Waliasing -Wsurprising")
+    endif()
+ 
+ elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "IBM")
+    if ( CMAKE_BUILD_TYPE MATCHES "Release" )
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O5 -qsuffix=cpp=f90 -qxlf2003=polymorphic")
+    elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
+        set(CMAKE_Fortran_FLAGS "-O0 -qsuffix=cpp=f90 -qxlf2003=polymorphic")
+    endif()
+ 
 endif()
 
 # Add source file directories

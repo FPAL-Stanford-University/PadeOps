@@ -38,7 +38,7 @@ program concurrentSimulation
     call igp%init(mainInputFile, .false.)                                            !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
     call igp%start_io(.true.)                                           !<-- Start I/O by creating a header file (see io.F90)
     call igp%printDivergence()
- 
+
     ! Fringe associations for non-periodic BCs in x
     call igp%fringe_x%associateFringeTargets(prec%u, prec%v, prec%w) !<-- Link the target velocity array to igp 
 
@@ -50,22 +50,22 @@ program concurrentSimulation
     call tic() 
     do while (igp%tsim < igp%tstop) 
        
-       call prec%timeAdvance()                                           !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
-       call igp%timeAdvance(prec%get_dt())                                !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
-       call doTemporalStuff(prec, igp)                                        !<-- Go to the temporal hook (see temporalHook.F90)
+       call prec%timeAdvance()                                           !<- Time stepping scheme + Pressure Proj. (see igrid.F90)
+       call igp%timeAdvance(prec%get_dt())                               !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
+       call doTemporalStuff(prec, igp)                                   !<-- Go to the temporal hook (see temporalHook.F90)
        
     end do 
  
     call prec%finalize_io()                                              !<-- Close the header file (wrap up i/o)
-    call igp%finalize_io()                                              !<-- Close the header file (wrap up i/o)
+    call igp%finalize_io()                                               !<-- Close the header file (wrap up i/o)
 
     call prec%destroy()                                                  !<-- Destroy the IGRID derived type 
-    call igp%destroy()                                                  !<-- Destroy the IGRID derived type 
+    call igp%destroy()                                                   !<-- Destroy the IGRID derived type 
    
 
     deallocate(prec)                                                     !<-- Deallocate all the memory associated with scalar defaults
-    deallocate(igp)                                                     !<-- Deallocate all the memory associated with scalar defaults
+    deallocate(igp)                                                      !<-- Deallocate all the memory associated with scalar defaults
     
-    call MPI_Finalize(ierr)                                             !<-- Terminate MPI 
+    call MPI_Finalize(ierr)                                              !<-- Terminate MPI 
 
 end program

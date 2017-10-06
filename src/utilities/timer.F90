@@ -8,10 +8,24 @@ module timer
         double precision :: start, finish
 
         interface toc
-            module procedure toc1,toc2,toc3,toc4
+            module procedure toc1,toc2,toc3,toc4, tocall
         end interface
 
 contains 
+
+        subroutine tocall(comm, val)
+            integer, intent(in) :: comm
+            integer :: ierr
+            real(rkind), intent(out) :: val
+            real(rkind) :: myval
+            
+            call mpi_barrier(comm, ierr)
+            finish = MPI_WTIME()
+            myval = real(finish - start,rkind)
+            val = P_MAXVAL(myval)
+            
+        end subroutine 
+
         subroutine tic 
             start = MPI_WTIME()
         end subroutine tic

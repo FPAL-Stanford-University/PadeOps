@@ -22,6 +22,7 @@ module staggOpsMod
         real(rkind) :: dx, dy, dz
         logical :: isBotSided = .false. 
         logical :: isTopSided = .false. 
+        logical :: isPeriodic = .false. 
         contains
             procedure :: init
             procedure :: destroy
@@ -59,7 +60,7 @@ contains
         OneByDz = one/this%dz
         dfdzC(:,:,1:this%nzC) = fE(:,:,2:this%nzE) - fE(:,:,1:this%nzE-1)
         dfdzC = OneByDz*dfdzC
-
+        
     end subroutine
 
     pure subroutine ddz_E2C_Cmplx(this,fE,dfdzC)
@@ -84,17 +85,22 @@ contains
         OneByDz = one/(this%dz)
         dfdzE(:,:,2:this%nzE-1) =  fC(:,:,2:this%nzC) - fC(:,:,1:this%nzC-1) 
 
-        if (isBotEven) then
-            dfdzE(:,:,1) = zero
-        else 
-            dfdzE(:,:,1) = two*fc(:,:,1)
-        end if
+        if (this%isPeriodic) then
+           dfdzE(:,:,1) = fC(:,:,1) - fC(:,:,this%nzC)
+           dfdzE(:,:,this%nzE) = dfdzE(:,:,1)
+        else
+            if (isBotEven) then
+                dfdzE(:,:,1) = zero
+            else 
+                dfdzE(:,:,1) = two*fc(:,:,1)
+            end if
 
-        if (isTopEven) then
-            dfdzE(:,:,this%nzE) = zero
-        else 
-            dfdzE(:,:,this%nzE) = -two*fC(:,:,this%nzC)
-        end if
+            if (isTopEven) then
+                dfdzE(:,:,this%nzE) = zero
+            else 
+                dfdzE(:,:,this%nzE) = -two*fC(:,:,this%nzC)
+            end if
+        end if 
 
         dfdzE = dfdzE*OneByDz
 
@@ -110,16 +116,21 @@ contains
         OneByDz = one/(this%dz)
         dfdzE(:,:,2:this%nzE-1) =  fC(:,:,2:this%nzC) - fC(:,:,1:this%nzC-1) 
 
-        if (isBotEven) then
-            dfdzE(:,:,1) = zero
-        else 
-            dfdzE(:,:,1) = two*fc(:,:,1)
-        end if
+        if(this%isPeriodic) then
+           dfdzE(:,:,1) = fC(:,:,1) - fC(:,:,this%nzC)
+           dfdzE(:,:,this%nzE) = dfdzE(:,:,1)
+        else
+                if (isBotEven) then
+                    dfdzE(:,:,1) = zero
+                else 
+                    dfdzE(:,:,1) = two*fc(:,:,1)
+                end if
 
-        if (isTopEven) then
-            dfdzE(:,:,this%nzE) = zero
-        else 
-            dfdzE(:,:,this%nzE) = -two*fC(:,:,this%nzC)
+                if (isTopEven) then
+                    dfdzE(:,:,this%nzE) = zero
+                else 
+                    dfdzE(:,:,this%nzE) = -two*fC(:,:,this%nzC)
+                end if
         end if
 
         dfdzE = dfdzE*OneByDz
@@ -198,17 +209,22 @@ contains
         OneByDzSq = one/(this%dz**2)
         d2fdz2C(:,:,2:this%nzC-1) =  fC(:,:,3:this%nzE) - two*fC(:,:,2:this%nzC-1) + fC(:,:,1:this%nzE-2) 
         
-        if (isBotEven) then
-            d2fdz2C(:,:,1) = fC(:,:,2) - fC(:,:,1)
-        else 
-            d2fdz2C(:,:,1) = fC(:,:,2) - three*fC(:,:,1)
-        end if
-
-        if (isTopEven) then
-            d2fdz2C(:,:,this%nzC) = fC(:,:,this%nzC-1) - fC(:,:,this%nzC)
+        if (this%isPeriodic) then
+               d2fdz2C(:,:,1) = fC(:,:,2) - two*fC(:,:,1) + fc(:,:,this%nzC) 
+               d2fdz2C(:,:,this%nzC) = fC(:,:,1) - two*fC(:,:,this%nzC) + fc(:,:,this%nzC-1) 
         else
-            d2fdz2C(:,:,this%nzC) = fC(:,:,this%nzC-1) - three*fC(:,:,this%nzC)
-        end if 
+                if (isBotEven) then
+                    d2fdz2C(:,:,1) = fC(:,:,2) - fC(:,:,1)
+                else 
+                    d2fdz2C(:,:,1) = fC(:,:,2) - three*fC(:,:,1)
+                end if
+
+                if (isTopEven) then
+                    d2fdz2C(:,:,this%nzC) = fC(:,:,this%nzC-1) - fC(:,:,this%nzC)
+                else
+                    d2fdz2C(:,:,this%nzC) = fC(:,:,this%nzC-1) - three*fC(:,:,this%nzC)
+                end if 
+        end if
 
         d2fdz2C = OneByDzSq*d2fdz2C
 
@@ -226,18 +242,23 @@ contains
         OneByDzSq = one/(this%dz**2)
         d2fdz2C(:,:,2:this%nzC-1) =  fC(:,:,3:this%nzE) - two*fC(:,:,2:this%nzC-1) + fC(:,:,1:this%nzE-2) 
         
-        if (isBotEven) then
-            d2fdz2C(:,:,1) = fC(:,:,2) - fC(:,:,1)
-        else 
-            d2fdz2C(:,:,1) = fC(:,:,2) - three*fC(:,:,1)
-        end if
-
-        if (isTopEven) then
-            d2fdz2C(:,:,this%nzC) = fC(:,:,this%nzC-1) - fC(:,:,this%nzC)
+        if (this%isPeriodic) then
+               d2fdz2C(:,:,1) = fC(:,:,2) - two*fC(:,:,1) + fc(:,:,this%nzC) 
+               d2fdz2C(:,:,this%nzC) = fC(:,:,1) - two*fC(:,:,this%nzC) + fc(:,:,this%nzC-1) 
         else
-            d2fdz2C(:,:,this%nzC) = fC(:,:,this%nzC-1) - three*fC(:,:,this%nzC)
-        end if 
+                if (isBotEven) then
+                    d2fdz2C(:,:,1) = fC(:,:,2) - fC(:,:,1)
+                else 
+                    d2fdz2C(:,:,1) = fC(:,:,2) - three*fC(:,:,1)
+                end if
 
+                if (isTopEven) then
+                    d2fdz2C(:,:,this%nzC) = fC(:,:,this%nzC-1) - fC(:,:,this%nzC)
+                else
+                    d2fdz2C(:,:,this%nzC) = fC(:,:,this%nzC-1) - three*fC(:,:,this%nzC)
+                end if 
+        end if
+        
         d2fdz2C = OneByDzSq*d2fdz2C
 
     end subroutine
@@ -252,18 +273,23 @@ contains
         OneByDzSq = one/(this%dz**2)
         d2fdz2E(:,:,2:this%nzE-1) =  fE(:,:,3:this%nzE) - two*fE(:,:,2:this%nzE-1) + fE(:,:,1:this%nzE-2) 
         
-        if (isBotEven) then
-            d2fdz2E(:,:,1) = two*(fE(:,:,2) - fE(:,:,1)) 
-        else 
-            d2fdz2E(:,:,1) = zero  
-        end if
-
-        if (isTopEven) then
-            d2fdz2E(:,:,this%nzE) = two*(fE(:,:,this%nzE-1) - fE(:,:,this%nzE))
+        if (this%isPeriodic) then
+                d2fdz2E(:,:,1) =  fE(:,:,2) - two*fE(:,:,1) + fE(:,:,this%nzE-1) 
+                d2fdz2E(:,:,this%nzE) =  fE(:,:,2) - two*fE(:,:,this%nzE) + fE(:,:,this%nzE-1) 
         else
-            d2fdz2E(:,:,this%nzE) = zero  
-        end if 
+                if (isBotEven) then
+                    d2fdz2E(:,:,1) = two*(fE(:,:,2) - fE(:,:,1)) 
+                else 
+                    d2fdz2E(:,:,1) = zero  
+                end if
 
+                if (isTopEven) then
+                    d2fdz2E(:,:,this%nzE) = two*(fE(:,:,this%nzE-1) - fE(:,:,this%nzE))
+                else
+                    d2fdz2E(:,:,this%nzE) = zero  
+                end if 
+        end if
+        
         d2fdz2E = OneByDzSq*d2fdz2E
 
     end subroutine
@@ -277,35 +303,43 @@ contains
 
         OneByDzSq = one/(this%dz**2)
         d2fdz2E(:,:,2:this%nzE-1) =  fE(:,:,3:this%nzE) - two*fE(:,:,2:this%nzE-1) + fE(:,:,1:this%nzE-2) 
-        
-        if (isBotEven) then
-            d2fdz2E(:,:,1) = two*(fE(:,:,2) - fE(:,:,1)) 
-        else 
-            d2fdz2E(:,:,1) = zero  
-        end if
-
-        if (isTopEven) then
-            d2fdz2E(:,:,this%nzE) = two*(fE(:,:,this%nzE-1) - fE(:,:,this%nzE))
+       
+        if (this%isPeriodic) then
+                d2fdz2E(:,:,1) =  fE(:,:,2) - two*fE(:,:,1) + fE(:,:,this%nzE-1) 
+                d2fdz2E(:,:,this%nzE) =  fE(:,:,2) - two*fE(:,:,this%nzE) + fE(:,:,this%nzE-1) 
         else
-            d2fdz2E(:,:,this%nzE) = zero  
-        end if 
+                if (isBotEven) then
+                    d2fdz2E(:,:,1) = two*(fE(:,:,2) - fE(:,:,1)) 
+                else 
+                    d2fdz2E(:,:,1) = zero  
+                end if
+
+                if (isTopEven) then
+                    d2fdz2E(:,:,this%nzE) = two*(fE(:,:,this%nzE-1) - fE(:,:,this%nzE))
+                else
+                    d2fdz2E(:,:,this%nzE) = zero  
+                end if 
+        end if
 
         d2fdz2E = OneByDzSq*d2fdz2E
 
     end subroutine
 
 
-    subroutine init(this, gpC, gpE, stagg_scheme , dx, dy, dz, gpCspect, gpEspect, isTopSided, isBotSided)
+    subroutine init(this, gpC, gpE, stagg_scheme , dx, dy, dz, gpCspect, gpEspect, isTopSided, isBotSided, isPeriodic)
         class(staggOps), intent(inout) :: this
         class(decomp_info), intent(in), target:: gpC, gpE
         integer, intent(in) :: stagg_scheme
         real(rkind), intent(in) :: dx, dy, dz
         class(decomp_info), intent(in), optional, target:: gpCspect, gpEspect
-        logical, intent(in), optional :: isTopSided, isBotSided
+        logical, intent(in), optional :: isTopSided, isBotSided, isPeriodic
 
         if ((present(isTopSided)) .and. (present(isBotSided))) then
             this%isTopSided = isTopSided; this%isBotSided = isBotSided
-        end if 
+        end if
+
+        if (present(isPeriodic)) this%isPeriodic = isPeriodic
+
         this%nxC = gpC%zsz(1)
         this%nyC = gpC%zsz(2)
         this%nzC = gpC%zsz(3)
@@ -381,11 +415,17 @@ contains
         complex(rkind), intent(out), dimension(this%nxE_cmplx, this%nyE_cmplx, this%nzE_cmplx) :: edgeArr
         complex(rkind), intent(in) :: BotVal, TopVal
 
-        edgeArr(:,:,this%nzE) = TopVal
-        edgeArr(:,:,1          ) = BotVal
         edgeArr(:,:,2:this%nzE-1) = cellArr(:,:,1:this%nzC-1) 
         edgeArr(:,:,2:this%nzE-1) = edgeArr(:,:,2:this%nzE-1) + cellArr(:,:,2:this%nzC)
         edgeArr(:,:,2:this%nzE-1) = half*edgeArr(:,:,2:this%nzE-1)
+        
+        if (this%isPeriodic) then
+            edgeArr(:,:,1) = half*(cellArr(:,:,1) + cellArr(:,:,this%nzC)) 
+            edgeArr(:,:,this%nzE) = half*(cellArr(:,:,1) + cellArr(:,:,this%nzC)) 
+        else
+            edgeArr(:,:,this%nzE) = TopVal
+            edgeArr(:,:,1       ) = BotVal
+        end if 
     end subroutine
 
     pure subroutine InterpZ_Cell2Edge_REAL(this, cellArr, edgeArr, BotVal, TopVal)
@@ -394,11 +434,17 @@ contains
         real(rkind), intent(out), dimension(this%nxE, this%nyE, this%nzE) :: edgeArr
         real(rkind), intent(in) :: BotVal, TopVal
 
-        edgeArr(:,:,this%nzE) = TopVal
-        edgeArr(:,:,1          ) = BotVal
         edgeArr(:,:,2:this%nzE-1) = cellArr(:,:,1:this%nzC-1) 
         edgeArr(:,:,2:this%nzE-1) = edgeArr(:,:,2:this%nzE-1) + cellArr(:,:, 2:this%nzC)
         edgeArr(:,:,2:this%nzE-1) = half*edgeArr(:,:,2:this%nzE-1)
+        
+        if (this%isPeriodic) then
+            edgeArr(:,:,1) = half*(cellArr(:,:,1) + cellArr(:,:,this%nzC)) 
+            edgeArr(:,:,this%nzE) = half*(cellArr(:,:,1) + cellArr(:,:,this%nzC)) 
+        else
+            edgeArr(:,:,this%nzE) = TopVal
+            edgeArr(:,:,1       ) = BotVal
+        end if 
     end subroutine
 
 end module 

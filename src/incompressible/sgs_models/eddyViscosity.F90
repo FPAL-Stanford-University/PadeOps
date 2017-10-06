@@ -60,6 +60,17 @@ subroutine get_SGS_kernel(this,duidxjC, duidxjE)
       else
          call this%interpolate_eddy_viscosity()                     
       end if
+   case (2)
+      ! AMD 
+      call get_amd_kernel(this%nu_sgs_C, this%camd_x, this%camd_y, this%camd_z, duidxjC, this%S_ij_C, &
+                                 this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3))
+      
+      if (this%explicitCalcEdgeEddyViscosity) then
+         call get_amd_kernel(this%nu_sgs_E, this%camd_x, this%camd_y, this%camd_z, duidxjE, this%S_ij_E, &
+                                 this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3))
+      else
+         call this%interpolate_eddy_viscosity()                     
+      end if
    end select
 
 end subroutine

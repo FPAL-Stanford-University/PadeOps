@@ -47,7 +47,8 @@ contains
             wexact  = -cos(y)*sin(z)*exp(-(2.d0/gp%Re)*gp%tsim)
             pexact  = 0.25d0*(cos(2.d0*y) + cos(2.d0*z))*((exp(-(2.d0/gp%Re)*gp%tsim))**2)
          end select
-        if (mod(gp%step,nt_print2screen) == 0) then
+        
+         if (mod(gp%step,nt_print2screen) == 0) then
             maxDiv = maxval(gp%divergence)
             DomMaxDiv = p_maxval(maxDiv)
             call message(0,"Time",gp%tsim)

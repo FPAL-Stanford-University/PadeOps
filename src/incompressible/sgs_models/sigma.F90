@@ -8,8 +8,12 @@ subroutine init_sigma(this, dx, dy, dz, Cs)
    ! in case the dynamic procedure is planar averages
    this%useCglobal = .true. 
    
-   
-   deltaLES = (1.5d0*dx*1.5d0*dy*dz)**(1.d0/3.d0)
+  
+   if (.not. this%isPeriodic) then
+      deltaLES = (1.5d0*dx*1.5d0*dy*dz)**(1.d0/3.d0)
+   else
+      deltaLES =  (1.5d0*dx*1.5d0*dy*1.5d0*dz)**(1.d0/3.d0)
+   end if 
    this%cmodel_global = (Cs*deltaLES)**2
   
    this%isEddyViscosityModel = .true. 
@@ -88,9 +92,16 @@ subroutine get_sigma_kernel(nu_sgs, duidxj, nxL, nyL, nzL)
             sigma3 = max(sigma3,zero)
             sigma3 = sqrt(sigma3)
 
-            nu_sgs(i,j,k) = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-13)
+            nu_sgs(i,j,k) = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
 
          end do 
       end do 
    end do
+
+   !print*, duidxj(5,6,3,:)
+   !print*, sum(abs(nu_sgs(:,:,:)))
+   !print*, sum(abs(duidxj(:,:,:,1))), sum(abs(duidxj(:,:,:,2))), sum(abs(duidxj(:,:,:,3)))
+   !print*, sum(abs(duidxj(:,:,:,4))), sum(abs(duidxj(:,:,:,5))), sum(abs(duidxj(:,:,:,6)))
+   !print*, sum(abs(duidxj(:,:,:,7))), sum(abs(duidxj(:,:,:,8))), sum(abs(duidxj(:,:,:,9)))
+
 end subroutine

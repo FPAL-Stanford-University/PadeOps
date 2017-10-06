@@ -1,21 +1,21 @@
 &INPUT
-inputdir                      = "/home/aditya90/Codes/PadeOps/data/pbl/"   ! Directory for any input files
-outputdir                     = "/home/aditya90/Codes/PadeOps/data/pbl/"   ! Directory for all output files
-nx                            = 128          ! Number of points in X
-ny                            = 128          ! Number of points in Y
-nz                            = 128          ! Number of points in Z
-tstop                         = 100.D0       ! Physical time to stop the simulation
-CFL                           = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+inputdir                      = "/home/mhowland/Lele/data/coriolisTurbine/Run_10"   ! Directory for any input files
+outputdir                     = "/home/mhowland/Lele/data/coriolisTurbine/Run_10"   ! Directory for all output files
+nx                            = 256          ! Number of points in X
+ny                            = 256          ! Number of points in Y
+nz                            = 256          ! Number of points in Z
+tstop                         = 1000.D0       ! Physical time to stop the simulation
+CFL                           = 1.4D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile                = .FALSE.     ! Set to false if it's a fresh simulation 
 restartFile_TID               = 8000        ! TimeID of the restart file being used
-restartFile_RID               = 11          ! RunID of the restart file being used
+restartFile_RID               = 33          ! RunID of the restart file being used
 /
 /
 &NUMERICS
-TimeSteppingScheme            = 1           ! 0: Adams-Bashforth, 1: TVD-RK3 (use this)
+TimeSteppingScheme            = 2           ! 0: Adams-Bashforth, 1: TVD-RK3 (use this)
 AdvectionTerm                 = 1           ! 0: Rotational Form, 1: Skew-Symmetric Form (use this for Compact Scheme)
 NumericalSchemeVert           = 1           ! 0: Second order FD, 1: Sixth order Compact Difference (CD06)
 ComputeStokesPressure         = .TRUE.      ! This would be FALSE only is very special circumstances.  
@@ -24,12 +24,12 @@ t_DivergenceCheck             = 100         ! Check divergence every $ timesteps
 /
 /
 &IO
-RunID                         = 11          ! Run Label (All output files will be tagged with this nubber)
+RunID                         = 10          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump                 = 1000        ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump                    = 500        ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
-dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
-t_planeDump                   = 100         ! Plane dumping frequency (# of timesteps)
+dumpPlanes                    = .TRUE.     ! Dump plane visualations. Select planes in initialize.F90
+t_planeDump                   = 50         ! Plane dumping frequency (# of timesteps)
 t_start_planeDump             = 1           ! When do you want to start dumping planes?
 t_stop_planeDump              = 5000        ! When do you want to stop dumping planes?
 /
@@ -51,18 +51,24 @@ controlDir                    = "null"          ! Check in this directory for co
 /
 &PHYSICS
 isInviscid                    = .TRUE.      ! Is this an inviscid simulation?
-useCoriolis                   = .FALSE.     ! Activate the coriolis term? 
-useExtraForcing               = .TRUE.      ! Is an extra forcing term being used? (non-Geostrophic forcing only)
-useGeostrophicForcing         = .FALSE.     ! This is true if forcing is provided using the coriolis term  
+useCoriolis                   = .TRUE.      ! Activate the coriolis term? 
+useExtraForcing               = .FALSE.     ! Is an extra forcing term being used? (non-Geostrophic forcing only)
+useGeostrophicForcing         = .TRUE.      ! This is true if forcing is provided using the coriolis term  
 isStratified                  = .FALSE.     ! Use Stratification / active scalar in momentum
 Pr                            = 0.6D0       ! Turbulent Prandtl Number; used when 
-Ro                            = 1.D10       ! Rossby Number used when Coriolis is ON
+Ro                            = 3.42D2     ! Rossby Number used when Coriolis is ON
 Re                            = 1.D10       ! Reynolds Number; used when isInvisid is FALSE
 Fr                            = 1.D10       ! Froude number; used when isStratified is TRUE
-Gx                            = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gy                            = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gz                            = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-dPfdx                         = 1.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
+G_geostrophic                 = 1.D0        ! Geostrophic wind speed 
+G_alpha                       = 0.D0        ! Geostrophic wind angle (degrees, from +x axis)
+<<<<<<< HEAD
+latitude                      = 45.D0
+assume_fplane                 = .FALSE.
+=======
+latitude                      = 90.d0       ! Latitude 
+use
+>>>>>>> igridSGS_KS_Integration
+dPfdx                         = 0.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                         = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                         = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
 useSGS                        = .true.      ! Do you want to use the SGS model?  
@@ -70,38 +76,50 @@ useSGS                        = .true.      ! Do you want to use the SGS model?
 /
 &PRESSURE_CALC
 fastCalcPressure              = .TRUE.      ! Compute and store pressure at every time step using the faster algorithm?
-storePressure                 = .TRUE.     ! Would you like to compute and store pressure?
+storePressure                 = .TRUE.      ! Would you like to compute and store pressure?
 P_dumpFreq                    = 100         ! How often (timesteps) do you want to dump pressure?
 P_compFreq                    = 10          ! How often (timesteps) do you want to compute pressure? 
 /
 /
 &BCs
-botWall                       = 3  
+botWall                       = 2           ! no_slip = 1, slip = 2
 topWall                       = 2           ! no_slip = 1, slip = 2
 useSpongeLayer                = .FALSE.     ! Use a sponge layer at the top 
 zstSponge                     = 0.8d0       ! Height above which the sponge layer is active
 SpongeTscale                  = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
-useFringe                     = .false.     ! This is false if simulation is periodic. 
+useFringe                     = .true.      ! This is false if simulation is periodic. 
 /
 /
 &SGS_MODEL
-DynamicProcedureType          = 0
-SGSModelID                    = 1           ! 0: smagorinsky, 1: sigma, 2: Shear Improved Smagorinsky
-z0                            = 1.0d-4
-useWallDamping                = .FALSE.      ! Use the Wall Damping Function 
-ncWall                        = 3.d0      ! Wall Damping Function Exponent
+DynamicProcedureType          = 0          ! 0: no dynamic procedure, 1: Standard Dynamic Procedure, 2: Global Dynamic Procedure
+SGSModelID                    = 1          ! 0: smagorinsky, 1: sigma, 2: Shear Improved Smagorinsky
+z0                            = 1.0d-4     ! roughness length scale (used only if wall model is used)
+useWallDamping                = .FALSE.    ! Use the Wall Damping Function 
+ncWall                        = 3.d0       ! Wall Damping Function Exponent
 Csgs                          = 1.3d0      ! Asymptotic model constant (wall damping function)
-WallModelType                 = 1
-explicitCalcEdgeEddyViscosity = .true.
-useVerticalTfilter            = .false.
-DynProcFreq                   = 5
+WallModelType                 = 0          ! 0: no wall model, 1: Moeng's wall model, 2: Bou-zeid wall model
+explicitCalcEdgeEddyViscosity = .true.     ! Explicitely compute eddy viscosity at edges? or interpolate? 
+useVerticalTfilter            = .false.    ! Vertical filtering used for dynamic procedure? 
+DynProcFreq                   = 5          ! Frequency of dynamic procedure
 /
 /
 &WINDTURBINES
-useWindTurbines               = .FALSE.             ! Do you want to use Wind turbines ?
-num_turbines                  = 24
+useWindTurbines               = .TRUE.    ! Do you want to use Wind turbines ?
+num_turbines                  = 9
 ADM                           = .TRUE.
-turbInfoDir                   = "/home/nghaisas/ActuatorDisk/"
+turbInfoDir                   = "/home/mhowland/Lele/problems/turbines/AD_Coriolis_files/turbInfo/array_3x3_stag"
+/
+/
+&FRINGE
+Fringe_xst                    = 0.75d0         
+Fringe_xen                    = 1.00d0
+Fringe_delta_st_x             = 0.20d0
+Fringe_delta_en_x             = 0.05d0
+Fringe_yst                    = 0.75d0         
+Fringe_yen                    = 1.00d0
+Fringe_delta_st_y             = 0.20d0
+Fringe_delta_en_y             = 0.05d0
+LambdaFact                    = 0.75d0 
 /
 /
 &KSPREPROCESS
@@ -111,9 +129,8 @@ KSRunID                       = 99             ! RunID tag for KS files
 t_dumpKSprep                  = 10             ! Dumping Frequency for KS files
 /
 /
-&PBLINPUT
-Lx                            = 6.28318530717959d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            = 6.28318530717959d0 ! Domain Width (appropriate dimesnions/non-dimensionalized)
-Lz                            = 1.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
-z0init                        = 1.d-4               ! Roughness scale used to initialize the profile
+&AD_CoriolisINPUT
+Lx                            = 50.d0                        ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            = 12.0d0           ! Domain Width  (appropriate dimesions/non-dimensionalized)
+Lz                            = 2.0d0           ! Domain Height (appropriate dimesnions/non-dimensionalized)
 /

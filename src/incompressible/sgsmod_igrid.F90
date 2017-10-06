@@ -7,7 +7,7 @@ module sgsmod_igrid
     use mpi 
     use reductions, only: p_maxval, p_sum, p_minval
     use numerics, only: useCompactFD 
-    use StaggOpsMod, only: staggOps  
+    !use StaggOpsMod, only: staggOps  
     use gaussianstuff, only: gaussian
     use lstsqstuff, only: lstsq
     use PadeDerOps, only: Pade6stagg
@@ -41,7 +41,7 @@ module sgsmod_igrid
         type(Pade6stagg), pointer :: PadeDer
         logical :: explicitCalcEdgeEddyViscosity = .false.
         real(rkind), dimension(:,:,:), allocatable :: q1C, q2C, q3E 
-        logical :: initspinup = .false. 
+        logical :: initspinup = .false., isPeriodic = .false.  
 
         ! Wall model
         real(rkind), dimension(:,:,:,:), allocatable :: tauijWM
@@ -67,6 +67,9 @@ module sgsmod_igrid
         real(rkind), dimension(:), allocatable :: cmodel_allZ
         real(rkind) :: invRe, deltaRat
         integer :: mstep
+
+        ! model constant values/properties
+        real(rkind) :: camd_x, camd_y, camd_z
         logical :: useCglobal = .false. 
 
         contains 
@@ -75,6 +78,7 @@ module sgsmod_igrid
             procedure          :: link_pointers
             procedure, private :: init_smagorinsky 
             procedure, private :: init_sigma
+            procedure, private :: init_amd
             procedure, private :: allocateMemory_EddyViscosity
 
             !! ALL WALL MODEL PROCEDURE
@@ -85,7 +89,9 @@ module sgsmod_igrid
             procedure, private :: compute_and_bcast_surface_Mn
             procedure, private :: getSurfaceQuantities
             procedure, private :: computeWall_PotTFlux
-         
+            procedure, private :: embed_WM_stress
+            procedure, private :: embed_WM_PotTFlux
+
             !! ALL DYNAMIC PROCEDURE SUBROUTINES
             procedure, private :: allocateMemory_DynamicProcedure
             procedure, private :: destroyMemory_DynamicProcedure
@@ -114,6 +120,7 @@ module sgsmod_igrid
             procedure          :: destroy
             procedure, private :: destroy_smagorinsky 
             procedure, private :: destroy_sigma
+            procedure, private :: destroy_amd
             procedure, private :: destroyMemory_EddyViscosity
 
             !! ACCESSORS (add these in src/incompressible/sgs_models/accessors.F90)
@@ -124,12 +131,14 @@ module sgsmod_igrid
             procedure          :: get_vmean 
             procedure          :: get_uspeedmean 
             procedure          :: get_DynamicProcedureType
+            procedure          :: get_wTh_surf
     end type 
 
 contains
 #include "sgs_models/init_destroy_sgs_igrid.F90"
 #include "sgs_models/smagorinsky.F90"
 #include "sgs_models/sigma.F90"
+#include "sgs_models/AMD.F90"
 #include "sgs_models/eddyViscosity.F90"
 #include "sgs_models/dynamicProcedure_sgs_igrid.F90"
 #include "sgs_models/standardDynamicProcedure.F90"
@@ -184,10 +193,6 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
    ! ddz(tau13) for urhs, ddx(tau13) for wrhs
    call this%spectE%fft(this%tau_13, cbuffy2)
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
-   if (this%useWallModel) then
-      cbuffz2(:,:,1) = this%tauijWMhat_inZ(:,:,1,1)
-      call transpose_z_to_y(cbuffz2,cbuffy2, this%sp_gpE)
-   end if
    call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
    call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
    urhs = urhs - cbuffy1
@@ -197,10 +202,6 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
    ! ddz(tau23) for vrhs, ddy(tau23) for wrhs
    call this%spectE%fft(this%tau_23, cbuffy2)
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
-   if (this%useWallModel) then
-      cbuffz2(:,:,1) = this%tauijWMhat_inZ(:,:,1,2)
-      call transpose_z_to_y(cbuffz2,cbuffy2, this%sp_gpE)
-   end if
    call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
    call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
    vrhs = vrhs - cbuffy1
@@ -235,9 +236,6 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzE)
    ! ddz(q3)
    call this%spectE%fft(this%q3E, cbuffy2)
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
-   if (this%useWallModel) then
-      cbuffz2(:,:,1) = this%q3HAT_AtWall
-   end if 
    call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
    call transpose_z_to_y(cbuffz1,cbuffy1,this%sp_gpC)
    Trhs = Trhs - cbuffy1
@@ -263,6 +261,8 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzE)
       this%q3E = -this%kappa_sgs_E*dTdzE
    end if
 
+   if (this%useWallModel) call this%embed_WM_PotTflux()
+ 
 end subroutine
 
 
@@ -304,7 +304,9 @@ subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uh
       this%tau_23 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,5)
       this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
    end if
-   
+
+   if (this%useWallModel) call this%embed_WM_stress()
+ 
    if(newTimeStep) this%mstep = this%mstep + 1
    
 end subroutine

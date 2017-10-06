@@ -410,7 +410,8 @@ contains
         ! STEP 5: ALLOCATE/INITIALIZE THE OPERATORS DERIVED TYPE
         if (useCompactFD) then
             allocate(this%derSE, this%derSO, this%derW, this%derWW, this%derT, this%derOE) 
-            call this%derivZ%init(this%gpC,this%sp_gpC, this%gpE, this%sp_gpE,this%dz, 1)
+            allocate(this%derivZ)
+            call this%derivZ%init(this%gpC,this%sp_gpC, this%gpE, this%sp_gpE,this%dz, 1, .false.)
             call this%derSE%init( this%gpC%zsz(3), this%dz, isTopEven = .true., isBotEven = .true., & 
                              isTopSided = .false., isBotSided = .true.) 
             call this%derSO%init( this%gpC%zsz(3), this%dz, isTopEven = .false., isBotEven = .false., & 
@@ -514,7 +515,7 @@ contains
         ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
         if (useCompactFD) then
             allocate(this%padepoiss)
-            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, this%storePressure, this%gpC, this%derivZ) 
+            call this%padepoiss%init(this%dx, this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, this%storePressure, this%gpC, this%derivZ, .false. ) 
         else    
             allocate(this%poiss)
             call this%poiss%init(this%spectC,.false.,this%dx,this%dy,this%dz,this%Ops,this%spectE, computeStokesPressure, this%gpC)  
@@ -550,7 +551,7 @@ contains
         call this%spectC%fft(this%v,this%vhat)   
         call this%spectE%fft(this%w,this%what)   
         if (this%isStratified) call this%spectC%fft(this%T,this%That)   
-
+     
         ! Dealias and filter before projection
         call this%spectC%dealias(this%uhat)
         call this%spectC%dealias(this%vhat)
@@ -584,7 +585,7 @@ contains
         ! STEP 9: Compute duidxj
         call this%compute_duidxj()
         if (this%isStratified) call this%compute_dTdxi() 
-
+      
         ! STEP 10a: Compute Coriolis Term
         if (this%useCoriolis) then
             call message(0, "Turning on Coriolis with Geostrophic Forcing")
@@ -600,12 +601,12 @@ contains
             if (this%assume_fplane) then
                 this%coriolis_sine   = sin(latitude*pi/180.d0)
                 this%coriolis_cosine = 0.d0
-                call message(1, "Making the f-plane assumption (Lattitude effect &
+                call message(1, "Making the f-plane assumption (Latitude effect &
                 & ignored in w equation)")
             else
                 this%coriolis_sine   = sin(latitude*pi/180.d0)
                 this%coriolis_cosine = cos(latitude*pi/180.d0)
-                call message(1,"Lattitude used for Coriolis (degrees)",latitude)
+                call message(1,"Latitude used for Coriolis (degrees)",latitude)
             end if
         end if
 
@@ -667,7 +668,7 @@ contains
 
         if (this%useWindTurbines) then
             allocate(this%WindTurbineArr)
-            call this%WindTurbineArr%init(inputFile, this%gpC, this%gpE, this%spectC, this%spectE, this%rbuffxC, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
+            call this%WindTurbineArr%init(inputFile, this%gpC, this%gpE, this%spectC, this%spectE, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
         end if 
 
         ! STEP 12: Set visualization planes for io
@@ -885,6 +886,13 @@ contains
         else
             call this%populate_rhs()
         end if
+
+        !print*, sum(abs(this%u_rhs))
+        !print*, sum(abs(this%v_rhs))
+        !print*, sum(abs(this%w_rhs))
+        !print*, sum(abs(this%T_rhs))    
+
+
         this%uhat1 = this%uhat + this%dt*this%u_rhs 
         this%vhat1 = this%vhat + this%dt*this%v_rhs 
         this%what1 = this%what + this%dt*this%w_rhs 
@@ -927,7 +935,7 @@ contains
 
 
         ! Wrap up this time step 
-        call this%wrapup_timestep() 
+        call this%wrapup_timestep()
 
     end subroutine
 
@@ -1404,7 +1412,7 @@ contains
             fT1E(1,1,:) = cmplx(zero,zero,rkind)
         end if 
         this%w_rhs = this%w_rhs + fT1E 
-        
+       
         if (this%useSponge) then
             call this%addSponge
         end if 
@@ -1421,11 +1429,25 @@ contains
             call this%AddNonLinearTerm_Rot()
         end if
 
+        !print*, "1:"
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
         
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
-        end if 
+        end if
+
+
+        !print*, "2:"
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
+   
+ 
         ! Step 3a: Extra Forcing 
         if (this%useExtraForcing) then
             call this%addExtraForcingTerm()
@@ -1434,26 +1456,45 @@ contains
         !if (this%useWindTurbines .and. (RKstage==1)) then
         if (this%useWindTurbines) then
             call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
-                                    this%u_rhs, this%v_rhs, this%w_rhs, this%inst_horz_avg_turb)
+                                    this%u_rhs, this%v_rhs, this%w_rhs, .true., this%inst_horz_avg_turb)
         end if 
+        !print*, "3:"
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !!print*, "Trhs:", sum(abs(this%T_rhs))
+        !print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs)) 
 
         ! Step 4: Buoyance + Sponge (inside Buoyancy)
         if (this%isStratified) then
             call this%addBuoyancyTerm()
-        end if 
+        end if
+
+        !print*, "4:"
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs)) 
 
         ! Step 5: Viscous Term (only if simulation if NOT inviscid)
         if (.not. this%isInviscid) then
             call this%addViscousTerm()
         end if
 
+        !print*, "5:"
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
 
         ! WARNING: the duidxjChat tensor changes state after this subroutine, so
         ! you must not assume that the values in it are correct after this
         ! state. Therefore, if you need to use it, use it BEFORE calling this
         ! subroutine. 
         ! Step 6: SGS Viscous Term
+        
         if (this%useSGS) then
+            call this%compute_and_bcast_surface_Mn()
             if (this%isStratified) then
                 call this%SGSmodel%getRHS_SGS_WallM(this%duidxjC, this%duidxjE        , this%duidxjChat ,& 
                                                 this%u_rhs  , this%v_rhs          , this%w_rhs      ,&
@@ -1476,6 +1517,12 @@ contains
                                                 !this%dTdyC  , this%dTdzHC)
             end if 
         end if
+
+        !print*, "6:"
+        !print*, "urhs:", sum(abs(this%u_rhs))
+        !print*, "vrhs:", sum(abs(this%v_rhs))
+        !print*, "wrhs:", sum(abs(this%w_rhs))
+        !print*, "Trhs:", sum(abs(this%T_rhs))
 
     end subroutine
 
@@ -1527,7 +1574,7 @@ contains
         if (this%isStratified) call this%spectC%ifft(this%That,this%T)
     
         ! STEP 4: Interpolate the cell center values of w
-        call this%compute_and_bcast_surface_Mn()
+        !call this%compute_and_bcast_surface_Mn()
         call this%interp_PrimitiveVars()
 
         ! STEP 5: Compute duidxjC 
@@ -1608,7 +1655,7 @@ contains
         if (this%isStratified) then
             if (this%botBC_Temp == 0) then
                 this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
-            end if 
+            end if
         end if  
         if (this%PreprocessForKS) this%KSupdated = .false. 
         if (this%useProbes) call this%updateProbes()
@@ -2032,7 +2079,7 @@ contains
         call this%spectC%ifft(this%dTdyH,this%dTdyC)
    
         call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
-       
+      
         if (useCompactFD) then
             call this%derT%ddz_C2E(ctmpz1,ctmpz2,size(ctmpz1,1),size(ctmpz1,2))
             call this%derT%InterpZ_E2C(ctmpz2,ctmpz1,size(ctmpz1,1),size(ctmpz1,2))

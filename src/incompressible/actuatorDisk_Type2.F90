@@ -14,8 +14,7 @@ module actuatorDisk_T2mod
     public :: actuatorDisk_T2
     
     real(rkind), parameter :: alpha_Smooth = 0.9d0 ! Exonential smoothing constant
-    integer, parameter :: xReg = 5, yReg = 8, zReg = 8
-    integer, parameter :: ntry = 10
+    integer, parameter :: xReg = 8, yReg = 8, zReg = 8
 
     type :: actuatorDisk_T2
         ! Actuator Disk_T2 Info
@@ -38,7 +37,7 @@ module actuatorDisk_T2mod
         real(rkind), dimension(:,:), allocatable :: rbuff
         real(rkind), dimension(:), allocatable :: dline, xline, yline, zline
         real(rkind), dimension(:,:,:), pointer :: xG, yG, zG
-
+        real(rkind), dimension(:,:,:), allocatable :: smearing_base
 
         ! MPI communicator stuff
         logical :: Am_I_Active, Am_I_Split
@@ -69,7 +68,9 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     integer :: j, locator(1)
     !integer :: i, ylen, zlen
     integer :: xLc(1), yLc(1), zLc(1), xst, xen, yst, yen, zst, zen, ierr, xlen
-   
+    integer  :: ntry = 100
+    real(rkind) :: time2initialize = 0
+
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
     ! Read input file for this turbine    
@@ -106,7 +107,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     tmp = sqrt((yG(1,:,:) - yLoc)**2 + (zG(1,:,:) - zLoc)**2)
     this%tag_face = 0
     tmp_tag = 0
-    where(tmp < (diam/2.d0 + 8.d0*max(dz,dy,dz)))
+    where(tmp < (diam/2.d0 + max(xReg*dx,yReg*dy,zReg*dz)))
         !this%tag_face = 1
         tmp_tag = 1
     end where
@@ -143,10 +144,10 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
         call MPI_COMM_SIZE( this%mycomm, this%myComm_nproc, ierr )
     end if 
 
+     ntry = 2*ceiling(diam/min(dx, dy, dz))
     
     if (this%Am_I_Active) then
         allocate(this%rbuff(size(xG,2),size(xG,3)))
-
         call sample_on_circle(diam/2.d0,yLoc,zLoc, this%ys,this%zs,ntry)
         allocate(this%xs(size(this%ys)))
         this%xs = xLoc
@@ -172,6 +173,19 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     else
         deallocate(this%dsq, this%tag_face)
     end if 
+
+    call message(1, "Initializing Actuator Disk (ADM Type=2) number", ActuatorDisk_T2ID)
+    call tic()
+    allocate(this%smearing_base(size(xG,1), size(xG,2), size(xG,3))) 
+    this%smearing_base = 0.d0
+    do j = 1,size(this%xs)
+            call this%smear_this_source(this%smearing_base,this%xs(j),this%ys(j),this%zs(j), one, this%startEnds(1,j), &
+                                this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
+                                this%startEnds(5,j),this%startEnds(6,j),this%startEnds(7,j))
+    end do 
+    call message(2, "Smearing grid parameter, ntry", ntry)
+    call toc(mpi_comm_world, time2initialize)
+    call message(2, "Time (seconds) to initialize", time2initialize)
 
     deallocate(tmp)
 end subroutine 
@@ -239,12 +253,13 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals)
 
     call this%getMeanU(u,v,w)
     usp_sq = this%uface**2 + this%vface**2 + this%wface**2
-    force = this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
-    do j = 1,size(this%xs)
-            call this%smear_this_source(rhsxvals,this%xs(j),this%ys(j),this%zs(j), force, this%startEnds(1,j), &
-                                this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
-                                this%startEnds(5,j),this%startEnds(6,j),this%startEnds(7,j))
-    end do 
+    force = -this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
+    !do j = 1,size(this%xs)
+    !        call this%smear_this_source(rhsxvals,this%xs(j),this%ys(j),this%zs(j), force, this%startEnds(1,j), &
+    !                            this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
+    !                            this%startEnds(5,j),this%startEnds(6,j),this%startEnds(7,j))
+    !end do 
+    rhsxvals = rhsxvals + force*this%smearing_base 
     rhsyvals = zero
     rhszvals = zero
 
@@ -258,7 +273,7 @@ subroutine smear_this_source(this,rhsfield, xC, yC, zC, valSource, xst, xen, yst
     integer :: jj, kk
 
     if (this%Am_I_Active) then
-        do concurrent (kk = zst:zen)
+        do kk = zst,zen
             do jj = yst,yen
                 this%dline(1:xlen) = (this%xG(xst:xen,jj,kk) - xC)**2 &
                                    + (this%yG(xst:xen,jj,kk) - yC)**2 & 

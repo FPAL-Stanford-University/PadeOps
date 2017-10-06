@@ -1,0 +1,119 @@
+&INPUT
+inputdir                      = "/home/aditya90/Codes/PadeOps/data/EkmanLayerGrowth/input_data"    ! Directory for any input (RESTART) files
+outputdir                     = "/home/aditya90/Codes/PadeOps/data/EkmanLayerGrowth/output_data"   ! Directory for all output files
+nx                            = 96                   ! Number of points in X
+ny                            = 96                   ! Number of points in Y
+nz                            = 256                   ! Number of points in Z
+tstop                         = 1000.D0               ! Physical time to stop the simulation
+CFL                           = 1.0D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+dt                            = 5.D-1                 ! Fixed time step value (only used if CFL is set to negative)
+prow                          = 0                     ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol                          = 0                     ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+useRestartFile                = .FALSE.               ! Set to false if it's a fresh simulation 
+restartFile_TID               = 2579                  ! TimeID of the restart file being used
+restartFile_RID               = 20                    ! RunID of the restart file being used
+/
+/
+&NUMERICS
+TimeSteppingScheme            = 2                     ! 0: Adams-Bashforth, 1: TVD-RK3, 2: SSP-RK45
+AdvectionTerm                 = 1                     ! 0: Rotational Form, 1: Skew-Symmetric Form (use this for Compact Scheme)
+NumericalSchemeVert           = 1                     ! 0: Second order FD, 1: Sixth order Compact Difference (CD06)
+ComputeStokesPressure         = .TRUE.                ! Leave this as TRUE unless you know what you are doing.  
+useDealiasFilterVert          = .FALSE.               ! Dealiasing filter used in vertical direction
+t_DivergenceCheck             = 10                    ! Check divergence every # of timesteps. Reproject if needed.
+/
+/
+&IO
+RunID                         = 16                    ! Run Label (All output files will be tagged with this number)
+t_restartDump                 = 1000                  ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump                    = 20                   ! Data dumping frequency (# of timesteps)
+ioType                        = 0                     ! 0: Fortran Binaries, 1: .vtk files
+dumpPlanes                    = .FALSE.                ! Dump plane visualations. Select planes in initialize.F90
+t_planeDump                   = 10                    ! Plane dumping frequency (# of timesteps)
+t_start_planeDump             = 1                     ! When do you want to start dumping planes?
+t_stop_planeDump              = 5000                  ! When do you want to stop dumping planes?
+/
+/
+&STATS
+tid_StatsDump                 = 20000                 ! Dumping Frequency for Statistics file (# of time steps)
+tid_compStats                 = 10                    ! Frequency of Computing Statistics
+tSimStartStats                = 2000.d0               ! Simulation time for starting stats calculations 
+normStatsByUstar              = .TRUE.                ! Normalize Statistics by ustar at each instant
+computeSpectra                = .FALSE.               ! Compute and time average x - spectra on the run
+timeAvgFullFields             = .FALSE.               ! Time average and store fields on the run
+/
+/
+&OS_INTERACTIONS
+useSystemInteractions         = .TRUE.                ! Do you wish to interact with the program while it is running?
+tSystemInteractions           = 10                    ! Check for interactions commands after these many time steps
+controlDir                    = "NULL"                ! Check in this directory for command files (NULL = Check in output directory)
+/
+/
+&PHYSICS
+isInviscid                    = .FALSE.               ! Is this an inviscid simulation?
+useCoriolis                   = .TRUE.                ! Activate the coriolis term? 
+assume_fplane                 = .FALSE.               ! make the f-plane assumption while computing the coriolis term
+latitude                      =  90.d0                ! Latitude of the domain in degrees 
+useExtraForcing               = .FALSE.               ! Is an extra forcing term being used? (non-Geostrophic forcing only)
+useGeostrophicForcing         = .TRUE.                ! This is true if forcing is provided using the coriolis term  
+isStratified                  = .FALSE.               ! Use Stratification / active scalar in momentum
+Pr                            = 0.6D0                 ! Turbulent Prandtl Number; used when 
+Ro                            = 300.D0                ! Rossby Number used when Coriolis is ON 
+Re                            = 300.D0                ! Reynolds Number; used when isInvisid is FALSE
+Fr                            = 1.D10                 ! Froude number; used when isStratified is TRUE
+G_Geostrophic                 = 1.D0                  ! Speed of the geostrophic wind (used for forcing)
+G_Alpha                       = 0.D0                  ! Angle made by the geostrophic wind vector with respect to x-axis
+dPfdx                         = 0.D0                  ! Additional Acceleration in X; used if useExtraForcing is ON
+dPfdy                         = 0.D0                  ! Additional Acceleration in Y; used if useExtraForcing is ON
+dPfdz                         = 0.D0                  ! Additional Acceleration in Z; used if useExtraForcing is ON
+useSGS                        = .FALSE.               ! Is this an LES? If yes, then you need to use an SGS model.
+/
+/
+&PRESSURE_CALC
+fastCalcPressure              = .FALSE.               ! Compute and store pressure at every time step using the faster algorithm?
+storePressure                 = .FALSE.               ! Would you like to compute and store pressure?
+P_dumpFreq                    = 100                   ! How often (timesteps) do you want to dump pressure?
+P_compFreq                    = 10                    ! How often (timesteps) do you want to compute pressure? 
+/
+/
+&BCs
+topWall                       = 2                     ! no_slip = 1, slip = 2, wall model = 3
+botWall                       = 1                     ! no_slip = 1, slip = 2, wall model = 3
+useSpongeLayer                = .FALSE.               ! Use a sponge layer at the top 
+zstSponge                     = 0.8d0                 ! Height above which the sponge layer is active
+SpongeTscale                  = 50.d0                 ! e-folding time to dt ratio (somewhere between 10 - 50) 
+/
+/
+&SGS_MODEL
+SGSModelID                    = 1                     ! 0: smagorinsky (w/ wall function), 1: sigma
+Csgs                          = 1.3d0                 ! Model constant (asymptotic value in case wall function is used)
+WallModelType                 = 1                     ! 1: Moeng, 2: Bou-zeid et. al.
+z0                            = 1.0d-4                ! Roughness length scale (non-dimensional) 
+DynamicProcedureType          = 0                     ! 0: No dynamic procedure, 1: Planar Avg. Dynamic Proc., 2: Global Dynamic Proc.
+useVerticalTfilter            = .false.               ! Use test filtering in vertical direction for dynamic procedure?
+DynProcFreq                   = 5                     ! Dynamic procedure used every DYNPROCFREQ timesteps.
+useWallDamping                = .FALSE.               ! Use the Wall Damping Function
+ncWall                        = 3.d0                  ! Wall Damping Function Exponent
+explicitCalcEdgeEddyViscosity = .true.                ! Explicitly calculate or interpolate edge values for eddy viscosity?
+/
+/
+&WINDTURBINES
+useWindTurbines               = .FALSE.               ! Do you want to use Wind turbines ?
+num_turbines                  = 24                    ! Do you want to use Wind turbines ?
+ADM                           = .TRUE.                ! Are the wind turbines, simple actuator disks? 
+turbInfoDir                   = "<Location>"          ! Location of the turbine input files
+/
+/
+&KSPREPROCESS
+PreprocessForKS               = .FALSE.               ! Do you want to generate preprocessing files for KS? 
+KSoutputDir                   = "SomeLocation"        ! Directory where KS files are dumped.
+KSRunID                       = 99                    ! RunID tag for KS files
+t_dumpKSprep                  = 10                    ! Dumping Frequency for KS files
+/
+/
+&ChannelGrowth
+InitFileTag                   = "SampleInput_singleMode"         ! Filename tag to use for input file 
+InitFileDirectory             = "/home/aditya90/Codes/PadeOps/data/EkmanLayerGrowth/input_data" ! Directory where the initialization files are located
+ProblemMode                   = 1                     ! 1: Provide your normal mode, 2: Mystery input
+Noise_Amp                     = 1.d-15                ! RMS of the white noise added to the velocity field
+/
