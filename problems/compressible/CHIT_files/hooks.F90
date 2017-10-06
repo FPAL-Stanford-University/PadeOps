@@ -1,9 +1,14 @@
-module taylorgreen_data
+module CHIT_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,eight
+    use constants,        only: one,half,four
     implicit none
     
-    real(rkind) :: tke0, enstrophy0
+    real(rkind) :: Mt = 0.1_rkind, Re_lambda = 100._rkind, visc_exp = 0.75_rkind, gam = 1.4_rkind, k0 = four
+    real(rkind) :: tke0, enstrophy0, dilatation_var0, u_rms0, lambda0, tau
+
+    real(rkind) :: mu_ref
+    real(rkind) :: T_ref = 1._rkind / 1.4_rkind
+    real(rkind) :: Pr = 0.70_rkind
 
 end module
 
@@ -12,7 +17,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: two,pi
     use decomp_2d,        only: decomp_info
 
-    use taylorgreen_data
+    use CHIT_data
 
     implicit none
 
@@ -53,13 +58,17 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
-    use kind_parameters,  only: rkind
-    use constants,        only: zero,half,one,two,pi
-    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
-    use decomp_2d,        only: decomp_info
-    use MixtureEOSMod,    only: mixture
+    use mpi
+    use kind_parameters,      only: rkind, clen
+    use constants,            only: zero,half,one,two,three,pi
+    use CompressibleGrid,     only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
+    use decomp_2d,            only: decomp_info, nrank, nproc
+    use MixtureEOSMod,        only: mixture
+    use IdealGasEOS,          only: idealgas
+    use PowerLawViscosityMod, only: powerLawViscosity
+    use exits,                only: GracefulExit
     
-    use taylorgreen_data
+    use CHIT_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -70,7 +79,21 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tstop,dt,tviz
     
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),3) :: vorticity
+    integer :: ioUnit
+    integer :: counter, rank, ierr
+    integer :: nx, ny, nz
+    integer :: ix_dat, iy_dat, iz_dat, ix, iy, iz
+    real(rkind) :: u_dat, v_dat, w_dat
+    character(len=clen) :: datafile
+
+    namelist /PROBINPUT/  Mt, Re_lambda, visc_exp, Pr, gam, k0, datafile
+    
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PROBINPUT)
+    close(ioUnit)
+
+    nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
     associate( rho => fields(:,:,:,rho_index), u => fields(:,:,:,u_index), &
                  v => fields(:,:,:,  v_index), w => fields(:,:,:,w_index), &
@@ -79,10 +102,60 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
         rho = one
-        u   =  sin(x)*cos(y)*cos(z)
-        v   = -cos(x)*sin(y)*cos(z)
-        w   = zero
-        p   = 100._rkind + ( (cos(two*z) + two)*(cos(two*x) + cos(two*y)) - two ) / 16._rkind
+        p   = one / gam
+
+        mu_ref = Mt * half / (Re_lambda * sqrt(three))
+        T_ref = 1._rkind / gam
+
+        ! Set the material property
+        call mix%set_material(1, idealgas(gam,one), powerLawViscosity(mu_ref, T_ref, visc_exp, Pr))
+
+        ! Make all processes read the file one by one to avoid file access conflicts
+        do rank = 0,nproc-1
+            call MPI_Barrier(MPI_COMM_WORLD, ierr)
+            if (nrank == rank) then
+                open(unit=ioUnit, file=trim(datafile), form='FORMATTED')
+                read(ioUnit,*) ix_dat, iy_dat, iz_dat
+
+                if ((ix_dat /= nx) .or. (iy_dat /= ny) .or. (iz_dat /= nz)) then
+                    call GracefulExit("Grid size in datafile does not match simulation grid size. Exiting...", 4652)
+                end if
+
+                counter = 0
+
+                ! Read in velocity data from file (u_rms = 1)
+                do while (counter < decomp%ysz(1)*decomp%ysz(2)*decomp%ysz(3))
+                  read(ioUnit,*) ix_dat, iy_dat, iz_dat, u_dat, v_dat, w_dat
+                  ix_dat = ix_dat + 1; iy_dat = iy_dat + 1; iz_dat = iz_dat + 1 ! Convert to 1 based indexing
+
+                  if ( (ix_dat >= decomp%yst(1)) .and. (ix_dat <= decomp%yen(1)) ) then
+                      if ( (iy_dat >= decomp%yst(2)) .and. (iy_dat <= decomp%yen(2)) ) then
+                          if ( (iz_dat >= decomp%yst(3)) .and. (iz_dat <= decomp%yen(3)) ) then
+                              ix = ix_dat - decomp%yst(1) + 1
+                              iy = iy_dat - decomp%yst(2) + 1
+                              iz = iz_dat - decomp%yst(3) + 1
+                              u(ix,iy,iz) = u_dat
+                              v(ix,iy,iz) = v_dat
+                              w(ix,iy,iz) = w_dat
+                              counter = counter + 1
+                          end if
+                      end if
+                  end if
+                end do
+                close(ioUnit)
+            end if
+        end do
+
+        u_rms0 = Mt / sqrt(three)
+        u = u_rms0 * u
+        v = u_rms0 * v
+        w = u_rms0 * w
+
+        lambda0 = two / k0
+        tau = lambda0 / u_rms0
+        tstop = tstop * tau
+        dt    = dt * tau
+        tviz  = tviz * tau
 
     end associate
 
@@ -95,10 +168,10 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use decomp_2d,        only: decomp_info, nrank
     use DerivativesMod,   only: derivatives
     use MixtureEOSMod,    only: mixture
-    use operators,        only: curl
+    use operators,        only: curl, divergence
     use reductions,       only: P_MEAN
 
-    use taylorgreen_data
+    use CHIT_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -112,7 +185,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     
     integer                                     :: outputunit=229
     character(len=clen) :: outputfile, str
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tke, enstrophy
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tke, enstrophy, dilatation
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),3) :: vorticity
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
@@ -123,26 +196,29 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         ! Get TKE and Enstrophy to output to file
-        tke = half*rho*(u*u + v*v + w*w)
+        tke = u*u + v*v + w*w
         call curl(decomp, der, u, v, w, vorticity)
         enstrophy = vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2
 
+        call divergence(decomp, der, u, v, w, dilatation)
+
         write(str,'(I4.4)') decomp%ysz(2)
-        write(outputfile,'(2A)') trim(outputdir),"/taylorgreen_"//trim(str)//".dat"
+        write(outputfile,'(2A)') trim(outputdir),"/CHIT_"//trim(str)//".dat"
 
         if (vizcount == 0) then
             tke0 = P_MEAN( tke )
             enstrophy0 = P_MEAN( vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2 )
+            dilatation_var0 = P_MEAN( dilatation**2 )
             open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-            write(outputunit,'(3A26)') "Time", "TKE", "Enstrophy"
+            write(outputunit,'(4A26)') "Time", "Velocity Var", "Enstrophy", "Dilatation Var"
         else
             open(unit=outputunit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
         end if
-        write(outputunit,'(3ES26.16)') tsim, P_MEAN(tke)/tke0, P_MEAN(enstrophy)/enstrophy0
+        write(outputunit,'(4ES26.16)') tsim, P_MEAN(tke)/tke0, P_MEAN(enstrophy)/(u_rms0**2 / lambda0**2), P_MEAN(dilatation**2)/(u_rms0**2 / lambda0**2)
         close(outputunit)
         
         ! write(str,'(I4.4,A,I4.4,A,I6.6)') decomp%ysz(2), "_", vizcount, "_", nrank
-        ! write(outputfile,'(2A)') trim(outputdir),"/taylorgreen_"//trim(str)//".dat"
+        ! write(outputfile,'(2A)') trim(outputdir),"/CHIT_"//trim(str)//".dat"
         ! open(unit=outputunit, file=trim(outputfile), form='UNFORMATTED', status='REPLACE')
         ! write(outputunit) tsim
         ! write(outputunit) decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)
@@ -155,6 +231,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
         ! write(outputunit) vorticity(:,:,:,1)
         ! write(outputunit) vorticity(:,:,:,2)
         ! write(outputunit) vorticity(:,:,:,3)
+        ! write(outputunit) dilatation
         ! write(outputunit) p
         ! close(outputunit)
 
@@ -168,7 +245,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim)
     use decomp_2d,        only: decomp_info
     use MixtureEOSMod,    only: mixture
 
-    use taylorgreen_data
+    use CHIT_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -195,7 +272,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
     use exits,            only: message
     use reductions,       only: P_MAXVAL, P_MEAN
 
-    use taylorgreen_data
+    use CHIT_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -228,7 +305,7 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,       only: decomp_info
     use MixtureEOSMod,   only: mixture
 
-    use taylorgreen_data
+    use CHIT_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
