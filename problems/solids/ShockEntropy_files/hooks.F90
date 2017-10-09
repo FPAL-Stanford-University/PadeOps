@@ -1,5 +1,5 @@
 module ShockEntropy_data
-    use kind_parameters,  only: rkind
+    use kind_parameters,  only: rkind, clen
     use constants,        only: one,third,half,twothird,two,three,four,seven,pi
     implicit none
     
@@ -13,6 +13,7 @@ module ShockEntropy_data
     real(rkind) :: rho_0
     real(rkind) :: ximp = real(-3.85D0,rkind)
     real(rkind) :: uimpact = real(300.0D0,rkind)
+    character(len=clen) :: multiplier_file = ""
 contains
 
 SUBROUTINE fnumden(pf,fparams,iparams,num,den)
@@ -139,16 +140,16 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = real(20.D0,rkind)/real(nx-1,rkind)
+        dx = real(10.D0,rkind)/real(nx,rkind)
         dy = pi/real(ny, rkind)
         dz = dx
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - real(10.D0,rkind)
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
-                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
+                    x(i,j,k) = ( real( ix1 - 1 + i - 1, rkind ) + half ) * dx - real(5.D0,rkind)
+                    y(i,j,k) = ( real( iy1 - 1 + j - 1, rkind )        ) * dy
+                    z(i,j,k) = ( real( iz1 - 1 + k - 1, rkind )        ) * dz
                 end do
             end do
         end do
@@ -158,7 +159,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rho0,tstop,dt,tviz)
-    use kind_parameters,  only: rkind
+    use kind_parameters,  only: rkind,clen
     use constants,        only: zero,eps,third,half,one,two,pi
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,&
                                 g11_index,g12_index,g13_index,g21_index,g22_index,g23_index,g31_index,g32_index,g33_index
@@ -181,10 +182,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
     real(rkind) :: p_star, rhoRatio, tfactor, h1, grho1, grho2
     integer, dimension(2) :: iparams
     real(rkind), dimension(8) :: fparams
-    integer :: nx
-    real(rkind) :: mu, gam, PInf, yield, tau0
+    integer :: nx, i
+    real(rkind) :: mu, gam, PInf, yield, tau0, dummy
+    character(len=clen) :: str
 
-    namelist /PROBINPUT/  pRatio, p1, thick, Cbeta, xs, xe, ximp, uimpact
+    namelist /PROBINPUT/  pRatio, p1, thick, Cbeta, xs, xe, ximp, uimpact, multiplier_file
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -197,6 +199,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
     else
     endif
 
+    nx = decomp%ysz(1)
+
     associate( rho => fields(:,:,:,rho_index),   u => fields(:,:,:,  u_index), &
                  v => fields(:,:,:,  v_index),   w => fields(:,:,:,  w_index), &
                  p => fields(:,:,:,  p_index),   T => fields(:,:,:,  T_index), &
@@ -207,7 +211,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
                g32 => fields(:,:,:,g32_index), g33 => fields(:,:,:,g33_index), & 
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
-        p_star = p1
+        p_star = pRatio*p1
         PInf = PInf / p_star
         mu = mu / p_star
         yield = yield / p_star
@@ -242,17 +246,29 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         w   = zero
         p   = (one-tmp)*  p2 + tmp*  p1
 
-        ! set location of impact if this is to be used instead of normal shock
-        if(ximp > -10.0d0 .and. ximp < (-10.0d0 + 20.0d0)) then
-          tmp = half * ( one + erf( (x-ximp)/(thick*dx) ) )
-          u = (one-tmp)*two*uimpact
-        endif
+        if (trim(multiplier_file) == "") then
+            ! set location of impact if this is to be used instead of normal shock
+            if(ximp > -5.0d0 .and. ximp < (-5.0d0 + 10.0d0)) then
+              tmp = half * ( one + erf( (x-ximp)/(thick*dx) ) )
+              u = (one-tmp)*two*uimpact
+            endif
 
-        ! add vorticity/entropy fluctuations starting from xe
-        tmp = half * ( one + erf( (x-xe)/(eps*dx) ) )
+            ! add vorticity/entropy fluctuations starting from xe
+            tmp = half * ( one + erf( (x-xe)/(eps*dx) ) )
 
-        !rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe)))  ! 1D fluctuations
-        rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe))*cos(4.0d0*y))
+            !rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe)))  ! 1D fluctuations
+            rho = rho*(one-tmp) + tmp*exp( -0.01_rkind * sin(13._rkind*(x-xe))*cos(4.0d0*y))
+        else
+            open(unit=iounit, file=trim(multiplier_file), form='FORMATTED')
+            read(iounit,*), str,str,str
+            do i=1,nx
+                read(iounit,*) dummy, tmp(i,1,1)
+                tmp(i,:,:) = tmp(i,1,1)
+            end do
+            close(iounit)
+
+            rho = rho * tmp
+        end if
         
         rho1 = rho(decomp%yen(1),1,1)
         u1   = u  (decomp%yen(1),1,1)
@@ -295,7 +311,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,eostype,eosparams,rh
         print*, "tstop = ", tstop
 
         ! store state variables at boundaries for use in hooks_bc
-        nx = decomp%ysz(1)
         rho1 = rho(nx,1,1); u1 = u(nx,1,1); p1 = p(nx,1,1)
         rho2 = rho( 1,1,1); u2 = u( 1,1,1); p2 = p( 1,1,1)
 
@@ -407,43 +422,43 @@ subroutine hook_output(decomp,der,fil,dx,dy,dz,outputdir,mesh,fields,tsim,vizcou
         !write(*,*) 'Filter commutation: F(ddy(g11)), ddy(F(g11)): ', maxval(curlg(:,:,:,4)-curlg(:,:,:,6)), minval(curlg(:,:,:,4)-curlg(:,:,:,6))
         !! ------debug block------
 
-        write(outputfile,'(2A)') trim(outputdir),"/tec_ShEn_"//trim(str)//".dat"
-        if(vizcount==0) then
+        ! write(outputfile,'(2A)') trim(outputdir),"/tec_ShEn_"//trim(str)//".dat"
+        ! if(vizcount==0) then
 
-          open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='unknown')
-          write(outputunit,'(290a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar","curlg11","curlg12","curlg13","curlg21","curlg22","curlg23","curlg31","curlg32","curlg33","conterr"'
-          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
-          write(outputunit,'(a,ES27.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
-          do k=1,decomp%ysz(3)
-           do j=1,decomp%ysz(2)
-            do i=1,decomp%ysz(1)
-                write(outputunit,'(37ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
-                                               g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
-                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), curlg(i,j,k,1:9), &
-                                               rho(i,j,k)-rho_0*detg(i,j,k)
-          
-            end do
-           end do
-          end do
-          close(outputunit)
-        else
-          open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='old',ACTION='write',POSITION='append')
-          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
-          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
-          write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
-          do k=1,decomp%ysz(3)
-           do j=1,decomp%ysz(2)
-            do i=1,decomp%ysz(1)
-                write(outputunit,'(34ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
-                                               g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
-                                               sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), curlg(i,j,k,1:9), &
-                                               rho(i,j,k)-rho_0*detg(i,j,k)
-          
-            end do
-           end do
-          end do
-          close(outputunit)
-        endif
+        !   open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='unknown')
+        !   write(outputunit,'(290a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p","g11","g12","g13","g21","g22","g23","g31","g32","g33","sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar","curlg11","curlg12","curlg13","curlg21","curlg22","curlg23","curlg31","curlg32","curlg33","conterr"'
+        !   write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+        !   write(outputunit,'(a,ES27.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+        !   do k=1,decomp%ysz(3)
+        !    do j=1,decomp%ysz(2)
+        !     do i=1,decomp%ysz(1)
+        !         write(outputunit,'(37ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+        !                                        g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
+        !                                        sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), curlg(i,j,k,1:9), &
+        !                                        rho(i,j,k)-rho_0*detg(i,j,k)
+        !   
+        !     end do
+        !    end do
+        !   end do
+        !   close(outputunit)
+        ! else
+        !   open(unit=outputunit, file=trim(outputfile), form='FORMATTED',STATUS='old',ACTION='write',POSITION='append')
+        !   write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
+        !   write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
+        !   write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
+        !   do k=1,decomp%ysz(3)
+        !    do j=1,decomp%ysz(2)
+        !     do i=1,decomp%ysz(1)
+        !         write(outputunit,'(34ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &
+        !                                        g11(i,j,k), g12(i,j,k), g13(i,j,k), g21(i,j,k), g22(i,j,k), g23(i,j,k), g31(i,j,k), g32(i,j,k), g33(i,j,k), &
+        !                                        sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), curlg(i,j,k,1:9), &
+        !                                        rho(i,j,k)-rho_0*detg(i,j,k)
+        !   
+        !     end do
+        !    end do
+        !   end do
+        !   close(outputunit)
+        ! endif
 
         deallocate(curlg,detg)
     end associate
