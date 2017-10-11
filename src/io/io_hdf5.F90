@@ -66,20 +66,21 @@ module io_hdf5_stuff
         procedure          :: start_reading
         procedure          :: end_reading
         procedure          :: write_variable
+        procedure          :: find_last_dump
         procedure          :: destroy
 
     end type
 
 contains
 
-    subroutine init(this, comm, gp, pencil, vizdir, filename_prefix, reduce_precision, read_only, subdomain_lo, subdomain_hi)
+    subroutine init(this, comm, gp, pencil, vizdir, filename_prefix, reduce_precision, read_only, subdomain_lo, subdomain_hi, jump_to_last)
         class(io_hdf5),     intent(inout) :: this
         integer,            intent(in)    :: comm
         class(decomp_info), intent(in)    :: gp
         character(len=1),   intent(in)    :: pencil
         character(len=*),   intent(in)    :: vizdir
         character(len=*),   intent(in)    :: filename_prefix
-        logical, optional,  intent(in)    :: reduce_precision, read_only
+        logical, optional,  intent(in)    :: reduce_precision, read_only, jump_to_last
         integer, dimension(3), optional, intent(in) :: subdomain_lo, subdomain_hi
 
         integer(hsize_t), dimension(3) :: tmp
@@ -140,6 +141,13 @@ contains
 
         ! Close the file
         ! call h5fclose_f(this%file_id, error)
+
+        ! Jump to the next vizdump if some are already present
+        ! If read_only, then jump to the last available vizdump
+        if ( (present(jump_to_last)) .and. (jump_to_last) ) then
+            this%vizcount = this%find_last_dump()
+            if (.not. this%read_only) this%vizcount = this%vizcount + 1
+        end if
 
         ! Create link creation property list and set it to allow creation of intermediate groups
         call h5pcreate_f(H5P_LINK_CREATE_F, this%lcpl_id, error)
@@ -740,5 +748,41 @@ contains
         call h5fclose_f(this%file_id, error)
 
     end subroutine
+    
+    function find_last_dump(this) result(vizcount)
+        class(io_hdf5), intent(inout) :: this
+
+        integer :: vizcount
+        integer :: error
+        integer :: info
+
+        info = mpi_info_null
+
+        ! Setup file access property list with parallel I/O access.
+        call h5pcreate_f(H5P_FILE_ACCESS_F, this%plist_id, error)
+        if (error /= 0) call GracefulExit("Could not create HDF5 file access property list.", 7356)
+        call h5pset_fapl_mpio_f(this%plist_id, this%comm, info, error)
+        if (error /= 0) call GracefulExit("Could not set collective MPI I/O HDF5 file access property.", 7356)
+
+        error = 0
+        vizcount = 0
+        do while (error == 0)
+            write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', vizcount, '.h5'
+
+            ! Open the file collectively
+            call h5fopen_f(this%filename, H5F_ACC_RDONLY_F, this%file_id, error, access_prp = this%plist_id)
+            if (error /= 0) call GracefulExit("Could not open HDF5 file " // adjustl(trim(this%filename)), 7356)
+
+            ! Close the file
+            call h5fclose_f(this%file_id, error)
+
+            vizcount = vizcount + 1
+        end do
+        vizcount = vizcount - 2
+
+        ! Close file access property list
+        call h5pclose_f(this%plist_id, error)
+
+    end function
 
 end module
