@@ -752,36 +752,23 @@ contains
     function find_last_dump(this) result(vizcount)
         class(io_hdf5), intent(inout) :: this
 
-        integer :: vizcount
-        integer :: error
-        integer :: info
+        integer :: vizcount, error
+        logical :: fileexists
 
-        info = mpi_info_null
+        if (this%master) then
+            fileexists = .true.
+            vizcount = 0
+            do while (fileexists)
+                write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', vizcount, '.h5'
 
-        ! Setup file access property list with parallel I/O access.
-        call h5pcreate_f(H5P_FILE_ACCESS_F, this%plist_id, error)
-        if (error /= 0) call GracefulExit("Could not create HDF5 file access property list.", 7356)
-        call h5pset_fapl_mpio_f(this%plist_id, this%comm, info, error)
-        if (error /= 0) call GracefulExit("Could not set collective MPI I/O HDF5 file access property.", 7356)
+                inquire(file=trim(this%filename), exist=fileexists)
+                vizcount = vizcount + 1
+            end do
+            vizcount = vizcount - 2
+        end if
 
-        error = 0
-        vizcount = 0
-        do while (error == 0)
-            write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', vizcount, '.h5'
-
-            ! Open the file collectively
-            call h5fopen_f(this%filename, H5F_ACC_RDONLY_F, this%file_id, error, access_prp = this%plist_id)
-            if (error /= 0) call GracefulExit("Could not open HDF5 file " // adjustl(trim(this%filename)), 7356)
-
-            ! Close the file
-            call h5fclose_f(this%file_id, error)
-
-            vizcount = vizcount + 1
-        end do
-        vizcount = vizcount - 2
-
-        ! Close file access property list
-        call h5pclose_f(this%plist_id, error)
+        ! Broadcast vizcount to all other processes
+        call mpi_bcast(vizcount, 1, MPI_INTEGER, 0, this%comm, error)
 
     end function
 
