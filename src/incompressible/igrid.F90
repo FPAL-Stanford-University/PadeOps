@@ -577,7 +577,7 @@ contains
             call initfields_wallM(this%gpC, this%gpE, inputfile, this%mesh, this%PfieldsC, this%PfieldsE)! <-- this procedure is part of user defined HOOKS
             this%step = 0
             this%tsim = zero
-            call this%dumpRestartfile()
+            !call this%dumpRestartfile()
         end if 
     
         if (this%isStratified) then
