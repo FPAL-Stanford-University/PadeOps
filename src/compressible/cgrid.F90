@@ -376,13 +376,14 @@ contains
         ! Write mesh coordinates to file
         call this%viz%write_coords(this%mesh)
 
+        ! Always write data in full precision for restart
         allocate(this%restart)
         call this%restart%init( mpi_comm_world, this%decomp, 'y', this%outputdir, 'restart', &
-                                reduce_precision=.false., read_only=.true., jump_to_last=.true.) ! Always in full precision for restart
+                                reduce_precision=.false., write_xdmf=.false., read_only=.true., jump_to_last=.true.)
         if (this%restart%vizcount > 0) call this%read_restart(this%restart%vizcount)
         call this%restart%destroy()
         call this%restart%init( mpi_comm_world, this%decomp, 'y', this%outputdir, 'restart', &
-                                reduce_precision=.false., read_only=.false., jump_to_last=.true.) ! Always in full precision for restart
+                                reduce_precision=.false., write_xdmf=.false., read_only=.false., jump_to_last=.true.)
         this%nrestart = nrestart
 
         if ((this%step > 0) .and. (rewrite_viz)) then

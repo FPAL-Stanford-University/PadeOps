@@ -22,6 +22,7 @@ module io_hdf5_stuff
         integer :: comm                  ! Communicator for parallel I/O
         character(len=1) :: pencil       ! Which pencil to use for I/O
         logical :: read_only             ! Open file as read only? If false, file is erased if exists
+        logical :: write_xdmf            ! Write XDMF file for visualization?
 
         integer(hid_t) :: file_id        ! File identifier
         integer        :: xdmf_file_id   ! XDMF file identifier
@@ -73,14 +74,14 @@ module io_hdf5_stuff
 
 contains
 
-    subroutine init(this, comm, gp, pencil, vizdir, filename_prefix, reduce_precision, read_only, subdomain_lo, subdomain_hi, jump_to_last)
+    subroutine init(this, comm, gp, pencil, vizdir, filename_prefix, reduce_precision, write_xdmf, read_only, subdomain_lo, subdomain_hi, jump_to_last)
         class(io_hdf5),     intent(inout) :: this
         integer,            intent(in)    :: comm
         class(decomp_info), intent(in)    :: gp
         character(len=1),   intent(in)    :: pencil
         character(len=*),   intent(in)    :: vizdir
         character(len=*),   intent(in)    :: filename_prefix
-        logical, optional,  intent(in)    :: reduce_precision, read_only, jump_to_last
+        logical, optional,  intent(in)    :: reduce_precision, write_xdmf, read_only, jump_to_last
         integer, dimension(3), optional, intent(in) :: subdomain_lo, subdomain_hi
 
         integer(hsize_t), dimension(3) :: tmp
@@ -99,6 +100,9 @@ contains
 
         this%reduce_precision = .false.
         if (present(reduce_precision)) this%reduce_precision = reduce_precision
+
+        this%write_xdmf = .true.
+        if (present(write_xdmf)) this%write_xdmf = write_xdmf
 
         this%vizcount = 0
         this%vizdir = adjustl(trim(vizdir))
@@ -639,30 +643,33 @@ contains
         ! call h5gclose_f(this%group_id, error)
         call this%write_attribute(1, [time], 'Time', grpname)
 
-        this%xdmf_filename = ''
-        write(this%xdmf_filename,'(A,A,I4.4,A)') adjustl(trim(this%vizdir)), "/", this%vizcount, '.xmf'
+        if (this%write_xdmf) then
+            this%xdmf_filename = ''
+            ! write(this%xdmf_filename,'(A,A,I4.4,A)') adjustl(trim(this%vizdir)), "/", this%vizcount, '.xmf'
+            write(this%xdmf_filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.xmf'
 
-        if (this%master) then
-            open(unit=this%xdmf_file_id, file=adjustl(trim(this%xdmf_filename)), form='FORMATTED', status='REPLACE')
+            if (this%master) then
+                open(unit=this%xdmf_file_id, file=adjustl(trim(this%xdmf_filename)), form='FORMATTED', status='REPLACE')
 
-            write(this%xdmf_file_id,'(A)')           '<?xml version="1.0" ?>'
-            write(this%xdmf_file_id,'(A)')           '<!DOCTYPE Xdmf SYSTEM "Xdmf.dtd" []>'
-            write(this%xdmf_file_id,'(A)')           '<Xdmf Version="2.0">'
-            write(this%xdmf_file_id,'(A)')           ' <Domain>'
-            write(this%xdmf_file_id,'(A)')           '   <Grid Name="mesh" GridType="Uniform">'
-            write(this%xdmf_file_id,'(A,ES26.16,A)') '     <Time Value="', time, '" />'
-            write(this%xdmf_file_id,'(A,3(I0,A))')   '     <Topology TopologyType="3DSMesh" NumberOfElements="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '"/>'
-            write(this%xdmf_file_id,'(A)')           '     <Geometry GeometryType="X_Y_Z">'
-            write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
-            write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename_prefix)) // '_coords.h5', ':/X'
-            write(this%xdmf_file_id,'(A)')           '       </DataItem>'
-            write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
-            write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename_prefix)) // '_coords.h5', ':/Y'
-            write(this%xdmf_file_id,'(A)')           '       </DataItem>'
-            write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
-            write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename_prefix)) // '_coords.h5', ':/Z'
-            write(this%xdmf_file_id,'(A)')           '       </DataItem>'
-            write(this%xdmf_file_id,'(A)')           '     </Geometry>'
+                write(this%xdmf_file_id,'(A)')           '<?xml version="1.0" ?>'
+                write(this%xdmf_file_id,'(A)')           '<!DOCTYPE Xdmf SYSTEM "Xdmf.dtd" []>'
+                write(this%xdmf_file_id,'(A)')           '<Xdmf Version="2.0">'
+                write(this%xdmf_file_id,'(A)')           ' <Domain>'
+                write(this%xdmf_file_id,'(A)')           '   <Grid Name="mesh" GridType="Uniform">'
+                write(this%xdmf_file_id,'(A,ES26.16,A)') '     <Time Value="', time, '" />'
+                write(this%xdmf_file_id,'(A,3(I0,A))')   '     <Topology TopologyType="3DSMesh" NumberOfElements="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '"/>'
+                write(this%xdmf_file_id,'(A)')           '     <Geometry GeometryType="X_Y_Z">'
+                write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
+                write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename_prefix)) // '_coords.h5', ':/X'
+                write(this%xdmf_file_id,'(A)')           '       </DataItem>'
+                write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
+                write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename_prefix)) // '_coords.h5', ':/Y'
+                write(this%xdmf_file_id,'(A)')           '       </DataItem>'
+                write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
+                write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename_prefix)) // '_coords.h5', ':/Z'
+                write(this%xdmf_file_id,'(A)')           '       </DataItem>'
+                write(this%xdmf_file_id,'(A)')           '     </Geometry>'
+            end if
         end if
 
     end subroutine
@@ -679,12 +686,14 @@ contains
         write(dsetname,'(A)') adjustl(trim(varname))
         call this%write_dataset(field, dsetname)
 
-        if (this%master) then
-            write(this%xdmf_file_id,'(3A)')          '     <Attribute Name="', adjustl(trim(varname)), '" AttributeType="Scalar" Center="Node">'
-            write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
-            write(this%xdmf_file_id,'(4A)')          '        ', adjustl(trim(this%basename)), ':/', adjustl(trim(dsetname))
-            write(this%xdmf_file_id,'(A)')           '       </DataItem>'
-            write(this%xdmf_file_id,'(A)')           '     </Attribute>'
+        if (this%write_xdmf) then
+            if (this%master) then
+                write(this%xdmf_file_id,'(3A)')          '     <Attribute Name="', adjustl(trim(varname)), '" AttributeType="Scalar" Center="Node">'
+                write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
+                write(this%xdmf_file_id,'(4A)')          '        ', adjustl(trim(this%basename)), ':/', adjustl(trim(dsetname))
+                write(this%xdmf_file_id,'(A)')           '       </DataItem>'
+                write(this%xdmf_file_id,'(A)')           '     </Attribute>'
+            end if
         end if
 
     end subroutine
@@ -697,12 +706,14 @@ contains
         ! Close the file
         call h5fclose_f(this%file_id, error)
 
-        if (this%master) then
-            write(this%xdmf_file_id,'(A)')           '   </Grid>'
-            write(this%xdmf_file_id,'(A)')           ' </Domain>'
-            write(this%xdmf_file_id,'(A)')           '</Xdmf>'
+        if (this%write_xdmf) then
+            if (this%master) then
+                write(this%xdmf_file_id,'(A)')           '   </Grid>'
+                write(this%xdmf_file_id,'(A)')           ' </Domain>'
+                write(this%xdmf_file_id,'(A)')           '</Xdmf>'
 
-            close(this%xdmf_file_id)
+                close(this%xdmf_file_id)
+            end if
         end if
 
         this%vizcount = this%vizcount + 1
