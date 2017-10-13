@@ -172,7 +172,7 @@ end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
-    use constants,        only: zero,third,half,twothird,one,two,seven,pi
+    use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
     use SolidGrid,        only: u_index,v_index,w_index
     use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit
@@ -194,7 +194,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
     real(rkind), dimension(8) :: fparams
+    real(rkind) :: fac
     integer, dimension(2) :: iparams
+    logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
+    logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
@@ -226,7 +229,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
           ! if rhoRatio is negative, all quantities except Rgas need to be
           ! specified in input file. Rgas is then set such
           ! that Temperature equilibrium condition is satisfied
-          Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
+          if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
+
+          ! determine p_amb that guarantees T equilibrium
+          if(adjustPamb) then
+            fac = Rgas_2*rho_0_2/Rgas/rho_0
+            p_amb = (fac*p_infty - p_infty_2)/(one - fac)
+          endif
         endif
 
         ! write material properties
@@ -237,6 +246,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             print *, '---Material 2---'
             write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0_2, ', gam  = ', gamma_2, ', p_infty = ', p_infty_2
             write(*,'(3(a,e12.5))') 'mu    = ', mu_2,    ', Rgas = ', Rgas_2
+
+            if(adjustPamb) write(*,*) '(Rgas2*rho02)/(Rgas*rho0) = ', fac
+            write(*,*) 'p_mb = ', p_amb
         end if
 
         ! Set materials
@@ -260,7 +272,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! fparams(4) = rho_0; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = zero;
         fparams(4) = rho1; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = mu;
         fparams(8) = p2
-        rho2 = rho1*min(one + p1/p_infty, one) ! Init guess
+        rho2 = rho1*min(one + p1/(p_infty+eps), one) ! Init guess
         call rootfind_nr_1d(rho2,fparams,iparams)
         ! print *, 'After root finding: ', rho2
         g11_1 = fparams(1)/fparams(4);   grho1 = g11_1**real(11.D0/3.D0,rkind) - g11_1**(-third) - g11_1**(seven*third) + g11_1**third
@@ -268,6 +280,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*zero*(grho1-grho2)))
         u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*mu*(grho1-grho2)))
         u1 = rho2*u2/rho1
+
 
         ! speed of sound
         a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
@@ -297,13 +310,16 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! fparams(4) = rho_0; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = zero;
         fparams(4) = rho1_2; fparams(5) = gamma_2; fparams(6) = p_infty_2; fparams(7) = mu_2;
         fparams(8) = p2
-        rho2_2 = rho1_2*min(one + p1/p_infty_2, one) ! Init guess
+        rho2_2 = rho1_2*min(one + p1/(p_infty_2+eps), one) ! Init guess
         call rootfind_nr_1d(rho2_2,fparams,iparams)
         ! print *, 'After root finding: ', rho2_2
         g11_1_2 = fparams(1)/fparams(4);   grho1_2 = g11_1_2**real(11.D0/3.D0,rkind) - g11_1_2**(-third) - g11_1_2**(seven*third) + g11_1_2**third
         g11_2_2 = rho2_2/fparams(4);         grho2_2 = g11_2_2**real(11.D0/3.D0,rkind) - g11_2_2**(-third) - g11_2_2**(seven*third) + g11_2_2**third
         u2_2 = -sqrt(rho1_2/rho2_2/(rho1_2-rho2_2)*(p1-p2+twothird*mu_2*(grho1_2-grho2_2)))
         u1_2 = rho2_2*u2_2/rho1_2
+
+        if(nrank==0) print *, 'T mat1 behind shock = ', (p2+p_infty)/Rgas/rho2
+        if(nrank==0) print *, 'T mat2 behind shock = ', (p2+p_infty_2)/Rgas_2/rho2_2
 
         ! speed of sound
         a1_2 = sqrt((gamma_2*(p1+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho1_2)
