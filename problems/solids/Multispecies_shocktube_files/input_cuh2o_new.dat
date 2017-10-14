@@ -8,11 +8,11 @@ ny = 1                    ! Number of points in Y
 nz = 1                    ! Number of points in Z
 
 dt = 1.0D-4               ! Fixed time step value (Set to negative to disable)
-tstop = 1.00D0           ! Physical time to stop the simulation
+tstop = 0.20D0           ! Physical time to stop the simulation
 CFL =  0.8D0              ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
-tviz = 0.5D-1             ! Time between visualization dumps (Set to negative to disable)
+tviz = 0.1D-1             ! Time between visualization dumps (Set to negative to disable)
 vizprefix = "Multispecies_shock" ! Prefix for the visualization files
 
 periodicx = .FALSE.       ! Periodic in X?
@@ -63,27 +63,27 @@ z_bcn   = 0
 /
 
 &PROBINPUT
-gamma    = 2.0D0          ! Ratio of specific heats  -- copper (material on left)
+gamma    = 4.22D0         ! Copper (material on left): (4.22, 30.8 GPa, 43.3 GPa, 0.45 GPa, 8930 kg/m3)
 Rgas     = 1.D0           ! Gas constant
 p_infty  = 1.D0           ! P_infinity, material stiffness
-mu       = 0.2886D0       ! Shear modulus
+mu       = 1.405844D0     ! Shear modulus
 rho_0    = 1.D0           ! No deformation density
 plastic    = .TRUE.       ! Logical to turn on plasticity
-yield      = 8.79d-4      ! Yield strength of material
+yield      = 0.01461      ! Yield strength of material
 explPlast  = .FALSE.      ! Logical to switch between explicit (F) and implicit (T) plastic update
-gamma_2    = 2.088D0      ! Ratio of specific heats   -- aluminium (material on right)
+gamma_2    = 4.4D0        ! H2O (material on right): (4.4, 0.6 GPa, 0 GPa, 0 GPa, 1000 kg/m3)
 Rgas_2     = 1.D0         ! Gas constant
-p_infty_2  = 0.5047D0     ! P_infinity, material stiffness
-mu_2       = 0.1985D0     ! Shear modulus
-rho_0_2    = 0.3037D0     ! No deformation density
+p_infty_2  = 0.019481D0   ! P_infinity, material stiffness
+mu_2       = 0.000000D0   ! Shear modulus
+rho_0_2    = 0.111982D0   ! No deformation density
 plastic2   = .TRUE.       ! Logical to turn on plasticity
-yield2     = 2.176d-3     ! Yield strength of material
+yield2     = 1.d10        ! Yield strength of material
 explPlast2 = .FALSE.      ! Logical to switch between explicit (F) and implicit (T) plastic update
 interface_init = 0.5D0    ! x location of interface at t = 0
 minVF      = 1.0D-6       ! Minimum mass fraction at initialization
 thick      = 3.0D0        ! Initial thickness in grid units for interface
 p1         = 5.D-2        ! Pressure on left
 p2         = 5.D-2        ! Pressure on right
-u1         = 25.0D0       ! Velocity on left
-u2         = 2.0D0        ! Velocity on right
+u1         = 0.5D0        ! Velocity on left
+u2         = -0.5D0       ! Velocity on right
 /

@@ -408,17 +408,17 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         if(decomp%yst(1)==1) then
           if(x_bc(1)==0) then
               rho( 1,:,:) = rhoL
-              u  ( 1,:,:) = (u2-u1)
+              u  ( 1,:,:) = u1
               v  ( 1,:,:) = zero
               w  ( 1,:,:) = zero
-              mix%material(1)%p  ( 1,:,:) = p2
-              mix%material(2)%p  ( 1,:,:) = p2
+              mix%material(1)%p  ( 1,:,:) = p1
+              mix%material(2)%p  ( 1,:,:) = p1
               
-              mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
+              mix%material(1)%g11( 1,:,:) = one; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
               mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
               mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = one
   
-              mix%material(2)%g11( 1,:,:) = rho2/rho_0;  mix%material(2)%g12( 1,:,:) = zero; mix%material(2)%g13( 1,:,:) = zero
+              mix%material(2)%g11( 1,:,:) = one;  mix%material(2)%g12( 1,:,:) = zero; mix%material(2)%g13( 1,:,:) = zero
               mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
               mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
               
@@ -432,12 +432,12 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
         if(decomp%yen(1)==decomp%xsz(1)) then
           if(x_bc(2)==0) then
-            rho(nx,:,:) = rhoR ! rho(nx-1,:,:)
-            u  (nx,:,:) = zero ! zero
-            v  (nx,:,:) = zero ! v(nx-1,:,:)
-            w  (nx,:,:) = zero ! w(nx-1,:,:)
-            mix%material(1)%p  (nx,:,:) = p1 ! mix%material(1)%p(nx-1,:,:)
-            mix%material(2)%p  (nx,:,:) = p1 ! mix%material(2)%p(nx-1,:,:)
+            rho(nx,:,:) = rhoR 
+            u  (nx,:,:) = u2   
+            v  (nx,:,:) = zero 
+            w  (nx,:,:) = zero 
+            mix%material(1)%p  (nx,:,:) = p2 
+            mix%material(2)%p  (nx,:,:) = p2 
             
             mix%material(1)%g11(nx,:,:) = one;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
             mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:) = one;  mix%material(1)%g23(nx,:,:) = zero
