@@ -34,11 +34,30 @@ module SolidGrid
     integer, parameter :: syz_index    = 16
     integer, parameter :: szz_index    = 17
 
-    integer, parameter :: nfields = 17
+    integer, parameter :: gxx_index    = 18
+    integer, parameter :: gxy_index    = 19
+    integer, parameter :: gxz_index    = 20
+    integer, parameter :: gyx_index    = 21
+    integer, parameter :: gyy_index    = 22
+    integer, parameter :: gyz_index    = 23
+    integer, parameter :: gzx_index    = 24
+    integer, parameter :: gzy_index    = 25
+    integer, parameter :: gzz_index    = 26
+
+    integer, parameter :: GGxx_index    = 18
+    integer, parameter :: GGxy_index    = 19
+    integer, parameter :: GGxz_index    = 20
+    integer, parameter :: GGyy_index    = 21
+    integer, parameter :: GGyz_index    = 22
+    integer, parameter :: GGzz_index    = 23
+
+    !integer, parameter :: nfields = 17
+    integer            :: nfields = 17
 
     integer, parameter :: mom_index = 1
     integer, parameter :: TE_index = mom_index+3
-    integer, parameter :: ncnsrv  = TE_index
+    !integer, parameter :: ncnsrv  = TE_index
+    integer            :: ncnsrv  = TE_index
 
     ! These indices are for data management, do not change if you're not sure of what you're doing
     integer, parameter :: tauxyidx = 2
@@ -71,6 +90,7 @@ module SolidGrid
         logical     :: pRelax                      ! Use pressure and temperature non-equilibrium formulation, but relax pressure at each substep
         logical     :: use_gTg                     ! Use formulation with the Finger tensor g^T.g instead of the full g tensor
         logical     :: updateEtot                  ! Update species etot (vs ehydro) with pRelax
+        logical     :: useOneG                     ! Use only one g or g^T.g field instead of species-specific fields
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -100,6 +120,16 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: syz
         real(rkind), dimension(:,:,:), pointer :: szz
         
+        real(rkind), dimension(:,:,:), pointer :: gxx
+        real(rkind), dimension(:,:,:), pointer :: gxy
+        real(rkind), dimension(:,:,:), pointer :: gxz
+        real(rkind), dimension(:,:,:), pointer :: gyx
+        real(rkind), dimension(:,:,:), pointer :: gyy
+        real(rkind), dimension(:,:,:), pointer :: gyz
+        real(rkind), dimension(:,:,:), pointer :: gzx
+        real(rkind), dimension(:,:,:), pointer :: gzy
+        real(rkind), dimension(:,:,:), pointer :: gzz
+
         contains
             procedure          :: init
             procedure          :: destroy
@@ -134,7 +164,8 @@ contains
         character(len=clen) :: inputdir
         character(len=clen) :: vizprefix = "sgrid"
         real(rkind) :: tviz = zero
-        character(len=clen), dimension(nfields) :: varnames
+        !character(len=clen), dimension(nfields) :: varnames
+        character(len=clen), allocatable, dimension(:) :: varnames
         logical :: periodicx = .true. 
         logical :: periodicy = .true. 
         logical :: periodicz = .true.
@@ -162,7 +193,7 @@ contains
         real(rkind) :: Cdiff = 0.003_rkind
         real(rkind) :: CY = 100._rkind
         logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
-        logical     :: use_gTg = .FALSE.
+        logical     :: use_gTg = .FALSE., useOneG = .false.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
 
@@ -174,7 +205,7 @@ contains
                                                        prow, pcol, &
                                                          SkewSymm  
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
-                           PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
+                           PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, ns, useOneG, Cmu, Cbeta, Ckap, Cdiff, CY, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
         ioUnit = 11
@@ -201,6 +232,7 @@ contains
         this%pRelax = pRelax
         this%use_gTg = use_gTg
         this%updateEtot = updateEtot
+        this%useOneG = useOneG
 
         itmp(1:3) = 0; if(this%PTeqb) itmp(1) = 1; if(this%pEqb) itmp(2) = 1; if(this%pRelax) itmp(3) = 1; 
         if(sum(itmp) .ne. 1) then
@@ -210,6 +242,10 @@ contains
         if(SOSmodel .and. this%pRelax) then
             call GracefulExit("Equilibrium sound speed model valid only with PTeqb or pEqb. SOSmodel must be .false. with pRelax",4634)
         endif
+
+        if(this%useOneG .and. this%use_gTg) then
+            call GracefulExit("gTg forumlation not supported with useOneG for now. Exiting.", 4634)
+        endif 
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -311,10 +347,18 @@ contains
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
         allocate(this%mix)
-        call this%mix%init(this%decomp,this%der,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot)
+        call this%mix%init(this%decomp,this%der,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useOneG)
         !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields
+        nfields = 17
+        if(this%useOneG) then
+          if(this%use_gTg) then
+            nfields = 17 + 6
+          else
+            nfields = 17 + 9
+          endif
+        endif
         if ( allocated(this%fields) ) deallocate(this%fields) 
         call alloc_buffs(this%fields,nfields,'y',this%decomp)
         
@@ -341,7 +385,25 @@ contains
         this%syy  => this%fields(:,:,:, syy_index)   
         this%syz  => this%fields(:,:,:, syz_index)   
         this%szz  => this%fields(:,:,:, szz_index)   
-        
+
+        if(this%useOneG) then
+          if(this%use_gTg) then
+            this%Gxx  => this%fields(:,:,:, GGxx_index)   
+            this%Gxy  => this%fields(:,:,:, GGxy_index)   
+            this%Gxz  => this%fields(:,:,:, GGxz_index)   
+            this%Gyy  => this%fields(:,:,:, GGyy_index)   
+            this%Gyz  => this%fields(:,:,:, GGyz_index)   
+            this%Gzz  => this%fields(:,:,:, GGzz_index)   
+          else
+            this%gxx  => this%fields(:,:,:, gxx_index)   
+            this%gxy  => this%fields(:,:,:, gxy_index)   
+            this%gxz  => this%fields(:,:,:, gxz_index)   
+            this%gyy  => this%fields(:,:,:, gyy_index)   
+            this%gyz  => this%fields(:,:,:, gyz_index)   
+            this%gzz  => this%fields(:,:,:, gzz_index)   
+          endif
+        endif        
+
         ! Initialize everything to a constant Zero
         this%fields = zero  
 
@@ -360,6 +422,7 @@ contains
 
         this%SkewSymm = SkewSymm
 
+        allocate(varnames(nfields))
         varnames( 1) = 'density'
         varnames( 2) = 'u'
         varnames( 3) = 'v'
@@ -377,10 +440,31 @@ contains
         varnames(15) = 'Syy'
         varnames(16) = 'Syz'
         varnames(17) = 'Szz'
+        if(this%useOneG) then
+          if(this%use_gTg) then
+            varnames(18) = 'Gxx'
+            varnames(19) = 'Gxy'
+            varnames(20) = 'Gxz'
+            varnames(21) = 'Gyy'
+            varnames(22) = 'Gyz'
+            varnames(23) = 'Gzz'
+          else
+            varnames(18) = 'gxx'
+            varnames(19) = 'gxy'
+            varnames(20) = 'gxz'
+            varnames(21) = 'gyx'
+            varnames(22) = 'gyy'
+            varnames(23) = 'gyz'
+            varnames(24) = 'gzx'
+            varnames(25) = 'gzy'
+            varnames(26) = 'gzz'
+          endif
+        endif
 
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
+        deallocate(varnames)
 
     end subroutine
 
@@ -410,6 +494,16 @@ contains
         nullify(this%syz      )
         nullify(this%szz      )
 
+        if(associated(this%gxx)) nullify(this%gxx)
+        if(associated(this%gxy)) nullify(this%gxy)
+        if(associated(this%gxz)) nullify(this%gxz)
+        if(associated(this%gyx)) nullify(this%gyx)
+        if(associated(this%gyy)) nullify(this%gyy)
+        if(associated(this%gyz)) nullify(this%gyz)
+        if(associated(this%gzx)) nullify(this%gzx)
+        if(associated(this%gzy)) nullify(this%gzy)
+        if(associated(this%gzz)) nullify(this%gzz)
+
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
         
@@ -431,7 +525,7 @@ contains
         if ( allocated(this%LAD) ) deallocate(this%LAD)
         
         if (allocated(this%Wcnsrv)) deallocate(this%Wcnsrv) 
-        
+       
         call this%viz%destroy()
         if (allocated(this%viz)) deallocate(this%viz)
 

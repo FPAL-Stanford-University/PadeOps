@@ -169,7 +169,8 @@ end subroutine
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi
-    use SolidGrid,        only: u_index,v_index,w_index
+    use SolidGrid,        only: u_index,v_index,w_index, &
+                                gxx_index,gxy_index,gxz_index,gyx_index,gyy_index,gyz_index,gzx_index,gzy_index,gzz_index
     use decomp_2d,        only: decomp_info
     use exits,            only: GracefulExit
     use StiffGasEOS,      only: stiffgas
@@ -191,6 +192,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
     real(rkind), dimension(8) :: fparams
     integer, dimension(2) :: iparams
+    logical :: useOneG
 
     namelist /PROBINPUT/  p_infty,   Rgas,   gamma,   mu,   rho_0,   plastic,  yield,  explPlast,  &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic2, yield2, explPlast2, &
@@ -204,7 +206,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-        
+
         if (mix%ns /= 2) then
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
         end if
@@ -238,15 +240,25 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         v   = zero
         w   = zero
 
-        mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
-        mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
-        mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
-        
-        mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
-        mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
-        mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
+        if(size(fields,4) > 17) then
+           useOneG = .true.
+        else
+           useOneG = .false.
+        endif  
 
-        mix%material(2)%g11 = mix%material(1)%g11
+        if(useOneG) then
+            fields(:,:,:,gxx_index) = one;  fields(:,:,:,gxy_index) = zero;  fields(:,:,:,gxz_index) = zero;
+            fields(:,:,:,gyx_index) = zero; fields(:,:,:,gyy_index) = one;   fields(:,:,:,gyz_index) = zero;
+            fields(:,:,:,gzx_index) = zero; fields(:,:,:,gzy_index) = zero;  fields(:,:,:,gzz_index) = one;
+        else
+            mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
+            mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
+            mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
+            
+            mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
+            mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
+            mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
+        endif
 
         mix%material(1)%p  = p2 + tmp*(p1-p2)
         mix%material(2)%p  = mix%material(1)%p
@@ -254,7 +266,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%VF = minVF + (one-two*minVF)*tmp
         mix%material(2)%VF = one - mix%material(1)%VF
 
-        tmp = rho_0*mix%material(1)%VF*mix%material(1)%g11 + rho_0_2*mix%material(2)%g11*(one-mix%material(1)%VF) ! Mixture density
+        if(useOneG) then
+            tmp = (rho_0*mix%material(1)%VF + rho_0_2*(one-mix%material(1)%VF)) * fields(:,:,:,gxx_index) ! Mixture density
+        else
+            tmp = rho_0*mix%material(1)%VF*mix%material(1)%g11 + rho_0_2*mix%material(2)%g11*(one-mix%material(1)%VF) ! Mixture density
+        endif
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / tmp
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 

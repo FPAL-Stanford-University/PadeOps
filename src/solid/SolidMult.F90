@@ -1,4 +1,4 @@
-module SolidMod
+module SolidMultMod
 
     use kind_parameters, only: rkind,clen
     use constants,       only: zero,one,two,epssmall,three,half
@@ -8,12 +8,15 @@ module SolidMod
     use exits,           only: GracefulExit
     use EOSMod,          only: eos
     use StiffGasEOS,     only: stiffgas
-    use Sep1SolidEOS,    only: sep1solid
+    use Sep1MultEOS,     only: sep1mult
 
     implicit none
 
-    type :: solid
+    type :: solidmult
         integer :: nxp, nyp, nzp
+
+        integer :: ncomp
+        real(rkind), allocatable, dimension(:) :: rho0, mu, yield, tau0
 
         logical :: sliding = .FALSE.
         logical :: plast = .FALSE.
@@ -21,16 +24,16 @@ module SolidMod
         logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .TRUE., includeSources = .FALSE.
         logical :: use_gTg = .FALSE., useOneG = .false.
 
-        class(stiffgas ), allocatable :: hydro
-        class(sep1solid), allocatable :: elastic
+        type(stiffgas ), allocatable, dimension(:) :: hydro
+        class(sep1mult),  allocatable :: elastic
 
         type(decomp_info), pointer :: decomp
         type(derivatives), pointer :: der
         type(filters),     pointer :: fil
         type(filters),     pointer :: gfil
 
-        real(rkind), dimension(:,:,:), allocatable :: Ys
-        real(rkind), dimension(:,:,:), allocatable :: VF
+        real(rkind), dimension(:,:,:,:), allocatable :: Ys
+        real(rkind), dimension(:,:,:,:), allocatable :: VF
         real(rkind), dimension(:,:,:), allocatable :: eh
         real(rkind), dimension(:,:,:), allocatable :: eel
 
@@ -53,9 +56,14 @@ module SolidMod
         real(rkind), dimension(:,:,:),   pointer     :: syz
         real(rkind), dimension(:,:,:),   pointer     :: szz
         
-        real(rkind), dimension(:,:,:),   allocatable :: rhom
-        real(rkind), dimension(:,:,:),   allocatable :: p
-        real(rkind), dimension(:,:,:),   allocatable :: T
+        real(rkind), dimension(:,:,:,:), allocatable :: rhom
+        real(rkind), dimension(:,:,:,:), allocatable :: p
+        real(rkind), dimension(:,:,:,:), allocatable :: T
+
+        !real(rkind), dimension(:,:,:),   allocatable :: pmix
+        !real(rkind), dimension(:,:,:),   allocatable :: Tmix
+        !real(rkind), dimension(:,:,:),   allocatable :: Ysmix
+        !real(rkind), dimension(:,:,:),   allocatable :: VFmix
 
         ! species-specific artificial properties
         real(rkind), dimension(:,:,:),   allocatable :: kap
@@ -176,13 +184,14 @@ module SolidMod
 contains
 
     !function init(decomp,der,fil,hydro,elastic) result(this)
-    subroutine init(this,decomp,der,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,updateEtot,useOneG)
-        class(solid), target, intent(inout) :: this
+    subroutine init(this,decomp,der,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,updateEtot,num_components)
+        class(solidmult), target, intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der
         type(filters),     target, intent(in) :: fil, gfil
         logical, intent(in) :: PTeqb,pEqb,pRelax,updateEtot
         logical, intent(in) :: use_gTg,useOneG
+        integer, intent(in) :: num_components
 
         this%decomp => decomp
         this%der  => der
@@ -195,30 +204,42 @@ contains
 
         this%use_gTg = use_gTg
         this%updateEtot  = updateEtot
-        this%useOneG = useOneG
+        this%ncomp = num_components
 
         ! Assume everything is in Y decomposition
         this%nxp = decomp%ysz(1)
         this%nyp = decomp%ysz(2)
         this%nzp = decomp%ysz(3)
 
+        if(allocated(this%rho0)) deallocate(this%rho0)
+        allocate(this%rho0(this%ncomp))
+
+        if(allocated(this%mu)) deallocate(this%mu)
+        allocate(this%mu(this%ncomp))
+
+        if(allocated(this%yield)) deallocate(this%yield)
+        allocate(this%yield(this%ncomp))
+
+        if(allocated(this%tau0)) deallocate(this%tau0)
+        allocate(this%tau0(this%ncomp))
+
         if (allocated(this%hydro)) deallocate(this%hydro)
-        allocate( this%hydro )
+        allocate( this%hydro(this%ncomp) )
         
         if (allocated(this%elastic)) deallocate(this%elastic)
         allocate( this%elastic )
         
         ! Allocate material massfraction
         if( allocated( this%Ys ) ) deallocate( this%Ys )
-        allocate( this%Ys(this%nxp,this%nyp,this%nzp) )
+        allocate( this%Ys(this%nxp,this%nyp,this%nzp,this%ncomp) )
         
         ! Allocate material volume fraction
         if( allocated( this%VF ) ) deallocate( this%VF )
-        allocate( this%VF(this%nxp,this%nyp,this%nzp) )
+        allocate( this%VF(this%nxp,this%nyp,this%nzp,this%ncomp) )
         
         ! Allocate material hydrodynamic energy
         if( allocated( this%eh ) ) deallocate( this%eh )
-        allocate( this%eh(this%nxp,this%nyp,this%nzp) )
+        allocate( this%eh(this%nxp,this%nyp,this%nzp,this%ncomp) )
         
         ! Allocate material elastic energy
         if( allocated( this%eel ) ) deallocate( this%eel )
@@ -226,22 +247,20 @@ contains
         
         ! Allocate material density
         if( allocated( this%rhom ) ) deallocate( this%rhom )
-        allocate( this%rhom(this%nxp,this%nyp,this%nzp) )
+        allocate( this%rhom(this%nxp,this%nyp,this%nzp,this%ncomp) )
         
         ! Allocate material inverse elastic deformation gradients and associate pointers
         if( allocated( this%g ) ) deallocate( this%g )
-        if(.not. this%useOneG) then
-            allocate( this%g(this%nxp,this%nyp,this%nzp,9) )
-            this%g11 => this%g(:,:,:,1)   
-            this%g12 => this%g(:,:,:,2)   
-            this%g13 => this%g(:,:,:,3)   
-            this%g21 => this%g(:,:,:,4)   
-            this%g22 => this%g(:,:,:,5)   
-            this%g23 => this%g(:,:,:,6)   
-            this%g31 => this%g(:,:,:,7)   
-            this%g32 => this%g(:,:,:,8)   
-            this%g33 => this%g(:,:,:,9)   
-        endif
+        allocate( this%g(this%nxp,this%nyp,this%nzp,9) )
+        this%g11 => this%g(:,:,:,1)   
+        this%g12 => this%g(:,:,:,2)   
+        this%g13 => this%g(:,:,:,3)   
+        this%g21 => this%g(:,:,:,4)   
+        this%g22 => this%g(:,:,:,5)   
+        this%g23 => this%g(:,:,:,6)   
+        this%g31 => this%g(:,:,:,7)   
+        this%g32 => this%g(:,:,:,8)   
+        this%g33 => this%g(:,:,:,9)   
 
         ! Allocate material deviatoric stress array
         if( allocated( this%devstress ) ) deallocate( this%devstress )
@@ -259,11 +278,27 @@ contains
         
         ! Allocate material pressure array
         if( allocated( this%p ) ) deallocate( this%p )
-        allocate( this%p(this%nxp,this%nyp,this%nzp) )
+        allocate( this%p(this%nxp,this%nyp,this%nzp,this%ncomp) )
 
         ! Allocate material temperature array
         if( allocated( this%T ) ) deallocate( this%T )
-        allocate( this%T(this%nxp,this%nyp,this%nzp) )
+        allocate( this%T(this%nxp,this%nyp,this%nzp,this%ncomp) )
+
+        !! Allocate mixture pressure array
+        !if( allocated( this%pmix ) ) deallocate( this%pmix )
+        !allocate( this%pmix(this%nxp,this%nyp,this%nzp) )
+
+        !! Allocate mixture Temperature array
+        !if( allocated( this%Tmix ) ) deallocate( this%Tmix )
+        !allocate( this%Tmix(this%nxp,this%nyp,this%nzp) )
+
+        !! Allocate mixture Ys array
+        !if( allocated( this%Ysmix ) ) deallocate( this%Ysmix )
+        !allocate( this%Ysmix(this%nxp,this%nyp,this%nzp) )
+
+        !! Allocate mixture VF array
+        !if( allocated( this%VFmix ) ) deallocate( thisVFmix )
+        !allocate( this%VFmix(this%nxp,this%nyp,this%nzp) )
 
         ! Allocate material kappa array
         if( allocated( this%kap ) ) deallocate( this%kap )
@@ -291,10 +326,9 @@ contains
 
         ! Allocate work arrays
         ! g tensor equation
-        if(.not. this%useOneG) then
-            if( allocated( this%Qtmpg ) ) deallocate( this%Qtmpg )
-            allocate( this%Qtmpg(this%nxp,this%nyp,this%nzp,9) )
-        endif
+        if( allocated( this%Qtmpg ) ) deallocate( this%Qtmpg )
+        allocate( this%Qtmpg(this%nxp,this%nyp,this%nzp,9) )
+
         ! Ys equation
         if( allocated( this%QtmpYs ) ) deallocate( this%QtmpYs )
         allocate( this%QtmpYs(this%nxp,this%nyp,this%nzp) )
@@ -330,6 +364,10 @@ contains
         if( allocated( this%Ji )   ) deallocate( this%Ji )
         if( allocated( this%diff ) ) deallocate( this%diff )
         if( allocated( this%kap )  ) deallocate( this%kap )
+        !if( allocated( this%VFmix )) deallocate( this%VFmix )
+        !if( allocated( this%Ysmix )) deallocate( this%Ysmix )
+        !if( allocated( this%Tmix ) ) deallocate( this%Tmix )
+        !if( allocated( this%pmix ) ) deallocate( this%pmix )
         if( allocated( this%T )    ) deallocate( this%T )
         if( allocated( this%p )    ) deallocate( this%p )
         if( allocated( this%modDevSigma ) ) deallocate( this%modDevSigma )
@@ -353,6 +391,11 @@ contains
         ! Now deallocate the EOS objects
         if ( allocated(this%hydro)   ) deallocate(this%hydro)
         if ( allocated(this%elastic) ) deallocate(this%elastic)
+
+        if(allocated(this%tau0))  deallocate(this%tau0)
+        if(allocated(this%yield)) deallocate(this%yield)
+        if(allocated(this%mu))    deallocate(this%mu)
+        if(allocated(this%rho0))  deallocate(this%rho0)
 
         nullify( this%fil    )
         nullify( this%gfil   )
@@ -1011,7 +1054,7 @@ contains
     subroutine getSpeciesDensity(this,rho,rhom)
         class(solid), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhom
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ncomp), intent(out) :: rhom
 
         ! Get detg in rhom
         rhom = this%g11*(this%g22*this%g33-this%g23*this%g32) &
@@ -1023,7 +1066,9 @@ contains
         end if
 
         ! Get rhom = rho*Ys/VF (Additional terms to give correct limiting behaviour when Ys and VF tend to 0)
-        rhom = (rho*this%Ys + this%elastic%rho0*rhom*epssmall)/(this%VF + epssmall)   
+        do icomp = 1, this%ncomp
+            rhom(:,:,:,icomp) = (rho*this%Ys(:,:,:,icomp) + this%rho0(icomp)*rhom*epssmall)/(this%VF(:,:,:,icomp) + epssmall)
+        enddo
 
         this%rhom = rhom
 
@@ -1045,13 +1090,17 @@ contains
     subroutine get_ehydroT_from_p(this, rho)
         class(solid), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)              :: rhom
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ncomp)   :: rhom
+
+        integer :: icomp
 
         call this%getSpeciesDensity(rho,rhom)
-        call this%hydro%get_e_from_p( rhom, this%p, this%eh )
-        call this%hydro%get_T(this%eh, this%T, rhom)
-        ! call this%hydro%get_e_from_p( this%Ys*rho/(this%VF+epssmall), this%p, this%eh )
-        ! call this%hydro%get_T(this%eh, this%T, this%Ys*rho/(this%VF+epssmall))
+        do icomp = 1, this%ncomp
+            call this%hydro(icomp)%get_e_from_p( rhom(:,:,:,icomp), this%p(:,:,:,icomp), this%eh(:,:,:,icomp) )
+            call this%hydro(icomp)%get_T(this%eh(:,:,:,icomp), this%T(:,:,:,icomp), rhom(:,:,:,icomp))
+            ! call this%hydro%get_e_from_p( this%Ys*rho/(this%VF+epssmall), this%p, this%eh ) 
+            ! call this%hydro%get_T(this%eh, this%T, this%Ys*rho/(this%VF+epssmall))
+        enddo
 
     end subroutine
 
@@ -1062,6 +1111,24 @@ contains
         call this%hydro%get_enthalpy(this%T,enthalpy)
     end subroutine
 
+    subroutine get_mixproperties(this)
+        class(solid), intent(inout) :: this
+
+        integer :: icomp
+
+        ! determine rho0_mix, mu_mix, yield_mix
+        this%rho0_mix  = this%VF(:,:,:,1) * this%rho0(1)
+        this%mu_mix    = this%VF(:,:,:,1) * this%mu(1)
+        this%yield_mix = this%VF(:,:,:,1) * this%yield(1)
+        this%tau0_mix  = this%VF(:,:,:,1) * this%tau0(1)
+        do icomp = 2, this%ncomp
+           this%rho0_mix  = this%rho0_mix  + this%VF(:,:,:,icomp) * this%rho0(icomp) 
+           this%mu_mix    = this%mu_mix    + this%VF(:,:,:,icomp) * this%mu(icomp) 
+           this%yield_mix = this%yield_mix + this%VF(:,:,:,icomp) * this%yield(icomp) 
+           this%tau0_mix  = this%tau0_mix  + this%VF(:,:,:,icomp) * this%tau0(icomp) 
+        enddo 
+    end subroutine
+
     subroutine get_eelastic_devstress(this)
         class(solid), intent(inout) :: this
 
@@ -1069,8 +1136,9 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: trG, trG2, detG
 
         call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG,this%use_gTg)
-        call this%elastic%get_eelastic(trG,trG2,detG,this%eel)
-        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+        call this%get_mixproperties()
+        call this%elastic%get_eelastic(trG, trG2, detG, this%rho0_mix, this%mu_mix, this%eel)
+        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%rho0_mix, this%mu_mix, this%devstress)
 
     end subroutine
 

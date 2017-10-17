@@ -16,9 +16,10 @@ module SolidMixtureMod
 
     type :: solid_mixture
 
-        integer :: ns
+        integer :: ns, nmult
         integer :: nxp, nyp, nzp
-        type(solid), dimension(:), allocatable :: material
+        type(solid),     dimension(:), allocatable :: material
+        type(solidmult), dimension(:), allocatable :: multimat
 
         type(decomp_info), pointer :: decomp
         type(derivatives), pointer :: der
@@ -28,7 +29,7 @@ module SolidMixtureMod
 
         logical :: SOSmodel = .FALSE.           ! is sound speed given by `equilibrium' model? Alternative is `frozen' model. Check Saurel et al., JCP 2009.
         logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .FALSE.
-        logical :: use_gTg = .FALSE.
+        logical :: use_gTg = .FALSE., useOneG = .false.
 
     contains
 
@@ -74,7 +75,7 @@ module SolidMixtureMod
 contains
 
     !function init(decomp,der,fil,LAD,ns) result(this)
-    subroutine init(this,decomp,der,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot)
+    subroutine init(this,decomp,der,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot,useOneG)
         !type(solid_mixture)      , intent(inout) :: this
         class(solid_mixture)      , intent(inout) :: this
         type(decomp_info), target, intent(in)    :: decomp
@@ -84,7 +85,7 @@ contains
         integer,                   intent(in)    :: ns
         logical,                   intent(in)    :: PTeqb,pEqb,pRelax,updateEtot
         logical,                   intent(in)    :: SOSmodel
-        logical,                   intent(in)    :: use_gTg
+        logical,                   intent(in)    :: use_gTg, useOneG
 
         type(solid), allocatable :: dummy
         integer :: i
@@ -97,6 +98,7 @@ contains
         this%SOSmodel   = SOSmodel
         this%use_gTg    = use_gTg
         this%updateEtot = updateEtot
+        this%useOneG    = useOneG
 
         this%ns = ns
 
@@ -111,22 +113,36 @@ contains
         this%LAD  => LAD
 
         ! Allocate array of solid objects (Use a dummy to avoid memory leaks)
-        allocate(dummy)
-        call dummy%init(decomp,der,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%updateEtot)
 
-        if (allocated(this%material)) deallocate(this%material)
-        allocate(this%material(this%ns))!, source=dummy)
-        do i=1,this%ns
-            call this%material(i)%init(decomp,der,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%updateEtot)
-        end do
-        deallocate(dummy)
+        if(this%useOneG) then
+            this%nmult = 1 ! Only one continuum mixture for now
 
-        this%material(1)%Ys = one
-        this%material(1)%VF = one
-        do i=2,this%ns
-            this%material(i)%Ys = zero
-            this%material(i)%VF = zero
-        end do
+            this%ncomp = this%ns
+            this%ns = 0
+
+            if (allocated(this%multimat)) deallocate(this%multimat)
+            allocate(this%multimat(this%nmult))
+            do i=1,this%nmult
+                call this%multimat(i)%init(decomp,der,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%updateEtot,this%ncomp)
+            end do
+        else
+            !allocate(dummy)
+            !call dummy%init(decomp,der,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%updateEtot,this%useOneG)
+
+            if (allocated(this%material)) deallocate(this%material)
+            allocate(this%material(this%ns))!, source=dummy)
+            do i=1,this%ns
+                call this%material(i)%init(decomp,der,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%updateEtot,this%useOneG)
+            end do
+            !deallocate(dummy)
+
+            this%material(1)%Ys = one
+            this%material(1)%VF = one
+            do i=2,this%ns
+                this%material(i)%Ys = zero
+                this%material(i)%VF = zero
+            end do
+        endif
 
     end subroutine
     !end function
@@ -136,6 +152,9 @@ contains
 
         ! Deallocate array of solids (Destructor of solid should take care of everything else)
         if (allocated(this%material)) deallocate(this%material)
+
+        ! Deallocate array of multimaterial mixturess (Destructor of solid should take care of everything else)
+        if (allocated(this%multimat)) deallocate(this%multimat)
 
         nullify(this%LAD)
         nullify(this%fil)
@@ -538,11 +557,15 @@ stop
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
 
-        integer :: imat
+        integer :: imat, imult
 
         ! get species energy from species pressure
         do imat = 1, this%ns
             call this%material(imat)%get_ehydroT_from_p(rho)             ! computes species ehydro and T from species p
+        enddo
+
+        do imult = 1, this%nmult
+            call this%multimat(imult)%get_ehydroT_from_p(rho)             ! computes species ehydro and T from species p
         enddo
 
     end subroutine
@@ -551,19 +574,26 @@ stop
         class(solid_mixture), intent(in) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: T  ! Mixture temperature
 
-        integer :: i
+        integer :: i, j
 
         T = zero
         do i = 1,this%ns
             T = T + this%material(i)%VF * this%material(i)%T  ! Volume fraction weighted sum
         end do
+
+        do i = 1,this%nmult
+          do j = 1, this%multimat(i)%ncomp
+            T = T + this%multimat(i)%VF(:,:,:,j) * this%multimat(i)%T(:,:,:,j)  ! Volume fraction weighted sum
+          end do
+        end do
+
     end subroutine
 
     subroutine get_eelastic_devstress(this,devstress)
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(out) :: devstress
 
-        integer :: imat
+        integer :: imat, imult
 
         devstress = zero
 
@@ -580,6 +610,16 @@ stop
           devstress(:,:,:,5) = devstress(:,:,:,5) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,5)
           devstress(:,:,:,6) = devstress(:,:,:,6) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,6)
         end do
+
+        do imult = 1, this%nmult
+          call this%multimat(imult)%get_eelastic_devstress()
+          devstress(:,:,:,1) = devstress(:,:,:,1) + this%multimat(imult)%devstress(:,:,:,1)
+          devstress(:,:,:,2) = devstress(:,:,:,2) + this%multimat(imult)%devstress(:,:,:,2)
+          devstress(:,:,:,3) = devstress(:,:,:,3) + this%multimat(imult)%devstress(:,:,:,3)
+          devstress(:,:,:,4) = devstress(:,:,:,4) + this%multimat(imult)%devstress(:,:,:,4)
+          devstress(:,:,:,5) = devstress(:,:,:,5) + this%multimat(imult)%devstress(:,:,:,5)
+          devstress(:,:,:,6) = devstress(:,:,:,6) + this%multimat(imult)%devstress(:,:,:,6)
+        enddo
 
     end subroutine
 
@@ -669,15 +709,25 @@ stop
         integer :: imat
 
         rho = zero
-        do imat = 1, this%ns
-          call this%material(imat)%getSpeciesDensity_from_g(rhom)
-          rho = rho + this%material(imat)%VF * rhom
-        end do
+        if(this%useOneG) then
+          do imat = 1, this%ns
+            rho = rho + this%material(imat)%VF * this%material(imat)%elastic%rho0
+          end do
 
-        do imat = 1,this%ns
+          do imat = 1, this%ns
+            this%material(imat)%Ys = this%material(imat)%VF * this%material(imat)%elastic%rho0 / rho
+          end do
+        else
+          do imat = 1, this%ns
+            call this%material(imat)%getSpeciesDensity_from_g(rhom)
+            rho = rho + this%material(imat)%VF * rhom
+          end do
+
+          do imat = 1,this%ns
             call this%material(imat)%getSpeciesDensity_from_g(rhom)
             this%material(imat)%Ys = this%material(imat)%VF * rhom / rho
-        end do
+          end do
+        endif
     end subroutine
 
     subroutine get_q(this,x_bc,y_bc,z_bc)
@@ -863,6 +913,12 @@ stop
             p = p + this%material(i)%VF * this%material(i)%p  ! Volume fraction weighted sum
         end do
 
+        do i = 1,this%nmult
+          do j = 1, this%multimat(i)%ncomp
+            p = p + this%multimat(i)%VF(:,:,:,j) * this%multimat(i)%p(:,:,:,j)  ! Volume fraction weighted sum
+          end do
+        end do
+
     end subroutine
 
     subroutine get_emix(this,e)
@@ -918,6 +974,11 @@ stop
                 sos = sos + this%material(i)%Ys*sosm
             endif
         end do
+
+        do i = 1, nmult
+          call this%multimat(i)%getsos2(rho,p)
+        enddo
+
 !print *, 'sos2 = ', maxval(sos), minval(sos)
         if(this%SOSmodel) then
             sos = one / (sqrt(rho*sos) + epssmall)
