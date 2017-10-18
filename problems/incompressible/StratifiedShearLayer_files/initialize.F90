@@ -105,7 +105,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     ! Deallocate local memory 
     deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
     nullify(u,v,w,x,y,z)
-    call message(0,"Velocity Field Initialized")
+    call message(0,"Fields Initialized")
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 

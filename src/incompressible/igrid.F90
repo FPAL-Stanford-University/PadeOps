@@ -587,7 +587,11 @@ contains
         end if 
     
         if (this%isStratified) then
-            call set_Reference_Temperature(inputfile,this%ThetaRef)
+            if (BuoyancyTermType == 1) then
+                call set_Reference_Temperature(inputfile,this%ThetaRef)
+                call message(1,"Reference Temperature set to:",this%ThetaRef) 
+            end if
+           
             if (botBC_Temp == 0) then
                 call setDirichletBC_Temp(inputfile, this%Tsurf, this%dTsurf_dt)
                 this%Tsurf0 = this%Tsurf
@@ -598,7 +602,6 @@ contains
                 call GraceFulExit("Only Dirichlet and homog. Neumann BCs supported for Temperature at &
                     & this time. Set botBC_Temp = 0 or 1",341)        
             end if
-            call message(1,"Reference Temperature set to:",this%ThetaRef) 
         end if 
 
         if (this%initspinup) then
@@ -946,7 +949,7 @@ contains
             select case (this%BuoyancyTermType)
             case(1)
                this%BuoyancyFact = one/(this%Fr*this%Fr*this%ThetaRef)
-               call message(1,"Bupyancy term type 1 selected. Buoyancy term &
+               call message(1,"Buoyancy term type 1 selected. Buoyancy term &
                                  & calculation term uses")
                call message(2,"Froude number:", this%Fr)
                call message(2,"Reference temperature:", this%thetaRef)
@@ -2546,7 +2549,7 @@ contains
         complex(rkind), dimension(:,:,:), pointer :: ctmpy1
 
         ctmpz1 => this%cbuffzC(:,:,:,1); ctmpz2 => this%cbuffzE(:,:,:,1); 
-        ctmpy1 => this%cbuffyC(:,:,:,1)
+        ctmpy1 => this%cbuffyC(:,:,:,1); ctmpz3 => this%cbuffzC(:,:,:,2)
 
         call this%spectC%mtimes_ik1_oop(this%That,this%dTdxH)
         call this%spectC%ifft(this%dTdxH,this%dTdxC)

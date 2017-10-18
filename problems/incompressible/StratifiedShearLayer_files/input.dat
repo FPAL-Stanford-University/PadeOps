@@ -1,6 +1,6 @@
 &INPUT
-inputdir                      = "/home/aditya90/Codes/PadeOps/data/gabls/output"   ! Directory for any input files
-outputdir                     = "/home/aditya90/Codes/PadeOps/data/gabls/output"   ! Directory for all output files
+inputdir                      = "/home1/04076/tg833754/Codes/PadeOps/build/build_debug/problems/incompressible/StratifiedShearLayer_files"   ! Directory for any input files
+outputdir                     = "/home1/04076/tg833754/Codes/PadeOps/build/build_debug/problems/incompressible/StratifiedShearLayer_files"   ! Directory for all output files
 nx                            = 256         ! Number of points in X
 ny                            = 128         ! Number of points in Y
 nz                            = 512         ! Number of points in Z
@@ -9,7 +9,7 @@ CFL                           = 0.8D0       ! CFL criterion for calculating the 
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
+useRestartFile                = .FALSE.     ! Set to false if it's a fresh simulation 
 restartFile_TID               = 110000        ! TimeID of the restart file being used
 restartFile_RID               = 1          ! RunID of the restart file being used
 /
@@ -83,10 +83,10 @@ P_compFreq                    = 10          ! How often (timesteps) do you want 
 /
 /
 &BCs
-botWall                          = 3           ! no_slip = 1, slip = 2, wall model = 3 
+botWall                          = 2           ! no_slip = 1, slip = 2, wall model = 3 
 topWall                          = 2           ! no_slip = 1, slip = 2, wall model = 3
 useSpongeLayer                   = .TRUE.      ! Use a sponge layer at the top 
-useTopAndBottomSymmetricSponge   = .TRUE.     
+useTopAndBottomSymmetricSponge   = .TRUE.      ! Is the sponge layer symmetric about z=0?  
 zstSponge                        = 0.75d0       ! Height above which the sponge layer is active
 SpongeTscale                     = 20.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
 useFringe                        = .false.     ! This is false if simulation is periodic. 
@@ -97,7 +97,7 @@ topBC_Temp                       = 1           ! 0: Dirichlet (could be time dep
 &SGS_MODEL
 SGSModelID                    = 1           ! 0: smagorinsky (w/ wall function), 1: sigma
 Csgs                          = 0.90d0       ! Model constant (asymptotic value in case wall function is used) 
-WallModelType                 = 1           ! 1: Moeng, 2: Bou-zeid et. al.  
+WallModelType                 = 0           ! 0: No wall model1: Moeng, 2: Bou-zeid et. al.  
 z0                            = 2.5d-4      ! Roughness length scale (CAUTION: this assumes appropriate non-dimensionalization)
 DynamicProcedureType          = 0           ! 0: No dynamic procedure, 1: Planar Avg. Dynamic Proc., 2: Global Dynamic Proc.  
 useVerticalTfilter            = .false.     ! Use test filtering in vertical direction for dynamic procedure? 

@@ -1,7 +1,7 @@
 module temporalHook
     use kind_parameters,    only: rkind
     use IncompressibleGrid, only: igrid
-    use reductions,         only: P_MAXVAL, p_minval
+    use reductions,         only: P_maxval, p_minval
     use exits,              only: message, message_min_max, GracefulExit
     use constants,          only: half
     use timer,              only: tic, toc 
@@ -10,7 +10,7 @@ module temporalHook
     implicit none 
 
     integer :: nt_print2screen = 1
-    real(rkind) ::  maxDiv, DomMaxDiv
+    real(rkind) ::  maxDiv, DomMaxDiv, maxnusgs
     integer :: ierr 
 
 contains
@@ -28,10 +28,10 @@ contains
             call message_min_max(1,"Bounds for v:", p_minval(minval(igp%v)), p_maxval(maxval(igp%v)))
             call message_min_max(1,"Bounds for w:", p_minval(minval(igp%w)), p_maxval(maxval(igp%w)))
             call message_min_max(1,"Bounds for T:", p_minval(minval(igp%T)), p_maxval(maxval(igp%T)))
-            call message(1,"T_surf:",igp%Tsurf)
-            call message(1,"u_star:",igp%sgsmodel%get_ustar())
-            call message(1,"Inv. Ob. Length:",igp%sgsmodel%get_InvObLength())
-            call message(1,"wTh_surf:",igp%sgsmodel%get_wTh_surf())
+            if (igp%useSGS) then
+                maxnusgs = p_maxval(igp%nu_SGS)
+                call message(1,"Maximum SGS viscosity:", maxnusgs)
+            end if 
             if (igp%useCFL) then
                 call message(1,"Current dt:",igp%dt)
             end if
