@@ -33,7 +33,7 @@ module IncompressibleGrid
 
     ! Allow non-zero value (isEven) 
     integer :: ierr 
-    integer :: topWall = 1, botWall = 1, botBC_Temp = 1
+    integer :: topWall = 1, botWall = 1, botBC_Temp = 1, topBC_Temp = 0
 
     !! BC convention: 
 
@@ -340,7 +340,7 @@ contains
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,&
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude, useHITForcing, frameAngle
-        namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex
+        namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
@@ -5009,16 +5009,21 @@ contains
          case default
             call gracefulExit("Invalid choice for TOP WALL BCs",13)
          end select
-         
-         TBC_top = 0; dTdzBC_top = 0; WTBC_top = -1;
-         WdTdzBC_top = 0;
+        
+         select case (topBC_Temp)
+         case(0) ! Dirichlet (default)
+            TBC_top = 0; dTdzBC_top = 0; WTBC_top = -1;
+            WdTdzBC_top = 0;
+         case(1)
+            TBC_top = 1; dTdzBC_top = -1; WTBC_top = -1;
+            WdTdzBC_top = 1;
          select case (botBC_Temp)
          case (0) ! Dirichlet BC for temperature at the bottom
             TBC_bottom = 0; dTdzBC_bottom = 0; WTBC_bottom = -1; 
             WdTdzBC_bottom = 0;      
          case(1)  ! Homogenenous Neumann BC at the bottom
-            TBC_bottom = +1; dTdzBC_bottom = -1; WTBC_bottom = -1;
-            WdTdzBC_bottom = +1
+            TBC_bottom = 1; dTdzBC_bottom = -1; WTBC_bottom = -1;
+            WdTdzBC_bottom = 1
          end select
 
     end subroutine
