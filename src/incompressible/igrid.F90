@@ -119,18 +119,21 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:,:), allocatable :: rhsC, rhsE, OrhsC, OrhsE 
         real(rkind), dimension(:,:,:,:), allocatable :: duidxjC, duidxjE 
         complex(rkind), dimension(:,:,:,:), allocatable :: duidxjChat, duidxjEhat
-        complex(rkind), dimension(:,:,:), allocatable :: d2udz2hatC, d2vdz2hatC,d2wdz2hatE
+        complex(rkind), dimension(:,:,:), allocatable :: d2udz2hatC, d2vdz2hatC,d2wdz2hatE, d2Tdz2hatC
         complex(rkind), dimension(:,:,:), pointer:: u_rhs, v_rhs, wC_rhs, w_rhs 
         complex(rkind), dimension(:,:,:), pointer:: u_Orhs, v_Orhs, w_Orhs
 
         real(rkind), dimension(:,:,:), allocatable :: rDampC, rDampE         
         real(rkind) :: Re, G_Geostrophic, G_alpha, frameAngle, dtby2, meanfact, Tref, dPfdx, dPfdy, dPfdz
         complex(rkind), dimension(:,:,:), allocatable :: GxHat, GyHat, GxHat_Edge, GyHat_Edge
-        real(rkind) :: Ro = 1.d5, Fr = 1000.d0
+        real(rkind) :: Ro = 1.d5, Fr = 1000.d0, PrandtlFluid = 1.d0, BulkRichardson = 0.d90
         logical :: assume_fplane = .true.
         real(rkind) :: coriolis_omegaY, coriolis_omegaZ, coriolis_omegaX 
         integer :: nxZ, nyZ
-     
+    
+        integer :: BuoyancyTermType = 0 
+        real(rkind) :: BuoyancyFact = 0.d0
+
         logical :: periodicInZ  = .false. 
         logical :: newTimeStep = .true., computeVorticity = .false.  
         integer :: timeSteppingScheme = 0 
@@ -309,17 +312,17 @@ contains
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1
         real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop
-        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0
+        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
         logical ::isStratified=.false.,dumpPlanes = .false.,useExtraForcing = .false.
-        logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false.
+        logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false. 
         logical :: useGeostrophicForcing = .false., PeriodicInZ = .false. 
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
-        integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10
+        integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10, BuoyancyTermType = 1
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
-        real(rkind) :: Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0
+        real(rkind) :: Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
@@ -335,9 +338,9 @@ contains
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
-        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, &
+        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,&
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude, useHITForcing, frameAngle
-        namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useFringe, usedoublefringex
+        namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
@@ -370,10 +373,10 @@ contains
         this%tSystemInteractions = tSystemInteractions; this%storePressure = storePressure
         this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq; this%timeAvgFullFields = timeAvgFullFields
         this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp; this%isInviscid = isInviscid
-        this%assume_fplane = assume_fplane; this%useProbes = useProbes
+        this%assume_fplane = assume_fplane; this%useProbes = useProbes; this%PrandtlFluid = PrandtlFLuid
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact; this%useFringe = useFringe
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
-        this%useHITForcing = useHITForcing
+        this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType 
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity
 
         if (this%CFL > zero) this%useCFL = .true. 
@@ -393,7 +396,7 @@ contains
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
         this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; 
         this%t_pointProbe = t_pointProbe; this%dPfdx = dPfdx; this%dPfdy = dPfdy; this%dPfdz = dPfdz
-        this%InitSpinUp = InitSpinUp
+        this%InitSpinUp = InitSpinUp; this%BulkRichardson = BulkRichardson
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC); allocate(this%gpE)
@@ -556,6 +559,9 @@ contains
             allocate(this%d2udz2hatC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
             allocate(this%d2vdz2hatC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
             allocate(this%d2wdz2hatE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
+            if (this%isStratified) then
+               allocate(this%d2Tdz2hatC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+            end if 
         end if 
         this%nxZ = size(this%cbuffzE,1); this%nyZ = size(this%cbuffzE,2)
         allocate(this%fbody_x(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
@@ -718,12 +724,29 @@ contains
             call transpose_z_to_y(zEinZ,zEinY,this%gpE)
             this%RdampC = (one/SpongeTscale) * (one - cos(pi*(zinY - zstSponge) /(zTop - zstSponge)))/two
             this%RdampE = (one/SpongeTscale) * (one - cos(pi*(zEinY - zstSponge)/(zTop - zstSponge)))/two
-            where (zEinY < zstSponge) 
-                this%RdampE = zero
-            end where
-            where (zinY < zstSponge) 
-                this%RdampC = zero
-            end where
+            if (useTopAndBottomSymmetricSponge) then
+               where (abs(zEinY) < zstSponge) 
+                   this%RdampE = zero
+               end where
+               where (abs(zinY) < zstSponge) 
+                   this%RdampC = zero
+               end where
+               if ((zEinZ(1,1,1) + zEinZ(1,1,this%nz+1))<1.d-13) then
+                  call message(0,"WARNING: Computed domain is not symmetric &
+                     & about z=0. You shouldn't use the symmetric sponge")
+                  call MPI_BARRIER(mpi_comm_world, ierr)
+                  call GracefulExit("Failed at sponge initialization",134)
+               end if   
+            else
+               where (zEinY < zstSponge) 
+                   this%RdampE = zero
+               end where
+               where (zinY < zstSponge) 
+                   this%RdampC = zero
+               end where
+            end if 
+            
+
             call this%spectC%alloc_r2c_out(this%uBase)
             call this%spectC%alloc_r2c_out(this%vBase)
             call this%spectC%alloc_r2c_out(this%TBase)
@@ -917,7 +940,26 @@ contains
         ! STEP 20: Update the probes
         if (this%useProbes) call this%updateProbes()
 
-        ! STEP 21: Safeguard against user invalid user inputs
+
+        ! STEP 21: Buoyancy term type
+        if (this%isStratified) then
+            select case (this%BuoyancyTermType)
+            case(1)
+               this%BuoyancyFact = one/(this%Fr*this%Fr*this%ThetaRef)
+               call message(1,"Bupyancy term type 1 selected. Buoyancy term &
+                                 & calculation term uses")
+               call message(2,"Froude number:", this%Fr)
+               call message(2,"Reference temperature:", this%thetaRef)
+            case(2)
+               this%BuoyancyFact = this%BulkRichardson
+               call message(1,"Bupyancy term type 2 selected. Buoyancy term &
+                                 & calculation term uses")
+               call message(2,"Bulk Richardson number:", this%BulkRichardson)
+            end select
+        end if 
+
+
+        ! STEP 22: Safeguard against user invalid user inputs
         if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
             call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 or SSP RK45 time stepping.",123)
         end if 
@@ -1628,7 +1670,8 @@ contains
         fT1E => this%cbuffyE(:,:,:,1)
         rbuffE => this%rbuffxE(:,:,:,1)
 
-        fT1E = (this%TEhat)/(this%ThetaRef*this%Fr*this%Fr)
+        !fT1E = (this%TEhat)/(this%ThetaRef*this%Fr*this%Fr)
+        fT1E = (this%TEhat)*this%BuoyancyFact ! See definition of buoyancy factor in init 
         if (this%spectE%carryingZeroK) then
             fT1E(1,1,:) = cmplx(zero,zero,rkind)
         end if 
@@ -1760,7 +1803,7 @@ contains
     subroutine addViscousTerm(this)
         class(igrid), intent(inout) :: this
         integer :: i, j, k
-        real(rkind) :: oneByRe
+        real(rkind) :: oneByRe, molecularDiff
         complex(rkind) :: tmp1, tmp2
 
         oneByRe = one/this%Re
@@ -1787,6 +1830,19 @@ contains
             end do
          end do
 
+         if (this%isStratified) then
+            molecularDiff = one/(this%Re*this%PrandtlFluid)
+            do k = 1,size(this%u_rhs,3)
+               do j = 1,size(this%u_rhs,2)
+                  !$omp simd
+                  do i = 1,size(this%u_rhs,1)
+                     this%T_rhs(i,j,k) = this%T_rhs(i,j,k) + molecularDiff*(-this%spectC%kabs_sq(i,j,k)*this%That(i,j,k) &
+                                       & + this%d2Tdz2hatC(i,j,k))
+                  end do 
+               end do 
+            end do 
+            
+         end if
         !this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%uhat + this%d2udz2hatC
         !this%u_rhs = this%u_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
 
@@ -2486,7 +2542,7 @@ contains
 
     subroutine compute_dTdxi(this)
         class(igrid), intent(inout), target :: this
-        complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
+        complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2, ctmpz3
         complex(rkind), dimension(:,:,:), pointer :: ctmpy1
 
         ctmpz1 => this%cbuffzC(:,:,:,1); ctmpz2 => this%cbuffzE(:,:,:,1); 
@@ -2499,15 +2555,20 @@ contains
         call this%spectC%ifft(this%dTdyH,this%dTdyC)
    
         call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
-      
         call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,TBC_bottom,TBC_top)
         call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dTdzBC_bottom,dTdzBC_top)
+        if (.not. this%isInviscid) then
+            call this%Pade6opZ%d2dz2_C2C(ctmpz1,ctmpz3,TBC_bottom, TBC_top)    
+            call transpose_z_to_y(ctmpz3,this%d2Tdz2hatC,this%sp_gpC)
+        end if 
 
         call transpose_z_to_y(ctmpz2, this%dTdzH, this%sp_gpE)
         call this%spectE%ifft(this%dTdzH,this%dTdzE)
         
         call transpose_z_to_y(ctmpz1,this%dTdzHC,this%sp_gpC)
         call this%spectC%ifft(this%dTdzHC,this%dTdzC)
+
+
 
     end subroutine
     
