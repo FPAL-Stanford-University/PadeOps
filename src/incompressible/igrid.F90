@@ -5017,6 +5017,7 @@ contains
          case(1)
             TBC_top = 1; dTdzBC_top = -1; WTBC_top = -1;
             WdTdzBC_top = 1;
+         end select 
          select case (botBC_Temp)
          case (0) ! Dirichlet BC for temperature at the bottom
             TBC_bottom = 0; dTdzBC_bottom = 0; WTBC_bottom = -1; 
