@@ -42,7 +42,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind)  :: Lx = one, Ly = one, Lz = one, maxperturbation = 1.d-3, deltaTh = 0.01
     real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, vperturb
     real(rkind), dimension(10) :: kwaves
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxperturbation, maxrandom
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxperturbation, maxrandom, deltaTh
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -119,8 +119,8 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=*),                intent(in)    :: inputfile
     integer :: ioUnit, seed 
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxperturbation, maxrandom
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxperturbation, maxrandom
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxperturbation, deltaTh, maxrandom
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxperturbation, maxrandom, deltaTh
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -191,8 +191,9 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn, seed = 231454
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxperturbation = 1.d-2, maxrandom = 1.d-5 
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxperturbation, maxrandom
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxperturbation = 1.d-2
+    real(rkind)  :: maxrandom = 1.d-5, deltaTh = 0.01
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxperturbation, maxrandom, deltaTh
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
