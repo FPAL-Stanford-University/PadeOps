@@ -126,5 +126,6 @@ Lx                            = 31.4159265359d0       ! Domain Length (appropria
 Ly                            = 15.7079632679d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
 Lz                            = 12.d0       ! Half-domain height (appropriate dimesnions/non-dimensionalized)
 seed                          = 43256       ! random integer for seeding initial condition
-maxperturbation               = 1.d-2
+maxperturbation               = 1.d-2       ! amplitude of the initial perturbations using fourier modes
+maxrandom                     = 1.d-5       ! amplitude of gaussian random number fluctuations
 /

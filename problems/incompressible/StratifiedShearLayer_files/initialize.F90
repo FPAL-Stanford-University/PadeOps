@@ -38,11 +38,11 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, T, x, y, z
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE, k, seed = 12331
-    real(rkind) :: kpeak = 1.d0, mag
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxperturbation = 1.d-3, deltaTh = 0.01, mfact
+    real(rkind) :: kpeak = 1.d0, mag, mfact, maxrandom = 1.d-5
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxperturbation = 1.d-3, deltaTh = 0.01
     real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, vperturb
     real(rkind), dimension(10) :: kwaves
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxperturbation
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxperturbation, maxrandom
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -78,10 +78,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     ! Add random numbers
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
     call gaussian_random(randArr,zero,one,seed + 12345)
-    uperturb = (mfact*uperturb + 1.d-5*randArr)*exp(-(z*z))
+    uperturb = (mfact*uperturb + maxrandom*randArr)*exp(-(z*z))
     
     call gaussian_random(randArr,zero,one,seed + 54321)
-    vperturb = (mfact*vperturb + 1.d-5*randArr)*exp(-(z*z))
+    vperturb = (mfact*vperturb + maxrandom*randArr)*exp(-(z*z))
     deallocate(randArr)
 
     u = u + uperturb
@@ -119,8 +119,8 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=*),                intent(in)    :: inputfile
     integer :: ioUnit, seed 
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxperturbation
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxperturbation
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxperturbation, maxrandom
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxperturbation, maxrandom
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -191,8 +191,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn, seed = 231454
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxperturbation = 1.d-2 
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxperturbation
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxperturbation = 1.d-2, maxrandom = 1.d-5 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxperturbation, maxrandom
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
