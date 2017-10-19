@@ -753,9 +753,9 @@ contains
             call this%spectC%alloc_r2c_out(this%uBase)
             call this%spectC%alloc_r2c_out(this%vBase)
             call this%spectC%alloc_r2c_out(this%TBase)
-            this%rbuffxC(:,:,:,1) = this%G_Geostrophic*cos(this%G_alpha*pi/180.d0)
+            this%rbuffxC(:,:,:,1) = this%u 
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%uBase)
-            this%rbuffxC(:,:,:,1) = this%G_Geostrophic*sin(this%G_alpha*pi/180.d0)
+            this%rbuffxC(:,:,:,1) = this%v
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%vBase)
             this%rbuffxC(:,:,:,1) = this%T
             call this%spectC%fft(this%rbuffxC(:,:,:,1),this%TBase)
