@@ -1835,12 +1835,12 @@ contains
 
          if (this%isStratified) then
             molecularDiff = one/(this%Re*this%PrandtlFluid)
-            do k = 1,size(this%u_rhs,3)
-               do j = 1,size(this%u_rhs,2)
+            do k = 1,size(this%T_rhs,3)
+               do j = 1,size(this%T_rhs,2)
                   !$omp simd
-                  do i = 1,size(this%u_rhs,1)
-                     this%T_rhs(i,j,k) = this%T_rhs(i,j,k) + molecularDiff*(-this%spectC%kabs_sq(i,j,k)*this%That(i,j,k) &
-                                       & + this%d2Tdz2hatC(i,j,k))
+                  do i = 1,size(this%T_rhs,1)
+                     tmp1 = -this%spectC%kabs_sq(i,j,k)*this%That(i,j,k) + this%d2Tdz2hatC(i,j,k) 
+                     this%T_rhs(i,j,k) = this%T_rhs(i,j,k) + molecularDiff*tmp1
                   end do 
                end do 
             end do 
@@ -2559,11 +2559,11 @@ contains
    
         call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
         call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,TBC_bottom,TBC_top)
-        call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dTdzBC_bottom,dTdzBC_top)
         if (.not. this%isInviscid) then
             call this%Pade6opZ%d2dz2_C2C(ctmpz1,ctmpz3,TBC_bottom, TBC_top)    
             call transpose_z_to_y(ctmpz3,this%d2Tdz2hatC,this%sp_gpC)
         end if 
+        call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dTdzBC_bottom,dTdzBC_top)
 
         call transpose_z_to_y(ctmpz2, this%dTdzH, this%sp_gpE)
         call this%spectE%ifft(this%dTdzH,this%dTdzE)

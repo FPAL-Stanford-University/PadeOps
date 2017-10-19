@@ -1,8 +1,8 @@
 &INPUT
-inputdir                      = "/home1/04076/tg833754/Codes/PadeOps/build/build_debug/problems/incompressible/StratifiedShearLayer_files"   ! Directory for any input files
-outputdir                     = "/home1/04076/tg833754/Codes/PadeOps/build/build_debug/problems/incompressible/StratifiedShearLayer_files"   ! Directory for all output files
-nx                            = 256         ! Number of points in X
-ny                            = 128         ! Number of points in Y
+inputdir                      = "/scratch/globus/aghate/StratifiedShearLayer/output"   ! Directory for any input files
+outputdir                     = "/scratch/globus/aghate/StratifiedShearLayer/output"   ! Directory for all output files
+nx                            = 192         ! Number of points in X
+ny                            = 96         ! Number of points in Y
 nz                            = 512         ! Number of points in Z
 tstop                         = 200.D0      ! Physical time to stop the simulation
 CFL                           = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
@@ -25,9 +25,9 @@ useExhaustiveFFT              = .TRUE.
 /
 /
 &IO
-RunID                         = 1          ! Run Label (All output files will be tagged with this nubber)
+RunID                         = 2          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump                 = 1000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump                    = 1000         ! Data dumping frequency (# of timesteps)
+t_dataDump                    = 100         ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump                   = 100         ! Plane dumping frequency (# of timesteps)
@@ -96,7 +96,7 @@ topBC_Temp                       = 1           ! 0: Dirichlet (could be time dep
 /
 &SGS_MODEL
 SGSModelID                    = 1           ! 0: smagorinsky (w/ wall function), 1: sigma
-Csgs                          = 0.90d0       ! Model constant (asymptotic value in case wall function is used) 
+Csgs                          = 1.0d0       ! Model constant (asymptotic value in case wall function is used) 
 WallModelType                 = 0           ! 0: No wall model1: Moeng, 2: Bou-zeid et. al.  
 z0                            = 2.5d-4      ! Roughness length scale (CAUTION: this assumes appropriate non-dimensionalization)
 DynamicProcedureType          = 0           ! 0: No dynamic procedure, 1: Planar Avg. Dynamic Proc., 2: Global Dynamic Proc.  
@@ -127,5 +127,5 @@ Ly                            = 15.7079632679d0       ! Domain Width  (appropria
 Lz                            = 12.d0       ! Half-domain height (appropriate dimesnions/non-dimensionalized)
 seed                          = 43256       ! random integer for seeding initial condition
 maxperturbation               = 1.d-2       ! amplitude of the initial perturbations using fourier modes
-maxrandom                     = 1.d-5       ! amplitude of gaussian random number fluctuations
+maxrandom                     = 1.d-15       ! amplitude of gaussian random number fluctuations
 /
