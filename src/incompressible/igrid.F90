@@ -955,7 +955,7 @@ contains
                call message(2,"Reference temperature:", this%thetaRef)
             case(2)
                this%BuoyancyFact = this%BulkRichardson
-               call message(1,"Bupyancy term type 2 selected. Buoyancy term &
+               call message(1,"Buoyancy term type 2 selected. Buoyancy term &
                                  & calculation term uses")
                call message(2,"Bulk Richardson number:", this%BulkRichardson)
             end select
