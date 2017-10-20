@@ -1,17 +1,17 @@
 &INPUT
-inputdir                      = "/scratch/globus/aghate/StratifiedShearLayer/output"   ! Directory for any input files
-outputdir                     = "/scratch/globus/aghate/StratifiedShearLayer/output"   ! Directory for all output files
-nx                            = 192         ! Number of points in X
-ny                            = 96         ! Number of points in Y
+inputdir                      = "/scratch/04076/tg833754/StratifiedShearLayer/output"   ! Directory for any input files
+outputdir                     = "/scratch/04076/tg833754/StratifiedShearLayer/output"   ! Directory for all output files
+nx                            = 512         ! Number of points in X
+ny                            = 512         ! Number of points in Y
 nz                            = 512         ! Number of points in Z
-tstop                         = 200.D0      ! Physical time to stop the simulation
+tstop                         = 300.D0      ! Physical time to stop the simulation
 CFL                           = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile                = .FALSE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 110000        ! TimeID of the restart file being used
-restartFile_RID               = 1          ! RunID of the restart file being used
+restartFile_TID               = 1462        ! TimeID of the restart file being used
+restartFile_RID               = 3          ! RunID of the restart file being used
 /
 /
 &NUMERICS
@@ -25,9 +25,9 @@ useExhaustiveFFT              = .TRUE.
 /
 /
 &IO
-RunID                         = 2          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump                 = 1000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump                    = 100         ! Data dumping frequency (# of timesteps)
+RunID                         = 10          ! Run Label (All output files will be tagged with this nubber)
+t_restartDump                 = 400        ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump                    = 400         ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump                   = 100         ! Plane dumping frequency (# of timesteps)
@@ -85,8 +85,8 @@ P_compFreq                    = 10          ! How often (timesteps) do you want 
 &BCs
 botWall                          = 2           ! no_slip = 1, slip = 2, wall model = 3 
 topWall                          = 2           ! no_slip = 1, slip = 2, wall model = 3
-useSpongeLayer                   = .TRUE.      ! Use a sponge layer at the top 
-useTopAndBottomSymmetricSponge   = .TRUE.      ! Is the sponge layer symmetric about z=0?  
+useSpongeLayer                   = .FALSE.      ! Use a sponge layer at the top 
+useTopAndBottomSymmetricSponge   = .FALSE.      ! Is the sponge layer symmetric about z=0?  
 zstSponge                        = 0.75d0       ! Height above which the sponge layer is active
 SpongeTscale                     = 20.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
 useFringe                        = .false.     ! This is false if simulation is periodic. 
@@ -123,9 +123,10 @@ t_dumpKSprep                  = 10         ! Dumping Frequency for KS files
 /
 &PROBLEM_INPUT
 Lx                            = 31.4159265359d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            = 15.7079632679d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
-Lz                            = 12.d0       ! Half-domain height (appropriate dimesnions/non-dimensionalized)
+Ly                            = 31.4159265359d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
+Lz                            = 8.d0       ! Half-domain height (appropriate dimesnions/non-dimensionalized)
 seed                          = 43256       ! random integer for seeding initial condition
-maxperturbation               = 1.d-2       ! amplitude of the initial perturbations using fourier modes
-maxrandom                     = 1.d-15       ! amplitude of gaussian random number fluctuations
+maxpert_u                     = 1.d-2       ! amplitude of the initial perturbations using fourier modes
+maxpert_T                     = 1.d-2       ! amplitude of the initial perturbations using fourier modes
+maxrandom                     = 2.d-2       ! amplitude of gaussian random number fluctuations
 /
