@@ -38,10 +38,17 @@ set(FFTPACK_INCLUDE_PATH "${FFTPACK_PATH}/include")
 
 set(CMAKE_Fortran_COMPILER_ID $ENV{COMPILER_ID})
 
+
+
 # Intel compiler suite
 if ( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
-    if ( CMAKE_BUILD_TYPE MATCHES "Release" )
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -mkl -heap-arrays 1024 -warn all -xhost -dynamic -qopt-report=2 -qopt-report-phase=vec -qoverride-limits -qopenmp")
+    if ( CMAKE_BUILD_TYPE MATCHES "Release" )	
+	if ($ENV{ARCH_OPT_FLAG})
+	    set(OPTFLAG "-xhost")
+	else()
+	    set(OPTFLAG $ENV{ARCH_OPT_FLAG})
+	endif()
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -mkl -heap-arrays 1024 -warn all ${OPTFLAG} -dynamic -qopt-report=2 -qopt-report-phase=vec -qoverride-limits -qopenmp")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
         set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -traceback -g -mkl -heap-arrays 1024 -check all -check noarg-temp-created -fpe0 -warn -traceback -debug extended -assume realloc_lhs -fstack-protector -assume protect_parens -implicitnone")
     endif()
@@ -57,7 +64,12 @@ elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "GNU_OSX")
 # Standard GNU compilers
 elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
     if ( CMAKE_BUILD_TYPE MATCHES "Release" )
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -Wall -Wconversion -Wextra -Waliasing -ffree-form -ffree-line-length-none -ffast-math -march=native -funroll-loops -fno-protect-parens -fopenmp")
+	if ($ENV{ARCH_OPT_FLAG})
+	    set(OPTFLAG "-march=native")
+	else()
+	    set(OPTFLAG $ENV{ARCH_OPT_FLAG})
+	endif()
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -Wall -Wconversion -Wextra -Waliasing -ffree-form -ffree-line-length-none -ffast-math ${OPTFLAG} -funroll-loops -fno-protect-parens -fopenmp")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
         set(CMAKE_Fortran_FLAGS "-Og -g -fbacktrace -pg -llapack -ffree-form -ffree-line-length-none -fcheck=all -fbounds-check -ffpe-trap=zero,overflow -Wall -Wconversion -Wextra -Waliasing -Wsurprising")
     endif()

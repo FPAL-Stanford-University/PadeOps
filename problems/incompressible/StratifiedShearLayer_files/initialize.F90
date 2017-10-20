@@ -60,7 +60,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     u = -0.5d0*tanh(z/0.5d0)
     v = zero
     wC = zero
-    T = 1./deltaTh + 0.5d0*tanh(z/0.5d0)
+    T = 1.d0/deltaTh + 0.5d0*tanh(z/0.5d0)
 
     allocate(uperturb(size(u,1),size(u,2),size(u,3)))
     allocate(vperturb(size(u,1),size(u,2),size(u,3)))
@@ -69,19 +69,18 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     kwaves = linspace(0.8d0,8.d0,10)
     do k = 1,10
          mag = ((kwaves(k)/kpeak)**4)*exp(-2*(kwaves(k)/kpeak)**2);
-         uperturb = uperturb + mag*cos(kwaves(k)*x)*sin(kwaves(k)*y) 
-         vperturb = vperturb - mag*sin(kwaves(k)*x)*cos(kwaves(k)*y) 
+         uperturb = uperturb + mag*sin(kwaves(k)*y) 
+         vperturb = vperturb - mag*cos(kwaves(k)*x) 
     end do 
 
     mfact = maxperturbation/p_maxval(maxval(uperturb))
+    vperturb = (mfact*vperturb)*exp(-(z*z))
+    uperturb = (mfact*uperturb)*exp(-(z*z))
     
     ! Add random numbers
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
     call gaussian_random(randArr,zero,one,seed + 12345)
-    uperturb = (mfact*uperturb + maxrandom*randArr)*exp(-(z*z))
-    
-    call gaussian_random(randArr,zero,one,seed + 54321)
-    vperturb = (mfact*vperturb + maxrandom*randArr)*exp(-(z*z))
+    T = T + (maxrandom*randArr)*exp(-4.d0*(z*z))
     deallocate(randArr)
 
     u = u + uperturb
