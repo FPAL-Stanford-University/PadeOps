@@ -1,8 +1,8 @@
 &INPUT
-inputdir                      = "/scratch/04076/tg833754/StratifiedShearLayer/output"   ! Directory for any input files
-outputdir                     = "/scratch/04076/tg833754/StratifiedShearLayer/output"   ! Directory for all output files
-nx                            = 512         ! Number of points in X
-ny                            = 512         ! Number of points in Y
+inputdir                      = "/scratch/globus/aghate/StratifiedShearLayer/output"   ! Directory for any input files
+outputdir                     = "/scratch/globus/aghate/StratifiedShearLayer/output"   ! Directory for all output files
+nx                            = 256         ! Number of points in X
+ny                            = 256         ! Number of points in Y
 nz                            = 512         ! Number of points in Z
 tstop                         = 300.D0      ! Physical time to stop the simulation
 CFL                           = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
@@ -25,9 +25,9 @@ useExhaustiveFFT              = .TRUE.
 /
 /
 &IO
-RunID                         = 10          ! Run Label (All output files will be tagged with this nubber)
+RunID                         = 20          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump                 = 400        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump                    = 400         ! Data dumping frequency (# of timesteps)
+t_dataDump                    = 10         ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump                   = 100         ! Plane dumping frequency (# of timesteps)
@@ -56,11 +56,11 @@ useCoriolis                   = .FALSE.     ! Activate the coriolis term?
 useExtraForcing               = .FALSE.     ! Is an extra forcing term being used? (non-Geostrophic forcing only)
 isStratified                  = .TRUE.      ! Use Stratification / active scalar in momentum
 BuoyancyTermType              = 2           ! 1: Specify (Tref, Fr), 2: Specify bulk Richardson number
-Re                            = 5000.d0     ! Reynolds Number; used when isInvisid is FALSE
+Re                            = 3000.d0     ! Reynolds Number; used when isInvisid is FALSE
 Ro                            = 1.d10       ! Rossby Number used when Coriolis is ON
 PrandtlFluid                  = 1.d0        ! Fluid molecular prandtl number
 Pr                            = 0.4d0       ! Turbulent Prandtl Number; used when 
-BulkRichardson                = 0.1d0       ! Bulk richardson number 
+BulkRichardson                = 0.4d0       ! Bulk richardson number 
 Fr                            = 1.D10       ! Froude number; used when isStratified is TRUE
 useSGS                        = .TRUE.      ! Do you want to use the SGS model?
 useGeostrophicForcing         = .FALSE.     ! This is true if forcing is provided using the coriolis term  
@@ -122,11 +122,13 @@ t_dumpKSprep                  = 10         ! Dumping Frequency for KS files
 /
 /
 &PROBLEM_INPUT
-Lx                            = 31.4159265359d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            = 31.4159265359d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
-Lz                            = 8.d0       ! Half-domain height (appropriate dimesnions/non-dimensionalized)
-seed                          = 43256       ! random integer for seeding initial condition
-maxpert_u                     = 1.d-2       ! amplitude of the initial perturbations using fourier modes
-maxpert_T                     = 1.d-2       ! amplitude of the initial perturbations using fourier modes
-maxrandom                     = 2.d-2       ! amplitude of gaussian random number fluctuations
+Lx                            = 29.16d0            ! Domain Length (appropriate dimensions/non-dimensionalized)
+Ly                            = 27.3375d0          ! Domain Width  (appropriate dimensions/non-dimensionalized)
+Lz                            = 8.d0               ! Half-domain height (appropriate dimesnions/non-dimensionalized)
+N                             = 4                  ! Number of KH rollers in x
+M                             = 3                  ! Numbers of regularized square waves in y
+A0                            = 0.10d0             ! Amplitude of the imposed mode 
+deltaPhi                      = 1.5707963267949d0  ! Phase for the regularized square wave
+seed                          = 43256              ! random integer for seeding initial condition
+maxrandom                     = 2.d-3              ! amplitude of gaussian random number fluctuations
 /

@@ -26,7 +26,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use random,             only: gaussian_random
     use decomp_2d          
     use reductions,         only: p_maxval
-    use constants,          only: pi
+    use constants,          only: pi, imi
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -38,11 +38,13 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, T, x, y, z
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE, k, seed = 12331
-    real(rkind) :: kpeak = 1.d0, mag, mfact, maxrandom = 1.d-5
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxpert_u = 1.d-3, deltaTh = 0.01, maxpert_T = 1.d-3
-    real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, vperturb
-    real(rkind), dimension(10) :: kwaves
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxpert_u, maxpert_T,  maxrandom, deltaTh
+    real(rkind) :: lambda_x, lambda_y, A0 = 0.1d0, Tbase = 100.d0, kx, ky
+    integer :: N = 4, M= 2, i, j
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxrandom = 1.d-4, deltaPhi = pi/2.d0
+    real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, wperturb
+    real(rkind) :: Psi, dPsi_dz
+
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -57,36 +59,43 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     !allocate(randArr(size(T,1),size(T,2),size(T,3)))
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    u = -0.5d0*tanh(z/0.5d0)
+    u = -erf(sqrt(pi)*z)
     v = zero
     wC = zero
-    T = 1.d0/deltaTh + 0.5d0*tanh(z/0.5d0)
+    T = Tbase +  0.5d0*erf(sqrt(pi)*z)
 
     allocate(uperturb(size(u,1),size(u,2),size(u,3)))
-    allocate(vperturb(size(u,1),size(u,2),size(u,3)))
+    allocate(wperturb(size(u,1),size(u,2),size(u,3)))
 
-    uperturb = 0.d0; vperturb = 0.d0 
-    kwaves = linspace(0.8d0,8.d0,10)
-    do k = 1,10
-         mag = ((kwaves(k)/kpeak)**4)*exp(-2*(kwaves(k)/kpeak)**2);
-         uperturb = uperturb + mag*sin(kwaves(k)*y) 
-         vperturb = vperturb - mag*cos(kwaves(k)*x) 
+    lambda_x = Lx/real(N,rkind); lambda_y = Ly/real(M,rkind)
+    kx = 2.d0*pi/lambda_x; ky = 2.d0*pi/lambda_y
+   
+    do k = 1,size(u,3)
+       Psi = A0*exp(-pi*(z(1,1,k)**2))
+       dPsi_dz = -2.d0*z(1,1,k)*A0*exp(-pi*(z(1,1,k)**2))
+       do j = 1,size(u,2)
+          !$omp simd
+          do i = 1,size(u,1)
+            uperturb(i,j,k) = real((imi/kx)*dPsi_dz*exp(imi*kx*x(i,j,k))*(cos(deltaPhi/2.d0) &
+                            + (4.d0*imi/pi)*sin(deltaPhi/2.d0)*sin(ky*y(i,j,k))),rkind) 
+            
+            wperturb(i,j,k) = real(Psi*exp(imi*kx*x(i,j,k))*(cos(deltaPhi/2.d0) &
+                            + (4.d0*imi/pi)*sin(deltaPhi/2.d0)*sin(ky*y(i,j,k))),rkind) 
+          end do 
+       end do 
     end do 
-
-    mfact = maxpert_u/p_maxval(maxval(uperturb))
-    vperturb = (mfact*vperturb)*exp(-2.d0*(z*z))
-    uperturb = (mfact*uperturb)*exp(-2.d0*(z*z))
+    u = u + uperturb
+    w = w + wperturb
+    deallocate(uperturb, wperturb)
     
     ! Add random numbers
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
     call gaussian_random(randArr,zero,one,seed+1234*nrank+54321)
-    T = T + (maxrandom*randArr)*exp(-8.d0*(z*z))
-    T = T + maxpert_T*exp(-8*(z*z))*cos(0.8*x)!*sin(0.8*y)
+    v = v + (maxrandom*randarr*exp(-pi*(z*z)))
     deallocate(randArr)
-
-    u = u + uperturb
-    v = v + vperturb
-    deallocate(uperturb, vperturb)
+    
+    !T = T + (maxrandom*randArr)*exp(-8.d0*(z*z))
+    !T = T + maxpert_T*exp(-8*(z*z))*cos(0.8*x)!*sin(0.8*y)
 
     !!!!!!!!!!!!!!!!!!!!! DON'T CHANGE ANYTHING UNDER THIS !!!!!!!!!!!!!!!!!!!!!!
     ! Interpolate wC to w
@@ -118,9 +127,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=*),                intent(in)    :: inputfile
-    integer :: ioUnit, seed 
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxpert_u, maxpert_T, deltaTh, maxrandom
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxpert_u, maxpert_T, maxrandom, deltaTh
+    integer :: ioUnit, seed, N, M
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -190,10 +199,10 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
-    integer :: ix1, ixn, iy1, iyn, iz1, izn, seed = 231454
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxpert_u = 1.d-2, maxpert_T
-    real(rkind)  :: maxrandom = 1.d-5, deltaTh = 0.01
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, maxpert_u, maxpert_T, maxrandom, deltaTh
+    integer :: ix1, ixn, iy1, iyn, iz1, izn, seed = 231454, N, M
+    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    real(rkind)  :: maxrandom = 1.d-5, deltaPhi, Tbase, A0
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
