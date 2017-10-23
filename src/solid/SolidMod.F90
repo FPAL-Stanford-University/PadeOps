@@ -584,6 +584,16 @@ contains
         call gradient(this%decomp, this%der, vt, dvtdx, dvtdy, dvtdz,  x_bc, -y_bc,  z_bc)
         call gradient(this%decomp, this%der, wt, dwtdx, dwtdy, dwtdz,  x_bc,  y_bc, -z_bc)
 
+        ! Get the normal derivative of the tangential velocity and recast them in 3D coordinates as a tensor
+        tmp = dutdx*normal(:,:,:,1) + dutdy*normal(:,:,:,2) + dutdz*normal(:,:,:,3)
+        dutdx = tmp*normal(:,:,:,1); dutdy = tmp*normal(:,:,:,2); dutdz = tmp*normal(:,:,:,3); 
+
+        tmp = dvtdx*normal(:,:,:,1) + dvtdy*normal(:,:,:,2) + dvtdz*normal(:,:,:,3)
+        dvtdx = tmp*normal(:,:,:,1); dvtdy = tmp*normal(:,:,:,2); dvtdz = tmp*normal(:,:,:,3); 
+
+        tmp = dwtdx*normal(:,:,:,1) + dwtdy*normal(:,:,:,2) + dwtdz*normal(:,:,:,3)
+        dwtdx = tmp*normal(:,:,:,1); dwtdy = tmp*normal(:,:,:,2); dwtdz = tmp*normal(:,:,:,3); 
+
         detg = this%g11*(this%g22*this%g33-this%g23*this%g32) &
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)

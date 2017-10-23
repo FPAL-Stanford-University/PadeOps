@@ -6,7 +6,7 @@ module sliding_data
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one
-    real(rkind) :: minVF = 1.D-6, thick = three, shock_thick = two
+    real(rkind) :: rhoRatio = one, muRatio = one, minVF = 1.D-6, thick = three, shock_thick = two
     real(rkind) :: yield = 1.D9, yield2 = 1.D9
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
@@ -188,7 +188,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(8) :: fparams
     integer, dimension(2) :: iparams
 
-    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, shock_thick, minVF, shock_init, interface_init, normal, sliding
+    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, rhoRatio, muRatio, thick, shock_thick, minVF, shock_init, interface_init, normal, sliding
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -197,10 +197,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     ! Make both materials the same
     p_infty_2 = p_infty
-    Rgas_2    = Rgas
+    Rgas_2    = Rgas / rhoRatio
     gamma_2   = gamma
-    mu_2      = mu
-    rho_0_2   = rho_0
+    mu_2      = mu * muRatio
+    rho_0_2   = rho_0 * rhoRatio
 
     ! Initialize mygfil
     call mygfil%init(                        decomp, &
