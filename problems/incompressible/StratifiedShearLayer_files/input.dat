@@ -1,9 +1,9 @@
 &INPUT
-inputdir                      = "/scratch/globus/aghate/StratifiedShearLayer/output"   ! Directory for any input files
-outputdir                     = "/scratch/globus/aghate/StratifiedShearLayer/output"   ! Directory for all output files
-nx                            = 256         ! Number of points in X
-ny                            = 256         ! Number of points in Y
-nz                            = 512         ! Number of points in Z
+inputdir                      = "/scratch/globus/aghate/StratifiedShearLayer/debug"   ! Directory for any input files
+outputdir                     = "/scratch/globus/aghate/StratifiedShearLayer/debug"   ! Directory for all output files
+nx                            = 128         ! Number of points in X
+ny                            = 128         ! Number of points in Y
+nz                            = 128         ! Number of points in Z
 tstop                         = 300.D0      ! Physical time to stop the simulation
 CFL                           = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
@@ -27,7 +27,7 @@ useExhaustiveFFT              = .TRUE.
 &IO
 RunID                         = 20          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump                 = 400        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump                    = 10         ! Data dumping frequency (# of timesteps)
+t_dataDump                    = 200         ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump                   = 100         ! Plane dumping frequency (# of timesteps)
@@ -95,13 +95,15 @@ topBC_Temp                       = 1           ! 0: Dirichlet (could be time dep
 /
 /
 &SGS_MODEL
-SGSModelID                    = 1           ! 0: smagorinsky (w/ wall function), 1: sigma
-Csgs                          = 1.0d0       ! Model constant (asymptotic value in case wall function is used) 
+SGSModelID                    = 0           ! 0: smagorinsky (w/ wall function), 1: sigma
+DynamicProcedureType          = 1           ! 0: No dynamic procedure, 1: Planar Avg. Dynamic Proc.
+DynProcFreq                   = 2           ! Dynamic procedure used every DYNPROCFREQ timesteps. 
+UseDynamicProcedureScalar     = .true.      ! Use dynamic procedure to compute the turbulent prandtl number? 
+deltaRatio                    = 2.d0 
+Csgs                          = 0.17d0       ! Model constant (asymptotic value in case wall function is used) 
+useVerticalTfilter            = .false.     ! Use test filtering in vertical direction for dynamic procedure? 
 WallModelType                 = 0           ! 0: No wall model1: Moeng, 2: Bou-zeid et. al.  
 z0                            = 2.5d-4      ! Roughness length scale (CAUTION: this assumes appropriate non-dimensionalization)
-DynamicProcedureType          = 0           ! 0: No dynamic procedure, 1: Planar Avg. Dynamic Proc., 2: Global Dynamic Proc.  
-useVerticalTfilter            = .false.     ! Use test filtering in vertical direction for dynamic procedure? 
-DynProcFreq                   = 5           ! Dynamic procedure used every DYNPROCFREQ timesteps. 
 useWallDamping                = .FALSE.     ! Use the Wall Damping Function 
 ncWall                        = 3.d0        ! Wall Damping Function Exponent
 explicitCalcEdgeEddyViscosity = .false.      ! Explicitly calculate or interpolate edge values for eddy viscosity? 

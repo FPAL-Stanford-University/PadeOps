@@ -27,6 +27,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use decomp_2d          
     use reductions,         only: p_maxval
     use constants,          only: pi, imi
+    use cd06staggstuff,     only: cd06stagg
+
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -37,12 +39,13 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, T, x, y, z
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: nz, nzE, k, seed = 12331
+    integer :: k, seed = 12331
     real(rkind) :: lambda_x, lambda_y, A0 = 0.1d0, Tbase = 100.d0, kx, ky
     integer :: N = 4, M= 2, i, j
     real(rkind)  :: Lx = one, Ly = one, Lz = one, maxrandom = 1.d-4, deltaPhi = pi/2.d0
     real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, wperturb
-    real(rkind) :: Psi, dPsi_dz
+    real(rkind) :: Psi, dPsi_dz, dz
+    type(cd06stagg), allocatable :: derW
 
     namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase
 
@@ -84,8 +87,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
           end do 
        end do 
     end do 
-    u = u + uperturb
-    w = w + wperturb
+    u  = u  + uperturb
+    wC = wC + wperturb
     deallocate(uperturb, wperturb)
     
     ! Add random numbers
@@ -98,22 +101,26 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     !T = T + maxpert_T*exp(-8*(z*z))*cos(0.8*x)!*sin(0.8*y)
 
     !!!!!!!!!!!!!!!!!!!!! DON'T CHANGE ANYTHING UNDER THIS !!!!!!!!!!!!!!!!!!!!!!
+    allocate(derW)
+    dz = z(1,1,2) - z(1,1,1)
+    call derW%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .false., &
+                                     isTopSided = .false., isBotSided = .false.)
     ! Interpolate wC to w
     allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
     allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
     allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
     allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
-    nz = decompC%zsz(3)
-    nzE = nz + 1
     call transpose_x_to_y(wC,ybuffC,decompC)
     call transpose_y_to_z(ybuffC,zbuffC,decompC)
-    zbuffE = zero
-    zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
+    call derW%interpz_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+    !zbuffE = zero
+    !zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
     call transpose_z_to_y(zbuffE,ybuffE,decompE)
     call transpose_y_to_x(ybuffE,w,decompE) 
     ! Deallocate local memory 
     deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
     nullify(u,v,w,x,y,z)
+    deallocate(derW)
     call message(0,"Fields Initialized")
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
