@@ -1305,7 +1305,7 @@ contains
       do k = 1,size(this%k1,3)
           do j = 1,size(this%k1,2)
               do i = 1,size(this%k1,1)
-                  if ((abs(this%k1(i,j,k)) < kdealiasx) .and. (abs(this%k2(i,j,k))< kdealiasy)) then
+                  if ((abs(this%k1(i,j,k)) < kfiltx) .and. (abs(this%k2(i,j,k))< kfilty)) then
                       this%GTestFilt(i,j,k) = one
                   else
                       this%GTestFilt(i,j,k) = zero
@@ -1315,7 +1315,7 @@ contains
       end do 
       call message(1, "TestFilter Summary:")
       call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
-
+      
       this%TestFilterInitialized = .true. 
     end subroutine 
 
