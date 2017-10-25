@@ -10,7 +10,7 @@ module temporalHook
     implicit none 
 
     integer :: nt_print2screen = 1
-    real(rkind) ::  maxDiv, DomMaxDiv, maxnusgs
+    real(rkind) ::  maxDiv, DomMaxDiv, maxnusgs, maxkappasgs
     integer :: ierr 
 
 contains
@@ -30,7 +30,15 @@ contains
             call message_min_max(1,"Bounds for T:", p_minval(minval(igp%T)), p_maxval(maxval(igp%T)))
             if (igp%useSGS) then
                 maxnusgs = p_maxval(igp%nu_SGS)
+                maxkappasgs = p_maxval(igp%kappaSGS)
                 call message(1,"Maximum SGS viscosity:", maxnusgs)
+                call message(1,"Maximum SGS scalar kappa:", maxkappasgs)
+               
+                if (igp%sgsModel%usingDynProc()) then
+                  call message(1,"Maximum lambda_dynamic:", igp%sgsModel%getMax_DynSmagConst())
+                  call message(1,"Maximum beta_dynamic:", igp%sgsModel%getMax_DynPrandtl())
+                end if 
+
             end if 
             if (igp%useCFL) then
                 call message(1,"Current dt:",igp%dt)

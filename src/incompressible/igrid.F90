@@ -188,7 +188,7 @@ module IncompressibleGrid
 
         ! Pointers linked to SGS stuff
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
-        real(rkind), dimension(:,:,:)  , pointer :: nu_SGS, tau13, tau23
+        real(rkind), dimension(:,:,:)  , pointer :: kappaSGS, nu_SGS, tau13, tau23
         real(rkind), dimension(:,:,:)  , pointer :: c_SGS, q1, q2, q3 
         real(rkind), dimension(:,:,:), allocatable :: fbody_x, fbody_y, fbody_z
         logical                                      :: storeFbody
@@ -707,7 +707,7 @@ contains
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
                                     this%ThetaRef, this%Fr, this%Re, Pr, this%isInviscid, this%isStratified, this%botBC_Temp, &
                                     this%initSpinUp)
-            call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3)
+            call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%kappaSGS)
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -1768,13 +1768,19 @@ contains
 
         ! Step 6: SGS Viscous Term
         if (this%useSGS) then
-            call this%sgsmodel%getRHS_SGS(this%u_rhs,      this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
-                                          this%duidxjEhat, this%uEhat, this%vEhat,      this%what,    this%uhat,    &
-                                          this%vhat,       this%That,  this%u,          this%v,       this%uE,      &
-                                          this%vE,         this%w,     this%newTimeStep                             )
+            !call this%sgsmodel%getRHS_SGS(this%u_rhs,      this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
+            !                              this%duidxjEhat, this%uEhat, this%vEhat,      this%what,    this%uhat,    &
+            !                              this%vhat,       this%That,  this%u,          this%v,       this%uE,      &
+            !                              this%vE,         this%w,     this%newTimeStep                             )
+            
+            call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
+                                          this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
+                                          this%v,     this%wC,    this%newTimeStep                             )
 
             if (this%isStratified .or. this%initspinup) then
-               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzE)
+               !call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzE)
+               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
+                                          this%u, this%v, this%wC, this%T, this%That)
             end if
             
         end if
@@ -1846,14 +1852,6 @@ contains
             end do 
             
          end if
-        !this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%uhat + this%d2udz2hatC
-        !this%u_rhs = this%u_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
-
-        !this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%vhat + this%d2vdz2hatC
-        !this%v_rhs = this%v_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
-
-        !this%cbuffyE(:,:,:,1) = -this%spectE%kabs_sq*this%what + this%d2wdz2hatE
-        !this%w_rhs = this%w_rhs + (one/this%Re)*this%cbuffyE(:,:,:,1)
 
     end subroutine
 
@@ -1863,13 +1861,6 @@ contains
         logical, intent(in) :: AlreadyProjected
 
         ! Step 1: Dealias
-        !call this%spectC%dealias(this%uhat)
-        !call this%spectC%dealias(this%vhat)
-        !call this%spectE%dealias(this%what)
-        !if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
-        !if (this%UseDealiasFilterVert) then
-        !    call this%ApplyCompactFilter()
-        !end if
         call this%dealiasFields()
 
         ! Step 2: Pressure projection

@@ -194,7 +194,8 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
    u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
 
    call tic()
-   call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
+   !call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
+   call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE,  uhatC, vhatC, whatC, ThatC, uC, vC, wC, .true.)
    call toc()
 
    umn = newsgs%get_umean()

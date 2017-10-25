@@ -15,12 +15,12 @@ subroutine destroy(this)
 end subroutine
 
 
-subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
+subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappaSGS)
    class(sgs_igrid), intent(in), target :: this
    real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: nuSGS
    real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: tau13, tau23
    real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: tauSGS_ij
-   real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: q1, q2, q3
+   real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: q1, q2, q3, kappaSGS
 
    nuSGS => this%nu_sgs_C
    tau13 => this%tau_13
@@ -32,6 +32,7 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
       q1 => this%q1C
       q2 => this%q2C
       q3 => this%q3E
+      kappaSGS => this%kappa_sgs_C
    end if 
 end subroutine 
 
@@ -54,16 +55,17 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
 
   ! Input file variables
   logical :: useWallDamping = .false., useSGSDynamicRestart = .false., useVerticalTfilter = .false.
-  integer :: DynamicProcedureType = 0, SGSmodelID = 0, WallModelType = 0, DynProcFreq = 1 
-  real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0
+  integer :: DynamicProcedureType = 0, SGSmodelID = 0, WallModelType = 0, DynProcFreq = 1
+  real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0, deltaRatio = 2.d0
   character(len=clen) :: SGSDynamicRestartFile
-  logical :: explicitCalcEdgeEddyViscosity = .false.
+  logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false. 
   integer :: ierr
   
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0,  &
                  useWallDamping, ncWall, Csgs, WallModelType, &
-                 DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,           &
-                 SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity
+                 DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,&
+                 SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity, &
+                 UseDynamicProcedureScalar, deltaRatio
 
 
   this%gpC => gpC
@@ -127,6 +129,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   read(unit=123, NML=SGS_MODEL)
   close(123)
 
+  this%UseDynamicProcedureScalar = UseDynamicProcedureScalar
   this%explicitCalcEdgeEddyViscosity = explicitCalcEdgeEddyViscosity
   this%mid = SGSmodelID
   this%z0 = z0
@@ -163,14 +166,27 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   end select
 
   if (this%isEddyViscosityModel) call this%allocateMemory_EddyViscosity()
-  
+
   if (DynamicProcedureType .ne. 0) then
-      call this%allocateMemory_DynamicProcedure(computeFbody)
+      call this%allocateMemory_DynamicProcedure(computeFbody, deltaRatio)
+      if (DynamicProcedureType .ne. 1) then
+         call gracefulExit("Only planar averaged dynamic procedure is allowed; &
+                  & all other code has been temporarily redacted. Contact Aditya & 
+                  & (aditya90@stanford.edu) if you want to use any other method.",4234)
+      end if
       if(useSGSDynamicRestart) then
          call this%readSGSDynamicRestart(SGSDynamicRestartFile)
       endif
+
   endif
 
+  if ((UseDynamicProcedureScalar) .and. (DynamicProcedureType == 0)) then
+      call gracefulExit("You cannot use dynamic procedure for a scalar without & 
+               & using dynamic procedure for momentum.",123)
+  end if 
+  if ((this%mid .ne. 0) .and. (UseDynamicProcedureScalar)) then
+      call gracefulExit("Dynamic procedure for scalar  only supported for smagorinsky",312)
+  end if
 
 end subroutine
 
@@ -180,6 +196,8 @@ subroutine readSGSDynamicRestart(this,SGSDynamicRestartFile)
   integer :: ierr
   integer :: oldDynProcType, oldSGSmodel
 
+  call GracefulExit("Restarting dynamic procedure using previous history has &
+      & been temporarily redacted. Contact ADITYA if you want to know why.", 214)
   ! Open the restart file 
   open(unit=123, file=trim(SGSDynamicRestartFile), form='FORMATTED', status='old', action='read', iostat=ierr)
    
