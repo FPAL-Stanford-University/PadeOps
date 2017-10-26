@@ -40,14 +40,14 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, T, x, y, z
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: k, seed = 12331
-    real(rkind) :: lambda_x, lambda_y, A0 = 0.1d0, Tbase = 100.d0, kx, ky
-    integer :: N = 4, M= 2, i, j
+    real(rkind) :: lambda_x, lambda_y, A0 = 0.1d0, Tbase = 100.d0, kx, ky, maxTG = 1.d-2
+    integer :: N = 4, M= 2, nTG = 2, i, j
     real(rkind)  :: Lx = one, Ly = one, Lz = one, maxrandom = 1.d-4, deltaPhi = pi/2.d0
     real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, wperturb
     real(rkind) :: Psi, dPsi_dz, dz
     type(cd06stagg), allocatable :: derW
 
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -89,12 +89,18 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     end do 
     u  = u  + uperturb
     wC = wC + wperturb
+    
+    uperturb =  maxTG*( cos(2.d0*nTG*pi*x/Lx)*sin(2.d0*nTG*pi*y/Ly))*exp(-pi*(z*z))
+    wperturb =  maxTG*(-sin(2.d0*nTG*pi*x/Lx)*cos(2.d0*nTG*pi*y/Ly))*exp(-pi*(z*z))
+    u = u + uperturb 
+    v = v + wperturb 
+
     deallocate(uperturb, wperturb)
     
     ! Add random numbers
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
     call gaussian_random(randArr,zero,one,seed+1234*nrank+54321)
-    v = v + (maxrandom*randarr*exp(-pi*(z*z)))
+    wC = wC + (maxrandom*randarr*exp(-pi*(z*z)))
     deallocate(randArr)
     
     !T = T + (maxrandom*randArr)*exp(-8.d0*(z*z))
@@ -134,9 +140,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=*),                intent(in)    :: inputfile
-    integer :: ioUnit, seed, N, M
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase
+    integer :: ioUnit, seed, N, M, nTG
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase, maxTG
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -153,17 +159,18 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 end subroutine
 
 subroutine set_planes_io(xplanes, yplanes, zplanes)
+    use StratifiedShearLayer_parameters 
     implicit none
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
+    integer, parameter :: nxplanes = 0, nyplanes = 1, nzplanes = 1
 
-    allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
+    allocate(yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [64]
-    yplanes = [64]
-    zplanes = [256]
+    !xplanes = [64]
+    yplanes = [nyg/2]
+    zplanes = [nzg/2]
 
 end subroutine
 
@@ -206,10 +213,10 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
-    integer :: ix1, ixn, iy1, iyn, iz1, izn, seed = 231454, N, M
+    integer :: ix1, ixn, iy1, iyn, iz1, izn, seed = 231454, N, M, nTG
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind)  :: maxrandom = 1.d-5, deltaPhi, Tbase, A0
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase
+    real(rkind)  :: maxrandom = 1.d-5, deltaPhi, Tbase, A0, maxTG
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
