@@ -33,7 +33,7 @@ program testSGSmodelWT
    integer :: ierr, ix1, ixn, iy1, iyn, iz1, izn, TID, RID
    logical :: computeFbody
   
-   real(rkind), dimension(:,:,:)  , pointer :: nuSGS
+   real(rkind), dimension(:,:,:)  , pointer :: nuSGS, kappaSGS
    real(rkind), dimension(:,:,:)  , pointer :: tau13, tau23
    real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
    real(rkind), dimension(:,:,:)  , pointer :: q1, q2, q3
@@ -164,7 +164,7 @@ print *, 'dxdydz = ', (dx*dy*dz)**(2.0d0/3.0d0)
    computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, &
    .false., .false.,1)
 
-   call newsgs%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
+   call newsgs%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappaSGS)
    
    ! Initialize WT
    call turbArray%init(inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
