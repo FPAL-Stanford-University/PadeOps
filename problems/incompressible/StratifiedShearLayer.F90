@@ -1,9 +1,9 @@
 ! Template for PadeOps
 
-#include "gabls_igrid_files/initialize.F90"       
-#include "gabls_igrid_files/temporalHook.F90"  
+#include "StratifiedShearLayer_files/initialize.F90"       
+#include "StratifiedShearLayer_files/temporalHook.F90"  
 
-program gabls_igrid
+program StratifiedShearLayer_igrid
     use mpi
     use kind_parameters,  only: clen
     use IncompressibleGrid, only: igrid
@@ -25,7 +25,7 @@ program gabls_igrid
 
     call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
   
-    call igp%start_io(.false.)                !<-- Start I/O by creating a header file (see io.F90)
+    call igp%start_io(.true.)                !<-- Start I/O by creating a header file (see io.F90)
     
     call igp%printDivergence()
   

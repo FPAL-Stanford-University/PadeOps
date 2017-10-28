@@ -11,6 +11,7 @@ module SolidGrid
     use StiffGasEOS,     only: stiffgas
     use Sep1SolidEOS,    only: sep1solid
     use GeneralMatEOS,   only: generaleos
+    use io_VTK_stuff,    only: io_VTK
    
     implicit none
 
@@ -126,6 +127,8 @@ module SolidGrid
          
         logical     :: gfilttimes
         real(rkind) :: etafac
+
+        type(io_VTK), allocatable :: viz
          
         contains
             procedure          :: init

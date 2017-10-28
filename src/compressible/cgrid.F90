@@ -1,15 +1,17 @@
 module CompressibleGrid
-    use kind_parameters, only: rkind, clen
-    use constants,       only: zero,eps,third,half,one,two,three,four
-    use FiltersMod,      only: filters
-    use GridMod,         only: grid
-    use gridtools,       only: alloc_buffs, destroy_buffs
-    use cgrid_hooks,     only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
-    use decomp_2d,       only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
-                               transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
-    use DerivativesMod,  only: derivatives
-    use IdealGasEOS,     only: idealgas
-    use MixtureEOSMod,   only: mixture
+    use kind_parameters,      only: rkind, clen
+    use constants,            only: zero,eps,third,half,one,two,three,four
+    use FiltersMod,           only: filters
+    use GridMod,              only: grid
+    use gridtools,            only: alloc_buffs, destroy_buffs
+    use cgrid_hooks,          only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
+    use decomp_2d,            only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
+                                    transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
+    use DerivativesMod,       only: derivatives
+    use io_hdf5_stuff,        only: io_hdf5
+    use IdealGasEOS,          only: idealgas
+    use MixtureEOSMod,        only: mixture
+    use PowerLawViscosityMod, only: powerLawViscosity
    
     implicit none
 
@@ -55,6 +57,8 @@ module CompressibleGrid
         type(filters), allocatable :: gfil
         type(mixture), allocatable :: mix
 
+        type(io_hdf5), allocatable :: viz
+
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
        
@@ -76,7 +80,7 @@ module CompressibleGrid
         real(rkind), dimension(:,:,:), pointer :: kap
         real(rkind), dimension(:,:,:,:), pointer :: Ys
         real(rkind), dimension(:,:,:,:), pointer :: diff
-         
+
         contains
             procedure          :: init
             procedure          :: destroy
@@ -98,10 +102,12 @@ module CompressibleGrid
             procedure, private :: get_tau
             procedure, private :: get_q
             procedure, private :: get_J
+            procedure, private :: write_viz
     end type
 
 contains
     subroutine init(this, inputfile )
+        use mpi
         use reductions, only: P_MAXVAL, P_MINVAL
         use exits, only: message, nancheck, GracefulExit
         class(cgrid),target, intent(inout) :: this
@@ -112,6 +118,7 @@ contains
         character(len=clen) :: outputdir
         character(len=clen) :: inputdir
         character(len=clen) :: vizprefix = "cgrid"
+        logical :: reduce_precision = .true.
         real(rkind) :: tviz = zero
         character(len=clen), dimension(:), allocatable :: varnames
         logical :: periodicx = .true. 
@@ -143,15 +150,19 @@ contains
         real(rkind) :: CY = 100.0_rkind
         character(len=clen) :: charout
         real(rkind) :: Ys_error
+        logical     :: inviscid = .true.
 
-        namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
-                             inputdir, outputdir, vizprefix, tviz, &
-                                  periodicx, periodicy, periodicz, &
-                         derivative_x, derivative_y, derivative_z, &
-                                     filter_x, filter_y, filter_z, &
-                                                       prow, pcol, &
-                                                         SkewSymm  
+        type(powerLawViscosity) :: visc
+
+        namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
+                         outputdir, vizprefix, tviz, reduce_precision, &
+                                      periodicx, periodicy, periodicz, &
+                             derivative_x, derivative_y, derivative_z, &
+                                         filter_x, filter_y, filter_z, &
+                                                           prow, pcol, &
+                                                             SkewSymm  
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
+                           inviscid,                                   &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
 
@@ -221,12 +232,12 @@ contains
         ! Allocate mixture
         if (allocated(this%mix)) deallocate(this%mix)
         allocate(this%mix)
-        call this%mix%init(this%decomp,ns)
+        call this%mix%init(this%decomp,ns,inviscid)
         ! allocate(this%mix , source=mixture(this%decomp,ns))
 
         ! Set default materials with the same gam and Rgas
         do i = 1,ns
-            call this%mix%set_material(i,idealgas(gam,Rgas))
+            call this%mix%set_material(i,idealgas(gam,Rgas),visc)
         end do
 
         nfields = kap_index + 2*ns   ! Add ns massfractions to fields
@@ -352,8 +363,10 @@ contains
         end do
 
         allocate(this%viz)
-        call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
+        call this%viz%init( mpi_comm_world, this%decomp, 'y', this%outputdir, vizprefix, reduce_precision=reduce_precision, read_only=.false.)
         this%tviz = tviz
+        ! Write mesh coordinates to file
+        call this%viz%write_coords(this%mesh)
 
         deallocate(varnames)
 
@@ -507,7 +520,8 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
-        call this%getPhysicalProperties()
+        ! call this%getPhysicalProperties()
+        call this%mix%get_transport_properties(this%rho, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
 
         if (this%mix%ns .GT. 1) then
             dYsdx => gradYs(:,:,:,              1:  this%mix%ns)
@@ -534,7 +548,8 @@ contains
 
         ! Write out initial conditions
         call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-        call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+        ! call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+        call this%write_viz()
         vizcond = .FALSE.
         
         ! Check for visualization condition and adjust time step
@@ -578,7 +593,8 @@ contains
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
                 call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+                ! call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+                call this%write_viz()
                 vizcond = .FALSE.
             end if
             
@@ -791,7 +807,8 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
-        call this%getPhysicalProperties()
+        ! call this%getPhysicalProperties()
+        call this%mix%get_transport_properties(this%rho, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
 
         if (this%mix%ns .GT. 1) then
             dYsdx => gradYs(:,:,:,1:this%mix%ns); dYsdy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns); dYsdz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);
@@ -1289,11 +1306,22 @@ contains
     subroutine getPhysicalProperties(this)
         class(cgrid), intent(inout) :: this
 
-        ! If inviscid set everything to zero (otherwise use a model)
-        this%mu = zero
+        ! TODO
+        ! Hard code these values for now. Need to make a better interface for this later
+        real(rkind) :: mu_ref = 0.6_rkind * half / (100._rkind * sqrt(3._rkind))
+        real(rkind) :: T_ref = 1._rkind / 1.4_rkind
+        real(rkind) :: Pr = 0.70_rkind
+
+        this%mu   = mu_ref * (this%T / T_ref)**(three/four)
         this%bulk = zero
-        this%kap = zero
+        this%kap  = this%mix%material(1)%mat%gam / (this%mix%material(1)%mat%gam - one) * this%mix%material(1)%mat%Rgas * this%mu / Pr
         this%diff = zero
+
+        ! If inviscid set everything to zero (otherwise use a model)
+        ! this%mu = zero
+        ! this%bulk = zero
+        ! this%kap = zero
+        ! this%diff = zero
 
     end subroutine  
 
@@ -1424,6 +1452,44 @@ contains
             dYsdz(:,:,:,i) = -this%rho*( dYsdz(:,:,:,i) - this%Ys(:,:,:,i)*sumJz )
         end do
 
+    end subroutine
+
+    subroutine write_viz(this)
+        use exits, only: message
+        class(cgrid), intent(inout) :: this
+        character(len=clen) :: charout
+        integer :: i
+
+        ! Start visualization dump
+        call this%viz%start_viz(this%tsim)
+
+        write(charout,'(A,I0,A,A)') "Writing visualization dump ", this%viz%vizcount, " to ", adjustl(trim(this%viz%filename))
+        call message(charout)
+
+        ! Write variables
+        call this%viz%write_variable(this%rho , 'rho' ) 
+        call this%viz%write_variable(this%u   , 'u'   )
+        call this%viz%write_variable(this%v   , 'v'   )
+        call this%viz%write_variable(this%w   , 'w'   )
+        call this%viz%write_variable(this%p   , 'p'   )
+        call this%viz%write_variable(this%T   , 'T'   )
+        call this%viz%write_variable(this%e   , 'e'   )
+        call this%viz%write_variable(this%mu  , 'mu'  )
+        call this%viz%write_variable(this%bulk, 'bulk')
+        call this%viz%write_variable(this%kap , 'kap' )
+
+        if (this%mix%ns > 1) then
+            do i = 1,this%mix%ns
+                write(charout,'(I2.2)') i
+                call this%viz%write_variable(this%Ys(:,:,:,i)  , 'Massfraction_'//adjustl(trim(charout)) )
+                call this%viz%write_variable(this%diff(:,:,:,i), 'Diffusivity_'//adjustl(trim(charout)) )
+            end do
+        end if
+
+        ! TODO: Add hook_viz here
+
+        ! End visualization dump
+        call this%viz%end_viz()
     end subroutine
 
 end module 

@@ -28,6 +28,13 @@ module sgsmod_igrid
         type(decomp_info), pointer :: sp_gpC, sp_gpE
         integer :: mid, DynamicProcedureType, WallModel, DynProcFreq
         real(rkind), dimension(:), allocatable :: cmodelC, cmodelE
+        
+        real(rkind), dimension(:,:,:), allocatable :: LambdaDynProc_C
+        real(rkind), dimension(:,:,:), allocatable :: BetaDynProc_C
+        real(rkind), dimension(:), allocatable :: lambda_1d, beta_1d
+        logical :: UpdateScalarDynProc = .false., usingDynamicProcedureMomentum = .false. 
+        logical :: UseDynamicProcedureScalar = .false. 
+
         real(rkind) :: cmodel_global, cmodel_global_x, cmodel_global_y, cmodel_global_z
         real(rkind), dimension(:,:,:), allocatable :: nu_sgs_C, nu_sgs_E
         real(rkind), dimension(:,:,:), allocatable :: kappa_sgs_C, kappa_sgs_E
@@ -58,12 +65,11 @@ module sgsmod_igrid
 
         ! for dynamic procedures - all are at edges
         type(gaussian) :: gaussianTestFilterZ
-        real(rkind), dimension(:,:,:,:), allocatable :: Mij, Lij, Sij_Filt, alphaij_Filt, tauijWM_Filt
-        real(rkind), dimension(:,:,:,:), allocatable :: fi_Filt, ui_Filt, fiE
-        real(rkind), dimension(:,:,:),   allocatable :: Dsgs_Filt, buff1, buff2
+        real(rkind), dimension(:,:,:,:), allocatable :: Lij, Sij_Filt
+        real(rkind), dimension(:,:,:,:), allocatable :: ui_Filt, fiE
+        real(rkind), dimension(:,:,:),   allocatable :: Dsgs, Dsgs_Filt
         real(rkind), dimension(:,:,:),   pointer     :: fxC, fyC, fzE
-        real(rkind), dimension(:,:,:),   pointer     :: Dsgs
-        logical :: isInviscid, isStratified, useDynamicProcedure, useVerticalTfilter = .false. 
+        logical :: isInviscid, isStratified,  useVerticalTfilter = .false. 
         real(rkind), dimension(:), allocatable :: cmodel_allZ
         real(rkind) :: invRe, deltaRat
         integer :: mstep
@@ -95,14 +101,12 @@ module sgsmod_igrid
             !! ALL DYNAMIC PROCEDURE SUBROUTINES
             procedure, private :: allocateMemory_DynamicProcedure
             procedure, private :: destroyMemory_DynamicProcedure
-            procedure, private :: applyDynamicProcedure 
             procedure, private :: TestFilter_Cmplx_to_Real
             procedure, private :: TestFilter_Real_to_Real
-            procedure, private :: TestFilter_Real_to_Real_ip
-            procedure, private :: planarAverageAndInterpolateToCells 
-            procedure, private :: interp_bForce_CellToEdge
+            procedure, private :: TestFilter_Real_to_Real_inplace
+            procedure, private :: planarAverage_and_TakeRatio 
             procedure, private :: DoStandardDynamicProcedure
-            procedure, private :: DoGlobalDynamicProcedure
+            procedure, private :: DoStandardDynamicProcedureScalar
 
             !! ALL SGS SOURCE/SINK PROCEDURES
             procedure          :: getQjSGS
@@ -114,6 +118,7 @@ module sgsmod_igrid
             procedure          :: dumpSGSDynamicRestart
             procedure, private :: readSGSDynamicRestart
             procedure, private :: interpolate_eddy_viscosity
+            procedure, private :: interpolate_kappaSGS 
            
 
             !! ALL DESTROY PROCEDURES
@@ -132,6 +137,9 @@ module sgsmod_igrid
             procedure          :: get_uspeedmean 
             procedure          :: get_DynamicProcedureType
             procedure          :: get_wTh_surf
+            procedure          :: getMax_DynSmagConst
+            procedure          :: getMax_DynPrandtl
+            procedure          :: usingDynProc 
     end type 
 
 contains
@@ -142,25 +150,72 @@ contains
 #include "sgs_models/eddyViscosity.F90"
 #include "sgs_models/dynamicProcedure_sgs_igrid.F90"
 #include "sgs_models/standardDynamicProcedure.F90"
-#include "sgs_models/globalDynamicProcedure.F90"
 #include "sgs_models/wallmodel.F90"
 #include "sgs_models/accessors.F90"
 
-subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep)
+subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep)
+   class(sgs_igrid), intent(inout) :: this
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
+   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
+   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC, whatC, ThatC
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: uC, vC, wC
+   logical, intent(in) :: newTimeStep
+
+   if (this%useWallModel) call this%computeWallStress( uC, vC, uhatC, vhatC, ThatC) 
+
+   if (this%isEddyViscosityModel) then
+
+      ! Step 0: Compute Sij
+      call get_Sij_from_duidxj(duidxjC, this%S_ij_C, this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)) 
+      call get_Sij_from_duidxj(duidxjE, this%S_ij_E, this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)) 
+      
+      ! Step 1: Get nuSGS
+      call this%get_SGS_kernel(duidxjC, duidxjE)
+
+      ! Step 2: Dynamic Procedure ?
+      if(newTimeStep .and. this%usingDynamicProcedureMomentum) then
+          !if (mod(this%mstep, this%DynProcFreq) == 0) call this%applyDynamicProcedure(uE, vE, wE, uhatE, vhatE, whatE, duidxjE, duidxjEhat)
+          this%Dsgs = this%nu_sgs_C   ! Copy the SGS kernel 
+          if (mod(this%mstep, this%DynProcFreq) == 0) then
+            call this%DoStandardDynamicProcedure(uC, vC, wC, uhatC, vhatC, whatC, this%S_ij_C)
+            this%UpdateScalarDynProc = .true. 
+          end if 
+      endif
+
+      ! Step 3: Multiply by model constant
+      call this%multiply_by_model_constant()
+
+      ! Step 2: Get tau_sgs
+      this%tau_11 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,1)
+      this%tau_12 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,2)
+      this%tau_13 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,3)
+      this%tau_22 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,4)
+      this%tau_23 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,5)
+      this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
+   end if
+
+   if (this%useWallModel) call this%embed_WM_stress()
+ 
+   if(newTimeStep) this%mstep = this%mstep + 1
+   
+end subroutine
+
+!subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep)
+subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep)
    class(sgs_igrid), intent(inout), target :: this
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
-   complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3),9), intent(in) :: duidxjEhat
-   complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in) :: uhatE, vhatE, whatE
-   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC, ThatC
-   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: uC, vC
-   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: uE, vE, wE
+   !complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3),9), intent(in) :: duidxjEhat
+   !complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in) :: uhatE, vhatE, whatE
+   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC, whatC, ThatC
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: uC, vC, wC
+   !real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: uE, vE, wE
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
    complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
    logical, intent(in) :: newTimeStep
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffy3, cbuffz1, cbuffz2
    
-   call this%getTauSGS(duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep)
+   call this%getTauSGS(duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep)
 
    cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
    cbuffz1 => this%cbuffzC(:,:,:,1); cbuffz2 => this%cbuffzE(:,:,:,1) 
@@ -210,18 +265,20 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhat
 
 end subroutine
 
-subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzE)
+subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That)
    class(sgs_igrid), intent(inout), target :: this
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: Trhs
-   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC, dTdzC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdzE
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v, w, T
+   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffz1, cbuffz2
 
    cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
    cbuffz1 => this%cbuffzC(:,:,:,1); cbuffz2 => this%cbuffzE(:,:,:,1) 
 
    ! First get qj's 
-   call this%getQjSGS(dTdxC, dTdyC, dTdzE)
+   call this%getQjSGS(dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That)
 
    ! ddx(q1)
    call this%spectC%fft(this%q1C, cbuffy1)
@@ -242,16 +299,28 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzE)
 
 end subroutine
 
-subroutine getQjSGS(this,dTdxC, dTdyC, dTdzE)
+subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That)
    class(sgs_igrid), intent(inout), target :: this
-   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC, dTdzC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdzE
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v, w, T
+   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
+
 
    if (this%useWallModel) call this%computeWall_PotTFlux()
 
    if (this%isEddyViscosityModel) then
-      this%kappa_sgs_C = this%nu_sgs_C/this%Pr
-      this%kappa_sgs_E = this%nu_sgs_E/this%Pr
+      if (this%UseDynamicProcedureScalar) then
+         if (this%UpdateScalarDynProc) then
+            call this%DoStandardDynamicProcedureScalar(u, v, w, T, That, dTdxC, dTdyC, dTdzC)     
+            this%UpdateScalarDynProc = .false. 
+         end if 
+         this%kappa_sgs_C = this%Dsgs*this%BetaDynProc_C
+         call this%interpolate_kappaSGS()
+      else
+         this%kappa_sgs_C = this%nu_sgs_C/this%Pr
+         this%kappa_sgs_E = this%nu_sgs_E/this%Pr
+      end if 
 
       ! No dynamic procedure as of now, so make sure that you provide a Prandtl
       ! number for initialization.
@@ -266,50 +335,6 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzE)
 end subroutine
 
 
-subroutine getTauSGS(this, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep)
-   class(sgs_igrid), intent(inout) :: this
-   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
-   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
-   complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3),9), intent(in) :: duidxjEhat
-   complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in) :: uhatE, vhatE, whatE
-   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC, ThatC
-   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: uC, vC
-   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: uE, vE, wE
-   logical, intent(in) :: newTimeStep
-
-   if (this%useWallModel) call this%computeWallStress( uC, vC, uhatC, vhatC, ThatC) 
-
-   if (this%isEddyViscosityModel) then
-
-      ! Step 0: Compute Sij
-      call get_Sij_from_duidxj(duidxjC, this%S_ij_C, this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)) 
-      call get_Sij_from_duidxj(duidxjE, this%S_ij_E, this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)) 
-      
-      ! Step 1: Get nuSGS
-      call this%get_SGS_kernel(duidxjC, duidxjE)
-
-      ! Step 2: Dynamic Procedure ?
-      if(newTimeStep .and. this%useDynamicProcedure) then
-          if (mod(this%mstep, this%DynProcFreq) == 0) call this%applyDynamicProcedure(uE, vE, wE, uhatE, vhatE, whatE, duidxjE, duidxjEhat)
-      endif
-
-      ! Step 3: Multiply by model constant
-      call this%multiply_by_model_constant()
-
-      ! Step 2: Get tau_sgs
-      this%tau_11 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,1)
-      this%tau_12 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,2)
-      this%tau_13 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,3)
-      this%tau_22 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,4)
-      this%tau_23 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,5)
-      this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
-   end if
-
-   if (this%useWallModel) call this%embed_WM_stress()
- 
-   if(newTimeStep) this%mstep = this%mstep + 1
-   
-end subroutine
     
 
 end module 
