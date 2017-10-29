@@ -47,13 +47,24 @@ contains
 
    end subroutine
 
-   subroutine addFringeRHS(this, dt, urhs, vrhs, wrhs, uC, vC, wE)
+   subroutine addFringeRHS(this, dt, urhs, vrhs, wrhs, uC, vC, wE, urhsF,vrhsF,wrhsF,addF)
       class(fringe),                                                                        intent(inout)  :: this
       real(rkind),                                                                         intent(in)     :: dt
       real(rkind),    dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)),          intent(in)     :: uC, vC 
       real(rkind),    dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)),          intent(in)     :: wE
       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout)  :: urhs, vrhs
       complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout)  :: wrhs
+      logical, intent(in), optional :: addF
+      complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout), optional  :: urhsF, vrhsF
+      complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout), optional  :: wrhsF
+      
+      logical :: AllOptionalsPresent
+
+      if (present(urhsF) .and. present(vrhsF) .and. present(wrhsF) .and. present(addF)) then
+         AllOptionalsPresent = .true. 
+      else
+         AllOptionalsPresent = .false. 
+      end if
 
 
       if (this%targetsAssociated) then
@@ -61,16 +72,37 @@ contains
          this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%u_target - uC)
          call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
          urhs = urhs + this%cbuffyC(:,:,:,1)
+         if (allOptionalsPresent) then
+            if (addF) then
+               urhsF = urhsF +  this%cbuffyC(:,:,:,1)
+            else
+               urhsF = this%cbuffyC(:,:,:,1)
+            end if
+         end if
 
          ! v velocity source term 
          this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%v_target - vC)
          call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
          vrhs = vrhs + this%cbuffyC(:,:,:,1)
+         if (allOptionalsPresent) then
+            if (addF) then
+               vrhsF = vrhsF +  this%cbuffyC(:,:,:,1)
+            else
+               vrhsF = this%cbuffyC(:,:,:,1)
+            end if
+         end if
          
          ! w velocity source term 
          this%rbuffxE(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_edges)*(this%w_target - wE)
          call this%spectE%fft(this%rbuffxE(:,:,:,1), this%cbuffyE(:,:,:,1))      
          wrhs = wrhs + this%cbuffyE(:,:,:,1)
+         if (allOptionalsPresent) then
+            if (addF) then
+               wrhsF = wrhsF +  this%cbuffyE(:,:,:,1)
+            else
+               wrhsF = this%cbuffyE(:,:,:,1)
+            end if
+         end if
       end if 
 
    end subroutine
