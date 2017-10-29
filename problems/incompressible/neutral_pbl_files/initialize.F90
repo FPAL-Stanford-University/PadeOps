@@ -65,27 +65,27 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     ! MH allocate new variables
-    allocate(fu(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3))) 
-    allocate(fv(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    allocate(signf(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    allocate(ub(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    allocate(vb(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    !allocate(fu(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3))) 
+    !allocate(fv(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    !allocate(signf(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    !allocate(ub(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    !allocate(vb(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     !ub => fieldsC(:,:,:,1); vb => fieldsC(:,:,:,2)
 
     ! Compute initial velocity field
-    fu = 1.57d0 * (z/h0Temp) - 2.68d0 * (z/h0Temp)**2
-    fv = 13.2d0 * (z/h0Temp) - 8.70d0 * (z/h0Temp)**2
-    ub = (ustar/kappaInit) * (log(z/z0init) + fu)
-    vb = -(ustar/kappaInit) * fv * sign(fv,signf)
-    u = ub*((1.d0-tanh(((z/z0init)-0.5d0)*2.d0*h0Temp/100.d0))/2.d0) + &
-        Gx0 * ((1.d0+tanh((z/z0init)*2.d0*h0Temp/100.d0))/2.d0)
-    v = vb*((1.d0-tanh(((z/z0init)-0.5d0)*2.d0*h0Temp/100.d0))/2.d0) + &
-        Gy0 * ((1.d0+tanh((z/z0init)*2.d0*h0Temp/100.d0))/2.d0)
-    deallocate(ub, vb, fu, fv, signf)
+    !fu = 1.57d0 * (z/h0Temp) - 2.68d0 * (z/h0Temp)**2
+    !fv = 13.2d0 * (z/h0Temp) - 8.70d0 * (z/h0Temp)**2
+    !ub = (ustar/kappaInit) * (log(z/z0init) + fu)
+    !vb = -(ustar/kappaInit) * fv * sign(fv,signf)
+    !u = ub*((1.d0-tanh(((z/z0init)-0.5d0)*2.d0*h0Temp/100.d0))/2.d0) + &
+    !    Gx0 * ((1.d0+tanh((z/z0init)*2.d0*h0Temp/100.d0))/2.d0)
+    !v = vb*((1.d0-tanh(((z/z0init)-0.5d0)*2.d0*h0Temp/100.d0))/2.d0) + &
+    !    Gy0 * ((1.d0+tanh((z/z0init)*2.d0*h0Temp/100.d0))/2.d0)
+    !deallocate(ub, vb, fu, fv, signf)
 
     ! Provide initial conditions for Velocities and Potential Temperature
-    !u = Gx0           ! Could be a function of (x,y,z)
-    !v = Gy0           ! Could be a function of (x,y,z)
+    u = Gx0           ! Could be a function of (x,y,z)
+    v = Gy0           ! Could be a function of (x,y,z)
     wC = zero         ! Could be a function of (x,y,z) 
    
     eta = (z - h1Temp)/(cTemp*(h2Temp - h0Temp))
