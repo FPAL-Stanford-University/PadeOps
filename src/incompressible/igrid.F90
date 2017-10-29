@@ -216,6 +216,7 @@ module IncompressibleGrid
         real(rkind), dimension(:,:,:), allocatable :: pressure, pressure_dns, pressure_fringe
         complex(rkind), dimension(:,:,:), allocatable ::urhs_dns,vrhs_dns,wrhs_dns,urhs_fringe,vrhs_fringe,wrhs_fringe
 
+        logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false. 
 
         ! Stats
         logical :: timeAvgFullFields, computeSpectra
@@ -337,11 +338,11 @@ contains
         integer :: ii, idx, temploc(1)
         logical, intent(in), optional :: initialize2decomp
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
-
+        logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false. 
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
-        namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
+        namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, dump_NU_SGS, dump_KAPPA_SGS,&
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,&
@@ -384,6 +385,7 @@ contains
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType 
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity; this%deleteInstructions = deleteInstructions
+        this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -2182,10 +2184,15 @@ contains
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
            call this%dumpVisualizationInfo()
+
+           ! Dump optional fields
            if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
            if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
+           if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
+           if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
+
            if (this%computevorticity) then
                call this%dumpFullField(this%ox,'omgX')
                call this%dumpFullField(this%oy,'omgY')
@@ -5196,6 +5203,12 @@ contains
         meanK = p_sum(sum(this%rbuffxC(:,:,:,1)))*mfact
         this%pressure = this%pressure + meanK
         this%pressure = this%pressure - this%rbuffxC(:,:,:,1)
+
+        if (this%computeDNSpressure) then
+            this%pressure_dns = this%pressure_dns + meanK
+            this%pressure_dns = this%pressure_dns - this%rbuffxC(:,:,:,1)
+        end if
+
     end subroutine
 
     function get_dt(this, recompute) result(val)
