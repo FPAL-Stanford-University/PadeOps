@@ -2239,6 +2239,8 @@ contains
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
            if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
+           if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
+           if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
            if (this%computevorticity) then
                call this%dumpFullField(this%ox,'omgX')
                call this%dumpFullField(this%oy,'omgY')

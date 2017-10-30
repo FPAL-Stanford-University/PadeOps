@@ -13,7 +13,7 @@ foreach ( postprocessingfile ${postprocessing_source_files} )
   
     add_executable( ${postprocessingexec} ${postprocessingfile} )
     
-    target_link_libraries( ${postprocessingexec} PadeOps )
+    target_link_libraries( ${postprocessingexec} PadeOps)
     # target_link_libraries( ${testexec} IncompressibleOps CompressibleOps 2decomp_fft fftw3 ${VTK_IO_LIBRARY_PATH}/libVTK_IO.a )
 
     if (MPI_Fortran_COMPILER_FLAGS)
