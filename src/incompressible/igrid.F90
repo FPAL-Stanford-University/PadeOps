@@ -14,7 +14,6 @@ module IncompressibleGrid
     use timer, only: tic, toc
     use PadePoissonMod, only: Padepoisson 
     use sgsmod_igrid, only: sgs_igrid
-    use wallmodelMod, only: wallmodel
     use numerics
     !use cd06staggstuff, only: cd06stagg
     use cf90stuff, only: cf90
@@ -78,7 +77,6 @@ module IncompressibleGrid
         type(spectral), allocatable :: spectE, spectC
         type(staggOps), allocatable :: Ops, OpsPP
         type(sgs_igrid), allocatable :: sgsmodel
-        type(wallmodel), allocatable :: moengWall
 
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsC
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsE
@@ -556,7 +554,7 @@ contains
         allocate(this%cbuffzC(this%sp_gpC%zsz(1),this%sp_gpC%zsz(2),this%sp_gpC%zsz(3),3))
         allocate(this%cbuffzE(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3),2))
 
-        allocate(this%rbuffxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),2))
+        allocate(this%rbuffxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),3))
         allocate(this%rbuffyC(this%gpC%ysz(1),this%gpC%ysz(2),this%gpC%ysz(3),2))
         allocate(this%rbuffzC(this%gpC%zsz(1),this%gpC%zsz(2),this%gpC%zsz(3),4))
 
