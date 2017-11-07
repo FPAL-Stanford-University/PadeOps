@@ -83,6 +83,7 @@ module CompressibleGrid
         real(rkind), dimension(:,:,:,:), pointer :: diff
 
         integer :: nrestart = 0
+        integer :: vizramp  = 5
 
         contains
             procedure          :: init
@@ -158,6 +159,7 @@ contains
         logical     :: inviscid = .true.
         integer     :: nrestart = 0
         logical     :: rewrite_viz = .true.
+        integer     :: vizramp = 5
 
         type(powerLawViscosity) :: visc
 
@@ -169,7 +171,7 @@ contains
                                                            prow, pcol, &
                                                              SkewSymm  
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
-                           inviscid, nrestart, rewrite_viz,            &
+                           inviscid, nrestart, rewrite_viz, vizramp,   &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
 
@@ -373,6 +375,7 @@ contains
         call this%viz%init( mpi_comm_world, this%decomp, 'y', this%outputdir, vizprefix, &
                             reduce_precision=reduce_precision, read_only=.false., jump_to_last=.true.)
         this%tviz = tviz
+        this%vizramp = vizramp
         ! Write mesh coordinates to file
         call this%viz%write_coords(this%mesh)
 
@@ -530,6 +533,7 @@ contains
         real(rkind), dimension(:,:,:),   pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
         integer :: i
+        integer :: stepramp = 0
 
         call this%get_dt(stability)
 
@@ -632,11 +636,21 @@ contains
 
             ! Get the new time step
             call this%get_dt(stability)
-            
+                
             ! Check for visualization condition and adjust time step
-            if ( (this%tviz > zero) .AND. (this%tsim + this%dt >= this%tviz * this%viz%vizcount) ) then
-                this%dt = this%tviz * this%viz%vizcount - this%tsim
+            if (stepramp == 0) then
+                if ( (this%tviz > zero) .AND. (this%tsim + this%vizramp*this%dt >= this%tviz * this%viz%vizcount) ) then
+                    this%dt = (this%tviz * this%viz%vizcount - this%tsim)/real(this%vizramp,rkind)
+                    stability = 'viz dump'
+                    stepramp = stepramp + 1
+                end if
+            else if (stepramp == this%vizramp) then
+                stepramp = 0
                 vizcond = .TRUE.
+                stability = 'viz dump'
+            else
+                this%dt = (this%tviz * this%viz%vizcount - this%tsim)/real(this%vizramp-stepramp,rkind)
+                stepramp = stepramp + 1
                 stability = 'viz dump'
             end if
 
