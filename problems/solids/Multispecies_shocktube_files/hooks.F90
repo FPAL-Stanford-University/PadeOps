@@ -175,6 +175,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
+    use exits,            only: message
     
     use Multispecies_shocktube_data
 
@@ -223,6 +224,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         print *, 'Change Rgas_2 to ', Rgas*(p1+p_infty_2)/(p1+p_infty)*(rho_0/rho_0_2), ' for T eqb on left'
         print *, 'Change Rgas_2 to ', Rgas*(p2+p_infty_2)/(p2+p_infty)*(rho_0/rho_0_2), ' for T eqb on right'
+        
+        Rgas_2 = Rgas*(p1+p_infty_2)/(p1+p_infty)*(rho_0/rho_0_2)
 
         ! Set materials
         call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10))
@@ -264,6 +267,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         YsR  = mix%material(1)%Ys(decomp%ysz(1),1,1)
         VFL  = mix%material(1)%VF(1,1,1)
         VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
+
+        if(mix%useOneG) then
+            call message(1,"Using mixture formulation: Ensure g fields are identical for the two materials atbinitialization")
+        endif
 
     end associate
 

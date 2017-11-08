@@ -32,7 +32,7 @@ module ElasticEOSMod
             logical,                         intent(in), optional :: use_gTg
         end subroutine
 
-        pure subroutine get_devstress_interface(this,finger,fingersq,trG,trG2,detG,devstress)
+        pure subroutine get_devstress_interface(this,finger,fingersq,trG,trG2,detG,devstress,rho0mix,mumix)
             import :: elasticeos
             import :: rkind
             class(elasticeos), intent(in) :: this
@@ -40,14 +40,16 @@ module ElasticEOSMod
             real(rkind), dimension(:,:,:,:), intent(in)  :: fingersq
             real(rkind), dimension(:,:,:),   intent(in)  :: trG, trG2, detG
             real(rkind), dimension(:,:,:,:), intent(out) :: devstress
+            real(rkind), dimension(:,:,:),   intent(in),optional  :: rho0mix, mumix
         end subroutine
 
-        subroutine get_eelastic_interface(this,trG,trG2,detG,eelastic)
+        subroutine get_eelastic_interface(this,trG,trG2,detG,eelastic,rho0mix,mumix)
             import :: elasticeos
             import :: rkind
             class(elasticeos), intent(in) :: this
             real(rkind), dimension(:,:,:), intent(in)  :: trG,trG2,detG
             real(rkind), dimension(:,:,:), intent(out) :: eelastic
+            real(rkind), dimension(:,:,:), intent(in),optional  :: rho0mix, mumix
         end subroutine
 
         pure subroutine get_sos_interface(this,rhom,sos)

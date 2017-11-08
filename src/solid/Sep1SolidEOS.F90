@@ -23,6 +23,7 @@ module Sep1SolidEOS
         procedure :: get_eelastic
         procedure :: get_sos
         procedure :: get_sos2
+        procedure :: get_sos2_mixture
         procedure :: plastic_deformation
         procedure :: make_tensor_SPD
         final     :: destroy
@@ -114,13 +115,14 @@ contains
 
     end subroutine
 
-    pure subroutine get_devstress(this,finger,fingersq,trG,trG2,detG,devstress)
+    pure subroutine get_devstress(this,finger,fingersq,trG,trG2,detG,devstress,rho0mix,mumix)
         use exits, only: GracefulExit
         class(sep1solid), intent(in) :: this
         real(rkind), dimension(:,:,:,:), intent(in)  :: finger
         real(rkind), dimension(:,:,:,:), intent(in)  :: fingersq
         real(rkind), dimension(:,:,:),   intent(in)  :: trG, trG2, detG
         real(rkind), dimension(:,:,:,:), intent(out) :: devstress
+        real(rkind), dimension(:,:,:), intent(in), optional :: mumix, rho0mix
 
         real(rkind), dimension(size(finger,1),size(finger,2),size(finger,3)) :: devstmp
         integer :: i
@@ -128,21 +130,35 @@ contains
         ! if(.not.present(fingersq)) call GracefulExit("fingersq required for devstress",1111)
         
         do i = 1,6
-            devstress(:,:,:,i) = -this%mu*(detG**(-sixth)*fingersq(:,:,:,i) - detG**sixth*finger(:,:,:,i))
+            devstress(:,:,:,i) = -(detG**(-sixth)*fingersq(:,:,:,i) - detG**sixth*finger(:,:,:,i))
         end do
-        devstmp = third*this%mu*(detG**(-sixth)*trG2 - detG**sixth*trG)
+        devstmp = third*(detG**(-sixth)*trG2 - detG**sixth*trG)
         devstress(:,:,:,1) = devstress(:,:,:,1) + devstmp
         devstress(:,:,:,4) = devstress(:,:,:,4) + devstmp
         devstress(:,:,:,6) = devstress(:,:,:,6) + devstmp
 
+        if(present(rho0mix) .and. present(mumix)) then
+            do i = 1, 6
+              devstress(:,:,:,i) = devstress(:,:,:,i)*mumix
+            enddo
+        else
+            devstress = devstress*this%mu
+        endif
+
     end subroutine
 
-    subroutine get_eelastic(this,trG,trG2,detG,eelastic)
+    subroutine get_eelastic(this,trG,trG2,detG,eelastic,rho0mix,mumix)
         class(sep1solid), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: trG,trG2,detG
         real(rkind), dimension(:,:,:), intent(out) :: eelastic
+        real(rkind), dimension(:,:,:), intent(in), optional :: mumix, rho0mix
 
-        eelastic = fourth*this%mu/this%rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
+        if(present(rho0mix) .and. present(mumix)) then
+            eelastic = fourth*mumix/rho0mix*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
+        else
+            eelastic = fourth*this%mu/this%rho0*(detG**(-twothird)*trG2 - two*detG**(-third)*trG + three)
+        endif 
+
 
     end subroutine
 
@@ -155,6 +171,15 @@ contains
 
     end subroutine
 
+    pure subroutine get_sos2_mixture(this,rhomix,mumix,sos2)
+        class(sep1solid), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in) :: rhomix,mumix
+        real(rkind), dimension(:,:,:), intent(inout) :: sos2
+
+        sos2 = sos2 + fourthird*mumix/rhomix
+
+    end subroutine
+
     pure subroutine get_sos2(this,rhom,sos2)
         class(sep1solid), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in) :: rhom
@@ -164,7 +189,7 @@ contains
 
     end subroutine
 
-    subroutine plastic_deformation(this, gfull, use_gTg)
+    subroutine plastic_deformation(this, gfull, use_gTg, mumix, yieldmix)
         use kind_parameters, only: clen
         use constants,       only: eps, twothird
         use decomp_2d,       only: nrank
@@ -172,6 +197,7 @@ contains
         class(sep1solid), target, intent(inout) :: this
         real(rkind), dimension(:,:,:,:), intent(inout) :: gfull
         logical, intent(in) :: use_gTg
+        real(rkind), dimension(:,:,:), intent(in), optional :: mumix, yieldmix
 
         real(rkind), dimension(3,3) :: g, u, vt, gradf, gradf_new
         real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new, dbeta_new
@@ -184,8 +210,17 @@ contains
         integer, dimension(3) :: ipiv
         integer :: nxp, nyp, nzp
         character(len=clen) :: charout
+        real(rkind), dimension(size(gfull,1),size(gfull,2),size(gfull,3)) :: mulocal, yieldlocal
 
         nxp = size(gfull,1); nyp = size(gfull,2); nzp = size(gfull,3);
+
+        if(present(yieldmix) .and. present(mumix)) then
+            mulocal = mumix
+            yieldlocal = yieldmix
+        else
+            mulocal = this%mu
+            yieldlocal = this%yield
+        endif
 
         if (use_gTg) then
             ! Get optimal lwork
@@ -232,10 +267,10 @@ contains
                     beta = sval**two / sqrt_om**(two/three)
 
                     betasum = sum( beta*(beta-one) ) / three
-                    Sa = -this%mu*sqrt_om * ( beta*(beta-one) - betasum )
+                    Sa = -mulocal(i,j,k)*sqrt_om * ( beta*(beta-one) - betasum )
 
-                    Sabymu_sq = sum(Sa**two) / this%mu**two
-                    ycrit = Sabymu_sq - (two/three)*(this%yield/this%mu)**two
+                    Sabymu_sq = sum(Sa**two) / mulocal(i,j,k)**two
+                    ycrit = Sabymu_sq - (two/three)*(yieldlocal(i,j,k)/mulocal(i,j,k))**two
 
                     if (ycrit .LE. zero) then
                         ! print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
@@ -246,7 +281,7 @@ contains
                     Sa = Sa*( sqrt(C0 - one)/sqrt(C0) )
 
                     ! Now get new beta
-                    f = Sa / (this%mu*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
+                    f = Sa / (mulocal(i,j,k)*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
                     
                     betasum = sum( beta*(beta-one) ) / three
                     f1 = -( beta*(beta-one) - betasum ); f1(3) = beta(1)*beta(2)*beta(3)   ! Original function value

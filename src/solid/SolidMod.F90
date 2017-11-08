@@ -91,6 +91,7 @@ module SolidMod
         procedure :: get_p_from_ehydro
         procedure :: get_ehydroT_from_p
         procedure :: get_eelastic_devstress
+        !procedure :: get_eelastic_devstress_mixture
         procedure :: get_conserved
         procedure :: get_primitive
         procedure :: getSpeciesDensity
@@ -381,7 +382,7 @@ contains
 
     end subroutine
 
-    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,rho0mix,mumix,yieldmix,solidVF)
         use constants,  only: eps
         use RKCoeffs,   only: RK45_A,RK45_B
         use reductions, only: P_MAXVAL
@@ -393,6 +394,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in), optional  :: rho0mix, mumix, yieldmix, solidVF
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg   ! RHS for g tensor equation
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: normal ! Interface normal for sliding treatment
@@ -449,16 +451,23 @@ contains
             mask = zero
         end if
 
-        call this%getRHS_g(rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc)
+        if(present(rho0mix)) then
+            call this%getRHS_g(rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
+        else
+            call this%getRHS_g(rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc)
+        endif
         call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
         ! advance sub-step
         if(isub==1) this%Qtmpg = zero                   ! not really needed, since RK45_A(1) = 0
         this%Qtmpg  = dt*rhsg + RK45_A(isub)*this%Qtmpg
+        !print *, 'Before : ', this%g11(89,1,1), rhsg(89,1,1,1)
         this%g = this%g  + RK45_B(isub)*this%Qtmpg
+        !print *, 'After 1: ', this%g11(89,1,1)
 
         ! Now project g tensor to SPD space
         call this%elastic%make_tensor_SPD(this%g)
+        !print *, 'After 2: ', this%g11(89,1,1)
 
         ! Sliding treatment using plasticity (Using zero yield everywhere for now)
         if (this%sliding) call this%sliding_deformation(normal, mask)
@@ -466,7 +475,11 @@ contains
         if(this%plast) then
             if (.NOT. this%explPlast) then
                 ! Effect plastic deformations
-                call this%get_eelastic_devstress()
+                if(present(rho0mix) .and. present(mumix)) then
+                    call this%get_eelastic_devstress(rho0mix,mumix)
+                else
+                    call this%get_eelastic_devstress()
+                endif
                 this%modDevSigma = this%sxx*this%sxx + this%syy*this%syy + this%szz*this%szz + &
                         two*( this%sxy*this%sxy + this%sxz*this%sxz + this%syz*this%syz )
                 max_modDevSigma = sqrt(3.0d0/2.0d0*maxval(this%modDevSigma))
@@ -475,22 +488,32 @@ contains
                 !endif
                 if(this%PTeqb) this%kap = sqrt(two/three*this%modDevSigma) !-- is this temporary storage ?? -- NSG
 
-                call this%elastic%plastic_deformation(this%g, this%use_gTg)
+                if(present(yieldmix) .and. present(mumix)) then
+                    call this%elastic%plastic_deformation(this%g, this%use_gTg, mumix, yieldmix)
+                else
+                    call this%elastic%plastic_deformation(this%g, this%use_gTg)
+                endif
 
-                call this%get_eelastic_devstress()
+                if(present(rho0mix) .and. present(mumix)) then
+                    call this%get_eelastic_devstress(rho0mix,mumix)
+                else
+                    call this%get_eelastic_devstress()
+                endif
                 this%modDevSigma = this%sxx*this%sxx + this%syy*this%syy + this%szz*this%szz + &
                         two*( this%sxy*this%sxy + this%sxz*this%sxz + this%syz*this%syz )
                 max_modDevSigma = sqrt(3.0d0/2.0d0*maxval(this%modDevSigma))
                 !if(max_modDevSigma > this%elastic%yield) then
                 !  write(*,'(a,2(e19.12,1x))') 'Exiting plasticity. Stresses = ', max_modDevSigma, this%elastic%yield
                 !endif
+                !write(*,*) 'modDevSig: ', max_modDevSigma, this%elastic%yield
                 
             end if
         end if
+        !print *, 'After 3: ', this%g11(89,1,1)
 
     end subroutine
 
-    subroutine getRHS_g(this,rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc)
+    subroutine getRHS_g(this,rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
         use decomp_2d, only: nrank
         use constants, only: eps, pi
         use operators, only: gradient, curl
@@ -501,6 +524,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in)  :: normal
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in), optional :: rho0mix, solidVF
 
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dutdx,dutdy,dutdz,dvtdx,dvtdy,dvtdz,dwtdx,dwtdy,dwtdz
@@ -592,7 +616,11 @@ contains
         tmp = (rho*this%Ys + this%elastic%rho0*detg*epssmall)/(this%VF + epssmall)   
         ! tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
 
-        penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
+        if(present(rho0mix)) then
+            penalty = etafac*(rho/rho0mix/detg - one)/dt
+        else
+            penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
+        endif
         if(this%pRelax) penalty = this%VF*etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density -- change2
 
         if (this%elastic%mu < eps) penalty = zero
@@ -604,6 +632,10 @@ contains
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-x_bc, y_bc, z_bc)
+        !do i = 1, size(u,1)
+        !  print '(4(e19.12,1x))', u(i,1,1), this%g11(i,1,1), tmp(i,1,1), rhsg(i,1,1,1)
+        !enddo
+        !print *, 'rhsg 1 : ', rhsg(89,1,1,1)
         
         call curl(this%decomp, this%der, this%g11, this%g12, this%g13, curlg, -x_bc, y_bc, z_bc)
         ! call P_MAXLOC( abs(penalty*this%g11), pmax, imax, jmax, kmax, rmax)
@@ -624,6 +656,11 @@ contains
         rhsg(:,:,:,1) = rhsg(:,:,:,1) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g11 + mask*(this%g11*dutdx + this%g12*dvtdx + this%g13*dwtdx)
         rhsg(:,:,:,2) = rhsg(:,:,:,2) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g12 + mask*(this%g11*dutdy + this%g12*dvtdy + this%g13*dwtdy)
         rhsg(:,:,:,3) = rhsg(:,:,:,3) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g13 + mask*(this%g11*dutdz + this%g12*dvtdz + this%g13*dwtdz)
+        !print *, 'rhsg 2 : ', rhsg(89,1,1,1)
+        !print *, '------ : ', v(89,1,1), curlg(89,1,1,3)
+        !print *, '------ : ', w(89,1,1), curlg(89,1,1,2)
+        !print *, '------ : ', penalty(89,1,1), this%g11(89,1,1)
+        !print *, '------ : ', mask(89,1,1)
  
         tmp = -u*this%g21-v*this%g22-w*this%g23
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6), x_bc,-y_bc, z_bc)   
@@ -647,9 +684,16 @@ contains
             end if
         end if
 
+        if(present(solidVF)) then
+           do i = 1, 9
+               rhsg(:,:,:,i) = rhsg(:,:,:,i) * solidVF
+           enddo
+        endif
+        !print *, 'rhsg 3 : ', rhsg(89,1,1,1)
+
     end subroutine
 
-    subroutine update_gTg(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+    subroutine update_gTg(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,rho0mix,mumix,yieldmix,solidVF)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
@@ -657,10 +701,15 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in), optional  :: rho0mix, mumix, yieldmix, solidVF
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for gTg tensor equation
 
-        call this%getRHS_gTg(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
+        if(present(rho0mix) .and. present(solidVF)) then
+            call this%getRHS_gTg(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
+        else
+            call this%getRHS_gTg(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
+        endif
         call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
         ! advance sub-step
@@ -670,19 +719,24 @@ contains
 
         if(this%plast) then
             if (.NOT. this%explPlast) then
-                call this%elastic%plastic_deformation(this%g, this%use_gTg)
+                if(present(yieldmix) .and. present(mumix)) then
+                    call this%elastic%plastic_deformation(this%g, this%use_gTg, mumix, yieldmix)
+                else
+                    call this%elastic%plastic_deformation(this%g, this%use_gTg)
+                endif
             end if
         end if
 
     end subroutine
 
-    subroutine getRHS_gTg(this,rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
+    subroutine getRHS_gTg(this,rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
         use operators, only: gradient, curl
         class(solid),                                         intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
         real(rkind),                                          intent(in)  :: dt
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in), optional :: rho0mix, solidVF
 
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
@@ -690,6 +744,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradG
         real(rkind), parameter :: etafac = one/6._rkind
+        integer :: i
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
@@ -714,7 +769,11 @@ contains
         
         detg = sqrt(detg)
         tmp = (rho*this%Ys + this%elastic%rho0*detg*epssmall)/(this%VF + epssmall) ! species density 
-        penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
+        if(present(rho0mix)) then
+            penalty = etafac*( rho/rho0mix/detg-one)/dt ! Penalty term to keep g consistent with species density
+        else
+            penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
+        endif
 
         call gradient(this%decomp, this%der, this%G11, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc, y_bc, z_bc)
         rhsg(:,:,:,1) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
@@ -756,6 +815,12 @@ contains
                 call this%getPlasticSources(detg,rhsg)
             end if
         end if
+
+        if(present(solidVF)) then
+           do i = 1, 9
+               rhsg(:,:,:,i) = rhsg(:,:,:,i) * solidVF
+           enddo
+        endif
 
     end subroutine
 
@@ -815,7 +880,9 @@ contains
         if(isub==1) this%QtmpYs = zero                   ! not really needed, since RK45_A(1) = 0
         this%QtmpYs  = dt*rhsYs + RK45_A(isub)*this%QtmpYs
         this%consrv(:,:,:,1) = this%consrv(:,:,:,1)  + RK45_B(isub)*this%QtmpYs
-
+!print *, 'rhs Ys:', rhsYs(89,1,1), rho(89,1,1), this%Ys(89,1,1)
+!print *, 'Ji:    ', this%Ji(89,1,1,1), this%Ji(89,1,1,2), this%Ji(89,1,1,3)
+!print *, 'cns Ys:', this%consrv(89,1,1,1)
     end subroutine
 
     subroutine getRHS_Ys(this,rho,u,v,w,rhsYs,x_bc,y_bc,z_bc)
@@ -1058,15 +1125,34 @@ contains
         call this%hydro%get_enthalpy(this%T,enthalpy)
     end subroutine
 
-    subroutine get_eelastic_devstress(this)
+    !subroutine get_eelastic_devstress_mixture(this,rho0mix, mumix)
+    !    class(solid), intent(inout) :: this
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho0mix, mumix
+
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp,6)  :: finger,fingersq
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: trG, trG2, detG
+
+    !    call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG,this%use_gTg)
+    !    call this%elastic%get_eelastic(trG,trG2,detG,this%eel,rho0mix,mumix)
+    !    call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress,rho0mix,mumix)
+
+    !end subroutine
+
+    subroutine get_eelastic_devstress(this,rho0mix,mumix)
         class(solid), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in), optional  :: rho0mix, mumix
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6)  :: finger,fingersq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: trG, trG2, detG
 
         call this%elastic%get_finger(this%g,finger,fingersq,trG,trG2,detG,this%use_gTg)
-        call this%elastic%get_eelastic(trG,trG2,detG,this%eel)
-        call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+        if(present(rho0mix) .and. present(mumix)) then
+          call this%elastic%get_eelastic(trG,trG2,detG,this%eel,rho0mix,mumix)
+          call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress, rho0mix, mumix)
+        else
+          call this%elastic%get_eelastic(trG,trG2,detG,this%eel)
+          call this%elastic%get_devstress(finger, fingersq, trG, trG2, detG, this%devstress)
+        endif
 
     end subroutine
 

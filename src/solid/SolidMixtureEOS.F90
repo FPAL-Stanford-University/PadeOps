@@ -26,9 +26,11 @@ module SolidMixtureMod
         type(filters),     pointer :: gfil
         type(ladobject),   pointer :: LAD
 
+        real(rkind), allocatable, dimension(:,:,:) :: rho0mix, mumix, yieldmix, solidVF
+
         logical :: SOSmodel = .FALSE.           ! is sound speed given by `equilibrium' model? Alternative is `frozen' model. Check Saurel et al., JCP 2009.
         logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .FALSE.
-        logical :: use_gTg = .FALSE.
+        logical :: use_gTg = .FALSE., useOneG = .FALSE.
 
     contains
 
@@ -60,6 +62,7 @@ module SolidMixtureMod
         procedure :: get_qmix
         procedure :: get_dt
         procedure :: get_eelastic_devstress
+        procedure :: get_mixture_properties
         procedure :: checkNaN
         procedure :: fnumden
         procedure :: rootfind_nr_1d
@@ -74,7 +77,7 @@ module SolidMixtureMod
 contains
 
     !function init(decomp,der,fil,LAD,ns) result(this)
-    subroutine init(this,decomp,der,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot)
+    subroutine init(this,decomp,der,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot,useOneG)
         !type(solid_mixture)      , intent(inout) :: this
         class(solid_mixture)      , intent(inout) :: this
         type(decomp_info), target, intent(in)    :: decomp
@@ -84,7 +87,7 @@ contains
         integer,                   intent(in)    :: ns
         logical,                   intent(in)    :: PTeqb,pEqb,pRelax,updateEtot
         logical,                   intent(in)    :: SOSmodel
-        logical,                   intent(in)    :: use_gTg
+        logical,                   intent(in)    :: use_gTg, useOneG
 
         type(solid), allocatable :: dummy
         integer :: i
@@ -97,6 +100,7 @@ contains
         this%SOSmodel   = SOSmodel
         this%use_gTg    = use_gTg
         this%updateEtot = updateEtot
+        this%useOneG    = useOneG
 
         this%ns = ns
 
@@ -128,11 +132,28 @@ contains
             this%material(i)%VF = zero
         end do
 
+        if(allocated(this%rho0mix)) deallocate(this%rho0mix)
+        allocate(this%rho0mix(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%mumix)) deallocate(this%mumix)
+        allocate(this%mumix(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%yieldmix)) deallocate(this%yieldmix)
+        allocate(this%yieldmix(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%solidVF)) deallocate(this%solidVF)
+        allocate(this%solidVF(this%nxp, this%nyp, this%nzp))
+
     end subroutine
     !end function
 
     pure elemental subroutine destroy(this)
         type(solid_mixture), intent(inout)  :: this
+
+        if(allocated(this%solidVF)) deallocate(this%solidVF)
+        if(allocated(this%yieldmix)) deallocate(this%yieldmix)
+        if(allocated(this%mumix)) deallocate(this%mumix)
+        if(allocated(this%rho0mix)) deallocate(this%rho0mix)
 
         ! Deallocate array of solids (Destructor of solid should take care of everything else)
         if (allocated(this%material)) deallocate(this%material)
@@ -188,8 +209,8 @@ contains
 
             mat1%VF = mat1%VF + Fsrc*dt
             mat2%VF = mat2%VF - Fsrc*dt
-            print *, tt, maxval((mat1%p*Fsrc*dt)), minval(mat1%p*Fsrc*dt)
-            print *, "p1 before = ", mat1%p(100,1,1)
+            !print *, tt, maxval((mat1%p*Fsrc*dt)), minval(mat1%p*Fsrc*dt)
+            !print *, "p1 before = ", mat1%p(100,1,1)
 
             mat1%consrv(:,:,:,2) = mat1%consrv(:,:,:,2) - dt*mat1%p*Fsrc
             mat2%consrv(:,:,:,2) = mat2%consrv(:,:,:,2) + dt*mat1%p*Fsrc
@@ -197,7 +218,7 @@ contains
             call mat1%get_primitive(rho,u,v,w)
             call mat2%get_primitive(rho,u,v,w)
             call this%get_p_from_ehydro(rho)   ! Get species pressures from species hydrodynamic energy 
-            print *, "p1 after = ", mat1%p(100,1,1)
+            !print *, "p1 after = ", mat1%p(100,1,1)
 
             if (tt==1000) then
                 print *, "Pressure relaxation OS did not converge", maxval(abs(Fsrc)), dtsim
@@ -418,6 +439,9 @@ stop
         do imat = 1, this%ns
             ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
         enddo
+!print *, 'pinpiut: ', mixE(89,1,1), ehmix(89,1,1), mixRho(89,1,1)
+!print *, 'VF     : ', this%material(1)%VF(89,1,1), this%material(2)%VF(89,1,1)
+!print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
 
         do k=1,this%nzp
          do j=1,this%nyp
@@ -450,6 +474,7 @@ stop
           enddo
          enddo
         enddo
+!print *, 'pafter: ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
 
         mixT = zero
         do i = 1, this%ns
@@ -514,9 +539,11 @@ stop
             end if
 
             ! Artificial diffusivity (grad(Ys) is stored in Ji at this stage)
+!print *, 'bef LAD:', this%material(1)%Ji(89,1,1,1), sos(89,1,1), this%material(1)%diff(89,1,1)
             call this%LAD%get_diffusivity(this%material(i)%Ys, this%material(i)%Ji(:,:,:,1), &
                                           this%material(i)%Ji(:,:,:,2), this%material(i)%Ji(:,:,:,3), &
                                           sos, this%material(i)%diff, x_bc, y_bc, z_bc)
+!print *, 'aft LAD:', this%material(1)%Ji(89,1,1,1), sos(89,1,1), this%material(1)%diff(89,1,1)
         end do
 
     end subroutine
@@ -559,6 +586,31 @@ stop
         end do
     end subroutine
 
+    subroutine get_mixture_properties(this)
+        class(solid_mixture), intent(inout) :: this
+
+        integer :: imat
+
+        ! compute rho0mix, mumix, yieldmix as VF weighted sums
+        this%rho0mix  = this%material(1)%elastic%rho0  * this%material(1)%VF
+        !this%mumix    = this%material(1)%elastic%mu/this%material(1)%elastic%rho0 * this%material(1)%VF
+        this%mumix    = this%material(1)%elastic%mu * this%material(1)%VF
+        this%yieldmix = this%material(1)%elastic%yield * this%material(1)%VF
+        do imat = 2, this%ns
+            this%rho0mix  = this%rho0mix  + this%material(imat)%elastic%rho0 * this%material(imat)%VF
+            !this%mumix    = this%mumix    + this%material(imat)%elastic%mu/this%material(imat)%elastic%rho0 * this%material(imat)%VF
+            this%mumix    = this%mumix    + this%material(imat)%elastic%mu * this%material(imat)%VF
+            this%yieldmix = this%yieldmix + this%material(imat)%elastic%yield * this%material(imat)%VF
+        enddo
+        !this%mumix = this%mumix * this%rho0mix
+
+        this%solidVF = zero
+        do imat = 1, this%ns
+          if(this%material(imat)%elastic%mu > eps) this%solidVF = this%solidVF + this%material(imat)%VF
+        enddo
+
+    end subroutine
+
     subroutine get_eelastic_devstress(this,devstress)
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(out) :: devstress
@@ -567,19 +619,50 @@ stop
 
         devstress = zero
 
-        do imat = 1, this%ns
-          call this%material(imat)%get_eelastic_devstress()
-          ! print *, "Material ", imat, " sigma:"
-          ! print *, "   ",  this%material(imat)%devstress(200,1,1,1), this%material(imat)%devstress(200,1,1,2), this%material(imat)%devstress(200,1,1,3)
-          ! print *, "   ",  this%material(imat)%devstress(200,1,1,2), this%material(imat)%devstress(200,1,1,4), this%material(imat)%devstress(200,1,1,5)
-          ! print *, "   ",  this%material(imat)%devstress(200,1,1,3), this%material(imat)%devstress(200,1,1,5), this%material(imat)%devstress(200,1,1,6)
-          devstress(:,:,:,1) = devstress(:,:,:,1) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,1)
-          devstress(:,:,:,2) = devstress(:,:,:,2) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,2)
-          devstress(:,:,:,3) = devstress(:,:,:,3) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,3)
-          devstress(:,:,:,4) = devstress(:,:,:,4) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,4)
-          devstress(:,:,:,5) = devstress(:,:,:,5) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,5)
-          devstress(:,:,:,6) = devstress(:,:,:,6) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,6)
-        end do
+        if(this%useOneG) then
+            call this%material(1)%get_eelastic_devstress(this%rho0mix,this%mumix)
+            !print '(a,4(e21.14,1x))', 'mu/rho0_m', this%mumix(89,1,1), this%rho0mix(89,1,1), this%mumix(89,1,1)/this%rho0mix(89,1,1)
+            !print '(a,4(e21.14,1x))', 'mu/rho0_1', this%material(1)%elastic%mu, this%material(1)%elastic%rho0, this%material(1)%elastic%mu/this%material(1)%elastic%rho0, this%material(1)%VF(89,1,1)
+            !print '(a,4(e21.14,1x))', 'mu/rho0_2', this%material(2)%elastic%mu, this%material(2)%elastic%rho0, this%material(2)%elastic%mu/this%material(2)%elastic%rho0, this%material(2)%VF(89,1,1)
+            do imat = 2, this%ns
+              this%material(imat)%eel = this%material(1)%eel
+              !this%material(imat)%devstress = this%material(1)%devstress
+            enddo
+            devstress = this%material(1)%devstress
+            !print '(a,4(e21.14,1x))', 'mixt sxx', this%material(1)%devstress(89,1,1,1)
+            !print '(a,4(e21.14,1x))', 'mixt eel', this%material(1)%eel(89,1,1), this%material(2)%eel(89,1,1)
+            !print '(a,4(e21.14,1x))', 'mixt Ys ', this%material(1)%Ys(89,1,1), this%material(2)%Ys(89,1,1)
+            !print '(a,4(e21.14,1x))', 'tot  mu ', this%mumix(89,1,1)/this%rho0mix(89,1,1), this%mumix(89,1,1), this%rho0mix(89,1,1)
+            !print '(a,4(e21.14,1x))', 'eel 1   ', this%material(1)%Ys(89,1,1)*this%material(1)%eel(89,1,1)
+            !print '(a,4(e21.14,1x))', 'eel 2   ', this%material(2)%Ys(89,1,1)*this%material(2)%eel(89,1,1)
+            !print '(a,4(e21.14,1x))', 'tot  eel', this%material(1)%Ys(89,1,1)*this%material(1)%eel(89,1,1) + this%material(2)%Ys(89,1,1)*this%material(2)%eel(89,1,1)
+            !print '(a,9(e21.14,1x))', 'mix1 g  ', this%material(1)%g(89,1,1,:)
+            !print '(a,9(e21.14,1x))', 'mix2 g  ', this%material(2)%g(89,1,1,:)
+        else
+            do imat = 1, this%ns
+              call this%material(imat)%get_eelastic_devstress()
+              ! print *, "Material ", imat, " sigma:"
+              ! print *, "   ",  this%material(imat)%devstress(200,1,1,1), this%material(imat)%devstress(200,1,1,2), this%material(imat)%devstress(200,1,1,3)
+              ! print *, "   ",  this%material(imat)%devstress(200,1,1,2), this%material(imat)%devstress(200,1,1,4), this%material(imat)%devstress(200,1,1,5)
+              ! print *, "   ",  this%material(imat)%devstress(200,1,1,3), this%material(imat)%devstress(200,1,1,5), this%material(imat)%devstress(200,1,1,6)
+              devstress(:,:,:,1) = devstress(:,:,:,1) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,1)
+              devstress(:,:,:,2) = devstress(:,:,:,2) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,2)
+              devstress(:,:,:,3) = devstress(:,:,:,3) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,3)
+              devstress(:,:,:,4) = devstress(:,:,:,4) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,4)
+              devstress(:,:,:,5) = devstress(:,:,:,5) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,5)
+              devstress(:,:,:,6) = devstress(:,:,:,6) + this%material(imat)%VF * this%material(imat)%devstress(:,:,:,6)
+            end do
+            !print '(a,4(e21.14,1x))', 'mult sxx', devstress(89,1,1,1)
+            !print '(a,4(e21.14,1x))', 'mult eel', this%material(1)%eel(89,1,1), this%material(2)%eel(89,1,1)
+            !print '(a,4(e21.14,1x))', 'mult Ys ', this%material(1)%Ys(89,1,1), this%material(2)%Ys(89,1,1)
+            !print '(a,4(e21.14,1x))', 'tot  mu1', (this%material(1)%VF(89,1,1)*this%material(1)%elastic%mu + this%material(2)%VF(89,1,1)*this%material(2)%elastic%mu)/(this%material(1)%VF(89,1,1)*this%material(1)%elastic%rho0 + this%material(2)%VF(89,1,1)*this%material(2)%elastic%rho0), (this%material(1)%VF(89,1,1)*this%material(1)%elastic%mu + this%material(2)%VF(89,1,1)*this%material(2)%elastic%mu), (this%material(1)%VF(89,1,1)*this%material(1)%elastic%rho0 + this%material(2)%VF(89,1,1)*this%material(2)%elastic%rho0)
+            !print '(a,4(e21.14,1x))', 'tot  mu2', (this%material(1)%Ys(89,1,1)*this%material(1)%elastic%mu/this%material(1)%elastic%rho0 + this%material(2)%Ys(89,1,1)*this%material(2)%elastic%mu/this%material(2)%elastic%rho0)
+            !print '(a,4(e21.14,1x))', 'tot  eel', this%material(1)%Ys(89,1,1)*this%material(1)%eel(89,1,1) + this%material(2)%Ys(89,1,1)*this%material(2)%eel(89,1,1)
+            !print '(a,9(e21.14,1x))', 'mat1 g  ', this%material(1)%g(89,1,1,:)
+            !print '(a,9(e21.14,1x))', 'mat2 g  ', this%material(2)%g(89,1,1,:)
+            !print '(a,4(e21.14,1x))', 'mat1 sxx', this%material(1)%devstress(89,1,1,1), this%material(1)%VF(89,1,1)
+            !print '(a,4(e21.14,1x))', 'mat2 sxx', this%material(2)%devstress(89,1,1,1), this%material(2)%VF(89,1,1)
+        endif
 
     end subroutine
 
@@ -589,7 +672,7 @@ stop
 
         integer :: i
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: sumJx,sumJy,sumJz
-
+!print *, 'diff Ji:', this%material(1)%Ji(89,1,1,1), this%material(1)%diff(89,1,1)
         sumJx = zero; sumJy = zero; sumJz = zero;
         ! Get diff*gradYs (gradYs are in Ji's)
         do i=1,this%ns
@@ -658,7 +741,7 @@ stop
         do imat = 1, this%ns
           rho = rho + this%material(imat)%consrv(:,:,:,1)
         end do
-
+!print *, '--rho--', rho(89,1,1), this%material(1)%consrv(89,1,1,1), this%material(2)%consrv(89,1,1,1)
     end subroutine
 
     subroutine get_rhoYs_from_gVF(this,rho)
@@ -826,13 +909,24 @@ stop
 
         integer :: imat
 
-        do imat = 1, this%ns
+        if(this%useOneG) then
             if (this%use_gTg) then
-                call this%material(imat)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+                call this%material(1)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,this%rho0mix,this%mumix,this%yieldmix,this%solidVF)
             else
-                call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+                call this%material(1)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,this%rho0mix,this%mumix,this%yieldmix,this%solidVF)
             end if
-        end do
+            do imat = 2, this%ns
+                this%material(imat)%g = this%material(1)%g
+            enddo
+        else
+            do imat = 1, this%ns
+                if (this%use_gTg) then
+                    call this%material(imat)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+                else
+                    call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+                end if
+            end do
+        endif
 
     end subroutine
 
@@ -904,12 +998,15 @@ stop
 
         integer :: i
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhom, sosm
-
+!print *, '----In mix%getSOS----'
         sos = zero
         do i = 1,this%ns
             call this%material(i)%getSpeciesDensity(rho,rhom)
             call this%material(i)%hydro%get_sos2(rhom,p,sosm)
-            call this%material(i)%elastic%get_sos2(rhom,sosm)
+            !if(.not. this%useOneG) then
+                call this%material(i)%elastic%get_sos2(rhom,sosm)
+                !print *, 'mat  dens', i, rhom(89,1,1), p(89,1,1), this%material(i)%Ys(89,1,1), sosm(89,1,1)
+            !endif
             if(this%SOSmodel) then
                 ! equilibrium model
                 sos = sos + this%material(i)%VF/(rhom*sosm)
@@ -918,14 +1015,20 @@ stop
                 sos = sos + this%material(i)%Ys*sosm
             endif
         end do
-!print *, 'sos2 = ', maxval(sos), minval(sos)
+
         if(this%SOSmodel) then
             sos = one / (sqrt(rho*sos) + epssmall)
         else
             sos = sqrt(abs(sos))
         endif
-!print *, 'sos  = ', maxval(sos), minval(sos)
 
+        !if(this%useOneG) then
+        !    sosm = sos*sos
+        !    call this%material(1)%elastic%get_sos2_mixture(rho,this%mumix,sosm)
+        !    sos = sqrt(sosm)
+        !    print *, 'mixt dens', rho(89,1,1), this%mumix(89,1,1)
+        !endif
+!print *, '----Exiting mix%getSOS----'
     end subroutine
 
     subroutine update_VF(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc)

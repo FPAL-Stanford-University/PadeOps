@@ -71,6 +71,7 @@ module SolidGrid
         logical     :: pRelax                      ! Use pressure and temperature non-equilibrium formulation, but relax pressure at each substep
         logical     :: use_gTg                     ! Use formulation with the Finger tensor g^T.g instead of the full g tensor
         logical     :: updateEtot                  ! Update species etot (vs ehydro) with pRelax
+        logical     :: useOneG                     ! Use formulation with a single g or gTg field
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -162,7 +163,7 @@ contains
         real(rkind) :: Cdiff = 0.003_rkind
         real(rkind) :: CY = 100._rkind
         logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
-        logical     :: use_gTg = .FALSE.
+        logical     :: use_gTg = .FALSE., useOneG = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
 
@@ -174,7 +175,7 @@ contains
                                                        prow, pcol, &
                                                          SkewSymm  
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
-                           PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
+                           PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
         ioUnit = 11
@@ -201,7 +202,8 @@ contains
         this%pRelax = pRelax
         this%use_gTg = use_gTg
         this%updateEtot = updateEtot
-
+        this%useOneG = useOneG
+ 
         itmp(1:3) = 0; if(this%PTeqb) itmp(1) = 1; if(this%pEqb) itmp(2) = 1; if(this%pRelax) itmp(3) = 1; 
         if(sum(itmp) .ne. 1) then
             call GracefulExit("Exactly one among PTeqb, pEqb and pRelax should be true",4634)
@@ -209,6 +211,10 @@ contains
 
         if(SOSmodel .and. this%pRelax) then
             call GracefulExit("Equilibrium sound speed model valid only with PTeqb or pEqb. SOSmodel must be .false. with pRelax",4634)
+        endif
+
+        if(this%useOneG .and. this%use_gTg) then
+            call GracefulExit("Only g formulation supported with single g field for now", 4634)
         endif
 
         ! Allocate decomp
@@ -311,7 +317,7 @@ contains
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
         allocate(this%mix)
-        call this%mix%init(this%decomp,this%der,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot)
+        call this%mix%init(this%decomp,this%der,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useOneG)
         !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields
@@ -686,7 +692,6 @@ contains
             !print *, '----', nrank, isub
             call this%get_conserved()
 
-            !print *, nrank, 1
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
                 call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
                 write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (Wcnsrv) at &
@@ -694,29 +699,29 @@ contains
                 call GracefulExit(trim(charout), 999)
             end if
             call this%mix%checkNaN()
-            !print *, nrank, 2
 
             ! Pre-compute stress, LAD, J, etc.
             ! call this%mix%getSOS(this%rho,this%p,this%sos)
             call this%mix%getLAD(this%rho,this%e,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
-            !print *, nrank, 3
 
             ! Update total mixture conserved variables
             call this%getRHS(rhs,divu,viscwork)
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
-            !print *, nrank, 4
 
             ! calculate sources if they are needed
             if(.not. this%PTeqb) call this%mix%calculate_source(this%rho,divu,this%u,this%v,this%w,this%p,Fsource,this%x_bc,this%y_bc,this%z_bc) ! -- actually, source terms should be included for PTeqb as well --NSG
-            !print *, nrank, 5
 
             ! Now update all the individual species variables
+            !do i = 1, size(this%mix%material(1)%g11, 1)
+            !    print '(9(e19.12,1x))', this%mix%material(1)%g11(i,1,1)-this%mix%material(2)%g11(i,1,1), this%mix%material(1)%g22(i,1,1)-this%mix%material(2)%g22(i,1,1), this%mix%material(1)%g33(i,1,1)-this%mix%material(2)%g33(i,1,1) 
+            !enddo
+            !print '(9(e19.12,1x))', maxval(abs(this%mix%material(1)%g11-this%mix%material(2)%g11)), maxval(abs(this%mix%material(1)%g22-this%mix%material(2)%g22)), maxval(abs(this%mix%material(1)%g33-this%mix%material(2)%g33)) 
+            !print *, maxloc(abs(this%mix%material(1)%g11-this%mix%material(2)%g11))!, maxval(abs(this%mix%material(1)%g22-this%mix%material(2)%g22)), maxval(abs(this%mix%material(1)%g33-this%mix%material(2)%g33)) 
             call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,Fsource,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
             call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
-            !print *, nrank, 6
             !if (.NOT. this%PTeqb) then
             if(this%pEqb) then
                 call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
@@ -724,25 +729,30 @@ contains
                 call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
                 call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%devstress,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
             end if
-            !print *, nrank, 7
 
             ! Integrate simulation time to keep it in sync with RK substep
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
-            !print *, nrank, 8
+            !print *, '-----', 8, this%Wcnsrv(179,1,1,1:4)
+            !do i = 1, size(this%Wcnsrv,1)
+            !    write(*,'(4(e21.14,1x))') this%Wcnsrv(i,1,1,1:4)
+            !enddo
 
             ! Filter the conserved variables
             call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
             call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
             call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
             call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
-            !print *, nrank, 9
+            !print *, '-----', 9, this%Wcnsrv(179,1,1,1:4)
+            !do i = 1, size(this%Wcnsrv,1)
+            !    write(*,'(4(e21.14,1x))') this%Wcnsrv(i,1,1,1:4)
+            !enddo
 
             ! Filter the individual species variables
             call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
             
             call this%get_primitive()
-            !print *, nrank, 10
+            !print *, nrank, 10, this%e(179,1,1), this%rho(179,1,1), this%u(179,1,1)
 
             ! if (.NOT. this%explPlast) then
             !     if (this%plastic) then
@@ -879,12 +889,15 @@ contains
     subroutine post_bc(this)
         class(sgrid), intent(inout) :: this
 
+        if(this%useOneG) then
+            call this%mix%get_mixture_properties()
+        endif
         call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
         call this%mix%get_ehydro_from_p(this%rho)              ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
         call this%mix%get_pmix(this%p)                         ! Get mixture pressure
         call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
         call this%mix%getSOS(this%rho,this%p,this%sos)
-
+!print *, 'SOS: ', this%sos(179,1,1)
         ! assuming pressures have relaxed and sum( (Ys*(ehydro + eelastic) ) over all
         ! materials equals e
         call this%mix%get_emix(this%e)
@@ -933,11 +946,13 @@ contains
         tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
                                          tauyy => duidxj(:,:,:,tauyyidx); tauyz => duidxj(:,:,:,tauyzidx);
                                                                           tauzz => duidxj(:,:,:,tauzzidx);
-
+!print '(a,9(e21.14,1x))', 'dudx ', duidxj(89,1,1,1:9)
+!print '(a,9(e21.14,1x))', 'tauxx', tauxx(89,1,1)
         ! Add the deviatoric stress to the tau for use in fluxes 
         tauxx = tauxx + this%sxx; tauxy = tauxy + this%sxy; tauxz = tauxz + this%sxz
                                   tauyy = tauyy + this%syy; tauyz = tauyz + this%syz
                                                             tauzz = tauzz + this%szz
+!print '(a,9(e21.14,1x))', 'tauxx', tauxx(89,1,1)
       
         ! store artificial stress tensor in devstress. this should not break anything since devstress will be
         ! overwritten in get_primitive and post_bc. used in update_eh -- NSG
@@ -954,14 +969,16 @@ contains
         call this%getRHS_x(              rhs,&
                            tauxx,tauxy,tauxz,&
                                qx )
-
+!print '(a,4(e21.14,1x))', 'rhsx: ', rhs(179,1,1,1:4)
         call this%getRHS_y(              rhs,&
                            tauxy,tauyy,tauyz,&
                                qy )
+!print '(a,4(e21.14,1x))', 'rhsy: ', rhs(179,1,1,1:4)
 
         call this%getRHS_z(              rhs,&
                            tauxz,tauyz,tauzz,&
                                qz )
+!print '(a,4(e21.14,1x))', 'rhsz: ', rhs(179,1,1,1:4)
 
         ! Call problem source hook
         call hook_mixture_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
@@ -978,12 +995,17 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
+        integer :: i
 
         xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
 
         flux = this%Wcnsrv(:,:,:,mom_index  )*this%u + this%p - tauxx ! x-momentum
+!print *, 'flux 1', flux(89,1,1), this%u(89,1,1), this%p(89,1,1), tauxx(89,1,1)
         call transpose_y_to_x(flux,xtmp1,this%decomp)
         call this%der%ddx(xtmp1,xtmp2, this%x_bc(1), this%x_bc(2)) ! Symmetric for x-momentum
+!do i = 1, size(flux,1)
+!  write(*,'(4(e21.14,1x))') xtmp1(i,1,1), xtmp2(i,1,1)
+!enddo
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
 
