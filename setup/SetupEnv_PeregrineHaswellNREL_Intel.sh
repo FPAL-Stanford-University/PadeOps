@@ -12,5 +12,5 @@ export I_MPI_F77=ifort
 export FFTW_PATH=${CWD}/dependencies/haswell/fftw-3.3.5
 export DECOMP_PATH=${CWD}/dependencies/haswell/2decomp_fft
 export VTK_IO_PATH=${CWD}/dependencies/haswell/Lib_VTK_IO/build
-export HDF5_PATH=${CWD}/dependencies/hdf5-1.8.18
+export HDF5_PATH=${CWD}/dependencies/haswell/hdf5-1.8.18
 export ARCH_OPT_FLAG="-xCORE-AVX2"
