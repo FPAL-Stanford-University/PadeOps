@@ -11,4 +11,5 @@ data/*
 tags
 pbsfiles
 batch_scripts
+bin*
 pp
