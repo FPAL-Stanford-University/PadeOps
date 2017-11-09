@@ -9,7 +9,6 @@ subroutine init_smagorinsky(this,dx,dy,dz,Cs,ncWall,z0,useWallDamping, zMeshC, z
    ! Set the type of mnodel constant (default is wall function). 
    ! Can be reset to true via dynamic procedure initialization, 
    ! in case the global dynamic procedure is used. 
-   this%useCglobal = .false. 
    
    
    if (.not. this%isPeriodic) then
@@ -19,6 +18,7 @@ subroutine init_smagorinsky(this,dx,dy,dz,Cs,ncWall,z0,useWallDamping, zMeshC, z
    end if 
    
    if (useWallDamping) then
+      this%useCglobal = .false. 
       this%cmodelC = ( Cs**(-real(ncWall,rkind)) + (kappa*(zMeshC/deltaLES + &
           & z0/deltaLES))**(-real(ncWall,rkind))  )**(-one/real(ncWall,rkind))
       this%cmodelE = ( Cs**(-real(ncWall,rkind)) + (kappa*(zMeshE/deltaLES + &
@@ -26,8 +26,10 @@ subroutine init_smagorinsky(this,dx,dy,dz,Cs,ncWall,z0,useWallDamping, zMeshC, z
       this%cmodelC = (deltaLES*this%cmodelC)**2    
       this%cmodelE = (deltaLES*this%cmodelE)**2    
    else
+      this%useCglobal = .true. 
       this%cmodelC = (Cs*deltaLES)**2
       this%cmodelE = (Cs*deltaLES)**2
+      this%cmodel_global = (Cs*deltaLES)**2
    end if
    this%isEddyViscosityModel = .true. 
 

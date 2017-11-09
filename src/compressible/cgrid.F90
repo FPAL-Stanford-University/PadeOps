@@ -58,6 +58,7 @@ module CompressibleGrid
         type(mixture), allocatable :: mix
 
         type(io_hdf5), allocatable :: viz
+        type(io_hdf5), allocatable :: restart
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -81,6 +82,8 @@ module CompressibleGrid
         real(rkind), dimension(:,:,:,:), pointer :: Ys
         real(rkind), dimension(:,:,:,:), pointer :: diff
 
+        integer :: nrestart = 0
+
         contains
             procedure          :: init
             procedure          :: destroy
@@ -103,6 +106,8 @@ module CompressibleGrid
             procedure, private :: get_q
             procedure, private :: get_J
             procedure, private :: write_viz
+            procedure, private :: write_restart
+            procedure, private :: read_restart
     end type
 
 contains
@@ -151,6 +156,8 @@ contains
         character(len=clen) :: charout
         real(rkind) :: Ys_error
         logical     :: inviscid = .true.
+        integer     :: nrestart = 0
+        logical     :: rewrite_viz = .true.
 
         type(powerLawViscosity) :: visc
 
@@ -162,7 +169,7 @@ contains
                                                            prow, pcol, &
                                                              SkewSymm  
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
-                           inviscid,                                   &
+                           inviscid, nrestart, rewrite_viz,            &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
 
@@ -363,12 +370,25 @@ contains
         end do
 
         allocate(this%viz)
-        call this%viz%init( mpi_comm_world, this%decomp, 'y', this%outputdir, vizprefix, reduce_precision=reduce_precision, read_only=.false.)
+        call this%viz%init( mpi_comm_world, this%decomp, 'y', this%outputdir, vizprefix, &
+                            reduce_precision=reduce_precision, read_only=.false., jump_to_last=.true.)
         this%tviz = tviz
         ! Write mesh coordinates to file
         call this%viz%write_coords(this%mesh)
 
-        deallocate(varnames)
+        ! Always write data in full precision for restart
+        allocate(this%restart)
+        call this%restart%init( mpi_comm_world, this%decomp, 'y', this%outputdir, 'restart', &
+                                reduce_precision=.false., write_xdmf=.false., read_only=.true., jump_to_last=.true.)
+        if (this%restart%vizcount > 0) call this%read_restart(this%restart%vizcount)
+        call this%restart%destroy()
+        call this%restart%init( mpi_comm_world, this%decomp, 'y', this%outputdir, 'restart', &
+                                reduce_precision=.false., write_xdmf=.false., read_only=.false., jump_to_last=.true.)
+        this%nrestart = nrestart
+
+        if ((this%step > 0) .and. (rewrite_viz)) then
+            this%viz%vizcount = int(this%tsim / this%tviz + 100._rkind*eps) + 1
+        end if
 
         ! Check for consistency of massfractions
         Ys_error = P_MAXVAL( abs(sum(this%Ys,4) - one) )
@@ -383,6 +403,8 @@ contains
             write(charout,'(A,4(I5,A))') "NaN encountered in initialization ("//trim(varnames(l))//") at (",i,", ",j,", ",k,", ",l,") of fields"
             call GracefulExit(trim(charout),999)
         end if
+
+        deallocate(varnames)
 
     end subroutine
 
@@ -412,6 +434,9 @@ contains
         
         call this%viz%destroy()
         if (allocated(this%viz)) deallocate(this%viz)
+
+        call this%restart%destroy()
+        if (allocated(this%restart)) deallocate(this%restart)
 
         call decomp_2d_finalize
         if (allocated(this%decomp)) deallocate(this%decomp) 
@@ -547,11 +572,15 @@ contains
         ! ------------------------------------------------
 
         ! Write out initial conditions
-        call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-        ! call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
-        call this%write_viz()
+        if (this%viz%vizcount == 0) then 
+            call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
+            call this%write_viz()
+        end if
         vizcond = .FALSE.
-        
+       
+        ! Write initial restart file
+        if (this%restart%vizcount == 0) call this%write_restart()
+
         ! Check for visualization condition and adjust time step
         if ( (this%tviz > zero) .AND. (this%tsim + this%dt > this%tviz * this%viz%vizcount) ) then
             this%dt = this%tviz * this%viz%vizcount - this%tsim
@@ -598,6 +627,9 @@ contains
                 vizcond = .FALSE.
             end if
             
+            ! Write restart file
+            if ( (this%nrestart > 0) .and. (mod(this%step,this%nrestart) == 0) ) call this%write_restart()
+
             ! Get the new time step
             call this%get_dt(stability)
             
@@ -1490,6 +1522,83 @@ contains
 
         ! End visualization dump
         call this%viz%end_viz()
+    end subroutine
+
+    subroutine write_restart(this)
+        use exits, only: message
+        class(cgrid), intent(inout) :: this
+        character(len=clen) :: charout
+        integer :: i
+
+        ! Get updated conserved variables
+        call this%get_conserved()
+
+        ! Start visualization dump
+        call this%restart%start_viz(this%tsim)
+
+        write(charout,'(A,I0,A,A)') "Writing restart dump ", this%restart%vizcount, " to ", adjustl(trim(this%restart%filename))
+        call message(charout)
+
+        ! Write conserved variables
+        if (this%mix%ns > 1) then
+            do i = 1,this%mix%ns
+                write(charout,'(I4.4)') i
+                call this%restart%write_variable(this%Wcnsrv(:,:,:,i), 'rhoY_'//adjustl(trim(charout)) )
+            end do
+        else
+            call this%restart%write_variable(this%Wcnsrv(:,:,:,mass_index), 'rho' )
+        end if
+        call this%restart%write_variable(this%Wcnsrv(:,:,:,mom_index  ), 'rhou')
+        call this%restart%write_variable(this%Wcnsrv(:,:,:,mom_index+1), 'rhov')
+        call this%restart%write_variable(this%Wcnsrv(:,:,:,mom_index+2), 'rhow')
+        call this%restart%write_variable(this%Wcnsrv(:,:,:, TE_index  ), 'TE')
+
+        call this%restart%write_attribute(1, [this%step], 'step', '/')
+
+        ! End visualization dump
+        call this%restart%end_viz()
+    end subroutine
+
+    subroutine read_restart(this, vizcount)
+        use exits, only: message
+        class(cgrid), intent(inout) :: this
+        integer,      intent(in)    :: vizcount
+        character(len=clen) :: charout
+        integer :: i
+        integer, dimension(1) :: tmp_int
+        real(rkind), dimension(1) :: tmp_real
+
+        ! Start reading restart file
+        call this%restart%start_reading(vizcount)
+
+        write(charout,'(A,A)') "Reading restart dump from ", adjustl(trim(this%restart%filename))
+        call message(charout)
+
+        ! Read conserved variables
+        if (this%mix%ns > 1) then
+            do i = 1,this%mix%ns
+                write(charout,'(I4.4)') i
+                call this%restart%read_dataset(this%Wcnsrv(:,:,:,i), 'rhoY_'//adjustl(trim(charout)) )
+            end do
+        else
+            call this%restart%read_dataset(this%Wcnsrv(:,:,:,mass_index), 'rho' )
+        end if
+        call this%restart%read_dataset(this%Wcnsrv(:,:,:,mom_index  ), 'rhou')
+        call this%restart%read_dataset(this%Wcnsrv(:,:,:,mom_index+1), 'rhov')
+        call this%restart%read_dataset(this%Wcnsrv(:,:,:,mom_index+2), 'rhow')
+        call this%restart%read_dataset(this%Wcnsrv(:,:,:, TE_index  ), 'TE')
+
+        call this%restart%read_attribute(1, tmp_int, 'step')
+        this%step = tmp_int(1)
+
+        call this%restart%read_attribute(1, tmp_real, 'Time')
+        this%tsim = tmp_real(1)
+
+        ! End visualization dump
+        call this%restart%end_reading()
+
+        ! Get primitive variables from conserved
+        call this%get_primitive()
     end subroutine
 
 end module 

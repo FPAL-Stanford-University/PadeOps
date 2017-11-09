@@ -276,7 +276,7 @@ program StratifiedShearLayerBudgets
 
    ! STEP 3: Compute the pressure flux
    call ops%getFluct_from_MeanZ(p,buff1)
-   buff1 = buff1*buff2
+   buff1 = buff1*w
    call ops%ddz(buff1,buff3)
    call ops%WriteField3d(buff1,"pflx",tidx)
    call ops%WriteField3d(buff3,"ptrn",tidx)
@@ -395,9 +395,62 @@ program StratifiedShearLayerBudgets
    call ops%ddz(w,buff3)
    buff5 = buff5  + w*buff3
    
-   buff5 = -2.d0*nuSGS
+   buff5 = -2.d0*nuSGS*buff5
    call ops%ddz(buff5,buff3)
    call ops%WriteField3d(buff3,"Tsgs",tidx)
+
+   ! STEP 11: Compute the potential energy
+   call ops%getFluct_from_MeanZ(T,buff2)
+   buff2 = 0.5d0*buff2*buff2
+   call ops%WriteField3d(buff2,"itpe",tidx)
+
+   ! STEP 12: Compute convective transport 
+   buff3 = w*buff2
+   call ops%ddz(buff3,buff1)
+   call ops%WriteField3d(buff1,"TtrC",tidx)
+   
+   ! STEP 13: Compute Production
+   call ops%getFluct_from_MeanZ(T,buff2)
+   buff3 = T- buff2
+   call ops%ddz(buff3,buff4)
+   buff5 = -buff2*w*buff4
+   call ops%WriteField3d(buff5,"ProT",tidx)
+   
+   ! STEP 14: Compute viscous dissipation
+   call ops%ddx(buff2,buff3)
+   buff5 = buff3*buff3
+   call ops%ddy(buff2,buff3)
+   buff5 = buff5 + buff3*buff3
+   call ops%ddz(buff2,buff3)
+   buff5 = buff5 + buff3*buff3
+   buff5 = (1.d0/(Re*Pr))*buff5
+   call ops%WriteField3d(buff5,"DisT",tidx)
+
+   ! STEP 15: Compute viscous transport
+   call ops%getFluct_from_MeanZ(T,buff2)
+   buff2 = 0.5d0*buff2*buff2
+   call ops%ddz(buff2,buff3)
+   buff3 = -(1.d0/(Re*Pr))*buff3
+   call ops%ddz(buff3,buff4)
+   call ops%writeField3d(buff4,"TtrV",tidx)
+   
+   ! STEP 16: Compute the SGS transport 
+   call ops%getFluct_from_MeanZ(T,buff2)
+   call ops%ddz(T, buff3)
+   buff3 = buff3*buff2*kappaSGS
+   call ops%ddz(buff3,buff4)
+   call ops%writeField3d(buff4,"TtrS",tidx)
+
+   ! STEP 17: Compute SGS dissipation
+   call ops%ddx(buff2,buff3)
+   buff5 = buff3*buff3
+   call ops%ddy(buff2,buff3)
+   buff5 = buff5 + buff3*buff3
+   call ops%ddz(buff2,buff3)
+   buff5 = buff5 + buff3*buff3
+   buff5 = kappaSGS*buff5
+   call ops%WriteField3d(buff5,"DiTS",tidx)
+
 
 
    deallocate(u, v, w, p, T, nuSGS, kappaSGS)
