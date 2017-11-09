@@ -357,7 +357,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     real(rkind), dimension(8),                                  intent(out), optional  :: inst_val
     integer :: j, icl
     real(rkind), dimension(:,:,:), pointer :: xCloudPtr, yCloudPtr, zCloudPtr, dsqPtr, eta_deltaPtr, sourcePtr
-    real(rkind) :: usp_sq, force
+    real(rkind) :: usp_sq, force, sum_dsqptr
 
     if (this%Am_I_Active) then
         call this%getMeanU(u,v,w)
@@ -371,9 +371,13 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
           do j =1,size(this%xs)
               dsqPtr = (xCloudPtr - this%xs(j))**2 + (yCloudPtr - this%ys(j))**2 + (zCloudPtr - this%zs(j))**2 
               dsqPtr = exp(-dsqPtr*this%oneByDelSq)
-              eta_deltaPtr = (force) * dsqPtr
+              !sum_dsqptr = sum(dsqPtr)
+              eta_deltaPtr = force * dsqPtr
               sourcePtr = sourcePtr + eta_deltaPtr
+              !print '(a,i5,5(e19.12,1x))', 'sum_dsqptr = ', j, this%xs(j), this%ys(j), this%zs(j), sum_dsqptr, this%normfactor
           end do
+          !print *, 'sum_dsqptr = ', sum_dsqptr
+          !print *, 'sum_force = ', sum(sourcePtr)
           rhsxvals(this%xst(icl):this%xen(icl),this%yst(icl):this%yen(icl),this%zst(icl):this%zen(icl)) = sourcePtr
           rhsyvals(this%xst(icl):this%xen(icl),this%yst(icl):this%yen(icl),this%zst(icl):this%zen(icl)) = 0.d0
           rhszvals(this%xst(icl):this%xen(icl),this%yst(icl):this%yen(icl),this%zst(icl):this%zen(icl)) = 0.d0

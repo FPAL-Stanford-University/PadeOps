@@ -69,7 +69,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     !integer :: i, ylen, zlen
     integer :: xLc(1), yLc(1), zLc(1), xst, xen, yst, yen, zst, zen, ierr, xlen
     integer  :: ntry = 100
-    real(rkind) :: time2initialize = 0
+    real(rkind) :: time2initialize = 0, correction_factor
 
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
@@ -182,7 +182,11 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
             call this%smear_this_source(this%smearing_base,this%xs(j),this%ys(j),this%zs(j), one, this%startEnds(1,j), &
                                 this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
                                 this%startEnds(5,j),this%startEnds(6,j),this%startEnds(7,j))
-    end do 
+    end do
+    correction_factor = p_sum(this%smearing_base)*dx*dy*dz*this%pfactor*this%normfactor
+    !print*, 'corr factor = ', correction_factor !--- this is necessary when, e.g., turbine is close to the bottom wall and part of the cloud is below the wall
+    call message(2, "correction factor = ", correction_factor)
+    this%smearing_base = this%smearing_base/correction_factor
     call message(2, "Smearing grid parameter, ntry", ntry)
     call toc(mpi_comm_world, time2initialize)
     call message(2, "Time (seconds) to initialize", time2initialize)
@@ -281,9 +285,8 @@ subroutine smear_this_source(this,rhsfield, xC, yC, zC, valSource, xst, xen, yst
                 this%dline(1:xlen) = -this%dline(1:xlen)*this%oneBydelSq
                 rhsfield(xst:xen,jj,kk) = rhsfield(xst:xen,jj,kk) + &
                                           valSource*exp(this%dline)
-
             end do 
-        end do  
+        end do 
     end if 
 
 end subroutine 
