@@ -1827,9 +1827,15 @@ contains
        
         if (present(CopyForDNSpress)) then
             if (CopyForDNSpress) then
-               this%urhs_dns = this%u_rhs
-               this%vrhs_dns = this%v_rhs
-               this%wrhs_dns = this%w_rhs
+               if (copyTurbRHS) then
+                  this%urhs_dns = this%u_rhs - this%urhs_turbine 
+                  this%vrhs_dns = this%v_rhs - this%vrhs_turbine
+                  this%wrhs_dns = this%w_rhs - this%wrhs_turbine
+               else
+                  this%urhs_dns = this%u_rhs
+                  this%vrhs_dns = this%v_rhs
+                  this%wrhs_dns = this%w_rhs
+               end if
             end if   
         end if
 
