@@ -1,18 +1,25 @@
 module MixtureEOSMod
 
-    use kind_parameters,      only: rkind,clen
-    use constants,            only: zero,one
-    use decomp_2d,            only: decomp_info
-    use DerivativesMod,       only: derivatives
-    use FiltersMod,           only: filters
-    use exits,                only: GracefulExit
-    use EOSMod,               only: eos
-    use IdealGasEOS,          only: idealgas
-    use PowerLawViscosityMod, only: powerLawViscosity
+    use kind_parameters,        only: rkind,clen
+    use constants,              only: zero,one
+    use decomp_2d,              only: decomp_info
+    use DerivativesMod,         only: derivatives
+    use FiltersMod,             only: filters
+    use exits,                  only: GracefulExit
+    use EOSMod,                 only: eos
+    use IdealGasEOS,            only: idealgas
+    use ShearViscosityMod,      only: shearViscosity
+    use BulkViscosityMod,       only: bulkViscosity
+    use ThermalConductivityMod, only: thermalConductivity
+    use MassDiffusivityMod,     only: massDiffusivity
+
+    implicit none
 
     type :: material_eos
         class(idealgas), allocatable :: mat
-        class(powerLawViscosity), allocatable :: visc
+        class(shearViscosity),      allocatable :: shearvisc
+        class(bulkViscosity),       allocatable :: bulkvisc
+        class(thermalConductivity), allocatable :: thermcond
     end type
 
     type :: mixture
@@ -22,12 +29,14 @@ module MixtureEOSMod
         integer :: ns
         integer :: nxp, nyp, nzp
         type(material_eos), dimension(:), allocatable :: material
+        class(massDiffusivity),           allocatable :: massdiff
         real(rkind), dimension(:,:,:), allocatable :: gam, Rgas, Cp, Cv
 
     contains
 
         procedure :: init
         procedure :: set_material
+        procedure :: set_massdiffusivity
         procedure :: update
         procedure :: get_p
         procedure :: get_T
@@ -73,11 +82,13 @@ contains
     end subroutine
     ! end function
 
-    subroutine set_material(this, imat, mat, visc)
-        class(mixture),                     intent(inout) :: this
-        integer,                            intent(in)    :: imat
-        class(idealgas),                    intent(in)    :: mat
-        class(powerLawViscosity), optional, intent(in)    :: visc
+    subroutine set_material(this, imat, mat, shearvisc, bulkvisc, thermcond)
+        class(mixture),                       intent(inout) :: this
+        integer,                              intent(in)    :: imat
+        class(idealgas),                      intent(in)    :: mat
+        class(shearViscosity),      optional, intent(in)    :: shearvisc
+        class(bulkViscosity),       optional, intent(in)    :: bulkvisc
+        class(thermalConductivity), optional, intent(in)    :: thermcond
 
         if ((imat .GT. this%ns) .OR. (imat .LE. 0)) call GracefulExit("Cannot set material with index greater than the number of species.",4534)
 
@@ -86,11 +97,40 @@ contains
         allocate( this%material(imat)%mat, source=mat )
 
         if (.not. this%inviscid) then
-            if (.not. present(visc)) call GracefulExit("Cannot run viscous simulation witout setting transport property object", 4534)
+            if (.not. present(shearvisc)) call GracefulExit("Cannot run viscous simulation without &
+                                          &setting shear viscosity transport property object", 4534)
 
             ! Allocate and set the material transport property object
-            if (allocated(this%material(imat)%visc)) deallocate(this%material(imat)%visc)
-            allocate( this%material(imat)%visc, source=visc )
+            if (allocated(this%material(imat)%shearvisc)) deallocate(this%material(imat)%shearvisc)
+            allocate( this%material(imat)%shearvisc, source=shearvisc )
+
+            if (.not. present(bulkvisc)) call GracefulExit("Cannot run viscous simulation without &
+                                          &setting bulk viscosity transport property object", 4534)
+
+            ! Allocate and set the material transport property object
+            if (allocated(this%material(imat)%bulkvisc)) deallocate(this%material(imat)%bulkvisc)
+            allocate( this%material(imat)%bulkvisc, source=bulkvisc )
+
+            if (.not. present(thermcond)) call GracefulExit("Cannot run viscous simulation without &
+                                     &setting thermal conductivity transport property object", 4534)
+
+            ! Allocate and set the material transport property object
+            if (allocated(this%material(imat)%thermcond)) deallocate(this%material(imat)%thermcond)
+            allocate( this%material(imat)%thermcond, source=thermcond )
+
+        end if
+    end subroutine
+
+    subroutine set_massdiffusivity(this, massdiff)
+        class(mixture),         intent(inout) :: this
+        class(massDiffusivity), intent(in)    :: massdiff
+
+        if (.not. this%inviscid) then
+            if (this%ns > 1) then
+                ! Allocate and set the material transport property object
+                if (allocated(this%massdiff)) deallocate(this%massdiff)
+                allocate( this%massdiff, source=massdiff )
+            end if
         end if
     end subroutine
 
@@ -172,18 +212,17 @@ contains
 
     end subroutine
 
-    pure subroutine get_transport_properties(this, rho, T, Ys, mu, bulk, kappa, diff)
+    pure subroutine get_transport_properties(this, p, T, Ys, mu, bulk, kappa, diff)
         ! class(mixture), target,                                     intent(in)  :: this
         class(mixture),                                             intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(in)  :: rho, T
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(in)  :: p, T
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns), intent(in)  :: Ys
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(out) :: mu, bulk, kappa
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns), intent(out) :: diff
 
         integer :: i
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: den, tmp, mu_i, Cp
-        class(idealgas),          pointer :: mat
-        class(powerLawViscosity), pointer :: visc
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: Xs
 
         select case(this%inviscid)
         case(.true.)
@@ -197,9 +236,9 @@ contains
                 ! mat  => this%material(1)%mat
                 ! visc => this%material(1)%visc
                 Cp = this%material(1)%mat%gam * this%material(1)%mat%Rgas * this%material(1)%mat%onebygam_m1 ! Cp
-                call this%material(1)%visc%get_mu(T, mu)
-                call this%material(1)%visc%get_beta(T, bulk)
-                call this%material(1)%visc%get_kappa(Cp, mu, kappa)
+                call this%material(1)%shearvisc%get_mu(T, mu)
+                call this%material(1)%bulkvisc%get_beta(T, mu, bulk)
+                call this%material(1)%thermcond%get_kappa(T, Cp, mu, kappa)
                 diff = zero
             case default
                 den = zero
@@ -213,17 +252,24 @@ contains
                     Cp = this%material(i)%mat%gam * this%material(i)%mat%Rgas * this%material(i)%mat%onebygam_m1 ! Cp
                     den = den + Ys(:,:,:,i)*sqrt(this%material(i)%mat%Rgas)
 
-                    call this%material(i)%visc%get_mu(T, mu_i)
+                    call this%material(i)%shearvisc%get_mu(T, mu_i)
                     mu = mu + mu_i*Ys(:,:,:,i)*sqrt(this%material(i)%mat%Rgas)
 
-                    call this%material(i)%visc%get_kappa(Cp, mu_i, tmp)
+                    call this%material(i)%thermcond%get_kappa(T, Cp, mu_i, tmp)
                     kappa = kappa + tmp*Ys(:,:,:,i)*sqrt(this%material(i)%mat%Rgas)
 
-                    call this%material(i)%visc%get_beta(T, tmp)
+                    call this%material(i)%bulkvisc%get_beta(T, mu_i, tmp)
                     bulk = bulk + tmp*Ys(:,:,:,i)*sqrt(this%material(i)%mat%Rgas)
 
-                    call this%material(i)%visc%get_diff(rho, mu_i, diff(:,:,:,i))
                 end do
+                mu = mu / den
+                bulk = bulk / den
+                kappa = kappa / den
+
+                do i = 1,this%ns
+                    Xs(:,:,:,i) = this%material(i)%mat%Rgas * Ys(:,:,:,i) / this%Rgas
+                end do
+                call this%massdiff%get_diff(p, T, Xs, diff)
             end select
         end select
     end subroutine
@@ -234,8 +280,11 @@ contains
 
         do i = 1,this%ns
             if (allocated(this%material(i)%mat))     deallocate(this%material(i)%mat)
-            if (allocated(this%material(imat)%visc)) deallocate(this%material(imat)%visc)
+            if (allocated(this%material(i)%shearvisc)) deallocate(this%material(i)%shearvisc)
+            if (allocated(this%material(i)%bulkvisc))  deallocate(this%material(i)%bulkvisc)
+            if (allocated(this%material(i)%thermcond)) deallocate(this%material(i)%thermcond)
         end do
+        if (allocated(this%massdiff)) deallocate(this%massdiff)
 
         if (allocated(this%gam )) deallocate(this%gam )
         if (allocated(this%Rgas)) deallocate(this%Rgas)

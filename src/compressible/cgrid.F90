@@ -550,7 +550,7 @@ contains
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
         ! call this%getPhysicalProperties()
-        call this%mix%get_transport_properties(this%rho, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
+        call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
 
         if (this%mix%ns .GT. 1) then
             dYsdx => gradYs(:,:,:,              1:  this%mix%ns)
@@ -854,7 +854,7 @@ contains
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
         ! call this%getPhysicalProperties()
-        call this%mix%get_transport_properties(this%rho, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
+        call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
 
         if (this%mix%ns .GT. 1) then
             dYsdx => gradYs(:,:,:,1:this%mix%ns); dYsdy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns); dYsdz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);

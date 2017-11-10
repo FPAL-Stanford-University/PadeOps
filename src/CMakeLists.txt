@@ -3,6 +3,7 @@ file(GLOB derivatives_source_files derivatives/*.F90)
 file(GLOB filters_source_files filters/*.F90)
 file(GLOB io_source_files io/*.F90)
 file(GLOB grid_source_files grid/*.F90)
+file(GLOB transportCoefficients_source_files compressible/transportCoefficients/*.F90)
 file(GLOB compressible_source_files compressible/*.F90)
 file(GLOB solid_source_files solid/*.F90)
 file(GLOB poisson_source_files incompressible/poisson/*.F90)
@@ -39,7 +40,7 @@ if (MPI_Fortran_COMPILER_FLAGS)
 endif()
 
 # Create a library called CompressibleOps
-add_library(CompressibleOps STATIC ${grid_source_files} ${compressible_source_files})
+add_library(CompressibleOps STATIC ${grid_source_files} ${transportCoefficients_source_files} ${compressible_source_files})
 target_link_libraries(CompressibleOps PadeOps ${MPI_LIBRARIES})
 
 if (MPI_Fortran_COMPILER_FLAGS)
