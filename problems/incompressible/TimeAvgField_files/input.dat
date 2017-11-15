@@ -1,0 +1,19 @@
+&INPUT
+inputdir     = "/scratch/globus/aghate/HIT_Decaying/Case10/ad_data"        ! Directory for input files
+outputdir    = "/scratch/globus/aghate/HIT_Decaying/Case10/mean_data"        ! Directory for output files
+RunID        = 6
+Lx           = 31.4159265359d0
+Ly           = 6.28318530718d0
+Lz           = 6.28318530718d0
+nx           = 1280
+ny           = 256
+nz           = 256
+tstart1      = 7950
+tstep1       = 75
+tstop1       = 123000
+tstart2      = 130000
+tstep2       = 75
+tstop2       = 175650
+fieldTag     = "uVel" 
+meanfieldTag = "U_mn"
+/

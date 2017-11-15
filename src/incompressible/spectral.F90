@@ -56,7 +56,7 @@ module spectralMod
         integer(kind=8) :: plan_c2c_bwd_z_oop
         integer(kind=8) :: plan_c2c_bwd_z_ip
         integer(kind=8) :: plan_r2c_z, plan_c2r_z 
-        complex(rkind), dimension(:), allocatable :: k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact
+        complex(rkind), dimension(:), allocatable :: k3_C2Cder, k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact
         real(rkind), dimension(:), allocatable, public :: k1inZ, k2inZ, k3inZ
 
         real(rkind), dimension(:), allocatable :: mk3sq
@@ -116,6 +116,7 @@ module spectralMod
             procedure, private  :: interp_E2C_spect_real
             procedure, private  :: interp_C2E_spect_real
             
+            procedure           :: ddz_C2C_real_inplace
             generic             :: ddz_E2C_spect => ddz_E2C_spect_cmplx, ddz_E2C_spect_real
             generic             :: ddz_C2E_spect => ddz_C2E_spect_cmplx, ddz_C2E_spect_real
             generic             :: interp_E2C_spect => interp_E2C_spect_cmplx, interp_E2C_spect_real
@@ -501,6 +502,27 @@ contains
 
     end subroutine 
 
+    subroutine ddz_C2C_real_inplace(this, arr_inout)
+      class(spectral), intent(inout) :: this
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)  ), intent(inout)  :: arr_inout
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft_r2c(this%plan_r2c_z, arr_inout, this%fhatz)
+         do k = 1,this%physdecomp%zsz(3)/2 ! Note that the oddball is ignored 
+            do j = 1,this%physdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%physdecomp%zsz(1)
+                  this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%k3_C2Cder(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft_c2r(this%plan_c2r_z, this%fhatz, arr_inout)
+         arr_inout = arr_inout*this%normfactz
+      end if
+
+    end subroutine 
+    
     subroutine ddz_C2E_spect_cmplx(this, arr_in, arr_out)
       class(spectral), intent(inout) :: this
       complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)  ), intent(in )  :: arr_in
@@ -800,11 +822,13 @@ contains
          allocate(this%C2Eshift(nz))
          allocate(this%E2Cshift(nz))
          allocate(this%mk3sq(nz))
+         allocate(this%k3_C2Cder(nz))
          allocate(k3_1d(nz))
          k3_1d = GetWaveNums(nz,dz) 
          this%mk3sq = -(k3_1d**2)
          this%k3_C2Eshift = imi*k3_1d*exp(-imi*k3_1d*dz/two)
          this%k3_E2Cshift = imi*k3_1d*exp( imi*k3_1d*dz/two)
+         this%k3_C2Cder   = imi*k3_1d
          this%C2Eshift = exp(-imi*k3_1d*dz/two)
          this%E2Cshift = exp( imi*k3_1d*dz/two)
 
