@@ -140,7 +140,7 @@ module IncompressibleGrid
         integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false. 
         logical :: useExtraForcing = .false., useGeostrophicForcing = .false., isInviscid = .false.  
-        logical :: useSGS = .false. 
+        logical :: useSGS = .false., computeTurbinePressure = .false.  
         logical :: UseDealiasFilterVert = .false.
         logical :: useDynamicProcedure 
         logical :: useCFL = .false.  
@@ -211,8 +211,9 @@ module IncompressibleGrid
         integer :: P_dumpFreq = 10, P_compFreq = 10
         logical :: AlreadyHaveRHS = .false.
         logical :: ComputeDNSPressure = .false., ComputeFringePressure = .false.  
-        real(rkind), dimension(:,:,:), allocatable :: pressure, pressure_dns, pressure_fringe
-        complex(rkind), dimension(:,:,:), allocatable ::urhs_dns,vrhs_dns,wrhs_dns,urhs_fringe,vrhs_fringe,wrhs_fringe
+        real(rkind), dimension(:,:,:), allocatable :: pressure, pressure_dns, pressure_fringe, pressure_turbine
+        complex(rkind), dimension(:,:,:), allocatable :: urhs_dns,vrhs_dns,wrhs_dns,urhs_fringe,vrhs_fringe,wrhs_fringe
+        complex(rkind), dimension(:,:,:), allocatable :: urhs_turbine, vrhs_turbine, wrhs_turbine
 
         logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false. 
 
@@ -336,7 +337,7 @@ contains
         integer :: ii, idx, temploc(1)
         logical, intent(in), optional :: initialize2decomp
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
-        logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false. 
+        logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false.  
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -352,7 +353,7 @@ contains
                                  useExhaustiveFFT, dealiasFact 
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, &
                                  KSdoZfilter, nKSvertFilt
-        namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq, computeDNSPressure, computeFringePressure            
+        namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq, computeDNSPressure, computeTurbinePressure, computeFringePressure            
         namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir, deleteInstructions
 
         ! STEP 1: READ INPUT 
@@ -404,6 +405,7 @@ contains
         this%t_pointProbe = t_pointProbe; this%dPfdx = dPfdx; this%dPfdy = dPfdy; this%dPfdz = dPfdz
         this%InitSpinUp = InitSpinUp; this%BulkRichardson = BulkRichardson
         this%computeDNSpressure = computeDNSpressure; this%computefringePressure = computeFringePressure
+        this%computeTurbinePressure = computeTurbinePressure
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC); allocate(this%gpE)
@@ -814,7 +816,7 @@ contains
                 !else                                     
                 !    allocate(this%probe_data(1:4,1:this%nprobes,0:this%probeTimeLimit-1)) ! Store time + 3 fields
                 !end if
-                allocate(this%probe_data(1:8,1:this%nprobes,0:this%probeTimeLimit-1))
+                allocate(this%probe_data(1:9,1:this%nprobes,0:this%probeTimeLimit-1))
                 this%probe_data = 0.d0
                 ii = 1
                 do idx = 1,size(probe_locs,2)
@@ -954,7 +956,16 @@ contains
                allocate(this%vrhs_dns(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
                allocate(this%wrhs_dns(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
                allocate(this%pressure_dns(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
-            end if 
+            end if
+            if (this%computeTurbinePressure) then
+               allocate(this%urhs_turbine(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+               allocate(this%vrhs_turbine(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+               allocate(this%wrhs_turbine(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
+               allocate(this%pressure_turbine(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+               this%urhs_turbine = dcmplx(0.d0, 0.d0)
+               this%vrhs_turbine = dcmplx(0.d0, 0.d0)
+               this%wrhs_turbine = dcmplx(0.d0, 0.d0)
+            end if
             call this%ComputePressure()
             call message(1, "Done allocating storage for pressure")
         end if 
@@ -1279,7 +1290,7 @@ contains
 
     subroutine computePressure(this)
         class(igrid), intent(inout) :: this
-        logical :: copyFringeRHS, copyDNSRHS
+        logical :: copyFringeRHS, copyDNSRHS, copyTurbineRHS
 
         if (this%computeDNSpressure) then
            copyDNSRHS = .true. 
@@ -1293,8 +1304,14 @@ contains
            copyFringeRHS = .false. 
         end if
 
+        if (this%computeTurbinePressure) then
+            copyTurbineRHS = .true.
+         else
+            copyTurbineRHS = .false. 
+        end if
+
         ! STEP 1: Populate RHS 
-        call this%populate_rhs(CopyForDNSpress=copyDNSRHS, CopyForFringePress=copyFringeRHS)
+        call this%populate_rhs(CopyForDNSpress=copyDNSRHS, CopyForFringePress=copyFringeRHS, copyForTurbinePress=copyTurbineRHS)
 
         ! STEP 2: Compute pressure
         if (this%fastCalcPressure) then
@@ -1307,6 +1324,10 @@ contains
             if (this%computeFringePressure) then
                call this%padepoiss%getPressure(this%urhs_fringe,this%vrhs_fringe,this%wrhs_fringe,this%pressure_fringe)
                call this%dealiasRealField_C(this%pressure_fringe)
+            end if
+            if (this%computeTurbinePressure) then
+               call this%padepoiss%getPressure(this%urhs_turbine,this%vrhs_turbine,this%wrhs_turbine,this%pressure_turbine)
+               call this%dealiasRealField_C(this%pressure_turbine)
             end if
         else
             call this%padepoiss%getPressure(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
@@ -1745,11 +1766,18 @@ contains
 
     end subroutine
 
-    subroutine populate_rhs(this, CopyForDNSpress, CopyForFringePress)
+    subroutine populate_rhs(this, CopyForDNSpress, CopyForFringePress, copyForTurbinePress)
         class(igrid), intent(inout) :: this
         !integer,           intent(in)    :: RKstage
-        logical, intent(in), optional :: CopyForDNSpress, CopyForFringePress
-        logical :: copyFringeRHS     
+        logical, intent(in), optional :: CopyForDNSpress, CopyForFringePress, copyForTurbinePress
+        logical :: copyFringeRHS, copyTurbRHS
+
+
+        if (present(copyForTurbinePress)) then
+           copyTurbRHS = copyForTurbinePress
+        else
+           copyTurbRHS = .false. 
+        end if
 
         ! Step 1: Non Linear Term 
         if (useSkewSymm) then
@@ -1772,12 +1800,17 @@ contains
         ! Step 3b: Wind Turbines
         !if (this%useWindTurbines .and. (RKstage==1)) then
         if (this%useWindTurbines) then
-           if (allocated(this%inst_horz_avg_turb)) then
-               call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
-                                    this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep, this%inst_horz_avg_turb)
+           if (copyTurbRHS) then
+            call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC, this%u_rhs, this%v_rhs, this%w_rhs, &
+                  & this%newTimestep, uturb=this%urhs_turbine, vturb=this%vrhs_turbine, wturb=this%wrhs_turbine) 
            else
-               call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
-                                    this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep)
+            if (allocated(this%inst_horz_avg_turb)) then
+                call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
+                                     this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep, this%inst_horz_avg_turb)
+            else
+                call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
+                                     this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep)
+            end if
            end if
         end if 
        
@@ -1794,9 +1827,15 @@ contains
        
         if (present(CopyForDNSpress)) then
             if (CopyForDNSpress) then
-               this%urhs_dns = this%u_rhs
-               this%vrhs_dns = this%v_rhs
-               this%wrhs_dns = this%w_rhs
+               if (copyTurbRHS) then
+                  this%urhs_dns = this%u_rhs - this%urhs_turbine 
+                  this%vrhs_dns = this%v_rhs - this%vrhs_turbine
+                  this%wrhs_dns = this%w_rhs - this%wrhs_turbine
+               else
+                  this%urhs_dns = this%u_rhs
+                  this%vrhs_dns = this%v_rhs
+                  this%wrhs_dns = this%w_rhs
+               end if
             end if   
         end if
 
@@ -1949,6 +1988,10 @@ contains
 
                 if (this%computeFringePressure) then
                     this%probe_data(8,idx,this%step) = this%Pressure_fringe(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                end if
+                
+                if (this%computeTurbinePressure) then
+                    this%probe_data(9,idx,this%step) = this%Pressure_turbine(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
                 end if
             end do 
         end if
@@ -2116,6 +2159,7 @@ contains
                 if ( (mod(this%step,this%P_dumpFreq) == 0).or. (forceDumpPressure)) then
                     call this%dumpFullField(this%pressure,"prss")
                     if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
+                    if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrb')
                     if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
                 end if 
             end if 
@@ -2187,6 +2231,7 @@ contains
            if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
+           if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrb')
            if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
            if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
            if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
@@ -2236,6 +2281,7 @@ contains
            if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
            if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
+           if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrb')
            if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
            if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
            if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
@@ -4727,6 +4773,12 @@ contains
                     call decomp_2d_write_plane(1,this%Pressure_dns,dirid, pid, fname, this%gpC)
                 end if 
 
+                if (this%computeturbinePressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".ptb"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure_turbine,dirid, pid, fname, this%gpC)
+                end if 
+                
                 if (this%computeFringePressure) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plF"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
@@ -4800,6 +4852,12 @@ contains
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plD"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                     call decomp_2d_write_plane(1,this%Pressure_dns,dirid, pid, fname, this%gpC)
+                end if 
+                
+                if (this%computeturbinePressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".ptb"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure_turbine,dirid, pid, fname, this%gpC)
                 end if 
 
                 if (this%computeFringePressure) then
@@ -4876,6 +4934,12 @@ contains
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plD"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                     call decomp_2d_write_plane(1,this%Pressure_dns,dirid, pid, fname, this%gpC)
+                end if 
+                
+                if (this%computeturbinePressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_xz",pid,".ptb"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure_turbine,dirid, pid, fname, this%gpC)
                 end if 
 
                 if (this%computeFringePressure) then
@@ -5036,6 +5100,7 @@ contains
                 if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
                 if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
                 if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
+                if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrn')
                 if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
                 if (this%useWindTurbines) then
                     this%WindTurbineArr%dumpTurbField = .true.
