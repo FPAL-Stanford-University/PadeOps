@@ -36,7 +36,7 @@ program test_ScalarDynProc_performance
    logical :: computeFbody = .false.  
    character(len=clen) :: inputfile = "/work/04076/tg833754/stampede2/me461/testing_data/inputsgs.dat"
 
-   real(rkind), parameter :: texpect = 5.2-02
+   real(rkind), parameter :: texpect = 5.2E-02
    real(rkind) :: maxErr_kappa, maxErr_nu, tactual
 
    call mpi_init(ierr)

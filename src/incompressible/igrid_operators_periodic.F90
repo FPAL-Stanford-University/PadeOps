@@ -12,7 +12,7 @@ module igrid_Operators_Periodic
 
    type :: Ops_Periodic
       private
-      complex(rkind), dimension(:,:,:), allocatable :: cbuffy1, cbuffy2
+      complex(rkind), dimension(:,:,:), allocatable :: cbuffy1, cbuffy2, cbuffz
       real(rkind),    dimension(:,:,:), allocatable :: rbuffy, rbuffz1, rbuffz2
       type(decomp_info), pointer :: gp
       type(spectral)  :: spect
@@ -30,14 +30,37 @@ module igrid_Operators_Periodic
          procedure :: ddx
          procedure :: ddy
          procedure :: ddz
+         procedure :: ddz_cmplx2cmplx
          procedure :: ReadField3D
          procedure :: WriteField3D
          procedure :: allocate3Dfield
          procedure :: SolvePoisson_oop
          procedure :: SolvePoisson_ip
+         procedure :: dealiasField
+         procedure :: link_spect
    end type 
 
 contains
+
+
+
+subroutine link_spect(this, spectout)
+   class(Ops_Periodic), intent(in), target :: this
+   type(spectral), pointer, intent(out) :: spectout
+
+   spectout => this%spect
+
+end subroutine
+
+
+subroutine dealiasField(this, f)
+   class(Ops_Periodic), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(inout)  :: f
+   call this%spect%fft(f,this%cbuffy1)
+   call this%spect%dealias(this%cbuffy1)
+   call this%spect%ifft(this%cbuffy1,f)
+
+end subroutine
 
 subroutine GetKmod_Fourier(kinout)
    real(rkind), dimension(:), intent(inout) :: kinout
@@ -72,6 +95,7 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, gp, InputDir, OutputDir)
                   exhaustiveFFT=.TRUE., init_periodicInZ=.TRUE., dealiasF=(2.d0/3.d0))
    
    call this%spect%alloc_r2c_out(this%cbuffy1) 
+   allocate(this%cbuffz(this%spect%spectdecomp%zsz(1),this%spect%spectdecomp%zsz(2),this%spect%spectdecomp%zsz(3)))
    !call this%spect%alloc_r2c(this%cbuffy2) 
    
    this%inputdir  = inputdir
@@ -108,9 +132,20 @@ subroutine ddy(this,f, dfdy)
    real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: dfdy
   
    call this%spect%fft(f,this%cbuffy1)
-   call this%spect%mtimes_ik1_ip(this%cbuffy1)
+   call this%spect%mtimes_ik2_ip(this%cbuffy1)
    call this%spect%ifft(this%cbuffy1,dfdy)
 end subroutine 
+
+subroutine ddz_cmplx2cmplx(this, fhat)
+   class(Ops_Periodic), intent(inout) :: this
+   complex(rkind), dimension(this%spect%spectdecomp%ysz(1),this%spect%spectdecomp%ysz(2),this%spect%spectdecomp%ysz(3)), intent(inout)  :: fhat
+
+   call transpose_y_to_z(fhat, this%cbuffz,this%spect%spectdecomp)
+   call this%spect%ddz_C2C_complex_inplace(this%cbuffz)
+   call transpose_z_to_y(this%cbuffz, fhat, this%spect%spectdecomp)
+end subroutine 
+
+
 
 subroutine ddz(this, f, dfdz)
    class(Ops_Periodic), intent(inout) :: this
@@ -125,30 +160,48 @@ subroutine ddz(this, f, dfdz)
    call transpose_y_to_x(this%rbuffy,dfdz,this%gp)
 end subroutine 
 
-subroutine ReadField3D(this, field, label, tidx, runID)
+subroutine ReadField3D(this, field, label, tidx, runID, newinputdir)
    use decomp_2d_io
+   use exits, only: GracefulExit
    class(Ops_Periodic), intent(inout) :: this
    real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out)  :: field
    character(len=clen) :: tempname, fname
    character(len=4), intent(in) :: label
    integer, intent(in) :: tidx, runID
-         
+   character(len=clen), intent(in), optional :: newinputdir
+   integer :: ierr
+
    write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",runID, "_",label,"_t",tidx,".out"
-   fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+   if (present(newinputdir)) then
+      fname = newinputdir(:len_trim(newinputdir))//"/"//trim(tempname)
+   else
+      fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+   end if
+   open(777,file=fname,status='old',iostat=ierr)
+   if (ierr .ne. 0) then
+      if (nrank == 0) print*, "FILE NOT FOUND"
+      if (nrank == 0) print*, fname
+      call gracefulExit("File not found", 321)
+   end if
+   close(777)
    call decomp_2d_read_one(1,field,fname,this%gp)
 end subroutine  
 
-subroutine WriteField3D(this, field, label, tidx, runID)
+subroutine WriteField3D(this, field, label, tidx, runID, newOutputDir)
    use decomp_2d_io
    class(Ops_Periodic), intent(inout) :: this
    real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: field
    character(len=clen) :: tempname, fname
    character(len=4), intent(in) :: label
    integer, intent(in) :: tidx, runID
+   character(len=clen), intent(in), optional :: newOutputdir
          
    write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",runID, "_",label,"_t",tidx,".out"
-   fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-   
+   if (present(newOutputDir)) then
+      fname = newOutputDir(:len_trim(newOutputDir))//"/"//trim(tempname)
+   else
+      fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+   end if
    call decomp_2d_write_one(1,field,fname,this%gp)
 end subroutine  
 

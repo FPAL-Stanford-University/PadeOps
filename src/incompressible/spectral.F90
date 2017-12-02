@@ -42,7 +42,8 @@ module spectralMod
         logical, public :: carryingZeroK = .false.
         integer, public :: zeroK_i = 123456, zeroK_j = 123456
         real(rkind), dimension(:,:), allocatable :: GsurfaceFilter 
-        real(rkind) :: dealiasFact = 2.d0/3.d0, dx, dy, dz
+        real(rkind) :: dealiasFact = 2.d0/3.d0
+        real(rkind), public :: dx, dy, dz
 
         real(rkind), dimension(:,:,:), allocatable :: G_bandpass
         integer, dimension(:,:,:), allocatable :: G_PostProcess
@@ -117,6 +118,7 @@ module spectralMod
             procedure, private  :: interp_C2E_spect_real
             
             procedure           :: ddz_C2C_real_inplace
+            procedure           :: ddz_C2C_complex_inplace
             generic             :: ddz_E2C_spect => ddz_E2C_spect_cmplx, ddz_E2C_spect_real
             generic             :: ddz_C2E_spect => ddz_C2E_spect_cmplx, ddz_C2E_spect_real
             generic             :: interp_E2C_spect => interp_E2C_spect_cmplx, interp_E2C_spect_real
@@ -519,6 +521,27 @@ contains
          end do
          call dfftw_execute_dft_c2r(this%plan_c2r_z, this%fhatz, arr_inout)
          arr_inout = arr_inout*this%normfactz
+      end if
+
+    end subroutine 
+    
+    subroutine ddz_C2C_complex_inplace(this, arr_inout)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(inout)  :: arr_inout
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft(this%plan_c2c_fwd_z_oop, arr_inout, this%ctmpz)
+         do k = 1,this%spectdecomp%zsz(3)
+            do j = 1,this%spectdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%spectdecomp%zsz(1)
+                  this%ctmpz(i,j,k) = this%ctmpz(i,j,k)*this%k3_C2Cder(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft(this%plan_c2c_bwd_z_oop, this%ctmpz, arr_inout)
+         arr_inout =  this%normfactz*arr_inout
       end if
 
     end subroutine 

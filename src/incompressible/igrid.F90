@@ -285,6 +285,7 @@ module IncompressibleGrid
             procedure, private :: dump_stats3D
             procedure, private :: compute_stats3D 
             procedure, private :: dealiasFields
+            procedure, private :: dealias_rhs
             procedure, private :: ApplyCompactFilter 
             procedure, private :: addNonLinearTerm_skewSymm
             procedure, private :: populate_rhs
@@ -1035,6 +1036,24 @@ contains
 
     end subroutine 
 
+
+   subroutine dealias_rhs(this, uin, vin, win)
+      class(igrid), intent(inout) :: this
+      complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout ) :: uin, vin
+      complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: win
+
+      call this%spectC%dealias(uin)
+      call this%spectC%dealias(vin)
+      if (this%PeriodicInZ) then
+          call transpose_y_to_z(win, this%cbuffzE(:,:,:,1), this%sp_gpE)
+          call this%spectC%dealias_edgeField(this%cbuffzE(:,:,:,1))
+          call transpose_z_to_y(this%cbuffzE(:,:,:,1),win,this%sp_gpE)
+      else
+          call this%spectE%dealias(win)
+      end if 
+   end subroutine 
+
+
     subroutine timeAdvance(this, dtforced)
         class(igrid), intent(inout) :: this
         real(rkind), intent(in), optional :: dtforced
@@ -1315,23 +1334,28 @@ contains
 
         ! STEP 2: Compute pressure
         if (this%fastCalcPressure) then
-            call this%Padepoiss%getPressureAndUpdateRHS(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
-            call this%dealiasRealField_C(this%pressure)
+           call this%dealias_rhs(this%u_rhs, this%v_rhs, this%w_rhs) 
+           call this%Padepoiss%getPressureAndUpdateRHS(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
+            !call this%dealiasRealField_C(this%pressure)
             if (this%computeDNSpressure) then
+               call this%dealias_rhs(this%urhs_dns, this%vrhs_dns, this%wrhs_dns) 
                call this%padepoiss%getPressure(this%urhs_dns,this%vrhs_dns,this%wrhs_dns,this%pressure_dns)
-               call this%dealiasRealField_C(this%pressure_dns)
+               !call this%dealiasRealField_C(this%pressure_dns)
             end if
             if (this%computeFringePressure) then
+               call this%dealias_rhs(this%urhs_fringe, this%vrhs_fringe, this%wrhs_fringe) 
                call this%padepoiss%getPressure(this%urhs_fringe,this%vrhs_fringe,this%wrhs_fringe,this%pressure_fringe)
-               call this%dealiasRealField_C(this%pressure_fringe)
+               !call this%dealiasRealField_C(this%pressure_fringe)
             end if
             if (this%computeTurbinePressure) then
+               call this%dealias_rhs(this%urhs_turbine, this%vrhs_turbine, this%wrhs_turbine) 
                call this%padepoiss%getPressure(this%urhs_turbine,this%vrhs_turbine,this%wrhs_turbine,this%pressure_turbine)
-               call this%dealiasRealField_C(this%pressure_turbine)
+               !call this%dealiasRealField_C(this%pressure_turbine)
             end if
         else
+            call this%dealias_rhs(this%u_rhs, this%v_rhs, this%w_rhs) 
             call this%padepoiss%getPressure(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
-            call this%dealiasRealField_C(this%pressure)
+            !call this%dealiasRealField_C(this%pressure)
         end if 
 
         if (.not. useSkewSymm) then 
