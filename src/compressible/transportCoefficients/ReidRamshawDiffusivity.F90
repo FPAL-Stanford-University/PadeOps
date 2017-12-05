@@ -23,6 +23,7 @@ module ReidRamshawDiffusivityMod
 
     contains
 
+        procedure :: reidBinaryDiffusion
         procedure :: get_diff
         final     :: destroy
 
@@ -75,6 +76,7 @@ contains
     pure subroutine reidBinaryDiffusion(this, p, T, diff, i, j)
         class(reidRamshawDiffusivity),   intent(in)  :: this
         real(rkind), dimension(:,:,:),   intent(in)  :: p, T
+        integer,                         intent(in)  :: i, j
         real(rkind), dimension(:,:,:),   intent(out) :: diff
 
         real(rkind), dimension(size(T,1),size(T,2),size(T,3)) :: T_star, Omega_ij

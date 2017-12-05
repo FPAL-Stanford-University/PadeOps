@@ -1,4 +1,4 @@
-module ConstantRatioBulkViscosityMod
+module ConstRatioBulkViscosityMod
 
     use kind_parameters,  only: rkind
     use constants,        only: zero

@@ -161,8 +161,6 @@ contains
         logical     :: rewrite_viz = .true.
         integer     :: vizramp = 5
 
-        type(powerLawViscosity) :: visc
-
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
                          outputdir, vizprefix, tviz, reduce_precision, &
                                       periodicx, periodicy, periodicz, &
@@ -245,9 +243,9 @@ contains
         ! allocate(this%mix , source=mixture(this%decomp,ns))
 
         ! Set default materials with the same gam and Rgas
-        do i = 1,ns
-            call this%mix%set_material(i,idealgas(gam,Rgas),visc)
-        end do
+        ! do i = 1,ns
+        !     call this%mix%set_material(i,idealgas(gam,Rgas),visc)
+        ! end do
 
         nfields = kap_index + 2*ns   ! Add ns massfractions to fields
         ncnsrv  = ncnsrv   + ns - 1  ! Add ns-1 conserved variables for the massfraction equations
@@ -281,6 +279,11 @@ contains
         this%fields = zero
         this%Ys(:,:,:,1) = one   ! So that all massfractions add up to unity
 
+        ! Finally, set the local array dimensions
+        this%nxp = this%decomp%ysz(1)
+        this%nyp = this%decomp%ysz(2)
+        this%nzp = this%decomp%ysz(3)
+
         ! Go to hooks if a different initialization is derired 
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         this%mix, this%tstop, this%dtfixed, tviz)
@@ -289,6 +292,12 @@ contains
         call this%mix%update(this%Ys)
         call this%mix%get_e_from_p(this%rho,this%p,this%e)
         call this%mix%get_T(this%e,this%T)
+
+        print *, "Cp(1,1,1) = ", this%mix%Cp(1,1,1)
+        print *, "Cp(-1,1,1) = ", this%mix%Cp(this%nxp,1,1)
+
+        print *, "T(1,1,1) = ", this%T(1,1,1)
+        print *, "T(-1,1,1) = ", this%T(this%nxp,1,1)
 
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
@@ -340,11 +349,6 @@ contains
         call this%gfil%init(                          this%decomp, &
                          periodicx,     periodicy,      periodicz, &
                         "gaussian",    "gaussian",     "gaussian"  )      
-
-        ! Finally, set the local array dimensions
-        this%nxp = this%decomp%ysz(1)
-        this%nyp = this%decomp%ysz(2)
-        this%nzp = this%decomp%ysz(3)
 
 
         ! Allocate 2 buffers for each of the three decompositions
@@ -551,6 +555,23 @@ contains
 
         ! call this%getPhysicalProperties()
         call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
+        print *, "mu(1,1,1) = ",  this%mu(1,1,1)
+        print *, "mu(-1,1,1) = ", this%mu(this%nxp,1,1)
+        print *, "beta(1,1,1) = ",  this%bulk(1,1,1)
+        print *, "beta(-1,1,1) = ", this%bulk(this%nxp,1,1)
+
+        print *, "D_N2(1,1,1) = ",  this%diff(1,1,1,1)
+        print *, "D_N2(-1,1,1) = ", this%diff(this%nxp,1,1,1)
+
+        print *, "D_O2(1,1,1) = ",  this%diff(1,1,1,2)
+        print *, "D_O2(-1,1,1) = ", this%diff(this%nxp,1,1,2)
+
+        print *, "D_SF6(1,1,1) = ",  this%diff(1,1,1,3)
+        print *, "D_SF6(-1,1,1) = ", this%diff(this%nxp,1,1,3)
+
+        print *, "D_Ac(1,1,1) = ",  this%diff(1,1,1,4)
+        print *, "D_Ac(-1,1,1) = ", this%diff(this%nxp,1,1,4)
+        stop
 
         if (this%mix%ns .GT. 1) then
             dYsdx => gradYs(:,:,:,              1:  this%mix%ns)
