@@ -1,7 +1,7 @@
 program test_Miranda_reader
     use mpi
     use kind_parameters, only : clen
-    use miranda_tools, only: miranda_reader
+    use miranda_reader_mod, only: miranda_reader
     use io_VTK_stuff, only: io_VTK
     use exits, only: message, GracefulExit
 

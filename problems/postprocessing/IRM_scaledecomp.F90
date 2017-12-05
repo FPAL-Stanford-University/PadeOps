@@ -1,14 +1,14 @@
 module IRM_scaledecomp_mod
     use mpi
-    use kind_parameters,  only: rkind, clen, mpirkind, mpickind
-    use constants,        only: zero, eps, half, one, three
-    use miranda_tools,    only: miranda_reader
-    use DerivativesMod,   only: derivatives
-    use FiltersMod,       only: filters
-    use decomp_2d,        only: nrank, nproc, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y, &
-                                decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize
-    use exits,            only: message
-    use io_hdf5_stuff,    only: io_hdf5
+    use kind_parameters,    only: rkind, clen, mpirkind, mpickind
+    use constants,          only: zero, eps, half, one, three
+    use miranda_reader_mod, only: miranda_reader
+    use DerivativesMod,     only: derivatives
+    use FiltersMod,         only: filters
+    use decomp_2d,          only: nrank, nproc, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y, &
+                                  decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize
+    use exits,              only: message
+    use io_hdf5_stuff,      only: io_hdf5
 
     implicit none
 
@@ -552,16 +552,16 @@ end module
 
 program IRM_scaledecomp
     use mpi
-    use kind_parameters, only: rkind, clen
-    use constants,       only: zero
-    use miranda_tools,   only: miranda_reader
-    use DerivativesMod,  only: derivatives
-    use FiltersMod,      only: filters
-    use gridtools,       only: alloc_buffs
-    use operators,       only: curl, gradient, divergence
-    use reductions,      only: P_AVGZ, P_MAXVAL, P_MINVAL, P_SUM
-    use timer,           only: tic, toc
-    use exits,           only: message, GracefulExit
+    use kind_parameters,    only: rkind, clen
+    use constants,          only: zero
+    use miranda_reader_mod, only: miranda_reader
+    use DerivativesMod,     only: derivatives
+    use FiltersMod,         only: filters
+    use gridtools,          only: alloc_buffs
+    use operators,          only: curl, gradient, divergence
+    use reductions,         only: P_AVGZ, P_MAXVAL, P_MINVAL, P_SUM
+    use timer,              only: tic, toc
+    use exits,              only: message, GracefulExit
 
     use IRM_scaledecomp_mod
 

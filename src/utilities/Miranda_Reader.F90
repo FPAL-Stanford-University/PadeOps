@@ -1,4 +1,4 @@
-module miranda_tools
+module miranda_reader_mod
 
     use kind_parameters, only: rkind,clen
     use decomp_2d,       only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize,       &

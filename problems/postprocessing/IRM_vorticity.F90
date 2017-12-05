@@ -1,17 +1,17 @@
 module IRM_vorticity_mod
     use mpi
-    use kind_parameters,  only: rkind, clen, mpirkind, mpickind
-    use constants,        only: zero, eps, half, one, three
-    use fftstuff,         only: ffts
-    use miranda_tools,    only: miranda_reader
-    use io_VTK_stuff,     only: io_VTK
-    use DerivativesMod,   only: derivatives
-    use FiltersMod,       only: filters
-    use decomp_2d,        only: nrank, nproc, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y, &
-                                decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize
-    use mytranspose2DMod, only: mytranspose2D
-    use exits,            only: message, warning, GracefulExit
-    use reductions,       only: P_MAXVAL, P_AVGZ
+    use kind_parameters,    only: rkind, clen, mpirkind, mpickind
+    use constants,          only: zero, eps, half, one, three
+    use fftstuff,           only: ffts
+    use miranda_reader_mod, only: miranda_reader
+    use io_VTK_stuff,       only: io_VTK
+    use DerivativesMod,     only: derivatives
+    use FiltersMod,         only: filters
+    use decomp_2d,          only: nrank, nproc, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y, &
+                                  decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize
+    use mytranspose2DMod,   only: mytranspose2D
+    use exits,              only: message, warning, GracefulExit
+    use reductions,         only: P_MAXVAL, P_AVGZ
 
     implicit none
 
@@ -1075,17 +1075,17 @@ end module
 
 program IRM_vorticity
     use mpi
-    use kind_parameters, only: rkind, clen
-    use constants,       only: zero, half, one, four, eps
-    use miranda_tools,   only: miranda_reader
-    use io_VTK_stuff,    only: io_VTK
-    use DerivativesMod,  only: derivatives
-    use FiltersMod,      only: filters
-    use gridtools,       only: alloc_buffs
-    use operators,       only: curl, gradient, divergence
-    use reductions,      only: P_AVGZ, P_MAXVAL, P_MINVAL, P_SUM
-    use timer,           only: tic, toc
-    use exits,           only: message, GracefulExit
+    use kind_parameters,    only: rkind, clen
+    use constants,          only: zero, half, one, four, eps
+    use miranda_reader_mod, only: miranda_reader
+    use io_VTK_stuff,       only: io_VTK
+    use DerivativesMod,     only: derivatives
+    use FiltersMod,         only: filters
+    use gridtools,          only: alloc_buffs
+    use operators,          only: curl, gradient, divergence
+    use reductions,         only: P_AVGZ, P_MAXVAL, P_MINVAL, P_SUM
+    use timer,              only: tic, toc
+    use exits,              only: message, GracefulExit
 
     use IRM_vorticity_mod
 
