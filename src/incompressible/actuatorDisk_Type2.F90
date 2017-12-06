@@ -145,7 +145,8 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     end if 
 
      ntry = 2*ceiling(diam/min(dx, dy, dz))
-    
+     ntry = p_maxval(ntry)
+ 
     if (this%Am_I_Active) then
         allocate(this%rbuff(size(xG,2),size(xG,3)))
         call sample_on_circle(diam/2.d0,yLoc,zLoc, this%ys,this%zs,ntry)
@@ -170,8 +171,10 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
                 this%startEnds(7,j) = xlen
         end do  
         this%normfactor = 1.d0/(real(size(this%xs),rkind))
+        call message(2,"size(xs) ", size(this%xs))
     else
         deallocate(this%dsq, this%tag_face)
+        !this%normfactor = 0.d0
     end if 
 
     call message(1, "Initializing Actuator Disk (ADM Type=2) number", ActuatorDisk_T2ID)
@@ -183,11 +186,11 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
                                 this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
                                 this%startEnds(5,j),this%startEnds(6,j),this%startEnds(7,j))
     end do
-    correction_factor = p_sum(this%smearing_base)*dx*dy*dz*this%pfactor*this%normfactor
+    correction_factor = p_sum(this%smearing_base)*dx*dy*dz*this%pfactor*p_maxval(this%normfactor)
     !print*, 'corr factor = ', correction_factor !--- this is necessary when, e.g., turbine is close to the bottom wall and part of the cloud is below the wall
-    call message(2, "correction factor = ", correction_factor)
-    this%smearing_base = this%smearing_base/correction_factor
     call message(2, "Smearing grid parameter, ntry", ntry)
+    call message(2, "correction factor", correction_factor)
+    this%smearing_base = this%smearing_base/correction_factor
     call toc(mpi_comm_world, time2initialize)
     call message(2, "Time (seconds) to initialize", time2initialize)
 
@@ -317,7 +320,7 @@ subroutine sample_on_circle(R,xcen, ycen, xloc,yloc,np)
 
     allocate(xline(np),yline(np))
     allocate(xtmp(np**2),ytmp(np**2), rtmp(np**2), tag(np**2))
-    
+
     xline = linspace(-R,R,np+1)
     yline = linspace(-R,R,np+1)
     idx = 1

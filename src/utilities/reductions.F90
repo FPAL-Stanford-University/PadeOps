@@ -10,7 +10,7 @@ module reductions
     public :: P_MAXVAL, P_MINVAL, P_SUM, P_MEAN, P_AVGZ
 
     interface P_MAXVAL
-        module procedure P_MAXVAL_arr4, P_MAXVAL_arr3, P_MAXVAL_arr2, P_MAXVAL_sca
+        module procedure P_MAXVAL_arr4, P_MAXVAL_arr3, P_MAXVAL_arr2, P_MAXVAL_sca, P_MAXVAL_int
     end interface
 
     interface P_MINVAL
@@ -89,6 +89,15 @@ contains
         integer :: ierr
 
         call MPI_Allreduce(x, maximum, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
+
+    end function
+    
+    function P_MAXVAL_int(x) result(maximum)
+        integer, intent(in) :: x
+        integer :: maximum
+        integer :: ierr
+
+        call MPI_Allreduce(x, maximum, 1, mpi_int, MPI_MAX, MPI_COMM_WORLD, ierr)
 
     end function
     

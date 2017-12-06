@@ -2149,6 +2149,7 @@ contains
         end if 
 
         if ( restartWrite .or. (mod(this%step,this%t_restartDump) == 0) ) then
+            call message(0,"About to dump restart files")
             call this%dumpRestartfile()
             call message(0,"Scheduled restart file dumped.")
         end if
@@ -2178,8 +2179,8 @@ contains
 
         if (mod(this%step,this%t_dataDump) == 0) then
            call message(0,"Scheduled visualization dump.")
+           !call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%u,'uVel')
-           call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
            call this%dumpVisualizationInfo()
 
@@ -2702,15 +2703,21 @@ contains
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call message(0,"Writing "//trim(fname))
         call decomp_2d_write_one(1,this%u,fname, this%gpC)
+            call message(0,"Written "//trim(fname))
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_v.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call message(0,"Writing "//trim(fname))
         call decomp_2d_write_one(1,this%v,fname, this%gpC)
+            call message(0,"Written "//trim(fname))
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_w.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call message(0,"Writing "//trim(fname))
         call decomp_2d_write_one(1,this%w,fname, this%gpE)
+            call message(0,"Written "//trim(fname))
 
         if (this%isStratified .or. this%initspinup) then
             write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_T.",this%step
@@ -2721,9 +2728,11 @@ contains
         if (nrank == 0) then
             write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",this%runID, "_info.",this%step
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call message(0,"Writing "//trim(fname))
             OPEN(UNIT=10, FILE=trim(fname))
             write(10,"(100g15.5)") this%tsim
             close(10)
+            call message(0,"Written "//trim(fname))
         end if 
 
         call mpi_barrier(mpi_comm_world, ierr)
@@ -2747,11 +2756,13 @@ contains
 
          write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
          fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+            call message(0,"Writing "//trim(fname))
          if (present(gp2use)) then
             call decomp_2d_write_one(1,arr,fname,gp2use)
          else
             call decomp_2d_write_one(1,arr,fname,this%gpC)
          end if
+            call message(0,"Written "//trim(fname))
 
     end subroutine
 

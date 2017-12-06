@@ -289,8 +289,10 @@ contains
 
 
    pure subroutine S_fringe(x, output)
+   !subroutine S_fringe(x, output)
       real(rkind), dimension(:), intent(in)    :: x
       real(rkind), dimension(:), intent(out)   :: output
+      real(rkind) :: arg
       integer :: i
 
       do i = 1,size(x)
@@ -299,7 +301,15 @@ contains
         else if (x(i) .ge. 1.d0) then
            output(i) = 1.d0
         else
-           output(i) = 1.d0/(1.d0 + exp((1.d0/(x(i) - 1.d0)) + (1.d0/(x(i)))))
+           !print *, i, x(i)
+           !print *, '  -', 1.0d0/(x(i)-1.0d0+1.0d-3)
+           !print *, '  -', 1.0d0/(x(i)+1.0d-3)
+           !!print *, '  -', exp(998.0)
+           arg = (1.d0/(x(i) - 1.d0+1.0d-3)) + (1.d0/(x(i)+1.0d-3))
+           !print *, arg
+           arg = min(arg,708.0d0) ! overfow if arg > 709. need a better fix for this
+           !print *, arg
+           output(i) = 1.d0/(1.d0 + exp(arg))
         end if
       end do
 
