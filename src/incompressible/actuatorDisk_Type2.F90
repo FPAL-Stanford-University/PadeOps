@@ -145,6 +145,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     end if 
 
      ntry = 2*ceiling(diam/min(dx, dy, dz))
+     ntry = p_maxval(ntry) ! prevents mismatch across processors due to roundoff
     
     if (this%Am_I_Active) then
         allocate(this%rbuff(size(xG,2),size(xG,3)))
