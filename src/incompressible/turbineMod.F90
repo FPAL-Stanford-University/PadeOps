@@ -371,7 +371,11 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
               end do
            case(2)
                do i = 1, this%nTurbines
-                  call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
+                 if (present(inst_horz_avg)) then
+                    call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz, inst_horz_avg(8*i-7:8*i))
+                 else
+                    call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
+                 end if 
                end do
                call mpi_barrier(mpi_comm_world, ierr)
            end select 
