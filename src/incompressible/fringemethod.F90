@@ -301,7 +301,7 @@ contains
            output(i) = 1.d0
         else
            exparg = 1.d0/(x(i) - 1.d0 + 1.0D-32) + 1.d0/(x(i) + 1.0D-32)
-           exparg = min(arg,708.0d0) ! overflows if exparg > 709. need a better fix for this
+           exparg = min(exparg,708.0d0) ! overflows if exparg > 709. need a better fix for this
            output(i) = 1.d0/(1.d0 + exp(exparg))
         end if
       end do
