@@ -33,7 +33,7 @@ program testTKEbudgetTerms
    logical :: computeFbody
    integer :: scheme = 1
 
-   real(rkind), dimension(:,:,:)  , pointer :: nuSGS
+   real(rkind), dimension(:,:,:)  , pointer :: nuSGS, kappaSGS
    real(rkind), dimension(:,:,:)  , pointer :: tau13, tau23
    real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
    real(rkind), dimension(:,:,:)  , pointer :: q1, q2, q3
@@ -116,7 +116,8 @@ program testTKEbudgetTerms
 
         ! SGS MODEL STUFF
         u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-        call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
+        !call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
+        call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE,  uhatC, vhatC, whatC, ThatC, uC, vC, wC, .true.)
         call spectC%ifft(u_rhs,fbody_x)
         call spectC%ifft(v_rhs,fbody_y)
         call spectE%ifft(w_rhs,fbody_z)
@@ -240,8 +241,8 @@ contains
       ! Initialize sgs
       call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, &
                       fbody_z, computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, &
-                      rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr,  .false., .false.,1)
-      call newsgs%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3)
+                      rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re,  .false., .false.,1)
+      call newsgs%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappaSGS)
 
 
 

@@ -43,19 +43,21 @@ module spectralMod
         integer, public :: zeroK_i = 123456, zeroK_j = 123456
         real(rkind), dimension(:,:), allocatable :: GsurfaceFilter 
         real(rkind) :: dealiasFact = 2.d0/3.d0
+        real(rkind), public :: dx, dy, dz
 
         real(rkind), dimension(:,:,:), allocatable :: G_bandpass
         integer, dimension(:,:,:), allocatable :: G_PostProcess
         complex(rkind), dimension(:,:,:), pointer :: cbuffz_bp, cbuffy_bp
         
         logical :: BandPassFilterInitialized = .false. 
+        logical :: TestFilterInitialized = .false. 
         logical :: initPostProcessor = .false.
         integer(kind=8) :: plan_c2c_fwd_z_oop
         integer(kind=8) :: plan_c2c_fwd_z_ip
         integer(kind=8) :: plan_c2c_bwd_z_oop
         integer(kind=8) :: plan_c2c_bwd_z_ip
         integer(kind=8) :: plan_r2c_z, plan_c2r_z 
-        complex(rkind), dimension(:), allocatable :: k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact
+        complex(rkind), dimension(:), allocatable :: k3_C2Cder, k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact
         real(rkind), dimension(:), allocatable, public :: k1inZ, k2inZ, k3inZ
 
         real(rkind), dimension(:), allocatable :: mk3sq
@@ -96,6 +98,7 @@ module spectralMod
             procedure           :: KSprepFilter1
             procedure           :: bandpassFilter_and_PhaseShift
 
+            procedure           :: InitTestFilter
             procedure           :: take_fft1d_z2z_ip
             procedure           :: take_ifft1d_z2z_ip
             procedure           :: shiftz_E2C
@@ -114,6 +117,8 @@ module spectralMod
             procedure, private  :: interp_E2C_spect_real
             procedure, private  :: interp_C2E_spect_real
             
+            procedure           :: ddz_C2C_real_inplace
+            procedure           :: ddz_C2C_complex_inplace
             generic             :: ddz_E2C_spect => ddz_E2C_spect_cmplx, ddz_E2C_spect_real
             generic             :: ddz_C2E_spect => ddz_C2E_spect_cmplx, ddz_C2E_spect_real
             generic             :: interp_E2C_spect => interp_E2C_spect_cmplx, interp_E2C_spect_real
@@ -499,6 +504,48 @@ contains
 
     end subroutine 
 
+    subroutine ddz_C2C_real_inplace(this, arr_inout)
+      class(spectral), intent(inout) :: this
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)  ), intent(inout)  :: arr_inout
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft_r2c(this%plan_r2c_z, arr_inout, this%fhatz)
+         do k = 1,this%physdecomp%zsz(3)/2 ! Note that the oddball is ignored 
+            do j = 1,this%physdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%physdecomp%zsz(1)
+                  this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%k3_C2Cder(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft_c2r(this%plan_c2r_z, this%fhatz, arr_inout)
+         arr_inout = arr_inout*this%normfactz
+      end if
+
+    end subroutine 
+    
+    subroutine ddz_C2C_complex_inplace(this, arr_inout)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(inout)  :: arr_inout
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft(this%plan_c2c_fwd_z_oop, arr_inout, this%ctmpz)
+         do k = 1,this%spectdecomp%zsz(3)
+            do j = 1,this%spectdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%spectdecomp%zsz(1)
+                  this%ctmpz(i,j,k) = this%ctmpz(i,j,k)*this%k3_C2Cder(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft(this%plan_c2c_bwd_z_oop, this%ctmpz, arr_inout)
+         arr_inout =  this%normfactz*arr_inout
+      end if
+
+    end subroutine 
+    
     subroutine ddz_C2E_spect_cmplx(this, arr_in, arr_out)
       class(spectral), intent(inout) :: this
       complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)  ), intent(in )  :: arr_in
@@ -659,14 +706,16 @@ contains
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fhat
         integer :: i, j, k
 
-        do k = 1,this%fft_size(3)
-            do j = 1,this%fft_size(2)
-                !$omp simd 
-                do i = 1,this%fft_size(1)
-                    fhat(i,j,k) = fhat(i,j,k)*this%GTestFilt(i,j,k)
+        if (this%TestFilterInitialized) then
+            do k = 1,this%fft_size(3)
+                do j = 1,this%fft_size(2)
+                    !$omp simd 
+                    do i = 1,this%fft_size(1)
+                        fhat(i,j,k) = fhat(i,j,k)*this%GTestFilt(i,j,k)
+                    end do 
                 end do 
             end do 
-        end do 
+        end if 
          
     end subroutine
 
@@ -690,14 +739,16 @@ contains
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(out) :: fhatout
         integer :: i, j, k
 
-        do k = 1,this%fft_size(3)
-            do j = 1,this%fft_size(2)
-                !$omp simd 
-                do i = 1,this%fft_size(1)
-                    fhatout(i,j,k) = fhat(i,j,k)*this%GTestFilt(i,j,k)
+        if (this%TestFilterInitialized) then
+            do k = 1,this%fft_size(3)
+                do j = 1,this%fft_size(2)
+                    !$omp simd 
+                    do i = 1,this%fft_size(1)
+                        fhatout(i,j,k) = fhat(i,j,k)*this%GTestFilt(i,j,k)
+                    end do 
                 end do 
             end do 
-        end do 
+        end if 
          
     end subroutine
 
@@ -794,11 +845,13 @@ contains
          allocate(this%C2Eshift(nz))
          allocate(this%E2Cshift(nz))
          allocate(this%mk3sq(nz))
+         allocate(this%k3_C2Cder(nz))
          allocate(k3_1d(nz))
          k3_1d = GetWaveNums(nz,dz) 
          this%mk3sq = -(k3_1d**2)
          this%k3_C2Eshift = imi*k3_1d*exp(-imi*k3_1d*dz/two)
          this%k3_E2Cshift = imi*k3_1d*exp( imi*k3_1d*dz/two)
+         this%k3_C2Cder   = imi*k3_1d
          this%C2Eshift = exp(-imi*k3_1d*dz/two)
          this%E2Cshift = exp( imi*k3_1d*dz/two)
 
@@ -842,6 +895,10 @@ contains
         this%nx_g = nx_g
         this%ny_g = ny_g
         this%nz_g = nz_g
+
+        this%dx = dx
+        this%dy = dy
+        this%dz = dz
 
         if (present(dealiasF)) this%dealiasFact = dealiasF
         if (present(fixOddball)) this%fixOddball = fixOddball
@@ -964,8 +1021,6 @@ contains
             allocate (this%kabs_sq(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             if (allocated(this%Gdealias)) deallocate(this%Gdealias)
             allocate (this%Gdealias(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-            if (allocated(this%GTestFilt)) deallocate(this%GTestFilt)
-            allocate (this%GTestFilt(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
             
             ! STEP 3: Generate 1d wavenumbers 
             k1_1d = GetWaveNums(nx_g,dx) 
@@ -1106,21 +1161,21 @@ contains
             call message(2, "Total non zero:", p_sum(sum(this%Gdealias)))
 
 
-            kdealiasx = kdealiasx/3.d0
-            kdealiasy = kdealiasy/3.d0
-            do k = 1,size(this%k1,3)
-                do j = 1,size(this%k1,2)
-                    do i = 1,size(this%k1,1)
-                        if ((abs(this%k1(i,j,k)) < kdealiasx) .and. (abs(this%k2(i,j,k))< kdealiasy)) then
-                            this%GTestFilt(i,j,k) = one
-                        else
-                            this%GTestFilt(i,j,k) = zero
-                        end if
-                    end do 
-                end do  
-            end do 
-            call message(1, "TestFilter Summary:")
-            call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
+            !kdealiasx = kdealiasx/3.d0
+            !kdealiasy = kdealiasy/3.d0
+            !do k = 1,size(this%k1,3)
+            !    do j = 1,size(this%k1,2)
+            !        do i = 1,size(this%k1,1)
+            !            if ((abs(this%k1(i,j,k)) < kdealiasx) .and. (abs(this%k2(i,j,k))< kdealiasy)) then
+            !                this%GTestFilt(i,j,k) = one
+            !            else
+            !                this%GTestFilt(i,j,k) = zero
+            !            end if
+            !        end do 
+            !    end do  
+            !end do 
+            !call message(1, "TestFilter Summary:")
+            !call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
 
 
         end if    
@@ -1274,7 +1329,43 @@ contains
         call message("===============================================================")
         ! Finished !
     end subroutine
-    
+   
+    subroutine InitTestFilter(this, filtfact)  
+      class(spectral), intent(inout) :: this
+      real(rkind), intent(in) :: filtfact  
+      real(rkind) :: kfiltx,kfilty, kdealiasx, kdealiasy
+      integer :: i, j, k
+
+      if (this%init_periodicinZ) then
+         call gracefulExit("Test filtering currently not supported for problems & 
+            & with periodic BC in z", 1233)
+      end if 
+      kdealiasx = ((two/three)*pi/this%dx)
+      kdealiasy = ((two/three)*pi/this%dy)
+
+      kfiltx = kdealiasx/filtfact
+      kfilty = kdealiasy/filtfact
+      
+      if (allocated(this%GTestFilt)) deallocate(this%GTestFilt)
+      allocate (this%GTestFilt(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
+      
+      do k = 1,size(this%k1,3)
+          do j = 1,size(this%k1,2)
+              do i = 1,size(this%k1,1)
+                  if ((abs(this%k1(i,j,k)) < kfiltx) .and. (abs(this%k2(i,j,k))< kfilty)) then
+                      this%GTestFilt(i,j,k) = one
+                  else
+                      this%GTestFilt(i,j,k) = zero
+                  end if
+              end do 
+          end do  
+      end do 
+      call message(1, "TestFilter Summary:")
+      call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
+      
+      this%TestFilterInitialized = .true. 
+    end subroutine 
+
     subroutine destroy(this)
         class(spectral), intent(inout) :: this
       

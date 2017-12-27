@@ -721,7 +721,6 @@ contains
 
         integer :: ii, jj, kk
 
-        print*, shape(pressure)
         do kk = 1,size(uhat,3)
             do jj = 1,size(uhat,2)
                 !$omp simd

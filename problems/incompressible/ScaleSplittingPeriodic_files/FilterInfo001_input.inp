@@ -1,0 +1,6 @@
+&FOF
+filtertype = 3
+filterfact_x = 0.12d0
+filterfact_y = 0.12d0
+filterfact_z = 0.12d0
+/
