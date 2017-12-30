@@ -920,19 +920,22 @@ contains
         call mpi_barrier(mpi_comm_world, ierr)
         if (this%usedoublefringex) then
             allocate(this%fringe_x1, this%fringe_x2)
-            call this%fringe_x1%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
+            call this%fringe_x1%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2),&
                                         this%spectC, this%spectE, this%gpC, this%gpE, &
-                                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, fringeID=1)   
-            call this%fringe_x2%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
+                                        this%rbuffxC, this%rbuffxE, this%rbuffyC, this%rbuffyE, &
+                                                                    this%cbuffyC, this%cbuffyE, fringeID=1)
+            call this%fringe_x2%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2),&
                                         this%spectC, this%spectE, this%gpC, this%gpE, &
-                                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, fringeID=2)   
+                                        this%rbuffxC, this%rbuffxE, this%rbuffyC, this%rbuffyE, &
+                                                                    this%cbuffyC, this%cbuffyE, fringeID=2)
 
         else
             if (this%useFringe) then
                 allocate(this%fringe_x)
                 call this%fringe_x%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
                                         this%spectC, this%spectE, this%gpC, this%gpE, &
-                                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE)   
+                                        this%rbuffxC, this%rbuffxE, this%rbuffyC, this%rbuffyE, &
+                                                                    this%cbuffyC, this%cbuffyE)   
             end if
         end if 
         

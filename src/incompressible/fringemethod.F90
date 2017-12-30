@@ -2,7 +2,7 @@ module fringeMethod
    use kind_parameters, only: rkind, clen
    use decomp_2d
    use spectralMod, only: spectral  
-   use exits, only: message
+   use exits, only: message, GracefulExit
    implicit none
    private
    public :: fringe
@@ -15,11 +15,15 @@ module fringeMethod
       real(rkind)                                   :: Fringe_Lambda_x
       type(spectral),    pointer                    :: spectC, spectE
       type(decomp_info), pointer                    :: gpC, gpE, sp_gpC, sp_gpE
-      real(rkind),    dimension(:,:,:,:), pointer   :: rbuffxC, rbuffxE
+      real(rkind),    dimension(:,:,:,:), pointer   :: rbuffxC, rbuffxE, rbuffyC, rbuffyE
       complex(rkind), dimension(:,:,:,:), pointer   :: cbuffyC, cbuffyE
       real(rkind)                                   :: LambdaFact
       integer :: myFringeID = 1
-      logical :: useTwoFringex = .false. 
+      logical :: useTwoFringex = .false.
+      logical :: useShiftedPeriodicBC = .false.
+      real(rkind) :: shift_distance = 0.5d0, shift_interp_factor
+      integer :: shift_ds_index
+      !real(rkind), dimension(:,:,:), allocatable :: shifted_u, shifted_v, shifted_w, shifted_T
       contains
          procedure :: init
          procedure :: destroy
@@ -27,6 +31,7 @@ module fringeMethod
          procedure :: associateFringeTargets
          procedure :: allocateTargetArray_Cells
          procedure :: allocateTargetArray_Edges
+         procedure :: getShiftedFields
    end type
     
 contains
@@ -44,6 +49,64 @@ contains
       real(rkind), dimension(:,:,:), allocatable, intent(out) :: array
 
       allocate(array(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)))
+
+   end subroutine
+
+   subroutine getShiftedFields(this, uC, vC, wE)
+      class(fringe), intent(inout)  :: this
+      real(rkind),  dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)),          intent(in)     :: uC, vC 
+      real(rkind),  dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)),          intent(in)     :: wE
+
+      integer :: j1, j2, j, k, ny, nz, nzE
+
+      ny = this%gpC%ysz(2); nz = this%gpC%ysz(3); nzE = this%gpE%ysz(3)
+
+      ! ----------Step 1 :: u_target----------------------
+      ! transform to ydecomp
+      call transpose_x_to_y(uC, this%rbuffyC(:,:,:,1), this%gpC)
+      ! interpolate and shift
+      do k = 1, nz
+       do j = 1, ny
+         j1 = j  + this%shift_ds_index; if(j1>ny) j1 = j1-ny
+         j2 = j1 + 1;                   if(j2>ny) j2 = j2-ny
+         this%rbuffyC(:,j,k,2) = this%rbuffyC(:,j1,k,1) + this%shift_interp_factor*(this%rbuffyC(:,j2,k,1)-this%rbuffyC(:,j1,k,1))
+       enddo
+      enddo
+      ! transform back to xdecomp
+      call transpose_y_to_x(this%rbuffyC(:,:,:,2), this%u_target, this%gpC)
+
+      ! ----------Step 2 :: v_target----------------------
+      ! transform to ydecomp
+      call transpose_x_to_y(vC, this%rbuffyC(:,:,:,1), this%gpC)
+      ! interpolate and shift
+      do k = 1, nz
+       do j = 1, ny
+         j1 = j  + this%shift_ds_index; if(j1>ny) j1 = j1-ny
+         j2 = j1 + 1;                   if(j2>ny) j2 = j2-ny
+         this%rbuffyC(:,j,k,2) = this%rbuffyC(:,j1,k,1) + this%shift_interp_factor*(this%rbuffyC(:,j2,k,1)-this%rbuffyC(:,j1,k,1))
+       enddo
+      enddo
+      ! transform back to xdecomp
+      call transpose_y_to_x(this%rbuffyC(:,:,:,2), this%v_target, this%gpC)
+
+      ! ----------Step 3 :: w_target----------------------
+      ! transform to ydecomp
+      call transpose_x_to_y(wE, this%rbuffyE(:,:,:,1), this%gpE)
+      ! interpolate and shift
+      do k = 1, nzE
+       do j = 1, ny
+         j1 = j  + this%shift_ds_index; if(j1>ny) j1 = j1-ny
+         j2 = j1 + 1;                   if(j2>ny) j2 = j2-ny
+         this%rbuffyE(:,j,k,2) = this%rbuffyE(:,j1,k,1) + this%shift_interp_factor*(this%rbuffyE(:,j2,k,1)-this%rbuffyE(:,j1,k,1))
+       enddo
+      enddo
+      ! transform back to xdecomp
+      call transpose_y_to_x(this%rbuffyE(:,:,:,2), this%w_target, this%gpE)
+
+
+      !if(someLogical) then
+      !    this%T_target = 0.0d0
+      !endif
 
    end subroutine
 
@@ -66,6 +129,10 @@ contains
          AllOptionalsPresent = .false. 
       end if
 
+
+      if(this%useShiftedPeriodicBC) then
+          call this%getShiftedFields(uC, vC, wE) ! in uvw_target 
+      endif
 
       if (this%targetsAssociated) then
          ! u velocity source term 
@@ -123,6 +190,10 @@ contains
       real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in), target           :: wtarget 
       real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in), optional, target :: Ttarget 
   
+      if(this%useShiftedPeriodicBC) then
+          call GracefulExit("Fringe targets already associated at setup if ShiftedPeriodicBC is true. Check input and problem files",999)
+      endif
+
       this%u_target => utarget
       this%v_target => vtarget
       this%w_target => wtarget
@@ -135,7 +206,7 @@ contains
       call message(0, "Fringe targets successfully associated.")
    end subroutine
 
-   subroutine init(this, inputfile, dx, x, dy, y, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE, fringeID)
+   subroutine init(this, inputfile, dx, x, dy, y, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, rbuffyC, rbuffyE, cbuffyC, cbuffyE, fringeID)
       use reductions, only: p_maxval
       use mpi
       class(fringe), intent(inout) :: this
@@ -145,7 +216,7 @@ contains
       real(rkind), dimension(gpC%xsz(2)), intent(in) :: y
       real(rkind), intent(in) :: dx, dy
       type(spectral), intent(in), target :: spectC, spectE
-      real(rkind),    dimension(:,:,:,:), target, intent(in) :: rbuffxC, rbuffxE
+      real(rkind),    dimension(:,:,:,:), target, intent(in) :: rbuffxC, rbuffxE, rbuffyC, rbuffyE
       complex(rkind), dimension(:,:,:,:), target, intent(in) :: cbuffyC, cbuffyE
       integer, intent(in), optional :: fringeID
 
@@ -162,9 +233,13 @@ contains
       integer :: ioUnit = 10, i, j, k, nx, ierr
       real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2
       logical :: Apply_x_fringe = .true., Apply_y_fringe = .false.
+      logical :: useShiftedPeriodicBC = .false.
+      real(rkind) :: shift_distance = 0.5d0
+
       namelist /FRINGE/ Apply_x_fringe, Apply_y_fringe, Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, &
                         Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, LambdaFact2, Fringe_yen, Fringe_yst, Fringe1_delta_st_x, &
-                        Fringe2_delta_st_x, Fringe1_delta_en_x, Fringe2_delta_en_x, Fringe1_xst, Fringe2_xst, Fringe1_xen, Fringe2_xen
+                        Fringe2_delta_st_x, Fringe1_delta_en_x, Fringe2_delta_en_x, Fringe1_xst, Fringe2_xst, Fringe1_xen, Fringe2_xen, &
+                        useShiftedPeriodicBC, shift_distance
     
       if (present(fringeID)) then
          this%myFringeID = fringeID
@@ -174,6 +249,10 @@ contains
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
       read(unit=ioUnit, NML=FRINGE)
       close(ioUnit)
+
+      if(useShiftedPeriodicBC .and. (Apply_y_fringe .or. this%useTwoFringex)) then
+          call GracefulExit("Shifted Periodic BC supported only with one fringe in x direction",9999)
+      endif
 
       Lx = maxval(x) + dx
       Ly = p_maxval(maxval(y)) + dy
@@ -187,6 +266,8 @@ contains
       this%rbuffxE => rbuffxE
       this%cbuffyC => cbuffyC 
       this%cbuffyE => cbuffyE
+      this%rbuffyC => rbuffyC 
+      this%rbuffyE => rbuffyE
 
       
       allocate(this%Fringe_kernel_cells(nx, gpC%xsz(2), gpC%xsz(3)))
@@ -282,6 +363,31 @@ contains
          end do
          deallocate(y1, y2, S1, S2, Fringe_func)
       end if 
+
+      if(useShiftedPeriodicBC) then
+          this%useShiftedPeriodicBC = .true.
+          this%shift_distance = shift_distance
+
+          this%shift_ds_index      = int(this%shift_distance / dy)
+          this%shift_interp_factor = mod(this%shift_distance,  dy) / dy
+
+          !!-allocate(this%shifted_u(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+          !!-allocate(this%shifted_v(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+          !!-allocate(this%shifted_w(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+          !!-!if(someLogical) then
+          !!-!    allocate(this%shifted_T(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+          !!-!endif
+
+          this%u_target => rbuffxC(:,:,:,2)
+          this%v_target => rbuffxC(:,:,:,3)
+          this%w_target => rbuffxE(:,:,:,2)
+          !if (someLogical) then
+          !   this%T_target => rbuffxC(:,:,:,4) !shifted_T
+          !end if
+          this%TargetsAssociated = .true.
+
+          call message(0, "Shifted periodic BC successfully set up in fringe init.")
+      endif
 
       call message(0, "Fringe initialized successfully.")
 
