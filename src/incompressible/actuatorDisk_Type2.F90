@@ -69,7 +69,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     !integer :: i, ylen, zlen
     integer :: xLc(1), yLc(1), zLc(1), xst, xen, yst, yen, zst, zen, ierr, xlen
     integer  :: ntry = 100
-    real(rkind) :: time2initialize = 0, correction_factor, normfact_p
+    real(rkind) :: time2initialize = 0, correction_factor = 1.0d0, normfact_p
 
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
@@ -257,8 +257,8 @@ end subroutine
 subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     class(actuatordisk_T2), intent(inout) :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
-    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in) :: u, v, w
-    real(rkind), dimension(8),                                  intent(out), optional  :: inst_val
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
+    real(rkind), dimension(8),                                  intent(out)   :: inst_val
     integer :: j
     real(rkind) :: usp_sq, force
 
@@ -274,7 +274,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     rhsyvals = zero
     rhszvals = zero
 
-    if (present(inst_val)) then
+    !if (present(inst_val)) then
       if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
         inst_val(1) = force
         inst_val(2) = force*sqrt(usp_sq)
@@ -285,7 +285,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
         inst_val(7) = this%vface
         inst_val(8) = this%wface
       end if
-    end if 
+    !end if 
 
 end subroutine
 

@@ -348,8 +348,8 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
     real(rkind),    dimension(this%gpC%xsz(1),   this%gpC%xsz(2),   this%gpC%xsz(3)),    intent(in) :: u, v, wC
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs 
-    logical,                                                                             intent(in) :: newTimestep
-    real(rkind),    dimension(:),                                                        intent(out), optional   :: inst_horz_avg
+    logical,                                                                             intent(in)    :: newTimestep
+    real(rkind),    dimension(:),                                                        intent(out)   :: inst_horz_avg
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout), optional :: uturb, vturb
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout), optional :: wturb
     integer :: i, ierr
@@ -361,21 +361,21 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
            select case (this%ADM_Type)
            case(1)
               do i = 1, this%nTurbines
-              ! CHANGED to allow avoiding inst_horz_avg calculations - useful for
-              ! testing/debugging
-                 if (present(inst_horz_avg)) then
+              !! CHANGED to allow avoiding inst_horz_avg calculations - useful for
+              !! testing/debugging
+              !   if (present(inst_horz_avg)) then
                     call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz,inst_horz_avg(8*i-7:8*i))
-                 else
-                    call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)   
-                 end if 
+              !   else
+              !      call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)   
+              !   end if 
               end do
            case(2)
                do i = 1, this%nTurbines
-                 if (present(inst_horz_avg)) then
+               !  if (present(inst_horz_avg)) then
                     call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz, inst_horz_avg(8*i-7:8*i))
-                 else
-                    call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
-                 end if 
+               !  else
+               !     call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
+               !  end if 
                end do
                call mpi_barrier(mpi_comm_world, ierr)
            end select 

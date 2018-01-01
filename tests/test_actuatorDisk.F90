@@ -74,7 +74,7 @@ program test_actuatorDisk
     call mpi_barrier(mpi_comm_world, ierr)
     call tic()
     do idx = 1,num_turbines
-        call hawts(idx)%get_RHS(u, v, w, rhs1, rhsv, rhsw)
+        call hawts(idx)%get_RHS(u, v, w, rhs1, rhsv, rhsw, inst_val)
     end do 
     call mpi_barrier(mpi_comm_world, ierr)
     call toc()
@@ -86,7 +86,7 @@ program test_actuatorDisk
     call mpi_barrier(mpi_comm_world, ierr)
     call tic()
     do idx = 1,num_turbines
-        call hawts_T2(idx)%get_RHS(u, v, w, rhs2, rhsv, rhsw)
+        call hawts_T2(idx)%get_RHS(u, v, w, rhs2, rhsv, rhsw, inst_val)
     end do 
     call mpi_barrier(mpi_comm_world, ierr)
     call toc()

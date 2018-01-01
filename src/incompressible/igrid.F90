@@ -1826,15 +1826,15 @@ contains
         if (this%useWindTurbines) then
            if (copyTurbRHS) then
             call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC, this%u_rhs, this%v_rhs, this%w_rhs, &
-                  & this%newTimestep, uturb=this%urhs_turbine, vturb=this%vrhs_turbine, wturb=this%wrhs_turbine) 
+                  & this%newTimestep, this%inst_horz_avg_turb, uturb=this%urhs_turbine, vturb=this%vrhs_turbine, wturb=this%wrhs_turbine) 
            else
-            if (allocated(this%inst_horz_avg_turb)) then
+            !if (allocated(this%inst_horz_avg_turb)) then
                 call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
                                      this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep, this%inst_horz_avg_turb)
-            else
-                call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
-                                     this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep)
-            end if
+            !else
+            !    call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
+            !                         this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep)
+            !end if
            end if
         end if 
        
