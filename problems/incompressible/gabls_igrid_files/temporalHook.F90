@@ -9,15 +9,24 @@ module temporalHook
 
     implicit none 
 
-    integer :: nt_print2screen = 1
-    real(rkind) ::  maxDiv, DomMaxDiv
+    integer :: i, j, nt_print2screen = 1
+    real(rkind) ::  maxDiv, DomMaxDiv, angle
     integer :: ierr 
 
 contains
 
     subroutine doTemporalStuff(igp)
-        class(igrid), intent(inout) :: igp 
-      
+        class(igrid), intent(inout) :: igp  
+
+        ! get angle
+        angle = 0.d0
+        do j = 1, igp%nx
+        do i = 1, igp%ny
+                angle = angle + atan(igp%v(j,i,8)/igp%u(j,i,8))*180.d0/3.14d0
+        enddo       
+        enddo 
+        angle = angle / (float(igp%ny)*float(igp%nx))
+  
         if (mod(igp%step,nt_print2screen) == 0) then
             maxDiv = maxval(igp%divergence)
             DomMaxDiv = p_maxval(maxDiv)
@@ -32,6 +41,8 @@ contains
             call message(1,"u_star:",igp%sgsmodel%get_ustar())
             call message(1,"Inv. Ob. Length:",igp%sgsmodel%get_InvObLength())
             call message(1,"wTh_surf:",igp%sgsmodel%get_wTh_surf())
+            call message(1,"hub angle:",angle)
+            call message(1,"frameAngle:",igp%frameAngle)
             if (igp%useCFL) then
                 call message(1,"Current dt:",igp%dt)
             end if
