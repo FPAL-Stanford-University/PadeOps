@@ -20,7 +20,7 @@ module angleControl
       !real(rkind)                                   :: LambdaFact
       integer, pointer :: z_ref !myFringeID = 1
       !logical :: useTwoFringex = .false. 
-      real(rkind), pointer                          :: phi, beta, phi_ref, sigma
+      real(rkind)                          :: phi, beta, phi_ref, sigma
       contains
          procedure :: init
          procedure :: destroy
@@ -59,12 +59,12 @@ contains
 
       !if (this%targetsAssociated) then
          ! u velocity source term 
-         this%rbuffxC(:,:,:,1) = - vC * wControl
+         this%rbuffxC(:,:,:,1) =  vC * wControl
          call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
          urhs = urhs + this%cbuffyC(:,:,:,1)
 
          ! v velocity source term 
-         this%rbuffxC(:,:,:,1) = uC * wControl
+         this%rbuffxC(:,:,:,1) = - uC * wControl
          call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
          vrhs = vrhs + this%cbuffyC(:,:,:,1)
          
