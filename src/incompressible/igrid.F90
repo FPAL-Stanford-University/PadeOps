@@ -22,6 +22,7 @@ module IncompressibleGrid
     use kspreprocessing, only: ksprep  
     use PadeDerOps, only: Pade6Stagg
     use Fringemethod, only: fringe
+    use angleControl, only: angCont
     use forcingmod,   only: HIT_shell_forcing
 
     implicit none
@@ -241,6 +242,10 @@ module IncompressibleGrid
         logical                           :: useFringe = .false., usedoublefringex = .false. 
         type(fringe), allocatable, public :: fringe_x, fringe_x1, fringe_x2
 
+        ! Control
+        logical                           :: useControl = .false.
+        type(angCont), allocatable, public :: angCont_yaw
+
         ! HIT Forcing
         logical :: useHITForcing = .false.
         type(HIT_shell_forcing), allocatable :: hitforce
@@ -331,7 +336,7 @@ contains
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
         logical, intent(in), optional :: initialize2decomp
-        logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true.  
+        logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., useControl = .false.  
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -340,7 +345,7 @@ contains
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,&
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude, useHITForcing, frameAngle
-        namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex
+        namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
@@ -374,7 +379,7 @@ contains
         this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq; this%timeAvgFullFields = timeAvgFullFields
         this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp; this%isInviscid = isInviscid
         this%assume_fplane = assume_fplane; this%useProbes = useProbes; this%PrandtlFluid = PrandtlFLuid
-        this%KSinitType = KSinitType; this%KSFilFact = KSFilFact; this%useFringe = useFringe
+        this%KSinitType = KSinitType; this%KSFilFact = KSFilFact;this%useFringe = useFringe; this%useControl = useControl
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType 
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity
@@ -924,8 +929,15 @@ contains
                                         this%spectC, this%spectE, this%gpC, this%gpE, &
                                         this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE)   
             end if
-        end if 
-        
+        end if
+
+        !! Set angle control PI yaw
+        if (this%useControl) then
+               allocate(this%angCont_yaw)
+               call this%angCont_yaw%init(inputfile, this%spectC, this%spectE, this%gpC, this%gpE, & 
+                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE) 
+        end if       
+ 
         ! STEP 18: Set HIT Forcing
         if (this%useHITForcing) then
             allocate(this%hitforce)
@@ -1601,6 +1613,8 @@ contains
     subroutine addCoriolisTerm(this)
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ybuffE, ybuffC1, ybuffC2, zbuffC, zbuffE
+        real(rkind) :: frameAngle, latitude
+        integer(rkind) :: i, j
 
         ybuffE => this%cbuffyE(:,:,:,1)
         ybuffC1 => this%cbuffyC(:,:,:,1)
@@ -1608,6 +1622,24 @@ contains
         zbuffE => this%cbuffzE(:,:,:,1)
         zbuffC => this%cbuffzC(:,:,:,1)
 
+
+        ! Update the coriolis terms according to the desired yaw control
+        !if (this%tsim > 5000.d0) then
+        !ybuffC1 = atan((this%v / this%u)) * 180.d0 / pi
+        !latitude = 45.d0
+        !frameAngle = 0.d0
+        !do j = 1, this%nx
+        !        do i = 1, this%ny
+        !                frameAngle = frameAngle + ybuffC1(j,i,8)
+        !        enddo
+        !enddo
+        !frameAngle = frameAngle / (float(this%nx) * float(this%nx))
+        !frameAngle = (1.d0 - 4.8650d0*0.0110d0) * frameAngle 
+        !this%frameAngle = this%frameAngle - 0.00001d0  * frameAngle 
+        !this%coriolis_omegaX = cos(latitude*pi/180.d0)*sin(this%frameAngle*pi/180.d0)
+        !this%coriolis_omegaZ = sin(latitude*pi/180.d0)
+        !this%coriolis_omegaY = cos(latitude*pi/180.d0)*cos(this%frameAngle*pi/180.d0) 
+        !endif
 
         ! u equation 
         ybuffC1    = (two/this%Ro)*(-this%coriolis_omegaY*this%whatC - this%coriolis_omegaZ*(this%GyHat - this%vhat))
@@ -1804,6 +1836,11 @@ contains
         ! Step 8: HIT forcing source term
         if (this%useHITForcing) then
             call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep)
+        end if
+
+        ! Step 9: Frame rotatio PI controller to fix yaw angle at a given height
+        if (this%useControl) then
+            call this%angCont_yaw%update_RHS_control(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%newTimeStep)
         end if 
 
         !if (nrank == 0) print*, maxval(abs(this%u_rhs)), maxval(abs(this%v_rhs)), maxval(abs(this%w_rhs))
