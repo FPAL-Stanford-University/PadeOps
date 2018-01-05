@@ -354,7 +354,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     class(actuatorDisk), intent(inout), target :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
-    real(rkind), dimension(8),                                  intent(out), optional  :: inst_val
+    real(rkind), dimension(8),                                  intent(out)   :: inst_val
     integer :: j, icl
     real(rkind), dimension(:,:,:), pointer :: xCloudPtr, yCloudPtr, zCloudPtr, dsqPtr, eta_deltaPtr, sourcePtr
     real(rkind) :: usp_sq, force
@@ -379,7 +379,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
           rhszvals(this%xst(icl):this%xen(icl),this%yst(icl):this%yen(icl),this%zst(icl):this%zen(icl)) = 0.d0
           nullify(sourcePtr, eta_deltaPtr, dsqPtr, zCloudPtr, yCloudPtr, xCloudPtr)
         end do
-        if (present(inst_val)) then
+        !if (present(inst_val)) then
           if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
             inst_val(1) = force
             inst_val(2) = force*sqrt(usp_sq)
@@ -390,7 +390,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
             inst_val(7) = this%vface
             inst_val(8) = this%wface
           end if
-        end if 
+        !end if 
     end if 
 end subroutine
 

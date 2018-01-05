@@ -292,6 +292,7 @@ contains
       real(rkind), dimension(:), intent(in)    :: x
       real(rkind), dimension(:), intent(out)   :: output
       integer :: i
+      real(rkind) :: exparg
 
       do i = 1,size(x)
         if (x(i) .le. 0.d0) then
@@ -299,7 +300,9 @@ contains
         else if (x(i) .ge. 1.d0) then
            output(i) = 1.d0
         else
-           output(i) = 1.d0/(1.d0 + exp((1.d0/(x(i) - 1.d0)) + (1.d0/(x(i)))))
+           exparg = 1.d0/(x(i) - 1.d0 + 1.0D-32) + 1.d0/(x(i) + 1.0D-32)
+           exparg = min(exparg,708.0d0) ! overflows if exparg > 709. need a better fix for this
+           output(i) = 1.d0/(1.d0 + exp(exparg))
         end if
       end do
 
