@@ -36,9 +36,24 @@ module igrid_Operators_NonPeriodicZ
          procedure :: ReadField3D
          procedure :: WriteField3D
          procedure :: allocate3Dfield
+         procedure :: getCenterlineQuantity
+         procedure :: WriteASCII_2D
+         procedure :: getSimTime
    end type 
 
 contains
+
+function getCenterlineQuantity(this, vec) result(val)
+   class(Ops_NP_Z), intent(in), target :: this
+   real(rkind), dimension(this%gp%zsz(3)), intent(in) :: vec
+   integer :: nz
+   real(rkind) :: val
+
+   nz = size(vec)
+
+   val = 0.5d0*(vec(nz/2) + vec(nz/2+1))
+
+end function
 
 subroutine init(this, nx, ny, nz, dx, dy, dz, gp, InputDir, OutputDir, RunID)
    class(Ops_NP_Z), intent(out), target :: this
@@ -188,10 +203,38 @@ subroutine allocate3Dfield(this, field)
 end subroutine 
 
 
+function getSimTime(this, tidx) result(time)
+   class(Ops_NP_Z), intent(in) :: this
+   character(len=clen) :: tempname, fname
+   integer, intent(in) :: tidx
+   real(rkind) :: time
+
+   write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_","info","_t",tidx,".out"
+   fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+   open(unit=10,file=fname,access='sequential',form='formatted')
+   read(10,*) time
+   close(10)
+
+end function
+
+subroutine WriteASCII_2D(this, field, flabel)
+   use basic_io, only: write_2d_ascii 
+   class(Ops_NP_Z), intent(inout) :: this
+   real(rkind), dimension(:,:), intent(in) :: field
+   character(len=4), intent(in) :: flabel
+   character(len=clen) :: tempname, fname
+   
+   write(tempname,"(A3,I2.2,A1,A4,A4)") "Run",this%runID, "_",flabel,".stt"
+   fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+   
+   call write_2d_ascii(field, fname)
+
+end subroutine 
+
+
 end module 
 
-
-program StratifiedShearLayerBudgets
+program StratifiedShearLayerCenterline
    use kind_parameters, only: rkind, clen
    use igrid_Operators_NonPeriodicZ, only: Ops_NP_Z
    use constants, only: pi, two
@@ -202,9 +245,10 @@ program StratifiedShearLayerBudgets
    implicit none
 
    real(rkind), dimension(:,:,:), allocatable :: buff1, buff2, buff3, buff4, buff5
-   real(rkind), dimension(:,:,:), allocatable :: u, v, w, p, T, nuSGS, kappaSGS!, uFluct, vFluct, pFluct, Tfluct
+   real(rkind), dimension(:,:,:), allocatable :: u, v, w, ufluct, vfluct, T, nuSGS, Tfluct!, uFluct, vFluct, pFluct, Tfluct
    !real(rkind), dimension(:),     allocatable :: Prod, Transp_Conv, Transp_Press, Transp_Visc, Dissp, DisspSGS, DisspTheta, DisspThetaSGS, Buoy
 
+   real(rkind), dimension(:), allocatable :: Tmp1d, umn, Tmn, Prod, Diss, Buoy, Nsq, dUdz, dTdz, TKE
    real(rkind), parameter :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0
    real(rkind) :: dx, dy, dz, Re = 3000.d0, Rib = 0.05d0, Pr = 1.d0
    integer :: nx, ny, nz, RunID, TIDX
@@ -215,7 +259,12 @@ program StratifiedShearLayerBudgets
    character(len=clen) ::  inputdir, outputdir
    character(len=clen) :: inputfile
 
-   namelist /INPUT/ InputDir, OutputDir, RunID, TIDX, nx, ny, nz, Re, Rib, Pr
+   real(rkind), dimension(10000) :: P, B, D, vortT, momT,  Rig, LT, LO, LE, LK, LC, Re_T, Re_b, time
+
+   real(rkind), dimension(:,:), allocatable :: data2write
+   integer :: idx, tstart, tstop, tstep
+
+   namelist /INPUT/ InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Re, Rib, Pr
     
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
@@ -233,12 +282,13 @@ program StratifiedShearLayerBudgets
    call ops%init(nx, ny, nz, dx, dy, dz, gp, InputDir, OutputDir, RunID)
 
    call ops%allocate3DField(u)
+   call ops%allocate3DField(ufluct)
    call ops%allocate3DField(v)
+   call ops%allocate3DField(vfluct)
    call ops%allocate3DField(w)
-   call ops%allocate3DField(p)
    call ops%allocate3DField(T)
+   call ops%allocate3DField(Tfluct)
    call ops%allocate3DField(nuSGS)
-   call ops%allocate3DField(kappaSGS)
    call ops%allocate3DField(buff1)
    call ops%allocate3DField(buff2)
    call ops%allocate3DField(buff3)
@@ -246,212 +296,197 @@ program StratifiedShearLayerBudgets
    call ops%allocate3DField(buff5)
 
 
+   allocate(umn(nz))
+   allocate(Tmn(nz))
+   allocate(Prod(nz))
+   allocate(TKE(nz))
+   allocate(Diss(nz))
+   allocate(Tmp1d(nz))
+   allocate(Buoy(nz))
+   allocate(Nsq(nz))
+   allocate(dTdz(nz))
+   allocate(dudz(nz))
 
-   call message(0, "Reading fields..")
-   call tic()
-   call ops%ReadField3D(u,"uVel",TIDX)
-   call ops%ReadField3D(v,"vVel",TIDX)
-   call ops%ReadField3D(w,"wVel",TIDX)
-   call ops%ReadField3D(T,"potT",TIDX)
-   call ops%ReadField3D(P,"prss",TIDX)
-   call ops%ReadField3D(nuSGS,"nSGS",TIDX)
-   call ops%ReadField3D(kappaSGS,"kSGS",TIDX)
-   call toc()
 
+   tidx = tstart
+   idx = 1
+   do while(tidx <= tstop)
+      call message(0, "Reading fields for tid:", TIDX)
+      call tic()
+      call ops%ReadField3D(u,"uVel",TIDX)
+      call ops%ReadField3D(v,"vVel",TIDX)
+      call ops%ReadField3D(w,"wVel",TIDX)
+      call ops%ReadField3D(T,"potT",TIDX)
+      call ops%ReadField3D(nuSGS,"nSGS",TIDX)
 
-   ! STEP 1: Compute TKE
-   call ops%getFluct_from_MeanZ(u,buff1)
-   buff2 = buff1*buff1
-   call ops%getFluct_from_MeanZ(v,buff1)
-   buff2 = buff2 + buff1*buff1
-   buff2 = buff2 + w*w        ! w mean is exactly 0
-   buff2 = buff2*0.5d0
-   call ops%WriteField3d(buff2,"itke",tidx)
+      time(idx) = ops%getSimTime(tidx)
+      call message(0, "Read simulation data at time:", time(idx))
 
-   ! STEP 2: Compute the convective flux
-   buff1 = w*buff2
-   call ops%ddz(buff1,buff3)
-   call ops%WriteField3d(buff1,"cflx",tidx)
-   call ops%WriteField3d(buff3,"ctrn",tidx)
-
-   ! STEP 3: Compute the pressure flux
-   call ops%getFluct_from_MeanZ(p,buff1)
-   buff1 = buff1*w
-   call ops%ddz(buff1,buff3)
-   call ops%WriteField3d(buff1,"pflx",tidx)
-   call ops%WriteField3d(buff3,"ptrn",tidx)
-
-   ! STEP 4: Compute the viscous
-   call ops%ddz(buff2,buff1)
-   buff1 = (1.d0/Re)*buff1
-   call ops%ddz(buff1,buff3)
-   call ops%WriteField3d(buff1,"vflx",tidx)
-   call ops%WriteField3d(buff3,"vtrn",tidx)
+      ! STEP 1: Compute the gradients and brunt vaisala frequency
+      call ops%TakeMean_xy(u,umn)
+      call ops%TakeMean_xy(T,Tmn)
+      call ops%ddz_1d(umn,dudz)
+      call ops%ddz_1d(Tmn,dTdz)
+      Nsq = Rib*dTdz
+      
   
-   ! STEP 5: Compute the production
-   call ops%getFluct_from_MeanZ(u,buff1)
-   buff3 = u - buff1 ! mean
-   call ops%ddz(buff3,buff2) ! dUdz
-   buff3 = -buff1*w      ! u'w' (since wmean = 0)
-   buff2 = buff2*buff3 
-   call ops%WriteField3d(buff2,"prod",tidx)
+      ! STEP 2: Compute the vorticity thickness
+      vortT(idx) = 2.d0/maxval(abs(dudz))
+      call message(1,"Vorticity thickness:", vortT(idx))
+
+      momT(idx) = dz*sum(0.25 - 0.25*(umn**2))
+      call message(1,"Momentum thickness:", momT(idx))
+
+      ! STEP 3: Compute TKE
+      call ops%getFluct_from_MeanZ(u,ufluct)
+      buff2 = ufluct*ufluct
+      call ops%getFluct_from_MeanZ(v,vfluct)
+      buff2 = buff2 + vfluct*vfluct
+      buff2 = buff2 + w*w        ! w mean is exactly 0
+      buff2 = buff2*0.5d0
+      call ops%TakeMean_xy(buff2,TKE)
+
+
+      ! STEP 4: Compute the production
+      call ops%getFluct_from_MeanZ(u,buff1)
+      buff3 = u - buff1 ! mean
+      call ops%ddz(buff3,buff2) ! dUdz
+      buff3 = -buff1*w      ! u'w' (since wmean = 0)
+      buff2 = buff2*buff3 
+      call ops%TakeMean_xy(buff2,Prod)
+      P(idx) = ops%getCenterlineQuantity(Prod)
+
+
+      ! STEP 5: Compute the Buoyancy term
+      call ops%getFluct_from_MeanZ(T,buff1)
+      buff2 = Rib*buff1*w
+      call ops%TakeMean_xy(buff2,Buoy)
+      B(idx) = ops%getCenterlineQuantity(Buoy)
+
+
+      ! STEP 6: Compute dissipation rate
+      buff3 = 0.d0
+      buff1 = ufluct
+      call ops%ddx(buff1,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddy(buff1,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddz(buff1,buff2)
+      buff3 = buff3 + buff2*buff2
+
+      buff1 = vfluct
+      call ops%ddx(buff1,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddy(buff1,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddz(buff1,buff2)
+      buff3 = buff3 + buff2*buff2
+
+      buff1 = w
+      call ops%ddx(buff1,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddy(buff1,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddz(buff1,buff2)
+      buff3 = buff3 + buff2*buff2
+      
+      buff3 = (1.d0/Re)*buff3
+      call ops%TakeMean_xy(buff3,Diss)
+      !call ops%WriteField3d(buff3,"diss",tidx)
+
+      ! STEP 7: SGS sink term
+      !call ops%getFluct_from_MeanZ(u,buff1)
+      !call ops%getFluct_from_MeanZ(v,buff2)
+      
+      buff1 = ufluct
+      buff2 = vfluct
+
+      ! s11*s11
+      call ops%ddx(buff1,buff3)
+      buff5 = buff3*buff3
+      
+      ! 2*s12*s12
+      call ops%ddy(buff1,buff3)
+      call ops%ddx(buff2,buff4)
+      buff3 = 0.5d0*(buff3 + buff4)
+      buff5 = buff5 + 2.d0*buff3*buff3 
+
+      ! 2*s13*s13 
+      call ops%ddz(buff1,buff3)
+      call ops%ddx(w    ,buff4)
+      buff3 = 0.5d0*(buff3 + buff4)
+      buff5 = buff5 + 2.d0*buff3*buff3 
+
+      ! 2*s23*s23 
+      call ops%ddz(buff2,buff3)
+      call ops%ddy(w    ,buff4)
+      buff3 = 0.5d0*(buff3 + buff4)
+      buff5 = buff5 + 2.d0*buff3*buff3 
+
+      ! s22*s22
+      call ops%ddy(buff2,buff3)
+      buff5 = buff5 + buff3*buff3
+      
+      ! s33*s33
+      call ops%ddz(w,buff3)
+      buff5 = buff5 + buff3*buff3
+      buff5 = 2.d0*nuSGS*buff5
+      !call ops%WriteField3d(buff5,"sgsD",tidx)
+      call ops%TakeMean_xy(buff5,tmp1D)
+      Diss = Diss + tmp1D
+      D(idx) = ops%getCenterlineQuantity(Diss)
+
+
+      ! STEP 8: Compute the gradient richardson number
+      tmp1D = Nsq/(dudz + 1.D-16)
+      Rig(idx) = ops%getCenterlineQuantity(tmp1D)
+
+      ! STEP 9: Compute the length scales
+      tmp1D = (tke**(3.d0/2.d0))/diss
+      LT(idx) = ops%getCenterlineQuantity(tmp1D)
+      tmp1D = Re*sqrt(tke)*tmp1D
+      Re_T(idx) = ops%getCenterlineQuantity(tmp1D)
+
+      tmp1D = sqrt(diss/((sqrt(abs(Nsq)))**3))
+      LO(idx) = ops%getCenterlineQuantity(tmp1D)
+
+      tmp1D = sqrt(diss/((sqrt(abs(dudz)))**3))
+      LC(idx) = ops%getCenterlineQuantity(tmp1D)
+
+      tmp1D = ((1.d0/(Re**3))/diss)**0.25d0
+      LK(idx) = ops%getCenterlineQuantity(tmp1D)
+      
   
-   ! STEP 6: Compute the Buoyancy term
-   call ops%getFluct_from_MeanZ(T,buff1)
-   buff2 = Rib*buff1*w
-   call ops%WriteField3d(buff2,"buoy",tidx)
+      tmp1D = diss*Re/(Nsq + 1.D-16)
+      Re_b(idx) = ops%getCenterlineQuantity(tmp1D)
 
+      call toc()
 
-   ! STEP 7: Compute dissipation rate
-   buff3 = 0.d0
-   call ops%getFluct_from_MeanZ(u,buff1)
-   call ops%ddx(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   call ops%ddy(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   call ops%ddz(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
+      tidx = tidx + tstep
+      idx = idx + 1
+   end do 
 
-   call ops%getFluct_from_MeanZ(v,buff1)
-   call ops%ddx(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   call ops%ddy(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   call ops%ddz(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
+   idx = idx - 1
+   allocate(data2write(idx,13))
+   data2write(:,1) = time(1:idx)
+   data2write(:,2) = vortT(1:idx) 
+   data2write(:,3) = momT(1:idx) 
+   data2write(:,4) = P(1:idx) 
+   data2write(:,5) = B(1:idx) 
+   data2write(:,6) = D(1:idx) 
+   data2write(:,7) = Rig(1:idx) 
+   data2write(:,8) = LT(1:idx) 
+   data2write(:,9) = LO(1:idx) 
+   data2write(:,10) = LC(1:idx) 
+   data2write(:,11) = LK(1:idx) 
+   data2write(:,12) = Re_T(1:idx) 
+   data2write(:,13) = Re_b(1:idx) 
 
-   buff1 = w
-   call ops%ddx(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   call ops%ddy(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   call ops%ddz(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   
-   buff3 = (1.d0/Re)*buff3
-   call ops%WriteField3d(buff3,"diss",tidx)
+   if (nrank == 0) then
+      call ops%WriteASCII_2D(data2write, "cent")
+   end if 
 
-   ! STEP 8: SGS sink term
-   call ops%getFluct_from_MeanZ(u,buff1)
-   call ops%getFluct_from_MeanZ(v,buff2)
-   
-   ! s11*s11
-   call ops%ddx(buff1,buff3)
-   buff5 = buff3*buff3
-   
-   ! 2*s12*s12
-   call ops%ddy(buff1,buff3)
-   call ops%ddx(buff2,buff4)
-   buff3 = 0.5d0*(buff3 + buff4)
-   buff5 = buff5 + 2.d0*buff3*buff3 
-
-   ! 2*s13*s13 
-   call ops%ddz(buff1,buff3)
-   call ops%ddx(w    ,buff4)
-   buff3 = 0.5d0*(buff3 + buff4)
-   buff5 = buff5 + 2.d0*buff3*buff3 
-
-   ! 2*s23*s23 
-   call ops%ddz(buff2,buff3)
-   call ops%ddy(w    ,buff4)
-   buff3 = 0.5d0*(buff3 + buff4)
-   buff5 = buff5 + 2.d0*buff3*buff3 
-
-   ! s22*s22
-   call ops%ddy(buff2,buff3)
-   buff5 = buff5 + buff3*buff3
-   
-   ! s33*s33
-   call ops%ddz(w,buff3)
-   buff5 = buff5 + buff3*buff3
-   buff5 = 2.d0*nuSGS*buff5
-   call ops%WriteField3d(buff5,"sgsD",tidx)
-
-   ! STEP 9: Mean SGS term
-   call ops%getFluct_from_MeanZ(u,buff1)
-   buff2 = u - buff1 ! Mean u
-   call ops%ddz(buff2,buff3)  ! dUdz
-   
-   call ops%ddz(buff1,buff2)
-   call ops%ddx(w    ,buff4)
-   buff4 = 0.5d0*(buff2 + buff4)
-   buff4 = 2.d0*nuSGS*buff4*buff3
-   call ops%WriteField3d(buff4,"SGSd",tidx)
-
-   ! STEP 10: SGS transport 
-   call ops%getFluct_from_MeanZ(u,buff1)
-   call ops%getFluct_from_MeanZ(v,buff2)
-   
-   call ops%ddz(u,buff3)
-   call ops%ddx(w,buff4)
-   buff3 = 0.5d0*(buff3 + buff4)
-   buff5 = buff1*buff3
-
-   call ops%ddz(v,buff3)
-   call ops%ddy(w,buff4)
-   buff3 = 0.5d0*(buff3 + buff4)
-   buff5 = buff5 + buff2*buff3
-
-   call ops%ddz(w,buff3)
-   buff5 = buff5  + w*buff3
-   
-   buff5 = -2.d0*nuSGS*buff5
-   call ops%ddz(buff5,buff3)
-   call ops%WriteField3d(buff3,"Tsgs",tidx)
-
-   ! STEP 11: Compute the potential energy
-   call ops%getFluct_from_MeanZ(T,buff2)
-   buff2 = 0.5d0*buff2*buff2
-   call ops%WriteField3d(buff2,"itpe",tidx)
-
-   ! STEP 12: Compute convective transport 
-   buff3 = w*buff2
-   call ops%ddz(buff3,buff1)
-   call ops%WriteField3d(buff1,"TtrC",tidx)
-   
-   ! STEP 13: Compute Production
-   call ops%getFluct_from_MeanZ(T,buff2)
-   buff3 = T- buff2
-   call ops%ddz(buff3,buff4)
-   buff5 = -buff2*w*buff4
-   call ops%WriteField3d(buff5,"ProT",tidx)
-   
-   ! STEP 14: Compute viscous dissipation
-   call ops%ddx(buff2,buff3)
-   buff5 = buff3*buff3
-   call ops%ddy(buff2,buff3)
-   buff5 = buff5 + buff3*buff3
-   call ops%ddz(buff2,buff3)
-   buff5 = buff5 + buff3*buff3
-   buff5 = (1.d0/(Re*Pr))*buff5
-   call ops%WriteField3d(buff5,"DisT",tidx)
-
-   ! STEP 15: Compute viscous transport
-   call ops%getFluct_from_MeanZ(T,buff2)
-   buff2 = 0.5d0*buff2*buff2
-   call ops%ddz(buff2,buff3)
-   buff3 = -(1.d0/(Re*Pr))*buff3
-   call ops%ddz(buff3,buff4)
-   call ops%writeField3d(buff4,"TtrV",tidx)
-   
-   ! STEP 16: Compute the SGS transport 
-   call ops%getFluct_from_MeanZ(T,buff2)
-   call ops%ddz(T, buff3)
-   buff3 = buff3*buff2*kappaSGS
-   call ops%ddz(buff3,buff4)
-   call ops%writeField3d(buff4,"TtrS",tidx)
-
-   ! STEP 17: Compute SGS dissipation
-   call ops%ddx(buff2,buff3)
-   buff5 = buff3*buff3
-   call ops%ddy(buff2,buff3)
-   buff5 = buff5 + buff3*buff3
-   call ops%ddz(buff2,buff3)
-   buff5 = buff5 + buff3*buff3
-   buff5 = kappaSGS*buff5
-   call ops%WriteField3d(buff5,"DiTS",tidx)
-
-   deallocate(u, v, w, p, T, nuSGS, kappaSGS)
+   call mpi_barrier(mpi_comm_world, ierr)
    call ops%destroy()
    call MPI_Finalize(ierr)           
 

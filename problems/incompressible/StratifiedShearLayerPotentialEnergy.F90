@@ -20,8 +20,9 @@ module igrid_Operators_NonPeriodicZ
       real(rkind), dimension(:,:,:), allocatable :: zarr1d_1, zarr1d_2
 
       character(len=clen) ::  inputdir, outputdir
-      real(rkind) :: mfact_xy
-
+      real(rkind) :: mfact_xy, dx, dy, dz
+      
+      real(rkind), dimension(:), allocatable :: zline
       integer :: RunID
 
       contains
@@ -36,17 +37,35 @@ module igrid_Operators_NonPeriodicZ
          procedure :: ReadField3D
          procedure :: WriteField3D
          procedure :: allocate3Dfield
+         procedure :: getCenterlineQuantity
+         procedure :: WriteASCII_2D
+         procedure :: getSimTime
+         procedure :: getPotentialEnergy
+         procedure :: getAPE
    end type 
 
 contains
 
-subroutine init(this, nx, ny, nz, dx, dy, dz, gp, InputDir, OutputDir, RunID)
+function getCenterlineQuantity(this, vec) result(val)
+   class(Ops_NP_Z), intent(in), target :: this
+   real(rkind), dimension(this%gp%zsz(3)), intent(in) :: vec
+   integer :: nz
+   real(rkind) :: val
+
+   nz = size(vec)
+
+   val = 0.5d0*(vec(nz/2) + vec(nz/2+1))
+
+end function
+
+subroutine init(this, nx, ny, nz, dx, dy, dz, Lz, gp, InputDir, OutputDir, RunID)
+   use gridtools, only: linspace
    class(Ops_NP_Z), intent(out), target :: this
    integer, intent(in) :: nx, ny, nz
-   real(rkind), intent(in) :: dx, dy, dz
+   real(rkind), intent(in) :: dx, dy, dz, Lz
    class(decomp_info), intent(in), target :: gp
    character(len=clen), intent(in) ::  inputdir, outputdir
-   integer :: RunID
+   integer :: RunID, idx
 
    this%gp => gp
    call this%spect%init("x",nx,ny,nz,dx, dy, dz, "four", "2/3rd", 2 , fixOddball=.false., &
@@ -58,6 +77,15 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, gp, InputDir, OutputDir, RunID)
    call this%spect%alloc_r2c_out(this%cbuffy1) 
    !call this%spect%alloc_r2c(this%cbuffy2) 
    
+   allocate(this%zline(nz))
+   this%zline(1) = -Lz + dz/2.d0
+   do idx = 2,nz
+      this%zline(idx) = this%zline(idx-1) + dz
+   end do 
+
+   this%dx = dx
+   this%dy = dy
+   this%dz = dz
    this%inputdir  = inputdir
    this%outputdir = outputdir
    this%RunID = RunID
@@ -188,10 +216,75 @@ subroutine allocate3Dfield(this, field)
 end subroutine 
 
 
+function getSimTime(this, tidx) result(time)
+   class(Ops_NP_Z), intent(in) :: this
+   character(len=clen) :: tempname, fname
+   integer, intent(in) :: tidx
+   real(rkind) :: time
+
+   write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_","info","_t",tidx,".out"
+   fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+   open(unit=10,file=fname,access='sequential',form='formatted')
+   read(10,*) time
+   close(10)
+
+end function
+
+subroutine getPotentialEnergy(this, T, TPE)
+   class(Ops_NP_Z), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: T
+   real(rkind), intent(out) :: TPE
+   integer :: k 
+
+   call transpose_x_to_y(T,this%rbuffy,this%gp)
+   call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
+   do k = 1,this%gp%zsz(3)
+      this%rbuffz1(:,:,k) = -this%zline(k)*this%rbuffz1(:,:,k)
+   end do 
+
+   TPE = p_sum(sum(this%rbuffz1))*this%dx*this%dy*this%dz
+
+end subroutine 
+
+subroutine getAPE(this, Tfluct, dTdz, APE)
+   class(Ops_NP_Z), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: Tfluct
+   real(rkind), dimension(this%gp%zsz(3)), intent(in) :: dTdz
+   real(rkind), intent(out) :: APE
+   integer :: k 
+
+   call transpose_x_to_y(Tfluct,this%rbuffy,this%gp)
+   call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
+
+   this%rbuffz1 = this%rbuffz1*this%rbuffz1
+
+   do k = 1,this%gp%zsz(3)
+      this%rbuffz1(:,:,k) = dTdz(k)*this%rbuffz1(:,:,k)
+   end do 
+
+   APE = p_sum(sum(this%rbuffz1))*this%dx*this%dy*this%dz
+
+
+end subroutine 
+
+subroutine WriteASCII_2D(this, field, flabel)
+   use basic_io, only: write_2d_ascii 
+   class(Ops_NP_Z), intent(inout) :: this
+   real(rkind), dimension(:,:), intent(in) :: field
+   character(len=4), intent(in) :: flabel
+   character(len=clen) :: tempname, fname
+   
+   write(tempname,"(A3,I2.2,A1,A4,A4)") "Run",this%runID, "_",flabel,".stt"
+   fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+   
+   call write_2d_ascii(field, fname)
+
+end subroutine 
+
+
 end module 
 
-
-program StratifiedShearLayerBudgets
+program StratifiedShearLayerPotentialEnergy
    use kind_parameters, only: rkind, clen
    use igrid_Operators_NonPeriodicZ, only: Ops_NP_Z
    use constants, only: pi, two
@@ -201,12 +294,13 @@ program StratifiedShearLayerBudgets
    use exits, only: message
    implicit none
 
-   real(rkind), dimension(:,:,:), allocatable :: buff1, buff2, buff3, buff4, buff5
-   real(rkind), dimension(:,:,:), allocatable :: u, v, w, p, T, nuSGS, kappaSGS!, uFluct, vFluct, pFluct, Tfluct
+   real(rkind), dimension(:,:,:), allocatable :: T, Tfluct!, uFluct, vFluct, pFluct, Tfluct
    !real(rkind), dimension(:),     allocatable :: Prod, Transp_Conv, Transp_Press, Transp_Visc, Dissp, DisspSGS, DisspTheta, DisspThetaSGS, Buoy
 
+   real(rkind), dimension(:), allocatable :: Tmn, dTdz
    real(rkind), parameter :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0
    real(rkind) :: dx, dy, dz, Re = 3000.d0, Rib = 0.05d0, Pr = 1.d0
+   real(rkind) :: T0 = 100.d0
    integer :: nx, ny, nz, RunID, TIDX
    type(decomp_info) :: gp
    type(Ops_NP_Z) :: ops
@@ -215,7 +309,12 @@ program StratifiedShearLayerBudgets
    character(len=clen) ::  inputdir, outputdir
    character(len=clen) :: inputfile
 
-   namelist /INPUT/ InputDir, OutputDir, RunID, TIDX, nx, ny, nz, Re, Rib, Pr
+   real(rkind), dimension(10000) :: time, TPE, APE, BPE 
+
+   real(rkind), dimension(:,:), allocatable :: data2write
+   integer :: idx, tstart, tstop, tstep
+
+   namelist /INPUT/ InputDir, OutputDir, RunID, tstart, tstop, T0, tstep, nx, ny, nz, Re, Rib, Pr
     
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
@@ -230,228 +329,55 @@ program StratifiedShearLayerBudgets
    dy =     Ly/real(ny,rkind) 
    dz = two*Lz/real(nz,rkind)
 
-   call ops%init(nx, ny, nz, dx, dy, dz, gp, InputDir, OutputDir, RunID)
+   call ops%init(nx, ny, nz, dx, dy, dz, Lz, gp, InputDir, OutputDir, RunID)
 
-   call ops%allocate3DField(u)
-   call ops%allocate3DField(v)
-   call ops%allocate3DField(w)
-   call ops%allocate3DField(p)
    call ops%allocate3DField(T)
-   call ops%allocate3DField(nuSGS)
-   call ops%allocate3DField(kappaSGS)
-   call ops%allocate3DField(buff1)
-   call ops%allocate3DField(buff2)
-   call ops%allocate3DField(buff3)
-   call ops%allocate3DField(buff4)
-   call ops%allocate3DField(buff5)
+   call ops%allocate3DField(Tfluct)
 
 
-
-   call message(0, "Reading fields..")
-   call tic()
-   call ops%ReadField3D(u,"uVel",TIDX)
-   call ops%ReadField3D(v,"vVel",TIDX)
-   call ops%ReadField3D(w,"wVel",TIDX)
-   call ops%ReadField3D(T,"potT",TIDX)
-   call ops%ReadField3D(P,"prss",TIDX)
-   call ops%ReadField3D(nuSGS,"nSGS",TIDX)
-   call ops%ReadField3D(kappaSGS,"kSGS",TIDX)
-   call toc()
+   allocate(Tmn(nz))
+   allocate(dTdz(nz))
 
 
-   ! STEP 1: Compute TKE
-   call ops%getFluct_from_MeanZ(u,buff1)
-   buff2 = buff1*buff1
-   call ops%getFluct_from_MeanZ(v,buff1)
-   buff2 = buff2 + buff1*buff1
-   buff2 = buff2 + w*w        ! w mean is exactly 0
-   buff2 = buff2*0.5d0
-   call ops%WriteField3d(buff2,"itke",tidx)
+   tidx = tstart
+   idx = 1
+   do while(tidx <= tstop)
+      call message(0, "Reading fields for tid:", TIDX)
+      call tic()
+      call ops%ReadField3D(T,"potT",TIDX)
+      T = Rib*(T - T0)
+      time(idx) = ops%getSimTime(tidx)
+      call message(0, "Read simulation data at time:", time(idx))
 
-   ! STEP 2: Compute the convective flux
-   buff1 = w*buff2
-   call ops%ddz(buff1,buff3)
-   call ops%WriteField3d(buff1,"cflx",tidx)
-   call ops%WriteField3d(buff3,"ctrn",tidx)
-
-   ! STEP 3: Compute the pressure flux
-   call ops%getFluct_from_MeanZ(p,buff1)
-   buff1 = buff1*w
-   call ops%ddz(buff1,buff3)
-   call ops%WriteField3d(buff1,"pflx",tidx)
-   call ops%WriteField3d(buff3,"ptrn",tidx)
-
-   ! STEP 4: Compute the viscous
-   call ops%ddz(buff2,buff1)
-   buff1 = (1.d0/Re)*buff1
-   call ops%ddz(buff1,buff3)
-   call ops%WriteField3d(buff1,"vflx",tidx)
-   call ops%WriteField3d(buff3,"vtrn",tidx)
+      ! STEP 1: Compute the gradients and brunt vaisala frequency
+      call ops%TakeMean_xy(T,Tmn)
+      call ops%getFluct_from_MeanZ(T,Tfluct)
+      call ops%ddz_1d(Tmn,dTdz)
+      
+      call ops%getPotentialEnergy(T, TPE(idx))
+      call ops%getAPE(Tfluct, dTdz, APE(idx))
+      BPE(idx) = TPE(idx) - APE(idx)
   
-   ! STEP 5: Compute the production
-   call ops%getFluct_from_MeanZ(u,buff1)
-   buff3 = u - buff1 ! mean
-   call ops%ddz(buff3,buff2) ! dUdz
-   buff3 = -buff1*w      ! u'w' (since wmean = 0)
-   buff2 = buff2*buff3 
-   call ops%WriteField3d(buff2,"prod",tidx)
-  
-   ! STEP 6: Compute the Buoyancy term
-   call ops%getFluct_from_MeanZ(T,buff1)
-   buff2 = Rib*buff1*w
-   call ops%WriteField3d(buff2,"buoy",tidx)
+      call message(1, "TPE:", TPE(idx))
+      call message(1, "APE:", APE(idx))
+      call message(1, "BPE:", BPE(idx))
+      call toc()
 
+      tidx = tidx + tstep
+      idx = idx + 1
+   end do 
 
-   ! STEP 7: Compute dissipation rate
-   buff3 = 0.d0
-   call ops%getFluct_from_MeanZ(u,buff1)
-   call ops%ddx(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   call ops%ddy(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   call ops%ddz(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
+   idx = idx - 1
+   allocate(data2write(idx,4))
+   data2write(:,1) = time(1:idx)
+   data2write(:,2) = TPE(1:idx) 
+   data2write(:,3) = APE(1:idx) 
+   data2write(:,4) = BPE(1:idx)
+   if (nrank == 0) then
+      call ops%WriteASCII_2D(data2write, "TPEd")
+   end if 
 
-   call ops%getFluct_from_MeanZ(v,buff1)
-   call ops%ddx(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   call ops%ddy(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   call ops%ddz(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-
-   buff1 = w
-   call ops%ddx(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   call ops%ddy(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   call ops%ddz(buff1,buff2)
-   buff3 = buff3 + buff2*buff2
-   
-   buff3 = (1.d0/Re)*buff3
-   call ops%WriteField3d(buff3,"diss",tidx)
-
-   ! STEP 8: SGS sink term
-   call ops%getFluct_from_MeanZ(u,buff1)
-   call ops%getFluct_from_MeanZ(v,buff2)
-   
-   ! s11*s11
-   call ops%ddx(buff1,buff3)
-   buff5 = buff3*buff3
-   
-   ! 2*s12*s12
-   call ops%ddy(buff1,buff3)
-   call ops%ddx(buff2,buff4)
-   buff3 = 0.5d0*(buff3 + buff4)
-   buff5 = buff5 + 2.d0*buff3*buff3 
-
-   ! 2*s13*s13 
-   call ops%ddz(buff1,buff3)
-   call ops%ddx(w    ,buff4)
-   buff3 = 0.5d0*(buff3 + buff4)
-   buff5 = buff5 + 2.d0*buff3*buff3 
-
-   ! 2*s23*s23 
-   call ops%ddz(buff2,buff3)
-   call ops%ddy(w    ,buff4)
-   buff3 = 0.5d0*(buff3 + buff4)
-   buff5 = buff5 + 2.d0*buff3*buff3 
-
-   ! s22*s22
-   call ops%ddy(buff2,buff3)
-   buff5 = buff5 + buff3*buff3
-   
-   ! s33*s33
-   call ops%ddz(w,buff3)
-   buff5 = buff5 + buff3*buff3
-   buff5 = 2.d0*nuSGS*buff5
-   call ops%WriteField3d(buff5,"sgsD",tidx)
-
-   ! STEP 9: Mean SGS term
-   call ops%getFluct_from_MeanZ(u,buff1)
-   buff2 = u - buff1 ! Mean u
-   call ops%ddz(buff2,buff3)  ! dUdz
-   
-   call ops%ddz(buff1,buff2)
-   call ops%ddx(w    ,buff4)
-   buff4 = 0.5d0*(buff2 + buff4)
-   buff4 = 2.d0*nuSGS*buff4*buff3
-   call ops%WriteField3d(buff4,"SGSd",tidx)
-
-   ! STEP 10: SGS transport 
-   call ops%getFluct_from_MeanZ(u,buff1)
-   call ops%getFluct_from_MeanZ(v,buff2)
-   
-   call ops%ddz(u,buff3)
-   call ops%ddx(w,buff4)
-   buff3 = 0.5d0*(buff3 + buff4)
-   buff5 = buff1*buff3
-
-   call ops%ddz(v,buff3)
-   call ops%ddy(w,buff4)
-   buff3 = 0.5d0*(buff3 + buff4)
-   buff5 = buff5 + buff2*buff3
-
-   call ops%ddz(w,buff3)
-   buff5 = buff5  + w*buff3
-   
-   buff5 = -2.d0*nuSGS*buff5
-   call ops%ddz(buff5,buff3)
-   call ops%WriteField3d(buff3,"Tsgs",tidx)
-
-   ! STEP 11: Compute the potential energy
-   call ops%getFluct_from_MeanZ(T,buff2)
-   buff2 = 0.5d0*buff2*buff2
-   call ops%WriteField3d(buff2,"itpe",tidx)
-
-   ! STEP 12: Compute convective transport 
-   buff3 = w*buff2
-   call ops%ddz(buff3,buff1)
-   call ops%WriteField3d(buff1,"TtrC",tidx)
-   
-   ! STEP 13: Compute Production
-   call ops%getFluct_from_MeanZ(T,buff2)
-   buff3 = T- buff2
-   call ops%ddz(buff3,buff4)
-   buff5 = -buff2*w*buff4
-   call ops%WriteField3d(buff5,"ProT",tidx)
-   
-   ! STEP 14: Compute viscous dissipation
-   call ops%ddx(buff2,buff3)
-   buff5 = buff3*buff3
-   call ops%ddy(buff2,buff3)
-   buff5 = buff5 + buff3*buff3
-   call ops%ddz(buff2,buff3)
-   buff5 = buff5 + buff3*buff3
-   buff5 = (1.d0/(Re*Pr))*buff5
-   call ops%WriteField3d(buff5,"DisT",tidx)
-
-   ! STEP 15: Compute viscous transport
-   call ops%getFluct_from_MeanZ(T,buff2)
-   buff2 = 0.5d0*buff2*buff2
-   call ops%ddz(buff2,buff3)
-   buff3 = -(1.d0/(Re*Pr))*buff3
-   call ops%ddz(buff3,buff4)
-   call ops%writeField3d(buff4,"TtrV",tidx)
-   
-   ! STEP 16: Compute the SGS transport 
-   call ops%getFluct_from_MeanZ(T,buff2)
-   call ops%ddz(T, buff3)
-   buff3 = buff3*buff2*kappaSGS
-   call ops%ddz(buff3,buff4)
-   call ops%writeField3d(buff4,"TtrS",tidx)
-
-   ! STEP 17: Compute SGS dissipation
-   call ops%ddx(buff2,buff3)
-   buff5 = buff3*buff3
-   call ops%ddy(buff2,buff3)
-   buff5 = buff5 + buff3*buff3
-   call ops%ddz(buff2,buff3)
-   buff5 = buff5 + buff3*buff3
-   buff5 = kappaSGS*buff5
-   call ops%WriteField3d(buff5,"DiTS",tidx)
-
-   deallocate(u, v, w, p, T, nuSGS, kappaSGS)
+   call mpi_barrier(mpi_comm_world, ierr)
    call ops%destroy()
    call MPI_Finalize(ierr)           
 
