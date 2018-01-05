@@ -1,17 +1,17 @@
 program test_Miranda_reader
     use mpi
-    use kind_parameters, only : clen
+    use kind_parameters,     only : clen
     use miranda_reader_mod, only: miranda_reader
-    use io_VTK_stuff, only: io_VTK
-    use exits, only: message, GracefulExit
+    use io_VTK_stuff,        only: io_VTK
+    use exits,               only: message, GracefulExit
 
     implicit none
 
-    type(miranda_reader) :: mir
-    type(io_VTK)         :: viz
+    type(miranda_reader)  :: mir
+    type(io_VTK)          :: viz
 
     character(len=clen) :: jobdir
-    integer :: prow = 8, pcol = 1
+    integer :: prow = 0, pcol = 0
 
     character(len=clen), dimension(:), allocatable :: varnames
     logical :: writeviz = .TRUE.
@@ -24,9 +24,11 @@ program test_Miranda_reader
         call GracefulExit("Usage: "//NEW_LINE('A')//"    mpiexec -n 8 ./test_Miranda_reader <jobdir>", 1729)
     end if
 
+    print *, "prow = ", prow, ", pcol = ", pcol
+
     call GETARG(1,jobdir)
     call message("Jobdir is "//jobdir)
-    
+
     ! Initialize miranda_reader object
     call mir%init(jobdir, prow, pcol)
 

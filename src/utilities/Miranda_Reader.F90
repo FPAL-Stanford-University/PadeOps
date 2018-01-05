@@ -34,11 +34,11 @@ module miranda_reader_mod
         integer :: ax, ay, az
         integer :: px, py, pz, mirprocs
         integer :: nvars
+        integer :: nres
         integer :: ns
         integer :: nsteps
 
         integer :: prow, pcol
-        integer :: ppx, ppz
 
         logical :: periodicx = .FALSE.
         logical :: periodicy = .FALSE.
@@ -107,6 +107,10 @@ contains
         ! Read in Miranda meta data
         call this%read_metadata()
 
+        ! Initialize decomp
+        call decomp_2d_init(this%nx, this%ny, this%nz, this%prow, this%pcol, [this%periodicx, this%periodicy, this%periodicz])
+        call get_decomp_info(this%gp)
+
     end subroutine
 
     subroutine destroy(this)
@@ -166,7 +170,6 @@ contains
     subroutine read_metadata(this)
         class(miranda_reader), intent(inout) :: this
 
-        real(kind=4) :: dx_, dy_, dz_
         integer :: i, ioUnit = 18
         character(len=clen) :: plotmir, dumchar
 
@@ -178,26 +181,15 @@ contains
         DO i=1,5; READ(ioUnit,*); END DO                        ! Skip first 5 lines
         READ(ioUnit,*) dumchar,this%nx,this%ny,this%nz          ! Domain size
         DO i=1,2; READ(ioUnit,*); END DO                        ! Skip next 2 lines
-        READ(ioUnit,*) dumchar,dx_,dy_,dz_                      ! Grid spacing
+        READ(ioUnit,*) dumchar,this%dx,this%dy,this%dz          ! Grid spacing
         READ(ioUnit,*) dumchar, this%nvars                      ! # of variables
         DO i=1,this%nvars; READ(ioUnit,*); END DO               ! Skip variable lines
         READ(ioUnit,*) dumchar, this%ns                         ! # of species
         DO i=1,this%ns; READ(ioUnit,*); END DO                  ! Skip material lines
         READ(ioUnit,*) dumchar, this%nsteps                     ! # of timesteps
 
-        this%nvars = this%nvars + 2 ! Since one of the vars is velocity
-
-        ! Convert from kind 4 to rkind
-        this%dx = real(dx_,rkind); this%dy = real(dy_,rkind); this%dz = real(dz_,rkind)
-
-        this%ppx = this%px / this%prow
-        this%ppz = this%pz / this%pcol
-        if (this%ppx*this%prow .ne. this%px) then
-            call GracefulExit("Incompatible number of X processors: prow does not divide Miranda's px",991)
-        end if
-        if (this%ppz*this%pcol .ne. this%pz) then
-            call GracefulExit("Incompatible number of Z processors: pcol does not divide Miranda's pz",992)
-        end if
+        this%nvars = this%nvars + 2  ! Since one of the vars is velocity
+        this%nres  = 5 + this%ns + 2 ! u, v, w, rho, e, Y's, p, T
 
         ! Get Miranda grid per processor
         this%ax = this%nx / this%px
@@ -215,10 +207,6 @@ contains
         end if
 
         CLOSE(ioUnit) 
-        
-        ! Initialize decomp
-        call decomp_2d_init(this%nx, this%ny, this%nz, this%prow, this%pcol, [this%periodicx, this%periodicy, this%periodicz])
-        call get_decomp_info(this%gp)
 
     end subroutine
 
@@ -226,7 +214,7 @@ contains
         class(miranda_reader), target, intent(inout) :: this
         
         integer :: xp,yp,zp,proc
-        integer :: xp1,xpn,yp1,ypn,zp1,zpn
+        integer, dimension(3) :: lo, hi, glo, ghi, plo, phi
         real(kind=4), dimension(:,:,:), allocatable :: procgrid
         character(len=clen) :: procfile
         integer :: pUnit = 27
@@ -237,22 +225,33 @@ contains
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         call alloc_buffs(this%mesh,3,'y',this%gp)
 
-        xp1 = (this%gp%yst(1)-1) / this%ax + 1
-        xpn = this%gp%yen(1) / this%ax
-        
-        yp1 = 1
-        ypn = this%py
-        
-        zp1 = (this%gp%yst(3)-1) / this%az + 1
-        zpn = this%gp%yen(3) / this%az
-
-
-        do zp = zp1,zpn
-            do yp = yp1,ypn
-                do xp = xp1,xpn
+        do zp = 1,this%pz
+            do yp = 1,this%py
+                do xp = 1,this%px
                     
                     ! Get processor ID
                     proc = this%invprocmap(xp,yp,zp)
+
+                    ! Get lo and hi of this proc
+                    lo = [ (xp-1)*this%ax+1, (yp-1)*this%ay+1, (zp-1)*this%az+1 ]
+                    hi = [ xp*this%ax, yp*this%ay, zp*this%az ]
+
+                    if ( (lo(1) > this%gp%yen(1)) .or. (lo(2) > this%gp%yen(2)) .or. (lo(3) > this%gp%yen(3)) ) then
+                        cycle
+                    end if
+                    if ( (hi(1) < this%gp%yst(1)) .or. (hi(2) < this%gp%yst(2)) .or. (hi(3) < this%gp%yst(3)) ) then
+                        cycle
+                    end if
+
+                    glo = [ 1+max(0,lo(1)-this%gp%yst(1)), 1+max(0,lo(2)-this%gp%yst(2)), 1+max(0,lo(3)-this%gp%yst(3)) ]
+                    ghi = [ min(this%gp%ysz(1), hi(1)-this%gp%yst(1)+1), &
+                            min(this%gp%ysz(2), hi(2)-this%gp%yst(2)+1), &
+                            min(this%gp%ysz(3), hi(3)-this%gp%yst(3)+1) ]
+
+                    plo = [ 1+max(0, this%gp%yst(1)-lo(1)), 1+max(0, this%gp%yst(2)-lo(2)), 1+max(0, this%gp%yst(3)-lo(3)) ]
+                    phi = [ min( hi(1)-lo(1)+1, this%gp%yen(1)-lo(1)+1 ), &
+                            min( hi(2)-lo(2)+1, this%gp%yen(2)-lo(2)+1 ), &
+                            min( hi(3)-lo(3)+1, this%gp%yen(3)-lo(3)+1 ) ]
 
                     ! Read in the grid
                     WRITE(procfile,'(2A,I6.6)') TRIM(this%jobdir),'/grid/p',proc
@@ -260,15 +259,18 @@ contains
 
                     ! Read x coordinate
                     READ(pUnit) procgrid
-                    this%mesh( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, 1) = real(procgrid,rkind)
+                    this%mesh( glo(1):ghi(1), glo(2):ghi(2), glo(3):ghi(3), 1) = &
+                        real( procgrid(plo(1):phi(1), plo(2):phi(2), plo(3):phi(3)), rkind )
 
                     ! Read y coordinate
                     READ(pUnit) procgrid
-                    this%mesh( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, 2) = real(procgrid,rkind)
+                    this%mesh( glo(1):ghi(1), glo(2):ghi(2), glo(3):ghi(3), 2) = &
+                        real( procgrid(plo(1):phi(1), plo(2):phi(2), plo(3):phi(3)), rkind )
                     
                     ! Read z coordinate
                     READ(pUnit) procgrid
-                    this%mesh( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, 3) = real(procgrid,rkind)
+                    this%mesh( glo(1):ghi(1), glo(2):ghi(2), glo(3):ghi(3), 3) = &
+                        real( procgrid(plo(1):phi(1), plo(2):phi(2), plo(3):phi(3)), rkind )
 
                     CLOSE(pUnit)
                 
@@ -290,7 +292,7 @@ contains
         integer, intent(in) :: step
 
         integer :: xp,yp,zp,proc
-        integer :: xp1,xpn,yp1,ypn,zp1,zpn
+        integer, dimension(3) :: lo, hi, glo, ghi, plo, phi
         real(kind=4), dimension(:,:,:), allocatable :: procdata
         character(len=clen) :: vizdir
         character(len=clen) :: procfile
@@ -320,22 +322,33 @@ contains
 
         WRITE(vizdir,'(2A,I4.4)') TRIM(this%jobdir),'/vis',step
 
-        xp1 = (this%gp%yst(1)-1) / this%ax + 1
-        xpn = this%gp%yen(1) / this%ax
-        
-        yp1 = 1
-        ypn = this%py
-        
-        zp1 = (this%gp%yst(3)-1) / this%az + 1
-        zpn = this%gp%yen(3) / this%az
-
-
-        do zp = zp1,zpn
-            do yp = yp1,ypn
-                do xp = xp1,xpn
+        do zp = 1,this%pz
+            do yp = 1,this%py
+                do xp = 1,this%px
                     
                     ! Get processor ID
                     proc = this%invprocmap(xp,yp,zp)
+
+                    ! Get lo and hi of this proc
+                    lo = [ (xp-1)*this%ax+1, (yp-1)*this%ay+1, (zp-1)*this%az+1 ]
+                    hi = [ xp*this%ax, yp*this%ay, zp*this%az ]
+
+                    if ( (lo(1) > this%gp%yen(1)) .or. (lo(2) > this%gp%yen(2)) .or. (lo(3) > this%gp%yen(3)) ) then
+                        cycle
+                    end if
+                    if ( (hi(1) < this%gp%yst(1)) .or. (hi(2) < this%gp%yst(2)) .or. (hi(3) < this%gp%yst(3)) ) then
+                        cycle
+                    end if
+
+                    glo = [ 1+max(0,lo(1)-this%gp%yst(1)), 1+max(0,lo(2)-this%gp%yst(2)), 1+max(0,lo(3)-this%gp%yst(3)) ]
+                    ghi = [ min(this%gp%ysz(1), hi(1)-this%gp%yst(1)+1), &
+                            min(this%gp%ysz(2), hi(2)-this%gp%yst(2)+1), &
+                            min(this%gp%ysz(3), hi(3)-this%gp%yst(3)+1) ]
+
+                    plo = [ 1+max(0, this%gp%yst(1)-lo(1)), 1+max(0, this%gp%yst(2)-lo(2)), 1+max(0, this%gp%yst(3)-lo(3)) ]
+                    phi = [ min( hi(1)-lo(1)+1, this%gp%yen(1)-lo(1)+1 ), &
+                            min( hi(2)-lo(2)+1, this%gp%yen(2)-lo(2)+1 ), &
+                            min( hi(3)-lo(3)+1, this%gp%yen(3)-lo(3)+1 ) ]
 
                     ! Read in the grid
                     WRITE(procfile,'(2A,I6.6)') TRIM(vizdir),'/p',proc
@@ -343,9 +356,8 @@ contains
 
                     do idx = 1,this%nvars+this%ns
                         READ(pUnit) procdata
-                        this%fields( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, &
-                                     (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, &
-                                     (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, idx ) = real(procdata,rkind)
+                        this%fields( glo(1):ghi(1), glo(2):ghi(2), glo(3):ghi(3), idx) = &
+                            real( procdata(plo(1):phi(1), plo(2):phi(2), plo(3):phi(3)), rkind )
                     end do
 
                     CLOSE(pUnit)
