@@ -245,6 +245,7 @@ module IncompressibleGrid
         ! Control
         logical                           :: useControl = .false.
         type(angCont), allocatable, public :: angCont_yaw
+        real(rkind) :: angleHubHeight
 
         ! HIT Forcing
         logical :: useHITForcing = .false.
@@ -936,7 +937,8 @@ contains
                allocate(this%angCont_yaw)
                call this%angCont_yaw%init(inputfile, this%spectC, this%spectE, this%gpC, this%gpE, & 
                         this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE) 
-        end if       
+        end if
+        this%angleHubHeight = 0.d0       
  
         ! STEP 18: Set HIT Forcing
         if (this%useHITForcing) then
@@ -1726,7 +1728,7 @@ contains
     subroutine populate_rhs(this)
         class(igrid), intent(inout) :: this
         !integer,           intent(in)    :: RKstage
-
+        integer :: i,j
         ! Step 1: Non Linear Term 
         if (useSkewSymm) then
             call this%addNonLinearTerm_skewSymm()
@@ -1840,7 +1842,16 @@ contains
 
         ! Step 9: Frame rotatio PI controller to fix yaw angle at a given height
         if (this%useControl) then
-            call this%angCont_yaw%update_RHS_control(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%newTimeStep)
+            call this%angCont_yaw%update_RHS_control(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%newTimeStep, this%angleHubHeight)
+        else
+            this%rbuffxC(:,:,:,1) = atan(this%v / this%u) * 180.d0 / 3.14d0
+            this%angleHubHeight = 0.d0
+            do j = 1, this%gpC%xsz(1)
+                do i = 1, this%gpC%xsz(2)
+                      this%angleHubHeight = this%angleHubHeight + this%rbuffxC(j,i,8,1)
+                enddo
+            enddo
+            this%angleHubHeight = this%angleHubHeight / (float(this%gpC%xsz(1)) * float(this%gpC%xsz(1)))
         end if 
 
         !if (nrank == 0) print*, maxval(abs(this%u_rhs)), maxval(abs(this%v_rhs)), maxval(abs(this%w_rhs))

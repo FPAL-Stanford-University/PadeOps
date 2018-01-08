@@ -18,7 +18,7 @@ module angleControl
       real(rkind),    dimension(:,:,:,:), pointer   :: rbuffxC, rbuffxE
       complex(rkind), dimension(:,:,:,:), pointer   :: cbuffyC, cbuffyE
       !real(rkind)                                   :: LambdaFact
-      integer, pointer :: z_ref !myFringeID = 1
+      integer :: z_ref !myFringeID = 1
       !logical :: useTwoFringex = .false. 
       real(rkind)                          :: phi, beta, phi_ref, sigma
       contains
@@ -29,7 +29,7 @@ module angleControl
     
 contains
    
-    subroutine update_RHS_control(this, dt, urhs, vrhs, wrhs, uC, vC, newTimestep)
+    subroutine update_RHS_control(this, dt, urhs, vrhs, wrhs, uC, vC, newTimestep, phi_n)
       class(angCont),                                                                        intent(inout)  :: this
       real(rkind),                                                                         intent(in)     :: dt
       real(rkind),    dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)),          intent(in)     :: uC, vC 
@@ -39,20 +39,21 @@ contains
       logical, intent(in) :: newTimestep
       integer :: nx, ny, i, j
       ! PID tuning parameters
-      real(rkind) :: wControl, phi_n 
+      real(rkind) :: wControl
+      real(rkind), intent(out) :: phi_n 
       nx = this%gpC%xsz(1)
       ny = this%gpC%xsz(2)
 
       ! PID controller
       if (newTimestep) then
-      this%cbuffyC(:,:,:,1) = atan((uC / vC)) * 180.d0 / pi
+      this%rbuffxC(:,:,:,1) = atan((vC / uC)) !* 180.d0 / pi
       phi_n = 0.d0 
       do j = 1, nx
               do i = 1, ny
-                      phi_n = phi_n + this%cbuffyC(j,i,this%z_ref,1)
+                      phi_n = phi_n + this%rbuffxC(j,i,this%z_ref,1)
               enddo
       enddo
-      phi_n = phi_n / (float(nx) * float(ny))
+      phi_n = phi_n / (float(nx) * float(ny)) 
       wControl = (phi_n - this%phi) / dt
       this%phi = phi_n
       wControl = wControl + this%beta * (phi_n - this%phi_ref)
@@ -99,7 +100,7 @@ contains
       real(rkind),    dimension(:,:,:,:), target, intent(in) :: rbuffxC, rbuffxE
       complex(rkind), dimension(:,:,:,:), target, intent(in) :: cbuffyC, cbuffyE
       !integer, intent(in), optional :: fringeID
-      real(rkind) :: phi_ref, beta, sigma 
+      real(rkind) :: phi_ref, beta, sigma, phi 
 
       !real(rkind) :: Lx, Ly, LambdaFact = 2.45d0, LambdaFact2 = 2.45d0
       !real(rkind) :: Fringe_yst = 1.d0, Fringe_yen = 1.d0
@@ -145,7 +146,7 @@ contains
       this%sigma = sigma
       this%phi_ref = phi_ref
       this%z_ref = z_ref
-
+      this%phi = phi_ref
       
       !allocate(this%Fringe_kernel_cells(nx, gpC%xsz(2), gpC%xsz(3)))
       !allocate(this%Fringe_kernel_edges(nx, gpE%xsz(2), gpE%xsz(3)))
