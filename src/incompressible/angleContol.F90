@@ -4,6 +4,7 @@ module angleControl
    use spectralMod, only: spectral  
    use exits, only: message
    use constants, only: pi
+   use reductions, only: p_sum
    implicit none
 
 
@@ -15,12 +16,12 @@ module angleControl
       !real(rkind)                                   :: Fringe_Lambda_x
       type(spectral),    pointer                    :: spectC, spectE
       type(decomp_info), pointer                    :: gpC, gpE, sp_gpC, sp_gpE
-      real(rkind),    dimension(:,:,:,:), pointer   :: rbuffxC, rbuffxE
+      real(rkind),    dimension(:,:,:,:), pointer   :: rbuffxC, rbuffxE, rbuffyC, rbuffzC
       complex(rkind), dimension(:,:,:,:), pointer   :: cbuffyC, cbuffyE
       !real(rkind)                                   :: LambdaFact
       integer :: z_ref !myFringeID = 1
       !logical :: useTwoFringex = .false. 
-      real(rkind)                          :: phi, beta, phi_ref, sigma
+      real(rkind)                          :: phi, beta, phi_ref, sigma, wControl, wFilt
       contains
          procedure :: init
          procedure :: destroy
@@ -39,33 +40,41 @@ contains
       logical, intent(in) :: newTimestep
       integer :: nx, ny, i, j
       ! PID tuning parameters
-      real(rkind) :: wControl
+      real(rkind) :: wControl_n, wFilt_n
       real(rkind), intent(out) :: phi_n 
       nx = this%gpC%xsz(1)
       ny = this%gpC%xsz(2)
 
       ! PID controller
       if (newTimestep) then
-      this%rbuffxC(:,:,:,1) = atan((vC / uC)) !* 180.d0 / pi
-      phi_n = 0.d0 
-      do j = 1, nx
-              do i = 1, ny
-                      phi_n = phi_n + this%rbuffxC(j,i,this%z_ref,1)
-              enddo
-      enddo
-      phi_n = phi_n / (float(nx) * float(ny)) 
-      wControl = (phi_n - this%phi) / dt
-      this%phi = phi_n
-      wControl = wControl + this%beta * (phi_n - this%phi_ref)
+         this%rbuffxC(:,:,:,1) = atan((vC / uC)) !* 180.d0 / pi
+         !phi_n = 0.d0 
+         !do j = 1, nx
+         !        do i = 1, ny
+         !                phi_n = phi_n + this%rbuffxC(j,i,this%z_ref,1)
+         !        enddo
+         !enddo
+         !phi_n = phi_n / (float(nx) * float(ny)) 
+         call transpose_x_to_y(this%rbuffxC(:,:,:,1),this%rbuffyC(:,:,:,1),this%gpC)
+         call transpose_y_to_z(this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1),this%gpC)
+         phi_n = p_sum(sum(this%rbuffzC(:,:,this%z_ref,1))) / (float(nx) * float(ny))
+         wControl_n = (phi_n - this%phi) / dt
+         this%phi = phi_n
+         wControl_n = wControl_n! + this%beta * (phi_n - this%phi_ref)
+         ! First order time filter         
+         wFilt_n = (2.d0*wControl_n + 2.d0*this%wControl - this%wFilt*(2.d0-this%sigma*dt)) / (this%sigma*dt + 2.d0) 
+         this%wFilt = wFilt_n
+         this%wControl = wControl_n
+         wFilt_n = wFilt_n + this%beta * (phi_n - this%phi_ref)
 
       !if (this%targetsAssociated) then
          ! u velocity source term 
-         this%rbuffxC(:,:,:,1) =  vC * wControl
+         this%rbuffxC(:,:,:,1) =  vC * wFilt_n
          call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
          urhs = urhs + this%cbuffyC(:,:,:,1)
 
          ! v velocity source term 
-         this%rbuffxC(:,:,:,1) = - uC * wControl
+         this%rbuffxC(:,:,:,1) = - uC * wFilt_n
          call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
          vrhs = vrhs + this%cbuffyC(:,:,:,1)
          
@@ -87,7 +96,7 @@ contains
       !this%TargetsAssociated = .false.
    end subroutine
 
-   subroutine init(this, inputfile, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE)
+   subroutine init(this, inputfile, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE, rbuffyC, rbuffzC)
       use reductions, only: p_maxval
       use mpi
       class(angCont), intent(inout) :: this
@@ -97,7 +106,7 @@ contains
       !real(rkind), dimension(gpC%xsz(2)), intent(in) :: y
       !real(rkind), intent(in) :: dx, dy
       type(spectral), intent(in), target :: spectC, spectE
-      real(rkind),    dimension(:,:,:,:), target, intent(in) :: rbuffxC, rbuffxE
+      real(rkind),    dimension(:,:,:,:), target, intent(in) :: rbuffxC, rbuffxE, rbuffyC, rbuffzC
       complex(rkind), dimension(:,:,:,:), target, intent(in) :: cbuffyC, cbuffyE
       !integer, intent(in), optional :: fringeID
       real(rkind) :: phi_ref, beta, sigma, phi 
@@ -142,12 +151,16 @@ contains
       this%rbuffxE => rbuffxE
       this%cbuffyC => cbuffyC 
       this%cbuffyE => cbuffyE
+      this%rbuffyC => rbuffyC
+      this%rbuffzC => rbuffzC
       this%beta = beta
       this%sigma = sigma
       this%phi_ref = phi_ref
       this%z_ref = z_ref
       this%phi = phi_ref
-      
+      this%wControl = 0.d0
+      this%wFilt = 0.d0     
+ 
       !allocate(this%Fringe_kernel_cells(nx, gpC%xsz(2), gpC%xsz(3)))
       !allocate(this%Fringe_kernel_edges(nx, gpE%xsz(2), gpE%xsz(3)))
       
