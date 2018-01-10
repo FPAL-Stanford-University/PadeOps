@@ -34,10 +34,10 @@ program test_Miranda_restart
     ! Get command line arguments
     call getarg(1,jobdir)
     call getarg(2,resfile)
-    call getarg(3,dummy); read(dummy, '(I)') nx
-    call getarg(4,dummy); read(dummy, '(I)') ny
-    call getarg(5,dummy); read(dummy, '(I)') nz
-    call getarg(6,dummy); read(dummy, '(I)') step
+    call getarg(3,dummy); read(dummy, '(I4)') nx
+    call getarg(4,dummy); read(dummy, '(I4)') ny
+    call getarg(5,dummy); read(dummy, '(I4)') nz
+    call getarg(6,dummy); read(dummy, '(I4)') step
 
     ! Initialize the grid partition object
     call decomp_2d_init(nx, ny, nz, prow, pcol, [periodicx, periodicy, periodicz])
