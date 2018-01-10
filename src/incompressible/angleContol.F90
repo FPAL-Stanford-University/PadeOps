@@ -41,7 +41,8 @@ contains
       integer :: nx, ny, i, j
       ! PID tuning parameters
       real(rkind) :: wControl_n, wFilt_n
-      real(rkind), intent(out) :: phi_n 
+      real(rkind), intent(out) :: phi_n
+      !real(rkind), intent(out) :: totalAngle
       nx = this%gpC%xsz(1)
       ny = this%gpC%xsz(2)
 
@@ -58,11 +59,14 @@ contains
          call transpose_x_to_y(this%rbuffxC(:,:,:,1),this%rbuffyC(:,:,:,1),this%gpC)
          call transpose_y_to_z(this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1),this%gpC)
          phi_n = p_sum(sum(this%rbuffzC(:,:,this%z_ref,1))) / (float(nx) * float(ny))
-         wControl_n = (phi_n - this%phi) / dt
+         wControl_n = (phi_n - this%phi) / dt 
+         ! Update the total angle and stored angles
+         !totalAngle = totalAngle + (phi_n - this%phi)
          this%phi = phi_n
          wControl_n = wControl_n! + this%beta * (phi_n - this%phi_ref)
          ! First order time filter         
-         wFilt_n = (2.d0*wControl_n + 2.d0*this%wControl - this%wFilt*(2.d0-this%sigma*dt)) / (this%sigma*dt + 2.d0) 
+         !wFilt_n = (dt*wControl_n + dt*this%wControl + this%wFilt*(2.d0*this%sigma - dt)) / (this%sigma*2.d0 + dt) 
+         wFilt_n = (1.d0 - (dt/(this%sigma+dt))) * this%wFilt + dt/(this%sigma + dt) * wControl_n
          this%wFilt = wFilt_n
          this%wControl = wControl_n
          wFilt_n = wFilt_n + this%beta * (phi_n - this%phi_ref)
@@ -160,6 +164,7 @@ contains
       this%phi = phi_ref
       this%wControl = 0.d0
       this%wFilt = 0.d0     
+!      this%totalAngle = 0.d0
  
       !allocate(this%Fringe_kernel_cells(nx, gpC%xsz(2), gpC%xsz(3)))
       !allocate(this%Fringe_kernel_edges(nx, gpE%xsz(2), gpE%xsz(3)))

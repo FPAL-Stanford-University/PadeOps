@@ -245,7 +245,7 @@ module IncompressibleGrid
         ! Control
         logical                           :: useControl = .false.
         type(angCont), allocatable, public :: angCont_yaw
-        real(rkind) :: angleHubHeight, zHubIndex
+        real(rkind) :: angleHubHeight, zHubIndex, totalAngle, latitude
 
         ! HIT Forcing
         logical :: useHITForcing = .false.
@@ -383,7 +383,8 @@ contains
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact;this%useFringe = useFringe; this%useControl = useControl
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType 
-        this%frameAngle = frameAngle; this%computeVorticity = computeVorticity
+        this%frameAngle = frameAngle; this%computeVorticity = computeVorticity; this%latitude = latitude
+        
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -940,6 +941,7 @@ contains
                         this%rbuffyC, this%rbuffzC) 
         end if
         this%angleHubHeight = 0.d0       
+        this%totalAngle = 0.d0
  
         ! STEP 18: Set HIT Forcing
         if (this%useHITForcing) then
@@ -1730,6 +1732,7 @@ contains
         class(igrid), intent(inout) :: this
         !integer,           intent(in)    :: RKstage
         integer :: i,j
+        !real(rkind) :: totalAngleTemp
         !use reductions, only: p_sum
         ! Step 1: Non Linear Term 
         if (useSkewSymm) then
@@ -1844,7 +1847,14 @@ contains
 
         ! Step 9: Frame rotatio PI controller to fix yaw angle at a given height
         if (this%useControl) then
-            call this%angCont_yaw%update_RHS_control(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%newTimeStep, this%angleHubHeight)
+            call this%angCont_yaw%update_RHS_control(this%dt, this%u_rhs, this%v_rhs, &
+                          this%w_rhs, this%u, this%v, this%newTimeStep, this%angleHubHeight)
+            this%totalAngle = this%totalAngle + this%angleHubHeight
+            if (this%newTimeStep) then
+                !this%coriolis_omegaX = cos(this%latitude*pi/180.d0)*sin(this%totalAngle)
+                !this%coriolis_omegaZ = sin(this%latitude*pi/180.d0)
+                !this%coriolis_omegaY = cos(this%latitude*pi/180.d0)*cos(this%totalAngle)
+            end if
         else
             this%zHubIndex = 16
             this%rbuffxC(:,:,:,1) = atan(this%v / this%u) * 180.d0 / 3.14d0
