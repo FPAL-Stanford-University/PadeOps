@@ -1857,7 +1857,7 @@ contains
             end if
         else
             this%zHubIndex = 16
-            this%rbuffxC(:,:,:,1) = atan(this%v / this%u) * 180.d0 / 3.14d0
+            this%rbuffxC(:,:,:,1) = atan(this%v / this%u) !* 180.d0 / 3.14d0
             call transpose_x_to_y(this%rbuffxC(:,:,:,1),this%rbuffyC(:,:,:,1),this%gpC)
             call transpose_y_to_z(this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1),this%gpC)
             this%angleHubHeight = p_sum(sum(this%rbuffzC(:,:,this%zHubIndex,1)))
