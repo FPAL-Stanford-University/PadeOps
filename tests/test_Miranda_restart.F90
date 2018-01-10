@@ -60,7 +60,7 @@ program test_Miranda_restart
 
     if ( writeviz ) then
         allocate( varnames(mir%nres) )
-        varnames(1:5) = ['u', 'v', 'w', 'rho', 'e']
+        varnames(1:5) = ['u  ', 'v  ', 'w  ', 'rho', 'e  ']
         do i = 1,mir%ns
             write(dummy,'(A,I2.2)') "Y_", i
             varnames(5+i) = trim(dummy)

@@ -59,14 +59,16 @@ end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use mpi
-    use kind_parameters,      only: rkind, clen
-    use constants,            only: zero,half,one,two,three,pi
-    use CompressibleGrid,     only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
-    use decomp_2d,            only: decomp_info, nrank, nproc
-    use MixtureEOSMod,        only: mixture
-    use IdealGasEOS,          only: idealgas
-    use PowerLawViscosityMod, only: powerLawViscosity
-    use exits,                only: GracefulExit
+    use kind_parameters,             only: rkind, clen
+    use constants,                   only: zero,half,one,two,three,pi
+    use CompressibleGrid,            only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
+    use decomp_2d,                   only: decomp_info, nrank, nproc
+    use MixtureEOSMod,               only: mixture
+    use IdealGasEOS,                 only: idealgas
+    use PowerLawViscosityMod,        only: powerLawViscosity
+    use ConstRatioBulkViscosityMod,  only: constRatioBulkViscosity
+    use ConstPrandtlConductivityMod, only: constPrandtlConductivity
+    use exits,                       only: GracefulExit
     
     use CHIT_data
 
@@ -108,7 +110,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         T_ref = 1._rkind / gam
 
         ! Set the material property
-        call mix%set_material(1, idealgas(gam,one), powerLawViscosity(mu_ref, T_ref, visc_exp, Pr))
+        call mix%set_material(1, idealgas(gam,one), shearvisc = powerLawViscosity(mu_ref, T_ref, visc_exp), &
+                                                    bulkvisc = constRatioBulkViscosity(zero), &
+                                                    thermcond = constPrandtlConductivity(Pr) )
 
         ! Make all processes read the file one by one to avoid file access conflicts
         do rank = 0,nproc-1

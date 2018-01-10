@@ -288,6 +288,9 @@ contains
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         this%mix, this%tstop, this%dtfixed, tviz)
         
+        ! Check for correct initialization of the mixture object
+        call this%mix%check_initialization()
+
         ! Update mix
         call this%mix%update(this%Ys)
         call this%mix%get_e_from_p(this%rho,this%p,this%e)

@@ -37,6 +37,7 @@ module MixtureEOSMod
         procedure :: init
         procedure :: set_material
         procedure :: set_massdiffusivity
+        procedure :: check_initialization
         procedure :: update
         procedure :: get_p
         procedure :: get_T
@@ -86,12 +87,12 @@ contains
         class(mixture),                       intent(inout) :: this
         integer,                              intent(in)    :: imat
         class(idealgas),                      intent(in)    :: mat
-        ! class(shearViscosity),      optional, intent(in)    :: shearvisc
-        ! class(bulkViscosity),       optional, intent(in)    :: bulkvisc
-        ! class(thermalConductivity), optional, intent(in)    :: thermcond
-        class(shearViscosity),                intent(in)    :: shearvisc
-        class(bulkViscosity),                 intent(in)    :: bulkvisc
-        class(thermalConductivity),           intent(in)    :: thermcond
+        class(shearViscosity),      optional, intent(in)    :: shearvisc
+        class(bulkViscosity),       optional, intent(in)    :: bulkvisc
+        class(thermalConductivity), optional, intent(in)    :: thermcond
+        ! class(shearViscosity),                intent(in)    :: shearvisc
+        ! class(bulkViscosity),                 intent(in)    :: bulkvisc
+        ! class(thermalConductivity),           intent(in)    :: thermcond
 
         if ((imat .GT. this%ns) .OR. (imat .LE. 0)) call GracefulExit("Cannot set material with index greater than the number of species.",4534)
 
@@ -100,22 +101,22 @@ contains
         allocate( this%material(imat)%mat, source=mat )
 
         if (.not. this%inviscid) then
-            ! if (.not. present(shearvisc)) call GracefulExit("Cannot run viscous simulation without &
-            !                               &setting shear viscosity transport property object", 4534)
+            if (.not. present(shearvisc)) call GracefulExit("Cannot run viscous simulation without &
+                                          &setting shear viscosity transport property object", 4534)
 
             ! Allocate and set the material transport property object
             if (allocated(this%material(imat)%shearvisc)) deallocate(this%material(imat)%shearvisc)
             allocate( this%material(imat)%shearvisc, source=shearvisc )
 
-            ! if (.not. present(bulkvisc)) call GracefulExit("Cannot run viscous simulation without &
-            !                               &setting bulk viscosity transport property object", 4534)
+            if (.not. present(bulkvisc)) call GracefulExit("Cannot run viscous simulation without &
+                                         &setting bulk viscosity transport property object", 4534)
 
             ! Allocate and set the material transport property object
             if (allocated(this%material(imat)%bulkvisc)) deallocate(this%material(imat)%bulkvisc)
             allocate( this%material(imat)%bulkvisc, source=bulkvisc )
 
-            ! if (.not. present(thermcond)) call GracefulExit("Cannot run viscous simulation without &
-            !                          &setting thermal conductivity transport property object", 4534)
+            if (.not. present(thermcond)) call GracefulExit("Cannot run viscous simulation without &
+                                          &setting thermal conductivity transport property object", 4534)
 
             ! Allocate and set the material transport property object
             if (allocated(this%material(imat)%thermcond)) deallocate(this%material(imat)%thermcond)
@@ -133,6 +134,30 @@ contains
                 ! Allocate and set the material transport property object
                 if (allocated(this%massdiff)) deallocate(this%massdiff)
                 allocate( this%massdiff, source=massdiff )
+            end if
+        end if
+    end subroutine
+
+    subroutine check_initialization(this)
+        class(mixture), intent(in) :: this
+
+        integer :: imat
+
+        if (.not. this%inviscid) then
+            do imat = 1,this%ns
+                if (.not. allocated(this%material(imat)%shearvisc)) call GracefulExit("Cannot run viscous simulation without &
+                                                                    &setting shear viscosity transport property object", 4534)
+
+                if (.not. allocated(this%material(imat)%bulkvisc)) call GracefulExit("Cannot run viscous simulation without &
+                                                                   &setting bulk viscosity transport property object", 4534)
+
+                if (.not. allocated(this%material(imat)%thermcond)) call GracefulExit("Cannot run viscous simulation without &
+                                                                    &setting thermal conductivity transport property object", 4534)
+            end do
+
+            if (this%ns > 1) then
+                if (.not. allocated(this%massdiff)) call GracefulExit("Cannot run viscous multispecies simulation without &
+                                                    &setting mass diffusivity transport property object", 4534)
             end if
         end if
     end subroutine
