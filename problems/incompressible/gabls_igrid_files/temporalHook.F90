@@ -42,8 +42,9 @@ contains
             call message(1,"u_star:",igp%sgsmodel%get_ustar())
             call message(1,"Inv. Ob. Length:",igp%sgsmodel%get_InvObLength())
             call message(1,"wTh_surf:",igp%sgsmodel%get_wTh_surf())
-            call message(1,"hub angle:",igp%angleHubHeight)
+            call message(1,"hub angle, degrees:",igp%angleHubHeight * 180.d0/3.14d0)
             call message(1,"frameAngle:",igp%frameAngle)
+            call message(1,"total angle, degrees:", igp%totalAngle*180.d0/3.14d0)
             if (igp%useCFL) then
                 call message(1,"Current dt:",igp%dt)
             end if
