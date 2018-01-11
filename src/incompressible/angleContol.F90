@@ -48,7 +48,7 @@ contains
 
       ! PID controller
       if (newTimestep) then
-         this%rbuffxC(:,:,:,1) = atan((vC / uC)) !* 180.d0 / pi
+         this%rbuffxC(:,:,:,1) = atan2(vC, uC) !* 180.d0 / pi
          !phi_n = 0.d0 
          !do j = 1, nx
          !        do i = 1, ny
@@ -58,7 +58,7 @@ contains
          !phi_n = phi_n / (float(nx) * float(ny)) 
          call transpose_x_to_y(this%rbuffxC(:,:,:,1),this%rbuffyC(:,:,:,1),this%gpC)
          call transpose_y_to_z(this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1),this%gpC)
-         phi_n = p_sum(sum(this%rbuffzC(:,:,this%z_ref,1))) / (float(nx) * float(ny))
+         phi_n = p_sum(sum(this%rbuffzC(:,:,this%z_ref,1))) / (real(nx,rkind) * real(ny,rkind))
          wControl_n = (phi_n - this%phi) / dt 
          ! Update the total angle and stored angles
          !totalAngle = totalAngle + (phi_n - this%phi)
