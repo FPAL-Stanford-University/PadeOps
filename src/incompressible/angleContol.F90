@@ -137,10 +137,11 @@ contains
       !   this%useTwoFringex = .true. 
       !end if
       !nx = gpC%xsz(1)
-      real(rkind)  :: Lx = 1.d0, Ly = 1.d0, Lz = 1.d0, Tref = 0.d0, Tsurf0 = 1.d0, dTsurf_dt = -0.05d0, z0init = 1.d-4, frameAngle = 0.d0
-      namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, Tsurf0, dTsurf_dt, z0init, frameAngle, beta, sigma, phi_ref, z_ref
+      !real(rkind)  :: Lx = 1.d0, Ly = 1.d0, Lz = 1.d0, Tref = 0.d0, Tsurf0 = 1.d0, dTsurf_dt = -0.05d0, z0init = 1.d-4, frameAngle = 0.d0
+      !namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, Tsurf0, dTsurf_dt, z0init, frameAngle, beta, sigma, phi_ref, z_ref
+      namelist /CONTROL/ beta, sigma, phi_ref, z_ref
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
-      read(unit=ioUnit, NML=PROBLEM_INPUT)
+      read(unit=ioUnit, NML=CONTROL)
       close(ioUnit)
 
       !Lx = maxval(x) + dx
