@@ -249,7 +249,7 @@ module IncompressibleGrid
         ! Control
         logical                           :: useControl = .false.
         type(angCont), allocatable, public :: angCont_yaw
-        real(rkind) :: angleHubHeight, zHubIndex, totalAngle, latitude
+        real(rkind) :: angleHubHeight, zHubIndex, totalAngle!, latitude
 
         ! HIT Forcing
         logical :: useHITForcing = .false.
@@ -335,7 +335,7 @@ contains
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10, BuoyancyTermType = 1
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
         real(rkind) :: Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0
-        logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false.
+        logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false., useControl = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
         logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
@@ -343,12 +343,8 @@ contains
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
         logical, intent(in), optional :: initialize2decomp
-<<<<<<< HEAD
-        logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., useControl = .false.  
-=======
-        logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
+        logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true.,computeFringePressure = .false., computeDNSPressure = .false.  
         logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false.  
->>>>>>> origin
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -394,13 +390,10 @@ contains
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact;this%useFringe = useFringe; this%useControl = useControl
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType 
-<<<<<<< HEAD
-        this%frameAngle = frameAngle; this%computeVorticity = computeVorticity; this%latitude = latitude
+        this%frameAngle = frameAngle; this%computeVorticity = computeVorticity!; this%latitude = latitude
         
-=======
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity; this%deleteInstructions = deleteInstructions
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS
->>>>>>> origin
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -1725,7 +1718,7 @@ contains
     subroutine addCoriolisTerm(this)
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ybuffE, ybuffC1, ybuffC2, zbuffC, zbuffE
-        real(rkind) :: frameAngle, latitude
+        !real(rkind) :: frameAngle!, latitude
         integer(rkind) :: i, j
 
         ybuffE => this%cbuffyE(:,:,:,1)
