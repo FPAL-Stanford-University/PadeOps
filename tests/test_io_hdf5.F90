@@ -150,6 +150,12 @@ program test_io_hdf5
     call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', reduce_precision=reduce_precision, read_only=.true., &
                   subdomain_lo=subdomain_lo, subdomain_hi=subdomain_hi)
 
+    if (viz%find_last_dump() /= 3) then
+        call message("ERROR:")
+        call message("  Last dump index is incorrect")
+        stop
+    end if
+
     call viz%read_coords(coords_read)
     do k = 1,gp%ysz(3)
         if ( ( (gp%yst(3) - 1 + k) < subdomain_lo(3) ) .or. ( (gp%yst(3) - 1 + k) > subdomain_hi(3) ) ) cycle
@@ -167,7 +173,7 @@ program test_io_hdf5
     end do
 
 
-    do iter = 1,4
+    do iter = 1,viz%find_last_dump()+1
         f    =  sin(iter*x)*sin(iter*y)*cos(iter*z)*iter
         time = (iter - 1)*0.01D0
         call viz%start_reading(iter-1)

@@ -1,5 +1,5 @@
 # Files to be ignored by git
-*SetupEnv*.sh*
+# *SetupEnv*.sh*
 build*
 *.mod
 *.F90.swp
@@ -11,4 +11,5 @@ data/*
 tags
 pbsfiles
 batch_scripts
+bin*
 pp

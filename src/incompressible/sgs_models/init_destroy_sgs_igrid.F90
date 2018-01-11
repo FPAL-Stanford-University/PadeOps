@@ -36,11 +36,11 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappa
    end if 
 end subroutine 
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, Pr, isInviscid, isStratified, botBC_temp, initSpinUp)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, isInviscid, isStratified, botBC_temp, initSpinUp)
   class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
-  real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re, Pr
+  real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re
   real(rkind), intent(in), target :: Tsurf
   character(len=*), intent(in) :: inputfile
   real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC
@@ -56,7 +56,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   ! Input file variables
   logical :: useWallDamping = .false., useSGSDynamicRestart = .false., useVerticalTfilter = .false.
   integer :: DynamicProcedureType = 0, SGSmodelID = 0, WallModelType = 0, DynProcFreq = 1
-  real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0, deltaRatio = 2.d0
+  real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0, deltaRatio = 2.d0, turbPrandtl = 0.4d0 
   character(len=clen) :: SGSDynamicRestartFile
   logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false. 
   integer :: ierr
@@ -65,7 +65,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
                  useWallDamping, ncWall, Csgs, WallModelType, &
                  DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,&
                  SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity, &
-                 UseDynamicProcedureScalar, deltaRatio
+                 UseDynamicProcedureScalar, deltaRatio, turbPrandtl
 
 
   this%gpC => gpC
@@ -78,7 +78,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%Tsurf => Tsurf
   this%Fr = Fr
   this%Re = Re
-  this%Pr = Pr
+  !this%Pr = Pr
+  this%Pr = turbPrandtl
   this%ThetaRef = ThetaRef
   this%PadeDer => PadeDer
   this%fxC => fBody_x
