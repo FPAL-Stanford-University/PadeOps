@@ -45,6 +45,7 @@ contains
             call message(1,"hub angle, degrees:",igp%angleHubHeight * 180.d0/3.14d0)
             call message(1,"frameAngle:",igp%frameAngle)
             call message(1,"total angle, degrees:", igp%totalAngle*180.d0/3.14d0)
+            call message(1,"Control w, rad/time:",igp%wFilt)
             if (igp%useCFL) then
                 call message(1,"Current dt:",igp%dt)
             end if
