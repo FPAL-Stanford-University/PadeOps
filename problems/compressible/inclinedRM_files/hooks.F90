@@ -1,5 +1,5 @@
 module inclinedRM_data
-    use kind_parameters,  only: rkind
+    use kind_parameters,  only: rkind, clen
     use constants,        only: zero, one
     implicit none
 
@@ -33,16 +33,20 @@ module inclinedRM_data
 
     ! Domain size data
     real(rkind) :: L_y = 0.1143_rkind
-    real(rkind) :: L_x = 16._rkind * L_y, L_z = L_y / 4._rkind
-    real(rkind) :: x1 = 2.5146_rkind - Lx, y1 = zero, z1 = -Lz / 2._rkind
+    real(rkind) :: L_x, L_z
+    real(rkind) :: x1, y1, z1
 
     logical :: periodicx = .false., periodicy = .false., periodicz = .true.
+
+    ! Miranda restart parameters
+    character(len=clen) :: resdir, resfile
+    integer :: resdump = 0
 
 end module
 
 subroutine meshgen(decomp, dx, dy, dz, mesh)
     use kind_parameters,  only: rkind
-    use constants,        only: half,one
+    use constants,        only: zero, half, one
     use decomp_2d,        only: decomp_info
 
     use inclinedRM_data
@@ -65,9 +69,15 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     ! Need to set x, y and z as well as  dx, dy and dz
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = L_x /real(nx-1,rkind)
-        dy = L_yz/real(ny-1,rkind)
-        dz = L_yz/real(nz  ,rkind)
+        L_x = 16._rkind * L_y
+        L_z = L_y / 4._rkind
+        x1 = 2.5146_rkind - L_x
+        y1 = zero
+        z1 = -L_z / 2._rkind
+
+        dx = L_x/real(nx-1,rkind)
+        dy = L_y/real(ny-1,rkind)
+        dz = L_z/real(nz  ,rkind)
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
@@ -95,7 +105,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use ConstPrandtlConductivityMod, only: constPrandtlConductivity
     use ReidRamshawDiffusivityMod,   only: reidRamshawDiffusivity
     use miranda_restart_mod,         only: miranda_restart
-    use exits,                       only: GracefulExit
+    use exits,                       only: GracefulExit, message
     
     use inclinedRM_data
 
@@ -113,7 +123,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind) :: R_air, Cp_air, gamma_air, Cp_N2, Cp_O2, sos_air, R_HG
     real(rkind) :: rho_shocked, u_shocked, p_shocked
     real(rkind), dimension(:,:,:,:), allocatable :: resmesh, resdata
-    integer :: resdump = 0
     character(len=clen) :: charout
 
     type(chapmanEnskogViscosity) :: shearvisc

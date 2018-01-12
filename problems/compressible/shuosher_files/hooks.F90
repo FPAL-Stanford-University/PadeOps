@@ -61,7 +61,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,half,one,two,pi,eight
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
@@ -77,7 +77,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind),                     intent(in)    :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-    real(rkind),                     intent(inout) :: tstop,dt,tviz
+    real(rkind),                     intent(inout) :: tsim,tstop,dt,tviz
 
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
 

@@ -57,7 +57,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
     use mpi
     use kind_parameters,             only: rkind, clen
     use constants,                   only: zero,half,one,two,three,pi
@@ -79,7 +79,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind),                     intent(in)    :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-    real(rkind),                     intent(inout) :: tstop,dt,tviz
+    real(rkind),                     intent(inout) :: tsim,tstop,dt,tviz
     
     integer :: ioUnit
     integer :: counter, rank, ierr

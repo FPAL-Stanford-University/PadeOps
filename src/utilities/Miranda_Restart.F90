@@ -9,20 +9,6 @@ module miranda_restart_mod
 
     private
 
-    integer, parameter :: u_index=1                               ! x-velocity Index
-    integer, parameter :: v_index=2                               ! y-velocity Index
-    integer, parameter :: w_index=3                               ! z-velocity Index
-    integer, parameter :: rho_index=4                             ! Density Index
-    integer, parameter :: e_index=5                               ! Energy Index
-    integer, parameter :: p_index=6                               ! Pressure Index
-    integer, parameter :: T_index=7                               ! Temp Index
-    integer, parameter :: c_index=8                               ! Speed of sound Index
-    integer, parameter :: mu_index=9                              ! Shear visc Index
-    integer, parameter :: bulk_index=10                           ! Bulk visc Index
-    integer, parameter :: ktc_index=11                            ! Thermal cond Index
-    integer, parameter :: Diff_index=12                           ! Species diffusion Index
-    integer, parameter :: Ys_index=13                             ! Species mass-fraction Index
-
     public :: miranda_restart
 
     type miranda_restart
@@ -90,10 +76,10 @@ contains
             call GracefulExit("Grid size in Z in gp does not match that in the data", 347)
         end if
 
-        u_index = 1; v_index = 2; w_index = 3; rho_index = 4; e_index = 5
-        Ys_index = 6
-        p_index  = Ys_index + this%ns
-        T_index  = p_index + 1
+        this%u_index = 1; this%v_index = 2; this%w_index = 3; this%rho_index = 4; this%e_index = 5
+        this%Ys_index = 6
+        this%p_index  = this%Ys_index + this%ns
+        this%T_index  = this%p_index + 1
 
     end subroutine
 
