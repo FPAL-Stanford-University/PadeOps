@@ -249,7 +249,7 @@ module IncompressibleGrid
         ! Control
         logical                           :: useControl = .false.
         type(angCont), allocatable, public :: angCont_yaw
-        real(rkind) :: angleHubHeight, zHubIndex, totalAngle!, latitude
+        real(rkind) :: angleHubHeight, zHubIndex, totalAngle, wFilt
 
         ! HIT Forcing
         logical :: useHITForcing = .false.
@@ -953,6 +953,7 @@ contains
         end if
         this%angleHubHeight = 0.d0       
         this%totalAngle = 0.d0
+        this%wFilt = 0.d0
  
         ! STEP 18: Set HIT Forcing
         if (this%useHITForcing) then
@@ -1952,7 +1953,7 @@ contains
         ! Step 9: Frame rotatio PI controller to fix yaw angle at a given height
         if (this%useControl) then
             call this%angCont_yaw%update_RHS_control(this%dt, this%u_rhs, this%v_rhs, &
-                          this%w_rhs, this%u, this%v, this%newTimeStep, this%angleHubHeight)
+                          this%w_rhs, this%u, this%v, this%newTimeStep, this%angleHubHeight, this%wFilt)
             this%totalAngle = this%totalAngle + this%angleHubHeight
             if (this%newTimeStep) then
                 !this%coriolis_omegaX = cos(this%latitude*pi/180.d0)*sin(this%totalAngle)
