@@ -277,13 +277,13 @@ contains
                     ! mat  => this%material(i)%mat
                     ! visc => this%material(i)%visc
 
-                    Cp = this%material(i)%mat%gam * this%material(i)%mat%Rgas * this%material(i)%mat%onebygam_m1 ! Cp
+                    ! Cp = this%material(i)%mat%gam * this%material(i)%mat%Rgas * this%material(i)%mat%onebygam_m1 ! Cp
                     den = den + Ys(:,:,:,i)*sqrt(this%material(i)%mat%Rgas)
 
                     call this%material(i)%shearvisc%get_mu(T, mu_i)
                     mu = mu + mu_i*Ys(:,:,:,i)*sqrt(this%material(i)%mat%Rgas)
 
-                    call this%material(i)%thermcond%get_kappa(T, Cp, mu_i, tmp)
+                    call this%material(i)%thermcond%get_kappa(T, this%Cp, mu_i, tmp) ! Use mixture Cp like in Tritschler et. al.
                     kappa = kappa + tmp*Ys(:,:,:,i)*sqrt(this%material(i)%mat%Rgas)
 
                     call this%material(i)%bulkvisc%get_beta(T, mu_i, tmp)

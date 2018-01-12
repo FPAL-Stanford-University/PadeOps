@@ -286,7 +286,7 @@ contains
 
         ! Go to hooks if a different initialization is derired 
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
-                        this%mix, this%tstop, this%dtfixed, tviz)
+                        this%mix, this%tsim, this%tstop, this%dtfixed, tviz)
         
         ! Check for correct initialization of the mixture object
         call this%mix%check_initialization()

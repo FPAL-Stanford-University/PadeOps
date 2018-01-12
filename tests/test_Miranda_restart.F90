@@ -50,7 +50,7 @@ program test_Miranda_restart
     call message("nz", nz)
 
     ! Initialize miranda_restart object
-    call mir%init(gp, jobdir, resfile, prow, pcol, periodicx, periodicy, periodicz)
+    call mir%init(gp, jobdir, resfile)
 
     allocate( mesh   (gp%ysz(1), gp%ysz(2), gp%ysz(3), 3       ) )
     allocate( resdata(gp%ysz(1), gp%ysz(2), gp%ysz(3), mir%nres) )
@@ -60,12 +60,17 @@ program test_Miranda_restart
 
     if ( writeviz ) then
         allocate( varnames(mir%nres) )
-        varnames(1:5) = ['u  ', 'v  ', 'w  ', 'rho', 'e  ']
+        varnames(mir%u_index)   = 'u'
+        varnames(mir%v_index)   = 'v'
+        varnames(mir%w_index)   = 'w'
+        varnames(mir%rho_index) = 'rho'
+        varnames(mir%e_index)   = 'e'
         do i = 1,mir%ns
             write(dummy,'(A,I2.2)') "Y_", i
-            varnames(5+i) = trim(dummy)
+            varnames(mir%Ys_index+i-1) = trim(dummy)
         end do
-        varnames(5+mir%ns+1:5+mir%ns+2) = ['p', 'T']
+        varnames(mir%p_index) = 'p'
+        varnames(mir%T_index) = 'T'
         call viz%init('.', 'mir_restart', mir%nres, varnames)
     end if
 

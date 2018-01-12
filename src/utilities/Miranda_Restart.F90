@@ -37,12 +37,6 @@ module miranda_restart_mod
         integer :: ns
         integer :: nsteps
 
-        integer :: prow, pcol
-
-        logical :: periodicx = .FALSE.
-        logical :: periodicy = .FALSE.
-        logical :: periodicz = .FALSE.
-
         real(rkind) :: dx, dy, dz
 
         integer, dimension(:,:),   allocatable :: procmap
@@ -51,6 +45,8 @@ module miranda_restart_mod
         character(len=clen) :: jobdir           ! Directory that contains all
                                                 ! miranda output and restart files
         character(len=clen) :: resfile          ! Name of the miranda res file
+
+        integer :: u_index, v_index, w_index, rho_index, e_index, Ys_index, p_index, T_index
 
         contains
 
@@ -68,22 +64,14 @@ module miranda_restart_mod
 
 contains
 
-    subroutine init(this, gp_, jobdir_, resfile_, prow_, pcol_, periodicx_, periodicy_, periodicz_)
+    subroutine init(this, gp_, jobdir_, resfile_)
         class(miranda_restart), intent(inout) :: this
         type(decomp_info), target, intent(in) :: gp_
         character(len=*), intent(in) :: jobdir_, resfile_
-        integer, intent(in) :: prow_, pcol_
-        logical, optional, intent(in) :: periodicx_, periodicy_, periodicz_
 
         this%jobdir  = trim(jobdir_)
         this%resfile = trim(resfile_)
-        this%prow = prow_
-        this%pcol = pcol_
         this%gp => gp_
-
-        if (present(periodicx_)) this%periodicx = periodicx_
-        if (present(periodicy_)) this%periodicy = periodicy_
-        if (present(periodicz_)) this%periodicz = periodicz_
 
         ! Get processor to grid mapping
         call this%get_procmap()
@@ -101,6 +89,11 @@ contains
         if (this%gp%zsz(3) /= this%nz) then
             call GracefulExit("Grid size in Z in gp does not match that in the data", 347)
         end if
+
+        u_index = 1; v_index = 2; w_index = 3; rho_index = 4; e_index = 5
+        Ys_index = 6
+        p_index  = Ys_index + this%ns
+        T_index  = p_index + 1
 
     end subroutine
 
