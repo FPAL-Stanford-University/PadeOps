@@ -149,7 +149,7 @@ module IncompressibleGrid
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
-        real(rkind) :: latitude, frameAngle, max_nuSGS, invObLength, Tsurf0, Tsurf, dTsurf_dt, ThetaRef
+        real(rkind) :: latitude, max_nuSGS, invObLength, Tsurf0, Tsurf, dTsurf_dt, ThetaRef
 
         real(rkind) :: dtOld, dtRat, Tmn, wTh_surf
         real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
@@ -1722,7 +1722,6 @@ contains
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: ybuffE, ybuffC1, ybuffC2, zbuffC, zbuffE
         !real(rkind) :: frameAngle!, latitude
-        integer(rkind) :: i, j
 
         ybuffE => this%cbuffyE(:,:,:,1)
         ybuffC1 => this%cbuffyC(:,:,:,1)
@@ -1835,8 +1834,8 @@ contains
         !use reductions, only: p_sum
         logical, intent(in), optional :: CopyForDNSpress, CopyForFringePress, copyForTurbinePress
         logical :: copyFringeRHS, copyTurbRHS
-
-
+        real(rkind) :: utarg, vtarg
+      
         if (present(copyForTurbinePress)) then
            copyTurbRHS = copyForTurbinePress
         else
@@ -4801,7 +4800,7 @@ contains
     !!--------------------------------Done 1D Statistics----------------------------------------------
 
     subroutine dump_pointProbes(this)
-        use kind_parameters, only: mpirkind
+        !use kind_parameters, only: mpirkind
         !class(igrid), intent(inout) :: this
         class(igrid), intent(in) :: this
         !character(len=clen) :: fname
