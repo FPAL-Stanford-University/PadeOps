@@ -45,7 +45,7 @@ contains
       real(rkind), intent(out) :: phi_n
       !real(rkind), intent(out) :: totalAngle
       nx = this%gpC%xsz(1)
-      ny = this%gpC%xsz(2)
+      ny = this%gpC%ysz(2)
 
       ! PID controller
       if (newTimestep) then
