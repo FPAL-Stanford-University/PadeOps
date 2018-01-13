@@ -1,5 +1,4 @@
 # Files to be ignored by git
-# *SetupEnv*.sh*
 build*
 *.mod
 *.F90.swp
