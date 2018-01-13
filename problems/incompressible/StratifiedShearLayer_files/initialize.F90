@@ -164,11 +164,11 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 0, nyplanes = 1, nzplanes = 1
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
 
-    allocate(yplanes(nyplanes), zplanes(nzplanes))
+    allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    !xplanes = [64]
+    xplanes = [nxg/2]
     yplanes = [nyg/2]
     zplanes = [nzg/2]
 
