@@ -6,6 +6,7 @@ module temporalHook
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
+    use decomp_2d
 
     implicit none 
 
@@ -27,7 +28,15 @@ contains
         !enddo       
         !enddo 
         !angle = angle / (float(igp%ny)*float(igp%nx))
-  
+ 
+         
+        igp%zHubIndex = 16
+        igp%rbuffxC(:,:,:,1) = atan2(igp%v, igp%u) !* 180.d0 / 3.14d0
+        call transpose_x_to_y(igp%rbuffxC(:,:,:,1),igp%rbuffyC(:,:,:,1),igp%gpC)
+        call transpose_y_to_z(igp%rbuffyC(:,:,:,1),igp%rbuffzC(:,:,:,1),igp%gpC)
+        igp%angleHubHeight = p_sum(sum(igp%rbuffzC(:,:,igp%zHubIndex,1))) / & 
+                        (real(igp%gpC%xsz(1),rkind) * real(igp%gpC%ysz(2),rkind))
+ 
         if (mod(igp%step,nt_print2screen) == 0) then
             maxDiv = maxval(igp%divergence)
             DomMaxDiv = p_maxval(maxDiv)
