@@ -149,7 +149,7 @@ module IncompressibleGrid
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
-        real(rkind) :: max_nuSGS, invObLength, Tsurf0, Tsurf, dTsurf_dt, ThetaRef
+        real(rkind) :: latitude, frameAngle, max_nuSGS, invObLength, Tsurf0, Tsurf, dTsurf_dt, ThetaRef
 
         real(rkind) :: dtOld, dtRat, Tmn, wTh_surf
         real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
@@ -681,6 +681,8 @@ contains
             this%rbuffxE(:,:,:,1) = this%G_GEOSTROPHIC*sin(G_ALPHA*pi/180.d0)
             call this%spectE%fft(this%rbuffxE(:,:,:,1),this%Gyhat_Edge)
 
+            this%latitude = latitude
+            this%frameAngle = frameAngle
             
             if (this%assume_fplane) then
                 this%coriolis_omegaZ   = sin(latitude*pi/180.d0)
@@ -1818,9 +1820,6 @@ contains
         end if 
         this%w_rhs = this%w_rhs + fT1E 
         
-        if (this%useSponge) then
-            call this%addSponge
-        end if
 
         if (this%storeFbody) then
             call this%spectE%ifft(fT1E, rbuffE)
@@ -1969,6 +1968,22 @@ contains
             !this%angleHubHeight = this%angleHubHeight / (float(this%gpC%xsz(1)) * float(this%gpC%xsz(1)))
         end if 
 
+        ! Step 10: Add sponge
+        if (this%useSponge) then
+            utarg = (sin(this%latitude*pi/180.d0)*cos(this%G_alpha*pi/180.d0)/this%Ro)/(sin(this%latitude*pi/180.d0)/this%Ro + this%wFilt)
+            vtarg = (sin(this%latitude*pi/180.d0)*sin(this%G_alpha*pi/180.d0)/this%Ro)/(sin(this%latitude*pi/180.d0)/this%Ro + this%wFilt)
+            
+            ! ASG > MH: This part can be computed a bit more efficiently. 
+            ! Once you've checked that it works, I will write the efficient code. 
+            this%rbuffxC(:,:,:,1) = utarg
+            call this%spectC%fft(this%rbuffxC,this%ubase)
+            
+            this%rbuffxC(:,:,:,1) = vtarg
+            call this%spectC%fft(this%rbuffxC,this%vbase)
+            call this%addSponge()
+
+        end if
+        
     end subroutine
 
     subroutine addViscousTerm(this)
