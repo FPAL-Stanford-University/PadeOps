@@ -69,7 +69,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     !integer :: i, ylen, zlen
     integer :: xLc(1), yLc(1), zLc(1), xst, xen, yst, yen, zst, zen, ierr, xlen
     integer  :: ntry = 100
-    real(rkind) :: time2initialize = 0
+    real(rkind) :: time2initialize = 0, correction_factor = 1.0d0, normfact_p
 
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
@@ -145,6 +145,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     end if 
 
      ntry = 2*ceiling(diam/min(dx, dy, dz))
+     ntry = p_maxval(ntry) ! prevents mismatch across processors due to roundoff
     
     if (this%Am_I_Active) then
         allocate(this%rbuff(size(xG,2),size(xG,3)))
@@ -183,6 +184,16 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
                                 this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
                                 this%startEnds(5,j),this%startEnds(6,j),this%startEnds(7,j))
     end do 
+
+    ! correction factor ::  required if this%smearing_base does not sum up to one because part of the cloud is outside the domain
+    ! this can happen if turbine is close to the bottom wall, or, in the future, close to an immersed boundary
+    normfact_p = p_maxval(this%normfactor)
+    this%normfactor = normfact_p
+    correction_factor = p_sum(this%smearing_base)*dx*dy*dz*this%pfactor*this%normfactor
+    call message(2, "correction factor = ", correction_factor)
+    !write(*,'(a,i4,e19.12,1x,e19.12)') '--', nrank, correction_factor, this%normfactor
+    this%smearing_base = this%smearing_base/correction_factor
+
     call message(2, "Smearing grid parameter, ntry", ntry)
     call toc(mpi_comm_world, time2initialize)
     call message(2, "Time (seconds) to initialize", time2initialize)
@@ -243,11 +254,11 @@ subroutine getMeanU(this, u, v, w)
 
 end subroutine
 
-subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals)
-!subroutine get_RHS(this, u, v, w, rhsvals)
+subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     class(actuatordisk_T2), intent(inout) :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
-    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in) :: u, v, w
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
+    real(rkind), dimension(8),                                  intent(out)   :: inst_val
     integer :: j
     real(rkind) :: usp_sq, force
 
@@ -262,6 +273,19 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals)
     rhsxvals = rhsxvals + force*this%smearing_base 
     rhsyvals = zero
     rhszvals = zero
+
+    !if (present(inst_val)) then
+      if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
+        inst_val(1) = force
+        inst_val(2) = force*sqrt(usp_sq)
+        inst_val(3) = sqrt(usp_sq)
+        inst_val(4) = usp_sq
+        inst_val(5) = usp_sq*inst_val(3)
+        inst_val(6) = this%uface
+        inst_val(7) = this%vface
+        inst_val(8) = this%wface
+      end if
+    !end if 
 
 end subroutine
 
