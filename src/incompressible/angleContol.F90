@@ -40,7 +40,8 @@ contains
       logical, intent(in) :: newTimestep
       integer :: nx, ny, i, j
       ! PID tuning parameters
-      real(rkind) :: wControl_n, wFilt_n
+      real(rkind) :: wControl_n
+      real(rkind), intent(out) :: wFilt_n
       real(rkind), intent(out) :: phi_n
       !real(rkind), intent(out) :: totalAngle
       nx = this%gpC%xsz(1)
