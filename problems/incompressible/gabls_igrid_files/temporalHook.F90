@@ -7,6 +7,7 @@ module temporalHook
     use timer,              only: tic, toc 
     use mpi
     use decomp_2d
+    use reductions, only: p_sum
 
     implicit none 
 
