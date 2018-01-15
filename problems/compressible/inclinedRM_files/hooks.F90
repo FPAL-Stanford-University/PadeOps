@@ -29,7 +29,8 @@ module inclinedRM_data
                    viscD = -0.7732_rkind, viscE =  2.16178_rkind, viscF = -2.43787_rkind
     real(rkind) :: viscConst = real(2.6693D-6, rkind)
 
-    real(rkind), parameter :: R_univ = 8.3144598_rkind ! Universal gas constant in SI units
+    ! real(rkind), parameter :: R_univ = 8.3144598_rkind ! Universal gas constant in SI units
+    real(rkind), parameter :: R_univ = 8.314472_rkind ! Universal gas constant in SI units
 
     ! Domain size data
     real(rkind) :: L_y = 0.1143_rkind
@@ -41,6 +42,122 @@ module inclinedRM_data
     ! Miranda restart parameters
     character(len=clen) :: resdir, resfile
     integer :: resdump = 0
+
+contains
+
+! ------------------------------------------------------------------------------
+! Assign problem-specific viscosity, thermal conductivity,
+! species diffusivities and magnetic diffusivity.
+! ------------------------------------------------------------------------------ 
+    SUBROUTINE prob_properties(rho,p,T,Y,mu,ktc,Diff)
+     USE constants, ONLY : epssmall,half,three,two
+
+     real(rkind), dimension(:,:,:),                                             intent(in)  :: rho,p,T
+     real(rkind), dimension(:,:,:,:),                                           intent(in)  :: Y
+     real(rkind), dimension(size(Y,1), size(Y,2), size(Y,3)),                   intent(out) :: mu,ktc    ! Shear visc and conductivity
+     real(rkind), dimension(size(Y,1), size(Y,2), size(Y,3), size(Y,4)),        intent(out) :: Diff      ! Species diffusivity
+
+     real(rkind), DIMENSION(size(Y,1), size(Y,2), size(Y,3)) :: M,CpMix,Rgas,Ts,Omega
+     real(rkind), DIMENSION(size(Y,1), size(Y,2), size(Y,3)) :: mu_i,tmp,dum,Dij,Xii,Xjj
+     real(rkind) :: Acc,Bcc,Ccc,Dcc,Ecc,Fcc,Gcc,Hcc
+     real(rkind) :: Mij,sigij,Teij
+     INTEGER :: n,ni,nj
+  
+    ! This part is from the Miranda problem file to recalculate the physical species diffusivity
+    ! Material properties list ------ Property --------  Air ------------ CO2 --------
+    real(rkind), DIMENSION(2) :: mySig    = (/ 3.681D0            , 3.952D0   /)
+    real(rkind), DIMENSION(2) :: myTeff   = (/ 91.46D0            , 200.0D0   /)
+    real(rkind), DIMENSION(2) :: myMolwts = (/ 28.013D0           , 44.010D0  /)
+    real(rkind), DIMENSION(2) :: myGammas = (/ 1.4D0              , 1.28D0    /)
+    real(rkind), DIMENSION(2) :: myPr     = (/ 0.72D0             , 0.77D0    /)
+    real(rkind), DIMENSION(2) :: myMix    = (/ 1.0D0              , 1.0D0     /)
+    real(rkind), DIMENSION(2) :: myNuA    = (/ 1.45D-5            , 1.59D-5   /) ! in g/(cm-s-K^0.5)
+    real(rkind), DIMENSION(2) :: myNuB    = (/ 1.105D2            , 2.438D2   /) ! in K
+    real(rkind), DIMENSION(2) :: myNuC    = (/ 0.0D0              , 0.0D0     /) ! in g/(cm-s)
+    real(rkind), DIMENSION(2) :: myNuN    = (/ 1.5D0              , 1.5D0     /)
+
+    real(rkind), PARAMETER :: Runiv  = 8.314472D+7 ! Gas constant              [g*cm^2/(s^2*mol*K)]=[erg/K/mol]
+
+     ! Effective Molecular weight for EOS
+     ! M = zero
+     ! DO n = 1,ns
+     !    M = M + Y(:,:,:,n)/myMolwts(n)
+     ! END DO
+     ! M = one/M
+     ! Rgas = Runiv/M
+     Rgas = zero
+     DO n = 1,ns
+        Rgas = Rgas + Y(:,:,:,n)*(Runiv/myMolwts(n))
+     END DO
+     M = Runiv/Rgas
+   
+   
+     ! Chapman-Cowling Viscosity
+     mu = zero
+     ktc = zero
+     tmp = zero
+     Acc = 1.16145D0
+     Bcc = -0.14874D0
+     Ccc = 0.52487D0
+     Dcc = -0.7732D0
+     Ecc = 2.16178D0
+     Fcc = -2.43787D0
+     DO n=1,ns
+         Ts = T/myTeff(n)
+         Omega = Acc*Ts**Bcc + Ccc*exp(Dcc*Ts) + Ecc*exp(Fcc*Ts)     ! Edit: Ecc** -> Ecc*
+         mu_i = 2.6693D-6*sqrt( myMolwts(n)*T)/(Omega*mySig(n)**2)
+         dum = Y(:,:,:,n)/(myMolwts(n)**half)
+         mu = mu + mu_i * dum
+         tmp = tmp + dum
+   
+        ! Thermal diff part
+         CpMix = myGammas(n)*Y(:,:,:,n)/(myMolwts(n)*(myGammas(n)-one))*Runiv
+         ktc = ktc + CpMix*mu_i*dum/myPr(n)
+   
+     END DO
+     mu = mu/tmp * 10.0D0  ! convert kg/m s to g/cm s
+     ktc = ktc/tmp * 10.0D0
+   
+     ! Diffusivity
+     Diff = zero
+     tmp = zero
+     Acc = 1.06036D0
+     Bcc = -0.1561D0
+     Ccc = 0.19300D0
+     Dcc = -0.47635D0
+     Ecc = 1.03587D0
+     Fcc = -1.52996D0
+     Gcc = 1.76474D0
+     Hcc = -3.89411D0
+     DO ni=1,ns
+         ! Xii = Y(:,:,:,ni)*M/myMolwts(ni)
+         Xii = Y(:,:,:,ni)*(Runiv/myMolwts(ni))/Rgas
+         tmp = zero
+         DO nj=1,ns
+            IF (ni .NE. nj) THEN
+               ! Xjj = Y(:,:,:,nj)*M/myMolwts(nj)
+               Xjj = Y(:,:,:,nj)*(Runiv/myMolwts(nj))/Rgas
+               Mij = two/(one/myMolwts(ni)+one/myMolwts(nj))
+               sigij = (mySig(ni)+mySig(nj))/two
+               Teij = sqrt( myTeff(ni)*myTeff(nj) )
+               Ts = T/Teij                                         ! Edit: Add omega calculation
+               Omega = Acc*Ts**Bcc + Ccc*exp(Dcc*Ts) + Ecc*exp(Fcc*Ts) + Gcc*exp(Hcc*Ts)
+               ! Dij = 0.0266/Omega * T**(three/two)/(p*sqrt(Mij)*sigij**2 )
+               Dij = 0.0266D0/Omega * T**(three/two)/(p*sqrt(Mij)*sigij**2 )
+               tmp = tmp + Xjj/Dij
+            END IF
+         END DO
+         ! Diff(:,:,:,ni) = (one-Xii)/(tmp + 1.0D-16)
+         Diff(:,:,:,ni) = (one-Xii)/(tmp + epssmall)
+         print *, "ni = ", ni,"   tmp = ", tmp(1,1,1), "   Xii = ", Xii(1,1,1), "   Xjj = ", Xjj(1,1,1)
+     END DO 
+     print *, "Diff befres = ", Diff(1,1,1,:)
+     ! Diff = Diff * 10.0D4 / 10.0D0 ! Convert m^2/s to cm^2/s  (extra /10 is from pressure)
+     Diff = Diff * 1.0D4 * 10.0D0 ! Convert m^2/s to cm^2/s  (extra /10 is from pressure)
+     print *, "Diff final = ", Diff(1,1,1,:)
+   
+    END SUBROUTINE prob_properties
+
 
 end module
 
@@ -105,6 +222,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use ConstPrandtlConductivityMod, only: constPrandtlConductivity
     use ReidRamshawDiffusivityMod,   only: reidRamshawDiffusivity
     use miranda_restart_mod,         only: miranda_restart
+    use reductions,                  only: P_MAXVAL
     use exits,                       only: GracefulExit, message
     
     use inclinedRM_data
@@ -130,6 +248,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(constPrandtlConductivity) :: thermcond
 
     type(miranda_restart) :: mir
+
+    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: mu, bulk, kappa
+    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), mix%ns) :: diff
+
+    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: mu_o, bulk_o, kappa_o
+    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), mix%ns) :: diff_o
+
+    integer, dimension(3) :: ind
 
     namelist /PROBINPUT/  resdir, resfile, resdump
     
@@ -193,11 +319,55 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         p   = resdata(:,:,:,  mir%p_index) * real(1.D-1, rkind) ! Ba (CGS) to Pa (SI)
 
         Ys  = resdata(:,:,:,mir%Ys_index:mir%Ys_index+mir%ns-1) ! Non-dimensional
+        
+        ! Check for consistency
+        call mix%update(Ys)
+        call mix%get_e_from_p(rho,p,e)
+        call mix%get_T(e, T)
+
+        call message("Max error in e", P_MAXVAL( abs(e - resdata(:,:,:,mir%e_index)*real(1.D-4,rkind)) ))
+        ind = maxloc( abs(e - resdata(:,:,:,mir%e_index)*real(1.D-4,rkind)) )
+        print *, "e = ", e(ind(1),ind(2),ind(3)), "    e_res = ", resdata(ind(1),ind(2),ind(3),mir%e_index), "  ind = ", ind
+
+        call message("Max error in T", P_MAXVAL( abs(T - resdata(:,:,:,mir%T_index)) ))
+        ind = maxloc( abs(T - resdata(:,:,:,mir%T_index)) )
+        print *, "T = ", T(ind(1),ind(2),ind(3)), "    T_res = ", resdata(ind(1),ind(2),ind(3),mir%T_index), "  ind = ", ind
+
+        call mix%get_transport_properties(p, T, Ys, mu, bulk, kappa, diff)
+        call prob_properties( resdata(:,:,:,mir%rho_index), resdata(:,:,:,mir%p_index), &
+                              resdata(:,:,:,  mir%T_index), Ys, &
+                              mu_o, kappa_o, diff_o)
+        bulk_o = zero
+
+        call message("Max error in mu", P_MAXVAL( abs(mu - mu_o*real(1.D-1,rkind)) ))
+        ind = maxloc( abs(mu - mu_o*real(1.D-1,rkind)) )
+        print *, "mu = ", mu(ind(1),ind(2),ind(3)), "    mu_res = ", mu_o(ind(1),ind(2),ind(3)), "  ind = ", ind
+
+        call message("Max error in bulk", P_MAXVAL( abs(bulk - bulk_o*real(1.D-1,rkind)) ))
+        call message("Max error in kappa", P_MAXVAL( abs(kappa - kappa_o*real(1.D-5,rkind)) ))
+        ind = maxloc( abs(kappa - kappa_o*real(1.D-5,rkind)) )
+        print *, "kappa = ", kappa(ind(1),ind(2),ind(3)), "    kappa_res = ", kappa_o(ind(1),ind(2),ind(3)), "  ind = ", ind
+
+        call message("Max error in diff(1)", P_MAXVAL( abs(diff(:,:,:,1) - diff_o(:,:,:,1)*real(1.D-4,rkind)) ))
+        ind = maxloc( abs(diff(:,:,:,1) - diff_o(:,:,:,1)*real(1.D-4,rkind)) )
+        print *, "diff(1) = ", diff(ind(1),ind(2),ind(3),1), "    diff_res(1) = ", diff_o(ind(1),ind(2),ind(3),1), "  error = ", abs(diff(ind(1),ind(2),ind(3),1) - diff_o(ind(1),ind(2),ind(3),1)*real(1.D-4,rkind))
+        print *, "Ys(1) = ", Ys(ind(1),ind(2),ind(3),1), "    Ys(2) = ", Ys(ind(1),ind(2),ind(3),2), "  ind = ", ind
+        call message("Max error in diff(2)", P_MAXVAL( abs(diff(:,:,:,2) - diff_o(:,:,:,2)*real(1.D-4,rkind)) ))
+        ind = maxloc( abs(diff(:,:,:,2) - diff_o(:,:,:,2)*real(1.D-4,rkind)) )
+        print *, "diff(2) = ", diff(ind(1),ind(2),ind(3),2), "    diff_res(2) = ", diff_o(ind(1),ind(2),ind(3),2), "  error = ", abs(diff(ind(1),ind(2),ind(3),2) - diff_o(ind(1),ind(2),ind(3),2)*real(1.D-4,rkind))
+        print *, "Ys(1) = ", Ys(ind(1),ind(2),ind(3),1), "    Ys(2) = ", Ys(ind(1),ind(2),ind(3),2), "  ind = ", ind
+
+        ind = [1,1,1]
+        print *, "diff(2) = ", diff(ind(1),ind(2),ind(3),2), "    diff_res(2) = ", diff_o(ind(1),ind(2),ind(3),2), "  error = ", abs(diff(ind(1),ind(2),ind(3),2) - diff_o(ind(1),ind(2),ind(3),2)*real(1.D-4,rkind))
+        print *, "Ys(1) = ", Ys(ind(1),ind(2),ind(3),1), "    Ys(2) = ", Ys(ind(1),ind(2),ind(3),2), "  ind = ", ind
+
 
         ! Deallocate temporary arrays and destroy miranda_restart object
         deallocate( resmesh )
         deallocate( resdata )
         call mir%destroy()
+
+        stop
     end associate
 
 end subroutine

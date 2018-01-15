@@ -1,7 +1,7 @@
 module ReidRamshawDiffusivityMod
 
     use kind_parameters,    only: rkind
-    use constants,          only: zero,one,two
+    use constants,          only: zero,epssmall,one,two
     use exits,              only: GracefulExit
     use MassDiffusivityMod, only: massDiffusivity
 
@@ -93,7 +93,8 @@ contains
         
     end subroutine
 
-    pure subroutine get_diff(this, p, T, Xs, diff)
+    !pure subroutine get_diff(this, p, T, Xs, diff)
+    subroutine get_diff(this, p, T, Xs, diff)
         class(reidRamshawDiffusivity),   intent(in)  :: this
         real(rkind), dimension(:,:,:),   intent(in)  :: p, T
         real(rkind), dimension(:,:,:,:), intent(in)  :: Xs
@@ -113,7 +114,9 @@ contains
             end do
         end do
 
-        diff = (one - Xs) / diff
+        print *, "tmp blah = ", diff(1,1,1,:)
+        diff = (one - Xs) / (diff + epssmall)
+        print *, "diff final = ", diff(1,1,1,:)
 
     end subroutine
 

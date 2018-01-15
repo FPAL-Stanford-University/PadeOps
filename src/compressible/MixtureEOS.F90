@@ -240,7 +240,8 @@ contains
 
     end subroutine
 
-    pure subroutine get_transport_properties(this, p, T, Ys, mu, bulk, kappa, diff)
+    ! pure subroutine get_transport_properties(this, p, T, Ys, mu, bulk, kappa, diff)
+    subroutine get_transport_properties(this, p, T, Ys, mu, bulk, kappa, diff)
         ! class(mixture), target,                                     intent(in)  :: this
         class(mixture),                                             intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(in)  :: p, T

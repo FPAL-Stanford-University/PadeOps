@@ -14,7 +14,8 @@ module MassDiffusivityMod
 
     abstract interface
 
-        pure subroutine get_diff_interface(this, p, T, Xs, diff)
+        ! pure subroutine get_diff_interface(this, p, T, Xs, diff)
+        subroutine get_diff_interface(this, p, T, Xs, diff)
             import :: massDiffusivity
             import :: rkind
             class(massDiffusivity),  intent(in) :: this

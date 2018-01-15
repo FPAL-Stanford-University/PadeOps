@@ -33,4 +33,5 @@ module constants
 
     real(rkind), parameter :: kappa = 0.40_rkind ! Kappa used in Turbulent BL wall models
     real(rkind), parameter :: eps = epsilon(real(1.0,rkind))
+    real(rkind), parameter :: epssmall = real(1.0D-32,rkind)
 end module
