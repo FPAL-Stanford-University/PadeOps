@@ -745,7 +745,7 @@ contains
             call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
             
             call this%get_primitive()
-            call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
+            call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             call this%post_bc()
         end do
 

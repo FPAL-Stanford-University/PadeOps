@@ -52,7 +52,7 @@ module cgrid_hooks
     end interface
 
     interface hook_bc
-        subroutine hook_bc(decomp,mesh,fields,mix,tsim)
+        subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             import :: rkind
             import :: decomp_info
             import :: mixture
@@ -61,6 +61,7 @@ module cgrid_hooks
             real(rkind),                     intent(in)    :: tsim
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+            integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
 
         end subroutine
     end interface

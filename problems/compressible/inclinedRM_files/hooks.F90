@@ -1,6 +1,7 @@
 module inclinedRM_data
     use kind_parameters,  only: rkind, clen
     use constants,        only: zero, one
+    use FiltersMod,       only: filters
     implicit none
 
     ! Using SI units for this problem
@@ -42,6 +43,9 @@ module inclinedRM_data
     ! Miranda restart parameters
     character(len=clen) :: resdir, resfile
     integer :: resdump = 0
+
+    ! Gaussian filter for sponge
+    type(filters) :: mygfil
 
 contains
 
@@ -248,7 +252,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(constPrandtlConductivity) :: thermcond
 
     type(miranda_restart) :: mir
-    type(io_hdf5)         :: viz
+    ! type(io_hdf5)         :: viz
 
     real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: mu, bulk, kappa
     real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), mix%ns) :: diff
@@ -322,9 +326,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         Ys  = resdata(:,:,:,mir%Ys_index:mir%Ys_index+mir%ns-1) ! Non-dimensional
         
         ! Initialize viz object
-        call viz%init( mpi_comm_world, decomp, 'y', '.', 'init_test', &
-                       reduce_precision=.true., read_only=.false., jump_to_last=.true.)
-        call viz%write_coords(mesh)
+        ! call viz%init( mpi_comm_world, decomp, 'y', '.', 'init_test', &
+        !                reduce_precision=.true., read_only=.false., jump_to_last=.true.)
+        ! call viz%write_coords(mesh)
+
+        ! Initialize mygfil
+        call mygfil%init(                           decomp, &
+                          periodicx,  periodicy, periodicz, &
+                         "gaussian", "gaussian", "gaussian" )
 
         ! Check for consistency
         call mix%update(Ys)
@@ -357,43 +366,42 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         end where
         call message("Max error in diff(2)", P_MAXVAL(tmp))
 
-        call viz%start_viz(tsim)
-        call viz%write_variable(rho , 'rho' ) 
-        call viz%write_variable(u   , 'u') 
-        call viz%write_variable(v   , 'v') 
-        call viz%write_variable(w   , 'w') 
-        call viz%write_variable(p   , 'p') 
+        ! call viz%start_viz(tsim)
+        ! call viz%write_variable(rho , 'rho' ) 
+        ! call viz%write_variable(u   , 'u') 
+        ! call viz%write_variable(v   , 'v') 
+        ! call viz%write_variable(w   , 'w') 
+        ! call viz%write_variable(p   , 'p') 
 
-        call viz%write_variable(Ys(:,:,:,1), 'Ys_1') 
-        call viz%write_variable(Ys(:,:,:,2), 'Ys_2') 
+        ! call viz%write_variable(Ys(:,:,:,1), 'Ys_1') 
+        ! call viz%write_variable(Ys(:,:,:,2), 'Ys_2') 
 
-        call viz%write_variable(e, 'e') 
-        call viz%write_variable(resdata(:,:,:,mir%e_index)*real(1.D-4,rkind), 'e_res') 
+        ! call viz%write_variable(e, 'e') 
+        ! call viz%write_variable(resdata(:,:,:,mir%e_index)*real(1.D-4,rkind), 'e_res') 
 
-        call viz%write_variable(T, 'T') 
-        call viz%write_variable(resdata(:,:,:,mir%T_index), 'T_res') 
+        ! call viz%write_variable(T, 'T') 
+        ! call viz%write_variable(resdata(:,:,:,mir%T_index), 'T_res') 
 
-        call viz%write_variable(mu, 'mu') 
-        call viz%write_variable(mu_o*real(1.D-1,rkind), 'mu_res') 
+        ! call viz%write_variable(mu, 'mu') 
+        ! call viz%write_variable(mu_o*real(1.D-1,rkind), 'mu_res') 
 
-        call viz%write_variable(kappa, 'kappa') 
-        call viz%write_variable(kappa_o*real(1.D-5,rkind), 'kappa_res') 
+        ! call viz%write_variable(kappa, 'kappa') 
+        ! call viz%write_variable(kappa_o*real(1.D-5,rkind), 'kappa_res') 
 
-        call viz%write_variable(diff(:,:,:,1), 'diff_1') 
-        call viz%write_variable(diff_o(:,:,:,1)*real(1.D-4,rkind), 'diff_res_1') 
+        ! call viz%write_variable(diff(:,:,:,1), 'diff_1') 
+        ! call viz%write_variable(diff_o(:,:,:,1)*real(1.D-4,rkind), 'diff_res_1') 
 
-        call viz%write_variable(diff(:,:,:,2), 'diff_2') 
-        call viz%write_variable(diff_o(:,:,:,2)*real(1.D-4,rkind), 'diff_res_2') 
+        ! call viz%write_variable(diff(:,:,:,2), 'diff_2') 
+        ! call viz%write_variable(diff_o(:,:,:,2)*real(1.D-4,rkind), 'diff_res_2') 
 
-        call viz%end_viz()
+        ! call viz%end_viz()
 
         ! Deallocate temporary arrays and destroy miranda_restart object
         deallocate( resmesh )
         deallocate( resdata )
         call mir%destroy()
-        call viz%destroy()
+        ! call viz%destroy()
 
-        stop
     end associate
 
 end subroutine
@@ -445,12 +453,13 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     end associate
 end subroutine
 
-subroutine hook_bc(decomp,mesh,fields,mix,tsim)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
-    use constants,        only: zero
-    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+    use constants,        only: zero, half, one
+    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,Ys_index
     use decomp_2d,        only: decomp_info
     use MixtureEOSMod,    only: mixture
+    use operators,        only: filter3D
 
     use inclinedRM_data
 
@@ -460,13 +469,60 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim)
     real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
+
+    integer :: i
+    real(rkind) :: dx, filpt, thickT
+    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: dumT, dumF
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+                 Ys   => fields(:,:,:,Ys_index:Ys_index+mix%ns-1),                 &
+                 diff => fields(:,:,:,Ys_index+mix%ns:Ys_index+2*mix%ns-1),        &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+        ! Sponge+bulk for exit bc
+        ! Gradually apply the exit boundary conditions  
+        dx = L_x/real(decomp%xsz(1)-1,rkind)
+        filpt = one / dx
+        thickT = real(10.D0, rkind)
+        do i=1,decomp%ysz(1)
+            dumT(i,:,:)=half*(one-tanh( real( decomp%yst(1) - 1 + i - 1, rkind )-filpt )/thickT)
+        end do
+            
+        !!!  OUT-FLOW  !!!
+        if (decomp%yst(1) == 1) then
+            v(1:5,:,:)  = zero      ! Only allow for normal velocities
+            w(1:5,:,:)  = zero      ! Only allow for normal velocities
+            Ys(1,:,:,1) = one       ! This boundary only has air
+            Ys(1,:,:,2) = zero      ! This boundary only has air
+        end if   
+            
+        ! Gussian Filter for last N points in x-direction to act as a sponge (A)
+        do i=1,4
+            dumF = u
+            call filter3D(decomp,mygfil,dumF,1,x_bc,y_bc,z_bc)
+            u = u + dumT*(dumF-u) 
+
+            dumF = v
+            call filter3D(decomp,mygfil,dumF,1,x_bc,y_bc,z_bc)
+            v = v + dumT*(dumF-v)
+
+            dumF = w
+            call filter3D(decomp,mygfil,dumF,1,x_bc,y_bc,z_bc)
+            w = w + dumT*(dumF-w)
+
+            dumF = p
+            call filter3D(decomp,mygfil,dumF,1,x_bc,y_bc,z_bc)
+            p = p + dumT*(dumF-p)
+
+            dumF = rho
+            call filter3D(decomp,mygfil,dumF,1,x_bc,y_bc,z_bc)
+            rho = rho + dumT*(dumF-rho)
+        end do
+
     end associate
 end subroutine
 

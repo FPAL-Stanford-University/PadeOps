@@ -1,23 +1,24 @@
 &INPUT
 
-inputdir  =  "/home/akshays/Data/PadeOps/speciesAdvection"      ! Directory for input files
-outputdir  = "/home/akshays/Data/PadeOps/speciesAdvection"      ! Directory for output files
+inputdir  = "/home/akshays/Data/PadeOps/inclinedRM/N0128_res00"      ! Directory for input files
+outputdir = "/home/akshays/Data/PadeOps/inclinedRM/N0128_res00"      ! Directory for output files
 
-nx = 201                  ! Number of points in X
-ny = 1                    ! Number of points in Y
-nz = 1                    ! Number of points in Z
+nx = 2048                 ! Number of points in X
+ny = 128                  ! Number of points in Y
+nz = 32                   ! Number of points in Z
 
-dt = 1.0D-4               ! Fixed time step value (Set to negative to disable)
-tstop = 2.0D0             ! Physical time to stop the simulation
+dt = 1.0D-3               ! Fixed time step value (Set to negative to disable)
+tstop = 3.0D-3            ! Physical time to stop the simulation
 CFL = 0.5D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
-tviz = 1.0D-1             ! Time between visualization dumps (Set to negative to disable)
-vizprefix = "speciesAdvection"   ! Prefix for the visualization files
+tviz = 2.0D-2             ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "inclinedRM"  ! Prefix for the visualization files
+reduce_precision = .true. ! Reduce precision for I/O?
 
-periodicx = .TRUE.        ! Periodic in X?
-periodicy = .TRUE.        ! Periodic in Y?
-periodicz = .TRUE.        ! Periodic in Z?
+periodicx = .false.       ! Periodic in X?
+periodicy = .false.       ! Periodic in Y?
+periodicz = .true.        ! Periodic in Z?
 
 derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
 derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
@@ -33,14 +34,19 @@ pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 
 /
 
 &CINPUT
-ns    = 2                 ! Number of species
-Cmu   = 2.D-3             ! Coefficient for artificial shear viscosity
-Cbeta = 1.75D0            ! Coefficient for artificial bulk viscosity
-Ckap  = 1.D-2             ! Coefficient for artificial thermal conductivity
-Cdiff = 3.0D-3            ! Coefficient for artificial species diffusivity
-CY    = 1.0D2             ! Coefficient for species massfraction bounds control
+gam      = 1.4D0          ! Ratio of specific heats
+Rgas     = 1.D0           ! Gas constant
+inviscid = .false.        ! Inviscid simulation?
+ns       = 2              ! Number of species
+nrestart = 1000           ! Number of steps between restart dumps
+x_bc1    = 0              ! Left  X BC (0 => general, 1 => symmetric). Not used if periodic
+x_bcn    = 1              ! Right X BC (0 => general, 1 => symmetric). Not used if periodic
+y_bc1    = 1              ! Left  Y BC (0 => general, 1 => symmetric). Not used if periodic
+y_bcn    = 1              ! Right Y BC (0 => general, 1 => symmetric). Not used if periodic
 /
 
-&IINPUT
-nu = 0.02D0               ! Kinematic viscosity
+&PROBINPUT
+resdir   = '/home/akshays/Data/miranda/BW/IRM_30MODES_128_CORRECTED' ! Directory that contains Miranda restart files
+resfile  = 'IRM_30MODES_128_CORRECTED.res'                           ! Directory that contains Miranda restart files
+resdump  = 0                                                         ! Which restart dump to use?
 /
