@@ -114,9 +114,7 @@ contains
             end do
         end do
 
-        print *, "tmp blah = ", diff(1,1,1,:)
         diff = (one - Xs) / (diff + epssmall)
-        print *, "diff final = ", diff(1,1,1,:)
 
     end subroutine
 

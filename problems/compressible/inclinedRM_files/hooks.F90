@@ -110,8 +110,9 @@ contains
          mu = mu + mu_i * dum
          tmp = tmp + dum
    
-        ! Thermal diff part
-         CpMix = myGammas(n)*Y(:,:,:,n)/(myMolwts(n)*(myGammas(n)-one))*Runiv
+         ! Thermal diff part
+         ! CpMix = myGammas(n)*Y(:,:,:,n)/(myMolwts(n)*(myGammas(n)-one))*Runiv
+         CpMix = myGammas(n)/(myMolwts(n)*(myGammas(n)-one))*Runiv
          ktc = ktc + CpMix*mu_i*dum/myPr(n)
    
      END DO
@@ -149,12 +150,9 @@ contains
          END DO
          ! Diff(:,:,:,ni) = (one-Xii)/(tmp + 1.0D-16)
          Diff(:,:,:,ni) = (one-Xii)/(tmp + epssmall)
-         print *, "ni = ", ni,"   tmp = ", tmp(1,1,1), "   Xii = ", Xii(1,1,1), "   Xjj = ", Xjj(1,1,1)
      END DO 
-     print *, "Diff befres = ", Diff(1,1,1,:)
      ! Diff = Diff * 10.0D4 / 10.0D0 ! Convert m^2/s to cm^2/s  (extra /10 is from pressure)
      Diff = Diff * 1.0D4 * 10.0D0 ! Convert m^2/s to cm^2/s  (extra /10 is from pressure)
-     print *, "Diff final = ", Diff(1,1,1,:)
    
     END SUBROUTINE prob_properties
 
@@ -222,8 +220,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use ConstPrandtlConductivityMod, only: constPrandtlConductivity
     use ReidRamshawDiffusivityMod,   only: reidRamshawDiffusivity
     use miranda_restart_mod,         only: miranda_restart
+    use io_hdf5_stuff,               only: io_hdf5
     use reductions,                  only: P_MAXVAL
     use exits,                       only: GracefulExit, message
+    use mpi
     
     use inclinedRM_data
 
@@ -248,6 +248,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(constPrandtlConductivity) :: thermcond
 
     type(miranda_restart) :: mir
+    type(io_hdf5)         :: viz
 
     real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: mu, bulk, kappa
     real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), mix%ns) :: diff
@@ -255,7 +256,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: mu_o, bulk_o, kappa_o
     real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), mix%ns) :: diff_o
 
-    integer, dimension(3) :: ind
+    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: tmp
 
     namelist /PROBINPUT/  resdir, resfile, resdump
     
@@ -320,18 +321,18 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
         Ys  = resdata(:,:,:,mir%Ys_index:mir%Ys_index+mir%ns-1) ! Non-dimensional
         
+        ! Initialize viz object
+        call viz%init( mpi_comm_world, decomp, 'y', '.', 'init_test', &
+                       reduce_precision=.true., read_only=.false., jump_to_last=.true.)
+        call viz%write_coords(mesh)
+
         ! Check for consistency
         call mix%update(Ys)
         call mix%get_e_from_p(rho,p,e)
         call mix%get_T(e, T)
 
         call message("Max error in e", P_MAXVAL( abs(e - resdata(:,:,:,mir%e_index)*real(1.D-4,rkind)) ))
-        ind = maxloc( abs(e - resdata(:,:,:,mir%e_index)*real(1.D-4,rkind)) )
-        print *, "e = ", e(ind(1),ind(2),ind(3)), "    e_res = ", resdata(ind(1),ind(2),ind(3),mir%e_index), "  ind = ", ind
-
         call message("Max error in T", P_MAXVAL( abs(T - resdata(:,:,:,mir%T_index)) ))
-        ind = maxloc( abs(T - resdata(:,:,:,mir%T_index)) )
-        print *, "T = ", T(ind(1),ind(2),ind(3)), "    T_res = ", resdata(ind(1),ind(2),ind(3),mir%T_index), "  ind = ", ind
 
         call mix%get_transport_properties(p, T, Ys, mu, bulk, kappa, diff)
         call prob_properties( resdata(:,:,:,mir%rho_index), resdata(:,:,:,mir%p_index), &
@@ -340,32 +341,57 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         bulk_o = zero
 
         call message("Max error in mu", P_MAXVAL( abs(mu - mu_o*real(1.D-1,rkind)) ))
-        ind = maxloc( abs(mu - mu_o*real(1.D-1,rkind)) )
-        print *, "mu = ", mu(ind(1),ind(2),ind(3)), "    mu_res = ", mu_o(ind(1),ind(2),ind(3)), "  ind = ", ind
 
         call message("Max error in bulk", P_MAXVAL( abs(bulk - bulk_o*real(1.D-1,rkind)) ))
         call message("Max error in kappa", P_MAXVAL( abs(kappa - kappa_o*real(1.D-5,rkind)) ))
-        ind = maxloc( abs(kappa - kappa_o*real(1.D-5,rkind)) )
-        print *, "kappa = ", kappa(ind(1),ind(2),ind(3)), "    kappa_res = ", kappa_o(ind(1),ind(2),ind(3)), "  ind = ", ind
 
-        call message("Max error in diff(1)", P_MAXVAL( abs(diff(:,:,:,1) - diff_o(:,:,:,1)*real(1.D-4,rkind)) ))
-        ind = maxloc( abs(diff(:,:,:,1) - diff_o(:,:,:,1)*real(1.D-4,rkind)) )
-        print *, "diff(1) = ", diff(ind(1),ind(2),ind(3),1), "    diff_res(1) = ", diff_o(ind(1),ind(2),ind(3),1), "  error = ", abs(diff(ind(1),ind(2),ind(3),1) - diff_o(ind(1),ind(2),ind(3),1)*real(1.D-4,rkind))
-        print *, "Ys(1) = ", Ys(ind(1),ind(2),ind(3),1), "    Ys(2) = ", Ys(ind(1),ind(2),ind(3),2), "  ind = ", ind
-        call message("Max error in diff(2)", P_MAXVAL( abs(diff(:,:,:,2) - diff_o(:,:,:,2)*real(1.D-4,rkind)) ))
-        ind = maxloc( abs(diff(:,:,:,2) - diff_o(:,:,:,2)*real(1.D-4,rkind)) )
-        print *, "diff(2) = ", diff(ind(1),ind(2),ind(3),2), "    diff_res(2) = ", diff_o(ind(1),ind(2),ind(3),2), "  error = ", abs(diff(ind(1),ind(2),ind(3),2) - diff_o(ind(1),ind(2),ind(3),2)*real(1.D-4,rkind))
-        print *, "Ys(1) = ", Ys(ind(1),ind(2),ind(3),1), "    Ys(2) = ", Ys(ind(1),ind(2),ind(3),2), "  ind = ", ind
+        tmp = abs(diff(:,:,:,1) - diff_o(:,:,:,1)*real(1.D-4,rkind))
+        where ( Ys(:,:,:,1) > one - real(1.D-5,rkind) )
+            tmp = zero
+        end where
+        call message("Max error in diff(1)", P_MAXVAL(tmp))
 
-        ind = [1,1,1]
-        print *, "diff(2) = ", diff(ind(1),ind(2),ind(3),2), "    diff_res(2) = ", diff_o(ind(1),ind(2),ind(3),2), "  error = ", abs(diff(ind(1),ind(2),ind(3),2) - diff_o(ind(1),ind(2),ind(3),2)*real(1.D-4,rkind))
-        print *, "Ys(1) = ", Ys(ind(1),ind(2),ind(3),1), "    Ys(2) = ", Ys(ind(1),ind(2),ind(3),2), "  ind = ", ind
+        tmp = abs(diff(:,:,:,2) - diff_o(:,:,:,2)*real(1.D-4,rkind))
+        where ( Ys(:,:,:,2) > one - real(1.D-5,rkind) )
+            tmp = zero
+        end where
+        call message("Max error in diff(2)", P_MAXVAL(tmp))
 
+        call viz%start_viz(tsim)
+        call viz%write_variable(rho , 'rho' ) 
+        call viz%write_variable(u   , 'u') 
+        call viz%write_variable(v   , 'v') 
+        call viz%write_variable(w   , 'w') 
+        call viz%write_variable(p   , 'p') 
+
+        call viz%write_variable(Ys(:,:,:,1), 'Ys_1') 
+        call viz%write_variable(Ys(:,:,:,2), 'Ys_2') 
+
+        call viz%write_variable(e, 'e') 
+        call viz%write_variable(resdata(:,:,:,mir%e_index)*real(1.D-4,rkind), 'e_res') 
+
+        call viz%write_variable(T, 'T') 
+        call viz%write_variable(resdata(:,:,:,mir%T_index), 'T_res') 
+
+        call viz%write_variable(mu, 'mu') 
+        call viz%write_variable(mu_o*real(1.D-1,rkind), 'mu_res') 
+
+        call viz%write_variable(kappa, 'kappa') 
+        call viz%write_variable(kappa_o*real(1.D-5,rkind), 'kappa_res') 
+
+        call viz%write_variable(diff(:,:,:,1), 'diff_1') 
+        call viz%write_variable(diff_o(:,:,:,1)*real(1.D-4,rkind), 'diff_res_1') 
+
+        call viz%write_variable(diff(:,:,:,2), 'diff_2') 
+        call viz%write_variable(diff_o(:,:,:,2)*real(1.D-4,rkind), 'diff_res_2') 
+
+        call viz%end_viz()
 
         ! Deallocate temporary arrays and destroy miranda_restart object
         deallocate( resmesh )
         deallocate( resdata )
         call mir%destroy()
+        call viz%destroy()
 
         stop
     end associate
