@@ -1,11 +1,11 @@
 &INPUT
-inputdir              = "/projects/windsim/PadeOps/build/debug/problems/incompressible"   ! Directory for any input files
-outputdir             = "/projects/windsim/PadeOps/build/debug/problems/incompressible"   ! Directory for all output files
-nx                    = 320          ! Number of points in X
-ny                    = 64          ! Number of points in Y
-nz                    = 64          ! Number of points in Z
+inputdir              = "/projects/windsim/PadeOps/build/build_avx2/problems/incompressible"   ! Directory for any input files
+outputdir             = "/projects/windsim/PadeOps/build/build_avx2/problems/incompressible"   ! Directory for all output files
+nx                    = 640          ! Number of points in X
+ny                    = 128          ! Number of points in Y
+nz                    = 128          ! Number of points in Z
 tstop                 = 10.D0       ! Physical time to stop the simulation
-CFL                   = 0.1D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+CFL                   = 0.5D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = -0.1D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
@@ -26,7 +26,7 @@ t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproj
 &IO
 RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump         = 2000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 500        ! Data dumping frequency (# of timesteps)
+t_dataDump            = 50        ! Data dumping frequency (# of timesteps)
 ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 100         ! Plane dumping frequency (# of timesteps)
@@ -76,12 +76,26 @@ P_compFreq            = 10          ! How often (timesteps) do you want to compu
 /
 /
 &BCs
+usedoubleFringex      = .TRUE. 
 PeriodicInZ           = .TRUE.      ! Is the problem periodic in Z? If yes, then everything below is ignored. 
 topWall               = 2           ! no_slip = 1, slip = 2
 botWall               = 2           ! no_slip = 1, slip = 2
 useSpongeLayer        = .FALSE.     ! Use a sponge layer at the top 
 zstSponge             = 0.8d0       ! Height above which the sponge layer is active
 SpongeTscale          = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
+/
+/
+&FRINGE
+Fringe1_xst                    = 0.75d0         
+Fringe1_xen                    = 0.90d0
+Fringe1_delta_st_x             = 0.100d0
+Fringe1_delta_en_x             = 0.05d0
+Fringe2_xst                    = 0.800d0         
+Fringe2_xen                    = 0.980d0
+Fringe2_delta_st_x             = 0.02d0
+Fringe2_delta_en_x             = 0.05d0
+LambdaFact                     = 0.60d0 
+LambdaFact2                    = 0.75d0
 /
 /
 &SGS_MODEL
