@@ -21,8 +21,7 @@ module sgsmod_igrid
     real(rkind), parameter :: beta_h = 7.8_rkind, beta_m = 4.8_rkind
 
     type :: sgs_igrid
-        private !-- how do I make only DynamicProcedureType and cmodel_gloal
-        !public, so that it can be accessed from problem_files/temporalHooks.F90 ???
+        private 
         type(decomp_info), pointer :: gpC, gpE
         type(spectral), pointer :: spectC, spectE
         type(decomp_info), pointer :: sp_gpC, sp_gpE
@@ -265,7 +264,7 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, wh
 
 end subroutine
 
-subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That)
+subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, TurbPrandtlNum)
    class(sgs_igrid), intent(inout), target :: this
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: Trhs
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC, dTdzC
@@ -273,9 +272,13 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v, w, T
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffz1, cbuffz2
+   real(rkind), intent(in), optional :: TurbPrandtlNum
 
    cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
    cbuffz1 => this%cbuffzC(:,:,:,1); cbuffz2 => this%cbuffzE(:,:,:,1) 
+
+
+   if (present(TurbPrandtlNum)) this%Pr = TurbPrandtlNum
 
    ! First get qj's 
    call this%getQjSGS(dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That)

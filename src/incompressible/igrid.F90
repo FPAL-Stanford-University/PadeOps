@@ -22,6 +22,7 @@ module IncompressibleGrid
     use PadeDerOps, only: Pade6Stagg
     use Fringemethod, only: fringe
     use forcingmod,   only: HIT_shell_forcing
+    use scalar_igridMod, only: scalar_igrid 
 
     implicit none
 
@@ -202,7 +203,7 @@ module IncompressibleGrid
         integer, dimension(:), allocatable :: planes2dumpC_KS, planes2dumpF_KS
         integer :: t_dumpKSprep, KSinitType
         real(rkind), dimension(:,:,:), pointer :: uFil4KS, vFil4KS, wFil4KS
-        real(rkind) :: KSFilFact 
+        real(rkind) :: turbPr, KSFilFact 
         real(rkind), dimension(:,:,:), allocatable :: KS_probe_data
 
 
@@ -248,6 +249,11 @@ module IncompressibleGrid
         ! HIT Forcing
         logical :: useHITForcing = .false.
         type(HIT_shell_forcing), allocatable :: hitforce
+
+        ! Scalars
+        logical :: useScalars = .false. 
+        type(scalar_igrid), dimension(:), allocatable :: scalars
+        integer :: n_scalars = 1
 
         contains
             procedure          :: init
@@ -297,6 +303,7 @@ module IncompressibleGrid
             procedure, private :: dump_planes
             procedure, private :: dealiasRealField_C
             procedure          :: dumpFullField 
+            procedure, private :: dump_scalar_fields
             procedure, private :: dumpVisualizationInfo
             procedure, private :: DeletePrevStats3DFiles
             procedure, private :: Delete_file_if_present
@@ -311,7 +318,7 @@ contains
     subroutine init(this,inputfile, initialize2decomp)
         class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
-        character(len=clen) :: outputdir, inputdir, turbInfoDir, ksOutputDir, controlDir = "null"
+        character(len=clen) :: outputdir, inputdir, scalar_info_dir, turbInfoDir, ksOutputDir, controlDir = "null"
         integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = 999999
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
@@ -337,8 +344,10 @@ contains
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
         logical, intent(in), optional :: initialize2decomp
+        integer :: num_scalars = 0
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
-        logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false.  
+        logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false., useScalars = .false. 
+         
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -346,7 +355,7 @@ contains
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,&
-                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude, useHITForcing, frameAngle
+                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
@@ -356,6 +365,7 @@ contains
                                  KSdoZfilter, nKSvertFilt
         namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq, computeDNSPressure, computeTurbinePressure, computeFringePressure            
         namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir, deleteInstructions
+        namelist /SCALARS/ num_scalars, scalar_info_dir
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -370,6 +380,10 @@ contains
         read(unit=ioUnit, NML=BCs)
         read(unit=ioUnit, NML=WINDTURBINES)
         read(unit=ioUnit, NML=KSPREPROCESS)
+        this%useScalars = useScalars
+        if (this%useScalars) then
+         read(unit=ioUnit, NML=SCALARS)
+        end if
         close(ioUnit)
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
         this%dt = dt; this%dtby2 = dt/two ; this%Re = Re; this%useSponge = useSpongeLayer
@@ -385,7 +399,7 @@ contains
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType 
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity; this%deleteInstructions = deleteInstructions
-        this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS
+        this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -406,7 +420,7 @@ contains
         this%t_pointProbe = t_pointProbe; this%dPfdx = dPfdx; this%dPfdy = dPfdy; this%dPfdz = dPfdz
         this%InitSpinUp = InitSpinUp; this%BulkRichardson = BulkRichardson
         this%computeDNSpressure = computeDNSpressure; this%computefringePressure = computeFringePressure
-        this%computeTurbinePressure = computeTurbinePressure
+        this%computeTurbinePressure = computeTurbinePressure; this%turbPr = Pr
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC); allocate(this%gpE)
@@ -698,6 +712,7 @@ contains
         end if  
 
         ! STEP 11: Initialize SGS model
+        allocate(this%SGSmodel)
         if (this%useSGS) then
             
             ! First get z at edges
@@ -710,7 +725,6 @@ contains
             call transpose_z_to_y(zEinZ,zEinY,this%gpE)
             call transpose_y_to_x(zEinY,this%rbuffxE(:,:,:,1), this%gpE)
 
-            allocate(this%SGSmodel)
             call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
@@ -917,9 +931,9 @@ contains
         end if
        
         ! STEP 17: Set Fringe
-        call mpi_barrier(mpi_comm_world, ierr)
+        allocate(this%fringe_x1, this%fringe_x2)
+        allocate(this%fringe_x)
         if (this%usedoublefringex) then
-            allocate(this%fringe_x1, this%fringe_x2)
             call this%fringe_x1%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
                                         this%spectC, this%spectE, this%gpC, this%gpE, &
                                         this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, fringeID=1)   
@@ -929,7 +943,6 @@ contains
 
         else
             if (this%useFringe) then
-                allocate(this%fringe_x)
                 call this%fringe_x%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
                                         this%spectC, this%spectE, this%gpC, this%gpE, &
                                         this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE)   
@@ -967,7 +980,6 @@ contains
                this%vrhs_turbine = dcmplx(0.d0, 0.d0)
                this%wrhs_turbine = dcmplx(0.d0, 0.d0)
             end if
-            call this%ComputePressure()
             call message(1, "Done allocating storage for pressure")
         end if 
         if ((.not. this%fastCalcPressure) .and. ((this%computefringePressure) .or. (this%computeDNSPressure))) then
@@ -977,7 +989,6 @@ contains
 
         ! STEP 20: Update the probes
         if (this%useProbes) call this%updateProbes()
-
 
         ! STEP 21: Buoyancy term type
         if (this%isStratified) then
@@ -997,10 +1008,36 @@ contains
         end if 
 
 
-        ! STEP 22: Safeguard against user invalid user inputs
+        ! STEP 22: Set the scalars
+        if (this%usescalars) then
+            if (allocated(this%scalars)) deallocate(this%scalars)
+            allocate(this%scalars(this%n_scalars))
+            do idx = 1,this%n_scalars
+               call this%scalars(idx)%init(this%gpC,this%gpE,this%spectC,this%spectE,this%sgsmodel,this%Pade6opZ,&
+                            & inputfile,scalar_info_dir,this%mesh,this%u,this%v,this%w,this%wC, this%rbuffxC, &
+                            & this%rbuffyC,this%rbuffzC,this%rbuffxE,this%rbuffyE,this%rbuffzE,  &
+                            & this%cbuffyC,this%cbuffzC,this%cbuffyE,this%cbuffzE, this%Re, &
+                            & this%isinviscid, this%useSGS, idx, this%inputdir, this%outputdir, &
+                            & this%runID, useRestartFile, restartfile_TID, this%usefringe, this%usedoublefringex, &
+                            & this%fringe_x, this%fringe_x1, this%fringe_x2)
+            end do 
+            call message(0, "SCALAR fields initialized successfully.")
+         end if  
+         
+         ! STEP 23: Compute pressure  
+        if ((this%storePressure) .or. (this%fastCalcPressure)) then
+            call this%ComputePressure()
+        end if 
+
+        ! STEP 24: Safeguard against user invalid user inputs
         if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
             call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 or SSP RK45 time stepping.",123)
+        end if
+
+        if ((this%usescalars) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
+            call GracefulExit("SCALARS are only supported with TVD RK3 or SSP RK45 time stepping.",123)
         end if 
+
         if ((this%fastCalcPressure) .and. (useDealiasFilterVert)) then
             call GracefulExit("fastCalcPressure feature is not supported if useDealiasFilterVert is TRUE",123) 
         end if 
@@ -1019,6 +1056,7 @@ contains
 
     subroutine dealiasFields(this)
         class(igrid), intent(inout) :: this
+        integer :: idx
 
         call this%spectC%dealias(this%uhat)
         call this%spectC%dealias(this%vhat)
@@ -1034,6 +1072,11 @@ contains
             call this%ApplyCompactFilter()
         end if
 
+        if ((this%usescalars) .and. allocated(this%scalars)) then
+           do idx = 1,this%n_scalars
+              call this%scalars(idx)%dealias()
+           end do 
+        end if 
     end subroutine 
 
 
@@ -1080,6 +1123,7 @@ contains
     subroutine reset_pointers(this, resetRHS)
         class(igrid), intent(inout), target :: this
         logical, intent(in), optional :: resetRHS 
+        integer :: idx 
 
         this%uhat => this%SfieldsC(:,:,:,1); 
         this%vhat => this%SfieldsC(:,:,:,2); 
@@ -1099,12 +1143,23 @@ contains
             end if 
         end if 
 
+        if (this%useScalars) then
+            do idx = 1,this%n_scalars
+               if (present(resetRHS)) then
+                  call this%scalars(idx)%reset_pointers(resetRHS)
+               else
+                  call this%scalars(idx)%reset_pointers()
+               end if  
+            end do 
+        end if 
+
     end subroutine
 
     
     subroutine TVD_RK3(this, dtforced)
         class(igrid), intent(inout), target :: this
         real(rkind), intent(in), optional :: dtforced
+        integer :: idx 
 
         if(present(dtforced)) then
           this%dt = dtforced
@@ -1130,25 +1185,51 @@ contains
         this%vhat1 = this%vhat + this%dt*this%v_rhs 
         this%what1 = this%what + this%dt*this%w_rhs 
         if (this%isStratified .or. this%initspinup) this%That1 = this%That + this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat1 = this%scalars(idx)%Fhat + this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
+        
         ! Now set pointers so that things operate on uhat1, vhat1, etc.
         this%uhat => this%SfieldsC2(:,:,:,1); this%vhat => this%SfieldsC2(:,:,:,2); this%what => this%SfieldsE2(:,:,:,1); 
         if (this%isStratified .or. this%initspinup) this%That => this%SfieldsC2(:,:,:,3)
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+               this%scalars(idx)%Fhat => this%scalars(idx)%Sfields(:,:,:,2) 
+           end do 
+        end if
+
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(this%fastCalcPressure)
+         
 
         !!! STAGE 2
         ! Second stage - u, v, w are really pointing to u1, v1, w1 (which is
         ! what we want. 
         call this%populate_rhs()
+
         ! reset u, v, w pointers
         call this%reset_pointers()
         this%uhat1 = (3.d0/4.d0)*this%uhat + (1.d0/4.d0)*this%uhat1 + (1.d0/4.d0)*this%dt*this%u_rhs
         this%vhat1 = (3.d0/4.d0)*this%vhat + (1.d0/4.d0)*this%vhat1 + (1.d0/4.d0)*this%dt*this%v_rhs
         this%what1 = (3.d0/4.d0)*this%what + (1.d0/4.d0)*this%what1 + (1.d0/4.d0)*this%dt*this%w_rhs
         if (this%isStratified .or. this%initspinup) this%That1 = (3.d0/4.d0)*this%That + (1.d0/4.d0)*this%That1 + (1.d0/4.d0)*this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat1 = (3.d0/4.d0)*this%scalars(idx)%Fhat + (1.d0/4.d0)*this%scalars(idx)%Fhat1 &
+                                    & + (1.d0/4.d0)*this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
         ! now set the u, v, w, pointers to u1, v1, w1
         this%uhat => this%SfieldsC2(:,:,:,1); this%vhat => this%SfieldsC2(:,:,:,2); this%what => this%SfieldsE2(:,:,:,1); 
         if (this%isStratified .or. this%initspinup) this%That => this%SfieldsC2(:,:,:,3)
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+            this%scalars(idx)%Fhat => this%scalars(idx)%Sfields(:,:,:,2) 
+           end do 
+        end if
+
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(.false.)
 
@@ -1157,12 +1238,20 @@ contains
         ! Third stage - u, v, w are really pointing to u2, v2, w2 (which is what
         ! we really want. 
         call this%populate_rhs()
+        
         ! reset u, v, w pointers
         call this%reset_pointers()
         this%uhat = (1.d0/3.d0)*this%uhat + (2.d0/3.d0)*this%uhat1 + (2.d0/3.d0)*this%dt*this%u_rhs
         this%vhat = (1.d0/3.d0)*this%vhat + (2.d0/3.d0)*this%vhat1 + (2.d0/3.d0)*this%dt*this%v_rhs
         this%what = (1.d0/3.d0)*this%what + (2.d0/3.d0)*this%what1 + (2.d0/3.d0)*this%dt*this%w_rhs
         if (this%isStratified .or. this%initspinup) this%That = (1.d0/3.d0)*this%That + (2.d0/3.d0)*this%That1 + (2.d0/3.d0)*this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat  = (1.d0/3.d0)*this%scalars(idx)%Fhat + (2.d0/3.d0)*this%scalars(idx)%Fhat1 &
+                                    & + (2.d0/3.d0)*this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
+        
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
 
@@ -1183,6 +1272,8 @@ contains
         real(rkind), parameter :: a30 = 0.620101851488403d0, a32 = 0.379898148511597d0
         real(rkind), parameter :: a40 = 0.17807995439313d0 , a43 = 0.821920045606868d0
         real(rkind), parameter :: a52 = 0.517231671970585d0, a53 = 0.096059710526147d0, a54 = 0.386708617503269d0
+
+        integer :: idx 
 
         if(present(dtforced)) then
           this%dt = dtforced
@@ -1209,10 +1300,23 @@ contains
         this%vhat1 = this%vhat + b01*this%dt*this%v_rhs 
         this%what1 = this%what + b01*this%dt*this%w_rhs 
         if (this%isStratified .or. this%initspinup) this%That1 = this%That + b01*this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat1 = this%scalars(idx)%Fhat + b01*this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
+        
         ! Now set pointers so that things operate on uhat1, vhat1, etc.
         this%uhat => this%uExtra(:,:,:,1); this%vhat => this%vExtra(:,:,:,1)
         this%what => this%wExtra(:,:,:,1); this%That => this%TExtra(:,:,:,1)
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+               this%scalars(idx)%Fhat => this%scalars(idx)%Sfields(:,:,:,2) ! Fhat1 is the second index of Sfields
+           end do 
+        end if
+
         ! Now perform the projection and prep for next stage
+        
         call this%project_and_prep(this%fastCalcPressure)
 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1229,9 +1333,19 @@ contains
         this%vhat2 = a20*this%vhat + a21*this%vhat1 + b12*this%dt*this%v_rhs
         this%what2 = a20*this%what + a21*this%what1 + b12*this%dt*this%w_rhs
         if (this%isStratified .or. this%initspinup) this%That2 = a20*this%That + a21*this%That1 + b12*this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat2 = a20*this%scalars(idx)%Fhat + a21*this%scalars(idx)%Fhat1 + b12*this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
         ! now set the u, v, w, pointers to u2, v2, w2
         this%uhat => this%uExtra(:,:,:,2); this%vhat => this%vExtra(:,:,:,2)
         this%what => this%wExtra(:,:,:,2); this%That => this%TExtra(:,:,:,2)
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+            this%scalars(idx)%Fhat => this%scalars(idx)%Sfields(:,:,:,3) ! Fhat2 is the third index of Sfields
+           end do 
+        end if
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(.false.)
 
@@ -1250,9 +1364,19 @@ contains
         this%vhat3 = a30*this%vhat + a32*this%vhat2 + b23*this%dt*this%v_rhs
         this%what3 = a30*this%what + a32*this%what2 + b23*this%dt*this%w_rhs
         if (this%isStratified .or. this%initspinup) this%That3 = a30*this%That + a32*this%That2 + b23*this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat3 = a30*this%scalars(idx)%Fhat + a32*this%scalars(idx)%Fhat2 + b23*this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
         ! now set u, v, w pointers to point to u3, v3, w3
         this%uhat => this%uExtra(:,:,:,3); this%vhat => this%vExtra(:,:,:,3)
         this%what => this%wExtra(:,:,:,3); this%That => this%TExtra(:,:,:,3)
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+            this%scalars(idx)%Fhat => this%scalars(idx)%Sfields(:,:,:,4) ! Fhat3 is the third index of Sfields
+           end do 
+        end if
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
 
@@ -1263,15 +1387,19 @@ contains
         ! reset u, v, w pointers
         call this%reset_pointers()
         ! Set the pointers 
-        this%uhat4 => this%uhat; this%vhat4 => this%vhat
-        this%what4 => this%what; this%That4 => this%That
+        !this%uhat4 => this%uhat; this%vhat4 => this%vhat
+        !this%what4 => this%what; this%That4 => this%That
         ! Do the time step 
-        this%uhat4 = a40*this%uhat + a43*this%uhat3 + b34*this%dt*this%u_rhs
-        this%vhat4 = a40*this%vhat + a43*this%vhat3 + b34*this%dt*this%v_rhs
-        this%what4 = a40*this%what + a43*this%what3 + b34*this%dt*this%w_rhs
-        if (this%isStratified .or. this%initspinup) this%That4 = a40*this%That + a43*this%That3 + b34*this%dt*this%T_rhs
-        ! now set u, v, w pointers to point to u4, v4, w4
-        ! < no need to do anything here since u4 is already pointing to u > 
+        this%uhat = a40*this%uhat + a43*this%uhat3 + b34*this%dt*this%u_rhs
+        this%vhat = a40*this%vhat + a43*this%vhat3 + b34*this%dt*this%v_rhs
+        this%what = a40*this%what + a43*this%what3 + b34*this%dt*this%w_rhs
+        if (this%isStratified .or. this%initspinup) this%That = a40*this%That + a43*this%That3 + b34*this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat = a40*this%scalars(idx)%Fhat + a43*this%scalars(idx)%Fhat3 + b34*this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
+        ! < IMPORTANT: no need to do anything here since uhat4 is really just uhat > 
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
 
@@ -1282,6 +1410,11 @@ contains
         ! First reset urhs pointers to point to spare buffers
         this%u_rhs => this%uRHSExtra(:,:,:,1); this%v_rhs => this%vRHSExtra(:,:,:,1);
         this%w_rhs => this%wRHSExtra(:,:,:,1); this%T_rhs => this%TRHSExtra(:,:,:,1);
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+            this%scalars(idx)%rhs => this%scalars(idx)%rhs_storage(:,:,:,2) 
+           end do 
+        end if
         call this%populate_rhs()
         ! Reset pointers
         call this%reset_pointers(resetRHS=.true.)
@@ -1290,6 +1423,13 @@ contains
         this%vhat = a52*this%vhat2 + a53*this%vhat3 + b35*this%dt*this%v_rhs + a54*this%vhat + b45*this%dt*this%vRHSExtra(:,:,:,1)
         this%what = a52*this%what2 + a53*this%what3 + b35*this%dt*this%w_rhs + a54*this%what + b45*this%dt*this%wRHSExtra(:,:,:,1)
         if (this%isStratified .or. this%initspinup) this%That = a52*this%That2 + a53*this%That3 + b35*this%dt*this%T_rhs + a54*this%That + b45*this%dt*this%TRHSExtra(:,:,:,1) 
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat = a52*this%scalars(idx)%Fhat2 + a53*this%scalars(idx)%Fhat3  &
+                                   & + b35*this%dt*this%scalars(idx)%rhs + a54*this%scalars(idx)%Fhat &
+                                   & + b45*this%dt*this%scalars(idx)%rhs_storage(:,:,:,2)
+           end do 
+        end if
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
 
@@ -1469,7 +1609,8 @@ contains
 
     subroutine destroy(this)
         class(igrid), intent(inout) :: this
-      
+        integer :: idx
+
         if(this%useHITForcing) then
           call this%hitforce%destroy()
           deallocate(this%hitforce)
@@ -1492,6 +1633,13 @@ contains
            call this%sgsModel%destroy()
            deallocate(this%sgsModel)
         end if
+
+        if (allocated(this%scalars)) then
+            do idx = 1,this%n_scalars
+               call this%scalars(idx)%destroy()
+            end do 
+        end if
+        deallocate(this%scalars)
     end subroutine
 
     subroutine addNonLinearTerm_Rot(this)
@@ -1795,7 +1943,8 @@ contains
         !integer,           intent(in)    :: RKstage
         logical, intent(in), optional :: CopyForDNSpress, CopyForFringePress, copyForTurbinePress
         logical :: copyFringeRHS, copyTurbRHS
-
+        integer :: idx 
+         
 
         if (present(copyForTurbinePress)) then
            copyTurbRHS = copyForTurbinePress
@@ -1871,7 +2020,7 @@ contains
 
             if (this%isStratified .or. this%initspinup) then
                call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
-                                          this%u, this%v, this%wC, this%T, this%That)
+                                          this%u, this%v, this%wC, this%T, this%That, this%turbPr)
             end if
             
         end if
@@ -1909,6 +2058,13 @@ contains
             call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep)
         end if 
 
+        ! Step 9: Populate RHS for scalars
+        !if (allocated(this%scalars)) then
+        if (this%useScalars) then
+            do idx = 1,this%n_scalars
+               call this%scalars(idx)%populateRHS(this%dt)
+            end do 
+        end if
     end subroutine
 
     subroutine addViscousTerm(this)
@@ -1961,6 +2117,7 @@ contains
     subroutine project_and_prep(this, AlreadyProjected)
         class(igrid), intent(inout) :: this
         logical, intent(in) :: AlreadyProjected
+        integer :: idx 
 
         ! Step 1: Dealias
         call this%dealiasFields()
@@ -1986,7 +2143,13 @@ contains
         ! STEP 5: Compute duidxjC 
         call this%compute_duidxj()
         if (this%isStratified .or. this%initspinup) call this%compute_dTdxi() 
-
+         
+        ! STEP 6: Prep scalar fields if being used. 
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              call this%scalars(idx)%prep_scalar()
+           end do 
+        end if
     end subroutine
 
 
@@ -2063,6 +2226,22 @@ contains
         end if
         
     end subroutine
+
+   
+    subroutine dump_scalar_fields(this)
+      class(igrid), intent(in) :: this
+      integer :: idx
+
+      if ((this%usescalars) .and. allocated(this%scalars)) then
+         do idx = 1,this%n_scalars
+            call this%scalars(idx)%dumpScalarField(this%step)
+         end do 
+      end if 
+
+
+    end subroutine 
+
+
 
     subroutine wrapup_timestep(this)
         class(igrid), intent(inout) :: this
@@ -2249,6 +2428,7 @@ contains
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
+           call this%dump_scalar_fields()
            call this%dumpVisualizationInfo()
 
            ! Dump optional fields
@@ -2301,6 +2481,7 @@ contains
            call this%dumpFullField(this%u,'uVel')
            call this%dumpFullField(this%v,'vVel')
            call this%dumpFullField(this%wC,'wVel')
+           call this%dump_scalar_fields()
            call this%dumpVisualizationInfo()
            if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
@@ -4754,7 +4935,7 @@ contains
         use decomp_2d_io
         class(igrid), intent(in) :: this
         integer :: nxplanes, nyplanes, nzplanes
-        integer :: idx, pid, dirid, tid
+        integer :: idx, pid, dirid, tid, sid
         character(len=clen) :: fname
         character(len=clen) :: tempname
 
@@ -4837,7 +5018,15 @@ contains
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".ksw"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                     call decomp_2d_write_plane(1,this%wFil4KS,dirid, pid, fname, this%gpC)
+                end if
+               
+                if (this%usescalars) then
+                  do sid = 1,this%n_scalars
+                     call this%scalars(idx)%dump_planes(tid, pid, dirid, "_x")
+                  end do 
                 end if 
+
+
             end do 
         end if 
             
@@ -4920,6 +5109,11 @@ contains
 
                 end if
 
+                if (this%usescalars) then
+                  do sid = 1,this%n_scalars
+                     call this%scalars(idx)%dump_planes(tid, pid, dirid, "_y")
+                  end do 
+                end if 
             end do 
         end if 
         
@@ -5000,6 +5194,12 @@ contains
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                     call decomp_2d_write_plane(1,this%wFil4KS,dirid, pid, fname, this%gpC)
                 end if
+                
+                if (this%usescalars) then
+                  do sid = 1,this%n_scalars
+                     call this%scalars(idx)%dump_planes(tid, pid, dirid, "_z")
+                  end do 
+                end if 
             end do 
         end if 
         call message(1, "Dumped Planes.")        
@@ -5120,6 +5320,7 @@ contains
                 call this%dumpFullField(this%u,'uVel')
                 call this%dumpFullField(this%v,'vVel')
                 call this%dumpFullField(this%wC,'wVel')
+                call this%dump_scalar_fields()
                 call this%dumpVisualizationInfo()
                 if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
                 if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
