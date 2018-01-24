@@ -134,12 +134,15 @@ module IncompressibleGrid
         integer :: BuoyancyTermType = 0 
         real(rkind) :: BuoyancyFact = 0.d0
 
+        integer :: moistureIndex = 1
+        real(rkind) :: moistureFactor = 0.61d0 ! converts g/kg to K
+
         logical :: periodicInZ  = .false. 
         logical :: newTimeStep = .true., computeVorticity = .false.  
         integer :: timeSteppingScheme = 0 
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
         integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
-        logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false. 
+        logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false., useMoisture = .false.
         logical :: useExtraForcing = .false., useGeostrophicForcing = .false., isInviscid = .false.  
         logical :: useSGS = .false., computeTurbinePressure = .false.  
         logical :: UseDealiasFilterVert = .false.
@@ -318,7 +321,7 @@ contains
     subroutine init(this,inputfile, initialize2decomp)
         class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
-        character(len=clen) :: outputdir, inputdir, scalar_info_dir, turbInfoDir, ksOutputDir, controlDir = "null"
+        character(len=clen) :: outputdir, inputdir, scalar_info_dir, turbInfoDir, ksOutputDir, controlDir = "null", moisture_info_dir
         integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = 999999
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
@@ -328,7 +331,7 @@ contains
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
-        logical ::isStratified=.false.,dumpPlanes = .false.,useExtraForcing = .false.
+        logical ::isStratified=.false.,useMoisture=.false.,dumpPlanes = .false.,useExtraForcing = .false.
         logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false. 
         logical :: useGeostrophicForcing = .false., PeriodicInZ = .false., deleteInstructions = .true.  
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
@@ -354,7 +357,7 @@ contains
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, dump_NU_SGS, dump_KAPPA_SGS,&
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
-        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,&
+        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,useMoisture,Re,Ro,Pr,Fr, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,&
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type  
@@ -366,6 +369,7 @@ contains
         namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq, computeDNSPressure, computeTurbinePressure, computeFringePressure            
         namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir, deleteInstructions
         namelist /SCALARS/ num_scalars, scalar_info_dir
+        namelist /MOISTURE/ moistureFactor, moisture_info_dir
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -380,6 +384,10 @@ contains
         read(unit=ioUnit, NML=BCs)
         read(unit=ioUnit, NML=WINDTURBINES)
         read(unit=ioUnit, NML=KSPREPROCESS)
+        this%useMoisture = useMoisture
+        if (this%useMoisture) then
+         read(unit=ioUnit, NML=MOISTURE)
+        end if
         this%useScalars = useScalars
         if (this%useScalars) then
          read(unit=ioUnit, NML=SCALARS)
@@ -387,7 +395,7 @@ contains
         close(ioUnit)
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
         this%dt = dt; this%dtby2 = dt/two ; this%Re = Re; this%useSponge = useSpongeLayer
-        this%outputdir = outputdir; this%inputdir = inputdir; this%isStratified = isStratified 
+        this%outputdir = outputdir; this%inputdir = inputdir; this%isStratified = isStratified
         this%WallMtype = WallMType; this%runID = runID; this%tstop = tstop; this%t_dataDump = t_dataDump
         this%CFL = CFL; this%dumpPlanes = dumpPlanes; this%useGeostrophicForcing = useGeostrophicForcing
         this%timeSteppingScheme = timeSteppingScheme; this%useSystemInteractions = useSystemInteractions
@@ -400,6 +408,7 @@ contains
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType 
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity; this%deleteInstructions = deleteInstructions
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
+        this%moistureFactor = moistureFactor
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -1014,11 +1023,26 @@ contains
         end if 
 
 
-        ! STEP 22: Set the scalars
+        ! STEP 22a: Set moisture
+        if(this%useMoisture) then
+          if(this%usescalars) then
+             this%n_scalars = this%n_scalars + 1
+             this%moistureIndex = this%n_scalars
+          else
+             if (this%useMoisture) this%usescalars = .true.
+             this%n_scalars = 1
+             this%moistureIndex = 1
+          endif
+        endif
+        
+        ! STEP 22b: Set other scalars
         if (this%usescalars) then
             if (allocated(this%scalars)) deallocate(this%scalars)
             allocate(this%scalars(this%n_scalars))
             do idx = 1,this%n_scalars
+               if(this%useMoisture .and. idx==this%n_scalars) then
+                 scalar_info_dir = moisture_info_dir
+               endif
                call this%scalars(idx)%init(this%gpC,this%gpE,this%spectC,this%spectE,this%sgsmodel,this%Pade6opZ,&
                             & inputfile,scalar_info_dir,this%mesh,this%u,this%v,this%w,this%wC, this%rbuffxC, &
                             & this%rbuffyC,this%rbuffzC,this%rbuffxE,this%rbuffyE,this%rbuffzE,  &
@@ -1053,6 +1077,9 @@ contains
             & there is stratification in the problem", 323)
         end if 
 
+        if ((this%useMoisture) .and. (.not. this%isStratified)) then
+            call GracefulExit("isStratified must be true for moisture to be true",123)
+        end if 
       
         call message("IGRID initialized successfully!")
         call message("===========================================================")
@@ -1918,16 +1945,26 @@ contains
         end if
     end subroutine
 
-    subroutine AddBuoyancyTerm(this)
+    subroutine addBuoyancyTerm(this)
         class(igrid), intent(inout), target :: this
         complex(rkind), dimension(:,:,:), pointer :: fT1E 
         real(rkind), dimension(:,:,:), pointer :: rbuffE
+
+        integer :: mind
 
         fT1E => this%cbuffyE(:,:,:,1)
         rbuffE => this%rbuffxE(:,:,:,1)
 
         !fT1E = (this%TEhat)/(this%ThetaRef*this%Fr*this%Fr)
-        fT1E = (this%TEhat)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+        if(this%useMoisture) then
+            mind = this%moistureIndex
+            call transpose_y_to_z(this%scalars(mind)%fhat, this%cbuffzC(:,:,:,1), this%sp_gpC)
+            call this%Pade6opZ%interpz_C2E(this%cbuffzC(:,:,:,1), this%cbuffzE(:,:,:,1), this%scalars(mind)%BC_bottom, this%scalars(mind)%BC_top)
+            call transpose_z_to_y(this%cbuffzE(:,:,:,1), this%cbuffyE(:,:,:,1), this%sp_gpC)
+            fT1E = (this%TEhat + this%moistureFactor*this%cbuffyE(:,:,:,1))*this%BuoyancyFact ! See definition of buoyancy factor in init 
+        else
+            fT1E = (this%TEhat)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+        endif
         if (this%spectE%carryingZeroK) then
             fT1E(1,1,:) = cmplx(zero,zero,rkind)
         end if 

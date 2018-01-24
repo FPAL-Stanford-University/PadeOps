@@ -46,7 +46,8 @@ module scalar_igridMod
       character(len=clen) :: inputDataDir, outputDataDir
       real(rkind), dimension(:,:,:), pointer :: u, v, w, wC
 
-      integer :: RunID, scalar_number, bc_bottom, bc_top
+      integer :: RunID, scalar_number
+      integer, public :: bc_bottom, bc_top
       type(sgs_igrid), pointer :: sgsmodel
       logical :: useSource, isinviscid, useSGS, usefringe, usedoublefringe
 
