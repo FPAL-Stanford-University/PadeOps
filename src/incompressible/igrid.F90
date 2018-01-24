@@ -346,7 +346,7 @@ contains
         logical, intent(in), optional :: initialize2decomp
         integer :: num_scalars = 0
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
-        logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false., useScalars = .false. 
+        logical :: sgsmod_stratified, Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false., useScalars = .false. 
          
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
@@ -725,11 +725,16 @@ contains
             call transpose_z_to_y(zEinZ,zEinY,this%gpE)
             call transpose_y_to_x(zEinY,this%rbuffxE(:,:,:,1), this%gpE)
 
+            if ((this%initSpinup) .or. (this%useScalars) .or. (this%isStratified)) then
+               sgsmod_stratified = .true. 
+            else
+               sgsmod_stratified = .false. 
+            end if 
             call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
-                                    this%ThetaRef, this%Fr, this%Re, this%isInviscid, this%isStratified, this%botBC_Temp, &
+                                    this%ThetaRef, this%Fr, this%Re, this%isInviscid, sgsmod_stratified, this%botBC_Temp, &
                                     this%initSpinUp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%kappaSGS)
             call message(0,"SGS model initialized successfully")
@@ -790,6 +795,7 @@ contains
         if (this%useWindTurbines) then
             allocate(this%WindTurbineArr)
             call this%WindTurbineArr%init(inputFile, this%gpC, this%gpE, this%spectC, this%spectE, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
+            allocate(this%inst_horz_avg_turb(8*this%WindTurbineArr%nTurbines))
         end if
         ! STEP 12: Set visualization planes for io
         call set_planes_io(this%xplanes, this%yplanes, this%zplanes)
@@ -2949,7 +2955,7 @@ contains
         use exits, only: message
         class(igrid), intent(in) :: this
         character(len=clen) :: tempname, fname
-        integer :: ierr
+        integer :: ierr, idx 
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
@@ -2968,6 +2974,12 @@ contains
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
             call decomp_2d_write_one(1,this%T,fname, this%gpC)
         end if 
+
+        if (this%usescalars) then
+            do idx = 1,this%n_scalars
+               call this%scalars(idx)%dumprestart(this%step)
+            end do
+        end if
 
         if (nrank == 0) then
             write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",this%runID, "_info.",this%step
@@ -3065,7 +3077,6 @@ contains
         allocate(this%horzavgstats(this%nz,nhorzavgvars))
 
         if(this%useWindTurbines) then
-            allocate(this%inst_horz_avg_turb(8*this%WindTurbineArr%nTurbines))
             allocate(this%runningSum_sc_turb(8*this%WindTurbineArr%nTurbines))
             allocate(this%runningSum_turb   (8*this%WindTurbineArr%nTurbines))
         endif
@@ -5022,7 +5033,7 @@ contains
                
                 if (this%usescalars) then
                   do sid = 1,this%n_scalars
-                     call this%scalars(idx)%dump_planes(tid, pid, dirid, "_x")
+                     call this%scalars(sid)%dump_planes(tid, pid, dirid, "_x")
                   end do 
                 end if 
 
@@ -5111,7 +5122,7 @@ contains
 
                 if (this%usescalars) then
                   do sid = 1,this%n_scalars
-                     call this%scalars(idx)%dump_planes(tid, pid, dirid, "_y")
+                     call this%scalars(sid)%dump_planes(tid, pid, dirid, "_y")
                   end do 
                 end if 
             end do 
@@ -5197,7 +5208,7 @@ contains
                 
                 if (this%usescalars) then
                   do sid = 1,this%n_scalars
-                     call this%scalars(idx)%dump_planes(tid, pid, dirid, "_z")
+                     call this%scalars(sid)%dump_planes(tid, pid, dirid, "_z")
                   end do 
                 end if 
             end do 

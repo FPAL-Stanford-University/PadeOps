@@ -1,6 +1,6 @@
 &INPUT
-inputdir              = "/projects/windsim/PadeOps/build/build_avx2/problems/incompressible"   ! Directory for any input files
-outputdir             = "/projects/windsim/PadeOps/build/build_avx2/problems/incompressible"   ! Directory for all output files
+inputdir              = "/scratch/aghate/dump/ScalarSourceTesting"   ! Directory for any input files
+outputdir             = "/scratch/aghate/dump/ScalarSourceTesting"   ! Directory for all output files
 nx                    = 1280          ! Number of points in X
 ny                    = 256          ! Number of points in Y
 nz                    = 256          ! Number of points in Z
@@ -24,14 +24,14 @@ t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproj
 /
 /
 &IO
-RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
+RunID                 = 6          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump         = 2000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 50        ! Data dumping frequency (# of timesteps)
+t_dataDump            = 100        ! Data dumping frequency (# of timesteps)
 ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
-dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
-t_planeDump           = 100         ! Plane dumping frequency (# of timesteps)
+dumpPlanes            = .TRUE.     ! Dump plane visualations. Select planes in initialize.F90
+t_planeDump           = 10         ! Plane dumping frequency (# of timesteps)
 t_start_planeDump     = 1           ! When do you want to start dumping planes?
-t_stop_planeDump      = 5000        ! When do you want to stop dumping planes?
+t_stop_planeDump      = 50000        ! When do you want to stop dumping planes?
 /
 /
 &STATS
@@ -45,7 +45,7 @@ timeAvgFullFields     = .FALSE.     ! Time average and store fields on the run
 /
 &OS_INTERACTIONS
 useSystemInteractions = .TRUE.      ! Do you wish to interact with the program while its running
-tSystemInteractions   = 10          ! Check for interactions commands after these many time steps
+tSystemInteractions   = 1          ! Check for interactions commands after these many time steps
 controlDir            = "null"          ! Check in this directory for command files (NULL = Check in output directory)
 /
 /

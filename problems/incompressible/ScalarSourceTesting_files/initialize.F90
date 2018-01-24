@@ -24,7 +24,7 @@ pure subroutine Sfunc(x, val)
 
    val = 0.d0
    where (x>0.d0) 
-      val = 1.d0/(1.d0 + exp(1.d0/(x - 1.d0) + 1.d0/(x)))
+      val = 1.d0/(1.d0 + exp(min(1.d0/(x - 1.d0 + 1.d-18) + 1.d0/(x + 1.d-18),50.d0)))
    end where
 
    where (x>1.d0) 

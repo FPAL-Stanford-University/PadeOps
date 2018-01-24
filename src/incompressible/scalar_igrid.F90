@@ -67,19 +67,6 @@ module scalar_igridMod
    end type 
 contains
 
-subroutine dump_planes(this, pid, tid, dirid, dirlabel)
-   use decomp_2d_io
-   class(scalar_igrid), intent(in) :: this
-   integer, intent(in) :: pid, tid, dirid
-   character(len=2), intent(in) :: dirlabel
-
-   character(len=clen) :: tempname, fname
-
-   write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A2,I2.2)") "Run", this%RunID,"_t",tid,dirlabel,pid,".p", this%scalar_number
-   fname = this%OutputDataDir(:len_trim(this%OutputDataDir))//"/"//trim(tempname)
-   call decomp_2d_write_plane(1,this%F,dirid, pid, fname, this%gpC)
-
-end subroutine
 
 subroutine dealias(this)
    class(scalar_igrid), intent(inout) :: this
@@ -160,7 +147,7 @@ subroutine populateRHS(this, dt)
    if (.not. this%isinviscid) then
       call this%addViscousTerm()
    end if 
-
+   
    ! Add the fringe contributions
    if (this%usedoublefringe) then
       call this%fringe_x1%addFringeRHS_scalar(dt, this%rhs, this%F)
@@ -192,7 +179,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
                   & InputDataDir, OutputDataDir, RunID, restartSim, tid_restart, &
                   & usefringe, usedoublefringe, fringe_x, fringe_x1, fringe_x2)
          
-   use kind_parameters, only: clen 
+   use kind_parameters, only: clen
 
    class(scalar_igrid), intent(inout), target :: this
    type(decomp_info), target, intent(in) :: gpC, gpE
@@ -215,6 +202,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    real(rkind) :: PrandtlNum = 1.d0, TurbPrandtlNum = 1.d0
    integer ::  bc_bottom = 1, bc_top = 1 
    character(len=clen) :: tempname, fname
+
 
    namelist /SCALAR_INFO/ useSource, PrandtlNum, bc_bottom, bc_top,TurbPrandtlNum
 
@@ -289,6 +277,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    allocate(this%dFdxC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
    allocate(this%dFdyC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
    allocate(this%dFdzC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+   allocate(this%dFdzE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
   
    allocate(this%Sfields(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),4))
    allocate(this%rhs_storage(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),2))
@@ -299,7 +288,6 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    this%Fhat3 => this%Sfields(:,:,:,4)
    this%rhs => this%rhs_storage(:,:,:,1)
 
-   allocate(this%dFdzE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
 
    if (.not. this%isInviscid) then
       allocate(this%d2Fdz2(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
@@ -318,7 +306,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
       allocate(this%source_hat(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
       call SetScalar_source(this%gpC, inputFile, mesh, this%scalar_number, this%rbuffxC(:,:,:,1)) 
       call this%spectC%fft(this%rbuffxC(:,:,:,1),this%source_hat)
-   end if 
+   end if
 
    call this%dealias()
    call this%prep_scalar()
@@ -355,28 +343,50 @@ end subroutine
 
 subroutine readRestart(this, tid)
    use decomp_2d_io
+   use reductions, only: p_minval, p_maxval
+   use exits, only: message, message_min_max
    class(scalar_igrid), intent(inout) :: this
    integer, intent(in) :: tid
    character(len=clen) :: tempname, fname
 
-   write(tempname,"(A7,A4,I2.2,A6,I2.2,A1,I6.6)") "RESTART", "_Run", this%RunID, "SCALAR",this%scalar_number,".",tid
+
+   write(tempname,"(A7,A4,I2.2,A7,I2.2,A1,I6.6)") "RESTART", "_Run", this%RunID, "_SCALAR",this%scalar_number,".",tid
    fname = this%InputDataDir(:len_trim(this%InputDataDir))//"/"//trim(tempname)
    call decomp_2d_read_one(1,this%F,fname, this%gpC)
+   
+   call message(1,"Restart data successfully read for scalar number", this%scalar_number)
+   call message_min_max(2,"Bounds for F:", p_minval(minval(this%F)), p_maxval(maxval(this%F)))
 
 end subroutine 
 
 subroutine dumpRestart(this, tid)
    use decomp_2d_io
+   use exits, only: message
    class(scalar_igrid), intent(in) :: this
    integer, intent(in) :: tid
    character(len=clen) :: tempname, fname
 
-   write(tempname,"(A7,A4,I2.2,A6,I2.2,A1,I6.6)") "RESTART", "_Run", this%RunID, "SCALAR",this%scalar_number,".",tid
+   write(tempname,"(A7,A4,I2.2,A7,I2.2,A1,I6.6)") "RESTART", "_Run", this%RunID, "_SCALAR",this%scalar_number,".",tid
    fname = this%OutputDataDir(:len_trim(this%OutputDataDir))//"/"//trim(tempname)
+
+   call message(0,"Dumping restart for scalar number", this%scalar_number)
    call decomp_2d_write_one(1,this%F,fname, this%gpC)
 
 end subroutine 
 
+subroutine dump_planes(this, tid, pid, dirid, dirlabel)
+   use decomp_2d_io
+   class(scalar_igrid), intent(in) :: this
+   integer, intent(in) :: pid, tid, dirid
+   character(len=2), intent(in) :: dirlabel
+
+   character(len=clen) :: tempname, fname
+
+   write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A2,I2.2)") "Run", this%RunID,"_t",tid,dirlabel,pid,".p", this%scalar_number
+   fname = this%OutputDataDir(:len_trim(this%OutputDataDir))//"/"//trim(tempname)
+   call decomp_2d_write_plane(1,this%F,dirid, pid, fname, this%gpC)
+
+end subroutine
 
 subroutine dumpScalarField(this, tid)
    use decomp_2d_io

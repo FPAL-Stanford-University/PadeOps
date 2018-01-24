@@ -309,7 +309,6 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That)
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v, w, T
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
 
-
    if (this%useWallModel) call this%computeWall_PotTFlux()
 
    if (this%isEddyViscosityModel) then
@@ -324,9 +323,6 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That)
          this%kappa_sgs_C = this%nu_sgs_C/this%Pr
          this%kappa_sgs_E = this%nu_sgs_E/this%Pr
       end if 
-
-      ! No dynamic procedure as of now, so make sure that you provide a Prandtl
-      ! number for initialization.
 
       this%q1C = -this%kappa_sgs_C*dTdxC
       this%q2C = -this%kappa_sgs_C*dTdyC
