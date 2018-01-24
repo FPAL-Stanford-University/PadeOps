@@ -31,7 +31,7 @@ contains
         !angle = angle / (float(igp%ny)*float(igp%nx))
  
          
-        igp%zHubIndex = 16
+        !igp%zHubIndex = 16
         igp%rbuffxC(:,:,:,1) = atan2(igp%v, igp%u) !* 180.d0 / 3.14d0
         call transpose_x_to_y(igp%rbuffxC(:,:,:,1),igp%rbuffyC(:,:,:,1),igp%gpC)
         call transpose_y_to_z(igp%rbuffyC(:,:,:,1),igp%rbuffzC(:,:,:,1),igp%gpC)
@@ -56,6 +56,7 @@ contains
             call message(1,"frameAngle:",igp%frameAngle)
             call message(1,"total angle, degrees:", igp%totalAngle*180.d0/3.14d0)
             call message(1,"Control w, rad/time:",igp%wFilt)
+            call message(1,"Control Galpha:", igp%G_alpha)
             if (igp%useCFL) then
                 call message(1,"Current dt:",igp%dt)
             end if

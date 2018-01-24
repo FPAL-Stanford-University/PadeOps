@@ -67,6 +67,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
          call GracefulExit("Incorrect value set for NZ. Needs to be 512",213)
       end if 
       Lx = 16.d0*pi; Ly = 16.d0*pi; Lz = 25.d0
+    case (3)
+      
     case default
       call GracefulExit("Incorrect choice for ProblemMode.",21)
     end select
@@ -222,8 +224,36 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
         fname = InitFileDirectory(:len_trim(InitFileDirectory))//"/mystery_w.bin"
         call decomp_2d_read_one(1,w,fname, decompE)
 
-    end select
-      
+    case (3)
+         u  =  cos(alphaRot*pi/180.d0) - exp(-z)*cos(z - (alphaRot*pi/180.d0))
+         v  =  sin(alphaRot*pi/180.d0) + exp(-z)*sin(z - (alphaRot*pi/180.d0))
+         wC = zero
+         allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
+         allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
+
+         allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
+         allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
+   
+         nz = decompC%zsz(3)
+         nzE = nz + 1
+         allocate(derW)
+         dz = z(1,1,2) - z(1,1,1)
+         call derW%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .true., &
+                                     isTopSided = .false., isBotSided = .false.)
+
+         call transpose_x_to_y(wC,ybuffC,decompC)
+         call transpose_y_to_z(ybuffC,zbuffC,decompC)
+         !zbuffE = zero
+         !zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
+         call derW%interpz_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+         zbuffE(:,:,1) = zero
+         call transpose_z_to_y(zbuffE,ybuffE,decompE)
+         call transpose_y_to_x(ybuffE,w,decompE) 
+         call derW%destroy()
+         deallocate(derW)
+
+         deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
+    end select  
     nullify(u,v,w,x,y,z)
    
 
