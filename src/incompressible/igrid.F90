@@ -249,7 +249,8 @@ module IncompressibleGrid
         ! Control
         logical                           :: useControl = .false.
         type(angCont), allocatable, public :: angCont_yaw
-        real(rkind) :: angleHubHeight, zHubIndex, totalAngle, wFilt
+        real(rkind) :: angleHubHeight, totalAngle, wFilt, restartPhi
+        integer :: zHubIndex = 16
 
         ! HIT Forcing
         logical :: useHITForcing = .false.
@@ -345,6 +346,7 @@ contains
         logical, intent(in), optional :: initialize2decomp
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true.,computeFringePressure = .false., computeDNSPressure = .false.  
         logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false.  
+        integer :: zHubIndex = 16
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -415,6 +417,8 @@ contains
         this%InitSpinUp = InitSpinUp; this%BulkRichardson = BulkRichardson
         this%computeDNSpressure = computeDNSpressure; this%computefringePressure = computeFringePressure
         this%computeTurbinePressure = computeTurbinePressure
+        this%zHubIndex = zHubIndex
+        this%restartPhi = 0.d0
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC); allocate(this%gpE)
@@ -951,7 +955,7 @@ contains
                allocate(this%angCont_yaw)
                call this%angCont_yaw%init(inputfile, this%spectC, this%spectE, this%gpC, this%gpE, & 
                         this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, & 
-                        this%rbuffyC, this%rbuffzC) 
+                        this%rbuffyC, this%rbuffzC, this%restartPhi) 
         end if
         this%angleHubHeight = 0.d0       
         this%totalAngle = 0.d0
@@ -1748,6 +1752,27 @@ contains
         !this%coriolis_omegaY = cos(latitude*pi/180.d0)*cos(this%frameAngle*pi/180.d0) 
         !endif
 
+        if (this%assume_fplane) then
+            this%coriolis_omegaZ   = sin(this%latitude*pi/180.d0)
+            this%coriolis_omegaY = 0.d0
+            this%coriolis_omegaX = 0.d0
+        else
+            this%coriolis_omegaX = cos(this%latitude*pi/180.d0)*sin(this%frameAngle*pi/180.d0)
+            this%coriolis_omegaZ = sin(this%latitude*pi/180.d0)
+            this%coriolis_omegaY = cos(this%latitude*pi/180.d0)*cos(this%frameAngle*pi/180.d0)
+        end if
+        call this%spectC%alloc_r2c_out(this%GxHat)
+        call this%spectC%alloc_r2c_out(this%GyHat)
+        call this%spectE%alloc_r2c_out(this%GxHat_Edge)
+        call this%spectE%alloc_r2c_out(this%GyHat_Edge)
+        this%rbuffxC(:,:,:,1) = this%G_GEOSTROPHIC*cos(this%G_ALPHA*pi/180.d0)
+        call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gxhat)
+        this%rbuffxE(:,:,:,1) = this%G_GEOSTROPHIC*cos(this%G_ALPHA*pi/180.d0)
+        call this%spectE%fft(this%rbuffxE(:,:,:,1),this%Gxhat_Edge)
+        this%rbuffxC(:,:,:,1) = this%G_GEOSTROPHIC*sin(this%G_ALPHA*pi/180.d0)
+        call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gyhat)
+        this%rbuffxE(:,:,:,1) = this%G_GEOSTROPHIC*sin(this%G_ALPHA*pi/180.d0)
+        call this%spectE%fft(this%rbuffxE(:,:,:,1),this%Gyhat_Edge)
         ! u equation 
         ybuffC1    = (two/this%Ro)*(-this%coriolis_omegaY*this%whatC - this%coriolis_omegaZ*(this%GyHat - this%vhat))
         this%u_rhs = this%u_rhs  + ybuffC1
@@ -1834,7 +1859,7 @@ contains
         !use reductions, only: p_sum
         logical, intent(in), optional :: CopyForDNSpress, CopyForFringePress, copyForTurbinePress
         logical :: copyFringeRHS, copyTurbRHS
-        real(rkind) :: utarg, vtarg
+        real(rkind) :: utarg, vtarg, deltaGalpha
       
         if (present(copyForTurbinePress)) then
            copyTurbRHS = copyForTurbinePress
@@ -1951,9 +1976,11 @@ contains
         ! Step 9: Frame rotatio PI controller to fix yaw angle at a given height
         if (this%useControl) then
             call this%angCont_yaw%update_RHS_control(this%dt, this%u_rhs, this%v_rhs, &
-                          this%w_rhs, this%u, this%v, this%newTimeStep, this%angleHubHeight, this%wFilt)
+                          this%w_rhs, this%u, this%v, this%newTimeStep, this%angleHubHeight, this%wFilt, deltaGalpha, this%zHubIndex)
             this%totalAngle = this%totalAngle + this%angleHubHeight
-            if (this%newTimeStep) then
+            if (this%newTimeStep)  then
+                this%G_alpha = this%G_alpha - deltaGalpha
+                this%frameAngle = this%frameAngle + deltaGalpha 
                 !this%coriolis_omegaX = cos(this%latitude*pi/180.d0)*sin(this%totalAngle)
                 !this%coriolis_omegaZ = sin(this%latitude*pi/180.d0)
                 !this%coriolis_omegaY = cos(this%latitude*pi/180.d0)*cos(this%totalAngle)
@@ -2824,6 +2851,9 @@ contains
             fid = 10
             open(unit=fid,file=trim(fname),status="old",action="read")
             read (fid, "(100g15.5)")  this%tsim
+            if (this%useControl) then
+               read(fid,"(100g15.5)") this%restartPhi
+            end if
             close(fid)
         end if 
 
@@ -2867,6 +2897,9 @@ contains
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
             OPEN(UNIT=10, FILE=trim(fname))
             write(10,"(100g15.5)") this%tsim
+            if (this%useControl) then
+               write(10,"(100g15.5)") this%angCont_yaw%getPhi()
+            end if
             close(10)
         end if 
 
