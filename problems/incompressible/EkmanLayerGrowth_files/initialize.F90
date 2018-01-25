@@ -68,7 +68,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
       end if 
       Lx = 16.d0*pi; Ly = 16.d0*pi; Lz = 25.d0
     case (3)
-      
+      Lx = 1.d0; Ly = 1.d0; Lz = 25.d0  
     case default
       call GracefulExit("Incorrect choice for ProblemMode.",21)
     end select

@@ -249,7 +249,7 @@ module IncompressibleGrid
         ! Control
         logical                           :: useControl = .false.
         type(angCont), allocatable, public :: angCont_yaw
-        real(rkind) :: angleHubHeight, totalAngle, wFilt, restartPhi
+        real(rkind) :: angleHubHeight, totalAngle, wFilt, restartPhi, deltaGalpha
         integer :: zHubIndex = 16
 
         ! HIT Forcing
@@ -960,6 +960,7 @@ contains
         this%angleHubHeight = 0.d0       
         this%totalAngle = 0.d0
         this%wFilt = 0.d0
+        this%deltaGalpha = 0.d0
  
         ! STEP 18: Set HIT Forcing
         if (this%useHITForcing) then
@@ -1751,28 +1752,25 @@ contains
         !this%coriolis_omegaZ = sin(latitude*pi/180.d0)
         !this%coriolis_omegaY = cos(latitude*pi/180.d0)*cos(this%frameAngle*pi/180.d0) 
         !endif
-
-        if (this%assume_fplane) then
-            this%coriolis_omegaZ   = sin(this%latitude*pi/180.d0)
-            this%coriolis_omegaY = 0.d0
-            this%coriolis_omegaX = 0.d0
-        else
-            this%coriolis_omegaX = cos(this%latitude*pi/180.d0)*sin(this%frameAngle*pi/180.d0)
-            this%coriolis_omegaZ = sin(this%latitude*pi/180.d0)
-            this%coriolis_omegaY = cos(this%latitude*pi/180.d0)*cos(this%frameAngle*pi/180.d0)
+        if (this%newTimestep) then
+            if (this%assume_fplane) then
+                this%coriolis_omegaZ   = sin(this%latitude*pi/180.d0)
+                this%coriolis_omegaY = 0.d0
+                this%coriolis_omegaX = 0.d0
+            else
+                this%coriolis_omegaX = cos(this%latitude*pi/180.d0)*sin(this%frameAngle*pi/180.d0)
+                this%coriolis_omegaZ = sin(this%latitude*pi/180.d0)
+                this%coriolis_omegaY = cos(this%latitude*pi/180.d0)*cos(this%frameAngle*pi/180.d0)
+            end if
+            this%rbuffxC(:,:,:,1) = this%G_GEOSTROPHIC*cos(this%G_ALPHA*pi/180.d0)
+            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gxhat)
+            this%rbuffxE(:,:,:,1) = this%G_GEOSTROPHIC*cos(this%G_ALPHA*pi/180.d0)
+            call this%spectE%fft(this%rbuffxE(:,:,:,1),this%Gxhat_Edge)
+            this%rbuffxC(:,:,:,1) = this%G_GEOSTROPHIC*sin(this%G_ALPHA*pi/180.d0)
+            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gyhat)
+            this%rbuffxE(:,:,:,1) = this%G_GEOSTROPHIC*sin(this%G_ALPHA*pi/180.d0)
+            call this%spectE%fft(this%rbuffxE(:,:,:,1),this%Gyhat_Edge)
         end if
-        call this%spectC%alloc_r2c_out(this%GxHat)
-        call this%spectC%alloc_r2c_out(this%GyHat)
-        call this%spectE%alloc_r2c_out(this%GxHat_Edge)
-        call this%spectE%alloc_r2c_out(this%GyHat_Edge)
-        this%rbuffxC(:,:,:,1) = this%G_GEOSTROPHIC*cos(this%G_ALPHA*pi/180.d0)
-        call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gxhat)
-        this%rbuffxE(:,:,:,1) = this%G_GEOSTROPHIC*cos(this%G_ALPHA*pi/180.d0)
-        call this%spectE%fft(this%rbuffxE(:,:,:,1),this%Gxhat_Edge)
-        this%rbuffxC(:,:,:,1) = this%G_GEOSTROPHIC*sin(this%G_ALPHA*pi/180.d0)
-        call this%spectC%fft(this%rbuffxC(:,:,:,1),this%Gyhat)
-        this%rbuffxE(:,:,:,1) = this%G_GEOSTROPHIC*sin(this%G_ALPHA*pi/180.d0)
-        call this%spectE%fft(this%rbuffxE(:,:,:,1),this%Gyhat_Edge)
         ! u equation 
         ybuffC1    = (two/this%Ro)*(-this%coriolis_omegaY*this%whatC - this%coriolis_omegaZ*(this%GyHat - this%vhat))
         this%u_rhs = this%u_rhs  + ybuffC1
@@ -1787,7 +1785,7 @@ contains
         ! this%w_rhs = this%w_rhs - this%coriolis_omegaY*(this%GxHat - this%uhat)/this%Ro
         ! But we evaluate this term as:
       
-        ybuffE = (two/this%Ro)*(-this%coriolis_omegaY*(this%Gxhat_Edge - this%uEhat) + this%coriolis_omegaY*(this%Gyhat_Edge - this%vEhat)) 
+        ybuffE = (two/this%Ro)*(-this%coriolis_omegaY*(this%Gxhat_Edge - this%uEhat) + this%coriolis_omegaX*(this%Gyhat_Edge - this%vEhat)) 
         if (this%spectE%CarryingZeroK) then
             ybuffE(1,1,:) = cmplx(zero,zero,rkind)
         end if 
@@ -1859,7 +1857,7 @@ contains
         !use reductions, only: p_sum
         logical, intent(in), optional :: CopyForDNSpress, CopyForFringePress, copyForTurbinePress
         logical :: copyFringeRHS, copyTurbRHS
-        real(rkind) :: utarg, vtarg, deltaGalpha
+        real(rkind) :: utarg, vtarg
       
         if (present(copyForTurbinePress)) then
            copyTurbRHS = copyForTurbinePress
@@ -1976,15 +1974,15 @@ contains
         ! Step 9: Frame rotatio PI controller to fix yaw angle at a given height
         if (this%useControl) then
             call this%angCont_yaw%update_RHS_control(this%dt, this%u_rhs, this%v_rhs, &
-                          this%w_rhs, this%u, this%v, this%newTimeStep, this%angleHubHeight, this%wFilt, deltaGalpha, this%zHubIndex)
+                          this%w_rhs, this%u, this%v, this%newTimeStep, this%angleHubHeight, this%wFilt, this%deltaGalpha, this%zHubIndex)
             this%totalAngle = this%totalAngle + this%angleHubHeight
-            if (this%newTimeStep)  then
-                this%G_alpha = this%G_alpha - deltaGalpha
-                this%frameAngle = this%frameAngle + deltaGalpha 
+            !if (this%newTimeStep)  then
+                !this%G_alpha = this%G_alpha - deltaGalpha
+                !this%frameAngle = this%frameAngle + deltaGalpha 
                 !this%coriolis_omegaX = cos(this%latitude*pi/180.d0)*sin(this%totalAngle)
                 !this%coriolis_omegaZ = sin(this%latitude*pi/180.d0)
                 !this%coriolis_omegaY = cos(this%latitude*pi/180.d0)*cos(this%totalAngle)
-            end if
+            !end if
                         !this%angleHubHeight = 0.d0
             !do j = 1, this%gpC%xsz(1)
             !    do i = 1, this%gpC%xsz(2)
@@ -1996,16 +1994,17 @@ contains
 
         ! Step 10: Add sponge
         if (this%useSponge) then
-            utarg = (sin(this%latitude*pi/180.d0)*cos(this%G_alpha*pi/180.d0)/this%Ro)/(sin(this%latitude*pi/180.d0)/this%Ro + this%wFilt)
-            vtarg = (sin(this%latitude*pi/180.d0)*sin(this%G_alpha*pi/180.d0)/this%Ro)/(sin(this%latitude*pi/180.d0)/this%Ro + this%wFilt)
+            !utarg = (sin(this%latitude*pi/180.d0)*cos(this%G_alpha*pi/180.d0)/this%Ro)/(sin(this%latitude*pi/180.d0)/this%Ro + this%wFilt)
+            !vtarg = (sin(this%latitude*pi/180.d0)*sin(this%G_alpha*pi/180.d0)/this%Ro)/(sin(this%latitude*pi/180.d0)/this%Ro + this%wFilt)
             
             ! ASG > MH: This part can be computed a bit more efficiently. 
             ! Once you've checked that it works, I will write the efficient code. 
-            this%rbuffxC(:,:,:,1) = utarg
-            call this%spectC%fft(this%rbuffxC,this%ubase)
+            !this%rbuffxC(:,:,:,1) = utarg
+            !call this%spectC%fft(this%rbuffxC,this%ubase)
             
-            this%rbuffxC(:,:,:,1) = vtarg
-            call this%spectC%fft(this%rbuffxC,this%vbase)
+            !this%rbuffxC(:,:,:,1) = vtarg
+            !call this%spectC%fft(this%rbuffxC,this%vbase)
+            call message(1,"You forgot to fix the sponge")
             call this%addSponge()
 
         end if
@@ -2174,6 +2173,10 @@ contains
         ! STEP 1: Update Time, BCs and record probe data
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
         this%newTimeStep = .true. 
+        if (this%useControl) then
+            this%G_alpha = this%G_alpha - this%deltaGalpha
+            this%frameAngle = this%frameAngle + this%deltaGalpha 
+        end if
         if (this%isStratified) then
             if (this%botBC_Temp == 0) then
                 this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
