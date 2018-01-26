@@ -957,7 +957,7 @@ contains
                         this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, & 
                         this%rbuffyC, this%rbuffzC, this%restartPhi) 
         end if
-        this%angleHubHeight = 0.d0       
+        this%angleHubHeight = 1.d0       
         this%totalAngle = 0.d0
         this%wFilt = 0.d0
         this%deltaGalpha = 0.d0
@@ -1972,7 +1972,7 @@ contains
         end if
 
         ! Step 9: Frame rotatio PI controller to fix yaw angle at a given height
-        if (this%useControl) then
+        if (this%useControl .AND. abs(180.d0/pi*this%angleHubHeight)>0.1d0) then
             call this%angCont_yaw%update_RHS_control(this%dt, this%u_rhs, this%v_rhs, &
                           this%w_rhs, this%u, this%v, this%newTimeStep, this%angleHubHeight, this%wFilt, this%deltaGalpha, this%zHubIndex)
             this%totalAngle = this%totalAngle + this%angleHubHeight
@@ -2173,7 +2173,7 @@ contains
         ! STEP 1: Update Time, BCs and record probe data
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
         this%newTimeStep = .true. 
-        if (this%useControl) then
+        if (this%useControl .AND. abs(180.d0/pi*this%angleHubHeight) > 0.1d0) then
             this%G_alpha = this%G_alpha - this%deltaGalpha
             this%frameAngle = this%frameAngle + this%deltaGalpha 
         end if

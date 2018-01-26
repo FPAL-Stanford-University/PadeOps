@@ -3,6 +3,8 @@ module EkmanDNS_parameters
     use exits, only: message
     use kind_parameters,  only: rkind
     use constants, only: kappa 
+    use decomp_2d
+    use reductions, only: p_sum
     implicit none
     integer :: seedu = 321341
     integer :: seedv = 423424
@@ -120,7 +122,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind) :: alphaRot, dz 
+    real(rkind) :: alphaRot, dz , speed, um, vm
     character(len=clen) :: InitFileTag, InitFileDirectory
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
@@ -225,15 +227,32 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
         call decomp_2d_read_one(1,w,fname, decompE)
 
     case (3)
-         u  =  cos(alphaRot*pi/180.d0) - exp(-z)*cos(z - (alphaRot*pi/180.d0))
-         v  =  sin(alphaRot*pi/180.d0) + exp(-z)*sin(z - (alphaRot*pi/180.d0))
-         wC = zero
+
          allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
          allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
 
          allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
          allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
-   
+ 
+         u  =  cos(alphaRot*pi/180.d0) - exp(-z)*cos(z - (alphaRot*pi/180.d0))
+         v  =  sin(alphaRot*pi/180.d0) + exp(-z)*sin(z - (alphaRot*pi/180.d0))
+         wC = zero
+         u = sqrt(u*u + v*v)
+         u = u*cos(20.d0*pi/180.d0)
+         v = u*sin(20.d0*pi/180.d0)
+        
+         call transpose_x_to_y(u,ybuffC,decompC)
+         call transpose_y_to_z(ybuffC,zbuffC,decompC) 
+         um = p_sum(sum(zbuffC(:,:,256))) / &
+                 (real(decompC%xsz(1),rkind) * real(decompC%ysz(2),rkind))
+         call transpose_x_to_y(v,ybuffC,decompC)
+         call transpose_y_to_z(ybuffC,zbuffC,decompC)
+         vm = p_sum(sum(zbuffC(:,:,256))) / &
+                 (real(decompC%xsz(1),rkind) * real(decompC%ysz(2),rkind))
+         speed = sqrt(um*um + vm*vm)
+         !speed = atan2(vm,um)
+         call message(1,"speed top init:",speed)
+  
          nz = decompC%zsz(3)
          nzE = nz + 1
          allocate(derW)
