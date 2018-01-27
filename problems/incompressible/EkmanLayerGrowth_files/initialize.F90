@@ -237,9 +237,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
          u  =  cos(alphaRot*pi/180.d0) - exp(-z)*cos(z - (alphaRot*pi/180.d0))
          v  =  sin(alphaRot*pi/180.d0) + exp(-z)*sin(z - (alphaRot*pi/180.d0))
          wC = zero
-         u = sqrt(u*u + v*v)
-         u = u*cos(20.d0*pi/180.d0)
-         v = u*sin(20.d0*pi/180.d0)
+         !u = sqrt(u*u + v*v)
+         !v = cos(30.d0*pi/180.d0) * u  !u*sin(0.d0*pi/180.d0)
+         !u = !u*cos(0.d0*pi/180.d0)
         
          call transpose_x_to_y(u,ybuffC,decompC)
          call transpose_y_to_z(ybuffC,zbuffC,decompC) 

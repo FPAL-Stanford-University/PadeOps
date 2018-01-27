@@ -346,7 +346,7 @@ contains
         logical, intent(in), optional :: initialize2decomp
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true.,computeFringePressure = .false., computeDNSPressure = .false.  
         logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false.  
-        integer :: zHubIndex = 16
+        integer :: zHubIndex = 256
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 

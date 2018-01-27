@@ -106,7 +106,10 @@ contains
          this%rbuffxC(:,:,:,1) = -2.d0 * uC * this%wFilt_n   
          call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
          vrhs = vrhs + this%cbuffyC(:,:,:,1)
-         deltaGalpha = this%wFilt_n * dt * 180.d0 / pi
+         !!!!!!!!!!!!!!!!!!!!!!!
+         ! Here I added the factor of 2 to deltaGalpha
+         !!!!!!!!!!!!!!!!!!!!!!!
+         deltaGalpha = 2.d0 * this%wFilt_n * dt * 180.d0 / pi
           
 
    end subroutine
