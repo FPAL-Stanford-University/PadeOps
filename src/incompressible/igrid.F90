@@ -1644,8 +1644,8 @@ contains
             do idx = 1,this%n_scalars
                call this%scalars(idx)%destroy()
             end do 
+            deallocate(this%scalars)
         end if
-        deallocate(this%scalars)
     end subroutine
 
     subroutine addNonLinearTerm_Rot(this)
