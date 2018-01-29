@@ -1972,7 +1972,7 @@ contains
         end if
 
         ! Step 9: Frame rotatio PI controller to fix yaw angle at a given height
-        if (this%useControl .AND. abs(180.d0/pi*this%angleHubHeight)>0.1d0) then
+        if (this%useControl .AND. abs(180.d0/pi*this%angleHubHeight)>0.0d0) then
             call this%angCont_yaw%update_RHS_control(this%dt, this%u_rhs, this%v_rhs, &
                           this%w_rhs, this%u, this%v, this%newTimeStep, this%angleHubHeight, this%wFilt, this%deltaGalpha, this%zHubIndex)
             this%totalAngle = this%totalAngle + this%angleHubHeight

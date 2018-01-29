@@ -21,7 +21,7 @@ module angleControl
       !real(rkind)                                   :: LambdaFact
       integer :: z_ref, controlType !myFringeID = 1
       !logical :: useTwoFringex = .false. 
-      real(rkind)                          :: phi, beta, phi_ref, sigma, wFilt, alpha, wFilt_n
+      real(rkind)                          :: phi, beta, phi_ref, sigma, wFilt, alpha, wFilt_n, angleTrigger
       contains
          procedure :: init
          procedure :: destroy
@@ -72,7 +72,7 @@ contains
          phi_n = atan2(vM, uM)
          z_hub = this%z_ref 
 
-      if (newTimestep .AND. abs(phi_n * 180.d0 / pi) > 0.d0) then
+      if (newTimestep .AND. abs(phi_n * 180.d0 / pi) > this%angleTrigger) then
          
          if (this%controlType == 1) then
             ! Meneveau 2014 psuedo force paper
@@ -136,7 +136,7 @@ contains
       real(rkind),    dimension(:,:,:,:), target, intent(in) :: rbuffxC, rbuffxE, rbuffyC, rbuffzC
       complex(rkind), dimension(:,:,:,:), target, intent(in) :: cbuffyC, cbuffyE
       !integer, intent(in), optional :: fringeID
-      real(rkind) :: phi_ref, beta, sigma, phi, alpha 
+      real(rkind) :: phi_ref, beta, sigma, phi, alpha , angleTrigger
       integer :: controlType
       real(rkind), intent(in) :: phiRestart
       !real(rkind) :: Lx, Ly, LambdaFact = 2.45d0, LambdaFact2 = 2.45d0
@@ -163,7 +163,7 @@ contains
       !nx = gpC%xsz(1)
       !real(rkind)  :: Lx = 1.d0, Ly = 1.d0, Lz = 1.d0, Tref = 0.d0, Tsurf0 = 1.d0, dTsurf_dt = -0.05d0, z0init = 1.d-4, frameAngle = 0.d0
       !namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, Tsurf0, dTsurf_dt, z0init, frameAngle, beta, sigma, phi_ref, z_ref
-      namelist /CONTROL/ beta, sigma, phi_ref, z_ref, alpha, controlType
+      namelist /CONTROL/ beta, sigma, phi_ref, z_ref, alpha, controlType, angleTrigger
       !open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
       !read(unit=ioUnit, NML=CONTROL)
       !close(ioUnit)
@@ -195,6 +195,7 @@ contains
       this%controlType = controlType
       this%phi = phiRestart
       this%wFilt_n = 0.d0
+      this%angleTrigger = angleTrigger
       call message(0, "Control initialized successfully.")
 
    end subroutine
