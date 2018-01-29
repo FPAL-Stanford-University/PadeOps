@@ -2,7 +2,7 @@ module concurrentSimulation_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
-    use constants, only: kappa 
+    use constants, only: kappa, pi
     implicit none
     integer :: seedu = 321341
     integer :: seedv = 423424
@@ -241,9 +241,10 @@ end subroutine
 
 subroutine hook_probes(inputfile, probe_locs)
     use kind_parameters,    only: rkind
+    use concurrentSimulation_parameters
     real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
     character(len=*),                intent(in)    :: inputfile
-    integer, parameter :: nprobes = 2
+    integer, parameter :: nprobes = 9
     
     ! IMPORTANT : Convention is to allocate probe_locs(3,nprobes)
     ! Example: If you have at least 3 probes:
@@ -255,11 +256,18 @@ subroutine hook_probes(inputfile, probe_locs)
     ! Add probes here if needed
     ! Example code: The following allocates 2 probes at (0.1,0.1,0.1) and
     ! (0.2,0.2,0.2)  
-    print*, inputfile
+    !call message(0,trim(inputfile))
     allocate(probe_locs(3,nprobes))
-    probe_locs(1,1) = 0.1d0; probe_locs(2,1) = 0.1d0; probe_locs(3,1) = 0.1d0;
-    probe_locs(1,2) = 0.2d0; probe_locs(2,2) = 0.2d0; probe_locs(3,2) = 0.2d0;
-
+    probe_locs(1,1) = 0.8d0; probe_locs(2,1) = pi/4.d0; probe_locs(3,1) = 0.05d0;
+    probe_locs(1,2) = 0.8d0; probe_locs(2,2) = pi/4.d0; probe_locs(3,2) = 0.10d0;
+    probe_locs(1,3) = 0.8d0; probe_locs(2,3) = pi/4.d0; probe_locs(3,3) = 0.15d0;
+    probe_locs(1,4) = 1.2d0; probe_locs(2,4) = pi/4.d0; probe_locs(3,4) = 0.05d0;
+    probe_locs(1,5) = 1.2d0; probe_locs(2,5) = pi/4.d0; probe_locs(3,5) = 0.10d0;
+    probe_locs(1,6) = 1.2d0; probe_locs(2,6) = pi/4.d0; probe_locs(3,6) = 0.15d0;
+    probe_locs(1,7) = 2.0d0; probe_locs(2,7) = pi/4.d0; probe_locs(3,7) = 0.05d0;
+    probe_locs(1,8) = 2.0d0; probe_locs(2,8) = pi/4.d0; probe_locs(3,8) = 0.10d0;
+    probe_locs(1,9) = 2.0d0; probe_locs(2,9) = pi/4.d0; probe_locs(3,9) = 0.15d0;
+    call message(1,"Done probe initialization")
 
 end subroutine
 
