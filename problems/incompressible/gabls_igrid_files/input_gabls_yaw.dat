@@ -1,16 +1,16 @@
 &INPUT
-inputdir                      = "/home/mhowland/Lele/data/testYawController/Run_4"   ! Directory for any input files
-outputdir                     = "/home/mhowland/Lele/data/testYawController/Run_4"   ! Directory for all output files
-nx                            = 64         ! Number of points in X
-ny                            = 64         ! Number of points in Y
-nz                            = 64         ! Number of points in Z
-tstop                         = 100.D0      ! Physical time to stop the simulation
+inputdir                      = "/home/mhowland/Lele/data/testYawController/Run_5"   ! Directory for any input files
+outputdir                     = "/home/mhowland/Lele/data/testYawController/Run_16"   ! Directory for all output files
+nx                            = 128         ! Number of points in X
+ny                            = 128         ! Number of points in Y
+nz                            = 128         ! Number of points in Z
+tstop                         = 500.D0      ! Physical time to stop the simulation
 CFL                           = 1.2D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile                = .FALSE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 072111        ! TimeID of the restart file being used
+useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
+restartFile_TID               = 040000        ! TimeID of the restart file being used
 restartFile_RID               = 9          ! RunID of the restart file being used
 /
 /
@@ -41,7 +41,7 @@ tid_compStats                 = 10          ! Frequency of Computing Statistics
 tSimStartStats                = 20.d0       ! Simulation time for starting stats calculations 
 normStatsByUstar              = .TRUE.      ! Normalize Statistics by ustar at each instant
 computeSpectra                = .FALSE.     ! Compute and time average x - spectra on the run
-timeAvgFullFields             = .FALSE.     ! Time average and store fields on the run
+timeAvgFullFields             = .TRUE.     ! Time average and store fields on the run
 /
 /
 &OS_INTERACTIONS
@@ -69,7 +69,7 @@ dPfdz                         = 0.D0        ! Additional Acceleration in Z; used
 assume_fplane                 = .FALSE.      ! F-plane assumption for horizontal component?
 latitude                      = 45.d0       ! latitude
 useHITForcing                 = .FALSE.     ! Use an extra forcing term used for HIT?
-frameAngle                    = -26.d0        ! Frame angle (degrees)
+frameAngle                    = 0.d0        ! Frame angle (degrees)
 /
 /
 &PRESSURE_CALC
@@ -82,10 +82,10 @@ P_compFreq                    = 10          ! How often (timesteps) do you want 
 &BCs
 botWall                       = 3           ! no_slip = 1, slip = 2, wall model = 3 
 topWall                       = 2           ! no_slip = 1, slip = 2, wall model = 3
-useSpongeLayer                = .TRUE.      ! Use a sponge layer at the top 
+useSpongeLayer                = .FALSE.      ! Use a sponge layer at the top 
 zstSponge                     = 0.75d0       ! Height above which the sponge layer is active
 SpongeTscale                  = 20.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
-useFringe                     = .false.     ! This is false if simulation is periodic. 
+useFringe                     = .FALSE.     ! This is false if simulation is periodic. 
 botBC_Temp                    = 0           ! 0: Dirichlet (could be time dependent),  1: Homog. Neumann (no-flux)
 useControl                    = .TRUE.      ! Use PI control to fix yaw angle at the height specified below
 /
@@ -117,6 +117,16 @@ KSRunID                       = 99         ! RunID tag for KS files
 t_dumpKSprep                  = 10         ! Dumping Frequency for KS files
 /
 /
+&CONTROL
+beta                          =  0.03d2      ! 0.08d3,0.0278 Integrator tuning parameter (appropriate non-dimensionalized)
+sigma                         =  3.995d0     ! 3.995d0 Time constant for filter for rotation rate 
+phi_ref                       =  0.d0        ! Desired degrees at z_ref
+z_ref                         =  16          ! Index of desired phi_ref
+alpha                         =  0.d0        ! Proportional gain constant
+controlType                   =  1           ! 1: Meneveau 2014, 2: Control G_alpha
+angleTrigger                  =  0.d         ! Angle at z_ref where control turns on
+/
+/
 &PROBLEM_INPUT
 Lx                            =  1.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Ly                            =  1.0d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
@@ -125,9 +135,5 @@ Tref                          =  263.5d0     ! Reference Temp.
 Tsurf0                        =  265.0d0     ! Surface Temp. (at tsim=0) in K (need to take care of the dimensions)
 dTsurf_dt                     =  -0.25D0      ! Surface Temp. decrease rate in K/hr. (need to take care of the dimensions)
 z0init                        =  2.5d-4       ! Roughness scale used to initialize the profile
-frameAngle                    =  -26.d0      ! Frame angle set to be the same as above, used for initialization 
-beta                          =  0.0278d0        ! Integrator tuning parameter (appropriate non-dimensionalized)
-sigma                         =  3.33d0      ! Time filter for angle 
-phi_ref                       =  0.d0        ! Desired degrees at z_ref
-z_ref                         =  8          ! Index of desired phi_ref
+frameAngle                    =  0.d0      ! Frame angle set to be the same as above, used for initialization 
 /
