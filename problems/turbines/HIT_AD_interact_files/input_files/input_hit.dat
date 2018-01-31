@@ -1,17 +1,17 @@
 &INPUT
-inputdir              = "/projects/windFlowModeling/PadeOps/HIT_testing/output/"   ! Directory for any input files
-outputdir             = "/projects/windFlowModeling/PadeOps/HIT_testing/output/"   ! Directory for all output files
+inputdir              = "/scratch/globus/aghate/SPOD_Data/Case10/hit_data"   ! Directory for any input files
+outputdir             = "/scratch/globus/aghate/SPOD_Data/Case10/hit_data"   ! Directory for all output files
 nx                    = 256          ! Number of points in X
 ny                    = 256          ! Number of points in Y
 nz                    = 256          ! Number of points in Z
-tstop                 = 500.D0       ! Physical time to stop the simulation
-CFL                   = 1.5D0       ! CFL criterion for calculating the time step (Set to negative to disable)
-dt                    = -0.1D0     ! Fixed time step value (only used if CFL is set to negative)
+tstop                 = 20000.D0       ! Physical time to stop the simulation
+CFL                   = -1.0D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+dt                    = 5.D-3     ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.     ! Set to false if it's a fresh simulation 
-restartFile_TID       = 13000          ! TimeID of the restart file being used
-restartFile_RID       = 15          ! RunID of the restart file being used
+restartFile_TID       = 184000           ! TimeID of the restart file being used
+restartFile_RID       = 6          ! RunID of the restart file being used
 /
 /
 &NUMERICS
@@ -25,14 +25,15 @@ dealiasFact           = 0.6667d0
 /
 /
 &IO
-RunID                 = 15          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 1000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 1000           ! Data dumping frequency (# of timesteps)
+RunID                 = 6          ! Run Label (All output files will be tagged with this nubber)
+t_restartDump         = 2000        ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump            = 8000           ! Data dumping frequency (# of timesteps)
 ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 100         ! Plane dumping frequency (# of timesteps)
 t_start_planeDump     = 1           ! When do you want to start dumping planes?
 t_stop_planeDump      = 5000        ! When do you want to stop dumping planes?
+useProbes             = .FALSE.       ! Use probes?
 /
 /
 &STATS
@@ -48,6 +49,7 @@ timeAvgFullFields     = .FALSE.     ! Time average and store fields on the run
 useSystemInteractions = .TRUE.      ! Do you wish to interact with the program while its running
 tSystemInteractions   = 10          ! Check for interactions commands after these many time steps
 controlDir            = "null"          ! Check in this directory for command files (NULL = Check in output directory)
+deleteInstructions    = .true.     ! Do you want to delete instruction after reading it? 
 /
 /
 &PHYSICS
@@ -68,6 +70,7 @@ dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useE
 dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
 useSGS                = .true.      ! Use an SGS model?   
 useHITforcing         = .true.      ! Use additional HIT forcing? 
+useScalars            = .false.      ! Do you want to use scalars? 
 /
 /
 &PRESSURE_CALC
@@ -75,6 +78,9 @@ fastCalcPressure      = .FALSE.      ! Compute and store pressure at every time 
 storePressure         = .FALSE.     ! Would you like to compute and store pressure?
 P_dumpFreq            = 100         ! How often (timesteps) do you want to dump pressure?
 P_compFreq            = 10          ! How often (timesteps) do you want to compute pressure? 
+computeDNSPressure    = .FALSE.
+computeFringePressure  = .FALSE.
+computeTurbinePressure  = .FALSE.
 /
 /
 &BCs
@@ -88,11 +94,11 @@ SpongeTscale          = 50.d0       ! e-folding time to dt ratio (somewhere betw
 /
 /
 &SGS_MODEL
-SGSModelID                    = 2            ! 0: smagorinsky, 1: sigma, 2: AMD 
+SGSModelID                    = 1            ! 0: smagorinsky, 1: sigma, 2: AMD 
 DynamicProcedureType          = 0            ! 0: no dynamic proc, 1: standard dynamic proc, 2: global dynamic proc
 useWallDamping                = .FALSE.      ! Use the Wall Damping Function 
 ncWall                        = 3.d0         ! Wall Damping Function Exponent
-Csgs                          = 1.65d0        ! Asymptotic model constant (wall damping function)
+Csgs                          = 0.90d0        ! Asymptotic model constant (wall damping function)
 WallModelType                 = 0
 explicitCalcEdgeEddyViscosity = .false.
 useVerticalTfilter            = .false.
@@ -116,10 +122,10 @@ t_dumpKSprep          = 10             ! Dumping Frequency for KS files
 /
 &HIT_Forcing 
 Nwaves = 20
-kmin = 4.d0
-kmax = 5.d0
+kmin = 1.d0
+kmax = 2.d0
 EpsAmplitude = 0.00225d0
-RandSeedToAdd = 0
+RandSeedToAdd = 1234
 /
 /
 &HIT_PeriodicINPUT

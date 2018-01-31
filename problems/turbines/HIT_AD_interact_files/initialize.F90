@@ -7,6 +7,22 @@ module HIT_AD_interact_parameters
     integer :: simulationID = 0
     integer :: nxSize = 256, nySize = 256, nzSize = 256
 
+contains
+
+pure subroutine Sfunc(x, val)
+   real(rkind), dimension(:,:,:), intent(in) :: x
+   real(rkind), dimension(:,:,:), intent(out) :: val
+
+   val = 0.d0
+   where (x>0.d0) 
+      val = 1.d0/(1.d0 + exp(min(1.d0/(x - 1.d0 + 1.d-18) + 1.d0/(x + 1.d-18),50.d0)))
+   end where
+
+   where (x>1.d0) 
+      val = 1.d0 
+   end where
+
+end subroutine
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
@@ -267,3 +283,67 @@ subroutine hook_probes(inputfile, probe_locs)
     probe_locs(2,9) = 3.141592653589d0; 
     probe_locs(3,9) = 4.25d0;
 end subroutine
+
+subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarField
+
+    scalarField = 0.d0
+end subroutine 
+
+subroutine setScalar_source(decompC, inputfile, mesh, scalar_id, scalarSource)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    use HIT_AD_interact_parameters, only: Sfunc
+    use constants, only: pi
+    use exits, only: message
+    use reductions, only: p_sum
+
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
+    real(rkind), dimension(:,:,:), allocatable :: r, lambda, tmp
+    real(rkind), dimension(:,:,:), pointer :: x, y, z
+    real(rkind) :: xc = pi, yc = pi, zc = pi, rin = 0.75d0, rout = 1.25d0, delta_r = 0.22d0
+    real(rkind) :: smear_x = 2.5d0, delta
+    real(rkind) :: sumVal 
+
+    z => mesh(:,:,:,3)
+    y => mesh(:,:,:,2)
+    x => mesh(:,:,:,1)
+
+    
+    allocate(r(size(x,1),size(x,2),size(x,3)))
+    allocate(lambda(size(x,1),size(x,2),size(x,3)))
+    allocate(tmp(size(x,1),size(x,2),size(x,3)))
+
+    r = sqrt((y - yc)**2 + (z - zc)**2)
+
+    select case (scalar_id)
+    case (1)
+      tmp = (r - rout)/delta_r + 1 
+      call Sfunc(tmp, lambda)
+      lambda = -lambda
+    case (2)
+      tmp = (r - rin)/delta_r
+      call Sfunc(tmp, lambda)
+      lambda = 1.d0 - lambda
+    end select 
+
+    r = x - xc
+    delta = (x(2,1,1) - x(1,1,1))*smear_x
+    tmp = (1.d0/(delta*sqrt(2.d0*pi)))*exp(-0.5d0*(r**2)/(delta**2))
+    scalarSource = tmp*lambda
+    sumVal = p_sum(sum(scalarSource))*((x(2,1,1) - x(1,1,1))**3)
+
+    call message(2,"Scalar source initialized with domain integrated value", sumVal)
+    deallocate(r, lambda, tmp)
+
+end subroutine 

@@ -1,4 +1,4 @@
-module concurrentSimulation_parameters
+module ScalarFieldTesting_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
@@ -9,36 +9,34 @@ module concurrentSimulation_parameters
     integer :: seedw = 131344
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
-    logical :: isPrecursor = .true.
-    
+   
+    real(rkind), dimension(:,:,:), allocatable :: scalarexact 
+
     real(rkind), parameter :: xdim = 1000._rkind, udim = 0.45_rkind
     real(rkind), parameter :: timeDim = xdim/udim
-
+    integer :: direction
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use concurrentSimulation_parameters    
+    use ScalarFieldTesting_parameters    
     use kind_parameters,  only: rkind
-    use constants,        only: one,two
+    use constants,        only: one,two, pi
     use decomp_2d,        only: decomp_info
     implicit none
 
     type(decomp_info),                                          intent(in)    :: decomp
     real(rkind),                                                intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
+    integer :: i,j,k
     character(len=*),                intent(in)    :: inputfile
-    integer :: i,j,k, ioUnit
-    integer :: ix1, ixn, iy1, iyn, iz1, izn
+    integer :: ix1, ixn, iy1, iyn, iz1, izn, directionID
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz
+    namelist /ScalarFieldTestingINPUT/ directionID
 
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=concurrentSimulationINPUT)
-    close(ioUnit)    
 
     !Lx = two*pi; Ly = two*pi; Lz = one
 
+    Lx = two*pi; Ly = two*pi; Lz = two*pi
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
     ! If base decomposition is in Y
@@ -71,14 +69,16 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use concurrentSimulation_parameters
+    use ScalarFieldTesting_parameters
+    use PadeDerOps, only: Pade6Stagg
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
     use random,             only: gaussian_random
     use decomp_2d          
     use reductions,         only: p_maxval, p_minval
-    use exits,              only: message_min_max
+    use cd06staggstuff,     only: cd06stagg
+    use exits,              only: gracefulExit,message_min_max
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -88,17 +88,16 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: nz, nzE, k
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind) ::  z0init = 1.0d-4, epsnd, yperiods = 3.0d0, zpeak = 0.2d0, xperiods = 3.0d0
-    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz
+    real(rkind) :: dz
+    integer :: directionID
+    namelist /ScalarFieldTestingINPUT/ directionID
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=concurrentSimulationINPUT)
+    read(unit=ioUnit, NML=ScalarFieldTestingINPUT)
     close(ioUnit)    
 
+    direction = directionID
 
     u  => fieldsC(:,:,:,1)
     v  => fieldsC(:,:,:,2)
@@ -109,61 +108,70 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    if(isPrecursor) then
-       epsnd = 5.0_rkind 
-       u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-       v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-       wC= zero  
-    else
-       epsnd = zero
-       u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-       v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-       wC= zero  
-    endif
-    isPrecursor = .false.
+    dz = z(1,1,2) - z(1,1,1)
+    !allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
+    !allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
 
-    !allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    !call gaussian_random(randArr,-one,one,seedu + 10*nrank)
-    !do k = 1,size(randArr,3)
-    !     u(:,:,k) = u(:,:,k) + 0.01*randArr(:,:,k)
-    !end do
-    !deallocate(randArr)
+    !allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
+    !allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
+    !allocate(zE(decompE%xsz(1),decompE%xsz(2), decompE%xsz(3)))
+    !allocate(xE(decompE%xsz(1),decompE%xsz(2), decompE%xsz(3)))
+    !allocate(yE(decompE%xsz(1),decompE%xsz(2), decompE%xsz(3)))
+    !allocate(der)
+    !call der%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .false., &
+    !                         isTopSided = .true., isBotSided = .true.)
+  
 
-    !seedu = seedu + 100000
+    !call transpose_x_to_y(z,ybuffC,decompC)
+    !call transpose_y_to_z(ybuffC,zbuffC,decompC)
+    !call der%interpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))                         
+    !call transpose_z_to_y(zbuffE,ybuffE,decompE)
+    !call transpose_y_to_x(ybuffE,zE,decompE) 
+    !
+    !call transpose_x_to_y(x,ybuffC,decompC)
+    !call transpose_y_to_z(ybuffC,zbuffC,decompC)
+    !call der%interpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))                         
+    !call transpose_z_to_y(zbuffE,ybuffE,decompE)
+    !call transpose_y_to_x(ybuffE,xE,decompE) 
+
+    !call transpose_x_to_y(y,ybuffC,decompC)
+    !call transpose_y_to_z(ybuffC,zbuffC,decompC)
+    !call der%interpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))                         
+    !call transpose_z_to_y(zbuffE,ybuffE,decompE)
+    !call transpose_y_to_x(ybuffE,yE,decompE) 
+    
+    select case(directionID)
+    case(1) 
+      u  = one
+      v  = zero  
+      w  = zero
+      wC = zero 
+    case(2)
+      u  =  zero 
+      v  =  one
+      w  =  zero  
+      wC =  zero  
+    case(3)
+      u  =  zero 
+      v  =  zero  
+      w  =  one  
+      wC =  one 
+    case default
+      call gracefulExit("Invalid choice of directionID.",32)
+    end select
+  
+    !allocate(uexact(size(u,1),size(u,2), size(u,3)))
+    !allocate(vexact(size(v,1),size(v,2), size(v,3)))
+    !allocate(pexact(size(u,1),size(u,2), size(u,3)))
+    !allocate(wexact(size(wC,1),size(wC,2), size(wC,3)))
+
 
     call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
     call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
-    call message_min_max(1,"Bounds for w:", p_minval(minval(w)), p_maxval(maxval(w)))
+    call message_min_max(1,"Bounds for w:", p_minval(minval(wC)), p_maxval(maxval(wC)))
     
-    !u = one!1.6d0*z*(2.d0 - z) 
-    !v = zero;
-    !w = zero;
-
-    ! Interpolate wC to w
-    allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
-    allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
-
-    allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
-    allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
-   
-    nz = decompC%zsz(3)
-    nzE = nz + 1
-
-    call transpose_x_to_y(wC,ybuffC,decompC)
-    call transpose_y_to_z(ybuffC,zbuffC,decompC)
-    zbuffE = zero
-    zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
-    call transpose_z_to_y(zbuffE,ybuffE,decompE)
-    call transpose_y_to_x(ybuffE,w,decompE) 
-    
-    
-
-    deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
-  
-      
     nullify(u,v,w,x,y,z)
    
-
     call message(0,"Velocity Field Initialized")
 
 end subroutine
@@ -174,13 +182,13 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 2
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [32]
-    yplanes = [32]
-    zplanes = [10, 20]
+    xplanes = [64]
+    yplanes = [64]
+    zplanes = [20]
 
 end subroutine
 
@@ -202,16 +210,16 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz
-    integer :: iounit
-    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz
+    real(rkind) :: ThetaRef
+    integer :: iounit, directionID
+    namelist /ScalarFieldTestingINPUT/ directionID
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=concurrentSimulationINPUT)
+    read(unit=ioUnit, NML=ScalarFieldTestingINPUT)
     close(ioUnit)    
 
     ! Do nothing really since this is an unstratified simulation
@@ -223,14 +231,13 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz
-    integer :: iounit
+    integer :: iounit, directionID
     
-    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz
+    namelist /ScalarFieldTestingINPUT/ directionID
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=concurrentSimulationINPUT)
+    read(unit=ioUnit, NML=ScalarFieldTestingINPUT)
     close(ioUnit)    
      
     Tref = 0.d0
@@ -255,7 +262,6 @@ subroutine hook_probes(inputfile, probe_locs)
     ! Add probes here if needed
     ! Example code: The following allocates 2 probes at (0.1,0.1,0.1) and
     ! (0.2,0.2,0.2)  
-    print*, inputfile
     allocate(probe_locs(3,nprobes))
     probe_locs(1,1) = 0.1d0; probe_locs(2,1) = 0.1d0; probe_locs(3,1) = 0.1d0;
     probe_locs(1,2) = 0.2d0; probe_locs(2,2) = 0.2d0; probe_locs(3,2) = 0.2d0;
@@ -266,13 +272,22 @@ end subroutine
 subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
     use kind_parameters, only: rkind
     use decomp_2d,        only: decomp_info
+    use ScalarFieldTesting_parameters, only: scalarExact
+
     type(decomp_info),                                          intent(in)    :: decompC
     character(len=*),                intent(in)    :: inpDirectory
-    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    real(rkind), dimension(:,:,:,:), intent(in), target  :: mesh
     integer, intent(in)                            :: scalar_id
     real(rkind), dimension(:,:,:), intent(out)     :: scalarField
+    real(rkind), dimension(:,:,:), pointer :: x, y, z
+   
+    z => mesh(:,:,:,3)
+    y => mesh(:,:,:,2)
+    x => mesh(:,:,:,1)
 
-    scalarField = 0.d0
+    scalarField = cos(4.d0*x)*sin(2.d0*y)*cos(3.d0*z)
+    allocate(scalarExact(size(scalarField,1), size(scalarField,2), size(scalarField,3)))
+    scalarExact = scalarField
 end subroutine 
 
 subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource)
