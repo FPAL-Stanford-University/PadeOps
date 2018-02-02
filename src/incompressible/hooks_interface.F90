@@ -90,6 +90,15 @@ module igrid_hooks
    end interface
 
 
+    interface setInhomogeneousNeumannBC_Temp
+        subroutine setInhomogeneousNeumannBC_Temp(inpDirectory, wTh_surf)
+            import :: rkind
+            character(len=*), intent(in) :: inpDirectory
+            real(rkind), intent(out) :: wTh_surf
+
+        end subroutine 
+    end interface
+
     interface setDirichletBC_Temp
         subroutine setDirichletBC_Temp(inpDirectory, Tsurf, dTsurfdt)
             import :: rkind

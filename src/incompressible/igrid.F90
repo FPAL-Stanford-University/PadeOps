@@ -328,7 +328,7 @@ contains
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1
         real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop
-        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0
+        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0, moistureFactor = 0.61_rkind
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
         logical ::isStratified=.false.,useMoisture=.false.,dumpPlanes = .false.,useExtraForcing = .false.
@@ -631,9 +631,11 @@ contains
                 this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
             else if (botBC_Temp == 1) then
                 ! Do nothing 
+            else if (botBC_Temp == 2) then
+                call setInhomogeneousNeumannBC_Temp(inputfile, this%wTh_surf)
             else
-                call GraceFulExit("Only Dirichlet and homog. Neumann BCs supported for Temperature at &
-                    & this time. Set botBC_Temp = 0 or 1",341)        
+                call GraceFulExit("Only Dirichlet, homog. Neumann and non-homogeneous Neumann BCs supported for Temperature at &
+                    & this time. Set botBC_Temp = 0 or 1 or 2",341)        
             end if
         end if 
 
@@ -743,8 +745,8 @@ contains
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
-                                    this%ThetaRef, this%Fr, this%Re, this%isInviscid, sgsmod_stratified, this%botBC_Temp, &
-                                    this%initSpinUp)
+                                    this%ThetaRef, this%wTh_surf, this%Fr, this%Re, this%isInviscid, sgsmod_stratified, &
+                                    this%botBC_Temp, this%initSpinUp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%kappaSGS)
             call message(0,"SGS model initialized successfully")
         end if 
@@ -1624,7 +1626,7 @@ contains
         if (this%isStratified .or. this%initspinup) then
             call transpose_y_to_z(this%That,zbuffC,this%sp_gpC)
             call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,TBC_bottom, TBC_top)
-            if (this%botBC_Temp == 0) then 
+            if ((this%botBC_Temp == 0) .or. (this%botBC_Temp == 2)) then 
                 zbuffE(:,:,1) = zero 
                 if (nrank == 0) then
                     zbuffE(1,1,1) = this%Tsurf*real(this%nx,rkind)*real(this%ny,rkind)
@@ -1671,8 +1673,8 @@ contains
             do idx = 1,this%n_scalars
                call this%scalars(idx)%destroy()
             end do 
+            deallocate(this%scalars)
         end if
-        deallocate(this%scalars)
     end subroutine
 
     subroutine addNonLinearTerm_Rot(this)
@@ -1967,7 +1969,7 @@ contains
         endif
         if (this%spectE%carryingZeroK) then
             fT1E(1,1,:) = cmplx(zero,zero,rkind)
-        end if 
+        end if
         this%w_rhs = this%w_rhs + fT1E 
         
         if (this%useSponge) then
@@ -2298,6 +2300,8 @@ contains
         if (this%isStratified) then
             if (this%botBC_Temp == 0) then
                 this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
+            else if (this%botBC_Temp == 2) then
+                ! Do nothing for constant non-varying flux
             end if
         end if  
         if (this%PreprocessForKS) this%KSupdated = .false. 
@@ -3622,7 +3626,7 @@ contains
         ! broadcast to all other procs above in this subroutine
         ! do nothing about inst_horz_avg(2:3) herre
         if(this%isStratified) then
-            this%inst_horz_avg(4) = this%invObLength
+            this%inst_horz_avg(4) = this%sgsmodel%invObLength
             this%inst_horz_avg(5) = this%wTh_surf
         endif
         ! this%inst_horz_avg_turb(1:5*this%WindTurbineArr%nTurbines) is computed in this%WindTurbineArr%getForceRHS
@@ -5474,6 +5478,9 @@ contains
          case(1)  ! Homogenenous Neumann BC at the bottom
             TBC_bottom = 1; dTdzBC_bottom = -1; WTBC_bottom = -1;
             WdTdzBC_bottom = 1
+         case (2) ! Inhomogeneous Neumann BC for temperature at the bottom
+            TBC_bottom = 0; dTdzBC_bottom = 0; WTBC_bottom = -1; 
+            WdTdzBC_bottom = 0;      
          end select
 
     end subroutine

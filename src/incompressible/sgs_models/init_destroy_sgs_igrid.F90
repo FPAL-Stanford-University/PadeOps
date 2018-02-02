@@ -1,7 +1,7 @@
 subroutine destroy(this)
   class(sgs_igrid), intent(inout) :: this
   nullify(this%gpC, this%gpE, this%spectC, this%spectE, this%sp_gpC, this%sp_gpE, this%fxC)
-  nullify(this%cbuffyC, this%cbuffzC, this%rbuffxC, this%Tsurf, this%fyC, this%fzE)
+  nullify(this%cbuffyC, this%cbuffzC, this%rbuffxC, this%Tsurf, this%fyC, this%fzE, this%wTh_surf)
   if (this%isEddyViscosityModel) call this%destroyMemory_EddyViscosity()
   if (this%DynamicProcedureType .ne. 0) call this%destroyMemory_DynamicProcedure()
   select case (this%mid)
@@ -36,12 +36,12 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappa
    end if 
 end subroutine 
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, isInviscid, isStratified, botBC_temp, initSpinUp)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, wTh_surf, Fr, Re, isInviscid, isStratified, botBC_temp, initSpinUp)
   class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
   real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re
-  real(rkind), intent(in), target :: Tsurf
+  real(rkind), intent(in), target :: Tsurf, wTh_surf
   character(len=*), intent(in) :: inputfile
   real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC
   real(rkind), dimension(:,:,:), intent(in), target :: fBody_x, fBody_y, fBody_z
@@ -76,6 +76,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%sp_gpE => spectE%spectdecomp
   this%dz = dz
   this%Tsurf => Tsurf
+  this%wTh_surf => wTh_surf
   this%Fr = Fr
   this%Re = Re
   !this%Pr = Pr

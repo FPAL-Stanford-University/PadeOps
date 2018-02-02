@@ -57,7 +57,7 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
       call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,2), this%tauijWM(:,:,:,2))
 
    case (2) ! Bou-zeid Wall model 
-      this%WallMFactor = -(kappa/(log(this%dz/(two*this%z0)) + beta_m*this%InvObLength*this%dz/two))**2 
+      this%WallMFactor = -(kappa/(log(this%dz/(two*this%z0)) - this%PsiM))**2 
       call this%getfilteredSpeedSqAtWall(uhat, vhat)
       
       call this%spectC%fft(this%filteredSpeedSq, cbuffy)
@@ -164,7 +164,7 @@ subroutine getSurfaceQuantities(this)
     integer :: idx
     integer, parameter :: itermax = 100 
     real(rkind) :: ustarNew, ustarDiff, dTheta, ustar
-    real(rkind) :: a, b, c, PsiH, PsiM, wTh, z, u, Linv
+    real(rkind) :: a, b, c, PsiH, PsiM, wTh, z, u, Linv, xi, xisq
  
     if (this%isStratified) then
       select case (this%botBC_Temp)
@@ -186,14 +186,39 @@ subroutine getSurfaceQuantities(this)
               ustar = ustarNew; idx = idx + 1
           end do 
           this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
-       case(1) ! Homogeneous Neumann BC for temperature
+          this%PsiM = PsiM
+      case(1) ! Homogeneous Neumann BC for temperature
           this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
           this%invObLength = zero
           this%wTh_surf = zero
+          this%PsiM = zero
+      case(2) ! Inhomogeneous Neumann BC for temperature
+          Linv = zero; !dTheta = this%Tsurf - this%Tmn;
+          z = this%dz/two ; ustarDiff = one; wTh = this%wTh_surf
+          a=log(z/this%z0); !b=beta_h*this%dz/two; c=beta_m*this%dz/two 
+          PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
+   
+          ! Inside the do loop all the used variables are on the stored on the stack
+          ! After the while loop these variables are copied to their counterparts
+          ! on the heap (variables part of the derived type)
+          do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
+              ustarNew = u*kappa/(a - PsiM)
+              !wTh = dTheta*ustarNew*kappa/(a - PsiH) 
+              Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
+              xisq = sqrt(one-15.d0*z*Linv); xi = sqrt(xisq)
+              PsiM = two*log(half*(one+xi)) + log(half*(one+xisq)) - two*atan(xi) + piby2; 
+              ustarDiff = abs((ustarNew - ustar)/ustarNew)
+              ustar = ustarNew; idx = idx + 1
+          end do 
+          this%ustar = ustar; this%invObLength = Linv; 
+          PsiH = two*log(half*(one+xisq));
+          this%Tsurf = this%Tmn + wTh*(a-PsiH)/(ustar*kappa)
+          this%PsiM = PsiM
       end select
-   else
+    else
           this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
           this%invObLength = zero
           this%wTh_surf = zero
-   end if 
+          this%PsiM = zero
+    end if 
 end subroutine
