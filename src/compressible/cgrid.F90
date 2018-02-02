@@ -243,9 +243,11 @@ contains
         ! allocate(this%mix , source=mixture(this%decomp,ns))
 
         ! Set default materials with the same gam and Rgas
-        ! do i = 1,ns
-        !     call this%mix%set_material(i,idealgas(gam,Rgas),visc)
-        ! end do
+        if (this%mix%inviscid) then
+            do i = 1,ns
+                call this%mix%set_material(i,idealgas(gam,Rgas))
+            end do
+        end if
 
         nfields = kap_index + 2*ns   ! Add ns massfractions to fields
         ncnsrv  = ncnsrv   + ns - 1  ! Add ns-1 conserved variables for the massfraction equations
@@ -396,7 +398,7 @@ contains
                                 reduce_precision=.false., write_xdmf=.false., read_only=.false., jump_to_last=.true.)
         this%nrestart = nrestart
 
-        if ((this%step > 0) .and. (rewrite_viz)) then
+        if ( ((this%step > 0) .or. (this%tsim > zero)) .and. (rewrite_viz)) then
             this%viz%vizcount = int(this%tsim / this%tviz + 100._rkind*eps) + 1
         end if
 
@@ -530,6 +532,7 @@ contains
         use reductions, only: P_MEAN
         use timer,      only: tic, toc
         use exits,      only: GracefulExit, message
+        use reductions, only: P_MAXVAL, P_MINVAL
         class(cgrid), target, intent(inout) :: this
 
         logical :: tcond, vizcond, stepcond
@@ -542,7 +545,7 @@ contains
         integer :: i
         integer :: stepramp = 0
 
-        call this%get_dt(stability)
+        ! call this%get_dt(stability)
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
         allocate( gradYs(this%nxp, this%nyp, this%nzp,3*this%mix%ns) )
@@ -609,6 +612,9 @@ contains
         ! Write initial restart file
         if (this%restart%vizcount == 0) call this%write_restart()
 
+        ! Get time step (after computing all artificial properties)
+        call this%get_dt(stability)
+
         ! Check for visualization condition and adjust time step
         if ( (this%tviz > zero) .AND. (this%tsim + this%dt > this%tviz * this%viz%vizcount) ) then
             this%dt = this%tviz * this%viz%vizcount - this%tsim
@@ -668,7 +674,8 @@ contains
                     stability = 'viz dump'
                     stepramp = stepramp + 1
                 end if
-            else if (stepramp == this%vizramp) then
+            else if (stepramp == this%vizramp-1) then
+                this%dt = (this%tviz * this%viz%vizcount - this%tsim)/real(this%vizramp-stepramp,rkind)
                 stepramp = 0
                 vizcond = .TRUE.
                 stability = 'viz dump'
@@ -701,7 +708,6 @@ contains
     subroutine advance_RK45(this)
         use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B
         use exits,      only: message,nancheck,GracefulExit
-        use reductions, only: P_MAXVAL, P_MINVAL
         class(cgrid), target, intent(inout) :: this
 
         real(rkind)                                          :: Qtmpt
@@ -726,6 +732,7 @@ contains
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
                 call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
                 write(charout,'(A,I0,A,I0,A,4(I0,A))') "NaN encountered in solution at substep ", isub, " of step ", this%step+1, " at Wcnsrv(",i,",",j,",",k,",",l,")"
+                print *, charout
                 call GracefulExit(trim(charout), 999)
             end if
 

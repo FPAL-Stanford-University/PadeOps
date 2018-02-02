@@ -226,7 +226,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use miranda_restart_mod,         only: miranda_restart
     use io_hdf5_stuff,               only: io_hdf5
     use reductions,                  only: P_MAXVAL
-    use exits,                       only: GracefulExit, message
+    use exits,                       only: GracefulExit, message, nancheck
     use mpi
     
     use inclinedRM_data
@@ -240,7 +240,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
 
-    integer :: i, iounit
+    integer :: i, j, k, l, iounit
     real(rkind) :: Y_N2, Y_O2, rho_air, rho_N2, rho_O2, rho_HG
     real(rkind) :: R_air, Cp_air, gamma_air, Cp_N2, Cp_O2, sos_air, R_HG
     real(rkind) :: rho_shocked, u_shocked, p_shocked
@@ -316,6 +316,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         write(charout,'(A,I0.0,A,A)') "Reading Miranda restart dump ", resdump, " from ", trim(resdir)
         call message(charout)
         call message("Simulation time at restart", tsim)
+        call message("Timestep at restart", dt)
 
         rho = resdata(:,:,:,mir%rho_index) * real(1.D3,  rkind) ! g/cm^3 to kg/m^3
         u   = resdata(:,:,:,  mir%u_index) * real(1.D-2, rkind) ! cm/s to m/s
@@ -325,6 +326,24 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
         Ys  = resdata(:,:,:,mir%Ys_index:mir%Ys_index+mir%ns-1) ! Non-dimensional
         
+        if ( nancheck(rho) ) then
+            print '(A)', "NaN found in rho"
+        end if
+        if ( nancheck(u) ) then
+            print '(A)', "NaN found in u"
+        end if
+        if ( nancheck(v) ) then
+            print '(A)', "NaN found in v"
+        end if
+        if ( nancheck(w) ) then
+            print '(A)', "NaN found in w"
+        end if
+        if ( nancheck(p) ) then
+            print '(A)', "NaN found in p"
+        end if
+        if ( nancheck(Ys,i,j,k,l) ) then
+            print '(A,4(I0.0,A))', "NaN found at Ys(", i, ",", j, ",", k, ",", l, ")"
+        end if
         ! Initialize viz object
         ! call viz%init( mpi_comm_world, decomp, 'y', '.', 'init_test', &
         !                reduce_precision=.true., read_only=.false., jump_to_last=.true.)
@@ -486,10 +505,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         ! Sponge+bulk for exit bc
         ! Gradually apply the exit boundary conditions  
         dx = L_x/real(decomp%xsz(1)-1,rkind)
-        filpt = one / dx
+        filpt = one*real(1.D-2,rkind) / dx ! 1cm width for sponge
         thickT = real(10.D0, rkind)
         do i=1,decomp%ysz(1)
-            dumT(i,:,:)=half*(one-tanh( real( decomp%yst(1) - 1 + i - 1, rkind )-filpt )/thickT)
+            dumT(i,:,:)=half*(one-tanh( (real( decomp%yst(1) - 1 + i - 1, rkind)-filpt) / thickT ))
         end do
             
         !!!  OUT-FLOW  !!!
