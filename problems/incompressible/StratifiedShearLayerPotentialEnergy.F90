@@ -4,12 +4,14 @@ module igrid_Operators_NonPeriodicZ
    use decomp_2d
    use cd06staggstuff, only: cd06stagg
    use reductions, only: p_sum
+   use sorting_mod, only: sortgroup, Qsort    
 
    implicit none
    
    private
    public :: Ops_NP_Z
 
+   integer :: niter = 4
    type :: Ops_NP_Z
       private
       complex(rkind), dimension(:,:,:), allocatable :: cbuffy1, cbuffy2
@@ -20,11 +22,13 @@ module igrid_Operators_NonPeriodicZ
       real(rkind), dimension(:,:,:), allocatable :: zarr1d_1, zarr1d_2
 
       character(len=clen) ::  inputdir, outputdir
-      real(rkind) :: mfact_xy, dx, dy, dz
+      real(rkind) :: mfact_xy, dx, dy, dz, mfact_xyz
+      type(sortgroup), dimension(:), allocatable :: sort_z, sort_y
       
       real(rkind), dimension(:), allocatable :: zline
       integer :: RunID
 
+      real(rkind), dimension(:), allocatable :: zold 
       contains
          procedure :: init
          procedure :: destroy
@@ -42,9 +46,71 @@ module igrid_Operators_NonPeriodicZ
          procedure :: getSimTime
          procedure :: getPotentialEnergy
          procedure :: getAPE
+         procedure :: sortPotT
    end type 
 
 contains
+
+subroutine sortPotT(this, T, Tsort) 
+   class(Ops_NP_Z), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in) :: T
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: Tsort
+   integer :: iiter, idx, i, j, k 
+
+   call transpose_y_to_z(T, this%rbuffy, this%gp)
+   do iiter = 1,niter
+      call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
+      idx = 1
+      do k = 1,this%gp%zsz(3)
+         do j = 1,this%gp%zsz(2)
+            do i = 1,this%gp%zsz(1)
+               this%sort_z(idx)%value = this%rbuffz1(i,j,k)
+               idx = idx + 1
+            end do 
+         end do 
+      end do   
+      
+      call Qsort(this%sort_z, this%gp%zsz(1)*this%gp%zsz(2)*this%gp%zsz(3)) 
+      
+      idx = 1
+      do k = 1,this%gp%zsz(3)
+         do j = 1,this%gp%zsz(2)
+            do i = 1,this%gp%zsz(1)
+               this%rbuffz1(i,j,k) = this%sort_z(idx)%value
+               idx = idx + 1
+            end do 
+         end do 
+      end do
+      
+   
+      call transpose_z_to_y(this%rbuffz1,this%rbuffy,this%gp)
+      
+      idx = 1
+      do k = 1,this%gp%ysz(3)
+         do j = 1,this%gp%ysz(2)
+            do i = 1,this%gp%ysz(1)
+               this%sort_y(idx)%value = this%rbuffy(i,j,k)
+               idx = idx + 1
+            end do 
+         end do 
+      end do 
+
+      call Qsort(this%sort_y, this%gp%ysz(1)*this%gp%ysz(2)*this%gp%ysz(3)) 
+
+      idx = 1
+      do k = 1,this%gp%ysz(3)
+         do j = 1,this%gp%ysz(2)
+            do i = 1,this%gp%ysz(1)
+               this%rbuffy(i,j,k) = this%sort_y(idx)%value
+               idx = idx + 1
+            end do 
+         end do 
+      end do 
+
+   end do
+
+   call transpose_y_to_x(this%rbuffy, Tsort, this%gp)
+end subroutine 
 
 function getCenterlineQuantity(this, vec) result(val)
    class(Ops_NP_Z), intent(in), target :: this
@@ -65,7 +131,7 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, Lz, gp, InputDir, OutputDir, RunID
    real(rkind), intent(in) :: dx, dy, dz, Lz
    class(decomp_info), intent(in), target :: gp
    character(len=clen), intent(in) ::  inputdir, outputdir
-   integer :: RunID, idx
+   integer :: RunID, idx, k
 
    this%gp => gp
    call this%spect%init("x",nx,ny,nz,dx, dy, dz, "four", "2/3rd", 2 , fixOddball=.false., &
@@ -75,13 +141,27 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, Lz, gp, InputDir, OutputDir, RunID
                                    isTopSided = .true., isBotSided = .true.)
 
    call this%spect%alloc_r2c_out(this%cbuffy1) 
-   !call this%spect%alloc_r2c(this%cbuffy2) 
    
    allocate(this%zline(nz))
    this%zline(1) = -Lz + dz/2.d0
    do idx = 2,nz
       this%zline(idx) = this%zline(idx-1) + dz
    end do 
+
+   allocate(this%sort_z(gp%zsz(1)*gp%zsz(2)*gp%zsz(3))) 
+   allocate(this%sort_y(gp%ysz(1)*gp%ysz(2)*gp%ysz(3))) 
+   allocate(this%zold(gp%ysz(1)*gp%ysz(2)*gp%ysz(3))) 
+
+   allocate(this%rbuffy(gp%ysz(1),gp%ysz(2),gp%ysz(3)))
+   allocate(this%rbuffz1(gp%zsz(1),gp%zsz(2),gp%zsz(3)))
+   allocate(this%rbuffz2(gp%zsz(1),gp%zsz(2),gp%zsz(3)))
+  
+   idx = 1
+   do k = gp%yst(3),gp%yen(3)
+      this%rbuffy(:,:,idx) = this%zline(k)
+      idx = idx + 1
+   end do 
+   this%zold = reshape(this%rbuffy,[size(this%zold)])
 
    this%dx = dx
    this%dy = dy
@@ -91,19 +171,18 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, Lz, gp, InputDir, OutputDir, RunID
    this%RunID = RunID
 
    this%mfact_xy = 1.d0/(real(nx,rkind)*real(ny,rkind))
-   allocate(this%rbuffy(gp%ysz(1),gp%ysz(2),gp%ysz(3)))
-   allocate(this%rbuffz1(gp%zsz(1),gp%zsz(2),gp%zsz(3)))
-   allocate(this%rbuffz2(gp%zsz(1),gp%zsz(2),gp%zsz(3)))
+   this%mfact_xyz = 1.d0/(real(nx,rkind)*real(ny,rkind)*real(nz,rkind))
 
    allocate(this%zarr1d_1(1,1,nz))
    allocate(this%zarr1d_2(1,1,nz))
+
 end subroutine 
 
 subroutine destroy(this)
    class(Ops_NP_Z), intent(inout), target :: this
   
    deallocate(this%rbuffy, this%rbuffz1, this%rbuffz2)
-   deallocate(this%zarr1d_1, this%zarr1d_2)
+   deallocate(this%zarr1d_1, this%zarr1d_2, this%zold, this%sort_z, this%sort_y)
 end subroutine 
 
 subroutine ddx(this,f, dfdx)
@@ -292,16 +371,17 @@ program StratifiedShearLayerPotentialEnergy
    use decomp_2d
    use timer, only: tic, toc
    use exits, only: message
+   use decomp_2d_io
    implicit none
 
-   real(rkind), dimension(:,:,:), allocatable :: T, Tfluct!, uFluct, vFluct, pFluct, Tfluct
+   real(rkind), dimension(:,:,:), allocatable :: T, Tsort!, uFluct, vFluct, pFluct, Tfluct
    !real(rkind), dimension(:),     allocatable :: Prod, Transp_Conv, Transp_Press, Transp_Visc, Dissp, DisspSGS, DisspTheta, DisspThetaSGS, Buoy
 
    real(rkind), dimension(:), allocatable :: Tmn, dTdz
    real(rkind), parameter :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0
-   real(rkind) :: dx, dy, dz, Re = 3000.d0, Rib = 0.05d0, Pr = 1.d0
+   real(rkind) :: dx, dy, dz, Re = 3000.d0, Rib = 0.2d0, Pr = 1.d0
    real(rkind) :: T0 = 100.d0
-   integer :: nx, ny, nz, RunID, TIDX
+   integer :: nx, ny, nz, RunID, TIDX, np
    type(decomp_info) :: gp
    type(Ops_NP_Z) :: ops
    logical :: periodicbcs(3)
@@ -317,12 +397,14 @@ program StratifiedShearLayerPotentialEnergy
    namelist /INPUT/ InputDir, OutputDir, RunID, tstart, tstop, T0, tstep, nx, ny, nz, Re, Rib, Pr
     
    call MPI_Init(ierr)               
+   call MPI_Comm_size ( MPI_COMM_WORLD, np, ierr )
    call GETARG(1,inputfile)          
    open(unit=99, file=trim(inputfile), form='FORMATTED', iostat=ierr)
    read(unit=99, NML=INPUT)
    close(unit=99)
    periodicbcs(1) = .true.; periodicbcs(2) = .true.; periodicbcs(3) = .false.  
-   call decomp_2d_init(nx, ny, nz, 0, 0, periodicbcs)
+   
+   call decomp_2d_init(nx, ny, nz, 1, np, periodicbcs)
    call get_decomp_info(gp)
 
    dx =     Lx/real(nx,rkind) 
@@ -332,7 +414,7 @@ program StratifiedShearLayerPotentialEnergy
    call ops%init(nx, ny, nz, dx, dy, dz, Lz, gp, InputDir, OutputDir, RunID)
 
    call ops%allocate3DField(T)
-   call ops%allocate3DField(Tfluct)
+   call ops%allocate3DField(Tsort)
 
 
    allocate(Tmn(nz))
@@ -349,14 +431,11 @@ program StratifiedShearLayerPotentialEnergy
       time(idx) = ops%getSimTime(tidx)
       call message(0, "Read simulation data at time:", time(idx))
 
-      ! STEP 1: Compute the gradients and brunt vaisala frequency
-      call ops%TakeMean_xy(T,Tmn)
-      call ops%getFluct_from_MeanZ(T,Tfluct)
-      call ops%ddz_1d(Tmn,dTdz)
-      
       call ops%getPotentialEnergy(T, TPE(idx))
-      call ops%getAPE(Tfluct, dTdz, APE(idx))
-      BPE(idx) = TPE(idx) - APE(idx)
+      call ops%sortPotT(T,Tsort)
+      !print*, maxval(abs(Tsort - T))
+      call ops%getPotentialEnergy(Tsort, BPE(idx))
+      APE(idx) = TPE(idx) - BPE(idx)
   
       call message(1, "TPE:", TPE(idx))
       call message(1, "APE:", APE(idx))

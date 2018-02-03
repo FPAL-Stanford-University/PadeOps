@@ -139,12 +139,14 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
     integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
 
-    allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [64]
-    yplanes = [64]
-    zplanes = [20]
-
+         !allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
+         allocate(yplanes(nyplanes))
+         !allocate(xplanes(nxplanes))
+         !allocate(zplanes(nzplanes))
+         !xplanes = [300,400,500,600,700]
+         yplanes = [128]
+         !xPlanes = [1, ceiling(nxSize/6.0), ceiling(nxSize/4.85), ceiling(nxSize/4.0), ceiling(nxSize/3.0), ceiling(nxSize/2.0), ceiling(nxSize/1.6)]
 end subroutine
 
 subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
