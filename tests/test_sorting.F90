@@ -137,26 +137,26 @@ program test_sorting
 
       if (iiter .ne. niter) then
          call Qsort(sort_y, gp%ysz(1)*gp%ysz(2)*gp%ysz(3))
-      end if 
-      idx = 1
-      do k = 1,gp%ysz(3)
-         do j = 1,gp%ysz(2)
-            do i = 1,gp%ysz(1)
-               fsort(i,j,k) = sort_y(idx)%value
-               idx = idx + 1
+         idx = 1
+         do k = 1,gp%ysz(3)
+            do j = 1,gp%ysz(2)
+               do i = 1,gp%ysz(1)
+                  fsort(i,j,k) = sort_y(idx)%value
+                  idx = idx + 1
+               end do 
             end do 
-         end do 
-      end do
+         end do
 
-      idx = 1
-      do k = 1,gp%ysz(3)
-         do j = 1,gp%ysz(2)
-            do i = 1,gp%ysz(1)
-               zCoords(i,j,k) = sort_y(idx)%zpos
-               idx = idx + 1
+         idx = 1
+         do k = 1,gp%ysz(3)
+            do j = 1,gp%ysz(2)
+               do i = 1,gp%ysz(1)
+                  zCoords(i,j,k) = sort_y(idx)%zpos
+                  idx = idx + 1
+               end do 
             end do 
-         end do 
-      end do
+         end do
+      end if 
       
       call toc()
    
