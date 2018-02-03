@@ -114,7 +114,7 @@ DynProcFreq                   = 5          ! Frequency of dynamic procedure
 useWindTurbines               = .TRUE.    ! Do you want to use Wind turbines ?
 num_turbines                  = 1
 ADM                           = .TRUE.
-turbInfoDir                   = "/home1/05428/tg847275/PadeOps/problems/turbines/getEnergyBudgetTerms_files/aditya_data_pp"
+turbInfoDir                   = "/home1/05428/tg847275/PadeOps/problems/turbines/getEnergyBudgetTerms_files/HIT_interact_pp"
 ADM_Type                      = 2
 /
 /
