@@ -4,7 +4,7 @@ program getEnergyBudgetTerms
    use kind_parameters,  only: rkind, clen
    use timer, only: tic, toc
    use sgsmod_igrid, only: sgs_igrid
-   use PadeDerOps, only: Pade6stagg, cd06
+   use PadeDerOps, only: Pade6stagg
    use spectralMod, only: spectral
    use decomp_2d 
    use decomp_2d_io
@@ -34,7 +34,7 @@ program getEnergyBudgetTerms
    type(decomp_info), pointer :: sp_gpC, sp_gpE
    type(Pade6stagg) :: Pade6opZ
    integer :: ierr, ix1, ixn, iy1, iyn, iz1, izn, RID
-   logical :: computeFbody
+   logical :: computeFbody 
   
    real(rkind), dimension(:,:,:)  , pointer :: nuSGS, kappaSGS
    real(rkind), dimension(:,:,:)  , pointer :: tau13, tau23
@@ -51,6 +51,13 @@ program getEnergyBudgetTerms
    integer :: nx, ny, nz, ioUnit, i, j, k, nvis = 0, tid_initial, tid_final, dtid, ind=0
    real(rkind) :: dt, inst_horz_avg_turb(8), tsim
    namelist /INPUT/ Lx, Ly, Lz, outputdir, inputdir, nx, ny, nz, RID, tid_initial, tid_final, dtid
+   
+   logical :: PeriodicInZ = .false.
+   integer :: botWall, topWall, NumericalSchemeVert = 1
+   namelist /BCs/ PeriodicInZ, botWall, topWall
+
+   namelist /NUMERICS/ NumericalSchemeVert
+
 
    ! Do MPI stuff
    call MPI_Init(ierr)               
@@ -312,12 +319,13 @@ program getEnergyBudgetTerms
    
    
    call mpi_barrier(mpi_comm_world, ierr)
-   stop
+   !stop
    call MPI_Finalize(ierr)           !<-- Terminate MPI 
 
 
 contains
    subroutine initializeEverything()
+
       ! Allocate memory
       allocate( mesh(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),3) )
       allocate( zMeshE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)) )
@@ -468,7 +476,7 @@ contains
       computeFbody = .true.
 
       ! Initialize Padeder
-      call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, cd06,.false.)
+      call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, NumericalSchemeVert,PeriodicInZ,spectC)
 
       ! Initialize sgs
       call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, &
@@ -789,6 +797,7 @@ contains
         call Pade6opz%ddz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
         call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
         call transpose_y_to_x(rbuffyC(:,:,:,1),dfdz,gpC)
+
     end subroutine
 
 end program 
