@@ -207,6 +207,25 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 
 end subroutine
 
+subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
+    use kind_parameters,    only: rkind, clen 
+    use constants, only: one, zero
+    implicit none
+    real(rkind), intent(out) :: wTh_surf
+    character(len=clen),                intent(in)    :: inputfile
+    integer :: ioUnit 
+    character(len=clen)  :: ufname, vfname, wfname 
+    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    logical :: BandpassFilterFields = .false. 
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
+    
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=HIT_PeriodicINPUT)
+    close(ioUnit)    
+
+    ! Do nothing really since this is an unstratified simulation
+end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind, clen 

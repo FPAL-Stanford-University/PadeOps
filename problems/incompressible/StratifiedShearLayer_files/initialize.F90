@@ -133,6 +133,25 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
 
 end subroutine
 
+subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
+    use kind_parameters,    only: rkind
+    use constants, only: one, zero 
+    implicit none
+
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), intent(out) :: wTh_surf
+    integer :: ioUnit, seed, N, M, nTG
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase, maxTG
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG
+     
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PROBLEM_INPUT)
+    close(ioUnit)    
+
+    ! Do nothing really since temperature BC is dirichlet
+end subroutine
+
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
     use StratifiedShearLayer_parameters
