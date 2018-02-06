@@ -173,7 +173,7 @@ subroutine getSurfaceQuantities(this)
           z = this%dz/two ; ustarDiff = one; wTh = zero
           a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
           PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
-   
+
           ! Inside the do loop all the used variables are on the stored on the stack
           ! After the while loop these variables are copied to their counterparts
           ! on the heap (variables part of the derived type)
@@ -181,7 +181,15 @@ subroutine getSurfaceQuantities(this)
               ustarNew = u*kappa/(a - PsiM)
               wTh = dTheta*ustarNew*kappa/(a - PsiH) 
               Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
-              PsiM = -c*Linv; PsiH = -b*Linv;
+              if (Linv .ge. zero) then 
+                ! similarity functions if stable stratification is present
+                PsiM = -c*Linv;         PsiH = -b*Linv; 
+              else
+                ! similarity functions if unstable stratification is present
+                xisq = sqrt(one-15.d0*z*Linv); xi = sqrt(xisq)
+                PsiM = two*log(half*(one+xi)) + log(half*(one+xisq)) - two*atan(xi) + piby2; 
+                PsiH = two*log(half*(one+xisq));
+              endif
               ustarDiff = abs((ustarNew - ustar)/ustarNew)
               ustar = ustarNew; idx = idx + 1
           end do 
@@ -203,15 +211,20 @@ subroutine getSurfaceQuantities(this)
           ! on the heap (variables part of the derived type)
           do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
               ustarNew = u*kappa/(a - PsiM)
-              !wTh = dTheta*ustarNew*kappa/(a - PsiH) 
               Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
-              xisq = sqrt(one-15.d0*z*Linv); xi = sqrt(xisq)
-              PsiM = two*log(half*(one+xi)) + log(half*(one+xisq)) - two*atan(xi) + piby2; 
+              if (Linv .ge. zero) then 
+                ! similarity functions if stable stratification is present
+                PsiM = -c*Linv;         PsiH = -b*Linv; 
+              else
+                ! similarity functions if unstable stratification is present
+                xisq = sqrt(one-15.d0*z*Linv); xi = sqrt(xisq)
+                PsiM = two*log(half*(one+xi)) + log(half*(one+xisq)) - two*atan(xi) + piby2; 
+                PsiH = two*log(half*(one+xisq));
+              endif
               ustarDiff = abs((ustarNew - ustar)/ustarNew)
               ustar = ustarNew; idx = idx + 1
           end do 
           this%ustar = ustar; this%invObLength = Linv; 
-          PsiH = two*log(half*(one+xisq));
           this%Tsurf = this%Tmn + wTh*(a-PsiH)/(ustar*kappa)
           this%PsiM = PsiM
       end select
