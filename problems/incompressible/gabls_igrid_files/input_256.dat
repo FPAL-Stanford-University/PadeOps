@@ -1,17 +1,17 @@
 &INPUT
-inputdir                      = "/scratch/aghate/gabls/128"   ! Directory for any input files
-outputdir                     = "/scratch/aghate/gabls/128"   ! Directory for all output files
-nx                            = 128         ! Number of points in X
-ny                            = 128         ! Number of points in Y
-nz                            = 128         ! Number of points in Z
-tstop                         = 500.D0      ! Physical time to stop the simulation
-CFL                           = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+inputdir                      = "/scratch/aghate/gabls/256"   ! Directory for any input files
+outputdir                     = "/scratch/aghate/gabls/256"   ! Directory for all output files
+nx                            = 256         ! Number of points in X
+ny                            = 256         ! Number of points in Y
+nz                            = 256         ! Number of points in Z
+tstop                         = 650.D0      ! Physical time to stop the simulation
+CFL                           = 1.2D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile                = .FALSE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 110000        ! TimeID of the restart file being used
-restartFile_RID               = 7          ! RunID of the restart file being used
+useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
+restartFile_TID               = 80000        ! TimeID of the restart file being used
+restartFile_RID               = 3          ! RunID of the restart file being used
 /
 /
 &NUMERICS
@@ -25,8 +25,8 @@ useExhaustiveFFT              = .TRUE.
 /
 /
 &IO
-RunID                         = 2          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump                 = 5000        ! Restart File Dumping Frequency  (# of timesteps)
+RunID                         = 3          ! Run Label (All output files will be tagged with this nubber)
+t_restartDump                 = 10000        ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump                    = 2000         ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
@@ -36,10 +36,10 @@ t_stop_planeDump              = 5000        ! When do you want to stop dumping p
 /
 /
 &STATS
-tid_StatsDump                 = 20000       ! Dumping Frequency for Statistics file (# of time steps)
-tid_compStats                 = 10          ! Frequency of Computing Statistics
-tSimStartStats                = 20.d0       ! Simulation time for starting stats calculations 
-normStatsByUstar              = .TRUE.      ! Normalize Statistics by ustar at each instant
+tid_StatsDump                 = 1000        ! Dumping Frequency for Statistics file (# of time steps)
+tid_compStats                 = 100          ! Frequency of Computing Statistics
+tSimStartStats                = 550.d0       ! Simulation time for starting stats calculations 
+normStatsByUstar              = .FALSE.      ! Normalize Statistics by ustar at each instant
 computeSpectra                = .FALSE.     ! Compute and time average x - spectra on the run
 timeAvgFullFields             = .FALSE.     ! Time average and store fields on the run
 /
