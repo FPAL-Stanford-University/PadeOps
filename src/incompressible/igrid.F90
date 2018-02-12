@@ -335,7 +335,7 @@ contains
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10, BuoyancyTermType = 1
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
-        real(rkind) :: Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0
+        real(rkind) :: tmpmn, Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
@@ -661,6 +661,16 @@ contains
         !    call this%compute_and_bcast_surface_Mn()
         !end if
 
+        if ((PeriodicInZ) .and. (useHITforcing)) then
+            tmpmn = p_sum(this%u)/(real(nx,rkind)*real(ny,rkind)*real(nz,rkind))
+            this%u = this%u - tmpmn
+            
+            tmpmn = p_sum(this%v)/(real(nx,rkind)*real(ny,rkind)*real(nz,rkind))
+            this%v = this%v - tmpmn
+            
+            tmpmn = p_sum(this%w)/(real(nx,rkind)*real(ny,rkind)*real(nz + 1,rkind))
+            this%w = this%w - tmpmn
+        end if
         call this%interp_PrimitiveVars()
         call message(1,"Max KE:",P_MAXVAL(this%getMaxKE()))
      

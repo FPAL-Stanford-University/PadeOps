@@ -31,10 +31,10 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one
     character(len=clen)  :: dir_init_files
-    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0
     character(len=clen)  :: ufname, vfname, wfname
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields
 
     !Lx = two*pi; Ly = two*pi; Lz = one
     ioUnit = 11
@@ -112,9 +112,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     type(cd06stagg), allocatable :: der
     integer :: nz, nzE, k
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: TI = 0.1, uadv = 0.d0, kleft = 10.d0, kright = 64.d0
+    real(rkind) :: uadv = 0.d0, kleft = 10.d0, kright = 64.d0
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -138,10 +138,6 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     call decomp_2d_read_one(1,v ,vfname, decompC)
     call decomp_2d_read_one(1,wC,wfname, decompC)
   
-    u  = TI*u
-    v  = TI*v
-    wC = TI*wC
-
     call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
     call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
     call message_min_max(1,"Bounds for w:", p_minval(minval(wC)), p_maxval(maxval(wC)))
@@ -218,9 +214,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind) :: ThetaRef
     integer :: iounit 
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -241,9 +237,9 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     real(rkind), intent(out) :: Tref
     integer :: iounit
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
