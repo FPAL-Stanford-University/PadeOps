@@ -23,6 +23,7 @@ useDealiasFilterVert  = .FALSE.     ! Dealiasing filter used in vertical directi
 t_DivergenceCheck     = 10          ! Compute divergence every # timesteps (useful to detect nan/infinity) 
 InitSpinUp            = .FALSE.     ! Do you want to use an active scalar for initialization spinup? (only works for boundary layers)
 useExhaustiveFFT      = .TRUE.      ! Set this to false only if debugging the code. 
+donot_dealias         = .FALSE.     ! Setting this to true will create monsters in your simulation.  
 /
 /
 &IO
