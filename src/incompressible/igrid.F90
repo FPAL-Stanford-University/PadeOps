@@ -144,7 +144,7 @@ module IncompressibleGrid
         logical :: useSGS = .false., computeTurbinePressure = .false.  
         logical :: UseDealiasFilterVert = .false.
         logical :: useDynamicProcedure 
-        logical :: useCFL = .false.  
+        logical :: useCFL = .false., donot_dealias = .false.   
         logical :: dumpPlanes = .false., useWindTurbines = .false. 
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
@@ -330,7 +330,7 @@ contains
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
         logical ::isStratified=.false.,dumpPlanes = .false.,useExtraForcing = .false.
         logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false. 
-        logical :: useGeostrophicForcing = .false., PeriodicInZ = .false., deleteInstructions = .true.  
+        logical :: useGeostrophicForcing = .false., PeriodicInZ = .false., deleteInstructions = .true., donot_dealias = .false.   
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10, BuoyancyTermType = 1
@@ -347,7 +347,7 @@ contains
         integer :: num_scalars = 0
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
         logical :: sgsmod_stratified, Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false., useScalars = .false. 
-         
+        character(len=4) :: scheme_xy = "FOUR"
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -360,7 +360,7 @@ contains
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
-                                 useExhaustiveFFT, dealiasFact 
+                            useExhaustiveFFT, dealiasFact, scheme_xy, donot_dealias
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, &
                                  KSdoZfilter, nKSvertFilt
         namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq, computeDNSPressure, computeTurbinePressure, computeFringePressure            
@@ -400,6 +400,7 @@ contains
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType 
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity; this%deleteInstructions = deleteInstructions
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
+        this%donot_dealias = donot_dealias 
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -501,10 +502,10 @@ contains
         ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
         allocate(this%spectC)
         call this%spectC%init("x", nx, ny, nz  , this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=periodicinZ, dealiasF=dealiasfact)
+                scheme_xy, this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=periodicinZ, dealiasF=dealiasfact)
         allocate(this%spectE)
         call this%spectE%init("x", nx, ny, nz+1, this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=.false., dealiasF=dealiasfact)
+                scheme_xy, this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=.false., dealiasF=dealiasfact)
         this%sp_gpC => this%spectC%spectdecomp
         this%sp_gpE => this%spectE%spectdecomp
 
@@ -1061,8 +1062,11 @@ contains
         if ((this%isStratified .or. this%initspinup) .and. (.not. ComputeStokesPressure )) then
             call GracefulExit("You must set ComputeStokesPressure to TRUE if &
             & there is stratification in the problem", 323)
-        end if 
+        end if
 
+        if (this%donot_dealias) then
+            call message(0,"DONOT_DEALIAS set to TRUE. Screw you.")
+        end if 
       
         call message("IGRID initialized successfully!")
         call message("===========================================================")
@@ -1074,24 +1078,28 @@ contains
         class(igrid), intent(inout) :: this
         integer :: idx
 
-        call this%spectC%dealias(this%uhat)
-        call this%spectC%dealias(this%vhat)
-        if (this%PeriodicInZ) then
-            call transpose_y_to_z(this%what, this%cbuffzE(:,:,:,1), this%sp_gpE)
-            call this%spectC%dealias_edgeField(this%cbuffzE(:,:,:,1))
-            call transpose_z_to_y(this%cbuffzE(:,:,:,1),this%what,this%sp_gpE)
+        if (this%donot_dealias) then
+           return
         else
-            call this%spectE%dealias(this%what)
-        end if 
-        if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
-        if (this%UseDealiasFilterVert) then
-            call this%ApplyCompactFilter()
-        end if
+            call this%spectC%dealias(this%uhat)
+            call this%spectC%dealias(this%vhat)
+            if (this%PeriodicInZ) then
+                call transpose_y_to_z(this%what, this%cbuffzE(:,:,:,1), this%sp_gpE)
+                call this%spectC%dealias_edgeField(this%cbuffzE(:,:,:,1))
+                call transpose_z_to_y(this%cbuffzE(:,:,:,1),this%what,this%sp_gpE)
+            else
+                call this%spectE%dealias(this%what)
+            end if 
+            if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
+            if (this%UseDealiasFilterVert) then
+                call this%ApplyCompactFilter()
+            end if
 
-        if ((this%usescalars) .and. allocated(this%scalars)) then
-           do idx = 1,this%n_scalars
-              call this%scalars(idx)%dealias()
-           end do 
+            if ((this%usescalars) .and. allocated(this%scalars)) then
+               do idx = 1,this%n_scalars
+                  call this%scalars(idx)%dealias()
+               end do 
+            end if 
         end if 
     end subroutine 
 
@@ -1101,14 +1109,18 @@ contains
       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout ) :: uin, vin
       complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: win
 
-      call this%spectC%dealias(uin)
-      call this%spectC%dealias(vin)
-      if (this%PeriodicInZ) then
-          call transpose_y_to_z(win, this%cbuffzE(:,:,:,1), this%sp_gpE)
-          call this%spectC%dealias_edgeField(this%cbuffzE(:,:,:,1))
-          call transpose_z_to_y(this%cbuffzE(:,:,:,1),win,this%sp_gpE)
+      if (this%donot_dealias) then
+         return
       else
-          call this%spectE%dealias(win)
+         call this%spectC%dealias(uin)
+         call this%spectC%dealias(vin)
+         if (this%PeriodicInZ) then
+             call transpose_y_to_z(win, this%cbuffzE(:,:,:,1), this%sp_gpE)
+             call this%spectC%dealias_edgeField(this%cbuffzE(:,:,:,1))
+             call transpose_z_to_y(this%cbuffzE(:,:,:,1),win,this%sp_gpE)
+         else
+             call this%spectE%dealias(win)
+         end if 
       end if 
    end subroutine 
 
@@ -1457,10 +1469,14 @@ contains
     subroutine dealiasRealField_C(this, field)
         class(igrid), intent(inout) :: this
         real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(1),this%gpC%xsz(1)), intent(inout) :: field
-       
-        call this%spectC%fft(field, this%cbuffyC(:,:,:,1))
-        call this%spectC%dealias(this%cbuffyC(:,:,:,1))
-        call this%spectC%ifft(this%cbuffyC(:,:,:,1),field)
+      
+        if (this%donot_dealias) then
+            return 
+        else
+            call this%spectC%fft(field, this%cbuffyC(:,:,:,1))
+            call this%spectC%dealias(this%cbuffyC(:,:,:,1))
+            call this%spectC%ifft(this%cbuffyC(:,:,:,1),field)
+        end if 
     end subroutine 
 
     subroutine computePressure(this)

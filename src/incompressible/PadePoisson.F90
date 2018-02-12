@@ -94,6 +94,8 @@ contains
          k1 = GetWaveNums(this%sp%nx_g, dx)
          k2 = GetWaveNums(this%sp%ny_g, dy)
          k3_loc = GetWaveNums(nz, dz)
+         call this%sp%GetModifiedWavenumber_xy_ip(k1,dx)
+         call this%sp%GetModifiedWavenumber_xy_ip(k2,dy)
          call this%derivZ%getModifiedWavenumbers(k3_loc,k3_loc_mod)
          
          myxst = this%sp_gp%zst(1); myyst = this%sp_gp%zst(2)
@@ -191,7 +193,9 @@ contains
             k1 = GetWaveNums(sp%nx_g, dx)
             k2 = GetWaveNums(sp%ny_g, dy)
             k3 = GetWaveNums(nzExt, dz)
-            !call getmodCD06stagg(k3, dz, k3mod)
+            
+            call this%sp%GetModifiedWavenumber_xy_ip(k1,dx)
+            call this%sp%GetModifiedWavenumber_xy_ip(k2,dy)
             call this%derivZ%getModifiedWavenumbers(k3,k3mod)
 
             tfm = exp(imi*(-dz/two)*k3); tfp = exp(imi*( dz/two)*k3)

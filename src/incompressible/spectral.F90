@@ -62,6 +62,7 @@ module spectralMod
 
         real(rkind), dimension(:), allocatable :: mk3sq
 
+        character(len=4) :: scheme_xy = "FOUR"
         contains
             procedure           :: init
             procedure           :: init_bandpass_filter
@@ -97,6 +98,8 @@ module spectralMod
             procedure           :: KSprepFilter2
             procedure           :: KSprepFilter1
             procedure           :: bandpassFilter_and_PhaseShift
+            procedure           :: GetModifiedWavenumber_xy_oop
+            procedure           :: GetModifiedWavenumber_xy_ip 
 
             procedure           :: InitTestFilter
             procedure           :: take_fft1d_z2z_ip
@@ -130,6 +133,9 @@ module spectralMod
             procedure           :: destroyPP
             procedure           :: destroy_bandpass_filter
             procedure           :: spectralFilter_ip
+            
+            procedure, private :: getmodK1_d1_coefficients 
+            procedure, private :: modify_my_xy_wavenumbers            
             !procedure, private  :: upsample_Fhat
             !procedure, private  :: downsample_Fhat
 
@@ -869,7 +875,7 @@ contains
         character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction
         integer,          intent(in)            :: nx_g, ny_g, nz_g    ! Global data size
         real(rkind),      intent(in)            :: dx, dy, dz          ! PHYSICAL grid spacing 
-        character(len=*), intent(in)            :: scheme              ! Scheme used for modified wavenumbers
+        character(len=4), intent(in)            :: scheme              ! Scheme used for modified wavenumbers
         character(len=*), intent(in)            :: filt                ! Scheme used for modified wavenumbers
         integer,          intent(in), optional  :: dimTransform        ! 2 or 3 (number of periodic directions) - default is 3
         logical,                      optional  :: fixOddball          ! Fix the oddball wavenumber - default is TRUE
@@ -900,6 +906,13 @@ contains
         this%dy = dy
         this%dz = dz
 
+        this%scheme_xy = scheme
+        if ((scheme .ne. "FOUR") .and. (scheme .ne. "ED02") .and. (scheme .ne. "ED04") .and. (scheme .ne. "CD06") .and. (scheme .ne. "CD10")) then
+            this%scheme_xy = "FOUR"
+            call message(0,"WARNING: Invalid choice for SCHEME in initialization for the SPECTRAL derived type.&
+               & Defaulting to Fourier Collocation")
+        end if 
+
         if (present(dealiasF)) this%dealiasFact = dealiasF
         if (present(fixOddball)) this%fixOddball = fixOddball
         if (present(use2decompFFT)) this%use2decompFFT = use2decompFFT 
@@ -908,15 +921,15 @@ contains
         if (present(dimTransform)) then
             if (dimTransform == 2) then
                 this%is3dFFT = .false.
-                call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt,.true.)
+                call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,filt,.true.)
             else if (dimTransform == 3) then
-                call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt)
+                call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,filt)
             else
                 call GracefulExit("Incorrect choice for DIMTRANSFORM while initializing SPECTRAL derived type. &
                                    & Available options include 2 and 3", 102)
             end if 
         else
-            call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt)
+            call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,filt)
         end if 
       
         this%normfact = one/real(nx_g)/real(ny_g)/real(nz_g) 
@@ -926,16 +939,36 @@ contains
             if (init_periodicInZ) then
                call this%init_periodic_inZ_procedures(dx, dy, dz)
             end if
-        end if 
+        end if
+
+        call this%modify_my_xy_wavenumbers()
+
     end subroutine 
 
+    subroutine modify_my_xy_wavenumbers(this)
+      class(spectral), intent(inout) :: this
+      integer :: i, j, k
 
-    subroutine initializeEverything(this,pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt,nonPeriodic)
+      do k = 1,size(this%k1,3)
+         do j = 1,size(this%k1,2)
+            call this%GetModifiedWavenumber_xy_ip(this%k1(:,j,k), this%dx)
+         end do 
+      end do 
+
+      do k = 1,size(this%k2,3)
+         do i = 1,size(this%k2,1)
+            call this%GetModifiedWavenumber_xy_ip(this%k2(i,:,k), this%dy)
+         end do 
+      end do
+
+      this%kabs_sq = this%k1*this%k1 + this%k2*this%k2
+    end subroutine 
+
+    subroutine initializeEverything(this,pencil,nx_g,ny_g,nz_g,dx,dy,dz,filt,nonPeriodic)
         class(spectral),  intent(inout), target :: this
         character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction
         integer,          intent(in)            :: nx_g, ny_g, nz_g    ! Global data size
         real(rkind),      intent(in)            :: dx, dy, dz          ! PHYSICAL grid spacing 
-        character(len=*), intent(in)            :: scheme              ! Scheme used for modified wavenumbers
         character(len=*), intent(in)            :: filt                ! Scheme used for modified wavenumbers
 
         real(rkind), dimension(nx_g) :: k1_1d 
@@ -1828,4 +1861,68 @@ contains
 
       arr = this%G_PostProcess*arr
     end subroutine
+
+    pure subroutine GetModifiedWavenumber_xy_ip(this, k, dx)
+      class(spectral), intent(in) :: this
+      real(rkind), dimension(:), intent(inout) :: k
+      real(rkind), intent(in) :: dx
+      real(rkind) :: a, b, c, alpha, beta
+      
+      if (this%scheme_xy == "FOUR") then
+         k = k
+         return
+      else
+         call this%getmodK1_d1_coefficients(alpha, beta, a, b, c)
+         k = (a*sin(k*dx) + (b/2.d0)*sin(2.d0*k*dx) + (c/3.d0)*sin(3.d0*k*dx))/(1.d0 + 2.d0*alpha*cos(k*dx) + 2.d0*beta*cos(2.d0*k*dx))
+      end if 
+    end subroutine
+
+    pure subroutine GetModifiedWavenumber_xy_oop(this, k, kmod, dx)
+      class(spectral), intent(in) :: this
+      real(rkind), dimension(:), intent(in) :: k
+      real(rkind), dimension(:), intent(out) :: kmod
+      real(rkind), intent(in) :: dx
+      real(rkind) :: a, b, c, alpha, beta
+      
+      if (this%scheme_xy == "FOUR") then
+         kmod = k
+         return
+      else
+         call this%getmodK1_d1_coefficients(alpha, beta, a, b, c)
+         kmod = (a*sin(k*dx) + (b/2.d0)*sin(2.d0*k*dx) + (c/3.d0)*sin(3.d0*k*dx))/(1.d0 + 2.d0*alpha*cos(k*dx) + 2.d0*beta*cos(2.d0*k*dx))
+      end if 
+    end subroutine
+
+    pure subroutine getmodK1_d1_coefficients(this, alpha, beta, a, b, c)
+      class(spectral), intent(in) :: this
+      real(rkind), intent(out) :: alpha, beta, a, b, c
+
+      select case(this%scheme_xy)
+      case("ED02")
+         alpha = 0.d0;
+         beta = 0.d0;
+         a = 1.d0;
+         b = 0.d0;
+         c = 0.d0;
+      case("ED04") 
+         alpha = 0;
+         beta = 0;
+         a = 4.d0/3.d0;
+         b = -1.d0/3.d0;
+         c = 0;
+      case("CD06") 
+         alpha = 1.d0/3.d0;
+         beta = 0.d0;
+         a = 14.d0/9.d0;
+         b = 1.d0/9.d0;
+         c = 0.d0;
+      case("CD10") 
+         alpha = 1.d0/2.d0;
+         beta = 1.d0/20.d0;
+         a = 17.d0/12.d0;
+         b = 101.d0/150.d0;
+         c = 1.d0/100.d0;
+      end select 
+
+    end subroutine 
 end module 
