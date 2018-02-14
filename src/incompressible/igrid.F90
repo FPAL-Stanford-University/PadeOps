@@ -250,7 +250,7 @@ module IncompressibleGrid
         ! Control
         logical                           :: useControl = .false.
         type(angCont), allocatable, public :: angCont_yaw
-        real(rkind) :: angleHubHeight, totalAngle, wFilt, restartPhi, deltaGalpha
+        real(rkind) :: angleHubHeight, totalAngle, wFilt, restartPhi, deltaGalpha, angleTrigger
         integer :: zHubIndex = 16
 
         ! HIT Forcing
@@ -354,7 +354,8 @@ contains
         integer :: num_scalars = 0
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
         logical :: sgsmod_stratified, Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false., useScalars = .false. 
-        integer :: zHubIndex = 256
+        integer :: zHubIndex = 16
+        real(rkind) :: angleTrigger=0.1d0
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
@@ -429,7 +430,7 @@ contains
         this%t_pointProbe = t_pointProbe; this%dPfdx = dPfdx; this%dPfdy = dPfdy; this%dPfdz = dPfdz
         this%InitSpinUp = InitSpinUp; this%BulkRichardson = BulkRichardson
         this%computeDNSpressure = computeDNSpressure; this%computefringePressure = computeFringePressure
-        this%zHubIndex = zHubIndex
+        this%zHubIndex = zHubIndex; this%angleTrigger = angleTrigger
         this%computeTurbinePressure = computeTurbinePressure; this%turbPr = Pr
         this%restartPhi = 0.d0
 
@@ -2128,7 +2129,7 @@ contains
         ! Step 9: Frame rotatio PI controller to fix yaw angle at a given height
         if (this%useControl .AND. abs(180.d0/pi*this%angleHubHeight)>0.0d0) then
             call this%angCont_yaw%update_RHS_control(this%dt, this%u_rhs, this%v_rhs, &
-                          this%w_rhs, this%u, this%v, this%newTimeStep, this%angleHubHeight, this%wFilt, this%deltaGalpha, this%zHubIndex)
+                          this%w_rhs, this%u, this%v, this%newTimeStep, this%angleHubHeight, this%wFilt, this%deltaGalpha, this%zHubIndex, this%angleTrigger)
             this%totalAngle = this%totalAngle + this%angleHubHeight
             !if (this%newTimeStep)  then
                 !this%G_alpha = this%G_alpha - deltaGalpha
@@ -2148,17 +2149,16 @@ contains
 
         ! Step 10: Add sponge
         if (this%useSponge) then
-            !utarg = (sin(this%latitude*pi/180.d0)*cos(this%G_alpha*pi/180.d0)/this%Ro)/(sin(this%latitude*pi/180.d0)/this%Ro + this%wFilt)
-            !vtarg = (sin(this%latitude*pi/180.d0)*sin(this%G_alpha*pi/180.d0)/this%Ro)/(sin(this%latitude*pi/180.d0)/this%Ro + this%wFilt)
+            utarg = cos(this%G_alpha*pi/180.d0)*this%G_Geostrophic
+            vtarg = sin(this%G_alpha*pi/180.d0)*this%G_Geostrophic
             
             ! ASG > MH: This part can be computed a bit more efficiently. 
             ! Once you've checked that it works, I will write the efficient code. 
-            !this%rbuffxC(:,:,:,1) = utarg
-            !call this%spectC%fft(this%rbuffxC,this%ubase)
+            this%rbuffxC(:,:,:,1) = utarg
+            call this%spectC%fft(this%rbuffxC,this%ubase)
             
-            !this%rbuffxC(:,:,:,1) = vtarg
-            !call this%spectC%fft(this%rbuffxC,this%vbase)
-            call message(1,"You forgot to fix the sponge")
+            this%rbuffxC(:,:,:,1) = vtarg
+            call this%spectC%fft(this%rbuffxC,this%vbase)
             call this%addSponge()
 
         end if
@@ -2357,7 +2357,7 @@ contains
         ! STEP 1: Update Time, BCs and record probe data
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
         this%newTimeStep = .true. 
-        if (this%useControl .AND. abs(180.d0/pi*this%angleHubHeight) > 0.1d0) then
+        if (this%useControl .AND. abs(180.d0/pi*this%angleHubHeight) > this%angleTrigger) then
             this%G_alpha = this%G_alpha - this%deltaGalpha
             this%frameAngle = this%frameAngle + this%deltaGalpha 
         end if
@@ -3093,7 +3093,7 @@ contains
             OPEN(UNIT=10, FILE=trim(fname))
             write(10,"(100g15.5)") this%tsim
             if (this%useControl) then
-               write(10,"(100g15.5)") this%angCont_yaw%getPhi()
+               write(10,"(100g15.5)") this%G_alpha
             end if
             close(10)
         end if 

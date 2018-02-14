@@ -37,7 +37,7 @@ contains
       val = this%phi
     end function  
 
-    subroutine update_RHS_control(this, dt, urhs, vrhs, wrhs, uC, vC, newTimestep, phi_n, wFilt_n, deltaGalpha, z_hub)
+    subroutine update_RHS_control(this, dt, urhs, vrhs, wrhs, uC, vC, newTimestep, phi_n, wFilt_n, deltaGalpha, z_hub, trigger)
       class(angCont),                                                                        intent(inout)  :: this
       real(rkind),                                                                         intent(in)     :: dt
       real(rkind),    dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)),          intent(in)     :: uC, vC 
@@ -49,7 +49,7 @@ contains
       ! PID tuning parameters
       real(rkind) :: wControl_n, vM, uM
       real(rkind), intent(out) :: wFilt_n
-      real(rkind), intent(out) :: phi_n, deltaGalpha
+      real(rkind), intent(out) :: phi_n, deltaGalpha, trigger
       integer, intent(out) :: z_hub
       !real(rkind), intent(out) :: totalAngle
       nx = this%gpC%xsz(1)
@@ -70,7 +70,8 @@ contains
          !phi_n = p_sum(sum(this%rbuffzC(:,:,this%z_ref,1))) / (real(nx,rkind) * real(ny,rkind))      
          vM = p_sum(sum(this%rbuffzC(:,:,this%z_ref,2))) / (real(nx,rkind) * real(ny,rkind))        
          phi_n = atan2(vM, uM)
-         z_hub = this%z_ref 
+         z_hub = this%z_ref
+         trigger = this%angleTrigger 
 
       if (newTimestep .AND. abs(phi_n * 180.d0 / pi) > this%angleTrigger) then
          
