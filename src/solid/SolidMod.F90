@@ -465,9 +465,9 @@ contains
         this%g = this%g  + RK45_B(isub)*this%Qtmpg
         !print *, 'After 1: ', this%g11(89,1,1)
 
-        ! Now project g tensor to SPD space
-        call this%elastic%make_tensor_SPD(this%g)
-        !print *, 'After 2: ', this%g11(89,1,1)
+        !! Now project g tensor to SPD space
+        !call this%elastic%make_tensor_SPD(this%g)
+        !!print *, 'After 2: ', this%g11(89,1,1)
 
         ! Sliding treatment using plasticity (Using zero yield everywhere for now)
         if (this%sliding) call this%sliding_deformation(normal, mask)
@@ -1132,7 +1132,7 @@ contains
         class(solid), intent(in) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: enthalpy
 
-        call this%hydro%get_enthalpy(this%T,enthalpy)
+        call this%hydro%get_enthalpy(this%T,this%eh,this%p,this%rhom,enthalpy)
     end subroutine
 
     !subroutine get_eelastic_devstress_mixture(this,rho0mix, mumix)

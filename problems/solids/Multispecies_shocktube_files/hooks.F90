@@ -5,6 +5,8 @@ module Multispecies_shocktube_data
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one
+    real(rkind) :: K0 = one, alp = one, CV = one, T0 = one
+    real(rkind) :: K0_2 = one, alp_2 = one, CV_2 = one, T0_2 = one
     real(rkind) :: minVF = 0.2_rkind, thick = one
     real(rkind) :: pRatio = two
     logical     :: sharp = .FALSE.
@@ -195,6 +197,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     namelist /PROBINPUT/  p_infty,   Rgas,   gamma,   mu,   rho_0,   plastic,  yield,  explPlast,  &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic2, yield2, explPlast2, &
+                          K0, alp, CV, T0, K0_2, alp_2, CV_2, T0_2, &
                           interface_init, minVF, thick, & ! interface properties
                           p1, p2, u1, u2                  ! shocktube init conditions
     
@@ -214,9 +217,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         write(*,*) '---Material 1---'
         write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0, ', gam  = ', gamma, ', p_infty = ', p_infty
         write(*,'(3(a,e12.5))') 'mu    = ', mu,    ', Rgas = ', Rgas
+        write(*,'(3(a,e12.5))') 'K0    = ', K0,    ', alp = ',  alp
+        write(*,'(3(a,e12.5))') 'CV    = ', CV,    ', T0 = ',  T0
         write(*,*) '---Material 2---'
         write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0_2, ', gam  = ', gamma_2, ', p_infty = ', p_infty_2
         write(*,'(3(a,e12.5))') 'mu    = ', mu_2,    ', Rgas = ', Rgas_2
+        write(*,'(3(a,e12.5))') 'K0    = ', K0_2,    ', alp = ',  alp_2
+        write(*,'(3(a,e12.5))') 'CV    = ', CV_2,    ', T0 = ',  T0_2
 
         ! Evaluate implied temperatures
         print *, 'Temperatures left = ', (p1+p_infty)/(rho_0*Rgas), (p1+p_infty_2)/(rho_0_2*Rgas_2)
@@ -228,8 +235,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         Rgas_2 = Rgas*(p1+p_infty_2)/(p1+p_infty)*(rho_0/rho_0_2)
 
         ! Set materials
-        call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10))
-        call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2),sep1solid(rho_0_2,mu_2,yield2,1.0D-10))
+        !call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10))
+        !call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2),sep1solid(rho_0_2,mu_2,yield2,1.0D-10))
+        call mix%set_material(1,stiffgas(rho_0,   K0,   alp,   gamma  , CV,   T0  ), sep1solid(rho_0  ,mu  ,yield,1.0D-10))
+        call mix%set_material(2,stiffgas(rho_0_2, K0_2, alp_2, gamma_2, CV_2, T0_2), sep1solid(rho_0_2,mu_2,yield2,1.0D-10))
 
         ! set logicals for plasticity
         mix%material(1)%plast = plastic; mix%material(1)%explPlast = explPlast
@@ -254,6 +263,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%p  = p2 + tmp*(p1-p2)
         mix%material(2)%p  = mix%material(1)%p
 
+        mix%material(1)%T  = T0
+        mix%material(2)%T  = T0_2
+
         mix%material(1)%VF = minVF + (one-two*minVF)*tmp
         mix%material(2)%VF = one - mix%material(1)%VF
 
@@ -269,7 +281,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
 
         if(mix%useOneG) then
-            call message(1,"Using mixture formulation: Ensure g fields are identical for the two materials atbinitialization")
+            call message(1,"Using mixture formulation: Ensure g fields are identical for the two materials at initialization")
         endif
 
     end associate

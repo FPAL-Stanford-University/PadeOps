@@ -9,8 +9,8 @@ module SolidGrid
                                transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
     use LADMod,          only: ladobject
-    use StiffGasEOS,     only: stiffgas
-    use Sep1SolidEOS,    only: sep1solid
+    !use StiffGasEOS,     only: stiffgas
+    !use Sep1SolidEOS,    only: sep1solid
     use SolidMixtureMod, only: solid_mixture
     use IOsgridMod,      only: IOsgrid
    
@@ -689,8 +689,10 @@ contains
         Qtmpt = zero
 
         do isub = 1,RK45_steps
-            !print *, '----', nrank, isub
+            print *, '----', nrank, isub
+print *, '1 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
             call this%get_conserved()
+print *, '2 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
                 call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
@@ -705,6 +707,7 @@ contains
             call this%mix%getLAD(this%rho,this%e,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
+print *, '3 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
 
             ! Update total mixture conserved variables
             call this%getRHS(rhs,divu,viscwork)
@@ -720,7 +723,9 @@ contains
             !enddo
             !print '(9(e19.12,1x))', maxval(abs(this%mix%material(1)%g11-this%mix%material(2)%g11)), maxval(abs(this%mix%material(1)%g22-this%mix%material(2)%g22)), maxval(abs(this%mix%material(1)%g33-this%mix%material(2)%g33)) 
             !print *, maxloc(abs(this%mix%material(1)%g11-this%mix%material(2)%g11))!, maxval(abs(this%mix%material(1)%g22-this%mix%material(2)%g22)), maxval(abs(this%mix%material(1)%g33-this%mix%material(2)%g33)) 
+print *, '4 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
             call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,Fsource,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
+print *, '5 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
             call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
             !if (.NOT. this%PTeqb) then
             if(this%pEqb) then
@@ -750,8 +755,10 @@ contains
 
             ! Filter the individual species variables
             call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
+print *, '6 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
             
             call this%get_primitive()
+print *, '7 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
             !print *, nrank, 10, this%e(179,1,1), this%rho(179,1,1), this%u(179,1,1)
 
             ! if (.NOT. this%explPlast) then
@@ -872,13 +879,17 @@ contains
 
     end subroutine
 
-    pure subroutine get_conserved(this)
+    !pure subroutine get_conserved(this)
+    subroutine get_conserved(this)
         class(sgrid), intent(inout) :: this
 
         ! Assume rho is already available
         this%Wcnsrv(:,:,:,mom_index  ) = this%rho * this%u
         this%Wcnsrv(:,:,:,mom_index+1) = this%rho * this%v
         this%Wcnsrv(:,:,:,mom_index+2) = this%rho * this%w
+print *, 'rho: ', maxval(this%rho), minval(this%rho)
+print *, 'u: ', maxval(this%u), minval(this%u)
+print *, 'e: ', maxval(this%e), minval(this%e)
         this%Wcnsrv(:,:,:, TE_index  ) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
 
         ! add 2M (mass fraction and hydrodynamic energy) variables here
@@ -897,7 +908,6 @@ contains
         call this%mix%get_pmix(this%p)                         ! Get mixture pressure
         call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
         call this%mix%getSOS(this%rho,this%p,this%sos)
-!print *, 'SOS: ', this%sos(179,1,1)
         ! assuming pressures have relaxed and sum( (Ys*(ehydro + eelastic) ) over all
         ! materials equals e
         call this%mix%get_emix(this%e)
