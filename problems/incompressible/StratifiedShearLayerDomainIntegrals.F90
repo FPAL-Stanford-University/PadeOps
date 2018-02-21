@@ -4,14 +4,12 @@ module igrid_Operators_NonPeriodicZ
    use decomp_2d
    use cd06staggstuff, only: cd06stagg
    use reductions, only: p_sum
-   use sorting_mod, only: sortgroup, Qsort    
 
    implicit none
    
    private
    public :: Ops_NP_Z
 
-   integer :: niter = 4
    type :: Ops_NP_Z
       private
       complex(rkind), dimension(:,:,:), allocatable :: cbuffy1, cbuffy2
@@ -21,14 +19,12 @@ module igrid_Operators_NonPeriodicZ
       type(cd06stagg) :: derZ
       real(rkind), dimension(:,:,:), allocatable :: zarr1d_1, zarr1d_2
 
+      real(rkind) :: dx, dy, dz
       character(len=clen) ::  inputdir, outputdir
-      real(rkind) :: mfact_xy, dx, dy, dz, mfact_xyz
-      type(sortgroup), dimension(:), allocatable :: sort_z, sort_y
-      
-      real(rkind), dimension(:), allocatable :: zline
+      real(rkind) :: mfact_xy
+
       integer :: RunID
 
-      real(rkind), dimension(:), allocatable :: zold 
       contains
          procedure :: init
          procedure :: destroy
@@ -44,73 +40,19 @@ module igrid_Operators_NonPeriodicZ
          procedure :: getCenterlineQuantity
          procedure :: WriteASCII_2D
          procedure :: getSimTime
-         procedure :: getPotentialEnergy
-         procedure :: getAPE
-         procedure :: sortPotT
+         procedure :: getVolumeIntegral
    end type 
 
 contains
 
-subroutine sortPotT(this, T, Tsort) 
-   class(Ops_NP_Z), intent(inout) :: this
-   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in) :: T
-   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: Tsort
-   integer :: iiter, idx, i, j, k 
+function getVolumeIntegral(this, arr) result(val)
+   class(Ops_NP_Z), intent(in), target :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in) :: arr
+   real(rkind) :: val 
 
-   call transpose_y_to_z(T, this%rbuffy, this%gp)
-   do iiter = 1,niter
-      call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
-      idx = 1
-      do k = 1,this%gp%zsz(3)
-         do j = 1,this%gp%zsz(2)
-            do i = 1,this%gp%zsz(1)
-               this%sort_z(idx)%value = this%rbuffz1(i,j,k)
-               idx = idx + 1
-            end do 
-         end do 
-      end do   
-      
-      call Qsort(this%sort_z, this%gp%zsz(1)*this%gp%zsz(2)*this%gp%zsz(3)) 
-      
-      idx = 1
-      do k = 1,this%gp%zsz(3)
-         do j = 1,this%gp%zsz(2)
-            do i = 1,this%gp%zsz(1)
-               this%rbuffz1(i,j,k) = this%sort_z(idx)%value
-               idx = idx + 1
-            end do 
-         end do 
-      end do
-      
-   
-      call transpose_z_to_y(this%rbuffz1,this%rbuffy,this%gp)
-      
-      idx = 1
-      do k = 1,this%gp%ysz(3)
-         do j = 1,this%gp%ysz(2)
-            do i = 1,this%gp%ysz(1)
-               this%sort_y(idx)%value = this%rbuffy(i,j,k)
-               idx = idx + 1
-            end do 
-         end do 
-      end do 
+   val = this%dx*this%dy*this%dz*p_sum(arr)
 
-      call Qsort(this%sort_y, this%gp%ysz(1)*this%gp%ysz(2)*this%gp%ysz(3)) 
-
-      idx = 1
-      do k = 1,this%gp%ysz(3)
-         do j = 1,this%gp%ysz(2)
-            do i = 1,this%gp%ysz(1)
-               this%rbuffy(i,j,k) = this%sort_y(idx)%value
-               idx = idx + 1
-            end do 
-         end do 
-      end do 
-
-   end do
-
-   call transpose_y_to_x(this%rbuffy, Tsort, this%gp)
-end subroutine 
+end function 
 
 function getCenterlineQuantity(this, vec) result(val)
    class(Ops_NP_Z), intent(in), target :: this
@@ -124,14 +66,13 @@ function getCenterlineQuantity(this, vec) result(val)
 
 end function
 
-subroutine init(this, nx, ny, nz, dx, dy, dz, Lz, gp, InputDir, OutputDir, RunID)
-   use gridtools, only: linspace
+subroutine init(this, nx, ny, nz, dx, dy, dz, gp, InputDir, OutputDir, RunID)
    class(Ops_NP_Z), intent(out), target :: this
    integer, intent(in) :: nx, ny, nz
-   real(rkind), intent(in) :: dx, dy, dz, Lz
+   real(rkind), intent(in) :: dx, dy, dz
    class(decomp_info), intent(in), target :: gp
    character(len=clen), intent(in) ::  inputdir, outputdir
-   integer :: RunID, idx, k
+   integer :: RunID
 
    this%gp => gp
    call this%spect%init("x",nx,ny,nz,dx, dy, dz, "four", "2/3rd", 2 , fixOddball=.false., &
@@ -141,48 +82,30 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, Lz, gp, InputDir, OutputDir, RunID
                                    isTopSided = .true., isBotSided = .true.)
 
    call this%spect%alloc_r2c_out(this%cbuffy1) 
+   !call this%spect%alloc_r2c(this%cbuffy2) 
    
-   allocate(this%zline(nz))
-   this%zline(1) = -Lz + dz/2.d0
-   do idx = 2,nz
-      this%zline(idx) = this%zline(idx-1) + dz
-   end do 
-
-   allocate(this%sort_z(gp%zsz(1)*gp%zsz(2)*gp%zsz(3))) 
-   allocate(this%sort_y(gp%ysz(1)*gp%ysz(2)*gp%ysz(3))) 
-   allocate(this%zold(gp%ysz(1)*gp%ysz(2)*gp%ysz(3))) 
-
-   allocate(this%rbuffy(gp%ysz(1),gp%ysz(2),gp%ysz(3)))
-   allocate(this%rbuffz1(gp%zsz(1),gp%zsz(2),gp%zsz(3)))
-   allocate(this%rbuffz2(gp%zsz(1),gp%zsz(2),gp%zsz(3)))
-  
-   idx = 1
-   do k = gp%yst(3),gp%yen(3)
-      this%rbuffy(:,:,idx) = this%zline(k)
-      idx = idx + 1
-   end do 
-   this%zold = reshape(this%rbuffy,[size(this%zold)])
-
-   this%dx = dx
-   this%dy = dy
-   this%dz = dz
    this%inputdir  = inputdir
    this%outputdir = outputdir
    this%RunID = RunID
 
+   this%dx = dx
+   this%dy = dy
+   this%dz = dz
+
    this%mfact_xy = 1.d0/(real(nx,rkind)*real(ny,rkind))
-   this%mfact_xyz = 1.d0/(real(nx,rkind)*real(ny,rkind)*real(nz,rkind))
+   allocate(this%rbuffy(gp%ysz(1),gp%ysz(2),gp%ysz(3)))
+   allocate(this%rbuffz1(gp%zsz(1),gp%zsz(2),gp%zsz(3)))
+   allocate(this%rbuffz2(gp%zsz(1),gp%zsz(2),gp%zsz(3)))
 
    allocate(this%zarr1d_1(1,1,nz))
    allocate(this%zarr1d_2(1,1,nz))
-
 end subroutine 
 
 subroutine destroy(this)
    class(Ops_NP_Z), intent(inout), target :: this
   
    deallocate(this%rbuffy, this%rbuffz1, this%rbuffz2)
-   deallocate(this%zarr1d_1, this%zarr1d_2, this%zold, this%sort_z, this%sort_y)
+   deallocate(this%zarr1d_1, this%zarr1d_2)
 end subroutine 
 
 subroutine ddx(this,f, dfdx)
@@ -309,43 +232,6 @@ function getSimTime(this, tidx) result(time)
 
 end function
 
-subroutine getPotentialEnergy(this, T, TPE)
-   class(Ops_NP_Z), intent(inout) :: this
-   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: T
-   real(rkind), intent(out) :: TPE
-   integer :: k 
-
-   call transpose_x_to_y(T,this%rbuffy,this%gp)
-   call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
-   do k = 1,this%gp%zsz(3)
-      this%rbuffz1(:,:,k) = -this%zline(k)*this%rbuffz1(:,:,k)
-   end do 
-
-   TPE = p_sum(sum(this%rbuffz1))*this%dx*this%dy*this%dz
-
-end subroutine 
-
-subroutine getAPE(this, Tfluct, dTdz, APE)
-   class(Ops_NP_Z), intent(inout) :: this
-   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: Tfluct
-   real(rkind), dimension(this%gp%zsz(3)), intent(in) :: dTdz
-   real(rkind), intent(out) :: APE
-   integer :: k 
-
-   call transpose_x_to_y(Tfluct,this%rbuffy,this%gp)
-   call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
-
-   this%rbuffz1 = this%rbuffz1*this%rbuffz1
-
-   do k = 1,this%gp%zsz(3)
-      this%rbuffz1(:,:,k) = dTdz(k)*this%rbuffz1(:,:,k)
-   end do 
-
-   APE = p_sum(sum(this%rbuffz1))*this%dx*this%dy*this%dz
-
-
-end subroutine 
-
 subroutine WriteASCII_2D(this, field, flabel)
    use basic_io, only: write_2d_ascii 
    class(Ops_NP_Z), intent(inout) :: this
@@ -363,7 +249,7 @@ end subroutine
 
 end module 
 
-program StratifiedShearLayerPotentialEnergy
+program StratifiedShearLayerCenterline
    use kind_parameters, only: rkind, clen
    use igrid_Operators_NonPeriodicZ, only: Ops_NP_Z
    use constants, only: pi, two
@@ -371,17 +257,15 @@ program StratifiedShearLayerPotentialEnergy
    use decomp_2d
    use timer, only: tic, toc
    use exits, only: message
-   use decomp_2d_io
    implicit none
 
-   real(rkind), dimension(:,:,:), allocatable :: T, Tsort!, uFluct, vFluct, pFluct, Tfluct
+   real(rkind), dimension(:,:,:), allocatable :: buff2, buff3, buff4
+   real(rkind), dimension(:,:,:), allocatable :: u, v, w, ufluct, vfluct, T, nuSGS, Tfluct!, uFluct, vFluct, pFluct, Tfluct
    !real(rkind), dimension(:),     allocatable :: Prod, Transp_Conv, Transp_Press, Transp_Visc, Dissp, DisspSGS, DisspTheta, DisspThetaSGS, Buoy
 
-   real(rkind), dimension(:), allocatable :: Tmn, dTdz
    real(rkind), parameter :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0
-   real(rkind) :: dx, dy, dz, Re = 3000.d0, Rib = 0.2d0, Pr = 1.d0
-   real(rkind) :: T0 = 100.d0
-   integer :: nx, ny, nz, RunID, TIDX, np
+   real(rkind) :: dx, dy, dz, Re = 3000.d0, Rib = 0.05d0, Pr = 1.d0, Tref = 100.d0 
+   integer :: nx, ny, nz, RunID, TIDX
    type(decomp_info) :: gp
    type(Ops_NP_Z) :: ops
    logical :: periodicbcs(3)
@@ -389,71 +273,177 @@ program StratifiedShearLayerPotentialEnergy
    character(len=clen) ::  inputdir, outputdir
    character(len=clen) :: inputfile
 
-   real(rkind), dimension(10000) :: time, TPE, APE, BPE 
+   real(rkind), dimension(10000) :: P, B, D, Dv, Dsgs, time, IEL, MKE, TKE 
 
    real(rkind), dimension(:,:), allocatable :: data2write
    integer :: idx, tstart, tstop, tstep
 
-   namelist /INPUT/ InputDir, OutputDir, RunID, tstart, tstop, T0, tstep, nx, ny, nz, Re, Rib, Pr
+   namelist /INPUT/ InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Re, Rib, Pr, Tref 
     
    call MPI_Init(ierr)               
-   call MPI_Comm_size ( MPI_COMM_WORLD, np, ierr )
    call GETARG(1,inputfile)          
    open(unit=99, file=trim(inputfile), form='FORMATTED', iostat=ierr)
    read(unit=99, NML=INPUT)
    close(unit=99)
    periodicbcs(1) = .true.; periodicbcs(2) = .true.; periodicbcs(3) = .false.  
-   
-   call decomp_2d_init(nx, ny, nz, 1, np, periodicbcs)
+   call decomp_2d_init(nx, ny, nz, 0, 0, periodicbcs)
    call get_decomp_info(gp)
 
    dx =     Lx/real(nx,rkind) 
    dy =     Ly/real(ny,rkind) 
    dz = two*Lz/real(nz,rkind)
 
-   call ops%init(nx, ny, nz, dx, dy, dz, Lz, gp, InputDir, OutputDir, RunID)
+   call ops%init(nx, ny, nz, dx, dy, dz, gp, InputDir, OutputDir, RunID)
 
+   call ops%allocate3DField(u)
+   call ops%allocate3DField(ufluct)
+   call ops%allocate3DField(v)
+   call ops%allocate3DField(vfluct)
+   call ops%allocate3DField(w)
    call ops%allocate3DField(T)
-   call ops%allocate3DField(Tsort)
-
-
-   allocate(Tmn(nz))
-   allocate(dTdz(nz))
-
+   call ops%allocate3DField(Tfluct)
+   call ops%allocate3DField(nuSGS)
+   call ops%allocate3DField(buff2)
+   call ops%allocate3DField(buff3)
+   call ops%allocate3DField(buff4)
 
    tidx = tstart
    idx = 1
    do while(tidx <= tstop)
       call message(0, "Reading fields for tid:", TIDX)
       call tic()
+      call ops%ReadField3D(u,"uVel",TIDX)
+      call ops%ReadField3D(v,"vVel",TIDX)
+      call ops%ReadField3D(w,"wVel",TIDX)
       call ops%ReadField3D(T,"potT",TIDX)
-      T = Rib*(T - T0)
+      call ops%ReadField3D(nuSGS,"nSGS",TIDX)
+
+      T = Rib*(T - Tref)
+
       time(idx) = ops%getSimTime(tidx)
       call message(0, "Read simulation data at time:", time(idx))
 
-      call ops%getPotentialEnergy(T, TPE(idx))
-      call ops%sortPotT(T,Tsort)
-      !print*, maxval(abs(Tsort - T))
-      call ops%getPotentialEnergy(Tsort, BPE(idx))
-      APE(idx) = TPE(idx) - BPE(idx)
+      ! STEP 1: Compute the gain in PE from IE
+      call ops%ddz(T,buff2)
+      buff2 = (1.d0/(Pr*Re))*buff2
+      IEL(idx) = ops%getVolumeIntegral(buff2)
+      
   
-      call message(1, "TPE:", TPE(idx))
-      call message(1, "APE:", APE(idx))
-      call message(1, "BPE:", BPE(idx))
+      ! STEP 4: Compute the production
+      call ops%getFluct_from_MeanZ(u,ufluct)
+      buff3 = u - ufluct ! mean
+      call ops%ddz(buff3,buff2) ! dUdz
+      buff3 = 0.5d0*buff3*buff3
+      MKE(idx) = ops%getVolumeIntegral(buff3)
+      buff3 = -ufluct*w      ! u'w' (since wmean = 0)
+      buff2 = buff2*buff3 
+      P(idx) = ops%getVolumeIntegral(buff2)
+      
+
+      call ops%getFluct_from_MeanZ(v,vfluct)
+      buff3 = v - vfluct ! mean
+      call ops%ddz(buff3,buff2) ! dVdz
+      buff3 = 0.5d0*buff3*buff3
+      MKE(idx) = MKE(idx) + ops%getVolumeIntegral(buff3)
+      buff3 = -vfluct*w      ! u'w' (since wmean = 0)
+      buff2 = buff2*buff3 
+      P(idx) = P(idx) + ops%getVolumeIntegral(buff2)
+
+      ! STEP 5a: Compute TKE
+      buff2 = (ufluct*ufluct + vfluct*vfluct + w*w)
+      TKE(idx) = 0.5d0*ops%getVolumeIntegral(buff2)
+
+      ! STEP 5: Compute the Buoyancy term
+      call ops%getFluct_from_MeanZ(T,buff2)
+      buff2 = buff2*w
+      B(idx) = ops%getVolumeIntegral(buff2)
+
+
+      ! STEP 6: Compute dissipation rate
+      call ops%ddx(ufluct,buff2)
+      buff3 = buff2*buff2
+      call ops%ddy(ufluct,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddz(ufluct,buff2)
+      buff3 = buff3 + buff2*buff2
+
+      call ops%ddx(vfluct,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddy(vfluct,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddz(vfluct,buff2)
+      buff3 = buff3 + buff2*buff2
+
+      call ops%ddx(w,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddy(w,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddz(w,buff2)
+      buff3 = buff3 + buff2*buff2
+      
+      buff3 = (1.d0/Re)*buff3
+      Dv(idx) = ops%getVolumeIntegral(buff3)
+
+      ! STEP 7: SGS sink term
+      ! s11*s11
+      call ops%ddx(ufluct,buff3)
+      buff2 = buff3*buff3
+      
+      ! 2*s12*s12
+      call ops%ddy(ufluct,buff3)
+      call ops%ddx(vfluct,buff4)
+      buff3 = 0.5d0*(buff3 + buff4)
+      buff2 = buff2 + 2.d0*buff3*buff3 
+
+      ! 2*s13*s13 
+      call ops%ddz(ufluct,buff3)
+      call ops%ddx(w     ,buff4)
+      buff3 = 0.5d0*(buff3 + buff4)
+      buff2 = buff2 + 2.d0*buff3*buff3 
+
+      ! 2*s23*s23 
+      call ops%ddz(vfluct,buff3)
+      call ops%ddy(w     ,buff4)
+      buff3 = 0.5d0*(buff3 + buff4)
+      buff2 = buff2 + 2.d0*buff3*buff3 
+
+      ! s22*s22
+      call ops%ddy(vfluct,buff3)
+      buff2 = buff2 + buff3*buff3
+      
+      ! s33*s33
+      call ops%ddz(w,buff3)
+      buff2 = buff2 + buff3*buff3
+      
+      buff2 = 2.d0*nuSGS*buff2
+      Dsgs(idx) = ops%getVolumeIntegral(buff2)
+
+      D(idx) = Dsgs(idx) + Dv(idx)
       call toc()
 
+      if (nrank == 0) then
+         print*, time(idx), P(idx), B(idx), D(idx), Dv(idx), Dsgs(idx), IEL(idx)
+         print*, "ddt_TKE:", P(idx) + B(idx) - D(idx)
+      end if 
+     
       tidx = tidx + tstep
       idx = idx + 1
    end do 
 
    idx = idx - 1
-   allocate(data2write(idx,4))
+   allocate(data2write(idx,9))
    data2write(:,1) = time(1:idx)
-   data2write(:,2) = TPE(1:idx) 
-   data2write(:,3) = APE(1:idx) 
-   data2write(:,4) = BPE(1:idx)
+   data2write(:,2) = IEL(1:idx) 
+   data2write(:,3) = P(1:idx) 
+   data2write(:,4) = B(1:idx) 
+   data2write(:,5) = D(1:idx) 
+   data2write(:,6) = Dv(1:idx) 
+   data2write(:,7) = Dsgs(1:idx)
+   data2write(:,8) = MKE(1:idx)
+   data2write(:,9) = TKE(1:idx)
+
    if (nrank == 0) then
-      call ops%WriteASCII_2D(data2write, "TPEd")
+      call ops%WriteASCII_2D(data2write, "avgV")
    end if 
 
    call mpi_barrier(mpi_comm_world, ierr)
