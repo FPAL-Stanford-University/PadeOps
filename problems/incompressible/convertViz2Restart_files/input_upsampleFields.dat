@@ -1,0 +1,13 @@
+&INPUT
+nx                    = 96 
+ny                    = 96
+nz                    = 64
+inputdir              = "/home/jrwest/Codes/PadeOps/data/runs/run05"   ! Directory for any input files
+outputdir             = "/home/jrwest/Codes/PadeOps/data/runs/run07"   ! Directory for all output files
+inputFile_TID         = 018503       ! TimeID of the restart file for the original data
+inputFile_RID         = 05          ! RunID of the restart file for the original data
+outputFile_TID        = 0       ! TimeID of the restart file with upsampled data
+outputFile_RID        = 07          ! RunID of the restart file with the upsampled data
+upsampleInZ           = .TRUE.
+isStratified          = .FALSE.     ! Is there a restart file for potential temperature?
+/

@@ -75,9 +75,9 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, gp, InputDir, OutputDir, RunID)
    integer :: RunID
 
    this%gp => gp
-   call this%spect%init("x",nx,ny,nz,dx, dy, dz, "four", "2/3rd", 2 , fixOddball=.false., &
+   call this%spect%init("x",nx,ny,nz,dx, dy, dz, "FOUR", "2/3rd", 2 , fixOddball=.false., &
                   exhaustiveFFT=.TRUE., init_periodicInZ=.FALSE., dealiasF=(2.d0/3.d0))
-   
+  
    call this%derZ%init(nz, dz, isTopEven = .false., isBotEven = .false., &
                                    isTopSided = .true., isBotSided = .true.)
 
