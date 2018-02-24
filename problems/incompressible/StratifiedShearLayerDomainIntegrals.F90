@@ -263,7 +263,7 @@ program StratifiedShearLayerCenterline
    real(rkind), dimension(:,:,:), allocatable :: u, v, w, ufluct, vfluct, T, nuSGS, Tfluct!, uFluct, vFluct, pFluct, Tfluct
    !real(rkind), dimension(:),     allocatable :: Prod, Transp_Conv, Transp_Press, Transp_Visc, Dissp, DisspSGS, DisspTheta, DisspThetaSGS, Buoy
 
-   real(rkind), parameter :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0
+   real(rkind) :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0
    real(rkind) :: dx, dy, dz, Re = 3000.d0, Rib = 0.05d0, Pr = 1.d0, Tref = 100.d0 
    integer :: nx, ny, nz, RunID, TIDX
    type(decomp_info) :: gp
@@ -278,7 +278,7 @@ program StratifiedShearLayerCenterline
    real(rkind), dimension(:,:), allocatable :: data2write
    integer :: idx, tstart, tstop, tstep
 
-   namelist /INPUT/ InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Re, Rib, Pr, Tref 
+   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Re, Rib, Pr, Tref 
     
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
