@@ -90,7 +90,7 @@ program getEnergyBudgetTerms
    ! DO LOOP START HERE
    do ind = tid_initial, tid_final, dtid 
         call tic()
-        
+
         ! Initialize WT
         allocate(turbArray)
         call turbArray%init(inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
@@ -114,7 +114,7 @@ program getEnergyBudgetTerms
         call spectC%ifft(u_rhs,fbody_x)
         call spectC%ifft(v_rhs,fbody_y)
         call spectE%ifft(w_rhs,fbody_z)
-        
+
         call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
         call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
         call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
@@ -478,11 +478,12 @@ contains
       computeFbody = .true.
 
       ! Initialize Padeder
-      !print*, "Num scheme:", numericalSchemeVert
-      !print*, "Periodic?", PeriodicInZ
-      !print*, "dx=", dx
-      !print*, "dy=", dy
-      !print*, "dz=", dz
+      print*, "Num scheme:", numericalSchemeVert
+      print*, "Periodic?", PeriodicInZ
+      print*, "dx=", dx
+      print*, "dy=", dy
+      print*, "dz=", dz
+
       call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, NumericalSchemeVert,PeriodicInZ,spectC)
 
       ! Initialize sgs
