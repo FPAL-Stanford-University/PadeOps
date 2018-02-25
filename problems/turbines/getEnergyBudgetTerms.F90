@@ -4,7 +4,7 @@ program getEnergyBudgetTerms
    use kind_parameters,  only: rkind, clen
    use timer, only: tic, toc
    use sgsmod_igrid, only: sgs_igrid
-   use PadeDerOps, only: Pade6stagg, cd06
+   use PadeDerOps, only: Pade6stagg
    use spectralMod, only: spectral
    use decomp_2d 
    use decomp_2d_io
@@ -34,7 +34,7 @@ program getEnergyBudgetTerms
    type(decomp_info), pointer :: sp_gpC, sp_gpE
    type(Pade6stagg) :: Pade6opZ
    integer :: ierr, ix1, ixn, iy1, iyn, iz1, izn, RID
-   logical :: computeFbody
+   logical :: computeFbody 
   
    real(rkind), dimension(:,:,:)  , pointer :: nuSGS, kappaSGS
    real(rkind), dimension(:,:,:)  , pointer :: tau13, tau23
@@ -51,6 +51,12 @@ program getEnergyBudgetTerms
    integer :: nx, ny, nz, ioUnit, i, j, k, nvis = 0, tid_initial, tid_final, dtid, ind=0
    real(rkind) :: dt, inst_horz_avg_turb(8), tsim
    namelist /INPUT/ Lx, Ly, Lz, outputdir, inputdir, nx, ny, nz, RID, tid_initial, tid_final, dtid
+   
+   logical :: PeriodicInZ = .false.
+   integer :: botWall=0, topWall=1, NumericalSchemeVert = 1
+   namelist /BCs/ PeriodicInZ, botWall, topWall
+   namelist /NUMERICS/ NumericalSchemeVert
+
 
    ! Do MPI stuff
    call MPI_Init(ierr)               
@@ -60,6 +66,8 @@ program getEnergyBudgetTerms
    ioUnit = 11
    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
    read(unit=ioUnit, NML=INPUT)
+   read(unit=ioUnit, NML=NUMERICS)
+   read(unit=ioUnit, NML=BCs)
    close(ioUnit)    
 
    call decomp_2d_init(nx, ny, nz, 0, 0)
@@ -69,8 +77,10 @@ program getEnergyBudgetTerms
 
    ! Initialize spectral
    dx = Lx/real(nx,rkind); dy = Ly/real(ny,rkind); dz = Lz/real(nz,rkind)
-    call spectC%init("x", nx, ny, nz, dx, dy, dz, "four", '2/3rd', 2 , .false.)
-    call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", '2/3rd', 2 , .false.)
+   call spectC%init("x",nx,ny,nz, dx, dy, dz, "four", '2/3rd', dimTransform=2 ,fixOddball=.false., use2decompFFT = .false., &
+                & exhaustiveFFT=.true.,init_periodicInZ=PeriodicInZ)
+   call spectE%init("x",nx,ny,nz+1,dx, dy, dz, "four",'2/3rd', dimTransform=2, fixOddball=.false., use2decompFFT = .false., &
+                & exhaustiveFFT=.true.,init_periodicInZ=.false.)
 
    sp_gpC => spectC%spectdecomp
    sp_gpE => spectE%spectdecomp
@@ -80,7 +90,7 @@ program getEnergyBudgetTerms
    ! DO LOOP START HERE
    do ind = tid_initial, tid_final, dtid 
         call tic()
-        
+
         ! Initialize WT
         allocate(turbArray)
         call turbArray%init(inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
@@ -89,14 +99,14 @@ program getEnergyBudgetTerms
         ! READ FIELDS)
         ! need to add read in pressure to readVisualizationFile subroutine
         call readVisualizationFile(ind, RID)
-        print *, ind
         call spectC%fft(uC, uhatC)
         call spectC%fft(vC, vhatC)
-        call spectE%fft(wE, whatE)
+        call spectC%fft(wC, whatC)
  
         ! PREPROCESS FIELDS
         call interp_primitivevars()
         call compute_duidxj()
+
 
         ! WIND TURBINE STUFF
         u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
@@ -104,7 +114,7 @@ program getEnergyBudgetTerms
         call spectC%ifft(u_rhs,fbody_x)
         call spectC%ifft(v_rhs,fbody_y)
         call spectE%ifft(w_rhs,fbody_z)
-        
+
         call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
         call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
         call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
@@ -119,7 +129,6 @@ program getEnergyBudgetTerms
  
         ! SGS MODEL STUFF
         u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-        !call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
         call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE,  uhatC, vhatC, whatC, ThatC, uC, vC, wC, .true.)
         call spectC%ifft(u_rhs,fbody_x)
         call spectC%ifft(v_rhs,fbody_y)
@@ -312,12 +321,13 @@ program getEnergyBudgetTerms
    
    
    call mpi_barrier(mpi_comm_world, ierr)
-   stop
+   !stop
    call MPI_Finalize(ierr)           !<-- Terminate MPI 
 
 
 contains
    subroutine initializeEverything()
+
       ! Allocate memory
       allocate( mesh(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),3) )
       allocate( zMeshE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)) )
@@ -468,7 +478,13 @@ contains
       computeFbody = .true.
 
       ! Initialize Padeder
-      call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, cd06,.false.)
+      print*, "Num scheme:", numericalSchemeVert
+      print*, "Periodic?", PeriodicInZ
+      print*, "dx=", dx
+      print*, "dy=", dy
+      print*, "dz=", dz
+
+      call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, NumericalSchemeVert,PeriodicInZ,spectC)
 
       ! Initialize sgs
       call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, &
@@ -481,9 +497,9 @@ contains
 
    end subroutine
 
-
-
     subroutine compute_duidxj()
+        use exits, only: message
+        use reductions, only: p_maxval
         complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2
         complex(rkind), dimension(:,:,:), pointer :: ctmpz3, ctmpz4
         complex(rkind), dimension(:,:,:), pointer :: ctmpy1, ctmpy2
@@ -570,6 +586,10 @@ contains
         call transpose_z_to_y(ctmpz4,dwdzEH,sp_gpE)
         call spectE%ifft(dwdzEH,dwdzE)
 
+        ! Compute divergence
+        rbuffxC(:,:,:,1) = abs(dudx + dvdy + dwdz)
+        call message(1,"Domain max divergence:",  p_maxval(maxval(rbuffxC(:,:,:,1))))
+
         !! d2wdz2
         !if(.not. isinviscid) then
         !   call Pade6opZ%d2dz2_E2E(ctmpz2,ctmpz4,wBC_bottom,wBC_top)
@@ -621,11 +641,11 @@ contains
         zbuffC => cbuffzC(:,:,:,1)
         ybuffC => cbuffyC(:,:,:,1)
 
-        ! Step 1: Interpolate w -> wC
-        call transpose_y_to_z(whatE,zbuffE,sp_gpE)
-        call Pade6opZ%interpz_E2C(zbuffE,zbuffC,wBC_bottom, wBC_top)
-        call transpose_z_to_y(zbuffC,whatC,sp_gpC)
-        call spectC%ifft(whatC,wC)
+        ! Step 1: Interpolate wC -> w
+        call transpose_y_to_z(whatC, zbuffC,sp_gpC)
+        call Pade6opZ%interpz_C2E(zbuffC, zbuffE, wBC_bottom, wBC_top)
+        call transpose_z_to_y(zbuffE, whatE, sp_gpE)
+        call spectE%ifft(whatE, wE)
 
         ! Step 2: Interpolate u -> uE
         call transpose_y_to_z(uhatC,zbuffC,sp_gpC)
@@ -715,7 +735,7 @@ contains
         character(len=clen) :: tempname, fname
         integer :: ierr
         character(len=4) :: label
-        print *, 'inside readVisualizationFile, ind=', tid
+        ! print *, 'inside readVisualizationFile, ind=', tid
         label = "uVel"
         write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",rid, "_",label,"_t",tid,".out"
         fname = trim(InputDir)//"/"//trim(tempname)
@@ -752,7 +772,7 @@ contains
         call transpose_y_to_x(rbuffyE(:,:,:,1), wE, gpE)
 
         call mpi_barrier(mpi_comm_world, ierr)
-        call message("================= RESTART FILE USED ======================")
+        call message("================= VISUALIZATION FILE USED ======================")
         call message(0, "Simulation Time at restart:", tsim)
         call message("=================================== ======================")
 
@@ -789,6 +809,7 @@ contains
         call Pade6opz%ddz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
         call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
         call transpose_y_to_x(rbuffyC(:,:,:,1),dfdz,gpC)
+
     end subroutine
 
 end program 
