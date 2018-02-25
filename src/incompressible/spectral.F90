@@ -120,8 +120,11 @@ module spectralMod
             procedure, private  :: interp_E2C_spect_real
             procedure, private  :: interp_C2E_spect_real
             
-            procedure           :: ddz_C2C_real_inplace
-            procedure           :: ddz_C2C_complex_inplace
+            procedure, private  :: ddz_C2C_real_inplace
+            procedure, private  :: ddz_C2C_complex_inplace
+            procedure, private  :: ddz_C2C_real_outofplace
+            procedure, private  :: ddz_C2C_complex_outofplace
+            generic             :: ddz_C2C_spect => ddz_C2C_real_inplace, ddz_C2C_real_outofplace, ddz_C2C_complex_inplace, ddz_C2C_complex_outofplace
             generic             :: ddz_E2C_spect => ddz_E2C_spect_cmplx, ddz_E2C_spect_real
             generic             :: ddz_C2E_spect => ddz_C2E_spect_cmplx, ddz_C2E_spect_real
             generic             :: interp_E2C_spect => interp_E2C_spect_cmplx, interp_E2C_spect_real
@@ -531,6 +534,28 @@ contains
 
     end subroutine 
     
+    subroutine ddz_C2C_real_outofplace(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)  ), intent(in)  :: arr_in
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)  ), intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft_r2c(this%plan_r2c_z, arr_in, this%fhatz)
+         do k = 1,this%physdecomp%zsz(3)/2 ! Note that the oddball is ignored 
+            do j = 1,this%physdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%physdecomp%zsz(1)
+                  this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%k3_C2Cder(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft_c2r(this%plan_c2r_z, this%fhatz, arr_out)
+         arr_out = arr_out*this%normfactz
+      end if
+
+    end subroutine 
+    
     subroutine ddz_C2C_complex_inplace(this, arr_inout)
       class(spectral), intent(inout) :: this
       complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(inout)  :: arr_inout
@@ -548,6 +573,28 @@ contains
          end do
          call dfftw_execute_dft(this%plan_c2c_bwd_z_oop, this%ctmpz, arr_inout)
          arr_inout =  this%normfactz*arr_inout
+      end if
+
+    end subroutine 
+    
+    subroutine ddz_C2C_complex_outofplace(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(in)  :: arr_in
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft(this%plan_c2c_fwd_z_oop, arr_in, this%ctmpz)
+         do k = 1,this%spectdecomp%zsz(3)
+            do j = 1,this%spectdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%spectdecomp%zsz(1)
+                  this%ctmpz(i,j,k) = this%ctmpz(i,j,k)*this%k3_C2Cder(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft(this%plan_c2c_bwd_z_oop, this%ctmpz, arr_out)
+         arr_out =  this%normfactz*arr_out
       end if
 
     end subroutine 
