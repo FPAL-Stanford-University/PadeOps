@@ -1,0 +1,36 @@
+&INPUT
+nx                            = 192                                           ! Number of points in X
+ny                            = 192                                           ! Number of points in Y
+nz                            = 128                                           ! Number of points in Z
+Lx                            = 3.141592653589793d0                           ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            = 3.141592653589793d0                           ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Lz                            = 1.0d0                                         ! Domain Height (appropriate dimesnions/non-dimensionalized)
+z0init                        = 1.0d-4                                         ! Roughness scale used to initialize the profile
+inputdir                      = "/scratch/users/jrwest/data/run19"   ! Directory for any input files
+outputdir                     = "/scratch/users/jrwest/data/run19"   ! Directory for all output files
+TID                           = 999800 
+RID                           = 19                
+tid_initial                   = 650000
+tid_final                     = 990000
+dtid                          = 20000
+/
+/
+&SGS_MODEL
+SGSModelID                    = 1           ! 0: smagorinsky (w/ wall function), 1: sigma
+Csgs                          = 1.3d0       ! Model constant (asymptotic value in case wall function is used) 
+WallModelType                 = 2           ! 1: Moeng, 2: Bou-zeid et. al.  
+z0                            = 1.0d-4      ! Roughness length scale (CAUTION: this assumes appropriate non-dimensionalization)
+DynamicProcedureType          = 0           ! 0: No dynamic procedure, 1: Planar Avg. Dynamic Proc., 2: Global Dynamic Proc.  
+useVerticalTfilter            = .false.     ! Use test filtering in vertical direction for dynamic procedure? 
+DynProcFreq                   = 5           ! Dynamic procedure used every DYNPROCFREQ timesteps. 
+useWallDamping                = .FALSE.     ! Use the Wall Damping Function 
+ncWall                        = 3.d0        ! Wall Damping Function Exponent
+explicitCalcEdgeEddyViscosity = .true.      ! Explicitly calculate or interpolate edge values for eddy viscosity? 
+/
+/
+&WINDTURBINES
+useWindTurbines               = .TRUE.
+num_turbines                  = 24
+ADM                           = .TRUE.
+turbInfoDir                   = "/home/users/jrwest/Codes/PadeOps/data/turbInfo_run19"
+/

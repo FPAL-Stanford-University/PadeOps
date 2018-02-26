@@ -96,7 +96,6 @@ program getEnergyBudgetTerms
    ! DO LOOP START HERE
    do ind = tid_initial, tid_final, dtid 
         call tic()
-       
         ! READ FIELDS)
         ! need to add read in pressure to readVisualizationFile subroutine
         call readVisualizationFile(ind, RID)
@@ -486,11 +485,12 @@ contains
       computeFbody = .true.
 
       ! Initialize Padeder
-      !print*, "Num scheme:", numericalSchemeVert
-      !print*, "Periodic?", PeriodicInZ
-      !print*, "dx=", dx
-      !print*, "dy=", dy
-      !print*, "dz=", dz
+      print*, "Num scheme:", numericalSchemeVert
+      print*, "Periodic?", PeriodicInZ
+      print*, "dx=", dx
+      print*, "dy=", dy
+      print*, "dz=", dz
+
       call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, NumericalSchemeVert,PeriodicInZ,spectC)
 
       ! Initialize sgs
