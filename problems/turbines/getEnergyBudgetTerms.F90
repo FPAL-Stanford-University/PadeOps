@@ -57,6 +57,11 @@ program getEnergyBudgetTerms
    namelist /BCs/ PeriodicInZ, botWall, topWall
    namelist /NUMERICS/ NumericalSchemeVert
 
+   character(len=clen) :: turbInfoDir
+   integer :: num_turbines, ADM_Type
+   logical :: useWindTurbines = .TRUE.
+   logical :: ADM
+   namelist /WINDTURBINES/ useWindTurbines, num_turbines, turbInfoDir, ADM_Type, ADM
 
    ! Do MPI stuff
    call MPI_Init(ierr)               
@@ -68,6 +73,7 @@ program getEnergyBudgetTerms
    read(unit=ioUnit, NML=INPUT)
    read(unit=ioUnit, NML=NUMERICS)
    read(unit=ioUnit, NML=BCs)
+   read(unit=ioUnit, NML=WINDTURBINES)
    close(ioUnit)    
 
    call decomp_2d_init(nx, ny, nz, 0, 0)
@@ -90,12 +96,7 @@ program getEnergyBudgetTerms
    ! DO LOOP START HERE
    do ind = tid_initial, tid_final, dtid 
         call tic()
-        
-        ! Initialize WT
-        allocate(turbArray)
-        call turbArray%init(inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
-        
-        
+       
         ! READ FIELDS)
         ! need to add read in pressure to readVisualizationFile subroutine
         call readVisualizationFile(ind, RID)
@@ -107,25 +108,34 @@ program getEnergyBudgetTerms
         call interp_primitivevars()
         call compute_duidxj()
 
+        if (useWindTurbines) then
+                ! Initialize WT
+                allocate(turbArray)
+                call turbArray%init(inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
 
-        ! WIND TURBINE STUFF
-        u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-        call turbArray%getForceRHS(dt, uC, vC, wC, u_rhs, v_rhs, w_rhs, .true., inst_horz_avg_turb)
-        call spectC%ifft(u_rhs,fbody_x)
-        call spectC%ifft(v_rhs,fbody_y)
-        call spectE%ifft(w_rhs,fbody_z)
+                !COMPUTE WIND TURBINE STUFF
+                u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
+                call turbArray%getForceRHS(dt, uC, vC, wC, u_rhs, v_rhs, w_rhs, .true., inst_horz_avg_turb)
+                call spectC%ifft(u_rhs,fbody_x)
+                call spectC%ifft(v_rhs,fbody_y)
+                call spectE%ifft(w_rhs,fbody_z)
+                
+                call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
+                call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
+                call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
+                call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
+                call transpose_y_to_x(rbuffyC(:,:,:,1),fbody_zC,gpC)
+
+                fx_turb_store = fx_turb_store + fbody_x 
+                fy_turb_store = fy_turb_store + fbody_y
+                fz_turb_store = fz_turb_store + fbody_zC 
+
+                xtrbu_store = xtrbu_store + fbody_x*uC       
+                
+                ! WRAP UP 
+                deallocate(turbArray)
         
-        call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
-        call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
-        call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
-        call transpose_z_to_y(rbuffzC(:,:,:,1),rbuffyC(:,:,:,1),gpC)
-        call transpose_y_to_x(rbuffyC(:,:,:,1),fbody_zC,gpC)
-
-        fx_turb_store = fx_turb_store + fbody_x 
-        fy_turb_store = fy_turb_store + fbody_y
-        fz_turb_store = fz_turb_store + fbody_zC 
-
-        xtrbu_store = xtrbu_store + fbody_x*uC       
+        end if     
  
         ! SGS MODEL STUFF
         u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
@@ -169,8 +179,6 @@ program getEnergyBudgetTerms
         ! derivative of P: dP/dx
         P_store = P_store + pC
 
-        ! WRAP UP 
-        deallocate(turbArray)
         call toc()
 
         nvis = nvis + 1
