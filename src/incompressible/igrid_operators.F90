@@ -43,12 +43,28 @@ module igrid_Operators
          procedure :: WriteASCII_2D
          procedure :: getSimTime
          procedure :: getVolumeIntegral
+         procedure :: getGradient
    end type 
 
 contains
 
+subroutine GetGradient(this, f, dfdx, dfdy, dfdz, botBC, topBC)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: f
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: dfdx, dfdy, dfdz
+   integer, intent(in) :: botBC, topBC
+   
+   call this%spect%fft(f,this%cbuffy1)
+   call this%spect%mtimes_ik1_oop(this%cbuffy1, this%cbuffy2)
+   call this%spect%ifft(this%cbuffy2,dfdx)
+   call this%spect%mtimes_ik2_ip(this%cbuffy1)
+   call this%spect%ifft(this%cbuffy1,dfdy)
+   call this%ddz(f, dfdz, botBC, topBC)
+
+end subroutine 
+
 function getVolumeIntegral(this, arr) result(val)
-   class(igrid_ops), intent(in), target :: this
+   class(igrid_ops), intent(in) :: this
    real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in) :: arr
    real(rkind) :: val 
 
@@ -57,7 +73,7 @@ function getVolumeIntegral(this, arr) result(val)
 end function 
 
 function getCenterlineQuantity(this, vec) result(val)
-   class(igrid_ops), intent(in), target :: this
+   class(igrid_ops), intent(in) :: this
    real(rkind), dimension(this%gp%zsz(3)), intent(in) :: vec
    integer :: nz
    real(rkind) :: val
@@ -94,6 +110,7 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeri
                                    isTopsided = .true., isBotSided = .true.)
 
    call this%spect%alloc_r2c_out(this%cbuffy1) 
+   call this%spect%alloc_r2c_out(this%cbuffy2) 
    
    this%inputdir  = inputdir
    this%outputdir = outputdir
