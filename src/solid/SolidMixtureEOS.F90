@@ -518,7 +518,7 @@ stop
         do imat = 1, this%ns
             ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
         enddo
-print *, 'ehmix: ', maxval(abs(ehmix))
+!print *, 'ehmix: ', maxval(abs(ehmix))
 !pri!nt *, 'pinpiut: ', mixE(89,1,1), ehmix(89,1,1), mixRho(89,1,1)
 !pri!nt *, 'VF     : ', this%material(1)%VF(89,1,1), this%material(2)%VF(89,1,1)
 !pri!nt *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
@@ -578,9 +578,9 @@ print *, 'ehmix: ', maxval(abs(ehmix))
 !-------------BLOCK FOR GRVOLUMETRIC EOS------------------------------------------
         allocate(beta(3), f(3), dbeta(3), beta_new(3), dbeta_new(3), f1(3), f2(3))
         allocate(gradf(3,3), gradf_new(3,3))
-write(*,*) '>>>>--------------------------<<<<'
-write(*,*) '>>>>p1: ', maxval(this%material(1)%p), minval(this%material(1)%p)
-write(*,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
+!write(*,*) '>>>>--------------------------<<<<'
+!write(*,*) '>>>>p1: ', maxval(this%material(1)%p), minval(this%material(1)%p)
+!write(*,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
         call this%material(1)%getSpeciesDensity_from_g(rhoinit(:,:,:,1))
         call this%material(2)%getSpeciesDensity_from_g(rhoinit(:,:,:,2))
         do k=1,this%nzp
@@ -590,7 +590,7 @@ write(*,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
             p1   = this%material(1)%p(i,j,k);       p2   = this%material(2)%p(i,j,k)
             eh1  = this%material(1)%eh(i,j,k);      eh2  = this%material(2)%eh(i,j,k)
             Temp1 = this%material(1)%T(i,j,k);       Temp2   = this%material(2)%T(i,j,k)
-            Tempf = half*(Temp1+Temp2)
+            Tempf = Y1*Temp1+Y2*Temp2
             !rho1 = mixRho(i,j,k)*Y1/this%material(1)%VF(i,j,k); rho2 = mixRho(i,j,k)*Y2/this%material(2)%VF(i,j,k)
 !if(i==41) rho2 = 0.9995d0
             rho1 = rhoinit(i,j,k,1); rho2 = rhoinit(i,j,k,2)
@@ -631,7 +631,8 @@ write(*,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
             endif
             
             ! Compute residual
-            residual = -sum( (f1-f)*dbeta )                                    ! lambda**2
+            !residual = -sum( (f1-f)*dbeta )                                    ! lambda**2
+            residual = maxval(abs( (f1-f) ))                                    ! lambda**2
             iters = 0
             t = 1._rkind
             do while ( (iters < niters) .AND. (abs(residual) .GT. tol) )
@@ -652,7 +653,8 @@ write(*,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
                     print *, '----at: ', i, j, k, nrank
                     stop
                 endif
-                residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
+                !residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
+                residual_new = maxval(abs( (f2-f) ))                                    ! lambda**2
 
                 iters_l2 = 0
                 do while ( (abs(residual_new) .GE. abs(residual)) .AND. (t > eps) )
@@ -676,7 +678,8 @@ write(*,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
                         print *, '----at: ', i, j, k, nrank
                         stop
                     endif
-                    residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
+                    !residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
+                    residual_new = maxval(abs( (f2-f) ))                                    ! lambda**2
                     iters_l2 = iters_l2 + 1
                 end do
                 beta = beta_new
@@ -690,12 +693,12 @@ write(*,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
                     exit
                 end if
             end do
-            print *, '---------i = ', i, '------'
-            print *, 'iters, iters_l2: ', iters, iters_l2
-            print *, 'residual       : ', residual
-            print *, 'f1             : ', f1
-            print *, 'f              : ', f
-            print *, 'dbeta          : ', dbeta
+            !print *, '---------i = ', i, '------'
+            !print *, 'iters, iters_l2: ', iters, iters_l2
+            !print *, 'residual       : ', residual
+            !print *, 'f1             : ', f1
+            !print *, 'f              : ', f
+            !print *, 'dbeta          : ', dbeta
             if ((iters >= niters) .OR. (t <= eps)) then
                 write(charout,'(4(A,I0))') 'Newton solve in p-T equilibartion did not converge at index ',i,',',j,',',k,' of process ',nrank
             !    print '(A)', charout
@@ -732,13 +735,13 @@ write(*,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
         enddo
         deallocate(beta, f, dbeta, beta_new, dbeta_new, f1,f2)
         deallocate(gradf, gradf_new)
-write(*,*) '>>>>p1: ', maxval(this%material(1)%p), minval(this%material(1)%p)
-write(*,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
-i1 = maxloc(this%material(1)%p(:,1,1),1); j1 = 1; k1=1
-write(*,'(a,3(e19.12,1x))') 'rho, p, eh:', this%material(1)%rhom(i1,j1,k1), this%material(1)%p(i1,j1,k1), this%material(1)%eh(i1,j1,k1)
-write(*,'(a,3(e19.12,1x))') 'T VF      :', this%material(1)%T(i1,j1,k1), this%material(1)%VF(i1,j1,k1)
-
-write(*,*) '>>>>--------------------------<<<<'
+!write(*,*) '>>>>p1: ', maxval(this%material(1)%p), minval(this%material(1)%p)
+!write(*,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
+!i1 = maxloc(this%material(1)%p(:,1,1),1); j1 = 1; k1=1
+!write(*,'(a,3(e19.12,1x))') 'rho, p, eh:', this%material(1)%rhom(i1,j1,k1), this%material(1)%p(i1,j1,k1), this%material(1)%eh(i1,j1,k1)
+!write(*,'(a,3(e19.12,1x))') 'T VF      :', this%material(1)%T(i1,j1,k1), this%material(1)%VF(i1,j1,k1)
+!
+!write(*,*) '>>>>--------------------------<<<<'
 
     end subroutine
 

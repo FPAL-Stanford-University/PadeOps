@@ -354,10 +354,11 @@ contains
         ! Go to hooks if a different initialization is derired (Set mixture p, Ys, VF, u, v, w, rho)
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         this%mix, this%tstop, this%dtfixed, tviz)
-       
         ! Get hydrodynamic and elastic energies, stresses
         call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
+      print *, '1 T:', maxval(abs(this%mix%material(1)%T)) , maxval(abs(this%mix%material(2)%T)) 
         call this%post_bc()
+      print *, '3 T:', maxval(abs(this%mix%material(1)%T)) , maxval(abs(this%mix%material(2)%T)) 
         
         ! Allocate 2 buffers for each of the three decompositions
         call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
@@ -689,10 +690,10 @@ contains
         Qtmpt = zero
 
         do isub = 1,RK45_steps
-            print *, '----', nrank, isub
-print *, '1 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
+!            print *, '----', nrank, isub
+!print *, '1 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
             call this%get_conserved()
-print *, '2 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
+!print *, '2 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
                 call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
@@ -707,7 +708,7 @@ print *, '2 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%materi
             call this%mix%getLAD(this%rho,this%e,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
-print *, '3 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
+!print *, '3 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
 
             ! Update total mixture conserved variables
             call this%getRHS(rhs,divu,viscwork)
@@ -723,9 +724,9 @@ print *, '3 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%materi
             !enddo
             !print '(9(e19.12,1x))', maxval(abs(this%mix%material(1)%g11-this%mix%material(2)%g11)), maxval(abs(this%mix%material(1)%g22-this%mix%material(2)%g22)), maxval(abs(this%mix%material(1)%g33-this%mix%material(2)%g33)) 
             !print *, maxloc(abs(this%mix%material(1)%g11-this%mix%material(2)%g11))!, maxval(abs(this%mix%material(1)%g22-this%mix%material(2)%g22)), maxval(abs(this%mix%material(1)%g33-this%mix%material(2)%g33)) 
-print *, '4 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
+!print *, '4 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
             call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,Fsource,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
-print *, '5 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
+!print *, '5 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
             call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
             !if (.NOT. this%PTeqb) then
             if(this%pEqb) then
@@ -755,10 +756,10 @@ print *, '5 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%materi
 
             ! Filter the individual species variables
             call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
-print *, '6 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
+!print *, '6 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
             
             call this%get_primitive()
-print *, '7 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%material(1)%rhom))
+!print *, '7 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
             !print *, nrank, 10, this%e(179,1,1), this%rho(179,1,1), this%u(179,1,1)
 
             ! if (.NOT. this%explPlast) then
@@ -788,9 +789,12 @@ print *, '7 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%materi
                 !call this%mix%relaxPressure_os(this%rho, this%u, this%v, this%w, this%e, this%dt, this%p)
             end if
             !print *, nrank, 11
+!print *, '8 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
+!print *, '9 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
             call this%post_bc()
+!print *, '10 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
             !print *, nrank, 12
         end do
 
@@ -887,9 +891,9 @@ print *, '7 T:', maxval(abs(this%mix%material(1)%p)), maxval(abs(this%mix%materi
         this%Wcnsrv(:,:,:,mom_index  ) = this%rho * this%u
         this%Wcnsrv(:,:,:,mom_index+1) = this%rho * this%v
         this%Wcnsrv(:,:,:,mom_index+2) = this%rho * this%w
-print *, 'rho: ', maxval(this%rho), minval(this%rho)
-print *, 'u: ', maxval(this%u), minval(this%u)
-print *, 'e: ', maxval(this%e), minval(this%e)
+!print *, 'rho: ', maxval(this%rho), minval(this%rho)
+!print *, 'u: ', maxval(this%u), minval(this%u)
+!print *, 'e: ', maxval(this%e), minval(this%e)
         this%Wcnsrv(:,:,:, TE_index  ) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
 
         ! add 2M (mass fraction and hydrodynamic energy) variables here

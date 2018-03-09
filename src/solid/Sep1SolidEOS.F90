@@ -416,18 +416,11 @@ contains
 
         ! Get optimal lwork
         lwork = -1
-print *, '---Before dgesvd 0------'
         call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
-print *, '---After dgesvd 0------', info
-print *, 'lwork = ', lwork
-print *, 'svdwork(1) = ', this%svdwork(1)
         lwork = this%svdwork(1)
-print *, 'lwork = ', lwork
-print *, 'size svdwork = ', size(this%svdwork)
         if (lwork .GT. size(this%svdwork)) then
             deallocate(this%svdwork); allocate(this%svdwork(lwork))
         end if
-print *, 'size svdwork = ', size(this%svdwork)
 
         do k = 1,nz
             do j = 1,ny
@@ -437,12 +430,7 @@ print *, 'size svdwork = ', size(this%svdwork)
                     g(3,1) = gfull(i,j,k,7); g(3,2) = gfull(i,j,k,8); g(3,3) = gfull(i,j,k,9)
         
                     ! Get SVD of g
-print *, '---Before dgesvd 1------', i
-write(*,*) 'g: ', g(1,:)
-write(*,*) 'g: ', g(2,:)
-write(*,*) 'g: ', g(3,:)
                     call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, this%svdwork, lwork, info)
-print *, '---After dgesvd 1------', i
 
                     ! Get projection (V * Sigma * V^T)
                     u = transpose(vt)

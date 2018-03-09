@@ -444,8 +444,9 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               ! mix%material(1)%Ys ( 1,:,:) = YsL
               ! mix%material(2)%Ys ( 1,:,:) = one - YsL
   
-              mix%material(1)%VF ( 1,:,:) = VFL
-              mix%material(2)%VF ( 1,:,:) = one - VFL
+              mix%material(1)%VF ( 1,:,:) = rho(1,:,:)*mix%material(1)%Ys(1,:,:)/rho_0
+              mix%material(2)%VF ( 1,:,:) = rho(1,:,:)*mix%material(2)%Ys(1,:,:)/rho_0_2
+              !mix%material(2)%VF ( 1,:,:) = one - VFL
           end if
         endif
 
@@ -469,8 +470,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             ! mix%material(1)%Ys (nx,:,:) = YsR
             ! mix%material(2)%Ys (nx,:,:) = one - YsR
   
-            mix%material(1)%VF (nx,:,:) = VFR
-            mix%material(2)%VF (nx,:,:) = one - VFR
+            mix%material(1)%VF (nx,:,:) = rho(nx,:,:)*mix%material(1)%Ys(nx,:,:)/rho_0
+            mix%material(2)%VF (nx,:,:) = rho(nx,:,:)*mix%material(2)%Ys(nx,:,:)/rho_0_2
+            !mix%material(1)%VF (nx,:,:) = VFR
+            !mix%material(2)%VF (nx,:,:) = one - VFR
           endif
         endif
 

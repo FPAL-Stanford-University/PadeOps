@@ -84,8 +84,8 @@ contains
         real(rkind), dimension(:,:,:), intent(in)  :: rho,T
         real(rkind), dimension(:,:,:), intent(out) :: e
 
-        e = (rho/this%rho0)**this%alp - one
-        e = this%CV * T + half*this%K0/this%alp/this%alp*e*e
+        e = (rho/this%rho0)
+        e = this%CV * (T-this%T0*e**this%gam) + half*this%K0/this%alp/this%alp*(e**this%alp-one)**2
 
     end subroutine
 
@@ -104,9 +104,10 @@ contains
         real(rkind), dimension(:,:,:), intent(in)  :: e
         real(rkind), dimension(:,:,:), intent(out) :: T
         real(rkind), dimension(:,:,:), intent(in), optional  :: rho
+        real(rkind), dimension(size(e,1),size(e,2),size(e,3))  :: I3alp
 
-        T = (rho/this%rho0)**this%alp - one
-        T = (e - half*this%K0/this%alp/this%alp*T*T)/this%CV
+        T = (rho/this%rho0)
+        T = this%T0*T**this%gam + (e - half*this%K0/this%alp/this%alp*(T**this%alp-one)**2)/this%CV
 
     end subroutine
 

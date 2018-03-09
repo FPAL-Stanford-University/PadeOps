@@ -466,7 +466,7 @@ contains
         !print *, 'After 1: ', this%g11(89,1,1)
 
         !! Now project g tensor to SPD space
-        !call this%elastic%make_tensor_SPD(this%g)
+        call this%elastic%make_tensor_SPD(this%g)
         !!print *, 'After 2: ', this%g11(89,1,1)
 
         ! Sliding treatment using plasticity (Using zero yield everywhere for now)

@@ -6,6 +6,9 @@ module Multispecies_shock_data
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one
+    real(rkind) :: K0 = one, alp = one, CV = one, T0 = one
+    real(rkind) :: K0_2 = one, alp_2 = one, CV_2 = one, T0_2 = one
+    integer     :: eostype = 2 ! 1 :: separable; 2 :: Godunov-Romenski Hydro
     real(rkind) :: minVF = 0.2_rkind, thick = one
     real(rkind) :: rhoRatio = one, pRatio = two
     logical     :: sharp = .FALSE.
@@ -201,6 +204,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
+                          K0, alp, CV, T0, K0_2, alp_2, CV_2, T0_2, eostype, p1, p2, u1, u2, &
                           plastic2, explPlast2, yield2, interface_init, kwave, sliding
     
     ioUnit = 11
@@ -220,40 +224,61 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
         end if
 
-        if(rhoRatio > 0) then
-          ! if rhoRatio is positive, only rho_0 is different. Rgas is set such
-          ! that Temperature equilibrium condition is satisfied
-          gamma_2 = gamma; Rgas_2 = Rgas/rhoRatio; p_infty_2 = p_infty; 
-          rho_0_2 = rho_0*rhoRatio; mu_2 = mu
-        else
-          ! if rhoRatio is negative, all quantities except Rgas need to be
-          ! specified in input file. Rgas is then set such
-          ! that Temperature equilibrium condition is satisfied
-          if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
+        if(eostype==1) then
+          if(rhoRatio > 0) then
+            ! if rhoRatio is positive, only rho_0 is different. Rgas is set such
+            ! that Temperature equilibrium condition is satisfied
+            gamma_2 = gamma; Rgas_2 = Rgas/rhoRatio; p_infty_2 = p_infty; 
+            rho_0_2 = rho_0*rhoRatio; mu_2 = mu
+          else
+            ! if rhoRatio is negative, all quantities except Rgas need to be
+            ! specified in input file. Rgas is then set such
+            ! that Temperature equilibrium condition is satisfied
+            if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
 
-          ! determine p_amb that guarantees T equilibrium
-          if(adjustPamb) then
-            fac = Rgas_2*rho_0_2/Rgas/rho_0
-            p_amb = (fac*p_infty - p_infty_2)/(one - fac)
+            ! determine p_amb that guarantees T equilibrium
+            if(adjustPamb) then
+              fac = Rgas_2*rho_0_2/Rgas/rho_0
+              p_amb = (fac*p_infty - p_infty_2)/(one - fac)
+            endif
           endif
         endif
 
-        ! write material properties
-        if (nrank == 0) then
-            print *, '---Material 1---'
-            write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0, ', gam  = ', gamma, ', p_infty = ', p_infty
-            write(*,'(3(a,e12.5))') 'mu    = ', mu,    ', Rgas = ', Rgas
-            print *, '---Material 2---'
-            write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0_2, ', gam  = ', gamma_2, ', p_infty = ', p_infty_2
-            write(*,'(3(a,e12.5))') 'mu    = ', mu_2,    ', Rgas = ', Rgas_2
+        if(eostype==1) then
+          ! write material properties
+          if (nrank == 0) then
+              print *, '---Material 1---'
+              write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0, ', gam  = ', gamma, ', p_infty = ', p_infty
+              write(*,'(3(a,e12.5))') 'mu    = ', mu,    ', Rgas = ', Rgas
+              print *, '---Material 2---'
+              write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0_2, ', gam  = ', gamma_2, ', p_infty = ', p_infty_2
+              write(*,'(3(a,e12.5))') 'mu    = ', mu_2,    ', Rgas = ', Rgas_2
 
-            if(adjustPamb) write(*,*) '(Rgas2*rho02)/(Rgas*rho0) = ', fac
-            write(*,*) 'p_mb = ', p_amb
-        end if
+              if(adjustPamb) write(*,*) '(Rgas2*rho02)/(Rgas*rho0) = ', fac
+              write(*,*) 'p_mb = ', p_amb
+          end if
+        elseif(eostype==2) then
+          ! write material properties
+          if (nrank == 0) then
+              print *, '---Material 1---'
+              write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0, ', gam  = ', gamma, ', C_V = ', CV
+              write(*,'(3(a,e12.5))') 'mu    = ', mu,    ', alp = ', alp,     ',T0  = ', T0
+              write(*,'(3(a,e12.5))') 'K0    = ', K0
+              print *, '---Material 2---'
+              write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0_2, ', gam  = ', gamma_2, ', CV   = ', CV_2
+              write(*,'(3(a,e12.5))') 'mu    = ', mu_2,    ', alp = ', alp_2,    ', T0   = ', T0_2
+              write(*,'(3(a,e12.5))') 'K0    = ', K0_2
+          end if
+        endif
 
         ! Set materials
-        call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10))
-        call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2),sep1solid(rho_0_2,mu_2,yield2,1.0D-10))
+        if(eostype==1) then
+            call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10))
+            call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2),sep1solid(rho_0_2,mu_2,yield2,1.0D-10))
+        elseif(eostype==2) then
+            call mix%set_material(1,stiffgas(rho_0,   K0,   alp,   gamma  , CV,   T0  ), sep1solid(rho_0  ,mu  ,yield,1.0D-10))
+            call mix%set_material(2,stiffgas(rho_0_2, K0_2, alp_2, gamma_2, CV_2, T0_2), sep1solid(rho_0_2,mu_2,yield2,1.0D-10))
+        endif
 
         ! set logicals for plasticity
         mix%material(1)%plast = plastic; mix%material(1)%explPlast = explPlast
@@ -263,132 +288,163 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%sliding = sliding
         mix%material(2)%sliding = sliding
 
-        ! determine jump conditions for material 1
-        p1 = p_amb
-        rho1 = rho_0
-        p2 = p1 * pRatio
-        u1 = zero
-        fparams(1) = rho1; fparams(2) = u1; fparams(3) = p1
-        ! fparams(4) = rho_0; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = zero;
-        fparams(4) = rho1; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = mu;
-        fparams(8) = p2
-        rho2 = rho1*min(one + p1/(p_infty+eps), one) ! Init guess
-        call rootfind_nr_1d(rho2,fparams,iparams)
-        ! print *, 'After root finding: ', rho2
-        g11_1 = fparams(1)/fparams(4);   grho1 = g11_1**real(11.D0/3.D0,rkind) - g11_1**(-third) - g11_1**(seven*third) + g11_1**third
-        g11_2 = rho2/fparams(4);         grho2 = g11_2**real(11.D0/3.D0,rkind) - g11_2**(-third) - g11_2**(seven*third) + g11_2**third
-        ! u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*zero*(grho1-grho2)))
-        u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*mu*(grho1-grho2)))
-        u1 = rho2*u2/rho1
+        if(eostype==1) then
+            ! determine jump conditions for material 1
+            p1 = p_amb
+            rho1 = rho_0
+            p2 = p1 * pRatio
+            u1 = zero
+            fparams(1) = rho1; fparams(2) = u1; fparams(3) = p1
+            ! fparams(4) = rho_0; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = zero;
+            fparams(4) = rho1; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = mu;
+            fparams(8) = p2
+            rho2 = rho1*min(one + p1/(p_infty+eps), one) ! Init guess
+            call rootfind_nr_1d(rho2,fparams,iparams)
+            ! print *, 'After root finding: ', rho2
+            g11_1 = fparams(1)/fparams(4);   grho1 = g11_1**real(11.D0/3.D0,rkind) - g11_1**(-third) - g11_1**(seven*third) + g11_1**third
+            g11_2 = rho2/fparams(4);         grho2 = g11_2**real(11.D0/3.D0,rkind) - g11_2**(-third) - g11_2**(seven*third) + g11_2**third
+            ! u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*zero*(grho1-grho2)))
+            u2 = -sqrt(rho1/rho2/(rho1-rho2)*(p1-p2+twothird*mu*(grho1-grho2)))
+            u1 = rho2*u2/rho1
 
 
-        ! speed of sound
-        a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
-        a2 = sqrt((gamma*(p2+p_infty) + 4.0d0/3.0d0*mu)/rho2)
+            ! speed of sound
+            a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
+            a2 = sqrt((gamma*(p2+p_infty) + 4.0d0/3.0d0*mu)/rho2)
 
-        if (nrank == 0) then
-            print*, '----Shock Initialization-----'
-            print*, "Mass flux: ", rho1*u1, rho2*u2
-            print*, "Momentum flux: ", rho1*u1*u1+p1, rho2*u2*u2+p2
-            print*, "g flux: ", g11_1*u1, g11_2*u2
+            if (nrank == 0) then
+                print*, '----Shock Initialization-----'
+                print*, "Mass flux: ", rho1*u1, rho2*u2
+                print*, "Momentum flux: ", rho1*u1*u1+p1, rho2*u2*u2+p2
+                print*, "g flux: ", g11_1*u1, g11_2*u2
+                
+                print*, "rho1, rho2 = ", rho1, rho2
+                print*, "u1, u2 = ", u1, u2
+                print*, "p1, p2 = ", p1, p2
+                print*, "a1, a2 = ", a1, a2
+                print*, "M1, M2 = ", u1/a1, u2/a2
+                print*, "p_infty = ", p_infty
+                print*, "rhoRatio = ", rhoRatio
+            end if
+
+            ! determine jump conditions for material 2
+            p1 = p_amb
+            rho1_2 = rho_0_2
+            p2 = p1 * pRatio
+            u1_2 = zero
+            fparams(1) = rho1_2; fparams(2) = u1_2; fparams(3) = p1
+            ! fparams(4) = rho_0; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = zero;
+            fparams(4) = rho1_2; fparams(5) = gamma_2; fparams(6) = p_infty_2; fparams(7) = mu_2;
+            fparams(8) = p2
+            rho2_2 = rho1_2*min(one + p1/(p_infty_2+eps), one) ! Init guess
+            call rootfind_nr_1d(rho2_2,fparams,iparams)
+            ! print *, 'After root finding: ', rho2_2
+            g11_1_2 = fparams(1)/fparams(4);   grho1_2 = g11_1_2**real(11.D0/3.D0,rkind) - g11_1_2**(-third) - g11_1_2**(seven*third) + g11_1_2**third
+            g11_2_2 = rho2_2/fparams(4);         grho2_2 = g11_2_2**real(11.D0/3.D0,rkind) - g11_2_2**(-third) - g11_2_2**(seven*third) + g11_2_2**third
+            u2_2 = -sqrt(rho1_2/rho2_2/(rho1_2-rho2_2)*(p1-p2+twothird*mu_2*(grho1_2-grho2_2)))
+            u1_2 = rho2_2*u2_2/rho1_2
+
+            if(nrank==0) print *, 'T mat1 behind shock = ', (p2+p_infty)/Rgas/rho2
+            if(nrank==0) print *, 'T mat2 behind shock = ', (p2+p_infty_2)/Rgas_2/rho2_2
+
+            ! speed of sound
+            a1_2 = sqrt((gamma_2*(p1+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho1_2)
+            a2_2 = sqrt((gamma_2*(p2+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho2_2)
+
+            if (nrank == 0) then
+                print*, '----Shock Initialization-----'
+                print*, "Mass flux: ", rho1_2*u1_2, rho2_2*u2_2
+                print*, "Momentum flux: ", rho1_2*u1_2*u1_2+p1, rho2_2*u2_2*u2_2+p2
+                print*, "g flux: ", g11_1_2*u1_2, g11_2_2*u2_2
+                
+                print*, "rho1, rho2 = ", rho1_2, rho2_2
+                print*, "u1, u2 = ", u1_2, u2_2
+                print*, "p1, p2 = ", p1, p2
+                print*, "a1, a2 = ", a1_2, a2_2
+                print*, "M1, M2 = ", u1_2/a1_2, u2_2/a2_2
+                print*, "p_infty = ", p_infty_2
+                print*, "rhoRatio = ", rhoRatio
+            end if
+
+            ! Get mixture momentum (put in u1 and u2)
+            u1 = (one-minVF)*rho1*u1 + minVF*rho1_2*u1_2
+            u2 = (one-minVF)*rho2*u2 + minVF*rho2_2*u2_2
             
-            print*, "rho1, rho2 = ", rho1, rho2
-            print*, "u1, u2 = ", u1, u2
-            print*, "p1, p2 = ", p1, p2
-            print*, "a1, a2 = ", a1, a2
-            print*, "M1, M2 = ", u1/a1, u2/a2
-            print*, "p_infty = ", p_infty
-            print*, "rhoRatio = ", rhoRatio
-        end if
+            ! Get mixture density
+            rho1 = (one-minVF)*rho1 + minVF*rho1_2
+            rho2 = (one-minVF)*rho2 + minVF*rho2_2
 
-        ! determine jump conditions for material 2
-        p1 = p_amb
-        rho1_2 = rho_0_2
-        p2 = p1 * pRatio
-        u1_2 = zero
-        fparams(1) = rho1_2; fparams(2) = u1_2; fparams(3) = p1
-        ! fparams(4) = rho_0; fparams(5) = gamma; fparams(6) = p_infty; fparams(7) = zero;
-        fparams(4) = rho1_2; fparams(5) = gamma_2; fparams(6) = p_infty_2; fparams(7) = mu_2;
-        fparams(8) = p2
-        rho2_2 = rho1_2*min(one + p1/(p_infty_2+eps), one) ! Init guess
-        call rootfind_nr_1d(rho2_2,fparams,iparams)
-        ! print *, 'After root finding: ', rho2_2
-        g11_1_2 = fparams(1)/fparams(4);   grho1_2 = g11_1_2**real(11.D0/3.D0,rkind) - g11_1_2**(-third) - g11_1_2**(seven*third) + g11_1_2**third
-        g11_2_2 = rho2_2/fparams(4);         grho2_2 = g11_2_2**real(11.D0/3.D0,rkind) - g11_2_2**(-third) - g11_2_2**(seven*third) + g11_2_2**third
-        u2_2 = -sqrt(rho1_2/rho2_2/(rho1_2-rho2_2)*(p1-p2+twothird*mu_2*(grho1_2-grho2_2)))
-        u1_2 = rho2_2*u2_2/rho1_2
+            ! Get mixture velocity
+            u1 = u1 / rho1
+            u2 = u2 / rho2
 
-        if(nrank==0) print *, 'T mat1 behind shock = ', (p2+p_infty)/Rgas/rho2
-        if(nrank==0) print *, 'T mat2 behind shock = ', (p2+p_infty_2)/Rgas_2/rho2_2
+            shock_init = interface_init - 1.0_rkind  ! (10*thick) grid points away from the interface
+            dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
 
-        ! speed of sound
-        a1_2 = sqrt((gamma_2*(p1+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho1_2)
-        a2_2 = sqrt((gamma_2*(p2+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho2_2)
+            u   = (u2-u1)*dum
+            v   = zero
+            w   = zero
 
-        if (nrank == 0) then
-            print*, '----Shock Initialization-----'
-            print*, "Mass flux: ", rho1_2*u1_2, rho2_2*u2_2
-            print*, "Momentum flux: ", rho1_2*u1_2*u1_2+p1, rho2_2*u2_2*u2_2+p2
-            print*, "g flux: ", g11_1_2*u1_2, g11_2_2*u2_2
+            tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
+
+            mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
+            mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
+            mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
             
-            print*, "rho1, rho2 = ", rho1_2, rho2_2
-            print*, "u1, u2 = ", u1_2, u2_2
-            print*, "p1, p2 = ", p1, p2
-            print*, "a1, a2 = ", a1_2, a2_2
-            print*, "M1, M2 = ", u1_2/a1_2, u2_2/a2_2
-            print*, "p_infty = ", p_infty_2
-            print*, "rhoRatio = ", rhoRatio
-        end if
+            mix%material(1)%g11 = (rho2*dum + rho1*(one-dum))/rho_0
+            if (mix%use_gTg) then
+                mix%material(1)%g11 = mix%material(1)%g11**2
+            end if
 
-        ! Get mixture momentum (put in u1 and u2)
-        u1 = (one-minVF)*rho1*u1 + minVF*rho1_2*u1_2
-        u2 = (one-minVF)*rho2*u2 + minVF*rho2_2*u2_2
-        
-        ! Get mixture density
-        rho1 = (one-minVF)*rho1 + minVF*rho1_2
-        rho2 = (one-minVF)*rho2 + minVF*rho2_2
+            mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
+            mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
+            mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
-        ! Get mixture velocity
-        u1 = u1 / rho1
-        u2 = u2 / rho2
+            mix%material(2)%g11 = mix%material(1)%g11
 
-        shock_init = interface_init - 1.0_rkind  ! (10*thick) grid points away from the interface
-        dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
+            mix%material(1)%p  = p2*dum + p1*(one-dum)
+            mix%material(2)%p  = mix%material(1)%p
 
-        u   = (u2-u1)*dum
-        v   = zero
-        w   = zero
+            mix%material(1)%VF = minVF + (one-two*minVF)*tmp
+            mix%material(2)%VF = one - mix%material(1)%VF
 
-        tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
+            if (mix%use_gTg) then
+                tmp = rho_0*mix%material(1)%VF*sqrt(mix%material(1)%g11) + rho_0_2*sqrt(mix%material(2)%g11)*(one-mix%material(1)%VF) ! Mixture density
+            else
+                tmp = rho_0*mix%material(1)%VF*mix%material(1)%g11 + rho_0_2*mix%material(2)%g11*(one-mix%material(1)%VF) ! Mixture density
+            end if
+            mix%material(1)%Ys = mix%material(1)%VF * rho_0 / tmp
+            mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
+        elseif(eostype==2) then
+            shock_init = interface_init - 1.0_rkind  ! (10*thick) grid points away from the interface
+            dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
+            tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 
-        mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
-        mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
-        mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
-        
-        mix%material(1)%g11 = (rho2*dum + rho1*(one-dum))/rho_0
-        if (mix%use_gTg) then
-            mix%material(1)%g11 = mix%material(1)%g11**2
-        end if
+            u   = u2 + dum*(u1-u2)
+            v   = zero
+            w   = zero
 
-        mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
-        mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
-        mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
+            mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
+            mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
+            mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
+            
+            mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
+            mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
+            mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
-        mix%material(2)%g11 = mix%material(1)%g11
+            mix%material(1)%p  = p2 + dum*(p1-p2)
+            mix%material(2)%p  = mix%material(1)%p
 
-        mix%material(1)%p  = p2*dum + p1*(one-dum)
-        mix%material(2)%p  = mix%material(1)%p
+            mix%material(1)%T  = T0
+            mix%material(2)%T  = T0_2
 
-        mix%material(1)%VF = minVF + (one-two*minVF)*tmp
-        mix%material(2)%VF = one - mix%material(1)%VF
+            mix%material(1)%VF = minVF + (one-two*minVF)*tmp
+            mix%material(2)%VF = one - mix%material(1)%VF
 
-        if (mix%use_gTg) then
-            tmp = rho_0*mix%material(1)%VF*sqrt(mix%material(1)%g11) + rho_0_2*sqrt(mix%material(2)%g11)*(one-mix%material(1)%VF) ! Mixture density
-        else
             tmp = rho_0*mix%material(1)%VF*mix%material(1)%g11 + rho_0_2*mix%material(2)%g11*(one-mix%material(1)%VF) ! Mixture density
-        end if
-        mix%material(1)%Ys = mix%material(1)%VF * rho_0 / tmp
-        mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
+            mix%material(1)%Ys = mix%material(1)%VF * rho_0 / tmp
+            mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
+        endif
 
         rhoL = tmp(1,1,1)
         rhoR = tmp(decomp%ysz(1),1,1)
@@ -628,11 +684,11 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               ! mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
               ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
               
-              ! mix%material(1)%Ys ( 1,:,:) = YsL
-              ! mix%material(2)%Ys ( 1,:,:) = one - YsL
+              mix%material(1)%Ys ( 1,:,:) = YsL
+              mix%material(2)%Ys ( 1,:,:) = one - YsL
   
-              mix%material(1)%VF ( 1,:,:) = VFL
-              mix%material(2)%VF ( 1,:,:) = one - VFL
+              ! mix%material(1)%VF ( 1,:,:) = VFL
+              ! mix%material(2)%VF ( 1,:,:) = one - VFL
           end if
         endif
 
@@ -654,9 +710,9 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
             w = w + dum*(tmp - w)
 
-            tmp = e
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            e = e + dum*(tmp - e)
+            !tmp = e
+            !call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            !e = e + dum*(tmp - e)
 
             tmp = rho
             call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
