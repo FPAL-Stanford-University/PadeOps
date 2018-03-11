@@ -130,7 +130,8 @@ module IncompressibleGrid
         logical :: assume_fplane = .true.
         real(rkind) :: coriolis_omegaY, coriolis_omegaZ, coriolis_omegaX 
         integer :: nxZ, nyZ
-    
+   
+        character(len=clen) :: dtlimit
         integer :: BuoyancyTermType = 0 
         real(rkind) :: BuoyancyFact = 0.d0
 
@@ -188,7 +189,7 @@ module IncompressibleGrid
 
         ! Pointers linked to SGS stuff
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
-        real(rkind), dimension(:,:,:)  , pointer :: kappaSGS, nu_SGS, tau13, tau23
+        real(rkind), dimension(:,:,:)  , pointer :: kappaSGS, nu_SGS, tau13, tau23, kappa_bounding
         real(rkind), dimension(:,:,:)  , pointer :: c_SGS, q1, q2, q3 
         real(rkind), dimension(:,:,:), allocatable :: fbody_x, fbody_y, fbody_z
         logical                                      :: storeFbody
@@ -747,7 +748,8 @@ contains
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
                                     this%ThetaRef, this%Fr, this%Re, this%isInviscid, sgsmod_stratified, this%botBC_Temp, &
                                     this%initSpinUp)
-            call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%kappaSGS)
+            call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, &
+                                    this%kappaSGS, this%kappa_bounding)
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -1546,9 +1548,11 @@ contains
     subroutine compute_deltaT(this)
         use reductions, only: p_maxval
         class(igrid), intent(inout), target :: this
-        real(rkind) :: TSmax , Tvisc
+        real(rkind) :: TSmax 
         real(rkind), dimension(:,:,:), pointer :: rb1, rb2
-        
+        real(rkind), dimension(5) :: dtmin
+        integer :: idx
+
         rb1 => this%rbuffxC(:,:,:,1)
         rb2 => this%rbuffxC(:,:,:,2)
 
@@ -1562,12 +1566,51 @@ contains
             rb2 = abs(rb2)
             rb1 = rb1 + rb2
             TSmax = p_maxval(rb1)
-            this%dt = this%CFL/TSmax
-
+            dtmin(1)= this%CFL/TSmax
+               
             if (.not. this%isInviscid) then
-               Tvisc = this%CFL*this%Re*(min(this%dx,this%dy,this%dz)**2)
-               this%dt = min(this%dt,Tvisc)
+               dtmin(2) = 0.5d0*this%Re*(min(this%dx,this%dy,this%dz)**2)
+               if (this%isStratified .and. (this%PrandtlFluid > 1.d0)) then 
+                  dtmin(2) = dtmin(2) / this%PrandtlFluid  
+               end if 
+            else
+               dtmin(2) = 1.d15
             end if
+            
+            if (associated(this%nu_SGS)) then
+               dtmin(3) = 0.25d0*(min(this%dx,this%dy,this%dz)**2)/(p_maxval(this%nu_SGS) + 1.d-18)
+            else
+               dtmin(3) = 1.d15
+            end if 
+
+            if (associated(this%kappaSGS)) then
+               dtmin(4) = 0.5d0*(min(this%dx,this%dy,this%dz)**2)/(p_maxval(this%kappaSGS) + 1.d-18)
+            else
+               dtmin(4) = 1.d15
+            end if 
+
+            if (associated(this%kappa_bounding)) then
+               dtmin(5) = 0.5d0*(min(this%dx,this%dy,this%dz)**2)/(p_maxval(this%kappa_bounding) + 1.d-18)
+            else
+               dtmin(5) = 1.d15
+            end if 
+
+            this%dt = minval(dtmin)
+            idx = minloc(dtmin, DIM=1)
+            select case(idx)
+            case (1) 
+               this%dtlimit = "Convective CFL"
+            case(2)
+               this%dtlimit = "Viscous"
+            case(3)
+               this%dtlimit = "SGS viscosity"
+            case(4)
+               this%dtlimit = "SGS scalar diffusivity"
+            case(5)
+               this%dtlimit = "Scalar bounding diffusivity"
+            end select 
+         else
+            this%dtlimit = "invalid/fixed dt"
         end if 
 
 
@@ -2471,6 +2514,9 @@ contains
            if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
            if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
            if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
+           if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
+              call this%dumpFullField(this%kappa_bounding,'kBND')
+           end if 
 
            if (this%computevorticity) then
                call this%dumpFullField(this%ox,'omgX')
@@ -2522,6 +2568,9 @@ contains
            if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
            if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
            if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
+           if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
+              call this%dumpFullField(this%kappa_bounding,'kBND')
+           end if 
            if (this%computevorticity) then
                call this%dumpFullField(this%ox,'omgX')
                call this%dumpFullField(this%oy,'omgY')

@@ -42,7 +42,7 @@ module scalar_igridMod
       complex(rkind), dimension(:,:,:), pointer, public :: Fhat1, Fhat2, Fhat3, Fhat4
       complex(rkind), dimension(:,:,:,:), allocatable, public   :: Sfields
 
-      real(rkind) :: Re, PrandtlNum, TurbPrandtlNum
+      real(rkind) :: Re, PrandtlNum, TurbPrandtlNum, Cy 
       character(len=clen) :: inputDataDir, outputDataDir
       real(rkind), dimension(:,:,:), pointer :: u, v, w, wC
 
@@ -50,6 +50,7 @@ module scalar_igridMod
       type(sgs_igrid), pointer :: sgsmodel
       logical :: useSource, isinviscid, useSGS, usefringe, usedoublefringe
 
+      real(rkind) :: lowbound, highbound 
       contains
          procedure :: init
          procedure :: destroy
@@ -141,7 +142,7 @@ subroutine populateRHS(this, dt)
 
    if (this%useSGS) then
       call this%sgsmodel%getRHS_SGS_Scalar(this%rhs, this%dFdxC, this%dFdyC, this%dFdzC, this%dFdzE, &
-         this%u, this%v, this%wC, this%F, this%Fhat, this%TurbPrandtlNum)
+         this%u, this%v, this%wC, this%F, this%Fhat, this%TurbPrandtlNum, this%Cy, this%lowbound, this%highbound)
    end if
 
    if (.not. this%isinviscid) then
@@ -199,12 +200,12 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    integer, intent(in) :: scalar_number, RunID, tid_restart 
    integer :: ierr
    logical :: useSource = .false. 
-   real(rkind) :: PrandtlNum = 1.d0, TurbPrandtlNum = 1.d0
+   real(rkind) :: PrandtlNum = 1.d0, TurbPrandtlNum = 1.d0, Cy = 100.d0 
    integer ::  bc_bottom = 1, bc_top = 1 
    character(len=clen) :: tempname, fname
 
 
-   namelist /SCALAR_INFO/ useSource, PrandtlNum, bc_bottom, bc_top,TurbPrandtlNum
+   namelist /SCALAR_INFO/ useSource, PrandtlNum, bc_bottom, bc_top,TurbPrandtlNum, Cy 
 
    
    this%InputDataDir = InputDataDir
@@ -220,6 +221,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    this%PrandtlNum = PrandtlNum
    this%TurbPrandtlNum = TurbPrandtlNum
    this%Re = Re
+   this%Cy = Cy 
 
    this%der => der
 
