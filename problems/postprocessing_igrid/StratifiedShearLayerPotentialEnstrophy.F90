@@ -15,10 +15,10 @@ program StratifiedShearLayerDomainIntegrals
    character(len=clen) ::  inputdir, outputdir
    character(len=clen) :: inputfile
    real(rkind) :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0
-   integer :: ierr, tsnapshot = 0, NumericalSchemeVert = 1
+   integer :: ierr, tsnapshot = 0, NumericalSchemeVert = 1 
    logical :: isZPeriodic = .false. 
 
-   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tsnapshot, nx, ny, nz, Re, Rib, NumericalSchemeVert 
+   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tsnapshot, nx, ny, nz, Re, Rib, NumericalSchemeVert, tidx  
    
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
@@ -29,10 +29,8 @@ program StratifiedShearLayerDomainIntegrals
    dx =     Lx/real(nx,rkind) 
    dy =     Ly/real(ny,rkind) 
    dz = two*Lz/real(nz,rkind)
-   print*, "before"
    ! Initialize the operator class
    call ops%init(nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isZPeriodic, NUmericalSchemeVert)
-   print*, "after"
    ! Allocate all the needed memory 
    call ops%allocate3DField(u)
    call ops%allocate3DField(v)
@@ -46,9 +44,7 @@ program StratifiedShearLayerDomainIntegrals
    call ops%allocate3DField(buff5)
    call ops%allocate3DField(buff6)
    call ops%allocate3DField(buff7)
-
    
-
    tidx = tsnapshot
    call message(0, "Reading fields for tid:", TIDX)
    call tic()
@@ -73,7 +69,6 @@ program StratifiedShearLayerDomainIntegrals
    buff7 = buff7 - buff2
    buff7 = buff7 * buff5
    call ops%writeField3D(buff7,"ptE2",TIDX)
-
 
    call ops%destroy()
    call MPI_Finalize(ierr)           

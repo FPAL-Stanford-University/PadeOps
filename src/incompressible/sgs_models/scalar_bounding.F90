@@ -27,6 +27,7 @@ subroutine compute_kappa_bounding(this, T, dTdx, dTdy, dTdz)
 
    do k = 1,size(dTdx,3)
       do j = 1,size(dTdx,2)
+         !$omp simd
          do i = 1,size(dTdx,1)
             den = sqrt(dTdx(i,j,k)*dTdx(i,j,k) + dTdy(i,j,k)*dTdy(i,j,k) +  dTdz(i,j,k)*dTdz(i,j,k))
             if (den < 1.d-18) then 

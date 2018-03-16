@@ -65,7 +65,7 @@ module IncompressibleGrid
 
         ! Variables common to grid
         integer :: nx, ny, nz, t_datadump, t_restartdump
-        real(rkind) :: dt, tstop, CFL, dx, dy, dz, tsim
+        real(rkind) :: dt, tstop, CFL, CviscDT, dx, dy, dz, tsim
         character(len=clen) ::  outputdir
         real(rkind), dimension(:,:,:,:), allocatable :: mesh
         character(len=clen) :: filter_x          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
@@ -325,7 +325,7 @@ contains
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1
-        real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop
+        real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop, CviscDT = 1.d0 
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
@@ -351,7 +351,7 @@ contains
         character(len=4) :: scheme_xy = "FOUR"
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
-                         useRestartFile, restartFile_TID, restartFile_RID 
+                         useRestartFile, restartFile_TID, restartFile_RID, CviscDT
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, dump_NU_SGS, dump_KAPPA_SGS,&
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
@@ -398,7 +398,7 @@ contains
         this%assume_fplane = assume_fplane; this%useProbes = useProbes; this%PrandtlFluid = PrandtlFLuid
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact; this%useFringe = useFringe
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
-        this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType 
+        this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType; this%CviscDT = CviscDT
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity; this%deleteInstructions = deleteInstructions
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
         this%donot_dealias = donot_dealias 
@@ -1569,7 +1569,7 @@ contains
             dtmin(1)= this%CFL/TSmax
                
             if (.not. this%isInviscid) then
-               dtmin(2) = 0.5d0*this%Re*(min(this%dx,this%dy,this%dz)**2)
+               dtmin(2) = this%CviscDT*0.5d0*this%Re*(min(this%dx,this%dy,this%dz)**2)
                if (this%isStratified .and. (this%PrandtlFluid > 1.d0)) then 
                   dtmin(2) = dtmin(2) / this%PrandtlFluid  
                end if 
@@ -1578,19 +1578,19 @@ contains
             end if
             
             if (associated(this%nu_SGS)) then
-               dtmin(3) = 0.25d0*(min(this%dx,this%dy,this%dz)**2)/(p_maxval(this%nu_SGS) + 1.d-18)
+               dtmin(3) = this%CviscDT*0.25d0*(min(this%dx,this%dy,this%dz)**2)/(p_maxval(this%nu_SGS) + 1.d-18)
             else
                dtmin(3) = 1.d15
             end if 
 
             if (associated(this%kappaSGS)) then
-               dtmin(4) = 0.5d0*(min(this%dx,this%dy,this%dz)**2)/(p_maxval(this%kappaSGS) + 1.d-18)
+               dtmin(4) = this%CviscDT*0.5d0*(min(this%dx,this%dy,this%dz)**2)/(p_maxval(this%kappaSGS) + 1.d-18)
             else
                dtmin(4) = 1.d15
             end if 
 
             if (associated(this%kappa_bounding)) then
-               dtmin(5) = 0.5d0*(min(this%dx,this%dy,this%dz)**2)/(p_maxval(this%kappa_bounding) + 1.d-18)
+               dtmin(5) = this%CviscDT*0.5d0*(min(this%dx,this%dy,this%dz)**2)/(p_maxval(this%kappa_bounding) + 1.d-18)
             else
                dtmin(5) = 1.d15
             end if 
@@ -1599,15 +1599,15 @@ contains
             idx = minloc(dtmin, DIM=1)
             select case(idx)
             case (1) 
-               this%dtlimit = "Convective CFL"
+               this%dtlimit = " Convective CFL"
             case(2)
-               this%dtlimit = "Viscous"
+               this%dtlimit = " Viscous"
             case(3)
-               this%dtlimit = "SGS viscosity"
+               this%dtlimit = " SGS viscosity"
             case(4)
-               this%dtlimit = "SGS scalar diffusivity"
+               this%dtlimit = " SGS scalar diffusivity"
             case(5)
-               this%dtlimit = "Scalar bounding diffusivity"
+               this%dtlimit = " Scalar bounding diffusivity"
             end select 
          else
             this%dtlimit = "invalid/fixed dt"

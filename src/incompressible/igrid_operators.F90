@@ -130,7 +130,7 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeri
    
    call this%derZ1d%init(nz, dz, isTopEven = .false., isBotEven = .false., &
                                    isTopsided = .true., isBotSided = .true.)
-
+ 
    call this%spect%alloc_r2c_out(this%cbuffy1) 
    call this%spect%alloc_r2c_out(this%cbuffy2) 
    
@@ -243,7 +243,7 @@ subroutine ReadField3D(this, field, label, tidx)
    integer, intent(in) :: tidx
          
    write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",tidx,".out"
-   fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+   fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
    
    call decomp_2d_read_one(1,field,fname,this%gp)
 end subroutine  

@@ -44,10 +44,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     integer :: N = 4, M= 2, nTG = 2, i, j
     real(rkind)  :: Lx = one, Ly = one, Lz = one, maxrandom = 1.d-4, deltaPhi = pi/2.d0
     real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, wperturb
-    real(rkind) :: Psi, dPsi_dz, dz
+    real(rkind) :: Psi, dPsi_dz, dz, lambda_rho = 1.d0 
     type(cd06stagg), allocatable :: derW
 
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, lambda_rho
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -65,7 +65,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     u = -erf(sqrt(pi)*z)
     v = zero
     wC = zero
-    T = Tbase +  0.5d0*erf(sqrt(pi)*z)
+    T = Tbase +  0.5d0*erf(sqrt(pi)*z/lambda_rho)
 
     allocate(uperturb(size(u,1),size(u,2),size(u,3)))
     allocate(wperturb(size(u,1),size(u,2),size(u,3)))
@@ -141,8 +141,8 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=*),                intent(in)    :: inputfile
     integer :: ioUnit, seed, N, M, nTG
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase, maxTG
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase, maxTG, lambda_rho
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, lambda_rho
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -215,8 +215,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn, seed = 231454, N, M, nTG
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind)  :: maxrandom = 1.d-5, deltaPhi, Tbase, A0, maxTG
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG
+    real(rkind)  :: maxrandom = 1.d-5, deltaPhi, Tbase, A0, maxTG, lambda_rho
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, lambda_rho
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
