@@ -14,7 +14,7 @@ module igrid_Operators
    type :: igrid_ops
       private
       complex(rkind), dimension(:,:,:), allocatable :: cbuffy1, cbuffy2
-      real(rkind),    dimension(:,:,:), allocatable :: rbuffy, rbuffz1, rbuffz2
+      real(rkind),    dimension(:,:,:), allocatable :: rbuffx, rbuffy, rbuffz1, rbuffz2
       type(decomp_info) :: gp, gpE
       type(spectral)  :: spect, spectE
       type(Pade6stagg) :: derZ
@@ -44,7 +44,8 @@ module igrid_Operators
          procedure :: getSimTime
          procedure :: getVolumeIntegral
          procedure :: getGradient
-   end type 
+         procedure :: getCurl
+     end type 
 
 contains
 
@@ -72,6 +73,27 @@ function getVolumeIntegral(this, arr) result(val)
 
 end function 
 
+subroutine getCurl(this, u, v, w, omegax, omegay, omegaz, botBCu, topBCu, botBCv, topBCv)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: u, v, w
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: omegax, omegay, omegaz
+   integer, intent(in) :: botBCu, topBCu, botBCv, topBCv
+
+   call this%ddy(w,omegax)
+   call this%ddz(u,omegay,botBCu,topBCu)
+   call this%ddx(v,omegaz)
+
+   call this%ddz(v,this%rbuffx,botBCv,topBCv) 
+   omegax = omegax - this%rbuffx
+
+   call this%ddx(w,this%rbuffx)
+   omegay = omegay - this%rbuffx
+
+   call this%ddy(u,this%rbuffx)
+   omegaz = omegaz - this%rbuffx
+
+end subroutine
+   
 function getCenterlineQuantity(this, vec) result(val)
    class(igrid_ops), intent(in) :: this
    real(rkind), dimension(this%gp%zsz(3)), intent(in) :: vec
@@ -124,6 +146,7 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeri
    allocate(this%rbuffy (this%gp%ysz(1),this%gp%ysz(2),this%gp%ysz(3)))
    allocate(this%rbuffz1(this%gp%zsz(1),this%gp%zsz(2),this%gp%zsz(3)))
    allocate(this%rbuffz2(this%gp%zsz(1),this%gp%zsz(2),this%gp%zsz(3)))
+   allocate(this%rbuffx (this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)))
 
    allocate(this%zarr1d_1(1,1,nz))
    allocate(this%zarr1d_2(1,1,nz))
@@ -132,7 +155,7 @@ end subroutine
 subroutine destroy(this)
    class(igrid_ops), intent(inout), target :: this
   
-   deallocate(this%rbuffy, this%rbuffz1, this%rbuffz2)
+   deallocate(this%rbuffx, this%rbuffy, this%rbuffz1, this%rbuffz2)
    deallocate(this%zarr1d_1, this%zarr1d_2)
 end subroutine 
 
