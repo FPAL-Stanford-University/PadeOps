@@ -42,12 +42,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     integer :: k, seed = 12331
     real(rkind) :: lambda_x, lambda_y, A0 = 0.1d0, Tbase = 100.d0, kx, ky, maxTG = 1.d-2
     integer :: N = 4, M= 2, nTG = 2, i, j
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxrandom = 1.d-4, deltaPhi = pi/2.d0
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxrandom = 1.d-4, deltaPhi = pi/2.d0, eta_rho = 1.d0
     real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, wperturb
     real(rkind) :: Psi, dPsi_dz, dz
     type(cd06stagg), allocatable :: derW
 
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta_rho
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -65,7 +65,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     u = -erf(sqrt(pi)*z)
     v = zero
     wC = zero
-    T = Tbase +  0.5d0*erf(sqrt(pi)*z)
+    T = Tbase +  0.5d0*erf(sqrt(pi)*z/eta_rho)
 
     allocate(uperturb(size(u,1),size(u,2),size(u,3)))
     allocate(wperturb(size(u,1),size(u,2),size(u,3)))

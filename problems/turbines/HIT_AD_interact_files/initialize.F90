@@ -151,15 +151,16 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 7, nyplanes = 1, nzplanes = 1
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
 
     if (simulationID == 1) then
          !allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
          allocate(yplanes(nyplanes))
-         !allocate(xplanes(nxplanes))
+         allocate(xplanes(nxplanes))
          !allocate(zplanes(nzplanes))
          !xplanes = [300,400,500,600,700]
          yplanes = [nySize/2]
+         xPlanes = [800]
          !xPlanes = [1, ceiling(nxSize/6.0), ceiling(nxSize/4.85), ceiling(nxSize/4.0), ceiling(nxSize/3.0), ceiling(nxSize/2.0), ceiling(nxSize/1.6)]
          !zplanes = [128]
     end if 
