@@ -34,9 +34,9 @@ module sgsmod_igrid
         logical :: UpdateScalarDynProc = .false., usingDynamicProcedureMomentum = .false. 
         logical :: UseDynamicProcedureScalar = .false. 
 
-        real(rkind) :: cmodel_global, cmodel_global_x, cmodel_global_y, cmodel_global_z
+        real(rkind) :: cmodel_global, cmodel_global_x, cmodel_global_y, cmodel_global_z, Cy, dx, dy, dz
         real(rkind), dimension(:,:,:), allocatable :: nu_sgs_C, nu_sgs_E
-        real(rkind), dimension(:,:,:), allocatable :: kappa_sgs_C, kappa_sgs_E
+        real(rkind), dimension(:,:,:), allocatable :: kappa_sgs_C, kappa_sgs_E, kappa_boundingC, kappa_boundingE
         logical :: isEddyViscosityModel = .false.
         real(rkind), dimension(:,:,:,:), allocatable :: tau_ij
         real(rkind), dimension(:,:,:), pointer :: tau_11, tau_12, tau_22, tau_33, tau_13C, tau_23C
@@ -47,18 +47,22 @@ module sgsmod_igrid
         type(Pade6stagg), pointer :: PadeDer
         logical :: explicitCalcEdgeEddyViscosity = .false.
         real(rkind), dimension(:,:,:), allocatable :: q1C, q2C, q3E 
-        logical :: initspinup = .false., isPeriodic = .false.  
+        logical :: initspinup = .false., isPeriodic = .false., useScalarBounding = .false.  
 
+        real(rkind) :: Tscale, lowbound_PotT, highbound_PotT, Cy_PotT, TurbPrandtlNum_PotT, lowbound, highbound
+
+        type(gaussian) :: gaussianX, gaussianY, gaussianZ
+        
         ! Wall model
         real(rkind), dimension(:,:,:,:), allocatable :: tauijWM
         complex(rkind),dimension(:,:,:,:), allocatable :: tauijWMhat_inZ, tauijWMhat_inY
         real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
         complex(rkind), dimension(:,:,:), allocatable :: Tfilhat, Tfilhatz1, Tfilhatz2
-        logical :: useWallModel = .false. 
+        logical :: useWallModel = .false.
         integer :: botBC_temp = 1
         real(rkind), public :: ustar = 1.d0, InvObLength = 0.d0
         real(rkind) :: umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0, wTh_surf = 0.d0
-        real(rkind) :: dz, z0, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr
+        real(rkind) :: z0, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr
         real(rkind), pointer :: Tsurf
         complex(rkind), dimension(:,:), allocatable :: q3HAT_AtWall
 
@@ -118,7 +122,8 @@ module sgsmod_igrid
             procedure, private :: readSGSDynamicRestart
             procedure, private :: interpolate_eddy_viscosity
             procedure, private :: interpolate_kappaSGS 
-           
+            procedure, private :: compute_kappa_bounding   
+            procedure, private :: compute_Tscale
 
             !! ALL DESTROY PROCEDURES
             procedure          :: destroy
@@ -138,7 +143,7 @@ module sgsmod_igrid
             procedure          :: get_wTh_surf
             procedure          :: getMax_DynSmagConst
             procedure          :: getMax_DynPrandtl
-            procedure          :: usingDynProc 
+            procedure          :: usingDynProc
     end type 
 
 contains
@@ -151,6 +156,7 @@ contains
 #include "sgs_models/standardDynamicProcedure.F90"
 #include "sgs_models/wallmodel.F90"
 #include "sgs_models/accessors.F90"
+#include "sgs_models/scalar_bounding.F90"
 
 subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep)
    class(sgs_igrid), intent(inout) :: this
@@ -264,7 +270,7 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, wh
 
 end subroutine
 
-subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, TurbPrandtlNum)
+subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, TurbPrandtlNum, Cy, lowbound, highbound)
    class(sgs_igrid), intent(inout), target :: this
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: Trhs
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC, dTdzC
@@ -272,13 +278,16 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v, w, T
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffz1, cbuffz2
-   real(rkind), intent(in), optional :: TurbPrandtlNum
+   real(rkind), intent(in), optional :: TurbPrandtlNum, Cy, lowbound, highbound
 
    cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
    cbuffz1 => this%cbuffzC(:,:,:,1); cbuffz2 => this%cbuffzE(:,:,:,1) 
 
 
    if (present(TurbPrandtlNum)) this%Pr = TurbPrandtlNum
+   if (present(Cy)) this%Cy = Cy 
+   if (present(lowbound)) this%lowbound = lowbound
+   if (present(highbound)) this%highbound = highbound
 
    ! First get qj's 
    call this%getQjSGS(dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That)
@@ -299,6 +308,11 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
    call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
    call transpose_z_to_y(cbuffz1,cbuffy1,this%sp_gpC)
    Trhs = Trhs - cbuffy1
+   
+   if (present(TurbPrandtlNum)) this%Pr = this%TurbPrandtlNum_PotT
+   if (present(Cy)) this%Cy = this%Cy_PotT
+   if (present(lowbound)) this%lowbound = this%lowbound_PotT
+   if (present(highbound)) this%highbound = this%highbound_PotT
 
 end subroutine
 
@@ -327,7 +341,19 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That)
       this%q1C = -this%kappa_sgs_C*dTdxC
       this%q2C = -this%kappa_sgs_C*dTdyC
       this%q3E = -this%kappa_sgs_E*dTdzE
+   else
+      this%q1C = zero 
+      this%q2C = zero 
+      this%q3E = zero 
    end if
+
+   if (this%useScalarBounding) then 
+      call this%compute_Tscale(u, v, w) 
+      call this%compute_kappa_bounding(T, dTdxC, dTdyC, dTdzC)
+      this%q1C = this%q1C - this%kappa_boundingC*dTdxC
+      this%q2C = this%q2C - this%kappa_boundingC*dTdyC
+      this%q3E = this%q3E - this%kappa_boundingE*dTdzE
+   end if 
 
    if (this%useWallModel) call this%embed_WM_PotTflux()
  

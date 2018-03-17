@@ -37,14 +37,14 @@ contains
             call toc()
             call tic()
             ! Added by MH, debugging blowup in neutral BL simulation
-            if (p_maxval(maxval(igp%u))>2.) then
-                call message(1, "this step has blown up", igp%tsim)
-                call igp%dumpFullField(igp%u,"uVel")
-                call igp%dumpFullField(igp%v,"vVel")
-                call igp%dumpFullField(igp%wC,"wVel")
-                call igp%dumpFullField(igp%T, "potT")
-                call GracefulExit("u-velocity has blown up",1)
-            end if
+            !if (p_maxval(maxval(igp%u))>2.) then
+            !    call message(1, "this step has blown up", igp%tsim)
+            !    call igp%dumpFullField(igp%u,"uVel")
+            !    call igp%dumpFullField(igp%v,"vVel")
+            !    call igp%dumpFullField(igp%wC,"wVel")
+            !    call igp%dumpFullField(igp%T, "potT")
+            !    call GracefulExit("u-velocity has blown up",1)
+            !end if
         end if 
 
     end subroutine
