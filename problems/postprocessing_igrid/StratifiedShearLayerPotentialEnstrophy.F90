@@ -53,22 +53,33 @@ program StratifiedShearLayerDomainIntegrals
    call ops%ReadField3D(w,"wVel",TIDX) 
    call ops%ReadField3D(potT,"potT",TIDX)
 
-   call ops%getCurl(u,v,w,buff1,buff2,buff3,1,1,1,1)
+   call ops%getCurl(u,v,w,   buff1,buff2,buff3,1,1,1,1)
    call ops%getGradient(potT,buff4,buff5,buff6,1,1)
-
+   
+   ! Potential Enstrophy (Total)
    buff7 = buff1 * buff4 + buff2 * buff5 + buff3 * buff6
-   call ops%writeField3D(buff7,"potE",TIDX)
+   buff7 = buff7 * buff7
+   call ops%writeField3D(buff7,"pEns",TIDX)
 
+   ! Potential Enstrophy with background P
    call ops%getFluct_from_MeanZ(buff6,buff7)
    buff7 = buff7 - buff6
    buff7 = buff7 * buff3
+   buff7 = buff7 * buff7
    call ops%writeField3D(buff7,"ptE1",TIDX)
 
-
+   ! Potential Enstrophy with background Vorticity
+   ! NOTE: Ignore cross term between 1 and 2
    call ops%getFluct_from_MeanZ(buff2,buff7)
    buff7 = buff7 - buff2
    buff7 = buff7 * buff5
+   buff7 = buff7 * buff7
    call ops%writeField3D(buff7,"ptE2",TIDX)
+
+
+   ! Enstrophy (Total)
+   buff7 = buff1*buff1 + buff2*buff2 + buff3*buff3
+   call ops%writeField3D(buff7,"Enst",TIDX)
 
    call ops%destroy()
    call MPI_Finalize(ierr)           

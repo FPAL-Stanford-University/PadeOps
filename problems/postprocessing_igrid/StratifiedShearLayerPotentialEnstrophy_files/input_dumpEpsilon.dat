@@ -1,11 +1,11 @@
 &INPUT
-inputdir  = "/scratch/globus/aghate/StratifiedShearLayer/Ri0.2_DNS/outfiles"        ! Directory for input files
-outputdir = "/scratch/globus/aghate/StratifiedShearLayer/Ri0.2_DNS/outfiles"        ! Directory for output files
+inputdir  = "/scratch/04076/tg833754/StratifiedShearLayer/Ri0.2_DNS"        ! Directory for input files
+outputdir = "/scratch/04076/tg833754/StratifiedShearLayer/postprocess/PotentialEnstrophy/Ri0.2"        ! Directory for output files
 RunID  = 20
-tsnapshot  = 100
+tsnapshot  = 3000
 nx     = 1024
 ny     = 1024
 nz     = 1024
 Rib    = 0.20d0
-NumericalSchemeVertical = 2
+NumericalSchemeVert = 1
 /
