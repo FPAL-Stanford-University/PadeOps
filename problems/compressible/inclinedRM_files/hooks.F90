@@ -47,6 +47,9 @@ module inclinedRM_data
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 
+    ! Exact compatibility with Miranda?
+    logical :: miranda_compat = .true.
+
 contains
 
 ! ------------------------------------------------------------------------------
@@ -190,13 +193,21 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
         L_x = 16._rkind * L_y
         L_z = L_y / 4._rkind
-        x1 = 2.5146_rkind - L_x
-        y1 = zero
-        z1 = -L_z / 2._rkind
 
         dx = L_x/real(nx-1,rkind)
         dy = L_y/real(ny-1,rkind)
         dz = L_z/real(nz  ,rkind)
+
+        if (miranda_compat) then
+            dx = dy
+            dz = dy
+            L_z = dz * real(nz-1, rkind)
+            L_x = dx * real(nx-1, rkind)
+        end if
+
+        x1 = 2.5146_rkind - L_x
+        y1 = zero
+        z1 = -L_z / 2._rkind
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
@@ -225,7 +236,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use ReidRamshawDiffusivityMod,   only: reidRamshawDiffusivity
     use miranda_restart_mod,         only: miranda_restart
     use io_hdf5_stuff,               only: io_hdf5
-    use reductions,                  only: P_MAXVAL
+    use reductions,                  only: P_MAXVAL,P_MINVAL
     use exits,                       only: GracefulExit, message, nancheck
     use mpi
     
@@ -262,12 +273,16 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
     real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: tmp
 
+    integer :: nx, ny, nz
+
     namelist /PROBINPUT/  resdir, resfile, resdump
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
+
+    nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
     associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),                    &
                  v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),                    &
@@ -309,6 +324,22 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
         ! Read in the grid
         call mir%read_grid(resmesh)
+
+        call message("Error in dx", abs(dx-(resmesh(2,1,1,1)-resmesh(1,1,1,1))*real(1.D-2,rkind)))
+        call message("Error in dy", abs(dy-(resmesh(1,2,1,2)-resmesh(1,1,1,2))*real(1.D-2,rkind)))
+        call message("Error in dz", abs(dz-(resmesh(1,1,2,3)-resmesh(1,1,1,3))*real(1.D-2,rkind)))
+
+        call message("Max error in x coordinate",P_MAXVAL( abs(x - resmesh(:,:,:,1)*real(1.D-2,rkind))/dx ))
+        call message("Min error in x coordinate",P_MINVAL( abs(x - resmesh(:,:,:,1)*real(1.D-2,rkind))/dx ))
+
+        call message("Max error in y coordinate",P_MAXVAL( abs(y - resmesh(:,:,:,2)*real(1.D-2,rkind))/dy ))
+        call message("Min error in y coordinate",P_MINVAL( abs(y - resmesh(:,:,:,2)*real(1.D-2,rkind))/dy ))
+
+        call message("Max error in z coordinate",P_MAXVAL( abs(z - resmesh(:,:,:,3)*real(1.D-2,rkind))/dz ))
+        call message("Min error in z coordinate",P_MINVAL( abs(z - resmesh(:,:,:,3)*real(1.D-2,rkind))/dz ))
+
+        print *, "x[ 1,1,1] = ", x( 1,1,1), "    resmesh[ 1,1,1,1] = ", resmesh( 1,1,1,1)
+        print *, "x[nx,1,1] = ", x(nx,1,1), "    resmesh[nx,1,1,1] = ", resmesh(nx,1,1,1)
 
         ! Read in data
         call mir%read_data(resdump, resdata, tsim, dt)
