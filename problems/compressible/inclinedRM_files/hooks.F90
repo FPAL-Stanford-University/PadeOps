@@ -164,6 +164,21 @@ contains
     END SUBROUTINE prob_properties
 
 
+    subroutine get_volumefractions(mix,Ys,Xs)
+        use MixtureEOSMod,               only: mixture
+        type(mixture),                   intent(in)  :: mix
+        real(rkind), dimension(:,:,:,:), intent(in)  :: Ys    ! Species mass fractions
+        real(rkind), dimension(size(Ys,1), size(Ys,2), size(Ys,3), size(Ys,4)), intent(out) :: Xs    ! Species volume fractions
+        
+        integer :: n
+
+        ! Get volume fractons
+        do n = 1,mix%ns
+            Xs(:,:,:,n) = mix%material(n)%mat%Rgas * Ys(:,:,:,n) / mix%Rgas
+        end do
+   
+    end subroutine
+
 end module
 
 subroutine meshgen(decomp, dx, dy, dz, mesh)

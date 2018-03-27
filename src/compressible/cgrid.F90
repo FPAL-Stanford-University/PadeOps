@@ -561,23 +561,6 @@ contains
 
         ! call this%getPhysicalProperties()
         call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
-        ! print *, "mu(1,1,1) = ",  this%mu(1,1,1)
-        ! print *, "mu(-1,1,1) = ", this%mu(this%nxp,1,1)
-        ! print *, "beta(1,1,1) = ",  this%bulk(1,1,1)
-        ! print *, "beta(-1,1,1) = ", this%bulk(this%nxp,1,1)
-
-        ! print *, "D_N2(1,1,1) = ",  this%diff(1,1,1,1)
-        ! print *, "D_N2(-1,1,1) = ", this%diff(this%nxp,1,1,1)
-
-        ! print *, "D_O2(1,1,1) = ",  this%diff(1,1,1,2)
-        ! print *, "D_O2(-1,1,1) = ", this%diff(this%nxp,1,1,2)
-
-        ! print *, "D_SF6(1,1,1) = ",  this%diff(1,1,1,3)
-        ! print *, "D_SF6(-1,1,1) = ", this%diff(this%nxp,1,1,3)
-
-        ! print *, "D_Ac(1,1,1) = ",  this%diff(1,1,1,4)
-        ! print *, "D_Ac(-1,1,1) = ", this%diff(this%nxp,1,1,4)
-        ! stop
 
         if (this%mix%ns .GT. 1) then
             dYsdx => gradYs(:,:,:,              1:  this%mix%ns)

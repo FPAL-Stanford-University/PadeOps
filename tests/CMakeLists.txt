@@ -1,7 +1,5 @@
 file(GLOB tests_source_files *.F90)
 
-# set(tests_source_files "test_cd10.F90;test_cd06.F90")
-
 # Include directories
 include_directories( ${FFTW_INCLUDE_PATH} ${DECOMP_INCLUDE_PATH} ${VTK_IO_INCLUDE_PATH} ${HDF5_INCLUDE_PATH} ${PadeOps_BINARY_DIR}/src )
 
