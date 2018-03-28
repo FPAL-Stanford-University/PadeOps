@@ -41,6 +41,7 @@ module igrid_Operators
          procedure :: allocate3Dfield
          procedure :: getCenterlineQuantity
          procedure :: WriteASCII_2D
+         procedure :: dump_plane
          procedure :: getSimTime
          procedure :: getVolumeIntegral
          procedure :: getGradient

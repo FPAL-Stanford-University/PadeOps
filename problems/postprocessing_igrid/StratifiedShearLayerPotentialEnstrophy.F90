@@ -15,10 +15,11 @@ program StratifiedShearLayerDomainIntegrals
    character(len=clen) ::  inputdir, outputdir
    character(len=clen) :: inputfile
    real(rkind) :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0
-   integer :: ierr, tsnapshot = 0, NumericalSchemeVert = 1 
+   integer :: idx, ierr, tstart = 0, tstop, tstep, NumericalSchemeVert = 1 
    logical :: isZPeriodic = .false. 
+   integer :: nt
 
-   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tsnapshot, nx, ny, nz, Re, Rib, NumericalSchemeVert, tidx  
+   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Re, Rib, NumericalSchemeVert, tidx  
    
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
@@ -45,41 +46,61 @@ program StratifiedShearLayerDomainIntegrals
    call ops%allocate3DField(buff6)
    call ops%allocate3DField(buff7)
    
-   tidx = tsnapshot
-   call message(0, "Reading fields for tid:", TIDX)
-   call tic()
-   call ops%ReadField3D(u,"uVel",TIDX)
-   call ops%ReadField3D(v,"vVel",TIDX)
-   call ops%ReadField3D(w,"wVel",TIDX) 
-   call ops%ReadField3D(potT,"potT",TIDX)
+   nt = (tstop - tstart)/tstep + 1
 
-   call ops%getCurl(u,v,w,   buff1,buff2,buff3,1,1,1,1)
-   call ops%getGradient(potT,buff4,buff5,buff6,1,1)
+   call message(0,"Number of snapshots to read:", nt)
+
+   tidx = tstart
+   idx = 1
+   do while(tidx <= tstop)
+      
+      call message(0, "Reading fields for tid:", TIDX)
+      call tic()
+      call ops%ReadField3D(u,"uVel",TIDX)
+      call ops%ReadField3D(v,"vVel",TIDX)
+      call ops%ReadField3D(w,"wVel",TIDX) 
+      call ops%ReadField3D(potT,"potT",TIDX)
+      
+      call ops%getCurl(u,v,w,   buff1,buff2,buff3,1,1,1,1) 
+      call ops%getGradient(potT,buff4,buff5,buff6,1,1)
+      
+      ! Potential Enstrophy (Total)
+      buff7 = buff1 * buff4 + buff2 * buff5 + buff3 * buff6
+      buff7 = buff7 * buff7
+      !call ops%writeField3D(buff7,"pEns",TIDX)
+      call ops%dump_plane(buff7,1,nx/2,TIDX,"pEns")
+      call ops%dump_plane(buff7,2,ny/2,TIDX,"pEns")
+      call ops%dump_plane(buff7,3,nz/2,TIDX,"pEns")
+
+      ! Potential Enstrophy with background P
+      !call ops%getFluct_from_MeanZ(buff6,buff7)
+      !buff7 = buff7 - buff6
+      !buff7 = buff7 * buff3
+      !buff7 = buff7 * buff7
+      !call ops%writeField3D(buff7,"ptE1",TIDX)
+      
+      ! Potential Enstrophy with background Vorticity
+      ! NOTE: Ignore cross term between 1 and 2
+      !call ops%getFluct_from_MeanZ(buff2,buff7)
+      !buff7 = buff7 - buff2
+      !buff7 = buff7 * buff5
+      !buff7 = buff7 * buff7
+      !call ops%writeField3D(buff7,"ptE2",TIDX)
+      
+      
+      ! Enstrophy (Total)
+      buff7 = buff1*buff1 + buff2*buff2 + buff3*buff3
+      !call ops%writeField3D(buff7,"Enst",TIDX)
+      call ops%dump_plane(buff7,1,nx/2,TIDX,"Enst")
+      call ops%dump_plane(buff7,2,ny/2,TIDX,"Enst")
+      call ops%dump_plane(buff7,3,nz/2,TIDX,"Enst")
+      
+      tidx = tidx + tstep
+
+      call toc()
    
-   ! Potential Enstrophy (Total)
-   buff7 = buff1 * buff4 + buff2 * buff5 + buff3 * buff6
-   buff7 = buff7 * buff7
-   call ops%writeField3D(buff7,"pEns",TIDX)
+   end do
 
-   ! Potential Enstrophy with background P
-   call ops%getFluct_from_MeanZ(buff6,buff7)
-   buff7 = buff7 - buff6
-   buff7 = buff7 * buff3
-   buff7 = buff7 * buff7
-   call ops%writeField3D(buff7,"ptE1",TIDX)
-
-   ! Potential Enstrophy with background Vorticity
-   ! NOTE: Ignore cross term between 1 and 2
-   call ops%getFluct_from_MeanZ(buff2,buff7)
-   buff7 = buff7 - buff2
-   buff7 = buff7 * buff5
-   buff7 = buff7 * buff7
-   call ops%writeField3D(buff7,"ptE2",TIDX)
-
-
-   ! Enstrophy (Total)
-   buff7 = buff1*buff1 + buff2*buff2 + buff3*buff3
-   call ops%writeField3D(buff7,"Enst",TIDX)
 
    call ops%destroy()
    call MPI_Finalize(ierr)           
