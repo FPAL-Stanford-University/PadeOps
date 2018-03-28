@@ -298,4 +298,27 @@ subroutine WriteASCII_2D(this, field, flabel)
 end subroutine 
 
 
+subroutine dump_plane(this, field, dir_id, plane_id, tid, label)
+   use decomp_2d_io
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: field
+   integer, intent(in) :: dir_id, plane_id, tid
+   character(len=4), intent(in) :: label
+   character(len=clen) :: fname
+   character(len=clen) :: tempname
+  
+   select case(dir_id) 
+   case(1)
+       write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A1,A4,A4)") "Run", this%RunID,"_t",tid,"_x",plane_id,"_",label,".pln"
+   case(2)
+       write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A1,A4,A4)") "Run", this%RunID,"_t",tid,"_y",plane_id,"_",label,".pln"
+   case(3)
+       write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A1,A4,A4)") "Run", this%RunID,"_t",tid,"_z",plane_id,"_",label,".pln"
+   end select 
+   fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+   call decomp_2d_write_plane(1,field,dir_id, plane_id, fname, this%gp)
+
+end subroutine 
+
+
 end module 
