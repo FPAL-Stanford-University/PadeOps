@@ -236,15 +236,25 @@ end subroutine
 
 subroutine ReadField3D(this, field, label, tidx)
    use decomp_2d_io
+   use exits, only: gracefulExit
+   use mpi
    class(igrid_ops), intent(inout) :: this
    real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out)  :: field
    character(len=clen) :: tempname, fname
    character(len=4), intent(in) :: label
    integer, intent(in) :: tidx
-         
+   integer :: ierr 
+
    write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",tidx,".out"
    fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
    
+   open(777,file=trim(fname),status='old',iostat=ierr)
+   if(ierr .ne. 0) then
+    print*, "Rank:", nrank, ". File:", fname, " not found"
+    call mpi_barrier(mpi_comm_world, ierr)
+    call gracefulExit("File I/O issue.",44)
+   end if 
+   close(777)
    call decomp_2d_read_one(1,field,fname,this%gp)
 end subroutine  
 
