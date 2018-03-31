@@ -1,4 +1,4 @@
-module StatisticsMod
+module AveragingMod
 
     use mpi
     use decomp_2d,       only: decomp_info, nrank
@@ -8,7 +8,7 @@ module StatisticsMod
 
     implicit none
 
-    type :: statistics
+    type :: averaging
         private
 
         type(decomp_info), pointer :: gp
@@ -35,14 +35,14 @@ module StatisticsMod
 
     end type
 
-    interface statistics
+    interface averaging
         module procedure init
     end interface
 
 contains
 
     function init(gp, pencil, averaging_directions) result(this)
-        type(statistics) :: this
+        type(averaging)                        :: this
         class(decomp_info), target, intent(in) :: gp
         integer,                    intent(in) :: pencil
         logical, dimension(3),      intent(in) :: averaging_directions
@@ -103,7 +103,7 @@ contains
     end function
 
     impure elemental subroutine destroy(this)
-        type(statistics), intent(inout) :: this
+        type(averaging), intent(inout) :: this
 
         if (allocated(this%buffer_x)) deallocate(this%buffer_x)
         if (allocated(this%buffer_y)) deallocate(this%buffer_y)
@@ -111,7 +111,7 @@ contains
     end subroutine
 
     subroutine allocate_average(this, f_avg)
-        class(statistics),                          intent(in)  :: this
+        class(averaging),                           intent(in)  :: this
         real(rkind), dimension(:,:,:), allocatable, intent(out) :: f_avg
 
         if (allocated(f_avg)) deallocate(f_avg)
@@ -119,7 +119,7 @@ contains
     end subroutine
 
     subroutine avg_x(this, f, avg)
-        class(statistics),                               intent(in)    :: this
+        class(averaging),                                intent(in)    :: this
         real(rkind), dimension(:,:,:),                   intent(in)    :: f
         real(rkind), dimension(1, size(f,2), size(f,3)), intent(out)   :: avg
         real(rkind), dimension(size(f,2), size(f,3))                   :: p_avg
@@ -142,7 +142,7 @@ contains
     end subroutine
 
     subroutine avg_y(this, f, avg)
-        class(statistics),                               intent(in)    :: this
+        class(averaging),                                intent(in)    :: this
         real(rkind), dimension(:,:,:),                   intent(in)    :: f
         real(rkind), dimension(size(f,1), 1, size(f,3)), intent(out)   :: avg
         real(rkind), dimension(size(f,1), size(f,3))                   :: p_avg
@@ -165,7 +165,7 @@ contains
     end subroutine
 
     subroutine avg_z(this, f, avg)
-        class(statistics),                               intent(in)    :: this
+        class(averaging),                                intent(in)    :: this
         real(rkind), dimension(:,:,:),                   intent(in)    :: f
         real(rkind), dimension(size(f,1), size(f,2), 1), intent(out)   :: avg
         real(rkind), dimension(size(f,1), size(f,2))                   :: p_avg
@@ -188,7 +188,7 @@ contains
     end subroutine
 
     subroutine get_average(this,f,f_avg)
-        class(statistics),                                                          target, intent(inout) :: this
+        class(averaging),                                                           target, intent(inout) :: this
         real(rkind), dimension(      this%sz(1),      this%sz(2),      this%sz(3)), target, intent(in)    :: f
         real(rkind), dimension(this%avg_size(1),this%avg_size(2),this%avg_size(3)),         intent(out)   :: f_avg
 
@@ -229,7 +229,7 @@ contains
     end subroutine
 
     subroutine get_weighted_average(this,weights,f,f_avg)
-        class(statistics),                                                          intent(inout) :: this
+        class(averaging),                                                           intent(inout) :: this
         real(rkind), dimension(      this%sz(1),      this%sz(2),      this%sz(3)), intent(in)    :: f, weights
         real(rkind), dimension(this%avg_size(1),this%avg_size(2),this%avg_size(3)), intent(out)   :: f_avg
 
@@ -242,7 +242,7 @@ contains
     end subroutine
 
     subroutine get_fluctuations(this, f, f_avg, f_fluct)
-        class(statistics),                                                          intent(in)  :: this
+        class(averaging),                                                           intent(in)  :: this
         real(rkind), dimension(      this%sz(1),      this%sz(2),      this%sz(3)), intent(in)  :: f
         real(rkind), dimension(this%avg_size(1),this%avg_size(2),this%avg_size(3)), intent(in)  :: f_avg
         real(rkind), dimension(      this%sz(1),      this%sz(2),      this%sz(3)), intent(out) :: f_fluct
