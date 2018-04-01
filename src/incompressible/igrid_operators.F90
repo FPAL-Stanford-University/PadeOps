@@ -5,7 +5,8 @@ module igrid_Operators
    use cd06staggstuff, only: cd06stagg
    use reductions, only: p_sum
    use PadeDerOps, only: Pade6stagg 
-
+   use PoissonPeriodicMod, only: PoissonPeriodic
+   use exits, only: GracefulExit, message
    implicit none
    
    private
@@ -21,10 +22,12 @@ module igrid_Operators
       type(cd06stagg) :: derZ1d
       real(rkind), dimension(:,:,:), allocatable :: zarr1d_1, zarr1d_2
 
+      type(PoissonPeriodic) :: poiss_periodic
       real(rkind) :: dx, dy, dz
       character(len=clen) ::  inputdir, outputdir
       real(rkind) :: mfact_xy
-
+    
+      logical :: PeriodicInZ, PoissonSolverInitiatized = .false. 
       integer :: RunID
 
       contains
@@ -46,9 +49,54 @@ module igrid_Operators
          procedure :: getVolumeIntegral
          procedure :: getGradient
          procedure :: getCurl
+         procedure :: check_dump_existence
+         procedure :: initPoissonSolver
+         procedure :: PoissonSolvePeriodic_inplace
+         procedure :: dealias
      end type 
 
 contains
+
+subroutine dealias(this, field)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(inout) :: field 
+
+   call this%spect%fft(field,this%cbuffy1)
+   call this%spect%dealias(this%cbuffy1)
+   call this%spect%ifft(this%cbuffy1,field)
+
+end subroutine 
+
+subroutine initPoissonSolver(this, dx, dy, dz)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), intent(in) :: dx, dy, dz
+
+   if (this%PeriodicInZ) then
+      call this%poiss_periodic%init(dx, dy, dz, this%gp, 1, useExhaustiveFFT=.true.)
+      call message(0,"Poisson solver initialized.")  
+      this%PoissonSolverInitiatized = .true.  
+  else
+      call GracefulExit("Poisson solver only supported for periodic problems",134)
+   end if
+
+end subroutine 
+
+subroutine PoissonSolvePeriodic_inplace(this,rhs, dealiasRHS)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(inout) :: rhs
+   logical, intent(in), optional :: dealiasRHS
+
+   if (this%PoissonSolverInitiatized) then
+      if (present(dealiasRHS)) then
+          if (dealiasRHS) then
+              call this%dealias(rhs)
+          end if 
+      end if 
+      call this%poiss_periodic%poisson_solve(rhs)
+   else
+      call message(0,"WARNING: Poisson solver called without initializing.")
+   end if 
+end subroutine 
 
 subroutine GetGradient(this, f, dfdx, dfdy, dfdz, botBC, topBC)
    class(igrid_ops), intent(inout) :: this
@@ -142,6 +190,8 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeri
    this%dx = dx
    this%dy = dy
    this%dz = dz
+    
+   this%PeriodicInZ = isPeriodicInZ
 
    this%mfact_xy = 1.d0/(real(nx,rkind)*real(ny,rkind))
    allocate(this%rbuffy (this%gp%ysz(1),this%gp%ysz(2),this%gp%ysz(3)))
@@ -239,7 +289,7 @@ subroutine ReadField3D(this, field, label, tidx)
    use decomp_2d_io
    use exits, only: gracefulExit
    use mpi
-   class(igrid_ops), intent(inout) :: this
+   class(igrid_ops), intent(in) :: this
    real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out)  :: field
    character(len=clen) :: tempname, fname
    character(len=4), intent(in) :: label
@@ -258,6 +308,28 @@ subroutine ReadField3D(this, field, label, tidx)
    close(777)
    call decomp_2d_read_one(1,field,fname,this%gp)
 end subroutine  
+
+
+function check_dump_existence(this, label, tidx) result(file_found)
+   class(igrid_ops), intent(in) :: this
+   character(len=clen) :: tempname, fname
+   character(len=4), intent(in) :: label
+   integer, intent(in) :: tidx
+   integer :: ierr 
+   logical :: file_found 
+
+   write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",tidx,".out"
+   fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+   
+   open(777,file=trim(fname),status='old',iostat=ierr)
+   if (ierr == 0) then
+       file_found = .true. 
+   else
+       file_found = .false. 
+   end if 
+
+end function
+
 
 subroutine WriteField3D(this, field, label, tidx)
    use decomp_2d_io
