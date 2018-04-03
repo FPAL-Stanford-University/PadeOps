@@ -9,7 +9,7 @@ program test_averaging
 
     implicit none
 
-    real(rkind), dimension(:,:,:), allocatable :: x, y, z, f, f_avg, f_avg_correct
+    real(rkind), dimension(:,:,:), allocatable :: x, y, z, f, f_avg, f_avg_correct, f_fluct, f_fluct_correct
     type(averaging) :: stats
     type(decomp_info) :: gp
 
@@ -19,7 +19,7 @@ program test_averaging
 
     real(rkind), dimension(:), allocatable :: f_local
 
-    real(rkind) :: dx, dy, dz, z_local, f_avg_z
+    real(rkind) :: dx, dy, dz, z_local, f_avg_z, f_avg_z_weighted, z_sum
 
     call MPI_Init(ierr)
 
@@ -31,7 +31,6 @@ program test_averaging
     allocate( y         ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     allocate( z         ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
     allocate( f         ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
-
 
     dx = two*pi/nx
     dy = two*pi/ny
@@ -59,6 +58,14 @@ program test_averaging
         f_local(k) = 2._rkind*z_local**2 - 3._rkind*z_local + 1._rkind
     end do
     f_avg_z = sum(f_local)/real(nz,rkind)
+
+    z_sum = 0._rkind
+    do k = 1,nz
+        z_local = real(k - 1, rkind)*dz
+        f_local(k) = z_local * (2._rkind*z_local**2 - 3._rkind*z_local + 1._rkind)
+        z_sum = z_sum + z_local
+    end do
+    f_avg_z_weighted = sum(f_local)/z_sum
     deallocate(f_local)
 
     stats =  averaging(gp, 2, [.true., .true., .true.])
@@ -71,10 +78,28 @@ program test_averaging
     call stats%allocate_average(f_avg)
 
     call stats%allocate_average(f_avg_correct)
-    f_avg_correct(:,:,1) = f_avg_z * sin(x(:,:,1)) * cos(y(:,:,1))
 
+    f_avg_correct(:,:,1) = f_avg_z * sin(x(:,:,1)) * cos(y(:,:,1))
     call stats%get_average(f, f_avg)
     call message("Max error in average", P_MAXVAL(abs(f_avg - f_avg_correct)))
+
+    f_avg_correct(:,:,1) = f_avg_z_weighted * sin(x(:,:,1)) * cos(y(:,:,1))
+    call stats%get_weighted_average(z, f, f_avg)
+    call message("Max error in average", P_MAXVAL(abs(f_avg - f_avg_correct)))
+
+    allocate( f_fluct        ( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
+    allocate( f_fluct_correct( gp%ysz(1), gp%ysz(2), gp%ysz(3) ) )
+
+    do k = 1, gp%ysz(3)
+        f_fluct_correct(:,:,k) = f(:,:,k) - f_avg_correct(:,:,1)
+    end do
+    call stats%get_fluctuations(f, f_avg, f_fluct)
+    call message("Max error in fluctuations", P_MAXVAL(abs(f_fluct - f_fluct_correct)))
+
+    deallocate( f_fluct        )
+    deallocate( f_fluct_correct)
+
+
     deallocate(f_avg)
     deallocate(f_avg_correct)
 

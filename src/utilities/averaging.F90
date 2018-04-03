@@ -251,7 +251,7 @@ contains
 
         do k = 1,this%sz(3)
             do j = 1,this%sz(2)
-                do i = 1,this%sz(2)
+                do i = 1,this%sz(1)
                     ii = min(i, this%avg_size(1))
                     jj = min(j, this%avg_size(2))
                     kk = min(k, this%avg_size(3))
