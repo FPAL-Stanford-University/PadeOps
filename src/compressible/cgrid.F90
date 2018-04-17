@@ -12,6 +12,7 @@ module CompressibleGrid
     use IdealGasEOS,          only: idealgas
     use MixtureEOSMod,        only: mixture
     use PowerLawViscosityMod, only: powerLawViscosity
+    use TKEBudgetMod,         only: tkeBudget
    
     implicit none
 
@@ -59,6 +60,9 @@ module CompressibleGrid
 
         type(io_hdf5), allocatable :: viz
         type(io_hdf5), allocatable :: restart
+
+        logical                      :: compute_tke_budget
+        type(tkeBudget), allocatable :: budget
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -160,9 +164,11 @@ contains
         integer     :: nrestart = 0
         logical     :: rewrite_viz = .true.
         integer     :: vizramp = 5
+        logical     :: compute_tke_budget = .false.
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
                          outputdir, vizprefix, tviz, reduce_precision, &
+                                                   compute_tke_budget, &
                                       periodicx, periodicy, periodicz, &
                              derivative_x, derivative_y, derivative_z, &
                                          filter_x, filter_y, filter_z, &
@@ -197,6 +203,8 @@ contains
         this%Ckap = Ckap
         this%Cdiff = Cdiff
         this%CY = CY
+
+        this%compute_tke_budget = compute_tke_budget
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -418,6 +426,18 @@ contains
 
         deallocate(varnames)
 
+        ! Instantiate TKE budget object
+        if (this%compute_tke_budget) then
+            if ( this%periodicx .or. this%periodicy .or. (.not. this%periodicz) ) then
+                call GracefulExit("TKE budgets only supported for Z direction averaging. Sorry :(", 2083)
+            end if
+            
+            if (allocated(this%budget)) deallocate(this%budget)
+            allocate(this%budget , source=tkeBudget(this%decomp, this%der, this%mesh, this%dx, this%dy, this%dz, &
+                                                    [this%periodicx, this%periodicy, this%periodicz], this%outputdir, &
+                                                    this%x_bc, this%y_bc, this%z_bc, reduce_precision))
+        end if
+
     end subroutine
 
 
@@ -444,6 +464,8 @@ contains
         
         if (allocated(this%Wcnsrv)) deallocate(this%Wcnsrv) 
         
+        if (allocated(this%budget)) deallocate(this%budget)
+
         call this%viz%destroy()
         if (allocated(this%viz)) deallocate(this%viz)
 

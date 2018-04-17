@@ -53,7 +53,7 @@ contains
     end subroutine
 
     subroutine transpose_x_to_y(this, input, output)
-        class(mytranspose2D), intent(inout) :: this
+        class(mytranspose2D), intent(in) :: this
         real(rkind), dimension(this%nx,this%ay), intent(in)  :: input
         real(rkind), dimension(this%ax,this%ny), intent(out) :: output
         
@@ -75,7 +75,7 @@ contains
     end subroutine
 
     subroutine transpose_y_to_x(this, input, output)
-        class(mytranspose2D), intent(inout) :: this
+        class(mytranspose2D), intent(in) :: this
         real(rkind), dimension(this%ax,this%ny), intent(in)  :: input
         real(rkind), dimension(this%nx,this%ay), intent(out) :: output
         

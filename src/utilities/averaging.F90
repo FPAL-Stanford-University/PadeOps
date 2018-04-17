@@ -9,7 +9,6 @@ module AveragingMod
     implicit none
 
     type :: averaging
-        private
 
         type(decomp_info), pointer :: gp
         logical, dimension(3) :: averaging_directions = [.true., .true., .true.]
@@ -20,7 +19,8 @@ module AveragingMod
 
         real(rkind), dimension(:,:,:), allocatable :: buffer_x, buffer_y, buffer_z
 
-        integer, dimension(3), public :: sz, avg_size
+        integer, dimension(3) :: sz, avg_size
+        integer :: avg_dim
 
     contains
 
@@ -48,7 +48,7 @@ contains
         logical, dimension(3),      intent(in) :: averaging_directions
 
         integer, dimension(3) :: st
-        integer :: ierr
+        integer :: ierr, counter
 
         this%gp => gp
         this%averaging_directions = averaging_directions
@@ -74,12 +74,16 @@ contains
         call mpi_comm_split( this%yz_comm,  st(3), nrank,  this%y_comm, ierr)
         call mpi_comm_split( this%xz_comm,  st(3), nrank,  this%x_comm, ierr)
 
+        counter = 0
+
         this%buffer_size_x = this%sz
         if ( this%averaging_directions(1) ) then
             this%buffer_size_x(1) = 1
 
             if (allocated(this%buffer_x)) deallocate(this%buffer_x)
             allocate(this%buffer_x(this%buffer_size_x(1), this%buffer_size_x(2), this%buffer_size_x(3) ))
+
+            counter = counter + 1
         end if
 
         this%buffer_size_y = this%buffer_size_x
@@ -88,6 +92,8 @@ contains
 
             if (allocated(this%buffer_y)) deallocate(this%buffer_y)
             allocate(this%buffer_y(this%buffer_size_y(1), this%buffer_size_y(2), this%buffer_size_y(3) ))
+
+            counter = counter + 1
         end if
 
         this%buffer_size_z = this%buffer_size_y
@@ -96,9 +102,12 @@ contains
 
             if (allocated(this%buffer_z)) deallocate(this%buffer_z)
             allocate(this%buffer_z(this%buffer_size_z(1), this%buffer_size_z(2), this%buffer_size_z(3) ))
+
+            counter = counter + 1
         end if
 
         this%avg_size = this%buffer_size_z
+        this%avg_dim  = 3 - counter
 
     end function
 
