@@ -444,13 +444,14 @@ contains
 
     end subroutine
 
-    subroutine tke_budget(this, rho, u, v, w, p, tauij, tke_old, tsim, dt)
+    subroutine tke_budget(this, rho, u, v, w, p, tauij, tke_old, tke_prefilter, tsim, dt)
         class(tkeBudget),                                                                         intent(inout) :: this
         real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3)),         intent(in)    :: rho, u, v, w, p
         real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3),      6), intent(in)    :: tauij
-        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),   intent(in)    :: tke_old
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),   intent(in)    :: tke_old, tke_prefilter
         real(rkind),                                                                              intent(in)    :: tsim, dt
 
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: ddt_tke
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: production
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: p_dil_fluct
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: fluct_p_dil
@@ -491,8 +492,11 @@ contains
         tmp = half*( u_pprime*u_pprime + v_pprime*v_pprime + w_pprime*w_pprime )
         call this%favre_avg(rho, tmp, tke)
 
+        ! Get tke rate of change
+        ddt_tke = (tke - tke_old)/dt
+
         ! Get numerical dissipation (from filtering)
-        dissipation_num = (tke_old - tke)/dt
+        dissipation_num = (tke_prefilter - tke)/dt
 
         ! Get Reynolds stresses
         call this%get_reynolds_stress(rho, u_pprime, v_pprime, w_pprime, Rij)
@@ -540,6 +544,7 @@ contains
         call this%viz%write_variable(w_tilde, 'w_tilde')
         call this%viz%write_variable(p_bar,   'p_bar')
 
+        call this%viz%write_variable(tke, 'TKE')
         call this%viz%write_variable(Rij(:,:,:,1), 'R_11')
         call this%viz%write_variable(Rij(:,:,:,2), 'R_12')
         call this%viz%write_variable(Rij(:,:,:,3), 'R_13')
@@ -558,6 +563,7 @@ contains
         call this%viz%write_variable(u_pprime_bar(:,:,:,2), 'v_pprime_bar')
         call this%viz%write_variable(u_pprime_bar(:,:,:,3), 'w_pprime_bar')
 
+        call this%viz%write_variable(ddt_tke,         'TKE_rate')
         call this%viz%write_variable(production,      'production')
         call this%viz%write_variable(p_dil_fluct,     'p_dil_fluct')
         call this%viz%write_variable(fluct_p_dil,     'fluct_p_dil')

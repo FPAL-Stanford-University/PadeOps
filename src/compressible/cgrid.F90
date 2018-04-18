@@ -649,7 +649,7 @@ contains
         do while ( tcond .AND. stepcond )
             ! Advance time
             call tic()
-            call this%advance_RK45()
+            call this%advance_RK45(vizcond)
             call toc(cputime)
             
             call message(1,"Time",this%tsim)
@@ -710,14 +710,23 @@ contains
 
     end subroutine
 
-    subroutine advance_RK45(this)
+    subroutine advance_RK45(this, vizcond)
         use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B
         use exits,      only: message,nancheck,GracefulExit
         class(cgrid), target, intent(inout) :: this
+        logical,              intent(in)    :: vizcond
 
-        real(rkind)                                          :: Qtmpt
+        real(rkind)                                               :: Qtmpt
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: rhs  ! RHS for conserved variables
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: Qtmp ! Temporary variable for RK45
+
+        real(rkind), dimension(:,:,:,:), target, allocatable :: duidxj, tauij, gradYs
+        real(rkind), dimension(:,:,:), allocatable :: tke_old, tke_prefilter ! Temporary variable for tke dissipation
+        real(rkind)                                :: dt_tke
+
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
+
         integer :: isub,i,j,k,l
 
         character(len=clen) :: charout
@@ -726,6 +735,11 @@ contains
             call this%mix%update(this%Ys)
             call this%mix%get_e_from_p(this%rho,this%p,this%e)
             call this%mix%get_T(this%e,this%T)
+        end if
+
+        if ( (vizcond) .and. (this%compute_tke_budget) ) then
+            allocate( tke_old      (this%budget%avg%sz(1),this%budget%avg%sz(2),this%budget%avg%sz(3)) )
+            allocate( tke_prefilter(this%budget%avg%sz(1),this%budget%avg%sz(2),this%budget%avg%sz(3)) )
         end if
 
         Qtmp = zero
@@ -747,6 +761,12 @@ contains
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
+            if ( (vizcond) .and. (isub == RK45_steps) ) then
+                call this%get_primitive()
+                call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_prefilter)
+                dt_tke = RK45_B(isub)*Qtmpt
+            end if
+
             ! Filter the conserved variables
             do i = 1,this%mix%ns
                 call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
@@ -759,11 +779,71 @@ contains
             call this%get_primitive()
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             call this%post_bc()
+
+            ! Compute TKE budgets
+            if (vizcond) then
+                if (isub == RK45_steps-1) then
+                    call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_old)
+                end if
+
+                if (isub == RK45_steps)then
+                    allocate( duidxj(this%nxp,this%nyp,this%nzp,9) )
+                    allocate( tauij (this%nxp,this%nyp,this%nzp,6) )
+                    allocate( gradYs(this%nxp, this%nyp, this%nzp,3*this%mix%ns) )
+
+                    dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+                    dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+                    dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+                    
+                    call this%gradient(this%u,dudx,dudy,dudz,-this%x_bc, this%y_bc, this%z_bc)
+                    call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
+                    call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
+
+                    ! call this%getPhysicalProperties()
+                    call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
+
+                    if (this%mix%ns .GT. 1) then
+                        dYsdx => gradYs(:,:,:,1:this%mix%ns); dYsdy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns); dYsdz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);
+                        do i = 1,this%mix%ns
+                            call this%gradient(this%Ys(:,:,:,i),dYsdx(:,:,:,i),dYsdy(:,:,:,i),dYsdz(:,:,:,i), this%x_bc, this%y_bc, this%z_bc)
+                        end do
+                        call this%getLAD(dudx, dudy, dudz,&
+                                         dvdx, dvdy, dvdz,&
+                                         dwdx, dwdy, dwdz,&
+                                        dYsdx,dYsdy,dYsdz )
+                    else
+                        call this%getLAD(dudx, dudy, dudz,&
+                                         dvdx, dvdy, dvdz,&
+                                         dwdx, dwdy, dwdz )
+                    end if
+                    deallocate( gradYs )
+
+                    ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
+                    call this%get_tau( duidxj )
+                    ! Now, associate the pointers to understand what's going on better
+                    tauij(:,:,:,1) = duidxj(:,:,:,tauxxidx)
+                    tauij(:,:,:,2) = duidxj(:,:,:,tauxyidx)
+                    tauij(:,:,:,3) = duidxj(:,:,:,tauxzidx)
+                    tauij(:,:,:,4) = duidxj(:,:,:,tauyyidx)
+                    tauij(:,:,:,5) = duidxj(:,:,:,tauyzidx)
+                    tauij(:,:,:,6) = duidxj(:,:,:,tauzzidx)
+
+                    deallocate( duidxj )
+
+                    call this%budget%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
+                                                tke_old, tke_prefilter, this%tsim, dt_tke)
+                    deallocate( tauij  )
+
+                end if
+            end if
+                
         end do
 
         !this%tsim = this%tsim + this%dt
         this%step = this%step + 1
             
+        if ( allocated(tke_old) )       deallocate( tke_old )
+        if ( allocated(tke_prefilter) ) deallocate( tke_prefilter )
     end subroutine
 
     subroutine get_dt(this,stability)

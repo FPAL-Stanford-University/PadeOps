@@ -26,7 +26,7 @@ program test_TKEBudget
 
     real(rkind) :: dt = real(1.0D-4, rkind)
 
-    real(rkind), dimension(:,:,:),   allocatable :: tke_old
+    real(rkind), dimension(:,:,:),   allocatable :: tke_old, tke_prefilter
     real(rkind), dimension(:,:,:,:), allocatable :: tauij
 
     integer :: ierr, step
@@ -58,21 +58,24 @@ program test_TKEBudget
     outputdir = "./outputs"
     budget = tkeBudget(mir%gp, der, mir%mesh, mir%dx, mir%dy, mir%dz, [periodicx, periodicy, periodicz], outputdir, x_bc, y_bc, z_bc, .true.)
 
-    allocate( tke_old(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) )
-    allocate(   tauij(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 6) )
+    allocate( tke_old      (mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) )
+    allocate( tke_prefilter(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) )
+    allocate(         tauij(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 6) )
 
     tke_old = zero
+    tke_prefilter = zero
 
     ! Read in data for time step 0
-    do step = 0, mir%nsteps
+    do step = 0, mir%nsteps-1
         call message("Processing step ", step)
         call mir%read_data(step)
 
         call get_tauij(mir%gp, der, mir%u, mir%v, mir%w, mir%mu, mir%bulk, tauij, x_bc, y_bc, z_bc)
-        call budget%tke_budget(mir%rho, mir%u, mir%v, mir%w, mir%p, tauij, tke_old, step*dt, dt)
+        call budget%tke_budget(mir%rho, mir%u, mir%v, mir%w, mir%p, tauij, tke_old, tke_prefilter, step*dt, dt)
     end do
 
     deallocate( tke_old )
+    deallocate( tke_prefilter )
     deallocate(   tauij )
 
     call mir%destroy()
