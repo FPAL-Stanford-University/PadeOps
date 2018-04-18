@@ -26,18 +26,18 @@ program HIT_AD_getRapidSlowPressure
    real(rkind), dimension(:,:,:), allocatable :: T11s, T12s, T13s, T22s, T23s, T33s
 
    real(rkind) :: dx, dy, dz
-   integer :: nx, ny, nz, RunID, TIDX
+   integer :: nx, ny, nz, RunID, TIDX, tDumpRestart = 1000
    type(igrid_ops) :: ops
-   character(len=clen) ::  inputdir, outputdir
+   character(len=clen) ::  inputdir, outputdir, RestartDir
    character(len=clen) :: inputfile
-   real(rkind) :: Lx = 10.d0*pi, Ly = 2.d0*pi, Lz = 2.d0
-   integer :: idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 2
+   real(rkind) :: Lx = 10.d0*pi, Ly = 2.d0*pi, Lz = 2.d0*pi
+   integer :: idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 2, RestartIDX
    logical :: isZPeriodic = .true. 
    integer :: nt, MeanTIDX 
-   logical :: file_found_u, file_found_v, file_found_w
+   logical :: file_found_u, file_found_v, file_found_w, useRestart = .false. 
    integer :: topBC = 0, botBC = 0
 
-   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, MeanTIDX
+   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RestartDir, RunID, tstart, tstop, tstep, nx, ny, nz, MeanTIDX, useRestart, RestartIDX, tDumpRestart
    
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
@@ -50,7 +50,8 @@ program HIT_AD_getRapidSlowPressure
    dz = Lz/real(nz,rkind)
 
    ! Initialize the operator class
-   call ops%init(nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isZPeriodic, NUmericalSchemeVert)
+   call ops%init(nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isZPeriodic, NUmericalSchemeVert, RestartDir)
+
 
    ! Allocate all the needed memory 
    call ops%allocate3DField(u)
@@ -134,17 +135,20 @@ program HIT_AD_getRapidSlowPressure
   
    call ops%initPoissonSolver(dx, dy, dz)
 
+   if (useRestart) tstart = RestartIDX
+
    nt = (tstop - tstart)/tstep + 1
    call message(0,"Number of snapshots to read:", nt)
 
    tidx = tstart
+   call message(0,"Now checking for existence of all files")
    do while(tidx <= tstop) 
      file_found_u = ops%check_dump_existence("uVel",TIDX)
      file_found_v = ops%check_dump_existence("uVel",TIDX)
      file_found_w = ops%check_dump_existence("uVel",TIDX)
       
      if (file_found_u .and. file_found_v .and. file_found_w) then
-         call message(0, "File succcessfully found for:", TIDX)
+         !call message(0, "File succcessfully found for:", TIDX)
      else
          call message(0, "File missing for tid:", TIDX)
          call mpi_barrier(mpi_comm_world, ierr) 
@@ -153,9 +157,62 @@ program HIT_AD_getRapidSlowPressure
 
      tidx = tidx + tstep
    end do 
+   call message(1,"All data files exist.")
+   if (mod(tDumpRestart,tstep) == 0) then
+      call message(0,"tDumpRestart input is Legal. Can dump restart files.")
+   else
+      call message(0,"tDumpRestart input is illegal.")
+      call gracefulExit("tDumpRestart input is illegal.",145)
+   end if
+  
+
+   if (useRestart) then
+      call ops%ReadSummingRestartInfo(RestartIDX, idx)
+
+      call ops%ReadSummingRestart(T11r, "T11r", RestartIDX)    
+      call ops%ReadSummingRestart(T22r, "T22r", RestartIDX)   
+      call ops%ReadSummingRestart(T33r, "T33r", RestartIDX)   
+      call ops%ReadSummingRestart(T12r, "T12r", RestartIDX)   
+      call ops%ReadSummingRestart(T13r, "T13r", RestartIDX)   
+      call ops%ReadSummingRestart(T23r, "T23r", RestartIDX)   
+
+      call ops%ReadSummingRestart(T11s, "T11s", RestartIDX)  
+      call ops%ReadSummingRestart(T22s, "T22s", RestartIDX)  
+      call ops%ReadSummingRestart(T33s, "T33s", RestartIDX)  
+      call ops%ReadSummingRestart(T12s, "T12s", RestartIDX)  
+      call ops%ReadSummingRestart(T13s, "T13s", RestartIDX)  
+      call ops%ReadSummingRestart(T23s, "T23s", RestartIDX)  
+     
+      call ops%ReadSummingRestart(prpr, "prpr", RestartIDX)  
+      call ops%ReadSummingRestart(pspr, "pspr", RestartIDX)  
+      call ops%ReadSummingRestart(psps, "psps", RestartIDX)  
+      
+      call message(0,"Restart files read successfully.")
+      call message(1,"Number of visualizations summed in restart", idx)
+      call message(1,"New starting index:", tstart)
+   else
+      T11r = 0.d0 
+      T22r = 0.d0
+      T33r = 0.d0
+      T12r = 0.d0
+      T13r = 0.d0
+      T23r = 0.d0
+
+      T11s = 0.d0
+      T22s = 0.d0
+      T33s = 0.d0
+      T12s = 0.d0
+      T13s = 0.d0
+      T23s = 0.d0
+     
+      prpr = 0.d0 
+      pspr = 0.d0 
+      psps = 0.d0 
+
+      idx = 0
+   end if
 
    tidx = tstart
-   idx = 0
    do while(tidx <= tstop)
       call message(0, "Reading fields for tid:", TIDX)
       call tic()
@@ -229,6 +286,30 @@ program HIT_AD_getRapidSlowPressure
    
       tidx = tidx + tstep
       idx = idx + 1
+    
+      if (mod(tidx,tDumpRestart) == 0) then
+        call ops%WriteSummingRestartInfo(tidx,idx) 
+        
+        call ops%WriteSummingRestart(T11r, "T11r", tidx)    
+        call ops%WriteSummingRestart(T22r, "T22r", tidx)   
+        call ops%WriteSummingRestart(T33r, "T33r", tidx)   
+        call ops%WriteSummingRestart(T12r, "T12r", tidx)   
+        call ops%WriteSummingRestart(T13r, "T13r", tidx)   
+        call ops%WriteSummingRestart(T23r, "T23r", tidx)   
+
+        call ops%WriteSummingRestart(T11s, "T11s", tidx)  
+        call ops%WriteSummingRestart(T22s, "T22s", tidx)  
+        call ops%WriteSummingRestart(T33s, "T33s", tidx)  
+        call ops%WriteSummingRestart(T12s, "T12s", tidx)  
+        call ops%WriteSummingRestart(T13s, "T13s", tidx)  
+        call ops%WriteSummingRestart(T23s, "T23s", tidx)  
+     
+        call ops%WriteSummingRestart(prpr, "prpr", tidx)  
+        call ops%WriteSummingRestart(pspr, "pspr", tidx)  
+        call ops%WriteSummingRestart(psps, "psps", tidx) 
+        call message(0,"Summing restart files dumped.")
+      end if 
+
       call toc()
    end do 
 

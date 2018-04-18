@@ -5,6 +5,7 @@ program HIT_AD_getRapidSlowPressure
    use mpi
    use timer, only: tic, toc
    use exits, only: message, gracefulExit
+   use fof_mod, only: fof  
    implicit none
    real(rkind), dimension(:,:,:), allocatable :: uM, vM, wM 
    real(rkind), dimension(:,:,:), allocatable :: uF, vF, wF
@@ -20,19 +21,22 @@ program HIT_AD_getRapidSlowPressure
    real(rkind), dimension(:,:,:), allocatable :: R11, R12, R13, R22, R23, R33
    real(rkind), dimension(:,:,:), allocatable :: rbuff1, rbuff2
    real(rkind), dimension(:,:,:), allocatable :: pslow, prapid, pfull 
-   
+
+   complex(rkind), dimension(:,:,:), allocatable :: cbuffzC
+
    real(rkind) :: dx, dy, dz
    integer :: nx, ny, nz, RunID, TIDX
    type(igrid_ops) :: ops
-   character(len=clen) ::  inputdir, outputdir
+   character(len=clen) ::  inputdir, outputdir, FilterInfoDir
    character(len=clen) :: inputfile
-   real(rkind) :: Lx = 10.d0*pi, Ly = 2.d0*pi, Lz = 2.d0
+   real(rkind) :: Lx = 10.d0*pi, Ly = 2.d0*pi, Lz = 2.d0*pi
    integer ::  ierr, tsnapshot, NumericalSchemeVert = 2
    logical :: isZPeriodic = .true. 
    integer :: MeanTIDX 
    integer :: topBC = 0, botBC = 0
+   type(fof) :: fof1, fof2
 
-   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tsnapshot, nx, ny, nz, MeanTIDX
+   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tsnapshot, nx, ny, nz, MeanTIDX, FilterInfoDir
 
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
@@ -46,6 +50,10 @@ program HIT_AD_getRapidSlowPressure
 
    ! Initialize the operator class
    call ops%init(nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isZPeriodic, NUmericalSchemeVert)
+   
+   call ops%alloc_cbuffz(cbuffzC)
+   call fof1%init(RunID, FilterInfoDir , outputdir, 1, ops%spect, ops%cbuffy1, cbuffzC, isZPeriodic, ops%gp)
+   call fof2%init(RunID, FilterInfoDir , outputdir, 2, ops%spect, ops%cbuffy1, cbuffzC, isZPeriodic, ops%gp)
 
    ! Allocate all the needed memory 
    call ops%allocate3DField(u)
@@ -172,6 +180,49 @@ program HIT_AD_getRapidSlowPressure
    call ops%writeField3D(prapid,"PRap",tidx)
    call ops%writeField3D(pslow,"PSlo",tidx)
    call ops%writeField3D(pfull,"PFlt",tidx)
+
+
+   ! Try Filtering 
+   call fof1%filter_Real2Real(uF,rbuff1)
+   call ops%writeField3D(rbuff1,"uSc1",tidx)
+   call fof2%filter_Real2Real(uF,rbuff2)
+   rbuff2 = rbuff2 - rbuff1
+   call ops%writeField3D(rbuff2,"uSc2",tidx)
+   rbuff2 = rbuff2 + rbuff1
+   rbuff1 = uF - (rbuff2)
+   call ops%writeField3D(rbuff1,"uSc3",tidx)
+   
+   call fof1%filter_Real2Real(vF,rbuff1)
+   call ops%writeField3D(rbuff1,"vSc1",tidx)
+   call fof2%filter_Real2Real(vF,rbuff2)
+   rbuff2 = rbuff2 - rbuff1
+   call ops%writeField3D(rbuff2,"vSc2",tidx)
+   rbuff2 = rbuff2 + rbuff1
+   rbuff1 = vF - (rbuff2)
+   call ops%writeField3D(rbuff1,"vSc3",tidx)
+   
+   call fof1%filter_Real2Real(wF,rbuff1)
+   call ops%writeField3D(rbuff1,"wSc1",tidx)
+   call fof2%filter_Real2Real(wF,rbuff2)
+   rbuff2 = rbuff2 - rbuff1
+   call ops%writeField3D(rbuff2,"wSc2",tidx)
+   rbuff2 = rbuff2 + rbuff1
+   rbuff1 = wF - (rbuff2)
+   call ops%writeField3D(rbuff1,"wSc3",tidx)
+   
+   call fof1%filter_Real2Real(pfull,rbuff1)
+   call ops%writeField3D(rbuff1,"pSc1",tidx)
+   call fof2%filter_Real2Real(pfull,rbuff2)
+   rbuff2 = rbuff2 - rbuff1
+   call ops%writeField3D(rbuff2,"pSc2",tidx)
+   rbuff2 = rbuff2 + rbuff1
+   rbuff1 = pfull - (rbuff2)
+   call ops%writeField3D(rbuff1,"pSc3",tidx)
+   
+   
+   
+   
+   call message(0,"Done writing filtered data")
 
    call ops%destroy()
    call MPI_Finalize(ierr)           

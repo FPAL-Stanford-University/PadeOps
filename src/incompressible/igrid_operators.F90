@@ -14,17 +14,17 @@ module igrid_Operators
 
    type :: igrid_ops
       private
-      complex(rkind), dimension(:,:,:), allocatable :: cbuffy1, cbuffy2
+      complex(rkind), dimension(:,:,:), allocatable, public :: cbuffy1, cbuffy2
       real(rkind),    dimension(:,:,:), allocatable :: rbuffx, rbuffy, rbuffz1, rbuffz2
-      type(decomp_info) :: gp, gpE
-      type(spectral)  :: spect, spectE
+      type(decomp_info), public :: gp, gpE
+      type(spectral), public  :: spect, spectE
       type(Pade6stagg) :: derZ
       type(cd06stagg) :: derZ1d
       real(rkind), dimension(:,:,:), allocatable :: zarr1d_1, zarr1d_2
 
       type(PoissonPeriodic) :: poiss_periodic
       real(rkind) :: dx, dy, dz
-      character(len=clen) ::  inputdir, outputdir
+      character(len=clen) ::  inputdir, outputdir, RestartDir
       real(rkind) :: mfact_xy
     
       logical :: PeriodicInZ, PoissonSolverInitiatized = .false. 
@@ -41,6 +41,10 @@ module igrid_Operators
          procedure :: getFluct_from_MeanZ
          procedure :: ReadField3D
          procedure :: WriteField3D
+         procedure :: WriteSummingRestart 
+         procedure :: ReadSummingRestart 
+         procedure :: WriteSummingRestartInfo
+         procedure :: ReadSummingRestartInfo
          procedure :: allocate3Dfield
          procedure :: getCenterlineQuantity
          procedure :: WriteASCII_2D
@@ -53,6 +57,7 @@ module igrid_Operators
          procedure :: initPoissonSolver
          procedure :: PoissonSolvePeriodic_inplace
          procedure :: dealias
+         procedure :: alloc_cbuffz
      end type 
 
 contains
@@ -155,11 +160,12 @@ function getCenterlineQuantity(this, vec) result(val)
 
 end function
 
-subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeriodicinZ, NumericalSchemeZ)
+subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeriodicinZ, NumericalSchemeZ, RestartDir)
    class(igrid_ops), intent(out), target :: this
    integer, intent(in) :: nx, ny, nz
    real(rkind), intent(in) :: dx, dy, dz
    character(len=clen), intent(in) ::  inputdir, outputdir
+   character(len=clen), intent(in), optional :: RestartDir
    logical, intent(in) :: isPeriodicinZ
    integer, intent(in) :: RunID, NumericalSchemeZ
    logical, dimension(3) :: periodicbcs
@@ -186,6 +192,7 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeri
    this%inputdir  = inputdir
    this%outputdir = outputdir
    this%RunID = RunID
+   if (present(RestartDir)) this%RestartDir = RestartDir
 
    this%dx = dx
    this%dy = dy
@@ -345,10 +352,86 @@ subroutine WriteField3D(this, field, label, tidx)
    call decomp_2d_write_one(1,field,fname,this%gp)
 end subroutine  
 
+
+subroutine WriteSummingRestart(this, field, label, tidx)
+   use decomp_2d_io
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: field
+   character(len=clen) :: tempname, fname
+   character(len=4), intent(in) :: label
+   integer, intent(in) :: tidx
+         
+   write(tempname,"(A14,I2.2,A1,A4,A2,I6.6,A4)") "SummingRESTART",this%runID, "_",label,"_t",tidx,".rss"
+   fname = this%RestartDir(:len_trim(this%RestartDir))//"/"//trim(tempname)
+   call decomp_2d_write_one(1,field,fname,this%gp)
+end subroutine  
+
+subroutine ReadSummingRestart(this, field, label, tidx)
+   use decomp_2d_io
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out)  :: field
+   character(len=clen) :: tempname, fname
+   character(len=4), intent(in) :: label
+   integer, intent(in) :: tidx
+   integer :: ierr
+         
+   write(tempname,"(A14,I2.2,A1,A4,A2,I6.6,A4)") "SummingRESTART",this%runID, "_",label,"_t",tidx,".rss"
+   fname = this%RestartDir(:len_trim(this%RestartDir))//"/"//trim(tempname)
+   
+   open(777,file=trim(fname),status='old',iostat=ierr)
+   if(ierr .ne. 0) then
+    print*, "Rank:", nrank, ". File:", fname, " not found"
+    call gracefulExit("File I/O issue.",44)
+   end if 
+   close(777)
+   
+   call decomp_2d_read_one(1,field,fname,this%gp)
+end subroutine  
+
+subroutine WriteSummingRestartInfo(this,tidx,nsum)
+   class(igrid_ops), intent(inout) :: this
+   integer, intent(in) :: tidx, nsum
+   character(len=clen) :: tempname, fname
+   if (nrank == 0) then
+       write(tempname,"(A14,I2.2,A1,A4,A2,I6.6,A4)") "SummingRESTART",this%runID, "_","info","_t",tidx,".rss"
+       fname = this%RestartDir(:len_trim(this%RestartDir))//"/"//trim(tempname)
+       OPEN(UNIT=10, FILE=trim(fname))
+       write(10,"(I7.7)") nsum
+       close(10)
+   end if 
+end subroutine
+
+subroutine ReadSummingRestartInfo(this,tidx,nsum)
+   class(igrid_ops), intent(inout) :: this
+   integer, intent(in) :: tidx
+   integer, intent(out) :: nsum
+   character(len=clen) :: tempname, fname
+   integer :: ierr
+
+   if (nrank == 0) then
+       write(tempname,"(A14,I2.2,A1,A4,A2,I6.6,A4)") "SummingRESTART",this%runID, "_","info","_t",tidx,".rss"
+       fname = this%RestartDir(:len_trim(this%RestartDir))//"/"//trim(tempname)
+       OPEN(UNIT=10, FILE=trim(fname),status='old',iostat=ierr)
+       if (ierr .ne. 0) then
+           print*, "Rank:", nrank, ". File:", fname, " not found"
+           call gracefulExit("File I/O issue.",44)
+       else
+           read(10,"(I7.7)") nsum
+       end if 
+       close(10)
+   end if 
+end subroutine
+
 subroutine allocate3Dfield(this, field)
    class(igrid_ops), intent(inout) :: this
    real(rkind), dimension(:,:,:), allocatable, intent(out) :: field
    allocate(field(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)))
+end subroutine 
+
+subroutine alloc_cbuffz(this, field)
+   class(igrid_ops), intent(inout) :: this
+   complex(rkind), dimension(:,:,:), allocatable, intent(out) :: field
+   allocate(field(this%spect%spectdecomp%zsz(1),this%spect%spectdecomp%zsz(2),this%spect%spectdecomp%zsz(3)))
 end subroutine 
 
 

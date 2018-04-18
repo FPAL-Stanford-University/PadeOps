@@ -11,16 +11,13 @@ module StratifiedShearLayer_parameters
     integer :: seedw = 131344
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
-    
-    real(rkind), parameter :: xdim = 400._rkind, udim =8._rkind
-    real(rkind), parameter :: timeDim = xdim/udim
 
 end module     
 
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use StratifiedShearLayer_parameters
-    use kind_parameters,    only: rkind
+    use kind_parameters,    only: rkind, clen 
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs, linspace
     use random,             only: gaussian_random
@@ -28,6 +25,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use reductions,         only: p_maxval
     use constants,          only: pi, imi
     use cd06staggstuff,     only: cd06stagg
+    use StratifiedShearLayer_IO, only: get_perturbations 
 
     implicit none
     type(decomp_info),               intent(in)    :: decompC
@@ -43,11 +41,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind) :: lambda_x, lambda_y, A0 = 0.1d0, Tbase = 100.d0, kx, ky, maxTG = 1.d-2
     integer :: N = 4, M= 2, nTG = 2, i, j
     real(rkind)  :: Lx = one, Ly = one, Lz = one, maxrandom = 1.d-4, deltaPhi = pi/2.d0
-    real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, wperturb
-    real(rkind) :: Psi, dPsi_dz, dz, lambda_rho = 1.d0 
+    real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, wperturb, vperturb, Tperturb
+    real(rkind) :: Psi, dPsi_dz, dz, eta = 1.d0 
     type(cd06stagg), allocatable :: derW
-
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, lambda_rho
+    integer :: ProblemMode = 0
+    character(len=clen) :: domain_fname,InitFileTag,InitFileDirectory 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta, ProblemMode, domain_fname, InitFileTag,InitFileDirectory  
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -65,36 +64,47 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     u = -erf(sqrt(pi)*z)
     v = zero
     wC = zero
-    T = Tbase +  0.5d0*erf(sqrt(pi)*z/lambda_rho)
+    T = Tbase +  0.5d0*erf(sqrt(pi)*z/eta)
 
-    allocate(uperturb(size(u,1),size(u,2),size(u,3)))
-    allocate(wperturb(size(u,1),size(u,2),size(u,3)))
+    if (ProblemMode == 1) then
+        allocate(uperturb(size(u,1),size(u,2),size(u,3)))
+        allocate(vperturb(size(u,1),size(u,2),size(u,3)))
+        allocate(wperturb(size(u,1),size(u,2),size(u,3)))
+        allocate(Tperturb(size(u,1),size(u,2),size(u,3)))
+        call get_perturbations(decompC, x, y, InitFileTag, InitFileDirectory, uperturb, vperturb, wperturb, Tperturb)
+        u = u + uperturb
+        v = v + vperturb
+        w = w + wperturb
+        T = T + Tperturb
+    else
+        allocate(uperturb(size(u,1),size(u,2),size(u,3)))
+        allocate(wperturb(size(u,1),size(u,2),size(u,3)))
 
-    lambda_x = Lx/real(N,rkind); lambda_y = Ly/real(M,rkind)
-    kx = 2.d0*pi/lambda_x; ky = 2.d0*pi/lambda_y
+        lambda_x = Lx/real(N,rkind); lambda_y = Ly/real(M,rkind)
+        kx = 2.d0*pi/lambda_x; ky = 2.d0*pi/lambda_y
    
-    do k = 1,size(u,3)
-       Psi = A0*exp(-pi*(z(1,1,k)**2))
-       dPsi_dz = -2.d0*z(1,1,k)*A0*exp(-pi*(z(1,1,k)**2))
-       do j = 1,size(u,2)
-          !$omp simd
-          do i = 1,size(u,1)
-            uperturb(i,j,k) = real((imi/kx)*dPsi_dz*exp(imi*kx*x(i,j,k))*(cos(deltaPhi/2.d0) &
-                            + (4.d0*imi/pi)*sin(deltaPhi/2.d0)*sin(ky*y(i,j,k))),rkind) 
-            
-            wperturb(i,j,k) = real(Psi*exp(imi*kx*x(i,j,k))*(cos(deltaPhi/2.d0) &
-                            + (4.d0*imi/pi)*sin(deltaPhi/2.d0)*sin(ky*y(i,j,k))),rkind) 
-          end do 
-       end do 
-    end do 
-    u  = u  + uperturb
-    wC = wC + wperturb
-    
-    uperturb =  maxTG*( cos(2.d0*nTG*pi*x/Lx)*sin(2.d0*nTG*pi*y/Ly))*exp(-pi*(z*z))
-    wperturb =  maxTG*(-sin(2.d0*nTG*pi*x/Lx)*cos(2.d0*nTG*pi*y/Ly))*exp(-pi*(z*z))
-    u = u + uperturb 
-    v = v + wperturb 
-
+        do k = 1,size(u,3)
+           Psi = A0*exp(-pi*(z(1,1,k)**2))
+           dPsi_dz = -2.d0*z(1,1,k)*A0*exp(-pi*(z(1,1,k)**2))
+           do j = 1,size(u,2)
+              !$omp simd
+              do i = 1,size(u,1)
+                uperturb(i,j,k) = real((imi/kx)*dPsi_dz*exp(imi*kx*x(i,j,k))*(cos(deltaPhi/2.d0) &
+                                + (4.d0*imi/pi)*sin(deltaPhi/2.d0)*sin(ky*y(i,j,k))),rkind) 
+                
+                wperturb(i,j,k) = real(Psi*exp(imi*kx*x(i,j,k))*(cos(deltaPhi/2.d0) &
+                                + (4.d0*imi/pi)*sin(deltaPhi/2.d0)*sin(ky*y(i,j,k))),rkind) 
+              end do 
+           end do 
+        end do 
+        u  = u  + uperturb
+        wC = wC + wperturb
+        
+        uperturb =  maxTG*( cos(2.d0*nTG*pi*x/Lx)*sin(2.d0*nTG*pi*y/Ly))*exp(-pi*(z*z))
+        wperturb =  maxTG*(-sin(2.d0*nTG*pi*x/Lx)*cos(2.d0*nTG*pi*y/Ly))*exp(-pi*(z*z))
+        u = u + uperturb 
+        v = v + wperturb 
+    end if 
     deallocate(uperturb, wperturb)
     
     ! Add random numbers
@@ -141,8 +151,8 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=*),                intent(in)    :: inputfile
     integer :: ioUnit, seed, N, M, nTG
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase, maxTG, lambda_rho
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, lambda_rho
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase, maxTG, eta
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -152,7 +162,7 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     dTsurf_dt = dTsurf_dt /  3600.d0
 
     ! Normalize
-    dTsurf_dt = dTsurf_dt * timeDim 
+    dTsurf_dt = 0.d0  
 
     Tsurf = one 
      
@@ -203,9 +213,10 @@ end subroutine
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     use StratifiedShearLayer_parameters    
-    use kind_parameters,  only: rkind
+    use kind_parameters,  only: rkind, clen 
     use constants,        only: one,two
     use decomp_2d,        only: decomp_info
+    use StratifiedShearLayer_IO, only: read_Domain_info 
     implicit none
 
     type(decomp_info),                                          intent(in)    :: decomp
@@ -215,8 +226,10 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn, seed = 231454, N, M, nTG
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind)  :: maxrandom = 1.d-5, deltaPhi, Tbase, A0, maxTG, lambda_rho
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, lambda_rho
+    real(rkind)  :: maxrandom = 1.d-5, deltaPhi, Tbase, A0, maxTG, eta
+    integer :: ProblemMode = 0
+    character(len=clen) :: domain_fname,InitFileTag,InitFileDirectory 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta, ProblemMode, domain_fname, InitFileTag,InitFileDirectory  
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -230,7 +243,11 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     ! If base decomposition is in Y
     ix1 = decomp%xst(1); iy1 = decomp%xst(2); iz1 = decomp%xst(3)
     ixn = decomp%xen(1); iyn = decomp%xen(2); izn = decomp%xen(3)
-    
+   
+    if (ProblemMode == 1) then
+        call read_Domain_info(Lx,Ly,Lz,trim(domain_fname))
+    end if 
+
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         dx = Lx/real(nxg,rkind)
