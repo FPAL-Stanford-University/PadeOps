@@ -40,13 +40,13 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     integer :: k, seed = 12331
     real(rkind) :: lambda_x, lambda_y, A0 = 0.1d0, Tbase = 100.d0, kx, ky, maxTG = 1.d-2
     integer :: N = 4, M= 2, nTG = 2, i, j
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxrandom = 1.d-4, deltaPhi = pi/2.d0
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxrandom = 1.d-4, deltaPhi = pi/2.d0, ScalePerturb = 1.d0 
     real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, wperturb, vperturb, Tperturb
     real(rkind) :: Psi, dPsi_dz, dz, eta = 1.d0 
     type(cd06stagg), allocatable :: derW
     integer :: ProblemMode = 0
     character(len=clen) :: domain_fname,InitFileTag,InitFileDirectory 
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta, ProblemMode, domain_fname, InitFileTag,InitFileDirectory  
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta, ProblemMode, domain_fname, InitFileTag,InitFileDirectory, ScalePerturb 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -66,22 +66,27 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     wC = zero
     T = Tbase +  0.5d0*erf(sqrt(pi)*z/eta)
 
+    lambda_y = Ly/(real(M,rkind) + 1.d-24)
+    ky = 2.d0*pi/lambda_y
     if (ProblemMode == 1) then
         allocate(uperturb(size(u,1),size(u,2),size(u,3)))
         allocate(vperturb(size(u,1),size(u,2),size(u,3)))
         allocate(wperturb(size(u,1),size(u,2),size(u,3)))
         allocate(Tperturb(size(u,1),size(u,2),size(u,3)))
-        call get_perturbations(decompC, x, y, InitFileTag, InitFileDirectory, uperturb, vperturb, wperturb, Tperturb)
+        
+        call get_perturbations(decompC, x, y, InitFileTag, InitFileDirectory, uperturb, vperturb, wperturb, Tperturb, &
+                                       deltaPhi, ky, ScalePerturb )
         u = u + uperturb
         v = v + vperturb
         w = w + wperturb
         T = T + Tperturb
+        deallocate(uperturb, vperturb, wperturb, Tperturb)
     else
         allocate(uperturb(size(u,1),size(u,2),size(u,3)))
         allocate(wperturb(size(u,1),size(u,2),size(u,3)))
 
-        lambda_x = Lx/real(N,rkind); lambda_y = Ly/real(M,rkind)
-        kx = 2.d0*pi/lambda_x; ky = 2.d0*pi/lambda_y
+        lambda_x = Lx/real(N,rkind); 
+        kx = 2.d0*pi/lambda_x; 
    
         do k = 1,size(u,3)
            Psi = A0*exp(-pi*(z(1,1,k)**2))
@@ -104,8 +109,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
         wperturb =  maxTG*(-sin(2.d0*nTG*pi*x/Lx)*cos(2.d0*nTG*pi*y/Ly))*exp(-pi*(z*z))
         u = u + uperturb 
         v = v + wperturb 
+       
+        deallocate(uperturb, wperturb)
     end if 
-    deallocate(uperturb, wperturb)
     
     ! Add random numbers
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
@@ -226,10 +232,10 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn, seed = 231454, N, M, nTG
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind)  :: maxrandom = 1.d-5, deltaPhi, Tbase, A0, maxTG, eta
+    real(rkind)  :: maxrandom = 1.d-5, deltaPhi, Tbase, A0, maxTG, eta, ScalePerturb
     integer :: ProblemMode = 0
     character(len=clen) :: domain_fname,InitFileTag,InitFileDirectory 
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta, ProblemMode, domain_fname, InitFileTag,InitFileDirectory  
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta, ProblemMode, domain_fname, InitFileTag,InitFileDirectory, ScalePerturb 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

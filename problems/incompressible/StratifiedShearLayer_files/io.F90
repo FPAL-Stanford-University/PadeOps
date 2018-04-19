@@ -23,20 +23,21 @@ subroutine read_Domain_info(Lx,Ly,Lz,fname)
    deallocate(data2read)
 end subroutine
 
-subroutine get_perturbations(gp, x, y, InitFileTag, InitFileDirectory, u, v, w, T)
+subroutine get_perturbations(gp, x, y, InitFileTag, InitFileDirectory, u, v, w, T, deltaPhi, ky, ScalePerturb)
    use constants, only: imi, pi   
    type(decomp_info), intent(in) :: gp
    character(len=*), intent(in) :: InitFileTag, InitFileDirectory
+   real(rkind), intent(in) :: deltaPhi, ky, ScalePerturb
    real(rkind), dimension(:,:,:), intent(in) :: x, y
    real(rkind), dimension(:,:,:), intent(out) :: u, v, w, T
 
-   real(rkind), dimension(:), allocatable :: kx, ky, kmode, beta
+   real(rkind), dimension(:), allocatable :: kx, kmode
    real(rkind), dimension(:,:), allocatable :: data2read
    character(len=clen) :: fname 
    integer :: nmodes, nz
    real(rkind), dimension(:,:), allocatable :: uhat_real, uhat_imag, vhat_real, vhat_imag, what_real, what_imag, That_real, That_imag
    complex(rkind), dimension(:,:), allocatable :: uhat, vhat, what, That
-   complex(rkind)  :: expfact
+   complex(rkind)  :: expfact, phase_fact
    
    integer :: modeID, j, k, ziter, i
 
@@ -90,18 +91,19 @@ subroutine get_perturbations(gp, x, y, InitFileTag, InitFileDirectory, u, v, w, 
       ziter = 1
       do k = gp%xst(3),gp%xen(3)
          do j = 1,gp%xsz(2)
+            phase_fact = cos(deltaPhi/2.d0) + (4.d0*imi/pi)*sin(deltaPhi/2.d0)*sin(ky*y(1,j,1))
             do i = 1,gp%xsz(1)
                expfact = exp(imi*(kx(modeID)*x(i,1,1)))
-               u(i,j,ziter) = u(i,j,ziter) + real(uhat(k, modeID)*expfact , rkind) 
-               v(i,j,ziter) = v(i,j,ziter) + real(vhat(k, modeID)*expfact , rkind) 
-               w(i,j,ziter) = w(i,j,ziter) + real(what(k, modeID)*expfact , rkind)
-               T(i,j,ziter) = T(i,j,ziter) + real(That(k, modeID)*expfact , rkind)
+               u(i,j,ziter) = u(i,j,ziter) + ScalePerturb*real(uhat(k, modeID)*expfact*phase_fact, rkind) 
+               v(i,j,ziter) = v(i,j,ziter) + ScalePerturb*real(vhat(k, modeID)*expfact*phase_fact, rkind) 
+               w(i,j,ziter) = w(i,j,ziter) + ScalePerturb*real(what(k, modeID)*expfact*phase_fact, rkind) 
+               T(i,j,ziter) = T(i,j,ziter) + ScalePerturb*real(That(k, modeID)*expfact*phase_fact, rkind) 
             end do 
          end do 
          ziter = ziter + 1
       end do
    end do 
-
+    
    deallocate(uhat, vhat, what, That)
    deallocate(kx)
 
