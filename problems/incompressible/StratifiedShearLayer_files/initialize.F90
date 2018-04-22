@@ -78,8 +78,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
                                        deltaPhi, ky, ScalePerturb )
         u = u + uperturb
         v = v + vperturb
-        w = w + wperturb
-        T = T + Tperturb
+        wC = wC + wperturb
+        T  = T + Tperturb
         deallocate(uperturb, vperturb, wperturb, Tperturb)
     else
         allocate(uperturb(size(u,1),size(u,2),size(u,3)))
@@ -116,7 +116,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     ! Add random numbers
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
     call gaussian_random(randArr,zero,one,seed+1234*nrank+54321)
-    wC = wC + (maxrandom*randarr*exp(-pi*(z*z)))
+    wC = wC + (maxrandom*randarr*exp(-4*pi*(z*z)))
     deallocate(randArr)
     
     !T = T + (maxrandom*randArr)*exp(-8.d0*(z*z))

@@ -219,6 +219,13 @@ module IncompressibleGrid
 
         logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false. 
 
+        ! Rapid and slow decomposition
+        real(rkind), dimension(:,:,:), allocatable :: prapid, uM, vM, wM
+        real(rkind), dimension(:,:,:), allocatable :: dumdx, dumdy, dumdz
+        real(rkind), dimension(:,:,:), allocatable :: dvmdx, dvmdy, dvmdz
+        real(rkind), dimension(:,:,:), allocatable :: dwmdx, dwmdy, dwmdz
+        logical :: computeRapidSlowPressure 
+
         ! Stats
         logical :: timeAvgFullFields, computeSpectra
 
@@ -255,6 +262,12 @@ module IncompressibleGrid
         logical :: useScalars = .false. 
         type(scalar_igrid), dimension(:), allocatable :: scalars
         integer :: n_scalars = 1
+
+        ! Dump schedule
+        integer :: vizDump_Schedule = 0
+        real(rkind) :: deltaT_dump, t_NextDump
+        logical :: DumpThisStep = .false.
+
 
         contains
             procedure          :: init
@@ -312,6 +325,10 @@ module IncompressibleGrid
             procedure, private :: dumpProbes
             procedure, private :: correctPressureRotationalForm
             procedure, private :: initialize_scalar_for_InitSpinUp
+            procedure, private :: initialize_Rapid_Slow_Pressure_Split
+            procedure, private :: compute_RapidSlowPressure_Split
+            procedure, private :: dump_visualization_files
+            procedure, private :: append_visualization_info
     end type
 
 contains 
@@ -325,7 +342,7 @@ contains
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1
-        real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop, CviscDT = 1.d0 
+        real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop,CviscDT=1.d0,deltaT_dump=1.d0 
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
@@ -335,7 +352,7 @@ contains
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10, BuoyancyTermType = 1
-        logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
+        logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false., ComputeRapidSlowPressure = .false. 
         real(rkind) :: tmpmn, Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
@@ -349,10 +366,12 @@ contains
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
         logical :: sgsmod_stratified, Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false., useScalars = .false. 
         character(len=4) :: scheme_xy = "FOUR"
+        integer :: MeanTIDX, MeanRID, VizDump_schedule = 0    
+        character(len=clen) :: MeanFilesDir 
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID, CviscDT
-        namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, dump_NU_SGS, dump_KAPPA_SGS,&
+        namelist /IO/ VizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, dump_NU_SGS, dump_KAPPA_SGS,&
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,&
@@ -364,9 +383,10 @@ contains
                             useExhaustiveFFT, dealiasFact, scheme_xy, donot_dealias
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, &
                                  KSdoZfilter, nKSvertFilt
-        namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq, computeDNSPressure, computeTurbinePressure, computeFringePressure            
+        namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq, computeDNSPressure, computeTurbinePressure, computeFringePressure,ComputeRapidSlowPressure            
         namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir, deleteInstructions
         namelist /SCALARS/ num_scalars, scalar_info_dir
+        namelist /TURB_PRESSURE/ MeanTIDX, MeanRID, MeanFilesDir 
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -385,6 +405,11 @@ contains
         if (this%useScalars) then
          read(unit=ioUnit, NML=SCALARS)
         end if
+        
+        this%computeRapidSlowPressure = ComputeRapidSlowPressure 
+        if (this%ComputeRapidSlowPressure) then
+            read(unit=ioUnit, NML=TURB_PRESSURE) 
+        end if
         close(ioUnit)
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
         this%dt = dt; this%dtby2 = dt/two ; this%Re = Re; this%useSponge = useSpongeLayer
@@ -401,7 +426,7 @@ contains
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType; this%CviscDT = CviscDT
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity; this%deleteInstructions = deleteInstructions
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
-        this%donot_dealias = donot_dealias 
+        this%donot_dealias = donot_dealias; 
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -813,10 +838,6 @@ contains
         ! STEP 12: Set visualization planes for io
         call set_planes_io(this%xplanes, this%yplanes, this%zplanes)
 
-        ! STEP 13: Compute the timestep
-        call this%compute_deltaT()
-        this%dtOld = this%dt
-        this%dtRat = one 
 
 
         ! STEP 14a : Probes
@@ -909,7 +930,6 @@ contains
             this%KSupdated = .false. 
             call message(0, "KS Preprocessor initializaed successfully.")
         end if 
-
 
 
         ! STEP 15: Set up extra buffers for RK3
@@ -1048,7 +1068,29 @@ contains
             call this%ComputePressure()
         end if 
 
-        ! STEP 24: Safeguard against user invalid user inputs
+
+        ! STEP 24: Compute Rapid and Slow Pressure Split
+        if (this%computeRapidSlowPressure) then
+            call this%initialize_Rapid_Slow_Pressure_Split(MeanTIDX, MeanRID, MeanFilesDir)
+        end if 
+
+        ! STEP 25: Schedule time dumps
+        this%vizDump_Schedule = vizDump_Schedule
+        this%DumpThisStep = .false. 
+        if (this%vizDump_Schedule == 1) then
+            this%deltaT_dump = deltaT_dump
+            this%t_NextDump = this%tsim + deltaT_dump
+        end if 
+
+        ! STEP 13 (relocated): Compute the timestep
+        call this%compute_deltaT()
+        this%dtOld = this%dt
+        this%dtRat = one 
+        
+        ! STEP 25: Safeguard against user invalid user inputs
+        if ((this%vizDump_Schedule == 1) .and. (.not. this%useCFL)) then
+            call GracefulExit("Cannot use vizDump_Schedule=1 if using fixed dt.",123)
+        end if 
         if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
             call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 or SSP RK45 time stepping.",123)
         end if
@@ -1075,6 +1117,30 @@ contains
 
 
     end subroutine
+
+
+    subroutine append_visualization_info(this)
+        class(igrid), intent(in) :: this 
+        character(len=clen) :: tempname, fname 
+        logical :: exists 
+
+        write(tempname,"(A3,I2.2,A12,A4)") "Run",this%runID, "_vis_summary",".smm"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+
+        if (nrank == 0) then
+            inquire(file=fname, exist=exists)
+            if (exists) then
+                open(12, file=fname, status="old", position="append", action="write")
+            else
+                open(12, file=fname, status="new", action="write")
+            end if
+            write(12,*) this%tsim, this%step
+            close(12)
+        end if 
+
+    end subroutine 
+
+
 
     subroutine dealiasFields(this)
         class(igrid), intent(inout) :: this
@@ -1548,7 +1614,7 @@ contains
     subroutine compute_deltaT(this)
         use reductions, only: p_maxval
         class(igrid), intent(inout), target :: this
-        real(rkind) :: TSmax 
+        real(rkind) :: TSmax, Tsim_next 
         real(rkind), dimension(:,:,:), pointer :: rb1, rb2
         real(rkind), dimension(5) :: dtmin
         integer :: idx
@@ -1613,6 +1679,15 @@ contains
             this%dtlimit = "invalid/fixed dt"
         end if 
 
+        if (this%vizDump_Schedule == 1) then
+            this%DumpThisStep = .false. 
+            Tsim_next = this%tsim + this%dt
+            if (Tsim_next > this%t_NextDump) then
+                this%dt = this%t_nextDump - this%tsim
+                this%t_NextDump = this%t_NextDump + this%deltaT_dump 
+                this%DumpThisStep = .true.
+            end if
+        end if 
 
     end subroutine
 
@@ -2316,8 +2391,6 @@ contains
 
     end subroutine 
 
-
-
     subroutine wrapup_timestep(this)
         class(igrid), intent(inout) :: this
 
@@ -2486,65 +2559,9 @@ contains
             call this%dump_planes()
         end if 
 
-        !if ( (forceWrite .or. (mod(this%step,this%t_dumpKSprep) == 0)) .and. this%PreprocessForKS ) then
-        !    call this%LES2KS%LES_TO_KS(this%uE,this%vE,this%w,this%step)
-        !    call this%LES2KS%LES_FOR_KS(this%uE,this%vE,this%w,this%step)
-        !end if 
-
-        ! ADITYA -> NIRANJAN: You need to fix the dump_pointProbes call. For
-        ! some reason, it seems to segfault for some problems. 
-        !if ( (forceWrite .or. ((mod(this%step,this%t_pointProbe) == 0) .and. &
-        !         (this%step .ge. this%t_start_pointProbe) .and. (this%step .le. this%t_stop_pointProbe))) .and. (this%t_pointProbe > 0)) then
-        !    call this%dump_pointProbes()
-        !end if 
-
         if (mod(this%step,this%t_dataDump) == 0) then
            call message(0,"Scheduled visualization dump.")
-           call this%dumpFullField(this%u,'uVel')
-           call this%dumpFullField(this%v,'vVel')
-           call this%dumpFullField(this%wC,'wVel')
-           call this%dump_scalar_fields()
-           call this%dumpVisualizationInfo()
-
-           ! Dump optional fields
-           if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
-           if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
-           if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
-           if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrb')
-           if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
-           if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
-           if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
-           if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
-              call this%dumpFullField(this%kappa_bounding,'kBND')
-           end if 
-
-           if (this%computevorticity) then
-               call this%dumpFullField(this%ox,'omgX')
-               call this%dumpFullField(this%oy,'omgY')
-               call this%dumpFullField(this%oz,'omgZ')
-           end if 
-           
-           ! ADITYA -> NIRANJAN : Did you mean to use this for debugging, or do
-           ! you need it to be here? If you do, then it needs to go inside
-           ! turbArr.  
-           !if (this%useWindTurbines) then
-           !    this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
-           !    this%WindTurbineArr%step = this%step-1
-           !endif
-
-           if (this%PreProcessForKS) then
-                if (.not. this%KSupdated) then
-                    call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
-                    this%KSupdated = .true. 
-                end if
-                call this%dumpFullField(this%uFil4KS,'uFks')
-                call this%dumpFullField(this%vFil4KS,'vFks')
-                call this%dumpFullField(this%wFil4KS,'wFks')
-           end if
-           if (this%useProbes) then
-                call this%dumpProbes()    
-                call message(0,"Performed a scheduled dump for probes.")
-           end if
+           call this%dump_visualization_files()
         end if
 
         if (this%useProbes) then
@@ -2554,45 +2571,15 @@ contains
             end if
         end if
 
+        if (this%DumpThisStep) then
+           call message(2,"Performing a fixed timed visualization dump at time:", this%tsim)
+           call message(2,"This time step used a deltaT:",this%dt)
+           call this%dump_visualization_files()
+        end if 
+
         if (forceWrite) then
            call message(2,"Performing a forced visualization dump.")
-           call this%dumpFullField(this%u,'uVel')
-           call this%dumpFullField(this%v,'vVel')
-           call this%dumpFullField(this%wC,'wVel')
-           call this%dump_scalar_fields()
-           call this%dumpVisualizationInfo()
-           if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
-           if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
-           if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
-           if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrb')
-           if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
-           if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
-           if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
-           if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
-              call this%dumpFullField(this%kappa_bounding,'kBND')
-           end if 
-           if (this%computevorticity) then
-               call this%dumpFullField(this%ox,'omgX')
-               call this%dumpFullField(this%oy,'omgY')
-               call this%dumpFullField(this%oz,'omgZ')
-           end if 
-           
-           ! ADITYA -> NIRANJAN : Did you mean to use this for debugging, or do
-           ! you need it to be here? 
-           !if (this%useWindTurbines) then
-           !    this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
-           !    this%WindTurbineArr%step = this%step-1
-           !endif
-           if (this%PreProcessForKS) then
-                if (.not. this%KSupdated) then
-                    call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
-                    this%KSupdated = .true. 
-                end if
-                call this%dumpFullField(this%uFil4KS,'uFks')
-                call this%dumpFullField(this%vFil4KS,'vFks')
-                call this%dumpFullField(this%wFil4KS,'wFks')
-           end if
-           !call output_tecplot(gp)
+           call this%dump_visualization_files()
         end if
 
         if (this%initspinup) then
@@ -2606,6 +2593,50 @@ contains
         if(exitstat) call GracefulExit("Found exitpdo file in control directory",1234)
 
     end subroutine
+
+    
+    subroutine dump_visualization_files(this)
+        class(igrid), intent(inout) :: this
+
+        call this%dumpFullField(this%u,'uVel')
+        call this%dumpFullField(this%v,'vVel')
+        call this%dumpFullField(this%wC,'wVel')
+        call this%dump_scalar_fields()
+        call this%dumpVisualizationInfo()
+        if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
+        if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
+        if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
+        if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrb')
+        if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
+        if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
+        if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
+        if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
+           call this%dumpFullField(this%kappa_bounding,'kBND')
+        end if 
+        if (this%computevorticity) then
+            call this%dumpFullField(this%ox,'omgX')
+            call this%dumpFullField(this%oy,'omgY')
+            call this%dumpFullField(this%oz,'omgZ')
+        end if 
+        
+        if (this%PreProcessForKS) then
+             if (.not. this%KSupdated) then
+                 call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
+                 this%KSupdated = .true. 
+             end if
+             call this%dumpFullField(this%uFil4KS,'uFks')
+             call this%dumpFullField(this%vFil4KS,'vFks')
+             call this%dumpFullField(this%wFil4KS,'wFks')
+        end if
+           
+        if (this%useProbes) then
+             call this%dumpProbes()    
+             call message(0,"Performed a scheduled dump for probes.")
+        end if
+        call this%append_visualization_info()
+    end subroutine 
+    
+    
 
     subroutine AdamsBashforth(this)
         class(igrid), intent(inout) :: this
@@ -2793,8 +2824,110 @@ contains
 
    end subroutine 
 
+   subroutine initialize_Rapid_Slow_Pressure_Split(this, MeanTIDX, MeanRID, MeanFilesDir)
+       class(igrid), intent(inout) :: this
+       integer, intent(in) :: MeanTIDX, MeanRID
+       character(len=*), intent(in) :: MeanFilesDir
+       real(rkind) :: maxdiv 
 
-    subroutine compute_vorticity(this)
+       call message(0,"Initializing the rapid/slow pressure decompositions")
+       allocate(this%uM(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%vM(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%wM(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       
+       allocate(this%dumdx(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%dvmdx(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%dwmdx(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       
+       allocate(this%dumdy(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%dvmdy(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%dwmdy(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       
+       allocate(this%dumdz(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%dvmdz(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%dwmdz(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       
+       allocate(this%prapid(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+
+       call readField3D(MeanRID,MeanTIDX, MeanFilesDir, "uMmn", this%uM,this%gpC)
+       call readField3D(MeanRID,MeanTIDX, MeanFilesDir, "vMmn", this%vM,this%gpC)
+       call readField3D(MeanRID,MeanTIDX, MeanFilesDir, "wMmn", this%wM,this%gpC)
+
+       call this%spectC%fft(this%uM,this%cbuffyC(:,:,:,1))
+       call this%spectC%mtimes_ik1_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), this%dumdx)
+       call this%spectC%mtimes_ik2_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), this%dumdy)
+       call transpose_x_to_y(this%uM, this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+       call this%Pade6opZ%ddz_C2C(this%rbuffzC(:,:,:,1),this%rbuffzC(:,:,:,2), uBC_bottom, uBC_top)
+       call transpose_z_to_y(this%rbuffzC(:,:,:,2),this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_x(this%rbuffyC(:,:,:,1),this%dumdz, this%gpC)
+
+       call this%spectC%fft(this%vM,this%cbuffyC(:,:,:,1))
+       call this%spectC%mtimes_ik1_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), this%dvmdx)
+       call this%spectC%mtimes_ik2_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), this%dvmdy)
+       call transpose_x_to_y(this%vM, this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+       call this%Pade6opZ%ddz_C2C(this%rbuffzC(:,:,:,1),this%rbuffzC(:,:,:,2), vBC_bottom, vBC_top)
+       call transpose_z_to_y(this%rbuffzC(:,:,:,2),this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_x(this%rbuffyC(:,:,:,1),this%dvmdz, this%gpC)
+
+       call this%spectC%fft(this%wM,this%cbuffyC(:,:,:,1))
+       call this%spectC%mtimes_ik1_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), this%dwmdx)
+       call this%spectC%mtimes_ik2_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), this%dwmdy)
+       call transpose_x_to_y(this%wM, this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+       call this%Pade6opZ%ddz_C2C(this%rbuffzC(:,:,:,1),this%rbuffzC(:,:,:,2), wBC_bottom, wBC_top)
+       call transpose_z_to_y(this%rbuffzC(:,:,:,2),this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_x(this%rbuffyC(:,:,:,1),this%dwmdz, this%gpC)
+        
+       this%rbuffxC(:,:,:,1) = abs(this%dumdx + this%dvmdy + this%dwmdz)
+       maxdiv = p_maxval(maxval(this%rbuffxC(:,:,:,1)))
+
+       call message(1,"Read in the mean fields and gradients needed for pressure decompositions")
+       call message(1,"Maximum divergence in mean fields:", maxdiv)
+   end subroutine 
+
+
+   subroutine readField3D(RunID, TIDX, inputDir, label, field, gpC)
+       use exits, only: GracefulExit
+       use decomp_2d_io
+       
+       integer, intent(in) :: RunID, TIDX
+       character(len=4), intent(in) :: label
+       character(len=*), intent(in) :: inputDir
+       type(decomp_info), intent(in) :: gpC
+       real(rkind), dimension(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)), intent(out) :: field
+       character(len=clen) :: tempname, fname
+
+       write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",RunID, "_",label,"_t",TIDX,".out"
+       fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
+       
+       open(777,file=trim(fname),status='old',iostat=ierr)
+       if(ierr .ne. 0) then
+        print*, "Rank:", nrank, ". File:", fname, " not found"
+        call mpi_barrier(mpi_comm_world, ierr)
+        call gracefulExit("File I/O issue.",44)
+       end if 
+       close(777)
+
+       call decomp_2d_read_one(1,field,fname,gpC)
+
+   end subroutine 
+   
+   
+   subroutine compute_RapidSlowPressure_Split(this)
+         class(igrid), intent(inout), target :: this
+
+
+   end subroutine 
+   
+   subroutine compute_vorticity(this)
          class(igrid), intent(inout), target :: this
          real(rkind),    dimension(:,:,:), pointer :: dudx , dudy , dudzC
          real(rkind),    dimension(:,:,:), pointer :: dvdx , dvdy , dvdzC
@@ -5595,7 +5728,10 @@ contains
         if (present(recompute)) then
            if (recompute) call this%compute_deltaT
         end if
+
+
         val = this%dt
+
     end function
 
     subroutine interpolate_cellField_to_edgeField(this, rxC, rxE, bc1, bc2)
