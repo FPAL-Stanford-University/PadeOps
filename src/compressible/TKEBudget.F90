@@ -177,7 +177,9 @@ contains
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)), intent(out)   :: tke
 
         real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3))       :: tke3d, tmp
-        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: dum
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: dum, rho_bar
+
+        call this%reynolds_avg(rho, rho_bar)
 
         call this%favre_avg_and_fluct(rho, u, dum, tmp) ! tmp has u_pprime
         tke3d = tmp*tmp ! u_pprime^2
@@ -190,6 +192,8 @@ contains
 
         ! Get tke as favre averaged tke3d
         call this%favre_avg(rho, tke3d, tke)
+
+        tke = half*rho_bar*tke
 
     end subroutine
 
@@ -489,8 +493,8 @@ contains
         call this%reynolds_avg_and_fluct(p, p_bar, p_prime)
 
         ! Get tke
-        tmp = half*( u_pprime*u_pprime + v_pprime*v_pprime + w_pprime*w_pprime )
-        call this%favre_avg(rho, tmp, tke)
+        tmp = half*rho*( u_pprime*u_pprime + v_pprime*v_pprime + w_pprime*w_pprime )
+        call this%reynolds_avg(tmp, tke)
 
         ! Get tke rate of change
         ddt_tke = (tke - tke_old)/dt

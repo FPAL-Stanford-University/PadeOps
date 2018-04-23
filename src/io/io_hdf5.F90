@@ -228,6 +228,9 @@ contains
         call MPI_Allreduce( this%chunk_dims, tmp, 3, MPI_INTEGER8, MPI_MAX, this%comm, error )
         this%chunk_dims = tmp
 
+        ! Set the XDMF file ID
+        this%xdmf_file_id = 347
+
         ! print *, "active = ", this%active
         ! print '(I2,A,3I4)', nrank, ": chunk_dims = ", this%chunk_dims
         ! print '(I2,A,3I4)', nrank, ": dimsf      = ", this%dimsf

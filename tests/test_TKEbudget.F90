@@ -37,13 +37,15 @@ program test_TKEBudget
         call GracefulExit("Usage: "//NEW_LINE('A')//"    mpiexec -n 8 ./test_TKEBudget <jobdir>", 1729)
     end if
 
-    print *, "prow = ", prow, ", pcol = ", pcol
 
     call GETARG(1,jobdir)
-    call message("Jobdir is "//jobdir)
-
     ! Initialize miranda_reader object
     call mir%init(jobdir, prow, pcol, periodicx, periodicy, periodicz)
+
+    if (nrank == 0) then
+        print *, "prow = ", prow, ", pcol = ", pcol
+        print *, "Jobdir is "//trim(jobdir)
+    end if
 
     ! Read in the grid
     call mir%read_grid()

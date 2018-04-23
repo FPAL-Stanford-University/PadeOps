@@ -168,14 +168,14 @@ contains
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
                          outputdir, vizprefix, tviz, reduce_precision, &
-                                                   compute_tke_budget, &
                                       periodicx, periodicy, periodicz, &
                              derivative_x, derivative_y, derivative_z, &
                                          filter_x, filter_y, filter_z, &
                                                            prow, pcol, &
                                                              SkewSymm  
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
-                           inviscid, nrestart, rewrite_viz, vizramp,   &
+                             inviscid, nrestart, rewrite_viz, vizramp, &
+                                                   compute_tke_budget, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
 
@@ -562,8 +562,11 @@ contains
         real(rkind) :: cputime
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:,:), allocatable, target :: gradYs
+        real(rkind), dimension(:,:,:,:), allocatable, target :: tauij
+        real(rkind), dimension(:,:,:), allocatable :: tke_old, tke_prefilter ! Temporary variable for tke dissipation
         real(rkind), dimension(:,:,:),   pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
+        real(rkind) :: dt_tke
         integer :: i
         integer :: stepramp = 0
 
@@ -604,16 +607,43 @@ contains
         end if
 
         deallocate( gradYs )
-        deallocate( duidxj )
-        ! ------------------------------------------------
 
         ! Write out initial conditions
         if (this%viz%vizcount == 0) then 
             call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
             call this%write_viz()
+
+            if (this%compute_tke_budget) then
+                allocate( tke_old      (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3)) )
+                allocate( tke_prefilter(this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3)) )
+
+                tke_old = zero
+                tke_prefilter = zero
+
+                ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
+                call this%get_tau( duidxj )
+                allocate( tauij (this%nxp,this%nyp,this%nzp,6) )
+                ! Now, associate the pointers to understand what's going on better
+                tauij(:,:,:,1) = duidxj(:,:,:,tauxxidx)
+                tauij(:,:,:,2) = duidxj(:,:,:,tauxyidx)
+                tauij(:,:,:,3) = duidxj(:,:,:,tauxzidx)
+                tauij(:,:,:,4) = duidxj(:,:,:,tauyyidx)
+                tauij(:,:,:,5) = duidxj(:,:,:,tauyzidx)
+                tauij(:,:,:,6) = duidxj(:,:,:,tauzzidx)
+
+                dt_tke = one
+                call this%budget%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
+                                            tke_old, tke_prefilter, this%tsim, dt_tke)
+                deallocate( tauij  )
+
+            end if
+
         end if
         vizcond = .FALSE.
        
+        deallocate( duidxj )
+        ! ------------------------------------------------
+
         ! Write initial restart file
         if (this%restart%vizcount == 0) call this%write_restart()
 
@@ -738,8 +768,8 @@ contains
         end if
 
         if ( (vizcond) .and. (this%compute_tke_budget) ) then
-            allocate( tke_old      (this%budget%avg%sz(1),this%budget%avg%sz(2),this%budget%avg%sz(3)) )
-            allocate( tke_prefilter(this%budget%avg%sz(1),this%budget%avg%sz(2),this%budget%avg%sz(3)) )
+            allocate( tke_old      (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3)) )
+            allocate( tke_prefilter(this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3)) )
         end if
 
         Qtmp = zero
@@ -761,7 +791,7 @@ contains
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
-            if ( (vizcond) .and. (isub == RK45_steps) ) then
+            if ( (vizcond) .and. (this%compute_tke_budget) .and. (isub == RK45_steps) ) then
                 call this%get_primitive()
                 call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_prefilter)
                 dt_tke = RK45_B(isub)*Qtmpt
@@ -781,14 +811,13 @@ contains
             call this%post_bc()
 
             ! Compute TKE budgets
-            if (vizcond) then
+            if ((vizcond) .and. (this%compute_tke_budget)) then
                 if (isub == RK45_steps-1) then
                     call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_old)
                 end if
 
                 if (isub == RK45_steps)then
                     allocate( duidxj(this%nxp,this%nyp,this%nzp,9) )
-                    allocate( tauij (this%nxp,this%nyp,this%nzp,6) )
                     allocate( gradYs(this%nxp, this%nyp, this%nzp,3*this%mix%ns) )
 
                     dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
@@ -820,6 +849,7 @@ contains
 
                     ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
                     call this%get_tau( duidxj )
+                    allocate( tauij (this%nxp,this%nyp,this%nzp,6) )
                     ! Now, associate the pointers to understand what's going on better
                     tauij(:,:,:,1) = duidxj(:,:,:,tauxxidx)
                     tauij(:,:,:,2) = duidxj(:,:,:,tauxyidx)
@@ -827,7 +857,6 @@ contains
                     tauij(:,:,:,4) = duidxj(:,:,:,tauyyidx)
                     tauij(:,:,:,5) = duidxj(:,:,:,tauyzidx)
                     tauij(:,:,:,6) = duidxj(:,:,:,tauzzidx)
-
                     deallocate( duidxj )
 
                     call this%budget%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
