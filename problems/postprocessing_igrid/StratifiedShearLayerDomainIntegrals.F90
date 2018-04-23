@@ -20,8 +20,11 @@ program StratifiedShearLayerDomainIntegrals
    integer :: idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 1
    logical :: isZPeriodic = .false. 
    real(rkind), dimension(:,:), allocatable :: data2write
+   integer :: VizDump_Schedule = 0
+   integer, dimension(:), allocatable :: timesteps
+   real(rkind), dimension(:), allocatable :: times 
 
-   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Re, Rib, Pr, Tref, NumericalSchemeVert 
+   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Re, Rib, Pr, Tref, NumericalSchemeVert, VizDump_Schedule 
    
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
@@ -51,6 +54,11 @@ program StratifiedShearLayerDomainIntegrals
 
    tidx = tstart
    idx = 1
+
+   if (VizDump_Schedule == 1) then
+      call ops%Read_VizSummary(times, timesteps)
+   end if
+
    do while(tidx <= tstop)
       call message(0, "Reading fields for tid:", TIDX)
       call tic()

@@ -58,9 +58,43 @@ module igrid_Operators
          procedure :: PoissonSolvePeriodic_inplace
          procedure :: dealias
          procedure :: alloc_cbuffz
+         procedure :: Read_VizSummary
      end type 
 
 contains
+
+subroutine Read_VizSummary(this, times, timesteps)
+   class(igrid_ops), intent(inout) :: this
+   integer, intent(out), dimension(:), allocatable :: timesteps
+   real(rkind), intent(out), dimension(:), allocatable :: times
+   character(len=clen) :: tempname, fname 
+   logical :: exists
+   integer :: nr, i, ierr
+
+   write(tempname,"(A3,I2.2,A12,A4)") "Run",this%runID, "_vis_summary",".smm"
+   fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+
+   inquire(file=fname, exist=exists)
+   if (exists) then
+       open(unit=37,file=fname,access='sequential',form='formatted')
+       nr = 0
+       do 
+           read(10,*, iostat = ierr)
+           if (ierr == -1) exit       
+           nr = nr + 1
+       end do 
+       rewind(10)
+       
+       allocate(times(nr), timesteps(nr))
+       do i=1, nr
+           read (10, *) times(i), timesteps(i) 
+       end do     
+    else
+       call GracefulExit("Summary file not found.", 34)
+    end if 
+
+
+end subroutine 
 
 subroutine dealias(this, field)
    class(igrid_ops), intent(inout) :: this
@@ -80,7 +114,7 @@ subroutine initPoissonSolver(this, dx, dy, dz)
       call this%poiss_periodic%init(dx, dy, dz, this%gp, 1, useExhaustiveFFT=.true.)
       call message(0,"Poisson solver initialized.")  
       this%PoissonSolverInitiatized = .true.  
-  else
+   else
       call GracefulExit("Poisson solver only supported for periodic problems",134)
    end if
 
