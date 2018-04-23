@@ -8,7 +8,7 @@ program test_padeder_periodic
    
    implicit none 
 
-   real(rkind), dimension(:,:,:), allocatable :: x, y, z, xE, yE, zE, fE, fC, tmpC, tmpE
+   real(rkind), dimension(:,:,:), allocatable :: x, y, z, xE, yE, zE, fE, fC, tmpC, tmpE, rbuffyC, rbuffzC
    complex(rkind), dimension(:,:,:), allocatable :: fhatC, fhatzC, fhatzE, fhatE, fhatzC2, fhatzE2
    integer :: nx = 4, ny = 4, nz = 32
    type(spectral), target :: spectC, spectE
@@ -76,7 +76,13 @@ program test_padeder_periodic
    allocate(fhatzE2(sp_gpE%zsz(1), sp_gpE%zsz(2), sp_gpE%zsz(3)))
    
    call derZ%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme, .true., spectC)
- 
+
+   ! ddz_C2C(fC)
+   
+   tmpC = fC
+   call spectC%ddz_C2C_real_inplace(tmpC)
+   print*, "max error (ddz_C2C): ", maxval(tmpC - (-cos(x)*cos(y)*sin(z)))
+
    ! ddz_C2E(fC)
    call spectC%fft(fC, fhatC)
    call transpose_y_to_z(fhatC, fhatzC, sp_gpC)

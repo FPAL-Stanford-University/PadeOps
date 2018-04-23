@@ -48,8 +48,6 @@ subroutine get_SGS_kernel(this,duidxjC, duidxjE)
       if (this%explicitCalcEdgeEddyViscosity) then
          call get_smagorinsky_kernel(this%S_ij_E,this%nu_sgs_E, &
                               this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3))
-      else
-         call this%interpolate_eddy_viscosity()                     
       end if
    case (1)
       ! Sigma
@@ -57,8 +55,6 @@ subroutine get_SGS_kernel(this,duidxjC, duidxjE)
       
       if (this%explicitCalcEdgeEddyViscosity) then
          call get_sigma_kernel(this%nu_sgs_E, duidxjE, this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3))
-      else
-         call this%interpolate_eddy_viscosity()                     
       end if
    case (2)
       ! AMD 
@@ -68,8 +64,6 @@ subroutine get_SGS_kernel(this,duidxjC, duidxjE)
       if (this%explicitCalcEdgeEddyViscosity) then
          call get_amd_kernel(this%nu_sgs_E, this%camd_x, this%camd_y, this%camd_z, duidxjE, this%S_ij_E, &
                                  this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3))
-      else
-         call this%interpolate_eddy_viscosity()                     
       end if
    end select
 
@@ -79,23 +73,35 @@ subroutine multiply_by_model_constant(this)
   class(sgs_igrid), intent(inout) :: this 
   integer :: k
 
-  if (this%useCglobal) then
-      this%nu_sgs_C = this%cmodel_global*this%nu_sgs_C
-      this%nu_sgs_E = this%cmodel_global*this%nu_sgs_E
+  if (this%usingDynamicProcedureMomentum) then
+      this%nu_sgs_C = this%LambdaDynProc_C*this%nu_sgs_c
+      call this%interpolate_eddy_viscosity(.false.)                     
   else
-      do k = 1,size(this%nu_sgs_C,3)
-         this%nu_sgs_C(:,:,k) = this%cmodelC(k)*this%nu_sgs_C(:,:,k)
-      end do 
-      do k = 1,size(this%nu_sgs_E,3)
-         this%nu_sgs_E(:,:,k) = this%cmodelE(k)*this%nu_sgs_E(:,:,k)
-      end do 
-  end if
+      if (this%useCglobal) then
+          this%nu_sgs_C = this%cmodel_global*this%nu_sgs_C
+      else
+          do k = 1,size(this%nu_sgs_C,3)
+             this%nu_sgs_C(:,:,k) = this%cmodelC(k)*this%nu_sgs_C(:,:,k)
+          end do 
+      end if
 
-
+      if (this%explicitCalcEdgeEddyViscosity) then
+         if (this%useCglobal) then
+             this%nu_sgs_E = this%cmodel_global*this%nu_sgs_E
+         else
+             do k = 1,size(this%nu_sgs_E,3)
+                this%nu_sgs_E(:,:,k) = this%cmodelE(k)*this%nu_sgs_E(:,:,k)
+             end do 
+         end if 
+      else
+          call this%interpolate_eddy_viscosity(.true.)                     
+      end if
+   end if 
 end subroutine
 
-subroutine interpolate_eddy_viscosity(this)
+subroutine interpolate_eddy_viscosity(this,checknegative)
   class(sgs_igrid), intent(inout) :: this 
+  logical, intent(in) :: checknegative
 
   call transpose_x_to_y(this%nu_sgs_C,this%rbuffyC(:,:,:,1), this%gpC)
   call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
@@ -103,10 +109,25 @@ subroutine interpolate_eddy_viscosity(this)
   call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
   call transpose_y_to_x(this%rbuffyE(:,:,:,1), this%nu_sgs_E, this%gpE)
 
-  where (this%nu_sgs_E < 0.d0) 
-   this%nu_sgs_E = 0.d0
-  end where
+  if (checknegative) then
+   where (this%nu_sgs_E < 0.d0) 
+      this%nu_sgs_E = 0.d0
+   end where
+  end if 
 end subroutine
+
+
+subroutine interpolate_kappaSGS(this)
+  class(sgs_igrid), intent(inout) :: this 
+
+  call transpose_x_to_y(this%kappa_sgs_C,this%rbuffyC(:,:,:,1), this%gpC)
+  call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+  call this%PadeDer%interpz_C2E(this%rbuffzC(:,:,:,1), this%rbuffzE(:,:,:,1),0,0)
+  call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
+  call transpose_y_to_x(this%rbuffyE(:,:,:,1), this%kappa_sgs_E, this%gpE)
+
+end subroutine
+
 
 subroutine destroyMemory_EddyViscosity(this)
   class(sgs_igrid), intent(inout) :: this

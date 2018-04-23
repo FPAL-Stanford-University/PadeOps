@@ -1,5 +1,6 @@
 ! Template for PadeOps
 
+#include "StratifiedShearLayer_files/io.F90"       
 #include "StratifiedShearLayer_files/initialize.F90"       
 #include "StratifiedShearLayer_files/temporalHook.F90"  
 

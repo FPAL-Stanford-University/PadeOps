@@ -14,7 +14,6 @@ module IncompressibleGrid
     use timer, only: tic, toc
     use PadePoissonMod, only: Padepoisson 
     use sgsmod_igrid, only: sgs_igrid
-    use wallmodelMod, only: wallmodel
     use numerics
     !use cd06staggstuff, only: cd06stagg
     use cf90stuff, only: cf90
@@ -23,6 +22,7 @@ module IncompressibleGrid
     use PadeDerOps, only: Pade6Stagg
     use Fringemethod, only: fringe
     use forcingmod,   only: HIT_shell_forcing
+    use scalar_igridMod, only: scalar_igrid 
 
     implicit none
 
@@ -65,7 +65,7 @@ module IncompressibleGrid
 
         ! Variables common to grid
         integer :: nx, ny, nz, t_datadump, t_restartdump
-        real(rkind) :: dt, tstop, CFL, dx, dy, dz, tsim
+        real(rkind) :: dt, tstop, CFL, CviscDT, dx, dy, dz, tsim
         character(len=clen) ::  outputdir
         real(rkind), dimension(:,:,:,:), allocatable :: mesh
         character(len=clen) :: filter_x          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
@@ -78,7 +78,6 @@ module IncompressibleGrid
         type(spectral), allocatable :: spectE, spectC
         type(staggOps), allocatable :: Ops, OpsPP
         type(sgs_igrid), allocatable :: sgsmodel
-        type(wallmodel), allocatable :: moengWall
 
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsC
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsE
@@ -110,6 +109,7 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:), allocatable :: uBase, Tbase, vBase, dTdxH, dTdyH, dTdzH, dTdzHC
         real(rkind), dimension(:,:,:), allocatable :: dTdxC, dTdyC, dTdzE, dTdzC
 
+
         real(rkind), dimension(:,:,:,:), allocatable, public :: rbuffxC, rbuffyC, rbuffzC
         real(rkind), dimension(:,:,:,:), allocatable :: rbuffxE, rbuffyE, rbuffzE
         
@@ -130,7 +130,8 @@ module IncompressibleGrid
         logical :: assume_fplane = .true.
         real(rkind) :: coriolis_omegaY, coriolis_omegaZ, coriolis_omegaX 
         integer :: nxZ, nyZ
-    
+   
+        character(len=clen) :: dtlimit
         integer :: BuoyancyTermType = 0 
         real(rkind) :: BuoyancyFact = 0.d0
 
@@ -141,10 +142,10 @@ module IncompressibleGrid
         integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false. 
         logical :: useExtraForcing = .false., useGeostrophicForcing = .false., isInviscid = .false.  
-        logical :: useSGS = .false. 
+        logical :: useSGS = .false., computeTurbinePressure = .false.  
         logical :: UseDealiasFilterVert = .false.
         logical :: useDynamicProcedure 
-        logical :: useCFL = .false.  
+        logical :: useCFL = .false., donot_dealias = .false.   
         logical :: dumpPlanes = .false., useWindTurbines = .false. 
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
@@ -184,11 +185,11 @@ module IncompressibleGrid
         logical :: normByustar
         real(rkind) :: tSimStartStats
         real(rkind), dimension(:,:,:,:), allocatable :: F_rhs_sgs
-        logical :: computeForcingTerm = .false. 
+        logical :: computeForcingTerm = .false., deleteInstructions 
 
         ! Pointers linked to SGS stuff
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
-        real(rkind), dimension(:,:,:)  , pointer :: nu_SGS, tau13, tau23
+        real(rkind), dimension(:,:,:)  , pointer :: kappaSGS, nu_SGS, tau13, tau23, kappa_bounding
         real(rkind), dimension(:,:,:)  , pointer :: c_SGS, q1, q2, q3 
         real(rkind), dimension(:,:,:), allocatable :: fbody_x, fbody_y, fbody_z
         logical                                      :: storeFbody
@@ -203,7 +204,7 @@ module IncompressibleGrid
         integer, dimension(:), allocatable :: planes2dumpC_KS, planes2dumpF_KS
         integer :: t_dumpKSprep, KSinitType
         real(rkind), dimension(:,:,:), pointer :: uFil4KS, vFil4KS, wFil4KS
-        real(rkind) :: KSFilFact 
+        real(rkind) :: turbPr, KSFilFact 
         real(rkind), dimension(:,:,:), allocatable :: KS_probe_data
 
 
@@ -211,7 +212,19 @@ module IncompressibleGrid
         logical :: StorePressure = .false., fastCalcPressure = .true. 
         integer :: P_dumpFreq = 10, P_compFreq = 10
         logical :: AlreadyHaveRHS = .false.
-        real(rkind), dimension(:,:,:), allocatable :: pressure  
+        logical :: ComputeDNSPressure = .false., ComputeFringePressure = .false.  
+        real(rkind), dimension(:,:,:), allocatable :: pressure, pressure_dns, pressure_fringe, pressure_turbine
+        complex(rkind), dimension(:,:,:), allocatable :: urhs_dns,vrhs_dns,wrhs_dns,urhs_fringe,vrhs_fringe,wrhs_fringe
+        complex(rkind), dimension(:,:,:), allocatable :: urhs_turbine, vrhs_turbine, wrhs_turbine
+
+        logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false. 
+
+        ! Rapid and slow decomposition
+        real(rkind), dimension(:,:,:), allocatable :: prapid, uM, vM, wM
+        real(rkind), dimension(:,:,:), allocatable :: dumdx, dumdy, dumdz
+        real(rkind), dimension(:,:,:), allocatable :: dvmdx, dvmdy, dvmdz
+        real(rkind), dimension(:,:,:), allocatable :: dwmdx, dwmdy, dwmdz
+        logical :: computeRapidSlowPressure 
 
         ! Stats
         logical :: timeAvgFullFields, computeSpectra
@@ -244,6 +257,17 @@ module IncompressibleGrid
         ! HIT Forcing
         logical :: useHITForcing = .false.
         type(HIT_shell_forcing), allocatable :: hitforce
+
+        ! Scalars
+        logical :: useScalars = .false. 
+        type(scalar_igrid), dimension(:), allocatable :: scalars
+        integer :: n_scalars = 1
+
+        ! Dump schedule
+        integer :: vizDump_Schedule = 0
+        real(rkind) :: deltaT_dump, t_NextDump
+        logical :: DumpThisStep = .false.
+
 
         contains
             procedure          :: init
@@ -281,6 +305,7 @@ module IncompressibleGrid
             procedure, private :: dump_stats3D
             procedure, private :: compute_stats3D 
             procedure, private :: dealiasFields
+            procedure, private :: dealias_rhs
             procedure, private :: ApplyCompactFilter 
             procedure, private :: addNonLinearTerm_skewSymm
             procedure, private :: populate_rhs
@@ -290,7 +315,9 @@ module IncompressibleGrid
             procedure, private :: compute_vorticity
             procedure, private :: finalize_stats3D
             procedure, private :: dump_planes
+            procedure, private :: dealiasRealField_C
             procedure          :: dumpFullField 
+            procedure, private :: dump_scalar_fields
             procedure, private :: dumpVisualizationInfo
             procedure, private :: DeletePrevStats3DFiles
             procedure, private :: Delete_file_if_present
@@ -298,6 +325,10 @@ module IncompressibleGrid
             procedure, private :: dumpProbes
             procedure, private :: correctPressureRotationalForm
             procedure, private :: initialize_scalar_for_InitSpinUp
+            procedure, private :: initialize_Rapid_Slow_Pressure_Split
+            procedure, private :: compute_RapidSlowPressure_Split
+            procedure, private :: dump_visualization_files
+            procedure, private :: append_visualization_info
     end type
 
 contains 
@@ -305,24 +336,24 @@ contains
     subroutine init(this,inputfile, initialize2decomp)
         class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
-        character(len=clen) :: outputdir, inputdir, turbInfoDir, ksOutputDir, controlDir = "null"
+        character(len=clen) :: outputdir, inputdir, scalar_info_dir, turbInfoDir, ksOutputDir, controlDir = "null"
         integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = 999999
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1
-        real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop
+        real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop,CviscDT=1.d0,deltaT_dump=1.d0 
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
         logical ::isStratified=.false.,dumpPlanes = .false.,useExtraForcing = .false.
         logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false. 
-        logical :: useGeostrophicForcing = .false., PeriodicInZ = .false. 
+        logical :: useGeostrophicForcing = .false., PeriodicInZ = .false., deleteInstructions = .true., donot_dealias = .false.   
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10, BuoyancyTermType = 1
-        logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false.
-        real(rkind) :: Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0
+        logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false., ComputeRapidSlowPressure = .false. 
+        real(rkind) :: tmpmn, Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
@@ -331,24 +362,31 @@ contains
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
         logical, intent(in), optional :: initialize2decomp
-        logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true.  
+        integer :: num_scalars = 0
+        logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
+        logical :: sgsmod_stratified, Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false., useScalars = .false. 
+        character(len=4) :: scheme_xy = "FOUR"
+        integer :: MeanTIDX, MeanRID, VizDump_schedule = 0    
+        character(len=clen) :: MeanFilesDir 
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
-                         useRestartFile, restartFile_TID, restartFile_RID 
-        namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
+                         useRestartFile, restartFile_TID, restartFile_RID, CviscDT
+        namelist /IO/ VizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, dump_NU_SGS, dump_KAPPA_SGS,&
                         t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,&
-                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx, dpFdy, dpFdz, assume_fplane, latitude, useHITForcing, frameAngle
+                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
-                                 useExhaustiveFFT, dealiasFact 
+                            useExhaustiveFFT, dealiasFact, scheme_xy, donot_dealias
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, &
                                  KSdoZfilter, nKSvertFilt
-        namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq            
-        namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir
+        namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq, computeDNSPressure, computeTurbinePressure, computeFringePressure,ComputeRapidSlowPressure            
+        namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir, deleteInstructions
+        namelist /SCALARS/ num_scalars, scalar_info_dir
+        namelist /TURB_PRESSURE/ MeanTIDX, MeanRID, MeanFilesDir 
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -363,6 +401,15 @@ contains
         read(unit=ioUnit, NML=BCs)
         read(unit=ioUnit, NML=WINDTURBINES)
         read(unit=ioUnit, NML=KSPREPROCESS)
+        this%useScalars = useScalars
+        if (this%useScalars) then
+         read(unit=ioUnit, NML=SCALARS)
+        end if
+        
+        this%computeRapidSlowPressure = ComputeRapidSlowPressure 
+        if (this%ComputeRapidSlowPressure) then
+            read(unit=ioUnit, NML=TURB_PRESSURE) 
+        end if
         close(ioUnit)
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
         this%dt = dt; this%dtby2 = dt/two ; this%Re = Re; this%useSponge = useSpongeLayer
@@ -376,8 +423,10 @@ contains
         this%assume_fplane = assume_fplane; this%useProbes = useProbes; this%PrandtlFluid = PrandtlFLuid
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact; this%useFringe = useFringe
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
-        this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType 
-        this%frameAngle = frameAngle; this%computeVorticity = computeVorticity
+        this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType; this%CviscDT = CviscDT
+        this%frameAngle = frameAngle; this%computeVorticity = computeVorticity; this%deleteInstructions = deleteInstructions
+        this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
+        this%donot_dealias = donot_dealias; 
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -397,6 +446,8 @@ contains
         this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; 
         this%t_pointProbe = t_pointProbe; this%dPfdx = dPfdx; this%dPfdy = dPfdy; this%dPfdz = dPfdz
         this%InitSpinUp = InitSpinUp; this%BulkRichardson = BulkRichardson
+        this%computeDNSpressure = computeDNSpressure; this%computefringePressure = computeFringePressure
+        this%computeTurbinePressure = computeTurbinePressure; this%turbPr = Pr
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
         allocate(this%gpC); allocate(this%gpE)
@@ -477,10 +528,10 @@ contains
         ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
         allocate(this%spectC)
         call this%spectC%init("x", nx, ny, nz  , this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=periodicinZ, dealiasF=dealiasfact)
+                scheme_xy, this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=periodicinZ, dealiasF=dealiasfact)
         allocate(this%spectE)
         call this%spectE%init("x", nx, ny, nz+1, this%dx, this%dy, this%dz, &
-                "four", this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=.false., dealiasF=dealiasfact)
+                scheme_xy, this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=.false., dealiasF=dealiasfact)
         this%sp_gpC => this%spectC%spectdecomp
         this%sp_gpE => this%spectE%spectdecomp
 
@@ -547,7 +598,7 @@ contains
         allocate(this%cbuffzC(this%sp_gpC%zsz(1),this%sp_gpC%zsz(2),this%sp_gpC%zsz(3),3))
         allocate(this%cbuffzE(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3),2))
 
-        allocate(this%rbuffxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),2))
+        allocate(this%rbuffxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),3))
         allocate(this%rbuffyC(this%gpC%ysz(1),this%gpC%ysz(2),this%gpC%ysz(3),2))
         allocate(this%rbuffzC(this%gpC%zsz(1),this%gpC%zsz(2),this%gpC%zsz(3),4))
 
@@ -637,6 +688,16 @@ contains
         !    call this%compute_and_bcast_surface_Mn()
         !end if
 
+        if ((PeriodicInZ) .and. (useHITforcing)) then
+            tmpmn = p_sum(this%u)/(real(nx,rkind)*real(ny,rkind)*real(nz,rkind))
+            this%u = this%u - tmpmn
+            
+            tmpmn = p_sum(this%v)/(real(nx,rkind)*real(ny,rkind)*real(nz,rkind))
+            this%v = this%v - tmpmn
+            
+            tmpmn = p_sum(this%w)/(real(nx,rkind)*real(ny,rkind)*real(nz + 1,rkind))
+            this%w = this%w - tmpmn
+        end if
         call this%interp_PrimitiveVars()
         call message(1,"Max KE:",P_MAXVAL(this%getMaxKE()))
      
@@ -688,6 +749,7 @@ contains
         end if  
 
         ! STEP 11: Initialize SGS model
+        allocate(this%SGSmodel)
         if (this%useSGS) then
             
             ! First get z at edges
@@ -700,14 +762,19 @@ contains
             call transpose_z_to_y(zEinZ,zEinY,this%gpE)
             call transpose_y_to_x(zEinY,this%rbuffxE(:,:,:,1), this%gpE)
 
-            allocate(this%SGSmodel)
+            if ((this%initSpinup) .or. (this%useScalars) .or. (this%isStratified)) then
+               sgsmod_stratified = .true. 
+            else
+               sgsmod_stratified = .false. 
+            end if 
             call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
-                                    this%ThetaRef, this%Fr, this%Re, Pr, this%isInviscid, this%isStratified, this%botBC_Temp, &
+                                    this%ThetaRef, this%Fr, this%Re, this%isInviscid, sgsmod_stratified, this%botBC_Temp, &
                                     this%initSpinUp)
-            call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3)
+            call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, &
+                                    this%kappaSGS, this%kappa_bounding)
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -766,14 +833,11 @@ contains
         if (this%useWindTurbines) then
             allocate(this%WindTurbineArr)
             call this%WindTurbineArr%init(inputFile, this%gpC, this%gpE, this%spectC, this%spectE, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
+            allocate(this%inst_horz_avg_turb(8*this%WindTurbineArr%nTurbines))
         end if
         ! STEP 12: Set visualization planes for io
         call set_planes_io(this%xplanes, this%yplanes, this%zplanes)
 
-        ! STEP 13: Compute the timestep
-        call this%compute_deltaT()
-        this%dtOld = this%dt
-        this%dtRat = one 
 
 
         ! STEP 14a : Probes
@@ -807,7 +871,7 @@ contains
                 !else                                     
                 !    allocate(this%probe_data(1:4,1:this%nprobes,0:this%probeTimeLimit-1)) ! Store time + 3 fields
                 !end if
-                allocate(this%probe_data(1:6,1:this%nprobes,0:this%probeTimeLimit-1))
+                allocate(this%probe_data(1:9,1:this%nprobes,0:this%probeTimeLimit-1))
                 this%probe_data = 0.d0
                 ii = 1
                 do idx = 1,size(probe_locs,2)
@@ -868,7 +932,6 @@ contains
         end if 
 
 
-
         ! STEP 15: Set up extra buffers for RK3
         if (timeSteppingScheme == 1) then
             if (this%isStratified .or. this%initspinup) then
@@ -907,9 +970,9 @@ contains
         end if
        
         ! STEP 17: Set Fringe
-        call mpi_barrier(mpi_comm_world, ierr)
+        allocate(this%fringe_x1, this%fringe_x2)
+        allocate(this%fringe_x)
         if (this%usedoublefringex) then
-            allocate(this%fringe_x1, this%fringe_x2)
             call this%fringe_x1%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
                                         this%spectC, this%spectE, this%gpC, this%gpE, &
                                         this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, fringeID=1)   
@@ -919,7 +982,6 @@ contains
 
         else
             if (this%useFringe) then
-                allocate(this%fringe_x)
                 call this%fringe_x%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
                                         this%spectC, this%spectE, this%gpC, this%gpE, &
                                         this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE)   
@@ -936,13 +998,36 @@ contains
         ! STEP 19: Set up storage for Pressure
         if ((this%storePressure) .or. (this%fastCalcPressure)) then
             allocate(this%Pressure(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
-            call this%ComputePressure()
+            if (this%computefringePressure) then
+               allocate(this%urhs_fringe(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+               allocate(this%vrhs_fringe(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+               allocate(this%wrhs_fringe(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
+               allocate(this%pressure_fringe(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+            end if
+            if (this%computeDNSpressure) then
+               allocate(this%urhs_dns(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+               allocate(this%vrhs_dns(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+               allocate(this%wrhs_dns(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
+               allocate(this%pressure_dns(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+            end if
+            if (this%computeTurbinePressure) then
+               allocate(this%urhs_turbine(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+               allocate(this%vrhs_turbine(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+               allocate(this%wrhs_turbine(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
+               allocate(this%pressure_turbine(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+               this%urhs_turbine = dcmplx(0.d0, 0.d0)
+               this%vrhs_turbine = dcmplx(0.d0, 0.d0)
+               this%wrhs_turbine = dcmplx(0.d0, 0.d0)
+            end if
             call message(1, "Done allocating storage for pressure")
         end if 
+        if ((.not. this%fastCalcPressure) .and. ((this%computefringePressure) .or. (this%computeDNSPressure))) then
+            call gracefulExit("You need to set FASTCALCPRESSURE = .true. in & 
+                     & order to use computefringepressure or computeDNSpressure", 313)
+        end if
 
         ! STEP 20: Update the probes
         if (this%useProbes) call this%updateProbes()
-
 
         ! STEP 21: Buoyancy term type
         if (this%isStratified) then
@@ -962,10 +1047,58 @@ contains
         end if 
 
 
-        ! STEP 22: Safeguard against user invalid user inputs
+        ! STEP 22: Set the scalars
+        if (this%usescalars) then
+            if (allocated(this%scalars)) deallocate(this%scalars)
+            allocate(this%scalars(this%n_scalars))
+            do idx = 1,this%n_scalars
+               call this%scalars(idx)%init(this%gpC,this%gpE,this%spectC,this%spectE,this%sgsmodel,this%Pade6opZ,&
+                            & inputfile,scalar_info_dir,this%mesh,this%u,this%v,this%w,this%wC, this%rbuffxC, &
+                            & this%rbuffyC,this%rbuffzC,this%rbuffxE,this%rbuffyE,this%rbuffzE,  &
+                            & this%cbuffyC,this%cbuffzC,this%cbuffyE,this%cbuffzE, this%Re, &
+                            & this%isinviscid, this%useSGS, idx, this%inputdir, this%outputdir, &
+                            & this%runID, useRestartFile, restartfile_TID, this%usefringe, this%usedoublefringex, &
+                            & this%fringe_x, this%fringe_x1, this%fringe_x2)
+            end do 
+            call message(0, "SCALAR fields initialized successfully.")
+         end if  
+         
+         ! STEP 23: Compute pressure  
+        if ((this%storePressure) .or. (this%fastCalcPressure)) then
+            call this%ComputePressure()
+        end if 
+
+
+        ! STEP 24: Compute Rapid and Slow Pressure Split
+        if (this%computeRapidSlowPressure) then
+            call this%initialize_Rapid_Slow_Pressure_Split(MeanTIDX, MeanRID, MeanFilesDir)
+        end if 
+
+        ! STEP 25: Schedule time dumps
+        this%vizDump_Schedule = vizDump_Schedule
+        this%DumpThisStep = .false. 
+        if (this%vizDump_Schedule == 1) then
+            this%deltaT_dump = deltaT_dump
+            this%t_NextDump = this%tsim + deltaT_dump
+        end if 
+
+        ! STEP 13 (relocated): Compute the timestep
+        call this%compute_deltaT()
+        this%dtOld = this%dt
+        this%dtRat = one 
+        
+        ! STEP 25: Safeguard against user invalid user inputs
+        if ((this%vizDump_Schedule == 1) .and. (.not. this%useCFL)) then
+            call GracefulExit("Cannot use vizDump_Schedule=1 if using fixed dt.",123)
+        end if 
         if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
             call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 or SSP RK45 time stepping.",123)
+        end if
+
+        if ((this%usescalars) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
+            call GracefulExit("SCALARS are only supported with TVD RK3 or SSP RK45 time stepping.",123)
         end if 
+
         if ((this%fastCalcPressure) .and. (useDealiasFilterVert)) then
             call GracefulExit("fastCalcPressure feature is not supported if useDealiasFilterVert is TRUE",123) 
         end if 
@@ -973,8 +1106,11 @@ contains
         if ((this%isStratified .or. this%initspinup) .and. (.not. ComputeStokesPressure )) then
             call GracefulExit("You must set ComputeStokesPressure to TRUE if &
             & there is stratification in the problem", 323)
-        end if 
+        end if
 
+        if (this%donot_dealias) then
+            call message(0,"DONOT_DEALIAS set to TRUE. Screw you.")
+        end if 
       
         call message("IGRID initialized successfully!")
         call message("===========================================================")
@@ -982,24 +1118,80 @@ contains
 
     end subroutine
 
-    subroutine dealiasFields(this)
-        class(igrid), intent(inout) :: this
 
-        call this%spectC%dealias(this%uhat)
-        call this%spectC%dealias(this%vhat)
-        if (this%PeriodicInZ) then
-            call transpose_y_to_z(this%what, this%cbuffzE(:,:,:,1), this%sp_gpE)
-            call this%spectC%dealias_edgeField(this%cbuffzE(:,:,:,1))
-            call transpose_z_to_y(this%cbuffzE(:,:,:,1),this%what,this%sp_gpE)
-        else
-            call this%spectE%dealias(this%what)
+    subroutine append_visualization_info(this)
+        class(igrid), intent(in) :: this 
+        character(len=clen) :: tempname, fname 
+        logical :: exists 
+
+        write(tempname,"(A3,I2.2,A12,A4)") "Run",this%runID, "_vis_summary",".smm"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+
+        if (nrank == 0) then
+            inquire(file=fname, exist=exists)
+            if (exists) then
+                open(12, file=fname, status="old", position="append", action="write")
+            else
+                open(12, file=fname, status="new", action="write")
+            end if
+            write(12,*) this%tsim, this%step
+            close(12)
         end if 
-        if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
-        if (this%UseDealiasFilterVert) then
-            call this%ApplyCompactFilter()
-        end if
 
     end subroutine 
+
+
+
+    subroutine dealiasFields(this)
+        class(igrid), intent(inout) :: this
+        integer :: idx
+
+        if (this%donot_dealias) then
+           return
+        else
+            call this%spectC%dealias(this%uhat)
+            call this%spectC%dealias(this%vhat)
+            if (this%PeriodicInZ) then
+                call transpose_y_to_z(this%what, this%cbuffzE(:,:,:,1), this%sp_gpE)
+                call this%spectC%dealias_edgeField(this%cbuffzE(:,:,:,1))
+                call transpose_z_to_y(this%cbuffzE(:,:,:,1),this%what,this%sp_gpE)
+            else
+                call this%spectE%dealias(this%what)
+            end if 
+            if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
+            if (this%UseDealiasFilterVert) then
+                call this%ApplyCompactFilter()
+            end if
+
+            if ((this%usescalars) .and. allocated(this%scalars)) then
+               do idx = 1,this%n_scalars
+                  call this%scalars(idx)%dealias()
+               end do 
+            end if 
+        end if 
+    end subroutine 
+
+
+   subroutine dealias_rhs(this, uin, vin, win)
+      class(igrid), intent(inout) :: this
+      complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout ) :: uin, vin
+      complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: win
+
+      if (this%donot_dealias) then
+         return
+      else
+         call this%spectC%dealias(uin)
+         call this%spectC%dealias(vin)
+         if (this%PeriodicInZ) then
+             call transpose_y_to_z(win, this%cbuffzE(:,:,:,1), this%sp_gpE)
+             call this%spectC%dealias_edgeField(this%cbuffzE(:,:,:,1))
+             call transpose_z_to_y(this%cbuffzE(:,:,:,1),win,this%sp_gpE)
+         else
+             call this%spectE%dealias(win)
+         end if 
+      end if 
+   end subroutine 
+
 
     subroutine timeAdvance(this, dtforced)
         class(igrid), intent(inout) :: this
@@ -1027,6 +1219,7 @@ contains
     subroutine reset_pointers(this, resetRHS)
         class(igrid), intent(inout), target :: this
         logical, intent(in), optional :: resetRHS 
+        integer :: idx 
 
         this%uhat => this%SfieldsC(:,:,:,1); 
         this%vhat => this%SfieldsC(:,:,:,2); 
@@ -1046,12 +1239,23 @@ contains
             end if 
         end if 
 
+        if (this%useScalars) then
+            do idx = 1,this%n_scalars
+               if (present(resetRHS)) then
+                  call this%scalars(idx)%reset_pointers(resetRHS)
+               else
+                  call this%scalars(idx)%reset_pointers()
+               end if  
+            end do 
+        end if 
+
     end subroutine
 
     
     subroutine TVD_RK3(this, dtforced)
         class(igrid), intent(inout), target :: this
         real(rkind), intent(in), optional :: dtforced
+        integer :: idx 
 
         if(present(dtforced)) then
           this%dt = dtforced
@@ -1077,25 +1281,51 @@ contains
         this%vhat1 = this%vhat + this%dt*this%v_rhs 
         this%what1 = this%what + this%dt*this%w_rhs 
         if (this%isStratified .or. this%initspinup) this%That1 = this%That + this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat1 = this%scalars(idx)%Fhat + this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
+        
         ! Now set pointers so that things operate on uhat1, vhat1, etc.
         this%uhat => this%SfieldsC2(:,:,:,1); this%vhat => this%SfieldsC2(:,:,:,2); this%what => this%SfieldsE2(:,:,:,1); 
         if (this%isStratified .or. this%initspinup) this%That => this%SfieldsC2(:,:,:,3)
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+               this%scalars(idx)%Fhat => this%scalars(idx)%Sfields(:,:,:,2) 
+           end do 
+        end if
+
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(this%fastCalcPressure)
+         
 
         !!! STAGE 2
         ! Second stage - u, v, w are really pointing to u1, v1, w1 (which is
         ! what we want. 
         call this%populate_rhs()
+
         ! reset u, v, w pointers
         call this%reset_pointers()
         this%uhat1 = (3.d0/4.d0)*this%uhat + (1.d0/4.d0)*this%uhat1 + (1.d0/4.d0)*this%dt*this%u_rhs
         this%vhat1 = (3.d0/4.d0)*this%vhat + (1.d0/4.d0)*this%vhat1 + (1.d0/4.d0)*this%dt*this%v_rhs
         this%what1 = (3.d0/4.d0)*this%what + (1.d0/4.d0)*this%what1 + (1.d0/4.d0)*this%dt*this%w_rhs
         if (this%isStratified .or. this%initspinup) this%That1 = (3.d0/4.d0)*this%That + (1.d0/4.d0)*this%That1 + (1.d0/4.d0)*this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat1 = (3.d0/4.d0)*this%scalars(idx)%Fhat + (1.d0/4.d0)*this%scalars(idx)%Fhat1 &
+                                    & + (1.d0/4.d0)*this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
         ! now set the u, v, w, pointers to u1, v1, w1
         this%uhat => this%SfieldsC2(:,:,:,1); this%vhat => this%SfieldsC2(:,:,:,2); this%what => this%SfieldsE2(:,:,:,1); 
         if (this%isStratified .or. this%initspinup) this%That => this%SfieldsC2(:,:,:,3)
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+            this%scalars(idx)%Fhat => this%scalars(idx)%Sfields(:,:,:,2) 
+           end do 
+        end if
+
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(.false.)
 
@@ -1104,12 +1334,20 @@ contains
         ! Third stage - u, v, w are really pointing to u2, v2, w2 (which is what
         ! we really want. 
         call this%populate_rhs()
+        
         ! reset u, v, w pointers
         call this%reset_pointers()
         this%uhat = (1.d0/3.d0)*this%uhat + (2.d0/3.d0)*this%uhat1 + (2.d0/3.d0)*this%dt*this%u_rhs
         this%vhat = (1.d0/3.d0)*this%vhat + (2.d0/3.d0)*this%vhat1 + (2.d0/3.d0)*this%dt*this%v_rhs
         this%what = (1.d0/3.d0)*this%what + (2.d0/3.d0)*this%what1 + (2.d0/3.d0)*this%dt*this%w_rhs
         if (this%isStratified .or. this%initspinup) this%That = (1.d0/3.d0)*this%That + (2.d0/3.d0)*this%That1 + (2.d0/3.d0)*this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat  = (1.d0/3.d0)*this%scalars(idx)%Fhat + (2.d0/3.d0)*this%scalars(idx)%Fhat1 &
+                                    & + (2.d0/3.d0)*this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
+        
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
 
@@ -1130,6 +1368,8 @@ contains
         real(rkind), parameter :: a30 = 0.620101851488403d0, a32 = 0.379898148511597d0
         real(rkind), parameter :: a40 = 0.17807995439313d0 , a43 = 0.821920045606868d0
         real(rkind), parameter :: a52 = 0.517231671970585d0, a53 = 0.096059710526147d0, a54 = 0.386708617503269d0
+
+        integer :: idx 
 
         if(present(dtforced)) then
           this%dt = dtforced
@@ -1156,10 +1396,23 @@ contains
         this%vhat1 = this%vhat + b01*this%dt*this%v_rhs 
         this%what1 = this%what + b01*this%dt*this%w_rhs 
         if (this%isStratified .or. this%initspinup) this%That1 = this%That + b01*this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat1 = this%scalars(idx)%Fhat + b01*this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
+        
         ! Now set pointers so that things operate on uhat1, vhat1, etc.
         this%uhat => this%uExtra(:,:,:,1); this%vhat => this%vExtra(:,:,:,1)
         this%what => this%wExtra(:,:,:,1); this%That => this%TExtra(:,:,:,1)
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+               this%scalars(idx)%Fhat => this%scalars(idx)%Sfields(:,:,:,2) ! Fhat1 is the second index of Sfields
+           end do 
+        end if
+
         ! Now perform the projection and prep for next stage
+        
         call this%project_and_prep(this%fastCalcPressure)
 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1176,9 +1429,19 @@ contains
         this%vhat2 = a20*this%vhat + a21*this%vhat1 + b12*this%dt*this%v_rhs
         this%what2 = a20*this%what + a21*this%what1 + b12*this%dt*this%w_rhs
         if (this%isStratified .or. this%initspinup) this%That2 = a20*this%That + a21*this%That1 + b12*this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat2 = a20*this%scalars(idx)%Fhat + a21*this%scalars(idx)%Fhat1 + b12*this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
         ! now set the u, v, w, pointers to u2, v2, w2
         this%uhat => this%uExtra(:,:,:,2); this%vhat => this%vExtra(:,:,:,2)
         this%what => this%wExtra(:,:,:,2); this%That => this%TExtra(:,:,:,2)
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+            this%scalars(idx)%Fhat => this%scalars(idx)%Sfields(:,:,:,3) ! Fhat2 is the third index of Sfields
+           end do 
+        end if
         ! Now perform the projection and prep for next stage
         call this%project_and_prep(.false.)
 
@@ -1197,9 +1460,19 @@ contains
         this%vhat3 = a30*this%vhat + a32*this%vhat2 + b23*this%dt*this%v_rhs
         this%what3 = a30*this%what + a32*this%what2 + b23*this%dt*this%w_rhs
         if (this%isStratified .or. this%initspinup) this%That3 = a30*this%That + a32*this%That2 + b23*this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat3 = a30*this%scalars(idx)%Fhat + a32*this%scalars(idx)%Fhat2 + b23*this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
         ! now set u, v, w pointers to point to u3, v3, w3
         this%uhat => this%uExtra(:,:,:,3); this%vhat => this%vExtra(:,:,:,3)
         this%what => this%wExtra(:,:,:,3); this%That => this%TExtra(:,:,:,3)
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+            this%scalars(idx)%Fhat => this%scalars(idx)%Sfields(:,:,:,4) ! Fhat3 is the third index of Sfields
+           end do 
+        end if
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
 
@@ -1210,15 +1483,19 @@ contains
         ! reset u, v, w pointers
         call this%reset_pointers()
         ! Set the pointers 
-        this%uhat4 => this%uhat; this%vhat4 => this%vhat
-        this%what4 => this%what; this%That4 => this%That
+        !this%uhat4 => this%uhat; this%vhat4 => this%vhat
+        !this%what4 => this%what; this%That4 => this%That
         ! Do the time step 
-        this%uhat4 = a40*this%uhat + a43*this%uhat3 + b34*this%dt*this%u_rhs
-        this%vhat4 = a40*this%vhat + a43*this%vhat3 + b34*this%dt*this%v_rhs
-        this%what4 = a40*this%what + a43*this%what3 + b34*this%dt*this%w_rhs
-        if (this%isStratified .or. this%initspinup) this%That4 = a40*this%That + a43*this%That3 + b34*this%dt*this%T_rhs
-        ! now set u, v, w pointers to point to u4, v4, w4
-        ! < no need to do anything here since u4 is already pointing to u > 
+        this%uhat = a40*this%uhat + a43*this%uhat3 + b34*this%dt*this%u_rhs
+        this%vhat = a40*this%vhat + a43*this%vhat3 + b34*this%dt*this%v_rhs
+        this%what = a40*this%what + a43*this%what3 + b34*this%dt*this%w_rhs
+        if (this%isStratified .or. this%initspinup) this%That = a40*this%That + a43*this%That3 + b34*this%dt*this%T_rhs
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat = a40*this%scalars(idx)%Fhat + a43*this%scalars(idx)%Fhat3 + b34*this%dt*this%scalars(idx)%rhs
+           end do 
+        end if
+        ! < IMPORTANT: no need to do anything here since uhat4 is really just uhat > 
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
 
@@ -1229,6 +1506,11 @@ contains
         ! First reset urhs pointers to point to spare buffers
         this%u_rhs => this%uRHSExtra(:,:,:,1); this%v_rhs => this%vRHSExtra(:,:,:,1);
         this%w_rhs => this%wRHSExtra(:,:,:,1); this%T_rhs => this%TRHSExtra(:,:,:,1);
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+            this%scalars(idx)%rhs => this%scalars(idx)%rhs_storage(:,:,:,2) 
+           end do 
+        end if
         call this%populate_rhs()
         ! Reset pointers
         call this%reset_pointers(resetRHS=.true.)
@@ -1237,6 +1519,13 @@ contains
         this%vhat = a52*this%vhat2 + a53*this%vhat3 + b35*this%dt*this%v_rhs + a54*this%vhat + b45*this%dt*this%vRHSExtra(:,:,:,1)
         this%what = a52*this%what2 + a53*this%what3 + b35*this%dt*this%w_rhs + a54*this%what + b45*this%dt*this%wRHSExtra(:,:,:,1)
         if (this%isStratified .or. this%initspinup) this%That = a52*this%That2 + a53*this%That3 + b35*this%dt*this%T_rhs + a54*this%That + b45*this%dt*this%TRHSExtra(:,:,:,1) 
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              this%scalars(idx)%Fhat = a52*this%scalars(idx)%Fhat2 + a53*this%scalars(idx)%Fhat3  &
+                                   & + b35*this%dt*this%scalars(idx)%rhs + a54*this%scalars(idx)%Fhat &
+                                   & + b45*this%dt*this%scalars(idx)%rhs_storage(:,:,:,2)
+           end do 
+        end if
         ! Now perform the projection and prep for next time step
         call this%project_and_prep(.false.)
 
@@ -1245,18 +1534,68 @@ contains
 
     end subroutine
 
+    subroutine dealiasRealField_C(this, field)
+        class(igrid), intent(inout) :: this
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(1),this%gpC%xsz(1)), intent(inout) :: field
+      
+        if (this%donot_dealias) then
+            return 
+        else
+            call this%spectC%fft(field, this%cbuffyC(:,:,:,1))
+            call this%spectC%dealias(this%cbuffyC(:,:,:,1))
+            call this%spectC%ifft(this%cbuffyC(:,:,:,1),field)
+        end if 
+    end subroutine 
 
     subroutine computePressure(this)
         class(igrid), intent(inout) :: this
-      
+        logical :: copyFringeRHS, copyDNSRHS, copyTurbineRHS
+
+        if (this%computeDNSpressure) then
+           copyDNSRHS = .true. 
+        else
+           copyDNSRHS = .false. 
+        end if
+
+        if (this%computeFringePressure) then
+           copyFringeRHS = .true. 
+        else
+           copyFringeRHS = .false. 
+        end if
+
+        if (this%computeTurbinePressure) then
+            copyTurbineRHS = .true.
+         else
+            copyTurbineRHS = .false. 
+        end if
+
         ! STEP 1: Populate RHS 
-        call this%populate_rhs()
+        call this%populate_rhs(CopyForDNSpress=copyDNSRHS, CopyForFringePress=copyFringeRHS, copyForTurbinePress=copyTurbineRHS)
 
         ! STEP 2: Compute pressure
         if (this%fastCalcPressure) then
-            call this%Padepoiss%getPressureAndUpdateRHS(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
+           call this%dealias_rhs(this%u_rhs, this%v_rhs, this%w_rhs) 
+           call this%Padepoiss%getPressureAndUpdateRHS(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
+            !call this%dealiasRealField_C(this%pressure)
+            if (this%computeDNSpressure) then
+               call this%dealias_rhs(this%urhs_dns, this%vrhs_dns, this%wrhs_dns) 
+               call this%padepoiss%getPressure(this%urhs_dns,this%vrhs_dns,this%wrhs_dns,this%pressure_dns)
+               !call this%dealiasRealField_C(this%pressure_dns)
+            end if
+            if (this%computeFringePressure) then
+               call this%dealias_rhs(this%urhs_fringe, this%vrhs_fringe, this%wrhs_fringe) 
+               call this%padepoiss%getPressure(this%urhs_fringe,this%vrhs_fringe,this%wrhs_fringe,this%pressure_fringe)
+               !call this%dealiasRealField_C(this%pressure_fringe)
+            end if
+            if (this%computeTurbinePressure) then
+               call this%dealias_rhs(this%urhs_turbine, this%vrhs_turbine, this%wrhs_turbine) 
+               call this%padepoiss%getPressure(this%urhs_turbine,this%vrhs_turbine,this%wrhs_turbine,this%pressure_turbine)
+               !call this%dealiasRealField_C(this%pressure_turbine)
+            end if
         else
+            call this%dealias_rhs(this%u_rhs, this%v_rhs, this%w_rhs) 
             call this%padepoiss%getPressure(this%u_rhs,this%v_rhs,this%w_rhs,this%pressure)
+            !call this%dealiasRealField_C(this%pressure)
         end if 
 
         if (.not. useSkewSymm) then 
@@ -1275,9 +1614,11 @@ contains
     subroutine compute_deltaT(this)
         use reductions, only: p_maxval
         class(igrid), intent(inout), target :: this
-        real(rkind) :: TSmax , Tvisc
+        real(rkind) :: TSmax, Tsim_next 
         real(rkind), dimension(:,:,:), pointer :: rb1, rb2
-        
+        real(rkind), dimension(5) :: dtmin
+        integer :: idx
+
         rb1 => this%rbuffxC(:,:,:,1)
         rb2 => this%rbuffxC(:,:,:,2)
 
@@ -1291,14 +1632,62 @@ contains
             rb2 = abs(rb2)
             rb1 = rb1 + rb2
             TSmax = p_maxval(rb1)
-            this%dt = this%CFL/TSmax
-
+            dtmin(1)= this%CFL/TSmax
+               
             if (.not. this%isInviscid) then
-               Tvisc = this%CFL*this%Re*(min(this%dx,this%dy,this%dz)**2)
-               this%dt = min(this%dt,Tvisc)
+               dtmin(2) = this%CviscDT*0.5d0*this%Re*(min(this%dx,this%dy,this%dz)**2)
+               if (this%isStratified .and. (this%PrandtlFluid > 1.d0)) then 
+                  dtmin(2) = dtmin(2) / this%PrandtlFluid  
+               end if 
+            else
+               dtmin(2) = 1.d15
             end if
+            
+            if (associated(this%nu_SGS)) then
+               dtmin(3) = this%CviscDT*0.25d0*(min(this%dx,this%dy,this%dz)**2)/(p_maxval(this%nu_SGS) + 1.d-18)
+            else
+               dtmin(3) = 1.d15
+            end if 
+
+            if (associated(this%kappaSGS)) then
+               dtmin(4) = this%CviscDT*0.5d0*(min(this%dx,this%dy,this%dz)**2)/(p_maxval(this%kappaSGS) + 1.d-18)
+            else
+               dtmin(4) = 1.d15
+            end if 
+
+            if (associated(this%kappa_bounding)) then
+               dtmin(5) = this%CviscDT*0.5d0*(min(this%dx,this%dy,this%dz)**2)/(p_maxval(this%kappa_bounding) + 1.d-18)
+            else
+               dtmin(5) = 1.d15
+            end if 
+
+            this%dt = minval(dtmin)
+            idx = minloc(dtmin, DIM=1)
+            select case(idx)
+            case (1) 
+               this%dtlimit = " Convective CFL"
+            case(2)
+               this%dtlimit = " Viscous"
+            case(3)
+               this%dtlimit = " SGS viscosity"
+            case(4)
+               this%dtlimit = " SGS scalar diffusivity"
+            case(5)
+               this%dtlimit = " Scalar bounding diffusivity"
+            end select 
+         else
+            this%dtlimit = "invalid/fixed dt"
         end if 
 
+        if (this%vizDump_Schedule == 1) then
+            this%DumpThisStep = .false. 
+            Tsim_next = this%tsim + this%dt
+            if (Tsim_next > this%t_NextDump) then
+                this%dt = this%t_nextDump - this%tsim
+                this%t_NextDump = this%t_NextDump + this%deltaT_dump 
+                this%DumpThisStep = .true.
+            end if
+        end if 
 
     end subroutine
 
@@ -1370,7 +1759,8 @@ contains
 
     subroutine destroy(this)
         class(igrid), intent(inout) :: this
-      
+        integer :: idx
+
         if(this%useHITForcing) then
           call this%hitforce%destroy()
           deallocate(this%hitforce)
@@ -1392,6 +1782,13 @@ contains
         if (this%useSGS) then
            call this%sgsModel%destroy()
            deallocate(this%sgsModel)
+        end if
+
+        if (allocated(this%scalars)) then
+            do idx = 1,this%n_scalars
+               call this%scalars(idx)%destroy()
+            end do 
+            deallocate(this%scalars)
         end if
     end subroutine
 
@@ -1691,9 +2088,19 @@ contains
 
     end subroutine
 
-    subroutine populate_rhs(this)
+    subroutine populate_rhs(this, CopyForDNSpress, CopyForFringePress, copyForTurbinePress)
         class(igrid), intent(inout) :: this
         !integer,           intent(in)    :: RKstage
+        logical, intent(in), optional :: CopyForDNSpress, CopyForFringePress, copyForTurbinePress
+        logical :: copyFringeRHS, copyTurbRHS
+        integer :: idx 
+         
+
+        if (present(copyForTurbinePress)) then
+           copyTurbRHS = copyForTurbinePress
+        else
+           copyTurbRHS = .false. 
+        end if
 
         ! Step 1: Non Linear Term 
         if (useSkewSymm) then
@@ -1702,22 +2109,11 @@ contains
             call this%AddNonLinearTerm_Rot()
         end if
 
-        !print*, "1:" 
-        !print*, "urhs:", sum(abs(this%u_rhs))
-        !print*, "vrhs:", sum(abs(this%v_rhs))
-        !print*, "wrhs:", sum(abs(this%w_rhs))
-        !print*, "Trhs:", sum(abs(this%T_rhs))
-
         ! Step 2: Coriolis Term
         if (this%useCoriolis) then
             call this%AddCoriolisTerm()
         end if 
         
-        !print*, "2:" 
-        !print*, "urhs:", sum(abs(this%u_rhs))
-        !print*, "vrhs:", sum(abs(this%v_rhs))
-        !print*, "wrhs:", sum(abs(this%w_rhs))
-        !print*, "Trhs:", sum(abs(this%T_rhs))
         
         ! Step 3a: Extra Forcing 
         if (this%useExtraForcing) then
@@ -1727,71 +2123,83 @@ contains
         ! Step 3b: Wind Turbines
         !if (this%useWindTurbines .and. (RKstage==1)) then
         if (this%useWindTurbines) then
-           if (allocated(this%inst_horz_avg_turb)) then
-               call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
-                                    this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep, this%inst_horz_avg_turb)
+           if (copyTurbRHS) then
+            call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC, this%u_rhs, this%v_rhs, this%w_rhs, &
+                  & this%newTimestep, this%inst_horz_avg_turb, uturb=this%urhs_turbine, vturb=this%vrhs_turbine, wturb=this%wrhs_turbine) 
            else
-               call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
-                                    this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep)
+            !if (allocated(this%inst_horz_avg_turb)) then
+                call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
+                                     this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep, this%inst_horz_avg_turb)
+            !else
+            !    call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
+            !                         this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep)
+            !end if
            end if
         end if 
        
-        !print*, "3:" 
-        !print*, "urhs:", sum(abs(this%u_rhs))
-        !print*, "vrhs:", sum(abs(this%v_rhs))
-        !print*, "wrhs:", sum(abs(this%w_rhs))
-        !!print*, "Trhs:", sum(abs(this%T_rhs))
-        !print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs))
-
         ! Step 4: Buoyance + Sponge (inside Buoyancy)
         if (this%isStratified .or. this%initspinup) then
             call this%addBuoyancyTerm()
         end if 
         
-        !print*, "4:" 
-        !print*, "urhs:", sum(abs(this%u_rhs))
-        !print*, "vrhs:", sum(abs(this%v_rhs))
-        !print*, "wrhs:", sum(abs(this%w_rhs))
-        !!print*, "Trhs:", sum(abs(this%T_rhs))
-        !print '(A,ES26.16)', "Trhs:", sum(abs(this%T_rhs))      
 
         ! Step 5: Viscous Term (only if simulation if NOT inviscid)
         if (.not. this%isInviscid) then
             call this%addViscousTerm()
         end if
-        
-        !print*, "5:" 
-        !print*, "urhs:", sum(abs(this%u_rhs))
-        !print*, "vrhs:", sum(abs(this%v_rhs))
-        !print*, "wrhs:", sum(abs(this%w_rhs))
-        !print*, "Trhs:", sum(abs(this%T_rhs))
+       
+        if (present(CopyForDNSpress)) then
+            if (CopyForDNSpress) then
+               if (copyTurbRHS) then
+                  this%urhs_dns = this%u_rhs - this%urhs_turbine 
+                  this%vrhs_dns = this%v_rhs - this%vrhs_turbine
+                  this%wrhs_dns = this%w_rhs - this%wrhs_turbine
+               else
+                  this%urhs_dns = this%u_rhs
+                  this%vrhs_dns = this%v_rhs
+                  this%wrhs_dns = this%w_rhs
+               end if
+            end if   
+        end if
 
         ! Step 6: SGS Viscous Term
         if (this%useSGS) then
-            call this%sgsmodel%getRHS_SGS(this%u_rhs,      this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
-                                          this%duidxjEhat, this%uEhat, this%vEhat,      this%what,    this%uhat,    &
-                                          this%vhat,       this%That,  this%u,          this%v,       this%uE,      &
-                                          this%vE,         this%w,     this%newTimeStep                             )
+            call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
+                                          this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
+                                          this%v,     this%wC,    this%newTimeStep                             )
 
             if (this%isStratified .or. this%initspinup) then
-               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzE)
+               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
+                                          this%u, this%v, this%wC, this%T, this%That, this%turbPr)
             end if
             
         end if
         
-        !print*, "6:" 
-        !print*, "urhs:", sum(abs(this%u_rhs))
-        !print*, "vrhs:", sum(abs(this%v_rhs))
-        !print*, "wrhs:", sum(abs(this%w_rhs))
-        !print*, "Trhs:", sum(abs(this%T_rhs))
 
         ! Step 7: Fringe source term if fringe is being used (non-periodic)
+        if (present(copyForFringePress)) then
+            copyFringeRHS = copyForFringePress
+        else
+            copyFringeRHS = .false. 
+        end if
         if (this%usedoublefringex) then
+            if (copyFringeRHS) then
+                call this%fringe_x1%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w, &
+                                    this%urhs_fringe, this%vrhs_fringe, this%wrhs_fringe, addF=.false. )
+                call this%fringe_x2%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w, &
+                                    this%urhs_fringe, this%vrhs_fringe, this%wrhs_fringe, addF=.true. )
+            else
                 call this%fringe_x1%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
                 call this%fringe_x2%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
+            end if 
         else
             if (this%useFringe) then
-                call this%fringe_x%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
+               if (copyFringeRHS) then
+                   call this%fringe_x%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w, & 
+                                    this%urhs_fringe, this%vrhs_fringe, this%wrhs_fringe, addF=.false. )
+               else
+                   call this%fringe_x%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
+               end if 
             end if 
         end if 
 
@@ -1800,7 +2208,13 @@ contains
             call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep)
         end if 
 
-        !if (nrank == 0) print*, maxval(abs(this%u_rhs)), maxval(abs(this%v_rhs)), maxval(abs(this%w_rhs))
+        ! Step 9: Populate RHS for scalars
+        !if (allocated(this%scalars)) then
+        if (this%useScalars) then
+            do idx = 1,this%n_scalars
+               call this%scalars(idx)%populateRHS(this%dt)
+            end do 
+        end if
     end subroutine
 
     subroutine addViscousTerm(this)
@@ -1846,14 +2260,6 @@ contains
             end do 
             
          end if
-        !this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%uhat + this%d2udz2hatC
-        !this%u_rhs = this%u_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
-
-        !this%cbuffyC(:,:,:,1) = -this%spectC%kabs_sq*this%vhat + this%d2vdz2hatC
-        !this%v_rhs = this%v_rhs + (one/this%Re)*this%cbuffyC(:,:,:,1)
-
-        !this%cbuffyE(:,:,:,1) = -this%spectE%kabs_sq*this%what + this%d2wdz2hatE
-        !this%w_rhs = this%w_rhs + (one/this%Re)*this%cbuffyE(:,:,:,1)
 
     end subroutine
 
@@ -1861,15 +2267,9 @@ contains
     subroutine project_and_prep(this, AlreadyProjected)
         class(igrid), intent(inout) :: this
         logical, intent(in) :: AlreadyProjected
+        integer :: idx 
 
         ! Step 1: Dealias
-        !call this%spectC%dealias(this%uhat)
-        !call this%spectC%dealias(this%vhat)
-        !call this%spectE%dealias(this%what)
-        !if (this%isStratified .or. this%initspinup) call this%spectC%dealias(this%That)
-        !if (this%UseDealiasFilterVert) then
-        !    call this%ApplyCompactFilter()
-        !end if
         call this%dealiasFields()
 
         ! Step 2: Pressure projection
@@ -1893,7 +2293,13 @@ contains
         ! STEP 5: Compute duidxjC 
         call this%compute_duidxj()
         if (this%isStratified .or. this%initspinup) call this%compute_dTdxi() 
-
+         
+        ! STEP 6: Prep scalar fields if being used. 
+        if (this%useScalars) then
+           do idx = 1,this%n_scalars
+              call this%scalars(idx)%prep_scalar()
+           end do 
+        end if
     end subroutine
 
 
@@ -1912,6 +2318,17 @@ contains
                 end if
                 if (this%fastCalcPressure) then
                     this%probe_data(6,idx,this%step) = this%Pressure(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                end if
+                if (this%computeDNSpressure) then
+                    this%probe_data(7,idx,this%step) = this%Pressure_dns(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                end if 
+
+                if (this%computeFringePressure) then
+                    this%probe_data(8,idx,this%step) = this%Pressure_fringe(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                end if
+                
+                if (this%computeTurbinePressure) then
+                    this%probe_data(9,idx,this%step) = this%Pressure_turbine(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
                 end if
             end do 
         end if
@@ -1960,6 +2377,20 @@ contains
         
     end subroutine
 
+   
+    subroutine dump_scalar_fields(this)
+      class(igrid), intent(in) :: this
+      integer :: idx
+
+      if ((this%usescalars) .and. allocated(this%scalars)) then
+         do idx = 1,this%n_scalars
+            call this%scalars(idx)%dumpScalarField(this%step)
+         end do 
+      end if 
+
+
+    end subroutine 
+
     subroutine wrapup_timestep(this)
         class(igrid), intent(inout) :: this
 
@@ -2000,7 +2431,12 @@ contains
                     call message(2, "Current Time Step is:", this%step)
                     if (nrank .ne. 0) close(777)
                     call mpi_barrier(mpi_comm_world, ierr2)
-                    if(nrank==0) close(777, status='delete')
+                    !if(nrank==0) close(777, status='delete')
+                    if (this%deleteInstructions) then
+                       if(nrank==0) close(777, status='delete')
+                    else
+                       if(nrank==0) close(777)
+                    end if
                 else
                     close(777)
                 endif
@@ -2014,7 +2450,12 @@ contains
                         call message(2, "Current Time Step is:", this%step)
                         if (nrank .ne. 0) close(777)
                         call mpi_barrier(mpi_comm_world, ierr2)
-                        if(nrank==0) close(777, status='delete')
+                        !if(nrank==0) close(777, status='delete')
+                        if (this%deleteInstructions) then
+                           if(nrank==0) close(777, status='delete')
+                        else
+                           if(nrank==0) close(777)
+                        end if
                     else
                         close(777)
                     end if
@@ -2027,7 +2468,12 @@ contains
                         call message(1,"Force Dump for pressure reqested; file prsspdo found.")
                         if (nrank .ne. 0) close(777)
                         call mpi_barrier(mpi_comm_world, ierr2)
-                        if (nrank==0) close(777, status='delete')
+                        !if (nrank==0) close(777, status='delete')
+                        if (this%deleteInstructions) then
+                           if(nrank==0) close(777, status='delete')
+                        else
+                           if(nrank==0) close(777)
+                        end if
                     else
                         close(777)
                     end if
@@ -2040,7 +2486,12 @@ contains
                     call message(2, "Current Time Step is:", this%step)
                     if (nrank .ne. 0) close(777)
                     call mpi_barrier(mpi_comm_world, ierr2)
-                    if(nrank==0) close(777, status='delete')
+                    !if(nrank==0) close(777, status='delete')
+                    if (this%deleteInstructions) then
+                       if(nrank==0) close(777, status='delete')
+                    else
+                       if(nrank==0) close(777)
+                    end if
                 else
                     close(777)
                 endif
@@ -2058,6 +2509,9 @@ contains
                 end if 
                 if ( (mod(this%step,this%P_dumpFreq) == 0).or. (forceDumpPressure)) then
                     call this%dumpFullField(this%pressure,"prss")
+                    if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
+                    if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrb')
+                    if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
                 end if 
             end if 
         end if
@@ -2105,53 +2559,9 @@ contains
             call this%dump_planes()
         end if 
 
-        !if ( (forceWrite .or. (mod(this%step,this%t_dumpKSprep) == 0)) .and. this%PreprocessForKS ) then
-        !    call this%LES2KS%LES_TO_KS(this%uE,this%vE,this%w,this%step)
-        !    call this%LES2KS%LES_FOR_KS(this%uE,this%vE,this%w,this%step)
-        !end if 
-
-        ! ADITYA -> NIRANJAN: You need to fix the dump_pointProbes call. For
-        ! some reason, it seems to segfault for some problems. 
-        !if ( (forceWrite .or. ((mod(this%step,this%t_pointProbe) == 0) .and. &
-        !         (this%step .ge. this%t_start_pointProbe) .and. (this%step .le. this%t_stop_pointProbe))) .and. (this%t_pointProbe > 0)) then
-        !    call this%dump_pointProbes()
-        !end if 
-
         if (mod(this%step,this%t_dataDump) == 0) then
            call message(0,"Scheduled visualization dump.")
-           call this%dumpFullField(this%u,'uVel')
-           call this%dumpFullField(this%v,'vVel')
-           call this%dumpFullField(this%wC,'wVel')
-           call this%dumpVisualizationInfo()
-           if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
-           if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
-           if (this%computevorticity) then
-               call this%dumpFullField(this%ox,'omgX')
-               call this%dumpFullField(this%oy,'omgY')
-               call this%dumpFullField(this%oz,'omgZ')
-           end if 
-           
-           ! ADITYA -> NIRANJAN : Did you mean to use this for debugging, or do
-           ! you need it to be here? If you do, then it needs to go inside
-           ! turbArr.  
-           !if (this%useWindTurbines) then
-           !    this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
-           !    this%WindTurbineArr%step = this%step-1
-           !endif
-
-           if (this%PreProcessForKS) then
-                if (.not. this%KSupdated) then
-                    call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
-                    this%KSupdated = .true. 
-                end if
-                call this%dumpFullField(this%uFil4KS,'uFks')
-                call this%dumpFullField(this%vFil4KS,'vFks')
-                call this%dumpFullField(this%wFil4KS,'wFks')
-           end if
-           if (this%useProbes) then
-                call this%dumpProbes()    
-                call message(0,"Performed a scheduled dump for probes.")
-           end if
+           call this%dump_visualization_files()
         end if
 
         if (this%useProbes) then
@@ -2161,36 +2571,15 @@ contains
             end if
         end if
 
+        if (this%DumpThisStep) then
+           call message(2,"Performing a fixed timed visualization dump at time:", this%tsim)
+           call message(2,"This time step used a deltaT:",this%dt)
+           call this%dump_visualization_files()
+        end if 
+
         if (forceWrite) then
            call message(2,"Performing a forced visualization dump.")
-           call this%dumpFullField(this%u,'uVel')
-           call this%dumpFullField(this%v,'vVel')
-           call this%dumpFullField(this%wC,'wVel')
-           call this%dumpVisualizationInfo()
-           if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
-           if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
-           if (this%computevorticity) then
-               call this%dumpFullField(this%ox,'omgX')
-               call this%dumpFullField(this%oy,'omgY')
-               call this%dumpFullField(this%oz,'omgZ')
-           end if 
-           
-           ! ADITYA -> NIRANJAN : Did you mean to use this for debugging, or do
-           ! you need it to be here? 
-           !if (this%useWindTurbines) then
-           !    this%WindTurbineArr%dumpTurbField = .true. ! forces will be printed out at the next time step
-           !    this%WindTurbineArr%step = this%step-1
-           !endif
-           if (this%PreProcessForKS) then
-                if (.not. this%KSupdated) then
-                    call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
-                    this%KSupdated = .true. 
-                end if
-                call this%dumpFullField(this%uFil4KS,'uFks')
-                call this%dumpFullField(this%vFil4KS,'vFks')
-                call this%dumpFullField(this%wFil4KS,'wFks')
-           end if
-           !call output_tecplot(gp)
+           call this%dump_visualization_files()
         end if
 
         if (this%initspinup) then
@@ -2204,6 +2593,50 @@ contains
         if(exitstat) call GracefulExit("Found exitpdo file in control directory",1234)
 
     end subroutine
+
+    
+    subroutine dump_visualization_files(this)
+        class(igrid), intent(inout) :: this
+
+        call this%dumpFullField(this%u,'uVel')
+        call this%dumpFullField(this%v,'vVel')
+        call this%dumpFullField(this%wC,'wVel')
+        call this%dump_scalar_fields()
+        call this%dumpVisualizationInfo()
+        if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
+        if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
+        if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
+        if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrb')
+        if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
+        if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
+        if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
+        if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
+           call this%dumpFullField(this%kappa_bounding,'kBND')
+        end if 
+        if (this%computevorticity) then
+            call this%dumpFullField(this%ox,'omgX')
+            call this%dumpFullField(this%oy,'omgY')
+            call this%dumpFullField(this%oz,'omgZ')
+        end if 
+        
+        if (this%PreProcessForKS) then
+             if (.not. this%KSupdated) then
+                 call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
+                 this%KSupdated = .true. 
+             end if
+             call this%dumpFullField(this%uFil4KS,'uFks')
+             call this%dumpFullField(this%vFil4KS,'vFks')
+             call this%dumpFullField(this%wFil4KS,'wFks')
+        end if
+           
+        if (this%useProbes) then
+             call this%dumpProbes()    
+             call message(0,"Performed a scheduled dump for probes.")
+        end if
+        call this%append_visualization_info()
+    end subroutine 
+    
+    
 
     subroutine AdamsBashforth(this)
         class(igrid), intent(inout) :: this
@@ -2391,8 +2824,110 @@ contains
 
    end subroutine 
 
+   subroutine initialize_Rapid_Slow_Pressure_Split(this, MeanTIDX, MeanRID, MeanFilesDir)
+       class(igrid), intent(inout) :: this
+       integer, intent(in) :: MeanTIDX, MeanRID
+       character(len=*), intent(in) :: MeanFilesDir
+       real(rkind) :: maxdiv 
 
-    subroutine compute_vorticity(this)
+       call message(0,"Initializing the rapid/slow pressure decompositions")
+       allocate(this%uM(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%vM(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%wM(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       
+       allocate(this%dumdx(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%dvmdx(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%dwmdx(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       
+       allocate(this%dumdy(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%dvmdy(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%dwmdy(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       
+       allocate(this%dumdz(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%dvmdz(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%dwmdz(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       
+       allocate(this%prapid(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+
+       call readField3D(MeanRID,MeanTIDX, MeanFilesDir, "uMmn", this%uM,this%gpC)
+       call readField3D(MeanRID,MeanTIDX, MeanFilesDir, "vMmn", this%vM,this%gpC)
+       call readField3D(MeanRID,MeanTIDX, MeanFilesDir, "wMmn", this%wM,this%gpC)
+
+       call this%spectC%fft(this%uM,this%cbuffyC(:,:,:,1))
+       call this%spectC%mtimes_ik1_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), this%dumdx)
+       call this%spectC%mtimes_ik2_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), this%dumdy)
+       call transpose_x_to_y(this%uM, this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+       call this%Pade6opZ%ddz_C2C(this%rbuffzC(:,:,:,1),this%rbuffzC(:,:,:,2), uBC_bottom, uBC_top)
+       call transpose_z_to_y(this%rbuffzC(:,:,:,2),this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_x(this%rbuffyC(:,:,:,1),this%dumdz, this%gpC)
+
+       call this%spectC%fft(this%vM,this%cbuffyC(:,:,:,1))
+       call this%spectC%mtimes_ik1_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), this%dvmdx)
+       call this%spectC%mtimes_ik2_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), this%dvmdy)
+       call transpose_x_to_y(this%vM, this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+       call this%Pade6opZ%ddz_C2C(this%rbuffzC(:,:,:,1),this%rbuffzC(:,:,:,2), vBC_bottom, vBC_top)
+       call transpose_z_to_y(this%rbuffzC(:,:,:,2),this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_x(this%rbuffyC(:,:,:,1),this%dvmdz, this%gpC)
+
+       call this%spectC%fft(this%wM,this%cbuffyC(:,:,:,1))
+       call this%spectC%mtimes_ik1_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), this%dwmdx)
+       call this%spectC%mtimes_ik2_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), this%dwmdy)
+       call transpose_x_to_y(this%wM, this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+       call this%Pade6opZ%ddz_C2C(this%rbuffzC(:,:,:,1),this%rbuffzC(:,:,:,2), wBC_bottom, wBC_top)
+       call transpose_z_to_y(this%rbuffzC(:,:,:,2),this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_x(this%rbuffyC(:,:,:,1),this%dwmdz, this%gpC)
+        
+       this%rbuffxC(:,:,:,1) = abs(this%dumdx + this%dvmdy + this%dwmdz)
+       maxdiv = p_maxval(maxval(this%rbuffxC(:,:,:,1)))
+
+       call message(1,"Read in the mean fields and gradients needed for pressure decompositions")
+       call message(1,"Maximum divergence in mean fields:", maxdiv)
+   end subroutine 
+
+
+   subroutine readField3D(RunID, TIDX, inputDir, label, field, gpC)
+       use exits, only: GracefulExit
+       use decomp_2d_io
+       
+       integer, intent(in) :: RunID, TIDX
+       character(len=4), intent(in) :: label
+       character(len=*), intent(in) :: inputDir
+       type(decomp_info), intent(in) :: gpC
+       real(rkind), dimension(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)), intent(out) :: field
+       character(len=clen) :: tempname, fname
+
+       write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",RunID, "_",label,"_t",TIDX,".out"
+       fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
+       
+       open(777,file=trim(fname),status='old',iostat=ierr)
+       if(ierr .ne. 0) then
+        print*, "Rank:", nrank, ". File:", fname, " not found"
+        call mpi_barrier(mpi_comm_world, ierr)
+        call gracefulExit("File I/O issue.",44)
+       end if 
+       close(777)
+
+       call decomp_2d_read_one(1,field,fname,gpC)
+
+   end subroutine 
+   
+   
+   subroutine compute_RapidSlowPressure_Split(this)
+         class(igrid), intent(inout), target :: this
+
+
+   end subroutine 
+   
+   subroutine compute_vorticity(this)
          class(igrid), intent(inout), target :: this
          real(rkind),    dimension(:,:,:), pointer :: dudx , dudy , dudzC
          real(rkind),    dimension(:,:,:), pointer :: dvdx , dvdy , dvdzC
@@ -2628,7 +3163,7 @@ contains
         use exits, only: message
         class(igrid), intent(in) :: this
         character(len=clen) :: tempname, fname
-        integer :: ierr
+        integer :: ierr, idx 
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",this%step
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
@@ -2647,6 +3182,12 @@ contains
             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
             call decomp_2d_write_one(1,this%T,fname, this%gpC)
         end if 
+
+        if (this%usescalars) then
+            do idx = 1,this%n_scalars
+               call this%scalars(idx)%dumprestart(this%step)
+            end do
+        end if
 
         if (nrank == 0) then
             write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",this%runID, "_info.",this%step
@@ -2744,7 +3285,6 @@ contains
         allocate(this%horzavgstats(this%nz,nhorzavgvars))
 
         if(this%useWindTurbines) then
-            allocate(this%inst_horz_avg_turb(8*this%WindTurbineArr%nTurbines))
             allocate(this%runningSum_sc_turb(8*this%WindTurbineArr%nTurbines))
             allocate(this%runningSum_turb   (8*this%WindTurbineArr%nTurbines))
         endif
@@ -4614,7 +5154,7 @@ contains
         use decomp_2d_io
         class(igrid), intent(in) :: this
         integer :: nxplanes, nyplanes, nzplanes
-        integer :: idx, pid, dirid, tid
+        integer :: idx, pid, dirid, tid, sid
         character(len=clen) :: fname
         character(len=clen) :: tempname
 
@@ -4651,6 +5191,24 @@ contains
                     call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname, this%gpC)
                 end if 
 
+                if (this%computeDNSPressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plD"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure_dns,dirid, pid, fname, this%gpC)
+                end if 
+
+                if (this%computeturbinePressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".ptb"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure_turbine,dirid, pid, fname, this%gpC)
+                end if 
+                
+                if (this%computeFringePressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plF"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure_fringe,dirid, pid, fname, this%gpC)
+                end if 
+
 
                 if (this%computevorticity) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".pox"
@@ -4679,7 +5237,15 @@ contains
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".ksw"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                     call decomp_2d_write_plane(1,this%wFil4KS,dirid, pid, fname, this%gpC)
+                end if
+               
+                if (this%usescalars) then
+                  do sid = 1,this%n_scalars
+                     call this%scalars(sid)%dump_planes(tid, pid, dirid, "_x")
+                  end do 
                 end if 
+
+
             end do 
         end if 
             
@@ -4714,6 +5280,24 @@ contains
                     call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname, this%gpC)
                 end if 
 
+                if (this%computeDNSPressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plD"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure_dns,dirid, pid, fname, this%gpC)
+                end if 
+                
+                if (this%computeturbinePressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".ptb"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure_turbine,dirid, pid, fname, this%gpC)
+                end if 
+
+                if (this%computeFringePressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plF"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure_fringe,dirid, pid, fname, this%gpC)
+                end if 
+                
                 if (this%computevorticity) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".pox"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
@@ -4744,6 +5328,11 @@ contains
 
                 end if
 
+                if (this%usescalars) then
+                  do sid = 1,this%n_scalars
+                     call this%scalars(sid)%dump_planes(tid, pid, dirid, "_y")
+                  end do 
+                end if 
             end do 
         end if 
         
@@ -4778,6 +5367,24 @@ contains
                     call decomp_2d_write_plane(1,this%Pressure,dirid, pid, fname, this%gpC)
                 end if 
 
+                if (this%computeDNSPressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plD"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure_dns,dirid, pid, fname, this%gpC)
+                end if 
+                
+                if (this%computeturbinePressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_xz",pid,".ptb"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure_turbine,dirid, pid, fname, this%gpC)
+                end if 
+
+                if (this%computeFringePressure) then
+                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plF"
+                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                    call decomp_2d_write_plane(1,this%Pressure_fringe,dirid, pid, fname, this%gpC)
+                end if 
+                
                 if (this%computevorticity) then
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".pox"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
@@ -4806,6 +5413,12 @@ contains
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                     call decomp_2d_write_plane(1,this%wFil4KS,dirid, pid, fname, this%gpC)
                 end if
+                
+                if (this%usescalars) then
+                  do sid = 1,this%n_scalars
+                     call this%scalars(sid)%dump_planes(tid, pid, dirid, "_z")
+                  end do 
+                end if 
             end do 
         end if 
         call message(1, "Dumped Planes.")        
@@ -4926,9 +5539,13 @@ contains
                 call this%dumpFullField(this%u,'uVel')
                 call this%dumpFullField(this%v,'vVel')
                 call this%dumpFullField(this%wC,'wVel')
+                call this%dump_scalar_fields()
                 call this%dumpVisualizationInfo()
                 if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
                 if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
+                if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
+                if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrn')
+                if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
                 if (this%useWindTurbines) then
                     this%WindTurbineArr%dumpTurbField = .true.
                     this%WindTurbineArr%step = this%step-1
@@ -5095,6 +5712,12 @@ contains
         meanK = p_sum(sum(this%rbuffxC(:,:,:,1)))*mfact
         this%pressure = this%pressure + meanK
         this%pressure = this%pressure - this%rbuffxC(:,:,:,1)
+
+        if (this%computeDNSpressure) then
+            this%pressure_dns = this%pressure_dns + meanK
+            this%pressure_dns = this%pressure_dns - this%rbuffxC(:,:,:,1)
+        end if
+
     end subroutine
 
     function get_dt(this, recompute) result(val)
@@ -5105,7 +5728,10 @@ contains
         if (present(recompute)) then
            if (recompute) call this%compute_deltaT
         end if
+
+
         val = this%dt
+
     end function
 
     subroutine interpolate_cellField_to_edgeField(this, rxC, rxE, bc1, bc2)

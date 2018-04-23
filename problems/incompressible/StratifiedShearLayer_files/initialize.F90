@@ -11,22 +11,22 @@ module StratifiedShearLayer_parameters
     integer :: seedw = 131344
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
-    
-    real(rkind), parameter :: xdim = 400._rkind, udim =8._rkind
-    real(rkind), parameter :: timeDim = xdim/udim
 
 end module     
 
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use StratifiedShearLayer_parameters
-    use kind_parameters,    only: rkind
+    use kind_parameters,    only: rkind, clen 
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs, linspace
     use random,             only: gaussian_random
     use decomp_2d          
     use reductions,         only: p_maxval
     use constants,          only: pi, imi
+    use cd06staggstuff,     only: cd06stagg
+    use StratifiedShearLayer_IO, only: get_perturbations 
+
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -37,14 +37,16 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, T, x, y, z
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: nz, nzE, k, seed = 12331
-    real(rkind) :: lambda_x, lambda_y, A0 = 0.1d0, Tbase = 100.d0, kx, ky
-    integer :: N = 4, M= 2, i, j
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxrandom = 1.d-4, deltaPhi = pi/2.d0
-    real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, wperturb
-    real(rkind) :: Psi, dPsi_dz
-
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase
+    integer :: k, seed = 12331
+    real(rkind) :: lambda_x, lambda_y, A0 = 0.1d0, Tbase = 100.d0, kx, ky, maxTG = 1.d-2
+    integer :: N = 4, M= 2, nTG = 2, i, j
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxrandom = 1.d-4, deltaPhi = pi/2.d0, ScalePerturb = 1.d0 
+    real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, wperturb, vperturb, Tperturb
+    real(rkind) :: Psi, dPsi_dz, dz, eta = 1.d0 
+    type(cd06stagg), allocatable :: derW
+    integer :: ProblemMode = 0
+    character(len=clen) :: domain_fname,InitFileTag,InitFileDirectory 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta, ProblemMode, domain_fname, InitFileTag,InitFileDirectory, ScalePerturb 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -62,58 +64,85 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     u = -erf(sqrt(pi)*z)
     v = zero
     wC = zero
-    T = Tbase +  0.5d0*erf(sqrt(pi)*z)
+    T = Tbase +  0.5d0*erf(sqrt(pi)*z/eta)
 
-    allocate(uperturb(size(u,1),size(u,2),size(u,3)))
-    allocate(wperturb(size(u,1),size(u,2),size(u,3)))
+    lambda_y = Ly/(real(M,rkind) + 1.d-24)
+    ky = 2.d0*pi/lambda_y
+    if (ProblemMode == 1) then
+        allocate(uperturb(size(u,1),size(u,2),size(u,3)))
+        allocate(vperturb(size(u,1),size(u,2),size(u,3)))
+        allocate(wperturb(size(u,1),size(u,2),size(u,3)))
+        allocate(Tperturb(size(u,1),size(u,2),size(u,3)))
+        
+        call get_perturbations(decompC, x, y, InitFileTag, InitFileDirectory, uperturb, vperturb, wperturb, Tperturb, &
+                                       deltaPhi, ky, ScalePerturb )
+        u = u + uperturb
+        v = v + vperturb
+        wC = wC + wperturb
+        T  = T + Tperturb
+        deallocate(uperturb, vperturb, wperturb, Tperturb)
+    else
+        allocate(uperturb(size(u,1),size(u,2),size(u,3)))
+        allocate(wperturb(size(u,1),size(u,2),size(u,3)))
 
-    lambda_x = Lx/real(N,rkind); lambda_y = Ly/real(M,rkind)
-    kx = 2.d0*pi/lambda_x; ky = 2.d0*pi/lambda_y
+        lambda_x = Lx/real(N,rkind); 
+        kx = 2.d0*pi/lambda_x; 
    
-    do k = 1,size(u,3)
-       Psi = A0*exp(-pi*(z(1,1,k)**2))
-       dPsi_dz = -2.d0*z(1,1,k)*A0*exp(-pi*(z(1,1,k)**2))
-       do j = 1,size(u,2)
-          !$omp simd
-          do i = 1,size(u,1)
-            uperturb(i,j,k) = real((imi/kx)*dPsi_dz*exp(imi*kx*x(i,j,k))*(cos(deltaPhi/2.d0) &
-                            + (4.d0*imi/pi)*sin(deltaPhi/2.d0)*sin(ky*y(i,j,k))),rkind) 
-            
-            wperturb(i,j,k) = real(Psi*exp(imi*kx*x(i,j,k))*(cos(deltaPhi/2.d0) &
-                            + (4.d0*imi/pi)*sin(deltaPhi/2.d0)*sin(ky*y(i,j,k))),rkind) 
-          end do 
-       end do 
-    end do 
-    u = u + uperturb
-    w = w + wperturb
-    deallocate(uperturb, wperturb)
+        do k = 1,size(u,3)
+           Psi = A0*exp(-pi*(z(1,1,k)**2))
+           dPsi_dz = -2.d0*z(1,1,k)*A0*exp(-pi*(z(1,1,k)**2))
+           do j = 1,size(u,2)
+              !$omp simd
+              do i = 1,size(u,1)
+                uperturb(i,j,k) = real((imi/kx)*dPsi_dz*exp(imi*kx*x(i,j,k))*(cos(deltaPhi/2.d0) &
+                                + (4.d0*imi/pi)*sin(deltaPhi/2.d0)*sin(ky*y(i,j,k))),rkind) 
+                
+                wperturb(i,j,k) = real(Psi*exp(imi*kx*x(i,j,k))*(cos(deltaPhi/2.d0) &
+                                + (4.d0*imi/pi)*sin(deltaPhi/2.d0)*sin(ky*y(i,j,k))),rkind) 
+              end do 
+           end do 
+        end do 
+        u  = u  + uperturb
+        wC = wC + wperturb
+        
+        uperturb =  maxTG*( cos(2.d0*nTG*pi*x/Lx)*sin(2.d0*nTG*pi*y/Ly))*exp(-pi*(z*z))
+        wperturb =  maxTG*(-sin(2.d0*nTG*pi*x/Lx)*cos(2.d0*nTG*pi*y/Ly))*exp(-pi*(z*z))
+        u = u + uperturb 
+        v = v + wperturb 
+       
+        deallocate(uperturb, wperturb)
+    end if 
     
     ! Add random numbers
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
     call gaussian_random(randArr,zero,one,seed+1234*nrank+54321)
-    v = v + (maxrandom*randarr*exp(-pi*(z*z)))
+    wC = wC + (maxrandom*randarr*exp(-4*pi*(z*z)))
     deallocate(randArr)
     
     !T = T + (maxrandom*randArr)*exp(-8.d0*(z*z))
     !T = T + maxpert_T*exp(-8*(z*z))*cos(0.8*x)!*sin(0.8*y)
 
     !!!!!!!!!!!!!!!!!!!!! DON'T CHANGE ANYTHING UNDER THIS !!!!!!!!!!!!!!!!!!!!!!
+    allocate(derW)
+    dz = z(1,1,2) - z(1,1,1)
+    call derW%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .false., &
+                                     isTopSided = .false., isBotSided = .false.)
     ! Interpolate wC to w
     allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
     allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
     allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
     allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
-    nz = decompC%zsz(3)
-    nzE = nz + 1
     call transpose_x_to_y(wC,ybuffC,decompC)
     call transpose_y_to_z(ybuffC,zbuffC,decompC)
-    zbuffE = zero
-    zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
+    call derW%interpz_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+    !zbuffE = zero
+    !zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
     call transpose_z_to_y(zbuffE,ybuffE,decompE)
     call transpose_y_to_x(ybuffE,w,decompE) 
     ! Deallocate local memory 
     deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
     nullify(u,v,w,x,y,z)
+    deallocate(derW)
     call message(0,"Fields Initialized")
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -127,9 +156,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=*),                intent(in)    :: inputfile
-    integer :: ioUnit, seed, N, M
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase
+    integer :: ioUnit, seed, N, M, nTG
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase, maxTG, eta
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -139,13 +168,14 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     dTsurf_dt = dTsurf_dt /  3600.d0
 
     ! Normalize
-    dTsurf_dt = dTsurf_dt * timeDim 
+    dTsurf_dt = 0.d0  
 
     Tsurf = one 
      
 end subroutine
 
 subroutine set_planes_io(xplanes, yplanes, zplanes)
+    use StratifiedShearLayer_parameters 
     implicit none
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
@@ -154,9 +184,9 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [64]
-    yplanes = [64]
-    zplanes = [256]
+    xplanes = [nxg/2]
+    yplanes = [nyg/2]
+    zplanes = [nzg/2]
 
 end subroutine
 
@@ -189,9 +219,10 @@ end subroutine
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     use StratifiedShearLayer_parameters    
-    use kind_parameters,  only: rkind
+    use kind_parameters,  only: rkind, clen 
     use constants,        only: one,two
     use decomp_2d,        only: decomp_info
+    use StratifiedShearLayer_IO, only: read_Domain_info 
     implicit none
 
     type(decomp_info),                                          intent(in)    :: decomp
@@ -199,10 +230,12 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
-    integer :: ix1, ixn, iy1, iyn, iz1, izn, seed = 231454, N, M
+    integer :: ix1, ixn, iy1, iyn, iz1, izn, seed = 231454, N, M, nTG
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind)  :: maxrandom = 1.d-5, deltaPhi, Tbase, A0
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase
+    real(rkind)  :: maxrandom = 1.d-5, deltaPhi, Tbase, A0, maxTG, eta, ScalePerturb
+    integer :: ProblemMode = 0
+    character(len=clen) :: domain_fname,InitFileTag,InitFileDirectory 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta, ProblemMode, domain_fname, InitFileTag,InitFileDirectory, ScalePerturb 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -216,7 +249,11 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     ! If base decomposition is in Y
     ix1 = decomp%xst(1); iy1 = decomp%xst(2); iz1 = decomp%xst(3)
     ixn = decomp%xen(1); iyn = decomp%xen(2); izn = decomp%xen(3)
-    
+   
+    if (ProblemMode == 1) then
+        call read_Domain_info(Lx,Ly,Lz,trim(domain_fname))
+    end if 
+
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         dx = Lx/real(nxg,rkind)
@@ -267,3 +304,26 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 
 end subroutine
 
+subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarField
+
+    scalarField = 0.d0
+end subroutine 
+
+subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
+
+    scalarSource = 0.d0
+end subroutine 

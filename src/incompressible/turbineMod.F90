@@ -342,14 +342,16 @@ subroutine halo_communication(this, u, v, wC)
 
 end subroutine
 
-subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_horz_avg)
+subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_horz_avg, uturb, vturb, wturb)
     class(TurbineArray), intent(inout), target :: this
     real(rkind),                                                                         intent(in) :: dt
     real(rkind),    dimension(this%gpC%xsz(1),   this%gpC%xsz(2),   this%gpC%xsz(3)),    intent(in) :: u, v, wC
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs 
-    logical,                                                                             intent(in) :: newTimestep
-    real(rkind),    dimension(:),                                                        intent(out), optional   :: inst_horz_avg
+    logical,                                                                             intent(in)    :: newTimestep
+    real(rkind),    dimension(:),                                                        intent(out)   :: inst_horz_avg
+    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout), optional :: uturb, vturb
+    complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout), optional :: wturb
     integer :: i, ierr
     !integer :: ierr
 
@@ -359,17 +361,21 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
            select case (this%ADM_Type)
            case(1)
               do i = 1, this%nTurbines
-              ! CHANGED to allow avoiding inst_horz_avg calculations - useful for
-              ! testing/debugging
-                 if (present(inst_horz_avg)) then
+              !! CHANGED to allow avoiding inst_horz_avg calculations - useful for
+              !! testing/debugging
+              !   if (present(inst_horz_avg)) then
                     call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz,inst_horz_avg(8*i-7:8*i))
-                 else
-                    call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)   
-                 end if 
+              !   else
+              !      call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)   
+              !   end if 
               end do
            case(2)
                do i = 1, this%nTurbines
-                  call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
+               !  if (present(inst_horz_avg)) then
+                    call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz, inst_horz_avg(8*i-7:8*i))
+               !  else
+               !     call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
+               !  end if 
                end do
                call mpi_barrier(mpi_comm_world, ierr)
            end select 
@@ -392,9 +398,11 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
     ! add forces to rhs
     call this%spectC%fft(this%fx,this%fChat)
     urhs = urhs + this%fChat
+    if (present(uturb)) uturb = this%fChat
 
     call this%spectC%fft(this%fy,this%fChat)
     vrhs = vrhs + this%fChat
+    if (present(vturb)) vturb = this%fChat
 
     call this%spectC%fft(this%fz,this%fChat)
     ! interpolate fz to fzE
@@ -402,6 +410,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
     call this%OpsNU%InterpZ_Cell2Edge(this%zbuffC,this%zbuffE,zeroC,zeroC)
     call transpose_z_to_y(this%zbuffE,this%fEhat,this%sp_gpE)
     wrhs = wrhs + this%fEhat
+    if (present(wturb)) wturb = this%fEhat
 
 end subroutine 
 

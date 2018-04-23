@@ -1,8 +1,0 @@
-&concurrent
-HIT_InputFile                 = "/projects/windFlowModeling/PadeOps/HIT_AD_interact/input_files/input_hit.dat"
-AD_InputFile                  = "/projects/windFlowModeling/PadeOps/HIT_AD_interact/input_files/input_AD.dat"
-InflowSpeed                   = 2.d0
-k_bandpass_left               = 5.d0
-k_bandpass_right              = 128.d0
-/
-/
