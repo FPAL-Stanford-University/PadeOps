@@ -86,7 +86,14 @@ program StratifiedShearLayerDomainIntegrals
       !buff7 = buff7 * buff5
       !buff7 = buff7 * buff7
       !call ops%writeField3D(buff7,"ptE2",TIDX)
-      
+     
+      ! Perturbation Enstrophy
+      call ops%getFluct_from_MeanZ(buff2,buff7)
+      buff7 = buff1*buff1 + buff7*buff7 + buff3*buff3
+      !call ops%writeField3D(buff7,"Ens1",TIDX)
+      call ops%dump_plane(buff7,1,nx/2,TIDX,"Ens1")
+      call ops%dump_plane(buff7,2,ny/2,TIDX,"Ens1")
+      call ops%dump_plane(buff7,3,nz/2,TIDX,"Ens1")
       
       ! Enstrophy (Total)
       buff7 = buff1*buff1 + buff2*buff2 + buff3*buff3
@@ -94,7 +101,15 @@ program StratifiedShearLayerDomainIntegrals
       call ops%dump_plane(buff7,1,nx/2,TIDX,"Enst")
       call ops%dump_plane(buff7,2,ny/2,TIDX,"Enst")
       call ops%dump_plane(buff7,3,nz/2,TIDX,"Enst")
-      
+     
+      ! (GradT)^2
+      call ops%getFluct_from_MeanZ(buff6,buff7)
+      buff7 = buff4*buff4 + buff5*buff5 + buff7*buff7
+      !call ops%writeField3D(buff7,"Enst",TIDX)
+      call ops%dump_plane(buff7,1,nx/2,TIDX,"dpT2")
+      call ops%dump_plane(buff7,2,ny/2,TIDX,"dpT2")
+      call ops%dump_plane(buff7,3,nz/2,TIDX,"dpT2")
+
       tidx = tidx + tstep
 
       call toc()
