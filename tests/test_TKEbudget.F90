@@ -1,6 +1,6 @@
 program test_TKEBudget
     use mpi
-    use decomp_2d,           only: decomp_info
+    use decomp_2d,           only: nrank, decomp_info
     use kind_parameters,     only: rkind, clen
     use constants,           only: zero
     use miranda_reader_mod,  only: miranda_reader
