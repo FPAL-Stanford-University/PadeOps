@@ -69,7 +69,7 @@ module io_hdf5_stuff
         procedure          :: write_variable
         procedure          :: find_last_dump
         procedure          :: destroy
-
+        procedure          :: update_vizcount 
     end type
 
 contains
@@ -613,6 +613,14 @@ contains
         call h5fclose_f(this%file_id, error)
     end subroutine
 
+    subroutine update_vizcount(this, viznum) 
+        class(io_hdf5), intent(inout) :: this
+        integer, intent(in) :: viznum
+
+        this%vizcount = viznum 
+
+    end subroutine 
+    
     subroutine start_viz(this, time)
         class(io_hdf5), intent(inout) :: this
         real(rkind),    intent(in)    :: time
