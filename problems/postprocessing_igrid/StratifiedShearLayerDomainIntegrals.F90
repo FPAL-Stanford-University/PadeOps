@@ -22,7 +22,8 @@ program StratifiedShearLayerDomainIntegrals
    real(rkind), dimension(:,:), allocatable :: data2write
    integer :: VizDump_Schedule = 0
    integer, dimension(:), allocatable :: timesteps
-   real(rkind), dimension(:), allocatable :: times 
+   real(rkind), dimension(:), allocatable :: times
+   integer :: nt 
 
    namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Re, Rib, Pr, Tref, NumericalSchemeVert, VizDump_Schedule 
    
@@ -52,14 +53,23 @@ program StratifiedShearLayerDomainIntegrals
    call ops%allocate3DField(buff3)
    call ops%allocate3DField(buff4)
 
-   tidx = tstart
    idx = 1
-
+   
    if (VizDump_Schedule == 1) then
       call ops%Read_VizSummary(times, timesteps)
+      nt = size(timesteps)
+   else
+      nt = (tstop - tstart)/tstep
    end if
-
-   do while(tidx <= tstop)
+   
+   do while(idx <= nt)
+      
+      if (VizDump_Schedule == 1) then
+         tidx = timesteps(idx)
+      else
+         tidx = tstart + tstep * (idx - 1)
+      end if
+      
       call message(0, "Reading fields for tid:", TIDX)
       call tic()
       call ops%ReadField3D(u,"uVel",TIDX)
@@ -176,7 +186,6 @@ program StratifiedShearLayerDomainIntegrals
          print*, "ddt_TKE:", P(idx) + B(idx) - D(idx)
       end if 
      
-      tidx = tidx + tstep
       idx = idx + 1
    end do 
 

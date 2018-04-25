@@ -73,10 +73,10 @@ subroutine Read_VizSummary(this, times, timesteps)
 
    write(tempname,"(A3,I2.2,A12,A4)") "Run",this%runID, "_vis_summary",".smm"
    fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
-
+print *, Fname
    inquire(file=fname, exist=exists)
    if (exists) then
-       open(unit=37,file=fname,access='sequential',form='formatted')
+       open(unit=10,file=fname,access='sequential',form='formatted')
        nr = 0
        do 
            read(10,*, iostat = ierr)
@@ -476,7 +476,7 @@ function getSimTime(this, tidx) result(time)
    real(rkind) :: time
 
    write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_","info","_t",tidx,".out"
-   fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+   fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
    open(unit=10,file=fname,access='sequential',form='formatted')
    read(10,*) time
    close(10)
