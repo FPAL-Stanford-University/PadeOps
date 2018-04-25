@@ -23,6 +23,7 @@ module IncompressibleGrid
     use Fringemethod, only: fringe
     use forcingmod,   only: HIT_shell_forcing
     use scalar_igridMod, only: scalar_igrid 
+    use io_hdf5_stuff, only: io_hdf5 
 
     implicit none
 
@@ -268,6 +269,9 @@ module IncompressibleGrid
         real(rkind) :: deltaT_dump, t_NextDump
         logical :: DumpThisStep = .false.
 
+        ! HDF5 IO
+        integer :: ioType = 0
+        type(io_hdf5) :: viz_hdf5
 
         contains
             procedure          :: init
@@ -329,6 +333,8 @@ module IncompressibleGrid
             procedure, private :: compute_RapidSlowPressure_Split
             procedure, private :: dump_visualization_files
             procedure, private :: append_visualization_info
+            procedure, private :: initialize_hdf5_io
+            procedure, private :: destroy_hdf5_io
     end type
 
 contains 
@@ -426,7 +432,7 @@ contains
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType; this%CviscDT = CviscDT
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity; this%deleteInstructions = deleteInstructions
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
-        this%donot_dealias = donot_dealias; 
+        this%donot_dealias = donot_dealias; this%ioType = ioType  
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -1082,6 +1088,13 @@ contains
             this%t_NextDump = this%tsim + deltaT_dump
         end if 
 
+        ! STEP 26: HDF5 IO
+        if (ioType .ne. 0) then
+            call this%initialize_hdf5_io()
+            call message(0, "HDF5 IO successfully initialized.")
+        end if 
+
+
         ! STEP 13 (relocated): Compute the timestep
         call this%compute_deltaT()
         this%dtOld = this%dt
@@ -1118,6 +1131,29 @@ contains
 
     end subroutine
 
+    subroutine initialize_hdf5_io(this)
+        class(igrid), intent(inout) :: this
+        character(len=5) :: filename_prefix
+
+        write(filename_prefix,"(A3,I2.2)") "Run", this%runID
+        if (this%ioType == 1) then
+            call this%viz_hdf5%init(MPI_COMM_WORLD,this%gpC, "x",this%outputdir, filename_prefix, &
+               reduce_precision=.false.,write_xdmf=.true., read_only=.false.) 
+        elseif (this%ioType == 2) then
+            call this%viz_hdf5%init(MPI_COMM_WORLD,this%gpC, "x",this%outputdir, filename_prefix, &
+               reduce_precision=.true.,write_xdmf=.true., read_only=.false.) 
+        else
+            call GracefulExit("Invalid choice for IOTYPE", 312)
+        end if 
+
+        call this%viz_hdf5%write_coords(this%mesh)
+    end subroutine 
+
+    subroutine destroy_hdf5_io(this)
+        class(igrid), intent(inout) :: this
+
+        call this%viz_hdf5%destroy()
+    end subroutine 
 
     subroutine append_visualization_info(this)
         class(igrid), intent(in) :: this 
@@ -1139,8 +1175,6 @@ contains
         end if 
 
     end subroutine 
-
-
 
     subroutine dealiasFields(this)
         class(igrid), intent(inout) :: this
@@ -2379,12 +2413,16 @@ contains
 
    
     subroutine dump_scalar_fields(this)
-      class(igrid), intent(in) :: this
+      class(igrid), intent(inout) :: this
       integer :: idx
 
       if ((this%usescalars) .and. allocated(this%scalars)) then
          do idx = 1,this%n_scalars
-            call this%scalars(idx)%dumpScalarField(this%step)
+            if (this%ioType == 0) then
+               call this%scalars(idx)%dumpScalarField(this%step)
+            else
+               call this%scalars(idx)%dumpScalarField(this%step, this%viz_hdf5)
+            end if 
          end do 
       end if 
 
@@ -2598,26 +2636,56 @@ contains
     subroutine dump_visualization_files(this)
         class(igrid), intent(inout) :: this
 
-        call this%dumpFullField(this%u,'uVel')
-        call this%dumpFullField(this%v,'vVel')
-        call this%dumpFullField(this%wC,'wVel')
-        call this%dump_scalar_fields()
-        call this%dumpVisualizationInfo()
-        if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
-        if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
-        if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
-        if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrb')
-        if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
-        if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
-        if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
-        if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
-           call this%dumpFullField(this%kappa_bounding,'kBND')
-        end if 
-        if (this%computevorticity) then
-            call this%dumpFullField(this%ox,'omgX')
-            call this%dumpFullField(this%oy,'omgY')
-            call this%dumpFullField(this%oz,'omgZ')
-        end if 
+        select case (this%ioType) 
+        case(0)
+            call this%dumpFullField(this%u,'uVel')
+            call this%dumpFullField(this%v,'vVel')
+            call this%dumpFullField(this%wC,'wVel')
+            call this%dump_scalar_fields()
+            call this%dumpVisualizationInfo()
+            if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
+            if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
+            if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
+            if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrb')
+            if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
+            if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
+            if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
+            if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
+               call this%dumpFullField(this%kappa_bounding,'kBND')
+            end if 
+            if (this%computevorticity) then
+                call this%dumpFullField(this%ox,'omgX')
+                call this%dumpFullField(this%oy,'omgY')
+                call this%dumpFullField(this%oz,'omgZ')
+            end if 
+        case default
+            call this%viz_hdf5%update_vizcount(this%step)
+            call this%viz_hdf5%start_viz(this%tsim)
+            call this%viz_hdf5%write_variable(this%u, "uVel")
+            call this%viz_hdf5%write_variable(this%v, "vVel")
+            call this%viz_hdf5%write_variable(this%wC, "wVel")
+            call this%dump_scalar_fields()           
+            if (this%isStratified .or. this%initspinup) call this%viz_hdf5%write_variable(this%T,'potT')
+            if (this%fastCalcPressure) call this%viz_hdf5%write_variable(this%pressure,'prss')
+            if (this%computeDNSpressure) call this%viz_hdf5%write_variable(this%pressure_dns,'pdns')
+            if (this%computeturbinepressure) call this%viz_hdf5%write_variable(this%pressure_turbine,'ptrb')
+            if (this%computefringepressure) call this%viz_hdf5%write_variable(this%pressure_fringe,'pfrn')
+            if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%viz_hdf5%write_variable(this%nu_SGS,'nSGS')
+            if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%viz_hdf5%write_variable(this%kappaSGS,'kSGS')
+            if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
+               call this%viz_hdf5%write_variable(this%kappa_bounding,'kBND')
+            end if 
+            if (this%computevorticity) then
+                call this%viz_hdf5%write_variable(this%ox,'omgX')
+                call this%viz_hdf5%write_variable(this%oy,'omgY')
+                call this%viz_hdf5%write_variable(this%oz,'omgZ')
+            end if 
+        end select 
+        if (this%useProbes) then
+             call this%dumpProbes()    
+             call message(0,"Performed a scheduled dump for probes.")
+        end if
+        call this%append_visualization_info()
         
         if (this%PreProcessForKS) then
              if (.not. this%KSupdated) then
@@ -2628,12 +2696,6 @@ contains
              call this%dumpFullField(this%vFil4KS,'vFks')
              call this%dumpFullField(this%wFil4KS,'wFks')
         end if
-           
-        if (this%useProbes) then
-             call this%dumpProbes()    
-             call message(0,"Performed a scheduled dump for probes.")
-        end if
-        call this%append_visualization_info()
     end subroutine 
     
     
@@ -5536,20 +5598,21 @@ contains
         if (present(dumpInitField)) then
             if (dumpInitField) then
                 call message(0,"Performing initialization data dump.")
-                call this%dumpFullField(this%u,'uVel')
-                call this%dumpFullField(this%v,'vVel')
-                call this%dumpFullField(this%wC,'wVel')
-                call this%dump_scalar_fields()
-                call this%dumpVisualizationInfo()
-                if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
-                if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
-                if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
-                if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrn')
-                if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
-                if (this%useWindTurbines) then
-                    this%WindTurbineArr%dumpTurbField = .true.
-                    this%WindTurbineArr%step = this%step-1
-                endif
+                !call this%dumpFullField(this%u,'uVel')
+                !call this%dumpFullField(this%v,'vVel')
+                !call this%dumpFullField(this%wC,'wVel')
+                !call this%dump_scalar_fields()
+                !call this%dumpVisualizationInfo()
+                !if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
+                !if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
+                !if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
+                !if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrn')
+                !if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
+                !if (this%useWindTurbines) then
+                !    this%WindTurbineArr%dumpTurbField = .true.
+                !    this%WindTurbineArr%step = this%step-1
+                !endif
+                call this%dump_visualization_files()
                 call message(0,"Done with the initialization data dump.")
             end if
         end if

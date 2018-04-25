@@ -7,6 +7,7 @@ module scalar_igridMod
    use spectralMod, only: spectral
    use igrid_hooks!, only: setDirichletBC_Temp, set_Reference_Temperature, meshgen_WallM, initfields_wallM, set_planes_io, set_KS_planes_io 
    use fringeMethod, only: fringe 
+   use io_hdf5_stuff, only: io_hdf5 
    implicit none
    
    private
@@ -390,15 +391,22 @@ subroutine dump_planes(this, tid, pid, dirid, dirlabel)
 
 end subroutine
 
-subroutine dumpScalarField(this, tid)
+subroutine dumpScalarField(this, tid, viz_hdf5 )
    use decomp_2d_io
    class(scalar_igrid), intent(in) :: this
    integer, intent(in) :: tid
    character(len=clen) :: tempname, fname
+   type(io_hdf5), intent(inout), optional :: viz_hdf5
+   character(len=4) :: scalar_label
 
-   write(tempname,"(A3,I2.2,A3,I2.2,A2,I6.6,A4)") "Run", this%RunID, "_sc",this%scalar_number,"_t",tid,".out" 
-   fname = this%OutputDataDir(:len_trim(this%OutputDataDir))//"/"//trim(tempname)
-   call decomp_2d_write_one(1,this%F,fname, this%gpC)
+   if (present(viz_hdf5)) then
+      write(scalar_label,"(A2,I2.2)") "sc", this%scalar_number
+      call viz_hdf5%write_variable(this%F, scalar_label)
+   else
+      write(tempname,"(A3,I2.2,A3,I2.2,A2,I6.6,A4)") "Run", this%RunID, "_sc",this%scalar_number,"_t",tid,".out" 
+      fname = this%OutputDataDir(:len_trim(this%OutputDataDir))//"/"//trim(tempname)
+      call decomp_2d_write_one(1,this%F,fname, this%gpC)
+   end if 
 
 end subroutine
 

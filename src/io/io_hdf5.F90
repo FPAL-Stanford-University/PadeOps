@@ -69,7 +69,7 @@ module io_hdf5_stuff
         procedure          :: write_variable
         procedure          :: find_last_dump
         procedure          :: destroy
-
+        procedure          :: update_vizcount 
     end type
 
 contains
@@ -227,6 +227,9 @@ contains
         ! Make sure the same chunk parameters are passed in from every process
         call MPI_Allreduce( this%chunk_dims, tmp, 3, MPI_INTEGER8, MPI_MAX, this%comm, error )
         this%chunk_dims = tmp
+
+        ! Set the XDMF file ID
+        this%xdmf_file_id = 347
 
         ! print *, "active = ", this%active
         ! print '(I2,A,3I4)', nrank, ": chunk_dims = ", this%chunk_dims
@@ -610,6 +613,14 @@ contains
         call h5fclose_f(this%file_id, error)
     end subroutine
 
+    subroutine update_vizcount(this, viznum) 
+        class(io_hdf5), intent(inout) :: this
+        integer, intent(in) :: viznum
+
+        this%vizcount = viznum 
+
+    end subroutine 
+    
     subroutine start_viz(this, time)
         class(io_hdf5), intent(inout) :: this
         real(rkind),    intent(in)    :: time
