@@ -109,6 +109,12 @@ program StratifiedShearLayerDomainIntegrals
       call ops%dump_plane(buff7,1,nx/2,TIDX,"dpT2")
       call ops%dump_plane(buff7,2,ny/2,TIDX,"dpT2")
       call ops%dump_plane(buff7,3,nz/2,TIDX,"dpT2")
+      
+
+      ! Dump Planes of potT while we're at it...
+      call ops%dump_plane(potT,1,nx/2,TIDX,"potT")
+      call ops%dump_plane(potT,2,ny/2,TIDX,"potT")
+      call ops%dump_plane(potT,3,nz/2,TIDX,"potT")
 
       tidx = tidx + tstep
 
