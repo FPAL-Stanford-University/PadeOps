@@ -10,4 +10,5 @@ ny     = 1024
 nz     = 1024
 Rib    = 0.20d0
 NumericalSchemeVertical = 2
+VizDump_Schedule = 0
 /

@@ -23,10 +23,13 @@ program StratifiedShearLayerDomainIntegrals
    logical :: isZPeriodic = .false. 
    real(rkind), dimension(:,:), allocatable :: Nsq, Ssq, R11, R12, R13, R22, R23, R33, TT, G11, G12, G13, G22, G23, G33 
    real(rkind), dimension(:,:), allocatable :: v11, v12, v13, v22, v23, v33, d11, d12, d13, d22, d23, d33, umn_set, Tmn_set, wT, uT, vT
-   real(rkind), dimension(:,:), allocatable :: times
+   integer :: VizDump_Schedule = 0
+   integer, dimension(:), allocatable :: timesteps
+   real(rkind), dimension(:), allocatable :: times
+   real(rkind), dimension(:,:), allocatable :: timewrite
    integer :: nt 
 
-   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Rib, NumericalSchemeVert 
+   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Rib, NumericalSchemeVert, VizDump_Schedule 
    
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
@@ -65,7 +68,14 @@ program StratifiedShearLayerDomainIntegrals
    call ops%allocate3DField(buff4)
    
 
-   nt = (tstop - tstart)/tstep + 1
+   if (VizDump_Schedule == 1) then
+      call ops%Read_VizSummary(times, timesteps)
+      nt = size(timesteps)
+   else
+      nt = (tstop - tstart)/tstep
+   end if
+
+   
 
    call message(0,"Number of snapshots to read:", nt)
 
@@ -102,21 +112,26 @@ program StratifiedShearLayerDomainIntegrals
       allocate(uT(nz,nt))
       allocate(vT(nz,nt))
       allocate(wT(nz,nt))
-
-      allocate(times(nt,1))
+      allocate(timewrite(nt,1))
    !end if 
 
-   tidx = tstart
    idx = 1
-   do while(tidx <= tstop)
+   
+   do while(idx <= nt)
+      
+      if (VizDump_Schedule == 1) then
+         tidx = timesteps(idx)
+      else
+         tidx = tstart + tstep * (idx - 1)
+      end if
+      
       call message(0, "Reading fields for tid:", TIDX)
       call tic()
       call ops%ReadField3D(u,"uVel",TIDX)
       call ops%ReadField3D(v,"vVel",TIDX)
       call ops%ReadField3D(w,"wVel",TIDX)
       call ops%ReadField3D(T,"potT",TIDX)
-      times(idx,1) = ops%getSimTime(tidx)
-      call message(0, "Read simulation data at time:", times(idx,1))
+      call message(0, "Read simulation data at time:", times(idx))
 
       T = Rib*(T - Tref)  ! Rescale Potential temperature to buoyancy variable: b 
       
@@ -204,7 +219,6 @@ program StratifiedShearLayerDomainIntegrals
       buff4 = buff3*buff3
       call ops%TakeMean_xy(buff4,v33(:,idx))
 
-      tidx = tidx + tstep
       idx = idx + 1
       call toc()
    end do 
@@ -247,7 +261,9 @@ program StratifiedShearLayerDomainIntegrals
       call ops%WriteASCII_2D(v23, "v23Z")
       call ops%WriteASCII_2D(v33, "v33Z")
       
-      call ops%WriteASCII_2D(times, "time")
+
+      timewrite(:,1) = times
+      call ops%WriteASCII_2D(timewrite, "time")
    end if 
 
    call ops%destroy()

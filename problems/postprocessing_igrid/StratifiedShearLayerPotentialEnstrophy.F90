@@ -17,9 +17,12 @@ program StratifiedShearLayerDomainIntegrals
    real(rkind) :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0
    integer :: idx, ierr, tstart = 0, tstop, tstep, NumericalSchemeVert = 1 
    logical :: isZPeriodic = .false. 
+   integer :: VizDump_Schedule = 0 
+   integer, dimension(:), allocatable :: timesteps
+   real(rkind), dimension(:), allocatable :: times
    integer :: nt
 
-   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Re, Rib, NumericalSchemeVert, tidx  
+   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Re, Rib, NumericalSchemeVert, VizDump_Schedule 
    
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
@@ -30,8 +33,10 @@ program StratifiedShearLayerDomainIntegrals
    dx =     Lx/real(nx,rkind) 
    dy =     Ly/real(ny,rkind) 
    dz = two*Lz/real(nz,rkind)
+
    ! Initialize the operator class
    call ops%init(nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isZPeriodic, NUmericalSchemeVert)
+   
    ! Allocate all the needed memory 
    call ops%allocate3DField(u)
    call ops%allocate3DField(v)
@@ -46,13 +51,24 @@ program StratifiedShearLayerDomainIntegrals
    call ops%allocate3DField(buff6)
    call ops%allocate3DField(buff7)
    
-   nt = (tstop - tstart)/tstep + 1
-
+   idx = 1
+   
+   if (VizDump_Schedule == 1) then
+      call ops%Read_VizSummary(times, timesteps)
+      nt = size(timesteps) 
+   else
+      nt = (tstop - tstart)/tstep 
+   end if
+   
    call message(0,"Number of snapshots to read:", nt)
 
-   tidx = tstart
-   idx = 1
-   do while(tidx <= tstop)
+   do while(idx <= nt)
+      
+      if (VizDump_Schedule == 1) then
+         tidx = timesteps(idx)
+      else
+         tidx = tstart + tstep * (idx - 1)
+      end if
       
       call message(0, "Reading fields for tid:", TIDX)
       call tic()
@@ -116,7 +132,7 @@ program StratifiedShearLayerDomainIntegrals
       call ops%dump_plane(potT,2,ny/2,TIDX,"potT")
       call ops%dump_plane(potT,3,nz/2,TIDX,"potT")
 
-      tidx = tidx + tstep
+      idx = idx + 1
 
       call toc()
    
