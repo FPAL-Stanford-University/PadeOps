@@ -24,6 +24,7 @@ module IncompressibleGrid
     use forcingmod,   only: HIT_shell_forcing
     use scalar_igridMod, only: scalar_igrid 
     use io_hdf5_stuff, only: io_hdf5 
+    use PoissonPeriodicMod, only: PoissonPeriodic
 
     implicit none
 
@@ -221,11 +222,12 @@ module IncompressibleGrid
         logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false. 
 
         ! Rapid and slow decomposition
-        real(rkind), dimension(:,:,:), allocatable :: prapid, uM, vM, wM
+        real(rkind), dimension(:,:,:), allocatable :: prapid, uM, vM, wM, pslow
         real(rkind), dimension(:,:,:), allocatable :: dumdx, dumdy, dumdz
         real(rkind), dimension(:,:,:), allocatable :: dvmdx, dvmdy, dvmdz
         real(rkind), dimension(:,:,:), allocatable :: dwmdx, dwmdy, dwmdz
         logical :: computeRapidSlowPressure 
+        type(PoissonPeriodic) :: poiss_periodic
 
         ! Stats
         logical :: timeAvgFullFields, computeSpectra
@@ -411,7 +413,7 @@ contains
         if (this%useScalars) then
          read(unit=ioUnit, NML=SCALARS)
         end if
-        
+       
         this%computeRapidSlowPressure = ComputeRapidSlowPressure 
         if (this%ComputeRapidSlowPressure) then
             read(unit=ioUnit, NML=TURB_PRESSURE) 
@@ -1077,7 +1079,11 @@ contains
 
         ! STEP 24: Compute Rapid and Slow Pressure Split
         if (this%computeRapidSlowPressure) then
-            call this%initialize_Rapid_Slow_Pressure_Split(MeanTIDX, MeanRID, MeanFilesDir)
+            if (this%computeDNSpressure) then
+                call this%initialize_Rapid_Slow_Pressure_Split(MeanTIDX, MeanRID, MeanFilesDir)
+            else
+                call gracefulExit("Rapid and Slow pressure calculations require calculation of DNS pressure",13)
+            end if 
         end if 
 
         ! STEP 25: Schedule time dumps
@@ -1138,10 +1144,10 @@ contains
         write(filename_prefix,"(A3,I2.2)") "Run", this%runID
         if (this%ioType == 1) then
             call this%viz_hdf5%init(MPI_COMM_WORLD,this%gpC, "x",this%outputdir, filename_prefix, &
-               reduce_precision=.false.,write_xdmf=.true., read_only=.false.) 
+               reduce_precision=.false.,write_xdmf=.true., read_only=.false., wider_time_format=.true.) 
         elseif (this%ioType == 2) then
             call this%viz_hdf5%init(MPI_COMM_WORLD,this%gpC, "x",this%outputdir, filename_prefix, &
-               reduce_precision=.true.,write_xdmf=.true., read_only=.false.) 
+               reduce_precision=.true.,write_xdmf=.true., read_only=.false., wider_time_format=.true.)  
         else
             call GracefulExit("Invalid choice for IOTYPE", 312)
         end if 
@@ -1640,6 +1646,10 @@ contains
             call this%correctPressureRotationalForm()
         end if
 
+        if (this%computeRapidSlowPressure) then
+            call this%compute_RapidSlowPressure_Split()
+        end if 
+        
         ! STEP 3: Inform the other subroutines that you already have RHS
         this%AlreadyHaveRHS = .true. 
 
@@ -2653,6 +2663,10 @@ contains
             if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
                call this%dumpFullField(this%kappa_bounding,'kBND')
             end if 
+            if (this%computeRapidSlowPressure) then
+                call this%dumpFullField(this%prapid,'prap')
+                call this%dumpFullField(this%pslow,'pslo')
+            end if 
             if (this%computevorticity) then
                 call this%dumpFullField(this%ox,'omgX')
                 call this%dumpFullField(this%oy,'omgY')
@@ -2674,6 +2688,10 @@ contains
             if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%viz_hdf5%write_variable(this%kappaSGS,'kSGS')
             if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
                call this%viz_hdf5%write_variable(this%kappa_bounding,'kBND')
+            end if 
+            if (this%computeRapidSlowPressure) then
+                call this%viz_hdf5%write_variable(this%prapid,'prap')
+                call this%viz_hdf5%write_variable(this%pslow,'pslo')
             end if 
             if (this%computevorticity) then
                 call this%viz_hdf5%write_variable(this%ox,'omgX')
@@ -2892,6 +2910,10 @@ contains
        character(len=*), intent(in) :: MeanFilesDir
        real(rkind) :: maxdiv 
 
+       if (.not. this%periodicInZ) then 
+            call GracefulExit("Rapid Pressure calculation only supported for fully periodic problems",34)
+       end if 
+
        call message(0,"Initializing the rapid/slow pressure decompositions")
        allocate(this%uM(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
        allocate(this%vM(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
@@ -2910,6 +2932,7 @@ contains
        allocate(this%dwmdz(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
        
        allocate(this%prapid(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+       allocate(this%pslow(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
 
        call readField3D(MeanRID,MeanTIDX, MeanFilesDir, "uMmn", this%uM,this%gpC)
        call readField3D(MeanRID,MeanTIDX, MeanFilesDir, "vMmn", this%vM,this%gpC)
@@ -2951,11 +2974,33 @@ contains
        this%rbuffxC(:,:,:,1) = abs(this%dumdx + this%dvmdy + this%dwmdz)
        maxdiv = p_maxval(maxval(this%rbuffxC(:,:,:,1)))
 
+       call this%poiss_periodic%init(this%dx, this%dy, this%dz, this%gpC, 1, useExhaustiveFFT=.true.)
+       
        call message(1,"Read in the mean fields and gradients needed for pressure decompositions")
        call message(1,"Maximum divergence in mean fields:", maxdiv)
    end subroutine 
 
+   subroutine compute_RapidSlowPressure_Split(this)
+        class(igrid), intent(inout), target :: this
+        real(rkind), dimension(:,:,:), pointer :: dudx , dudy , dudz , dvdx , dvdy , dvdz , dwdx , dwdy , dwdz
 
+        dudx => this%duidxjC(:,:,:,1); dudy => this%duidxjC(:,:,:,2); dudz => this%duidxjC(:,:,:,3) 
+        dvdx => this%duidxjC(:,:,:,4); dvdy => this%duidxjC(:,:,:,5); dvdz => this%duidxjC(:,:,:,6) 
+        dwdx => this%duidxjC(:,:,:,7); dwdy => this%duidxjC(:,:,:,8); dwdz => this%duidxjC(:,:,:,9) 
+        
+        this%prapid = -2.d0*(this%duMdx*dudx + this%duMdy*dvdx + this%duMdz*dwdx &
+                        &  + this%dvMdx*dudy + this%dvMdy*dvdy + this%dvMdz*dwdy & 
+                        &  + this%dwMdx*dudz + this%dwMdy*dvdz + this%dwMdz*dwdz )  
+       
+        call this%spectC%fft(this%prapid,this%cbuffyC(:,:,:,1))
+        call this%spectC%dealias(this%cbuffyC(:,:,:,1))
+        call this%spectC%ifft(this%cbuffyC(:,:,:,1),this%prapid)
+        call this%poiss_periodic%poisson_solve(this%prapid)
+        this%pslow = this%pressure_dns - this%prapid
+        
+   end subroutine 
+   
+   
    subroutine readField3D(RunID, TIDX, inputDir, label, field, gpC)
        use exits, only: GracefulExit
        use decomp_2d_io
@@ -2979,13 +3024,6 @@ contains
        close(777)
 
        call decomp_2d_read_one(1,field,fname,gpC)
-
-   end subroutine 
-   
-   
-   subroutine compute_RapidSlowPressure_Split(this)
-         class(igrid), intent(inout), target :: this
-
 
    end subroutine 
    
@@ -5257,6 +5295,16 @@ contains
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".plD"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                     call decomp_2d_write_plane(1,this%Pressure_dns,dirid, pid, fname, this%gpC)
+
+                    if (this%computeRapidSlowPressure) then
+                        write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".pRp"
+                        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                        call decomp_2d_write_plane(1,this%prapid,dirid, pid, fname, this%gpC)
+                        
+                        write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".pSl"
+                        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                        call decomp_2d_write_plane(1,this%pslow,dirid, pid, fname, this%gpC)
+                    end if 
                 end if 
 
                 if (this%computeturbinePressure) then
@@ -5346,6 +5394,16 @@ contains
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".plD"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                     call decomp_2d_write_plane(1,this%Pressure_dns,dirid, pid, fname, this%gpC)
+                    
+                    if (this%computeRapidSlowPressure) then
+                        write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".pRp"
+                        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                        call decomp_2d_write_plane(1,this%prapid,dirid, pid, fname, this%gpC)
+                        
+                        write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".pSl"
+                        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                        call decomp_2d_write_plane(1,this%pslow,dirid, pid, fname, this%gpC)
+                    end if 
                 end if 
                 
                 if (this%computeturbinePressure) then
@@ -5433,6 +5491,16 @@ contains
                     write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".plD"
                     fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                     call decomp_2d_write_plane(1,this%Pressure_dns,dirid, pid, fname, this%gpC)
+                    
+                    if (this%computeRapidSlowPressure) then
+                        write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".pRp"
+                        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                        call decomp_2d_write_plane(1,this%prapid,dirid, pid, fname, this%gpC)
+                        
+                        write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_z",pid,".pSl"
+                        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                        call decomp_2d_write_plane(1,this%pslow,dirid, pid, fname, this%gpC)
+                    end if 
                 end if 
                 
                 if (this%computeturbinePressure) then

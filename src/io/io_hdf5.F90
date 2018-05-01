@@ -49,6 +49,7 @@ module io_hdf5_stuff
         logical :: master
         logical :: active
 
+        logical :: wider_time_format = .false. 
     contains
 
         procedure          :: init
@@ -74,14 +75,14 @@ module io_hdf5_stuff
 
 contains
 
-    subroutine init(this, comm, gp, pencil, vizdir, filename_prefix, reduce_precision, write_xdmf, read_only, subdomain_lo, subdomain_hi, jump_to_last)
+    subroutine init(this, comm, gp, pencil, vizdir, filename_prefix, reduce_precision, write_xdmf, read_only, subdomain_lo, subdomain_hi, jump_to_last, wider_time_format)
         class(io_hdf5),     intent(inout) :: this
         integer,            intent(in)    :: comm
         class(decomp_info), intent(in)    :: gp
         character(len=1),   intent(in)    :: pencil
         character(len=*),   intent(in)    :: vizdir
         character(len=*),   intent(in)    :: filename_prefix
-        logical, optional,  intent(in)    :: reduce_precision, write_xdmf, read_only, jump_to_last
+        logical, optional,  intent(in)    :: reduce_precision, write_xdmf, read_only, jump_to_last, wider_time_format
         integer, dimension(3), optional, intent(in) :: subdomain_lo, subdomain_hi
 
         integer(hsize_t), dimension(3) :: tmp
@@ -92,6 +93,8 @@ contains
 
         this%read_only = .true.
         if (present(read_only)) this%read_only = read_only
+
+        if (present(wider_time_format)) this%wider_time_format = wider_time_format
 
         info = mpi_info_null
 
@@ -637,8 +640,13 @@ contains
 
         this%filename = ''
         this%basename = ''
-        write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
-        write(this%basename, '(2A,I4.4,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+        if (this%wider_time_format) then
+            write(this%filename, '(2A,I7.7,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
+            write(this%basename, '(2A,I7.7,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+        else
+            write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
+            write(this%basename, '(2A,I4.4,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+        end if 
 
         ! Create the file collectively
         if (this%read_only) then
@@ -657,7 +665,11 @@ contains
         if (this%write_xdmf) then
             this%xdmf_filename = ''
             ! write(this%xdmf_filename,'(A,A,I4.4,A)') adjustl(trim(this%vizdir)), "/", this%vizcount, '.xmf'
-            write(this%xdmf_filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.xmf'
+            if (this%wider_time_format) then
+                write(this%xdmf_filename, '(2A,I7.7,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.xmf'
+            else
+                write(this%xdmf_filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.xmf'
+            end if 
 
             if (this%master) then
                 open(unit=this%xdmf_file_id, file=adjustl(trim(this%xdmf_filename)), form='FORMATTED', status='REPLACE')
@@ -693,7 +705,6 @@ contains
 
         character(len=clen) :: dsetname
 
-        ! write(dsetname,'(I4.4,A,A)') this%vizcount, '/', adjustl(trim(varname))
         write(dsetname,'(A)') adjustl(trim(varname))
         call this%write_dataset(field, dsetname)
 
@@ -743,8 +754,13 @@ contains
 
         this%filename = ''
         this%basename = ''
-        write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
-        write(this%basename, '(2A,I4.4,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+        if (this%wider_time_format) then
+            write(this%filename, '(2A,I7.7,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
+            write(this%basename, '(2A,I7.7,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+        else
+            write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
+            write(this%basename, '(2A,I4.4,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+        end if 
 
         ! Setup file access property list with parallel I/O access.
         call h5pcreate_f(H5P_FILE_ACCESS_F, this%plist_id, error)
@@ -781,8 +797,11 @@ contains
             fileexists = .true.
             vizcount = 0
             do while (fileexists)
-                write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', vizcount, '.h5'
-
+                if (this%wider_time_format) then
+                    write(this%filename, '(2A,I7.7,A)') adjustl(trim(this%filename_prefix)), '_', vizcount, '.h5'
+                else
+                    write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', vizcount, '.h5'
+                end if 
                 inquire(file=trim(this%filename), exist=fileexists)
                 vizcount = vizcount + 1
             end do
