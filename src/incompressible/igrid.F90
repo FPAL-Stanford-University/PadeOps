@@ -1071,13 +1071,7 @@ contains
             call message(0, "SCALAR fields initialized successfully.")
          end if  
          
-         ! STEP 23: Compute pressure  
-        if ((this%storePressure) .or. (this%fastCalcPressure)) then
-            call this%ComputePressure()
-        end if 
-
-
-        ! STEP 24: Compute Rapid and Slow Pressure Split
+        ! STEP 23: Compute Rapid and Slow Pressure Split
         if (this%computeRapidSlowPressure) then
             if (this%computeDNSpressure) then
                 call this%initialize_Rapid_Slow_Pressure_Split(MeanTIDX, MeanRID, MeanFilesDir)
@@ -1085,6 +1079,13 @@ contains
                 call gracefulExit("Rapid and Slow pressure calculations require calculation of DNS pressure",13)
             end if 
         end if 
+        
+        ! STEP 24: Compute pressure  
+        if ((this%storePressure) .or. (this%fastCalcPressure)) then
+            call this%ComputePressure()
+        end if 
+
+
 
         ! STEP 25: Schedule time dumps
         this%vizDump_Schedule = vizDump_Schedule
