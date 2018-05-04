@@ -1092,7 +1092,11 @@ contains
         this%DumpThisStep = .false. 
         if (this%vizDump_Schedule == 1) then
             this%deltaT_dump = deltaT_dump
-            this%t_NextDump = this%tsim + deltaT_dump
+            if (useRestartFile) then
+                this%t_NextDump = this%tsim - mod(this%tsim,deltaT_dump) + deltaT_dump
+            else
+                this%t_NextDump = this%tsim + deltaT_dump
+            end if 
         end if 
 
         ! STEP 26: HDF5 IO
@@ -2582,64 +2586,68 @@ contains
        end if 
 
        if ((forceWrite.or.(mod(this%step,this%tid_statsDump)==0)).and.(this%tsim > this%tSimStartStats) ) then
-           if (this%timeAvgFullFields) then
-                call this%dump_stats3D()
-                call mpi_barrier(mpi_comm_world, ierr)
-                !stop
-            else
-                !call this%compute_stats()
-                !call this%dump_stats()
+          if (this%timeAvgFullFields) then
+               call this%dump_stats3D()
+               call mpi_barrier(mpi_comm_world, ierr)
+               !stop
+           else
+               !call this%compute_stats()
+               !call this%dump_stats()
+           end if
+       end if 
+
+       if ( restartWrite .or. (mod(this%step,this%t_restartDump) == 0) ) then
+           call this%dumpRestartfile()
+           call message(0,"Scheduled restart file dumped.")
+       end if
+       
+       if ( (forceWrite .or. ((mod(this%step,this%t_planeDump) == 0) .and. &
+                (this%step .ge. this%t_start_planeDump) .and. (this%step .le. this%t_stop_planeDump))) .and. (this%dumpPlanes)) then
+           if (this%PreprocessForKS) then
+               if (.not. this%KSupdated) then
+                   call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
+                   this%KSupdated = .true. 
+               end if
+           end if
+           call this%dump_planes()
+       end if 
+
+
+       if (this%useProbes) then
+           if (forceDumpProbes) then
+               call this%dumpProbes()    
+               call message(0,"Performed a forced dump for probes.")
+           end if
+       end if
+
+       if (this%vizDump_Schedule == 1) then
+            if (this%DumpThisStep) then
+               call message(2,"Performing a fixed timed visualization dump at time:", this%tsim)
+               call message(2,"This time step used a deltaT:",this%dt)
+               call this%dump_visualization_files()
+            end if 
+       else
+            if (mod(this%step,this%t_dataDump) == 0) then
+               call message(0,"Scheduled visualization dump.")
+               call this%dump_visualization_files()
             end if
+       end if 
+
+
+       if (forceWrite) then
+          call message(2,"Performing a forced visualization dump.")
+          call this%dump_visualization_files()
+       end if
+
+       if (this%initspinup) then
+        if (this%tsim > this%Tstop_initspinup) then
+            this%initspinup = .false.
+            call message(0,"Initialization spin up turned off. No active scalar in the problem.")
         end if 
-
-        if ( restartWrite .or. (mod(this%step,this%t_restartDump) == 0) ) then
-            call this%dumpRestartfile()
-            call message(0,"Scheduled restart file dumped.")
-        end if
-        
-        if ( (forceWrite .or. ((mod(this%step,this%t_planeDump) == 0) .and. &
-                 (this%step .ge. this%t_start_planeDump) .and. (this%step .le. this%t_stop_planeDump))) .and. (this%dumpPlanes)) then
-            if (this%PreprocessForKS) then
-                if (.not. this%KSupdated) then
-                    call this%LES2KS%applyFilterForKS(this%u, this%v, this%wC)
-                    this%KSupdated = .true. 
-                end if
-            end if
-            call this%dump_planes()
-        end if 
-
-        if (mod(this%step,this%t_dataDump) == 0) then
-           call message(0,"Scheduled visualization dump.")
-           call this%dump_visualization_files()
-        end if
-
-        if (this%useProbes) then
-            if (forceDumpProbes) then
-                call this%dumpProbes()    
-                call message(0,"Performed a forced dump for probes.")
-            end if
-        end if
-
-        if (this%DumpThisStep) then
-           call message(2,"Performing a fixed timed visualization dump at time:", this%tsim)
-           call message(2,"This time step used a deltaT:",this%dt)
-           call this%dump_visualization_files()
-        end if 
-
-        if (forceWrite) then
-           call message(2,"Performing a forced visualization dump.")
-           call this%dump_visualization_files()
-        end if
-
-        if (this%initspinup) then
-         if (this%tsim > this%Tstop_initspinup) then
-             this%initspinup = .false.
-             call message(0,"Initialization spin up turned off. No active scalar in the problem.")
-         end if 
-        end if 
-        ! Exit if the exitpdo file was detected earlier at the beginning of this
-        ! subroutine
-        if(exitstat) call GracefulExit("Found exitpdo file in control directory",1234)
+       end if 
+       ! Exit if the exitpdo file was detected earlier at the beginning of this
+       ! subroutine
+       if(exitstat) call GracefulExit("Found exitpdo file in control directory",1234)
 
     end subroutine
 

@@ -73,7 +73,6 @@ subroutine Read_VizSummary(this, times, timesteps)
 
    write(tempname,"(A3,I2.2,A12,A4)") "Run",this%runID, "_vis_summary",".smm"
    fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
-print *, Fname
    inquire(file=fname, exist=exists)
    if (exists) then
        open(unit=10,file=fname,access='sequential',form='formatted')
