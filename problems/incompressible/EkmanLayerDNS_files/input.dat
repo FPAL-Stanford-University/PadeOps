@@ -58,8 +58,8 @@ useExtraForcing       = .FALSE.      ! Is an extra forcing term being used? (non
 useGeostrophicForcing = .TRUE.     ! This is true if forcing is provided using the coriolis term  
 isStratified          = .FALSE.     ! Use Stratification / active scalar in momentum
 Pr                    = 0.6D0       ! Turbulent Prandtl Number; used when 
-Ro                    = 100.D0       ! Rossby Number used when Coriolis is ON
-Re                    = 100.D0       ! Reynolds Number; used when isInvisid is FALSE
+Ro                    = 397.986D0       ! Rossby Number used when Coriolis is ON
+Re                    = 397.986D0       ! Reynolds Number; used when isInvisid is FALSE
 Fr                    = 1.D10       ! Froude number; used when isStratified is TRUE
 Gx                    = 1.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
 Gy                    = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
@@ -115,10 +115,10 @@ t_dumpKSprep          = 10             ! Dumping Frequency for KS files
 /
 /
 &EkmanDNSINPUT
-Lx                    = 36.d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                    = 36.d0 ! Domain Width (appropriate dimesnions/non-dimensionalized)
-Lz                    = 20.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
+Lx                    = 26.d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                    = 26.d0 ! Domain Width (appropriate dimesnions/non-dimensionalized)
+Lz                    = 24.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
 zpeak                 = 0.05d0
 epsnd                 = 4.d0          
 randscale             = 0.1d0
-/
+
