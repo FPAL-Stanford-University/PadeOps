@@ -97,9 +97,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
     real(rkind), dimension(:,:,:), allocatable :: upurt, vpurt, wpurt
-    real(rkind) :: Noise_Amp = 1.d-6
+    real(rkind) :: Noise_Amp = 1.d-6, waveAmp = 1.d-3
     type(cd06stagg), allocatable :: derW
     integer :: ProblemMode = 1
+    integer :: Nwaves = 5
     character(len=clen) :: fname
     real(rkind)  :: Lx = 26.d0, Ly = 26.d0, Lz = 24.d0 
 
@@ -131,9 +132,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     allocate(vpurt(size(v ,1),size(v ,2),size(v ,3)))
     allocate(wpurt(size(wC,1),size(wC,2),size(wC,3)))
 
-    upurt = 0.d0
-    vpurt = 0.d0
-    wpurt = 0.d0
+    upurt = waveAmp*(exp(-Z)*Z / exp(-1.d0))*cos(Nwaves*2.d0*pi*Y/Lx)
+    vpurt = waveAmp*(exp(-Z)*Z / exp(-1.d0))*cos(Nwaves*2.d0*pi*X/Lx)
+    wpurt = 0.d0;
     u  = u + upurt
     v  = v + vpurt
     wC = wC+ wpurt
