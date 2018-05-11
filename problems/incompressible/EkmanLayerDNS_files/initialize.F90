@@ -31,8 +31,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = 26.d0, Ly = 26.d0, Lz = 24.d0, alphaRot = 0.d0 
-    real(rkind) ::  Noise_Amp = 1.d-6
-    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot
+    real(rkind) ::  Noise_Amp = 1.d-6, waveAmp
+    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot,waveAmp
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -97,14 +97,14 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
     real(rkind), dimension(:,:,:), allocatable :: upurt, vpurt, wpurt
-    real(rkind) :: Noise_Amp = 1.d-6, waveAmp = 1.d-3
+    real(rkind) :: Noise_Amp = 1.d-6, waveAmp
     type(cd06stagg), allocatable :: derW
     integer :: ProblemMode = 1
-    integer :: Nwaves = 5
+    integer :: Ns = 5
     character(len=clen) :: fname
     real(rkind)  :: Lx = 26.d0, Ly = 26.d0, Lz = 24.d0 
 
-    namelist /EkmanLayerDNS/Lx,Ly,Lz,alphaRot 
+    namelist /EkmanLayerDNS/Lx,Ly,Lz,alphaRot,waveAmp 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -132,8 +132,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     allocate(vpurt(size(v ,1),size(v ,2),size(v ,3)))
     allocate(wpurt(size(wC,1),size(wC,2),size(wC,3)))
 
-    upurt = waveAmp*(exp(-Z)*Z / exp(-1.d0))*cos(Nwaves*2.d0*pi*Y/Lx)
-    vpurt = waveAmp*(exp(-Z)*Z / exp(-1.d0))*cos(Nwaves*2.d0*pi*X/Lx)
+    upurt = waveAmp*(exp(-Z)*Z / exp(-1.d0))*cos(Ns*2.d0*pi*Y/Lx)
+    vpurt = waveAmp*(exp(-Z)*Z / exp(-1.d0))*cos(Ns*2.d0*pi*X/Lx)
     wpurt = 0.d0;
     u  = u + upurt
     v  = v + vpurt
@@ -230,13 +230,12 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     real(rkind) :: ThetaRef, Lx, Ly, Lz, alphaRot
     integer :: iounit
-    real(rkind) :: Noise_Amp = 1.d-6
+    real(rkind) :: Noise_Amp = 1.d-6, waveAmp
     integer :: ProblemMode = 1
-    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot
+    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot,waveAmp
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
-
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=EkmanLayerDNS)
@@ -253,10 +252,10 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     real(rkind), intent(out) :: Tref
     real(rkind) :: Lx, Ly, Lz, alphaRot 
     integer :: iounit
-    real(rkind) :: Noise_Amp = 1.d-6
+    real(rkind) :: Noise_Amp = 1.d-6, waveAmp
     integer :: ProblemMode = 1
     
-    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot
+    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot,waveAmp
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
