@@ -1052,6 +1052,8 @@ contains
                                  & calculation term uses")
                call message(2,"Bulk Richardson number:", this%BulkRichardson)
             end select
+        elseif (this%initSpinup) then
+               this%BuoyancyFact = one/(this%Fr*this%Fr*this%ThetaRef)
         end if 
 
 

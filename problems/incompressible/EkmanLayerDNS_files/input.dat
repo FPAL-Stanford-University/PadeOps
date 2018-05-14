@@ -1,6 +1,6 @@
 &INPUT
-inputdir              = "/scratch/05648/kmatsuno/EkmanNeutral"   ! Directory for any input files
-outputdir             = "/scratch/05648/kmatsuno/EkmanNeutral"   ! Directory for all output files
+inputdir              = "/scratch/04076/tg833754/EkmanLayerDNS/output"   ! Directory for any input files
+outputdir             = "/scratch/04076/tg833754/EkmanLayerDNS/output"   ! Directory for all output files
 nx                    = 256          ! Number of points in X
 ny                    = 256    	   ! Number of points in Y
 nz                    = 512          ! Number of points in Z
@@ -22,7 +22,7 @@ NumericalSchemeVert   = 1           ! 0: Second order FD, 1: Sixth order Compact
 ComputeStokesPressure = .TRUE.      ! This would be FALSE only is very special circumstances.  
 useDealiasFilterVert  = .FALSE.     ! Dealiasing filter used in vertical direction
 t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproject if needed.
-InitSpinup            = .FALSE.
+InitSpinup            = .TRUE.
 useExhaustiveFFT      = .TRUE.
 dealiasFact           = 0.66666667d0
 donot_dealias         = .FALSE.
@@ -130,12 +130,20 @@ KSRunID               = 99             ! RunID tag for KS files
 t_dumpKSprep          = 10             ! Dumping Frequency for KS files
 /
 /
+&INIT_SPINUP
+Tstop_InitSpinUp = 30.d0
+Zcutoff          = 1.5d0 
+Sigma_purt       = 0.5d0 
+Froude_Scalar    = 0.25d0
+seed             = 213455
+/
+/
 &EkmanLayerDNS
 Lx              = 26.d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Ly              = 26.d0 ! Domain Width (appropriate dimesnions/non-dimensionalized)
 Lz              = 24.d0 ! Domain Height (appropriate dimesnions/non-dimensionalized)
 alphaRot 		= 0.d0  ! frame rotation
-waveAmp 		= 1.d-1 ! perturbation amplitude 
-noiseAmp 		= 1.d-3 ! noise amplitude
+waveAmp 		= 1.d-14 ! perturbation amplitude 
+noiseAmp 		= 1.d-14 ! noise amplitude
 /
 /
