@@ -131,9 +131,9 @@ t_dumpKSprep          = 10             ! Dumping Frequency for KS files
 /
 /
 &INIT_SPINUP
-Tstop_InitSpinUp = 30.d0
-Zcutoff          = 1.5d0 
-Sigma_purt       = 0.5d0 
+Tstop_InitSpinUp = 30.d0        ! time to turn off temp perturbations
+Zcutoff          = 1.5d0        ! height to perturb temp
+Sigma_purt       = 0.5d0        
 Froude_Scalar    = 0.25d0
 seed             = 213455
 /
