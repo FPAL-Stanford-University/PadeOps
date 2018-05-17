@@ -29,7 +29,7 @@ donot_dealias         = .FALSE.
 /
 /
 &IO
-RunID                 = 2          ! Run Label (All output files will be tagged with this nubber)
+RunID                 = 6          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump         = 2000       ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump            = 100        ! Data dumping frequency (# of timesteps)
 ioType                = 0           ! 0: Fortran Binaries, 1: hdf5 files
@@ -143,7 +143,8 @@ Lx              = 26.d0 ! Domain Length (appropriate dimesnions/non-dimensionali
 Ly              = 26.d0 ! Domain Width (appropriate dimesnions/non-dimensionalized)
 Lz              = 24.d0 ! Domain Height (appropriate dimesnions/non-dimensionalized)
 alphaRot 		= 0.d0  ! frame rotation
-waveAmp 		= 1.d-14 ! perturbation amplitude 
-noiseAmp 		= 1.d-14 ! noise amplitude
+noiseAmp 		= 0.01d0 ! noise amplitude
+!InitFileTag     = "PadeInput"
+!InitFileDirectory = "/home1/05648/kmatsuno/bins"
 /
 /
