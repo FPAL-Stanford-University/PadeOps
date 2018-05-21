@@ -7,7 +7,7 @@ module MultSpecGauss_data
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one, p_amb_2 = 0.1_rkind
     real(rkind) :: K0 = one, alp = one, CV = one, T0 = one
     real(rkind) :: K0_2 = one, alp_2 = one, CV_2 = one, T0_2 = one
-    real(rkind) :: minVF = 0.2_rkind, thick = one, rho_ratio = two, thickness = 0.001_rkind, yield = 0.1_rkind, yield_2 = 0.1_rkind
+    real(rkind) :: minVF = 0.2_rkind, thick = one, rho_ratio = two, thickness = 0.001_rkind, yield = 0.1_rkind, yield_2 = 0.1_rkind, interfloc = 0.5_rkind, interfwidth = 0.4_rkind
     logical     :: plastic = .false., plastic_2 = .false.
     real(rkind) :: rhomax, rhomin, umax, umin, vmax, vmin, wmax, wmin, pmax, pmin, Tmax, Tmin, vfmax, vfmin
     real(rkind) :: Ys1max, Ys1min, eh1max, eh1min, g1max, g1min, Ys2max, Ys2min, eh2max, eh2min, g2max, g2min
@@ -89,7 +89,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rho_ratio, &
                           p_infty_2, gamma_2, mu_2, rho_0_2, p_amb_2, sigma_0, SOSmodel, thickness, &
                           plastic, plastic_2, yield, yield_2, iprob, &
-                          K0, alp, CV, T0, K0_2, alp_2, CV_2, T0_2
+                          K0, alp, CV, T0, K0_2, alp_2, CV_2, T0_2, interfloc, interfwidth
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -151,9 +151,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(2)%plast = plastic_2
 
         if(thick<zero) then
-          tmp = half * ( erf( (x-half-0.0_rkind)/(thickness) ) - erf( (x-half-0.4_rkind)/(thickness) ) )
+          tmp = half * ( erf( (x-interfloc)/(thickness) ) - erf( (x-interfloc-interfwidth)/(thickness) ) )
         else
-          tmp = half * ( erf( (x-half-0.0_rkind)/(thick*dx) ) - erf( (x-half-0.4_rkind)/(thick*dx) ) )
+          tmp = half * ( erf( (x-interfloc)/(thick*dx) ) - erf( (x-interfloc-interfwidth)/(1.0*dx) ) )
           !tmp = half * ( one + erf( (x-0.5_rkind)/(thick*dx) ) )
         endif
         !write(*,*) 'thickness = ', thickness
