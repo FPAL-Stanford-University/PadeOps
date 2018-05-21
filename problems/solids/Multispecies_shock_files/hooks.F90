@@ -8,7 +8,7 @@ module Multispecies_shock_data
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one
     real(rkind) :: K0 = one, alp = one, CV = one, T0 = one
     real(rkind) :: K0_2 = one, alp_2 = one, CV_2 = one, T0_2 = one
-    integer     :: eostype = 2 ! 1 :: separable; 2 :: Godunov-Romenski Hydro
+    integer     :: eostype = 1 ! 1 :: separable; 2 :: Godunov-Romenski Hydro
     real(rkind) :: minVF = 0.2_rkind, thick = one
     real(rkind) :: rhoRatio = one, pRatio = two
     logical     :: sharp = .FALSE.
@@ -400,7 +400,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
             mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
-            mix%material(2)%g11 = mix%material(1)%g11
+            mix%material(2)%g11 = (rho2*dum + rho1*(one-dum))/rho_0_2
+            if (mix%use_gTg) then
+                mix%material(2)%g11 = mix%material(2)%g11**2
+            end if
+
+            if(mix%useOneG) then
+                mix%material(2)%g11 = mix%material(1)%g11
+            endif
 
             mix%material(1)%p  = p2*dum + p1*(one-dum)
             mix%material(2)%p  = mix%material(1)%p
@@ -684,11 +691,11 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               ! mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
               ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
               
-              mix%material(1)%Ys ( 1,:,:) = YsL
-              mix%material(2)%Ys ( 1,:,:) = one - YsL
+              !mix%material(1)%Ys ( 1,:,:) = YsL
+              !mix%material(2)%Ys ( 1,:,:) = one - YsL
   
-              ! mix%material(1)%VF ( 1,:,:) = VFL
-              ! mix%material(2)%VF ( 1,:,:) = one - VFL
+               mix%material(1)%VF ( 1,:,:) = VFL
+               mix%material(2)%VF ( 1,:,:) = one - VFL
           end if
         endif
 
