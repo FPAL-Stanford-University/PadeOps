@@ -123,7 +123,6 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     x => mesh(:,:,:,1)
  
     ! Laminar Ekman layer profile
-
     u  = cos(alphaRot*pi/180.d0) - exp(-z)*cos(z-(alphaRot*pi/180.d0)) 
     v  = sin(alphaRot*pi/180.d0) + exp(-z)*sin(z-(alphaRot*pi/180.d0)) 
     wC = zero

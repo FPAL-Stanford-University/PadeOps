@@ -1,6 +1,6 @@
 &INPUT
-inputdir              = "/scratch/04076/tg833754/EkmanLayerDNS/output"   ! Directory for any input files
-outputdir             = "/scratch/04076/tg833754/EkmanLayerDNS/output"   ! Directory for all output files
+inputdir              = "/scratch/05648/kmatsuno/EkmanNeutral/Run06/"   ! Directory for any input files
+outputdir             = "/scratch/05648/kmatsuno/EkmanNeutral/Run06/"   ! Directory for all output files
 nx                    = 256          ! Number of points in X
 ny                    = 256    	   ! Number of points in Y
 nz                    = 512          ! Number of points in Z
@@ -9,9 +9,9 @@ CFL                   = 0.8D0       ! CFL criterion for calculating the time ste
 dt                    = 5.D-5       ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .FALSE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 1620        ! TimeID of the restart file being used
-restartFile_RID       = 1           ! RunID of the restart file being used
+useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
+restartFile_TID       = 3200        ! TimeID of the restart file being used
+restartFile_RID       = 6           ! RunID of the restart file being used
 CviscDT 		      = 1.d0 	
 /
 /
@@ -144,7 +144,7 @@ Ly              = 26.d0 ! Domain Width (appropriate dimesnions/non-dimensionaliz
 Lz              = 24.d0 ! Domain Height (appropriate dimesnions/non-dimensionalized)
 alphaRot 		= 0.d0  ! frame rotation
 noiseAmp 		= 0.01d0 ! noise amplitude
-!InitFileTag     = "PadeInput"
-!InitFileDirectory = "/home1/05648/kmatsuno/bins"
+InitFileTag     = "PadeInput"
+InitFileDirectory = "/home1/05648/kmatsuno/bins/ICfiles"
 /
 /
