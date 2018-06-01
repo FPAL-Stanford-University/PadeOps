@@ -30,6 +30,7 @@ module TKEBudgetMod
 
     contains
 
+        procedure          :: init
         procedure          :: reynolds_avg
         procedure          :: reynolds_avg_and_fluct
         procedure          :: favre_avg
@@ -43,18 +44,20 @@ module TKEBudgetMod
         procedure          :: get_p_dil
         procedure          :: get_dissipation
         procedure          :: tke_budget
-        final              :: destroy
+        final              :: destructor
 
     end type
 
-    interface tkeBudget
-        module procedure init
-    end interface
+    ! interface tkeBudget
+    !     module procedure init
+    ! end interface
 
 contains
 
-    function init(gp, der, mesh, dx, dy, dz, averaging_directions, outputdir, x_bc, y_bc, z_bc, reduce_precision) result(this)
-        type(tkeBudget)                             :: this
+    ! function init(gp, der, mesh, dx, dy, dz, averaging_directions, outputdir, x_bc, y_bc, z_bc, reduce_precision) result(this)
+    subroutine init(this, gp, der, mesh, dx, dy, dz, averaging_directions, outputdir, x_bc, y_bc, z_bc, reduce_precision)
+        ! type(tkeBudget)                             :: this
+        class(tkeBudget)                            :: this
         class(decomp_info), target,      intent(in) :: gp
         class(derivatives), target,      intent(in) :: der
         real(rkind), dimension(:,:,:,:), intent(in) :: mesh
@@ -110,8 +113,9 @@ contains
                 call this%gp_avg%init(this%gp%xsz(1),this%gp%ysz(2),this%avg%xy_comm)
 
                 ! Initialize HDF5 output object (only z index of 1 since we're outputting a 1D field)
-                call this%viz%init(this%avg%xy_comm, this%gp, 'y', outputdir, 'TKEBudget', reduce_precision=reduce_precision_, &
-                                   read_only=.false., subdomain_lo=[1,1,1], subdomain_hi=[this%gp%xsz(1),this%gp%ysz(2),1])
+                call this%viz%init(mpi_comm_world, this%gp, 'y', outputdir, 'TKEBudget', reduce_precision=reduce_precision_, &
+                                   read_only=.false., subdomain_lo=[1,1,1], subdomain_hi=[this%gp%xsz(1),this%gp%ysz(2),1], &
+                                   jump_to_last=.true.)
 
                 ! Write the coordinates of subdomain out
                 call this%viz%write_coords(mesh)
@@ -119,9 +123,11 @@ contains
 
         end if
 
-    end function
+    ! end function
+    end subroutine
 
-    impure elemental subroutine destroy(this)
+    ! impure elemental subroutine destructor(this)
+    subroutine destructor(this)
         type(tkeBudget), intent(inout) :: this
 
         nullify(this%gp)

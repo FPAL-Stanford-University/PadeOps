@@ -244,7 +244,7 @@ module IncompressibleGrid
 
         contains
             procedure          :: init
-            procedure          :: destroy
+            procedure          :: destroy_grid
             procedure          :: printDivergence 
             procedure          :: getMaxKE
             procedure          :: getMeanKE
@@ -1323,7 +1323,7 @@ contains
         call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
     end subroutine 
 
-    subroutine destroy(this)
+    subroutine destroy_grid(this)
         class(igrid), intent(inout) :: this
       
         if(this%useHITForcing) then

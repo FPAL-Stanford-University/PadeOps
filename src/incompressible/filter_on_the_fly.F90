@@ -82,14 +82,14 @@ subroutine init(this, runID, inputdir, outputdir, fof_id, spectC, cbuffyC, cbuff
    character(len=clen) :: fname, tempname
    integer :: ioUnit
 
-   namelist /FOF/ filterfact_x, filterfact_y, filterfact_z 
+   namelist /NLFOF/ filterfact_x, filterfact_y, filterfact_z 
 
    write(tempname,"(A10,I3.3,A10)") "FilterInfo", fof_id, "_input.inp"
    fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
 
    ioUnit = 11
    open(unit=ioUnit, file=trim(fname), form='FORMATTED')
-   read(unit=ioUnit, NML=FOF)
+   read(unit=ioUnit, NML=NLFOF)
    close(ioUnit)
 
 

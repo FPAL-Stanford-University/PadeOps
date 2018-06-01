@@ -43,6 +43,7 @@ module inclinedRM_data
     ! Miranda restart parameters
     character(len=clen) :: resdir, resfile
     integer :: resdump = 0
+    logical :: use_miranda_restart = .true.
 
     ! Gaussian filter for sponge
     type(filters) :: mygfil
@@ -290,7 +291,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
     integer :: nx, ny, nz
 
-    namelist /PROBINPUT/  resdir, resfile, resdump
+    namelist /PROBINPUT/  resdir, resfile, resdump, use_miranda_restart
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -329,143 +330,154 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         call mix%set_massdiffusivity( reidRamshawDiffusivity(mix%ns, diffConst, molwt, sigma, eps_by_k, &
              diffA, diffB, diffC, diffD, diffE, diffF, diffG, diffH) )
 
-        ! Initialize miranda_restart object
-        call mir%init(decomp, resdir, resfile)
-        if (mir%ns /= mix%ns) call GracefulExit("Number of species doesn't match that in the restart files",5687)
+        if (use_miranda_restart) then
+            ! Initialize miranda_restart object
+            call mir%init(decomp, resdir, resfile)
+            if (mir%ns /= mix%ns) call GracefulExit("Number of species doesn't match that in the restart files",5687)
 
-        ! Allocate restart mesh and data arrays
-        allocate( resmesh(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), 3       ) )
-        allocate( resdata(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), mir%nres) )
+            ! Allocate restart mesh and data arrays
+            allocate( resmesh(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), 3       ) )
+            allocate( resdata(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), mir%nres) )
 
-        ! Read in the grid
-        call mir%read_grid(resmesh)
+            ! Read in the grid
+            call mir%read_grid(resmesh)
 
-        call message("Error in dx", abs(dx-(resmesh(2,1,1,1)-resmesh(1,1,1,1))*real(1.D-2,rkind)))
-        call message("Error in dy", abs(dy-(resmesh(1,2,1,2)-resmesh(1,1,1,2))*real(1.D-2,rkind)))
-        call message("Error in dz", abs(dz-(resmesh(1,1,2,3)-resmesh(1,1,1,3))*real(1.D-2,rkind)))
+            call message("Error in dx", abs(dx-(resmesh(2,1,1,1)-resmesh(1,1,1,1))*real(1.D-2,rkind)))
+            call message("Error in dy", abs(dy-(resmesh(1,2,1,2)-resmesh(1,1,1,2))*real(1.D-2,rkind)))
+            call message("Error in dz", abs(dz-(resmesh(1,1,2,3)-resmesh(1,1,1,3))*real(1.D-2,rkind)))
 
-        call message("Max error in x coordinate",P_MAXVAL( abs(x - resmesh(:,:,:,1)*real(1.D-2,rkind))/dx ))
-        call message("Min error in x coordinate",P_MINVAL( abs(x - resmesh(:,:,:,1)*real(1.D-2,rkind))/dx ))
+            call message("Max error in x coordinate",P_MAXVAL( abs(x - resmesh(:,:,:,1)*real(1.D-2,rkind))/dx ))
+            call message("Min error in x coordinate",P_MINVAL( abs(x - resmesh(:,:,:,1)*real(1.D-2,rkind))/dx ))
 
-        call message("Max error in y coordinate",P_MAXVAL( abs(y - resmesh(:,:,:,2)*real(1.D-2,rkind))/dy ))
-        call message("Min error in y coordinate",P_MINVAL( abs(y - resmesh(:,:,:,2)*real(1.D-2,rkind))/dy ))
+            call message("Max error in y coordinate",P_MAXVAL( abs(y - resmesh(:,:,:,2)*real(1.D-2,rkind))/dy ))
+            call message("Min error in y coordinate",P_MINVAL( abs(y - resmesh(:,:,:,2)*real(1.D-2,rkind))/dy ))
 
-        call message("Max error in z coordinate",P_MAXVAL( abs(z - resmesh(:,:,:,3)*real(1.D-2,rkind))/dz ))
-        call message("Min error in z coordinate",P_MINVAL( abs(z - resmesh(:,:,:,3)*real(1.D-2,rkind))/dz ))
+            call message("Max error in z coordinate",P_MAXVAL( abs(z - resmesh(:,:,:,3)*real(1.D-2,rkind))/dz ))
+            call message("Min error in z coordinate",P_MINVAL( abs(z - resmesh(:,:,:,3)*real(1.D-2,rkind))/dz ))
 
-        print *, "x[ 1,1,1] = ", x( 1,1,1), "    resmesh[ 1,1,1,1] = ", resmesh( 1,1,1,1)
-        print *, "x[nx,1,1] = ", x(nx,1,1), "    resmesh[nx,1,1,1] = ", resmesh(nx,1,1,1)
+            ! print *, "x[ 1,1,1] = ", x( 1,1,1), "    resmesh[ 1,1,1,1] = ", resmesh( 1,1,1,1)
+            ! print *, "x[nx,1,1] = ", x(nx,1,1), "    resmesh[nx,1,1,1] = ", resmesh(nx,1,1,1)
 
-        ! Read in data
-        call mir%read_data(resdump, resdata, tsim, dt)
-        
-        write(charout,'(A,I0.0,A,A)') "Reading Miranda restart dump ", resdump, " from ", trim(resdir)
-        call message(charout)
-        call message("Simulation time at restart", tsim)
-        call message("Timestep at restart", dt)
+            ! Read in data
+            call mir%read_data(resdump, resdata, tsim, dt)
+            
+            write(charout,'(A,I0.0,A,A)') "Reading Miranda restart dump ", resdump, " from ", trim(resdir)
+            call message(charout)
+            call message("Simulation time at restart", tsim)
+            call message("Timestep at restart", dt)
 
-        rho = resdata(:,:,:,mir%rho_index) * real(1.D3,  rkind) ! g/cm^3 to kg/m^3
-        u   = resdata(:,:,:,  mir%u_index) * real(1.D-2, rkind) ! cm/s to m/s
-        v   = resdata(:,:,:,  mir%v_index) * real(1.D-2, rkind) ! cm/s to m/s
-        w   = resdata(:,:,:,  mir%w_index) * real(1.D-2, rkind) ! cm/s to m/s
-        p   = resdata(:,:,:,  mir%p_index) * real(1.D-1, rkind) ! Ba (CGS) to Pa (SI)
+            rho = resdata(:,:,:,mir%rho_index) * real(1.D3,  rkind) ! g/cm^3 to kg/m^3
+            u   = resdata(:,:,:,  mir%u_index) * real(1.D-2, rkind) ! cm/s to m/s
+            v   = resdata(:,:,:,  mir%v_index) * real(1.D-2, rkind) ! cm/s to m/s
+            w   = resdata(:,:,:,  mir%w_index) * real(1.D-2, rkind) ! cm/s to m/s
+            p   = resdata(:,:,:,  mir%p_index) * real(1.D-1, rkind) ! Ba (CGS) to Pa (SI)
 
-        Ys  = resdata(:,:,:,mir%Ys_index:mir%Ys_index+mir%ns-1) ! Non-dimensional
-        
-        if ( nancheck(rho) ) then
-            print '(A)', "NaN found in rho"
+            Ys  = resdata(:,:,:,mir%Ys_index:mir%Ys_index+mir%ns-1) ! Non-dimensional
+            
+            if ( nancheck(rho) ) then
+                print '(A)', "NaN found in rho"
+            end if
+            if ( nancheck(u) ) then
+                print '(A)', "NaN found in u"
+            end if
+            if ( nancheck(v) ) then
+                print '(A)', "NaN found in v"
+            end if
+            if ( nancheck(w) ) then
+                print '(A)', "NaN found in w"
+            end if
+            if ( nancheck(p) ) then
+                print '(A)', "NaN found in p"
+            end if
+            if ( nancheck(Ys,i,j,k,l) ) then
+                print '(A,4(I0.0,A))', "NaN found at Ys(", i, ",", j, ",", k, ",", l, ")"
+            end if
+            ! Initialize viz object
+            ! call viz%init( mpi_comm_world, decomp, 'y', '.', 'init_test', &
+            !                reduce_precision=.true., read_only=.false., jump_to_last=.true.)
+            ! call viz%write_coords(mesh)
+
+            ! Initialize mygfil
+            call mygfil%init(                           decomp, &
+                              periodicx,  periodicy, periodicz, &
+                             "gaussian", "gaussian", "gaussian" )
+
+            ! Check for consistency
+            call mix%update(Ys)
+            call mix%get_e_from_p(rho,p,e)
+            call mix%get_T(e, T)
+
+            call message("Max error in e", P_MAXVAL( abs(e - resdata(:,:,:,mir%e_index)*real(1.D-4,rkind)) ))
+            call message("Max error in T", P_MAXVAL( abs(T - resdata(:,:,:,mir%T_index)) ))
+
+            call mix%get_transport_properties(p, T, Ys, mu, bulk, kappa, diff)
+            call prob_properties( resdata(:,:,:,mir%rho_index), resdata(:,:,:,mir%p_index), &
+                                  resdata(:,:,:,  mir%T_index), Ys, &
+                                  mu_o, kappa_o, diff_o)
+            bulk_o = zero
+
+            call message("Max error in mu", P_MAXVAL( abs(mu - mu_o*real(1.D-1,rkind)) ))
+
+            call message("Max error in bulk", P_MAXVAL( abs(bulk - bulk_o*real(1.D-1,rkind)) ))
+            call message("Max error in kappa", P_MAXVAL( abs(kappa - kappa_o*real(1.D-5,rkind)) ))
+
+            tmp = abs(diff(:,:,:,1) - diff_o(:,:,:,1)*real(1.D-4,rkind))
+            where ( Ys(:,:,:,1) > one - real(1.D-5,rkind) )
+                tmp = zero
+            end where
+            call message("Max error in diff(1)", P_MAXVAL(tmp))
+
+            tmp = abs(diff(:,:,:,2) - diff_o(:,:,:,2)*real(1.D-4,rkind))
+            where ( Ys(:,:,:,2) > one - real(1.D-5,rkind) )
+                tmp = zero
+            end where
+            call message("Max error in diff(2)", P_MAXVAL(tmp))
+
+            ! call viz%start_viz(tsim)
+            ! call viz%write_variable(rho , 'rho' ) 
+            ! call viz%write_variable(u   , 'u') 
+            ! call viz%write_variable(v   , 'v') 
+            ! call viz%write_variable(w   , 'w') 
+            ! call viz%write_variable(p   , 'p') 
+
+            ! call viz%write_variable(Ys(:,:,:,1), 'Ys_1') 
+            ! call viz%write_variable(Ys(:,:,:,2), 'Ys_2') 
+
+            ! call viz%write_variable(e, 'e') 
+            ! call viz%write_variable(resdata(:,:,:,mir%e_index)*real(1.D-4,rkind), 'e_res') 
+
+            ! call viz%write_variable(T, 'T') 
+            ! call viz%write_variable(resdata(:,:,:,mir%T_index), 'T_res') 
+
+            ! call viz%write_variable(mu, 'mu') 
+            ! call viz%write_variable(mu_o*real(1.D-1,rkind), 'mu_res') 
+
+            ! call viz%write_variable(kappa, 'kappa') 
+            ! call viz%write_variable(kappa_o*real(1.D-5,rkind), 'kappa_res') 
+
+            ! call viz%write_variable(diff(:,:,:,1), 'diff_1') 
+            ! call viz%write_variable(diff_o(:,:,:,1)*real(1.D-4,rkind), 'diff_res_1') 
+
+            ! call viz%write_variable(diff(:,:,:,2), 'diff_2') 
+            ! call viz%write_variable(diff_o(:,:,:,2)*real(1.D-4,rkind), 'diff_res_2') 
+
+            ! call viz%end_viz()
+
+            ! Deallocate temporary arrays and destroy miranda_restart object
+            deallocate( resmesh )
+            deallocate( resdata )
+            call mir%destroy()
+            ! call viz%destroy()
+        else
+            rho = one
+            u   = zero
+            v   = zero
+            w   = zero
+            p   = one
+
+            Ys(:,:,:,1)  = one
+            Ys(:,:,:,2)  = zero
         end if
-        if ( nancheck(u) ) then
-            print '(A)', "NaN found in u"
-        end if
-        if ( nancheck(v) ) then
-            print '(A)', "NaN found in v"
-        end if
-        if ( nancheck(w) ) then
-            print '(A)', "NaN found in w"
-        end if
-        if ( nancheck(p) ) then
-            print '(A)', "NaN found in p"
-        end if
-        if ( nancheck(Ys,i,j,k,l) ) then
-            print '(A,4(I0.0,A))', "NaN found at Ys(", i, ",", j, ",", k, ",", l, ")"
-        end if
-        ! Initialize viz object
-        ! call viz%init( mpi_comm_world, decomp, 'y', '.', 'init_test', &
-        !                reduce_precision=.true., read_only=.false., jump_to_last=.true.)
-        ! call viz%write_coords(mesh)
-
-        ! Initialize mygfil
-        call mygfil%init(                           decomp, &
-                          periodicx,  periodicy, periodicz, &
-                         "gaussian", "gaussian", "gaussian" )
-
-        ! Check for consistency
-        call mix%update(Ys)
-        call mix%get_e_from_p(rho,p,e)
-        call mix%get_T(e, T)
-
-        call message("Max error in e", P_MAXVAL( abs(e - resdata(:,:,:,mir%e_index)*real(1.D-4,rkind)) ))
-        call message("Max error in T", P_MAXVAL( abs(T - resdata(:,:,:,mir%T_index)) ))
-
-        call mix%get_transport_properties(p, T, Ys, mu, bulk, kappa, diff)
-        call prob_properties( resdata(:,:,:,mir%rho_index), resdata(:,:,:,mir%p_index), &
-                              resdata(:,:,:,  mir%T_index), Ys, &
-                              mu_o, kappa_o, diff_o)
-        bulk_o = zero
-
-        call message("Max error in mu", P_MAXVAL( abs(mu - mu_o*real(1.D-1,rkind)) ))
-
-        call message("Max error in bulk", P_MAXVAL( abs(bulk - bulk_o*real(1.D-1,rkind)) ))
-        call message("Max error in kappa", P_MAXVAL( abs(kappa - kappa_o*real(1.D-5,rkind)) ))
-
-        tmp = abs(diff(:,:,:,1) - diff_o(:,:,:,1)*real(1.D-4,rkind))
-        where ( Ys(:,:,:,1) > one - real(1.D-5,rkind) )
-            tmp = zero
-        end where
-        call message("Max error in diff(1)", P_MAXVAL(tmp))
-
-        tmp = abs(diff(:,:,:,2) - diff_o(:,:,:,2)*real(1.D-4,rkind))
-        where ( Ys(:,:,:,2) > one - real(1.D-5,rkind) )
-            tmp = zero
-        end where
-        call message("Max error in diff(2)", P_MAXVAL(tmp))
-
-        ! call viz%start_viz(tsim)
-        ! call viz%write_variable(rho , 'rho' ) 
-        ! call viz%write_variable(u   , 'u') 
-        ! call viz%write_variable(v   , 'v') 
-        ! call viz%write_variable(w   , 'w') 
-        ! call viz%write_variable(p   , 'p') 
-
-        ! call viz%write_variable(Ys(:,:,:,1), 'Ys_1') 
-        ! call viz%write_variable(Ys(:,:,:,2), 'Ys_2') 
-
-        ! call viz%write_variable(e, 'e') 
-        ! call viz%write_variable(resdata(:,:,:,mir%e_index)*real(1.D-4,rkind), 'e_res') 
-
-        ! call viz%write_variable(T, 'T') 
-        ! call viz%write_variable(resdata(:,:,:,mir%T_index), 'T_res') 
-
-        ! call viz%write_variable(mu, 'mu') 
-        ! call viz%write_variable(mu_o*real(1.D-1,rkind), 'mu_res') 
-
-        ! call viz%write_variable(kappa, 'kappa') 
-        ! call viz%write_variable(kappa_o*real(1.D-5,rkind), 'kappa_res') 
-
-        ! call viz%write_variable(diff(:,:,:,1), 'diff_1') 
-        ! call viz%write_variable(diff_o(:,:,:,1)*real(1.D-4,rkind), 'diff_res_1') 
-
-        ! call viz%write_variable(diff(:,:,:,2), 'diff_2') 
-        ! call viz%write_variable(diff_o(:,:,:,2)*real(1.D-4,rkind), 'diff_res_2') 
-
-        ! call viz%end_viz()
-
-        ! Deallocate temporary arrays and destroy miranda_restart object
-        deallocate( resmesh )
-        deallocate( resdata )
-        call mir%destroy()
-        ! call viz%destroy()
 
     end associate
 
@@ -645,7 +657,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     end associate
 end subroutine
 
-subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
+subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
     use kind_parameters, only: rkind
     use decomp_2d,       only: decomp_info
     use MixtureEOSMod,    only: mixture
@@ -659,5 +671,6 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
+    real(rkind), dimension(:,:,:,:), optional, intent(inout) ::rhsg
 
 end subroutine

@@ -61,8 +61,8 @@ module CompressibleGrid
         type(io_hdf5), allocatable :: viz
         type(io_hdf5), allocatable :: restart
 
-        logical                      :: compute_tke_budget
-        type(tkeBudget), allocatable :: budget
+        logical         :: compute_tke_budget
+        type(tkeBudget) :: budget
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -91,7 +91,7 @@ module CompressibleGrid
 
         contains
             procedure          :: init
-            procedure          :: destroy
+            procedure          :: destroy_grid
             procedure          :: laplacian
             procedure          :: gradient 
             procedure          :: advance_RK45
@@ -432,16 +432,19 @@ contains
                 call GracefulExit("TKE budgets only supported for Z direction averaging. Sorry :(", 2083)
             end if
             
-            if (allocated(this%budget)) deallocate(this%budget)
-            allocate(this%budget , source=tkeBudget(this%decomp, this%der, this%mesh, this%dx, this%dy, this%dz, &
-                                                    [this%periodicx, this%periodicy, this%periodicz], this%outputdir, &
-                                                    this%x_bc, this%y_bc, this%z_bc, reduce_precision))
+            ! if (allocated(this%budget)) deallocate(this%budget)
+            ! allocate(this%budget , source=tkeBudget(this%decomp, this%der, this%mesh, this%dx, this%dy, this%dz, &
+            !                                         [this%periodicx, this%periodicy, this%periodicz], this%outputdir, &
+            !                                         this%x_bc, this%y_bc, this%z_bc, reduce_precision))
+            call this%budget%init(this%decomp, this%der, this%mesh, this%dx, this%dy, this%dz, &
+                                  [this%periodicx, this%periodicy, this%periodicz], this%outputdir, &
+                                  this%x_bc, this%y_bc, this%z_bc, reduce_precision)
         end if
 
     end subroutine
 
 
-    subroutine destroy(this)
+    subroutine destroy_grid(this)
         class(cgrid), intent(inout) :: this
 
         if (allocated(this%mesh)) deallocate(this%mesh) 
@@ -460,11 +463,12 @@ contains
         call destroy_buffs(this%ybuf)
         call destroy_buffs(this%zbuf)
 
+        call this%mix%destroy()
         if (allocated(this%mix)) deallocate(this%mix)
         
         if (allocated(this%Wcnsrv)) deallocate(this%Wcnsrv) 
         
-        if (allocated(this%budget)) deallocate(this%budget)
+        ! if (allocated(this%budget)) deallocate(this%budget)
 
         call this%viz%destroy()
         if (allocated(this%viz)) deallocate(this%viz)
@@ -737,6 +741,9 @@ contains
             end if
 
         end do
+
+        ! Write final restart file
+        call this%write_restart()
 
     end subroutine
 
@@ -1016,7 +1023,6 @@ contains
                              dwdx, dwdy, dwdz )
         end if
         
-
         ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
         call this%get_tau( duidxj )
         ! Now, associate the pointers to understand what's going on better
@@ -1647,9 +1653,13 @@ contains
 
     subroutine write_viz(this)
         use exits, only: message
+        use timer, only: tic, toc
         class(cgrid), intent(inout) :: this
         character(len=clen) :: charout
+        real(rkind) :: cputime
         integer :: i
+
+        call tic()
 
         ! Start visualization dump
         call this%viz%start_viz(this%tsim)
@@ -1658,7 +1668,7 @@ contains
         call message(charout)
 
         ! Write variables
-        call this%viz%write_variable(this%rho , 'rho' ) 
+        call this%viz%write_variable(this%rho , 'rho' )
         call this%viz%write_variable(this%u   , 'u'   )
         call this%viz%write_variable(this%v   , 'v'   )
         call this%viz%write_variable(this%w   , 'w'   )
@@ -1681,16 +1691,25 @@ contains
 
         ! End visualization dump
         call this%viz%end_viz()
+
+        call toc(cputime)
+        write(charout,'(A,ES11.3,A)') "Finished writing visualization dump in ", cputime, " seconds"
+        call message(charout)
+
     end subroutine
 
     subroutine write_restart(this)
         use exits, only: message
+        use timer, only: tic, toc
         class(cgrid), intent(inout) :: this
         character(len=clen) :: charout
+        real(rkind) :: cputime
         integer :: i
 
         ! Get updated conserved variables
         call this%get_conserved()
+
+        call tic()
 
         ! Start visualization dump
         call this%restart%start_viz(this%tsim)
@@ -1716,19 +1735,28 @@ contains
 
         ! End visualization dump
         call this%restart%end_viz()
+
+        call toc(cputime)
+        write(charout,'(A,ES11.3,A)') "Finished writing restart dump in ", cputime, " seconds"
+        call message(charout)
+
     end subroutine
 
     subroutine read_restart(this, vizcount)
         use exits, only: message
+        use timer, only: tic, toc
         class(cgrid), intent(inout) :: this
         integer,      intent(in)    :: vizcount
         character(len=clen) :: charout
+        real(rkind) :: cputime
         integer :: i
         integer, dimension(1) :: tmp_int
         real(rkind), dimension(1) :: tmp_real
 
         ! Start reading restart file
         call this%restart%start_reading(vizcount)
+
+        call tic()
 
         write(charout,'(A,A)') "Reading restart dump from ", adjustl(trim(this%restart%filename))
         call message(charout)
@@ -1750,11 +1778,18 @@ contains
         call this%restart%read_attribute(1, tmp_int, 'step')
         this%step = tmp_int(1)
 
+        ! Reset nsteps so that simulation runs for no. of steps in inputfile
+        if (this%nsteps > 0) this%nsteps = this%step + this%nsteps
+
         call this%restart%read_attribute(1, tmp_real, 'Time')
         this%tsim = tmp_real(1)
 
         ! End visualization dump
         call this%restart%end_reading()
+
+        call toc(cputime)
+        write(charout,'(A,ES11.3,A)') "Finished reading restart dump in ", cputime, " seconds"
+        call message(charout)
 
         ! Get primitive variables from conserved
         call this%get_primitive()

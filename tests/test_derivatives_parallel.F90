@@ -12,7 +12,7 @@ program test_derivatives_parallel
     type(derivatives) :: method1, method2, method3
     type(decomp_info) :: gp
 
-    integer :: nx = 128, ny = 128, nz = 128
+    integer :: nx = 256, ny = 256, nz = 256
     integer :: prow = 0, pcol = 0
     integer :: ierr, i, j, k
     real(rkind) :: maxerr, mymaxerr

@@ -90,6 +90,8 @@ contains
         integer :: error
         integer :: i
 
+        call mpi_comm_rank(comm, nrank, error)
+
         this%read_only = .true.
         if (present(read_only)) this%read_only = read_only
 
@@ -113,7 +115,6 @@ contains
         this%basename_prefix = adjustl(trim(filename_prefix))
         write(this%coordsfile, '(2A)') adjustl(trim(this%filename_prefix)), '_coords.h5'
 
-        call mpi_comm_rank(this%comm, nrank, error)
         if (nrank == 0) then
             this%master = .true.
         else
@@ -125,8 +126,8 @@ contains
         call mpi_barrier(mpi_comm_world, error)
 
         ! Initialize the HDF5 library and Fortran interfaces
-        call h5open_f(error)
-        if (error /= 0) call GracefulExit("Could not initialize HDF5 library and Fortran interfaces.",7356)
+        ! call h5open_f(error)
+        ! if (error /= 0) call GracefulExit("Could not initialize HDF5 library and Fortran interfaces.",7356)
 
         ! Setup file access property list with parallel I/O access.
         ! call h5pcreate_f(H5P_FILE_ACCESS_F, this%plist_id, error)
@@ -148,9 +149,11 @@ contains
 
         ! Jump to the next vizdump if some are already present
         ! If read_only, then jump to the last available vizdump
-        if ( (present(jump_to_last)) .and. (jump_to_last) ) then
-            this%vizcount = this%find_last_dump()
-            if (.not. this%read_only) this%vizcount = this%vizcount + 1
+        if (present(jump_to_last)) then
+            if (jump_to_last) then
+                this%vizcount = this%find_last_dump()
+                if (.not. this%read_only) this%vizcount = this%vizcount + 1
+            end if
         end if
 
         ! Create link creation property list and set it to allow creation of intermediate groups
@@ -208,7 +211,7 @@ contains
         this%offset = 0
         if (this%active) then
             do i=1,3
-                this%myblock_st(i) = 1 + max(0,this%subdomain_lo(i)-this%block_st(i))
+                this%myblock_st(i) = 1 + max(int(0, kind(this%subdomain_lo(i))),this%subdomain_lo(i)-this%block_st(i))
                 this%block_st(i) = this%block_st(i) + this%myblock_st(i) - 1
                 this%block_en(i) = min(this%subdomain_hi(i), this%block_en(i))
                 this%myblock_en(i) = this%block_en(i) - this%block_st(i) + this%myblock_st(i)
@@ -265,7 +268,7 @@ contains
         ! call h5fclose_f(this%file_id, error)
 
         ! Close Fortran interfaces and HDF5 library
-        call h5close_f(error)
+        ! call h5close_f(error)
     end subroutine
 
     subroutine write_dataset(this,field,dsetname)
@@ -487,6 +490,7 @@ contains
         integer(hid_t) :: atype_id  ! Attribute datatype identifier
         integer(hsize_t), dimension(1) :: adims   ! Attribute dimensions
         
+        arank = 1
         adims = [dims]
         atype_id = H5T_NATIVE_DOUBLE
 
@@ -644,7 +648,7 @@ contains
         write(grpname,'(A)') '/'
         ! call h5gcreate_f(this%file_id, adjustl(trim(grpname)), this%group_id, error)
         ! call h5gclose_f(this%group_id, error)
-        call this%write_attribute(1, [time], 'Time', grpname)
+        call this%write_attribute(1, [time], 'Time', trim(grpname))
 
         if (this%write_xdmf) then
             this%xdmf_filename = ''
@@ -687,7 +691,7 @@ contains
 
         ! write(dsetname,'(I4.4,A,A)') this%vizcount, '/', adjustl(trim(varname))
         write(dsetname,'(A)') adjustl(trim(varname))
-        call this%write_dataset(field, dsetname)
+        call this%write_dataset(field, trim(dsetname))
 
         if (this%write_xdmf) then
             if (this%master) then

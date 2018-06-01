@@ -111,7 +111,8 @@ contains
 
     end function
 
-    impure elemental subroutine destroy(this)
+    ! impure elemental subroutine destroy(this)
+    subroutine destroy(this)
         type(averaging), intent(inout) :: this
 
         if (allocated(this%buffer_x)) deallocate(this%buffer_x)

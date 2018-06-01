@@ -181,7 +181,7 @@ module IncompressibleGridWallM
 
         contains
             procedure          :: init
-            procedure          :: destroy
+            procedure          :: destroy_grid
             procedure          :: printDivergence 
             procedure          :: getMaxKE
             procedure          :: timeAdvance
@@ -1072,7 +1072,7 @@ contains
         end if 
     end subroutine 
 
-    subroutine destroy(this)
+    subroutine destroy_grid(this)
         class(igridWallM), intent(inout) :: this
        
         if (this%timeAvgFullFields) then

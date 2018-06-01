@@ -1,5 +1,6 @@
 program test_TKEBudget
     use mpi
+    use hdf5
     use decomp_2d,           only: nrank, decomp_info
     use kind_parameters,     only: rkind, clen
     use constants,           only: zero
@@ -29,14 +30,20 @@ program test_TKEBudget
     real(rkind), dimension(:,:,:),   allocatable :: tke_old, tke_prefilter
     real(rkind), dimension(:,:,:,:), allocatable :: tauij
 
-    integer :: ierr, step
+    integer :: ierr, error, step
 
     call MPI_Init(ierr)
 
+#ifndef __bgq__
     if( iargc() .LT. 1 ) then
         call GracefulExit("Usage: "//NEW_LINE('A')//"    mpiexec -n 8 ./test_TKEBudget <jobdir>", 1729)
     end if
+#endif
 
+
+    ! Initialize the HDF5 library and Fortran interfaces
+    call h5open_f(error)
+    if (error /= 0) call GracefulExit("Could not initialize HDF5 library and Fortran interfaces.",7356)
 
     call GETARG(1,jobdir)
     ! Initialize miranda_reader object
@@ -58,7 +65,7 @@ program test_TKEBudget
 
     ! Initialize budget object
     outputdir = "./outputs"
-    budget = tkeBudget(mir%gp, der, mir%mesh, mir%dx, mir%dy, mir%dz, [periodicx, periodicy, periodicz], outputdir, x_bc, y_bc, z_bc, .true.)
+    call budget%init(mir%gp, der, mir%mesh, mir%dx, mir%dy, mir%dz, [periodicx, periodicy, periodicz], outputdir, x_bc, y_bc, z_bc, .true.)
 
     allocate( tke_old      (mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) )
     allocate( tke_prefilter(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) )
@@ -81,6 +88,10 @@ program test_TKEBudget
     deallocate(   tauij )
 
     call mir%destroy()
+
+    ! Close Fortran interfaces and HDF5 library
+    call h5close_f(error)
+
     call MPI_Finalize(ierr)
 
 contains
