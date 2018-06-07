@@ -99,11 +99,11 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     real(rkind), intent(in) :: dx, dy, dz
     logical :: useWindTurbines = .TRUE. ! .FALSE. implies ALM
     real(rkind) :: xyzPads(6)
-    logical :: ADM = .TRUE. ! .FALSE. implies ALM
+    logical :: ADM = .TRUE., WriteTurbineForce  ! .FALSE. implies ALM
 
     integer :: i, ierr, ADM_Type = 2
 
-    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type
+    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, WriteTurbineForce
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
