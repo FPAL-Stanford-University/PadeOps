@@ -56,10 +56,22 @@ module turbineMod
         procedure :: getForceRHS 
         procedure :: reset_turbArray 
         !procedure :: dumpFullField
+        procedure :: link_pointers
 
     end type
 
 contains
+
+subroutine link_pointers(this,fxturb, fyturb, fzturb)
+    class(TurbineArray), intent(in), target :: this
+    real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: fxturb, fyturb, fzturb
+
+    fxturb => this%fx
+    fyturb => this%fy
+    fzturb => this%fz
+
+end subroutine 
+
 
 subroutine reset_turbArray(this)
     class(TurbineArray), intent(inout), target :: this
