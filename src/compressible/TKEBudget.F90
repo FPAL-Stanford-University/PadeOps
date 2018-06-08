@@ -68,8 +68,8 @@ contains
         logical, optional,               intent(in) :: reduce_precision
 
         logical :: reduce_precision_
-        integer, dimension(3) :: st
-        integer :: ierr
+        ! integer, dimension(3) :: st
+        ! integer :: ierr
 
         this%gp => gp
         this%der => der
@@ -454,12 +454,15 @@ contains
 
     end subroutine
 
-    subroutine tke_budget(this, rho, u, v, w, p, tauij, tke_old, tke_prefilter, tsim, dt)
-        class(tkeBudget),                                                                         intent(inout) :: this
-        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3)),         intent(in)    :: rho, u, v, w, p
-        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3),      6), intent(in)    :: tauij
-        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),   intent(in)    :: tke_old, tke_prefilter
-        real(rkind),                                                                              intent(in)    :: tsim, dt
+    subroutine tke_budget(this, rho, u, v, w, p, tauij, tke_old, tke_prefilter, tke_postfilter, tsim, dt)
+        use RKCoeffs, only: RK45_steps
+        class(tkeBudget),                                                                                  intent(inout) :: this
+        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3)),                  intent(in)    :: rho, u, v, w, p
+        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3),      6),          intent(in)    :: tauij
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),            intent(in)    :: tke_old
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),RK45_steps), intent(in)    :: tke_prefilter
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),RK45_steps), intent(in)    :: tke_postfilter
+        real(rkind),                                                                                       intent(in)    :: tsim, dt
 
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: ddt_tke
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: production
@@ -486,6 +489,7 @@ contains
         real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3))   :: tmp
 
         integer :: i
+        character(len=clen) :: varname
 
         ! Get density average
         call this%reynolds_avg(rho, rho_bar)
@@ -506,7 +510,7 @@ contains
         ddt_tke = (tke - tke_old)/dt
 
         ! Get numerical dissipation (from filtering)
-        dissipation_num = (tke_prefilter - tke)/dt
+        dissipation_num = (tke_prefilter(:,:,:,RK45_steps) - tke)/dt
 
         ! Get Reynolds stresses
         call this%get_reynolds_stress(rho, u_pprime, v_pprime, w_pprime, Rij)
@@ -547,6 +551,7 @@ contains
 
         ! Write out data to output file
         call this%viz%start_viz(tsim)
+        call this%viz%write_attribute(1, [dt], 'dt', '/')
 
         call this%viz%write_variable(rho_bar, 'rho_bar')
         call this%viz%write_variable(u_tilde, 'u_tilde')
@@ -554,7 +559,15 @@ contains
         call this%viz%write_variable(w_tilde, 'w_tilde')
         call this%viz%write_variable(p_bar,   'p_bar')
 
-        call this%viz%write_variable(tke, 'TKE')
+        call this%viz%write_variable(tke, 'tke')
+        call this%viz%write_variable(tke_old, 'tke_old')
+        do i=1,RK45_steps
+            write(varname, '(A,I1.1)') 'tke_prefilter_', i
+            call this%viz%write_variable(tke_prefilter(:,:,:,i), trim(varname))
+            write(varname, '(A,I1.1)') 'tke_postfilter_', i
+            call this%viz%write_variable(tke_postfilter(:,:,:,i), trim(varname))
+        end do
+
         call this%viz%write_variable(Rij(:,:,:,1), 'R_11')
         call this%viz%write_variable(Rij(:,:,:,2), 'R_12')
         call this%viz%write_variable(Rij(:,:,:,3), 'R_13')

@@ -559,6 +559,7 @@ contains
         use timer,      only: tic, toc
         use exits,      only: GracefulExit, message
         use reductions, only: P_MAXVAL, P_MINVAL
+        use RKCoeffs,   only: RK45_steps
         class(cgrid), target, intent(inout) :: this
 
         logical :: tcond, vizcond, stepcond
@@ -567,7 +568,8 @@ contains
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:,:), allocatable, target :: gradYs
         real(rkind), dimension(:,:,:,:), allocatable, target :: tauij
-        real(rkind), dimension(:,:,:), allocatable :: tke_old, tke_prefilter ! Temporary variable for tke dissipation
+        real(rkind), dimension(:,:,:),   allocatable :: tke_old ! Temporary variable for tke rate
+        real(rkind), dimension(:,:,:,:), allocatable :: tke_prefilter, tke_postfilter ! Temporary variable for tke dissipation
         real(rkind), dimension(:,:,:),   pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
         real(rkind) :: dt_tke
@@ -618,11 +620,13 @@ contains
             call this%write_viz()
 
             if (this%compute_tke_budget) then
-                allocate( tke_old      (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3)) )
-                allocate( tke_prefilter(this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3)) )
+                allocate( tke_old       (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3)) )
+                allocate( tke_prefilter (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),RK45_steps) )
+                allocate( tke_postfilter(this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),RK45_steps) )
 
                 tke_old = zero
                 tke_prefilter = zero
+                tke_postfilter = zero
 
                 ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
                 call this%get_tau( duidxj )
@@ -637,9 +641,12 @@ contains
 
                 dt_tke = one
                 call this%budget%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
-                                            tke_old, tke_prefilter, this%tsim, dt_tke)
+                                            tke_old, tke_prefilter, tke_postfilter, this%tsim, dt_tke)
                 deallocate( tauij  )
 
+                if ( allocated(tke_old) )        deallocate( tke_old )
+                if ( allocated(tke_prefilter) )  deallocate( tke_prefilter )
+                if ( allocated(tke_postfilter) ) deallocate( tke_postfilter )
             end if
 
         end if
@@ -687,6 +694,7 @@ contains
             call toc(cputime)
             
             call message(1,"Time",this%tsim)
+            call message(2,"Step",this%step)
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
@@ -758,8 +766,9 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: Qtmp ! Temporary variable for RK45
 
         real(rkind), dimension(:,:,:,:), target, allocatable :: duidxj, tauij, gradYs
-        real(rkind), dimension(:,:,:), allocatable :: tke_old, tke_prefilter ! Temporary variable for tke dissipation
-        real(rkind)                                :: dt_tke
+        real(rkind), dimension(:,:,:),   allocatable :: tke_old ! Temporary variable for tke rate
+        real(rkind), dimension(:,:,:,:), allocatable :: tke_prefilter, tke_postfilter ! Temporary variable for tke dissipation
+        real(rkind)                                  :: dt_tke
 
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
@@ -775,12 +784,17 @@ contains
         end if
 
         if ( (vizcond) .and. (this%compute_tke_budget) ) then
-            allocate( tke_old      (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3)) )
-            allocate( tke_prefilter(this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3)) )
+            allocate( tke_old       (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3)) )
+            allocate( tke_prefilter (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),RK45_steps) )
+            allocate( tke_postfilter(this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),RK45_steps) )
         end if
 
         Qtmp = zero
         Qtmpt = zero
+
+        if ((vizcond) .and. (this%compute_tke_budget)) then
+            call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_old)
+        end if
 
         do isub = 1,RK45_steps
             call this%get_conserved()
@@ -798,9 +812,10 @@ contains
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
-            if ( (vizcond) .and. (this%compute_tke_budget) .and. (isub == RK45_steps) ) then
+            ! if ( (vizcond) .and. (this%compute_tke_budget) .and. (isub == RK45_steps) ) then
+            if ( (vizcond) .and. (this%compute_tke_budget) ) then
                 call this%get_primitive()
-                call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_prefilter)
+                call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_prefilter(:,:,:,isub))
                 dt_tke = RK45_B(isub)*Qtmpt
             end if
 
@@ -819,9 +834,10 @@ contains
 
             ! Compute TKE budgets
             if ((vizcond) .and. (this%compute_tke_budget)) then
-                if (isub == RK45_steps-1) then
-                    call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_old)
-                end if
+                ! if (isub == RK45_steps-1) then
+                !     call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_old)
+                ! end if
+                call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_postfilter(:,:,:,isub))
 
                 if (isub == RK45_steps)then
                     allocate( duidxj(this%nxp,this%nyp,this%nzp,9) )
@@ -866,8 +882,10 @@ contains
                     tauij(:,:,:,6) = duidxj(:,:,:,tauzzidx)
                     deallocate( duidxj )
 
+                    ! call this%budget%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
+                    !                             tke_old, tke_prefilter, this%tsim, dt_tke)
                     call this%budget%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
-                                                tke_old, tke_prefilter, this%tsim, dt_tke)
+                                                tke_old, tke_prefilter, tke_postfilter, this%tsim, this%dt)
                     deallocate( tauij  )
 
                 end if
@@ -878,8 +896,9 @@ contains
         !this%tsim = this%tsim + this%dt
         this%step = this%step + 1
             
-        if ( allocated(tke_old) )       deallocate( tke_old )
-        if ( allocated(tke_prefilter) ) deallocate( tke_prefilter )
+        if ( allocated(tke_old) )        deallocate( tke_old )
+        if ( allocated(tke_prefilter) )  deallocate( tke_prefilter )
+        if ( allocated(tke_postfilter) ) deallocate( tke_postfilter )
     end subroutine
 
     subroutine get_dt(this,stability)

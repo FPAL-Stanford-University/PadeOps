@@ -375,12 +375,12 @@ contains
     subroutine init_random_seed()
         ! Taken from GNU 
         use iso_fortran_env, only: int64
-        #ifdef __INTEL_COMPILER
+#ifdef __INTEL_COMPILER
         use ifport
-        #endif
-        #ifdef __bgq__
+#endif
+#ifdef __bgq__
         use xlf_posix_bindings
-        #endif
+#endif
         implicit none
         integer, allocatable :: iseed(:)
         integer :: i, n, un, istat, dt(8), pid
