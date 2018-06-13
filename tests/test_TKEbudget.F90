@@ -1,13 +1,14 @@
 program test_TKEBudget
     use mpi
     use hdf5
-    use decomp_2d,           only: nrank, decomp_info
-    use kind_parameters,     only: rkind, clen
-    use constants,           only: zero
-    use miranda_reader_mod,  only: miranda_reader
-    use TKEBudgetMod,        only: tkeBudget
-    use DerivativesMod,      only: derivatives
-    use exits,               only: message, GracefulExit
+    use decomp_2d,          only: nrank, decomp_info
+    use kind_parameters,    only: rkind, clen
+    use constants,          only: zero
+    use miranda_reader_mod, only: miranda_reader
+    use TKEBudgetMod,       only: tkeBudget
+    use DerivativesMod,     only: derivatives
+    use exits,              only: message, GracefulExit
+    use RKCoeffs,           only: RK45_steps
 
     implicit none
 
@@ -27,7 +28,8 @@ program test_TKEBudget
 
     real(rkind) :: dt = real(1.0D-4, rkind)
 
-    real(rkind), dimension(:,:,:),   allocatable :: tke_old, tke_prefilter
+    real(rkind), dimension(:,:,:),   allocatable :: tke_old
+    real(rkind), dimension(:,:,:,:), allocatable :: tke_prefilter, tke_postfilter
     real(rkind), dimension(:,:,:,:), allocatable :: tauij
 
     integer :: ierr, error, step
@@ -67,12 +69,14 @@ program test_TKEBudget
     outputdir = "./outputs"
     call budget%init(mir%gp, der, mir%mesh, mir%dx, mir%dy, mir%dz, [periodicx, periodicy, periodicz], outputdir, x_bc, y_bc, z_bc, .true.)
 
-    allocate( tke_old      (mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) )
-    allocate( tke_prefilter(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) )
-    allocate(         tauij(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 6) )
+    allocate( tke_old       (mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) )
+    allocate( tke_prefilter (mir%gp%ysz(1), mir%gp%ysz(2),mir%gp%ysz(3),RK45_steps) )
+    allocate( tke_postfilter(mir%gp%ysz(1), mir%gp%ysz(2),mir%gp%ysz(3),RK45_steps) )
+    allocate(          tauij(mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3), 6) )
 
     tke_old = zero
     tke_prefilter = zero
+    tke_postfilter = zero
 
     ! Read in data for time step 0
     do step = 0, mir%nsteps-1
@@ -80,12 +84,13 @@ program test_TKEBudget
         call mir%read_data(step)
 
         call get_tauij(mir%gp, der, mir%u, mir%v, mir%w, mir%mu, mir%bulk, tauij, x_bc, y_bc, z_bc)
-        call budget%tke_budget(mir%rho, mir%u, mir%v, mir%w, mir%p, tauij, tke_old, tke_prefilter, step*dt, dt)
+        call budget%tke_budget(mir%rho, mir%u, mir%v, mir%w, mir%p, tauij, tke_old, tke_prefilter, tke_postfilter, step*dt, dt)
     end do
 
     deallocate( tke_old )
     deallocate( tke_prefilter )
-    deallocate(   tauij )
+    deallocate( tke_postfilter )
+    deallocate( tauij )
 
     call mir%destroy()
 

@@ -400,7 +400,7 @@ contains
         allocate(this%restart)
         call this%restart%init( mpi_comm_world, this%decomp, 'y', this%outputdir, 'restart', &
                                 reduce_precision=.false., write_xdmf=.false., read_only=.true., jump_to_last=.true.)
-        if (this%restart%vizcount > 0) call this%read_restart(this%restart%vizcount)
+        if (this%restart%vizcount >= 0) call this%read_restart(this%restart%vizcount)
         call this%restart%destroy()
         call this%restart%init( mpi_comm_world, this%decomp, 'y', this%outputdir, 'restart', &
                                 reduce_precision=.false., write_xdmf=.false., read_only=.false., jump_to_last=.true.)
@@ -438,7 +438,7 @@ contains
             !                                         this%x_bc, this%y_bc, this%z_bc, reduce_precision))
             call this%budget%init(this%decomp, this%der, this%mesh, this%dx, this%dy, this%dz, &
                                   [this%periodicx, this%periodicy, this%periodicz], this%outputdir, &
-                                  this%x_bc, this%y_bc, this%z_bc, reduce_precision)
+                                  this%x_bc, this%y_bc, this%z_bc, reduce_precision=.false.)
         end if
 
     end subroutine

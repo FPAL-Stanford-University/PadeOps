@@ -510,7 +510,7 @@ contains
         ddt_tke = (tke - tke_old)/dt
 
         ! Get numerical dissipation (from filtering)
-        dissipation_num = (tke_prefilter(:,:,:,RK45_steps) - tke)/dt
+        dissipation_num = sum(tke_prefilter - tke_postfilter, 4)/dt
 
         ! Get Reynolds stresses
         call this%get_reynolds_stress(rho, u_pprime, v_pprime, w_pprime, Rij)
