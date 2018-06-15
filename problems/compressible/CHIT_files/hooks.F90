@@ -288,7 +288,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
+subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use kind_parameters,  only: rkind
     use constants,        only: half
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
@@ -301,7 +301,8 @@ subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
-    type(mixture),                   intent(in)    :: mix
+    type(mixture),                   intent(in) :: mix
+    integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields

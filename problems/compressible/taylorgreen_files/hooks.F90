@@ -114,6 +114,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     character(len=clen) :: outputfile, str
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tke, enstrophy
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),3) :: vorticity
+    real(rkind) :: tke_mean, enstrophy_mean
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -133,13 +134,23 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
         if (vizcount == 0) then
             tke0 = P_MEAN( tke )
             enstrophy0 = P_MEAN( vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2 )
-            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-            write(outputunit,'(3A26)') "Time", "TKE", "Enstrophy"
+            if (nrank == 0) then
+                open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
+                write(outputunit,'(3A26)') "Time", "TKE", "Enstrophy"
+            end if
         else
-            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
+            if (nrank == 0) then
+                open(unit=outputunit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
+            end if
         end if
-        write(outputunit,'(3ES26.16)') tsim, P_MEAN(tke)/tke0, P_MEAN(enstrophy)/enstrophy0
-        close(outputunit)
+
+
+        tke_mean = P_MEAN(tke)
+        enstrophy_mean = P_MEAN(enstrophy)
+        if (nrank == 0) then
+            write(outputunit,'(3ES26.16)') tsim, tke_mean/tke0, enstrophy_mean/enstrophy0
+            close(outputunit)
+        end if
         
         ! write(str,'(I4.4,A,I4.4,A,I6.6)') decomp%ysz(2), "_", vizcount, "_", nrank
         ! write(outputfile,'(2A)') trim(outputdir),"/taylorgreen_"//trim(str)//".dat"
@@ -187,7 +198,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
+subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use kind_parameters,  only: rkind
     use constants,        only: half
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
@@ -200,7 +211,8 @@ subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
-    type(mixture),                   intent(in)    :: mix
+    type(mixture),                   intent(in) :: mix
+    integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
@@ -224,7 +236,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
     end associate
 end subroutine
 
-subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
+subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
     use kind_parameters, only: rkind
     use decomp_2d,       only: decomp_info
     use MixtureEOSMod,   only: mixture
@@ -238,5 +250,6 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
+    real(rkind), dimension(:,:,:,:), optional, intent(inout) ::rhsg
 
 end subroutine
