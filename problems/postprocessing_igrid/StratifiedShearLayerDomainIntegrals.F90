@@ -15,7 +15,7 @@ program StratifiedShearLayerDomainIntegrals
    type(igrid_ops) :: ops
    character(len=clen) ::  inputdir, outputdir
    character(len=clen) :: inputfile
-   real(rkind) :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0
+   real(rkind) :: Lx = 26.d0, Ly = 26.d0, Lz =12.d0
    real(rkind), dimension(10000) :: P, B, D, Dv, Dsgs, time, IEL, MKE, TKE 
    integer :: idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 1
    logical :: isZPeriodic = .false. 

@@ -1,4 +1,4 @@
-program StratifiedShearLayerTurbStats
+program EkmanLayerDNSTurbStats 
    use kind_parameters, only: rkind, clen
    use igrid_Operators, only: igrid_ops
    use constants, only: pi, two
@@ -13,13 +13,13 @@ program StratifiedShearLayerTurbStats
    real(rkind), dimension(:,:,:), allocatable :: dvdx, dvdy, dvdz
    real(rkind), dimension(:,:,:), allocatable :: dwdx, dwdy, dwdz
    real(rkind), dimension(:,:,:), allocatable :: u, v, w, ufluct, vfluct, T,  Tfluct
-   real(rkind) :: dx, dy, dz, Rib = 0.05d0, Pr = 1.d0, Tref = 100.d0 
+   real(rkind) :: dx, dy, dz, Rib = 0.0d0, Pr = 1.d0, Tref = 100.d0 
    integer :: nx, ny, nz, RunID, TIDX
    type(igrid_ops) :: ops
    character(len=clen) ::  inputdir, outputdir
    character(len=clen) :: inputfile
-   real(rkind) :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0
-   integer :: idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 1
+   real(rkind) :: Lx = 26.d0, Ly = 26.d0, Lz = 24.d0
+   integer :: idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 2
    logical :: isZPeriodic = .false. 
    real(rkind), dimension(:,:), allocatable :: Nsq, Ssq, R11, R12, R13, R22, R23, R33, TT, G11, G12, G13, G22, G23, G33 
    real(rkind), dimension(:,:), allocatable :: v11, v12, v13, v22, v23, v33, d11, d12, d13, d22, d23, d33, umn_set, Tmn_set, wT, uT, vT
@@ -37,13 +37,14 @@ program StratifiedShearLayerTurbStats
    read(unit=99, NML=INPUT)
    close(unit=99)
 
-   dx =     Lx/real(nx,rkind) 
-   dy =     Ly/real(ny,rkind) 
-   dz = two*Lz/real(nz,rkind)
+   dx = Lx/real(nx,rkind) 
+   dy = Ly/real(ny,rkind) 
+   dz = Lz/real(nz,rkind)
 
    ! Initialize the operator class
    call ops%init(nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isZPeriodic, NUmericalSchemeVert)
 
+   call message(0, "flag 0")
    ! Allocate all the needed memory 
    call ops%allocate3DField(u)
    call ops%allocate3DField(ufluct)
@@ -130,21 +131,21 @@ program StratifiedShearLayerTurbStats
       call ops%ReadField3D(u,"uVel",TIDX)
       call ops%ReadField3D(v,"vVel",TIDX)
       call ops%ReadField3D(w,"wVel",TIDX)
-      call ops%ReadField3D(T,"potT",TIDX)
+      !call ops%ReadField3D(T,"potT",TIDX)
       call message(0, "Read simulation data at time:", times(idx))
 
-      T = Rib*(T - Tref)  ! Rescale Potential temperature to buoyancy variable: b 
+      !T = Rib*(T - Tref)  ! Rescale Potential temperature to buoyancy variable: b 
       
       ! STEP 0: Compute means, mean gradients and fluctuations
-      call ops%TakeMean_xy(u,umn_set(:,idx))
-      call ops%TakeMean_xy(T,Tmn_set(:,idx))
-      
-      call ops%ddz_1d(umn_set(:,idx),Ssq(:,idx))
-      call ops%ddz_1d(Tmn_set(:,idx),Nsq(:,idx))
+      !call ops%TakeMean_xy(u,umn_set(:,idx))
+      !call ops%TakeMean_xy(T,Tmn_set(:,idx))
+      !
+      !call ops%ddz_1d(umn_set(:,idx),Ssq(:,idx))
+      !call ops%ddz_1d(Tmn_set(:,idx),Nsq(:,idx))
 
       call ops%getFluct_from_MeanZ(v,vfluct)
       call ops%getFluct_from_MeanZ(u,ufluct)
-      call ops%getFluct_from_MeanZ(T,Tfluct)
+      !call ops%getFluct_from_MeanZ(T,Tfluct)
 
       ! STEP 1: Compute correlations
       buff2 = ufluct*ufluct
@@ -159,30 +160,7 @@ program StratifiedShearLayerTurbStats
       call ops%TakeMean_xy(buff2,R23(:,idx))
       buff2 = w*w
       call ops%TakeMean_xy(buff2,R33(:,idx))
-      buff2 = Tfluct*Tfluct
-      call ops%TakeMean_xy(buff2,TT(:,idx))
-      buff2 = ufluct*Tfluct
-      call ops%TakeMean_xy(buff2,uT(:,idx))
-      buff2 = vfluct*Tfluct
-      call ops%TakeMean_xy(buff2,vT(:,idx))
-      buff2 = w*Tfluct
-      call ops%TakeMean_xy(buff2,wT(:,idx))
-
-      ! STEP 2: Compute Temperature gradient correlations 
-      call ops%GetGradient(T, buff1, buff2, buff3, 1, 1)
-      buff4 = buff1*buff1
-      call ops%TakeMean_xy(buff4,G11(:,idx))
-      buff4 = buff1*buff2
-      call ops%TakeMean_xy(buff4,G12(:,idx))
-      buff4 = buff1*buff3
-      call ops%TakeMean_xy(buff4,G13(:,idx))
-      buff4 = buff2*buff2
-      call ops%TakeMean_xy(buff4,G22(:,idx))
-      buff4 = buff2*buff3
-      call ops%TakeMean_xy(buff4,G23(:,idx))
-      buff4 = buff3*buff3
-      call ops%TakeMean_xy(buff4,G33(:,idx))
-
+      
       ! STEP 3: Compute velocity gradients
       call ops%GetGradient(ufluct, dudx, dudy, dudz, 1, 1)
       call ops%GetGradient(vfluct, dvdx, dvdy, dvdz, 1, 1)
@@ -235,10 +213,10 @@ program StratifiedShearLayerTurbStats
       call ops%WriteASCII_2D(R23, "R23Z")
       call ops%WriteASCII_2D(R33, "R33Z")
       
-      call ops%WriteASCII_2D(TT, "TTmZ")
-      call ops%WriteASCII_2D(uT, "uTmZ")
-      call ops%WriteASCII_2D(vT, "vTmZ")
-      call ops%WriteASCII_2D(wT, "wTmZ")
+      !call ops%WriteASCII_2D(TT, "TTmZ")
+      !call ops%WriteASCII_2D(uT, "uTmZ")
+      !call ops%WriteASCII_2D(vT, "vTmZ")
+      !call ops%WriteASCII_2D(wT, "wTmZ")
 
       call ops%WriteASCII_2D(G11, "G11Z")
       call ops%WriteASCII_2D(G12, "G12Z")

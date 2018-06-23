@@ -486,7 +486,7 @@ subroutine WriteASCII_2D(this, field, flabel)
    use basic_io, only: write_2d_ascii 
    class(igrid_ops), intent(inout) :: this
    real(rkind), dimension(:,:), intent(in) :: field
-   character(len=4), intent(in) :: flabel
+   character(len=5), intent(in) :: flabel
    character(len=clen) :: tempname, fname
    
    write(tempname,"(A3,I2.2,A1,A4,A4)") "Run",this%runID, "_",flabel,".stt"

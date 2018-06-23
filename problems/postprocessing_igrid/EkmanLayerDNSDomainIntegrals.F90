@@ -1,4 +1,4 @@
-program StratifiedShearLayerDomainIntegrals
+program EkmanLayerDNSDomainIntegrals
    use kind_parameters, only: rkind, clen
    use igrid_Operators, only: igrid_ops
    use constants, only: pi, two
@@ -9,14 +9,14 @@ program StratifiedShearLayerDomainIntegrals
    implicit none
 
    real(rkind), dimension(:,:,:), allocatable :: buff2, buff3, buff4
-   real(rkind), dimension(:,:,:), allocatable :: u, v, w, ufluct, vfluct, T, Tfluct
-   real(rkind) :: dx, dy, dz, Re, Rib, Pr = 1.d0, Tref = 100.d0 
+   real(rkind), dimension(:,:,:), allocatable :: u, v, w, ufluct, vfluct, T, nuSGS, Tfluct
+   real(rkind) :: dx, dy, dz, Re = 400.d0, Rib = 0.d0, Pr = 1.d0, Tref = 100.d0 
    integer :: nx, ny, nz, RunID, TIDX
    type(igrid_ops) :: ops
    character(len=clen) ::  inputdir, outputdir
    character(len=clen) :: inputfile
-   real(rkind) :: Lx, Ly, Lz
-   real(rkind), dimension(10000) :: P, B, D, Dv, Dsgs, time, IEL, MKE, TKE 
+   real(rkind) :: Lx = 26.d0, Ly = 26.d0, Lz = 24.d0
+   real(rkind), dimension(10000) :: P, B, D, Dv, Dsgs, time, IEL, MKE, TKE, uu, vv, ww 
    integer :: idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 1
    logical :: isZPeriodic = .false. 
    real(rkind), dimension(:,:), allocatable :: data2write
@@ -33,9 +33,9 @@ program StratifiedShearLayerDomainIntegrals
    read(unit=99, NML=INPUT)
    close(unit=99)
 
-   dx =     Lx/real(nx,rkind) 
-   dy =     Ly/real(ny,rkind) 
-   dz = two*Lz/real(nz,rkind)
+   dx = Lx/real(nx,rkind) 
+   dy = Ly/real(ny,rkind) 
+   dz = Lz/real(nz,rkind)
 
    ! Initialize the operator class
    call ops%init(nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isZPeriodic, NUmericalSchemeVert)
@@ -46,6 +46,9 @@ program StratifiedShearLayerDomainIntegrals
    call ops%allocate3DField(v)
    call ops%allocate3DField(vfluct)
    call ops%allocate3DField(w)
+   call ops%allocate3DField(T)
+   call ops%allocate3DField(Tfluct)
+   call ops%allocate3DField(nuSGS)
    call ops%allocate3DField(buff2)
    call ops%allocate3DField(buff3)
    call ops%allocate3DField(buff4)
@@ -75,7 +78,7 @@ program StratifiedShearLayerDomainIntegrals
 
       time(idx) = ops%getSimTime(tidx)
       call message(0, "Read simulation data at time:", time(idx))
-  
+
       ! STEP 4: Compute the production
       call ops%getFluct_from_MeanZ(u,ufluct)
       buff3 = u - ufluct ! mean
@@ -94,10 +97,45 @@ program StratifiedShearLayerDomainIntegrals
       buff3 = -vfluct*w      ! u'w' (since wmean = 0)
       buff2 = buff2*buff3 
       P(idx) = P(idx) + ops%getVolumeIntegral(buff2)
-
+       
+      !!!!!!!!!!!!!! 
+      ! Re stress terms
+      buff2   = ufluct*ufluct
+      uu(idx) = ops%getVolumeIntegral(buff2)
+      buff2   = vfluct*vfluct
+      vv(idx) = ops%getVolumeIntegral(buff2)
+      buff2   = w*w
+      ww(idx) = ops%getVolumeIntegral(buff2)   
+      !!!!!!!!!!!!!!
+      
       ! STEP 5a: Compute TKE
-      buff2 = (ufluct*ufluct + vfluct*vfluct + w*w)
+      buff2   = (ufluct*ufluct + vfluct*vfluct + w*w)
       TKE(idx) = 0.5d0*ops%getVolumeIntegral(buff2)
+
+      !! STEP 6: Compute dissipation rate
+      call ops%ddx(ufluct,buff2)
+      buff3 = buff2*buff2
+      call ops%ddy(ufluct,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddz(ufluct,buff2, 1, 1)
+      buff3 = buff3 + buff2*buff2
+
+      call ops%ddx(vfluct,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddy(vfluct,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddz(vfluct,buff2, 1, 1)
+      buff3 = buff3 + buff2*buff2
+
+      call ops%ddx(w,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddy(w,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddz(w,buff2, -1, -1)  ! no-penetration BCs
+      buff3 = buff3 + buff2*buff2
+      
+      buff3 = (1.d0/Re)*buff3
+      Dv(idx) = ops%getVolumeIntegral(buff3)
 
       call toc()
 
@@ -109,12 +147,17 @@ program StratifiedShearLayerDomainIntegrals
    end do 
 
    idx = idx - 1
-   allocate(data2write(idx,2))
+   allocate(data2write(idx,7))
    data2write(:,1) = time(1:idx)
    data2write(:,2) = TKE(1:idx)
-
+   data2write(:,3) = P(1:idx)
+   data2write(:,4) = Dv(1:idx)
+   data2write(:,5) = uu(1:idx)
+   data2write(:,6) = vv(1:idx)
+   data2write(:,7) = ww(1:idx)
+   
    if (nrank == 0) then
-      call ops%WriteASCII_2D(data2write, "TKE")
+      call ops%WriteASCII_2D(data2write, "Davg")
    end if 
 
    call ops%destroy()
