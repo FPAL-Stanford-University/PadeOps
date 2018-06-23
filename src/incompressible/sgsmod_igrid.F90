@@ -81,6 +81,8 @@ module sgsmod_igrid
         real(rkind) :: camd_x, camd_y, camd_z
         logical :: useCglobal = .false. 
 
+        ! Buoyancy factor (needed for AMD model, set using the procedure:  setBuoyancyFact)
+        real(rkind) :: BuoyancyFact = 0.d0 
         contains 
             !! ALL INIT PROCEDURES
             procedure          :: init
@@ -144,9 +146,11 @@ module sgsmod_igrid
             procedure          :: getMax_DynSmagConst
             procedure          :: getMax_DynPrandtl
             procedure          :: usingDynProc
+            procedure          :: set_BuoyancyFactor
     end type 
 
 contains
+
 #include "sgs_models/init_destroy_sgs_igrid.F90"
 #include "sgs_models/smagorinsky.F90"
 #include "sgs_models/sigma.F90"
@@ -158,13 +162,14 @@ contains
 #include "sgs_models/accessors.F90"
 #include "sgs_models/scalar_bounding.F90"
 
-subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep)
+subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep, dTdx, dTdy, dTdz)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC, whatC, ThatC
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: uC, vC, wC
    logical, intent(in) :: newTimeStep
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdx, dTdy, dTdz
 
    if (this%useWallModel) call this%computeWallStress( uC, vC, uhatC, vhatC, ThatC) 
 
@@ -175,7 +180,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
       call get_Sij_from_duidxj(duidxjE, this%S_ij_E, this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)) 
       
       ! Step 1: Get nuSGS
-      call this%get_SGS_kernel(duidxjC, duidxjE)
+      call this%get_SGS_kernel(duidxjC, duidxjE, dTdx, dTdy, dTdz)
 
       ! Step 2: Dynamic Procedure ?
       if(newTimeStep .and. this%usingDynamicProcedureMomentum) then
@@ -206,7 +211,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
 end subroutine
 
 !subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep)
-subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep)
+subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep, dTdx, dTdy, dTdz)
    class(sgs_igrid), intent(inout), target :: this
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
@@ -219,8 +224,10 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, wh
    complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
    logical, intent(in) :: newTimeStep
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffy3, cbuffz1, cbuffz2
-   
-   call this%getTauSGS(duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep)
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdx, dTdy, dTdz
+
+
+   call this%getTauSGS(duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep, dTdx, dTdy, dTdz)
 
    cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
    cbuffz1 => this%cbuffzC(:,:,:,1); cbuffz2 => this%cbuffzE(:,:,:,1) 
@@ -270,7 +277,7 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, wh
 
 end subroutine
 
-subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, TurbPrandtlNum, Cy, lowbound, highbound)
+subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC, TurbPrandtlNum, Cy, lowbound, highbound)
    class(sgs_igrid), intent(inout), target :: this
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: Trhs
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC, dTdzC
@@ -279,6 +286,7 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffz1, cbuffz2
    real(rkind), intent(in), optional :: TurbPrandtlNum, Cy, lowbound, highbound
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
 
    cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
    cbuffz1 => this%cbuffzC(:,:,:,1); cbuffz2 => this%cbuffzE(:,:,:,1) 
@@ -290,7 +298,7 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
    if (present(highbound)) this%highbound = highbound
 
    ! First get qj's 
-   call this%getQjSGS(dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That)
+   call this%getQjSGS(dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
 
    ! ddx(q1)
    call this%spectC%fft(this%q1C, cbuffy1)
@@ -316,26 +324,33 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
 
 end subroutine
 
-subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That)
+subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
    class(sgs_igrid), intent(inout), target :: this
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC, dTdzC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdzE
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v, w, T
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
 
    if (this%useWallModel) call this%computeWall_PotTFlux()
 
    if (this%isEddyViscosityModel) then
-      if (this%UseDynamicProcedureScalar) then
-         if (this%UpdateScalarDynProc) then
-            call this%DoStandardDynamicProcedureScalar(u, v, w, T, That, dTdxC, dTdyC, dTdzC)     
-            this%UpdateScalarDynProc = .false. 
-         end if 
-         this%kappa_sgs_C = this%Dsgs*this%BetaDynProc_C
-         call this%interpolate_kappaSGS()
+      if (this%mid == 2) then ! AMD model has its own formula for kappaSGS
+          call get_amd_Dkernel(this%kappa_sgs_C,this%camd_x, this%camd_y, this%camd_z, duidxjC, &
+                            & dTdxC, dTdyC, dTdzC, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3))
+          call this%interpolate_kappaSGS(.true.)
       else
-         this%kappa_sgs_C = this%nu_sgs_C/this%Pr
-         this%kappa_sgs_E = this%nu_sgs_E/this%Pr
+          if (this%UseDynamicProcedureScalar) then
+             if (this%UpdateScalarDynProc) then
+                call this%DoStandardDynamicProcedureScalar(u, v, w, T, That, dTdxC, dTdyC, dTdzC)     
+                this%UpdateScalarDynProc = .false. 
+             end if 
+             this%kappa_sgs_C = this%Dsgs*this%BetaDynProc_C
+             call this%interpolate_kappaSGS(.true.)
+          else
+             this%kappa_sgs_C = this%nu_sgs_C/this%Pr
+             this%kappa_sgs_E = this%nu_sgs_E/this%Pr
+          end if 
       end if 
 
       this%q1C = -this%kappa_sgs_C*dTdxC

@@ -1111,7 +1111,7 @@ pure function getApproxPoincareConstant(this) result(const)
    case (fourierColl)
       const = 1.d0/sqrt(12.d0)
    case (cd06)
-      const = 1.d0/sqrt(10.d0)
+      const = 1.d0/sqrt(8.d0)
    case (fd02)
       const = 1.d0/sqrt(3.d0)
    end select 

@@ -34,10 +34,11 @@ subroutine allocateMemory_EddyViscosity(this)
   end if
 end subroutine
 
-subroutine get_SGS_kernel(this,duidxjC, duidxjE)
+subroutine get_SGS_kernel(this,duidxjC, duidxjE, dTdx, dTdy, dTdz)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
+   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdx, dTdy, dTdz
 
    select case(this%mid) 
    case (0)
@@ -58,12 +59,20 @@ subroutine get_SGS_kernel(this,duidxjC, duidxjE)
       end if
    case (2)
       ! AMD 
+      if (this%isStratified) then
+          call this%spectC%fft(dTdz,this%cbuffyC(:,:,:,1))
+          if (this%spectE%carryingZeroK) then
+              this%cbuffyC(1,1,:,1) = cmplx(zero,zero,rkind)
+          end if 
+          call this%spectC%ifft(this%cbuffyC(:,:,:,1),this%rbuffxC(:,:,:,1))
+      end if 
       call get_amd_kernel(this%nu_sgs_C, this%camd_x, this%camd_y, this%camd_z, duidxjC, this%S_ij_C, &
-                                 this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3))
+                                 dTdx, dTdy, this%rbuffxC(:,:,:,1), this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3), this%isStratified, this%BuoyancyFact)
       
       if (this%explicitCalcEdgeEddyViscosity) then
-         call get_amd_kernel(this%nu_sgs_E, this%camd_x, this%camd_y, this%camd_z, duidxjE, this%S_ij_E, &
-                                 this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3))
+          !call get_amd_kernel(this%nu_sgs_E, this%camd_x, this%camd_y, this%camd_z, duidxjE, this%S_ij_E, &
+          !                       this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3))
+          call this%interpolate_eddy_viscosity(.true.)   ! Explicit calculation not supported at the edges
       end if
    end select
 
@@ -117,15 +126,21 @@ subroutine interpolate_eddy_viscosity(this,checknegative)
 end subroutine
 
 
-subroutine interpolate_kappaSGS(this)
+subroutine interpolate_kappaSGS(this, checknegative)
   class(sgs_igrid), intent(inout) :: this 
+  logical, intent(in) :: checknegative
 
   call transpose_x_to_y(this%kappa_sgs_C,this%rbuffyC(:,:,:,1), this%gpC)
   call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
   call this%PadeDer%interpz_C2E(this%rbuffzC(:,:,:,1), this%rbuffzE(:,:,:,1),0,0)
   call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
   call transpose_y_to_x(this%rbuffyE(:,:,:,1), this%kappa_sgs_E, this%gpE)
-
+    
+  if (checknegative) then
+   where (this%kappa_sgs_E < 0.d0) 
+      this%kappa_sgs_E = 0.d0
+   end where
+  end if 
 end subroutine
 
 

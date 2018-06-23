@@ -10,13 +10,13 @@ module temporalHook
     implicit none 
 
     integer :: nt_print2screen = 1
-    real(rkind) ::  maxDiv, DomMaxDiv
     integer :: ierr 
 
 contains
 
     subroutine doTemporalStuff(igp)
         class(igrid), intent(inout) :: igp 
+        real(rkind) ::  maxDiv, DomMaxDiv, maxnusgs, maxkappasgs
       
         if (mod(igp%step,nt_print2screen) == 0) then
             maxDiv = maxval(igp%divergence)
@@ -32,6 +32,20 @@ contains
             call message(1,"u_star:",igp%sgsmodel%get_ustar())
             call message(1,"Inv. Ob. Length:",igp%sgsmodel%get_InvObLength())
             call message(1,"wTh_surf:",igp%sgsmodel%get_wTh_surf())
+            if (igp%useSGS) then
+                maxnusgs = p_maxval(igp%nu_SGS)
+                maxkappasgs = p_maxval(igp%kappaSGS)
+                call message(1,"Maximum SGS viscosity:", maxnusgs)
+                call message(1,"Maximum SGS scalar kappa:", maxkappasgs)
+                if (associated(igp%kappa_bounding)) then
+                  maxkappasgs = p_maxval(igp%kappa_bounding)
+                  call message(1,"Maximum kappa bounding:", maxkappasgs)
+                end if 
+                if (igp%sgsModel%usingDynProc()) then
+                  call message(1,"Maximum lambda_dynamic:", igp%sgsModel%getMax_DynSmagConst())
+                  call message(1,"Maximum beta_dynamic:", igp%sgsModel%getMax_DynPrandtl())
+                end if 
+            end if 
             if (igp%useCFL) then
                 call message(1,"Current dt:",igp%dt)
             end if

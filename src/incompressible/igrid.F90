@@ -1055,8 +1055,11 @@ contains
                                 & calculation term uses")
               call message(2,"Bulk Richardson number:", this%BulkRichardson)
            end select
+
+           call this%sgsModel%set_BuoyancyFactor(this%BuoyancyFact)
        elseif (this%initSpinup) then
-              this%BuoyancyFact = one/(this%Fr*this%Fr*this%ThetaRef)
+            this%BuoyancyFact = one/(this%Fr*this%Fr*this%ThetaRef)
+            call this%sgsModel%set_BuoyancyFactor(this%BuoyancyFact)
        end if 
 
 
@@ -1066,7 +1069,7 @@ contains
            allocate(this%scalars(this%n_scalars))
            do idx = 1,this%n_scalars
               call this%scalars(idx)%init(this%gpC,this%gpE,this%spectC,this%spectE,this%sgsmodel,this%Pade6opZ,&
-                           & inputfile,scalar_info_dir,this%mesh,this%u,this%v,this%w,this%wC, this%rbuffxC, &
+                           & inputfile,scalar_info_dir,this%mesh,this%u,this%v,this%w,this%wC, this%duidxjC, this%rbuffxC, &
                            & this%rbuffyC,this%rbuffzC,this%rbuffxE,this%rbuffyE,this%rbuffzE,  &
                            & this%cbuffyC,this%cbuffzC,this%cbuffyE,this%cbuffzE, this%Re, &
                            & this%isinviscid, this%useSGS, idx, this%inputdir, this%outputdir, &
@@ -1089,8 +1092,6 @@ contains
        if ((this%storePressure) .or. (this%fastCalcPressure)) then
            call this%ComputePressure()
        end if 
-
-
 
        ! STEP 25: Schedule time dumps
        this%vizDump_Schedule = vizDump_Schedule
@@ -2220,11 +2221,11 @@ contains
        if (this%useSGS) then
            call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
                                          this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
-                                         this%v,     this%wC,    this%newTimeStep                             )
+                                         this%v,     this%wC,    this%newTimeStep,this%dTdxC,   this%dTdyC,   this%dTdzC)
 
            if (this%isStratified .or. this%initspinup) then
               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
-                                         this%u, this%v, this%wC, this%T, this%That, this%turbPr)
+                                         this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
            end if
            
        end if
