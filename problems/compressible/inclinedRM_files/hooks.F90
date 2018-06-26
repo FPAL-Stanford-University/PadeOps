@@ -1,5 +1,5 @@
 module inclinedRM_data
-    use kind_parameters,  only: rkind, clen
+    use kind_parameters,  only: rkind, mpirkind, clen
     use constants,        only: zero, one
     use FiltersMod,       only: filters
     implicit none
@@ -9,6 +9,15 @@ module inclinedRM_data
     ! they are converted to SI units properly
 
     integer, parameter :: ns = 2
+
+    ! Problem parameters
+    real(rkind) :: Mach = 1.55_rkind          ! Shock Mach number
+    real(rkind) :: theta = 60._rkind          ! Interface inclination
+    real(rkind) :: x_shock = 0.85_rkind       ! Initial shock location
+    real(rkind) :: x_interface = 0.877_rkind  ! Interface location at y=0
+    real(rkind) :: L_rho = 0.00364747_rkind   ! Initial diffusion thickness in m
+    real(rkind) :: p_pre = real(2.3D4, rkind) ! Ambient pressure in Pa
+    real(rkind) :: T_pre = 298._rkind         ! Ambient temperature in K
 
     ! Parameters for the 2 materials:               Nitrogen            CO2
     !                                        --------------------------------
@@ -51,7 +60,81 @@ module inclinedRM_data
     ! Exact compatibility with Miranda?
     logical :: miranda_compat = .true.
 
+    ! Perturbation parameters
+    character(len=clen) :: y_pertfile, z_pertfile
+    integer :: ymodes, zmodes
+    real(rkind), dimension(:), allocatable :: ky, amp_y, phi_y
+    real(rkind), dimension(:), allocatable :: kz, amp_z, phi_z
+    real(rkind), dimension(:), allocatable :: pertz
 contains
+
+    subroutine read_perturbation_files()
+        use mpi
+        use decomp_2d, only: nrank
+        integer :: pertunit
+        integer :: ierr
+        integer :: i
+
+        pertunit = 229
+
+        ! Read in the y perturbation file
+        if (nrank == 0) then
+          print *, "Reading in the y-perturbation file ", trim(y_pertfile)
+          open(unit=pertunit,file=trim(y_pertfile),form='FORMATTED',status='OLD')
+          read(pertunit,*) ymodes
+        end if
+
+        ! broadcast ymodes to all procs
+        call mpi_bcast(ymodes, 1, mpi_int, 0, mpi_comm_world, ierr)
+
+        allocate(    ky(ymodes) )
+        allocate( amp_y(ymodes) )
+        allocate( phi_y(ymodes) )
+
+        if (nrank == 0) then
+          do i=1,ymodes
+            read(pertunit,*) ky(i),amp_y(i),phi_y(i)
+          end do
+          close(pertunit)
+        end if
+
+        ! broadcast wavenumbers, amplitudes and phases to all procs
+        call mpi_bcast(   ky, ymodes, mpirkind, 0, mpi_comm_world, ierr)
+        call mpi_bcast(amp_y, ymodes, mpirkind, 0, mpi_comm_world, ierr)
+        call mpi_bcast(phi_y, ymodes, mpirkind, 0, mpi_comm_world, ierr)
+
+        ky    = ky    * real(1.D2, rkind) ! Convert from cm^-1 to m^-1
+        amp_y = amp_y * real(1.D-2,rkind) ! Convert from cm to m
+        
+        ! read in the z perturbation file
+        if (nrank == 0) then
+          print *, "Reading in the z-perturbation file ", trim(z_pertfile)
+          open(unit=pertunit,file=trim(z_pertfile),form='formatted',status='old')
+          read(pertunit,*) zmodes
+        end if
+
+        ! broadcast ymodes to all procs
+        call mpi_bcast(zmodes, 1, mpi_int, 0, mpi_comm_world, ierr)
+
+        allocate(    kz(zmodes) )
+        allocate( amp_z(zmodes) )
+        allocate( phi_z(zmodes) )
+
+        if (nrank == 0) then
+          do i=1,zmodes
+            read(pertunit,*) kz(i),amp_z(i),phi_z(i)
+          end do
+          close(pertunit)
+        end if
+        ! broadcast wavenumbers, amplitudes and phases to all procs
+        call mpi_bcast(   kz, zmodes, mpirkind, 0, mpi_comm_world, ierr)
+        call mpi_bcast(amp_z, zmodes, mpirkind, 0, mpi_comm_world, ierr)
+        call mpi_bcast(phi_z, zmodes, mpirkind, 0, mpi_comm_world, ierr) 
+
+        kz    = kz    * real(1.D2, rkind) ! Convert from cm^-1 to m^-1
+        amp_z = amp_z * real(1.D-2,rkind) ! Convert from cm to m
+        
+    end subroutine
 
 ! ------------------------------------------------------------------------------
 ! Assign problem-specific viscosity, thermal conductivity,
@@ -267,10 +350,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
 
-    integer :: i, j, k, l, iounit
+    integer :: i, j, k, l, mode, iounit
     real(rkind) :: Y_N2, Y_O2, rho_air, rho_N2, rho_O2, rho_HG
     real(rkind) :: R_air, Cp_air, gamma_air, Cp_N2, Cp_O2, sos_air, R_HG
-    real(rkind) :: rho_shocked, u_shocked, p_shocked
+    real(rkind) :: rho_pre, c_pre, rhoSk, pSk, USk, rot, xp, yp, perty
+    real(rkind) :: rho_shocked, u_shocked, p_shocked, T_shocked
     real(rkind), dimension(:,:,:,:), allocatable :: resmesh, resdata
     character(len=clen) :: charout
 
@@ -291,7 +375,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
     integer :: nx, ny, nz
 
-    namelist /PROBINPUT/  resdir, resfile, resdump, use_miranda_restart
+    namelist /PROBINPUT/  resdir, resfile, resdump, use_miranda_restart, y_pertfile, z_pertfile
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -397,11 +481,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
             !                reduce_precision=.true., read_only=.false., jump_to_last=.true.)
             ! call viz%write_coords(mesh)
 
-            ! Initialize mygfil
-            call mygfil%init(                           decomp, &
-                              periodicx,  periodicy, periodicz, &
-                             "gaussian", "gaussian", "gaussian" )
-
             ! Check for consistency
             call mix%update(Ys)
             call mix%get_e_from_p(rho,p,e)
@@ -469,15 +548,150 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
             call mir%destroy()
             ! call viz%destroy()
         else
-            rho = one
+            call read_perturbation_files()
+
+            allocate(pertz(decomp%ysz(3)))
+
+            pertz = zero
+            do i=1,zmodes
+                pertz = pertz + amp_z(i) * cos( kz(i)*(z(1,1,:)+L_y/two) + phi_z(i) ) ! Center about 0
+            end do
+
+            theta = theta * pi / 180._rkind
+            rot = -(pi/two - theta)
+            do k = 1,decomp%ysz(3)
+                do j = 1,decomp%ysz(2)
+                    do i = 1,decomp%ysz(1)
+                        ! Get coordinate in rotated system
+                        xp = (x(i,j,k) - x_interface)*cos(rot) + y(i,j,k)*sin(rot)
+                        yp =-(x(i,j,k) - x_interface)*sin(rot) + y(i,j,k)*cos(rot)
+
+                        perty = zero
+                        do mode=1,30
+                            perty = perty + amp_y(mode) * cos( ky(mode)*yp + phi_y(mode) )
+                        end do
+
+                        tmp(i,j,k) = half * (one + erf( (xp - perty - pertz(k))/L_rho ) )
+                    end do
+                end do
+            end do
+            deallocate(pertz)
+
+            Ys(:,:,:,1)  = one - tmp
+            Ys(:,:,:,2)  = one - Ys(:,:,:,1)
+            call mix%update(Ys)
+
             u   = zero
             v   = zero
             w   = zero
-            p   = one
 
-            Ys(:,:,:,1)  = one
-            Ys(:,:,:,2)  = zero
+            p   = p_pre
+            T   = T_pre
+            rho = p / (mix%Rgas * T)
+
+            ! Now add the shock
+            rhoSk = ((gam(1)+one)*Mach**2)/(two+(gam(1)-one)*Mach**2) ! rho_2 / rho_1
+            USk   = (one-one/rhoSk)                                   ! (U_1-U_2)/ U_1
+            pSk   = (one+two*gam(1)/(gam(1)+one)*(Mach**2-one))       ! p_2 / p_1
+
+            rho_pre     = p_pre / (Rgas(1)*T_pre)
+            rho_shocked = rho_pre * rhoSk
+            p_shocked   = p_pre * pSk
+            T_shocked   = p_shocked /(Rgas(1)*rho_shocked)
+
+            c_pre     = sqrt(gam(1)*p_pre/rho_pre)
+            u_shocked = Mach*c_pre*USk
+
+            tmp = half* (one - erf( (x - x_shock)/(half*dx) ))
+
+            rho = rho + (rho_shocked - rho)*tmp
+            T   = T   + (T_shocked   - T  )*tmp
+            p   = rho * mix%Rgas * T
+            ! p   = p   + (p_shocked   - p  )*tmp
+            u   = u   + (u_shocked   - u  )*tmp
+
+            call mix%get_e_from_p(rho,p,e)
+            call mix%get_T(e, T)
+
+            
+            ! Initialize miranda_restart object
+            call mir%init(decomp, resdir, resfile)
+            if (mir%ns /= mix%ns) call GracefulExit("Number of species doesn't match that in the restart files",5687)
+
+            ! Allocate restart mesh and data arrays
+            allocate( resmesh(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), 3       ) )
+            allocate( resdata(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), mir%nres) )
+
+            ! Read in the grid
+            call mir%read_grid(resmesh)
+
+            call message("Error in dx", abs(dx-(resmesh(2,1,1,1)-resmesh(1,1,1,1))*real(1.D-2,rkind)))
+            call message("Error in dy", abs(dy-(resmesh(1,2,1,2)-resmesh(1,1,1,2))*real(1.D-2,rkind)))
+            call message("Error in dz", abs(dz-(resmesh(1,1,2,3)-resmesh(1,1,1,3))*real(1.D-2,rkind)))
+
+            call message("Max error in x coordinate",P_MAXVAL( abs(x - resmesh(:,:,:,1)*real(1.D-2,rkind))/dx ))
+            call message("Min error in x coordinate",P_MINVAL( abs(x - resmesh(:,:,:,1)*real(1.D-2,rkind))/dx ))
+
+            call message("Max error in y coordinate",P_MAXVAL( abs(y - resmesh(:,:,:,2)*real(1.D-2,rkind))/dy ))
+            call message("Min error in y coordinate",P_MINVAL( abs(y - resmesh(:,:,:,2)*real(1.D-2,rkind))/dy ))
+
+            call message("Max error in z coordinate",P_MAXVAL( abs(z - resmesh(:,:,:,3)*real(1.D-2,rkind))/dz ))
+            call message("Min error in z coordinate",P_MINVAL( abs(z - resmesh(:,:,:,3)*real(1.D-2,rkind))/dz ))
+
+            ! Read in data
+            call mir%read_data(resdump, resdata, tsim, dt)
+            
+            write(charout,'(A,I0.0,A,A)') "Reading Miranda restart dump ", resdump, " from ", trim(resdir)
+            call message(charout)
+            call message("Simulation time at restart", tsim)
+            call message("Timestep at restart", dt)
+
+            call message("Max error in rho", P_MAXVAL( abs(rho - resdata(:,:,:,mir%rho_index)*real(1.D3,rkind)) ))
+            call message("Max error in u", P_MAXVAL( abs(u - resdata(:,:,:,mir%u_index)*real(1.D-2,rkind)) ))
+            call message("Max error in v", P_MAXVAL( abs(v - resdata(:,:,:,mir%v_index)*real(1.D-2,rkind)) ))
+            call message("Max error in w", P_MAXVAL( abs(w - resdata(:,:,:,mir%w_index)*real(1.D-2,rkind)) ))
+            call message("Max error in p", P_MAXVAL( abs(p - resdata(:,:,:,mir%p_index)*real(1.D-1,rkind)) ))
+
+            call message("Max error in Ys_1", P_MAXVAL( abs(Ys(:,:,:,1) - resdata(:,:,:,mir%Ys_index)) ))
+            call message("Max error in Ys_2", P_MAXVAL( abs(Ys(:,:,:,2) - resdata(:,:,:,mir%Ys_index+1)) ))
+            
+            call message("Max error in e", P_MAXVAL( abs(e - resdata(:,:,:,mir%e_index)*real(1.D-4,rkind)) ))
+            call message("Max error in T", P_MAXVAL( abs(T - resdata(:,:,:,mir%T_index)) ))
+
+            call mix%get_transport_properties(p, T, Ys, mu, bulk, kappa, diff)
+            call prob_properties( resdata(:,:,:,mir%rho_index), resdata(:,:,:,mir%p_index), &
+                                  resdata(:,:,:,  mir%T_index), Ys, &
+                                  mu_o, kappa_o, diff_o)
+            bulk_o = zero
+
+            call message("Max error in mu", P_MAXVAL( abs(mu - mu_o*real(1.D-1,rkind)) ))
+
+            call message("Max error in bulk", P_MAXVAL( abs(bulk - bulk_o*real(1.D-1,rkind)) ))
+            call message("Max error in kappa", P_MAXVAL( abs(kappa - kappa_o*real(1.D-5,rkind)) ))
+
+            tmp = abs(diff(:,:,:,1) - diff_o(:,:,:,1)*real(1.D-4,rkind))
+            where ( Ys(:,:,:,1) > one - real(1.D-5,rkind) )
+                tmp = zero
+            end where
+            call message("Max error in diff(1)", P_MAXVAL(tmp))
+
+            tmp = abs(diff(:,:,:,2) - diff_o(:,:,:,2)*real(1.D-4,rkind))
+            where ( Ys(:,:,:,2) > one - real(1.D-5,rkind) )
+                tmp = zero
+            end where
+            call message("Max error in diff(2)", P_MAXVAL(tmp))
+
+
+            ! Deallocate temporary arrays and destroy miranda_restart object
+            deallocate( resmesh )
+            deallocate( resdata )
+            call mir%destroy()
         end if
+
+        ! Initialize mygfil
+        call mygfil%init(                           decomp, &
+                          periodicx,  periodicy, periodicz, &
+                         "gaussian", "gaussian", "gaussian" )
 
     end associate
 
