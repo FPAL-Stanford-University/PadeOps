@@ -44,6 +44,7 @@ module inclinedRM_data
 
     ! Domain size data
     real(rkind) :: L_y = 0.1143_rkind
+    real(rkind) :: span_factor = 1._rkind
     real(rkind) :: L_x, L_z
     real(rkind) :: x1, y1, z1
 
@@ -58,7 +59,7 @@ module inclinedRM_data
     type(filters) :: mygfil
 
     ! Exact compatibility with Miranda?
-    logical :: miranda_compat = .true.
+    logical :: miranda_compat = .false.
 
     ! Perturbation parameters
     character(len=clen) :: y_pertfile, z_pertfile
@@ -71,9 +72,10 @@ contains
     subroutine read_perturbation_files()
         use mpi
         use decomp_2d, only: nrank
+        use constants, only: zero, two, pi
         integer :: pertunit
         integer :: ierr
-        integer :: i
+        integer :: i, L_by_lambda_z
 
         pertunit = 229
 
@@ -133,6 +135,18 @@ contains
 
         kz    = kz    * real(1.D2, rkind) ! Convert from cm^-1 to m^-1
         amp_z = amp_z * real(1.D-2,rkind) ! Convert from cm to m
+
+        ! Adjust wavenumbers so that they are periodic in the domain
+        if (.not. miranda_compat) then
+            do i=1,zmodes
+                L_by_lambda_z = nint( kz(i) * L_z / (two*pi) )
+                if (L_by_lambda_z < nint(8*span_factor)) then
+                    amp_z(i) = zero
+                else
+                    kz(i) = L_by_lambda_z * two * pi / L_z
+                end if
+            end do
+        end if
         
     end subroutine
 
@@ -278,7 +292,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
 
-    integer :: i,j,k
+    integer :: i,j,k,ioUnit
     integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
@@ -291,7 +305,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         L_x = 16._rkind * L_y
-        L_z = L_y / 4._rkind
+        L_z = L_y * span_factor
 
         dx = L_x/real(nx-1,rkind)
         dy = L_y/real(ny-1,rkind)
@@ -614,78 +628,78 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
             call mix%get_T(e, T)
 
             
-            ! Initialize miranda_restart object
-            call mir%init(decomp, resdir, resfile)
-            if (mir%ns /= mix%ns) call GracefulExit("Number of species doesn't match that in the restart files",5687)
+            ! ! Initialize miranda_restart object
+            ! call mir%init(decomp, resdir, resfile)
+            ! if (mir%ns /= mix%ns) call GracefulExit("Number of species doesn't match that in the restart files",5687)
 
-            ! Allocate restart mesh and data arrays
-            allocate( resmesh(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), 3       ) )
-            allocate( resdata(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), mir%nres) )
+            ! ! Allocate restart mesh and data arrays
+            ! allocate( resmesh(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), 3       ) )
+            ! allocate( resdata(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), mir%nres) )
 
-            ! Read in the grid
-            call mir%read_grid(resmesh)
+            ! ! Read in the grid
+            ! call mir%read_grid(resmesh)
 
-            call message("Error in dx", abs(dx-(resmesh(2,1,1,1)-resmesh(1,1,1,1))*real(1.D-2,rkind)))
-            call message("Error in dy", abs(dy-(resmesh(1,2,1,2)-resmesh(1,1,1,2))*real(1.D-2,rkind)))
-            call message("Error in dz", abs(dz-(resmesh(1,1,2,3)-resmesh(1,1,1,3))*real(1.D-2,rkind)))
+            ! call message("Error in dx", abs(dx-(resmesh(2,1,1,1)-resmesh(1,1,1,1))*real(1.D-2,rkind)))
+            ! call message("Error in dy", abs(dy-(resmesh(1,2,1,2)-resmesh(1,1,1,2))*real(1.D-2,rkind)))
+            ! call message("Error in dz", abs(dz-(resmesh(1,1,2,3)-resmesh(1,1,1,3))*real(1.D-2,rkind)))
 
-            call message("Max error in x coordinate",P_MAXVAL( abs(x - resmesh(:,:,:,1)*real(1.D-2,rkind))/dx ))
-            call message("Min error in x coordinate",P_MINVAL( abs(x - resmesh(:,:,:,1)*real(1.D-2,rkind))/dx ))
+            ! call message("Max error in x coordinate",P_MAXVAL( abs(x - resmesh(:,:,:,1)*real(1.D-2,rkind))/dx ))
+            ! call message("Min error in x coordinate",P_MINVAL( abs(x - resmesh(:,:,:,1)*real(1.D-2,rkind))/dx ))
 
-            call message("Max error in y coordinate",P_MAXVAL( abs(y - resmesh(:,:,:,2)*real(1.D-2,rkind))/dy ))
-            call message("Min error in y coordinate",P_MINVAL( abs(y - resmesh(:,:,:,2)*real(1.D-2,rkind))/dy ))
+            ! call message("Max error in y coordinate",P_MAXVAL( abs(y - resmesh(:,:,:,2)*real(1.D-2,rkind))/dy ))
+            ! call message("Min error in y coordinate",P_MINVAL( abs(y - resmesh(:,:,:,2)*real(1.D-2,rkind))/dy ))
 
-            call message("Max error in z coordinate",P_MAXVAL( abs(z - resmesh(:,:,:,3)*real(1.D-2,rkind))/dz ))
-            call message("Min error in z coordinate",P_MINVAL( abs(z - resmesh(:,:,:,3)*real(1.D-2,rkind))/dz ))
+            ! call message("Max error in z coordinate",P_MAXVAL( abs(z - resmesh(:,:,:,3)*real(1.D-2,rkind))/dz ))
+            ! call message("Min error in z coordinate",P_MINVAL( abs(z - resmesh(:,:,:,3)*real(1.D-2,rkind))/dz ))
 
-            ! Read in data
-            call mir%read_data(resdump, resdata, tsim, dt)
-            
-            write(charout,'(A,I0.0,A,A)') "Reading Miranda restart dump ", resdump, " from ", trim(resdir)
-            call message(charout)
-            call message("Simulation time at restart", tsim)
-            call message("Timestep at restart", dt)
+            ! ! Read in data
+            ! call mir%read_data(resdump, resdata, tsim, dt)
+            ! 
+            ! write(charout,'(A,I0.0,A,A)') "Reading Miranda restart dump ", resdump, " from ", trim(resdir)
+            ! call message(charout)
+            ! call message("Simulation time at restart", tsim)
+            ! call message("Timestep at restart", dt)
 
-            call message("Max error in rho", P_MAXVAL( abs(rho - resdata(:,:,:,mir%rho_index)*real(1.D3,rkind)) ))
-            call message("Max error in u", P_MAXVAL( abs(u - resdata(:,:,:,mir%u_index)*real(1.D-2,rkind)) ))
-            call message("Max error in v", P_MAXVAL( abs(v - resdata(:,:,:,mir%v_index)*real(1.D-2,rkind)) ))
-            call message("Max error in w", P_MAXVAL( abs(w - resdata(:,:,:,mir%w_index)*real(1.D-2,rkind)) ))
-            call message("Max error in p", P_MAXVAL( abs(p - resdata(:,:,:,mir%p_index)*real(1.D-1,rkind)) ))
+            ! call message("Max error in rho", P_MAXVAL( abs(rho - resdata(:,:,:,mir%rho_index)*real(1.D3,rkind)) ))
+            ! call message("Max error in u", P_MAXVAL( abs(u - resdata(:,:,:,mir%u_index)*real(1.D-2,rkind)) ))
+            ! call message("Max error in v", P_MAXVAL( abs(v - resdata(:,:,:,mir%v_index)*real(1.D-2,rkind)) ))
+            ! call message("Max error in w", P_MAXVAL( abs(w - resdata(:,:,:,mir%w_index)*real(1.D-2,rkind)) ))
+            ! call message("Max error in p", P_MAXVAL( abs(p - resdata(:,:,:,mir%p_index)*real(1.D-1,rkind)) ))
 
-            call message("Max error in Ys_1", P_MAXVAL( abs(Ys(:,:,:,1) - resdata(:,:,:,mir%Ys_index)) ))
-            call message("Max error in Ys_2", P_MAXVAL( abs(Ys(:,:,:,2) - resdata(:,:,:,mir%Ys_index+1)) ))
-            
-            call message("Max error in e", P_MAXVAL( abs(e - resdata(:,:,:,mir%e_index)*real(1.D-4,rkind)) ))
-            call message("Max error in T", P_MAXVAL( abs(T - resdata(:,:,:,mir%T_index)) ))
+            ! call message("Max error in Ys_1", P_MAXVAL( abs(Ys(:,:,:,1) - resdata(:,:,:,mir%Ys_index)) ))
+            ! call message("Max error in Ys_2", P_MAXVAL( abs(Ys(:,:,:,2) - resdata(:,:,:,mir%Ys_index+1)) ))
+            ! 
+            ! call message("Max error in e", P_MAXVAL( abs(e - resdata(:,:,:,mir%e_index)*real(1.D-4,rkind)) ))
+            ! call message("Max error in T", P_MAXVAL( abs(T - resdata(:,:,:,mir%T_index)) ))
 
-            call mix%get_transport_properties(p, T, Ys, mu, bulk, kappa, diff)
-            call prob_properties( resdata(:,:,:,mir%rho_index), resdata(:,:,:,mir%p_index), &
-                                  resdata(:,:,:,  mir%T_index), Ys, &
-                                  mu_o, kappa_o, diff_o)
-            bulk_o = zero
+            ! call mix%get_transport_properties(p, T, Ys, mu, bulk, kappa, diff)
+            ! call prob_properties( resdata(:,:,:,mir%rho_index), resdata(:,:,:,mir%p_index), &
+            !                       resdata(:,:,:,  mir%T_index), Ys, &
+            !                       mu_o, kappa_o, diff_o)
+            ! bulk_o = zero
 
-            call message("Max error in mu", P_MAXVAL( abs(mu - mu_o*real(1.D-1,rkind)) ))
+            ! call message("Max error in mu", P_MAXVAL( abs(mu - mu_o*real(1.D-1,rkind)) ))
 
-            call message("Max error in bulk", P_MAXVAL( abs(bulk - bulk_o*real(1.D-1,rkind)) ))
-            call message("Max error in kappa", P_MAXVAL( abs(kappa - kappa_o*real(1.D-5,rkind)) ))
+            ! call message("Max error in bulk", P_MAXVAL( abs(bulk - bulk_o*real(1.D-1,rkind)) ))
+            ! call message("Max error in kappa", P_MAXVAL( abs(kappa - kappa_o*real(1.D-5,rkind)) ))
 
-            tmp = abs(diff(:,:,:,1) - diff_o(:,:,:,1)*real(1.D-4,rkind))
-            where ( Ys(:,:,:,1) > one - real(1.D-5,rkind) )
-                tmp = zero
-            end where
-            call message("Max error in diff(1)", P_MAXVAL(tmp))
+            ! tmp = abs(diff(:,:,:,1) - diff_o(:,:,:,1)*real(1.D-4,rkind))
+            ! where ( Ys(:,:,:,1) > one - real(1.D-5,rkind) )
+            !     tmp = zero
+            ! end where
+            ! call message("Max error in diff(1)", P_MAXVAL(tmp))
 
-            tmp = abs(diff(:,:,:,2) - diff_o(:,:,:,2)*real(1.D-4,rkind))
-            where ( Ys(:,:,:,2) > one - real(1.D-5,rkind) )
-                tmp = zero
-            end where
-            call message("Max error in diff(2)", P_MAXVAL(tmp))
+            ! tmp = abs(diff(:,:,:,2) - diff_o(:,:,:,2)*real(1.D-4,rkind))
+            ! where ( Ys(:,:,:,2) > one - real(1.D-5,rkind) )
+            !     tmp = zero
+            ! end where
+            ! call message("Max error in diff(2)", P_MAXVAL(tmp))
 
 
-            ! Deallocate temporary arrays and destroy miranda_restart object
-            deallocate( resmesh )
-            deallocate( resdata )
-            call mir%destroy()
+            ! ! Deallocate temporary arrays and destroy miranda_restart object
+            ! deallocate( resmesh )
+            ! deallocate( resdata )
+            ! call mir%destroy()
         end if
 
         ! Initialize mygfil
