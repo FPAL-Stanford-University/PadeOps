@@ -82,108 +82,12 @@ program StratifiedShearLayerDomainIntegrals
 
       time(idx) = ops%getSimTime(tidx)
       call message(0, "Read simulation data at time:", time(idx))
-
-      ! STEP 1: Compute the gain in PE from IE
-      !call ops%ddz(T,buff2, 1, 1)   ! dTdz (adiabatic BCs)
-      !buff2 = (1.d0/(Pr*Re))*buff2
-      !IEL(idx) = ops%getVolumeIntegral(buff2)
-      
-  
-      ! STEP 4: Compute the production
+     
+      ! Compute TKE 
       call ops%getFluct_from_MeanZ(u,ufluct)
-      buff3 = u - ufluct ! mean
-      call ops%ddz(buff3,buff2,1,1) ! dUdz (no stress BC)
-      buff3 = 0.5d0*buff3*buff3
-      MKE(idx) = ops%getVolumeIntegral(buff3)
-      buff3 = -ufluct*w      ! u'w' (since wmean = 0)
-      buff2 = buff2*buff3 
-      P(idx) = ops%getVolumeIntegral(buff2)
-      
-
       call ops%getFluct_from_MeanZ(v,vfluct)
-      buff3 = v - vfluct ! mean
-      call ops%ddz(buff3,buff2,1,1) ! dVdz (no stress BC)
-      buff3 = 0.5d0*buff3*buff3
-      MKE(idx) = MKE(idx) + ops%getVolumeIntegral(buff3)
-      buff3 = -vfluct*w      ! u'w' (since wmean = 0)
-      buff2 = buff2*buff3 
-      P(idx) = P(idx) + ops%getVolumeIntegral(buff2)
-
-      ! STEP 5a: Compute TKE
       buff2 = (ufluct*ufluct + vfluct*vfluct + w*w)
       TKE(idx) = 0.5d0*ops%getVolumeIntegral(buff2)
-
-      !! STEP 5: Compute the Buoyancy term
-      !call ops%getFluct_from_MeanZ(T,buff2)
-      !buff2 = buff2*w
-      !B(idx) = ops%getVolumeIntegral(buff2)
-
-
-      !! STEP 6: Compute dissipation rate
-      !call ops%ddx(ufluct,buff2)
-      !buff3 = buff2*buff2
-      !call ops%ddy(ufluct,buff2)
-      !buff3 = buff3 + buff2*buff2
-      !call ops%ddz(ufluct,buff2, 1, 1)
-      !buff3 = buff3 + buff2*buff2
-
-      !call ops%ddx(vfluct,buff2)
-      !buff3 = buff3 + buff2*buff2
-      !call ops%ddy(vfluct,buff2)
-      !buff3 = buff3 + buff2*buff2
-      !call ops%ddz(vfluct,buff2, 1, 1)
-      !buff3 = buff3 + buff2*buff2
-
-      !call ops%ddx(w,buff2)
-      !buff3 = buff3 + buff2*buff2
-      !call ops%ddy(w,buff2)
-      !buff3 = buff3 + buff2*buff2
-      !call ops%ddz(w,buff2, -1, -1)  ! no-penetration BCs
-      !buff3 = buff3 + buff2*buff2
-      !
-      !buff3 = (1.d0/Re)*buff3
-      !Dv(idx) = ops%getVolumeIntegral(buff3)
-
-      !! STEP 7: SGS sink term
-      !! s11*s11
-      !call ops%ddx(ufluct,buff3)
-      !buff2 = buff3*buff3
-      !
-      !! 2*s12*s12
-      !call ops%ddy(ufluct,buff3)
-      !call ops%ddx(vfluct,buff4)
-      !buff3 = 0.5d0*(buff3 + buff4)
-      !buff2 = buff2 + 2.d0*buff3*buff3 
-
-      !! 2*s13*s13 
-      !call ops%ddz(ufluct,buff3, 1, 1)
-      !call ops%ddx(w     ,buff4)
-      !buff3 = 0.5d0*(buff3 + buff4)
-      !buff2 = buff2 + 2.d0*buff3*buff3 
-
-      !! 2*s23*s23 
-      !call ops%ddz(vfluct,buff3, 1, 1)
-      !call ops%ddy(w     ,buff4)
-      !buff3 = 0.5d0*(buff3 + buff4)
-      !buff2 = buff2 + 2.d0*buff3*buff3 
-
-      !! s22*s22
-      !call ops%ddy(vfluct,buff3)
-      !buff2 = buff2 + buff3*buff3
-      !
-      !! s33*s33
-      !call ops%ddz(w,buff3, -1, -1)
-      !buff2 = buff2 + buff3*buff3
-      !
-      !!buff2 = 2.d0*nuSGS*buff2
-      !!Dsgs(idx) = ops%getVolumeIntegral(buff2)
-
-      call toc()
-
-      if (nrank == 0) then
-         !print*, time(idx), P(idx), B(idx), D(idx), Dv(idx), Dsgs(idx), IEL(idx)
-         print*, "ddt_TKE:", P(idx) + B(idx) - D(idx)
-      end if 
      
       idx = idx + 1
    end do 
@@ -191,13 +95,6 @@ program StratifiedShearLayerDomainIntegrals
    idx = idx - 1
    allocate(data2write(idx,2))
    data2write(:,1) = time(1:idx)
-   !data2write(:,2) = IEL(1:idx) 
-   !data2write(:,3) = P(1:idx) 
-   !data2write(:,4) = B(1:idx) 
-   !data2write(:,5) = D(1:idx) 
-   !data2write(:,6) = Dv(1:idx) 
-   !data2write(:,7) = Dsgs(1:idx)
-   !data2write(:,8) = MKE(1:idx)
    data2write(:,2) = TKE(1:idx)
 
    if (nrank == 0) then
