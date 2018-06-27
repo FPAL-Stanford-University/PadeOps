@@ -18,7 +18,7 @@ module igrid_Operators
       real(rkind),    dimension(:,:,:), allocatable :: rbuffx, rbuffy, rbuffz1, rbuffz2
       type(decomp_info), public :: gp, gpE
       type(spectral), public  :: spect, spectE
-      type(Pade6stagg) :: derZ
+      type(Pade6stagg), public :: derZ
       type(cd06stagg) :: derZ1d
       real(rkind), dimension(:,:,:), allocatable :: zarr1d_1, zarr1d_2
 
@@ -59,9 +59,18 @@ module igrid_Operators
          procedure :: dealias
          procedure :: alloc_cbuffz
          procedure :: Read_VizSummary
+         procedure :: alloc_zvec
      end type 
 
 contains
+
+subroutine alloc_zvec(this, vec)
+   class(igrid_ops), intent(in) :: this
+   real(rkind), dimension(:), allocatable, intent(out) :: vec
+
+   allocate(vec(this%gp%zsz(3)))
+
+end subroutine 
 
 subroutine Read_VizSummary(this, times, timesteps)
    class(igrid_ops), intent(inout) :: this
