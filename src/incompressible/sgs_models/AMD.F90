@@ -11,6 +11,9 @@ subroutine init_amd(this, dx, dy, dz, Csgs)
    this%cmodel_global = one  ! Anisotropic model constants 
    call message(1,"AMD model initialized")
 
+   if ((this%isStratified) .and. (this%explicitCalcEdgeEddyViscosity)) then
+        allocate(this%rbuffxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+   end if 
 end subroutine
 
 subroutine destroy_amd(this)

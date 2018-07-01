@@ -62,7 +62,7 @@ subroutine get_SGS_kernel(this,duidxjC, duidxjE, dTdx, dTdy, dTdz, dTdxE, dTdyE,
       ! AMD 
       if (this%isStratified) then
           call this%spectC%fft(dTdz,this%cbuffyC(:,:,:,1))
-          if (this%spectE%carryingZeroK) then
+          if (this%spectC%carryingZeroK) then
               this%cbuffyC(1,1,:,1) = cmplx(zero,zero,rkind)
           end if 
           call this%spectC%ifft(this%cbuffyC(:,:,:,1),this%rbuffxC(:,:,:,1))
@@ -71,8 +71,15 @@ subroutine get_SGS_kernel(this,duidxjC, duidxjE, dTdx, dTdy, dTdz, dTdxE, dTdyE,
                                  dTdx, dTdy, this%rbuffxC(:,:,:,1), this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3), this%isStratified, this%BuoyancyFact)
       
       if (this%explicitCalcEdgeEddyViscosity) then
-            call get_amd_kernel(this%nu_sgs_E, this%camd_x, this%camd_y, this%camd_z, duidxjE, this%S_ij_E, &
-                                 dTdxE, dTdyE, dTdzE, this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3), this%isStratified, this%BuoyancyFact)
+        if (this%isStratified) then
+          call this%spectE%fft(dTdzE,this%cbuffyE(:,:,:,1))
+          if (this%spectE%carryingZeroK) then
+              this%cbuffyE(1,1,:,1) = cmplx(zero,zero,rkind)
+          end if 
+          call this%spectE%ifft(this%cbuffyE(:,:,:,1),this%rbuffxE)
+        end if 
+        call get_amd_kernel(this%nu_sgs_E, this%camd_x, this%camd_y, this%camd_z, duidxjE, this%S_ij_E, &
+                dTdxE, dTdyE, this%rbuffxE, this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3), this%isStratified, this%BuoyancyFact)
       end if
    end select
 
