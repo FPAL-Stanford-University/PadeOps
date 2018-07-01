@@ -34,11 +34,12 @@ subroutine allocateMemory_EddyViscosity(this)
   end if
 end subroutine
 
-subroutine get_SGS_kernel(this,duidxjC, duidxjE, dTdx, dTdy, dTdz)
+subroutine get_SGS_kernel(this,duidxjC, duidxjE, dTdx, dTdy, dTdz, dTdxE, dTdyE, dTdzE)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdx, dTdy, dTdz
+   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdxE, dTdyE, dTdzE
 
    select case(this%mid) 
    case (0)
@@ -70,9 +71,8 @@ subroutine get_SGS_kernel(this,duidxjC, duidxjE, dTdx, dTdy, dTdz)
                                  dTdx, dTdy, this%rbuffxC(:,:,:,1), this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3), this%isStratified, this%BuoyancyFact)
       
       if (this%explicitCalcEdgeEddyViscosity) then
-          !call get_amd_kernel(this%nu_sgs_E, this%camd_x, this%camd_y, this%camd_z, duidxjE, this%S_ij_E, &
-          !                       this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3))
-          call this%interpolate_eddy_viscosity(.true.)   ! Explicit calculation not supported at the edges
+            call get_amd_kernel(this%nu_sgs_E, this%camd_x, this%camd_y, this%camd_z, duidxjE, this%S_ij_E, &
+                                 dTdxE, dTdyE, dTdzE, this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3), this%isStratified, this%BuoyancyFact)
       end if
    end select
 

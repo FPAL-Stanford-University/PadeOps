@@ -109,7 +109,7 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:), pointer :: T_rhs, T_Orhs
 
         complex(rkind), dimension(:,:,:), allocatable :: uBase, Tbase, vBase, dTdxH, dTdyH, dTdzH, dTdzHC
-        real(rkind), dimension(:,:,:), allocatable :: dTdxC, dTdyC, dTdzE, dTdzC
+        real(rkind), dimension(:,:,:), allocatable :: dTdxC, dTdyC, dTdzE, dTdzC, dTdxE, dTdyE
 
 
         real(rkind), dimension(:,:,:,:), allocatable, public :: rbuffxC, rbuffyC, rbuffzC
@@ -568,6 +568,8 @@ contains
        allocate(this%dTdzC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
        allocate(this%dTdxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
        allocate(this%dTdyC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+       allocate(this%dTdxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+       allocate(this%dTdyE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
        call this%spectC%alloc_r2c_out(this%SfieldsC,4)
        call this%spectC%alloc_r2c_out(this%dTdxH)
        call this%spectC%alloc_r2c_out(this%dTdyH)
@@ -2221,7 +2223,8 @@ contains
        if (this%useSGS) then
            call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
                                          this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
-                                         this%v,     this%wC,    this%newTimeStep,this%dTdxC,   this%dTdyC,   this%dTdzC)
+                                         this%v,     this%wC,    this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
+                                         this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
 
            if (this%isStratified .or. this%initspinup) then
               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
@@ -3219,6 +3222,12 @@ contains
         call this%spectC%mtimes_ik2_oop(this%That,this%dTdyH)
         call this%spectC%ifft(this%dTdyH,this%dTdyC)
    
+        call this%spectE%mtimes_ik1_oop(this%TEhat,this%cbuffyE(:,:,:,1))
+        call this%spectE%ifft(this%cbuffyE(:,:,:,1),this%dTdxE)
+        
+        call this%spectE%mtimes_ik2_oop(this%TEhat,this%cbuffyE(:,:,:,1))
+        call this%spectE%ifft(this%cbuffyE(:,:,:,1),this%dTdyE)
+        
         call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
         call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,TBC_bottom,TBC_top)
         if (.not. this%isInviscid) then

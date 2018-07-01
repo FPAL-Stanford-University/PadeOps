@@ -94,23 +94,23 @@ subroutine get_amd_Dkernel(kappa_sgs, camd_x, camd_y, camd_z, duidxj, dTdx, dTdy
 
 
    do k = 1,nzL
-      do j = 1,nyL
-         !$omp simd 
-         do i = 1,nxL
-            ! First compute the numerator
-            num = ((duidxj(i,j,k,1)*camd_x)*(dTdx(i,j,k)*camd_x) + (duidxj(i,j,k,2)*camd_y)*(dTdy(i,j,k)*camd_y) &
-             &  + (duidxj(i,j,k,3)*camd_z)*(dTdz(i,j,k)*camd_z))*dTdx(i,j,k)
-            num = num + ((duidxj(i,j,k,4)*camd_x)*(dTdx(i,j,k)*camd_x) + (duidxj(i,j,k,5)*camd_y)*(dTdy(i,j,k)*camd_y) &
-             &  + (duidxj(i,j,k,6)*camd_z)*(dTdz(i,j,k)*camd_z))*dTdy(i,j,k)
-            num = num + ((duidxj(i,j,k,7)*camd_x)*(dTdx(i,j,k)*camd_x) + (duidxj(i,j,k,8)*camd_y)*(dTdy(i,j,k)*camd_y) &
-             &  + (duidxj(i,j,k,9)*camd_z)*(dTdz(i,j,k)*camd_z))*dTdz(i,j,k)
+     do j = 1,nyL
+        !$omp simd 
+        do i = 1,nxL
+           ! First compute the numerator
+           num = ((duidxj(i,j,k,1)*camd_x)*(dTdx(i,j,k)*camd_x) + (duidxj(i,j,k,2)*camd_y)*(dTdy(i,j,k)*camd_y) &
+            &  + (duidxj(i,j,k,3)*camd_z)*(dTdz(i,j,k)*camd_z))*dTdx(i,j,k)
+           num = num + ((duidxj(i,j,k,4)*camd_x)*(dTdx(i,j,k)*camd_x) + (duidxj(i,j,k,5)*camd_y)*(dTdy(i,j,k)*camd_y) &
+            &  + (duidxj(i,j,k,6)*camd_z)*(dTdz(i,j,k)*camd_z))*dTdy(i,j,k)
+           num = num + ((duidxj(i,j,k,7)*camd_x)*(dTdx(i,j,k)*camd_x) + (duidxj(i,j,k,8)*camd_y)*(dTdy(i,j,k)*camd_y) &
+            &  + (duidxj(i,j,k,9)*camd_z)*(dTdz(i,j,k)*camd_z))*dTdz(i,j,k)
 
-            ! Now get the denominator
-            den = dTdx(i,j,k)*dTdx(i,j,k) + dTdy(i,j,k)*dTdy(i,j,k) +  dTdz(i,j,k)*dTdz(i,j,k)  
+           ! Now get the denominator
+           den = dTdx(i,j,k)*dTdx(i,j,k) + dTdy(i,j,k)*dTdy(i,j,k) +  dTdz(i,j,k)*dTdz(i,j,k)  
 
-            kappa_sgs(i,j,k) = max(-num/(den + 1.d-15),zero)
-         end do 
-       end do
-    end do 
+           kappa_sgs(i,j,k) = max(-num/(den + 1.d-15),zero)
+        end do 
+      end do
+   end do 
 
 end subroutine 
