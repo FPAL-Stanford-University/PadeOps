@@ -38,6 +38,7 @@ module igrid_Operators
          procedure :: ddz
          procedure :: ddz_1d
          procedure :: TakeMean_xy
+         procedure :: TakeMean_y
          procedure :: getFluct_from_MeanZ
          procedure :: ReadField3D
          procedure :: WriteField3D
@@ -332,6 +333,22 @@ subroutine TakeMean_xy(this, f, fmean)
    do k = 1,this%gp%zsz(3)
       fmean(k) = p_sum(sum(this%rbuffz1(:,:,k)))*this%mfact_xy
    end do 
+end subroutine
+
+subroutine TakeMean_y(this, f, fmean)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: f
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: fmean
+   integer :: i,k 
+
+   call transpose_x_to_y(f,this%rbuffy,this%gp)
+   do k = 1,this%gp%ysz(3)
+      do i = 1,this%gp%ysz(1)
+        this%rbuffy(i,:,k) = sum(this%rbuffy(i,:,k))/this%gp%ysz(2) 
+      end do
+   end do
+   call transpose_y_to_x(this%rbuffy,fmean,this%gp)
+
 end subroutine
 
 subroutine ReadField3D(this, field, label, tidx)
