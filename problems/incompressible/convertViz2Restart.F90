@@ -1,4 +1,4 @@
-program upsampleFields
+program convertViz2Restart 
     use kind_parameters, only: rkind, clen
     use gridtools, only: alloc_buffs, destroy_buffs
     use decomp_2d
