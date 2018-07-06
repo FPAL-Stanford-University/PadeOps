@@ -182,7 +182,7 @@ program StratifiedShearLayerDomainIntegrals
       call toc()
 
       if (nrank == 0) then
-         print*, time(idx), P(idx), B(idx), D(idx), Dv(idx), Dsgs(idx), IEL(idx)
+         print*, time(idx), P(idx), B(idx), D(idx), Dv(idx), Dsgs(idx), IEL(idx), TKE(idx)
          print*, "ddt_TKE:", P(idx) + B(idx) - D(idx)
       end if 
      
