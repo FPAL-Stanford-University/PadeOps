@@ -82,6 +82,8 @@ module sgsmod_igrid
         real(rkind) :: camd_x, camd_y, camd_z
         logical :: useCglobal = .false. 
 
+
+        integer :: BC_tau13_top = 0, BC_tau13_bot = 0, BC_tau23_top = 0, BC_tau23_bot = 0, BC_tau33_top = 0, BC_tau33_bot = 0
         ! Buoyancy factor (needed for AMD model, set using the procedure:  setBuoyancyFact)
         real(rkind) :: BuoyancyFact = 0.d0 
         contains 
@@ -92,6 +94,7 @@ module sgsmod_igrid
             procedure, private :: init_sigma
             procedure, private :: init_amd
             procedure, private :: allocateMemory_EddyViscosity
+            procedure          :: setTauBC
 
             !! ALL WALL MODEL PROCEDURE
             procedure, private :: initWallModel
@@ -103,6 +106,7 @@ module sgsmod_igrid
             procedure, private :: computeWall_PotTFlux
             procedure, private :: embed_WM_stress
             procedure, private :: embed_WM_PotTFlux
+            
 
             !! ALL DYNAMIC PROCEDURE SUBROUTINES
             procedure, private :: allocateMemory_DynamicProcedure
@@ -163,6 +167,43 @@ contains
 #include "sgs_models/accessors.F90"
 #include "sgs_models/scalar_bounding.F90"
 
+subroutine setTauBC(this, botwall, topwall)
+   class(sgs_igrid), intent(inout) :: this
+   integer, intent(in) :: topwall, botwall
+
+   select case(topwall)
+   case(1) ! no-slip wall
+        this%BC_tau13_top = 0 
+        this%BC_tau23_top = 0
+        this%BC_tau33_top = -1
+   case(2) ! slip wall
+        this%BC_tau13_top = 0
+        this%BC_tau23_top = 0
+        this%BC_tau33_top = -1
+   case(3) ! wall model
+        this%BC_tau13_top = 0  
+        this%BC_tau23_top = 0  
+        this%BC_tau33_top = 0  
+   end select 
+
+   select case(botwall)
+   case(1) ! no-slip wall
+        this%BC_tau13_bot = 0 
+        this%BC_tau23_bot = 0
+        this%BC_tau33_bot = -1
+   case(2) ! slip wallbot
+        this%BC_tau13_bot = 0
+        this%BC_tau23_bot = 0
+        this%BC_tau33_bot = -1
+   case(3) ! wall modebot
+        this%BC_tau13_bot = 0  
+        this%BC_tau23_bot = 0  
+        this%BC_tau33_bot = 0  
+   end select 
+
+end subroutine 
+
+
 subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep, dTdx, dTdy, dTdz, dTdxE, dTdyE, dTdzE)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
@@ -172,6 +213,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
    logical, intent(in) :: newTimeStep
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdx, dTdy, dTdz
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdxE, dTdyE, dTdzE
+   real(rkind) :: TwobyRe
 
    if (this%useWallModel) call this%computeWallStress( uC, vC, uhatC, vhatC, ThatC) 
 
@@ -205,6 +247,18 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
       this%tau_23 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,5)
       this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
    end if
+
+
+   if (.not. this%isInviscid) then
+      ! Embed viscous stress in tau_ij
+      TwobyRe = 2.d0/this%Re
+      this%tau_11 = this%tau_11 - TwobyRe*this%S_ij_C(:,:,:,1)
+      this%tau_12 = this%tau_12 - TwobyRe*this%S_ij_C(:,:,:,2)
+      this%tau_13 = this%tau_13 - TwobyRe*this%S_ij_E(:,:,:,3)
+      this%tau_22 = this%tau_22 - TwobyRe*this%S_ij_C(:,:,:,4)
+      this%tau_23 = this%tau_23 - TwobyRe*this%S_ij_E(:,:,:,5)
+      this%tau_33 = this%tau_33 - TwobyRe*this%S_ij_C(:,:,:,6)
+   end if 
 
    if (this%useWallModel) call this%embed_WM_stress()
  
@@ -249,7 +303,7 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, wh
    ! ddz(tau33)
    call this%spectC%fft(this%tau_33, cbuffy1)
    call transpose_y_to_z(cbuffy1, cbuffz1, this%sp_gpC)
-   call this%PadeDer%ddz_C2E(cbuffz1, cbuffz2, 0, 0)
+   call this%PadeDer%ddz_C2E(cbuffz1, cbuffz2, this%BC_tau33_bot, this%BC_tau33_top)
    call transpose_z_to_y(cbuffz2, cbuffy2, this%sp_gpE)
    wrhs = wrhs - cbuffy2
 
@@ -263,7 +317,7 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, wh
    ! ddz(tau13) for urhs, ddx(tau13) for wrhs
    call this%spectE%fft(this%tau_13, cbuffy2)
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
-   call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
+   call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, this%BC_tau13_bot, this%BC_tau13_top)
    call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
    urhs = urhs - cbuffy1
    call this%spectE%mtimes_ik1_ip(cbuffy2)
@@ -272,7 +326,7 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, wh
    ! ddz(tau23) for vrhs, ddy(tau23) for wrhs
    call this%spectE%fft(this%tau_23, cbuffy2)
    call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
-   call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
+   call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, this%BC_tau23_bot, this%BC_tau23_top)
    call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
    vrhs = vrhs - cbuffy1
    call this%spectE%mtimes_ik2_ip(cbuffy2)

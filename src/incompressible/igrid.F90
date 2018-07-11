@@ -788,6 +788,8 @@ contains
                                    this%initSpinUp)
            call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, &
                                    this%kappaSGS, this%kappa_bounding)
+
+           call this%sgsModel%setTauBC(botwall, topwall)
            call message(0,"SGS model initialized successfully")
        end if 
        this%max_nuSGS = zero
@@ -2200,11 +2202,9 @@ contains
        end if 
        
 
-       ! Step 5: Viscous Term (only if simulation if NOT inviscid)
-       if (.not. this%isInviscid) then
-           call this%addViscousTerm()
-       end if
       
+       ! Step 5: If needed compute the source term to calculate DNS pressure
+       ! later 
        if (present(CopyForDNSpress)) then
            if (CopyForDNSpress) then
               if (copyTurbRHS) then
@@ -2219,7 +2219,7 @@ contains
            end if   
        end if
 
-       ! Step 6: SGS Viscous Term
+       ! Step 6: SGS and Viscous Stress Terms
        if (this%useSGS) then
            call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
                                          this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
@@ -2230,7 +2230,12 @@ contains
               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
                                          this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
            end if
-           
+    
+       else
+            if (.not. this%isInviscid) then
+                call this%addViscousTerm()
+            end if
+
        end if
        
 
