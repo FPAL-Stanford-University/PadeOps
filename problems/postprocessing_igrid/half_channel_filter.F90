@@ -1,0 +1,94 @@
+program half_channel_filter
+   use kind_parameters, only: rkind, clen
+   use igrid_Operators, only: igrid_ops
+   use constants, only: pi, two
+   use mpi
+   use timer, only: tic, toc
+   use exits, only: message
+   implicit none
+
+   real(rkind), dimension(:,:,:), allocatable :: buff1
+   real(rkind), dimension(:,:,:), allocatable :: u, v, w
+   real(rkind) :: dx, dy, dz
+   integer :: nx, ny, nz, RunID, TIDX
+   type(igrid_ops) :: ops
+   character(len=clen) ::  inputdir, outputdir
+   character(len=clen) :: inputfile
+   real(rkind) :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0
+   integer :: idx, ierr, tstart = 0, tstop, tstep, NumericalSchemeVert = 1 
+   logical :: isZPeriodic = .false. 
+   integer :: VizDump_Schedule = 0 
+   integer, dimension(:), allocatable :: timesteps
+   real(rkind), dimension(:), allocatable :: times
+   integer :: nt, nx_filt, ny_filt, vfilt_times
+
+   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, NumericalSchemeVert, nx_filt, ny_filt, vfilt_times  
+   
+   call MPI_Init(ierr)               
+   call GETARG(1,inputfile)          
+   open(unit=99, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+   read(unit=99, NML=INPUT)
+   close(unit=99)
+
+   dx =     Lx/real(nx,rkind) 
+   dy =     Ly/real(ny,rkind) 
+   dz =     Lz/real(nz,rkind)
+
+   ! Initialize the operator class
+   call ops%init(nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isZPeriodic, NumericalSchemeVert)
+   
+   call ops%initFilter(nx_filt, ny_filt, vfilt_times)
+   
+   ! Allocate all the needed memory 
+   call ops%allocate3DField(u)
+   call ops%allocate3DField(v)
+   call ops%allocate3DField(w)
+
+   call ops%allocate3DField(buff1)
+   
+   idx = 1
+   
+   if (VizDump_Schedule == 1) then
+      call ops%Read_VizSummary(times, timesteps)
+      nt = size(timesteps) 
+   else
+      nt = (tstop - tstart)/tstep 
+   end if
+   
+   call message(0,"Number of snapshots to read:", nt)
+
+   do while(idx <= nt)
+      
+      if (VizDump_Schedule == 1) then
+         tidx = timesteps(idx)
+      else
+         tidx = tstart + tstep * (idx - 1)
+      end if
+      
+      call message(0, "Reading fields for tid:", TIDX)
+      call tic()
+      call ops%ReadField3D(u,"uVel",TIDX)
+      call ops%ReadField3D(v,"vVel",TIDX)
+      call ops%ReadField3D(w,"wVel",TIDX) 
+  
+      call ops%FilterField(u,buff1)
+      call ops%WriteField3D(buff1, "uflt", tidx)
+      
+      call ops%FilterField(v,buff1)
+      call ops%WriteField3D(buff1, "vflt", tidx)
+
+      call ops%FilterField(w,buff1)
+      call ops%WriteField3D(buff1, "wflt", tidx)
+
+      idx = idx + 1
+
+      call toc()
+   
+   end do
+
+   call ops%destroy()
+   call MPI_Finalize(ierr)           
+
+
+end program 
+

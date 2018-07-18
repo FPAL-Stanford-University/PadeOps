@@ -1,4 +1,4 @@
-program testTKEbudgetTerms
+program testSGSmodelWT
    use mpi
    use constants
    use kind_parameters,  only: rkind, clen
@@ -44,6 +44,8 @@ program testTKEbudgetTerms
    integer :: dVdzBC_bottom  =  0, dVdzBC_top  =  -1
    integer :: dWdzBC_bottom  =  1, dWdzBC_top  =  1
 
+   real(rkind), dimension(:,:,:), allocatable :: dTdxC, dTdyC, dTdzC, dTdxE, dTdyE, dTdzE
+
    character(len=clen) :: inputdir, outputdir, inputFile 
    integer :: nx, ny, nz, ioUnit, i, j, k, nvis = 0, tid_initial, tid_final, dtid, ind=0
    real(rkind) :: z0init, dt, inst_horz_avg_turb(8), tsim
@@ -75,14 +77,21 @@ program testTKEbudgetTerms
    call initializeEverything()
   
    print*, RID, tid_initial, tid_final, dtid
-   ! Initialize WT
-   allocate(turbArray)
-   call turbArray%init(inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
+
+   allocate(dTdxC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+   allocate(dTdyC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+   allocate(dTdzC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+   allocate(dTdxE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+   allocate(dTdyE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+   allocate(dTdzE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
 
    ! DO LOOP START HERE
    do ind = tid_initial, tid_final, dtid 
         call tic()
         
+        ! Initialize WT
+        allocate(turbArray)
+        call turbArray%init(inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffyE, cbuffzC, cbuffzE, mesh, dx, dy, dz) 
         
         
         ! READ FIELDS)
@@ -116,12 +125,11 @@ program testTKEbudgetTerms
 
         ! SGS MODEL STUFF
         u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-        !call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, .true.)
-        call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE,  uhatC, vhatC, whatC, ThatC, uC, vC, wC, .true.)
+        call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, .true., dTdxC, dTdyC, dTdzC, dTdxE, dTdyE, dTdzE)
         call spectC%ifft(u_rhs,fbody_x)
         call spectC%ifft(v_rhs,fbody_y)
         call spectE%ifft(w_rhs,fbody_z)
-        
+        !
         call transpose_x_to_y(fbody_z,rbuffyE(:,:,:,1),gpE)
         call transpose_y_to_z(rbuffyE(:,:,:,1),rbuffzE(:,:,:,1),gpE)
         call Pade6opz%interpz_E2C(rbuffzE(:,:,:,1),rbuffzC(:,:,:,1),0,0)
@@ -134,13 +142,13 @@ program testTKEbudgetTerms
         fz_sgs_store = fz_sgs_store + fbody_zC 
 
         ! WRAP UP 
+        deallocate(turbArray)
         call toc()
 
         nvis = nvis + 1
         
         ! END DO LOOP
    end do
-   deallocate(turbArray)
 
    call dumpFullField(fx_turb_store/real(nvis,rkind),"xtrb")
    call dumpFullField(fy_turb_store/real(nvis,rkind),"ytrb")
@@ -236,13 +244,13 @@ contains
       computeFbody = .true.
 
       ! Initialize Padeder
-      call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme, .true.)
+      call Pade6opz%init(gpC, sp_gpC, gpE, sp_gpE, dz, scheme, .false.)
 
       ! Initialize sgs
       call newsgs%init(gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE(1,1,:), mesh(1,1,:,3), fbody_x, fbody_y, &
                       fbody_z, computeFbody, Pade6opZ, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, &
                       rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re,  .false., .false.,1)
-      call newsgs%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappaSGS)
+      call newsgs%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3,kappaSGS)
 
 
 

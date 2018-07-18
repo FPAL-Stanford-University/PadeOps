@@ -1,0 +1,13 @@
+&INPUT
+inputdir  = "/scratch/05294/mhowland/neutral_JFM/Sx_8p5_Sy_4p2/Run_3"        ! Directory for input files
+outputdir = "/scratch/05294/mhowland/neutral_JFM/Sx_8p5_Sy_4p2/Run_3"        ! Directory for output files
+RunID  = 1
+tstart = 10700
+tstop  = 26400
+tstep  = 100
+nx     = 512
+ny     = 256
+nz     = 256
+NumericalSchemeVertical = 2
+VizDump_Schedule = 0
+/

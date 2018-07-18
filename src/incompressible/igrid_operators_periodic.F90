@@ -141,7 +141,8 @@ subroutine ddz_cmplx2cmplx(this, fhat)
    complex(rkind), dimension(this%spect%spectdecomp%ysz(1),this%spect%spectdecomp%ysz(2),this%spect%spectdecomp%ysz(3)), intent(inout)  :: fhat
 
    call transpose_y_to_z(fhat, this%cbuffz,this%spect%spectdecomp)
-   call this%spect%ddz_C2C_complex_inplace(this%cbuffz)
+   !call this%spect%ddz_C2C_complex_inplace(this%cbuffz)
+   call this%spect%ddz_C2C_spect(this%cbuffz)
    call transpose_z_to_y(this%cbuffz, fhat, this%spect%spectdecomp)
 end subroutine 
 
@@ -155,7 +156,8 @@ subroutine ddz(this, f, dfdz)
 
    call transpose_x_to_y(f,this%rbuffy,this%gp)
    call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
-   call this%spect%ddz_C2C_real_inplace(this%rbuffz1)
+   !call this%spect%ddz_C2C_real_inplace(this%rbuffz1)
+   call this%spect%ddz_C2C_spect(this%rbuffz1)
    call transpose_z_to_y(this%rbuffz1,this%rbuffy,this%gp)
    call transpose_y_to_x(this%rbuffy,dfdz,this%gp)
 end subroutine 
