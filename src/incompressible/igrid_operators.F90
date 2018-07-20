@@ -380,7 +380,7 @@ subroutine d2dz2(this, f, d2fdz2, botBC, topBC)
    call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
    call this%derZ%d2dz2_C2C(this%rbuffz1,this%rbuffz2, botBC, topBC)
    call transpose_z_to_y(this%rbuffz2,this%rbuffy,this%gp)
-   call transpose_y_to_x(this%rbuffy,dfdz,this%gp)
+   call transpose_y_to_x(this%rbuffy,d2fdz2,this%gp)
 end subroutine 
 
 subroutine ddz_1d(this, f1d, dfdz1d)
