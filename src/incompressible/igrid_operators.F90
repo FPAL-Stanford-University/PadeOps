@@ -7,6 +7,7 @@ module igrid_Operators
    use PadeDerOps, only: Pade6stagg 
    use PoissonPeriodicMod, only: PoissonPeriodic
    use exits, only: GracefulExit, message
+   use gaussianstuff, only: gaussian  
    implicit none
    
    private
@@ -18,18 +19,20 @@ module igrid_Operators
       real(rkind),    dimension(:,:,:), allocatable :: rbuffx, rbuffy, rbuffz1, rbuffz2
       type(decomp_info), public :: gp, gpE
       type(spectral), public  :: spect, spectE
-      type(Pade6stagg) :: derZ
+      type(Pade6stagg), public :: derZ
       type(cd06stagg) :: derZ1d
       real(rkind), dimension(:,:,:), allocatable :: zarr1d_1, zarr1d_2
 
       type(PoissonPeriodic) :: poiss_periodic
-      real(rkind) :: dx, dy, dz
+      real(rkind) :: dx, dy, dz, Lx, Ly, Lz
       character(len=clen) ::  inputdir, outputdir, RestartDir
       real(rkind) :: mfact_xy
     
       logical :: PeriodicInZ, PoissonSolverInitiatized = .false. 
-      integer :: RunID
-
+      integer :: RunID, vfilt_times 
+    
+      real(rkind), dimension(:), allocatable :: gxfilt, gyfilt
+      type(gaussian) :: gfilt 
       contains
          procedure :: init
          procedure :: destroy
@@ -37,7 +40,9 @@ module igrid_Operators
          procedure :: ddy
          procedure :: ddz
          procedure :: ddz_1d
+         procedure :: d2dz2
          procedure :: TakeMean_xy
+         procedure :: TakeMean_y
          procedure :: getFluct_from_MeanZ
          procedure :: ReadField3D
          procedure :: WriteField3D
@@ -59,9 +64,87 @@ module igrid_Operators
          procedure :: dealias
          procedure :: alloc_cbuffz
          procedure :: Read_VizSummary
+         procedure :: alloc_zvec
+         procedure :: initFilter
+         procedure :: FilterField
      end type 
 
 contains
+
+subroutine FilterField(this, f, fout)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in) :: f
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: fout
+   integer :: fid, j, k
+
+   call this%spect%fft(f,this%cbuffy1)
+   do k = 1,size(this%cbuffy1,3)
+       do j = 1,size(this%cbuffy1,2)
+          this%cbuffy1(:,j,k) = this%gyfilt(j)*this%gxfilt*this%cbuffy1(:,j,k)
+       end do 
+   end do 
+    
+   call this%spect%ifft(this%cbuffy1,fout)
+
+   call transpose_x_to_y(fout,this%rbuffy,this%gp)
+   call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
+   do fid = 1,this%vfilt_times
+        call this%gfilt%filter3(this%rbuffz1,this%rbuffz2,size(this%rbuffz1,1),size(this%rbuffz1,2))
+        this%rbuffz1 = this%rbuffz2
+   end do 
+   call transpose_z_to_y(this%rbuffz2,this%rbuffy,this%gp)
+   call transpose_y_to_x(this%rbuffy,fout,this%gp)
+
+   
+
+end subroutine 
+
+
+subroutine initFilter(this, nx_filt, ny_filt, vfilt_times) 
+    use constants, only: pi
+    class(igrid_ops), intent(inout) :: this
+    integer, intent(in) :: nx_filt, ny_filt, vfilt_times
+    real(rkind) :: kx_co, ky_co, dxf, dyf
+    integer :: i, j, ierr
+
+    allocate(this%gxfilt(this%spect%spectdecomp%ysz(1)))
+    allocate(this%gyfilt(this%spect%spectdecomp%ysz(2)))
+    
+
+    dxf = this%Lx/nx_filt
+    dyf = this%Ly/ny_filt
+    kx_co = ((2.d0/3.d0)*pi/dxf)  
+    ky_co = ((2.d0/3.d0)*pi/dyf)  
+
+    do i = 1,size(this%gxfilt)
+        if (abs(this%spect%k1(i,1,1)) < kx_co) then
+            this%gxfilt(i) = 1.d0 
+        else
+            this%gxfilt(i) = 0.d0 
+        end if
+    end do 
+    
+    do j = 1,size(this%gyfilt)
+        if (abs(this%spect%k2(1,j,1)) < ky_co) then
+            this%gyfilt(j) = 1.d0 
+        else
+            this%gyfilt(j) = 0.d0 
+        end if
+    end do 
+
+    this%vfilt_times = vfilt_times
+    
+    ierr = this%gfilt%init(this%gp%zsz(3),.false.) 
+    
+end subroutine 
+
+subroutine alloc_zvec(this, vec)
+   class(igrid_ops), intent(in) :: this
+   real(rkind), dimension(:), allocatable, intent(out) :: vec
+
+   allocate(vec(this%gp%zsz(3)))
+
+end subroutine 
 
 subroutine Read_VizSummary(this, times, timesteps)
    class(igrid_ops), intent(inout) :: this
@@ -221,7 +304,11 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeri
  
    call this%spect%alloc_r2c_out(this%cbuffy1) 
    call this%spect%alloc_r2c_out(this%cbuffy2) 
-   
+
+   this%Lx = nx*dx
+   this%Ly = ny*dy
+   this%Lz = nz*dz
+
    this%inputdir  = inputdir
    this%outputdir = outputdir
    this%RunID = RunID
@@ -283,6 +370,19 @@ subroutine ddz(this, f, dfdz, botBC, topBC)
    call transpose_y_to_x(this%rbuffy,dfdz,this%gp)
 end subroutine 
 
+subroutine d2dz2(this, f, d2fdz2, botBC, topBC)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: f
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: d2fdz2
+   integer, intent(in) :: botBC, topBC
+
+   call transpose_x_to_y(f,this%rbuffy,this%gp)
+   call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
+   call this%derZ%d2dz2_C2C(this%rbuffz1,this%rbuffz2, botBC, topBC)
+   call transpose_z_to_y(this%rbuffz2,this%rbuffy,this%gp)
+   call transpose_y_to_x(this%rbuffy,d2fdz2,this%gp)
+end subroutine 
+
 subroutine ddz_1d(this, f1d, dfdz1d)
    class(igrid_ops), intent(inout) :: this
    real(rkind), dimension(this%gp%zsz(3)), intent(in)  :: f1d
@@ -323,6 +423,22 @@ subroutine TakeMean_xy(this, f, fmean)
    do k = 1,this%gp%zsz(3)
       fmean(k) = p_sum(sum(this%rbuffz1(:,:,k)))*this%mfact_xy
    end do 
+end subroutine
+
+subroutine TakeMean_y(this, f, fmean)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: f
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: fmean
+   integer :: i,k 
+
+   call transpose_x_to_y(f,this%rbuffy,this%gp)
+   do k = 1,this%gp%ysz(3)
+      do i = 1,this%gp%ysz(1)
+        this%rbuffy(i,:,k) = sum(this%rbuffy(i,:,k))/this%gp%ysz(2) 
+      end do
+   end do
+   call transpose_y_to_x(this%rbuffy,fmean,this%gp)
+
 end subroutine
 
 subroutine ReadField3D(this, field, label, tidx)

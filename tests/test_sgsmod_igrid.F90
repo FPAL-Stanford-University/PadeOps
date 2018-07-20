@@ -34,6 +34,7 @@ program test_sgsmod_igrid
    integer :: botBC_temp = 1
    logical :: computeFbody = .false.  
    character(len=clen) :: inputfile = "/work/04076/tg833754/stampede2/me461/testing_data/inputsgs.dat"
+   real(rkind), dimension(:,:,:), allocatable :: dTdxE, dTdyE
 
    call mpi_init(ierr)
    call decomp_2d_init(nx,ny,nz,0,0)
@@ -119,6 +120,8 @@ program test_sgsmod_igrid
    call transpose_z_to_y(cbuffzC(:,:,:,1), whatC, sp_gp )
    call spectC%ifft(whatC, wC)
 
+   allocate(dTdxE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+   allocate(dTdyE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
 
    ! STEP 2: Compute dudxC, dudyC, dudzC, dudxE, dudyE, dudzE
    call spectC%mtimes_ik1_oop(uhatC, cbuffyC(:,:,:,1))
@@ -195,8 +198,9 @@ program test_sgsmod_igrid
  
    ! STEP 6: Compute the SGS rhs terms 
    call sgsmodel%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappaSGS)
-   call sgsmodel%getRHS_SGS(urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, u, v, wC, .true.)
-   call sgsmodel%getRHS_SGS_Scalar(Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, wC, T, ThatC)
+   call sgsmodel%getRHS_SGS(urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, u, v, wC, .true., dTdxC, dTdyC, dTdzC, dTdxE, dTdyE, dTdzE)
+   call sgsmodel%getRHS_SGS_Scalar(Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, wC, T, ThatC, duidxjC)
+! subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC, TurbPrandtlNum, Cy, lowbound, highbound)
 
    call decomp_2d_write_one(1,nuSGS,'/work/04076/tg833754/stampede2/me461/testing_data/nuSGS_verify.out',gp)
    call decomp_2d_write_one(1,kappaSGS,'/work/04076/tg833754/stampede2/me461/testing_data/kappaSGS_verify.out',gp)

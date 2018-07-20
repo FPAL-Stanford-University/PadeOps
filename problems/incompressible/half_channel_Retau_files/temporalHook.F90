@@ -3,7 +3,6 @@ module temporalHook
     use IncompressibleGrid, only: igrid
     use reductions,         only: P_MAXVAL, p_minval
     use exits,              only: message, message_min_max
-    !use pbl_IO,           only: output_tecplot!dumpData4Matlab 
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi

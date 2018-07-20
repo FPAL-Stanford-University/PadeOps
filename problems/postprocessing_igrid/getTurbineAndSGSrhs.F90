@@ -44,6 +44,8 @@ program testSGSmodelWT
    integer :: dVdzBC_bottom  =  0, dVdzBC_top  =  -1
    integer :: dWdzBC_bottom  =  1, dWdzBC_top  =  1
 
+   real(rkind), dimension(:,:,:), allocatable :: dTdxC, dTdyC, dTdzC, dTdxE, dTdyE, dTdzE
+
    character(len=clen) :: inputdir, outputdir, inputFile 
    integer :: nx, ny, nz, ioUnit, i, j, k, nvis = 0, tid_initial, tid_final, dtid, ind=0
    real(rkind) :: z0init, dt, inst_horz_avg_turb(8), tsim
@@ -75,6 +77,13 @@ program testSGSmodelWT
    call initializeEverything()
   
    print*, RID, tid_initial, tid_final, dtid
+
+   allocate(dTdxC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+   allocate(dTdyC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+   allocate(dTdzC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+   allocate(dTdxE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+   allocate(dTdyE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+   allocate(dTdzE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
 
    ! DO LOOP START HERE
    do ind = tid_initial, tid_final, dtid 
@@ -116,7 +125,7 @@ program testSGSmodelWT
 
         ! SGS MODEL STUFF
         u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-        call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, .true.)
+        call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, .true., dTdxC, dTdyC, dTdzC, dTdxE, dTdyE, dTdzE)
         call spectC%ifft(u_rhs,fbody_x)
         call spectC%ifft(v_rhs,fbody_y)
         call spectE%ifft(w_rhs,fbody_z)

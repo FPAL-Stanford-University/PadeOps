@@ -1,4 +1,4 @@
-program StratifiedShearLayerDumpEpsPlanes
+program StratifiedShearLayerDumpQcrit
    use kind_parameters, only: rkind, clen
    use igrid_Operators, only: igrid_ops
    use constants, only: pi, two
@@ -7,8 +7,10 @@ program StratifiedShearLayerDumpEpsPlanes
    use exits, only: message
    implicit none
 
-   real(rkind), dimension(:,:,:), allocatable :: buff1, buff2, buff3, buff4
-   real(rkind), dimension(:,:,:), allocatable :: u, v, w 
+   real(rkind), dimension(:,:,:), allocatable :: dudx, dudy, dudz 
+   real(rkind), dimension(:,:,:), allocatable :: dwdx, dwdy, dwdz 
+   real(rkind), dimension(:,:,:), allocatable :: dvdx, dvdy, dvdz 
+   real(rkind), dimension(:,:,:), allocatable :: u, v, w, buff1 
    real(rkind) :: dx, dy, dz, Re = 3000.d0
    integer :: nx, ny, nz, nt, RunID, TIDX, tstart=0, tstop=0, tstep=0, VizDump_Schedule=0
    type(igrid_ops) :: ops
@@ -40,10 +42,16 @@ program StratifiedShearLayerDumpEpsPlanes
    call ops%allocate3DField(v)
    call ops%allocate3DField(w)
    
+   call ops%allocate3DField(dudx)
+   call ops%allocate3DField(dudy)
+   call ops%allocate3DField(dudz)
+   call ops%allocate3DField(dvdx)
+   call ops%allocate3DField(dvdy)
+   call ops%allocate3DField(dvdz)
+   call ops%allocate3DField(dwdx)
+   call ops%allocate3DField(dwdy)
+   call ops%allocate3DField(dwdz)
    call ops%allocate3DField(buff1)
-   call ops%allocate3DField(buff2)
-   call ops%allocate3DField(buff3)
-   call ops%allocate3DField(buff4)
    
    if (VizDump_Schedule == 1) then
       call ops%Read_VizSummary(times, timesteps)
@@ -74,18 +82,15 @@ program StratifiedShearLayerDumpEpsPlanes
       u = buff1
 
       ! Get gradients and add norms
-      call ops%GetGradient(u, buff1, buff2, buff3, 1, 1)
-      buff4 = buff1*buff1 + buff2*buff2 + buff3*buff3
+      call ops%GetGradient(u, dudx, dudy, dudz, 1, 1)
+      call ops%GetGradient(v, dvdx, dvdy, dvdz, 1, 1)
+      call ops%GetGradient(w, dwdx, dwdy, dwdz, -1, -1)
 
-      call ops%GetGradient(v, buff1, buff2, buff3, 1, 1)
-      buff4 = buff4 + buff1*buff1 + buff2*buff2 + buff3*buff3
-      
-      call ops%GetGradient(w, buff1, buff2, buff3, -1, -1)
-      buff4 = buff4 + buff1*buff1 + buff2*buff2 + buff3*buff3
+      buff1 = 0.5d0*(dudx*dudx  + dvdy*dvdy + dwdz*dwdz)
+      buff1 = buff1 + dudy*dvdx + dudz*dwdx + dvdz*dwdy
+      buff1 = -buff1
 
-      buff4 = (1.d0/Re)*buff4
-
-      call ops%dump_plane(buff4, 3, nz/2, tidx, "diss")
+      call ops%WriteField3D(buff1, "qcri", tidx)
 
       idx = idx + 1
   end do 

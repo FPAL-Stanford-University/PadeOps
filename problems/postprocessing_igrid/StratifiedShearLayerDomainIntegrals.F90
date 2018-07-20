@@ -75,10 +75,14 @@ program StratifiedShearLayerDomainIntegrals
       call ops%ReadField3D(u,"uVel",TIDX)
       call ops%ReadField3D(v,"vVel",TIDX)
       call ops%ReadField3D(w,"wVel",TIDX)
-      !call ops%ReadField3D(T,"potT",TIDX)
-      !call ops%ReadField3D(nuSGS,"nSGS",TIDX)
-
-      !T = Rib*(T - Tref)  ! Rescale Potential temperature to buoyancy variable: b 
+      call ops%ReadField3D(T,"potT",TIDX)
+      if (tidx == 0) then
+         nuSGS = 0
+      else
+         call ops%ReadField3D(nuSGS,"nSGS",TIDX)
+      end if
+      
+      T = Rib*(T - Tref)  ! Rescale Potential temperature to buoyancy variable: b 
 
       time(idx) = ops%getSimTime(tidx)
       call message(0, "Read simulation data at time:", time(idx))
@@ -88,6 +92,80 @@ program StratifiedShearLayerDomainIntegrals
       call ops%getFluct_from_MeanZ(v,vfluct)
       buff2 = (ufluct*ufluct + vfluct*vfluct + w*w)
       TKE(idx) = 0.5d0*ops%getVolumeIntegral(buff2)
+
+      ! STEP 5: Compute the Buoyancy term
+      call ops%getFluct_from_MeanZ(T,buff2)
+      buff2 = buff2*w
+      B(idx) = ops%getVolumeIntegral(buff2)
+
+
+      ! STEP 6: Compute dissipation rate
+      call ops%ddx(ufluct,buff2)
+      buff3 = buff2*buff2
+      call ops%ddy(ufluct,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddz(ufluct,buff2, 1, 1)
+      buff3 = buff3 + buff2*buff2
+
+      call ops%ddx(vfluct,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddy(vfluct,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddz(vfluct,buff2, 1, 1)
+      buff3 = buff3 + buff2*buff2
+
+      call ops%ddx(w,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddy(w,buff2)
+      buff3 = buff3 + buff2*buff2
+      call ops%ddz(w,buff2, -1, -1)  ! no-penetration BCs
+      buff3 = buff3 + buff2*buff2
+      
+      buff3 = (1.d0/Re)*buff3
+      Dv(idx) = ops%getVolumeIntegral(buff3)
+
+      ! STEP 7: SGS sink term
+      ! s11*s11
+      call ops%ddx(ufluct,buff3)
+      buff2 = buff3*buff3
+      
+      ! 2*s12*s12
+      call ops%ddy(ufluct,buff3)
+      call ops%ddx(vfluct,buff4)
+      buff3 = 0.5d0*(buff3 + buff4)
+      buff2 = buff2 + 2.d0*buff3*buff3 
+
+      ! 2*s13*s13 
+      call ops%ddz(ufluct,buff3, 1, 1)
+      call ops%ddx(w     ,buff4)
+      buff3 = 0.5d0*(buff3 + buff4)
+      buff2 = buff2 + 2.d0*buff3*buff3 
+
+      ! 2*s23*s23 
+      call ops%ddz(vfluct,buff3, 1, 1)
+      call ops%ddy(w     ,buff4)
+      buff3 = 0.5d0*(buff3 + buff4)
+      buff2 = buff2 + 2.d0*buff3*buff3 
+
+      ! s22*s22
+      call ops%ddy(vfluct,buff3)
+      buff2 = buff2 + buff3*buff3
+      
+      ! s33*s33
+      call ops%ddz(w,buff3, -1, -1)
+      buff2 = buff2 + buff3*buff3
+      
+      buff2 = 2.d0*nuSGS*buff2
+      Dsgs(idx) = ops%getVolumeIntegral(buff2)
+
+      D(idx) = Dsgs(idx) + Dv(idx)
+      call toc()
+
+      if (nrank == 0) then
+         print*, time(idx), P(idx), B(idx), D(idx), Dv(idx), Dsgs(idx), IEL(idx), TKE(idx)
+         print*, "ddt_TKE:", P(idx) + B(idx) - D(idx)
+      end if 
+>>>>>>> igridSGS
      
       idx = idx + 1
    end do 

@@ -46,6 +46,7 @@ module scalar_igridMod
       real(rkind) :: Re, PrandtlNum, TurbPrandtlNum, Cy 
       character(len=clen) :: inputDataDir, outputDataDir
       real(rkind), dimension(:,:,:), pointer :: u, v, w, wC
+      real(rkind), dimension(:,:,:,:), pointer :: duidxj
 
       integer :: RunID, scalar_number, bc_bottom, bc_top
       type(sgs_igrid), pointer :: sgsmodel
@@ -143,7 +144,7 @@ subroutine populateRHS(this, dt)
 
    if (this%useSGS) then
       call this%sgsmodel%getRHS_SGS_Scalar(this%rhs, this%dFdxC, this%dFdyC, this%dFdzC, this%dFdzE, &
-         this%u, this%v, this%wC, this%F, this%Fhat, this%TurbPrandtlNum, this%Cy, this%lowbound, this%highbound)
+         this%u, this%v, this%wC, this%F, this%Fhat, this%duidxj, this%TurbPrandtlNum, this%Cy, this%lowbound, this%highbound)
    end if
 
    if (.not. this%isinviscid) then
@@ -175,7 +176,7 @@ subroutine destroy(this)
 end subroutine
 
 
-subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh,u,v,w,wC,    &
+subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh,u,v,w,wC,duidxj,    &
                   & rbuffxC,rbuffyC,rbuffzC,rbuffxE,rbuffyE,rbuffzE, cbuffyC,&
                   & cbuffzC,cbuffyE,cbuffzE, Re, isinviscid, useSGS, scalar_number, &
                   & InputDataDir, OutputDataDir, RunID, restartSim, tid_restart, &
@@ -192,6 +193,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    real(rkind), dimension(:,:,:,:), target, intent(in) :: rbuffxC, rbuffyC, rbuffzC
    real(rkind), dimension(:,:,:,:), target, intent(in) :: rbuffxE, rbuffyE, rbuffzE
    real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+   real(rkind), dimension(:,:,:,:), target, intent(in) :: duidxj 
    complex(rkind), dimension(:,:,:,:), target, intent(in) ::  cbuffyC, cbuffzC
    complex(rkind), dimension(:,:,:,:), target, intent(in) ::  cbuffyE, cbuffzE
    logical, intent(in) :: isinviscid, useSGS, restartSim, usefringe, usedoublefringe
@@ -273,6 +275,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    this%v => v
    this%w => w
    this%wC => wC
+   this%duidxj = duidxj
 
 
    allocate(this%F (gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))

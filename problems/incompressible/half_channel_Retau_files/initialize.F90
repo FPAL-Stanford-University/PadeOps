@@ -1,4 +1,4 @@
-module pbl_igrid_parameters
+module half_channel_Retau_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
@@ -16,7 +16,7 @@ module pbl_igrid_parameters
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use pbl_igrid_parameters    
+    use half_channel_Retau_parameters    
     use kind_parameters,  only: rkind
     use constants,        only: one,two
     use decomp_2d,        only: decomp_info
@@ -72,7 +72,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use pbl_igrid_parameters
+    use half_channel_Retau_parameters    
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
