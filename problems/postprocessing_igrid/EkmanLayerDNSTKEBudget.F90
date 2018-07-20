@@ -1,4 +1,4 @@
-program EkmanLayerDNSTurbStats
+program EkmanLayerDNSTKEBudget
     use kind_parameters, only: rkind, clen
     use igrid_Operators, only: igrid_ops
     use DerivativesMod, only: derivatives
@@ -14,7 +14,7 @@ program EkmanLayerDNSTurbStats
                 &u,v,w,p, ufluct, vfluct
     real(rkind), dimension(:,:), allocatable :: &
                 &umean_t, vmean_t, data2write, &
-                &Tran_t, Prod_t, Diff_t, Diss_t, PDif_t
+                &Tran_t, Prod_t, Diff_t, Diss_t, PDif_t, uiui_t, times
     real(rkind) :: &
                 &time, dx, dy, dz, &
                 &Re=400.d0, Lx=26.d0, Ly=26.d0, Lz=24.d0
@@ -44,7 +44,7 @@ program EkmanLayerDNSTurbStats
     call get_decomp_info(ops%gp)
     call der%init( ops%gp,   dx,     dy,    dz, &
                         .TRUE., .TRUE., .FALSE., &
-                        "cd10", "cd10", "cd10" )
+                        "four", "four", "cd10" )
     call mpi_barrier(mpi_comm_world, ierr)
 
     ! Allocate all the needed memory 
@@ -70,6 +70,8 @@ program EkmanLayerDNSTurbStats
     allocate(Diff_t(nz,nt))
     allocate(Diss_t(nz,nt))
     allocate(PDif_t(nz,nt))
+    allocate(uiui_t(nz,nt))
+    allocate(times(1,nt))
  
     ! Compute for each timestep: 
     idx = 1
@@ -81,15 +83,20 @@ program EkmanLayerDNSTurbStats
         call ops%ReadField3D(v,"vVel",TIDX)
         call ops%ReadField3D(w,"wVel",TIDX)
         call ops%ReadField3D(p,"prss",TIDX)
-        time = ops%getSimTime(tidx)
+        time = ops%getSimTime(TIDX)
         call message(0, "Read simulation data at time:", time)
+        times(1,idx) = TIDX
 
         ! Fluctuations and means
         call ops%getFluct_from_MeanZ(u,ufluct)
         call ops%getFluct_from_MeanZ(v,vfluct)
         call ops%TakeMean_xy(u-ufluct,umean_t(:,idx))
         call ops%TakeMean_xy(v-vfluct,vmean_t(:,idx))
-        
+       
+        ! TKE: uiui = uu+vv+ww
+        buff1 = ufluct**2 + vfluct**2 + w**2        
+        call ops%TakeMean_xy(buff1, uiui_t(:,idx))
+ 
         ! Transport terms: d/dz <uuw + vvw + www>
         call ops%ddz(ufluct*ufluct*w + vfluct*vfluct*w + w**3, buff1, botBC, topBC)
         call ops%TakeMean_xy(-buff1, Tran_t(:,idx))            
@@ -105,7 +112,7 @@ program EkmanLayerDNSTurbStats
         buff1 = ufluct**2+vfluct**2+w**2
         call transpose_y_to_z(buff1,buffz1,ops%gp)
         call der % d2dz2(buffz1,buffz2)
-        call transpose_z_to_y(buffz2,buff2,ops%gp)
+        call Transpose_z_to_y(buffz2,buff2,ops%gp)
         call ops%TakeMean_xy(buff2,Diff_t(:,idx))
 
         ! Viscous dissip: -2<dui/dxk*dui/dxk>
@@ -128,17 +135,25 @@ program EkmanLayerDNSTurbStats
 
     ! Write out time averages
     if (nrank == 0) then
-        allocate(data2write(nz,5))
-        data2write(:,1) = sum(Tran_t,2)/nt
-        data2write(:,2) = sum(Prod_t,2)/nt
-        data2write(:,3) = sum(Diff_t,2)/nt
-        data2write(:,4) = sum(Diss_t,2)/nt
-        data2write(:,5) = sum(PDif_t,2)/nt
-        call ops%WriteASCII_2D(data2write, "tkeb")
+        call message(0,"Writing files...")
+        !allocate(data2write(nz,5))
+        !data2write(:,1) = sum(Tran_t,2)/nt
+        !data2write(:,2) = sum(Prod_t,2)/nt
+        !data2write(:,3) = sum(Diff_t,2)/nt
+        !data2write(:,4) = sum(Diss_t,2)/nt
+        !data2write(:,5) = sum(PDif_t,2)/nt
+        call ops%WriteASCII_2D(Tran_t, "Tran")
+        call ops%WriteASCII_2D(Prod_t, "Prod")
+        call ops%WriteASCII_2D(Diff_t, "Diff")
+        call ops%WriteASCII_2D(Diss_t, "Diss")
+        call ops%WriteASCII_2D(PDif_t, "PDif")
+        call ops%WriteASCII_2D(uiui_t, "uiui")
+        call ops%WriteASCII_2D(times, "time")
     end if 
         
     call ops%destroy()
     call MPI_Finalize(ierr)           
+    call message(0,"Done")
 
 end program 
 

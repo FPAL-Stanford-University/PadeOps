@@ -46,9 +46,6 @@ program EkmanLayerDNSDomainIntegrals
    call ops%allocate3DField(v)
    call ops%allocate3DField(vfluct)
    call ops%allocate3DField(w)
-   call ops%allocate3DField(T)
-   call ops%allocate3DField(Tfluct)
-   call ops%allocate3DField(nuSGS)
    call ops%allocate3DField(buff2)
    call ops%allocate3DField(buff3)
    call ops%allocate3DField(buff4)
@@ -79,82 +76,19 @@ program EkmanLayerDNSDomainIntegrals
       time(idx) = ops%getSimTime(tidx)
       call message(0, "Read simulation data at time:", time(idx))
 
-      ! STEP 4: Compute the production
       call ops%getFluct_from_MeanZ(u,ufluct)
-      buff3 = u - ufluct ! mean
-      call ops%ddz(buff3,buff2,1,1) ! dUdz (no stress BC)
-      buff3 = 0.5d0*buff3*buff3
-      MKE(idx) = ops%getVolumeIntegral(buff3)
-      buff3 = -ufluct*w      ! u'w' (since wmean = 0)
-      buff2 = buff2*buff3 
-      P(idx) = ops%getVolumeIntegral(buff2)
-      
       call ops%getFluct_from_MeanZ(v,vfluct)
-      buff3 = v - vfluct ! mean
-      call ops%ddz(buff3,buff2,1,1) ! dVdz (no stress BC)
-      buff3 = 0.5d0*buff3*buff3
-      MKE(idx) = MKE(idx) + ops%getVolumeIntegral(buff3)
-      buff3 = -vfluct*w      ! u'w' (since wmean = 0)
-      buff2 = buff2*buff3 
-      P(idx) = P(idx) + ops%getVolumeIntegral(buff2)
-       
-      !!!!!!!!!!!!!! 
-      ! Re stress terms
-      buff2   = ufluct*ufluct
-      uu(idx) = ops%getVolumeIntegral(buff2)
-      buff2   = vfluct*vfluct
-      vv(idx) = ops%getVolumeIntegral(buff2)
-      buff2   = w*w
-      ww(idx) = ops%getVolumeIntegral(buff2)   
-      !!!!!!!!!!!!!!
-      
-      ! STEP 5a: Compute TKE
       buff2   = (ufluct*ufluct + vfluct*vfluct + w*w)
       TKE(idx) = 0.5d0*ops%getVolumeIntegral(buff2)
 
-      !! STEP 6: Compute dissipation rate
-      call ops%ddx(ufluct,buff2)
-      buff3 = buff2*buff2
-      call ops%ddy(ufluct,buff2)
-      buff3 = buff3 + buff2*buff2
-      call ops%ddz(ufluct,buff2, 1, 1)
-      buff3 = buff3 + buff2*buff2
-
-      call ops%ddx(vfluct,buff2)
-      buff3 = buff3 + buff2*buff2
-      call ops%ddy(vfluct,buff2)
-      buff3 = buff3 + buff2*buff2
-      call ops%ddz(vfluct,buff2, 1, 1)
-      buff3 = buff3 + buff2*buff2
-
-      call ops%ddx(w,buff2)
-      buff3 = buff3 + buff2*buff2
-      call ops%ddy(w,buff2)
-      buff3 = buff3 + buff2*buff2
-      call ops%ddz(w,buff2, -1, -1)  ! no-penetration BCs
-      buff3 = buff3 + buff2*buff2
-      
-      buff3 = (1.d0/Re)*buff3
-      Dv(idx) = ops%getVolumeIntegral(buff3)
-
       call toc()
-
-      if (nrank == 0) then
-         print*, "ddt_TKE:", P(idx) + B(idx) - D(idx)
-      end if 
-     
       idx = idx + 1
    end do 
 
    idx = idx - 1
-   allocate(data2write(idx,7))
+   allocate(data2write(idx,2))
    data2write(:,1) = time(1:idx)
    data2write(:,2) = TKE(1:idx)
-   data2write(:,3) = P(1:idx)
-   data2write(:,4) = Dv(1:idx)
-   data2write(:,5) = uu(1:idx)
-   data2write(:,6) = vv(1:idx)
-   data2write(:,7) = ww(1:idx)
    
    if (nrank == 0) then
       call ops%WriteASCII_2D(data2write, "Davg")

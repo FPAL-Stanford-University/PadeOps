@@ -55,7 +55,7 @@ program test_derivatives2_parallel
     call method1%init(                         gp, &
                                 dx,     dy,    dz, &
                             .TRUE., .TRUE., .FALSE., &
-                            "cd10", "cd10", "cd10" )
+                            "four", "four", "cd10" )
 
     call mpi_barrier(mpi_comm_world, ierr)
 

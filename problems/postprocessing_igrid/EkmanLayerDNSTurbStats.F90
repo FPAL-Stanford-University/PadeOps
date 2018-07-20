@@ -8,7 +8,7 @@ program EkmanLayerDNSTurbStats
     use exits, only: message
     implicit none
 
-    real(rkind), dimension(:,:,:), allocatable :: tmp3D,buff1,buff2,buff3,buff4, u,v,w, ufluct,vfluct
+    real(rkind), dimension(:,:,:), allocatable :: tmp3D,buff1,buff2,buff3,buff4, u,v,w, ufluct,vfluct, omegax,omegay,omegaz
     real(rkind), dimension(:,:), allocatable :: umean_t,vmean_t,data2write,uu_t,uv_t,uw_t, vv_t,vw_t,ww_t
     real(rkind), dimension(:), allocatable :: umean, vmean, dudz, dvdz
     real(rkind) :: time, dx, dy, dz, Re=400.d0, Lx=26.d0, Ly=26.d0, Lz=24.d0!, nu=1.145d-5, G=0.0115, D=3.9626d-1
@@ -42,6 +42,9 @@ program EkmanLayerDNSTurbStats
     call ops%allocate3DField(w)
     call ops%allocate3DField(ufluct)
     call ops%allocate3DField(vfluct)
+    call ops%allocate3DField(omegax)
+    call ops%allocate3DField(omegay)
+    call ops%allocate3DField(omegaz)
 
     ! Get number of timesteps and allocate arrays
     nt = (tstop - tstart)/tstep
@@ -97,7 +100,7 @@ program EkmanLayerDNSTurbStats
     call ops%ddz_1d(umean, dudz)
     call ops%ddz_1d(vmean, dvdz)
     call message(0,"dim 1",size(dvdz,1))
-
+    
     ! Write out time averages
     if (nrank == 0) then
        allocate(data2write(nz,10))
