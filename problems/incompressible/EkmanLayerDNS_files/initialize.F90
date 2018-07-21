@@ -9,7 +9,8 @@ module EkmanDNS_parameters
     integer :: seedw = 131344
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
-    
+ 
+    character(len=clen) :: inputfname   
     real(rkind), parameter :: xdim = 1000._rkind, udim = 0.45_rkind
     real(rkind), parameter :: timeDim = xdim/udim
 
@@ -41,6 +42,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     read(unit=ioUnit, NML=EkmanLayerDNS)
     close(ioUnit)    
 
+    inputfname = trim(inputfile)
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
     ! If base decomposition is in Y
@@ -196,17 +198,16 @@ end subroutine
 
 
 subroutine set_planes_io(xplanes, yplanes, zplanes)
+    use EkmanDNS_parameters  
     implicit none
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 6
+    integer, parameter :: nxplanes = 0, nyplanes = 0, nzplanes = 3
 
-    allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
+    allocate(zplanes(nzplanes))
 
-    xplanes = [64]
-    yplanes = [64]
-    zplanes = [5,15,30,50,80,150]
+    zplanes = [5,50,150]
 
 end subroutine
 
