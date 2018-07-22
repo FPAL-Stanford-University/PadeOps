@@ -10,11 +10,13 @@ contains
     subroutine write_2d_ascii(raw_data,filename)
         real(kind=rkind), intent(in) :: raw_data(:,:)
         character(len=*), intent(in) :: filename
+        character(len=30) :: rowfmt
         integer :: n1, n2
         integer :: i, j 
 
         n1 = size(raw_data,1)
         n2 = size(raw_data,2)
+        write(rowfmt,'(A,I4,A)') '(',n1,'(es25.17E3,1x))'
         OPEN(UNIT=10, FILE=trim(filename))
 
         !do i = 1,n1
@@ -22,7 +24,7 @@ contains
         !    write(10,*, advance='no') raw_data(i,j) ! Write with default precision (all sigfigs are written)
         !end do
         do i=1,n1
-            write(10,"(100(e19.12,1x))") ( raw_data(i,j), j=1,n2 )
+            write(10,FMT=rowfmt) ( raw_data(i,j), j=1,n2 )
         enddo
         CLOSE(10)
     end subroutine

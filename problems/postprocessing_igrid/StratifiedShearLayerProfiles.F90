@@ -135,7 +135,7 @@ program StratifiedShearLayerProfiles
       ! STEP 1: Compute Production, Buoyancy
       buff3 = u - ufluct
       call ops%ddz(buff3,buff2, 1, 1)
-      buff3 = -buff1*w
+      buff3 = -ufluct*w
       buff2 = buff2*buff3
       call ops%TakeMean_xy(buff2,Prod(:,idx))
 

@@ -73,6 +73,7 @@ program StratifiedShearLayerDomainIntegrals
       nt = size(timesteps)
    else
       nt = (tstop - tstart)/tstep
+      allocate(times(nt))
    end if
 
    
