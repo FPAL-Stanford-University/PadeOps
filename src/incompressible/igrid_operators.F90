@@ -226,8 +226,9 @@ subroutine GetGradient(this, f, dfdx, dfdy, dfdz, botBC, topBC)
    
    call this%spect%fft(f,this%cbuffy1)
    call this%spect%mtimes_ik1_oop(this%cbuffy1, this%cbuffy2)
-   call this%spect%ifft(this%cbuffy2,dfdx)
+   call this%spect%ifft(this%cbuffy2,dfdx,setOddball=.True.)
    call this%spect%mtimes_ik2_ip(this%cbuffy1)
+   this%cbuffy1(:,size(this%cbuffy1,2)/2+1,:) = 0.d0 ! need to set the oddball to zero 
    call this%spect%ifft(this%cbuffy1,dfdy)
    call this%ddz(f, dfdz, botBC, topBC)
 
@@ -343,7 +344,7 @@ subroutine ddx(this,f, dfdx)
   
    call this%spect%fft(f,this%cbuffy1)
    call this%spect%mtimes_ik1_ip(this%cbuffy1)
-   call this%spect%ifft(this%cbuffy1,dfdx)
+   call this%spect%ifft(this%cbuffy1,dfdx,setOddball=.true.)
 end subroutine 
 
 subroutine ddy(this,f, dfdy)
@@ -353,6 +354,7 @@ subroutine ddy(this,f, dfdy)
   
    call this%spect%fft(f,this%cbuffy1)
    call this%spect%mtimes_ik2_ip(this%cbuffy1)
+   this%cbuffy1(:,size(this%cbuffy1,2)/2+1,:) = 0.d0 ! need to set the oddball to zero 
    call this%spect%ifft(this%cbuffy1,dfdy)
 end subroutine 
 
