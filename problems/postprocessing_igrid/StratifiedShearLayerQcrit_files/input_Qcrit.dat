@@ -1,6 +1,6 @@
 &INPUT
 inputdir  = "/scratch/02703/wienkers/StratifiedShearLayer/Ri0.05_DNS"        ! Directory for input files
-outputdir = "/scratch/02703/wienkers/StratifiedShearLayer/stt_files/Ri0.05"        ! Directory for output files
+outputdir = "/scratch/02703/wienkers/StratifiedShearLayer/qCrit/Ri0.05"        ! Directory for output files
 RunID  = 45
 VizDump_Schedule = 1
 nx     = 1024
