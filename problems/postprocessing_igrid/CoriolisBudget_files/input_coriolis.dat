@@ -1,6 +1,6 @@
 &INPUT
 inputdir  = "/scratch/05294/mhowland/neutral_JFM/Sx_8p5_Sy_4p2/Run_3"        ! Directory for input files
-outputdir = "/scratch/05294/mhowland/neutral_JFM/Sx_8p5_Sy_4p2/Run_3"        ! Directory for output files
+outputdir = "/scratch/05294/mhowland/neutral_JFM/Sx_8p5_Sy_4p2/Run_3_post"        ! Directory for output files
 RunID  = 1
 tstart = 10700
 tstop  = 26400
@@ -10,4 +10,10 @@ ny     = 256
 nz     = 256
 NumericalSchemeVertical = 2
 VizDump_Schedule = 0
+Ro = 171.4180D0
+Fr = 0.0798188571D0
+omega_2 = 0.70710678118D0
+omega_3 = 0.70710678118D0
+G_1 = 0.97029572627D0
+G_2 = 0.2419218956D0
 /
