@@ -23,10 +23,8 @@ program CoriolisBudget
    integer :: idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 1
    logical :: isZPeriodic = .false. 
    real(rkind), dimension(:,:), allocatable :: R11, R12, R13, R22, R23, R33, TT, T13, T23
-   real(rkind), dimension(:,:), allocatable :: d11, d12, d13, d22, d23, d33
    real(rkind), dimension(:,:,:), allocatable :: S11, S12, S13, S22, S23, S33
    real(rkind), dimension(:,:,:), allocatable :: S11m, S12m, S13m, S22m, S23m, S33m
-   real(rkind), dimension(:,:), allocatable :: DD11, DD12, DD13, DD22, DD23, DD33
    real(rkind), dimension(:,:), allocatable :: umn_set, Tmn_set, wT, uT, vT, vmn_set
    real(rkind), dimension(:,:), allocatable :: P_mke, D_mke, C_mke, transport_mke, transportSGS_mke 
    real(rkind), dimension(:,:), allocatable :: eps, bou_tke, prod_tke, transport_tke, transportSGS_tke, transport_p_tke
@@ -112,8 +110,6 @@ program CoriolisBudget
       allocate(umn_set(nz,nt))  
       allocate(Tmn_set(nz,nt))  
       allocate(vmn_set(nz,nt))
-      !allocate(Nsq(nz,nt))
-      !allocate(Ssq(nz,nt))
       ! Reynolds stresses
       allocate(R11(nz,nt))
       allocate(R12(nz,nt))
@@ -174,8 +170,8 @@ program CoriolisBudget
       tau_22 = - 2. * nSGS * dvdy
       tau_23 = - nSGS * (dvdz + dwdy)
       tau_33 = - 2. * nSGS * dwdz
-      !call ops%TakeMean_xy(tau_13, T13(:,idx)) !T13 
-      !call ops%TakeMean_xy(tau_23, T23(:,idx)) !T23
+      call ops%TakeMean_xy(tau_13, T13(:,idx)) !T13 
+      call ops%TakeMean_xy(tau_23, T23(:,idx)) !T23
       S11m = 0.5 * (dudx + dudx)
       S12m = 0.5 * (dudy + dvdx)
       S13m = 0.5 * (dudz + dwdx)
@@ -242,8 +238,6 @@ program CoriolisBudget
       call ops%GetGradient(wfluct, dwdx, dwdy, dwdz, -1, -1)
       tau_13 = - nSGS * (dudz + dwdx)
       tau_23 = - nSGS * (dvdz + dwdy)
-      !call ops%TakeMean_xy(tau_13, T13_prime(:,idx))
-      !call ops%TakeMean_xy(tau_23, T23_prime(:,idx))
       ! TKE LHS
       call ops%TakeMean_xy(wfluct*buff1, buff1d_1)
       call ops%ddz_1d(buff1d_1, transport_tke(:,idx), 0, 1) ! transport_tke
