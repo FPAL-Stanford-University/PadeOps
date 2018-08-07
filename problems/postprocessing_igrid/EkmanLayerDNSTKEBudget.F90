@@ -1,7 +1,6 @@
 program EkmanLayerDNSTKEBudget
     use kind_parameters, only: rkind, clen
     use igrid_Operators, only: igrid_ops
-    use DerivativesMod, only: derivatives
     use constants, only: pi, two
     use mpi
     use decomp_2d
@@ -10,10 +9,10 @@ program EkmanLayerDNSTKEBudget
     implicit none
 
     real(rkind), dimension(:,:,:), allocatable :: &
-                &buff1, buff2, buff3, buff4, buffz1, buffz2, &
+                &buff1, buff2, buff3, buff4, &
                 &u,v,w,p, ufluct, vfluct
     real(rkind), dimension(:,:), allocatable :: &
-                &umean_t, vmean_t, data2write, &
+                &umean_t, vmean_t, &
                 &Tran_t, Prod_t, Diff_t, Diss_t, PDif_t, uiui_t, times
     real(rkind) :: &
                 &time, dx, dy, dz, &
@@ -21,12 +20,10 @@ program EkmanLayerDNSTKEBudget
     integer ::  nx, ny, nz, nt, RunID, TIDX, botBC=0, topBC=1, &
                 &idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 1
     type(igrid_ops) :: ops
-    type(derivatives) :: der  
     character(len=clen) ::  inputdir, outputdir, inputfile
     logical :: isZPeriodic = .false. 
 
-    namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep,&
-             nx, ny, nz, Re, NumericalSchemeVert 
+    namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Re, NumericalSchemeVert 
     
     call GETARG(1,inputfile)          
     open(unit=99, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -42,9 +39,6 @@ program EkmanLayerDNSTKEBudget
     call ops%init(nx, ny, nz, dx, dy, dz, InputDir, OutputDir, &
                    & RunID, isZPeriodic, NumericalSchemeVert)
     call get_decomp_info(ops%gp)
-    call der%init( ops%gp,   dx,     dy,    dz, &
-                        .TRUE., .TRUE., .FALSE., &
-                        "four", "four", "cd10" )
     call mpi_barrier(mpi_comm_world, ierr)
 
     ! Allocate all the needed memory 
@@ -58,8 +52,6 @@ program EkmanLayerDNSTKEBudget
     call ops%allocate3DField(p)
     call ops%allocate3DField(ufluct)
     call ops%allocate3DField(vfluct)
-    allocate(buffz1(ops%gp%zsz(1),ops%gp%zsz(2),ops%gp%zsz(3)))
-    allocate(buffz2(ops%gp%zsz(1),ops%gp%zsz(2),ops%gp%zsz(3)))
 
     ! Get number of timesteps and allocate arrays
     nt = (tstop - tstart)/tstep
@@ -109,11 +101,8 @@ program EkmanLayerDNSTKEBudget
         call ops%TakeMean_xy(-buff2,Prod_t(:,idx))
 
         ! Diffusion: d2dz2 <uiui>
-        buff1 = ufluct**2+vfluct**2+w**2
-        call transpose_y_to_z(buff1,buffz1,ops%gp)
-        call der % d2dz2(buffz1,buffz2)
-        call Transpose_z_to_y(buffz2,buff2,ops%gp)
-        call ops%TakeMean_xy(buff2,Diff_t(:,idx))
+        call ops%d2dz2(ufluct**2+vfluct**2+w**2,buff1,0,0)
+        call ops%TakeMean_xy(buff1,Diff_t(:,idx))
 
         ! Viscous dissip: -2<dui/dxk*dui/dxk>
         call ops%GetGradient(ufluct,buff1,buff2,buff3,botBC,topBC)
@@ -126,7 +115,7 @@ program EkmanLayerDNSTKEBudget
 
         ! Pressure diffusion: -d/dz<wp'>
         call ops%getFluct_from_MeanZ(p,buff1)
-        call ops%ddz( w*buff1, buff2, botBC, topBC )
+        call ops%ddz( w*buff1, buff2, botBC, 0)
         call ops%TakeMean_xy(-buff2, PDif_t(:,idx))
 
         call toc()
@@ -136,12 +125,6 @@ program EkmanLayerDNSTKEBudget
     ! Write out time averages
     if (nrank == 0) then
         call message(0,"Writing files...")
-        !allocate(data2write(nz,5))
-        !data2write(:,1) = sum(Tran_t,2)/nt
-        !data2write(:,2) = sum(Prod_t,2)/nt
-        !data2write(:,3) = sum(Diff_t,2)/nt
-        !data2write(:,4) = sum(Diss_t,2)/nt
-        !data2write(:,5) = sum(PDif_t,2)/nt
         call ops%WriteASCII_2D(Tran_t, "Tran")
         call ops%WriteASCII_2D(Prod_t, "Prod")
         call ops%WriteASCII_2D(Diff_t, "Diff")
