@@ -9,11 +9,11 @@ program EkmanLayerDNSTKEBudget
     implicit none
 
     real(rkind), dimension(:,:,:), allocatable :: &
-                &buff1, buff2, buff3, buff4, &
+                &buff1, buff2, buff3, buff4, buff5, &
                 &u,v,w,p, ufluct, vfluct
     real(rkind), dimension(:,:), allocatable :: &
                 &umean_t, vmean_t, &
-                &Tran_t, Prod_t, Diff_t, Diss_t, PDif_t, uiui_t, times
+                &Tran_t, Prod_t, Diff_t, Diss_t, PDif_t, T_da_t, uiui_t, times
     real(rkind) :: &
                 &time, dx, dy, dz, &
                 &Re=400.d0, Lx=26.d0, Ly=26.d0, Lz=24.d0
@@ -46,6 +46,7 @@ program EkmanLayerDNSTKEBudget
     call ops%allocate3DField(buff2)
     call ops%allocate3DField(buff3)
     call ops%allocate3DField(buff4)
+    call ops%allocate3DField(buff5)
     call ops%allocate3DField(u)
     call ops%allocate3DField(v)
     call ops%allocate3DField(w)
@@ -63,6 +64,7 @@ program EkmanLayerDNSTKEBudget
     allocate(Diss_t(nz,nt))
     allocate(PDif_t(nz,nt))
     allocate(uiui_t(nz,nt))
+    allocate(T_da_t(nz,nt))
     allocate(times(1,nt))
  
     ! Compute for each timestep: 
@@ -92,6 +94,49 @@ program EkmanLayerDNSTKEBudget
         ! Transport terms: d/dz <uuw + vvw + www>
         call ops%ddz(ufluct*ufluct*w + vfluct*vfluct*w + w**3, buff1, botBC, topBC)
         call ops%TakeMean_xy(-buff1, Tran_t(:,idx))            
+       
+        ! Corrections terms for transport term dealiasing
+        call ops%GetGradient(ufluct,buff2,buff3,buff4,botBC,topBC)
+        buff5 = ufluct*ufluct
+        call ops%dealias(buff5)
+        call ops%dealias(buff2)
+        buff1 = buff5*buff2         !uu*dudx
+        buff5 = ufluct*vfluct
+        call ops%dealias(buff5)
+        call ops%dealias(buff3)
+        buff1 = buff5*buff3 + buff1 !uv*dudy
+        buff5 = ufluct*w
+        call ops%dealias(buff5)
+        call ops%dealias(buff4)
+        buff1 = buff5*buff4 + buff1 !uw*dudz
+        call ops%GetGradient(vfluct,buff2,buff3,buff4,botBC,topBC)
+        buff5 = vfluct*ufluct
+        call ops%dealias(buff5)
+        call ops%dealias(buff2)
+        buff1 = buff5*buff2 + buff1 !vu*dvdz
+        buff5 = vfluct*vfluct
+        call ops%dealias(buff5)
+        call ops%dealias(buff3)
+        buff1 = buff5*buff3 + buff1 !vv*dvdz
+        buff5 = vfluct*w
+        call ops%dealias(buff5)
+        call ops%dealias(buff4)
+        buff1 = buff5*buff4 + buff1 !vw*dvdz
+        call ops%GetGradient(w,buff2,buff3,buff4,botBC,topBC)
+        buff5 = w*ufluct
+        call ops%dealias(buff5)
+        call ops%dealias(buff2)
+        buff1 = buff5*buff2 + buff1 !wu*dwdz
+        buff5 = w*vfluct
+        call ops%dealias(buff5)
+        call ops%dealias(buff3)
+        buff1 = buff5*buff3 + buff1 !ww*dwdz
+        buff5 = w*w
+        call ops%dealias(buff5)
+        call ops%dealias(buff4)
+        buff1 = buff5*buff4 + buff1 !ww*dwdz
+        call ops%TakeMean_xy(buff1,T_da_t(:,idx))
+ 
         
         ! Production: -(<uw>*dUdz + <vw>*dVdz)
         call ops%ddz(u-ufluct, buff1, botBC, topBC)
@@ -115,7 +160,7 @@ program EkmanLayerDNSTKEBudget
 
         ! Pressure diffusion: -d/dz<wp'>
         call ops%getFluct_from_MeanZ(p,buff1)
-        call ops%ddz( w*buff1, buff2, botBC, 0)
+        call ops%ddz( w*buff1, buff2, 0, 0)
         call ops%TakeMean_xy(-buff2, PDif_t(:,idx))
 
         call toc()
@@ -130,6 +175,7 @@ program EkmanLayerDNSTKEBudget
         call ops%WriteASCII_2D(Diff_t, "Diff")
         call ops%WriteASCII_2D(Diss_t, "Diss")
         call ops%WriteASCII_2D(PDif_t, "PDif")
+        call ops%WriteASCII_2D(T_da_t, "T_da")
         call ops%WriteASCII_2D(uiui_t, "uiui")
         call ops%WriteASCII_2D(times, "time")
     end if 
