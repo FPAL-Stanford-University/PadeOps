@@ -97,12 +97,10 @@ program EkmanLayerDNSTurbStats
         call ops%TakeMean_xy(w*w,           ww_t(:,idx))       
        
         ! Viscous stresses
-        !call ops%d2dz2(umean_t, buff1,0,0)
-        !call ops%TakeMean_xy(buff1, d2Udz2_t(:,idx))
-        !call ops%d2dz2(vmean_t, buff2,0,0)
-        !call ops%TakeMean_xy(buff2, d2Vdz2_t(:,idx))
-        d2Udz2_t(:,idx) = 0 
-        d2Vdz2_t(:,idx) = 0 
+        call ops%d2dz2(u-ufluct, buff1,-1,-1)
+        call ops%TakeMean_xy(buff1, d2Udz2_t(:,idx))
+        call ops%d2dz2(v-vfluct, buff2,-1,-1)
+        call ops%TakeMean_xy(buff2, d2Vdz2_t(:,idx))
         call toc()
         idx = idx + 1
     end do 

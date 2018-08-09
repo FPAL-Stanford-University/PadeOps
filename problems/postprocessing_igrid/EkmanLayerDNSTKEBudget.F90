@@ -146,7 +146,7 @@ program EkmanLayerDNSTKEBudget
         call ops%TakeMean_xy(-buff2,Prod_t(:,idx))
 
         ! Diffusion: d2dz2 <uiui>
-        call ops%d2dz2(ufluct**2+vfluct**2+w**2,buff1,0,0)
+        call ops%d2dz2(ufluct**2+vfluct**2+w**2,buff1,-1,-1)
         call ops%TakeMean_xy(buff1,Diff_t(:,idx))
 
         ! Viscous dissip: -2<dui/dxk*dui/dxk>
