@@ -15,9 +15,8 @@ program EkmanLayerDNSTurbStats
                 &data2write, &
                 &umean_t, vmean_t, &
                 &uu_t, uv_t, uw_t, vv_t, vw_t, ww_t, &
-                &d2Udz2_t, d2Vdz2_t
-    real(rkind), dimension(:), allocatable :: &
-                &dUdz, dVdz, duwdz, dvwdz
+                &d2Udz2_t, d2Vdz2_t,&
+                &dUdz_t, dVdz_t, duwdz_t, dvwdz_t
     real(rkind) :: &
                 &time, dx, dy, dz, &
                 &Re=400.d0, Lx=26.d0, Ly=26.d0, Lz=24.d0
@@ -63,10 +62,10 @@ program EkmanLayerDNSTurbStats
     allocate(vv_t(nz,nt))
     allocate(vw_t(nz,nt))
     allocate(ww_t(nz,nt))
-    allocate(dUdz(nz))
-    allocate(dVdz(nz))
-    allocate(duwdz(nz))
-    allocate(dvwdz(nz))
+    allocate(dUdz_t(nz,nt))
+    allocate(dVdz_t(nz,nt))
+    allocate(duwdz_t(nz,nt))
+    allocate(dvwdz_t(nz,nt))
     allocate(d2Udz2_t(nz,nt))
     allocate(d2Vdz2_t(nz,nt))
  
@@ -115,28 +114,28 @@ program EkmanLayerDNSTurbStats
     ! Write out time averages
     if (nrank == 0) then
        allocate(data2write(nz,10))
-       data2write(:,1) = sum(umean_t,2)/nt
-       data2write(:,2) = sum(vmean_t,2)/nt
-       data2write(:,3) = sum(uu_t,2)/nt 
-       data2write(:,4) = sum(uv_t,2)/nt
-       data2write(:,5) = sum(uw_t,2)/nt
-       data2write(:,6) = sum(vv_t,2)/nt
-       data2write(:,7) = sum(vw_t,2)/nt 
-       data2write(:,8) = sum(ww_t,2)/nt 
-       data2write(:,9) = dUdz
-       data2write(:,10) = dVdz
-       call ops%WriteASCII_2D(data2write, "tavg")
-       data2write(:,1) = dUdz 
-       data2write(:,2) = dVdz
-       data2write(:,3) = sum(d2Udz2_t,2)/nt
-       data2write(:,4) = sum(d2Vdz2_t,2)/nt
-       data2write(:,5) = duwdz
-       data2write(:,6) = dvwdz
-       data2write(:,7) = 0
-       data2write(:,8) = 0
-       data2write(:,9) = 0
-       data2write(:,10) = 0 
-       call ops%WriteASCII_2D(data2write, "d_dz")
+       !data2write(:,1) = sum(umean_t,2)/nt
+       !data2write(:,2) = sum(vmean_t,2)/nt
+       !data2write(:,3) = sum(uu_t,2)/nt 
+       !data2write(:,4) = sum(uv_t,2)/nt
+       !data2write(:,5) = sum(uw_t,2)/nt
+       !data2write(:,6) = sum(vv_t,2)/nt
+       !data2write(:,7) = sum(vw_t,2)/nt 
+       !data2write(:,8) = sum(ww_t,2)/nt 
+       !data2write(:,9) = dUdz
+       !data2write(:,10) = dVdz
+       !call ops%WriteASCII_2D(data2write, "tavg")
+       !data2write(:,1) = dUdz 
+       !data2write(:,2) = dVdz
+       !data2write(:,3) = sum(d2Udz2_t,2)/nt
+       !data2write(:,4) = sum(d2Vdz2_t,2)/nt
+       !data2write(:,5) = duwdz
+       !data2write(:,6) = dvwdz
+       !data2write(:,7) = 0
+       !data2write(:,8) = 0
+       !data2write(:,9) = 0
+       !data2write(:,10) = 0 
+       !call ops%WriteASCII_2D(data2write, "d_dz")
     end if 
         
     call ops%destroy()

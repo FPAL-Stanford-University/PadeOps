@@ -1,6 +1,7 @@
 program EkmanLayerDNSTKEBudget
     use kind_parameters, only: rkind, clen
     use igrid_Operators, only: igrid_ops
+    use DerivativesMod, only: derivatives
     use constants, only: pi, two
     use mpi
     use decomp_2d
@@ -9,17 +10,19 @@ program EkmanLayerDNSTKEBudget
     implicit none
 
     real(rkind), dimension(:,:,:), allocatable :: &
-                &buff1, buff2, buff3, buff4, buff5, &
+                &buff1, buff2, buff3, buff4, buff5, buffz1, buffz2,&
                 &u,v,w,p, ufluct, vfluct
     real(rkind), dimension(:,:), allocatable :: &
                 &umean_t, vmean_t, &
-                &Tran_t, Prod_t, Diff_t, Diss_t, PDif_t, T_da_t, uiui_t, times
+                &Tran_t, Prod_t, Diff_t, Diss_t, PDif_t, uiui_t, times,&
+                & DA1_t, DA2_t
     real(rkind) :: &
                 &time, dx, dy, dz, &
                 &Re=400.d0, Lx=26.d0, Ly=26.d0, Lz=24.d0
     integer ::  nx, ny, nz, nt, RunID, TIDX, botBC=0, topBC=1, &
                 &idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 1
     type(igrid_ops) :: ops
+    type(derivatives) :: der  
     character(len=clen) ::  inputdir, outputdir, inputfile
     logical :: isZPeriodic = .false. 
 
@@ -39,6 +42,9 @@ program EkmanLayerDNSTKEBudget
     call ops%init(nx, ny, nz, dx, dy, dz, InputDir, OutputDir, &
                    & RunID, isZPeriodic, NumericalSchemeVert)
     call get_decomp_info(ops%gp)
+    call der%init( ops%gp,   dx,     dy,    dz, &
+                        .TRUE., .TRUE., .FALSE., &
+                        "four", "four", "cd10" )
     call mpi_barrier(mpi_comm_world, ierr)
 
     ! Allocate all the needed memory 
@@ -53,6 +59,8 @@ program EkmanLayerDNSTKEBudget
     call ops%allocate3DField(p)
     call ops%allocate3DField(ufluct)
     call ops%allocate3DField(vfluct)
+    allocate(buffz1(ops%gp%zsz(1),ops%gp%zsz(2),ops%gp%zsz(3)))
+    allocate(buffz2(ops%gp%zsz(1),ops%gp%zsz(2),ops%gp%zsz(3)))
 
     ! Get number of timesteps and allocate arrays
     nt = (tstop - tstart)/tstep
@@ -64,7 +72,8 @@ program EkmanLayerDNSTKEBudget
     allocate(Diss_t(nz,nt))
     allocate(PDif_t(nz,nt))
     allocate(uiui_t(nz,nt))
-    allocate(T_da_t(nz,nt))
+    allocate(DA1_t(nz,nt))
+    allocate(DA2_t(nz,nt))
     allocate(times(1,nt))
  
     ! Compute for each timestep: 
@@ -94,49 +103,52 @@ program EkmanLayerDNSTKEBudget
         ! Transport terms: d/dz <uuw + vvw + www>
         call ops%ddz(ufluct*ufluct*w + vfluct*vfluct*w + w**3, buff1, botBC, topBC)
         call ops%TakeMean_xy(-buff1, Tran_t(:,idx))            
-       
-        ! Corrections terms for transport term dealiasing
+      
+        ! Dealiasing Residual: d/dz <u*tilde{uw} + v*tilde{vw} + w*tilde{ww}>
+        buff2 = ufluct*w
+        call ops%dealias(buff2) 
+        buff1 = buff2*ufluct        !u*tilde{uw}
+        buff2 = vfluct*w
+        call ops%dealias(buff2) 
+        buff1 = buff2*vfluct+buff1  !v*tilde{vw}
+        buff2 = w*w
+        call ops%dealias(buff2) 
+        buff1 = buff2*w+buff1       !w*tilde{ww}
+        call ops%ddz(buff1,buff1, botBC, topBC)
+        call ops%TakeMean_xy(buff1, DA1_t(:,idx))   
+     
+        ! Dealiasing Residual: -tilde{ui*w}dui/dz
         call ops%GetGradient(ufluct,buff2,buff3,buff4,botBC,topBC)
         buff5 = ufluct*ufluct
         call ops%dealias(buff5)
-        call ops%dealias(buff2)
-        buff1 = buff5*buff2         !uu*dudx
+        buff1 = buff5*buff2 + buff1 !uu*dudx
         buff5 = ufluct*vfluct
         call ops%dealias(buff5)
-        call ops%dealias(buff3)
         buff1 = buff5*buff3 + buff1 !uv*dudy
         buff5 = ufluct*w
         call ops%dealias(buff5)
-        call ops%dealias(buff4)
         buff1 = buff5*buff4 + buff1 !uw*dudz
         call ops%GetGradient(vfluct,buff2,buff3,buff4,botBC,topBC)
         buff5 = vfluct*ufluct
         call ops%dealias(buff5)
-        call ops%dealias(buff2)
-        buff1 = buff5*buff2 + buff1 !vu*dvdz
+        buff1 = buff5*buff2 + buff1 !vu*dvdx
         buff5 = vfluct*vfluct
         call ops%dealias(buff5)
-        call ops%dealias(buff3)
-        buff1 = buff5*buff3 + buff1 !vv*dvdz
+        buff1 = buff5*buff3 + buff1 !vv*dvdy
         buff5 = vfluct*w
         call ops%dealias(buff5)
-        call ops%dealias(buff4)
         buff1 = buff5*buff4 + buff1 !vw*dvdz
         call ops%GetGradient(w,buff2,buff3,buff4,botBC,topBC)
         buff5 = w*ufluct
         call ops%dealias(buff5)
-        call ops%dealias(buff2)
-        buff1 = buff5*buff2 + buff1 !wu*dwdz
+        buff1 = buff5*buff2 + buff1 !wu*dwdx
         buff5 = w*vfluct
         call ops%dealias(buff5)
-        call ops%dealias(buff3)
-        buff1 = buff5*buff3 + buff1 !ww*dwdz
+        buff1 = buff5*buff3 + buff1 !ww*dwdx
         buff5 = w*w
         call ops%dealias(buff5)
-        call ops%dealias(buff4)
         buff1 = buff5*buff4 + buff1 !ww*dwdz
-        call ops%TakeMean_xy(buff1,T_da_t(:,idx))
- 
+        call ops%TakeMean_xy(-buff1,DA2_t(:,idx))
         
         ! Production: -(<uw>*dUdz + <vw>*dVdz)
         call ops%ddz(u-ufluct, buff1, botBC, topBC)
@@ -146,8 +158,12 @@ program EkmanLayerDNSTKEBudget
         call ops%TakeMean_xy(-buff2,Prod_t(:,idx))
 
         ! Diffusion: d2dz2 <uiui>
-        call ops%d2dz2(ufluct**2+vfluct**2+w**2,buff1,-1,-1)
-        call ops%TakeMean_xy(buff1,Diff_t(:,idx))
+        buff1 = ufluct**2+vfluct**2+w**2
+        !call ops%d2dz2(buff1, buff2, -1, -1)
+        call transpose_y_to_z(buff1,buffz1,ops%gp)
+        call der%d2dz2(buffz1,buffz2)
+        call transpose_z_to_y(buffz2,buff2,ops%gp)
+        call ops%TakeMean_xy(buff2,Diff_t(:,idx))
 
         ! Viscous dissip: -2<dui/dxk*dui/dxk>
         call ops%GetGradient(ufluct,buff1,buff2,buff3,botBC,topBC)
@@ -160,7 +176,7 @@ program EkmanLayerDNSTKEBudget
 
         ! Pressure diffusion: -d/dz<wp'>
         call ops%getFluct_from_MeanZ(p,buff1)
-        call ops%ddz( w*buff1, buff2, 0, 0)
+        call ops%ddz( w*buff1, buff2, -1, -1)
         call ops%TakeMean_xy(-buff2, PDif_t(:,idx))
 
         call toc()
@@ -175,7 +191,8 @@ program EkmanLayerDNSTKEBudget
         call ops%WriteASCII_2D(Diff_t, "Diff")
         call ops%WriteASCII_2D(Diss_t, "Diss")
         call ops%WriteASCII_2D(PDif_t, "PDif")
-        call ops%WriteASCII_2D(T_da_t, "T_da")
+        call ops%WriteASCII_2D(DA1_t, "DA_1")
+        call ops%WriteASCII_2D(DA2_t, "DA_2")
         call ops%WriteASCII_2D(uiui_t, "uiui")
         call ops%WriteASCII_2D(times, "time")
     end if 
