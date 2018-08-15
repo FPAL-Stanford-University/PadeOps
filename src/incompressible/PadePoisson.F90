@@ -58,6 +58,7 @@ module PadePoissonMod
 
         contains
             procedure :: init
+            procedure :: PoissonSolver_HomogeneousNeumannBCz
             procedure, private :: PeriodicProjection
             procedure, private :: InitPeriodicPoissonSolver
             procedure :: PressureProjection
@@ -521,7 +522,7 @@ contains
             call dfftw_execute_dft(this%plan_c2c_fwd_z, this%wext  , this%wext  )  
       
 
-            ! Step 5: Solve the Poisson System and project out w velocity
+            ! Step 5: Solve the Poisson System 
             do kk = 1,size(this%f2dext,3) 
                 do jj = 1,size(this%f2dext,2) 
                     !$omp simd
@@ -901,6 +902,75 @@ contains
          end if 
     end subroutine 
 
+    subroutine PoissonSolver_HomogeneousNeumannBCz(this, frhs, pressure) 
+        class(PadePoisson), intent(inout) :: this
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(out) :: pressure
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: frhs
+        integer :: ii, jj, kk
+      
+        ! Step 1: Take fft_xy for rhs and transpose to z
+        call this%sp%fft(frhs,this%f2dy)
+        call transpose_y_to_z(this%f2dy,this%f2d,this%sp_gp)
+
+         ! Step 2: Create Extensions
+         do kk = 1,this%nzG
+             do jj = 1,size(this%f2dext,2)
+                !$omp simd
+                do ii = 1,size(this%f2dext,1)
+                   this%f2dext(ii,jj,kk) = this%f2d(ii,jj,this%nzG-kk+1)
+                end do 
+             end do 
+         end do
+         do kk = 1,size(this%f2d,3)
+            do jj = 1,size(this%f2d,2)
+               !$omp simd
+               do ii = 1,size(this%f2d,1)
+                  !this%f2dext(ii,jj,this%nzG+1:2*this%nzG) = this%f2d
+                  this%f2dext(ii,jj,this%nzG+kk) = this%f2d(ii,jj,kk)
+               end do
+            end do
+         end do
+
+         ! Step 3: Take Fourier Transform 
+         call dfftw_execute_dft(this%plan_c2c_fwd_z, this%f2dext, this%f2dext)  
+
+         ! Step 4: Solve the Poisson equation 
+         do kk = 1,size(this%f2dext,3) 
+             do jj = 1,size(this%f2dext,2) 
+                 !$omp simd
+                 do ii = 1,size(this%f2dext,1) 
+                     this%f2dext(ii,jj,kk) = -this%f2dext(ii,jj,kk)*this%kradsq_inv(ii,jj,kk)
+                 end do 
+             end do 
+         end do 
+
+         ! Step 5: Take inverse Fourier Transform
+         call dfftw_execute_dft(this%plan_c2c_bwd_z, this%f2dext, this%f2dext)  
+         !this%f2dext = this%f2dext*this%mfact
+         do kk = 1,size(this%f2dext,3)
+             do jj = 1,size(this%f2dext,2)
+                !$omp simd
+                do ii = 1,size(this%f2dext,1)
+                   this%f2dext(ii,jj,kk) = this%mfact*this%f2dext(ii,jj,kk)
+                end do
+             end do
+         end do
+
+         ! Step 6: Extract the top half
+         do kk = 1,size(this%f2d,3)
+             do jj = 1,size(this%f2d,2)
+                !$omp simd
+                do ii = 1,size(this%f2d,1)
+                   this%f2d(ii,jj,kk) = this%f2dext(ii,jj,this%nzG+kk)
+                end do
+             end do
+         end do
+
+         ! Step 7: transpose to y and take inverse fourier transform
+         call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
+         call this%sp%ifft(this%f2dy,pressure)
+    end subroutine 
+    
     subroutine Periodic_getPressureAndUpdateRHS(this, uhat, vhat, what, pressure)
         class(PadePoisson), intent(inout) :: this
         complex(rkind), dimension(this%nx_in, this%ny_in, this%nz_in), intent(inout) :: uhat, vhat

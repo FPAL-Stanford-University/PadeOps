@@ -1,12 +1,13 @@
 subroutine init_amd(this, dx, dy, dz, Csgs)
+   use constants, only: pi
    class(sgs_igrid), intent(inout) :: this
    real(rkind), intent(in) :: dx, dy, dz, Csgs
 
    this%useCglobal = .true. 
    this%isEddyViscosityModel = .true. 
    
-   this%camd_x = Csgs*1.5d0*dx*sqrt(1.d0/12.d0)
-   this%camd_y = Csgs*1.5d0*dy*sqrt(1.d0/12.d0)
+   this%camd_x = Csgs*1.5d0*dx*sqrt(1.d0/(pi**2))
+   this%camd_y = Csgs*1.5d0*dy*sqrt(1.d0/(pi**2))
    this%camd_z = Csgs*dz*this%PadeDer%getApproxPoincareConstant()
    this%cmodel_global = one  ! Anisotropic model constants 
    call message(1,"AMD model initialized")

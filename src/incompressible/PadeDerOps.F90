@@ -1104,14 +1104,15 @@ subroutine getModifiedWavenumbers(this, k, kp)
 end subroutine
 
 pure function getApproxPoincareConstant(this) result(const)
+   use constants, only: pi
    class(Pade6stagg), intent(in) :: this
    real(rkind) :: const   
 
    select case(this%scheme)
    case (fourierColl)
-      const = 1.d0/sqrt(12.d0)
-   case (cd06)
-      const = 1.d0/sqrt(4.d0)
+      const = 1.d0/sqrt(pi**2)
+   case (cd06) ! For wall bounded flows the code gives second order near wall
+      const = 1.d0/sqrt(3.d0)
    case (fd02)
       const = 1.d0/sqrt(3.d0)
    end select 

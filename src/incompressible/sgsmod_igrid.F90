@@ -66,6 +66,7 @@ module sgsmod_igrid
         real(rkind) :: z0, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr
         real(rkind), pointer :: Tsurf
         complex(rkind), dimension(:,:), allocatable :: q3HAT_AtWall
+        integer :: WM_matchingIndex
 
         ! for dynamic procedures - all are at edges
         type(gaussian) :: gaussianTestFilterZ

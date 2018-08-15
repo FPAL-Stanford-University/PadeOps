@@ -66,7 +66,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0, deltaRatio = 2.d0, turbPrandtl = 0.4d0, Cy = 100.d0 
   character(len=clen) :: SGSDynamicRestartFile
   logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false. 
-  integer :: ierr
+  integer :: ierr, WM_matchingIndex = 1
   real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0,  &
@@ -74,7 +74,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
                  DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,&
                  SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity, &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
-                 useScalarBounding, Cy, lowbound, highbound 
+                 useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex 
 
 
   this%gpC => gpC
@@ -158,7 +158,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%isInviscid = isInviscid
 
   this%WallModel  = WallModelType
-  
+  this%WM_matchingIndex = WM_matchingIndex
   if (this%WallModel .ne. 0) then
       if (this%PadeDer%isPeriodic) then
          call GracefulExit("You cannot use a wall model if the problem is periodic in Z",12)
