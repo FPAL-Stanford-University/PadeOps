@@ -12,7 +12,7 @@ program EkmanLayerDNSRijBudget
                 &buff1, buff2, buff3, buff4, buff5, buff6, &
                 &u,v,w,p, ufluct, vfluct, pfluct
     real(rkind), dimension(:,:), allocatable :: &
-                &umean_t, vmean_t, uw_t, times, &
+                &umean_t, vmean_t, uw_t, vw_t, times, &
                 &Tran_13, Prod_13, Diff_13, Diss_13, PDif_13, PStr_13
     real(rkind) :: &
                 &time, dx, dy, dz, &
@@ -68,6 +68,7 @@ program EkmanLayerDNSRijBudget
     allocate(PDif_13(nz,nt))
     allocate(PStr_13(nz,nt))
     allocate(uw_t(nz,nt))
+    allocate(vw_t(nz,nt))
     allocate(times(1,nt))
  
     ! Compute for each timestep: 
@@ -91,12 +92,13 @@ program EkmanLayerDNSRijBudget
         call ops%TakeMean_xy(u-ufluct,umean_t(:,idx))
         call ops%TakeMean_xy(v-vfluct,vmean_t(:,idx))
        
+        call ops%TakeMean_xy( ufluct*w, uw_t(:,idx))
+        call ops%TakeMean_xy( vfluct*w, vw_t(:,idx))
+
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         ! uw budget
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        call ops%TakeMean_xy( ufluct*w, uw_t(:,idx))
-        
-        ! Transport: d/dz <uww>
+        ! Transport: -d/dz<uww>
         call ops%ddz( ufluct*ufluct*w, buff1, botBC, topBC)
         call ops%TakeMean_xy( -buff1, Tran_13(:,idx))            
         
@@ -104,7 +106,7 @@ program EkmanLayerDNSRijBudget
         call ops%ddz(u-ufluct, buff1, botBC, topBC)
         call ops%TakeMean_xy(-w*w*buff1,Prod_13(:,idx))
 
-        ! Diffusion: d2dz2 <uw>
+        ! Diffusion: d2dz2<uw>
         call ops%d2dz2( ufluct*w, buff1, 0, 0 )
         call ops%TakeMean_xy( buff1, Diff_13(:,idx) )
 
@@ -120,7 +122,7 @@ program EkmanLayerDNSRijBudget
         ! Pressure strain: -p'( du'/dz + dw'/dx )
         call ops%ddz( ufluct, buff1, botBC, topBC )
         call ops%TakeMean_xy(-pfluct*buff1, PStr_13(:,idx))
-
+        
         call toc()
         idx = idx + 1
     end do 
@@ -133,9 +135,9 @@ program EkmanLayerDNSRijBudget
         call ops%WriteASCII_2D(Diff_13, "Diff")
         call ops%WriteASCII_2D(Diss_13, "Diss")
         call ops%WriteASCII_2D(PDif_13, "PDif")
-        call ops%WriteASCII_2D(PStr_13, "PDif")
+        call ops%WriteASCII_2D(PStr_13, "PStr")
         call ops%WriteASCII_2D(uw_t, "uw_t")
-        call ops%WriteASCII_2D(times, "time")
+        call ops%WriteASCII_2D(vw_t, "vw_t")
     end if 
         
     call ops%destroy()

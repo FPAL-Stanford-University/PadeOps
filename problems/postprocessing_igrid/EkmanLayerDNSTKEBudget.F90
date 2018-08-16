@@ -101,7 +101,7 @@ program EkmanLayerDNSTKEBudget
         call ops%TakeMean_xy(buff1, uiui_t(:,idx))
  
         ! Transport terms: d/dz <uuw + vvw + www>
-        call ops%ddz(ufluct*ufluct*w + vfluct*vfluct*w + w**3, buff1, botBC, topBC)
+        call ops%ddz(ufluct**2*w + vfluct**2*w + w**3, buff1, botBC, topBC)
         call ops%TakeMean_xy(-buff1, Tran_t(:,idx))            
       
         ! Dealiasing Residual: d/dz <u*tilde{uw} + v*tilde{vw} + w*tilde{ww}>
@@ -159,10 +159,10 @@ program EkmanLayerDNSTKEBudget
 
         ! Diffusion: d2dz2 <uiui>
         buff1 = ufluct**2+vfluct**2+w**2
-        !call ops%d2dz2(buff1, buff2, -1, -1)
-        call transpose_y_to_z(buff1,buffz1,ops%gp)
-        call der%d2dz2(buffz1,buffz2)
-        call transpose_z_to_y(buffz2,buff2,ops%gp)
+        call ops%d2dz2(buff1, buff2, 0, 1)
+        !call transpose_y_to_z(buff1,buffz1,ops%gp)
+        !call der%d2dz2(buffz1,buffz2)
+        !call transpose_z_to_y(buffz2,buff2,ops%gp)
         call ops%TakeMean_xy(buff2,Diff_t(:,idx))
 
         ! Viscous dissip: -2<dui/dxk*dui/dxk>
@@ -176,7 +176,7 @@ program EkmanLayerDNSTKEBudget
 
         ! Pressure diffusion: -d/dz<wp'>
         call ops%getFluct_from_MeanZ(p,buff1)
-        call ops%ddz( w*buff1, buff2, -1, -1)
+        call ops%ddz( w*buff1, buff2, 0, 1)
         call ops%TakeMean_xy(-buff2, PDif_t(:,idx))
 
         call toc()
