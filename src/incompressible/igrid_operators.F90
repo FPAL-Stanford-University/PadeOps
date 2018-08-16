@@ -67,37 +67,9 @@ module igrid_Operators
          procedure :: alloc_zvec
          procedure :: initFilter
          procedure :: FilterField
-         procedure :: ComputeF_mvOmega ! For PV Decomposition
      end type 
 
 contains
-
-subroutine ComputeF_mvOmega(this, omegaxfluct, omegayfluct, omegazfluct, T, Fx, Fy, Fz)
-   class(igrid_ops), intent(inout) :: this
-   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: T
-   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(inout)  :: omegaxfluct, omegayfluct, omegazfluct
-   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: Fx, Fy, Fz
-
-   call this%getGradient(T, Fx,Fy,Fz,1,1)
-   this%rbuffx = Fx*Fx + Fy*Fy + Fz*Fz
-   this%rbuffx = this%rbuffx**(1.d0/2.d0) ! |gradT|
-   Fx = Fx / this%rbuffx
-   Fy = Fy / this%rbuffx
-   Fz = Fz / this%rbuffx ! gradT/|gradT|
-
-   this%rbuffx = omegaxfluct * Fx
-   this%rbuffx = this%rbuffx + omegayfluct * Fy
-   this%rbuffx = this%rbuffx + omegazfluct * Fz ! omega \cdot gradT/|gradT|
-
-   omegaxfluct = -Fx * this%rbuffx
-   omegayfluct = -Fy * this%rbuffx
-   omegazfluct = -Fz * this%rbuffx
-
-   call this%getCurl(omegaxfluct,omegayfluct,omegazfluct, Fx,Fy,Fz,1,1,1,1)
-
-
-end subroutine
-
 
 
 subroutine FilterField(this, f, fout)
