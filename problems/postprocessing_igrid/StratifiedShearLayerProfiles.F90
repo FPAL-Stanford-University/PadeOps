@@ -1,3 +1,5 @@
+#include "StratifiedShearLayerWPV_files/PVroutines.F90"
+
 program StratifiedShearLayerProfiles
    use kind_parameters, only: rkind, clen
    use igrid_Operators, only: igrid_ops
@@ -6,11 +8,12 @@ program StratifiedShearLayerProfiles
    use decomp_2d, only: nrank
    use timer, only: tic, toc
    use exits, only: message
+   use PVroutines
    implicit none
 
    real(rkind), dimension(:,:,:), allocatable :: buff1, buff2, buff3
    real(rkind), dimension(:,:,:), allocatable :: buff4, buff5, buff6
-   real(rkind), dimension(:,:,:), allocatable :: buff7, buff8
+   real(rkind), dimension(:,:,:), allocatable :: buff7, buff8, buff9
    real(rkind), dimension(:,:,:), allocatable :: u, v, w, ufluct, vfluct, T,  nuSGS
    real(rkind) :: dx, dy, dz, Re = 3000.d0, Rib = 0.05d0, Tref = 100.d0
    integer :: nx, ny, nz, RunID, TIDX
@@ -21,11 +24,12 @@ program StratifiedShearLayerProfiles
    integer :: idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 1
    logical :: isZPeriodic = .false.
    real(rkind), dimension(:,:), allocatable :: Prod, Buoy, Diss
-   real(rkind), dimension(:,:), allocatable :: OmZ, PiZ, XiZ
+   real(rkind), dimension(:,:), allocatable :: OmZrms, PiZrms, XiZrms
    real(rkind), dimension(:,:), allocatable :: uXiZ, vXiZ, wXiZ, uPiZ, vPiZ, wPiZ
    real(rkind), dimension(:,:), allocatable :: OmXXiZ, OmYXiZ, OmZXiZ
    real(rkind), dimension(:,:), allocatable :: KEXiZ, KEPiZ
    real(rkind), dimension(:,:), allocatable :: OmXPiZ, OmYPiZ, OmZPiZ
+   real(rkind), dimension(:,:), allocatable :: FxZ, FyZ, FzZ
    integer :: VizDump_Schedule = 0
    integer, dimension(:), allocatable :: timesteps
    real(rkind), dimension(:), allocatable :: times
@@ -64,6 +68,7 @@ program StratifiedShearLayerProfiles
    call ops%allocate3DField(buff6)
    call ops%allocate3DField(buff7)
    call ops%allocate3DField(buff8)
+   call ops%allocate3DField(buff9)
 
 
 
@@ -82,9 +87,9 @@ program StratifiedShearLayerProfiles
       allocate(Prod(nz,nt))
       allocate(Buoy(nz,nt))
       allocate(Diss(nz,nt))
-      allocate(OmZ(nz,nt))
-      allocate(PiZ(nz,nt))
-      allocate(XiZ(nz,nt))
+      allocate(OmZrms(nz,nt))
+      allocate(PiZrms(nz,nt))
+      allocate(XiZrms(nz,nt))
       allocate(uXiZ(nz,nt))
       allocate(vXiZ(nz,nt))
       allocate(wXiZ(nz,nt))
@@ -99,6 +104,9 @@ program StratifiedShearLayerProfiles
       allocate(OmXPiZ(nz,nt))
       allocate(OmYPiZ(nz,nt))
       allocate(OmZPiZ(nz,nt))
+      allocate(FxZ(nz,nt))
+      allocate(FyZ(nz,nt))
+      allocate(FzZ(nz,nt))
       allocate(timewrite(nt,1))
    !end if
 
@@ -207,57 +215,70 @@ program StratifiedShearLayerProfiles
 
       ! STEP 3: Compute Wave-PV Decomposition
 
-      call ops%getCurl(ufluct,vfluct,w, buff1,buff2,buff3,1,1,1,1)
+      call ops%getCurl(ufluct,vfluct,w, buff1,buff2,buff3,1,1,1,1) 
       call ops%getGradient(T,           buff4,buff5,buff6,1,1)
 
-      call ops%TakeMean_xy(buff3,OmZ(:,idx))
+      buff9 = buff3*buff3
+      call ops%TakeMean_xy(buff9,OmZrms(:,idx))
+      OmZrms(:,idx) = OmZrms(:,idx)**(1.d0/2.d0)
 
       buff7 = buff1 * buff4 + buff2 * buff5 + buff3 * buff6 ! Pi
-      call ops%TakeMean_xy(buff7,PiZ(:,idx))
+      
+      buff9 = buff7*buff7
+      call ops%TakeMean_xy(buff9,PiZrms(:,idx))
+      PiZrms(:,idx) = PiZrms(:,idx)**(1.d0/2.d0)
 
       buff8 = buff4*buff4 + buff5*buff5 + buff6*buff6
       buff8 = buff8**(1.d0/2.d0) ! |gradT|
 
-      buff1 = buff1 - buff7*buff4/buff8**2
-      buff2 = buff2 - buff7*buff5/buff8**2
-      buff3 = buff3 - buff7*buff6/buff8**2
+      buff1 = buff1 - buff7*buff4/buff8**2.d0
+      buff2 = buff2 - buff7*buff5/buff8**2.d0
+      buff3 = buff3 - buff7*buff6/buff8**2.d0
 
       buff1 = buff1*buff1 + buff2*buff2 + buff3*buff3
       buff1 = buff1**(1.d0/2.d0) * buff8 ! Xi
-      call ops%TakeMean_xy(buff1,XiZ(:,idx))
+      
+      buff9 = buff1*buff1
+      call ops%TakeMean_xy(buff9,XiZrms(:,idx))
+      XiZrms(:,idx) = XiZrms(:,idx)**(1.d0/2.d0)
+
+ 
 
 
-      buff7 = ufluct*buff4 + vfluct*buff5 + w*buff6
-      buff7 = buff7 / buff8**2
-      buff1 = buff7*buff4
-      call ops%TakeMean_xy(buff1,uXiZ(:,idx))
-      buff2 = buff7*buff5
-      call ops%TakeMean_xy(buff2,vXiZ(:,idx))
-      buff3 = buff7*buff6
-      call ops%TakeMean_xy(buff3,wXiZ(:,idx))
+      
+      ! Naive Computation of WPV Decomposition!
 
-      buff8 = 0.5d0*(buff1*buff1+buff2*buff2+buff3*buff3)
-      call ops%TakeMean_xy(buff8,KEXiZ(:,idx))
+      !buff7 = ufluct*buff4 + vfluct*buff5 + w*buff6
+      !buff7 = buff7 / buff8**2.d0
+      !buff1 = buff7*buff4
+      !call ops%TakeMean_xy(buff1,uXiZ(:,idx))
+      !buff2 = buff7*buff5
+      !call ops%TakeMean_xy(buff2,vXiZ(:,idx))
+      !buff3 = buff7*buff6
+      !call ops%TakeMean_xy(buff3,wXiZ(:,idx))
 
-      call ops%getCurl(buff1,buff2,buff3, buff4,buff5,buff6,1,1,1,1)
-      call ops%TakeMean_xy(buff4,OmXXiZ(:,idx))
-      call ops%TakeMean_xy(buff5,OmYXiZ(:,idx))
-      call ops%TakeMean_xy(buff6,OmZXiZ(:,idx))
+      !buff8 = 0.5d0*(buff1*buff1+buff2*buff2+buff3*buff3)
+      !call ops%TakeMean_xy(buff8,KEXiZ(:,idx))
 
-      buff4 = ufluct - buff1
-      call ops%TakeMean_xy(buff4,uPiZ(:,idx))
-      buff5 = vfluct - buff2
-      call ops%TakeMean_xy(buff5,vPiZ(:,idx))
-      buff6 = w - buff3
-      call ops%TakeMean_xy(buff6,wPiZ(:,idx))
+      !call ops%getCurl(buff1,buff2,buff3, buff4,buff5,buff6,1,1,1,1)
+      !call ops%TakeMean_xy(buff4,OmXXiZ(:,idx))
+      !call ops%TakeMean_xy(buff5,OmYXiZ(:,idx))
+      !call ops%TakeMean_xy(buff6,OmZXiZ(:,idx))
 
-      buff8 = 0.5d0*(buff4*buff4+buff5*buff5+buff6*buff6)
-      call ops%TakeMean_xy(buff8,KEPiZ(:,idx))
+      !buff4 = ufluct - buff1
+      !call ops%TakeMean_xy(buff4,uPiZ(:,idx))
+      !buff5 = vfluct - buff2
+      !call ops%TakeMean_xy(buff5,vPiZ(:,idx))
+      !buff6 = w - buff3
+      !call ops%TakeMean_xy(buff6,wPiZ(:,idx))
 
-      call ops%getCurl(buff4,buff5,buff6, buff1,buff2,buff3,1,1,1,1)
-      call ops%TakeMean_xy(buff1,OmXPiZ(:,idx))
-      call ops%TakeMean_xy(buff2,OmYPiZ(:,idx))
-      call ops%TakeMean_xy(buff3,OmZPiZ(:,idx))
+      !buff8 = 0.5d0*(buff4*buff4+buff5*buff5+buff6*buff6)
+      !call ops%TakeMean_xy(buff8,KEPiZ(:,idx))
+
+      !call ops%getCurl(buff4,buff5,buff6, buff1,buff2,buff3,1,1,1,1)
+      !call ops%TakeMean_xy(buff1,OmXPiZ(:,idx))
+      !call ops%TakeMean_xy(buff2,OmYPiZ(:,idx))
+      !call ops%TakeMean_xy(buff3,OmZPiZ(:,idx))
 
 
       idx = idx + 1
@@ -269,30 +290,29 @@ program StratifiedShearLayerProfiles
       call ops%WriteASCII_2D(Buoy, "buoy")
       call ops%WriteASCII_2D(Diss, "diss")
 
-      call ops%WriteASCII_2D(OmZ, "OmeZ")
-      call ops%WriteASCII_2D(PiZ, "PiiZ")
-      call ops%WriteASCII_2D(XiZ, "XiiZ")
+      call ops%WriteASCII_2D(OmZrms, "OmZr")  ! Omega_Z RMS
+      call ops%WriteASCII_2D(PiZrms, "PiZr")
+      call ops%WriteASCII_2D(XiZrms, "XiZr")
 
-      call ops%WriteASCII_2D(uXiZ, "uXiZ")
-      call ops%WriteASCII_2D(vXiZ, "vXiZ")
-      call ops%WriteASCII_2D(wXiZ, "wXiZ")
+      !call ops%WriteASCII_2D(uXiZ, "uXiZ")
+      !call ops%WriteASCII_2D(vXiZ, "vXiZ")
+      !call ops%WriteASCII_2D(wXiZ, "wXiZ")
 
-      call ops%WriteASCII_2D(uPiZ, "uPiZ")
-      call ops%WriteASCII_2D(vPiZ, "vPiZ")
-      call ops%WriteASCII_2D(wPiZ, "wPiZ")
+      !call ops%WriteASCII_2D(uPiZ, "uPiZ")
+      !call ops%WriteASCII_2D(vPiZ, "vPiZ")
+      !call ops%WriteASCII_2D(wPiZ, "wPiZ")
 
-      call ops%WriteASCII_2D(OmXXiZ, "OmXXiZ")
-      call ops%WriteASCII_2D(OmYXiZ, "OmYXiZ")
-      call ops%WriteASCII_2D(OmZXiZ, "OmZXiZ")
+      !call ops%WriteASCII_2D(OmXXiZ, "OmXXiZ")
+      !call ops%WriteASCII_2D(OmYXiZ, "OmYXiZ")
+      !call ops%WriteASCII_2D(OmZXiZ, "OmZXiZ")
 
-      call ops%WriteASCII_2D(KEXiZ, "KEXiZ")
-      call ops%WriteASCII_2D(KEPiZ, "KEPiZ")
+      !call ops%WriteASCII_2D(KEXiZ, "KEXiZ")
+      !call ops%WriteASCII_2D(KEPiZ, "KEPiZ")
 
-      call ops%WriteASCII_2D(OmXPiZ, "OmXPiZ")
-      call ops%WriteASCII_2D(OmYPiZ, "OmYPiZ")
-      call ops%WriteASCII_2D(OmZPiZ, "OmZPiZ")
-
-
+      !call ops%WriteASCII_2D(OmXPiZ, "OmXPiZ")
+      !call ops%WriteASCII_2D(OmYPiZ, "OmYPiZ")
+      !call ops%WriteASCII_2D(OmZPiZ, "OmZPiZ")
+      
       timewrite(:,1) = times
       call ops%WriteASCII_2D(timewrite, "time")
    end if

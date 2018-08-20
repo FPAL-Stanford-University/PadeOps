@@ -1,13 +1,17 @@
-program StratifiedShearLayerProfiles
+#include "../problems/postprocessing_igrid/StratifiedShearLayerWPV_files/PVroutines.F90"
+! Test to check if RHS of Laplace equations (F) is correct
+
+program test_ComputeF
    use kind_parameters, only: rkind, clen
    use igrid_Operators, only: igrid_ops
    use constants, only: pi, two
    use mpi
    use timer, only: tic, toc
    use exits, only: message
+   use PVroutines
    implicit none
 
-   real(rkind), dimension(:,:,:), allocatable :: buff1, buff2, buff3, buff4, buff5, buff6
+   real(rkind), dimension(:,:,:), allocatable :: buff1, buff2, buff3, buff4, buff5, buff6, buff7
    real(rkind), dimension(:,:,:), allocatable :: x, y, z, ufluct, vfluct, w, T
    real(rkind) :: dx, dy, dz
    integer :: nx=256, ny=256, nz=256
@@ -43,6 +47,7 @@ program StratifiedShearLayerProfiles
    call ops%allocate3DField(buff4)
    call ops%allocate3DField(buff5)
    call ops%allocate3DField(buff6)
+   call ops%allocate3DField(buff7)
 
    ! Initialise grid  
    do k = 1,ops%gp%xsz(3)
@@ -62,13 +67,7 @@ program StratifiedShearLayerProfiles
 
 
 
-
-   ! T = Rib*(T - Tref)  ! Rescale Potential temperature to buoyancy variable: b
-
-   call ops%getCurl(ufluct,vfluct,w, buff1,buff2,buff3,1,1,1,1)
-
-   call ops%ComputeF_mvOmega(buff1,buff2,buff3,T,buff4,buff5,buff6)
-   
+   call ComputeF(ops,ufluct,vfluct,w,T,buff1,buff2,buff3,buff4,buff5,buff6,buff7)
      
   
    ! Check Solution
@@ -79,20 +78,20 @@ program StratifiedShearLayerProfiles
          do i = 1,ops%gp%xsz(1)
 
            temp = -4.d0 * pi**2.d0 * Lz * Cos(pi*z(i,j,k)/Lz) * Sin(2.d0 * pi * y(i,j,k)/Ly) / (Ly*Ly*Lz) 
-           cumerror = cumerror + abs(buff4(i,j,k) - temp)
+           cumerror = cumerror + abs(buff1(i,j,k) - temp)
 
-           !call message(0, "value1:", buff4(i,j,k))
+           !call message(0, "value1:", buff1(i,j,k))
            !call message(0, "answer1:", temp)
 
            temp = -4.d0 * pi**2.d0 * Lz * Cos(pi*z(i,j,k)/Lz) * Sin(2.d0 * pi *x(i,j,k)/Lx) / (Lx*Lx*Lz)
-           cumerror = cumerror + abs(buff5(i,j,k) - temp)
+           cumerror = cumerror + abs(buff2(i,j,k) - temp)
 
-           !call message(0, "value2:", buff5(i,j,k))
+           !call message(0, "value2:", buff2(i,j,k))
            !call message(0, "answer2:", temp)
 
-           cumerror = cumerror + abs(buff6(i,j,k))
+           cumerror = cumerror + abs(buff3(i,j,k))
      
-           !call message(0, "value3:", buff6(i,j,k))
+           !call message(0, "value3:", buff3(i,j,k))
            !call message(0, "answer3:", 0)
 
          end do
