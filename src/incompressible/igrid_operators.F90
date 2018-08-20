@@ -8,6 +8,7 @@ module igrid_Operators
    use PoissonPeriodicMod, only: PoissonPeriodic
    use exits, only: GracefulExit, message
    use gaussianstuff, only: gaussian  
+   use PadePoissonMod, only: padepoisson
    implicit none
    
    private
@@ -15,7 +16,7 @@ module igrid_Operators
 
    type :: igrid_ops
       private
-      complex(rkind), dimension(:,:,:), allocatable, public :: cbuffy1, cbuffy2
+      complex(rkind), dimension(:,:,:), allocatable, public :: cbuffy1, cbuffy2, cbuffy3
       real(rkind),    dimension(:,:,:), allocatable :: rbuffx, rbuffy, rbuffz1, rbuffz2
       type(decomp_info), public :: gp, gpE
       type(spectral), public  :: spect, spectE
@@ -68,9 +69,38 @@ module igrid_Operators
          procedure :: initFilter
          procedure :: FilterField
          procedure :: ComputeF_mvOmega ! For PV Decomposition
+         procedure :: Project_DivergenceFree_BC
      end type 
 
 contains
+
+subroutine project_DivergenceFree_BC(this, u, v, w, poiss)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(inout) :: u, v, w 
+   class(padepoisson), intent(inout) :: poiss
+    
+   complex(rkind), dimension(this%spect%spectdecomp%ysz(1),this%spect%spectdecomp%ysz(2),this%spect%spectdecomp%ysz(3)) :: uhat, vhat
+   complex(rkind), dimension(this%spectE%spectdecomp%ysz(1),this%spectE%spectdecomp%ysz(2),this%spectE%spectdecomp%ysz(3)) :: what
+   complex(rkind), dimension(this%spect%spectdecomp%zsz(1),this%spect%spectdecomp%zsz(2),this%spect%spectdecomp%zsz(3)) :: tmp1
+   complex(rkind), dimension(this%spectE%spectdecomp%zsz(1),this%spectE%spectdecomp%zsz(2),this%spectE%spectdecomp%zsz(3)) :: tmp2
+
+   call this%spect%fft(u, uhat)
+   call this%spect%fft(w, vhat) !< this is intentional to save memory
+   call transpose_y_to_z(vhat, tmp1, this%spect%spectdecomp)
+   call this%derZ%interpz_C2E(tmp1,tmp2,0,0)
+   call transpose_z_to_y(tmp2, what, this%spectE%spectdecomp)
+   call this%spect%fft(v, vhat)
+   call poiss%PressureProjection(uhat, vhat, what)
+   call this%spect%ifft(uhat, u)
+   call this%spect%ifft(vhat, v)
+   call transpose_y_to_z(what, tmp2, this%spectE%spectdecomp)
+   call this%derZ%interpz_E2C(tmp2,tmp1,-1,-1)
+   call transpose_z_to_y(tmp1, vhat, this%spect%spectdecomp)
+   call this%spect%ifft(vhat, w)
+
+
+end subroutine 
+
 
 subroutine ComputeF_mvOmega(this, omegaxfluct, omegayfluct, omegazfluct, T, Fx, Fy, Fz)
    class(igrid_ops), intent(inout) :: this
