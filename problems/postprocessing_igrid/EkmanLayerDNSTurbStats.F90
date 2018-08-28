@@ -105,10 +105,10 @@ program EkmanLayerDNSTurbStats
     end do 
 
     ! d/dz terms: time avgd, fn of height
-    call ops%ddz_1d(sum(umean_t,2)/nt, dUdz)
-    call ops%ddz_1d(sum(vmean_t,2)/nt, dVdz)
-    call ops%ddz_1d(sum(uw_t,2)/nt, duwdz)
-    call ops%ddz_1d(sum(vw_t,2)/nt, dvwdz)
+    call ops%ddz_1d(sum(umean_t,2)/nt, dUdz,0,0)
+    call ops%ddz_1d(sum(vmean_t,2)/nt, dVdz,0,0)
+    call ops%ddz_1d(sum(uw_t,2)/nt, duwdz,0,0)
+    call ops%ddz_1d(sum(vw_t,2)/nt, dvwdz,0,0)
     
     
     ! Write out time averages

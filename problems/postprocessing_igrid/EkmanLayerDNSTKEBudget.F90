@@ -14,8 +14,7 @@ program EkmanLayerDNSTKEBudget
                 &u,v,w,p, ufluct, vfluct
     real(rkind), dimension(:,:), allocatable :: &
                 &umean_t, vmean_t, &
-                &Tran_t, Prod_t, Diff_t, Diss_t, PDif_t, uiui_t, times,&
-                & DA1_t, DA2_t
+                &Tran_t, Prod_t, Diff_t, Diss_t, PDif_t, uiui_t, times
     real(rkind) :: &
                 &time, dx, dy, dz, &
                 &Re=400.d0, Lx=26.d0, Ly=26.d0, Lz=24.d0
@@ -72,8 +71,6 @@ program EkmanLayerDNSTKEBudget
     allocate(Diss_t(nz,nt))
     allocate(PDif_t(nz,nt))
     allocate(uiui_t(nz,nt))
-    allocate(DA1_t(nz,nt))
-    allocate(DA2_t(nz,nt))
     allocate(times(1,nt))
  
     ! Compute for each timestep: 
@@ -104,52 +101,6 @@ program EkmanLayerDNSTKEBudget
         call ops%ddz(ufluct**2*w + vfluct**2*w + w**3, buff1, botBC, topBC)
         call ops%TakeMean_xy(-buff1, Tran_t(:,idx))            
       
-        ! Dealiasing Residual: d/dz <u*tilde{uw} + v*tilde{vw} + w*tilde{ww}>
-        buff2 = ufluct*w
-        call ops%dealias(buff2) 
-        buff1 = buff2*ufluct        !u*tilde{uw}
-        buff2 = vfluct*w
-        call ops%dealias(buff2) 
-        buff1 = buff2*vfluct+buff1  !v*tilde{vw}
-        buff2 = w*w
-        call ops%dealias(buff2) 
-        buff1 = buff2*w+buff1       !w*tilde{ww}
-        call ops%ddz(buff1,buff1, botBC, topBC)
-        call ops%TakeMean_xy(buff1, DA1_t(:,idx))   
-     
-        ! Dealiasing Residual: -tilde{ui*w}dui/dz
-        call ops%GetGradient(ufluct,buff2,buff3,buff4,botBC,topBC)
-        buff5 = ufluct*ufluct
-        call ops%dealias(buff5)
-        buff1 = buff5*buff2 + buff1 !uu*dudx
-        buff5 = ufluct*vfluct
-        call ops%dealias(buff5)
-        buff1 = buff5*buff3 + buff1 !uv*dudy
-        buff5 = ufluct*w
-        call ops%dealias(buff5)
-        buff1 = buff5*buff4 + buff1 !uw*dudz
-        call ops%GetGradient(vfluct,buff2,buff3,buff4,botBC,topBC)
-        buff5 = vfluct*ufluct
-        call ops%dealias(buff5)
-        buff1 = buff5*buff2 + buff1 !vu*dvdx
-        buff5 = vfluct*vfluct
-        call ops%dealias(buff5)
-        buff1 = buff5*buff3 + buff1 !vv*dvdy
-        buff5 = vfluct*w
-        call ops%dealias(buff5)
-        buff1 = buff5*buff4 + buff1 !vw*dvdz
-        call ops%GetGradient(w,buff2,buff3,buff4,botBC,topBC)
-        buff5 = w*ufluct
-        call ops%dealias(buff5)
-        buff1 = buff5*buff2 + buff1 !wu*dwdx
-        buff5 = w*vfluct
-        call ops%dealias(buff5)
-        buff1 = buff5*buff3 + buff1 !ww*dwdx
-        buff5 = w*w
-        call ops%dealias(buff5)
-        buff1 = buff5*buff4 + buff1 !ww*dwdz
-        call ops%TakeMean_xy(-buff1,DA2_t(:,idx))
-        
         ! Production: -(<uw>*dUdz + <vw>*dVdz)
         call ops%ddz(u-ufluct, buff1, botBC, topBC)
         buff2 = ufluct*w*buff1
@@ -159,10 +110,10 @@ program EkmanLayerDNSTKEBudget
 
         ! Diffusion: d2dz2 <uiui>
         buff1 = ufluct**2+vfluct**2+w**2
-        call ops%d2dz2(buff1, buff2, 0, 1)
-        !call transpose_y_to_z(buff1,buffz1,ops%gp)
-        !call der%d2dz2(buffz1,buffz2)
-        !call transpose_z_to_y(buffz2,buff2,ops%gp)
+        !call ops%d2dz2(buff1, buff2, -1, 1)
+        call transpose_y_to_z(buff1,buffz1,ops%gp)
+        call der%d2dz2(buffz1,buffz2)
+        call transpose_z_to_y(buffz2,buff2,ops%gp)
         call ops%TakeMean_xy(buff2,Diff_t(:,idx))
 
         ! Viscous dissip: -2<dui/dxk*dui/dxk>
@@ -191,10 +142,7 @@ program EkmanLayerDNSTKEBudget
         call ops%WriteASCII_2D(Diff_t, "Diff")
         call ops%WriteASCII_2D(Diss_t, "Diss")
         call ops%WriteASCII_2D(PDif_t, "PDif")
-        call ops%WriteASCII_2D(DA1_t, "DA_1")
-        call ops%WriteASCII_2D(DA2_t, "DA_2")
         call ops%WriteASCII_2D(uiui_t, "uiui")
-        call ops%WriteASCII_2D(times, "time")
     end if 
         
     call ops%destroy()
@@ -202,4 +150,3 @@ program EkmanLayerDNSTKEBudget
     call message(0,"Done")
 
 end program 
-

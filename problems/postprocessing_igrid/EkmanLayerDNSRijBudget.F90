@@ -12,8 +12,8 @@ program EkmanLayerDNSRijBudget
                 &buff1, buff2, buff3, buff4, buff5, buff6, &
                 &u,v,w,p, ufluct, vfluct, pfluct
     real(rkind), dimension(:,:), allocatable :: &
-                &umean_t, vmean_t, uw_t, vw_t, times, &
-                &Tran_13, Prod_13, Diff_13, Diss_13, PDif_13, PStr_13
+                &umean_t, vmean_t, uw_t, vw_t, ww_t, &
+                &Tran, Prod, Diff, Diss, PDif, PStr
     real(rkind) :: &
                 &time, dx, dy, dz, &
                 &Re=400.d0, Lx=26.d0, Ly=26.d0, Lz=24.d0
@@ -61,15 +61,15 @@ program EkmanLayerDNSRijBudget
     nt = (tstop - tstart)/tstep
     allocate(umean_t(nz,nt))
     allocate(vmean_t(nz,nt))
-    allocate(Tran_13(nz,nt))
-    allocate(Prod_13(nz,nt))
-    allocate(Diff_13(nz,nt))
-    allocate(Diss_13(nz,nt))
-    allocate(PDif_13(nz,nt))
-    allocate(PStr_13(nz,nt))
+    allocate(Tran(nz,nt))
+    allocate(Prod(nz,nt))
+    allocate(Diff(nz,nt))
+    allocate(Diss(nz,nt))
+    allocate(PDif(nz,nt))
+    allocate(PStr(nz,nt))
     allocate(uw_t(nz,nt))
     allocate(vw_t(nz,nt))
-    allocate(times(1,nt))
+    allocate(ww_t(nz,nt))
  
     ! Compute for each timestep: 
     idx = 1
@@ -83,7 +83,6 @@ program EkmanLayerDNSRijBudget
         call ops%ReadField3D(p,"prss",TIDX)
         time = ops%getSimTime(TIDX)
         call message(0, "Read simulation data at time:", time)
-        times(1,idx) = TIDX
 
         ! Fluctuations and means
         call ops%getFluct_from_MeanZ(u,ufluct)
@@ -94,50 +93,79 @@ program EkmanLayerDNSRijBudget
        
         call ops%TakeMean_xy( ufluct*w, uw_t(:,idx))
         call ops%TakeMean_xy( vfluct*w, vw_t(:,idx))
+        call ops%TakeMean_xy( w*w, ww_t(:,idx))
 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         ! uw budget
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         ! Transport: -d/dz<uww>
-        call ops%ddz( ufluct*ufluct*w, buff1, botBC, topBC)
-        call ops%TakeMean_xy( -buff1, Tran_13(:,idx))            
+        call ops%ddz( ufluct*w*w, buff1, botBC, topBC)
+        call ops%TakeMean_xy( -buff1, Tran(:,idx))            
         
         ! Production: -<ww>dUdz
         call ops%ddz(u-ufluct, buff1, botBC, topBC)
-        call ops%TakeMean_xy(-w*w*buff1,Prod_13(:,idx))
+        call ops%TakeMean_xy( -w*w*buff1,Prod(:,idx))
 
         ! Diffusion: d2dz2<uw>
-        call ops%d2dz2( ufluct*w, buff1, 0, 0 )
-        call ops%TakeMean_xy( buff1, Diff_13(:,idx) )
+        call ops%d2dz2( ufluct*w, buff1, -1, 1 )
+        call ops%TakeMean_xy( buff1, Diff(:,idx) )
 
         ! Viscous Dissip: -2<du/dxk*dw/dxk>
-        call ops%GetGradient( ufluct, buff1, buff2, buff3, botBC, topBC)
-        call ops%GetGradient( w,      buff4, buff5, buff6, botBC, topBC)
-        call ops%TakeMean_xy(-2*(buff1*buff4+buff2*buff5+buff3+buff6), Diss_13(:,idx))
+        call ops%GetGradient( ufluct, buff1, buff2, buff3, 0,0)
+        call ops%GetGradient( w,      buff4, buff5, buff6, 0,0)
+        call ops%TakeMean_xy(-2*(buff1*buff4+buff2*buff5+buff3*buff6), Diss(:,idx))
 
-        ! Pressure diffusion: -d/dz<wp'>
-        call ops%ddz( w*pfluct, buff1, botBC, topBC )
-        call ops%TakeMean_xy(-buff1, PDif_13(:,idx))
+        ! Pressure diffusion: -d/dz<up'>
+        call ops%ddz( ufluct*pfluct, buff1, 0, 0 )
+        call ops%TakeMean_xy(-buff1, PDif(:,idx))
 
-        ! Pressure strain: -p'( du'/dz + dw'/dx )
-        call ops%ddz( ufluct, buff1, botBC, topBC )
-        call ops%TakeMean_xy(-pfluct*buff1, PStr_13(:,idx))
-        
-        call toc()
+        ! Pressure strain: p'( du'/dz + dw'/dx )
+        call ops%ddz( ufluct, buff1,0 , topBC )
+        call ops%ddz( w,      buff2,0 , topBC )
+        call ops%TakeMean_xy(pfluct*(buff1+buff2), PStr(:,idx))
+       
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        ! ww budget
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !! Transport: -d/dz<www>
+        !call ops%ddz( w**3, buff1, botBC, topBC)
+        !call ops%TakeMean_xy( -buff1, Tran(:,idx))            
+        !
+        !! Production: -<ww>dWdz
+        !Prod(:,idx) = 0
+
+        !! Diffusion: d2dz2<ww>
+        !call ops%d2dz2( w*w, buff1, -1, 1 )
+        !call ops%TakeMean_xy( buff1, Diff(:,idx) )
+
+        !! Viscous Dissip: -2<dw/dxk*dw/dxk>
+        !call ops%GetGradient( w, buff1, buff2, buff3, 0,0)
+        !call ops%TakeMean_xy( -2*(buff1**2+buff2**2+buff3**2), Diss(:,idx))
+
+        !! Pressure diffusion: -2d/dz<wp'>
+        !call ops%ddz( w*pfluct, buff1, 0, 0 )
+        !call ops%TakeMean_xy( -2*buff1, PDif(:,idx))
+
+        !! Pressure strain: 2p'dw/dz
+        !call ops%ddz( w, buff1, 0 , topBC )
+        !call ops%TakeMean_xy( pfluct*buff1, PStr(:,idx))
+
+        !call toc()
         idx = idx + 1
     end do 
 
     ! Write out time averages
     if (nrank == 0) then
         call message(0,"Writing files...")
-        call ops%WriteASCII_2D(Tran_13, "Tran")
-        call ops%WriteASCII_2D(Prod_13, "Prod")
-        call ops%WriteASCII_2D(Diff_13, "Diff")
-        call ops%WriteASCII_2D(Diss_13, "Diss")
-        call ops%WriteASCII_2D(PDif_13, "PDif")
-        call ops%WriteASCII_2D(PStr_13, "PStr")
+        call ops%WriteASCII_2D(Tran, "Tran")
+        call ops%WriteASCII_2D(Prod, "Prod")
+        call ops%WriteASCII_2D(Diff, "Diff")
+        call ops%WriteASCII_2D(Diss, "Diss")
+        call ops%WriteASCII_2D(PDif, "PDif")
+        call ops%WriteASCII_2D(PStr, "PStr")
         call ops%WriteASCII_2D(uw_t, "uw_t")
         call ops%WriteASCII_2D(vw_t, "vw_t")
+        call ops%WriteASCII_2D(vw_t, "ww_t")
     end if 
         
     call ops%destroy()
