@@ -1,18 +1,19 @@
 module temporalHook
     use kind_parameters,    only: rkind
     use IncompressibleGrid, only: igrid
-    use reductions,         only: P_MAXVAL, p_minval
+    use reductions,         only: P_maxval, p_minval, p_sum 
     use exits,              only: message, message_min_max
     !use EkmanDNS_IO,           only: output_tecplot!dumpData4Matlab 
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
+    use decomp_2d
 
     implicit none 
 
     integer :: nt_print2screen = 1
     real(rkind) :: maxDiv, DomMaxDiv, maxnusgs
-    integer :: ierr 
+    integer :: ierr
    
     real(rkind), dimension(:), allocatable :: tmp
     real(rkind), dimension(:,:), allocatable :: ubudget, vbudget, AllBudgets
@@ -24,7 +25,6 @@ module temporalHook
 
 contains
     
-
     subroutine doTemporalStuff(gp)
         class(igrid), intent(inout) :: gp 
       
@@ -78,7 +78,6 @@ contains
             allocate(tmp(nz))
             allocate(ubudget(nz,4))
             allocate(vbudget(nz,4))
-            
             allocate(AllBudgets(nz,8))
 
             ubudget = 0.d0 
@@ -105,12 +104,77 @@ contains
 
     end subroutine 
 
-    subroutine process_stats(gp)
-        class(igrid), intent(inout) :: gp 
+    subroutine process_stats(this)
+        class(igrid), intent(inout) :: this
+       
         
         if (dobudgetcalcs) then
+            ! Step 1: Compute means
+            call average_xyC(this, this%v, tmp)
+            ubudget(:,4) = ubudget(:,4) + tmp/this%Ro
+            
+            call average_xyC(this, this%u, tmp)
+            vbudget(:,4) = vbudget(:,4) + (1 - tmp)/this%Ro
+            
+            ! Step 2: Compute advection terms
+            this%rbuffxE(:,:,:,1) = this%w*this%uE
+            call ddz_E2C_mean(this, this%rbuffxE(:,:,:,1), tmp, -1, -1) ! w for no-slip wall is an even function 
+            ubudget(:,1) = ubudget(:,1) - tmp 
+            
+            this%rbuffxE(:,:,:,1) = this%w*this%vE
+            call ddz_E2C_mean(this, this%rbuffxE(:,:,:,1), tmp, -1, -1) ! w for no-slip wall is an even function 
+            vbudget(:,1) = vbudget(:,1) - tmp 
+
+            ! Step 3: Compute SGS stress terms (only if used)
+            if (this%useSGS) then
+                call ddz_E2C_mean(this, this%tau13, tmp, 0, -1)
+                ubudget(:,2) = ubudget(:,2) - tmp
+                
+                call ddz_E2C_mean(this, this%tau23, tmp, 0, -1)
+                vbudget(:,2) = vbudget(:,2) - tmp
+            end if 
+
+            ! Step 4: Compute the viscous stress 
+            call ddz_E2C_mean(this, this%duidxjE(:,:,:,3), tmp, 0, -1) 
+            ubudget(:,3) = ubudget(:,3) + tmp /this%Re
+           
+            call ddz_E2C_mean(this, this%duidxjE(:,:,:,6), tmp, 0, -1) 
+            vbudget(:,3) = vbudget(:,3) + tmp /this%Re
 
         end if 
+
+    end subroutine 
+
+    subroutine ddz_E2C_mean(this, fE, dfdz1dC, botBC, topBC)
+        class(igrid), intent(inout) :: this
+        real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: fE
+        real(rkind), dimension(this%nz), intent(out) :: dfdz1dC
+        integer, intent(in) :: botBC, topBC
+        integer :: k
+
+        call transpose_x_to_y(fE, this%rbuffyE(:,:,:,1), this%gpE)
+        call transpose_y_to_z(this%rbuffyE(:,:,:,1), this%rbuffzE(:,:,:,1),this%gpE)
+
+        call this%Pade6opZ%ddz_E2C(this%rbuffzE(:,:,:,1), this%rbuffzC(:,:,:,1), botBC, topBC)
+        
+        do k = 1,this%nz ! OR size(this%rbuffzC,3)
+            dfdz1dC(k) = p_sum(this%rbuffzC(:,:,k,1))/(this%nx*this%ny)
+        end do 
+
+    end subroutine 
+
+    subroutine average_xyC(this, f, fmean)
+        class(igrid), intent(inout) :: this
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: f
+        real(rkind), dimension(this%nz), intent(out) :: fmean
+        integer :: k
+         
+        call transpose_x_to_y(f, this%rbuffyC(:,:,:,1), this%gpC)
+        call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1),this%gpC)
+
+        do k = 1,this%nz
+            fmean(k) = p_sum(this%rbuffzC(:,:,k,1))/(this%nx*this%ny)
+        end do 
 
     end subroutine 
 
