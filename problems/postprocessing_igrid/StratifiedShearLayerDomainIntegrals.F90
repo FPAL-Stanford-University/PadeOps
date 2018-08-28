@@ -15,7 +15,7 @@ program StratifiedShearLayerDomainIntegrals
    type(igrid_ops) :: ops
    character(len=clen) ::  inputdir, outputdir
    character(len=clen) :: inputfile
-   real(rkind) :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0
+   real(rkind) :: Lx = 26.d0, Ly = 26.d0, Lz =12.d0
    real(rkind), dimension(10000) :: P, B, D, Dv, Dsgs, time, IEL, MKE, TKE 
    integer :: idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 1
    logical :: isZPeriodic = .false. 
@@ -86,34 +86,10 @@ program StratifiedShearLayerDomainIntegrals
 
       time(idx) = ops%getSimTime(tidx)
       call message(0, "Read simulation data at time:", time(idx))
-
-      ! STEP 1: Compute the gain in PE from IE
-      call ops%ddz(T,buff2, 1, 1)   ! dTdz (adiabatic BCs)
-      buff2 = (1.d0/(Pr*Re))*buff2
-      IEL(idx) = ops%getVolumeIntegral(buff2)
-      
-  
-      ! STEP 4: Compute the production
+     
+      ! Compute TKE 
       call ops%getFluct_from_MeanZ(u,ufluct)
-      buff3 = u - ufluct ! mean
-      call ops%ddz(buff3,buff2,1,1) ! dUdz (no stress BC)
-      buff3 = 0.5d0*buff3*buff3
-      MKE(idx) = ops%getVolumeIntegral(buff3)
-      buff3 = -ufluct*w      ! u'w' (since wmean = 0)
-      buff2 = buff2*buff3 
-      P(idx) = ops%getVolumeIntegral(buff2)
-      
-
       call ops%getFluct_from_MeanZ(v,vfluct)
-      buff3 = v - vfluct ! mean
-      call ops%ddz(buff3,buff2,1,1) ! dVdz (no stress BC)
-      buff3 = 0.5d0*buff3*buff3
-      MKE(idx) = MKE(idx) + ops%getVolumeIntegral(buff3)
-      buff3 = -vfluct*w      ! u'w' (since wmean = 0)
-      buff2 = buff2*buff3 
-      P(idx) = P(idx) + ops%getVolumeIntegral(buff2)
-
-      ! STEP 5a: Compute TKE
       buff2 = (ufluct*ufluct + vfluct*vfluct + w*w)
       TKE(idx) = 0.5d0*ops%getVolumeIntegral(buff2)
 
@@ -189,21 +165,15 @@ program StratifiedShearLayerDomainIntegrals
          print*, time(idx), P(idx), B(idx), D(idx), Dv(idx), Dsgs(idx), IEL(idx), TKE(idx)
          print*, "ddt_TKE:", P(idx) + B(idx) - D(idx)
       end if 
+>>>>>>> igridSGS
      
       idx = idx + 1
    end do 
 
    idx = idx - 1
-   allocate(data2write(idx,9))
+   allocate(data2write(idx,2))
    data2write(:,1) = time(1:idx)
-   data2write(:,2) = IEL(1:idx) 
-   data2write(:,3) = P(1:idx) 
-   data2write(:,4) = B(1:idx) 
-   data2write(:,5) = D(1:idx) 
-   data2write(:,6) = Dv(1:idx) 
-   data2write(:,7) = Dsgs(1:idx)
-   data2write(:,8) = MKE(1:idx)
-   data2write(:,9) = TKE(1:idx)
+   data2write(:,2) = TKE(1:idx)
 
    if (nrank == 0) then
       call ops%WriteASCII_2D(data2write, "avgV")

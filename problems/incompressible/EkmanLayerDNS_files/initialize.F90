@@ -9,7 +9,8 @@ module EkmanDNS_parameters
     integer :: seedw = 131344
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
-    
+ 
+    !character(len=clen) :: inputfname   
     real(rkind), parameter :: xdim = 1000._rkind, udim = 0.45_rkind
     real(rkind), parameter :: timeDim = xdim/udim
 
@@ -17,28 +18,30 @@ end module
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     use EkmanDNS_parameters  
-    !use EkmanLayerDNS_IO, only: read_domain_info  
+    use EkmanLayerDNS_IO, only: read_domain_info  
     use kind_parameters,  only: rkind, clen
     use constants,        only: one,two, pi
     use decomp_2d,        only: decomp_info
     use exits,            only: GracefulExit
     implicit none
 
-    type(decomp_info),                                          intent(in)    :: decomp
-    real(rkind),                                                intent(inout) :: dx,dy,dz
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
-    integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
+    integer :: i,j,k, ioUnit
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = 26.d0, Ly = 26.d0, Lz = 24.d0, alphaRot = 0.d0 
-    real(rkind) ::  noiseAmp, waveAmp
-    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot,waveAmp,noiseAmp
+    real(rkind)  :: Lx=26.d0, Ly=26.d0, Lz=24.d0, alphaRot = 0.d0, noiseAmp 
+    character(len=clen) :: InitFileTag, InitFileDirectory!,inputfname
+    
+    namelist /EkmanLayerDNS/Lx,Ly,Lz,alphaRot,noiseAmp,InitFileTag, InitFileDirectory
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=EkmanLayerDNS)
     close(ioUnit)    
 
+    !inputfname = trim(inputfile)
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
     ! If base decomposition is in Y
@@ -79,7 +82,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use decomp_2d          
     use reductions,         only: p_maxval, p_minval
     use exits,              only: message_min_max
-    !use EkmanLayerDNS_IO, only: get_perturbations
+    use EkmanLayerDNS_IO,   only: get_perturbations
     use cd06staggstuff,      only: cd06stagg
     use decomp_2d_io,        only: decomp_2d_read_one
 
@@ -92,19 +95,14 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind) :: alphaRot=0.d0, dz 
+    real(rkind) :: alphaRot=0.d0, dz,noiseAmp 
     character(len=clen) :: InitFileTag, InitFileDirectory
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
     real(rkind), dimension(:,:,:), allocatable :: upurt, vpurt, wpurt
-    real(rkind) :: noiseAmp, waveAmp
     type(cd06stagg), allocatable :: derW
-    integer :: ProblemMode = 1
-    integer :: Ns = 5
-    character(len=clen) :: fname
     real(rkind)  :: Lx = 26.d0, Ly = 26.d0, Lz = 24.d0 
-
-    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot,waveAmp,noiseAmp
+    namelist /EkmanLayerDNS/Lx,Ly,Lz,alphaRot,noiseAmp,InitFileTag, InitFileDirectory
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -122,19 +120,15 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     x => mesh(:,:,:,1)
  
     ! Laminar Ekman layer profile
-
-    u  =  cos(alphaRot*pi/180.d0) - exp(-z)*cos(z - (alphaRot*pi/180.d0))
-    v  =  sin(alphaRot*pi/180.d0) + exp(-z)*sin(z - (alphaRot*pi/180.d0))
+    u  = cos(alphaRot*pi/180.d0) - exp(-z)*cos(z-(alphaRot*pi/180.d0)) 
+    v  = sin(alphaRot*pi/180.d0) + exp(-z)*sin(z-(alphaRot*pi/180.d0)) 
     wC = zero
 
-
+    ! Perturbations and noise
     allocate(upurt(size(u ,1),size(u ,2),size(u ,3)))
     allocate(vpurt(size(v ,1),size(v ,2),size(v ,3)))
     allocate(wpurt(size(wC,1),size(wC,2),size(wC,3)))
-
-    upurt = waveAmp*(exp(-Z)*Z / exp(-1.d0))*cos(Ns*2.d0*pi*Y/Lx)
-    vpurt = waveAmp*(exp(-Z)*Z / exp(-1.d0))*cos(Ns*2.d0*pi*X/Lx)
-    wpurt = 0.d0;
+    call get_perturbations(decompC, x, y, InitFileTag, InitFileDirectory, upurt, vpurt, wpurt)
     u  = u + upurt
     v  = v + vpurt
     wC = wC+ wpurt
@@ -196,17 +190,15 @@ end subroutine
 
 
 subroutine set_planes_io(xplanes, yplanes, zplanes)
+    use EkmanDNS_parameters  
     implicit none
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 6
-
-    allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
-
-    xplanes = [64]
-    yplanes = [64]
-    zplanes = [5,15,30,50,80,150]
+    integer, parameter :: nxplanes = 0, nyplanes = 0, nzplanes = 4
+    
+    allocate(zplanes(nzplanes))
+    zplanes =[1, 53, 106, 500]
 
 end subroutine
 
@@ -229,18 +221,11 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     real(rkind) :: ThetaRef, Lx, Ly, Lz, alphaRot
-    integer :: iounit
-    real(rkind) :: noiseAmp, waveAmp
-    integer :: ProblemMode = 1
-    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot,waveAmp,noiseAmp
     
-    Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
+    Tsurf = zero
+    dTsurf_dt = zero
+    ThetaRef = one
     
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=EkmanLayerDNS)
-    close(ioUnit)    
-
     ! Do nothing really since this is an unstratified simulation
 end subroutine
 
@@ -250,17 +235,6 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, alphaRot 
-    integer :: iounit
-    real(rkind) :: noiseAmp, waveAmp
-    integer :: ProblemMode = 1
-    
-    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot,waveAmp,noiseAmp
-
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=EkmanLayerDNS)
-    close(ioUnit)    
      
     Tref = 0.d0
     

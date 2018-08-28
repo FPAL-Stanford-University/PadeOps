@@ -1,0 +1,19 @@
+&INPUT
+inputdir  = "/scratch/05648/kmatsuno/EkmanNeutral/Run07"        ! Directory for input files
+outputdir = "/scratch/05648/kmatsuno/EkmanNeutral/Run07"        ! Directory for output files
+RunID  = 07
+tstart = 0
+tstop  = 3200
+tstep  = 100
+nx     = 256
+ny     = 256
+nz     = 512
+Lx      = 26.d0
+Ly      = 26.d0
+Lz      = 24.d0
+Re      = 397.986477 
+Rib    = 0.d0
+NumericalSchemeVert = 1
+VizDump_Schedule = 0
+/
+/
