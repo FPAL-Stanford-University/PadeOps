@@ -8,7 +8,7 @@ program EkmanLayerDNS
     use mpi
     use kind_parameters,  only: clen
     use IncompressibleGrid, only: igrid
-    use temporalhook, only: doTemporalStuff
+    use temporalhook, only: doTemporalStuff, initialize_processing, finalize_processing
     use timer, only: tic, toc
     use exits, only: message
 
@@ -28,16 +28,16 @@ program EkmanLayerDNS
  
     call igp%start_io(.true.)                !<-- Start I/O by creating a header file (see io.F90)
 
-    call igp%printDivergence()
-  
-    call tic() 
+    call tic()
+
+    call initialize_processing(igp%nz, inputfile)
     do while (igp%tsim < igp%tstop) 
        
        call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
-       
     end do 
- 
+
+    call finalize_processing()
     call igp%finalize_io()                  !<-- Close the header file (wrap up i/o)
 
     call igp%destroy()                !<-- Destroy the IGRID derived type 
