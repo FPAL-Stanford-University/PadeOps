@@ -130,7 +130,7 @@ contains
 
     end subroutine 
 
-    subroutine init(this, dx, dy, dz, sp, spE, computeStokesPressure, Lz, storePressure, gpC, derivZ, PeriodicInZ)
+    subroutine init(this, dx, dy, dz, sp, spE, computeStokesPressure, Lz, storePressure, gpC, derivZ, PeriodicInZ, useTrueWavenumbers)
         class(padepoisson), intent(inout) :: this
         real(rkind), intent(in) :: dx, dy, dz
         !class(cd06stagg), intent(in), target :: derZ
@@ -147,6 +147,7 @@ contains
         type(decomp_info), intent(in), target :: gpC
         type(Pade6stagg), intent(in), target :: derivZ
         logical, intent(in) :: PeriodicInZ
+        logical, intent(in), optional :: useTrueWavenumbers
 
         call  message("=========================================")
         call  message(0,"Initializing PADEPOISSON derived type")
@@ -197,7 +198,16 @@ contains
             
             call this%sp%GetModifiedWavenumber_xy_ip(k1,dx)
             call this%sp%GetModifiedWavenumber_xy_ip(k2,dy)
-            call this%derivZ%getModifiedWavenumbers(k3,k3mod)
+            if (present(useTrueWavenumbers)) then
+                if(useTrueWavenumbers) then
+                    k3mod = k3
+                    !k3mod(nzExt/2+1) = 0.d0
+                else
+                    call this%derivZ%getModifiedWavenumbers(k3,k3mod)
+                end if 
+            else
+                call this%derivZ%getModifiedWavenumbers(k3,k3mod)
+            end if 
 
             tfm = exp(imi*(-dz/two)*k3); tfp = exp(imi*( dz/two)*k3)
 

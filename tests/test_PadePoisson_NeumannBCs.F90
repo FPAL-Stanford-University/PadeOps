@@ -22,6 +22,7 @@ program test_PadePoisson_NeumannBCs
     real(rkind), dimension(:,:,:), allocatable :: x, y, z, g, f, ftrue
     real(rkind) :: dx, dy, dz, MaxError
     real(rkind), parameter :: Lx = 2.d0*pi, Ly = 2.d0*pi, Lz = 1.d0 
+    logical :: useTrueWavenums = .true. 
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -67,7 +68,7 @@ program test_PadePoisson_NeumannBCs
     call spect%init("x", nx, ny, nz, dx, dy, dz, "four", "2/3rd", 2,.false.)
     call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", "2/3rd", 2,.false.)
     call Pade6opz%init(gpC, spect%spectdecomp, gpE, spectE%spectdecomp, dz, scheme,.false.)
-    call poiss%init(dx, dy, dz, spect, spectE, computeStokesPressure, Lz, .false., gpC, Pade6opz, .false. )
+    call poiss%init(dx, dy, dz, spect, spectE, computeStokesPressure, Lz, .false., gpC, Pade6opz, .false., useTrueWavenums )
    
     call poiss%PoissonSolver_HomogeneousNeumannBCz(g, f)
 
