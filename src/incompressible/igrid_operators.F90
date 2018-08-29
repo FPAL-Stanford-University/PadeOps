@@ -63,6 +63,7 @@ module igrid_Operators
          procedure :: initPoissonSolver
          procedure :: PoissonSolvePeriodic_inplace
          procedure :: dealias
+         procedure :: softdealias
          procedure :: alloc_cbuffz
          procedure :: Read_VizSummary
          procedure :: alloc_zvec
@@ -213,6 +214,16 @@ subroutine dealias(this, field)
 
    call this%spect%fft(field,this%cbuffy1)
    call this%spect%dealias(this%cbuffy1)
+   call this%spect%ifft(this%cbuffy1,field)
+
+end subroutine 
+
+subroutine softdealias(this, field)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(inout) :: field 
+
+   call this%spect%fft(field,this%cbuffy1)
+   call this%spect%softdealias(this%cbuffy1)
    call this%spect%ifft(this%cbuffy1,field)
 
 end subroutine 

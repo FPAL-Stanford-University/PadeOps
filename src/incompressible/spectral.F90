@@ -80,6 +80,7 @@ module spectralMod
             procedure           :: fft1_x2y
             procedure, private  :: initializeEverything
             procedure           :: dealias
+            procedure           :: softdealias
             procedure           :: dealias_edgeField
             procedure           :: mTimes_ik1_oop
             procedure           :: mTimes_ik1_ip
@@ -348,7 +349,37 @@ contains
         end if 
          
     end subroutine
-  
+ 
+
+    subroutine softdealias(this, fhat)
+        class(spectral),  intent(inout)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fhat
+        integer :: i, j, k
+
+        if (this%init_periodicinZ) then
+            call this%take_fftz(fhat)
+            do k = 1,this%spectdecomp%zsz(3)
+               do j = 1,this%spectdecomp%zsz(2)
+                  !$omp simd
+                  do i = 1,this%spectdecomp%zsz(1)
+                     this%ctmpz(i,j,k) = this%ctmpz(i,j,k)*this%Gdealias(i,j,k)
+                  end do 
+               end do 
+            end do 
+            call this%take_ifftz(fhat)
+        else
+         do k = 1,this%fft_size(3)
+             do j = 1,this%fft_size(2)
+                 !$omp simd 
+                 do i = 1,this%fft_size(1)
+                     fhat(i,j,k) = fhat(i,j,k)*this%GksPrep1(i,j,k)
+                 end do 
+             end do 
+         end do 
+        end if 
+         
+    end subroutine
+
     subroutine dealias_edgeField(this, fhat)
         class(spectral),  intent(inout)         :: this
         complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)+1), intent(inout) :: fhat
@@ -1372,8 +1403,8 @@ contains
      
         ! STEP 14: Prep filter for KS  
         allocate(this%GksPrep1(this%spectdecomp%ysz(1), this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)))
-        kdealiasx = (one/four)*pi/dx
-        kdealiasy = (one/four)*pi/dy
+        kdealiasx = (4.d0/5.d0)*pi/dx
+        kdealiasy = (4.d0/5.d0)*pi/dy
         do k = 1,this%spectdecomp%ysz(3)
             do j = 1,this%spectdecomp%ysz(2)
                 do i = 1,this%spectdecomp%ysz(1)
