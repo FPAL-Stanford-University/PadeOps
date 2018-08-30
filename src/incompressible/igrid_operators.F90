@@ -64,6 +64,7 @@ module igrid_Operators
          procedure :: initPoissonSolver
          procedure :: PoissonSolvePeriodic_inplace
          procedure :: dealias
+         procedure :: softdealias
          procedure :: alloc_cbuffz
          procedure :: Read_VizSummary
          procedure :: alloc_zvec
@@ -214,6 +215,16 @@ subroutine dealias(this, field)
 
    call this%spect%fft(field,this%cbuffy1)
    call this%spect%dealias(this%cbuffy1)
+   call this%spect%ifft(this%cbuffy1,field)
+
+end subroutine 
+
+subroutine softdealias(this, field)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(inout) :: field 
+
+   call this%spect%fft(field,this%cbuffy1)
+   call this%spect%softdealias(this%cbuffy1)
    call this%spect%ifft(this%cbuffy1,field)
 
 end subroutine 
@@ -415,14 +426,14 @@ subroutine d2dz2(this, f, d2fdz2, botBC, topBC)
    call transpose_y_to_x(this%rbuffy,d2fdz2,this%gp)
 end subroutine 
 
-subroutine ddz_1d(this, f1d, dfdz1d,botBC,topBC)
+subroutine ddz_1d(this, f1d, dfdz1d, botBC, topBC)
    class(igrid_ops), intent(inout) :: this
    real(rkind), dimension(this%gp%zsz(3)), intent(in)  :: f1d
    real(rkind), dimension(this%gp%zsz(3)), intent(out) :: dfdz1d
    integer, intent(in) :: botBC, topBC
 
    this%zarr1d_1(1,1,:) = f1d
-   call this%derZ1d%ddz_C2C(this%zarr1d_1,this%zarr1d_2,botBC,topBC)
+   call this%derZ%ddz_1d_C2C(this%zarr1d_1,this%zarr1d_2,botBC,topBC)
    dfdz1d = this%zarr1d_2(1,1,:)
 end subroutine 
 
@@ -436,6 +447,21 @@ subroutine d2dz2_1d(this, f1d, d2fdz2_1d,botBC,topBC)
    call this%derZ1d%d2dz2_C2C(this%zarr1d_1,this%zarr1d_2,botBC,topBC)
    d2fdz2_1d = this%zarr1d_2(1,1,:)
 end subroutine 
+
+
+
+subroutine d2dz2_1d(this, f1d, d2fdz21d, botBC, topBC)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%zsz(3)), intent(in)  :: f1d
+   real(rkind), dimension(this%gp%zsz(3)), intent(out) :: d2fdz21d
+   integer, intent(in) :: botBC, topBC
+
+   this%zarr1d_1(1,1,:) = f1d
+   call this%derZ%ddz_1d_C2C(this%zarr1d_1,this%zarr1d_2,botBC,topBC)
+   call this%derZ%ddz_1d_C2C(this%zarr1d_2,this%zarr1d_1,-botBC,-topBC)
+   d2fdz21d = this%zarr1d_1(1,1,:)
+end subroutine 
+
 
 subroutine getFluct_from_MeanZ(this, f, ffluct)
    class(igrid_ops), intent(inout) :: this
