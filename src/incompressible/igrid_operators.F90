@@ -430,10 +430,14 @@ subroutine ddz_1d(this, f1d, dfdz1d, botBC, topBC)
    class(igrid_ops), intent(inout) :: this
    real(rkind), dimension(this%gp%zsz(3)), intent(in)  :: f1d
    real(rkind), dimension(this%gp%zsz(3)), intent(out) :: dfdz1d
-   integer, intent(in) :: botBC, topBC
+   integer, intent(in), optional :: botBC, topBC
 
    this%zarr1d_1(1,1,:) = f1d
-   call this%derZ%ddz_1d_C2C(this%zarr1d_1,this%zarr1d_2,botBC,topBC)
+   if (present(botBC) .and. present(topBC)) then
+        call this%derZ%ddz_1d_C2C(this%zarr1d_1,this%zarr1d_2,botBC,topBC)
+   else
+        call this%derZ%ddz_1d_C2C(this%zarr1d_1,this%zarr1d_2,0,0)
+   end if 
    dfdz1d = this%zarr1d_2(1,1,:)
 end subroutine 
 

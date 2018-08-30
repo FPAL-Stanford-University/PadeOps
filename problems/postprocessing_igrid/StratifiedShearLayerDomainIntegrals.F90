@@ -165,7 +165,6 @@ program StratifiedShearLayerDomainIntegrals
          print*, time(idx), P(idx), B(idx), D(idx), Dv(idx), Dsgs(idx), IEL(idx), TKE(idx)
          print*, "ddt_TKE:", P(idx) + B(idx) - D(idx)
       end if 
->>>>>>> igridSGS
      
       idx = idx + 1
    end do 
