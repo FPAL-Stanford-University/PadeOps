@@ -41,6 +41,7 @@ module igrid_Operators
          procedure :: ddy
          procedure :: ddz
          procedure :: ddz_1d
+         procedure :: d2dz2_1d 
          procedure :: d2dz2
          procedure :: TakeMean_xy
          procedure :: TakeMean_y
@@ -425,15 +426,30 @@ subroutine d2dz2(this, f, d2fdz2, botBC, topBC)
    call transpose_y_to_x(this%rbuffy,d2fdz2,this%gp)
 end subroutine 
 
-subroutine ddz_1d(this, f1d, dfdz1d)
+subroutine ddz_1d(this, f1d, dfdz1d, botBC, topBC)
    class(igrid_ops), intent(inout) :: this
    real(rkind), dimension(this%gp%zsz(3)), intent(in)  :: f1d
    real(rkind), dimension(this%gp%zsz(3)), intent(out) :: dfdz1d
+   integer, intent(in) :: botBC, topBC
 
    this%zarr1d_1(1,1,:) = f1d
-   call this%derZ1d%ddz_C2C(this%zarr1d_1,this%zarr1d_2,1,1)
+   call this%derZ%ddz_1d_C2C(this%zarr1d_1,this%zarr1d_2,botBC,topBC)
    dfdz1d = this%zarr1d_2(1,1,:)
 end subroutine 
+
+
+subroutine d2dz2_1d(this, f1d, d2fdz21d, botBC, topBC)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%zsz(3)), intent(in)  :: f1d
+   real(rkind), dimension(this%gp%zsz(3)), intent(out) :: d2fdz21d
+   integer, intent(in) :: botBC, topBC
+
+   this%zarr1d_1(1,1,:) = f1d
+   call this%derZ%ddz_1d_C2C(this%zarr1d_1,this%zarr1d_2,botBC,topBC)
+   call this%derZ%ddz_1d_C2C(this%zarr1d_2,this%zarr1d_1,-botBC,-topBC)
+   d2fdz21d = this%zarr1d_1(1,1,:)
+end subroutine 
+
 
 subroutine getFluct_from_MeanZ(this, f, ffluct)
    class(igrid_ops), intent(inout) :: this
