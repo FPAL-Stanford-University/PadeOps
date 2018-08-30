@@ -10,17 +10,18 @@ program EkmanLayerDNSTurbStats
 
     real(rkind), dimension(:,:,:), allocatable :: &
                 &buff1, buff2, buff3, buff4, &
-                &ufluct, vfluct, u, v, w
+                &ufluct, vfluct, u, v, w, Rij_t
     real(rkind), dimension(:,:), allocatable :: &
-                &data2write, &
-                &umean_t, vmean_t, &
-                &uu_t, uv_t, uw_t, vv_t, vw_t, ww_t, &
-                &d2Udz2_t, d2Vdz2_t,&
-                &dUdz_t, dVdz_t, duwdz_t, dvwdz_t
+                &data2write, Rij, &
+                &umean_t, vmean_t
+    real(rkind), dimension(:), allocatable :: &
+                &umean, vmean,&
+                &d2Udz2, d2Vdz2,&
+                &dUdz, dVdz, duwdz, dvwdz
     real(rkind) :: &
                 &time, dx, dy, dz, &
                 &Re=400.d0, Lx=26.d0, Ly=26.d0, Lz=24.d0
-    integer ::  nx, ny, nz, nt, RunID, TIDX, botBC=0, topBC=1, &
+    integer ::  nx, ny, nz, nt, RunID, TIDX,&
                 &idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 1
     type(igrid_ops) :: ops
     character(len=clen) ::  inputdir, outputdir, inputfile
@@ -56,18 +57,16 @@ program EkmanLayerDNSTurbStats
     nt = (tstop - tstart)/tstep
     allocate(umean_t(nz,nt))
     allocate(vmean_t(nz,nt))
-    allocate(uu_t(nz,nt))
-    allocate(uv_t(nz,nt))
-    allocate(uw_t(nz,nt))
-    allocate(vv_t(nz,nt))
-    allocate(vw_t(nz,nt))
-    allocate(ww_t(nz,nt))
-    allocate(dUdz_t(nz,nt))
-    allocate(dVdz_t(nz,nt))
-    allocate(duwdz_t(nz,nt))
-    allocate(dvwdz_t(nz,nt))
-    allocate(d2Udz2_t(nz,nt))
-    allocate(d2Vdz2_t(nz,nt))
+    allocate(Rij_t(nz,6,nt))
+    allocate(umean(nz))
+    allocate(vmean(nz))
+    allocate(Rij(nz,6))
+    allocate(dUdz(nz))
+    allocate(dVdz(nz))
+    allocate(duwdz(nz))
+    allocate(dvwdz(nz))
+    allocate(d2Udz2(nz))
+    allocate(d2Vdz2(nz))
  
     ! Compute for each timestep the z profiles 
     idx = 1
@@ -88,54 +87,44 @@ program EkmanLayerDNSTurbStats
         call ops%TakeMean_xy(v-vfluct,vmean_t(:,idx))
         
         ! Reynolds stresses
-        call ops%TakeMean_xy(ufluct*ufluct, uu_t(:,idx))        
-        call ops%TakeMean_xy(ufluct*vfluct, uv_t(:,idx))        
-        call ops%TakeMean_xy(ufluct*w,      uw_t(:,idx))        
-        call ops%TakeMean_xy(vfluct*vfluct, vv_t(:,idx))        
-        call ops%TakeMean_xy(vfluct*w,      vw_t(:,idx))       
-        call ops%TakeMean_xy(w*w,           ww_t(:,idx))       
+        call ops%TakeMean_xy(ufluct*ufluct, Rij_t(:,1,idx))        
+        call ops%TakeMean_xy(ufluct*vfluct, Rij_t(:,2,idx))        
+        call ops%TakeMean_xy(ufluct*w,      Rij_t(:,3,idx))        
+        call ops%TakeMean_xy(vfluct*vfluct, Rij_t(:,4,idx))        
+        call ops%TakeMean_xy(vfluct*w,      Rij_t(:,5,idx))       
+        call ops%TakeMean_xy(w*w,           Rij_t(:,6,idx))       
        
-        ! Viscous stresses
-        call ops%d2dz2(u-ufluct, buff1,-1,-1)
-        call ops%TakeMean_xy(buff1, d2Udz2_t(:,idx))
-        call ops%d2dz2(v-vfluct, buff2,-1,-1)
-        call ops%TakeMean_xy(buff2, d2Vdz2_t(:,idx))
-        call toc()
         idx = idx + 1
     end do 
 
-    ! d/dz terms: time avgd, fn of height
-    call ops%ddz_1d(sum(umean_t,2)/nt, dUdz,0,0)
-    call ops%ddz_1d(sum(vmean_t,2)/nt, dVdz,0,0)
-    call ops%ddz_1d(sum(uw_t,2)/nt, duwdz,0,0)
-    call ops%ddz_1d(sum(vw_t,2)/nt, dvwdz,0,0)
+    ! Averages in time:
+    umean = sum(umean_t,2)/nt
+    vmean = sum(vmean_t,2)/nt
+    Rij = sum(Rij_t,3)/nt
+        
+    ! d/dz terms:
+    call ops%ddz_1d(umean, dUdz,0,1)
+    call ops%ddz_1d(vmean, dVdz,0,1)
+    call ops%ddz_1d(Rij(:,3), duwdz,-1,-1)
+    call ops%ddz_1d(Rij(:,5), dvwdz,-1,-1)
     
+    ! Viscous stresses
+    call ops%d2dz2_1d(umean, d2Udz2,0,-1)
+    call ops%d2dz2_1d(vmean, d2Vdz2,0,-1)
     
     ! Write out time averages
     if (nrank == 0) then
-       allocate(data2write(nz,10))
-       !data2write(:,1) = sum(umean_t,2)/nt
-       !data2write(:,2) = sum(vmean_t,2)/nt
-       !data2write(:,3) = sum(uu_t,2)/nt 
-       !data2write(:,4) = sum(uv_t,2)/nt
-       !data2write(:,5) = sum(uw_t,2)/nt
-       !data2write(:,6) = sum(vv_t,2)/nt
-       !data2write(:,7) = sum(vw_t,2)/nt 
-       !data2write(:,8) = sum(ww_t,2)/nt 
-       !data2write(:,9) = dUdz
-       !data2write(:,10) = dVdz
-       !call ops%WriteASCII_2D(data2write, "tavg")
-       !data2write(:,1) = dUdz 
-       !data2write(:,2) = dVdz
-       !data2write(:,3) = sum(d2Udz2_t,2)/nt
-       !data2write(:,4) = sum(d2Vdz2_t,2)/nt
-       !data2write(:,5) = duwdz
-       !data2write(:,6) = dvwdz
-       !data2write(:,7) = 0
-       !data2write(:,8) = 0
-       !data2write(:,9) = 0
-       !data2write(:,10) = 0 
-       !call ops%WriteASCII_2D(data2write, "d_dz")
+        allocate(data2write(nz,8))
+        data2write(:,1) = umean
+        data2write(:,2) = vmean
+        data2write(:,3) = dUdz 
+        data2write(:,4) = dVdz
+        data2write(:,5) = d2Udz2
+        data2write(:,6) = d2Vdz2
+        data2write(:,7) = duwdz
+        data2write(:,8) = dvwdz
+        call ops%WriteASCII_2D(data2write, "tavg")
+        call ops%WriteASCII_2D(Rij, "uiuj")
     end if 
         
     call ops%destroy()

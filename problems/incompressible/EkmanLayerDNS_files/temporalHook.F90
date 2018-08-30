@@ -22,7 +22,7 @@ module temporalHook
     integer :: compute_frequency = 9999999, write_frequency = 999999999
     logical :: dobudgetcalcs = .false.
     integer :: NumEnsembles
-
+    real(rkind) :: tstart = 800.d0
 contains
     
     subroutine doTemporalStuff(gp)
@@ -50,16 +50,19 @@ contains
                 call message(1,"Current dt:",gp%dt)
             end if 
             call toc()
-            call tic()
+            call tic() 
         end if 
-
-        if (mod(gp%step,compute_frequency) == 0) then
-            call process_stats(gp)
-        end if 
-        
-        if (mod(gp%step,write_frequency) == 0) then
-            call dump_problem_stats(gp)
-        end if 
+        if (gp%tsim>tstart) then
+            if (mod(gp%step,compute_frequency) == 0) then
+                NumEnsembles = NumEnsembles + 1
+                call process_stats(gp)
+            end if 
+            
+            if (mod(gp%step,write_frequency) == 0) then
+                call message(0,"Writing stats file...")
+                call dump_problem_stats(gp)
+            end if 
+        end if
 
     end subroutine
 
@@ -67,7 +70,7 @@ contains
         integer, intent(in) :: nz
         character(len=*), intent(in) :: inputfile
         integer :: ioUnit
-        namelist /ProcessingStats/doBudgetcalcs, write_frequency, compute_frequency
+        namelist /ProcessingStats/tstart, doBudgetcalcs, write_frequency, compute_frequency
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -109,23 +112,18 @@ contains
        
         
         if (dobudgetcalcs) then
-            ! Step 1: Compute means
-            call average_xyC(this, this%v, tmp)
-            ubudget(:,4) = ubudget(:,4) + tmp/this%Ro
             
-            call average_xyC(this, this%u, tmp)
-            vbudget(:,4) = vbudget(:,4) + (1 - tmp)/this%Ro
-            
-            ! Step 2: Compute advection terms
+            ! Compute advection terms: ddz<uw>, ddz<vw>
+            ! w for no-slip wall is an even function 
             this%rbuffxE(:,:,:,1) = this%w*this%uE
-            call ddz_E2C_mean(this, this%rbuffxE(:,:,:,1), tmp, -1, -1) ! w for no-slip wall is an even function 
+            call ddz_E2C_mean(this, this%rbuffxE(:,:,:,1), tmp, -1, -1) 
             ubudget(:,1) = ubudget(:,1) - tmp 
             
             this%rbuffxE(:,:,:,1) = this%w*this%vE
-            call ddz_E2C_mean(this, this%rbuffxE(:,:,:,1), tmp, -1, -1) ! w for no-slip wall is an even function 
+            call ddz_E2C_mean(this, this%rbuffxE(:,:,:,1), tmp, -1, -1)
             vbudget(:,1) = vbudget(:,1) - tmp 
 
-            ! Step 3: Compute SGS stress terms (only if used)
+            ! Compute SGS stress terms (only if used): ddz<tauSGS_13>, ddz<tauSGS_23>
             if (this%useSGS) then
                 call ddz_E2C_mean(this, this%tau13, tmp, 0, -1)
                 ubudget(:,2) = ubudget(:,2) - tmp
@@ -134,19 +132,26 @@ contains
                 vbudget(:,2) = vbudget(:,2) - tmp
             end if 
 
-            ! Step 4: Compute the viscous stress 
+            ! Compute the viscous stress: d2dz2<U>, d2dz2<V>
             call ddz_E2C_mean(this, this%duidxjE(:,:,:,3), tmp, 0, -1) 
             ubudget(:,3) = ubudget(:,3) + tmp /this%Re
            
             call ddz_E2C_mean(this, this%duidxjE(:,:,:,6), tmp, 0, -1) 
             vbudget(:,3) = vbudget(:,3) + tmp /this%Re
+            
+            ! Compute means: (1-U)/Ro and V/Ro
+            call average_xyC(this, this%v, tmp)
+            ubudget(:,4) = ubudget(:,4) + tmp/this%Ro
+            
+            call average_xyC(this, this%u, tmp)
+            vbudget(:,4) = vbudget(:,4) + (1 - tmp)/this%Ro
 
         end if 
 
     end subroutine 
 
     subroutine ddz_E2C_mean(this, fE, dfdz1dC, botBC, topBC)
-        class(igrid), intent(inout) :: this
+        class(igrid), intent (inout) :: this
         real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: fE
         real(rkind), dimension(this%nz), intent(out) :: dfdz1dC
         integer, intent(in) :: botBC, topBC

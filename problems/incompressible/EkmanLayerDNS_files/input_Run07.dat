@@ -39,6 +39,7 @@ t_start_planeDump     = 10000       ! When do you want to start dumping planes?
 t_stop_planeDump      = 45000       ! When do you want to stop dumping planes?
 VizDump_Schedule 	  = 0
 deltaT_dump 		  = 0.d0
+dump_NU_SGS           = .TRUE.
 /
 /
 &STATS
@@ -142,5 +143,11 @@ alphaRot 		= 0.d0  ! frame rotation
 noiseAmp 		= 1.d-3  ! noise amplitude
 InitFileTag     = "PadeInput"
 InitFileDirectory = "/home1/05648/kmatsuno/bins/PadeInput_1mode"
+/
+/
+&ProcessingStats
+write_frequency = 500
+compute_frequency = 1
+doBudgetCalcs = .TRUE.
 /
 /
