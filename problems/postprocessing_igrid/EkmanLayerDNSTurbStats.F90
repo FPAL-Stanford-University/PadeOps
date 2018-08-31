@@ -111,7 +111,7 @@ program EkmanLayerDNSTurbStats
     ! Viscous stresses
     call ops%d2dz2_1d(umean, d2Udz2,0,-1)
     call ops%d2dz2_1d(vmean, d2Vdz2,0,-1)
-    
+
     ! Write out time averages
     if (nrank == 0) then
         allocate(data2write(nz,8))

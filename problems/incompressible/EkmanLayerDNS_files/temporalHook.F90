@@ -54,8 +54,8 @@ contains
         end if 
         if (gp%tsim>tstart) then
             if (mod(gp%step,compute_frequency) == 0) then
-                NumEnsembles = NumEnsembles + 1
                 call process_stats(gp)
+                NumEnsembles = NumEnsembles + 1
             end if 
             
             if (mod(gp%step,write_frequency) == 0) then
@@ -102,7 +102,9 @@ contains
 
          write(tempname,"(A3,I2.2,A15,A2,I6.6,A2,I6.6,A4)") "Run",gp%runID,"_MomentumBudget","_t",gp%step,"_n",NumEnsembles,".stt"
          fname = gp%OutputDir(:len_trim(gp%OutputDir))//"/"//trim(tempname)
-         call write_2d_ascii(AllBudgets, fname)
+         if (nrank==0) then
+            call write_2d_ascii(AllBudgets, fname)
+         end if
         end if 
 
     end subroutine 
@@ -125,11 +127,13 @@ contains
 
             ! Compute SGS stress terms (only if used): ddz<tauSGS_13>, ddz<tauSGS_23>
             if (this%useSGS) then
-                call ddz_E2C_mean(this, this%tau13, tmp, 0, -1)
-                ubudget(:,2) = ubudget(:,2) - tmp
+                this%rbuffxC(:,:,:,1) = this%nu_SGS * ( this%duidxjC(:,:,:,3)+this%duidxjC(:,:,:,7) )
+                call ddz_C2C_mean(this,this%rbuffxC(:,:,:,1) , tmp, 0, -1)
+                ubudget(:,2) = ubudget(:,2) + tmp
                 
-                call ddz_E2C_mean(this, this%tau23, tmp, 0, -1)
-                vbudget(:,2) = vbudget(:,2) - tmp
+                this%rbuffxC(:,:,:,1) = this%nu_SGS * ( this%duidxjC(:,:,:,6)+this%duidxjC(:,:,:,8) )
+                call ddz_C2C_mean(this,this%rbuffxC(:,:,:,1) , tmp, 0, -1)
+                vbudget(:,2) = vbudget(:,2) + tmp
             end if 
 
             ! Compute the viscous stress: d2dz2<U>, d2dz2<V>
@@ -145,7 +149,7 @@ contains
             
             call average_xyC(this, this%u, tmp)
             vbudget(:,4) = vbudget(:,4) + (1 - tmp)/this%Ro
-
+            
         end if 
 
     end subroutine 
@@ -164,6 +168,24 @@ contains
         
         do k = 1,this%nz ! OR size(this%rbuffzC,3)
             dfdz1dC(k) = p_sum(this%rbuffzC(:,:,k,1))/(this%nx*this%ny)
+        end do 
+
+    end subroutine 
+
+    subroutine ddz_C2C_mean(this, fC, dfdz1dC, botBC, topBC)
+        class(igrid), intent (inout) :: this
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: fC
+        real(rkind), dimension(this%nz), intent(out) :: dfdz1dC
+        integer, intent(in) :: botBC, topBC
+        integer :: k
+
+        call transpose_x_to_y(fC, this%rbuffyC(:,:,:,1), this%gpC)
+        call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1),this%gpC)
+
+        call this%Pade6opZ%ddz_C2C(this%rbuffzC(:,:,:,1), this%rbuffzC(:,:,:,2), botBC, topBC)
+        
+        do k = 1,this%nz ! OR size(this%rbuffzC,3)
+            dfdz1dC(k) = p_sum(this%rbuffzC(:,:,k,2))/(this%nx*this%ny)
         end do 
 
     end subroutine 
