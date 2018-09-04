@@ -27,7 +27,7 @@ program CoriolisBudget
    real(rkind), dimension(:,:,:), allocatable :: S11m, S12m, S13m, S22m, S23m, S33m
    real(rkind), dimension(:,:), allocatable :: umn_set, Tmn_set, wT, uT, vT, vmn_set
    real(rkind), dimension(:,:), allocatable :: P_mke, D_mke, C_mke, transport_mke, transportSGS_mke 
-   real(rkind), dimension(:,:), allocatable :: eps, bou_tke, prod_tke, transport_tke, transportSGS_tke, transport_p_tke
+   real(rkind), dimension(:,:), allocatable :: budget_MKE, eps, bou_tke, prod_tke, transport_tke, transportSGS_tke, transport_p_tke
    integer :: VizDump_Schedule = 0
    integer, dimension(:), allocatable :: timesteps
    real(rkind), dimension(:), allocatable :: times, buff1d_1, buff1d_2, buff1d_3, dudzM, dvdzM, buff1d_4
@@ -137,7 +137,10 @@ program CoriolisBudget
       allocate(transport_p_tke(nz,nt))
       allocate(transportSGS_tke(nz,nt))
       allocate(eps(nz,nt))
-   !end if 
+    
+    
+    !end if 
+    allocate(budget_MKE(nz,6))
 
    idx = 1
    
@@ -213,11 +216,11 @@ program CoriolisBudget
       call ops%TakeMean_xy(buff2,wT(:,idx)) ! wT
 
       ! STEP 2: Compute velocity gradients
-      call ops%GetGradient(ufluct, dudx, dudy, dudz, -1, 0)
-      call ops%GetGradient(vfluct, dvdx, dvdy, dvdz, -1, 0)
-      call ops%GetGradient(wfluct, dwdx, dwdy, dwdz, -1, 0)
-      call ops%ddz_1d(umn_set(:,idx), dudzM, 0, 1)
-      call ops%ddz_1d(vmn_set(:,idx), dvdzM, 0, 1)
+      ! call ops%GetGradient(ufluct, dudx, dudy, dudz, -1, 0)
+      ! call ops%GetGradient(vfluct, dvdx, dvdy, dvdz, -1, 0)
+      ! call ops%GetGradient(wfluct, dwdx, dwdy, dwdz, -1, 0)
+      ! call ops%ddz_1d(umn_set(:,idx), dudzM, 0, 1)
+      ! call ops%ddz_1d(vmn_set(:,idx), dvdzM, 0, 1)
 
       ! STEP 3: Production/Destruction of MKE terms
       P_mke(:,idx) = R13(:,idx) * dudzM + R23(:,idx) * dvdzM ! P_mke
@@ -232,73 +235,92 @@ program CoriolisBudget
       
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       !!! TKE
-      buff1 = 0.5 * (ufluct*ufluct + vfluct*vfluct + wfluct*wfluct)
-      call ops%GetGradient(ufluct, dudx, dudy, dudz, 0, 1)
-      call ops%GetGradient(vfluct, dvdx, dvdy, dvdz, 0, 1)
-      call ops%GetGradient(wfluct, dwdx, dwdy, dwdz, -1, -1)
-      tau_13 = - nSGS * (dudz + dwdx)
-      tau_23 = - nSGS * (dvdz + dwdy)
-      ! TKE LHS
-      call ops%TakeMean_xy(wfluct*buff1, buff1d_1)
-      call ops%ddz_1d(buff1d_1, transport_tke(:,idx), 0, 1) ! transport_tke
-      call ops%TakeMean_xy(wfluct*Pfluct, buff1d_1)
-      call ops%ddz_1d(buff1d_1, transport_p_tke(:,idx), 0, 0) ! transport_p_tke
-      call ops%TakeMean_xy(ufluct*tau_13 + vfluct*tau_23, buff1d_1)
-      call ops%ddz_1d(buff1d_1, transportSGS_tke(:,idx), 0, 0) ! transportSGS_tke
+      ! buff1 = 0.5 * (ufluct*ufluct + vfluct*vfluct + wfluct*wfluct)
+      ! call ops%GetGradient(ufluct, dudx, dudy, dudz, 0, 1)
+      ! call ops%GetGradient(vfluct, dvdx, dvdy, dvdz, 0, 1)
+      ! call ops%GetGradient(wfluct, dwdx, dwdy, dwdz, -1, -1)
+      ! tau_13 = - nSGS * (dudz + dwdx)
+      ! tau_23 = - nSGS * (dvdz + dwdy)
+      ! ! TKE LHS
+      ! call ops%TakeMean_xy(wfluct*buff1, buff1d_1)
+      ! call ops%ddz_1d(buff1d_1, transport_tke(:,idx), 0, 1) ! transport_tke
+      ! call ops%TakeMean_xy(wfluct*Pfluct, buff1d_1)
+      ! call ops%ddz_1d(buff1d_1, transport_p_tke(:,idx), 0, 0) ! transport_p_tke
+      ! call ops%TakeMean_xy(ufluct*tau_13 + vfluct*tau_23, buff1d_1)
+      ! call ops%ddz_1d(buff1d_1, transportSGS_tke(:,idx), 0, 0) ! transportSGS_tke
 
-      ! TKE RHS
-      ! Production
-      call ops%TakeMean_xy(-ufluct*wfluct, buff1d_1)
-      call ops%TakeMean_xy(-vfluct*wfluct, buff1d_2)
-      prod_tke(:,idx) = buff1d_1 * dudzM + buff1d_2 * dvdzM ! prod_tke
-      ! Bouancy
-      call ops%TakeMean_xy(wfluct*Tfluct / Fr**2., bou_tke(:,idx)) ! bou_tke
-      ! Dissipation
-      S11 = 0.5 * (dudx + dudx) 
-      S12 = 0.5 * (dudy + dvdx) 
-      S13 = 0.5 * (dudz + dwdx) 
-      S22 = 0.5 * (dvdy + dvdy) 
-      S23 = 0.5 * (dvdz + dwdy) 
-      S33 = 0.5 * (dwdz + dwdz)
-      buff1 = -2. * nSGS * (S11*S11 + 2.*S12*S12 + 2.*S13*S13 + S22*S22 + 2.*S23*S23 + S33*S33) 
-      buff2 = -2. * nSGS * (S11*S11m + 2.*S12*S12m + 2.*S13*S13m + S22*S22m + 2.*S23*S23m + S33*S33m)
-      call ops%TakeMean_xy(buff1 + buff2, eps(:,idx)) ! eps
+      ! ! TKE RHS
+      ! ! Production
+      ! call ops%TakeMean_xy(-ufluct*wfluct, buff1d_1)
+      ! call ops%TakeMean_xy(-vfluct*wfluct, buff1d_2)
+      ! prod_tke(:,idx) = buff1d_1 * dudzM + buff1d_2 * dvdzM ! prod_tke
+      ! ! Bouancy
+      ! call ops%TakeMean_xy(wfluct*Tfluct / Fr**2., bou_tke(:,idx)) ! bou_tke
+      ! ! Dissipation
+      ! S11 = 0.5 * (dudx + dudx) 
+      ! S12 = 0.5 * (dudy + dvdx) 
+      ! S13 = 0.5 * (dudz + dwdx) 
+      ! S22 = 0.5 * (dvdy + dvdy) 
+      ! S23 = 0.5 * (dvdz + dwdy) 
+      ! S33 = 0.5 * (dwdz + dwdz)
+      ! buff1 = -2. * nSGS * (S11*S11 + 2.*S12*S12 + 2.*S13*S13 + S22*S22 + 2.*S23*S23 + S33*S33) 
+      ! buff2 = -2. * nSGS * (S11*S11m + 2.*S12*S12m + 2.*S13*S13m + S22*S22m + 2.*S23*S23m + S33*S33m)
+      ! call ops%TakeMean_xy(buff1 + buff2, eps(:,idx)) ! eps
       
       idx = idx + 1
       call toc()
    end do 
 
+   ! STEP 1: Compute MKE > TKE, SGS
+   call ops%ddz_1d(sum(umn_set,2)/real(idx,rkind),buff1d_1,0,1)
+   budget_MKE(:,1) = (sum(R13,2)/real(idx,rkind))*buff1d_1
+   budget_MKE(:,3) = (sum(T13,2)/real(idx,rkind))*buff1d_1
+   
+   call ops%ddz_1d(sum(vmn_set,2)/real(idx,rkind),buff1d_1,0,1)
+   budget_MKE(:,2) = (sum(R23,2)/real(idx,rkind))*buff1d_1
+   budget_MKE(:,4) = (sum(T23,2)/real(idx,rkind))*buff1d_1
+    
+   ! STEP 2: Compute Transfer 
+   buff1d_1 = (sum(R13,2)/real(idx,rkind))*(sum(umn_set,2)/real(idx,rkind))
+   call ops%ddz_1d(buff1d_1,budget_MKE(:,5),0,-1)
+   buff1d_1 = (sum(R23,2)/real(idx,rkind))*(sum(vmn_set,2)/real(idx,rkind))
+   call ops%ddz_1d(buff1d_1,budget_MKE(:,6),0,-1)
+
    if (nrank == 0) then
-      call ops%WriteASCII_2D(transport_tke, "transport_tke")
-      call ops%WriteASCII_2D(transport_p_tke, "transport_p_tke")  
-      call ops%WriteASCII_2D(transportSGS_tke, "transportSGS_tke")   
-      call ops%WriteASCII_2D(prod_tke, "prod_tke") 
-      call ops%WriteASCII_2D(bou_tke, "bou_tke")
-      call ops%WriteASCII_2D(eps, "eps")
-
-      call ops%WriteASCII_2D(umn_set, "umn")
-      call ops%WriteASCII_2D(Tmn_set, "Tmn")
-      call ops%WriteASCII_2D(R11, "R11")
-      call ops%WriteASCII_2D(R12, "R12")
-      call ops%WriteASCII_2D(R13, "R13")
-      call ops%WriteASCII_2D(R22, "R22")
-      call ops%WriteASCII_2D(R23, "R23")
-      call ops%WriteASCII_2D(R33, "R33")
-      
-      call ops%WriteASCII_2D(TT, "TTm")
-      call ops%WriteASCII_2D(uT, "uTm")
-      call ops%WriteASCII_2D(vT, "vTm")
-      call ops%WriteASCII_2D(wT, "wTm")
-
-      call ops%WriteASCII_2D(P_mke, "P_mke")
-      call ops%WriteASCII_2D(D_mke, "D_mke")
-      call ops%WriteASCII_2D(C_mke, "C_mke")
-      call ops%WriteASCII_2D(transport_mke, "transport_mke")
-      call ops%WriteASCII_2D(transportSGS_mke, "transportSGS_mke")
-
-      timewrite(:,1) = times
-      call ops%WriteASCII_2D(timewrite, "time")
+      call ops%WriteASCII_2D(budget_MKE, "mkeB")
    end if 
+
+   !if (nrank == 0) then
+   !   call ops%WriteASCII_2D(transport_tke, "transport_tke")
+   !   call ops%WriteASCII_2D(transport_p_tke, "transport_p_tke")  
+   !   call ops%WriteASCII_2D(transportSGS_tke, "transportSGS_tke")   
+   !   call ops%WriteASCII_2D(prod_tke, "prod_tke") 
+   !   call ops%WriteASCII_2D(bou_tke, "bou_tke")
+   !   call ops%WriteASCII_2D(eps, "eps")
+
+   !   call ops%WriteASCII_2D(umn_set, "umn")
+   !   call ops%WriteASCII_2D(Tmn_set, "Tmn")
+   !   call ops%WriteASCII_2D(R11, "R11")
+   !   call ops%WriteASCII_2D(R12, "R12")
+   !   call ops%WriteASCII_2D(R13, "R13")
+   !   call ops%WriteASCII_2D(R22, "R22")
+   !   call ops%WriteASCII_2D(R23, "R23")
+   !   call ops%WriteASCII_2D(R33, "R33")
+   !   
+   !   call ops%WriteASCII_2D(TT, "TTm")
+   !   call ops%WriteASCII_2D(uT, "uTm")
+   !   call ops%WriteASCII_2D(vT, "vTm")
+   !   call ops%WriteASCII_2D(wT, "wTm")
+
+   !   call ops%WriteASCII_2D(P_mke, "P_mke")
+   !   call ops%WriteASCII_2D(D_mke, "D_mke")
+   !   call ops%WriteASCII_2D(C_mke, "C_mke")
+   !   call ops%WriteASCII_2D(transport_mke, "transport_mke")
+   !   call ops%WriteASCII_2D(transportSGS_mke, "transportSGS_mke")
+
+   !   timewrite(:,1) = times
+   !   call ops%WriteASCII_2D(timewrite, "time")
+   !end if 
 
    call ops%destroy()
    call MPI_Finalize(ierr)           
