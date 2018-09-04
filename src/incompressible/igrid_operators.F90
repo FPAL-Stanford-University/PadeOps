@@ -8,6 +8,7 @@ module igrid_Operators
    use PoissonPeriodicMod, only: PoissonPeriodic
    use exits, only: GracefulExit, message
    use gaussianstuff, only: gaussian  
+   use PadePoissonMod, only: padepoisson
    implicit none
    
    private
@@ -15,7 +16,7 @@ module igrid_Operators
 
    type :: igrid_ops
       private
-      complex(rkind), dimension(:,:,:), allocatable, public :: cbuffy1, cbuffy2
+      complex(rkind), dimension(:,:,:), allocatable, public :: cbuffy1, cbuffy2, cbuffy3
       real(rkind),    dimension(:,:,:), allocatable :: rbuffx, rbuffy, rbuffz1, rbuffz2
       type(decomp_info), public :: gp, gpE
       type(spectral), public  :: spect, spectE
@@ -40,6 +41,8 @@ module igrid_Operators
          procedure :: ddy
          procedure :: ddz
          procedure :: ddz_1d
+         procedure :: d2dz2_1d 
+         procedure :: d2dz2
          procedure :: TakeMean_xy
          procedure :: TakeMean_y
          procedure :: getFluct_from_MeanZ
@@ -61,14 +64,43 @@ module igrid_Operators
          procedure :: initPoissonSolver
          procedure :: PoissonSolvePeriodic_inplace
          procedure :: dealias
+         procedure :: softdealias
          procedure :: alloc_cbuffz
          procedure :: Read_VizSummary
          procedure :: alloc_zvec
          procedure :: initFilter
          procedure :: FilterField
+         procedure :: Project_DivergenceFree_BC
      end type 
 
 contains
+
+subroutine project_DivergenceFree_BC(this, u, v, w, poiss)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(inout) :: u, v, w 
+   class(padepoisson), intent(inout) :: poiss
+    
+   complex(rkind), dimension(this%spect%spectdecomp%ysz(1),this%spect%spectdecomp%ysz(2),this%spect%spectdecomp%ysz(3)) :: uhat, vhat
+   complex(rkind), dimension(this%spectE%spectdecomp%ysz(1),this%spectE%spectdecomp%ysz(2),this%spectE%spectdecomp%ysz(3)) :: what
+   complex(rkind), dimension(this%spect%spectdecomp%zsz(1),this%spect%spectdecomp%zsz(2),this%spect%spectdecomp%zsz(3)) :: tmp1
+   complex(rkind), dimension(this%spectE%spectdecomp%zsz(1),this%spectE%spectdecomp%zsz(2),this%spectE%spectdecomp%zsz(3)) :: tmp2
+
+   call this%spect%fft(u, uhat)
+   call this%spect%fft(w, vhat) !< this is intentional to save memory
+   call transpose_y_to_z(vhat, tmp1, this%spect%spectdecomp)
+   call this%derZ%interpz_C2E(tmp1,tmp2,0,0)
+   call transpose_z_to_y(tmp2, what, this%spectE%spectdecomp)
+   call this%spect%fft(v, vhat)
+   call poiss%PressureProjection(uhat, vhat, what)
+   call this%spect%ifft(uhat, u)
+   call this%spect%ifft(vhat, v)
+   call transpose_y_to_z(what, tmp2, this%spectE%spectdecomp)
+   call this%derZ%interpz_E2C(tmp2,tmp1,-1,-1)
+   call transpose_z_to_y(tmp1, vhat, this%spect%spectdecomp)
+   call this%spect%ifft(vhat, w)
+
+
+end subroutine 
 
 subroutine FilterField(this, f, fout)
    class(igrid_ops), intent(inout) :: this
@@ -187,6 +219,16 @@ subroutine dealias(this, field)
 
 end subroutine 
 
+subroutine softdealias(this, field)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(inout) :: field 
+
+   call this%spect%fft(field,this%cbuffy1)
+   call this%spect%softdealias(this%cbuffy1)
+   call this%spect%ifft(this%cbuffy1,field)
+
+end subroutine 
+
 subroutine initPoissonSolver(this, dx, dy, dz)
    class(igrid_ops), intent(inout) :: this
    real(rkind), intent(in) :: dx, dy, dz
@@ -226,8 +268,9 @@ subroutine GetGradient(this, f, dfdx, dfdy, dfdz, botBC, topBC)
    
    call this%spect%fft(f,this%cbuffy1)
    call this%spect%mtimes_ik1_oop(this%cbuffy1, this%cbuffy2)
-   call this%spect%ifft(this%cbuffy2,dfdx)
+   call this%spect%ifft(this%cbuffy2,dfdx,setOddball=.True.)
    call this%spect%mtimes_ik2_ip(this%cbuffy1)
+   this%cbuffy1(:,size(this%cbuffy1,2)/2+1,:) = 0.d0 ! need to set the oddball to zero 
    call this%spect%ifft(this%cbuffy1,dfdy)
    call this%ddz(f, dfdz, botBC, topBC)
 
@@ -343,7 +386,7 @@ subroutine ddx(this,f, dfdx)
   
    call this%spect%fft(f,this%cbuffy1)
    call this%spect%mtimes_ik1_ip(this%cbuffy1)
-   call this%spect%ifft(this%cbuffy1,dfdx)
+   call this%spect%ifft(this%cbuffy1,dfdx,setOddball=.true.)
 end subroutine 
 
 subroutine ddy(this,f, dfdy)
@@ -353,6 +396,7 @@ subroutine ddy(this,f, dfdy)
   
    call this%spect%fft(f,this%cbuffy1)
    call this%spect%mtimes_ik2_ip(this%cbuffy1)
+   this%cbuffy1(:,size(this%cbuffy1,2)/2+1,:) = 0.d0 ! need to set the oddball to zero 
    call this%spect%ifft(this%cbuffy1,dfdy)
 end subroutine 
 
@@ -369,21 +413,47 @@ subroutine ddz(this, f, dfdz, botBC, topBC)
    call transpose_y_to_x(this%rbuffy,dfdz,this%gp)
 end subroutine 
 
+subroutine d2dz2(this, f, d2fdz2, botBC, topBC)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: f
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: d2fdz2
+   integer, intent(in) :: botBC, topBC
+
+   call transpose_x_to_y(f,this%rbuffy,this%gp)
+   call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
+   call this%derZ%d2dz2_C2C(this%rbuffz1,this%rbuffz2, botBC, topBC)
+   call transpose_z_to_y(this%rbuffz2,this%rbuffy,this%gp)
+   call transpose_y_to_x(this%rbuffy,d2fdz2,this%gp)
+end subroutine 
+
 subroutine ddz_1d(this, f1d, dfdz1d, botBC, topBC)
    class(igrid_ops), intent(inout) :: this
    real(rkind), dimension(this%gp%zsz(3)), intent(in)  :: f1d
    real(rkind), dimension(this%gp%zsz(3)), intent(out) :: dfdz1d
    integer, intent(in), optional :: botBC, topBC
 
-   
    this%zarr1d_1(1,1,:) = f1d
-   if (present(botBC) .AND. present(topBC)) then
-       call this%derZ1d%ddz_C2C(this%zarr1d_1,this%zarr1d_2,botBC,topBC)
-   else 
-       call this%derZ1d%ddz_C2C(this%zarr1d_1,this%zarr1d_2,0,0)
-   end if
+   if (present(botBC) .and. present(topBC)) then
+        call this%derZ%ddz_1d_C2C(this%zarr1d_1,this%zarr1d_2,botBC,topBC)
+   else
+        call this%derZ%ddz_1d_C2C(this%zarr1d_1,this%zarr1d_2,0,0)
+   end if 
    dfdz1d = this%zarr1d_2(1,1,:)
 end subroutine 
+
+
+subroutine d2dz2_1d(this, f1d, d2fdz21d, botBC, topBC)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%zsz(3)), intent(in)  :: f1d
+   real(rkind), dimension(this%gp%zsz(3)), intent(out) :: d2fdz21d
+   integer, intent(in) :: botBC, topBC
+
+   this%zarr1d_1(1,1,:) = f1d
+   call this%derZ%ddz_1d_C2C(this%zarr1d_1,this%zarr1d_2,botBC,topBC)
+   call this%derZ%ddz_1d_C2C(this%zarr1d_2,this%zarr1d_1,-botBC,-topBC)
+   d2fdz21d = this%zarr1d_1(1,1,:)
+end subroutine 
+
 
 subroutine getFluct_from_MeanZ(this, f, ffluct)
    class(igrid_ops), intent(inout) :: this
