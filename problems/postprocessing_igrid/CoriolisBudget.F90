@@ -260,8 +260,8 @@ program CoriolisBudget
       S22 = 0.5 * (dvdy + dvdy) 
       S23 = 0.5 * (dvdz + dwdy) 
       S33 = 0.5 * (dwdz + dwdz)
-      buff1 = -2. * nSGS * (S11*S11 + S12*S12 + S13*S13 + S22*S22 + S23*S23 + S33*S33) 
-      buff2 = -2. * nSGS * (S11*S11m + S12*S12m + S13*S13m + S22*S22m + S23*S23m + S33*S33m)
+      buff1 = -2. * nSGS * (S11*S11 + 2.*S12*S12 + 2.*S13*S13 + S22*S22 + 2.*S23*S23 + S33*S33) 
+      buff2 = -2. * nSGS * (S11*S11m + 2.*S12*S12m + 2.*S13*S13m + S22*S22m + 2.*S23*S23m + S33*S33m)
       call ops%TakeMean_xy(buff1 + buff2, eps(:,idx)) ! eps
       
       idx = idx + 1
