@@ -32,9 +32,10 @@ program CoriolisBudget
    integer, dimension(:), allocatable :: timesteps
    real(rkind), dimension(:), allocatable :: times, buff1d_1, buff1d_2, buff1d_3, dudzM, dvdzM, buff1d_4
    real(rkind), dimension(:,:), allocatable :: timewrite
+   real(rkind), dimension(:,:,:), allocatable :: budget_MKE_time, R_time
    integer :: nt 
 
-   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, NumericalSchemeVert, VizDump_Schedule, Ro, Fr, omega_2, omega_3, G_1, G_2
+   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, NumericalSchemeVert, VizDump_Schedule, Ro, Fr, omega_2, omega_3, G_1, G_2, turbInfoDir
    
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
@@ -146,7 +147,10 @@ program CoriolisBudget
     !end if 
     allocate(budget_MKE(nz,13))
     allocate(budget_MKE_time(nz,nt,5))
+    allocate(R_time(nz,nt,2))
 
+   ! Initialize the turbine array
+   call ops%create_turbine_array(turbInfoDir) 
 
    idx = 1
    
@@ -246,6 +250,13 @@ program CoriolisBudget
       budget_MKE_time(:,idx,4) = D_mke(:,idx)
       budget_MKE_time(:,idx,5) = C_mke(:,idx)    
  
+      ! Get turbine forcing
+      call ops%get_turbine_RHS(u, v, w, buff1, buff2, buff3)
+      
+      ! Store diagonal Reynolds stress terms for all the time steps
+      R_time(:,idx,1) = R12(:,idx)
+      R_time(:,idx,2) = R13(:,idx)
+
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       !!! TKE
       ! buff1 = 0.5 * (ufluct*ufluct + vfluct*vfluct + wfluct*wfluct)
@@ -283,6 +294,8 @@ program CoriolisBudget
       idx = idx + 1
       call toc()
    end do 
+   ! Destrio
+   call ops%destroy_turbine_array()
 
    ! STEP 1: Compute MKE > TKE, SGS
    call ops%ddz_1d(sum(umn_set,2)/real(idx,rkind),buff1d_1,0,1)
