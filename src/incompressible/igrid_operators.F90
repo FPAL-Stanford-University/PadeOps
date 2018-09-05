@@ -9,6 +9,7 @@ module igrid_Operators
    use exits, only: GracefulExit, message
    use gaussianstuff, only: gaussian  
    use PadePoissonMod, only: padepoisson
+   use turbineMod, only: turbineArray
    implicit none
    
    private
@@ -34,6 +35,12 @@ module igrid_Operators
     
       real(rkind), dimension(:), allocatable :: gxfilt, gyfilt
       type(gaussian) :: gfilt 
+      
+    
+      complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffyE, cbuffzC, cbuffzE  ! Actuator disk buffers
+      real(rkind), dimension(:,:,:,:), allocatable :: mesh 
+      complex(rkind), dimension(:,:,:), allocatable :: urhshat, vrhshat, wrhshat
+      class(turbineArray), allocatable :: turbArray
       contains
          procedure :: init
          procedure :: destroy
@@ -71,9 +78,91 @@ module igrid_Operators
          procedure :: initFilter
          procedure :: FilterField
          procedure :: Project_DivergenceFree_BC
+         procedure :: create_turbine_array
+         procedure :: destroy_turbine_array
      end type 
 
 contains
+
+subroutine create_turbine_array(this, inputfile)
+    use constants, only : two
+    class(igrid_ops), intent(inout) :: this
+    character(len=*), intent(in) :: inputfile
+    integer :: i, j, k, ix1, iy1, iz1
+
+    allocate(this%mesh(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3),3))
+    associate( x => this%mesh(:,:,:,1), y => this%mesh(:,:,:,2), z => this%mesh(:,:,:,3) )
+
+        do k=1,size(this%mesh,3)
+            do j=1,size(this%mesh,2)
+                do i=1,size(this%mesh,1)
+                    x(i,j,k) = real( ix1 + i - 1, rkind ) * this%dx
+                    y(i,j,k) = real( iy1 + j - 1, rkind ) * this%dy
+                    z(i,j,k) = real( iz1 + k - 1, rkind ) * this%dz + this%dz/two
+                end do
+            end do
+        end do
+
+        ! Shift everything to the origin 
+        x = x - this%dx
+        y = y - this%dy
+        z = z - this%dz 
+
+    end associate
+    
+    allocate(this%turbArray)
+    allocate(this%cbuffyC(this%spect%spectdecomp%ysz(1),this%spect%spectdecomp%ysz(2),this%spect%spectdecomp%ysz(3),1))
+    allocate(this%cbuffyE(this%spectE%spectdecomp%ysz(1),this%spectE%spectdecomp%ysz(2),this%spectE%spectdecomp%ysz(3),1))
+    allocate(this%cbuffzC(this%spect%spectdecomp%zsz(1),this%spect%spectdecomp%zsz(2),this%spect%spectdecomp%zsz(3),1))
+    allocate(this%cbuffzE(this%spectE%spectdecomp%zsz(1),this%spectE%spectdecomp%zsz(2),this%spectE%spectdecomp%zsz(3),1))
+  
+    
+    call this%turbArray%init(inputFile, this%gp, this%gpE, this%spect, this%spectE, this%cbuffyC, this%cbuffyE, &
+                & this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
+
+    allocate(this%urhshat(this%spect%spectdecomp%ysz(1),this%spect%spectdecomp%ysz(2),this%spect%spectdecomp%ysz(3)))
+    allocate(this%vrhshat(this%spect%spectdecomp%ysz(1),this%spect%spectdecomp%ysz(2),this%spect%spectdecomp%ysz(3)))
+    allocate(this%wrhshat(this%spectE%spectdecomp%ysz(1),this%spectE%spectdecomp%ysz(2),this%spectE%spectdecomp%ysz(3)))
+
+end subroutine 
+
+
+subroutine destroy_turbine_array(this)
+    class(igrid_ops), intent(inout) :: this
+
+    if (allocated(this%turbArray)) deallocate(this%turbArray)
+    if (allocated(this%mesh)) deallocate(this%mesh)
+    if (allocated(this%cbuffyC)) deallocate(this%cbuffyC)
+    if (allocated(this%cbuffzC)) deallocate(this%cbuffzC)
+    if (allocated(this%cbuffyE)) deallocate(this%cbuffyE)
+    if (allocated(this%cbuffzE)) deallocate(this%cbuffzE)
+
+    if (allocated(this%urhshat)) deallocate(this%urhshat)
+    if (allocated(this%vrhshat)) deallocate(this%vrhshat)
+    if (allocated(this%wrhshat)) deallocate(this%wrhshat)
+    
+end subroutine 
+
+
+
+subroutine get_turbine_RHS(this, u, v, w, urhs, vrhs, wrhs)
+    class(igrid_ops), intent(inout) :: this
+    real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in) :: u, v, w
+    real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: urhs, vrhs, wrhs
+    real(rkind) :: inst_horz_avg_turb(8)
+    real(rkind) :: dt = 1.d0
+
+    call this%turbArray%getForceRHS(dt, u, v, w, this%urhshat, this%vrhshat, this%wrhshat, .true., inst_horz_avg_turb)
+
+    call transpose_y_to_z(this%wrhshat,this%cbuffzE(:,:,:,1),this%spectE%spectdecomp)
+    call this%derZ%interpZ_E2C(this%cbuffzE(:,:,:,1),this%cbuffzC(:,:,:,1), 0, 0)
+    call transpose_z_to_y(this%cbuffzC(:,:,:,1),this%cbuffyC(:,:,:,1),this%spect%spectdecomp)
+
+    call this%spect%ifft(this%urhshat, urhs)
+    call this%spect%ifft(this%vrhshat, vrhs)
+    call this%spect%ifft(this%wrhshat, wrhs)
+
+end subroutine 
 
 subroutine project_DivergenceFree_BC(this, u, v, w, poiss)
    class(igrid_ops), intent(inout) :: this

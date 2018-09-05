@@ -173,6 +173,7 @@ program CoriolisBudget
       call ops%ReadField3D(P,'prss', TIDX)
       !call message(0, "Read simulation data at time:", times(idx))
 
+
       ! STEP 2: Compute velocity gradients
       call ops%GetGradient(u, dudx, dudy, dudz, 0, 1)
       call ops%GetGradient(v, dvdx, dvdy, dvdz, 0, 1)
