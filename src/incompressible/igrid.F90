@@ -766,7 +766,8 @@ contains
             call transpose_y_to_z(zinY,zinZ,this%gpC)
             call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
             zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
-            ztop = zEinZ(1,1,this%nz+1); zstSponge = zstSponge*ztop 
+            ztop = zEinZ(1,1,this%nz+1); 
+            zstSponge = zstSponge*ztop       !! <PERCENTAGE OF THE DOMAIN>
             call transpose_z_to_y(zEinZ,zEinY,this%gpE)
             this%RdampC = (one/SpongeTscale) * (one - cos(pi*(zinY - zstSponge) /(zTop - zstSponge)))/two
             this%RdampE = (one/SpongeTscale) * (one - cos(pi*(zEinY - zstSponge)/(zTop - zstSponge)))/two
@@ -793,15 +794,17 @@ contains
             end if 
             
 
-            call this%spectC%alloc_r2c_out(this%uBase)
-            call this%spectC%alloc_r2c_out(this%vBase)
-            call this%spectC%alloc_r2c_out(this%TBase)
-            this%rbuffxC(:,:,:,1) = this%u 
-            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%uBase)
-            this%rbuffxC(:,:,:,1) = this%v
-            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%vBase)
-            this%rbuffxC(:,:,:,1) = this%T
-            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%TBase)
+            ! REMOVING THE LINES BELOW TO ENSURE THAT SPONGE ONLY AFFECTS
+            ! FLUCTUATIONS
+            !call this%spectC%alloc_r2c_out(this%uBase)
+            !call this%spectC%alloc_r2c_out(this%vBase)
+            !call this%spectC%alloc_r2c_out(this%TBase)
+            !this%rbuffxC(:,:,:,1) = this%u 
+            !call this%spectC%fft(this%rbuffxC(:,:,:,1),this%uBase)
+            !this%rbuffxC(:,:,:,1) = this%v
+            !call this%spectC%fft(this%rbuffxC(:,:,:,1),this%vBase)
+            !this%rbuffxC(:,:,:,1) = this%T
+            !call this%spectC%fft(this%rbuffxC(:,:,:,1),this%TBase)
             call message(0,"Sponge Layer initialized successfully")
             call message(1,"Sponge Layer active above z = ",zstSponge)
         end if 
@@ -1960,16 +1963,25 @@ contains
 
         deviationC => this%cbuffyC(:,:,:,1)
         
-        deviationC = this%uhat - this%ubase
+        deviationC = this%uhat
+        if (this%spectC%carryingZeroK) then
+            deviationC(1,1,:) = cmplx(zero,zero,rkind)
+        end if 
         this%u_rhs = this%u_rhs - (this%RdampC/this%dt)*deviationC
 
-        deviationC = this%vhat - this%vbase
+        deviationC = this%vhat
+        if (this%spectC%carryingZeroK) then
+            deviationC(1,1,:) = cmplx(zero,zero,rkind)
+        end if 
         this%v_rhs = this%v_rhs - (this%RdampC/this%dt)*deviationC
         
-        this%w_rhs = this%w_rhs - (this%RdampE/this%dt)*this%what ! base value for w is zero  
+        this%w_rhs = this%w_rhs - (this%RdampE/this%dt)*this%what ! Mean of w is always zero 
 
-        !deviationC = this%That - this%Tbase
-        !this%T_rhs = this%T_rhs - (this%RdampC/this%dt)*deviationC
+        deviationC = this%That 
+        if (this%spectC%carryingZeroK) then
+            deviationC(1,1,:) = cmplx(zero,zero,rkind)
+        end if 
+        this%T_rhs = this%T_rhs - (this%RdampC/this%dt)*deviationC
 
     end subroutine
 
