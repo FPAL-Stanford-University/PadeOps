@@ -59,6 +59,7 @@ program CoriolisBudget
    call ops%allocate3DField(T)
    call ops%allocate3DField(Tfluct)
    call ops%allocate3DField(P)
+   call ops%allocate3DField(Pfluct)
    call ops%allocate3DField(kSGS)       
    call ops%allocate3DField(nSGS)
    call ops%allocate3Dfield(dudx)
@@ -89,6 +90,8 @@ program CoriolisBudget
    call ops%allocate3DField(buff2)
    call ops%allocate3DField(buff3)
    call ops%allocate3DField(buff4)
+   allocate(dudzM(nz))
+   allocate(dvdzM(nz))
    allocate(buff1d_1(nz))
    allocate(buff1d_2(nz))
    allocate(buff1d_3(nz))
@@ -119,6 +122,7 @@ program CoriolisBudget
       allocate(R33(nz,nt))
       allocate(T13(nz,nt))
       allocate(T23(nz,nt))
+      allocate(TT(nz,nt))
       ! Velocity temperature corr
       allocate(uT(nz,nt))
       allocate(vT(nz,nt))
@@ -140,7 +144,9 @@ program CoriolisBudget
     
     
     !end if 
-    allocate(budget_MKE(nz,6))
+    allocate(budget_MKE(nz,13))
+    allocate(budget_MKE_time(nz,nt,5))
+
 
    idx = 1
    
@@ -161,7 +167,7 @@ program CoriolisBudget
       !call ops%ReadField3D(kSGS,'kSGS',TIDX)
       call ops%ReadField3D(nSGS,'nSGS',TIDX)
       call ops%ReadField3D(P,'prss', TIDX)
-      call message(0, "Read simulation data at time:", times(idx))
+      !call message(0, "Read simulation data at time:", times(idx))
 
       ! STEP 2: Compute velocity gradients
       call ops%GetGradient(u, dudx, dudy, dudz, 0, 1)
@@ -219,20 +225,26 @@ program CoriolisBudget
       ! call ops%GetGradient(ufluct, dudx, dudy, dudz, -1, 0)
       ! call ops%GetGradient(vfluct, dvdx, dvdy, dvdz, -1, 0)
       ! call ops%GetGradient(wfluct, dwdx, dwdy, dwdz, -1, 0)
-      ! call ops%ddz_1d(umn_set(:,idx), dudzM, 0, 1)
-      ! call ops%ddz_1d(vmn_set(:,idx), dvdzM, 0, 1)
+      call ops%ddz_1d(umn_set(:,idx), dudzM, 0, 1)
+      call ops%ddz_1d(vmn_set(:,idx), dvdzM, 0, 1)
 
       ! STEP 3: Production/Destruction of MKE terms
       P_mke(:,idx) = R13(:,idx) * dudzM + R23(:,idx) * dvdzM ! P_mke
       D_mke(:,idx) = T13(:,idx) * dudzM + T23(:,idx) * dvdzM ! D_mke
  
       ! STEP 4: Forcing 
-      C_mke(:,idx) = - (1./Ro) * omega_3 * umn_set(:,idx) * G_2 + (1./Ro) * omega_2 * vmn_set(:,idx) * G_1 ! C_mke
+      C_mke(:,idx) = -(2./Ro) * omega_3 * umn_set(:,idx) * G_2 + (2./Ro) * omega_3 * vmn_set(:,idx) * G_1 ! C_mke
 
       ! STEP 5: MKE LHS
       call ops%ddz_1d(umn_set(:,idx) * R13(:,idx) + vmn_set(:,idx) * R23(:,idx), transport_mke(:,idx), 0, -1) ! transport_mke
       call ops%ddz_1d(umn_set(:,idx) * T13(:,idx) + vmn_set(:,idx) * T23(:,idx), transportSGS_mke(:,idx), 0, -1) ! transportSGS_mke
-      
+     
+      budget_MKE_time(:,idx,1) = transport_mke(:,idx)
+      budget_MKE_time(:,idx,2) = transportSGS_mke(:,idx)
+      budget_MKE_time(:,idx,3) = P_mke(:,idx)
+      budget_MKE_time(:,idx,4) = D_mke(:,idx)
+      budget_MKE_time(:,idx,5) = C_mke(:,idx)    
+ 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       !!! TKE
       ! buff1 = 0.5 * (ufluct*ufluct + vfluct*vfluct + wfluct*wfluct)
@@ -285,9 +297,22 @@ program CoriolisBudget
    call ops%ddz_1d(buff1d_1,budget_MKE(:,5),0,-1)
    buff1d_1 = (sum(R23,2)/real(idx,rkind))*(sum(vmn_set,2)/real(idx,rkind))
    call ops%ddz_1d(buff1d_1,budget_MKE(:,6),0,-1)
+   buff1d_1 = (sum(T13,2)/real(idx,rkind))*(sum(umn_set,2)/real(idx,rkind))
+   call ops%ddz_1d(buff1d_1,budget_MKE(:,7),0,-1)
+   buff1d_1 = (sum(T23,2)/real(idx,rkind))*(sum(vmn_set,2)/real(idx,rkind))
+   call ops%ddz_1d(buff1d_1,budget_MKE(:,8),0,-1)
+
+   budget_MKE(:,10) = (sum(R13,2)/real(idx,rkind))*(sum(umn_set,2)/real(idx,rkind))
+   budget_MKE(:,11) = (sum(R23,2)/real(idx,rkind))*(sum(vmn_set,2)/real(idx,rkind))
+
+   budget_MKE(:,9) = sum(C_mke, 2) / real(idx, rkind)
+
+   budget_MKE(:,12) = sum(umn_set,2)/real(idx,rkind)
+   budget_MKE(:,13) = sum(vmn_set,2)/real(idx,rkind)
 
    if (nrank == 0) then
       call ops%WriteASCII_2D(budget_MKE, "mkeB")
+      call ops%WriteASCII_2D(budget_MKE_time, 'mkeT')
    end if 
 
    !if (nrank == 0) then
