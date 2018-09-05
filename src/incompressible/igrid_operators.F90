@@ -153,6 +153,9 @@ subroutine get_turbine_RHS(this, u, v, w, urhs, vrhs, wrhs)
     real(rkind) :: inst_horz_avg_turb(8)
     real(rkind) :: dt = 1.d0
 
+    this%urhshat = 0.d0 + imi*0.d0
+    this%vrhshat = 0.d0 + imi*0.d0
+    this%wrhshat = 0.d0 + imi*0.d0
     call this%turbArray%getForceRHS(dt, u, v, w, this%urhshat, this%vrhshat, this%wrhshat, .true., inst_horz_avg_turb)
 
     call transpose_y_to_z(this%wrhshat,this%cbuffzE(:,:,:,1),this%spectE%spectdecomp)
