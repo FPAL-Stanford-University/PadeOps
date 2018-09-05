@@ -31,11 +31,12 @@ program CoriolisBudget
    integer :: VizDump_Schedule = 0
    integer, dimension(:), allocatable :: timesteps
    real(rkind), dimension(:), allocatable :: times, buff1d_1, buff1d_2, buff1d_3, dudzM, dvdzM, buff1d_4
+   real(rkind), dimension(:), allocatable :: turbine_u, turbine_v, turbine_w
    real(rkind), dimension(:,:), allocatable :: timewrite
    real(rkind), dimension(:,:,:), allocatable :: budget_MKE_time, R_time
    integer :: nt 
 
-   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, NumericalSchemeVert, VizDump_Schedule, Ro, Fr, omega_2, omega_3, G_1, G_2, turbInfoDir
+   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, NumericalSchemeVert, VizDump_Schedule, Ro, Fr, omega_2, omega_3, G_1, G_2
    
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
@@ -91,12 +92,19 @@ program CoriolisBudget
    call ops%allocate3DField(buff2)
    call ops%allocate3DField(buff3)
    call ops%allocate3DField(buff4)
-   allocate(dudzM(nz))
+  
+   allocate(dudzM(nz)) 
    allocate(dvdzM(nz))
    allocate(buff1d_1(nz))
    allocate(buff1d_2(nz))
    allocate(buff1d_3(nz))
    allocate(buff1d_4(nz))
+   allocate(turbine_u(nz))
+   allocate(turbine_v(nz))
+   allocate(turbine_w(nz))
+   turbine_u = 0.
+   turbine_v = 0.
+   turbine_w = 0.
 
    if (VizDump_Schedule == 1) then
       call ops%Read_VizSummary(times, timesteps)
@@ -146,11 +154,11 @@ program CoriolisBudget
     
     !end if 
     allocate(budget_MKE(nz,13))
-    allocate(budget_MKE_time(nz,nt,5))
+    allocate(budget_MKE_time(nz,nt,6))
     allocate(R_time(nz,nt,2))
 
    ! Initialize the turbine array
-   call ops%create_turbine_array(turbInfoDir) 
+   call ops%create_turbine_array(inputfile) 
 
    idx = 1
    
@@ -252,7 +260,14 @@ program CoriolisBudget
  
       ! Get turbine forcing
       call ops%get_turbine_RHS(u, v, w, buff1, buff2, buff3)
+      call ops%TakeMean_xy(buff1, buff1d_1)
+      turbine_u = turbine_u + buff1d_1
+      budget_MKE_time(:,idx,6) = umn_set(:,idx) * buff1d_1
+      call ops%TakeMean_xy(buff2, buff1d_1)
+      turbine_v = turbine_v + buff1d_1
+      budget_MKE_time(:,idx,6) = budget_MKE_time(:,idx,6) + vmn_set(:,idx) * buff1d_1
       
+
       ! Store diagonal Reynolds stress terms for all the time steps
       R_time(:,idx,1) = R12(:,idx)
       R_time(:,idx,2) = R13(:,idx)
@@ -320,13 +335,23 @@ program CoriolisBudget
    budget_MKE(:,11) = (sum(R23,2)/real(idx,rkind))*(sum(vmn_set,2)/real(idx,rkind))
 
    budget_MKE(:,9) = sum(C_mke, 2) / real(idx, rkind)
+   budget_MKE(:,10) = sum(umn_set,2) / real(idx,rkind) * turbine_u / real(idx,rkind)
+   budget_MKE(:,10) = budget_MKE(:,10) + sum(vmn_set,2) / real(idx,rkind) * turbine_v / real(idx,rkind)
 
    budget_MKE(:,12) = sum(umn_set,2)/real(idx,rkind)
    budget_MKE(:,13) = sum(vmn_set,2)/real(idx,rkind)
+ 
 
    if (nrank == 0) then
       call ops%WriteASCII_2D(budget_MKE, "mkeB")
-      call ops%WriteASCII_2D(budget_MKE_time, 'mkeT')
+      call ops%WriteASCII_2D(budget_MKE_time(:,:,1), 'mke1')
+      call ops%WriteASCII_2D(budget_MKE_time(:,:,2), 'mke2')
+      call ops%WriteASCII_2D(budget_MKE_time(:,:,3), 'mke3')
+      call ops%WriteASCII_2D(budget_MKE_time(:,:,4), 'mke4')
+      call ops%WriteASCII_2D(budget_MKE_time(:,:,5), 'mke5')
+      call ops%WriteASCII_2D(budget_MKE_time(:,:,6), 'mke6')
+      call ops%WriteASCII_2D(R_time(:,:,1), 'rss1')
+      call ops%WriteASCII_2D(R_time(:,:,2), 'rss2')
    end if 
 
    !if (nrank == 0) then

@@ -40,7 +40,7 @@ module igrid_Operators
       complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffyE, cbuffzC, cbuffzE  ! Actuator disk buffers
       real(rkind), dimension(:,:,:,:), allocatable :: mesh 
       complex(rkind), dimension(:,:,:), allocatable :: urhshat, vrhshat, wrhshat
-      class(turbineArray), allocatable :: turbArray
+      type(turbineArray), allocatable :: turbArray
       contains
          procedure :: init
          procedure :: destroy
@@ -87,13 +87,18 @@ contains
 
 subroutine create_turbine_array(this, inputfile)
     use constants, only : two
-    class(igrid_ops), intent(inout) :: this
+    class(igrid_ops), intent(inout), target :: this
     character(len=*), intent(in) :: inputfile
-    integer :: i, j, k, ix1, iy1, iz1
+    integer :: i, j, k, ix1, iy1, iz1, ixn, iyn, izn
+    real(rkind), dimension(:,:,:), pointer :: x, y, z
 
+    ix1 = this%gp%xst(1); iy1 = this%gp%xst(2); iz1 = this%gp%xst(3)
+    ixn = this%gp%xen(1); iyn = this%gp%xen(2); izn = this%gp%xen(3)
     allocate(this%mesh(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3),3))
-    associate( x => this%mesh(:,:,:,1), y => this%mesh(:,:,:,2), z => this%mesh(:,:,:,3) )
-
+    !associate( x => this%mesh(:,:,:,1), y => this%mesh(:,:,:,2), z => this%mesh(:,:,:,3) )
+    x => this%mesh(:,:,:,1)
+    y => this%mesh(:,:,:,2)
+    z => this%mesh(:,:,:,3)
         do k=1,size(this%mesh,3)
             do j=1,size(this%mesh,2)
                 do i=1,size(this%mesh,1)
@@ -109,7 +114,7 @@ subroutine create_turbine_array(this, inputfile)
         y = y - this%dy
         z = z - this%dz 
 
-    end associate
+    !end associate
     
     allocate(this%turbArray)
     allocate(this%cbuffyC(this%spect%spectdecomp%ysz(1),this%spect%spectdecomp%ysz(2),this%spect%spectdecomp%ysz(3),1))
@@ -147,6 +152,7 @@ end subroutine
 
 
 subroutine get_turbine_RHS(this, u, v, w, urhs, vrhs, wrhs)
+    use constants, only : imi
     class(igrid_ops), intent(inout) :: this
     real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in) :: u, v, w
     real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: urhs, vrhs, wrhs
@@ -164,7 +170,7 @@ subroutine get_turbine_RHS(this, u, v, w, urhs, vrhs, wrhs)
 
     call this%spect%ifft(this%urhshat, urhs)
     call this%spect%ifft(this%vrhshat, vrhs)
-    call this%spect%ifft(this%wrhshat, wrhs)
+    call this%spect%ifft(this%cbuffyC(:,:,:,1), wrhs)
 
 end subroutine 
 
