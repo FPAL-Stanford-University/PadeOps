@@ -80,6 +80,7 @@ module igrid_Operators
          procedure :: Project_DivergenceFree_BC
          procedure :: create_turbine_array
          procedure :: destroy_turbine_array
+         procedure :: get_turbine_RHS 
      end type 
 
 contains
