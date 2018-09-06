@@ -189,7 +189,7 @@ contains
       this%rbuffzC => rbuffzC
       this%beta = beta
       this%sigma = sigma
-      this%phi_ref = phi_ref
+      this%phi_ref = phi_ref * pi / 180.d0
       this%z_ref = z_ref
       this%wFilt = 0.d0     
       this%alpha = alpha
