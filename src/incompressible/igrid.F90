@@ -2161,16 +2161,16 @@ contains
 
         ! Step 10: Add sponge
         if (this%useSponge) then
-            utarg = cos(this%G_alpha*pi/180.d0)*this%G_Geostrophic
-            vtarg = sin(this%G_alpha*pi/180.d0)*this%G_Geostrophic
-            
-            ! ASG > MH: This part can be computed a bit more efficiently. 
-            ! Once you've checked that it works, I will write the efficient code. 
-            this%rbuffxC(:,:,:,1) = utarg
-            call this%spectC%fft(this%rbuffxC,this%ubase)
-            
-            this%rbuffxC(:,:,:,1) = vtarg
-            call this%spectC%fft(this%rbuffxC,this%vbase)
+            !utarg = cos(this%G_alpha*pi/180.d0)*this%G_Geostrophic
+            !vtarg = sin(this%G_alpha*pi/180.d0)*this%G_Geostrophic
+            !
+            !! ASG > MH: This part can be computed a bit more efficiently. 
+            !! Once you've checked that it works, I will write the efficient code. 
+            !this%rbuffxC(:,:,:,1) = utarg
+            !call this%spectC%fft(this%rbuffxC,this%ubase)
+            !
+            !this%rbuffxC(:,:,:,1) = vtarg
+            !call this%spectC%fft(this%rbuffxC,this%vbase)
             call this%addSponge()
 
         end if
