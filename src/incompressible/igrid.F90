@@ -1115,21 +1115,21 @@ contains
     end subroutine 
 
 
-   subroutine dealias_rhs(this, uin, vin, win)
-      class(igrid), intent(inout) :: this
-      complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout ) :: uin, vin
-      complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: win
+    subroutine dealias_rhs(this, uin, vin, win)
+       class(igrid), intent(inout) :: this
+       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout ) :: uin, vin
+       complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: win
 
-      call this%spectC%dealias(uin)
-      call this%spectC%dealias(vin)
-      if (this%PeriodicInZ) then
-          call transpose_y_to_z(win, this%cbuffzE(:,:,:,1), this%sp_gpE)
-          call this%spectC%dealias_edgeField(this%cbuffzE(:,:,:,1))
-          call transpose_z_to_y(this%cbuffzE(:,:,:,1),win,this%sp_gpE)
-      else
-          call this%spectE%dealias(win)
-      end if 
-   end subroutine 
+       call this%spectC%dealias(uin)
+       call this%spectC%dealias(vin)
+       if (this%PeriodicInZ) then
+           call transpose_y_to_z(win, this%cbuffzE(:,:,:,1), this%sp_gpE)
+           call this%spectC%dealias_edgeField(this%cbuffzE(:,:,:,1))
+           call transpose_z_to_y(this%cbuffzE(:,:,:,1),win,this%sp_gpE)
+       else
+           call this%spectE%dealias(win)
+       end if 
+    end subroutine 
 
 
     subroutine timeAdvance(this, dtforced)
@@ -1586,14 +1586,14 @@ contains
 
     end function
 
-   function getMeanKE(this) result(meanTKE)
-        class(igrid), intent(inout) :: this
-        real(rkind)  :: meanTKE
+    function getMeanKE(this) result(meanTKE)
+         class(igrid), intent(inout) :: this
+         real(rkind)  :: meanTKE
 
-        this%rbuffxC(:,:,:,1) = this%u**2 + this%v**2 + this%wC**2
-        meanTKE = half*p_sum(sum(this%rbuffxC))/(real(this%nx)*real(this%ny)*real(this%nz))
+         this%rbuffxC(:,:,:,1) = this%u**2 + this%v**2 + this%wC**2
+         meanTKE = half*p_sum(sum(this%rbuffxC))/(real(this%nx)*real(this%ny)*real(this%nz))
 
-   end function
+    end function
 
     subroutine interp_PrimitiveVars(this)
         class(igrid), intent(inout), target :: this
@@ -2831,7 +2831,7 @@ contains
 
         nullify(u_mean3Dhat, v_mean3Dhat, w_mean3Dhat, rbuff1, ctmpy1, ctmpz1, ctmpz2, S11_mean3D, S12_mean3D, S13_mean3D, S22_mean3D, S23_mean3D, S33_mean3D)
 
-   end subroutine 
+    end subroutine 
 
 
     subroutine compute_vorticity(this)
