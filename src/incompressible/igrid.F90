@@ -326,7 +326,7 @@ contains
         class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
         character(len=clen) :: outputdir, inputdir, scalar_info_dir, turbInfoDir, ksOutputDir, controlDir = "null"
-        integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = 999999
+        integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = 999999, sponge_type = 2
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
@@ -357,6 +357,7 @@ contains
         integer :: zHubIndex = 16
         real(rkind) :: angleTrigger=0.1d0
 
+        real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                          useRestartFile, restartFile_TID, restartFile_RID 
         namelist /IO/ t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, dump_NU_SGS, dump_KAPPA_SGS,&
@@ -364,7 +365,7 @@ contains
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,&
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle
-        namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
+        namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
@@ -760,40 +761,78 @@ contains
         if (this%useSponge) then
             allocate(this%RdampC(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)))
             allocate(this%RdampE(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)))
-            zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
-            zEinZ => this%rbuffzE(:,:,:,1); zEinY => this%rbuffyE(:,:,:,1)
+            zinZ => this%rbuffzC(:,:,:,1)
+            zEinZ => this%rbuffzE(:,:,:,1); 
             call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
             call transpose_y_to_z(zinY,zinZ,this%gpC)
             call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
             zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
             ztop = zEinZ(1,1,this%nz+1); 
-            zstSponge = zstSponge*ztop       !! <PERCENTAGE OF THE DOMAIN>
-            call transpose_z_to_y(zEinZ,zEinY,this%gpE)
-            this%RdampC = (one/SpongeTscale) * (one - cos(pi*(zinY - zstSponge) /(zTop - zstSponge)))/two
-            this%RdampE = (one/SpongeTscale) * (one - cos(pi*(zEinY - zstSponge)/(zTop - zstSponge)))/two
-            if (useTopAndBottomSymmetricSponge) then
-               where (abs(zEinY) < zstSponge) 
-                   this%RdampE = zero
-               end where
-               where (abs(zinY) < zstSponge) 
-                   this%RdampC = zero
-               end where
-               if ((zEinZ(1,1,1) + zEinZ(1,1,this%nz+1))<1.d-13) then
-                  call message(0,"WARNING: Computed domain is not symmetric &
-                     & about z=0. You shouldn't use the symmetric sponge")
-                  call MPI_BARRIER(mpi_comm_world, ierr)
-                  call GracefulExit("Failed at sponge initialization",134)
-               end if   
-            else
-               where (zEinY < zstSponge) 
-                   this%RdampE = zero
-               end where
-               where (zinY < zstSponge) 
-                   this%RdampC = zero
-               end where
-            end if 
+            if (zstSponge >= 1) then
+                call GracefulExit("zstSponge must be less than 1.",245)
+            end if
             
+            
+            allocate(tmpyC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+            allocate(tmpyE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
 
+            zinY => tmpyC
+            zEinY => tmpyE
+            allocate(tmpzC(this%sp_gpC%zsz(1),this%sp_gpC%zsz(2),this%sp_gpC%zsz(3)))
+            do idx = 1,size(zinZ,3)
+                tmpzC(:,:,idx) = zinZ(1,1,idx)
+            end do 
+            call transpose_z_to_y(tmpzC,zinY,this%sp_gpC)
+            deallocate(tmpzC)
+            allocate(tmpzE(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3)))
+            do idx = 1,size(zEinZ,3)
+                tmpzE(:,:,idx) = zEinZ(1,1,idx)
+            end do 
+            call transpose_z_to_y(tmpzE,zEinY, this%sp_gpC) 
+            deallocate(tmpzE)
+            nullify(zEinZ, zinZ)
+
+            zstSponge = zstSponge*ztop       !! <PERCENTAGE OF THE DOMAIN>
+            select case(sponge_type)
+            case(1)
+
+                this%RdampC = (one/SpongeTscale) * (one - cos(pi*(zinY - zstSponge) /(zTop - zstSponge)))/two
+                this%RdampE = (one/SpongeTscale) * (one - cos(pi*(zEinY - zstSponge)/(zTop - zstSponge)))/two
+                if (useTopAndBottomSymmetricSponge) then
+                   where (abs(zEinY) < zstSponge) 
+                       this%RdampE = zero
+                   end where
+                   where (abs(zinY) < zstSponge) 
+                       this%RdampC = zero
+                   end where
+                   if ((zEinZ(1,1,1) + zEinZ(1,1,this%nz+1))<1.d-13) then
+                      call message(0,"WARNING: Computed domain is not symmetric &
+                         & about z=0. You shouldn't use the symmetric sponge")
+                      call MPI_BARRIER(mpi_comm_world, ierr)
+                      call GracefulExit("Failed at sponge initialization",134)
+                   end if   
+                else
+                   where (zEinY < zstSponge) 
+                       this%RdampE = zero
+                   end where
+                   where (zinY < zstSponge) 
+                       this%RdampC = zero
+                   end where
+                end if 
+            case(2)
+                print*, shape(this%rbuffyC), shape(zinY)
+                zinY = (zinY - zstSponge)/(2*(zTop - zstSponge))
+                call S_sponge_smooth(zinY,this%RdampC)
+                this%RdampC = (2.5d0/SpongeTscale)*this%RdampC
+                
+                print*, shape(this%rbuffyE), shape(zEinY)
+                zEinY = (zEinY - zstSponge)/(2*(zTop - zstSponge))
+                call S_sponge_smooth(zEinY,this%RdampE)
+                this%RdampE = (2.5d0/SpongeTscale)*this%RdampE ! consistent noramlization with type 1 sponge
+            end select 
+
+            nullify(zinY, zEinY)
+            deallocate(tmpyC, tmpyE)
             ! REMOVING THE LINES BELOW TO ENSURE THAT SPONGE ONLY AFFECTS
             ! FLUCTUATIONS
             !call this%spectC%alloc_r2c_out(this%uBase)
@@ -1089,6 +1128,31 @@ contains
 
     end subroutine
 
+    subroutine S_sponge_smooth(x, output)
+       real(rkind), dimension(:,:,:), intent(in)    :: x
+       real(rkind), dimension(:,:,:), intent(out)   :: output
+       integer :: i, j, k
+       real(rkind) :: exparg
+
+       print*, shape(x), shape(output)
+       do i = 1,size(x,3)
+         do j = 1,size(x,2)
+            do k = 1,size(x,1)
+                if (x(k,j,i) .le. 0.d0) then
+                output(k,j,i) = 0.d0
+                else if (x(k,j,i) .ge. 1.d0) then
+                    output(k,j,i) = 1.d0
+                else
+                    exparg = 1.d0/(x(k,j,i) - 1.d0 + 1.0D-32) + 1.d0/(x(k,j,i) + 1.0D-32)
+                    exparg = min(exparg,708.0d0) ! overflows if exparg > 709. need a better fix for this
+                    output(k,j,i) = 1.d0/(1.d0 + exp(exparg))
+                end if
+            end do 
+         end do 
+       end do
+
+    end subroutine
+    
     subroutine dealiasFields(this)
         class(igrid), intent(inout) :: this
         integer :: idx
@@ -2024,7 +2088,7 @@ contains
         logical, intent(in), optional :: CopyForDNSpress, CopyForFringePress, copyForTurbinePress
         logical :: copyFringeRHS, copyTurbRHS
         integer :: idx 
-        real(rkind) :: utarg, vtarg
+        !real(rkind) :: utarg, vtarg
 
         if (present(copyForTurbinePress)) then
            copyTurbRHS = copyForTurbinePress
@@ -2161,18 +2225,7 @@ contains
 
         ! Step 10: Add sponge
         if (this%useSponge) then
-            !utarg = cos(this%G_alpha*pi/180.d0)*this%G_Geostrophic
-            !vtarg = sin(this%G_alpha*pi/180.d0)*this%G_Geostrophic
-            !
-            !! ASG > MH: This part can be computed a bit more efficiently. 
-            !! Once you've checked that it works, I will write the efficient code. 
-            !this%rbuffxC(:,:,:,1) = utarg
-            !call this%spectC%fft(this%rbuffxC,this%ubase)
-            !
-            !this%rbuffxC(:,:,:,1) = vtarg
-            !call this%spectC%fft(this%rbuffxC,this%vbase)
             call this%addSponge()
-
         end if
         
         ! Step 9: Populate RHS for scalars
