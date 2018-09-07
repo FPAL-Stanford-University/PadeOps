@@ -820,12 +820,10 @@ contains
                    end where
                 end if 
             case(2)
-                print*, shape(this%rbuffyC), shape(zinY)
                 zinY = (zinY - zstSponge)/(2*(zTop - zstSponge))
                 call S_sponge_smooth(zinY,this%RdampC)
                 this%RdampC = (2.5d0/SpongeTscale)*this%RdampC
                 
-                print*, shape(this%rbuffyE), shape(zEinY)
                 zEinY = (zEinY - zstSponge)/(2*(zTop - zstSponge))
                 call S_sponge_smooth(zEinY,this%RdampE)
                 this%RdampE = (2.5d0/SpongeTscale)*this%RdampE ! consistent noramlization with type 1 sponge
@@ -1128,13 +1126,12 @@ contains
 
     end subroutine
 
-    subroutine S_sponge_smooth(x, output)
+    pure subroutine S_sponge_smooth(x, output)
        real(rkind), dimension(:,:,:), intent(in)    :: x
        real(rkind), dimension(:,:,:), intent(out)   :: output
        integer :: i, j, k
        real(rkind) :: exparg
 
-       print*, shape(x), shape(output)
        do i = 1,size(x,3)
          do j = 1,size(x,2)
             do k = 1,size(x,1)
