@@ -1,4 +1,4 @@
-program StratifiedShearLayerDomainIntegrals
+program StratifiedShearLayerTurbStats
    use kind_parameters, only: rkind, clen
    use igrid_Operators, only: igrid_ops
    use constants, only: pi, two
@@ -73,10 +73,7 @@ program StratifiedShearLayerDomainIntegrals
       nt = size(timesteps)
    else
       nt = (tstop - tstart)/tstep
-<<<<<<< HEAD
-=======
       allocate(times(nt))
->>>>>>> origin/igridSGS
    end if
 
    

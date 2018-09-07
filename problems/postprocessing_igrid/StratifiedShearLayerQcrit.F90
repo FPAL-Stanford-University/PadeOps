@@ -11,11 +11,7 @@ program StratifiedShearLayerDumpQcrit
    real(rkind), dimension(:,:,:), allocatable :: dwdx, dwdy, dwdz 
    real(rkind), dimension(:,:,:), allocatable :: dvdx, dvdy, dvdz 
    real(rkind), dimension(:,:,:), allocatable :: u, v, w, buff1 
-<<<<<<< HEAD
-   real(rkind) :: dx, dy, dz, Re = 3000.d0
-=======
    real(rkind) :: dx, dy, dz, Re = 3000.d0, Rib = 0.05d0
->>>>>>> origin/igridSGS
    integer :: nx, ny, nz, nt, RunID, TIDX, tstart=0, tstop=0, tstep=0, VizDump_Schedule=0
    type(igrid_ops) :: ops
    character(len=clen) ::  inputdir, outputdir
@@ -26,11 +22,7 @@ program StratifiedShearLayerDumpQcrit
    integer, dimension(:), allocatable :: timesteps
    real(rkind), dimension(:), allocatable :: times
 
-<<<<<<< HEAD
-   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Re, NumericalSchemeVert, VizDump_Schedule 
-=======
    namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, Re, Rib, NumericalSchemeVert, VizDump_Schedule 
->>>>>>> origin/igridSGS
    
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
