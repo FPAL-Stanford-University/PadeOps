@@ -149,7 +149,12 @@ contains
             
             call average_xyC(this, this%u, tmp)
             vbudget(:,4) = vbudget(:,4) + (1 - tmp)/this%Ro
-            
+           
+            if (nrank == 0) then
+                print*,ubudget(10:15,1)
+                print*,"--"
+                print*,ubudget(10:15,2)
+            end if
         end if 
 
     end subroutine 
