@@ -78,6 +78,13 @@ pure function getMax_DynPrandtl(this) result(val)
 
 end function
 
+subroutine set_buoyancyFactor(this, buoyancyFact)
+   class(sgs_igrid), intent(inout) :: this
+   real(rkind), intent(in) :: buoyancyFact
+
+   this%buoyancyFact = buoyancyFact 
+
+end subroutine 
 
 pure function usingDynProc(this) result(val)
    class(sgs_igrid), intent(in) :: this

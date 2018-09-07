@@ -15,12 +15,13 @@ subroutine destroy(this)
 end subroutine
 
 
-subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappaSGS)
+subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappaSGS, kappa_bounding)
    class(sgs_igrid), intent(in), target :: this
    real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: nuSGS
    real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: tau13, tau23
    real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: tauSGS_ij
    real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: q1, q2, q3, kappaSGS
+   real(rkind), dimension(:,:,:)  , pointer, optional, intent(inout)  :: kappa_bounding 
 
    nuSGS => this%nu_sgs_C
    tau13 => this%tau_13
@@ -33,7 +34,13 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappa
       q2 => this%q2C
       q3 => this%q3E
       kappaSGS => this%kappa_sgs_C
-   end if 
+   end if
+
+   if (this%useScalarBounding) then
+      if(present(kappa_bounding)) then
+         kappa_bounding => this%kappa_boundingC
+      end if 
+   end if
 end subroutine 
 
 subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, isInviscid, isStratified, botBC_temp, initSpinUp)
@@ -56,16 +63,18 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   ! Input file variables
   logical :: useWallDamping = .false., useSGSDynamicRestart = .false., useVerticalTfilter = .false.
   integer :: DynamicProcedureType = 0, SGSmodelID = 0, WallModelType = 0, DynProcFreq = 1
-  real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0, deltaRatio = 2.d0, turbPrandtl = 0.4d0 
+  real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0, deltaRatio = 2.d0, turbPrandtl = 0.4d0, Cy = 100.d0 
   character(len=clen) :: SGSDynamicRestartFile
-  logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false. 
-  integer :: ierr
-  
+  logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false. 
+  integer :: ierr, WM_matchingIndex = 1
+  real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 
+
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0,  &
                  useWallDamping, ncWall, Csgs, WallModelType, &
                  DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,&
                  SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity, &
-                 UseDynamicProcedureScalar, deltaRatio, turbPrandtl
+                 UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
+                 useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex 
 
 
   this%gpC => gpC
@@ -74,7 +83,6 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%spectE => spectE
   this%sp_gpC => spectC%spectdecomp
   this%sp_gpE => spectE%spectdecomp
-  this%dz = dz
   this%Tsurf => Tsurf
   this%Fr = Fr
   this%Re = Re
@@ -89,6 +97,11 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%isStratified = isStratified
   !if (present(botBC_Temp)) 
   this%botBC_Temp = botBC_Temp
+
+  this%dx = dx
+  this%dy = dy
+  this%dz = dz
+
 
   allocate(this%tau_ij(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),6))
   this%tau_11   => this%tau_ij(:,:,:,1)
@@ -130,6 +143,10 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   read(unit=123, NML=SGS_MODEL)
   close(123)
 
+  this%useScalarBounding = useScalarBounding 
+  this%Cy = Cy  
+  this%lowbound = lowbound
+  this%highbound = highbound 
   this%UseDynamicProcedureScalar = UseDynamicProcedureScalar
   this%explicitCalcEdgeEddyViscosity = explicitCalcEdgeEddyViscosity
   this%mid = SGSmodelID
@@ -141,7 +158,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%isInviscid = isInviscid
 
   this%WallModel  = WallModelType
-  
+  this%WM_matchingIndex = WM_matchingIndex
   if (this%WallModel .ne. 0) then
       if (this%PadeDer%isPeriodic) then
          call GracefulExit("You cannot use a wall model if the problem is periodic in Z",12)
@@ -167,6 +184,21 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   end select
 
   if (this%isEddyViscosityModel) call this%allocateMemory_EddyViscosity()
+  
+  if (this%useScalarBounding) then 
+      allocate(this%kappa_boundingC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+      allocate(this%kappa_boundingE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+      ierr = this%gaussianX%init(gpC%xsz(1), .true.)
+      ierr = this%gaussianY%init(gpC%ysz(2), .true.)
+      ierr = this%gaussianZ%init(gpC%zsz(3), this%isPeriodic)
+      this%lowbound_PotT = lowbound
+      this%highbound_PotT = highbound 
+      this%Cy_PotT        = Cy 
+  end if 
+
+  if (this%isStratified) then
+      this%TurbPrandtlNum_PotT = turbPrandtl
+  end if
 
   if (DynamicProcedureType .ne. 0) then
       call this%allocateMemory_DynamicProcedure(computeFbody, deltaRatio)
