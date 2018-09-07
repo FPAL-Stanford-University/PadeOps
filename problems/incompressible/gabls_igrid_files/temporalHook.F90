@@ -11,8 +11,12 @@ module temporalHook
 
     implicit none 
 
+<<<<<<< HEAD
     integer :: i, j, nt_print2screen = 1
     real(rkind) ::  maxDiv, DomMaxDiv, angle
+=======
+    integer :: nt_print2screen = 1
+>>>>>>> origin/igridSGS
     integer :: ierr 
 
 contains
@@ -34,6 +38,7 @@ contains
     end subroutine 
 
     subroutine doTemporalStuff(igp)
+<<<<<<< HEAD
         class(igrid), intent(inout) :: igp  
         real(rkind) :: speedTop, um, vm, speedHub, utop, vtop
         igp%rbuffxC(:,:,:,1) = atan2(igp%v, igp%u) !* 180.d0 / 3.14d0
@@ -57,6 +62,11 @@ contains
         speedHub = (um*um + vm*vm)**0.5
         igp%angleHubHeight = atan2(vm,um)
 
+=======
+        class(igrid), intent(inout) :: igp 
+        real(rkind) ::  maxDiv, DomMaxDiv, maxnusgs, maxkappasgs
+      
+>>>>>>> origin/igridSGS
         if (mod(igp%step,nt_print2screen) == 0) then
             maxDiv = maxval(igp%divergence)
             DomMaxDiv = p_maxval(maxDiv)
@@ -70,6 +80,7 @@ contains
             call message(1,"u_star:",igp%sgsmodel%get_ustar())
             call message(1,"Inv. Ob. Length:",igp%sgsmodel%get_InvObLength())
             call message(1,"wTh_surf:",igp%sgsmodel%get_wTh_surf())
+<<<<<<< HEAD
             call message(1,"hub angle, degrees:",igp%angleHubHeight * 180.d0/3.14d0)
             call message(1,"frameAngle:",igp%frameAngle)
             call message(1,"Control w, rad/time:",igp%wFilt)
@@ -81,6 +92,22 @@ contains
             call message(1,"u at the hub:", um)
             call message(1,"v at the hub:", vm)
             call message(1,"Hub",igp%zHubIndex)
+=======
+            if (igp%useSGS) then
+                maxnusgs = p_maxval(igp%nu_SGS)
+                maxkappasgs = p_maxval(igp%kappaSGS)
+                call message(1,"Maximum SGS viscosity:", maxnusgs)
+                call message(1,"Maximum SGS scalar kappa:", maxkappasgs)
+                if (associated(igp%kappa_bounding)) then
+                  maxkappasgs = p_maxval(igp%kappa_bounding)
+                  call message(1,"Maximum kappa bounding:", maxkappasgs)
+                end if 
+                if (igp%sgsModel%usingDynProc()) then
+                  call message(1,"Maximum lambda_dynamic:", igp%sgsModel%getMax_DynSmagConst())
+                  call message(1,"Maximum beta_dynamic:", igp%sgsModel%getMax_DynPrandtl())
+                end if 
+            end if 
+>>>>>>> origin/igridSGS
             if (igp%useCFL) then
                 call message(1,"Current dt:",igp%dt)
             end if

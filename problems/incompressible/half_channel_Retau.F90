@@ -1,9 +1,9 @@
 ! Template for PadeOps
 
-#include "ScalarFieldTesting_files/initialize.F90"       
-#include "ScalarFieldTesting_files/temporalHook.F90"  
+#include "half_channel_Retau_files/initialize.F90"       
+#include "half_channel_Retau_files/temporalHook.F90"  
 
-program ScalarFieldTesting
+program half_channel_Retau
     use mpi
     use kind_parameters,  only: clen
     use IncompressibleGrid, only: igrid
@@ -25,14 +25,14 @@ program ScalarFieldTesting
 
     call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
   
-    call igp%start_io(.true.)                !<-- Start I/O by creating a header file (see io.F90)
+    call igp%start_io()                !<-- Start I/O by creating a header file (see io.F90)
 
     call igp%printDivergence()
   
     call tic() 
     do while (igp%tsim < igp%tstop) 
        
-       call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
+       call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
        
     end do 

@@ -36,7 +36,6 @@ module igrid_Operators
       real(rkind), dimension(:), allocatable :: gxfilt, gyfilt
       type(gaussian) :: gfilt 
       
-    
       complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffyE, cbuffzC, cbuffzE  ! Actuator disk buffers
       real(rkind), dimension(:,:,:,:), allocatable :: mesh 
       complex(rkind), dimension(:,:,:), allocatable :: urhshat, vrhshat, wrhshat

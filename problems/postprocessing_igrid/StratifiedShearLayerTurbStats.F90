@@ -73,6 +73,10 @@ program StratifiedShearLayerDomainIntegrals
       nt = size(timesteps)
    else
       nt = (tstop - tstart)/tstep
+<<<<<<< HEAD
+=======
+      allocate(times(nt))
+>>>>>>> origin/igridSGS
    end if
 
    

@@ -76,8 +76,17 @@ program StratifiedShearLayerDomainIntegrals
       call ops%ReadField3D(v,"vVel",TIDX)
       call ops%ReadField3D(w,"wVel",TIDX)
       call ops%ReadField3D(T,"potT",TIDX)
+<<<<<<< HEAD
       call ops%ReadField3D(nuSGS,"nSGS",TIDX)
 
+=======
+      if (tidx == 0) then
+         nuSGS = 0
+      else
+         call ops%ReadField3D(nuSGS,"nSGS",TIDX)
+      end if
+      
+>>>>>>> origin/igridSGS
       T = Rib*(T - Tref)  ! Rescale Potential temperature to buoyancy variable: b 
 
       time(idx) = ops%getSimTime(tidx)

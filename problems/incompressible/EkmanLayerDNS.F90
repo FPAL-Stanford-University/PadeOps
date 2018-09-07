@@ -1,11 +1,11 @@
 ! Template for PadeOps
 
-#include "ScalarSourceTesting_files/initialize.F90"       
-#include "ScalarSourceTesting_files/temporalHook.F90"  
+#include "EkmanLayerDNS_files/initialize.F90"       
+#include "EkmanLayerDNS_files/temporalHook.F90"  
 
-program ScalarSourceTesting
+program EkmanLayerDNS
     use mpi
-    use kind_parameters,  only: rkind, clen
+    use kind_parameters,  only: clen
     use IncompressibleGrid, only: igrid
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
@@ -16,7 +16,6 @@ program ScalarSourceTesting
     type(igrid), allocatable, target :: igp
     character(len=clen) :: inputfile
     integer :: ierr
-    real(rkind), dimension(:,:,:), allocatable :: utarget, vtarget, wtarget
 
     call MPI_Init(ierr)               !<-- Begin MPI
 
@@ -25,20 +24,10 @@ program ScalarSourceTesting
     allocate(igp)                     !<-- Initialize hit_grid with defaults
 
     call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
-  
+ 
     call igp%start_io(.true.)                !<-- Start I/O by creating a header file (see io.F90)
 
     call igp%printDivergence()
-    
-    ! Fringe associations for non-periodic BCs in x
-    call igp%fringe_x1%allocateTargetArray_Cells(utarget)                !<-- Allocate target array of appropriate size
-    call igp%fringe_x1%allocateTargetArray_Cells(vtarget)                !<-- Allocate target array of appropriate size
-    call igp%fringe_x1%allocateTargetArray_Edges(wtarget)                !<-- Allocate target array of appropriate size
-    utarget = 1.d0                                                      !<-- Target u - velocity at inlet 
-    vtarget = 0.d0                                                      !<-- Target v - velocity at inlet
-    wtarget = 0.d0                                                      !<-- Target w - velocity at inlet    
-    call igp%fringe_x1%associateFringeTargets(utarget, vtarget, wtarget) !<-- Link the target velocity array to igp 
-    call igp%fringe_x2%associateFringeTargets(utarget, vtarget, wtarget) !<-- Link the target velocity array to igp 
   
     call tic() 
     do while (igp%tsim < igp%tstop) 

@@ -1,8 +1,0 @@
-&SCALAR_INFO
-useSource = .true. 
-PrandtlNum = 1.d0
-bc_bottom = 2 
-bc_top = 2
-TurbPrandtlNum = 0.65d0 
-/
-/

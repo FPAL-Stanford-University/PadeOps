@@ -1,4 +1,4 @@
-module ScalarSourceTesting_parameters
+module EkmanDNS_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
@@ -9,56 +9,42 @@ module ScalarSourceTesting_parameters
     integer :: seedw = 131344
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
-   
-    real(rkind), dimension(:,:,:), allocatable :: scalarexact 
-
+    
     real(rkind), parameter :: xdim = 1000._rkind, udim = 0.45_rkind
     real(rkind), parameter :: timeDim = xdim/udim
-    integer :: direction
-
-contains
-
-pure subroutine Sfunc(x, val)
-   real(rkind), dimension(:,:,:), intent(in) :: x
-   real(rkind), dimension(:,:,:), intent(out) :: val
-
-   val = 0.d0
-   where (x>0.d0) 
-      val = 1.d0/(1.d0 + exp(min(1.d0/(x - 1.d0 + 1.d-18) + 1.d0/(x + 1.d-18),50.d0)))
-   end where
-
-   where (x>1.d0) 
-      val = 1.d0 
-   end where
-
-end subroutine
 
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use ScalarSourceTesting_parameters    
-    use kind_parameters,  only: rkind
+    use EkmanDNS_parameters  
+    !use EkmanLayerDNS_IO, only: read_domain_info  
+    use kind_parameters,  only: rkind, clen
     use constants,        only: one,two, pi
     use decomp_2d,        only: decomp_info
+    use exits,            only: GracefulExit
     implicit none
 
     type(decomp_info),                                          intent(in)    :: decomp
     real(rkind),                                                intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
-    integer :: i,j,k
+    integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    real(rkind)  :: Lx = 26.d0, Ly = 26.d0, Lz = 24.d0, alphaRot = 0.d0 
+    real(rkind) ::  noiseAmp, waveAmp
+    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot,waveAmp,noiseAmp
+    
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=EkmanLayerDNS)
+    close(ioUnit)    
 
-    !Lx = two*pi; Ly = two*pi; Lz = one
-
-    Lx = 10.d0*pi; Ly = two*pi; Lz = two*pi
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
     ! If base decomposition is in Y
     ix1 = decomp%xst(1); iy1 = decomp%xst(2); iz1 = decomp%xst(3)
     ixn = decomp%xen(1); iyn = decomp%xen(2); izn = decomp%xen(3)
-    
+
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         dx = Lx/real(nxg,rkind)
@@ -85,16 +71,18 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use ScalarSourceTesting_parameters
-    use PadeDerOps, only: Pade6Stagg
-    use kind_parameters,    only: rkind
+    use EkmanDNS_parameters
+    use kind_parameters,    only: rkind, clen
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
     use random,             only: gaussian_random
     use decomp_2d          
     use reductions,         only: p_maxval, p_minval
-    use cd06staggstuff,     only: cd06stagg
-    use exits,              only: gracefulExit,message_min_max
+    use exits,              only: message_min_max
+    !use EkmanLayerDNS_IO, only: get_perturbations
+    use cd06staggstuff,      only: cd06stagg
+    use decomp_2d_io,        only: decomp_2d_read_one
+
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -102,8 +90,27 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
+    integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind) :: dz
+    real(rkind) :: alphaRot=0.d0, dz 
+    character(len=clen) :: InitFileTag, InitFileDirectory
+    real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
+    integer :: nz, nzE
+    real(rkind), dimension(:,:,:), allocatable :: upurt, vpurt, wpurt
+    real(rkind) :: noiseAmp, waveAmp
+    type(cd06stagg), allocatable :: derW
+    integer :: ProblemMode = 1
+    integer :: Ns = 5
+    character(len=clen) :: fname
+    real(rkind)  :: Lx = 26.d0, Ly = 26.d0, Lz = 24.d0 
+
+    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot,waveAmp,noiseAmp
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=EkmanLayerDNS)
+    close(ioUnit)    
+
 
     u  => fieldsC(:,:,:,1)
     v  => fieldsC(:,:,:,2)
@@ -114,19 +121,75 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    dz = z(1,1,2) - z(1,1,1)
-    
-    u = one
-    v = zero
-    w = zero
+    ! Laminar Ekman layer profile
+
+    u  =  cos(alphaRot*pi/180.d0) - exp(-z)*cos(z - (alphaRot*pi/180.d0))
+    v  =  sin(alphaRot*pi/180.d0) + exp(-z)*sin(z - (alphaRot*pi/180.d0))
     wC = zero
+
+
+    allocate(upurt(size(u ,1),size(u ,2),size(u ,3)))
+    allocate(vpurt(size(v ,1),size(v ,2),size(v ,3)))
+    allocate(wpurt(size(wC,1),size(wC,2),size(wC,3)))
+
+    upurt = waveAmp*(exp(-Z)*Z / exp(-1.d0))*cos(Ns*2.d0*pi*Y/Lx)
+    vpurt = waveAmp*(exp(-Z)*Z / exp(-1.d0))*cos(Ns*2.d0*pi*X/Lx)
+    wpurt = 0.d0;
+    u  = u + upurt
+    v  = v + vpurt
+    wC = wC+ wpurt
+    
+    deallocate(upurt, vpurt, wpurt)
+    allocate(randArr(size(wC,1),size(wC,2),size(wC,3)))
+    
+    call gaussian_random(randArr,zero,one,seedu + 100*nrank)
+    u  = u + noiseAmp*randArr
+    
+    call gaussian_random(randArr,zero,one,seedv + 100*nrank)
+    v  = v + noiseAmp*randArr
+
+    deallocate(randArr)
+    
 
     call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
     call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
     call message_min_max(1,"Bounds for w:", p_minval(minval(wC)), p_maxval(maxval(wC)))
     
+    !u = one!1.6d0*z*(2.d0 - z) 
+    !v = zero;
+    !w = zero;
+
+    ! Interpolate wC to w
+    allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
+    allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
+
+    allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
+    allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
+   
+    nz = decompC%zsz(3)
+    nzE = nz + 1
+    allocate(derW)
+    dz = z(1,1,2) - z(1,1,1)
+    call derW%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .true., &
+                                isTopSided = .false., isBotSided = .false.)
+
+    call transpose_x_to_y(wC,ybuffC,decompC)
+    call transpose_y_to_z(ybuffC,zbuffC,decompC)
+    !zbuffE = zero
+    !zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
+    call derW%interpz_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+    zbuffE(:,:,1) = zero
+    call transpose_z_to_y(zbuffE,ybuffE,decompE)
+    call transpose_y_to_x(ybuffE,w,decompE) 
+    call derW%destroy()
+    deallocate(derW)
+
+    deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
+  
+
     nullify(u,v,w,x,y,z)
    
+
     call message(0,"Velocity Field Initialized")
 
 end subroutine
@@ -137,13 +200,13 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 6
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
     xplanes = [64]
     yplanes = [64]
-    zplanes = [20]
+    zplanes = [5,15,30,50,80,150]
 
 end subroutine
 
@@ -165,16 +228,17 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef
-    integer :: iounit, directionID
-    namelist /ScalarSourceTestingINPUT/ directionID
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, alphaRot
+    integer :: iounit
+    real(rkind) :: noiseAmp, waveAmp
+    integer :: ProblemMode = 1
+    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot,waveAmp,noiseAmp
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
-
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=ScalarSourceTestingINPUT)
+    read(unit=ioUnit, NML=EkmanLayerDNS)
     close(ioUnit)    
 
     ! Do nothing really since this is an unstratified simulation
@@ -186,13 +250,16 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    integer :: iounit, directionID
+    real(rkind) :: Lx, Ly, Lz, alphaRot 
+    integer :: iounit
+    real(rkind) :: noiseAmp, waveAmp
+    integer :: ProblemMode = 1
     
-    namelist /ScalarSourceTestingINPUT/ directionID
+    namelist /EkmanLayerDNS/Lx,Ly,Lz, alphaRot,waveAmp,noiseAmp
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=ScalarSourceTestingINPUT)
+    read(unit=ioUnit, NML=EkmanLayerDNS)
     close(ioUnit)    
      
     Tref = 0.d0
@@ -200,6 +267,31 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     ! Do nothing really since this is an unstratified simulation
 
 end subroutine
+
+
+subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarField
+
+    scalarField = 0.d0
+end subroutine 
+
+subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
+
+    scalarSource = 0.d0
+end subroutine 
 
 subroutine hook_probes(inputfile, probe_locs)
     use kind_parameters,    only: rkind
@@ -223,73 +315,3 @@ subroutine hook_probes(inputfile, probe_locs)
 
 
 end subroutine
-
-subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
-    use kind_parameters, only: rkind
-    use decomp_2d,        only: decomp_info
-    use ScalarSourceTesting_parameters, only: scalarExact
-
-    type(decomp_info),                                          intent(in)    :: decompC
-    character(len=*),                intent(in)    :: inpDirectory
-    real(rkind), dimension(:,:,:,:), intent(in), target  :: mesh
-    integer, intent(in)                            :: scalar_id
-    real(rkind), dimension(:,:,:), intent(out)     :: scalarField
-    real(rkind), dimension(:,:,:), pointer :: x, y, z
-   
-    z => mesh(:,:,:,3)
-    y => mesh(:,:,:,2)
-    x => mesh(:,:,:,1)
-
-    scalarField = 0.d0  
-end subroutine 
-
-subroutine setScalar_source(decompC, inputfile, mesh, scalar_id, scalarSource)
-    use kind_parameters, only: rkind
-    use decomp_2d,        only: decomp_info
-    use ScalarSourceTesting_parameters, only: Sfunc
-    use constants,      only: pi
-    type(decomp_info),                                          intent(in)    :: decompC
-    character(len=*),                intent(in)    :: inputfile
-    real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
-    integer, intent(in)                            :: scalar_id
-    real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
-    real(rkind), dimension(:,:,:), pointer :: x, y, z
-    real(rkind), dimension(:,:,:), allocatable :: r, lambda, tmp
-    integer :: ioUnit
-    real(rkind) :: xc = 1.d0, yc = 1.d0, zc = 1.d0, rin = 1.d0, rout = 1.d0, delta_r = 1.d0
-    real(rkind) :: smear_x = 1.5d0, delta
-    namelist /ScalarSourceTestingINPUT/ xc, yc, zc, rin, rout, delta_r, smear_x
-
-    z => mesh(:,:,:,3)
-    y => mesh(:,:,:,2)
-    x => mesh(:,:,:,1)
-
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=ScalarSourceTestingINPUT)
-    close(ioUnit)    
-    
-    allocate(r(size(x,1),size(x,2),size(x,3)))
-    allocate(lambda(size(x,1),size(x,2),size(x,3)))
-    allocate(tmp(size(x,1),size(x,2),size(x,3)))
-
-    r = sqrt((y - yc)**2 + (z - zc)**2)
-
-    select case (scalar_id)
-    case (1)
-      tmp = (r - rout)/delta_r + 1 
-      call Sfunc(tmp, lambda)
-      lambda = -lambda
-    case (2)
-      tmp = (r - rin)/delta_r
-      call Sfunc(tmp, lambda)
-      lambda = 1.d0 - lambda
-    end select 
-
-    r = x - xc
-    delta = (x(2,1,1) - x(1,1,1))*smear_x
-    tmp = (1.d0/(delta*sqrt(2.d0*pi)))*exp(-0.5d0*(r**2)/(delta**2))
-    scalarSource = tmp*lambda
-
-    deallocate(r, lambda, tmp)
-end subroutine 
