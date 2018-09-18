@@ -1,4 +1,4 @@
-program EkmanLayerDNSTKEBudget
+program EkmanLayerDNSMKEBudget
     use kind_parameters, only: rkind, clen
     use igrid_Operators, only: igrid_ops
     use DerivativesMod, only: derivatives
@@ -14,7 +14,7 @@ program EkmanLayerDNSTKEBudget
          &buff1, buff2, buff3,& 
          &u,v,w,p, umean,vmean,pmean, ufluct,vfluct,pfluct, MKE
     real(rkind), dimension(:,:), allocatable :: &
-         & Prod, Diss, Diff, PDif, RDif,&
+         & Prod, Diss, Diff, TDif,&
          & umean_1d, vmean_1d, MKE_1d
     real(rkind) :: &
             & dx, dy, dz , &
@@ -66,8 +66,7 @@ program EkmanLayerDNSTKEBudget
     allocate(Prod(nz,1))
     allocate(Diss(nz,1))
     allocate(Diff(nz,1))
-    allocate(PDif(nz,1))
-    allocate(RDif(nz,1))
+    allocate(TDif(nz,1))
     allocate(umean_1d(nz,1))
     allocate(vmean_1d(nz,1))
     allocate(MKE_1d(nz,1))
@@ -110,16 +109,9 @@ program EkmanLayerDNSTKEBudget
     Rij = Rij/nt
     MKE = 0.5*(umean**2 + vmean**2)
 
-    ! Advection Uj*DE/dxj = 0
-    ! call ops%getGradient(MKE,buff1,buff2,buff3,0,0)
-    ! call ops%TakeMean_xy(umean*buff1+vmean*buff2+wmean*buff3, Advc)
-
-    ! Pressure diffusion d/dxj(PUj) = Uj*dP/dxj= 0
-    call ops%getGradient(pmean,buff1,buff2,buff3,0,0)
-    call ops%TakeMean_xy(umean*buff1+vmean*buff2, PDif)
-
     ! Viscous diffusion d2/dxj2 MKE
-    call ops%d2dz2(MKE,buff1,0,0)
+    call ops%ddz(MKE,buff1,0,0)
+    call ops%ddz(buff1,buff1,0,0)
     call ops%TakeMean_xy(buff1,Diff)
 
     ! Dissipation dUi/dxj*dUi/dxj = dUdz^2 + dVdz^2
@@ -130,9 +122,9 @@ program EkmanLayerDNSTKEBudget
     ! Production uiuj*dUi/dxj = uwdUdz + vwdVdz
     call ops%TakeMean_xy(Rij(:,:,:,3)*buff1+Rij(:,:,:,5)*buff2, Prod)
 
-    ! Reynolds diffusion terms d/dxj(Ui uiuj) = ddz(Uuw+Vvw)
+    ! Turbulent diffusion terms d/dxj(Ui uiuj) = ddz(Uuw+Vvw)
     call ops%ddz( umean*Rij(:,:,:,3)+vmean*Rij(:,:,:,5),buff1,0,0)
-    call ops%TakeMean_xy(buff1,RDif)
+    call ops%TakeMean_xy(buff1,TDif)
 
     ! Coriolis terms: omega3*(umean*G2-vmean*G1)
     ! 1D Averages
@@ -145,8 +137,7 @@ program EkmanLayerDNSTKEBudget
         call message(0,"Writing  files...")
         call ops%WriteASCII_2D(Prod, "Prod")
         call ops%WriteASCII_2D(Diff, "Diff")
-        call ops%WriteASCII_2D(Diff, "PDif")
-        call ops%WriteASCII_2D(Diff, "RDif")
+        call ops%WriteASCII_2D(TDif, "TDif")
         call ops%WriteASCII_2D(Diss, "Diss")
         call ops%WriteASCII_2D(umean_1d, "u_mn")
         call ops%WriteASCII_2D(vmean_1d, "v_mn")
