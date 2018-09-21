@@ -307,7 +307,7 @@ program upsampleFields
 
     character(len=clen) :: inputfile 
     character(len=clen) :: outputdir, inputdir
-    integer :: ioUnit, nx, ny, nz, ierr, inputFile_TID, inputFile_RID, outputFile_TID, outputFile_RID
+    integer :: ioUnit, nx, ny, nz, ierr, inputFile_TID, inputFile_RID, outputFile_TID, outputFile_RID, i1, j1, k1, i, j, k
     logical :: upsampleInZ = .false., isStratified = .false. 
     type(decomp_info) :: gpC, gpE, gpC_upX, gpC_upXY, gpC_upXYZ, gpE_upX, gpE_upXY, gpE_upXYZ 
     real(rkind), dimension(:,:,:), allocatable :: f, fxyupE_inZ, fxyzupE_inZ
@@ -374,8 +374,36 @@ program upsampleFields
     fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
 
     call upsampleX(f,fxup_inX)
+!!!!!!!CHECKING!!!!!!!!
+    j1 = 3; k1 = 4;
+    open(101,file='check_upsample_x.dat',status='unknown',action='write')
+    write(101,*) 'VARIABLES="x","val"'
+    write(101,*) 'ZONE T="Sample X", F=POINT, I=', size(f,1)
+    do i = 1, size(f,1)
+    write(101,*) real(i-1,rkind)/real(size(f,1),rkind), f(i,j1,k1)
+    enddo
+    write(101,*) 'ZONE T="Upsample X", F=POINT, I=', size(fxup_inX,1)
+    do i = 1, size(fxup_inX,1)
+    write(101,*) real(i-1,rkind)/real(size(fxup_inX,1),rkind), fxup_inX(i,j1,k1)
+    enddo
+    close(101)
+!!!!!!!CHECKING!!!!!!!!
     call transpose_x_to_y(fxup_inX,fxup_inY,gpC_upX)
     call upsampleY(fxup_inY,fxyup_inY)
+!!!!!!!CHECKING!!!!!!!!
+    i1 = 3; k1 = 4;
+    open(101,file='check_upsample_y.dat',status='unknown',action='write')
+    write(101,*) 'VARIABLES="y","val"'
+    write(101,*) 'ZONE T="Sample Y", F=POINT, I=', size(fxup_inY,2)
+    do j = 1, size(fxup_inY,2)
+    write(101,*) real(j-1,rkind)/real(size(fxup_inY,2),rkind), fxup_inY(i1,j,k1)
+    enddo
+    write(101,*) 'ZONE T="Upsample Y", F=POINT, I=', size(fxyup_inY,2)
+    do j = 1, size(fxyup_inY,2)
+    write(101,*) real(j-1,rkind)/real(size(fxyup_inY,2),rkind), fxyup_inY(i1,j,k1)
+    enddo
+    close(101)
+!!!!!!!CHECKING!!!!!!!!
 
     if (UpsampleInZ) then
         call transpose_y_to_z(fxyup_inY,fxyup_inZ,gpC_upXY)
@@ -388,6 +416,28 @@ program upsampleFields
         else
            call upsampleZ_cells(fxyup_inZ,fxyzup_inZ)
         end if 
+!!!!!!!CHECKING!!!!!!!!
+    i1 = 3; j1 = 4;
+    open(101,file='check_upsample_z.dat',status='unknown',action='write')
+    write(101,*) 'VARIABLES="z","val"'
+    write(101,*) 'ZONE T="Sample Z", F=POINT, I=', size(fxyup_inZ,3)
+    do k = 1, size(fxyup_inZ,3)
+    write(101,*) (real(k,rkind)-0.5d0)/real(size(fxyup_inZ,3),rkind), fxyup_inZ(i1,j1,k)
+    enddo
+    write(101,*) 'ZONE T="Upsample Z", F=POINT, I=', size(fxyzup_inZ,3)
+    do k = 1, size(fxyzup_inZ,3)
+    write(101,*) (real(k,rkind)-0.5d0)/real(size(fxyzup_inZ,3),rkind), fxyzup_inZ(i1,j1,k)
+    enddo
+    write(101,*) 'ZONE T="Sample Z E", F=POINT, I=', size(fxyupE_inZ,3)
+    do k = 1, size(fxyupE_inZ,3)
+    write(101,*) (real(k,rkind)-0.5d0)/real(size(fxyupE_inZ,3),rkind), fxyupE_inZ(i1,j1,k)
+    enddo
+    write(101,*) 'ZONE T="Upsample Z E", F=POINT, I=', size(fxyzupE_inZ,3)
+    do k = 1, size(fxyzupE_inZ,3)
+    write(101,*) (real(k,rkind)-0.5d0)/real(size(fxyzupE_inZ,3),rkind), fxyzupE_inZ(i1,j1,k)
+    enddo
+    close(101)
+!!!!!!!CHECKING!!!!!!!!
 
         call transpose_z_to_y(fxyzup_inZ,fxyzup_inY,gpC_upXYZ)
         call transpose_y_to_x(fxyzup_inY,fxyzup_inX,gpC_upXYZ)
@@ -396,7 +446,8 @@ program upsampleFields
         call transpose_y_to_x(fxyup_inY,fxyup_inX,gpC_upXY)
         call decomp_2d_write_one(1,fxyup_inX,fname, gpC_upXY)
     end if 
-    
+   
+
     ! Read and Write v - field
     write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",inputFile_RID, "_v.",inputFile_TID
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
