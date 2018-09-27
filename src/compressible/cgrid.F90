@@ -1,18 +1,19 @@
 module CompressibleGrid
-    use kind_parameters,      only: rkind, clen
-    use constants,            only: zero,eps,third,half,one,two,three,four
-    use FiltersMod,           only: filters
-    use GridMod,              only: grid
-    use gridtools,            only: alloc_buffs, destroy_buffs
-    use cgrid_hooks,          only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
-    use decomp_2d,            only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
-                                    transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
-    use DerivativesMod,       only: derivatives
-    use io_hdf5_stuff,        only: io_hdf5
-    use IdealGasEOS,          only: idealgas
-    use MixtureEOSMod,        only: mixture
-    use PowerLawViscosityMod, only: powerLawViscosity
-    use TKEBudgetMod,         only: tkeBudget
+    use kind_parameters,       only: rkind, clen
+    use constants,             only: zero,eps,third,half,one,two,three,four
+    use FiltersMod,            only: filters
+    use GridMod,               only: grid
+    use gridtools,             only: alloc_buffs, destroy_buffs
+    use cgrid_hooks,           only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
+    use decomp_2d,             only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
+                                     transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
+    use DerivativesMod,        only: derivatives
+    use io_hdf5_stuff,         only: io_hdf5
+    use IdealGasEOS,           only: idealgas
+    use MixtureEOSMod,         only: mixture
+    use PowerLawViscosityMod,  only: powerLawViscosity
+    use TKEBudgetMod,          only: tkeBudget
+    use ScaleDecompositionMod, only: scaleDecomposition
    
     implicit none
 
@@ -64,6 +65,9 @@ module CompressibleGrid
         logical         :: compute_tke_budget
         type(tkeBudget) :: budget
 
+        logical                  :: compute_scale_decomposition
+        type(scaleDecomposition) :: scaledecomp
+
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
        
@@ -96,7 +100,8 @@ module CompressibleGrid
             procedure          :: gradient 
             procedure          :: advance_RK45
             procedure          :: simulate
-            procedure, private :: get_dt
+            procedure          :: get_dt
+            ! procedure, private :: get_dt
             procedure, private :: get_primitive
             procedure, private :: get_conserved
             procedure, private :: post_bc
@@ -112,7 +117,9 @@ module CompressibleGrid
             procedure, private :: get_J
             procedure, private :: write_viz
             procedure, private :: write_restart
-            procedure, private :: read_restart
+            procedure          :: read_restart
+            ! procedure, private :: read_restart
+            procedure          :: setup_postprocessing
     end type
 
 contains
@@ -165,6 +172,7 @@ contains
         logical     :: rewrite_viz = .true.
         integer     :: vizramp = 5
         logical     :: compute_tke_budget = .false.
+        logical     :: compute_scale_decomposition = .false.
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
                          outputdir, vizprefix, tviz, reduce_precision, &
@@ -175,7 +183,7 @@ contains
                                                              SkewSymm  
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
                              inviscid, nrestart, rewrite_viz, vizramp, &
-                                                   compute_tke_budget, &
+                      compute_tke_budget, compute_scale_decomposition, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
 
@@ -205,6 +213,7 @@ contains
         this%CY = CY
 
         this%compute_tke_budget = compute_tke_budget
+        this%compute_scale_decomposition = compute_scale_decomposition
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -436,9 +445,15 @@ contains
             ! allocate(this%budget , source=tkeBudget(this%decomp, this%der, this%mesh, this%dx, this%dy, this%dz, &
             !                                         [this%periodicx, this%periodicy, this%periodicz], this%outputdir, &
             !                                         this%x_bc, this%y_bc, this%z_bc, reduce_precision))
-            call this%budget%init(this%decomp, this%der, this%mesh, this%dx, this%dy, this%dz, &
+            call this%budget%init(this%decomp, this%der, this%mesh, this%dx, this%dy, this%dz, this%mix%ns, &
                                   [this%periodicx, this%periodicy, this%periodicz], this%outputdir, &
                                   this%x_bc, this%y_bc, this%z_bc, reduce_precision=.false.)
+        end if
+
+        ! Instantiate scale decomposition object
+        if (this%compute_scale_decomposition) then
+            call this%scaledecomp%init(this%decomp, this%der, this%gfil, this%mesh, this%dx, this%dy, this%dz, this%mix%ns, &
+                                       this%x_bc, this%y_bc, this%z_bc, inputfile)
         end if
 
     end subroutine
@@ -570,9 +585,19 @@ contains
         real(rkind), dimension(:,:,:,:), allocatable, target :: tauij
         real(rkind), dimension(:,:,:),   allocatable :: tke_old ! Temporary variable for tke rate
         real(rkind), dimension(:,:,:,:), allocatable :: tke_prefilter, tke_postfilter ! Temporary variable for tke dissipation
+        real(rkind), dimension(:,:,:,:),   allocatable :: rhoPsi_old ! Temporary variable for Psi rate
+        real(rkind), dimension(:,:,:,:,:), allocatable :: rhoPsi_prefilter, rhoPsi_postfilter ! Temporary variable for Psi dissipation
+        real(rkind), dimension(:,:,:),     allocatable :: KE_L_old ! Temporary variable for large scale KE rate
+        real(rkind), dimension(:,:,:,:),   allocatable :: KE_L_prefilter, KE_L_postfilter ! Temporary variable for large scale KE dissipation
+        real(rkind), dimension(:,:,:),     allocatable :: KE_S_old ! Temporary variable for small scale KE rate
+        real(rkind), dimension(:,:,:,:),   allocatable :: KE_S_prefilter, KE_S_postfilter ! Temporary variable for small scale KE dissipation
+        real(rkind), dimension(:,:,:),     allocatable :: rhoPsi_SD_old        ! Temporary variable for large scale KE rate
+        real(rkind), dimension(:,:,:,:),   allocatable :: rhoPsi_SD_prefilter  ! Temporary variable for large scale KE dissipation
+        real(rkind), dimension(:,:,:,:),   allocatable :: rhoPsi_SD_postfilter ! Temporary variable for large scale KE dissipation
+
         real(rkind), dimension(:,:,:),   pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
-        real(rkind) :: dt_tke
+        ! real(rkind) :: dt_tke
         integer :: i
         integer :: stepramp = 0
 
@@ -619,14 +644,51 @@ contains
             call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
             call this%write_viz()
 
-            if (this%compute_tke_budget) then
-                allocate( tke_old       (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3)) )
-                allocate( tke_prefilter (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),RK45_steps) )
-                allocate( tke_postfilter(this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),RK45_steps) )
+            if ((this%compute_tke_budget) .or. (this%compute_scale_decomposition)) then
+                if (this%compute_tke_budget) then
+                    allocate( tke_old       (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3)) )
+                    allocate( tke_prefilter (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),RK45_steps) )
+                    allocate( tke_postfilter(this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),RK45_steps) )
+                    tke_old = zero
+                    tke_prefilter = zero
+                    tke_postfilter = zero
 
-                tke_old = zero
-                tke_prefilter = zero
-                tke_postfilter = zero
+                    if (this%mix%ns > 1) then
+                        allocate( rhoPsi_old       (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),this%mix%ns) )
+                        allocate( rhoPsi_prefilter (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),this%mix%ns,RK45_steps) )
+                        allocate( rhoPsi_postfilter(this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),this%mix%ns,RK45_steps) )
+
+                        rhoPsi_old = zero
+                        rhoPsi_prefilter = zero
+                        rhoPsi_postfilter = zero
+                    end if
+                end if
+
+                if (this%compute_scale_decomposition) then
+                    allocate( KE_L_old       (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+                    allocate( KE_L_prefilter (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),RK45_steps) )
+                    allocate( KE_L_postfilter(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),RK45_steps) )
+                    allocate( KE_S_old       (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+                    allocate( KE_S_prefilter (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),RK45_steps) )
+                    allocate( KE_S_postfilter(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),RK45_steps) )
+
+                    KE_L_old = zero
+                    KE_L_prefilter = zero
+                    KE_L_postfilter = zero
+                    KE_S_old = zero
+                    KE_S_prefilter = zero
+                    KE_S_postfilter = zero
+
+                    if (this%mix%ns > 1) then
+                        allocate( rhoPsi_SD_old       (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+                        allocate( rhoPsi_SD_prefilter (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),RK45_steps) )
+                        allocate( rhoPsi_SD_postfilter(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),RK45_steps) )
+
+                        rhoPsi_SD_old = zero
+                        rhoPsi_SD_prefilter = zero
+                        rhoPsi_SD_postfilter = zero
+                    end if
+                end if
 
                 ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
                 call this%get_tau( duidxj )
@@ -639,14 +701,44 @@ contains
                 tauij(:,:,:,5) = duidxj(:,:,:,tauyzidx)
                 tauij(:,:,:,6) = duidxj(:,:,:,tauzzidx)
 
-                dt_tke = one
-                call this%budget%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
-                                            tke_old, tke_prefilter, tke_postfilter, this%tsim, dt_tke)
+                ! dt_tke = one
+                if (this%compute_tke_budget) then
+                    call this%budget%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
+                                                tke_old, tke_prefilter, tke_postfilter, this%tsim, this%dt)
+                    if (this%mix%ns > 1) then
+                        call this%budget%mixing_budget(this%rho, this%u, this%v, this%w, this%Ys, this%diff, &
+                                                       rhoPsi_old, rhoPsi_prefilter, rhoPsi_postfilter, this%tsim, this%dt)
+                    end if
+                end if
+
+                if (this%compute_scale_decomposition) then
+                    call this%scaledecomp%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
+                         KE_L_old, KE_S_old, KE_L_prefilter, KE_L_postfilter, KE_S_prefilter, KE_S_postfilter, this%tsim, this%dt)
+                    if (this%mix%ns > 1) then
+                        call this%scaledecomp%mix_budget(this%rho, this%u, this%v, this%w, this%Ys, this%diff, &
+                             rhoPsi_SD_old, rhoPsi_SD_prefilter, rhoPsi_SD_postfilter, this%tsim, this%dt)
+                    end if
+                end if
+
                 deallocate( tauij  )
 
                 if ( allocated(tke_old) )        deallocate( tke_old )
                 if ( allocated(tke_prefilter) )  deallocate( tke_prefilter )
                 if ( allocated(tke_postfilter) ) deallocate( tke_postfilter )
+                if ( allocated(rhoPsi_old) )        deallocate( rhoPsi_old )
+                if ( allocated(rhoPsi_prefilter) )  deallocate( rhoPsi_prefilter )
+                if ( allocated(rhoPsi_postfilter) ) deallocate( rhoPsi_postfilter )
+
+                if ( allocated( KE_L_old        ) ) deallocate( KE_L_old        )
+                if ( allocated( KE_L_prefilter  ) ) deallocate( KE_L_prefilter  )
+                if ( allocated( KE_L_postfilter ) ) deallocate( KE_L_postfilter )
+                if ( allocated( KE_S_old        ) ) deallocate( KE_S_old        )
+                if ( allocated( KE_S_prefilter  ) ) deallocate( KE_S_prefilter  )
+                if ( allocated( KE_S_postfilter ) ) deallocate( KE_S_postfilter )
+
+                if ( allocated( rhoPsi_SD_old        ) ) deallocate( rhoPsi_SD_old        )
+                if ( allocated( rhoPsi_SD_prefilter  ) ) deallocate( rhoPsi_SD_prefilter  )
+                if ( allocated( rhoPsi_SD_postfilter ) ) deallocate( rhoPsi_SD_postfilter )
             end if
 
         end if
@@ -766,9 +858,18 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: Qtmp ! Temporary variable for RK45
 
         real(rkind), dimension(:,:,:,:), target, allocatable :: duidxj, tauij, gradYs
-        real(rkind), dimension(:,:,:),   allocatable :: tke_old ! Temporary variable for tke rate
-        real(rkind), dimension(:,:,:,:), allocatable :: tke_prefilter, tke_postfilter ! Temporary variable for tke dissipation
-        real(rkind)                                  :: dt_tke
+        real(rkind), dimension(:,:,:),     allocatable :: tke_old ! Temporary variable for tke rate
+        real(rkind), dimension(:,:,:,:),   allocatable :: tke_prefilter, tke_postfilter ! Temporary variable for tke dissipation
+        real(rkind), dimension(:,:,:,:),   allocatable :: rhoPsi_old ! Temporary variable for Psi rate
+        real(rkind), dimension(:,:,:,:,:), allocatable :: rhoPsi_prefilter, rhoPsi_postfilter ! Temporary variable for Psi dissipation
+        real(rkind), dimension(:,:,:),     allocatable :: KE_L_old ! Temporary variable for large scale KE rate
+        real(rkind), dimension(:,:,:,:),   allocatable :: KE_L_prefilter, KE_L_postfilter ! Temporary variable for large scale KE dissipation
+        real(rkind), dimension(:,:,:),     allocatable :: KE_S_old ! Temporary variable for small scale KE rate
+        real(rkind), dimension(:,:,:,:),   allocatable :: KE_S_prefilter, KE_S_postfilter ! Temporary variable for small scale KE dissipation
+        real(rkind), dimension(:,:,:),     allocatable :: rhoPsi_SD_old        ! Temporary variable for large scale KE rate
+        real(rkind), dimension(:,:,:,:),   allocatable :: rhoPsi_SD_prefilter  ! Temporary variable for large scale KE dissipation
+        real(rkind), dimension(:,:,:,:),   allocatable :: rhoPsi_SD_postfilter ! Temporary variable for large scale KE dissipation
+        ! real(rkind)                                    :: dt_tke
 
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
@@ -787,6 +888,26 @@ contains
             allocate( tke_old       (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3)) )
             allocate( tke_prefilter (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),RK45_steps) )
             allocate( tke_postfilter(this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),RK45_steps) )
+            if (this%mix%ns > 1) then
+                allocate( rhoPsi_old       (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),this%mix%ns) )
+                allocate( rhoPsi_prefilter (this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),this%mix%ns,RK45_steps) )
+                allocate( rhoPsi_postfilter(this%budget%avg%avg_size(1),this%budget%avg%avg_size(2),this%budget%avg%avg_size(3),this%mix%ns,RK45_steps) )
+            end if
+        end if
+
+        if ( (vizcond) .and. (this%compute_scale_decomposition) ) then
+            allocate( KE_L_old       (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+            allocate( KE_L_prefilter (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),RK45_steps) )
+            allocate( KE_L_postfilter(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),RK45_steps) )
+            allocate( KE_S_old       (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+            allocate( KE_S_prefilter (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),RK45_steps) )
+            allocate( KE_S_postfilter(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),RK45_steps) )
+
+            if (this%mix%ns > 1) then
+                allocate( rhoPsi_SD_old       (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+                allocate( rhoPsi_SD_prefilter (this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),RK45_steps) )
+                allocate( rhoPsi_SD_postfilter(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),RK45_steps) )
+            end if
         end if
 
         Qtmp = zero
@@ -794,6 +915,16 @@ contains
 
         if ((vizcond) .and. (this%compute_tke_budget)) then
             call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_old)
+            if (this%mix%ns > 1) then
+                call this%budget%get_rhoPsi_bar(this%rho, this%Ys, rhoPsi_old)
+            end if
+        end if
+
+        if ((vizcond) .and. (this%compute_scale_decomposition)) then
+            call this%scaledecomp%get_kinetic_energies(this%rho, this%u, this%v, this%w, KE_L_old, KE_S_old)
+            if (this%mix%ns > 1) then
+                call this%scaledecomp%get_rhoPsi(this%rho, this%Ys, rhoPsi_SD_old)
+            end if
         end if
 
         do isub = 1,RK45_steps
@@ -813,10 +944,20 @@ contains
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
             ! if ( (vizcond) .and. (this%compute_tke_budget) .and. (isub == RK45_steps) ) then
-            if ( (vizcond) .and. (this%compute_tke_budget) ) then
+            if ( (vizcond) .and. ((this%compute_tke_budget) .or. (this%compute_scale_decomposition)) ) then
                 call this%get_primitive()
-                call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_prefilter(:,:,:,isub))
-                dt_tke = RK45_B(isub)*Qtmpt
+                if (this%compute_tke_budget) then
+                    call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_prefilter(:,:,:,isub))
+                    call this%budget%get_rhoPsi_bar(this%rho, this%Ys, rhoPsi_prefilter(:,:,:,:,isub))
+                end if
+                if (this%compute_scale_decomposition) then
+                    call this%scaledecomp%get_kinetic_energies(this%rho, this%u, this%v, this%w, &
+                                                  KE_L_prefilter(:,:,:,isub), KE_S_prefilter(:,:,:,isub))
+                    if (this%mix%ns > 1) then
+                        call this%scaledecomp%get_rhoPsi(this%rho, this%Ys, rhoPsi_SD_prefilter(:,:,:,isub))
+                    end if
+                end if
+                ! dt_tke = RK45_B(isub)*Qtmpt
             end if
 
             ! Filter the conserved variables
@@ -833,11 +974,21 @@ contains
             call this%post_bc()
 
             ! Compute TKE budgets
-            if ((vizcond) .and. (this%compute_tke_budget)) then
-                ! if (isub == RK45_steps-1) then
-                !     call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_old)
-                ! end if
-                call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_postfilter(:,:,:,isub))
+            if ((vizcond) .and. ((this%compute_tke_budget) .or. (this%compute_scale_decomposition))) then
+                if (this%compute_tke_budget) then
+                    ! if (isub == RK45_steps-1) then
+                    !     call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_old)
+                    ! end if
+                    call this%budget%get_tke(this%rho, this%u, this%v, this%w, tke_postfilter(:,:,:,isub))
+                    call this%budget%get_rhoPsi_bar(this%rho, this%Ys, rhoPsi_postfilter(:,:,:,:,isub))
+                end if
+                if (this%compute_scale_decomposition) then
+                    call this%scaledecomp%get_kinetic_energies(this%rho, this%u, this%v, this%w, &
+                                                  KE_L_postfilter(:,:,:,isub), KE_S_postfilter(:,:,:,isub))
+                    if (this%mix%ns > 1) then
+                        call this%scaledecomp%get_rhoPsi(this%rho, this%Ys, rhoPsi_SD_postfilter(:,:,:,isub))
+                    end if
+                end if
 
                 if (isub == RK45_steps)then
                     allocate( duidxj(this%nxp,this%nyp,this%nzp,9) )
@@ -882,10 +1033,25 @@ contains
                     tauij(:,:,:,6) = duidxj(:,:,:,tauzzidx)
                     deallocate( duidxj )
 
-                    ! call this%budget%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
-                    !                             tke_old, tke_prefilter, this%tsim, dt_tke)
-                    call this%budget%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
-                                                tke_old, tke_prefilter, tke_postfilter, this%tsim, this%dt)
+                    if (this%compute_tke_budget) then
+                        ! call this%budget%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
+                        !                             tke_old, tke_prefilter, this%tsim, dt_tke)
+                        call this%budget%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
+                                                    tke_old, tke_prefilter, tke_postfilter, this%tsim, this%dt)
+                        if (this%mix%ns > 1) then
+                            call this%budget%mixing_budget(this%rho, this%u, this%v, this%w, this%Ys, this%diff, &
+                                                           rhoPsi_old, rhoPsi_prefilter, rhoPsi_postfilter, this%tsim, this%dt)
+                        end if
+                    end if
+                    if (this%compute_scale_decomposition) then
+                        call this%scaledecomp%tke_budget(this%rho, this%u, this%v, this%w, this%p, tauij, &
+                             KE_L_old, KE_S_old, KE_L_prefilter, KE_L_postfilter, KE_S_prefilter, KE_S_postfilter, this%tsim, this%dt)
+                        if (this%mix%ns > 1) then
+                            call this%scaledecomp%mix_budget(this%rho, this%u, this%v, this%w, this%Ys, this%diff, &
+                                 rhoPsi_SD_old, rhoPsi_SD_prefilter, rhoPsi_SD_postfilter, this%tsim, this%dt)
+                        end if
+                    end if
+
                     deallocate( tauij  )
 
                 end if
@@ -899,6 +1065,20 @@ contains
         if ( allocated(tke_old) )        deallocate( tke_old )
         if ( allocated(tke_prefilter) )  deallocate( tke_prefilter )
         if ( allocated(tke_postfilter) ) deallocate( tke_postfilter )
+        if ( allocated(rhoPsi_old) )        deallocate( rhoPsi_old )
+        if ( allocated(rhoPsi_prefilter) )  deallocate( rhoPsi_prefilter )
+        if ( allocated(rhoPsi_postfilter) ) deallocate( rhoPsi_postfilter )
+
+        if ( allocated( KE_L_old        ) ) deallocate( KE_L_old        )
+        if ( allocated( KE_L_prefilter  ) ) deallocate( KE_L_prefilter  )
+        if ( allocated( KE_L_postfilter ) ) deallocate( KE_L_postfilter )
+        if ( allocated( KE_S_old        ) ) deallocate( KE_S_old        )
+        if ( allocated( KE_S_prefilter  ) ) deallocate( KE_S_prefilter  )
+        if ( allocated( KE_S_postfilter ) ) deallocate( KE_S_postfilter )
+
+        if ( allocated( rhoPsi_SD_old        ) ) deallocate( rhoPsi_SD_old        )
+        if ( allocated( rhoPsi_SD_prefilter  ) ) deallocate( rhoPsi_SD_prefilter  )
+        if ( allocated( rhoPsi_SD_postfilter ) ) deallocate( rhoPsi_SD_postfilter )
     end subroutine
 
     subroutine get_dt(this,stability)
@@ -1812,6 +1992,21 @@ contains
 
         ! Get primitive variables from conserved
         call this%get_primitive()
+    end subroutine
+
+    subroutine setup_postprocessing(this, nrestarts)
+        use mpi
+        class(cgrid), intent(inout) :: this
+        integer,      intent(out)   :: nrestarts
+
+        ! Destroy old restart object
+        call this%restart%destroy()
+
+        ! Initialize new restart object in read only mode
+        call this%restart%init( mpi_comm_world, this%decomp, 'y', this%outputdir, 'restart', &
+                                reduce_precision=.false., write_xdmf=.false., read_only=.true., jump_to_last=.true.)
+        nrestarts = this%restart%vizcount
+
     end subroutine
 
 end module 

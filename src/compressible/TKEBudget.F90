@@ -3,7 +3,7 @@ module TKEBudgetMod
     use mpi
     use decomp_2d,        only: decomp_info, nrank
     use kind_parameters,  only: rkind, mpirkind, clen
-    use constants,        only: zero,half,one
+    use constants,        only: zero,half,one,two
     use exits,            only: GracefulExit
     use AveragingMod,     only: averaging
     use io_hdf5_stuff,    only: io_hdf5
@@ -23,10 +23,13 @@ module TKEBudgetMod
         type(derivatives)   :: der_avg
         type(mytranspose2D) :: gp_avg !!! Only support 2D for now
 
-        type(io_hdf5)       :: viz
+        type(io_hdf5)       :: tke_viz
+        type(io_hdf5)       :: mix_viz
 
         logical, dimension(3) :: averaging_directions = [.true., .true., .true.]
         integer, dimension(2) :: x_bc, y_bc, z_bc
+
+        integer :: ns
 
     contains
 
@@ -44,6 +47,8 @@ module TKEBudgetMod
         procedure          :: get_p_dil
         procedure          :: get_dissipation
         procedure          :: tke_budget
+        procedure          :: get_rhoPsi_bar
+        procedure          :: mixing_budget
         final              :: destructor
 
     end type
@@ -55,13 +60,14 @@ module TKEBudgetMod
 contains
 
     ! function init(gp, der, mesh, dx, dy, dz, averaging_directions, outputdir, x_bc, y_bc, z_bc, reduce_precision) result(this)
-    subroutine init(this, gp, der, mesh, dx, dy, dz, averaging_directions, outputdir, x_bc, y_bc, z_bc, reduce_precision)
+    subroutine init(this, gp, der, mesh, dx, dy, dz, ns, averaging_directions, outputdir, x_bc, y_bc, z_bc, reduce_precision)
         ! type(tkeBudget)                             :: this
         class(tkeBudget)                            :: this
         class(decomp_info), target,      intent(in) :: gp
         class(derivatives), target,      intent(in) :: der
         real(rkind), dimension(:,:,:,:), intent(in) :: mesh
         real(rkind),                     intent(in) :: dx, dy, dz
+        integer,                         intent(in) :: ns
         logical, dimension(3),           intent(in) :: averaging_directions
         character(len=clen),             intent(in) :: outputdir
         integer, dimension(2),           intent(in) :: x_bc, y_bc, z_bc
@@ -78,6 +84,8 @@ contains
         this%x_bc = x_bc
         this%y_bc = y_bc
         this%z_bc = z_bc
+
+        this%ns = ns
 
         reduce_precision_ = .true.
         if (present(reduce_precision)) reduce_precision_ = reduce_precision
@@ -99,11 +107,11 @@ contains
                 ! call this%der_avg%set_ysz( [1, this%gp%ysz(2), this%gp%ysz(3)] )                 ! Set ysz to make arrays 2D
                 ! call this%der_avg%set_zsz( [1, this%gp%zsz(2), this%gp%zsz(3)] )                 ! Set zsz to make arrays 2D
 
-                call GracefulExit("Averaging in X is supported for budgets! :(", 4589)
+                call GracefulExit("Averaging in X is not supported for budgets! :(", 4589)
             end if
 
             if (averaging_directions(2)) then
-                call GracefulExit("Averaging in Y is supported for budgets! :(", 4589)
+                call GracefulExit("Averaging in Y is not supported for budgets! :(", 4589)
             end if
 
             if (averaging_directions(3)) then
@@ -113,12 +121,20 @@ contains
                 call this%gp_avg%init(this%gp%xsz(1),this%gp%ysz(2),this%avg%xy_comm)
 
                 ! Initialize HDF5 output object (only z index of 1 since we're outputting a 1D field)
-                call this%viz%init(mpi_comm_world, this%gp, 'y', outputdir, 'TKEBudget', reduce_precision=reduce_precision_, &
+                call this%tke_viz%init(mpi_comm_world, this%gp, 'y', outputdir, 'TKEBudget', reduce_precision=reduce_precision_, &
                                    read_only=.false., subdomain_lo=[1,1,1], subdomain_hi=[this%gp%xsz(1),this%gp%ysz(2),1], &
                                    jump_to_last=.true.)
 
                 ! Write the coordinates of subdomain out
-                call this%viz%write_coords(mesh)
+                call this%tke_viz%write_coords(mesh)
+
+                ! Initialize HDF5 output object (only z index of 1 since we're outputting a 1D field)
+                call this%mix_viz%init(mpi_comm_world, this%gp, 'y', outputdir, 'MixBudget', reduce_precision=reduce_precision_, &
+                                   read_only=.false., subdomain_lo=[1,1,1], subdomain_hi=[this%gp%xsz(1),this%gp%ysz(2),1], &
+                                   jump_to_last=.true.)
+
+                ! Write the coordinates of subdomain out
+                call this%mix_viz%write_coords(mesh)
             end if
 
         end if
@@ -133,7 +149,8 @@ contains
         nullify(this%gp)
         nullify(this%der)
 
-        call this%viz%destroy()
+        call this%tke_viz%destroy()
+        call this%mix_viz%destroy()
 
     end subroutine
 
@@ -550,54 +567,174 @@ contains
         call this%get_dissipation(tauij, tau_bar, tau_prime, u_pprime_bar, grad_u_pprime, dissipation, diss_mass_flux, diss_fluct)
 
         ! Write out data to output file
-        call this%viz%start_viz(tsim)
-        call this%viz%write_attribute(1, [dt], 'dt', '/')
+        call this%tke_viz%start_viz(tsim)
+        call this%tke_viz%write_attribute(1, [dt], 'dt', '/')
 
-        call this%viz%write_variable(rho_bar, 'rho_bar')
-        call this%viz%write_variable(u_tilde, 'u_tilde')
-        call this%viz%write_variable(v_tilde, 'v_tilde')
-        call this%viz%write_variable(w_tilde, 'w_tilde')
-        call this%viz%write_variable(p_bar,   'p_bar')
+        call this%tke_viz%write_variable(rho_bar, 'rho_bar')
+        call this%tke_viz%write_variable(u_tilde, 'u_tilde')
+        call this%tke_viz%write_variable(v_tilde, 'v_tilde')
+        call this%tke_viz%write_variable(w_tilde, 'w_tilde')
+        call this%tke_viz%write_variable(p_bar,   'p_bar')
 
-        call this%viz%write_variable(tke, 'tke')
-        call this%viz%write_variable(tke_old, 'tke_old')
+        call this%tke_viz%write_variable(tke, 'tke')
+        call this%tke_viz%write_variable(tke_old, 'tke_old')
         do i=1,RK45_steps
             write(varname, '(A,I1.1)') 'tke_prefilter_', i
-            call this%viz%write_variable(tke_prefilter(:,:,:,i), trim(varname))
+            call this%tke_viz%write_variable(tke_prefilter(:,:,:,i), trim(varname))
             write(varname, '(A,I1.1)') 'tke_postfilter_', i
-            call this%viz%write_variable(tke_postfilter(:,:,:,i), trim(varname))
+            call this%tke_viz%write_variable(tke_postfilter(:,:,:,i), trim(varname))
         end do
 
-        call this%viz%write_variable(Rij(:,:,:,1), 'R_11')
-        call this%viz%write_variable(Rij(:,:,:,2), 'R_12')
-        call this%viz%write_variable(Rij(:,:,:,3), 'R_13')
-        call this%viz%write_variable(Rij(:,:,:,4), 'R_22')
-        call this%viz%write_variable(Rij(:,:,:,5), 'R_23')
-        call this%viz%write_variable(Rij(:,:,:,6), 'R_33')
+        call this%tke_viz%write_variable(Rij(:,:,:,1), 'R_11')
+        call this%tke_viz%write_variable(Rij(:,:,:,2), 'R_12')
+        call this%tke_viz%write_variable(Rij(:,:,:,3), 'R_13')
+        call this%tke_viz%write_variable(Rij(:,:,:,4), 'R_22')
+        call this%tke_viz%write_variable(Rij(:,:,:,5), 'R_23')
+        call this%tke_viz%write_variable(Rij(:,:,:,6), 'R_33')
 
-        call this%viz%write_variable(tau_bar(:,:,:,1), 'tau_bar_11')
-        call this%viz%write_variable(tau_bar(:,:,:,2), 'tau_bar_12')
-        call this%viz%write_variable(tau_bar(:,:,:,3), 'tau_bar_13')
-        call this%viz%write_variable(tau_bar(:,:,:,4), 'tau_bar_22')
-        call this%viz%write_variable(tau_bar(:,:,:,5), 'tau_bar_23')
-        call this%viz%write_variable(tau_bar(:,:,:,6), 'tau_bar_33')
+        call this%tke_viz%write_variable(tau_bar(:,:,:,1), 'tau_bar_11')
+        call this%tke_viz%write_variable(tau_bar(:,:,:,2), 'tau_bar_12')
+        call this%tke_viz%write_variable(tau_bar(:,:,:,3), 'tau_bar_13')
+        call this%tke_viz%write_variable(tau_bar(:,:,:,4), 'tau_bar_22')
+        call this%tke_viz%write_variable(tau_bar(:,:,:,5), 'tau_bar_23')
+        call this%tke_viz%write_variable(tau_bar(:,:,:,6), 'tau_bar_33')
 
-        call this%viz%write_variable(u_pprime_bar(:,:,:,1), 'u_pprime_bar')
-        call this%viz%write_variable(u_pprime_bar(:,:,:,2), 'v_pprime_bar')
-        call this%viz%write_variable(u_pprime_bar(:,:,:,3), 'w_pprime_bar')
+        call this%tke_viz%write_variable(u_pprime_bar(:,:,:,1), 'u_pprime_bar')
+        call this%tke_viz%write_variable(u_pprime_bar(:,:,:,2), 'v_pprime_bar')
+        call this%tke_viz%write_variable(u_pprime_bar(:,:,:,3), 'w_pprime_bar')
 
-        call this%viz%write_variable(ddt_tke,         'TKE_rate')
-        call this%viz%write_variable(production,      'production')
-        call this%viz%write_variable(p_dil_fluct,     'p_dil_fluct')
-        call this%viz%write_variable(fluct_p_dil,     'fluct_p_dil')
-        call this%viz%write_variable(baropycnal,      'baropycnal')
-        call this%viz%write_variable(dissipation,     'dissipation')
-        call this%viz%write_variable(diss_mass_flux,  'diss_mass_flux')
-        call this%viz%write_variable(diss_fluct,      'diss_fluct')
-        call this%viz%write_variable(dissipation_num, 'dissipation_num')
+        call this%tke_viz%write_variable(ddt_tke,         'TKE_rate')
+        call this%tke_viz%write_variable(production,      'production')
+        call this%tke_viz%write_variable(p_dil_fluct,     'p_dil_fluct')
+        call this%tke_viz%write_variable(fluct_p_dil,     'fluct_p_dil')
+        call this%tke_viz%write_variable(baropycnal,      'baropycnal')
+        call this%tke_viz%write_variable(dissipation,     'dissipation')
+        call this%tke_viz%write_variable(diss_mass_flux,  'diss_mass_flux')
+        call this%tke_viz%write_variable(diss_fluct,      'diss_fluct')
+        call this%tke_viz%write_variable(dissipation_num, 'dissipation_num')
 
-        call this%viz%end_viz()
+        call this%tke_viz%end_viz()
 
     end subroutine
+
+    subroutine get_rhoPsi_bar(this, rho, Ys, rhoPsi_bar)
+        class(tkeBudget),                                                                                  intent(inout) :: this
+        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3)),                  intent(in)    :: rho
+        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3),      this%ns),    intent(in)    :: Ys
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),this%ns),    intent(out)   :: rhoPsi_bar
+
+        integer :: m
+
+        do m = 1,this%ns
+            ! Get rho*Psi average
+            call this%reynolds_avg(rho*Ys(:,:,:,m)*(one-Ys(:,:,:,m)), rhoPsi_bar(:,:,:,m))
+        end do
+
+    end subroutine
+
+    subroutine mixing_budget(this, rho, u, v, w, Ys, diff, rhoPsi_old, rhoPsi_prefilter, rhoPsi_postfilter, tsim, dt)
+        use RKCoeffs, only: RK45_steps
+        class(tkeBudget),                                                                                  intent(inout) :: this
+        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3)),                  intent(in)    :: rho, u, v, w
+        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3),      this%ns),    intent(in)    :: Ys, diff
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),this%ns),    intent(in)    :: rhoPsi_old
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),this%ns,RK45_steps), intent(in)    :: rhoPsi_prefilter
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),this%ns,RK45_steps), intent(in)    :: rhoPsi_postfilter
+        real(rkind),                                                                                       intent(in)    :: tsim, dt
+
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3))         :: rho_bar
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3))         :: u_tilde, v_tilde, w_tilde
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),this%ns) :: Psi_tilde
+
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),this%ns) :: ddt_Psi
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),this%ns) :: scalar_dissipation
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),this%ns) :: num_scalar_dissipation
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),this%ns) :: mix_turb_flux_x, mix_turb_flux_y, &
+                                                                                                          mix_turb_flux_z
+
+        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3))          :: u_pprime, v_pprime, w_pprime
+        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3))          :: Psi_pprime
+        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3), 3)       :: grad_Ys
+        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3))          :: tmp
+
+        integer :: m, i
+        character(len=clen) :: varname
+
+        ! Get density average
+        call this%reynolds_avg(rho, rho_bar)
+
+        ! Get velocity favre average and fluctuations
+        call this%favre_avg_and_fluct(rho, u, u_tilde, u_pprime)
+        call this%favre_avg_and_fluct(rho, v, v_tilde, v_pprime)
+        call this%favre_avg_and_fluct(rho, w, w_tilde, w_pprime)
+
+        do m = 1,this%ns
+            ! Get Psi favre average and fluctuations
+            call this%favre_avg_and_fluct(rho, Ys(:,:,:,m)*(one-Ys(:,:,:,m)), Psi_tilde(:,:,:,m), Psi_pprime)
+
+            ! Get Psi rate of change
+            ddt_Psi(:,:,:,m) = (rho_bar*Psi_tilde(:,:,:,m) - rhoPsi_old(:,:,:,m))/dt
+
+            ! Get massfraction gradients
+            call gradient(this%gp, this%der, Ys(:,:,:,m), grad_Ys(:,:,:,1), grad_Ys(:,:,:,2), grad_Ys(:,:,:,3),&
+                          this%x_bc, this%y_bc, this%z_bc)
+
+            ! Get scalar_dissipation
+            tmp = two * rho * diff(:,:,:,m) * (grad_Ys(:,:,:,1)**2 + grad_Ys(:,:,:,2)**2 + grad_Ys(:,:,:,3)**2)
+            call this%reynolds_avg(tmp, scalar_dissipation(:,:,:,m))
+
+            ! Get turbulent flux
+            tmp = rho * Psi_pprime * u_pprime
+            call this%reynolds_avg(tmp, mix_turb_flux_x(:,:,:,m))
+            tmp = rho * Psi_pprime * v_pprime
+            call this%reynolds_avg(tmp, mix_turb_flux_y(:,:,:,m))
+            tmp = rho * Psi_pprime * w_pprime
+            call this%reynolds_avg(tmp, mix_turb_flux_z(:,:,:,m))
+        end do
+
+        ! Get numerical dissipation (from filtering)
+        num_scalar_dissipation = sum(rhoPsi_prefilter - rhoPsi_postfilter, 5)/dt
+
+        ! Write out data to output file
+        call this%mix_viz%start_viz(tsim)
+        call this%mix_viz%write_attribute(1, [dt], 'dt', '/')
+
+        call this%mix_viz%write_variable(rho_bar, 'rho_bar')
+
+        do m = 1,this%ns
+            write(varname, '(A,I2.2)') 'Psi_tilde_', m
+            call this%mix_viz%write_variable(Psi_tilde(:,:,:,m), trim(varname))
+
+            do i=1,RK45_steps
+                write(varname, '(A,I2.2,A,I1.1)') 'rhoPsi_prefilter_', m, '_', i
+                call this%tke_viz%write_variable(rhoPsi_prefilter(:,:,:,m,i), trim(varname))
+                write(varname, '(A,I2.2,A,I1.1)') 'rhoPsi_postfilter_', m, '_', i
+                call this%tke_viz%write_variable(rhoPsi_postfilter(:,:,:,m,i), trim(varname))
+            end do
+
+            write(varname, '(A,I2.2)') 'ddt_Psi_tilde_', m
+            call this%mix_viz%write_variable(ddt_Psi(:,:,:,m), trim(varname))
+
+            write(varname, '(A,I2.2)') 'scalar_dissipation_', m
+            call this%mix_viz%write_variable(scalar_dissipation(:,:,:,m), trim(varname))
+
+            write(varname, '(A,I2.2)') 'num_scalar_dissipation_', m
+            call this%mix_viz%write_variable(num_scalar_dissipation(:,:,:,m), trim(varname))
+
+            write(varname, '(A,I2.2)') 'mix_turb_flux_x_', m
+            call this%mix_viz%write_variable(mix_turb_flux_x(:,:,:,m), trim(varname))
+
+            write(varname, '(A,I2.2)') 'mix_turb_flux_y_', m
+            call this%mix_viz%write_variable(mix_turb_flux_y(:,:,:,m), trim(varname))
+
+            write(varname, '(A,I2.2)') 'mix_turb_flux_z_', m
+            call this%mix_viz%write_variable(mix_turb_flux_z(:,:,:,m), trim(varname))
+
+        end do
+
+        call this%mix_viz%end_viz()
+
+    end subroutine
+
 
 end module
