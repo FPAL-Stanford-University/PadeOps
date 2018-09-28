@@ -562,7 +562,7 @@ contains
         call gradient(this%gp, this%der, Ys_ff, grad_Ys_ff(:,:,:,1), grad_Ys_ff(:,:,:,2), grad_Ys_ff(:,:,:,3), this%x_bc, this%y_bc, this%z_bc)
 
         ! Get turbulent generation term
-        Pi_psi = rho_f * (turb_flux(:,:,:,1)*grad_Ys_ff(:,:,:,1) + turb_flux(:,:,:,2)*grad_Ys_ff(:,:,:,2) + turb_flux(:,:,:,3)*grad_Ys_ff(:,:,:,3))
+        Pi_Psi = - two * rho_f * (turb_flux(:,:,:,1)*grad_Ys_ff(:,:,:,1) + turb_flux(:,:,:,2)*grad_Ys_ff(:,:,:,2) + turb_flux(:,:,:,3)*grad_Ys_ff(:,:,:,3))
 
     end subroutine
 
@@ -590,7 +590,7 @@ contains
         call this%favre_filter(rho, rho_f, dYsdz, J_ff(:,:,:,3), this%x_bc, this%y_bc,-this%z_bc)
 
         ! Large scale generation term
-        G_psi = rho_f * (J_ff(:,:,:,1)*grad_Ys_ff(:,:,:,1) + J_ff(:,:,:,2)*grad_Ys_ff(:,:,:,2) + J_ff(:,:,:,3)*grad_Ys_ff(:,:,:,3))
+        G_psi = two * rho_f * (J_ff(:,:,:,1)*grad_Ys_ff(:,:,:,1) + J_ff(:,:,:,2)*grad_Ys_ff(:,:,:,2) + J_ff(:,:,:,3)*grad_Ys_ff(:,:,:,3))
 
     end subroutine
 
