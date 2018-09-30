@@ -3,11 +3,11 @@
 #include "neutral_pbl_files/initialize.F90"       
 #include "neutral_pbl_files/temporalHook.F90"  
 
-program neutral_pbl
+program neutral_pbl_igrid
     use mpi
     use kind_parameters,  only: clen
     use IncompressibleGrid, only: igrid
-    use temporalhook, only: doTemporalStuff
+    use temporalhook, only: doTemporalStuff, initialize_controller_location
     use timer, only: tic, toc
     use exits, only: message
 
@@ -25,10 +25,12 @@ program neutral_pbl
 
     call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
   
-    call igp%start_io(.true.)                !<-- Start I/O by creating a header file (see io.F90)
+    call igp%start_io(.false.)                !<-- Start I/O by creating a header file (see io.F90)
     
     call igp%printDivergence()
   
+    call initialize_controller_location(igp, inputfile)
+
     call tic() 
     do while (igp%tsim < igp%tstop) 
        
