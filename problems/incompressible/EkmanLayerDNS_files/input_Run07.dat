@@ -1,17 +1,17 @@
 &INPUT
-inputdir              = "/scratch/05648/kmatsuno/EkmanNeutral/Run12" !Directory for any input files
-outputdir             = "/scratch/05648/kmatsuno/EkmanNeutral/Run12" ! Directory for all output files
-nx                    = 64         ! Number of points in X
-ny                    = 64    	    ! Number of points in Y
-nz                    = 256         ! Number of points in Z
-tstop                 = 9000000.D0  ! Physical time to stop the simulation
+inputdir              = "/scratch/05648/kmatsuno/EkmanNeutral/Run07" !Directory for any input files
+outputdir             = "/scratch/05648/kmatsuno/EkmanNeutral/Run07" ! Directory for all output files
+nx                    = 128         ! Number of points in X
+ny                    = 128    	    ! Number of points in Y
+nz                    = 512         ! Number of points in Z
+tstop                 = 8500.D0     ! Physical time to stop the simulation
 CFL                   = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 5.D-5       ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 30500     ! TimeID of the restart file being used
-restartFile_RID       = 12          ! RunID of the restart file being used
+restartFile_TID       = 56000     ! TimeID of the restart file being used
+restartFile_RID       = 07          ! RunID of the restart file being used
 CviscDT 		      = 1.d0 	
 /
 /
@@ -29,8 +29,8 @@ donot_dealias         = .FALSE.
 /
 /
 &IO
-RunID                 = 12         ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 1000        ! Restart File Dumping Frequency  (# of timesteps)
+RunID                 = 07         ! Run Label (All output files will be tagged with this nubber)
+t_restartDump         = 500        ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump            = 100        ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: hdf5 files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
@@ -147,10 +147,7 @@ InitFileDirectory = "/home1/05648/kmatsuno/bins/PadeInput_1mode"
 /
 &ProcessingStats
 write_frequency = 500
-compute_frequency = 5
+compute_frequency = 1
 doBudgetCalcs = .TRUE.
-tstart = 1000.d0
-!usePrevStats = .TRUE.
-!fnamePrevStats = "Run12_MomentumBudget_t018500_n002500.stt"
 /
 /

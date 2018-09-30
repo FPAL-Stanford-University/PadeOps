@@ -385,7 +385,7 @@ subroutine hook_probes(inputfile, probe_locs)
     real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
     character(len=*),                intent(in)    :: inputfile
     integer, parameter :: nprobes = 2
-    
+   
     ! IMPORTANT : Convention is to allocate probe_locs(3,nprobes)
     ! Example: If you have at least 3 probes:
     ! probe_locs(1,3) : x -location of the third probe
@@ -397,7 +397,7 @@ subroutine hook_probes(inputfile, probe_locs)
     ! Example code: The following allocates 2 probes at (0.1,0.1,0.1) and
     ! (0.2,0.2,0.2)  
     allocate(probe_locs(3,nprobes))
-    probe_locs(1,1) = 0.1d0; probe_locs(2,1) = 0.1d0; probe_locs(3,1) = 0.1d0;
+    probe_locs(4,1) = 0.1d0; probe_locs(2,1) = 0.1d0; probe_locs(3,1) = 0.1d0;
     probe_locs(1,2) = 0.2d0; probe_locs(2,2) = 0.2d0; probe_locs(3,2) = 0.2d0;
 
 
