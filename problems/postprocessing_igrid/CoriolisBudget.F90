@@ -267,7 +267,7 @@ program CoriolisBudget
       budget_MKE_time(:,idx,5) = C_mke(:,idx)    
  
       ! Get turbine forcing
-      if (isTurbines == .true.) then
+      if (isTurbines) then
           call ops%get_turbine_RHS(u, v, w, buff1, buff2, buff3)
           call ops%TakeMean_xy(buff1, buff1d_1)
           turbine_u = turbine_u + buff1d_1
@@ -325,7 +325,7 @@ program CoriolisBudget
       call toc()
    end do 
    ! Destrio
-   if (isTurbines == .true.) then
+   if (isTurbines) then
        call ops%destroy_turbine_array()
    end if
 
