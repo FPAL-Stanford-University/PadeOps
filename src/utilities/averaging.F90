@@ -111,7 +111,8 @@ contains
 
     end function
 
-    impure elemental subroutine destroy(this)
+    ! impure elemental subroutine destroy(this)
+    subroutine destroy(this)
         type(averaging), intent(inout) :: this
 
         if (allocated(this%buffer_x)) deallocate(this%buffer_x)
@@ -134,7 +135,8 @@ contains
         real(rkind), dimension(size(f,2), size(f,3))                   :: p_avg
         integer :: ierr
         
-        if (size(f,1) == 1) then
+        ! if (size(f,1) == 1) then
+        if (this%gp%xsz(1) == 1) then
             avg = f
             return
         end if
@@ -157,7 +159,8 @@ contains
         real(rkind), dimension(size(f,1), size(f,3))                   :: p_avg
         integer :: ierr
         
-        if (size(f,2) == 1) then
+        ! if (size(f,2) == 1) then
+        if (this%gp%ysz(2) == 1) then
             avg = f
             return
         end if
@@ -180,7 +183,8 @@ contains
         real(rkind), dimension(size(f,1), size(f,2))                   :: p_avg
         integer :: ierr
         
-        if (size(f,3) == 1) then
+        ! if (size(f,3) == 1) then
+        if (this%gp%zsz(3) == 1) then
             avg = f
             return
         end if

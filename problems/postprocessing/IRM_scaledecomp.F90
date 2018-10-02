@@ -226,10 +226,12 @@ contains
         call filter(gfil, v, v_f, x_bc,-y_bc, z_bc)
         call filter(gfil, w, w_f, x_bc, y_bc,-z_bc)
 
-        call divergence( mir%gp, der, u_f, v_f, w_f, divu,-x_bc,-y_bc,-z_bc )
+        ! call divergence( mir%gp, der, u_f, v_f, w_f, divu,-x_bc,-y_bc,-z_bc )
+        call divergence( mir%gp, der, u_f, v_f, w_f, divu,x_bc,y_bc,z_bc )
         pdil_L = p_f*divu ! filter(p) * divergence( filter(velocity) )
 
-        call divergence( mir%gp, der, u, v, w, divu,-x_bc,-y_bc,-z_bc )
+        ! call divergence( mir%gp, der, u, v, w, divu,-x_bc,-y_bc,-z_bc )
+        call divergence( mir%gp, der, u, v, w, divu,x_bc,y_bc,z_bc )
         divu = p*divu
         call filter(gfil, divu, pdil_S, x_bc, y_bc, z_bc)
         pdil_S = pdil_S - pdil_L    ! filter( p * divergence(velocity) ) - filter(p)*divergence( filter(velocity) )
@@ -289,6 +291,7 @@ end module
 
 program IRM_scaledecomp
     use mpi
+    use hdf5
     use kind_parameters,    only: rkind, clen
     use constants,          only: zero
     use miranda_reader_mod, only: miranda_reader
@@ -324,7 +327,7 @@ program IRM_scaledecomp
     character(len=clen) :: outputfile
     integer :: iounit = 93
 
-    integer :: ierr, istep, step, i
+    integer :: ierr, error, istep, step, i
 
     !======================================================================================================!
     ! Note about usage: All 3D arrays are in Y decomposition.
@@ -334,6 +337,10 @@ program IRM_scaledecomp
     !======================================================================================================!
 
     call MPI_Init(ierr)
+
+    ! Initialize the HDF5 library and Fortran interfaces
+    call h5open_f(error)
+    if (error /= 0) call GracefulExit("Could not initialize HDF5 library and Fortran interfaces.",7356)
 
     call tic()
 
@@ -520,6 +527,10 @@ program IRM_scaledecomp
     if ( writeviz ) then
         call viz%destroy()
     end if
+
+    ! Close Fortran interfaces and HDF5 library
+    call h5close_f(error)
+
     call MPI_Finalize(ierr)
 
 end program 

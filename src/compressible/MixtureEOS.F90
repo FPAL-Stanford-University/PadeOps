@@ -44,7 +44,8 @@ module MixtureEOSMod
         procedure :: get_e_from_p
         procedure :: get_sos
         procedure :: get_transport_properties
-        final     :: destroy
+        ! final     :: destroy
+        procedure :: destroy
 
     end type
 
@@ -304,7 +305,8 @@ contains
     end subroutine
 
     subroutine destroy(this)
-        type(mixture), intent(inout)  :: this
+        ! type(mixture), intent(inout)  :: this
+        class(mixture), intent(inout)  :: this
         integer :: i
 
         do i = 1,this%ns

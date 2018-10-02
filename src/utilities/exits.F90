@@ -151,7 +151,8 @@ contains
             do k = 1,size(f,3)
                 do j = 1,size(f,2)
                     do i = 1,size(f,1)
-                        if ( isnan(f(i,j,k,l)) .OR. ( f(i,j,k,l) + one == f(i,j,k,l) ) ) then
+                        ! if ( isnan(f(i,j,k,l)) .OR. ( f(i,j,k,l) + one == f(i,j,k,l) ) ) then
+                        if ( ( f(i,j,k,l) + one == f(i,j,k,l) ) ) then
                             nancheck = .TRUE.
                             exit
                         end if
@@ -173,7 +174,8 @@ contains
         do k = 1,size(f,3)
             do j = 1,size(f,2)
                 do i = 1,size(f,1)
-                    if ( isnan(f(i,j,k)) .OR. ( f(i,j,k) + one == f(i,j,k) ) ) then
+                    ! if ( isnan(f(i,j,k)) .OR. ( f(i,j,k) + one == f(i,j,k) ) ) then
+                    if ( ( f(i,j,k) + one == f(i,j,k) ) ) then
                         nancheck = .TRUE.
                         exit
                     end if
@@ -194,7 +196,8 @@ contains
             do k = 1,size(f,3)
                 do j = 1,size(f,2)
                     do i = 1,size(f,1)
-                        if ( isnan(f(i,j,k,l)) .OR. ( f(i,j,k,l) + one == f(i,j,k,l) ) ) then
+                        ! if ( isnan(f(i,j,k,l)) .OR. ( f(i,j,k,l) + one == f(i,j,k,l) ) ) then
+                        if ( ( f(i,j,k,l) + one == f(i,j,k,l) ) ) then
                             nancheck = .TRUE.
                             exit
                         end if

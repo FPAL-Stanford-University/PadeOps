@@ -9,6 +9,7 @@ module CHIT_data
     real(rkind) :: mu_ref
     real(rkind) :: T_ref = 1._rkind / 1.4_rkind
     real(rkind) :: Pr = 0.70_rkind
+    logical     :: useRestart = .false.
 
 end module
 
@@ -88,7 +89,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind) :: u_dat, v_dat, w_dat
     character(len=clen) :: datafile
 
-    namelist /PROBINPUT/  Mt, Re_lambda, visc_exp, Pr, gam, k0, datafile
+    namelist /PROBINPUT/  Mt, Re_lambda, visc_exp, Pr, gam, k0, datafile, useRestart
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -105,6 +106,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         
         rho = one
         p   = one / gam
+        u   = zero
+        v   = zero
+        w   = zero
 
         mu_ref = Mt * half / (Re_lambda * sqrt(three))
         T_ref = 1._rkind / gam
@@ -114,41 +118,44 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
                                                     bulkvisc = constRatioBulkViscosity(zero), &
                                                     thermcond = constPrandtlConductivity(Pr) )
 
-        ! Make all processes read the file one by one to avoid file access conflicts
-        do rank = 0,nproc-1
-            call MPI_Barrier(MPI_COMM_WORLD, ierr)
-            if (nrank == rank) then
-                open(unit=ioUnit, file=trim(datafile), form='FORMATTED')
-                read(ioUnit,*) ix_dat, iy_dat, iz_dat
+        if (.not. useRestart) then
+            ioUnit = 27
+            ! Make all processes read the file one by one to avoid file access conflicts
+            do rank = 0,nproc-1
+                call MPI_Barrier(MPI_COMM_WORLD, ierr)
+                if (nrank == rank) then
+                    open(unit=ioUnit, file=trim(datafile), form='FORMATTED')
+                    read(ioUnit,*) ix_dat, iy_dat, iz_dat
 
-                if ((ix_dat /= nx) .or. (iy_dat /= ny) .or. (iz_dat /= nz)) then
-                    call GracefulExit("Grid size in datafile does not match simulation grid size. Exiting...", 4652)
-                end if
+                    if ((ix_dat /= nx) .or. (iy_dat /= ny) .or. (iz_dat /= nz)) then
+                        call GracefulExit("Grid size in datafile does not match simulation grid size. Exiting...", 4652)
+                    end if
 
-                counter = 0
+                    counter = 0
 
-                ! Read in velocity data from file (u_rms = 1)
-                do while (counter < decomp%ysz(1)*decomp%ysz(2)*decomp%ysz(3))
-                  read(ioUnit,*) ix_dat, iy_dat, iz_dat, u_dat, v_dat, w_dat
-                  ix_dat = ix_dat + 1; iy_dat = iy_dat + 1; iz_dat = iz_dat + 1 ! Convert to 1 based indexing
+                    ! Read in velocity data from file (u_rms = 1)
+                    do while (counter < decomp%ysz(1)*decomp%ysz(2)*decomp%ysz(3))
+                      read(ioUnit,*) ix_dat, iy_dat, iz_dat, u_dat, v_dat, w_dat
+                      ix_dat = ix_dat + 1; iy_dat = iy_dat + 1; iz_dat = iz_dat + 1 ! Convert to 1 based indexing
 
-                  if ( (ix_dat >= decomp%yst(1)) .and. (ix_dat <= decomp%yen(1)) ) then
-                      if ( (iy_dat >= decomp%yst(2)) .and. (iy_dat <= decomp%yen(2)) ) then
-                          if ( (iz_dat >= decomp%yst(3)) .and. (iz_dat <= decomp%yen(3)) ) then
-                              ix = ix_dat - decomp%yst(1) + 1
-                              iy = iy_dat - decomp%yst(2) + 1
-                              iz = iz_dat - decomp%yst(3) + 1
-                              u(ix,iy,iz) = u_dat
-                              v(ix,iy,iz) = v_dat
-                              w(ix,iy,iz) = w_dat
-                              counter = counter + 1
+                      if ( (ix_dat >= decomp%yst(1)) .and. (ix_dat <= decomp%yen(1)) ) then
+                          if ( (iy_dat >= decomp%yst(2)) .and. (iy_dat <= decomp%yen(2)) ) then
+                              if ( (iz_dat >= decomp%yst(3)) .and. (iz_dat <= decomp%yen(3)) ) then
+                                  ix = ix_dat - decomp%yst(1) + 1
+                                  iy = iy_dat - decomp%yst(2) + 1
+                                  iz = iz_dat - decomp%yst(3) + 1
+                                  u(ix,iy,iz) = u_dat
+                                  v(ix,iy,iz) = v_dat
+                                  w(ix,iy,iz) = w_dat
+                                  counter = counter + 1
+                              end if
                           end if
                       end if
-                  end if
-                end do
-                close(ioUnit)
-            end if
-        end do
+                    end do
+                    close(ioUnit)
+                end if
+            end do
+        end if
 
         u_rms0 = Mt / sqrt(three)
         u = u_rms0 * u
@@ -191,6 +198,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     character(len=clen) :: outputfile, str
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tke, enstrophy, dilatation
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),3) :: vorticity
+    real(rkind) :: tke_mean, enstrophy_mean, dilatation_var
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -213,13 +221,25 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
             tke0 = P_MEAN( tke )
             enstrophy0 = P_MEAN( vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2 )
             dilatation_var0 = P_MEAN( dilatation**2 )
-            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-            write(outputunit,'(4A26)') "Time", "Velocity Var", "Enstrophy", "Dilatation Var"
+            if (nrank == 0) then
+                open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
+                write(outputunit,'(4A26)') "Time", "Velocity Var", "Enstrophy", "Dilatation Var"
+            end if
         else
-            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
+            if (nrank == 0) then
+                open(unit=outputunit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
+            end if
         end if
-        write(outputunit,'(4ES26.16)') tsim, P_MEAN(tke)/tke0, P_MEAN(enstrophy)/(u_rms0**2 / lambda0**2), P_MEAN(dilatation**2)/(u_rms0**2 / lambda0**2)
-        close(outputunit)
+
+        tke_mean = P_MEAN( tke )
+        enstrophy_mean = P_MEAN( vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2 )
+        dilatation_var = P_MEAN( dilatation**2 )
+
+        if (nrank == 0) then
+            ! write(outputunit,'(4ES26.16)') tsim, tke_mean/tke0, enstrophy_mean/(u_rms0**2 / lambda0**2), dilatation_var/(u_rms0**2 / lambda0**2)
+            write(outputunit,'(4ES26.16)') tsim, tke_mean, enstrophy_mean, dilatation_var
+            close(outputunit)
+        end if
         
         ! write(str,'(I4.4,A,I4.4,A,I6.6)') decomp%ysz(2), "_", vizcount, "_", nrank
         ! write(outputfile,'(2A)') trim(outputdir),"/CHIT_"//trim(str)//".dat"
@@ -268,7 +288,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
+subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use kind_parameters,  only: rkind
     use constants,        only: half
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
@@ -281,7 +301,8 @@ subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
-    type(mixture),                   intent(in)    :: mix
+    type(mixture),                   intent(in) :: mix
+    integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
@@ -305,7 +326,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
     end associate
 end subroutine
 
-subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
+subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
     use kind_parameters, only: rkind
     use decomp_2d,       only: decomp_info
     use MixtureEOSMod,   only: mixture
@@ -319,5 +340,6 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
+    real(rkind), dimension(:,:,:,:), optional, intent(inout) ::rhsg
 
 end subroutine

@@ -1,24 +1,27 @@
 program test_io_hdf5
     use mpi
+    use hdf5
     use kind_parameters, only : rkind, single_kind
     use decomp_2d
     use decomp_2d_io
     use constants,       only: eps, two, pi
-    use exits,           only: message
+    use exits,           only: message, GracefulExit
     use reductions,      only: P_MAXVAL
     use io_hdf5_stuff,   only: io_hdf5
 
     implicit none
 
     real(rkind), dimension(:,:,:,:), allocatable, target :: coords, coords_read
-    real(rkind), dimension(:,:,:),   allocatable :: f,dfdx, dfdy, dfdz
+    real(rkind), dimension(:,:,:,:), allocatable, target :: fields
+    real(rkind), dimension(:,:,:),   pointer     :: f,dfdx, dfdy, dfdz
     real(rkind), dimension(:,:,:),   pointer     :: x, y, z
     type(decomp_info) :: gp
     type(io_hdf5)     :: viz
 
-    integer :: nx = 128, ny = 192, nz = 129
+    ! integer :: nx = 128, ny = 192, nz = 129
+    integer :: nx = 2048, ny = 128, nz = 32
     integer :: prow = 0, pcol = 0
-    integer :: ierr, i, j, k, iter
+    integer :: ierr, i, j, k, iter, error
 
     real(rkind) :: dx, dy, dz
     real(rkind) :: time
@@ -37,15 +40,25 @@ program test_io_hdf5
     call decomp_2d_init(nx, ny, nz, prow, pcol)
     call get_decomp_info(gp)
 
+    ! Initialize the HDF5 library and Fortran interfaces
+    call h5open_f(error)
+    if (error /= 0) call GracefulExit("Could not initialize HDF5 library and Fortran interfaces.",7356)
+
     ! Initialize input data (y decomposition)
     allocate( coords     ( gp%ysz(1), gp%ysz(2), gp%ysz(3), 3 ) )
     allocate( coords_read( gp%ysz(1), gp%ysz(2), gp%ysz(3), 3 ) )
-    allocate( f          ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
-    allocate( dfdx       ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
-    allocate( dfdy       ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
-    allocate( dfdz       ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
+    allocate( fields     ( gp%ysz(1), gp%ysz(2), gp%ysz(3), 4 ) )
+    ! allocate( f          ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
+    ! allocate( dfdx       ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
+    ! allocate( dfdy       ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
+    ! allocate( dfdz       ( gp%ysz(1), gp%ysz(2), gp%ysz(3)    ) )
 
     x => coords(:,:,:,1); y => coords(:,:,:,2); z => coords(:,:,:,3)
+
+    f    => fields(:,:,:,1)
+    dfdx => fields(:,:,:,2)
+    dfdy => fields(:,:,:,3)
+    dfdz => fields(:,:,:,4)
 
     dx = two*pi/nx
     dy = two*pi/ny
@@ -64,8 +77,10 @@ program test_io_hdf5
 
     ! subdomain_lo = [      1,      1,      1]
     ! subdomain_hi = [     nx,     ny,     nz]
-    subdomain_lo = [   nx/4,   ny/4,   nz/4]
-    subdomain_hi = [ 3*nx/4, 3*ny/4, 3*nz/4]
+    subdomain_lo = [      1,      1,      1]
+    subdomain_hi = [     nx,     ny,      1]
+    ! subdomain_lo = [   nx/4,   ny/4,   nz/4]
+    ! subdomain_hi = [ 3*nx/4, 3*ny/4, 3*nz/4]
 
     if (nrank == 0) then
         print *, ""
@@ -74,20 +89,26 @@ program test_io_hdf5
     end if
 
     if (reduce_precision) then
-        elemsize = storage_size(1._single_kind)
+        elemsize = 4*8 ! storage_size(1._single_kind)
         tolerance = 10._rkind*epsilon(real(1.0,single_kind))
     else
-        elemsize = storage_size(1._rkind)
+        elemsize = 8*8 ! storage_size(1._rkind)
         tolerance = 10._rkind*epsilon(real(1.0,rkind))
     end if
     gbytes = ( real(elemsize, rkind) * product(subdomain_hi - subdomain_lo + 1) * 4 ) / ( real(8, rkind) * 1024 * 1024 * 1024 )
+
+    call message("Initializing HDF5 I/O object")
 
     ! Initialize everything
     call viz%init(mpi_comm_world, gp, 'y', '.', 'parallel_hdf5_io', reduce_precision=reduce_precision, read_only=.false., &
                   subdomain_lo=subdomain_lo, subdomain_hi=subdomain_hi)
 
+    call message("Finished initializing HDF5 I/O object")
+
     ! Write mesh coordinates to file
     call viz%write_coords(coords)
+
+    call message("Finished writing coords file")
 
     do iter=1,4
         call message("Starting viz dump", viz%vizcount)
@@ -98,28 +119,28 @@ program test_io_hdf5
         dfdy =  sin(iter*x)*cos(iter*y)*cos(iter*z)*iter
         dfdz = -sin(iter*x)*sin(iter*y)*sin(iter*z)*iter
 
-        call mpi_barrier(mpi_comm_world, ierr)
+        ! call mpi_barrier(mpi_comm_world, ierr)
         t0 = mpi_wtime()
 
         ! Start vizualization dump
         call viz%start_viz(time)
 
-        call mpi_barrier(mpi_comm_world, ierr)
+        ! call mpi_barrier(mpi_comm_world, ierr)
         t1 = mpi_wtime()
 
         ! Add variables to file
-        call viz%write_variable(f,    'f'   )
-        call viz%write_variable(dfdx, 'dfdx')
-        call viz%write_variable(dfdy, 'dfdy')
-        call viz%write_variable(dfdz, 'dfdz')
+        call viz%write_variable(f(:,:,1:1),    'f'   )
+        call viz%write_variable(dfdx(:,:,1:1), 'dfdx')
+        call viz%write_variable(dfdy(:,:,1:1), 'dfdy')
+        call viz%write_variable(dfdz(:,:,1:1), 'dfdz')
 
-        call mpi_barrier(mpi_comm_world, ierr)
+        ! call mpi_barrier(mpi_comm_world, ierr)
         t2 = mpi_wtime()
 
         ! End vizualization dump
         call viz%end_viz()
 
-        call mpi_barrier(mpi_comm_world, ierr)
+        ! call mpi_barrier(mpi_comm_world, ierr)
         t3 = mpi_wtime()
 
         call decomp_2d_write_one(2, f,    'f.dat',    gp)
@@ -127,7 +148,7 @@ program test_io_hdf5
         call decomp_2d_write_one(2, dfdy, 'dfdy.dat', gp)
         call decomp_2d_write_one(2, dfdz, 'dfdz.dat', gp)
 
-        call mpi_barrier(mpi_comm_world, ierr)
+        ! call mpi_barrier(mpi_comm_world, ierr)
         t4 = mpi_wtime()
 
         if (nrank == 0) then
@@ -203,11 +224,15 @@ program test_io_hdf5
         call viz%end_reading
     end do
 
-    deallocate(coords, coords_read, f, dfdx,dfdy, dfdz)
-    nullify(x, y, z)
+    deallocate(coords, coords_read, fields)
+    nullify(x, y, z, f, dfdx,dfdy, dfdz)
 
     call viz%destroy()
     call decomp_2d_finalize
+
+    ! Close Fortran interfaces and HDF5 library
+    call h5close_f(error)
+
     call MPI_Finalize(ierr)
 
 end program

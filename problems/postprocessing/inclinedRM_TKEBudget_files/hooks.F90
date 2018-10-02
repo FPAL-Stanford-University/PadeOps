@@ -1,4 +1,4 @@
-module inclinedRM_data
+module inclinedRM_TKEBudget_data
     use kind_parameters,  only: rkind, mpirkind, clen
     use constants,        only: zero, one
     use FiltersMod,       only: filters
@@ -284,7 +284,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use constants,        only: zero, half, one
     use decomp_2d,        only: decomp_info
 
-    use inclinedRM_data
+    use inclinedRM_TKEBudget_data
 
     implicit none
 
@@ -353,7 +353,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use exits,                       only: GracefulExit, message, nancheck
     use mpi
     
-    use inclinedRM_data
+    use inclinedRM_TKEBudget_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -719,7 +719,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use DerivativesMod,   only: derivatives
     use MixtureEOSMod,    only: mixture
 
-    use inclinedRM_data
+    use inclinedRM_TKEBudget_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -766,7 +766,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use MixtureEOSMod,    only: mixture
     use operators,        only: filter3D
 
-    use inclinedRM_data
+    use inclinedRM_TKEBudget_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -840,7 +840,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use exits,            only: message
     use reductions,       only: P_MAXVAL,P_MINVAL
 
-    use inclinedRM_data
+    use inclinedRM_TKEBudget_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -890,7 +890,7 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
     use decomp_2d,       only: decomp_info
     use MixtureEOSMod,    only: mixture
 
-    use inclinedRM_data
+    use inclinedRM_TKEBudget_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
