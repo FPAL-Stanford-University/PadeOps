@@ -23,7 +23,7 @@ program PlasticRelaxation
     call sgp%simulate()
         
     ! Destroy everythin before ending
-    call sgp%destroy()
+    call sgp%destroy_grid()
 
     ! End the run
     call MPI_Finalize(ierr)

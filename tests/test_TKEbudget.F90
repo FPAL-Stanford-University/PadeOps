@@ -24,7 +24,6 @@ program test_TKEBudget
     integer, dimension(2) :: z_bc = [0, 0]
 
     logical :: periodicx = .false., periodicy = .false., periodicz = .true.
-    logical, dimension(3) :: averaging_directions
 
     real(rkind) :: dt = real(1.0D-4, rkind)
 
@@ -67,7 +66,7 @@ program test_TKEBudget
 
     ! Initialize budget object
     outputdir = "./outputs"
-    call budget%init(mir%gp, der, mir%mesh, mir%dx, mir%dy, mir%dz, [periodicx, periodicy, periodicz], outputdir, x_bc, y_bc, z_bc, .true.)
+    call budget%init(mir%gp, der, mir%mesh, mir%dx, mir%dy, mir%dz, mir%ns, [periodicx, periodicy, periodicz], outputdir, x_bc, y_bc, z_bc, .true.)
 
     allocate( tke_old       (mir%gp%ysz(1), mir%gp%ysz(2), mir%gp%ysz(3)) )
     allocate( tke_prefilter (mir%gp%ysz(1), mir%gp%ysz(2),mir%gp%ysz(3),RK45_steps) )

@@ -170,8 +170,8 @@ program HIT_AD_interact
     call hit%finalize_io()          
     call adsim%finalize_io()         
 
-    call hit%destroy()                
-    call adsim%destroy()               
+    call hit%destroy_grid()                
+    call adsim%destroy_grid()               
    
     deallocate(hit, adsim)             
     
