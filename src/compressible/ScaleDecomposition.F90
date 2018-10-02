@@ -608,9 +608,9 @@ contains
         real(rkind), dimension(this%gp%ysz(1), this%gp%ysz(2), this%gp%ysz(3)) :: T_x, T_y, T_z
 
         ! Large scale advection fluxes
-        T_x = rho_f * rhoPsi * u_ff
-        T_y = rho_f * rhoPsi * v_ff
-        T_z = rho_f * rhoPsi * w_ff
+        T_x = rhoPsi * u_ff
+        T_y = rhoPsi * v_ff
+        T_z = rhoPsi * w_ff
 
         ! Divergence of transport fluxes
         call divergence( this%gp, this%der, T_x, T_y, T_z, advection, this%x_bc, this%y_bc, this%z_bc )
