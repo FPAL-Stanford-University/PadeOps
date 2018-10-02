@@ -3,7 +3,8 @@ program CoriolisBudget
    use igrid_Operators, only: igrid_ops
    use constants, only: pi, two
    use mpi
-   use decomp_2d, only: nrank 
+   use decomp_2d, only: nrank
+   use decomp_2d_io 
    use timer, only: tic, toc
    use exits, only: message
    implicit none
@@ -12,17 +13,17 @@ program CoriolisBudget
    real(rkind), dimension(:,:,:), allocatable :: dudx, dudy, dudz
    real(rkind), dimension(:,:,:), allocatable :: dvdx, dvdy, dvdz
    real(rkind), dimension(:,:,:), allocatable :: dwdx, dwdy, dwdz
-   real(rkind), dimension(:,:,:), allocatable :: u, v, w, ufluct, vfluct, T,  Tfluct, P, kSGS, nSGS, Pfluct, wfluct
+   real(rkind), dimension(:,:,:), allocatable :: u, v, w, ufluct, vfluct, T,  Tfluct, P, kSGS, nSGS, Pfluct, wfluct, wE
    real(rkind), dimension(:,:,:), allocatable :: tau_11, tau_12, tau_13, tau_23, tau_22, tau_33
    real(rkind) :: dx, dy, dz, Rib = 0.05d0, Pr = 1.d0, Tref = 100.d0 
    integer :: nx, ny, nz, RunID, TIDX
    type(igrid_ops) :: ops
    character(len=clen) ::  inputdir, outputdir
-   character(len=clen) :: inputfile
+   character(len=clen) :: inputfile, tempname, fname
    real(rkind) :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0, Ro, Fr, omega_2, omega_3, G_1, G_2
    real(rkind) :: latitude, frameAngle
    integer :: idx, ierr, tstart, tstop, tstep, NumericalSchemeVert = 1
-   logical :: isZPeriodic = .false., isTurbines = .true. 
+   logical :: isZPeriodic = .false., isTurbines = .true., noisy = .FALSE. 
    real(rkind), dimension(:,:), allocatable :: R11, R12, R13, R22, R23, R33, TT, T13, T23
    real(rkind), dimension(:,:,:), allocatable :: S11, S12, S13, S22, S23, S33
    real(rkind), dimension(:,:,:), allocatable :: S11m, S12m, S13m, S22m, S23m, S33m
@@ -37,7 +38,7 @@ program CoriolisBudget
    real(rkind), dimension(:,:,:), allocatable :: budget_MKE_time, R_time
    integer :: nt 
 
-   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, NumericalSchemeVert, VizDump_Schedule, Ro, Fr, G_1, G_2, latitude, frameAngle, isTurbines
+   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tstart, tstop, tstep, nx, ny, nz, NumericalSchemeVert, VizDump_Schedule, Ro, Fr, G_1, G_2, latitude, frameAngle, isTurbines, noisy
    
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
@@ -87,8 +88,8 @@ program CoriolisBudget
    call ops%allocate3Dfield(S13m)
    call ops%allocate3Dfield(S22m)
    call ops%allocate3Dfield(S23m)
-   call ops%allocate3Dfield(S33m)  
-  
+   call ops%allocate3Dfield(S33m)   
+ 
    call ops%allocate3DField(buff1)
    call ops%allocate3DField(buff2)
    call ops%allocate3DField(buff3)
@@ -103,6 +104,7 @@ program CoriolisBudget
    allocate(turbine_u(nz))
    allocate(turbine_v(nz))
    allocate(turbine_w(nz))
+   !allocate(wE(ops%gpE%xsz(1),ops%gpE%xsz(2),ops%gpE%xsz(3)))
    turbine_u = 0.
    turbine_v = 0.
    turbine_w = 0.
@@ -154,7 +156,7 @@ program CoriolisBudget
     
     
     !end if 
-    allocate(budget_MKE(nz,14))
+    allocate(budget_MKE(nz,16))
     allocate(budget_MKE_time(nz,nt,6))
     allocate(R_time(nz,nt,2))
     allocate(Rij_mean(nz,6))
@@ -184,7 +186,12 @@ program CoriolisBudget
       !call ops%ReadField3D(kSGS,'kSGS',TIDX)
       call ops%ReadField3D(nSGS,'nSGS',TIDX)
       call ops%ReadField3D(P,'prss', TIDX)
+      !call ops%ReadField3DEdge(wE, 'wVel', TIDX)
       !call message(0, "Read simulation data at time:", times(idx))
+      ! Read edge velocity
+      !write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",RunID, "_w.",TIDX
+      !fname = ops%InputDir(:len_trim(ops%InputDir))//"/"//trim(tempname)
+      !call decomp_2d_read_one(1, wE, fname, ops%gpE)
 
 
       ! STEP 2: Compute velocity gradients
@@ -339,14 +346,25 @@ program CoriolisBudget
    budget_MKE(:,4) = (sum(T23,2)/real(idx,rkind))*buff1d_1
     
    ! STEP 2: Compute Transfer 
-   buff1d_1 = (sum(R13,2)/real(idx,rkind))*(sum(umn_set,2)/real(idx,rkind))
-   call ops%ddz_1d(buff1d_1,budget_MKE(:,5),0,-1)
-   buff1d_1 = (sum(R23,2)/real(idx,rkind))*(sum(vmn_set,2)/real(idx,rkind))
-   call ops%ddz_1d(buff1d_1,budget_MKE(:,6),0,-1)
-   buff1d_1 = (sum(T13,2)/real(idx,rkind))*(sum(umn_set,2)/real(idx,rkind))
-   call ops%ddz_1d(buff1d_1,budget_MKE(:,7),0,-1)
-   buff1d_1 = (sum(T23,2)/real(idx,rkind))*(sum(vmn_set,2)/real(idx,rkind))
-   call ops%ddz_1d(buff1d_1,budget_MKE(:,8),0,-1)
+   if (noisy == .TRUE.) then
+       buff1d_1 = (sum(R13,2)/real(idx,rkind))*(sum(umn_set,2)/real(idx,rkind))
+       call ops%ddz_1d(buff1d_1,budget_MKE(:,5),0,-1)
+       buff1d_1 = (sum(R23,2)/real(idx,rkind))*(sum(vmn_set,2)/real(idx,rkind))
+       call ops%ddz_1d(buff1d_1,budget_MKE(:,6),0,-1)
+       buff1d_1 = (sum(T13,2)/real(idx,rkind))*(sum(umn_set,2)/real(idx,rkind))
+       call ops%ddz_1d(buff1d_1,budget_MKE(:,7),0,-1)
+       buff1d_1 = (sum(T23,2)/real(idx,rkind))*(sum(vmn_set,2)/real(idx,rkind))
+       call ops%ddz_1d(buff1d_1,budget_MKE(:,8),0,-1)
+   else 
+       call ops%ddz_1d(sum(R13,2)/real(idx,rkind), buff1d_1, 0, -1) 
+       budget_MKE(:,5) = budget_MKE(:, 1) + buff1d_1 * sum(umn_set,2)/real(idx,rkind)
+       call ops%ddz_1d(sum(R23,2)/real(idx,rkind), buff1d_1, 0, -1) 
+       budget_MKE(:,6) = budget_MKE(:, 2) + buff1d_1 * sum(vmn_set,2)/real(idx,rkind)
+       call ops%ddz_1d(sum(T13,2)/real(idx,rkind), buff1d_1, 0, -1) 
+       budget_MKE(:,7) = budget_MKE(:, 3) + buff1d_1 * sum(umn_set,2)/real(idx,rkind)
+       call ops%ddz_1d(sum(T23,2)/real(idx,rkind), buff1d_1, 0, -1) 
+       budget_MKE(:,8) = budget_MKE(:, 4) + buff1d_1 * sum(vmn_set,2)/real(idx,rkind)
+   end if
 
 
    budget_MKE(:,9) = sum(C_mke, 2) / real(idx, rkind)
@@ -357,6 +375,9 @@ program CoriolisBudget
    budget_MKE(:,12) = (sum(R23,2)/real(idx,rkind))*(sum(vmn_set,2)/real(idx,rkind))
    budget_MKE(:,13) = sum(umn_set,2)/real(idx,rkind)
    budget_MKE(:,14) = sum(vmn_set,2)/real(idx,rkind)
+   budget_MKE(:,15) = sum(Tmn_set,2)/real(idx,rkind)
+   budget_MKE(:,16) = sum(wT,2)/real(idx,rkind)
+       
 
    ! Reynolds stresses
    Rij_mean(:,1) = sum(R11,2) / real(idx, rkind) 
