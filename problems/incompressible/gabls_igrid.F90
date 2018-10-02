@@ -7,7 +7,7 @@ program gabls_igrid
     use mpi
     use kind_parameters,  only: clen
     use IncompressibleGrid, only: igrid
-    use temporalhook, only: doTemporalStuff
+    use temporalhook, only: doTemporalStuff, initialize_controller_location
     use timer, only: tic, toc
     use exits, only: message
 
@@ -29,6 +29,8 @@ program gabls_igrid
     
     call igp%printDivergence()
   
+    call initialize_controller_location(igp, inputfile)
+
     call tic() 
     do while (igp%tsim < igp%tstop) 
        

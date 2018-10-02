@@ -63,18 +63,18 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
 
 
     u = one
-    v = one
+    v = zero
     wC = zero
     ! Added to account for frame angle    
-    u = u * cos(frameAngle * pi / 180.d0)
-    v = v * sin(frameAngle * pi / 180.d0) 
+    !u = u * cos(frameAngle * pi / 180.d0)
+    !v = v * sin(frameAngle * pi / 180.d0) 
 
     allocate(ztmp(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     ztmp = z*xDim
-    T = 0.003d0*(ztmp - 700.d0) + 300.d0
-    where(ztmp < 700.d0)
-        T = 300.d0
+    T = 0.01d0*(ztmp - 100.d0) + 265.d0
+    where(ztmp < 100.d0)
+        T = 265.d0
     end where
     T = T + 0.0001d0*ztmp
 
@@ -250,7 +250,7 @@ subroutine set_Reference_Temperature(inputfile, Thetaref)
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Thetaref
     integer :: ioUnit 
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, Tsurf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4, frameAngle = 0.d0 
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, Tsurf0 = one, dTsurf_dt = -0.05d0, z0init = 2.5d-4, frameAngle = 0.d0 
     namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, Tsurf0, dTsurf_dt, z0init, frameAngle  
     !real(rkind)  :: beta, sigma, phi_ref
     !integer :: z_ref

@@ -1,15 +1,15 @@
 &INPUT
-inputdir                      = "/home/aditya90/Codes/PadeOps/data/gabls/output"   ! Directory for any input files
-outputdir                     = "/home/aditya90/Codes/PadeOps/data/gabls/output"   ! Directory for all output files
-nx                            = 256         ! Number of points in X
-ny                            = 256         ! Number of points in Y
-nz                            = 256         ! Number of points in Z
+inputdir                      = "/scratch/aghate/gabls/128"   ! Directory for any input files
+outputdir                     = "/scratch/aghate/gabls/128"   ! Directory for all output files
+nx                            = 128         ! Number of points in X
+ny                            = 128         ! Number of points in Y
+nz                            = 128         ! Number of points in Z
 tstop                         = 500.D0      ! Physical time to stop the simulation
 CFL                           = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
+useRestartFile                = .FALSE.     ! Set to false if it's a fresh simulation 
 restartFile_TID               = 110000        ! TimeID of the restart file being used
 restartFile_RID               = 7          ! RunID of the restart file being used
 /
@@ -25,7 +25,7 @@ useExhaustiveFFT              = .TRUE.
 /
 /
 &IO
-RunID                         = 9          ! Run Label (All output files will be tagged with this nubber)
+RunID                         = 2          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump                 = 5000        ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump                    = 2000         ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files

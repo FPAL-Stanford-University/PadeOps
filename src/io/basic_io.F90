@@ -29,7 +29,7 @@ contains
         implicit none 
         real(rkind), intent(out), dimension(:,:), allocatable :: data2read
         character(len=*), intent(in) :: filename
-        character(len=100000) :: columncount
+        character(len=1000000) :: columncount
         integer :: nc,nr, ierr, i, j 
 
 

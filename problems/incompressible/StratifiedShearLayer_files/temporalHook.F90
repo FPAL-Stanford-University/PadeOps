@@ -28,12 +28,16 @@ contains
             call message_min_max(1,"Bounds for v:", p_minval(minval(igp%v)), p_maxval(maxval(igp%v)))
             call message_min_max(1,"Bounds for w:", p_minval(minval(igp%w)), p_maxval(maxval(igp%w)))
             call message_min_max(1,"Bounds for T:", p_minval(minval(igp%T)), p_maxval(maxval(igp%T)))
+            call message(1, "Time step limit:" // trim(igp%dtlimit))
             if (igp%useSGS) then
                 maxnusgs = p_maxval(igp%nu_SGS)
                 maxkappasgs = p_maxval(igp%kappaSGS)
                 call message(1,"Maximum SGS viscosity:", maxnusgs)
                 call message(1,"Maximum SGS scalar kappa:", maxkappasgs)
-               
+                if (associated(igp%kappa_bounding)) then
+                  maxkappasgs = p_maxval(igp%kappa_bounding)
+                  call message(1,"Maximum kappa bounding:", maxkappasgs)
+                end if 
                 if (igp%sgsModel%usingDynProc()) then
                   call message(1,"Maximum lambda_dynamic:", igp%sgsModel%getMax_DynSmagConst())
                   call message(1,"Maximum beta_dynamic:", igp%sgsModel%getMax_DynPrandtl())

@@ -1,6 +1,6 @@
 &INPUT
-inputdir              = "/home/aghate/Codes/PadeOps/build/problems/incompressible/tmp_dump/"   ! Directory for any input files
-outputdir             = "/home/aghate/Codes/PadeOps/build/problems/incompressible/tmp_dump/"   ! Directory for all output files
+inputdir              = "/projects/windsim/PadeOps/build/build_avx2/problems/incompressible/dump"   ! Directory for any input files
+outputdir             = "/projects/windsim/PadeOps/build/build_avx2/problems/incompressible/dump"   ! Directory for all output files
 nx                    = 32          ! Number of points in X
 ny                    = 32          ! Number of points in Y
 nz                    = 32          ! Number of points in Z
@@ -16,11 +16,13 @@ restartFile_RID       = 15          ! RunID of the restart file being used
 /
 &NUMERICS
 TimeSteppingScheme    = 2           ! 0: Adams-Bashforth, 1: TVD-RK3, 2: SSP-RK45 
-AdvectionTerm         = 1           ! 0: Rotational Form, 1: Skew-Symmetric Form (use this for Compact Scheme)
+AdvectionTerm         = 0           ! 0: Rotational Form, 1: Skew-Symmetric Form (use this for Compact Scheme)
 NumericalSchemeVert   = 1           ! 0: Second order FD, 1: Sixth order Compact Difference (CD06), 2: Fourier Collocation
 ComputeStokesPressure = .TRUE.      ! This would be FALSE only is very special circumstances.  
 useDealiasFilterVert  = .FALSE.     ! Dealiasing filter used in vertical direction
-t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproject if needed.
+t_DivergenceCheck     = 1           ! Check divergence every $ timesteps. Reproject if needed.
+scheme_xy             = "CD10"      ! "FOUR", "ED02", "ED04", "CD06", "CD10"
+donot_dealias         = .FALSE.     ! Setting this to true will create monsters in your simulation.  
 /
 /
 &IO
