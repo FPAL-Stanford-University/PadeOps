@@ -57,14 +57,15 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   logical :: useWallDamping = .false., useSGSDynamicRestart = .false., useVerticalTfilter = .false.
   integer :: DynamicProcedureType = 0, SGSmodelID = 0, WallModelType = 0, DynProcFreq = 1
   real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0, deltaRatio = 2.d0, turbPrandtl = 0.4d0 
+  real(rkind) :: z0t = 0.001d0
   character(len=clen) :: SGSDynamicRestartFile
   logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false. 
   integer :: ierr
   
-  namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0,  &
-                 useWallDamping, ncWall, Csgs, WallModelType, &
+  namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t,      &
+                 useWallDamping, ncWall, Csgs, WallModelType,          &
                  DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,&
-                 SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity, &
+                 SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity,  &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl
 
 
@@ -134,7 +135,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%UseDynamicProcedureScalar = UseDynamicProcedureScalar
   this%explicitCalcEdgeEddyViscosity = explicitCalcEdgeEddyViscosity
   this%mid = SGSmodelID
-  this%z0 = z0
+  this%z0  = z0
+  this%z0t = z0t
   this%DynamicProcedureType = DynamicProcedureType
   this%DynProcFreq = DynProcFreq
   this%useVerticalTfilter = useVerticalTfilter

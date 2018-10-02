@@ -163,7 +163,7 @@ subroutine getSurfaceQuantities(this)
     class(sgs_igrid), intent(inout) :: this
     integer :: idx
     integer, parameter :: itermax = 100 
-    real(rkind) :: ustarNew, ustarDiff, dTheta, ustar
+    real(rkind) :: ustarNew, ustarDiff, dTheta, ustar, at
     real(rkind) :: a, b, c, PsiH, PsiM, wTh, z, u, Linv, xi, xisq
  
     if (this%isStratified) then
@@ -171,15 +171,19 @@ subroutine getSurfaceQuantities(this)
       case(0) ! Dirichlet BC for temperature 
           dTheta = this%Tsurf - this%Tmn; Linv = zero
           z = this%dz/two ; ustarDiff = one; wTh = zero
-          a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
+          a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two
           PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
+          at=log(z/this%z0t)
 
+          if(nrank==0) then
+             write(nrank+100,'(8(e19.12,1x),2(i5,1x))') this%ustar, this%invObLength, this%Tsurf, this%wTh_surf, ustarDiff, this%PsiM, u, PsiH, idx, itermax
+          endif
           ! Inside the do loop all the used variables are on the stored on the stack
           ! After the while loop these variables are copied to their counterparts
           ! on the heap (variables part of the derived type)
           do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
               ustarNew = u*kappa/(a - PsiM)
-              wTh = dTheta*ustarNew*kappa/(a - PsiH) 
+              wTh = dTheta*ustarNew*kappa/(at - PsiH) 
               Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
               if (Linv .ge. zero) then 
                 ! similarity functions if stable stratification is present
@@ -195,6 +199,9 @@ subroutine getSurfaceQuantities(this)
           end do 
           this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
           this%PsiM = PsiM
+          if(nrank==0) then
+             write(nrank+200,'(8(e19.12,1x),2(i5,1x))') this%ustar, this%invObLength, this%Tsurf, this%wTh_surf, ustarDiff, this%PsiM, u, PsiH, idx, itermax
+          endif
       case(1) ! Homogeneous Neumann BC for temperature
           this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
           this%invObLength = zero
@@ -203,8 +210,9 @@ subroutine getSurfaceQuantities(this)
       case(2) ! Inhomogeneous Neumann BC for temperature
           Linv = zero; !dTheta = this%Tsurf - this%Tmn;
           z = this%dz/two ; ustarDiff = one; wTh = this%wTh_surf
-          a=log(z/this%z0); !b=beta_h*this%dz/two; c=beta_m*this%dz/two 
+          a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
           PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
+          at=log(z/this%z0t)
    
           ! Inside the do loop all the used variables are on the stored on the stack
           ! After the while loop these variables are copied to their counterparts
@@ -225,7 +233,7 @@ subroutine getSurfaceQuantities(this)
               ustar = ustarNew; idx = idx + 1
           end do 
           this%ustar = ustar; this%invObLength = Linv; 
-          this%Tsurf = this%Tmn + wTh*(a-PsiH)/(ustar*kappa)
+          this%Tsurf = this%Tmn + wTh*(at-PsiH)/(ustar*kappa)
           this%PsiM = PsiM
       end select
     else

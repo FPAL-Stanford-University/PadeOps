@@ -2297,13 +2297,13 @@ contains
         ! STEP 1: Update Time, BCs and record probe data
         this%step = this%step + 1; this%tsim = this%tsim + this%dt
         this%newTimeStep = .true. 
-        if (this%isStratified) then
-            if (this%botBC_Temp == 0) then
-                this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
-            else if (this%botBC_Temp == 2) then
-                ! Do nothing for constant non-varying flux
-            end if
-        end if  
+        !if (this%isStratified) then
+        !    if (this%botBC_Temp == 0) then
+        !        this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim  !this is problem-specific. Should it be moved to problem file?
+        !    else if (this%botBC_Temp == 2) then
+        !        ! Do nothing for constant non-varying flux
+        !    end if
+        !end if  
         if (this%PreprocessForKS) this%KSupdated = .false. 
         if (this%useProbes) call this%updateProbes()
         if (this%computevorticity) call this%compute_vorticity
@@ -2422,7 +2422,7 @@ contains
                ! derivatives, which is needed for correct SGS dissipation
                if (.not. this%AlreadyHaveRHS) then
                    call this%populate_rhs()
-                   this%AlreadyHaveRHS = .true. 
+                   !this%AlreadyHaveRHS = .true.  !--for correct stats of mean as well as SGS fields
                end if 
 
                call this%compute_stats3D()
@@ -3546,7 +3546,7 @@ contains
                 ! interpolate q3 from E to C
                 call transpose_x_to_y(this%q3,rbuff2E,this%gpE)
                 call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-                rbuff3E(:,:,1) = this%wTh_surf
+                !rbuff3E(:,:,1) = this%wTh_surf !---this is already embedded
                 call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
                 call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
                 call transpose_y_to_x(rbuff2,rbuff1,this%gpC)
