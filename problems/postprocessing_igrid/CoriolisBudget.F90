@@ -161,7 +161,7 @@ program CoriolisBudget
     allocate(Tij_mean(nz,2))
 
    ! Initialize the turbine array
-   if (isTurbines == .true.) then    
+   if (isTurbines) then    
        call ops%create_turbine_array(inputfile) 
    end if
 
