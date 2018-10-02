@@ -38,7 +38,7 @@ program channelDNS
  
     call igp%finalize_io()                  !<-- Close the header file (wrap up i/o)
 
-    call igp%destroy()                !<-- Destroy the IGRID derived type 
+    call igp%destroy_grid()                !<-- Destroy the IGRID derived type 
    
 
     deallocate(igp)                   !<-- Deallocate all the memory associated with scalar defaults
