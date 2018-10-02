@@ -27,7 +27,7 @@ module igrid_Operators
 
       type(PoissonPeriodic) :: poiss_periodic
       real(rkind) :: dx, dy, dz, Lx, Ly, Lz
-      character(len=clen) ::  inputdir, outputdir, RestartDir
+      character(len=clen), public ::  inputdir, outputdir, RestartDir
       real(rkind) :: mfact_xy
     
       logical :: PeriodicInZ, PoissonSolverInitiatized = .false. 
@@ -38,7 +38,7 @@ module igrid_Operators
       
     
       complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffyE, cbuffzC, cbuffzE  ! Actuator disk buffers
-      real(rkind), dimension(:,:,:,:), allocatable :: mesh 
+      real(rkind), dimension(:,:,:,:), allocatable :: mesh, rbuffyC, rbuffzC, rbuffyE, rbuffzE 
       complex(rkind), dimension(:,:,:), allocatable :: urhshat, vrhshat, wrhshat
       type(turbineArray), allocatable :: turbArray
       contains
@@ -796,5 +796,18 @@ subroutine dump_plane(this, field, dir_id, plane_id, tid, label)
 
 end subroutine 
 
+!subroutine interpolate_cellField_to_edgeField(this, rxC, rxE, bc1, bc2)
+!   class(igrid_ops), intent(inout) :: this
+!   real(rkind), intent(in),  dimension(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)) :: rxC
+!   real(rkind), intent(out), dimension(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)) :: rxE
+!   integer, intent(in) :: bc1, bc2
+!
+!!   call transpose_x_to_y(rxC, this%rbuffyC(:,:,:,1), this%gpC)
+!!   call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+!!   call this%Pade6opZ%interpz_E2C(this%rbuffzC(:,:,:,1), this%rbuffzE(:,:,:,1), bc1,bc2)
+!!   call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
+!!   call transpose_y_to_x(this%rbuffyE(:,:,:,1), rxE, this%gpE)
+!!
+!end subroutine
 
 end module 
