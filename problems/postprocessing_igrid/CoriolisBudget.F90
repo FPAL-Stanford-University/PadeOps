@@ -346,7 +346,7 @@ program CoriolisBudget
    budget_MKE(:,4) = (sum(T23,2)/real(idx,rkind))*buff1d_1
     
    ! STEP 2: Compute Transfer 
-   if (noisy == .TRUE.) then
+   if (noisy) then
        buff1d_1 = (sum(R13,2)/real(idx,rkind))*(sum(umn_set,2)/real(idx,rkind))
        call ops%ddz_1d(buff1d_1,budget_MKE(:,5),0,-1)
        buff1d_1 = (sum(R23,2)/real(idx,rkind))*(sum(vmn_set,2)/real(idx,rkind))
