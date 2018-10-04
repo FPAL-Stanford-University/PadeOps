@@ -85,7 +85,6 @@ contains
         this%dz = dz
 
         this%ns = ns
-        this%species_id = species_id
 
         ! Set to full domain by default
         subdomain_lo = [1, 1, 1]
@@ -102,6 +101,7 @@ contains
         this%z_bc = z_bc
 
         this%nfilters = nfilters
+        this%species_id = species_id
 
         write(outputprefix, '(A,I4.4)') 'TKE_scaledecomp_F', this%nfilters
         call message("Will save data with prefix "//trim(outputprefix))
