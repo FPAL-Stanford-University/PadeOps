@@ -10,19 +10,19 @@ module miranda_reader_mod
 
     private
 
-    integer, parameter :: u_index=1                               ! x-velocity Index
-    integer, parameter :: v_index=2                               ! y-velocity Index
-    integer, parameter :: w_index=3                               ! z-velocity Index
-    integer, parameter :: rho_index=4                             ! Density Index
-    integer, parameter :: e_index=5                               ! Energy Index
-    integer, parameter :: p_index=6                               ! Pressure Index
-    integer, parameter :: T_index=7                               ! Temp Index
-    integer, parameter :: c_index=8                               ! Speed of sound Index
-    integer, parameter :: mu_index=9                              ! Shear visc Index
-    integer, parameter :: bulk_index=10                           ! Bulk visc Index
-    integer, parameter :: ktc_index=11                            ! Thermal cond Index
-    integer, parameter :: Diff_index=12                           ! Species diffusion Index
-    integer, parameter :: Ys_index=13                             ! Species mass-fraction Index
+    integer :: u_index=1                               ! x-velocity Index
+    integer :: v_index=2                               ! y-velocity Index
+    integer :: w_index=3                               ! z-velocity Index
+    integer :: rho_index=4                             ! Density Index
+    integer :: e_index=5                               ! Energy Index
+    integer :: p_index=6                               ! Pressure Index
+    integer :: T_index=7                               ! Temp Index
+    integer :: c_index=8                               ! Speed of sound Index
+    integer :: mu_index=9                              ! Shear visc Index
+    integer :: bulk_index=10                           ! Bulk visc Index
+    integer :: ktc_index=11                            ! Thermal cond Index
+    integer :: Diff_index=12                           ! Species diffusion Index
+    integer :: Ys_index=13                             ! Species mass-fraction Index
 
     public :: miranda_reader
 
@@ -69,7 +69,7 @@ module miranda_reader_mod
         real(rkind), dimension(:,:,:),   pointer :: mu                                ! Shear visc Index
         real(rkind), dimension(:,:,:),   pointer :: bulk                              ! Bulk visc Index
         real(rkind), dimension(:,:,:),   pointer :: ktc                               ! Thermal cond Index
-        real(rkind), dimension(:,:,:),   pointer :: Diff                              ! Species diffusion Index
+        real(rkind), dimension(:,:,:,:), pointer :: Diff                              ! Species diffusion Index
         real(rkind), dimension(:,:,:,:), pointer :: Ys                                ! Species mass-fraction Index
         
         contains
@@ -207,6 +207,9 @@ contains
         end if
 
         CLOSE(ioUnit) 
+
+        ! Set correct Ys_index
+        Ys_index = this%nvars + 1
 
     end subroutine
 
@@ -380,7 +383,7 @@ contains
         this%mu    => this%fields(:,:,:,  mu_index)
         this%bulk  => this%fields(:,:,:,bulk_index)
         this%ktc   => this%fields(:,:,:, ktc_index)
-        this%Diff  => this%fields(:,:,:,Diff_index)
+        this%Diff  => this%fields(:,:,:,Diff_index:Diff_index+this%ns-1)
         this%Ys    => this%fields(:,:,:,  Ys_index:Ys_index+this%ns-1)
 
     end subroutine
