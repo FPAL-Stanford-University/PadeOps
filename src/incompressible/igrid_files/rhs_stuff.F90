@@ -313,16 +313,25 @@
        end if
    end subroutine
 
-   subroutine AddBuoyancyTerm(this)
+   subroutine addBuoyancyTerm(this)
        class(igrid), intent(inout), target :: this
        complex(rkind), dimension(:,:,:), pointer :: fT1E 
        real(rkind), dimension(:,:,:), pointer :: rbuffE
+       integer :: mind
 
        fT1E => this%cbuffyE(:,:,:,1)
        rbuffE => this%rbuffxE(:,:,:,1)
 
        !fT1E = (this%TEhat)/(this%ThetaRef*this%Fr*this%Fr)
-       fT1E = (this%TEhat)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+       if(this%useMoisture) then
+           mind = this%moistureIndex
+           call transpose_y_to_z(this%scalars(mind)%fhat, this%cbuffzC(:,:,:,1), this%sp_gpC)
+           call this%Pade6opZ%interpz_C2E(this%cbuffzC(:,:,:,1), this%cbuffzE(:,:,:,1), this%scalars(mind)%BC_bottom, this%scalars(mind)%BC_top)
+           call transpose_z_to_y(this%cbuffzE(:,:,:,1), this%cbuffyE(:,:,:,1), this%sp_gpC)
+           fT1E = (this%TEhat + this%moistureFactor*this%cbuffyE(:,:,:,1))*this%BuoyancyFact ! See definition of buoyancy factor in init 
+       else
+           fT1E = (this%TEhat)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+       endif
        if (this%spectE%carryingZeroK) then
            fT1E(1,1,:) = cmplx(zero,zero,rkind)
        end if 

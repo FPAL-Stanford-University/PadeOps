@@ -1,7 +1,7 @@
 subroutine destroy(this)
   class(sgs_igrid), intent(inout) :: this
   nullify(this%gpC, this%gpE, this%spectC, this%spectE, this%sp_gpC, this%sp_gpE, this%fxC)
-  nullify(this%cbuffyC, this%cbuffzC, this%rbuffxC, this%Tsurf, this%fyC, this%fzE)
+  nullify(this%cbuffyC, this%cbuffzC, this%rbuffxC, this%Tsurf, this%fyC, this%fzE, this%wTh_surf)
   if (this%isEddyViscosityModel) call this%destroyMemory_EddyViscosity()
   if (this%DynamicProcedureType .ne. 0) call this%destroyMemory_DynamicProcedure()
   select case (this%mid)
@@ -43,12 +43,12 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappa
    end if
 end subroutine 
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, Fr, Re, isInviscid, isStratified, botBC_temp, initSpinUp)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, wTh_surf, Fr, Re, isInviscid, isStratified, botBC_temp, initSpinUp)
   class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
   real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re
-  real(rkind), intent(in), target :: Tsurf
+  real(rkind), intent(in), target :: Tsurf, wTh_surf
   character(len=*), intent(in) :: inputfile
   real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC
   real(rkind), dimension(:,:,:), intent(in), target :: fBody_x, fBody_y, fBody_z
@@ -64,18 +64,18 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   logical :: useWallDamping = .false., useSGSDynamicRestart = .false., useVerticalTfilter = .false.
   integer :: DynamicProcedureType = 0, SGSmodelID = 0, WallModelType = 0, DynProcFreq = 1
   real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0, deltaRatio = 2.d0, turbPrandtl = 0.4d0, Cy = 100.d0 
+  real(rkind) :: z0t = 0.001d0
   character(len=clen) :: SGSDynamicRestartFile
   logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false. 
   integer :: ierr, WM_matchingIndex = 1
   real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 
 
-  namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0,  &
+  namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
                  useWallDamping, ncWall, Csgs, WallModelType, &
                  DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,&
                  SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity, &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
                  useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex 
-
 
   this%gpC => gpC
   this%gpE => gpE
@@ -84,6 +84,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%sp_gpC => spectC%spectdecomp
   this%sp_gpE => spectE%spectdecomp
   this%Tsurf => Tsurf
+  this%wTh_surf => wTh_surf
   this%Fr = Fr
   this%Re = Re
   !this%Pr = Pr
@@ -150,7 +151,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%UseDynamicProcedureScalar = UseDynamicProcedureScalar
   this%explicitCalcEdgeEddyViscosity = explicitCalcEdgeEddyViscosity
   this%mid = SGSmodelID
-  this%z0 = z0
+  this%z0  = z0
+  this%z0t = z0t
   this%DynamicProcedureType = DynamicProcedureType
   this%DynProcFreq = DynProcFreq
   this%useVerticalTfilter = useVerticalTfilter

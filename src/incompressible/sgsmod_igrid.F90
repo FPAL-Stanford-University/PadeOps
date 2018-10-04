@@ -1,6 +1,6 @@
 module sgsmod_igrid
     use kind_parameters, only: rkind, clen
-    use constants, only: imi, pi, zero,one,two,three,half, four,eight, nine, six, kappa 
+    use constants, only: imi, pi, zero,one,two,three,half, four,eight, nine, six, kappa, piby2 
     use decomp_2d
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
@@ -61,10 +61,10 @@ module sgsmod_igrid
         complex(rkind), dimension(:,:,:), allocatable :: Tfilhat, Tfilhatz1, Tfilhatz2
         logical :: useWallModel = .false.
         integer :: botBC_temp = 1
-        real(rkind), public :: ustar = 1.d0, InvObLength = 0.d0
-        real(rkind) :: umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0, wTh_surf = 0.d0
-        real(rkind) :: z0, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr
-        real(rkind), pointer :: Tsurf
+        real(rkind), public :: ustar = 1.d0, InvObLength = 0.d0, PsiM = 0.0d0
+        real(rkind) :: umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0!, wTh_surf = 0.d0
+        real(rkind) :: z0, z0t, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr
+        real(rkind), pointer :: Tsurf, wTh_surf
         complex(rkind), dimension(:,:), allocatable :: q3HAT_AtWall
         integer :: WM_matchingIndex
 

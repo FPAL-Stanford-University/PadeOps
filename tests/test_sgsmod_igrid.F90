@@ -106,7 +106,7 @@ program test_sgsmod_igrid
    call message(0, "Now initializing the SGS model.")
    call sgsmodel%init( gp , gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, &
                         & computeFbody, der, cbuffyC, cbuffzC,     cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC,&
-                        & rbuffyE, rbuffzE, 100.d0, 100.d0, 1.d0, 3000.d0, .false., .true., botBC_temp, .false.)
+                        & rbuffyE, rbuffzE, 100.d0, 100.d0, 0.0d0, 1.d0, 3000.d0, .false., .true., botBC_temp, .false.)
 
    call message(0, "All operators initiatized successfully.")
 
