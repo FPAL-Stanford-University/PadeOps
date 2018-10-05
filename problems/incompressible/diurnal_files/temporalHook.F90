@@ -17,6 +17,7 @@ contains
 
     subroutine doTemporalStuff(igp)
         class(igrid), intent(inout) :: igp 
+        real(rkind) :: maxnusgs, maxkappasgs
       
         if (mod(igp%step,nt_print2screen) == 0) then
             maxDiv = maxval(igp%divergence)
@@ -28,10 +29,15 @@ contains
             call message_min_max(1,"Bounds for v:", p_minval(minval(igp%v)), p_maxval(maxval(igp%v)))
             call message_min_max(1,"Bounds for w:", p_minval(minval(igp%w)), p_maxval(maxval(igp%w)))
             call message_min_max(1,"Bounds for T:", p_minval(minval(igp%T)), p_maxval(maxval(igp%T)))
+            call message(1, "Time step limit:" // trim(igp%dtlimit))
             call message(1,"T_surf:",igp%Tsurf)
             call message(1,"u_star:",igp%sgsmodel%get_ustar())
             call message(1,"Inv. Ob. Length:",igp%sgsmodel%get_InvObLength())
             call message(1,"wTh_surf:",igp%sgsmodel%get_wTh_surf())
+            maxnusgs = p_maxval(igp%nu_SGS)
+            maxkappasgs = p_maxval(igp%kappaSGS)
+            call message(1,"Maximum SGS viscosity:", maxnusgs)
+            call message(1,"Maximum SGS scalar kappa:", maxkappasgs)
             if (igp%useCFL) then
                 call message(1,"Current dt:",igp%dt)
             end if
