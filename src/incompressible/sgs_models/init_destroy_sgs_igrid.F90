@@ -66,12 +66,13 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0, deltaRatio = 2.d0, turbPrandtl = 0.4d0, Cy = 100.d0 
   real(rkind) :: z0t = 0.001d0
   character(len=clen) :: SGSDynamicRestartFile
-  logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false. 
+  logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false.
+  logical :: usePrSGS = .false. 
   integer :: ierr, WM_matchingIndex = 1
   real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
-                 useWallDamping, ncWall, Csgs, WallModelType, &
+                 useWallDamping, ncWall, Csgs, WallModelType, usePrSGS, &
                  DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,&
                  SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity, &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
@@ -96,6 +97,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%fzE => fBody_z
   this%meanfact = one/(real(gpC%xsz(1),rkind) * real(gpC%ysz(2),rkind))
   this%isStratified = isStratified
+  this%usePrSGS = usePrSGS
   !if (present(botBC_Temp)) 
   this%botBC_Temp = botBC_Temp
 
