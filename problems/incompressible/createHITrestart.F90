@@ -60,6 +60,7 @@ program createHITrestart
    ! w fields
    fC = reshape(data2read(:,3),[nx,ny,nz])
    write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_w.",tid
+   fname1 = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
    call spectC%init("x", nx, ny, nz, dz, dz, dz, "FOUR", "2/3rd", 2, .false., .false., .true., .true., .false., .true.)
    call der%init(gpC, gpC, gpE, gpE, dz, 2, .true., spectC)
    call der%interpz_C2E(fC, fE, 0, 0)
