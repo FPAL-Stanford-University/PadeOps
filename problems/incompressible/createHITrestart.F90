@@ -6,12 +6,14 @@ program createHITrestart
    use exits, only: message, gracefulExit
    use PadeDerOps, only: Pade6stagg
    use basic_io, only: read_2d_ascii 
+   use spectralMod, only: spectral
    implicit none
 
    character(len=clen) :: inputfile, outputdir, matlabfile
    real(rkind), dimension(:,:,:), allocatable  :: fE, fC
    type(decomp_info) :: gpC, gpE
    type(Pade6stagg) :: der
+   type(spectral) :: spectC
    real(rkind) :: Lz, dz
    integer :: nfilters, nx, ny, nz, RID, ierr, tid, ioUnit
    integer, dimension(:), allocatable :: pid
@@ -54,7 +56,8 @@ program createHITrestart
    ! w fields
    fC = reshape(data2read(:,3),[nx,ny,nz])
    write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_w.",tid
-   call der%init(gpC, gpC, gpE, gpE, dz, 2, .true.)
+   call spectC%init("x", nx, ny, nz, dz, dz, dz, "FOUR", "2/3rd", 2, .false., .false., .true., .true., .false., .true.)
+   call der%init(gpC, gpC, gpE, gpE, dz, 2, .true., spectC)
    call der%interpz_C2E(fC, fE, 0, 0)
    call decomp_2d_write_one(1,fE, fname1, gpE)
 
