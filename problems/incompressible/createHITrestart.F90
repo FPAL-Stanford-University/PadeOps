@@ -19,6 +19,7 @@ program createHITrestart
    integer, dimension(:), allocatable :: pid
    character(len=clen) :: tempname, fname1, fname2
    real(rkind), dimension(:,:), allocatable :: data2read
+   real(rkind) :: tsim = 0.d0 
    namelist /INPUT/ nx, ny, nz, Lz, tid, RID,  outputdir, matlabfile
 
 
@@ -66,6 +67,14 @@ program createHITrestart
    call der%interpz_C2E(fC, fE, 0, 0)
    call decomp_2d_write_one(1,fE, fname1, gpE)
    call message(0,"RESTART file for w generated")
+    
+   if (nrank == 0) then
+        write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
+        fname1 = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+        OPEN(UNIT=10, FILE=trim(fname1))
+        write(10,"(100g15.5)") tsim
+        close(10)
+   end if 
 
    call message(0, "Initialization RESTART files generated")
    call MPI_Finalize(ierr)    
