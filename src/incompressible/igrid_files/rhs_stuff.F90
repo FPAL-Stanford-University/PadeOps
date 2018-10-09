@@ -280,7 +280,8 @@
        T1C = this%u*this%v
        call this%spectC%fft(T1C,fT1C)
        call this%spectC%mtimes_ik2_oop(fT1C,fT2C)
-       this%u_rhs = this%u_rhs + fT2C
+       !this%u_rhs = this%u_rhs + fT2C
+       urhs = urhs + fT2C
        call this%spectC%mtimes_ik1_ip(fT1C)
        !this%v_rhs = this%v_rhs + fT1C
        vrhs = vrhs + fT1C
@@ -290,7 +291,8 @@
        call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
        call this%Pade6opZ%ddz_E2C(tzE,tzC,UWBC_bottom,UWBC_top)
        call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
-       this%u_rhs = this%u_rhs + fT1C
+       ! this%u_rhs = this%u_rhs + fT1C
+       urhs = urhs + fT1C
        
        call this%spectE%mtimes_ik1_ip(fT1E)
        !this%w_rhs = this%w_rhs + fT1E

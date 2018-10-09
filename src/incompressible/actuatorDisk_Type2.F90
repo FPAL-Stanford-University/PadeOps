@@ -13,7 +13,7 @@ module actuatorDisk_T2mod
     private
     public :: actuatorDisk_T2
     
-    real(rkind), parameter :: alpha_Smooth = 0.9d0 ! Exonential smoothing constant
+    real(rkind), parameter :: alpha_Smooth = 1.d0 ! 0.9d0 ! Exonential smoothing constant
     integer, parameter :: xReg = 8, yReg = 8, zReg = 8
 
     type :: actuatorDisk_T2

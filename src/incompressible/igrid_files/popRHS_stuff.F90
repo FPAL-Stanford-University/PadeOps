@@ -26,9 +26,8 @@
 
        ! Step 2: Coriolis Term
        if (this%useCoriolis) call this%AddCoriolisTerm(this%u_rhs, this%v_rhs, this%w_rhs)
-       
+       !
        ! Step 3b: Wind Turbines
-       !if (this%useWindTurbines .and. (RKstage==1)) then
        if (this%useWindTurbines) then
           if (copyTurbRHS) then
            call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC, this%u_rhs, this%v_rhs, this%w_rhs, &
@@ -101,13 +100,15 @@
       
        ! Step 1: Non Linear Term 
        if (useSkewSymm) then
-           call this%addNonLinearTerm_skewSymm(this%ucon, this%vcon, this%wcon)
+           !call this%addNonLinearTerm_skewSymm(this%ucon, this%vcon, this%wcon)
+           call this%addNonLinearTerm_skewSymm(this%u_rhs, this%v_rhs, this%w_rhs)
        else
-           call this%AddNonLinearTerm_Rot(this%ucon, this%vcon, this%wcon)
+           !call this%AddNonLinearTerm_Rot(this%ucon, this%vcon, this%wcon)
+           call this%AddNonLinearTerm_Rot(this%u_rhs, this%v_rhs, this%w_rhs)
        end if
-       this%u_rhs = this%ucon 
-       this%v_rhs = this%vcon 
-       this%w_rhs = this%wcon
+       this%ucon = this%u_rhs 
+       this%vcon = this%v_rhs 
+       this%wcon = this%w_rhs
 
        ! Step 2: Coriolis Term
        if (this%useCoriolis) then 
@@ -118,7 +119,6 @@
        end if 
 
        ! Step 3b: Wind Turbines
-       !if (this%useWindTurbines .and. (RKstage==1)) then
        if (this%useWindTurbines) then
           if (copyTurbRHS) then
            call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC, this%uturb, this%v_rhs, this%w_rhs, &
@@ -157,6 +157,7 @@
               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
                                          this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
            end if
+
            this%u_rhs = this%u_rhs + this%usgs
            this%v_rhs = this%v_rhs + this%vsgs
            this%w_rhs = this%w_rhs + this%wsgs
@@ -164,12 +165,13 @@
            ! viscous term evaluate separately  
            if (.not. this%isInviscid) then
                call this%addViscousTerm(this%uvisc, this%vvisc, this%wvisc)
+               
+               ! Now correct the SGS term 
+               this%usgs = this%usgs - this%uvisc 
+               this%vsgs = this%vsgs - this%vvisc 
+               this%wsgs = this%wsgs - this%wvisc 
            end if  
           
-           ! Now correct the SGS term 
-           this%usgs = this%usgs - this%uvisc 
-           this%vsgs = this%vsgs - this%vvisc 
-           this%wsgs = this%wsgs - this%wvisc 
        else
            ! IMPORTANT: If SGS model is used, the viscous term is evaluated
            ! as part of the SGS stress tensor. 

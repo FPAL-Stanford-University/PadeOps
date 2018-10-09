@@ -4,7 +4,8 @@ module budgets_xy_avg_mod
    use cd06staggstuff, only: cd06stagg
    use reductions, only: p_sum
    use incompressibleGrid, only: igrid  
-
+   use exits, only: message
+   use basic_io, only: read_2d_ascii, write_2d_ascii
    implicit none 
 
    private
@@ -62,7 +63,7 @@ module budgets_xy_avg_mod
         type(igrid), pointer :: igrid_sim 
         
         real(rkind), dimension(:,:), allocatable :: budget_0, budget_1, budget_2
-        integer :: counter, rid 
+        integer :: counter
         real(rkind) :: avgFact 
         character(len=clen) :: budgets_dir
         real(rkind), dimension(:), allocatable :: tmp_meanC, tmp_meanE
@@ -71,12 +72,18 @@ module budgets_xy_avg_mod
 
         type(cd06stagg) :: cd06op_z_mom_budget 
 
+        integer :: tidx_dump 
+        integer :: tidx_compute
+
+        logical :: do_budgets
+
     contains
         procedure           :: init
-        procedure           :: updateBudget
-        procedure           :: DumpBudget
         procedure           :: destroy
         procedure           :: ResetBudget
+        procedure           :: DoBudgets
+        procedure, private  :: updateBudget
+        procedure, private  :: DumpBudget
         procedure, private  :: restartBudget
         procedure, private  :: AssembleBudget0
         procedure, private  :: AssembleBudget1
@@ -88,6 +95,7 @@ module budgets_xy_avg_mod
         procedure, private  :: get_xy_meanE_from_fE 
         procedure, private  :: interp_1d_Edge2Cell 
         !procedure, private  :: AssembleBudget2 (TKE budget is incomplete)
+
    end type 
 
 
@@ -101,8 +109,9 @@ contains
         character(len=clen) :: budgets_dir = "NULL"
         integer :: ioUnit, ierr,  budgetType = 1, restart_tid = 0, restart_rid = 0, restart_counter = 0
         logical :: restart_budgets = .false. 
-
-        namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter  
+        integer :: tidx_compute = 1000000, tidx_dump = 1000000
+        logical :: do_budgets = .false. 
+        namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets
         
         ! STEP 1: Read in inputs, link pointers and allocate budget vectors
         ioUnit = 534
@@ -113,6 +122,9 @@ contains
         this%igrid_sim => igrid_sim 
         this%run_id = igrid_sim%runid
         this%nz = igrid_sim%nz
+        this%do_budgets = do_budgets
+        this%tidx_dump = tidx_dump
+        this%tidx_compute = tidx_compute
 
         this%budgets_dir = budgets_dir
         this%budgetType = budgetType 
@@ -169,6 +181,24 @@ contains
 
     end subroutine 
 
+
+    subroutine doBudgets(this)
+        class(budgets_xy_avg), intent(inout) :: this
+
+        if (this%do_budgets) then
+        
+            if (mod(this%igrid_sim%step,this%tidx_compute) .eq. 0) then
+                call this%updateBudget()
+            end if
+
+            if (mod(this%igrid_sim%step,this%tidx_dump) .eq. 0) then
+                call this%dumpBudget()
+                call message(0,"Dumped a budget .stt file")
+            end if 
+
+        end if 
+    end subroutine 
+
     subroutine ResetBudget(this)
         class(budgets_xy_avg), intent(inout) :: this
         
@@ -217,7 +247,7 @@ contains
 
         if (nrank == 0) then
             ! Budget 0: 
-            write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",this%rid,"_budget0","_t",this%igrid_sim%step,"_n",this%counter,".stt"
+            write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_budget0","_t",this%igrid_sim%step,"_n",this%counter,".stt"
             fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
             
             this%budget_0 = this%budget_0/(real(this%counter,rkind) + 1.d-18)
@@ -239,7 +269,7 @@ contains
             this%budget_0 = this%budget_0*(real(this%counter,rkind) + 1.d-18)
 
             ! Budget 1: 
-            write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",this%rid,"_budget1","_t",this%igrid_sim%step,"_n",this%counter,".stt"
+            write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_budget1","_t",this%igrid_sim%step,"_n",this%counter,".stt"
             fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
             this%budget_1 = this%budget_1/(real(this%counter,rkind) + 1.d-18)
             call write_2d_ascii(this%budget_1, fname) 
@@ -273,7 +303,7 @@ contains
 
     subroutine get_xy_meanC_from_fhatC(this, fhat, fmean)
         class(budgets_xy_avg), intent(inout) :: this
-        complex(rkind), dimension(this%igrid_sim%sp_gpC%ysz(1), this%igrid_sim%sp_gpC%ysz(2), this%igrid_sim%sp_gpC%ysz(3)), intent(inout) :: fhat
+        complex(rkind), dimension(this%igrid_sim%sp_gpC%ysz(1), this%igrid_sim%sp_gpC%ysz(2), this%igrid_sim%sp_gpC%ysz(3)), intent(in) :: fhat
         real(rkind), dimension(this%nz), intent(out) :: fmean
 
         call transpose_y_to_z(fhat, this%igrid_sim%cbuffzC(:,:,:,1), this%igrid_sim%sp_gpC)
@@ -287,7 +317,7 @@ contains
 
     subroutine get_xy_meanE_from_fhatE(this, fhat, fmean)
         class(budgets_xy_avg), intent(inout) :: this
-        complex(rkind), dimension(this%igrid_sim%sp_gpE%ysz(1), this%igrid_sim%sp_gpE%ysz(2), this%igrid_sim%sp_gpE%ysz(3)), intent(inout) :: fhat
+        complex(rkind), dimension(this%igrid_sim%sp_gpE%ysz(1), this%igrid_sim%sp_gpE%ysz(2), this%igrid_sim%sp_gpE%ysz(3)), intent(in) :: fhat
         real(rkind), dimension(this%nz+1), intent(out) :: fmean
 
         call transpose_y_to_z(fhat, this%igrid_sim%cbuffzE(:,:,:,1), this%igrid_sim%sp_gpE)
@@ -301,7 +331,7 @@ contains
     
     subroutine get_xy_meanC_from_fC(this, f, fmean)
         class(budgets_xy_avg), intent(inout) :: this
-        real(rkind), dimension(this%igrid_sim%gpC%xsz(1), this%igrid_sim%gpC%xsz(2), this%igrid_sim%gpC%xsz(3)), intent(inout) :: f
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1), this%igrid_sim%gpC%xsz(2), this%igrid_sim%gpC%xsz(3)), intent(in) :: f
         real(rkind), dimension(this%nz), intent(out) :: fmean
 
         call this%igrid_sim%spectC%fft(f, this%igrid_sim%cbuffyC(:,:,:,1))
@@ -316,7 +346,7 @@ contains
     
     subroutine get_xy_meanE_from_fE(this, f, fmean)
         class(budgets_xy_avg), intent(inout) :: this
-        real(rkind), dimension(this%igrid_sim%gpE%xsz(1), this%igrid_sim%gpE%xsz(2), this%igrid_sim%gpE%xsz(3)), intent(inout) :: f
+        real(rkind), dimension(this%igrid_sim%gpE%xsz(1), this%igrid_sim%gpE%xsz(2), this%igrid_sim%gpE%xsz(3)), intent(in) :: f
         real(rkind), dimension(this%nz+1), intent(out) :: fmean
 
         call this%igrid_sim%spectE%fft(f, this%igrid_sim%cbuffyE(:,:,:,1))
@@ -331,7 +361,7 @@ contains
     
     subroutine get_xy_fluctC_from_fhatC(this, fhat, ffluct)
         class(budgets_xy_avg), intent(inout) :: this
-        complex(rkind), dimension(this%igrid_sim%sp_gpC%ysz(1), this%igrid_sim%sp_gpC%ysz(2), this%igrid_sim%sp_gpC%ysz(3)), intent(inout) :: fhat
+        complex(rkind), dimension(this%igrid_sim%sp_gpC%ysz(1), this%igrid_sim%sp_gpC%ysz(2), this%igrid_sim%sp_gpC%ysz(3)), intent(in) :: fhat
         real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: ffluct 
 
         this%igrid_sim%cbuffyC(:,:,:,1) = fhat
@@ -344,7 +374,7 @@ contains
 
     subroutine get_xy_fluctE_from_fhatE(this, fhat, ffluct)
         class(budgets_xy_avg), intent(inout) :: this
-        complex(rkind), dimension(this%igrid_sim%sp_gpE%ysz(1), this%igrid_sim%sp_gpE%ysz(2), this%igrid_sim%sp_gpE%ysz(3)), intent(inout) :: fhat
+        complex(rkind), dimension(this%igrid_sim%sp_gpE%ysz(1), this%igrid_sim%sp_gpE%ysz(2), this%igrid_sim%sp_gpE%ysz(3)), intent(in) :: fhat
         real(rkind), dimension(this%igrid_sim%gpE%xsz(1),this%igrid_sim%gpE%xsz(2),this%igrid_sim%gpE%xsz(3)), intent(out) :: ffluct 
 
         this%igrid_sim%cbuffyE(:,:,:,1) = fhat
@@ -382,7 +412,7 @@ contains
         call this%get_xy_meanC_from_fhatC(this%igrid_sim%That, this%tmp_meanC)
         this%budget_0(:,3) = this%budget_0(:,3) + this%tmp_meanC
 
-        ! STEP 2: Get Reynolds stresses (IMPORTANT: need to correct for fluctuation before dumping)
+        !! STEP 2: Get Reynolds stresses (IMPORTANT: need to correct for fluctuation before dumping)
         this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%u*this%igrid_sim%u
         call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
         this%budget_0(:,4) = this%budget_0(:,4) + this%tmp_meanC

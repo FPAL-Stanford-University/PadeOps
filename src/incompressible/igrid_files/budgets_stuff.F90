@@ -41,6 +41,7 @@ subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc
     end if 
     call message(0, "Budget calculations instrumented within igrid!")
 
+    call this%set_budget_rhs_to_zero()
 end subroutine
 
 
@@ -69,6 +70,7 @@ subroutine set_budget_rhs_to_zero(this)
     this%wcor = czero 
 
     this%wb = czero 
+    this%uturb = czero 
 
 end subroutine 
 
@@ -77,8 +79,10 @@ subroutine getMomentumTerms(this)
 
     if (this%StoreForBudgets) then
         ! Step 1: split the RHS terms into 4 contributions and pressure
+        
+        
         call this%ComputePressure(ComputeRHSForBudget=.true.)
-
+        
         ! Step 2: compute the pressure gradient term 
         call this%spectC%fft(this%Pressure, this%cbuffyC(:,:,:,1))
         this%cbuffyC(:,:,:,1) = -this%cbuffyC(:,:,:,1) ! Pressure terms is -gradP
