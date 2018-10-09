@@ -1,4 +1,19 @@
-   subroutine addCoriolisTerm(this, urhs, vrhs, wrhs)
+    pure subroutine get_geostrophic_forcing(this, Fg_x, Fg_y)
+        class(igrid), intent(in) :: this
+        real(rkind), intent(out) :: Fg_x, Fg_y
+        real(rkind) :: gx, gy 
+
+        gx = this%G_GEOSTROPHIC*cos(this%G_ALPHA*pi/180.d0)
+        gy = this%G_GEOSTROPHIC*sin(this%G_ALPHA*pi/180.d0)
+
+        Fg_x = -this%coriolis_omegaZ*(two/this%Ro)*gy
+        Fg_y =  this%coriolis_omegaZ*(two/this%Ro)*gx
+
+
+    end subroutine 
+
+
+    subroutine addCoriolisTerm(this, urhs, vrhs, wrhs)
        class(igrid), intent(inout), target :: this
        complex(rkind), dimension(:,:,:), pointer :: ybuffE, ybuffC1, ybuffC2, zbuffC, zbuffE
        complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
@@ -12,23 +27,6 @@
        zbuffC => this%cbuffzC(:,:,:,1)
 
 
-       ! Update the coriolis terms according to the desired yaw control
-       !if (this%tsim > 5000.d0) then
-       !ybuffC1 = atan((this%v / this%u)) * 180.d0 / pi
-       !latitude = 45.d0
-       !frameAngle = 0.d0
-       !do j = 1, this%nx
-       !        do i = 1, this%ny
-       !                frameAngle = frameAngle + ybuffC1(j,i,8)
-       !        enddo
-       !enddo
-       !frameAngle = frameAngle / (float(this%nx) * float(this%nx))
-       !frameAngle = (1.d0 - 4.8650d0*0.0110d0) * frameAngle 
-       !this%frameAngle = this%frameAngle - 0.00001d0  * frameAngle 
-       !this%coriolis_omegaX = cos(latitude*pi/180.d0)*sin(this%frameAngle*pi/180.d0)
-       !this%coriolis_omegaZ = sin(latitude*pi/180.d0)
-       !this%coriolis_omegaY = cos(latitude*pi/180.d0)*cos(this%frameAngle*pi/180.d0) 
-       !endif
        if (this%newTimestep) then
            if (this%assume_fplane) then
                this%coriolis_omegaZ   = sin(this%latitude*pi/180.d0)

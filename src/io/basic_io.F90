@@ -16,7 +16,7 @@ contains
 
         n1 = size(raw_data,1)
         n2 = size(raw_data,2)
-        write(rowfmt,'(A,I4,A)') '(',n1,'(es25.17E3,1x))'
+        write(rowfmt,'(A,I4,A)') '(',n2,'(es25.17E3,1x))'
         OPEN(UNIT=10, FILE=trim(filename))
 
         do i=1,n1

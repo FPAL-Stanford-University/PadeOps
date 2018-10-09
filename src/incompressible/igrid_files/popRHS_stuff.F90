@@ -54,7 +54,7 @@
            end if   
        end if
 
-       ! Step 6a: SGS  Stress Terms
+       ! Step 6a: SGS and viscous stress Terms
        if (this%useSGS) then
            call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
                                          this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
@@ -65,12 +65,14 @@
               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
                                          this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
            end if
+       else
+           ! IMPORTANT: If SGS model is used, the viscous term is evaluated
+           ! as part of the SGS stress tensor. 
+           if (.not. this%isInviscid) then
+               call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs)
+           end if
        end if
 
-       ! Step 6b: Viscous Stress Terms
-       if (.not. this%isInviscid) then
-           call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs)
-       end if
 
        call this%populate_RHS_extraTerms(copyFringeRHS)
 
@@ -158,15 +160,24 @@
            this%u_rhs = this%u_rhs + this%usgs
            this%v_rhs = this%v_rhs + this%vsgs
            this%w_rhs = this%w_rhs + this%wsgs
+           
+           ! viscous term evaluate separately  
+           if (.not. this%isInviscid) then
+               call this%addViscousTerm(this%uvisc, this%vvisc, this%wvisc)
+           end if  
+          
+           ! Now correct the SGS term 
+           this%usgs = this%usgs - this%uvisc 
+           this%vsgs = this%vsgs - this%vvisc 
+           this%wsgs = this%wsgs - this%wvisc 
+       else
+           ! IMPORTANT: If SGS model is used, the viscous term is evaluated
+           ! as part of the SGS stress tensor. 
+           if (.not. this%isInviscid) then
+               call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs)
+           end if
        end if
 
-       ! Step 6b: Viscous Stress Terms
-       if (.not. this%isInviscid) then
-           call this%addViscousTerm(this%uvisc, this%vvisc, this%wvisc)
-           this%u_rhs = this%u_rhs + this%uvisc
-           this%v_rhs = this%v_rhs + this%vvisc
-           this%w_rhs = this%w_rhs + this%wvisc
-       end if
 
        call this%populate_RHS_extraTerms(copyFringeRHS)
 

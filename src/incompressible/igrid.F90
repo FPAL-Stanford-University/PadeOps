@@ -355,6 +355,7 @@ module IncompressibleGrid
             procedure, private :: append_visualization_info
             procedure, private :: initialize_hdf5_io
             procedure, private :: destroy_hdf5_io
+            procedure          :: get_geostrophic_forcing
             procedure          :: InstrumentForBudgets
             procedure          :: GetMomentumTerms
             procedure          :: set_budget_rhs_to_zero
