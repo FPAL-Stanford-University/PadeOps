@@ -48,7 +48,8 @@ module scalar_igridMod
       real(rkind), dimension(:,:,:), pointer :: u, v, w, wC
       real(rkind), dimension(:,:,:,:), pointer :: duidxj
 
-      integer :: RunID, scalar_number, bc_bottom, bc_top
+      integer :: RunID, scalar_number
+      integer, public :: bc_bottom, bc_top
       type(sgs_igrid), pointer :: sgsmodel
       logical :: useSource, isinviscid, useSGS, usefringe, usedoublefringe
 
@@ -275,7 +276,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    this%v => v
    this%w => w
    this%wC => wC
-   this%duidxj = duidxj
+   this%duidxj => duidxj
 
 
    allocate(this%F (gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))

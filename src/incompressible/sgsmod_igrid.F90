@@ -1,6 +1,6 @@
 module sgsmod_igrid
     use kind_parameters, only: rkind, clen
-    use constants, only: imi, pi, zero,one,two,three,half, four,eight, nine, six, kappa 
+    use constants, only: imi, pi, zero,one,two,three,half, four,eight, nine, six, kappa, piby2 
     use decomp_2d
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
@@ -38,6 +38,7 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:), allocatable :: nu_sgs_C, nu_sgs_E
         real(rkind), dimension(:,:,:), allocatable :: kappa_sgs_C, kappa_sgs_E, kappa_boundingC, kappa_boundingE
         logical :: isEddyViscosityModel = .false.
+        logical :: usePrSGS = .false.
         real(rkind), dimension(:,:,:,:), allocatable :: tau_ij
         real(rkind), dimension(:,:,:), pointer :: tau_11, tau_12, tau_22, tau_33, tau_13C, tau_23C
         real(rkind), dimension(:,:,:), allocatable :: tau_13, tau_23
@@ -61,10 +62,10 @@ module sgsmod_igrid
         complex(rkind), dimension(:,:,:), allocatable :: Tfilhat, Tfilhatz1, Tfilhatz2
         logical :: useWallModel = .false.
         integer :: botBC_temp = 1
-        real(rkind), public :: ustar = 1.d0, InvObLength = 0.d0
-        real(rkind) :: umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0, wTh_surf = 0.d0
-        real(rkind) :: z0, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr
-        real(rkind), pointer :: Tsurf
+        real(rkind), public :: ustar = 1.d0, InvObLength = 0.d0, PsiM = 0.0d0
+        real(rkind) :: umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0!, wTh_surf = 0.d0
+        real(rkind) :: z0, z0t, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr
+        real(rkind), pointer :: Tsurf, wTh_surf
         complex(rkind), dimension(:,:), allocatable :: q3HAT_AtWall
         integer :: WM_matchingIndex
 
@@ -393,7 +394,7 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
    if (this%useWallModel) call this%computeWall_PotTFlux()
 
    if (this%isEddyViscosityModel) then
-      if (this%mid == 2) then ! AMD model has its own formula for kappaSGS
+      if ((this%mid == 2) .and. (.not. this%usePrSGS))then ! AMD model has its own formula for kappaSGS
           call get_amd_Dkernel(this%kappa_sgs_C,this%camd_x, this%camd_y, this%camd_z, duidxjC, &
                             & dTdxC, dTdyC, dTdzC, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3))
           call this%interpolate_kappaSGS(.true.)

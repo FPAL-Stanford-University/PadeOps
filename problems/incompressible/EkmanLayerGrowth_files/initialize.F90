@@ -306,6 +306,25 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 
 end subroutine
 
+subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
+    use kind_parameters,    only: rkind
+    use constants, only: one, zero 
+    implicit none
+    real(rkind), intent(out) :: wTh_surf
+    character(len=*),                intent(in)    :: inputfile
+    integer :: ioUnit 
+    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    real(rkind) :: Noise_Amp = 1.d-6, alphaRot
+    integer :: ProblemMode = 1
+    namelist /EkmanLayerGrowth/ Lx, Ly, Lz, alphaRot, Noise_Amp, ProblemMode
+     
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=EkmanLayerGrowth)
+    close(ioUnit)    
+
+    ! Do nothing really since this is an unstratified simulation
+end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind

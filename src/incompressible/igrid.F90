@@ -138,12 +138,15 @@ module IncompressibleGrid
         integer :: BuoyancyTermType = 0 
         real(rkind) :: BuoyancyFact = 0.d0
 
+        integer :: moistureIndex = 1
+        real(rkind) :: moistureFactor = 0.61d0 ! converts g/kg to K
+
         logical :: periodicInZ  = .false. 
         logical :: newTimeStep = .true., computeVorticity = .false.  
         integer :: timeSteppingScheme = 0 
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
         integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
-        logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false. 
+        logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false., useMoisture = .false.
         logical :: useExtraForcing = .false., useGeostrophicForcing = .false., isInviscid = .false.  
         logical :: useSGS = .false., computeTurbinePressure = .false.  
         logical :: UseDealiasFilterVert = .false.
@@ -283,6 +286,12 @@ module IncompressibleGrid
         type(io_hdf5) :: viz_hdf5
 
         logical :: WriteTurbineForce = .false. 
+        
+        ! budgets on the fly
+        logical :: StoreForBudgets = .false. 
+        complex(rkind), dimension(:,:,:), pointer :: ucon, vcon, wcon, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb 
+
+
         contains
             procedure          :: init
             procedure          :: destroy
@@ -322,6 +331,8 @@ module IncompressibleGrid
             procedure, private :: ApplyCompactFilter 
             procedure, private :: addNonLinearTerm_skewSymm
             procedure, private :: populate_rhs
+            procedure, private :: populate_rhs_for_budgets
+            procedure, private :: populate_RHS_extraTerms 
             procedure, private :: project_and_prep
             procedure, private :: wrapup_timestep
             procedure, private :: reset_pointers
@@ -344,29 +355,36 @@ module IncompressibleGrid
             procedure, private :: append_visualization_info
             procedure, private :: initialize_hdf5_io
             procedure, private :: destroy_hdf5_io
+            procedure          :: get_geostrophic_forcing
+            procedure          :: InstrumentForBudgets
+            procedure          :: GetMomentumTerms
+            procedure          :: set_budget_rhs_to_zero
     end type
 
 contains 
+
 #include "igrid_files/io_stuff.F90"
 #include "igrid_files/stats_stuff.F90"
 #include "igrid_files/rhs_stuff.F90"
 #include "igrid_files/timestepping_stuff.F90"
 #include "igrid_files/prep_wrapup_stuff.F90"
+#include "igrid_files/budgets_stuff.F90"
+#include "igrid_files/popRHS_stuff.F90"
 
     subroutine init(this,inputfile, initialize2decomp)
         class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
-        character(len=clen) :: outputdir, inputdir, scalar_info_dir, turbInfoDir, ksOutputDir, controlDir = "null"
+        character(len=clen) :: outputdir, inputdir, scalar_info_dir, turbInfoDir, ksOutputDir, controlDir = "null", moisture_info_dir
         integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = 999999, sponge_type = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1
         real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop,CviscDT=1.d0,deltaT_dump=1.d0
-        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0
+        real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0, moistureFactor = 0.61_rkind
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
-        logical ::isStratified=.false.,dumpPlanes = .false.,useExtraForcing = .false.
+        logical ::isStratified=.false.,useMoisture=.false.,dumpPlanes = .false.,useExtraForcing = .false.
         logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false. 
         logical :: useGeostrophicForcing = .false., PeriodicInZ = .false., deleteInstructions = .true., donot_dealias = .false.   
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
@@ -399,7 +417,7 @@ contains
                     & dump_NU_SGS, dump_KAPPA_SGS, t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe,&
                     & t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
-        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,Re,Ro,Pr,Fr, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,&
+        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,useMoisture,Re,Ro,Pr,Fr, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,&
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type  
@@ -412,6 +430,7 @@ contains
         namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir, deleteInstructions
         namelist /SCALARS/ num_scalars, scalar_info_dir
         namelist /TURB_PRESSURE/ MeanTIDX, MeanRID, MeanFilesDir
+        namelist /MOISTURE/ moistureFactor, moisture_info_dir
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -426,6 +445,10 @@ contains
         read(unit=ioUnit, NML=BCs)
         read(unit=ioUnit, NML=WINDTURBINES)
         read(unit=ioUnit, NML=KSPREPROCESS)
+        this%useMoisture = useMoisture
+        if (this%useMoisture) then
+         read(unit=ioUnit, NML=MOISTURE)
+        end if
         this%useScalars = useScalars
         if (this%useScalars) then
          read(unit=ioUnit, NML=SCALARS)
@@ -433,7 +456,7 @@ contains
         close(ioUnit)
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
         this%dt = dt; this%dtby2 = dt/two ; this%Re = Re; this%useSponge = useSpongeLayer
-        this%outputdir = outputdir; this%inputdir = inputdir; this%isStratified = isStratified 
+        this%outputdir = outputdir; this%inputdir = inputdir; this%isStratified = isStratified
         this%WallMtype = WallMType; this%runID = runID; this%tstop = tstop; this%t_dataDump = t_dataDump
         this%CFL = CFL; this%dumpPlanes = dumpPlanes; this%useGeostrophicForcing = useGeostrophicForcing
         this%timeSteppingScheme = timeSteppingScheme; this%useSystemInteractions = useSystemInteractions
@@ -448,6 +471,7 @@ contains
         this%deleteInstructions = deleteInstructions
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
         this%donot_dealias = donot_dealias; this%ioType = ioType
+        this%moistureFactor = moistureFactor
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -675,9 +699,11 @@ contains
                this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
            else if (botBC_Temp == 1) then
                ! Do nothing 
+           else if (botBC_Temp == 2) then
+               call setInhomogeneousNeumannBC_Temp(inputfile, this%wTh_surf)
            else
-               call GraceFulExit("Only Dirichlet and homog. Neumann BCs supported for Temperature at &
-                   & this time. Set botBC_Temp = 0 or 1",341)        
+               call GraceFulExit("Only Dirichlet, Homog. Neumann or Inhomog. Neumann BCs supported for Temperature at &
+                   & this time. Set botBC_Temp = 0 or 1 or 2",341)        
            end if
        end if 
 
@@ -798,8 +824,8 @@ contains
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
-                                    this%ThetaRef, this%Fr, this%Re, this%isInviscid, sgsmod_stratified, this%botBC_Temp, &
-                                    this%initSpinUp)
+                                    this%ThetaRef, this%wTh_surf, this%Fr, this%Re, this%isInviscid, sgsmod_stratified, &
+                                    this%botBC_Temp, this%initSpinUp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%kappaSGS)
             call message(0,"SGS model initialized successfully")
         end if 
@@ -1113,12 +1139,26 @@ contains
             call this%sgsModel%set_BuoyancyFactor(this%BuoyancyFact)
        end if 
 
-
-       ! STEP 22: Set the scalars
+       ! STEP 22a: Set moisture
+       if(this%useMoisture) then
+         if(this%usescalars) then
+            this%n_scalars = this%n_scalars + 1
+            this%moistureIndex = this%n_scalars
+         else
+            if (this%useMoisture) this%usescalars = .true.
+            this%n_scalars = 1
+            this%moistureIndex = 1
+         endif
+       endif
+       
+       ! STEP 22b: Set other scalars
        if (this%usescalars) then
            if (allocated(this%scalars)) deallocate(this%scalars)
            allocate(this%scalars(this%n_scalars))
            do idx = 1,this%n_scalars
+              if(this%useMoisture .and. idx==this%n_scalars) then
+                scalar_info_dir = moisture_info_dir
+              endif
               call this%scalars(idx)%init(this%gpC,this%gpE,this%spectC,this%spectE,this%sgsmodel,this%Pade6opZ,&
                            & inputfile,scalar_info_dir,this%mesh,this%u,this%v,this%w,this%wC, this%duidxjC, this%rbuffxC, &
                            & this%rbuffyC,this%rbuffzC,this%rbuffxE,this%rbuffyE,this%rbuffzE,  &
@@ -1128,8 +1168,8 @@ contains
                            & this%fringe_x, this%fringe_x1, this%fringe_x2)
            end do 
            call message(0, "SCALAR fields initialized successfully.")
-        end if  
-        
+       end if  
+         
        ! STEP 23: Compute Rapid and Slow Pressure Split
        if (this%computeRapidSlowPressure) then
            if (this%computeDNSpressure) then
@@ -1163,17 +1203,17 @@ contains
        end if 
 
        ! STEP 27: Frame angle controller 
-        !! Set angle control PI yaw
-        if (this%useControl) then
-               allocate(this%angCont_yaw)
-               call this%angCont_yaw%init(inputfile, this%spectC, this%spectE, this%gpC, this%gpE, & 
-                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, & 
-                        this%rbuffyC, this%rbuffzC, this%restartPhi) 
-        end if
-        this%angleHubHeight = 1.d0       
-        this%totalAngle = 0.d0
-        this%wFilt = 0.d0
-        this%deltaGalpha = 0.d0
+       !! Set angle control PI yaw
+       if (this%useControl) then
+              allocate(this%angCont_yaw)
+              call this%angCont_yaw%init(inputfile, this%spectC, this%spectE, this%gpC, this%gpE, & 
+                       this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, & 
+                       this%rbuffyC, this%rbuffzC, this%restartPhi) 
+       end if
+       this%angleHubHeight = 1.d0       
+       this%totalAngle = 0.d0
+       this%wFilt = 0.d0
+       this%deltaGalpha = 0.d0
 
        ! STEP 28: Compute the timestep
        call this%compute_deltaT()
@@ -1210,9 +1250,12 @@ contains
            call message(0,"DONOT_DEALIAS set to TRUE. Screw you.")
        end if 
      
+       if ((this%useMoisture) .and. (.not. this%isStratified)) then
+           call GracefulExit("isStratified must be true for moisture to be true",123)
+       end if 
+
        call message("IGRID initialized successfully!")
        call message("===========================================================")
-
 
    end subroutine
 
@@ -1432,6 +1475,9 @@ contains
         case(1)
            TBC_top = 1; dTdzBC_top = -1; WTBC_top = -1;
            WdTdzBC_top = 1;
+         case (2) ! Inhomogeneous Neumann BC for temperature at the top
+            TBC_top = 0; dTdzBC_top = 0; WTBC_top = -1;
+            WdTdzBC_top = 0;
         end select 
         select case (botBC_Temp)
         case (0) ! Dirichlet BC for temperature at the bottom
@@ -1440,6 +1486,9 @@ contains
         case(1)  ! Homogenenous Neumann BC at the bottom
            TBC_bottom = 1; dTdzBC_bottom = -1; WTBC_bottom = -1;
            WdTdzBC_bottom = 1
+         case (2) ! Inhomogeneous Neumann BC for temperature at the bottom
+            TBC_bottom = 0; dTdzBC_bottom = 0; WTBC_bottom = -1;
+            WdTdzBC_bottom = 0;
         end select
 
    end subroutine
@@ -1461,7 +1510,6 @@ contains
 
        namelist /INIT_SPINUP/ Tstop_InitSpinUp, Zcutoff, ScalarRef, Sigma_purt, Froude_Scalar, seed
 
-       
        open(unit=11, file=trim(inputfile), form='FORMATTED', iostat=ierr)
        read(unit=11, NML=INIT_SPINUP)
        close(11)

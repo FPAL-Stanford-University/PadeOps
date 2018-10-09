@@ -1,23 +1,21 @@
 ! Template for PadeOps
 
-#include "neutral_pbl_files/initialize.F90"       
-#include "neutral_pbl_files/temporalHook.F90"  
+#include "diurnal_files/initialize.F90"       
+#include "diurnal_files/temporalHook.F90"  
 
-program neutral_pbl_igrid
+program diurnal
     use mpi
     use kind_parameters,  only: clen
     use IncompressibleGrid, only: igrid
-    use temporalhook, only: doTemporalStuff, initialize_controller_location
+    use temporalhook, only: doTemporalStuff, set_bottomwall_heatflux, set_bottomwall_temperature
     use timer, only: tic, toc
     use exits, only: message
-    use budgets_xy_avg_mod, only: budgets_xy_avg  
 
     implicit none
 
     type(igrid), allocatable, target :: igp
     character(len=clen) :: inputfile
     integer :: ierr
-    type(budgets_xy_avg) :: budg
 
     call MPI_Init(ierr)               !<-- Begin MPI
 
@@ -31,22 +29,19 @@ program neutral_pbl_igrid
     
     call igp%printDivergence()
   
-    call initialize_controller_location(igp, inputfile)  !<-- frame angle controller initialization 
-
-    call budg%init(inputfile, igp)   !<-- Budget class initialization 
-
     call tic() 
     do while (igp%tsim < igp%tstop) 
+
+       if(igp%botBC_Temp==0) then ! Dirichlet
+           call set_bottomwall_temperature(igp)
+       elseif(igp%botBC_Temp==2) then ! Inhomogeneous Neumann
+           call set_bottomwall_heatflux(igp)
+       endif
+       call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
+       call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
        
-       call igp%timeAdvance()      !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
-       call doTemporalStuff(igp)   !<-- Go to the temporal hook (see temporalHook.F90)
-   
-       ! call budg%ResetBudgets()  !<--- call resetBudgets if the problem is non-stationary 
-       call budg%doBudgets()       !<--- perform budget related operations 
     end do 
  
-    call budg%destroy()             !<-- release memory taken by the budget class 
-
     call igp%finalize_io()                  !<-- Close the header file (wrap up i/o)
 
     call igp%destroy()                !<-- Destroy the IGRID derived type 

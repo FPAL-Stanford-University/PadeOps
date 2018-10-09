@@ -468,7 +468,7 @@
                ! interpolate q3 from E to C
                call transpose_x_to_y(this%q3,rbuff2E,this%gpE)
                call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
-               rbuff3E(:,:,1) = this%wTh_surf
+               !rbuff3E(:,:,1) = this%wTh_surf   ! already embedded
                call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
                call transpose_z_to_y(rbuff3,rbuff2,this%gpC)
                call transpose_y_to_x(rbuff2,rbuff1,this%gpC)
@@ -548,7 +548,7 @@
        ! broadcast to all other procs above in this subroutine
        ! do nothing about inst_horz_avg(2:3) herre
        if(this%isStratified) then
-           this%inst_horz_avg(4) = this%invObLength
+           this%inst_horz_avg(4) = this%sgsmodel%invObLength
            this%inst_horz_avg(5) = this%wTh_surf
        endif
        ! this%inst_horz_avg_turb(1:5*this%WindTurbineArr%nTurbines) is computed in this%WindTurbineArr%getForceRHS

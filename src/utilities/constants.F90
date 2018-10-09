@@ -27,6 +27,7 @@ module constants
     real(rkind), parameter :: fourthird = 4._rkind/3._rkind
 
     real(rkind), parameter :: pi=4._rkind*atan(1._rkind)
+    real(rkind), parameter :: piby2=2._rkind*atan(1._rkind)
     
     complex(rkind), parameter :: imi=(zero,one)
     complex(rkind), parameter :: im0=(zero,zero)

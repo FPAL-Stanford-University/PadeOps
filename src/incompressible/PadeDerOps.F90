@@ -489,59 +489,6 @@ subroutine ddz_C2C(this, input, output, bot, top)
 
 end subroutine 
 
-subroutine ddz_1d_C2C(this, input, output, bot, top)
-   class(Pade6stagg), intent(in) :: this
-   real(rkind), dimension(1,1,this%gp%zsz(3)), intent(in)  :: input
-   real(rkind), dimension(1,1,this%gp%zsz(3)), intent(out) :: output
-   integer, intent(in) :: bot, top
-
-   if (this%isPeriodic) then
-        output = 0.d0 
-   else 
-      select case (this%scheme) 
-      case(fd02)
-        call message(0,"WARNING: Second order FD cannot be used for 1D derivative evaluations.")
-        output = 0.d0
-      case(cd06)
-         select case (bot)
-         case(-1) 
-            if     (top == -1) then
-               call this%derOO%ddz_C2C(input,output,1,1)
-            elseif (top ==  0) then
-               call this%derSO%ddz_C2C(input,output,1,1)
-            elseif (top ==  1) then
-               call this%derEO%ddz_C2C(input,output,1,1)
-            else 
-               output = 0.d0
-            end if
-         case(0)  ! bottom = sided
-            if     (top == -1) then
-               call this%derOS%ddz_C2C(input,output,1,1)
-            elseif (top ==  0) then
-               call this%derSS%ddz_C2C(input,output,1,1)
-            elseif (top ==  1) then
-               call this%derES%ddz_C2C(input,output,1,1)
-            else 
-               output = 0.d0
-            end if
-         case(1)  ! bottom = even
-            if     (top == -1) then
-               call this%derOE%ddz_C2C(input,output,1,1)
-            elseif (top ==  0) then
-               call this%derSE%ddz_C2C(input,output,1,1)
-            elseif (top ==  1) then
-               call this%derEE%ddz_C2C(input,output,1,1)
-            else 
-               output = 0.d0
-            end if
-         case default
-            output = 0.d0
-         end select
-      end select 
-   end if 
-
-
-end subroutine 
 
 
 
@@ -1218,6 +1165,59 @@ pure subroutine getmodFD02stagg(k,dx,kp)
     deallocate(omega)
 
 end subroutine
+
+subroutine ddz_1d_C2C(this, input, output, bot, top)
+   class(Pade6stagg), intent(in) :: this
+   real(rkind), dimension(1,1,this%gp%zsz(3)), intent(in)  :: input
+   real(rkind), dimension(1,1,this%gp%zsz(3)), intent(out) :: output
+   integer, intent(in) :: bot, top
+
+   if (this%isPeriodic) then
+        output = 0.d0 
+   else 
+      select case (this%scheme) 
+      case(fd02)
+        call message(0,"WARNING: Second order FD cannot be used for 1D derivative evaluations.")
+        output = 0.d0
+      case(cd06)
+         select case (bot)
+         case(-1) 
+            if     (top == -1) then
+               call this%derOO%ddz_C2C(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSO%ddz_C2C(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derEO%ddz_C2C(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case(0)  ! bottom = sided
+            if     (top == -1) then
+               call this%derOS%ddz_C2C(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSS%ddz_C2C(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derES%ddz_C2C(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case(1)  ! bottom = even
+            if     (top == -1) then
+               call this%derOE%ddz_C2C(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSE%ddz_C2C(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derEE%ddz_C2C(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case default
+            output = 0.d0
+         end select
+      end select 
+   end if 
+
+end subroutine 
 
 
 end module 

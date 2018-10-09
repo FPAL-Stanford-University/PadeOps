@@ -1,6 +1,23 @@
-   subroutine addCoriolisTerm(this)
+    pure subroutine get_geostrophic_forcing(this, Fg_x, Fg_y)
+        class(igrid), intent(in) :: this
+        real(rkind), intent(out) :: Fg_x, Fg_y
+        real(rkind) :: gx, gy 
+
+        gx = this%G_GEOSTROPHIC*cos(this%G_ALPHA*pi/180.d0)
+        gy = this%G_GEOSTROPHIC*sin(this%G_ALPHA*pi/180.d0)
+
+        Fg_x = -this%coriolis_omegaZ*(two/this%Ro)*gy
+        Fg_y =  this%coriolis_omegaZ*(two/this%Ro)*gx
+
+
+    end subroutine 
+
+
+    subroutine addCoriolisTerm(this, urhs, vrhs, wrhs)
        class(igrid), intent(inout), target :: this
        complex(rkind), dimension(:,:,:), pointer :: ybuffE, ybuffC1, ybuffC2, zbuffC, zbuffE
+       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
+       complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
        !real(rkind) :: frameAngle!, latitude
 
        ybuffE => this%cbuffyE(:,:,:,1)
@@ -10,23 +27,6 @@
        zbuffC => this%cbuffzC(:,:,:,1)
 
 
-       ! Update the coriolis terms according to the desired yaw control
-       !if (this%tsim > 5000.d0) then
-       !ybuffC1 = atan((this%v / this%u)) * 180.d0 / pi
-       !latitude = 45.d0
-       !frameAngle = 0.d0
-       !do j = 1, this%nx
-       !        do i = 1, this%ny
-       !                frameAngle = frameAngle + ybuffC1(j,i,8)
-       !        enddo
-       !enddo
-       !frameAngle = frameAngle / (float(this%nx) * float(this%nx))
-       !frameAngle = (1.d0 - 4.8650d0*0.0110d0) * frameAngle 
-       !this%frameAngle = this%frameAngle - 0.00001d0  * frameAngle 
-       !this%coriolis_omegaX = cos(latitude*pi/180.d0)*sin(this%frameAngle*pi/180.d0)
-       !this%coriolis_omegaZ = sin(latitude*pi/180.d0)
-       !this%coriolis_omegaY = cos(latitude*pi/180.d0)*cos(this%frameAngle*pi/180.d0) 
-       !endif
        if (this%newTimestep) then
            if (this%assume_fplane) then
                this%coriolis_omegaZ   = sin(this%latitude*pi/180.d0)
@@ -48,13 +48,15 @@
        end if
        ! u equation 
        ybuffC1    = (two/this%Ro)*(-this%coriolis_omegaY*this%whatC - this%coriolis_omegaZ*(this%GyHat - this%vhat))
-       this%u_rhs = this%u_rhs  + ybuffC1
-       
+       !this%u_rhs = this%u_rhs  + ybuffC1
+       urhs = urhs + ybuffC1
+
        ! v equation
        !ybuffC2    = (two/this%Ro)*(this%coriolis_omegaZ*(this%GxHat - this%uhat))
        ybuffC2    = (two/this%Ro)*(this%coriolis_omegaZ*(this%GxHat - this%uhat) + this%coriolis_omegaX*this%whatC)
-       this%v_rhs = this%v_rhs + ybuffC2 
-       
+       !this%v_rhs = this%v_rhs + ybuffC2 
+       vrhs = vrhs + ybuffC2
+
        ! w equation 
        ! The real equation is given as:
        ! this%w_rhs = this%w_rhs - this%coriolis_omegaY*(this%GxHat - this%uhat)/this%Ro
@@ -64,7 +66,9 @@
        if (this%spectE%CarryingZeroK) then
            ybuffE(1,1,:) = cmplx(zero,zero,rkind)
        end if 
-       this%w_rhs = this%w_rhs + ybuffE 
+       !this%w_rhs = this%w_rhs + ybuffE 
+       wrhs = wrhs + ybuffE
+       
        ! The residual quantity (Gx - <u>)*cos(alpha)/Ro is accomodated in
        ! pressure
 
@@ -103,7 +107,7 @@
    end subroutine  
    
 
-   subroutine addNonLinearTerm_Rot(this)
+   subroutine addNonLinearTerm_Rot(this, u_rhs, v_rhs, w_rhs)
        class(igrid), intent(inout), target :: this
        real(rkind),    dimension(:,:,:), pointer :: dudy, dudz, dudx
        real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
@@ -113,6 +117,8 @@
        real(rkind),    dimension(:,:,:), pointer :: T1C, T2C, T1E, T2E 
        complex(rkind), dimension(:,:,:), pointer :: fT1C, fT2C, fT1E, fT2E 
        complex(rkind), dimension(:,:,:), pointer :: tzC, tzE
+       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)), intent(inout) :: u_rhs, v_rhs
+       complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)), intent(inout) :: w_rhs
 
        dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
        dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
@@ -141,8 +147,10 @@
        call this%spectE%fft(T2E,fT2E)
        call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
        call this%Pade6opZ%interpz_E2C(tzE,tzC,0,0)
-       call transpose_z_to_y(tzC,this%u_rhs, this%sp_gpC)
-       this%u_rhs = this%u_rhs + fT1C
+       !call transpose_z_to_y(tzC,this%u_rhs, this%sp_gpC)
+       call transpose_z_to_y(tzC,u_rhs, this%sp_gpC)
+       !this%u_rhs = this%u_rhs + fT1C
+       u_rhs = u_rhs + fT1C
 
 
        T1C = dudy - dvdx
@@ -153,15 +161,18 @@
        call this%spectE%fft(T2E,fT2E)
        call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
        call this%Pade6opZ%interpz_E2C(tzE,tzC,0,0)
-       call transpose_z_to_y(tzC,this%v_rhs, this%sp_gpC)
-       this%v_rhs = this%v_rhs + fT1C
+       !call transpose_z_to_y(tzC,this%v_rhs, this%sp_gpC)
+       call transpose_z_to_y(tzC,v_rhs, this%sp_gpC)
+       !this%v_rhs = this%v_rhs + fT1C
+       v_rhs = v_rhs + fT1C
 
        T1E = dudz - dwdx
        T1E = T1E*this%uE
        T2E = dvdz - dwdy
        T2E = T2E*this%vE
        T1E = T1E + T2E
-       call this%spectE%fft(T1E,this%w_rhs)
+       !call this%spectE%fft(T1E,this%w_rhs)
+       call this%spectE%fft(T1E,w_rhs)
 
        if (this%isStratified .or. this%initspinup) then
            T1C = -this%u*this%dTdxC 
@@ -178,7 +189,7 @@
 
    end subroutine
 
-   subroutine addNonLinearTerm_skewSymm(this)
+   subroutine addNonLinearTerm_skewSymm(this, urhs, vrhs, wrhs)
        class(igrid), intent(inout), target :: this
        real(rkind),    dimension(:,:,:), pointer :: dudy, dudz, dudx
        real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
@@ -188,6 +199,8 @@
        real(rkind),    dimension(:,:,:), pointer :: T1C, T2C, T1E, T2E 
        complex(rkind), dimension(:,:,:), pointer :: fT1C, fT2C, fT1E, fT2E 
        complex(rkind), dimension(:,:,:), pointer :: tzC, tzE
+       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
+       complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
 
        dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
        dvdx  => this%duidxjC(:,:,:,4); dvdy  => this%duidxjC(:,:,:,5); dvdzC => this%duidxjC(:,:,:,6); 
@@ -213,8 +226,10 @@
        call this%spectE%fft(T1E,fT1E)
        call transpose_y_to_z(fT1E,tzE, this%sp_gpE)
        call this%Pade6opZ%interpz_E2C(tzE,tzC,WdUdzBC_bottom,WdUdzBC_top)
-       call transpose_z_to_y(tzC,this%u_rhs, this%sp_gpC)
-       this%u_rhs = this%u_rhs + fT1C
+       !call transpose_z_to_y(tzC,this%u_rhs, this%sp_gpC)
+       call transpose_z_to_y(tzC,urhs, this%sp_gpC)
+       !this%u_rhs = this%u_rhs + fT1C
+       urhs = urhs + fT1C
        
        T1C = dvdx*this%u
        T2C = dvdy*this%v
@@ -224,8 +239,10 @@
        call this%spectE%fft(T1E,fT1E)
        call transpose_y_to_z(fT1E,tzE, this%sp_gpE)
        call this%Pade6opZ%interpz_E2C(tzE,tzC,WdVdzBC_bottom,WdVdzBC_top)
-       call transpose_z_to_y(tzC,this%v_rhs, this%sp_gpC)
-       this%v_rhs = this%v_rhs + fT1C
+       !call transpose_z_to_y(tzC,this%v_rhs, this%sp_gpC)
+       call transpose_z_to_y(tzC,vrhs, this%sp_gpC)
+       !this%v_rhs = this%v_rhs + fT1C
+       vrhs = vrhs + fT1C
        
        T1E = dwdx*this%uE
        T2E = dwdy*this%vE
@@ -235,42 +252,51 @@
        call this%spectC%fft(T1C,fT1C)
        call transpose_y_to_z(fT1C,tzC, this%sp_gpC)
        call this%Pade6opZ%interpz_C2E(tzC,tzE,WdWdzBC_bottom,WdWdzBC_top)
-       call transpose_z_to_y(tzE,this%w_rhs, this%sp_gpE)
-       this%w_rhs = this%w_rhs + fT2E
+       !call transpose_z_to_y(tzE,this%w_rhs, this%sp_gpE)
+       call transpose_z_to_y(tzE,wrhs, this%sp_gpE)
+       !this%w_rhs = this%w_rhs + fT2E
+       wrhs = wrhs + fT2E
 
        T1C = this%u*this%u
        call this%spectC%fft(T1C,fT1C)
        call this%spectC%mtimes_ik1_ip(fT1C)
-       this%u_rhs = this%u_rhs + fT1C
+       !this%u_rhs = this%u_rhs + fT1C
+       urhs = urhs + fT1C
 
        T1C = this%v*this%v
        call this%spectC%fft(T1C,fT1C)
        call this%spectC%mtimes_ik2_ip(fT1C)
-       this%v_rhs = this%v_rhs + fT1C
+       !this%v_rhs = this%v_rhs + fT1C
+       vrhs = vrhs + fT1C
 
        T1C = this%wC*this%wC
        call this%spectC%fft(T1C,fT1C)
        call transpose_y_to_z(fT1C,tzC,this%sp_gpC)
        call this%Pade6opZ%ddz_C2E(tzC,tzE,WWBC_bottom,WWBC_top)
        call transpose_z_to_y(tzE,fT1E,this%sp_gpE)
-       this%w_rhs = this%w_rhs + fT1E
+       !this%w_rhs = this%w_rhs + fT1E
+       wrhs = wrhs + fT1E
 
        T1C = this%u*this%v
        call this%spectC%fft(T1C,fT1C)
        call this%spectC%mtimes_ik2_oop(fT1C,fT2C)
-       this%u_rhs = this%u_rhs + fT2C
+       !this%u_rhs = this%u_rhs + fT2C
+       urhs = urhs + fT2C
        call this%spectC%mtimes_ik1_ip(fT1C)
-       this%v_rhs = this%v_rhs + fT1C
+       !this%v_rhs = this%v_rhs + fT1C
+       vrhs = vrhs + fT1C
 
        T1E = this%uE*this%w
        call this%spectE%fft(T1E,fT1E)
        call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
        call this%Pade6opZ%ddz_E2C(tzE,tzC,UWBC_bottom,UWBC_top)
        call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
-       this%u_rhs = this%u_rhs + fT1C
+       ! this%u_rhs = this%u_rhs + fT1C
+       urhs = urhs + fT1C
        
        call this%spectE%mtimes_ik1_ip(fT1E)
-       this%w_rhs = this%w_rhs + fT1E
+       !this%w_rhs = this%w_rhs + fT1E
+       wrhs = wrhs + fT1E
 
 
        T1E = this%vE*this%w
@@ -278,14 +304,19 @@
        call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
        call this%Pade6opZ%ddz_E2C(tzE,tzC,VWBC_bottom,VWBC_top)
        call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
-       this%v_rhs = this%v_rhs + fT1C
+       !this%v_rhs = this%v_rhs + fT1C
+       vrhs = vrhs + fT1C
 
        call this%spectE%mtimes_ik2_ip(fT1E)
-       this%w_rhs = this%w_rhs + fT1E
+       !this%w_rhs = this%w_rhs + fT1E
+       wrhs = wrhs + fT1E
 
-       this%u_rhs = -half*this%u_rhs
-       this%v_rhs = -half*this%v_rhs
-       this%w_rhs = -half*this%w_rhs
+       !this%u_rhs = -half*this%u_rhs
+       !this%v_rhs = -half*this%v_rhs
+       !this%w_rhs = -half*this%w_rhs
+       urhs = -half*urhs
+       vrhs = -half*vrhs
+       wrhs = -half*wrhs
 
 
        if (this%isStratified .or. this%initspinup) then
@@ -313,24 +344,31 @@
        end if
    end subroutine
 
-   subroutine AddBuoyancyTerm(this)
+   subroutine addBuoyancyTerm(this, wrhs)
        class(igrid), intent(inout), target :: this
        complex(rkind), dimension(:,:,:), pointer :: fT1E 
        real(rkind), dimension(:,:,:), pointer :: rbuffE
+       complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)), intent(inout) :: wrhs
+       integer :: mind
 
        fT1E => this%cbuffyE(:,:,:,1)
        rbuffE => this%rbuffxE(:,:,:,1)
 
        !fT1E = (this%TEhat)/(this%ThetaRef*this%Fr*this%Fr)
-       fT1E = (this%TEhat)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+       if(this%useMoisture) then
+           mind = this%moistureIndex
+           call transpose_y_to_z(this%scalars(mind)%fhat, this%cbuffzC(:,:,:,1), this%sp_gpC)
+           call this%Pade6opZ%interpz_C2E(this%cbuffzC(:,:,:,1), this%cbuffzE(:,:,:,1), this%scalars(mind)%BC_bottom, this%scalars(mind)%BC_top)
+           call transpose_z_to_y(this%cbuffzE(:,:,:,1), this%cbuffyE(:,:,:,1), this%sp_gpC)
+           fT1E = (this%TEhat + this%moistureFactor*this%cbuffyE(:,:,:,1))*this%BuoyancyFact ! See definition of buoyancy factor in init 
+       else
+           fT1E = (this%TEhat)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+       endif
        if (this%spectE%carryingZeroK) then
            fT1E(1,1,:) = cmplx(zero,zero,rkind)
        end if 
-       this%w_rhs = this%w_rhs + fT1E 
-       
-       if (this%useSponge) then
-           call this%addSponge
-       end if
+       !this%w_rhs = this%w_rhs + fT1E 
+       wrhs = wrhs + fT1E
 
        if (this%storeFbody) then
            call this%spectE%ifft(fT1E, rbuffE)
@@ -339,11 +377,13 @@
 
    end subroutine
 
-   subroutine addViscousTerm(this)
+   subroutine addViscousTerm(this, u_rhs, v_rhs, w_rhs)
        class(igrid), intent(inout) :: this
        integer :: i, j, k
        real(rkind) :: oneByRe, molecularDiff
        complex(rkind) :: tmp1, tmp2
+       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)), intent(inout) :: u_rhs, v_rhs
+       complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)), intent(inout) :: w_rhs
 
        oneByRe = one/this%Re
 
@@ -353,8 +393,10 @@
              do i = 1,size(this%u_rhs,1)
                  tmp1 = -this%spectC%kabs_sq(i,j,k)*this%uhat(i,j,k) + this%d2udz2hatC(i,j,k)
                  tmp2 = -this%spectC%kabs_sq(i,j,k)*this%vhat(i,j,k) + this%d2vdz2hatC(i,j,k)
-                 this%u_rhs(i,j,k) = this%u_rhs(i,j,k) + oneByRe*tmp1
-                 this%v_rhs(i,j,k) = this%v_rhs(i,j,k) + oneByRe*tmp2
+                 !this%u_rhs(i,j,k) = this%u_rhs(i,j,k) + oneByRe*tmp1
+                 !this%v_rhs(i,j,k) = this%v_rhs(i,j,k) + oneByRe*tmp2
+                 u_rhs(i,j,k) = u_rhs(i,j,k) + oneByRe*tmp1
+                 v_rhs(i,j,k) = v_rhs(i,j,k) + oneByRe*tmp2
               end do
            end do
         end do
@@ -364,7 +406,8 @@
              !$omp simd
              do i = 1,size(this%w_rhs,1)
                  tmp1 = -this%spectE%kabs_sq(i,j,k)*this%what(i,j,k) + this%d2wdz2hatE(i,j,k)
-                 this%w_rhs(i,j,k) = this%w_rhs(i,j,k) + oneByRe*tmp1
+                 !this%w_rhs(i,j,k) = this%w_rhs(i,j,k) + oneByRe*tmp1
+                 w_rhs(i,j,k) = w_rhs(i,j,k) + oneByRe*tmp1
               end do
            end do
         end do

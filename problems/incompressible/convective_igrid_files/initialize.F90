@@ -1,4 +1,4 @@
-module StratifiedShearLayer_parameters
+module convective_igrid_parameters
 
       ! TAKE CARE OF TIME NON-DIMENSIONALIZATION IN THIS MODULE
 
@@ -11,22 +11,22 @@ module StratifiedShearLayer_parameters
     integer :: seedw = 131344
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
+    
+    real(rkind), parameter :: xDim = 2000._rkind, udim =8._rkind
+    real(rkind), parameter :: timeDim = xDim/udim
 
 end module     
 
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use StratifiedShearLayer_parameters
-    use kind_parameters,    only: rkind, clen 
+    use convective_igrid_parameters
+    use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, pi, half
-    use gridtools,          only: alloc_buffs, linspace
+    use gridtools,          only: alloc_buffs
     use random,             only: gaussian_random
     use decomp_2d          
     use reductions,         only: p_maxval
-    use constants,          only: pi, imi
-    use cd06staggstuff,     only: cd06stagg
-    use StratifiedShearLayer_IO, only: get_perturbations 
-
+    use constants,          only: pi
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -36,22 +36,19 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, T, x, y, z
-    real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: k, seed = 12331
-    real(rkind) :: lambda_x, lambda_y, A0 = 0.1d0, Tbase = 100.d0, kx, ky, maxTG = 1.d-2
-    integer :: N = 4, M= 2, nTG = 2, i, j
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxrandom = 1.d-4, deltaPhi = pi/2.d0, ScalePerturb = 1.d0 
-    real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, wperturb, vperturb, Tperturb
-    real(rkind) :: Psi, dPsi_dz, dz, eta = 1.d0 
-    type(cd06stagg), allocatable :: derW
-    integer :: ProblemMode = 0
-    character(len=clen) :: domain_fname,InitFileTag,InitFileDirectory 
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta, ProblemMode, domain_fname, InitFileTag,InitFileDirectory, ScalePerturb 
+    real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE, ztmp
+    integer :: nz, nzE, k
+    real(rkind) :: sig
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4 
+    real(rkind), dimension(:,:,:), allocatable :: randArr, Tpurt, eta
+    
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init  
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBLEM_INPUT)
     close(ioUnit)    
+
 
     !!!!!!!!!!!!!!!!!!!!! DON'T CHANGE THE POINTERS / ALLOCATIONS !!!!!!!!!!!!!!!!!!!!!!
     u  => fieldsC(:,:,:,1); v  => fieldsC(:,:,:,2); wC => fieldsC(:,:,:,3)
@@ -61,89 +58,58 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     !allocate(randArr(size(T,1),size(T,2),size(T,3)))
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    u = -erf(sqrt(pi)*z)
+    u = one
     v = zero
     wC = zero
-    T = Tbase +  0.5d0*erf(sqrt(pi)*z/eta)
 
-    lambda_y = Ly/(real(M,rkind) + 1.d-24)
-    ky = 2.d0*pi/lambda_y
-    if (ProblemMode == 1) then
-        allocate(uperturb(size(u,1),size(u,2),size(u,3)))
-        allocate(vperturb(size(u,1),size(u,2),size(u,3)))
-        allocate(wperturb(size(u,1),size(u,2),size(u,3)))
-        allocate(Tperturb(size(u,1),size(u,2),size(u,3)))
-        
-        call get_perturbations(decompC, x, y, InitFileTag, InitFileDirectory, uperturb, vperturb, wperturb, Tperturb, &
-                                       deltaPhi, ky, ScalePerturb )
-        u = u + uperturb
-        v = v + vperturb
-        wC = wC + wperturb
-        T  = T + Tperturb
-        deallocate(uperturb, vperturb, wperturb, Tperturb)
-    else
-        allocate(uperturb(size(u,1),size(u,2),size(u,3)))
-        allocate(wperturb(size(u,1),size(u,2),size(u,3)))
+    allocate(ztmp(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    ztmp = z*xDim
+    do k = 1, decompC%xsz(3)
+      if(ztmp(1,1,k) < 937.d0) then
+        T(:,:,k) = 300.d0
+      elseif(ztmp(1,1,k) < 1063.d0) then
+        T(:,:,k) = 300.0d0 + (ztmp(1,1,k)-937.d0)*8.0d0/126.d0
+      else
+        T(:,:,k) = 308.0d0 + (ztmp(1,1,k)-1063.d0)*0.003d0
+      endif
+    enddo
 
-        lambda_x = Lx/real(N,rkind); 
-        kx = 2.d0*pi/lambda_x; 
-   
-        do k = 1,size(u,3)
-           Psi = A0*exp(-pi*(z(1,1,k)**2))
-           dPsi_dz = -2.d0*z(1,1,k)*A0*exp(-pi*(z(1,1,k)**2))
-           do j = 1,size(u,2)
-              !$omp simd
-              do i = 1,size(u,1)
-                uperturb(i,j,k) = real((imi/kx)*dPsi_dz*exp(imi*kx*x(i,j,k))*(cos(deltaPhi/2.d0) &
-                                + (4.d0*imi/pi)*sin(deltaPhi/2.d0)*sin(ky*y(i,j,k))),rkind) 
-                
-                wperturb(i,j,k) = real(Psi*exp(imi*kx*x(i,j,k))*(cos(deltaPhi/2.d0) &
-                                + (4.d0*imi/pi)*sin(deltaPhi/2.d0)*sin(ky*y(i,j,k))),rkind) 
-              end do 
-           end do 
-        end do 
-        u  = u  + uperturb
-        wC = wC + wperturb
-        
-        uperturb =  maxTG*( cos(2.d0*nTG*pi*x/Lx)*sin(2.d0*nTG*pi*y/Ly))*exp(-pi*(z*z))
-        wperturb =  maxTG*(-sin(2.d0*nTG*pi*x/Lx)*cos(2.d0*nTG*pi*y/Ly))*exp(-pi*(z*z))
-        u = u + uperturb 
-        v = v + wperturb 
-       
-        deallocate(uperturb, wperturb)
-    end if 
-    
     ! Add random numbers
-    allocate(randArr(size(u,1),size(u,2),size(u,3)))
-    call gaussian_random(randArr,zero,one,seed+1234*nrank+54321)
-    wC = wC + (maxrandom*randarr*exp(-4*pi*(z*z)))
+    allocate(randArr(size(T,1),size(T,2),size(T,3)))
+    call gaussian_random(randArr,zero,one,seedu + 10*nrank)
+    !randArr = cos(4.d0*2.d0*pi*x)*sin(4.d0*2.d0*pi*y)
+    do k = 1,size(u,3)
+        sig = 0.01d0
+        Tpurt(:,:,k) = sig*randArr(:,:,k)
+    end do
     deallocate(randArr)
-    
-    !T = T + (maxrandom*randArr)*exp(-8.d0*(z*z))
-    !T = T + maxpert_T*exp(-8*(z*z))*cos(0.8*x)!*sin(0.8*y)
+
+    where (ztmp > 50.d0)
+        Tpurt = zero
+    end where
+    T = T + Tpurt
+
+    deallocate(ztmp, Tpurt)
 
     !!!!!!!!!!!!!!!!!!!!! DON'T CHANGE ANYTHING UNDER THIS !!!!!!!!!!!!!!!!!!!!!!
-    allocate(derW)
-    dz = z(1,1,2) - z(1,1,1)
-    call derW%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .false., &
-                                     isTopSided = .false., isBotSided = .false.)
     ! Interpolate wC to w
     allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
     allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
     allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
     allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
+    nz = decompC%zsz(3)
+    nzE = nz + 1
     call transpose_x_to_y(wC,ybuffC,decompC)
     call transpose_y_to_z(ybuffC,zbuffC,decompC)
-    call derW%interpz_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
-    !zbuffE = zero
-    !zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
+    zbuffE = zero
+    zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
     call transpose_z_to_y(zbuffE,ybuffE,decompE)
     call transpose_y_to_x(ybuffE,w,decompE) 
     ! Deallocate local memory 
     deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
     nullify(u,v,w,x,y,z)
-    deallocate(derW)
-    call message(0,"Fields Initialized")
+    call message(0,"Velocity Field Initialized")
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
@@ -151,50 +117,43 @@ end subroutine
 
 subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     use kind_parameters,    only: rkind
+    use convective_igrid_parameters
     use constants, only: one, zero 
     implicit none
-
-    character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: wTh_surf
-    integer :: ioUnit, seed, N, M, nTG
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase, maxTG
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG
+    character(len=*),                intent(in)    :: inputfile
+    integer :: ioUnit 
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, z0init = 1.d-4
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init  
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBLEM_INPUT)
     close(ioUnit)    
 
-    ! Do nothing really since temperature BC is dirichlet
+    wTh_surf = wTh_surf0
 end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
-    use StratifiedShearLayer_parameters
+    use convective_igrid_parameters
     use constants, only: one, zero 
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=*),                intent(in)    :: inputfile
-    integer :: ioUnit, seed, N, M, nTG
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase, maxTG, eta
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta
+    integer :: ioUnit 
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, z0init = 1.d-4
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init  
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBLEM_INPUT)
     close(ioUnit)    
 
-    dTsurf_dt = dTsurf_dt /  3600.d0
-
-    ! Normalize
-    dTsurf_dt = 0.d0  
-
-    Tsurf = one 
-     
+    ! Do nothing here
 end subroutine
 
 subroutine set_planes_io(xplanes, yplanes, zplanes)
-    use StratifiedShearLayer_parameters 
     implicit none
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
@@ -203,9 +162,9 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [nxg/2]
-    yplanes = [nyg/2]
-    zplanes = [nzg/2]
+    xplanes = [64]
+    yplanes = [64]
+    zplanes = [256]
 
 end subroutine
 
@@ -224,7 +183,7 @@ subroutine hook_probes(inputfile, probe_locs)
 
     ! Add probes here if needed
     ! Example code: The following allocates 2 probes at (0.1,0.1,0.1) and
-    ! (0.2,0.2,0.2) 
+    ! (0.2,0.2,0.2)  
     allocate(probe_locs(3,nprobes))
     probe_locs(1,1) = 0.1d0; probe_locs(2,1) = 0.1d0; probe_locs(3,1) = 0.1d0;
     probe_locs(1,2) = 0.2d0; probe_locs(2,2) = 0.2d0; probe_locs(3,2) = 0.2d0;
@@ -237,11 +196,10 @@ end subroutine
 
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use StratifiedShearLayer_parameters    
-    use kind_parameters,  only: rkind, clen 
+    use convective_igrid_parameters    
+    use kind_parameters,  only: rkind
     use constants,        only: one,two
     use decomp_2d,        only: decomp_info
-    use StratifiedShearLayer_IO, only: read_Domain_info 
     implicit none
 
     type(decomp_info),                                          intent(in)    :: decomp
@@ -249,12 +207,9 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
-    integer :: ix1, ixn, iy1, iyn, iz1, izn, seed = 231454, N, M, nTG
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind)  :: maxrandom = 1.d-5, deltaPhi, Tbase, A0, maxTG, eta, ScalePerturb
-    integer :: ProblemMode = 0
-    character(len=clen) :: domain_fname,InitFileTag,InitFileDirectory 
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta, ProblemMode, domain_fname, InitFileTag,InitFileDirectory, ScalePerturb 
+    integer :: ix1, ixn, iy1, iyn, iz1, izn
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init  
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -268,23 +223,19 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     ! If base decomposition is in Y
     ix1 = decomp%xst(1); iy1 = decomp%xst(2); iz1 = decomp%xst(3)
     ixn = decomp%xen(1); iyn = decomp%xen(2); izn = decomp%xen(3)
-   
-    if (ProblemMode == 1) then
-        call read_Domain_info(Lx,Ly,Lz,trim(domain_fname))
-    end if 
-
+    
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         dx = Lx/real(nxg,rkind)
         dy = Ly/real(nyg,rkind)
-        dz = two*Lz/real(nzg,rkind)
+        dz = Lz/real(nzg,rkind)
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
                     x(i,j,k) = real( ix1 + i - 1, rkind ) * dx
                     y(i,j,k) = real( iy1 + j - 1, rkind ) * dy
-                    z(i,j,k) = real( iz1 + k - 1, rkind ) * dz + dz/two - Lz
+                    z(i,j,k) = real( iz1 + k - 1, rkind ) * dz + dz/two
                 end do
             end do
         end do
@@ -304,10 +255,16 @@ subroutine set_Reference_Temperature(inputfile, Thetaref)
     implicit none
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Thetaref
-    !integer :: ioUnit 
-    !real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = one, Tsurf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4 
+    integer :: ioUnit 
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init  
      
-    Thetaref = one
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PROBLEM_INPUT)
+    close(ioUnit)    
+
+    Thetaref = Tref
     ! This will set the value of Tref.     
 
 end subroutine

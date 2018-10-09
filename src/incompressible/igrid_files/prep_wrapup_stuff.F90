@@ -61,9 +61,17 @@ subroutine dealiasRealField_C(this, field)
     end if 
 end subroutine
 
-subroutine computePressure(this)
+subroutine computePressure(this, ComputeRHSForBudget)
     class(igrid), intent(inout) :: this
     logical :: copyFringeRHS, copyDNSRHS, copyTurbineRHS
+    logical, optional, intent(in) :: ComputeRHSForBudget
+    logical :: splitRHS
+
+    if (present(ComputeRHSForBudget)) then
+        splitRHS = ComputeRHSForBudget
+    else
+        splitRHS = .false. 
+    end if 
 
     if (this%computeDNSpressure) then
        copyDNSRHS = .true. 
@@ -83,8 +91,12 @@ subroutine computePressure(this)
         copyTurbineRHS = .false. 
     end if
 
-    ! STEP 1: Populate RHS 
-    call this%populate_rhs(CopyForDNSpress=copyDNSRHS, CopyForFringePress=copyFringeRHS, copyForTurbinePress=copyTurbineRHS)
+    ! STEP 1: Populate RHS
+    if (splitRHS) then
+        call this%populate_rhs_for_budgets(CopyForDNSpress=copyDNSRHS, CopyForFringePress=copyFringeRHS, copyForTurbinePress=copyTurbineRHS)
+    else
+        call this%populate_rhs(CopyForDNSpress=copyDNSRHS, CopyForFringePress=copyFringeRHS, copyForTurbinePress=copyTurbineRHS)
+    end if
 
     ! STEP 2: Compute pressure
     if (this%fastCalcPressure) then
