@@ -286,6 +286,12 @@ module IncompressibleGrid
         type(io_hdf5) :: viz_hdf5
 
         logical :: WriteTurbineForce = .false. 
+        
+        ! budgets on the fly
+        logical :: StoreForBudgets = .false. 
+        complex(rkind), dimension(:,:,:), pointer :: ucon, vcon, wcon, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb 
+
+
         contains
             procedure          :: init
             procedure          :: destroy
@@ -325,6 +331,8 @@ module IncompressibleGrid
             procedure, private :: ApplyCompactFilter 
             procedure, private :: addNonLinearTerm_skewSymm
             procedure, private :: populate_rhs
+            procedure, private :: populate_rhs_for_budgets
+            procedure, private :: populate_RHS_extraTerms 
             procedure, private :: project_and_prep
             procedure, private :: wrapup_timestep
             procedure, private :: reset_pointers
@@ -347,14 +355,20 @@ module IncompressibleGrid
             procedure, private :: append_visualization_info
             procedure, private :: initialize_hdf5_io
             procedure, private :: destroy_hdf5_io
+            procedure          :: InstrumentForBudgets
+            procedure          :: GetMomentumTerms
+            procedure          :: set_budget_rhs_to_zero
     end type
 
 contains 
+
 #include "igrid_files/io_stuff.F90"
 #include "igrid_files/stats_stuff.F90"
 #include "igrid_files/rhs_stuff.F90"
 #include "igrid_files/timestepping_stuff.F90"
 #include "igrid_files/prep_wrapup_stuff.F90"
+#include "igrid_files/budgets_stuff.F90"
+#include "igrid_files/popRHS_stuff.F90"
 
     subroutine init(this,inputfile, initialize2decomp)
         class(igrid), intent(inout), target :: this        
