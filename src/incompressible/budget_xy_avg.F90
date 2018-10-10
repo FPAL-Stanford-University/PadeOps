@@ -14,7 +14,8 @@ module budgets_xy_avg_mod
    ! BUDGET TYPE: 
    ! BUDGET_0: 6 Reynolds stress terms + 3 temp fluxes + meanU + meanV + meanT
    ! BUDGET_1: momentum equation terms (Budget0 also computed) 
-   ! BUDGET_2: TKE budget (Budget0 and Budget1 also computed) 
+   ! BUDGET_2: MKE budget (Budget0 and Budget1 also computed) 
+   ! BUDGET 3: TKE budget (Budget 0, 1 and 2 also included)
 
 
    ! BUDGET_0 term indices:
@@ -55,6 +56,15 @@ module budgets_xy_avg_mod
    ! 14: Z eqn - Pressure gradient term (the mean coriolis, and buoyancy terms are removed)  
 
 
+   ! BUDGET_2 term indices: 
+   ! 1:  Loss to Resolved TKE
+   ! 2:  Convective transport 
+   ! 3:  Loss to SGS TKE + viscous dissipation 
+   ! 4:  SGS + viscous transport
+   ! 5:  Actuator disk sink
+   ! 6:  Geostrophic forcing source
+   ! 7:  Coriolis work (should be zero)
+
    type :: budgets_xy_avg
         private
         integer :: budgetType = 1, run_id, nz
@@ -67,7 +77,7 @@ module budgets_xy_avg_mod
         real(rkind) :: avgFact 
         character(len=clen) :: budgets_dir
         real(rkind), dimension(:), allocatable :: tmp_meanC, tmp_meanE
-        real(rkind), dimension(:,:,:), allocatable :: tmpC_1d, tmpE_1d
+        real(rkind), dimension(:,:,:), allocatable :: tmpC_1d, tmpE_1d, ddz_tmpC_1d
         real(rkind), dimension(:), allocatable :: buoy_hydrostatic
 
         type(cd06stagg) :: cd06op_z_mom_budget 
@@ -87,6 +97,7 @@ module budgets_xy_avg_mod
         procedure, private  :: restartBudget
         procedure, private  :: AssembleBudget0
         procedure, private  :: AssembleBudget1
+        procedure, private  :: AssembleBudget2
         procedure, private  :: get_xy_fluctE_from_fhatE
         procedure, private  :: get_xy_fluctC_from_fhatC
         procedure, private  :: get_xy_meanC_from_fhatC 
@@ -94,6 +105,7 @@ module budgets_xy_avg_mod
         procedure, private  :: get_xy_meanC_from_fC 
         procedure, private  :: get_xy_meanE_from_fE 
         procedure, private  :: interp_1d_Edge2Cell 
+        procedure, private  :: ddz_1d_Cell2Cell 
         !procedure, private  :: AssembleBudget2 (TKE budget is incomplete)
 
    end type 
@@ -131,6 +143,8 @@ contains
         this%avgFact = 1.d0/(real(igrid_sim%nx,rkind)*real(igrid_sim%ny,rkind))
         allocate(this%Budget_0(this%nz,16))
         allocate(this%Budget_1(this%nz,14))
+        if (nrank == 0) allocate(this%Budget_2(this%nz,7))
+
         if ((trim(budgets_dir) .eq. "null") .or.(trim(budgets_dir) .eq. "NULL")) then
             this%budgets_dir = igrid_sim%outputDir
         end if 
@@ -141,12 +155,14 @@ contains
             this%counter = 0
             this%budget_0 = 0.d0 
             this%budget_1 = 0.d0 
+            this%budget_2 = 0.d0 
         end if
 
         call this%cd06op_z_mom_budget%init(igrid_sim%nx, igrid_sim%dx, .false., .false., .true., .true.)
         allocate(this%tmp_meanC(this%nz)) 
         allocate(this%tmp_meanE(this%nz+1)) 
         allocate(this%tmpC_1d(1,1,this%nz)) 
+        allocate(this%ddz_tmpC_1d(1,1,this%nz)) 
         allocate(this%tmpE_1d(1,1,this%nz+1)) 
 
         allocate(this%buoy_hydrostatic(this%nz)) 
@@ -234,7 +250,8 @@ contains
         case(2)
             call this%AssembleBudget0()
             call this%AssembleBudget1()
-            !call this%AssembleBudget2()
+            ! Budget 2 need to be assembled now; it only needs to be assembled
+            ! before writing to disk 
         end select
 
         this%counter = this%counter + 1
@@ -245,6 +262,8 @@ contains
         class(budgets_xy_avg), intent(inout) :: this
         character(len=clen) :: fname, tempname 
 
+        if (this%budgetType>1) call this%AssembleBudget2()
+        
         if (nrank == 0) then
             ! Budget 0: 
             write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_budget0","_t",this%igrid_sim%step,"_n",this%counter,".stt"
@@ -269,11 +288,20 @@ contains
             this%budget_0 = this%budget_0*(real(this%counter,rkind) + 1.d-18)
 
             ! Budget 1: 
-            write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_budget1","_t",this%igrid_sim%step,"_n",this%counter,".stt"
-            fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
-            this%budget_1 = this%budget_1/(real(this%counter,rkind) + 1.d-18)
-            call write_2d_ascii(this%budget_1, fname) 
-            this%budget_1 = this%budget_1*(real(this%counter,rkind) + 1.d-18)
+            if (this%budgetType>0) then
+                write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_budget1","_t",this%igrid_sim%step,"_n",this%counter,".stt"
+                fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+                this%budget_1 = this%budget_1/(real(this%counter,rkind) + 1.d-18)
+                call write_2d_ascii(this%budget_1, fname) 
+                this%budget_1 = this%budget_1*(real(this%counter,rkind) + 1.d-18)
+            end if
+
+            ! Budget 2: 
+            if (this%budgetType>1) then
+                write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_budget2","_t",this%igrid_sim%step,"_n",this%counter,".stt"
+                fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+                call write_2d_ascii(this%budget_2, fname) 
+            end if 
         end if 
     end subroutine 
 
@@ -283,6 +311,8 @@ contains
         integer, intent(in) :: rid, cid, tid
         character(len=clen) :: fname, tempname 
 
+        this%counter = cid
+        
         ! Budget 0: 
         write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",rid,"_budget0","_t",tid,"_n",cid,".stt"
         fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
@@ -291,13 +321,16 @@ contains
         this%budget_0 = this%budget_0*(real(cid,rkind) + 1.d-18)
 
         ! Budget 1: 
-        write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",rid,"_budget1","_t",tid,"_n",cid,".stt"
-        fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
-        if (allocated(this%budget_1)) deallocate(this%budget_1)
-        call read_2d_ascii(this%budget_1, fname)
-        this%budget_1 = this%budget_1*(real(cid,rkind) + 1.d-18)
+        if (this%budgetType>0) then
+            write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",rid,"_budget1","_t",tid,"_n",cid,".stt"
+            fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+            if (allocated(this%budget_1)) deallocate(this%budget_1)
+            call read_2d_ascii(this%budget_1, fname)
+            this%budget_1 = this%budget_1*(real(cid,rkind) + 1.d-18)
+        end if 
 
-        this%counter = cid
+        ! Budget 2: need not be read in since it's computed using budget_0 and
+        ! budget_1 entirely. 
     end subroutine 
 
 
@@ -398,6 +431,16 @@ contains
 
     end subroutine 
 
+    subroutine ddz_1d_Cell2Cell(this, fC, ddz_fC)
+        class(budgets_xy_avg), intent(inout) :: this
+        real(rkind), dimension(this%nz  ), intent(in)  :: fC
+        real(rkind), dimension(this%nz  ), intent(out) :: ddz_fC
+
+        this%tmpC_1d(1,1,:) = fC
+        call this%cd06op_z_mom_budget%ddz_C2C(this%tmpC_1d, this%ddz_tmpC_1d,1,1)
+        ddz_fC = this%ddz_tmpC_1d(1,1,:)
+
+    end subroutine 
 
     subroutine AssembleBudget0(this)
         class(budgets_xy_avg), intent(inout) :: this
@@ -528,6 +571,62 @@ contains
         call this%get_xy_meanE_from_fhatE(this%pz, this%tmp_meanE)
         call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
         this%budget_1(:,14) = this%budget_1(:,14) + this%tmp_meanC
+
+    end subroutine
+
+
+    subroutine AssembleBudget2(this)
+        class(budgets_xy_avg), intent(inout) :: this
+        real(rkind), dimension(:), allocatable :: U_mean, V_mean, dUdz, dVdz, uw, vw
+
+        if (nrank == 0) then
+            if (this%counter > 0) then
+                allocate(U_mean(this%nz), V_mean(this%nz))
+                allocate(dUdz(this%nz), dVdz(this%nz))
+                allocate(uw(this%nz), vw(this%nz))
+
+                U_mean = this%budget_0(:,1)/real(this%counter,rkind)
+                V_mean = this%budget_0(:,2)/real(this%counter,rkind)
+
+                uw = this%budget_0(:,6)/real(this%counter,rkind)
+                vw = this%budget_0(:,8)/real(this%counter,rkind)
+
+                call this%ddz_1d_Cell2Cell(U_mean, dUdz)
+                call this%ddz_1d_Cell2Cell(V_mean, dVdz)
+
+                ! Loss of MKE to Resolved TKE
+                this%budget_2(:,1) = uw*dUdz + vw*dVdz
+                
+                ! Convective transport: (more accurate to compute this way than to
+                ! take derivative)
+                this%tmp_meanC = U_mean*(this%budget_1(:,1)/real(this%counter,rkind))
+                this%tmp_meanC = this%tmp_meanC + V_mean*(this%budget_1(:,7)/real(this%counter,rkind))
+                this%budget_2(:,2) = this%tmp_meanC - this%budget_2(:,1)
+
+                ! Loss of MKE to SGS TKE + viscous dissipation 
+                this%budget_2(:,3) = (this%budget_0(:,14)/real(this%counter+1,rkind))*dUdz &
+                                   + (this%budget_0(:,15)/real(this%counter+1,rkind))*dVdz
+       
+                ! Viscous + SGS transport
+                this%tmp_meanC = U_mean*((this%budget_1(:,2) + this%budget_1(:,3))/real(this%counter,rkind))
+                this%tmp_meanC = this%tmp_meanC + V_mean*((this%budget_1(:,8) + this%budget_1(:,9))/real(this%counter,rkind))
+                this%budget_2(:,4) = this%tmp_meanC - this%budget_2(:,3)
+
+                ! Actuator disk sink
+                this%budget_2(:,5) = U_mean*(this%budget_1(:,6)/real(this%counter,rkind))
+
+                ! Geostrophic forcing term
+                this%budget_2(:,6) = U_mean*(this%budget_1(:,5)/real(this%counter,rkind)) &
+                                   + V_mean*(this%budget_1(:,11)/real(this%counter,rkind))
+                
+                ! Coriolis forcing term (should be 0)
+                this%budget_2(:,7) = U_mean*(this%budget_1(:,4)/real(this%counter,rkind)) &
+                                   + V_mean*(this%budget_1(:,10)/real(this%counter,rkind))
+
+                deallocate(U_mean, V_mean, dUdz, dVdz, uw, vw)
+            end if 
+        end if 
+
 
     end subroutine 
 end module 
