@@ -84,7 +84,7 @@ module budgets_xy_avg_mod
 
         integer :: tidx_dump 
         integer :: tidx_compute
-
+        integer :: tidx_budget_start 
         logical :: do_budgets
 
     contains
@@ -121,9 +121,9 @@ contains
         character(len=clen) :: budgets_dir = "NULL"
         integer :: ioUnit, ierr,  budgetType = 1, restart_tid = 0, restart_rid = 0, restart_counter = 0
         logical :: restart_budgets = .false. 
-        integer :: tidx_compute = 1000000, tidx_dump = 1000000
+        integer :: tidx_compute = 1000000, tidx_dump = 1000000, tidx_budget_start = 0
         logical :: do_budgets = .false. 
-        namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets
+        namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start 
         
         ! STEP 1: Read in inputs, link pointers and allocate budget vectors
         ioUnit = 534
@@ -137,6 +137,7 @@ contains
         this%do_budgets = do_budgets
         this%tidx_dump = tidx_dump
         this%tidx_compute = tidx_compute
+        this%tidx_budget_start = tidx_budget_start  
 
         this%budgets_dir = budgets_dir
         this%budgetType = budgetType 
@@ -201,7 +202,7 @@ contains
     subroutine doBudgets(this)
         class(budgets_xy_avg), intent(inout) :: this
 
-        if (this%do_budgets) then
+        if (this%do_budgets .and. (this%igrid_sim%step>this%tidx_budget_start)) then
         
             if (mod(this%igrid_sim%step,this%tidx_compute) .eq. 0) then
                 call this%updateBudget()
