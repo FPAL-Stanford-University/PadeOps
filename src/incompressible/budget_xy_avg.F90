@@ -71,6 +71,7 @@ module budgets_xy_avg_mod
 
         complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb 
         type(igrid), pointer :: igrid_sim 
+        real(rkind), dimension(:), allocatable :: U_mean, V_mean, dUdz, dVdz, uw, vw
         
         real(rkind), dimension(:,:), allocatable :: budget_0, budget_1, budget_2
         integer :: counter
@@ -165,6 +166,9 @@ contains
         allocate(this%tmpC_1d(1,1,this%nz)) 
         allocate(this%ddz_tmpC_1d(1,1,this%nz)) 
         allocate(this%tmpE_1d(1,1,this%nz+1)) 
+        allocate(this%U_mean(this%nz), this%V_mean(this%nz))
+        allocate(this%dUdz(this%nz), this%dVdz(this%nz))
+        allocate(this%uw(this%nz), this%vw(this%nz))
 
         allocate(this%buoy_hydrostatic(this%nz)) 
 
@@ -578,53 +582,48 @@ contains
 
     subroutine AssembleBudget2(this)
         class(budgets_xy_avg), intent(inout) :: this
-        real(rkind), dimension(:), allocatable :: U_mean, V_mean, dUdz, dVdz, uw, vw
 
         if (nrank == 0) then
             if (this%counter > 0) then
-                allocate(U_mean(this%nz), V_mean(this%nz))
-                allocate(dUdz(this%nz), dVdz(this%nz))
-                allocate(uw(this%nz), vw(this%nz))
 
-                U_mean = this%budget_0(:,1)/real(this%counter,rkind)
-                V_mean = this%budget_0(:,2)/real(this%counter,rkind)
+                this%U_mean = this%budget_0(:,1)/real(this%counter,rkind)
+                this%V_mean = this%budget_0(:,2)/real(this%counter,rkind)
 
-                uw = this%budget_0(:,6)/real(this%counter,rkind)
-                vw = this%budget_0(:,8)/real(this%counter,rkind)
+                this%uw = this%budget_0(:,6)/real(this%counter,rkind)
+                this%vw = this%budget_0(:,8)/real(this%counter,rkind)
 
-                call this%ddz_1d_Cell2Cell(U_mean, dUdz)
-                call this%ddz_1d_Cell2Cell(V_mean, dVdz)
+                call this%ddz_1d_Cell2Cell(this%U_mean, this%dUdz)
+                call this%ddz_1d_Cell2Cell(this%V_mean, this%dVdz)
 
                 ! Loss of MKE to Resolved TKE
-                this%budget_2(:,1) = uw*dUdz + vw*dVdz
+                this%budget_2(:,1) = this%uw*this%dUdz + this%vw*this%dVdz
                 
                 ! Convective transport: (more accurate to compute this way than to
                 ! take derivative)
-                this%tmp_meanC = U_mean*(this%budget_1(:,1)/real(this%counter,rkind))
-                this%tmp_meanC = this%tmp_meanC + V_mean*(this%budget_1(:,7)/real(this%counter,rkind))
+                this%tmp_meanC = this%U_mean*(this%budget_1(:,1)/real(this%counter,rkind))
+                this%tmp_meanC = this%tmp_meanC + this%V_mean*(this%budget_1(:,7)/real(this%counter,rkind))
                 this%budget_2(:,2) = this%tmp_meanC - this%budget_2(:,1)
 
                 ! Loss of MKE to SGS TKE + viscous dissipation 
-                this%budget_2(:,3) = (this%budget_0(:,14)/real(this%counter+1,rkind))*dUdz &
-                                   + (this%budget_0(:,15)/real(this%counter+1,rkind))*dVdz
+                this%budget_2(:,3) = (this%budget_0(:,14)/real(this%counter+1,rkind))*this%dUdz &
+                                   + (this%budget_0(:,15)/real(this%counter+1,rkind))*this%dVdz
        
                 ! Viscous + SGS transport
-                this%tmp_meanC = U_mean*((this%budget_1(:,2) + this%budget_1(:,3))/real(this%counter,rkind))
-                this%tmp_meanC = this%tmp_meanC + V_mean*((this%budget_1(:,8) + this%budget_1(:,9))/real(this%counter,rkind))
+                this%tmp_meanC = this%U_mean*((this%budget_1(:,2) + this%budget_1(:,3))/real(this%counter,rkind))
+                this%tmp_meanC = this%tmp_meanC + this%V_mean*((this%budget_1(:,8) + this%budget_1(:,9))/real(this%counter,rkind))
                 this%budget_2(:,4) = this%tmp_meanC - this%budget_2(:,3)
 
                 ! Actuator disk sink
-                this%budget_2(:,5) = U_mean*(this%budget_1(:,6)/real(this%counter,rkind))
+                this%budget_2(:,5) = this%U_mean*(this%budget_1(:,6)/real(this%counter,rkind))
 
                 ! Geostrophic forcing term
-                this%budget_2(:,6) = U_mean*(this%budget_1(:,5)/real(this%counter,rkind)) &
-                                   + V_mean*(this%budget_1(:,11)/real(this%counter,rkind))
+                this%budget_2(:,6) = this%U_mean*(this%budget_1(:,5)/real(this%counter,rkind)) &
+                                   + this%V_mean*(this%budget_1(:,11)/real(this%counter,rkind))
                 
                 ! Coriolis forcing term (should be 0)
-                this%budget_2(:,7) = U_mean*(this%budget_1(:,4)/real(this%counter,rkind)) &
-                                   + V_mean*(this%budget_1(:,10)/real(this%counter,rkind))
+                this%budget_2(:,7) = this%U_mean*(this%budget_1(:,4)/real(this%counter,rkind)) &
+                                   + this%V_mean*(this%budget_1(:,10)/real(this%counter,rkind))
 
-                deallocate(U_mean, V_mean, dUdz, dVdz, uw, vw)
             end if 
         end if 
 
