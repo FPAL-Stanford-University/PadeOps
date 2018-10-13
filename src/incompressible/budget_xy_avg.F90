@@ -183,11 +183,7 @@ contains
         if (restart_budgets) then
             call this%RestartBudget(restart_rid, restart_tid, restart_counter)
         else
-            this%counter = 0
-            this%budget_0 = 0.d0 
-            this%budget_1 = 0.d0 
-            this%budget_2 = 0.d0 
-            this%budget_3 = 0.d0 
+            call this%resetBudget()
         end if
 
         call this%cd06op_z_mom_budget%init(igrid_sim%nx, igrid_sim%dx, .false., .false., .true., .true.)
@@ -291,7 +287,7 @@ contains
         case(2)
             call this%AssembleBudget0()
             call this%AssembleBudget1()
-            ! Budget 2 need to be assembled now; it only needs to be assembled
+            ! Budget 2 need not be assembled now; it only needs to be assembled
             ! before writing to disk 
         case(3)
             call this%AssembleBudget0()
@@ -362,13 +358,10 @@ contains
             ! Production 
             this%budget_3s(:,1) = -this%budget_2(:,1)
            
-
             ! Convective transport 
-            ! first get the time averaged quantity
-            this%budget_3s(:,2) = this%budget_3s(:,2) - this%U_mean*this%budget_1s(:,1) - this%V_mean*this%budget_1s(:,7)
-            ! now subtract out the production 
-            this%budget_3s(:,2) = this%budget_3s(:,2) - this%budget_3s(:,1) 
-            
+            ! TKE transport = TOTAL KE transport - MKE trasport  
+            this%budget_3s(:,2) = this%budget_3s(:,2) - this%budget_2(:,2)
+
             ! Pressure transport 
             ! Done already because <dpdx> and <dpdy> are 0. 
 
@@ -424,6 +417,15 @@ contains
 
         ! Budget 2: need not be read in since it's computed using budget_0 and
         ! budget_1 entirely. 
+        
+        ! Budget 3:
+        if (this%budgetType>2) then
+            write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",rid,"_budget3","_t",tid,"_n",cid,".stt"
+            fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+            if (allocated(this%budget_3)) deallocate(this%budget_3)
+            call read_2d_ascii(this%budget_3, fname)
+            this%budget_3 = this%budget_3*(real(cid,rkind) + 1.d-18)
+        end if 
     end subroutine 
 
 
@@ -734,10 +736,11 @@ contains
     
     subroutine AssembleBudget3(this)
         class(budgets_xy_avg), intent(inout) :: this
+        real(rkind) :: tmp1, tmp2
         
         ! First get the mean statistics
-        this%U_mean = this%budget_0(:,1)/real(this%counter+1,rkind)
-        this%V_mean = this%budget_0(:,2)/real(this%counter+1,rkind)
+        !this%U_mean = this%budget_0(:,1)/real(this%counter+1,rkind)
+        !this%V_mean = this%budget_0(:,2)/real(this%counter+1,rkind)
         
         
         
@@ -745,7 +748,8 @@ contains
         ! this%budget_3(:,1) = this%budget_2(:,1) <- compute this before writing 
 
         ! Convective transport 
-        ! Really just compute u_i_prime*RHS_i and add; subtract out production before dumping. 
+        ! Really just compute total kinetic energy transport: u_i* ddx_j (u_i * u_j)  = ddx_j (u_i u_i /2 u_j) = u_i * RHS_i
+        ! The TKE convetive transport is just Total KE transport - MKE transport 
         call this%igrid_sim%spectC%ifft(this%uc,this%igrid_sim%rbuffxC(:,:,:,3))
         this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,3)
         call this%igrid_sim%spectC%ifft(this%vc,this%igrid_sim%rbuffxC(:,:,:,3))
@@ -812,9 +816,14 @@ contains
         this%budget_3(:,6) = this%budget_3(:,6)  + this%tmp_meanC 
 
         ! Coriolis sink 
+        ! Get the geostrophic forcing 
+        call this%igrid_sim%get_geostrophic_forcing(tmp1, tmp2)         ! Forcing in x and y directions respectively 
+        
         call this%igrid_sim%spectC%ifft(this%ucor,this%igrid_sim%rbuffxC(:,:,:,3))
+        this%igrid_sim%rbuffxC(:,:,:,3) = this%igrid_sim%rbuffxC(:,:,:,3) - tmp1 ! remove the geostrphic forcing term 
         this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,3)
         call this%igrid_sim%spectC%ifft(this%vcor,this%igrid_sim%rbuffxC(:,:,:,3))
+        this%igrid_sim%rbuffxC(:,:,:,3) = this%igrid_sim%rbuffxC(:,:,:,3) - tmp2 ! remove the geostrphic forcing term 
         this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%rbuffxC(:,:,:,4) + this%igrid_sim%v*this%igrid_sim%rbuffxC(:,:,:,3)
         call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
         this%budget_3(:,7) = this%budget_3(:,7) + this%tmp_meanC
