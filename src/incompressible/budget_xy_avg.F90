@@ -79,9 +79,9 @@ module budgets_xy_avg_mod
    ! 3. Pressure transport
    ! 4. SGS + viscous transport
    ! 5. SGS + viscous dissipation
-   ! 6. Buoyancy transfer
-   ! 7. Actuator disk/Turbine sink 
-   ! 8. Coriolis work (should be zero)
+   ! 6. Actuator disk/Turbine sink 
+   ! 7. Coriolis work (should be zero)
+   ! 8. Buoyancy transfer
 
 
 
@@ -124,6 +124,7 @@ module budgets_xy_avg_mod
         procedure, private  :: AssembleBudget0
         procedure, private  :: AssembleBudget1
         procedure, private  :: AssembleBudget2
+        procedure, private  :: AssembleBudget3
         procedure, private  :: get_xy_fluctE_from_fhatE
         procedure, private  :: get_xy_fluctC_from_fhatC
         procedure, private  :: get_xy_meanC_from_fhatC 
@@ -292,6 +293,10 @@ contains
             call this%AssembleBudget1()
             ! Budget 2 need to be assembled now; it only needs to be assembled
             ! before writing to disk 
+        case(3)
+            call this%AssembleBudget0()
+            call this%AssembleBudget1()
+            call this%AssembleBudget3()
         end select
 
         this%counter = this%counter + 1
@@ -383,6 +388,8 @@ contains
             ! Coriolis
             this%budget_3s(:,7) = this%budget_3s(:,7) - this%U_mean*this%budget_1s(:,4) - this%V_mean*this%budget_1s(:,10)
 
+            ! Buoyancy 
+            ! nothing to do since <W> = 0
             if (this%budgetType>2) then
                 write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_budget3","_t",this%igrid_sim%step,"_n",this%counter,".stt"
                 fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
@@ -816,6 +823,14 @@ contains
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
         call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
         this%budget_3(:,7) = this%budget_3(:,7) + this%tmp_meanC 
+
+
+        ! Buoyancy transfer
+        call this%igrid_sim%spectE%ifft(this%wb,this%igrid_sim%rbuffxE(:,:,:,1))
+        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%rbuffxE(:,:,:,1)
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        this%budget_3(:,8) = this%budget_3(:,8) + this%tmp_meanC 
 
     end subroutine
 
