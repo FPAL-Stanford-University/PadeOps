@@ -54,6 +54,7 @@ module PadeDerOps
       generic            :: interpz_E2C => interpz_E2C_real, interpz_E2C_cmplx
       procedure          :: ddz_1d_C2C
       procedure          :: ddz_1d_C2E
+      procedure          :: interp_1d_E2C
   end type
 
 contains
@@ -1273,4 +1274,56 @@ subroutine ddz_1d_C2E(this, input, output, bot, top)
 
 end subroutine 
 
+subroutine interp_1d_E2C(this,input,output,bot,top)
+   class(Pade6stagg), intent(in) :: this
+   real(rkind), dimension(1,1,this%gp%zsz(3)+1), intent(in)  :: input
+   real(rkind), dimension(1,1,this%gp%zsz(3)  ), intent(out) :: output
+   integer, intent(in) :: bot, top
+
+
+   if (this%isPeriodic) then
+        output = 0.d0 
+   else
+      select case(this%scheme)
+      case(fd02)
+            call message(0,"WARNING: Second order FD cannot be used for 1D derivative evaluations.")
+      case(cd06)
+         select case (bot)
+         case(-1) 
+            if     (top == -1) then
+               call this%derOO%interpz_E2C(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSO%interpz_E2C(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derEO%interpz_E2C(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case(0)  ! bottom = sided
+            if     (top == -1) then
+               call this%derOS%interpz_E2C(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSS%interpz_E2C(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derES%interpz_E2C(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case(1)  ! bottom = even
+            if     (top == -1) then
+               call this%derOE%interpz_E2C(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSE%interpz_E2C(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derEE%interpz_E2C(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case default
+            output = 0.d0
+         end select
+      end select 
+   end if 
+
+end subroutine
 end module 

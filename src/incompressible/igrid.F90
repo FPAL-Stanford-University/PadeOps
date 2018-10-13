@@ -30,7 +30,7 @@ module IncompressibleGrid
     implicit none
 
     private
-    public :: igrid 
+    public :: igrid, wBC_bottom, wBC_top  
 
     complex(rkind), parameter :: zeroC = zero + imi*zero 
 

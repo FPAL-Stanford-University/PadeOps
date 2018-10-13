@@ -1,7 +1,6 @@
 module budgets_xy_avg_mod
    use kind_parameters, only: rkind, clen, mpirkind
    use decomp_2d
-   use cd06staggstuff, only: cd06stagg
    use reductions, only: p_sum
    use incompressibleGrid, only: igrid  
    use exits, only: message
@@ -106,7 +105,6 @@ module budgets_xy_avg_mod
 
         real(rkind), dimension(:), allocatable :: meanZ_bcast
 
-        type(cd06stagg) :: cd06op_z_mom_budget 
 
         integer :: tidx_dump 
         integer :: tidx_compute
@@ -186,7 +184,6 @@ contains
             call this%resetBudget()
         end if
 
-        call this%cd06op_z_mom_budget%init(igrid_sim%nx, igrid_sim%dx, .false., .false., .true., .true.)
         allocate(this%tmp_meanC(this%nz)) 
         allocate(this%tmp_meanE(this%nz+1)) 
         allocate(this%tmpC_1d(1,1,this%nz)) 
@@ -348,8 +345,8 @@ contains
             ! subtract out sgs dissipation from sgs transport 
             this%U_mean = this%budget_0(:,1)/real(this%counter,rkind)
             this%V_mean = this%budget_0(:,2)/real(this%counter,rkind)
-            call this%ddz_1d_Cell2Cell(this%U_mean, this%dUdz)
-            call this%ddz_1d_Cell2Cell(this%V_mean, this%dVdz)
+            call this%ddz_1d_Cell2Cell(this%U_mean, this%dUdz, 0, 0)
+            call this%ddz_1d_Cell2Cell(this%V_mean, this%dVdz, 0, 0)
             
             this%budget_0s = this%budget_0/real(this%counter,rkind) 
             this%budget_1s = this%budget_1/real(this%counter,rkind) 
@@ -523,25 +520,27 @@ contains
 
     end subroutine
     
-    subroutine interp_1d_Edge2Cell(this, fE,fC)
+    subroutine interp_1d_Edge2Cell(this, fE,fC, bc_bot, bc_top)
         class(budgets_xy_avg), intent(inout) :: this
         real(rkind), dimension(this%nz+1), intent(in)  :: fE
         real(rkind), dimension(this%nz  ), intent(out) :: fC
+        integer, intent(in) :: bc_bot, bc_top 
 
 
         this%tmpE_1d(1,1,:) = fE
-        call this%cd06op_z_mom_budget%interpz_E2C(this%tmpE_1d, this%tmpC_1d, 1, 1)
+        call this%igrid_sim%Pade6opZ%interp_1d_E2C(this%tmpE_1d,this%tmpC_1d, bc_bot, bc_top)
         fC = this%tmpC_1d(1,1,:)
 
     end subroutine 
 
-    subroutine ddz_1d_Cell2Cell(this, fC, ddz_fC)
+    subroutine ddz_1d_Cell2Cell(this, fC, ddz_fC, bc_bot, bc_top)
         class(budgets_xy_avg), intent(inout) :: this
         real(rkind), dimension(this%nz  ), intent(in)  :: fC
         real(rkind), dimension(this%nz  ), intent(out) :: ddz_fC
+        integer, intent(in) :: bc_bot, bc_top 
 
         this%tmpC_1d(1,1,:) = fC
-        call this%cd06op_z_mom_budget%ddz_C2C(this%tmpC_1d, this%ddz_tmpC_1d,1,1)
+        call this%igrid_sim%Pade6opZ%ddz_1d_C2C(this%tmpC_1d,this%ddz_tmpC_1d, bc_bot, bc_top)
         ddz_fC = this%ddz_tmpC_1d(1,1,:)
 
     end subroutine 
@@ -570,7 +569,7 @@ contains
         
         this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%uE*this%igrid_sim%w
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,-1,-1)
         this%budget_0(:,6) = this%budget_0(:,6) + this%tmp_meanC
         
         this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%v*this%igrid_sim%v
@@ -579,12 +578,12 @@ contains
 
         this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%vE*this%igrid_sim%w
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,-1,-1)
         this%budget_0(:,8) = this%budget_0(:,8) + this%tmp_meanC
         
         this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%w
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
         this%budget_0(:,9) = this%budget_0(:,9) + this%tmp_meanC
         
         ! STEP 2: Get Temperature fluxes and variances (IMPORTANT: need to correct for fluctuation before dumping)
@@ -598,7 +597,7 @@ contains
 
         this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%TE*this%igrid_sim%w
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,-1,-1)
         this%budget_0(:,12) = this%budget_0(:,12) + this%tmp_meanC
 
         this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%T*this%igrid_sim%T
@@ -607,16 +606,16 @@ contains
 
         ! STEP 3: SGS stress (also viscous stress if finite reynolds number is being used)
         call this%get_xy_meanE_from_fE(this%igrid_sim%tau13, this%tmp_meanE) 
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
         this%budget_0(:,14) = this%budget_0(:,14) + this%tmp_meanC
 
         call this%get_xy_meanE_from_fE(this%igrid_sim%tau23, this%tmp_meanE) 
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
         this%budget_0(:,15) = this%budget_0(:,15) + this%tmp_meanC
 
         if (associated(this%igrid_Sim%q3)) then
             call this%get_xy_meanE_from_fE(this%igrid_sim%q3, this%tmp_meanE) 
-            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
             this%budget_0(:,16) = this%budget_0(:,16) + this%tmp_meanC
         end if 
 
@@ -673,15 +672,15 @@ contains
 
         ! Get z- momentum equation 
         call this%get_xy_meanE_from_fhatE(this%wc, this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
         this%budget_1(:,12) = this%budget_1(:,12) + this%tmp_meanC
 
         call this%get_xy_meanE_from_fhatE(this%wsgs, this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
         this%budget_1(:,13) = this%budget_1(:,13) + this%tmp_meanC
 
         call this%get_xy_meanE_from_fhatE(this%pz, this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
         this%budget_1(:,14) = this%budget_1(:,14) + this%tmp_meanC
 
     end subroutine
@@ -698,8 +697,8 @@ contains
             this%uw = this%budget_0(:,6)/real(this%counter,rkind)
             this%vw = this%budget_0(:,8)/real(this%counter,rkind)
 
-            call this%ddz_1d_Cell2Cell(this%U_mean, this%dUdz)
-            call this%ddz_1d_Cell2Cell(this%V_mean, this%dVdz)
+            call this%ddz_1d_Cell2Cell(this%U_mean, this%dUdz, 0, 0)
+            call this%ddz_1d_Cell2Cell(this%V_mean, this%dVdz, 0, 0)
 
             ! Loss of MKE to Resolved TKE
             this%budget_2(:,1) = this%uw*this%dUdz + this%vw*this%dVdz
@@ -735,6 +734,7 @@ contains
     end subroutine 
     
     subroutine AssembleBudget3(this)
+        use IncompressibleGrid, only: wBC_bottom, wBC_top 
         class(budgets_xy_avg), intent(inout) :: this
         real(rkind) :: tmp1, tmp2
         
@@ -759,7 +759,7 @@ contains
         call this%igrid_sim%spectE%ifft(this%wc,this%igrid_sim%rbuffxE(:,:,:,1))
         this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%rbuffxE(:,:,:,1)
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, -wBC_bottom, -wBC_top)
         this%budget_3(:,2) = this%budget_3(:,2) + this%tmp_meanC 
     
         ! Pressure transport 
@@ -772,7 +772,7 @@ contains
         call this%igrid_sim%spectE%ifft(this%pz,this%igrid_sim%rbuffxE(:,:,:,1))
         this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%rbuffxE(:,:,:,1)*this%igrid_sim%w
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
         this%budget_3(:,3) = this%budget_3(:,3)  + this%tmp_meanC 
 
         ! SGS transport 
@@ -787,7 +787,7 @@ contains
         call this%igrid_sim%spectE%ifft(this%wsgs,this%igrid_sim%rbuffxE(:,:,:,1))
         this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%rbuffxE(:,:,:,1)
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
         this%budget_3(:,4) = this%budget_3(:,4) + this%tmp_meanC 
         
         ! SGS dissipation
@@ -806,7 +806,7 @@ contains
                                         + this%igrid_sim%tau23*this%igrid_sim%duidxjE(:,:,:,8) 
 
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1),this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
         this%budget_3(:,5) = this%budget_3(:,5) + this%tmp_meanC 
 
         ! Turbine sink
@@ -830,7 +830,7 @@ contains
         call this%igrid_sim%spectE%ifft(this%wcor,this%igrid_sim%rbuffxE(:,:,:,1))
         this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%rbuffxE(:,:,:,1)
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, -1, -1)
         this%budget_3(:,7) = this%budget_3(:,7) + this%tmp_meanC 
 
 
@@ -838,7 +838,7 @@ contains
         call this%igrid_sim%spectE%ifft(this%wb,this%igrid_sim%rbuffxE(:,:,:,1))
         this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%rbuffxE(:,:,:,1)
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
         this%budget_3(:,8) = this%budget_3(:,8) + this%tmp_meanC 
 
     end subroutine
