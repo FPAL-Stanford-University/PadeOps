@@ -160,7 +160,7 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
          !allocate(zplanes(nzplanes))
          !xplanes = [300,400,500,600,700]
          yplanes = [nySize/2]
-         xPlanes = [800]
+         xPlanes = [5*nxSize/8] !800
          !xPlanes = [1, ceiling(nxSize/6.0), ceiling(nxSize/4.85), ceiling(nxSize/4.0), ceiling(nxSize/3.0), ceiling(nxSize/2.0), ceiling(nxSize/1.6)]
          !zplanes = [128]
     end if 
