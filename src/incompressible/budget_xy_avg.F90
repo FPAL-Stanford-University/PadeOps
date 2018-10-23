@@ -534,6 +534,34 @@ contains
             if (allocated(this%budget_3)) deallocate(this%budget_3)
             call read_2d_ascii(this%budget_3, fname)
             this%budget_3 = this%budget_3*(real(cid,rkind) + 1.d-18)
+        end if
+
+        ! Budget 4
+        if (this%budgetType>3) then
+            write(tempname,"(A3,I2.2,A8,A3,A2,I6.6,A2,I6.6,A4)") "Run",rid,"_budget4","_13","_t",tid,"_n",cid,".stt"
+            fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+            if (allocated(this%budget_4_13)) deallocate(this%budget_4_13)
+            call read_2d_ascii(this%budget_4_13, fname)
+            this%budget_4_13 = this%budget_4_13*(real(cid,rkind) + 1.d-18)
+            
+            write(tempname,"(A3,I2.2,A8,A3,A2,I6.6,A2,I6.6,A4)") "Run",rid,"_budget4","_23","_t",tid,"_n",cid,".stt"
+            fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+            if (allocated(this%budget_4_23)) deallocate(this%budget_4_23)
+            call read_2d_ascii(this%budget_4_23, fname)
+            this%budget_4_23 = this%budget_4_23*(real(cid,rkind) + 1.d-18)
+            
+            write(tempname,"(A3,I2.2,A8,A3,A2,I6.6,A2,I6.6,A4)") "Run",rid,"_budget4","_33","_t",tid,"_n",cid,".stt"
+            fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+            if (allocated(this%budget_4_33)) deallocate(this%budget_4_33)
+            call read_2d_ascii(this%budget_4_33, fname)
+            this%budget_4_33 = this%budget_4_33*(real(cid,rkind) + 1.d-18)
+            
+            write(tempname,"(A3,I2.2,A8,A3,A2,I6.6,A2,I6.6,A4)") "Run",rid,"_budget4","_11","_t",tid,"_n",cid,".stt"
+            fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+            if (allocated(this%budget_4_11)) deallocate(this%budget_4_11)
+            call read_2d_ascii(this%budget_4_11, fname)
+            this%budget_4_11 = this%budget_4_11*(real(cid,rkind) + 1.d-18)
+
         end if 
     end subroutine 
 
@@ -1244,7 +1272,8 @@ contains
         call this%igrid_sim%spectC%ifft(this%uc,this%igrid_sim%rbuffxC(:,:,:,3))
         this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,3)
         call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
-        this%budget_4_11(:,2) = this%budget_4_11(:,2) + this%tmp_meanC
+        this%budget_4_11(:,2) = this%budget_4_11(:,2) + 2.d0*this%tmp_meanC
+
 
         ! pressure strain rate 
         this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%duidxjC(:,:,:,1)*this%igrid_sim%pressure
