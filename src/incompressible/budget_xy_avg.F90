@@ -37,10 +37,10 @@ module budgets_xy_avg_mod
    ! 15: <tau23> 
    ! 16: <q3>
    ! 17: <P>
-   ! 18: <tau11>
-   ! 19: <tau12>
-   ! 20: <tau22>
-   ! 21: <tau33>
+   ! 18: <tau11> 
+   ! 19: <tau12> 
+   ! 20: <tau22> 
+   ! 21: <tau33> 
 
 
    ! BUDGET_1 term indices:  
@@ -83,6 +83,16 @@ module budgets_xy_avg_mod
    ! 8. Buoyancy transfer
 
 
+   ! BUDGET_4_ij term indices: 
+   ! 1. Shear Production
+   ! 2. Turbulent transport
+   ! 3. Pressure strain
+   ! 4. Pressure transport 
+   ! 5. SGS + Viscous transport
+   ! 6. SGS + Viscous dissipation
+   ! 7. Buoyancy contribution
+   ! 8. Coriolis exchange
+   ! 9. Actuatir disk sink/source
 
    type :: budgets_xy_avg
         private
@@ -93,7 +103,8 @@ module budgets_xy_avg_mod
         real(rkind), dimension(:), allocatable :: U_mean, V_mean, dUdz, dVdz, uw, vw
         real(rkind), dimension(:), allocatable :: dUdzE, dVdzE
         
-        real(rkind), dimension(:,:), allocatable :: budget_0, budget_1, budget_2
+        real(rkind), dimension(:,:), allocatable :: budget_0, budget_1, budget_2, budget_4s
+        real(rkind), dimension(:,:), allocatable :: budget_4_13, budget_4_23, budget_4_12, budget_4_11, budget_4_22, budget_4_33
         real(rkind), dimension(:,:), allocatable :: budget_3s, budget_3, budget_0s, budget_1s
         integer :: counter
         real(rkind) :: avgFact 
@@ -123,6 +134,7 @@ module budgets_xy_avg_mod
         procedure, private  :: AssembleBudget1
         procedure, private  :: AssembleBudget2
         procedure, private  :: AssembleBudget3
+        procedure, private  :: AssembleBudget4_13
         procedure, private  :: get_xy_fluctE_from_fhatE
         procedure, private  :: get_xy_fluctC_from_fhatC
         procedure, private  :: get_xy_meanC_from_fhatC 
@@ -173,6 +185,9 @@ contains
         allocate(this%Budget_2(this%nz,7))
         allocate(this%Budget_3(this%nz,8))
         allocate(this%Budget_3s(this%nz,8))
+        
+        allocate(this%Budget_4s(this%nz,9))
+        allocate(this%Budget_4_13(this%nz,9))
 
         if ((trim(budgets_dir) .eq. "null") .or.(trim(budgets_dir) .eq. "NULL")) then
             this%budgets_dir = igrid_sim%outputDir
@@ -255,6 +270,7 @@ contains
         this%budget_1 = 0.d0 
         this%budget_2 = 0.d0 
         this%budget_3 = 0.d0 
+        this%budget_4_13 = 0.d0 
 
     end subroutine 
     
@@ -290,6 +306,11 @@ contains
             call this%AssembleBudget0()
             call this%AssembleBudget1()
             call this%AssembleBudget3()
+        case(4)
+            call this%AssembleBudget0()
+            call this%AssembleBudget1()
+            call this%AssembleBudget3()
+            call this%AssembleBudget4_13()
         end select
 
         this%counter = this%counter + 1
@@ -386,6 +407,30 @@ contains
                 call write_2d_ascii(this%budget_3s, fname) 
             end if
 
+
+            ! Budget 4: 
+            ! 13 component:
+            this%budget_4s = this%budget_4_13/real(this%counter,rkind) 
+            ! Shear production: 
+            this%budget_4s(:,1) = -this%budget_0(:,9)*this%dUdz 
+            ! Turbulent transport 
+            this%budget_4s(:,2) = this%budget_4s(:,2) - (this%budget_1s(:,12)*this%U_mean) - this%budget_4s(:,1)
+            ! Pressure strain 
+            this%budget_4s(:,3) = this%budget_4s(:,3) - (this%budget_0s(:,17)*this%dUdz)
+            ! Pressure transport 
+            this%budget_4s(:,4) = this%budget_4s(:,4) - (this%budget_1s(:,14)*this%u_mean) - this%budget_4s(:,3)
+            ! SGS + viscous dissipation 
+            this%budget_4s(:,5) = this%budget_4s(:,5) - (this%budget_0s(:,21)*this%dUdz)
+            ! SGS + viscous transport 
+            this%budget_4s(:,6) = this%budget_4s(:,6) - (this%budget_1s(:,13)*this%u_mean) - this%budget_4s(:,5)
+            ! rest of the indices do not need to be corrected. 
+            if (this%budgetType>3) then
+                write(tempname,"(A3,I2.2,A8,A3,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_budget3","_13","_t",this%igrid_sim%step,"_n",this%counter,".stt"
+                fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+                call write_2d_ascii(this%budget_4s, fname) 
+            end if
+
+            
         end if 
     end subroutine 
 
@@ -624,8 +669,21 @@ contains
         call this%get_xy_meanC_from_fC(this%igrid_sim%pressure, this%tmp_meanC)
         this%budget_0(:,17) = this%budget_0(:,17) + this%tmp_meanC
 
+        ! Get mean tau_11
+        call this%get_xy_meanC_from_fC(this%igrid_sim%tauSGS_ij(:,:,:,1), this%tmp_meanC)
+        this%budget_0(:,18) = this%budget_0(:,18) + this%tmp_meanC
 
-        ! Get the remaining tau_sgs
+        ! Get mean tau_12
+        call this%get_xy_meanC_from_fC(this%igrid_sim%tauSGS_ij(:,:,:,2), this%tmp_meanC)
+        this%budget_0(:,19) = this%budget_0(:,19) + this%tmp_meanC
+
+        ! Get mean tau_22
+        call this%get_xy_meanC_from_fC(this%igrid_sim%tauSGS_ij(:,:,:,4), this%tmp_meanC)
+        this%budget_0(:,20) = this%budget_0(:,20) + this%tmp_meanC
+
+        ! Get mean tau_23
+        call this%get_xy_meanC_from_fC(this%igrid_sim%tauSGS_ij(:,:,:,6), this%tmp_meanC)
+        this%budget_0(:,21) = this%budget_0(:,21) + this%tmp_meanC
 
     end subroutine 
 
@@ -784,7 +842,8 @@ contains
         this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%rbuffxC(:,:,:,4) + this%igrid_sim%v*this%igrid_sim%rbuffxC(:,:,:,3)
         call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
         this%budget_3(:,4) = this%budget_3(:,4) + this%tmp_meanC
-        call this%igrid_sim%spectE%ifft(this%wsgs,this%igrid_sim%rbuffxE(:,:,:,1))
+        this%igrid_sim%cbuffyE(:,:,:,1) = this%wsgs + this%wvisc
+        call this%igrid_sim%spectE%ifft(this%igrid_sim%cbuffyE(:,:,:,1),this%igrid_sim%rbuffxE(:,:,:,1))
         this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%rbuffxE(:,:,:,1)
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
         call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
@@ -842,6 +901,104 @@ contains
         this%budget_3(:,8) = this%budget_3(:,8) + this%tmp_meanC 
 
     end subroutine
+
+   
+    subroutine AssembleBudget4_13(this)
+        class(budgets_xy_avg), intent(inout) :: this
+        
+        ! First get the mean statistics
+        !this%U_mean = this%budget_0(:,1)/real(this%counter+1,rkind)
+        !this%V_mean = this%budget_0(:,2)/real(this%counter+1,rkind)
+       
+        !Indices: i = 1, k = 3
+            
+        ! Shear production: -(w*w)*dU/dz 
+        ! Do nothing here (compute before writing)
+
+        ! Turbulent transport 
+        ! Assemble: w*RHSc_u + u*RHSc_w
+        call this%igrid_sim%spectC%ifft(this%uc,this%igrid_sim%rbuffxC(:,:,:,3))
+        this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%wC*this%igrid_sim%rbuffxC(:,:,:,3)
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
+        this%budget_4_13(:,2) = this%budget_4_13(:,2) + this%tmp_meanC
+        call this%igrid_sim%spectE%ifft(this%wc,this%igrid_sim%rbuffxE(:,:,:,1))
+        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%uE*this%igrid_sim%rbuffxE(:,:,:,1)
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
+        this%budget_4_13(:,2) = this%budget_4_13(:,2) + this%tmp_meanC
+
+        ! pressure strain rate 
+        call this%igrid_sim%interpolate_cellField_to_edgeField(this%igrid_sim%pressure,this%igrid_sim%rbuffxE(:,:,:,2),0,0) 
+        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%duidxjE(:,:,:,3) + this%igrid_sim%duidxjE(:,:,:,6) 
+        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%rbuffxE(:,:,:,1)*this%igrid_sim%rbuffxE(:,:,:,2)
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
+        this%budget_4_13(:,3) = this%budget_4_13(:,3) + this%tmp_meanC
+
+        ! pressure transport 
+        call this%igrid_sim%spectC%ifft(this%px,this%igrid_sim%rbuffxC(:,:,:,3))
+        this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%wC*this%igrid_sim%rbuffxC(:,:,:,3)
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
+        this%budget_4_13(:,4) = this%budget_4_13(:,4) + this%tmp_meanC
+        call this%igrid_sim%spectE%ifft(this%pz,this%igrid_sim%rbuffxE(:,:,:,1))
+        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%uE*this%igrid_sim%rbuffxE(:,:,:,1)
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
+        this%budget_4_13(:,4) = this%budget_4_13(:,4) + this%tmp_meanC
+        
+        ! sgs dissipation 
+        this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%tauSGS_ij(:,:,:,1)*this%igrid_sim%duidxjC(:,:,:,7) &
+                                        + this%igrid_sim%tauSGS_ij(:,:,:,2)*this%igrid_sim%duidxjC(:,:,:,8) &
+                                        + this%igrid_sim%tauSGS_ij(:,:,:,6)*this%igrid_sim%duidxjC(:,:,:,9) 
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
+        this%budget_4_13(:,5) = this%budget_4_13(:,5) + this%tmp_meanC
+        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%tau13*this%igrid_sim%duidxjE(:,:,:,9) &
+                                        + this%igrid_sim%tau13*this%igrid_sim%duidxjE(:,:,:,1) &
+                                        + this%igrid_sim%tau23*this%igrid_sim%duidxjE(:,:,:,2) 
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
+        this%budget_4_13(:,5) = this%budget_4_13(:,5) + this%tmp_meanC
+        
+        ! SGS + viscous transport 
+        this%igrid_sim%cbuffyC(:,:,:,1) = this%usgs + this%uvisc
+        call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%rbuffxC(:,:,:,3))
+        this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%wC*this%igrid_sim%rbuffxC(:,:,:,3)
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
+        this%budget_4_13(:,6) = this%budget_4_13(:,6) + this%tmp_meanC
+        this%igrid_sim%cbuffyE(:,:,:,1) = this%wsgs + this%wvisc
+        call this%igrid_sim%spectE%ifft(this%igrid_sim%cbuffyE(:,:,:,1),this%igrid_sim%rbuffxE(:,:,:,1))
+        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%uE*this%igrid_sim%rbuffxE(:,:,:,1)
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
+        this%budget_4_13(:,6) = this%budget_4_13(:,6) + this%tmp_meanC
+
+        ! Buoyancy transfer: 
+        call this%igrid_sim%spectE%ifft(this%wb,this%igrid_sim%rbuffxE(:,:,:,1))
+        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%uE*this%igrid_sim%rbuffxE(:,:,:,1)
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
+        this%budget_4_13(:,7) = this%budget_4_13(:,7) + this%tmp_meanC
+
+        ! Coriolis transfer: 
+        call this%igrid_sim%spectC%ifft(this%ucor,this%igrid_sim%rbuffxC(:,:,:,3))
+        this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%wC*this%igrid_sim%rbuffxC(:,:,:,3)
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
+        this%budget_4_13(:,8) = this%budget_4_13(:,8) + this%tmp_meanC
+        call this%igrid_sim%spectE%ifft(this%wcor,this%igrid_sim%rbuffxE(:,:,:,1))
+        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%uE*this%igrid_sim%rbuffxE(:,:,:,1)
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
+        this%budget_4_13(:,8) = this%budget_4_13(:,8) + this%tmp_meanC
+        
+        ! Actuator disk source/sink: 
+        call this%igrid_sim%spectC%ifft(this%uturb,this%igrid_sim%rbuffxC(:,:,:,3))
+        this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%wC*this%igrid_sim%rbuffxC(:,:,:,3)
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
+        this%budget_4_13(:,9) = this%budget_4_13(:,9) + this%tmp_meanC
+
+
+    end subroutine
+
 
 
 end module 
