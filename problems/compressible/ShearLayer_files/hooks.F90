@@ -32,28 +32,30 @@ module ShearLayer_data
     real(rkind) :: kx, amp_x
     real(rkind) :: kz, amp_z
     real(rkind), dimension(:), allocatable :: perty
+    real(rkind), dimension(:,:,:), allocatable :: perty_field
 contains
 
-    subroutine read_perturbation_files(ny)
-        use mpi
+    subroutine read_perturbation_files(nx,ny,nz)
+        use mpi 
         use decomp_2d, only: nrank
         use constants, only: zero, two, pi
-        integer, intent(in) :: ny 
+        integer, intent(in) :: nx,ny,nz
         integer :: pertunit
         integer :: ierr
         integer :: i, L_by_lambda_z
 
         pertunit = 229
 		allocate(perty(ny))
+		allocate(perty_field(nx,ny,nz))
         
         ! Read in the y perturbation file
         if (nrank == 0) then
-            print *, "Reading in the perturbation file ", trim(pertfile)
+            print *,  "Reading in the perturbation file ", trim(pertfile)
             open(unit=pertunit,file=trim(pertfile),form='FORMATTED',status='OLD')
             read(pertunit,*) L_x, L_y, L_z
             read(pertunit,*) kx, amp_x 
             read(pertunit,*) kz, amp_z 
-            print *, L_x,L_y,L_z
+            print *, "Domain size: ",L_x,L_y,L_z
         end if
 
         ! broadcast perturbations to all procs
@@ -64,11 +66,9 @@ contains
 
         if (nrank == 0) then
             do i=1,ny
-                !read(pertunit,*) perty(i)
-                !print *, perty(i)
-                perty(i)=0
+                read(pertunit,*) perty(i)
+                perty_field(:,i,:)=perty(i)
             end do
-
             close(pertunit)
         end if
 
@@ -104,7 +104,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     ! Need to set x, y and z as well as  dx, dy and dz
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 	
-		call read_perturbation_files(ny)
+		call read_perturbation_files(nx,ny,nz)
         dx = L_x/real(nx,rkind)
         dy = L_y/real(ny-1,rkind)
         dz = L_z/real(nz,rkind)
@@ -140,6 +140,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use reductions,                  only: P_MAXVAL,P_MINVAL
     use exits,                       only: GracefulExit, message, nancheck
     use mpi
+    use random,                      only: gaussian_random
     
     use ShearLayer_data
 
@@ -152,16 +153,15 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
 
-    integer :: i, iounit
+    integer :: i, iounit, nx, ny, nz
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
 
     real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: tmp
-    real(rkind) :: p_ref=one, mu_ref=one, T_ref=one, rho_ref=one
-    real(rkind) :: c1,c2,du, Rgas1, Rgas2
-    integer :: nx, ny, nz
-
+    real(rkind) :: p_ref=one, mu_ref=one, T_ref=one, rho_ref=one, &
+                   c1,c2,du, Rgas1, Rgas2
+    
     namelist /PROBINPUT/ Mach, Re, Pr, Sc, rho_ref, p_ref, T_ref, rho_ratio, gam, dtheta 
     
     ioUnit = 11
@@ -203,17 +203,22 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         Ys(:,:,:,2)  = one - Ys(:,:,:,1)
         call mix%update(Ys)
 		
+        ! Velocity 
         c1 = sqrt(gam*p_ref/(rho_ref/Rgas1))
         c2 = sqrt(gam*p_ref/(rho_ref/Rgas2))
 		du = Mach*(c1+c2)
-        u   = du*(tmp-half) 
+        u   = du*(tmp-half)
         v   = zero
         w   = zero
-
         p   = p_ref
         T   = T_ref
         rho = p / (mix%Rgas * T)
 
+        ! Perturbations
+        do i = 1,ny
+            v(:,i,:) = v(:,i,:) + perty(i)
+        end do
+        print *, P_MAXVAL(v), P_MINVAL(v)
 
         ! Initialize mygfil
         call mygfil%init(                           decomp, &
@@ -395,10 +400,11 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
                  Ys   => fields(:,:,:,Ys_index:Ys_index+mix%ns-1),                 &
                  diff => fields(:,:,:,Ys_index+mix%ns:Ys_index+2*mix%ns-1),        &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-        call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
-        call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
-        call message(2,"Maximum conductivity",P_MAXVAL(kap))
-        call message(2,"Maximum diffusivity",P_MAXVAL(diff))
+        call message(2,"Maximum v-velocity",P_MAXVAL(v))
+        !call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
+        !call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
+        !call message(2,"Maximum conductivity",P_MAXVAL(kap))
+        !call message(2,"Maximum diffusivity",P_MAXVAL(diff))
 
     end associate
 end subroutine
