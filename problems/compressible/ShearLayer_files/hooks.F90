@@ -44,7 +44,8 @@ contains
         integer :: i, L_by_lambda_z
 
         pertunit = 229
-
+		allocate(perty(ny))
+        
         ! Read in the y perturbation file
         if (nrank == 0) then
             print *, "Reading in the perturbation file ", trim(pertfile)
@@ -52,14 +53,7 @@ contains
             read(pertunit,*) L_x, L_y, L_z
             read(pertunit,*) kx, amp_x 
             read(pertunit,*) kz, amp_z 
-
-		    allocate(perty(ny))
-            do i=1,ny
-                !read(pertunit,*) perty(i)
-                !print *, perty(i)
-                perty(i)=0._rkind
-            end do
-            close(pertunit)
+            print *, L_x,L_y,L_z
         end if
 
         ! broadcast perturbations to all procs
@@ -67,11 +61,23 @@ contains
         call mpi_bcast(kz, 1, mpirkind, 0, mpi_comm_world, ierr)
         call mpi_bcast(amp_x, 1, mpirkind, 0, mpi_comm_world, ierr)
         call mpi_bcast(amp_z, 1, mpirkind, 0, mpi_comm_world, ierr)
+
+        if (nrank == 0) then
+            do i=1,ny
+                !read(pertunit,*) perty(i)
+                !print *, perty(i)
+                perty(i)=0
+            end do
+
+            close(pertunit)
+        end if
+
         call mpi_bcast(perty, ny, mpirkind, 0, mpi_comm_world, ierr)
         
     end subroutine
 
 end module
+
 
 subroutine meshgen(decomp, dx, dy, dz, mesh)
     use kind_parameters,  only: rkind
@@ -118,7 +124,6 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         end do
 
     end associate
-
 end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
@@ -216,8 +221,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
                          "gaussian", "gaussian", "gaussian" )
 
     end associate
-
 end subroutine
+
 
 subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     use kind_parameters,  only: rkind,clen
@@ -265,6 +270,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 
     end associate
 end subroutine
+
 
 subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
@@ -356,6 +362,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     end associate
 end subroutine
 
+
 subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,two
@@ -396,6 +403,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     end associate
 end subroutine
 
+
 subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
     use kind_parameters, only: rkind
     use decomp_2d,       only: decomp_info
@@ -411,5 +419,4 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
     real(rkind), dimension(:,:,:,:), optional, intent(inout) ::rhsg
-
 end subroutine
