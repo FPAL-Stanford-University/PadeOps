@@ -344,14 +344,16 @@
        end if
    end subroutine
 
-   subroutine addBuoyancyTerm(this, wrhs)
+   subroutine addBuoyancyTerm(this, urhs, vrhs, wrhs)
        class(igrid), intent(inout), target :: this
-       complex(rkind), dimension(:,:,:), pointer :: fT1E 
+       complex(rkind), dimension(:,:,:), pointer :: fT1E, fT1C
        real(rkind), dimension(:,:,:), pointer :: rbuffE
        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)), intent(inout) :: wrhs
+       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
        integer :: mind
 
        fT1E => this%cbuffyE(:,:,:,1)
+       fT1C => this%cbuffyC(:,:,:,1)
        rbuffE => this%rbuffxE(:,:,:,1)
 
        !fT1E = (this%TEhat)/(this%ThetaRef*this%Fr*this%Fr)
@@ -361,21 +363,53 @@
            call this%Pade6opZ%interpz_C2E(this%cbuffzC(:,:,:,1), this%cbuffzE(:,:,:,1), this%scalars(mind)%BC_bottom, this%scalars(mind)%BC_top)
            call transpose_z_to_y(this%cbuffzE(:,:,:,1), this%cbuffyE(:,:,:,1), this%sp_gpC)
            fT1E = (this%TEhat + this%moistureFactor*this%cbuffyE(:,:,:,1))*this%BuoyancyFact ! See definition of buoyancy factor in init 
-       else
-           fT1E = (this%TEhat)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+       !else
+           !fT1E = (this%TEhat)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+           wrhs = wrhs + fT1E
+           return  ! MOISTURE ADD WILL ONLY WORK IN Z EQUATION
        endif
-       if (this%spectE%carryingZeroK) then
-           fT1E(1,1,:) = cmplx(zero,zero,rkind)
-       end if 
-       !this%w_rhs = this%w_rhs + fT1E 
-       wrhs = wrhs + fT1E
 
-       if (this%storeFbody) then
-           call this%spectE%ifft(fT1E, rbuffE)
-           this%fbody_z = this%fbody_z + rbuffE
-       end if
+       !this%w_rhs = this%w_rhs + fT1E 
+       select case (this%BuoyancyDirection)
+       case(1)
+           fT1C = (this%That)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+           urhs = urhs + fT1C
+       case(2)
+           fT1C = (this%That)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+           vrhs = vrhs + fT1C
+       case(3)
+           fT1E = (this%TEhat)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+           if (this%spectE%carryingZeroK) then
+               fT1E(1,1,:) = cmplx(zero,zero,rkind)
+           end if 
+           wrhs = wrhs + fT1E
+           if (this%storeFbody) then
+               call this%spectE%ifft(fT1E, rbuffE)
+               this%fbody_z = this%fbody_z + rbuffE
+           end if
+       end select 
+
 
    end subroutine
+
+   
+   subroutine addForcedStratification(this)
+       class(igrid), intent(inout) :: this 
+       real(rkind) :: molecularDiff
+       integer :: i, j, k
+
+       molecularDiff = one/(this%Re*this%PrandtlFluid)
+       do k = 1,size(this%T_rhs,3)
+          do j = 1,size(this%T_rhs,2)
+             !$omp simd
+             do i = 1,size(this%T_rhs,1)
+                this%T_rhs(i,j,k) = this%T_rhs(i,j,k) - molecularDiff*this%uhat(i,j,k)
+             end do 
+          end do 
+       end do 
+
+
+   end subroutine 
 
    subroutine addViscousTerm(this, u_rhs, v_rhs, w_rhs)
        class(igrid), intent(inout) :: this

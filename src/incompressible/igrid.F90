@@ -136,7 +136,7 @@ module IncompressibleGrid
    
         character(len=clen) :: dtlimit
         integer :: BuoyancyTermType = 0 
-        real(rkind) :: BuoyancyFact = 0.d0
+        real(rkind) :: Ra, BuoyancyFact = 0.d0
 
         integer :: moistureIndex = 1
         real(rkind) :: moistureFactor = 0.61d0 ! converts g/kg to K
@@ -268,7 +268,7 @@ module IncompressibleGrid
         integer :: zHubIndex = 16
 
         ! HIT Forcing
-        logical :: useHITForcing = .false.
+        logical :: useHITForcing = .false., useforcedStratification = .false. 
         type(HIT_shell_forcing), allocatable :: hitforce
 
         ! Scalars
@@ -291,6 +291,7 @@ module IncompressibleGrid
         logical :: StoreForBudgets = .false. 
         complex(rkind), dimension(:,:,:), pointer :: ucon, vcon, wcon, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb 
 
+        integer :: BuoyancyDirection 
 
         contains
             procedure          :: init
@@ -319,6 +320,7 @@ module IncompressibleGrid
             procedure, private :: addCoriolisTerm
             procedure, private :: addSponge
             procedure, private :: addExtraForcingTerm 
+            procedure, private :: addForcedStratification
             procedure, private :: dumpRestartFile
             procedure, private :: readRestartFile
             procedure, private :: compute_z_mean 
@@ -404,11 +406,12 @@ contains
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
         logical :: sgsmod_stratified, Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false., useScalars = .false. 
         integer :: zHubIndex = 16
-        real(rkind) :: angleTrigger=0.1d0
+        real(rkind) :: angleTrigger=0.1d0, Ra = 1.d14
         character(len=4) :: scheme_xy = "FOUR"
         integer :: MeanTIDX, MeanRID, VizDump_schedule = 0    
         character(len=clen) :: MeanFilesDir 
-        logical :: WriteTurbineForce = .false. 
+        logical :: WriteTurbineForce = .false., useforcedStratification = .false. 
+        integer :: buoyancyDirection = 3
 
         real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
@@ -417,8 +420,8 @@ contains
                     & dump_NU_SGS, dump_KAPPA_SGS, t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe,&
                     & t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
-        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,useMoisture,Re,Ro,Pr,Fr, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,&
-                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle
+        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,useforcedStratification,&
+                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle, buoyancyDirection
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type  
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
@@ -495,6 +498,7 @@ contains
         this%zHubIndex = zHubIndex; this%angleTrigger = angleTrigger
         this%computeTurbinePressure = computeTurbinePressure; this%turbPr = Pr
         this%restartPhi = 0.d0
+        this%Ra = Ra
         if (useWindturbines) this%WriteTurbineForce = WriteTurbineForce
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
@@ -1131,6 +1135,12 @@ contains
               call message(1,"Buoyancy term type 2 selected. Buoyancy term &
                                 & calculation term uses")
               call message(2,"Bulk Richardson number:", this%BulkRichardson)
+           case (3) 
+              this%BuoyancyFact = this%Ra/this%Re   
+              call message(1,"Buoyancy term type 3 selected. Buoyancy term &
+                                & calculation term uses")
+              call message(2,"Rayleigh number:", this%Ra)
+              call message(2,"Reynolds number:", this%Re)
            end select
 
            call this%sgsModel%set_BuoyancyFactor(this%BuoyancyFact)
@@ -1219,7 +1229,13 @@ contains
        call this%compute_deltaT()
        this%dtOld = this%dt
        this%dtRat = one 
-       
+      
+
+       ! STEP 29: Set the buoyancy direction
+       this%BuoyancyDirection = BuoyancyDirection
+       this%useforcedStratification = useforcedStratification
+
+
        ! STEP 29: Safeguard against user invalid user inputs
        if ((this%vizDump_Schedule == 1) .and. (.not. this%useCFL)) then
            call GracefulExit("Cannot use vizDump_Schedule=1 if using fixed dt.",123)
@@ -1417,10 +1433,12 @@ contains
            call message(1,"No-Slip Wall")
            ! NOTE: no-slip wall requires both w = 0 and dwdz = 0. Therefore, w
            ! is an even extension, which also satisfies w = 0.
-           uBC_bottom      = -1; vBC_bottom      = -1;
+           !uBC_bottom      = -1; vBC_bottom      = -1;
+           uBC_bottom      =  0; vBC_bottom      =  0;
            dUdzBC_bottom   =  0; dVdzBC_bottom   =  0;
            WdUdzBC_bottom  =  0; WdVdzBC_bottom  =  0;
-           UWBC_bottom     = +1; VWBC_bottom     = +1;
+           !UWBC_bottom     = +1; VWBC_bottom     = +1;
+           UWBC_bottom     =  0; VWBC_bottom     =  0;
            wBC_bottom      = +1; WdWdzBC_bottom  = -1; 
            WWBC_bottom     = +1; dwdzBC_bottom   = -1;
         case(2) 
@@ -1446,10 +1464,12 @@ contains
            call message(1,"No-Slip Wall")
            ! NOTE: no-slip wall requires both w = 0 and dwdz = 0. Therefore, w
            ! is an even extension, which also satisfies w = 0.
-           uBC_top      = -1; vBC_top      = -1;
+           ! uBC_top      = -1; vBC_top      = -1;
+           uBC_top      =  0; vBC_top      =  0;
            dUdzBC_top   =  0; dVdzBC_top   =  0;
            WdUdzBC_top  =  0; WdVdzBC_top  =  0;
-           UWBC_top     = +1; VWBC_top     = +1;   
+           !UWBC_top     = +1; VWBC_top     = +1;   
+           UWBC_top     =  0; VWBC_top     =  0;   
            wBC_top      = +1; WdWdzBC_top  = -1; 
            WWBC_top     = +1; dwdzBC_top   = -1;
         case(2) 

@@ -40,7 +40,7 @@
      
        ! Step 4: Buoyance + Sponge (inside Buoyancy)
        if (this%isStratified .or. this%initspinup) then
-           call this%addBuoyancyTerm(this%w_rhs)
+           call this%addBuoyancyTerm(this%u_rhs, this%v_rhs, this%w_rhs)
        end if 
        
        if (present(CopyForDNSpress)) then
@@ -132,7 +132,7 @@
      
        ! Step 4: Buoyance + Sponge (inside Buoyancy)
        if (this%isStratified .or. this%initspinup) then
-           call this%addBuoyancyTerm(this%wb)
+           call this%addBuoyancyTerm(this%u_rhs, this%v_rhs, this%wb)
            this%w_rhs = this%w_rhs + this%wb
        end if 
        
@@ -246,5 +246,9 @@
            end do 
        end if
 
+       ! Step 12: Add statified forcing 
+       if (this%isStratified .and. this%useforcedStratification) then
+            call this%addForcedStratification()
+       end if 
 
    end subroutine 

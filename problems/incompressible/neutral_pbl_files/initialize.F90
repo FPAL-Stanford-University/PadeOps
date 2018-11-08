@@ -12,7 +12,7 @@ module neutral_pbl_parameters
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
     
-    real(rkind), parameter :: xdim = 400._rkind, udim =8._rkind
+    real(rkind), parameter :: xdim = 400._rkind, udim =5._rkind
     real(rkind), parameter :: timeDim = xdim/udim
 
 end module     

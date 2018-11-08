@@ -255,12 +255,16 @@ subroutine interp_PrimitiveVars(this)
     ! Step 2: Interpolate u -> uE
     call transpose_y_to_z(this%uhat,zbuffC,this%sp_gpC)
     call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,uBC_bottom, uBC_top)
+    if (botWall==1) zbuffE(:,:,1)         = 0.d0 ! No-slip wall (sided scheme is corrected) 
+    if (topWall==1) zbuffE(:,:,this%nz+1) = 0.d0 ! No-slip wall (sided scheme is corrected)  
     call transpose_z_to_y(zbuffE,this%uEhat, this%sp_gpE)
     call this%spectE%ifft(this%uEhat, this%uE)
 
     ! Step 3: Interpolate v -> vE
     call transpose_y_to_z(this%vhat,zbuffC,this%sp_gpC)
     call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,vBC_bottom, vBC_top)
+    if (botWall==1) zbuffE(:,:,1)         = 0.d0 ! No-slip wall (sided scheme is corrected)
+    if (topWall==1) zbuffE(:,:,this%nz+1) = 0.d0 ! No-slip wall (sided scheme is corrected) 
     call transpose_z_to_y(zbuffE,this%vEhat, this%sp_gpE)
     call this%spectE%ifft(this%vEhat, this%vE)
     
@@ -520,40 +524,70 @@ subroutine compute_duidxj(this)
     end if
 
     ! dudz and d2udz2
-    call transpose_y_to_z(this%uhat,ctmpz1,this%sp_gpC)
-    call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,uBC_bottom,uBC_top)
-    call transpose_z_to_y(ctmpz2,dudzEH,this%sp_gpE)
-    call this%spectE%ifft(dudzEH,dudz)
-    if (.not. this%isinviscid) then
-           if ((uBC_top == 0) .or. (uBC_bottom == 0)) then
-              call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz4,uBC_bottom,uBC_top)
-              call this%Pade6opZ%ddz_E2C(ctmpz4,ctmpz3,dUdzBC_bottom,dUdzBC_top)
-           else
-              call this%Pade6opZ%d2dz2_C2C(ctmpz1,ctmpz3,uBC_bottom,uBC_top)
-           end if
-           call transpose_z_to_y(ctmpz3,this%d2udz2hatC,this%sp_gpC)
+    if ((topWall == 1).or.(botWall == 1)) then
+        call transpose_y_to_z(this%uEhat,ctmpz2,this%sp_gpE)
+        ! Compute dudzC
+        call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,uBC_bottom,uBC_top)
+        call transpose_z_to_y(ctmpz1,dudzH,this%sp_gpC)
+        call this%spectC%ifft(dudzH,dudzC)
+        ! Now compute d2udz2C
+        call this%Pade6opZ%ddz_C2C(ctmpz1,ctmpz3,-uBC_bottom,-uBC_top)
+        call transpose_z_to_y(ctmpz3,this%d2udz2hatC,this%sp_gpC)
+        ! Now compute dudzE
+        call this%Pade6opZ%interpz_C2E(ctmpz1,ctmpz4,-uBC_bottom,-uBC_top) 
+        call transpose_z_to_y(ctmpz4,dudzEH,this%sp_gpC)
+        call this%spectE%ifft(dudzEH,dudz)
+    else
+        call transpose_y_to_z(this%uhat,ctmpz1,this%sp_gpC)
+        call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,uBC_bottom,uBC_top)
+        call transpose_z_to_y(ctmpz2,dudzEH,this%sp_gpE)
+        call this%spectE%ifft(dudzEH,dudz)
+        if (.not. this%isinviscid) then
+               if ((uBC_top == 0) .or. (uBC_bottom == 0)) then
+                  call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz4,uBC_bottom,uBC_top)
+                  call this%Pade6opZ%ddz_E2C(ctmpz4,ctmpz3,dUdzBC_bottom,dUdzBC_top)
+               else
+                  call this%Pade6opZ%d2dz2_C2C(ctmpz1,ctmpz3,uBC_bottom,uBC_top)
+               end if
+               call transpose_z_to_y(ctmpz3,this%d2udz2hatC,this%sp_gpC)
+        end if 
+        call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dUdzBC_bottom,dUdzBC_top)
+        call transpose_z_to_y(ctmpz1,dudzH,this%sp_gpC)
+        call this%spectC%ifft(dudzH,dudzC)
     end if 
-    call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dUdzBC_bottom,dUdzBC_top)
-    call transpose_z_to_y(ctmpz1,dudzH,this%sp_gpC)
-    call this%spectC%ifft(dudzH,dudzC)
-  
+
     ! dvdz and d2vdz2
-    call transpose_y_to_z(this%vhat,ctmpz1,this%sp_gpC)
-    call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,vBC_bottom,vBC_top)
-    call transpose_z_to_y(ctmpz2,dvdzEH,this%sp_gpE)
-    call this%spectE%ifft(dvdzEH,dvdz)
-    if (.not. this%isinviscid) then
-        if ((vBC_top == 0) .or. (vBC_bottom == 0)) then
-           call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz4,vBC_bottom,vBC_top)
-           call this%Pade6opZ%ddz_E2C(ctmpz4,ctmpz3,dVdzBC_bottom,dVdzBC_top)
-        else
-           call this%Pade6opZ%d2dz2_C2C(ctmpz1,ctmpz3,vBC_bottom,vBC_top)
-        end if
+    if ((topWall == 1).or.(botWall == 1)) then
+        call transpose_y_to_z(this%vEhat,ctmpz2,this%sp_gpE)
+        ! compute dvdzC
+        call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,vBC_bottom,vBC_top)
+        call transpose_z_to_y(ctmpz1,dvdzH,this%sp_gpC)
+        call this%spectC%ifft(dvdzH,dvdzC)
+        ! Now compute d2udz2C
+        call this%Pade6opZ%ddz_C2C(ctmpz1,ctmpz3,-vBC_bottom,-vBC_top)
         call transpose_z_to_y(ctmpz3,this%d2vdz2hatC,this%sp_gpC)
+        ! Now compute dvdzE
+        call this%Pade6opZ%interpz_C2E(ctmpz1,ctmpz4,-vBC_bottom,-vBC_top) 
+        call transpose_z_to_y(ctmpz4,dvdzEH,this%sp_gpC)
+        call this%spectE%ifft(dvdzEH,dvdz)
+    else
+        call transpose_y_to_z(this%vhat,ctmpz1,this%sp_gpC)
+        call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,vBC_bottom,vBC_top)
+        call transpose_z_to_y(ctmpz2,dvdzEH,this%sp_gpE)
+        call this%spectE%ifft(dvdzEH,dvdz)
+        if (.not. this%isinviscid) then
+            if ((vBC_top == 0) .or. (vBC_bottom == 0)) then
+               call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz4,vBC_bottom,vBC_top)
+               call this%Pade6opZ%ddz_E2C(ctmpz4,ctmpz3,dVdzBC_bottom,dVdzBC_top)
+            else
+               call this%Pade6opZ%d2dz2_C2C(ctmpz1,ctmpz3,vBC_bottom,vBC_top)
+            end if
+            call transpose_z_to_y(ctmpz3,this%d2vdz2hatC,this%sp_gpC)
+        end if 
+        call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dVdzBC_bottom,dVdzBC_top)
+        call transpose_z_to_y(ctmpz1,dvdzH,this%sp_gpC)
+        call this%spectC%ifft(dvdzH,dvdzC)
     end if 
-    call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dVdzBC_bottom,dVdzBC_top)
-    call transpose_z_to_y(ctmpz1,dvdzH,this%sp_gpC)
-    call this%spectC%ifft(dvdzH,dvdzC)
 
 end subroutine
 
