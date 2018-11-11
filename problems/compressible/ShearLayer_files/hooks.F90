@@ -130,7 +130,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use kind_parameters,             only: rkind, clen
     use constants,                   only: zero,half,one,two,pi,eight
     use CompressibleGrid,            only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,Ys_index
-    use decomp_2d,                   only: decomp_info
+    use decomp_2d,                   only: decomp_info,nrank
     use MixtureEOSMod,               only: mixture
     use IdealGasEOS,                 only: idealgas
     use PowerLawViscosityMod,		 only: powerLawViscosity
@@ -139,9 +139,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use ConstSchmidtDiffusivityMod,  only: constSchmidtDiffusivity
     use reductions,                  only: P_MAXVAL,P_MINVAL
     use exits,                       only: GracefulExit, message, nancheck
+    use random,                      only: gaussian_random                  
     use mpi
-    use random,                      only: gaussian_random
-    
     use ShearLayer_data
 
     implicit none
@@ -154,22 +153,27 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
 
     integer :: i, iounit, nx, ny, nz
+    integer :: seedu=321341, seedv=423424, seedw=131344
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
 
-    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: tmp
+    real(rkind), dimension(:,:,:), allocatable :: tmp, randarray
     real(rkind) :: p_ref=one, mu_ref=one, T_ref=one, rho_ref=one, &
-                   c1,c2,du, Rgas1, Rgas2
+                   c1,c2,du, Rgas1, Rgas2 
     
-    namelist /PROBINPUT/ Mach, Re, Pr, Sc, rho_ref, p_ref, T_ref, rho_ratio, gam, dtheta 
-    
+    namelist /PROBINPUT/ Mach, Re, Pr, Sc, rho_ref, p_ref, T_ref, rho_ratio,&
+                        gam, dtheta 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
 
-    nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
+    nx = decomp%xsz(1) 
+    ny = decomp%ysz(2) 
+    nz = decomp%zsz(3)
+    allocate(tmp(nx,ny,nz))
+    allocate(randarray(nx,ny,nz))
 
     associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),                    &
                  v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),                    &
@@ -215,9 +219,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         rho = p / (mix%Rgas * T)
 
         ! Perturbations
-        do i = 1,ny
-            v(:,i,:) = v(:,i,:) + perty(i)
-        end do
+        call gaussian_random(randarray,zero,one,seedu+100*nrank)
+        u = u + 0.001*randarray
+        call gaussian_random(randarray,zero,one,seedv+100*nrank)
+        v = v + 0.001*randarray
+        call gaussian_random(randarray,zero,one,seedw+100*nrank)
+        w = w + 0.001*randarray
         print *, P_MAXVAL(v), P_MINVAL(v)
 
         ! Initialize mygfil
