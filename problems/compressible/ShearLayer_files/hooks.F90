@@ -87,13 +87,10 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use ShearLayer_data
 
     implicit none
-
     type(decomp_info),               intent(in)    :: decomp
     real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
-
-    integer :: i,j,k,ioUnit
-    integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
+    integer :: i,j,k,ioUnit, nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
@@ -126,6 +123,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     end associate
 end subroutine
 
+
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
     use kind_parameters,             only: rkind, clen
     use constants,                   only: zero,half,one,two,pi,eight
@@ -142,6 +140,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use random,                      only: gaussian_random                  
     use mpi
     use ShearLayer_data
+    !use ShearLayer_IO
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -158,12 +157,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
 
-    real(rkind), dimension(:,:,:), allocatable :: tmp, randarray
+    real(rkind), dimension(:,:,:), allocatable :: tmp, upert, vpert, wpert 
     real(rkind) :: p_ref=one, mu_ref=one, T_ref=one, rho_ref=one, &
-                   c1,c2,du, Rgas1, Rgas2 
+                   c1,c2,du, Rgas1, Rgas2, noiseAmp 
+    character(len=clen) :: InitFileTag, InitFileDirectory
     
     namelist /PROBINPUT/ Mach, Re, Pr, Sc, rho_ref, p_ref, T_ref, rho_ratio,&
-                        gam, dtheta 
+                        gam, dtheta, InitFileTag, InitFileDirectory, noiseAmp
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -173,7 +173,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     ny = decomp%ysz(2) 
     nz = decomp%zsz(3)
     allocate(tmp(nx,ny,nz))
-    allocate(randarray(nx,ny,nz))
+    allocate(upert(nx,ny,nz))
+    allocate(vpert(nx,ny,nz))
+    allocate(wpert(nx,ny,nz))
 
     associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),                    &
                  v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),                    &
@@ -207,7 +209,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         Ys(:,:,:,2)  = one - Ys(:,:,:,1)
         call mix%update(Ys)
 		
-        ! Velocity 
+        ! Base flow profiles 
         c1 = sqrt(gam*p_ref/(rho_ref/Rgas1))
         c2 = sqrt(gam*p_ref/(rho_ref/Rgas2))
 		du = Mach*(c1+c2)
@@ -218,19 +220,30 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         T   = T_ref
         rho = p / (mix%Rgas * T)
 
-        ! Perturbations
-        call gaussian_random(randarray,zero,one,seedu+100*nrank)
-        u = u + 0.001*randarray
-        call gaussian_random(randarray,zero,one,seedv+100*nrank)
-        v = v + 0.001*randarray
-        call gaussian_random(randarray,zero,one,seedw+100*nrank)
-        w = w + 0.001*randarray
+        ! Modal perturbations
+        allocate(upert(size(u,1),size(u,2),size(u,3)))
+        allocate(vpert(size(v,1),size(v,2),size(v,3)))
+        allocate(wpert(size(w,1),size(w,2),size(w,3)))
+        call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
+                 upert, vpert, wpert)
+        u = u + upert
+        v = v + vpert
+        w = w + wpert
+
+        ! Gaussian noise
+        call gaussian_random(upert,zero,one,seedu+100*nrank)
+        call gaussian_random(vpert,zero,one,seedu+100*nrank)
+        call gaussian_random(wpert,zero,one,seedu+100*nrank)
+        u = u + noiseAmp*upert
+        v = v + noiseAmp*vpert
+        w = w + noiseAmp*wpert
         print *, P_MAXVAL(v), P_MINVAL(v)
+        deallocate(upert, vpert, wpert)
 
         ! Initialize mygfil
         call mygfil%init(                           decomp, &
                           periodicx,  periodicy, periodicz, &
-                         "gaussian", "gaussian", "gaussian" )
+                          "gaussian", "gaussian", "gaussian" )
 
     end associate
 end subroutine
