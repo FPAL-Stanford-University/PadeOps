@@ -2,6 +2,9 @@ module ShearLayer_data
     use kind_parameters,  only: rkind, mpirkind, clen
     use constants,        only: zero, one
     use FiltersMod,       only: filters
+    use decomp_2d,        only: decomp_info
+    use basic_io,         only: read_2d_ascii 
+    use exits,            only: message
     implicit none
 
     integer, parameter :: ns = 2
@@ -73,8 +76,91 @@ contains
         end if
 
         call mpi_bcast(perty, ny, mpirkind, 0, mpi_comm_world, ierr)
-        
     end subroutine
+
+    subroutine get_perturbations(gp, x, z, InitFileTag, InitFileDirectory,u, v, w)
+        use constants, only: imi, pi    
+        type(decomp_info),                intent(in) :: gp
+        character(len=*),                 intent(in) :: InitFileTag, InitFileDirectory
+        real(rkind), dimension(:,:,:),    intent(in) :: x, z
+        real(rkind), dimension(:,:,:),    intent(out) :: u, v, w
+    
+        real(rkind), dimension(:,:), allocatable :: & 
+                      data2read, uhat_real, uhat_imag, vhat_real, vhat_imag, &
+                      what_real, what_imag, uhat, vhat, what
+        real(rkind), dimension(:), allocatable :: kx, kz, kmode, beta
+        real(rkind) :: arg1
+        complex(rkind) :: expfact, uhatn, vhatn, whatn
+        character(len=clen) :: fname 
+        integer :: nmodes, ny, modeID, i, j, k, yiter
+       
+        ! Read mode info in x and y
+        fname = InitFileDirectory(:len_trim(InitFileDirectory))//"/"//trim(InitFileTag)//"_mode_info.dat"
+        call read_2d_ascii(data2read,fname)
+        nmodes = size(data2read,1)
+        allocate(kx(nmodes), kz(nmodes))
+        allocate(beta(nmodes), kmode(nmodes))
+        beta  = data2read(:,1)
+        kmode = data2read(:,2)
+        kx = -kmode*sin(beta*pi/180.d0)
+        kz =  kmode*cos(beta*pi/180.d0)
+        deallocate(data2read)
+        call message(0, "Number of normal modes being used:",nmodes)
+        
+        ! Allocate based on global domain height
+        ny = gp%zsz(2) 
+        allocate(uhat_real(ny,nmodes),vhat_real(ny,nmodes),what_real(ny,nmodes))
+        allocate(uhat_imag(ny,nmodes),vhat_imag(ny,nmodes),what_imag(ny,nmodes))
+        allocate(uhat(ny,nmodes),vhat(ny,nmodes),what(ny,nmodes))
+    
+        ! Read imaginary mode data 
+        fname = InitFileDirectory(:len_trim(InitFileDirectory))//"/"//trim(InitFileTag)//"_init_info_imag.dat"
+        call read_2d_ascii(data2read,fname)
+        uhat_imag = reshape(data2read(:,1),[ny,nmodes])
+        vhat_imag = reshape(data2read(:,2),[ny,nmodes])
+        what_imag = reshape(data2read(:,3),[ny,nmodes])
+        deallocate(data2read)
+    
+        ! Read real mode data 
+        fname = InitFileDirectory(:len_trim(InitFileDirectory))//"/"//trim(InitFileTag)//"_init_info_real.dat"
+        call read_2d_ascii(data2read,fname)
+        uhat_real = reshape(data2read(:,1),[ny,nmodes])
+        vhat_real = reshape(data2read(:,2),[ny,nmodes])
+        what_real = reshape(data2read(:,3),[ny,nmodes])
+        deallocate(data2read)
+       
+        ! Init perturbation fields
+        uhat = uhat_real + imi*uhat_imag
+        vhat = vhat_real + imi*vhat_imag
+        what = what_real + imi*what_imag
+        u = 0.d0
+        v = 0.d0
+        w = 0.d0
+    
+        do modeID = 1,nmodes
+            yiter = 1
+            arg1  = 0!beta(modeID)*pi/180.d0
+            do j = gp%xst(2),gp%xen(2)
+                do k = 1,gp%xsz(3)
+                    do i = 1,gp%xsz(1)
+                        expfact = exp(imi*kz(modeID)*z(1,1,k) + imi*kx(modeID)*x(i,1,1) )
+                        uhatn = uhat(k,modeID)*cos(arg1) - vhat(k,modeID)*sin(arg1)
+                        vhatn = uhat(k,modeID)*sin(arg1) + vhat(k,modeID)*cos(arg1)
+                        whatn = what(k,modeID) 
+                        u(i,yiter,k) = u(i,yiter,k) + real(uhatn*expfact,rkind) 
+                        v(i,yiter,k) = v(i,yiter,k) + real(vhatn*expfact,rkind) 
+                        w(i,yiter,k) = w(i,yiter,k) + real(whatn*expfact,rkind)
+                    end do !x 
+                end do !z 
+                yiter = yiter + 1
+            end do !y
+        end do !modes
+    
+        deallocate(uhat_real,vhat_real,what_real,uhat_imag,vhat_imag,what_imag)
+        deallocate(beta,kmode)
+        deallocate(uhat, vhat, what)
+        deallocate(kx, kz)
+    end subroutine 
 
 end module
 
