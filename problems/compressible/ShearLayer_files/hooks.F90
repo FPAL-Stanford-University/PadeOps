@@ -6,7 +6,6 @@ module ShearLayer_data
     use basic_io,         only: read_2d_ascii 
     use exits,            only: message
     implicit none
-
     integer, parameter :: ns = 2
 
     ! Problem parameters
@@ -22,8 +21,7 @@ module ShearLayer_data
     real(rkind), dimension(ns) :: Rgas=[one,one]
 
     ! Domain size data
-    real(rkind) :: L_y = 129_rkind
-    real(rkind) :: L_x=172._rkind, L_z=86._rkind
+    real(rkind) :: Ly = 129._rkind, Lx=172._rkind, Lz=86._rkind
     real(rkind) :: x1, y1, z1
     logical :: periodicx = .true., periodicy = .false., periodicz = .true.
 
@@ -55,10 +53,10 @@ contains
         if (nrank == 0) then
             print *,  "Reading in the perturbation file ", trim(pertfile)
             open(unit=pertunit,file=trim(pertfile),form='FORMATTED',status='OLD')
-            read(pertunit,*) L_x, L_y, L_z
+            read(pertunit,*) Lx, Ly, Lz
             read(pertunit,*) kx, amp_x 
             read(pertunit,*) kz, amp_z 
-            print *, "Domain size: ",L_x,L_y,L_z
+            print *, "Domain size: ",Lx,Ly,Lz
         end if
 
         ! broadcast perturbations to all procs
@@ -78,10 +76,10 @@ contains
         call mpi_bcast(perty, ny, mpirkind, 0, mpi_comm_world, ierr)
     end subroutine
 
-    subroutine get_perturbations(gp, x, z, InitFileTag, InitFileDirectory,u, v, w)
+    subroutine get_perturbations(gp,x,z,InitFileTag,InitFileDirectory,u,v,w)
         use constants, only: imi, pi    
-        type(decomp_info),                intent(in) :: gp
-        character(len=*),                 intent(in) :: InitFileTag, InitFileDirectory
+        type(decomp_info),  intent(in) :: gp
+        character(len=*),   intent(in) :: InitFileTag, InitFileDirectory
         real(rkind), dimension(:,:,:),    intent(in) :: x, z
         real(rkind), dimension(:,:,:),    intent(out) :: u, v, w
     
@@ -165,19 +163,31 @@ contains
 end module
 
 
-subroutine meshgen(decomp, dx, dy, dz, mesh)
+subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile)
     use kind_parameters,  only: rkind
     use constants,        only: zero, half, one
     use decomp_2d,        only: decomp_info
-
     use ShearLayer_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
+    character(len=*),                intent(in)    :: inputfile
     real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     integer :: i,j,k,ioUnit, nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
+    real(rkind) :: p_ref=one, mu_ref=one, T_ref=one, rho_ref=one, &
+                   c1,c2,du, noiseAmp
+    character(len=clen) :: InitFileTag, InitFileDirectory
+    
+    namelist /PROBINPUT/ Mach, Re, Pr, Sc, rho_ref, p_ref, T_ref, rho_ratio,&
+                        gam, dtheta, InitFileTag, InitFileDirectory, noiseAmp,&
+                        Lx, Ly, Lz
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PROBINPUT)
+    close(ioUnit)
 
+    ! domain size for this proc
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
     ! If base decomposition is in Y
@@ -187,14 +197,12 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     ! Need to set x, y and z as well as  dx, dy and dz
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 	
-		call read_perturbation_files(nx,ny,nz)
-        dx = L_x/real(nx,rkind)
-        dy = L_y/real(ny-1,rkind)
-        dz = L_z/real(nz,rkind)
-
-        x1 = -L_x/2._rkind
-        y1 = -L_y/2._rkind
-        z1 = -L_z/2._rkind
+        dx = Lx/real(nx,rkind)
+        dy = Ly/real(ny-1,rkind)
+        dz = Lz/real(nz,rkind)
+        x1 = -Lx/2._rkind
+        y1 = -Ly/2._rkind
+        z1 = -Lz/2._rkind
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
@@ -226,7 +234,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use random,                      only: gaussian_random                  
     use mpi
     use ShearLayer_data
-    !use ShearLayer_IO
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -245,11 +252,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
     real(rkind), dimension(:,:,:), allocatable :: tmp, upert, vpert, wpert 
     real(rkind) :: p_ref=one, mu_ref=one, T_ref=one, rho_ref=one, &
-                   c1,c2,du, Rgas1, Rgas2, noiseAmp 
+                   c1,c2,du, Rgas1, Rgas2, noiseAmp
     character(len=clen) :: InitFileTag, InitFileDirectory
     
     namelist /PROBINPUT/ Mach, Re, Pr, Sc, rho_ref, p_ref, T_ref, rho_ratio,&
-                        gam, dtheta, InitFileTag, InitFileDirectory, noiseAmp
+                        gam, dtheta, InitFileTag, InitFileDirectory, noiseAmp,&
+                        Lx, Ly, Lz
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -415,7 +423,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         ! Sponge+bulk for exit bc
         ! Gradually apply the exit boundary conditions  
-        dy = L_y/real(decomp%ysz(2)-1,rkind)
+        dy = Ly/real(decomp%ysz(2)-1,rkind)
         filpt = 10.0_rkind/dy 
         thickT = real(10.D0, rkind)
         do i=1,decomp%ysz(2)
