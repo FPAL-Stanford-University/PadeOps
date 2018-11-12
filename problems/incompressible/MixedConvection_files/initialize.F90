@@ -31,8 +31,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     character(len=clen) :: InitFileTag, InitFileDirectory
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind) ::  E,Ra,Noise_Amp = 1.d-6
-    namelist /MixedConvectionInputs/ InitFileTag, InitFileDirectory,  E,Ra,Noise_Amp 
+    real(rkind) ::  Ra,Noise_Amp = 1.d-6
+    namelist /MixedConvectionInputs/ InitFileTag, InitFileDirectory,  Ra,Noise_Amp 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -47,7 +47,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     ix1 = decomp%xst(1); iy1 = decomp%xst(2); iz1 = decomp%xst(3)
     ixn = decomp%xen(1); iyn = decomp%xen(2); izn = decomp%xen(3)
  
-    Lx = 6.283185307179586d0
+    Lx = 12.56637061435917d0 
     Ly = 6.283185307179586d0 
     Lz = 1.d0 
 
@@ -97,16 +97,16 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z, T
-    real(rkind) ::  dz 
+    real(rkind) ::  dz, E 
     character(len=clen) :: InitFileTag, InitFileDirectory
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
-    real(rkind), dimension(:,:,:), allocatable :: upurt, vpurt, wpurt
-    real(rkind) :: E,Ra,Noise_Amp = 1.d-6, kappa
+    real(rkind), dimension(:,:,:), allocatable :: upurt, vpurt, wpurt, Tpurt
+    real(rkind) :: Ra,Noise_Amp = 1.d-6, kappa
     type(cd06stagg), allocatable :: derW
     character(len=clen) :: fname
 
-    namelist /MixedConvectionInputs/ InitFileTag, InitFileDirectory,  E,Ra,Noise_Amp 
+    namelist /MixedConvectionInputs/ InitFileTag, InitFileDirectory,  Ra,Noise_Amp 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -137,17 +137,21 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     allocate(upurt(size(u ,1),size(u ,2),size(u ,3)))
     allocate(vpurt(size(v ,1),size(v ,2),size(v ,3)))
     allocate(wpurt(size(wC,1),size(wC,2),size(wC,3)))
+    allocate(Tpurt(size(wC,1),size(wC,2),size(wC,3)))
 
     upurt = 0.d0 
     vpurt = 0.d0
-    wpurt = 0.d0 
-    !call get_perturbations(decompC, x, y, InitFileTag, InitFileDirectory, upurt, vpurt, wpurt)
+    wpurt = 0.d0
+    Tpurt = 0.d0
+    
+    call get_perturbations(decompC, x, y, InitFileTag, InitFileDirectory, upurt, vpurt, wpurt, Tpurt)
 
     u  = u + upurt
     v  = v + vpurt
     wC = wC+ wpurt
+    T  = T + Tpurt
     
-    deallocate(upurt, vpurt, wpurt)
+    deallocate(upurt, vpurt, wpurt, Tpurt)
     allocate(randArr(size(wC,1),size(wC,2),size(wC,3)))
     
     call gaussian_random(randArr,zero,one,seedu + 100*nrank)
@@ -163,9 +167,6 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
     call message_min_max(1,"Bounds for w:", p_minval(minval(wC)), p_maxval(maxval(wC)))
     
-    !u = one!1.6d0*z*(2.d0 - z) 
-    !v = zero;
-    !w = zero;
 
     ! Interpolate wC to w
     allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))

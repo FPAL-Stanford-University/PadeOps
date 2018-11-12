@@ -160,7 +160,7 @@ module IncompressibleGrid
 
         real(rkind) :: dtOld, dtRat, Tmn, wTh_surf
         real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
-        integer :: wallMType, botBC_Temp 
+        integer :: wallMType, botBC_Temp, topBC_Temp 
 
         ! Statistics to compute 
         real(rkind), dimension(:), allocatable :: runningSum_sc, inst_horz_avg, runningSum_sc_turb, runningSum_turb, inst_horz_avg_turb, debugavg, debuginst
@@ -471,7 +471,7 @@ contains
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType; this%CviscDT = CviscDT 
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity 
-        this%deleteInstructions = deleteInstructions
+        this%deleteInstructions = deleteInstructions; this%TopBC_Temp = TopBC_temp
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
         this%donot_dealias = donot_dealias; this%ioType = ioType
         this%moistureFactor = moistureFactor
@@ -705,6 +705,10 @@ contains
                ! Do nothing 
            else if (botBC_Temp == 2) then
                call setInhomogeneousNeumannBC_Temp(inputfile, this%wTh_surf)
+           else if (botBC_Temp == 3) then
+               if (topBC_Temp .ne. 3) then
+                    call GraceFulExit("Zero dirichlet BC must be set symmetrically if botBC_Temp = 3",341)        
+               end if 
            else
                call GraceFulExit("Only Dirichlet, Homog. Neumann or Inhomog. Neumann BCs supported for Temperature at &
                    & this time. Set botBC_Temp = 0 or 1 or 2",341)        
@@ -1498,6 +1502,9 @@ contains
          case (2) ! Inhomogeneous Neumann BC for temperature at the top
             TBC_top = 0; dTdzBC_top = 0; WTBC_top = -1;
             WdTdzBC_top = 0;
+        case (3)
+           TBC_top = 0; dTdzBC_top = 0; WTBC_top = -1;
+           WdTdzBC_top = 0;
         end select 
         select case (botBC_Temp)
         case (0) ! Dirichlet BC for temperature at the bottom
@@ -1509,6 +1516,9 @@ contains
          case (2) ! Inhomogeneous Neumann BC for temperature at the bottom
             TBC_bottom = 0; dTdzBC_bottom = 0; WTBC_bottom = -1;
             WdTdzBC_bottom = 0;
+        case (3) 
+           TBC_bottom = 0; dTdzBC_bottom = 0; WTBC_bottom = -1; 
+           WdTdzBC_bottom = 0;      
         end select
 
    end subroutine

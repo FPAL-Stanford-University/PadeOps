@@ -126,14 +126,16 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: wTh_surf
     integer :: ioUnit 
-    real(rkind) :: Gx0, Gy0, Lx, Ly, Lz, z0init, Tref
-    real(rkind) :: aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
-    namelist /PROBLEM_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
+    real(rkind) :: wt_surface 
+    namelist /BOUNDARY_FLUX/wt_surface 
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PROBLEM_INPUT)
+    read(unit=ioUnit, NML=BOUNDARY_FLUX)
     close(ioUnit)    
+
+    wTh_surf = wt_surface
+
 
     ! Do nothing really since temperature BC is homogeneous Neumann
 end subroutine
