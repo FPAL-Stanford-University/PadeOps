@@ -61,7 +61,7 @@ contains
         real(rkind) :: arg1
         complex(rkind) :: e
         character(len=clen) :: fname 
-        integer :: nmodes, ny, modeID, i, j, k
+        integer :: nmodes, ny, modeID, i, j, k, nx, nz
        
         ! Read mode info in x and y
         fname = trim(InitFileDirectory)//"/"//trim(InitFileTag)//"_mode_info.dat"
@@ -72,9 +72,13 @@ contains
         kz = data2read(:,2)!beta
         deallocate(data2read)
         call message(0, "Number of normal modes being used:",nmodes)
-        
+       
+        ! Local sizes of the chunk of domain on this proc:
+        ny = gp%ysz(2)
+        nx = size(x,1)
+        nz = size(x,3)
+
         ! Allocate based on global domain height
-        ny = gp%ysz(2) 
         allocate(uhat_real(ny,nmodes),vhat_real(ny,nmodes),what_real(ny,nmodes))
         allocate(uhat_imag(ny,nmodes),vhat_imag(ny,nmodes),what_imag(ny,nmodes))
         allocate(uhat(ny,nmodes),vhat(ny,nmodes),what(ny,nmodes))
@@ -105,14 +109,10 @@ contains
         v = 0.d0
         w = 0.d0
       
-        if (nrank==0) then
-            print *, size(x,1), size(x,2), size(x,3) 
-            print *, size(z,1), size(z,2), size(z,3) 
-        end if
         do modeID = 1,nmodes
             do j = 1,ny
-                do k = 1,size(z,3)!gp%yst(3),gp%yen(3)
-                    do i = 1,size(x,1)!gp%yst(1),gp%yen(1)
+                do k = 1,nz
+                    do i = 1,nx
                         e = exp(imi*(kx(modeID)*x(i,1,1) + kz(modeID)*z(1,1,k) ))
                         u(i,j,k) = u(i,j,k) + real(uhat(j,modeID)*e,rkind) 
                         v(i,j,k) = v(i,j,k) + real(vhat(j,modeID)*e,rkind) 
