@@ -1,10 +1,11 @@
 module ShearLayer_data
     use kind_parameters,  only: rkind, mpirkind, clen
-    use constants,        only: zero, one
+    use constants,        only: zero, one, two, pi, imi
     use FiltersMod,       only: filters
-    use decomp_2d,        only: decomp_info
+    use decomp_2d,        only: decomp_info, nrank
     use basic_io,         only: read_2d_ascii 
     use exits,            only: message
+    use mpi
     implicit none
     integer, parameter :: ns = 2
 
@@ -28,61 +29,15 @@ module ShearLayer_data
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 
-    ! Perturbation parameters
-    character(len=clen) :: pertfile='pertfile.dat'
-    real(rkind) :: kx, amp_x
-    real(rkind) :: kz, amp_z
-    real(rkind), dimension(:), allocatable :: perty
-    real(rkind), dimension(:,:,:), allocatable :: perty_field
 contains
 
-    subroutine read_perturbation_files(nx,ny,nz)
-        use mpi 
-        use decomp_2d, only: nrank
-        use constants, only: zero, two, pi
-        integer, intent(in) :: nx,ny,nz
-        integer :: pertunit
-        integer :: ierr
-        integer :: i, L_by_lambda_z
-
-        pertunit = 229
-		allocate(perty(ny))
-		allocate(perty_field(nx,ny,nz))
-        
-        ! Read in the y perturbation file
-        if (nrank == 0) then
-            print *,  "Reading in the perturbation file ", trim(pertfile)
-            open(unit=pertunit,file=trim(pertfile),form='FORMATTED',status='OLD')
-            read(pertunit,*) Lx, Ly, Lz
-        end if
-
-        ! broadcast perturbations to all procs
-        call mpi_bcast(kx, 1, mpirkind, 0, mpi_comm_world, ierr)
-        call mpi_bcast(kz, 1, mpirkind, 0, mpi_comm_world, ierr)
-        call mpi_bcast(amp_x, 1, mpirkind, 0, mpi_comm_world, ierr)
-        call mpi_bcast(amp_z, 1, mpirkind, 0, mpi_comm_world, ierr)
-
-        if (nrank == 0) then
-            do i=1,ny
-                read(pertunit,*) perty(i)
-                perty_field(:,i,:)=perty(i)
-            end do
-            close(pertunit)
-        end if
-
-        call mpi_bcast(perty, ny, mpirkind, 0, mpi_comm_world, ierr)
-    end subroutine
-
     subroutine read_domain_info(fname,Lx,Ly,Lz)
-        use mpi 
-        use decomp_2d, only: nrank
         character(len=*),   intent(in) :: fname 
         real(rkind),        intent(out) :: Lx, Ly, Lz
         integer :: funit=229
         
         ! Read in the y perturbation file
         if (nrank == 0) then
-            print *,  "Reading domain info", trim(fname)
             open(unit=funit,file=trim(fname),form='FORMATTED',status='OLD')
             read(funit,*) Lx
             read(funit,*) Ly
@@ -93,19 +48,18 @@ contains
 
 
     subroutine get_perturbations(gp,x,z,InitFileTag,InitFileDirectory,u,v,w)
-        use constants, only: imi, pi    
         type(decomp_info),  intent(in) :: gp
         character(len=*),   intent(in) :: InitFileTag, InitFileDirectory
-        real(rkind), dimension(:,:,:),    intent(in) :: x, z
-        real(rkind), dimension(:,:,:),    intent(out) :: u, v, w
+        real(rkind), dimension(:,:,:),    intent(in)    :: x, z
+        real(rkind), dimension(:,:,:),    intent(inout) :: u, v, w
     
         real(rkind), dimension(:,:), allocatable :: & 
                       data2read, uhat_real, uhat_imag, vhat_real, vhat_imag, &
                       what_real, what_imag 
         complex(rkind), dimension(:,:), allocatable :: uhat, vhat, what
-        real(rkind), dimension(:), allocatable :: kx, kz, kmode, beta
+        real(rkind), dimension(:), allocatable :: kx, kz
         real(rkind) :: arg1
-        complex(rkind) :: expfact, uhatn, vhatn, whatn
+        complex(rkind) :: e
         character(len=clen) :: fname 
         integer :: nmodes, ny, modeID, i, j, k
        
@@ -114,11 +68,8 @@ contains
         call read_2d_ascii(data2read,fname)
         nmodes = size(data2read,1)
         allocate(kx(nmodes), kz(nmodes))
-        allocate(beta(nmodes), kmode(nmodes))
-        beta  = data2read(:,1)
-        kmode = data2read(:,2)
-        kx = -kmode*sin(beta*pi/180.d0)
-        kz =  kmode*cos(beta*pi/180.d0)
+        kx = data2read(:,1)!alpha
+        kz = data2read(:,2)!beta
         deallocate(data2read)
         call message(0, "Number of normal modes being used:",nmodes)
         
@@ -129,19 +80,21 @@ contains
         allocate(uhat(ny,nmodes),vhat(ny,nmodes),what(ny,nmodes))
     
         ! Read imaginary mode data 
-        fname = trim(InitFileDirectory)//"/"//trim(InitFileTag)//"_init_info_imag.dat"
+        fname = trim(InitFileDirectory)//"/"//&
+                trim(InitFileTag)//"_init_info_imag.dat"
         call read_2d_ascii(data2read,fname)
-        uhat_imag = reshape(data2read(:,1),[ny,nmodes])
-        vhat_imag = reshape(data2read(:,2),[ny,nmodes])
-        what_imag = reshape(data2read(:,3),[ny,nmodes])
+        uhat_imag = reshape(data2read(:,2),[ny,nmodes])
+        vhat_imag = reshape(data2read(:,3),[ny,nmodes])
+        what_imag = reshape(data2read(:,4),[ny,nmodes])
         deallocate(data2read)
     
         ! Read real mode data 
-        fname = trim(InitFileDirectory)//"/"//trim(InitFileTag)//"_init_info_real.dat"
+        fname = trim(InitFileDirectory)//"/"//&
+                trim(InitFileTag)//"_init_info_real.dat"
         call read_2d_ascii(data2read,fname)
-        uhat_real = reshape(data2read(:,1),[ny,nmodes])
-        vhat_real = reshape(data2read(:,2),[ny,nmodes])
-        what_real = reshape(data2read(:,3),[ny,nmodes])
+        uhat_real = reshape(data2read(:,2),[ny,nmodes])
+        vhat_real = reshape(data2read(:,3),[ny,nmodes])
+        what_real = reshape(data2read(:,4),[ny,nmodes])
         deallocate(data2read)
        
         ! Init perturbation fields
@@ -151,26 +104,25 @@ contains
         u = 0.d0
         v = 0.d0
         w = 0.d0
-    
+      
+        if (nrank==0) then
+            print *, size(x,1), size(x,2), size(x,3) 
+            print *, size(z,1), size(z,2), size(z,3) 
+        end if
         do modeID = 1,nmodes
-            arg1  = 0!beta(modeID)*pi/180.d0
-            do j = gp%yst(2),gp%yen(2)
-                do k = 1,gp%ysz(3)
-                    do i = 1,gp%ysz(1)
-                        expfact = exp(imi*kz(modeID)*z(1,1,k) + imi*kx(modeID)*x(i,1,1) )
-                        uhatn = uhat(j,modeID)*cos(arg1) - vhat(j,modeID)*sin(arg1)
-                        vhatn = uhat(j,modeID)*sin(arg1) + vhat(j,modeID)*cos(arg1)
-                        whatn = what(j,modeID) 
-                        u(i,j-gp%yst(2)+1,k) = u(i,j-gp%yst(2)+1,k) + real(uhatn*expfact,rkind) 
-                        v(i,j-gp%yst(2)+1,k) = v(i,j-gp%yst(2)+1,k) + real(vhatn*expfact,rkind) 
-                        w(i,j-gp%yst(2)+1,k) = w(i,j-gp%yst(2)+1,k) + real(whatn*expfact,rkind)
+            do j = 1,ny
+                do k = 1,size(z,3)!gp%yst(3),gp%yen(3)
+                    do i = 1,size(x,1)!gp%yst(1),gp%yen(1)
+                        e = exp(imi*(kx(modeID)*x(i,1,1) + kz(modeID)*z(1,1,k) ))
+                        u(i,j,k) = u(i,j,k) + real(uhat(j,modeID)*e,rkind) 
+                        v(i,j,k) = v(i,j,k) + real(vhat(j,modeID)*e,rkind) 
+                        w(i,j,k) = w(i,j,k) + real(what(j,modeID)*e,rkind)
                     end do !x 
                 end do !z 
             end do !y
         end do !modes
     
         deallocate(uhat_real,vhat_real,what_real,uhat_imag,vhat_imag,what_imag)
-        deallocate(beta,kmode)
         deallocate(uhat, vhat, what)
         deallocate(kx, kz)
     end subroutine 
@@ -181,51 +133,39 @@ end module
 subroutine meshgen(decomp, dx, dy, dz, mesh)
     use kind_parameters,  only: rkind
     use constants,        only: zero, half, one
-    use decomp_2d,        only: decomp_info
+    use decomp_2d,        only: decomp_info, nrank
     use ShearLayer_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
-    !character(len=*),                intent(in)    :: inputfile
     real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     integer :: i,j,k,ioUnit, nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-    !real(rkind) :: p_ref=one, mu_ref=one, T_ref=one, rho_ref=one, &
-    !               c1,c2,du, noiseAmp
-    !character(len=clen) :: InitFileTag, InitFileDirectory
-    !
-    !namelist /PROBINPUT/ Mach, Re, Pr, Sc, rho_ref, p_ref, T_ref, rho_ratio,&
-    !                    gam, dtheta, InitFileTag, InitFileDirectory, noiseAmp,&
-    !                    Lx, Ly, Lz
-    !ioUnit = 11
-    !open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    !read(unit=ioUnit, NML=PROBINPUT)
-    !close(ioUnit)
 
-    ! domain size for this proc
+    ! Global domain size 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
     ! If base decomposition is in Y
     ix1 = decomp%yst(1); iy1 = decomp%yst(2); iz1 = decomp%yst(3)
     ixn = decomp%yen(1); iyn = decomp%yen(2); izn = decomp%yen(3)
-    
+
     ! Need to set x, y and z as well as  dx, dy and dz
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         call read_domain_info("/home/kmatsuno/ShearLayerInput/PadeInput/ShearLayer_domain_info.dat",Lx,Ly,Lz)
         dx = Lx/real(nx,rkind)
-        dy = Ly/real(ny-1,rkind)
+        dy = Ly/real(ny,rkind)
         dz = Lz/real(nz,rkind)
-        x1 = -Lx/2._rkind
+        x1 = 0._rkind! -Lx/2._rkind
         y1 = -Ly/2._rkind
-        z1 = -Lz/2._rkind
+        z1 = 0._rkind!-Lz/2._rkind
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = x1 + real( ix1 - 1 + i - 1, rkind ) * dx
-                    y(i,j,k) = y1 + real( iy1 - 1 + j - 1, rkind ) * dy
-                    z(i,j,k) = z1 + real( iz1 - 1 + k - 1, rkind ) * dz
+                    x(i,j,k) = x1 + real( ix1 + i - 1, rkind ) * dx
+                    y(i,j,k) = y1 + real( iy1 + j - 1, rkind ) * dy
+                    z(i,j,k) = z1 + real( iz1 + k - 1, rkind ) * dz
                 end do
             end do
         end do
@@ -336,7 +276,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         u = u + upert
         v = v + vpert
         w = w + wpert
-
+        
         ! Gaussian noise
         !call gaussian_random(upert,zero,one,seedu+100*nrank)
         !call gaussian_random(vpert,zero,one,seedu+100*nrank)
