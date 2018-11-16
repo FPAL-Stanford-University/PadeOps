@@ -273,8 +273,12 @@ subroutine interp_PrimitiveVars(this)
     if (this%isStratified .or. this%initspinup) then
         call transpose_y_to_z(this%That,zbuffC,this%sp_gpC)
         call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,TBC_bottom, TBC_top)
-        if (this%botBC_Temp == 0) then 
+        if ((this%botBC_Temp == 0)) then 
             zbuffE(:,:,1) = zero 
+            if (nrank == 0) then
+                zbuffE(1,1,1) = this%Tsurf*real(this%nx,rkind)*real(this%ny,rkind)
+            end if 
+        elseif ((this%botBC_Temp == 2)) then
             if (nrank == 0) then
                 zbuffE(1,1,1) = this%Tsurf*real(this%nx,rkind)*real(this%ny,rkind)
             end if 
@@ -618,7 +622,7 @@ subroutine compute_dTdxi(this)
     call this%spectE%mtimes_ik2_oop(this%TEhat,this%cbuffyE(:,:,:,1))
     call this%spectE%ifft(this%cbuffyE(:,:,:,1),this%dTdyE)
    
-    if ((this%botBC_Temp == 3) .and. (this%topBC_Temp == 3)) then ! symmetric dirichlet BCs
+    if (((this%botBC_Temp == 3) .and. (this%topBC_Temp == 3)).or.(this%botBC_Temp == 2)) then ! symmetric dirichlet BCs
         call transpose_y_to_z(this%TEhat, ctmpz2, this%sp_gpE)
         call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,TBC_bottom,TBC_top)
         call transpose_z_to_y(ctmpz1,this%dTdzHC,this%sp_gpC)

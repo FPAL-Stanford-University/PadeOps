@@ -103,7 +103,18 @@ contains
             call tic()
         end if 
 
+        call update_surface_flux(igp%Tsim, this%wTh_surf)
+
     end subroutine
 
+    subroutine update_surface_flux(igp)
+        real(rkind), intent(in) :: time
+        real(rkind), intent(inout) :: surfaceFlux
+
+        ! ADITYA TO MIKE: Set your function here
+        
+        ! surfaceFlux = 0.1*time 
+
+    end subroutine 
 
 end module 

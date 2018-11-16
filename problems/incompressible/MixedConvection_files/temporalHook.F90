@@ -51,6 +51,8 @@ contains
             call message(1,"TIDX:",igp%step)
             call message(1,"MaxDivergence:",DomMaxDiv)
             call message(1,"TKE:", tke)
+            call message(1,"Uvar:", uvar)
+            call message(1,"Wvar:", wvar)
             call message_min_max(1,"Bounds for u:", p_minval(minval(igp%u)),p_maxval(maxval(igp%u)))
             call message_min_max(1,"Bounds for v:", p_minval(minval(igp%v)),p_maxval(maxval(igp%v)))
             call message_min_max(1,"Bounds for w:", p_minval(minval(igp%w)),p_maxval(maxval(igp%w)))
