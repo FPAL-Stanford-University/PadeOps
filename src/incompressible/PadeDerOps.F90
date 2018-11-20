@@ -1199,6 +1199,7 @@ pure function getApproxPoincareConstant(this) result(const)
    class(Pade6stagg), intent(in) :: this
    real(rkind) :: const   
 
+   const = 0.d0 
    select case(this%scheme)
    case (fourierColl)
       const = 1.d0/sqrt(pi**2)

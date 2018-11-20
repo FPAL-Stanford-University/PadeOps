@@ -574,7 +574,7 @@ contains
 
         call transpose_y_to_z(fhat, this%igrid_sim%cbuffzC(:,:,:,1), this%igrid_sim%sp_gpC)
         if (nrank == 0) then
-            fmean = this%igrid_sim%cbuffzC(1,1,:,1)*this%avgFact
+            fmean = real(this%igrid_sim%cbuffzC(1,1,:,1),rkind)*this%avgFact
         else
             fmean = 0.d0 ! Only 0 processor has the actual mean  
         end if 
@@ -591,7 +591,7 @@ contains
 
         call transpose_y_to_z(fhat, this%igrid_sim%cbuffzE(:,:,:,1), this%igrid_sim%sp_gpE)
         if (nrank == 0) then
-            fmean = this%igrid_sim%cbuffzE(1,1,:,1)*this%avgFact
+            fmean = real(this%igrid_sim%cbuffzE(1,1,:,1),rkind)*this%avgFact
         else
             fmean = 0.d0 ! Only 0 processor has the actual mean  
         end if 
@@ -609,7 +609,7 @@ contains
         call this%igrid_sim%spectC%fft(f, this%igrid_sim%cbuffyC(:,:,:,1))
         call transpose_y_to_z(this%igrid_sim%cbuffyC(:,:,:,1), this%igrid_sim%cbuffzC(:,:,:,1), this%igrid_sim%sp_gpC)
         if (nrank == 0) then
-            fmean = this%igrid_sim%cbuffzC(1,1,:,1)*this%avgFact
+            fmean = real(this%igrid_sim%cbuffzC(1,1,:,1),rkind)*this%avgFact
         else
             fmean = 0.d0 ! Only 0 processor has the actual mean  
         end if 
@@ -626,7 +626,7 @@ contains
         call this%igrid_sim%spectE%fft(f, this%igrid_sim%cbuffyE(:,:,:,1))
         call transpose_y_to_z(this%igrid_sim%cbuffyE(:,:,:,1), this%igrid_sim%cbuffzE(:,:,:,1), this%igrid_sim%sp_gpE)
         if (nrank == 0) then
-            fmean = this%igrid_sim%cbuffzE(1,1,:,1)*this%avgFact
+            fmean = real(this%igrid_sim%cbuffzE(1,1,:,1),rkind)*this%avgFact
         else
             fmean = 0.d0 ! Only 0 processor has the actual mean  
         end if 

@@ -14,7 +14,7 @@ module igrid_Operators_Periodic
       private
       complex(rkind), dimension(:,:,:), allocatable :: cbuffy1, cbuffy2, cbuffz
       real(rkind),    dimension(:,:,:), allocatable :: rbuffy, rbuffz1, rbuffz2
-      type(decomp_info), pointer :: gp
+      class(decomp_info), pointer :: gp
       type(spectral)  :: spect
       type(cd06stagg) :: derZ
       real(rkind), dimension(:,:,:), allocatable :: zarr1d_1, zarr1d_2

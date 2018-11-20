@@ -22,9 +22,9 @@ module sgsmod_igrid
 
     type :: sgs_igrid
         private 
-        type(decomp_info), pointer :: gpC, gpE
-        type(spectral), pointer :: spectC, spectE
-        type(decomp_info), pointer :: sp_gpC, sp_gpE
+        class(decomp_info), pointer :: gpC, gpE
+        class(spectral), pointer :: spectC, spectE
+        class(decomp_info), pointer :: sp_gpC, sp_gpE
         integer :: mid, DynamicProcedureType, WallModel, DynProcFreq
         real(rkind), dimension(:), allocatable :: cmodelC, cmodelE
         

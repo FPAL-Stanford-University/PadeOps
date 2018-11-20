@@ -24,10 +24,10 @@ module PadePoissonMod
     type :: Padepoisson
         integer :: nzG, nx_in, ny_in, nz_in
         integer ::      nxE_in, nyE_in, nzE_in
-        type(cd06stagg), allocatable :: derZ
-        type(Pade6stagg), pointer :: derivZ 
-        type(spectral), pointer :: sp, spE
-        type(decomp_info), pointer :: sp_gp, sp_gpE
+        class(cd06stagg), allocatable :: derZ
+        class(Pade6stagg), pointer :: derivZ 
+        class(spectral), pointer :: sp, spE
+        class(decomp_info), pointer :: sp_gp, sp_gpE
 
         real(rkind), dimension(:,:,:), pointer :: k1_2d, k2_2d
         real(rkind), dimension(:,:,:), allocatable :: kradsq_inv

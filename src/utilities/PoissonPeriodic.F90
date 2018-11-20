@@ -116,7 +116,7 @@ contains
       real(rkind), intent(in) :: dx, dy, dz
       integer, intent(in) :: dir_id
       logical, intent(in), optional :: useExhaustiveFFT
-      class(decomp_info), intent(in), target :: gp
+      type(decomp_info), intent(in), target :: gp
       logical :: useExhaustiveFFT_
       procedure(GetModifiedWavenum), optional :: Get_ModKx, Get_ModKy, Get_ModKz
 
@@ -135,6 +135,7 @@ contains
          useExhaustiveFFT_ = .true.
       end if 
 
+      ierr = 0
       select case (dir_id)
       case (1)
          ierr = this%FT%init(nx,ny,nz, "x",dx,dy,dz,useExhaustiveFFT_, &
