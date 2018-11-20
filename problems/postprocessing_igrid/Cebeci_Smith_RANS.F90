@@ -1,23 +1,50 @@
 module NS_1d_rhs
     use kind_parameters, only: rkind
     use cd06staggstuff, only:cd06stagg
+    use interpolation
     implicit none
 
-    real(rkind), parameter :: dz_match = 5.d0/1000.d0 !50.d0/1000.d0
-    real(rkind) :: umatch = 0.010d0 !14.8439612264d0
-    integer, parameter :: nz = 400
+    real(rkind), parameter :: dz_match = 0.10d0 !50.d0/1000.d0
+    integer, parameter :: nz = 9
     real(rkind), dimension(:), allocatable :: nu_t, z, zE
+    real(rkind) :: umatch = 0.d0 !14.8439612264d0
 
     real(rkind) :: ustar = 1.d0 
     integer :: matching_mode = 1
-    integer :: scheme = 1 ! 1: 2nd order, 2: CD06
-    real(rkind), parameter :: Retau = 1000
+    integer :: scheme = 2 ! 1: 2nd order, 2: CD06
+    real(rkind), parameter :: Retau = 5000
     
     type(cd06stagg) :: der
     real(rkind) :: dz
-
+    real(rkind), dimension(:), allocatable :: bsp, csp, dsp 
+    real(rkind), dimension(:,:), allocatable :: data2read
+    
+    real(rkind), dimension(:), allocatable :: zplus, yplus
 
 contains
+    
+    subroutine get_nu_t(ustar)
+        real(rkind), intent(in) :: ustar
+        integer :: idx, nzdat
+
+        zplus = (z + 1)*Retau*ustar
+        
+        nzdat = size(data2read,1)
+        !call spline (yplus, data2read(:,2), bsp, csp, dsp, size(bsp))
+        do idx = 1,nz/2
+            if (zplus(idx)>Retau) then
+                nu_t(idx) = data2read(nzdat/2,2)
+            else
+                nu_t(idx) = ispline(zplus(idx), yplus, data2read(:,2), bsp, csp, dsp, size(bsp)) 
+            end if 
+        end do 
+            
+        do idx = nz/2+1,nz
+            nu_t(idx) = nu_t(nz-idx+1)
+        end do 
+
+    end subroutine 
+
 
     subroutine get_RHS(nz, u, rhs, tmpC, dudz, uE, F, nu_t)
         integer, intent(in) :: nz
@@ -38,6 +65,7 @@ contains
         
         if (matching_mode == 1) then
             umatch = get_utarget(uE(1,1,2),(1+zE(2)),(1+zE(1)))
+           !call get_nu_t(ustar)
         end if 
         ! Dirichlet BCs
         uE(1,1,1) = umatch 
@@ -110,14 +138,10 @@ end module
 
 program Cebeci_smith_RANS
     use kind_parameters, only: rkind, clen 
-!    use cd06staggstuff, only:cd06stagg
- !   use staggOps, 
     use basic_io
     use NS_1d_rhs
-    use interpolation
 
     implicit none
-    real(rkind), dimension(:,:), allocatable :: data2read
 
     real(rkind), parameter :: tstop = 5000.0d0 
     real(rkind), parameter :: cvisc =  0.4d0
@@ -125,12 +149,11 @@ program Cebeci_smith_RANS
     real(rkind), dimension(:,:,:), allocatable :: u, uE, tmpC, rhs, dudz, uLam
     real(rkind), dimension(:,:,:), allocatable :: uin, k1, k2, k3, k4
     real(rkind), parameter :: F = 1.d0 
-    character(len=clen) :: fname, input_fname = "/scratch/04076/tg833754/Cebecci_smith/Cebeci_smith_ReTau1000.txt"
+    character(len=clen) :: fname, input_fname = "/scratch/04076/tg833754/Cebecci_smith/Cebeci_smith_ReTau5000.txt"
     character(len=clen) :: restart_fname = "/scratch/04076/tg833754/Cebecci_smith/u_CS_WM0002400000.dat"
     logical :: restartSim = .false. 
-    integer :: idx, tprint = 100000, tdatadump = 5000000 
+    integer :: idx, nzdat, tprint = 100000, tdatadump = 5000000 
     integer, parameter :: tscheme = 3
-    real(rkind), dimension(:), allocatable :: bsp, csp, dsp 
     real(rkind), dimension(:,:), allocatable :: data2read2
 
     ! get the nu_t from disk
@@ -139,12 +162,8 @@ program Cebeci_smith_RANS
     allocate(bsp(size(data2read,1)))
     allocate(csp(size(data2read,1)))
     allocate(dsp(size(data2read,1)))
+    allocate(yplus(size(data2read,1)))
 
-    call spline (data2read(:,1), data2read(:,2), bsp, csp, dsp, size(bsp))
-
-
-    !nz = size(data2read,1)
-    print*, "Nz:", nz
 
     allocate(z(nz),nu_t(nz))
     allocate(u(1,1,nz))
@@ -153,7 +172,7 @@ program Cebeci_smith_RANS
     allocate(tmpC(1,1,nz))
     allocate(uLam(1,1,nz))
     allocate(rhs(1,1,nz))
-
+    allocate(zplus(nz))
     allocate(zE(nz+1))
 
     allocate(dt(1,1,nz))
@@ -166,11 +185,7 @@ program Cebeci_smith_RANS
     zE(1:nz) = z - dz/2.d0 
     zE(nz+1) = zE(nz) + dz
 
-    ! Interpolate nu_t
-    do idx = 1,nz
-       nu_t(idx) = ispline(z(idx), data2read(:,1), data2read(:,2), bsp, csp, dsp, size(bsp)) 
-    end do
-    !nu_t = 0.d0 
+    call get_nu_t(ustar)
 
     uLam(1,1,:) = 0.5*Retau*F*(1 - z*z)
 
@@ -180,16 +195,43 @@ program Cebeci_smith_RANS
     call der%init(nz, dz, isTopEven=.false., isBotEven=.false., isTopSided=.true., isBotSided=.true.)
     ! Initialize u
     if (restartSim) then
-        deallocate(data2read)
-        allocate(data2read(nz,2))
-        call read_ascii_2d_2rows(data2read,restart_fname,nz)
-        u(1,1,:) = data2read(:,2)
+        allocate(data2read2(nz,2))
+        call read_ascii_2d_2rows(data2read2,restart_fname,nz)
+        u(1,1,:) = data2read2(:,2)
+        deallocate(data2read2)
     else
         u = 1.d0 !am 
     end if 
 
     !nu_t = 0.d0 ! temporary
 
+    yplus = (data2read(:,1)+1)*Retau
+    zplus = (z + 1)*Retau*ustar
+    call spline (yplus, data2read(:,2), bsp, csp, dsp, size(bsp))
+    !do idx = 1,nz
+    !    nu_t(idx) = ispline(zplus(idx), yplus, data2read(:,2), bsp, csp, dsp, size(bsp)) 
+    !end do 
+    nzdat = size(data2read,1)
+    !do idx = 1,nz/2
+    do idx = 1,nz
+    !    if (zplus(idx)>Retau) then
+    !        nu_t(idx) = data2read(nzdat/2,2)
+    !    else
+           nu_t(idx) = ispline(zplus(idx), yplus, data2read(:,2), bsp, csp, dsp, size(bsp)) 
+    !    end if 
+    end do 
+    !do idx = nz/2+1,nz
+    !    nu_t(idx) = nu_t(nz-idx+1)
+    !end do 
+   
+    !print*, sum(nu_t)
+    !stop 
+
+    !nz = size(data2read,1)
+    print*, "Nz:", nz
+    print*, "matchLoc:", zE(1)
+    print*, "zmatchDist:", zE(1) + 1
+    print*, "delta_z:", zE(2) - zE(1)
 
     do idx = 1,nz
         dt(1,1,idx) = cvisc*dz*dz/(1.d0/Retau + nu_t(idx))
@@ -207,7 +249,7 @@ program Cebeci_smith_RANS
     deallocate(data2read)
     allocate(data2read(nz,2))
     idx = 1
-    do while(idx<100000000)
+    do while(idx<5000000)
         ! Interpolate cell to edge
 
         select case (tscheme)
