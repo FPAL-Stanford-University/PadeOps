@@ -7,7 +7,7 @@ program neutral_pbl_igrid
     use mpi
     use kind_parameters,  only: clen
     use IncompressibleGrid, only: igrid
-    use temporalhook, only: doTemporalStuff, initialize_controller_location
+    use temporalhook, only: doTemporalStuff!, initialize_controller_location
     use timer, only: tic, toc
     use exits, only: message
     use budgets_xy_avg_mod, only: budgets_xy_avg  
@@ -31,7 +31,7 @@ program neutral_pbl_igrid
     
     call igp%printDivergence()
   
-    call initialize_controller_location(igp, inputfile)  !<-- frame angle controller initialization 
+    !call initialize_controller_location(igp, inputfile)  !<-- frame angle controller initialization 
 
     call budg%init(inputfile, igp)   !<-- Budget class initialization 
 
