@@ -49,7 +49,7 @@ contains
             nr = nr + 1
         end do 
         rewind(10)
-        
+       
         allocate(data2read(nr,nc))
 
         do i=1, nr
@@ -59,6 +59,23 @@ contains
         close(10)
 
     end subroutine
+   
+    subroutine read_ascii_2d_2rows(data2read,filename,nrows)
+        implicit none 
+        real(rkind), intent(out), dimension(nrows,2) :: data2read
+        character(len=*), intent(in) :: filename
+        integer, intent(in) :: nrows
+        integer :: i
+
+        open(12, file=filename)
+        do i = 1,nrows
+            read(12,*) data2read(i,:)
+        end do 
+        close(12)
+
+
+
+    end subroutine 
     
     subroutine write_2D_binary(data2write,filename)
         implicit none
