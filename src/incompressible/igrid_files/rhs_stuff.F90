@@ -397,13 +397,15 @@
        class(igrid), intent(inout) :: this 
        real(rkind) :: molecularDiff
        integer :: i, j, k
+       complex :: tmp1
 
        molecularDiff = one/(this%Re*this%PrandtlFluid)
        do k = 1,size(this%T_rhs,3)
           do j = 1,size(this%T_rhs,2)
              !$omp simd
              do i = 1,size(this%T_rhs,1)
-                this%T_rhs(i,j,k) = this%T_rhs(i,j,k) - molecularDiff*this%uhat(i,j,k)
+                tmp1 = molecularDiff*this%uhat(i,j,k)
+                this%T_rhs(i,j,k) = this%T_rhs(i,j,k) - tmp1
              end do 
           end do 
        end do 
