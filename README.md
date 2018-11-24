@@ -9,7 +9,7 @@ This   README would normally document whatever steps are necessary to get your a
 * Tutorials : TBD/Incomplete
 
 ### Current build status ###
-* `master:` [![Build Status](https://travis-ci.com/akshaysubr/PadeOps.svg?token=pw8NM711GSaRntPLSzsL&branch=master)](https://travis-ci.com/akshaysubr/PadeOps)
+* `master:` [![Build Status](https://travis-ci.org/FPAL-Stanford-University/PadeOps.svg?branch=master)](https://travis-ci.org/FPAL-Stanford-University/PadeOps)
 * `devel :`
 * `cgrid :`
 * `igrid :`
