@@ -47,16 +47,16 @@ contains
     end subroutine
 
 
-    subroutine get_perturbations(gp,x,z,InitFileTag,InitFileDirectory,u,v,w)
+    subroutine get_perturbations(gp,x,z,InitFileTag,InitFileDirectory,u,v,w,T,p)
         type(decomp_info),  intent(in) :: gp
         character(len=*),   intent(in) :: InitFileTag, InitFileDirectory
         real(rkind), dimension(:,:,:),    intent(in)    :: x, z
-        real(rkind), dimension(:,:,:),    intent(inout) :: u, v, w
+        real(rkind), dimension(:,:,:),    intent(inout) :: u, v, w, T, p
     
         real(rkind), dimension(:,:), allocatable :: & 
                       data2read, uhat_real, uhat_imag, vhat_real, vhat_imag, &
-                      what_real, what_imag 
-        complex(rkind), dimension(:,:), allocatable :: uhat, vhat, what
+                      what_real, what_imag, That_real, That_imag, phat_real,phat_imag 
+        complex(rkind), dimension(:,:), allocatable :: uhat, vhat, what, That,phat
         real(rkind), dimension(:), allocatable :: kx, kz
         real(rkind) :: arg1
         complex(rkind) :: e
@@ -79,9 +79,11 @@ contains
         nz = size(x,3)
 
         ! Allocate based on global domain height
-        allocate(uhat_real(ny,nmodes),vhat_real(ny,nmodes),what_real(ny,nmodes))
-        allocate(uhat_imag(ny,nmodes),vhat_imag(ny,nmodes),what_imag(ny,nmodes))
-        allocate(uhat(ny,nmodes),vhat(ny,nmodes),what(ny,nmodes))
+        allocate(uhat_real(ny,nmodes),uhat_imag(ny,nmodes),uhat(ny,nmodes))
+        allocate(vhat_real(ny,nmodes),vhat_imag(ny,nmodes),vhat(ny,nmodes))
+        allocate(what_real(ny,nmodes),what_imag(ny,nmodes),what(ny,nmodes))
+        allocate(That_real(ny,nmodes),That_imag(ny,nmodes),That(ny,nmodes))
+        allocate(phat_real(ny,nmodes),phat_imag(ny,nmodes),phat(ny,nmodes))
     
         ! Read imaginary mode data 
         fname = trim(InitFileDirectory)//"/"//&
@@ -90,6 +92,8 @@ contains
         uhat_imag = reshape(data2read(:,2),[ny,nmodes])
         vhat_imag = reshape(data2read(:,3),[ny,nmodes])
         what_imag = reshape(data2read(:,4),[ny,nmodes])
+        That_imag = reshape(data2read(:,5),[ny,nmodes])
+        phat_imag = reshape(data2read(:,6),[ny,nmodes])
         deallocate(data2read)
     
         ! Read real mode data 
@@ -99,15 +103,21 @@ contains
         uhat_real = reshape(data2read(:,2),[ny,nmodes])
         vhat_real = reshape(data2read(:,3),[ny,nmodes])
         what_real = reshape(data2read(:,4),[ny,nmodes])
+        That_real = reshape(data2read(:,5),[ny,nmodes])
+        phat_real = reshape(data2read(:,6),[ny,nmodes])
         deallocate(data2read)
        
         ! Init perturbation fields
         uhat = uhat_real + imi*uhat_imag
         vhat = vhat_real + imi*vhat_imag
         what = what_real + imi*what_imag
+        That = That_real + imi*That_imag
+        phat = phat_real + imi*phat_imag
         u = 0.d0
         v = 0.d0
         w = 0.d0
+        T = 0.d0
+        p = 0.d0
       
         do modeID = 1,nmodes
             do j = 1,ny
@@ -117,14 +127,19 @@ contains
                         u(i,j,k) = u(i,j,k) + real(uhat(j,modeID)*e,rkind) 
                         v(i,j,k) = v(i,j,k) + real(vhat(j,modeID)*e,rkind) 
                         w(i,j,k) = w(i,j,k) + real(what(j,modeID)*e,rkind)
+                        T(i,j,k) = T(i,j,k) + real(That(j,modeID)*e,rkind) 
+                        p(i,j,k) = p(i,j,k) + real(phat(j,modeID)*e,rkind)
                     end do !x 
                 end do !z 
             end do !y
         end do !modes
     
-        deallocate(uhat_real,vhat_real,what_real,uhat_imag,vhat_imag,what_imag)
-        deallocate(uhat, vhat, what)
         deallocate(kx, kz)
+        deallocate(uhat_real,uhat_imag,uhat)
+        deallocate(vhat_real,vhat_imag,vhat)
+        deallocate(what_real,what_imag,what)
+        deallocate(That_real,That_imag,That)
+        deallocate(phat_real,phat_imag,phat)
     end subroutine 
 
 end module
@@ -206,7 +221,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
 
-    real(rkind), dimension(:,:,:), allocatable :: tmp, upert, vpert, wpert 
+    real(rkind), dimension(:,:,:), allocatable :: &
+        tmp, upert, vpert, wpert, Tpert, ppert
     real(rkind) :: p_ref=one, mu_ref=one, T_ref=one, rho_ref=one, &
                    c1,c2,du, Rgas1, Rgas2, noiseAmp
     character(len=clen) :: InitFileTag, InitFileDirectory
@@ -226,6 +242,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     allocate(upert(nx,ny,nz))
     allocate(vpert(nx,ny,nz))
     allocate(wpert(nx,ny,nz))
+    allocate(Tpert(nx,ny,nz))
+    allocate(ppert(nx,ny,nz))
 
     associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),                    &
                  v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),                    &
@@ -263,19 +281,21 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         c1 = sqrt(gam*p_ref/(rho_ref/Rgas1))
         c2 = sqrt(gam*p_ref/(rho_ref/Rgas2))
 		du = Mach*(c1+c2)
-        u   = zero;!du*(tmp-half)
+        u   = half*(1+tanh(y))!du*(tmp-half)
         v   = zero
         w   = zero
         p   = p_ref
-        T   = T_ref
+        T   = T_ref + half*(gam-1)*1**2*u*(1-u)
         rho = p / (mix%Rgas * T)
 
         ! Modal perturbations
         call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
-                 upert, vpert, wpert)
-        u = u + upert
-        v = v + vpert
-        w = w + wpert
+                 upert, vpert, wpert, Tpert, ppert)
+        u = u + noiseAmp*upert
+        v = v + noiseAmp*vpert
+        w = w + noiseAmp*wpert
+        T = T + noiseAmp*Tpert
+        p = p + noiseAmp*ppert
         
         ! Gaussian noise
         !call gaussian_random(upert,zero,one,seedu+100*nrank)
@@ -284,7 +304,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         !u = u + noiseAmp*upert
         !v = v + noiseAmp*vpert
         !w = w + noiseAmp*wpert
-        deallocate(upert, vpert, wpert)
+        deallocate(upert, vpert, wpert, Tpert, ppert)
 
         ! Initialize mygfil
         call mygfil%init(                           decomp, &
