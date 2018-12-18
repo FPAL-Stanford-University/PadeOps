@@ -1,22 +1,22 @@
 &INPUT
 
-inputdir  = "/home/akshays/Data/PadeOps/inclinedRM/N0128_res00"      ! Directory for input files
-outputdir = "/home/akshays/Data/PadeOps/inclinedRM/N0128_res00"      ! Directory for output files
+inputdir  = "/home/kmatsuno/ShearLayerInput/"
+outputdir = "/farmshare/user_data/kmatsuno/ShearLayerData/Run01/" 
 
-nx = 2048                 ! Number of points in X
-ny = 128                  ! Number of points in Y
-nz = 32                   ! Number of points in Z
+nx = 256                ! Number of points in X (256)
+ny = 129                ! Number of points in Y (192)
+nz = 128                ! Number of points in Z (128)
 
 dt = 1.0D-3               ! Fixed time step value (Set to negative to disable)
-tstop = 3.0D-3            ! Physical time to stop the simulation
-CFL = 0.5D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+tstop = 250.D0            ! Physical time to stop the simulation
+CFL = 0.5D0               ! CFL criterion for time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
-tviz = 2.0D-2             ! Time between visualization dumps (Set to negative to disable)
-vizprefix = "inclinedRM"  ! Prefix for the visualization files
+tviz = 3.D-1              ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "shearlayer"  ! Prefix for the visualization files
 reduce_precision = .true. ! Reduce precision for I/O?
 
-periodicx = .false.       ! Periodic in X?
+periodicx = .true.       ! Periodic in X?
 periodicy = .false.       ! Periodic in Y?
 periodicz = .true.        ! Periodic in Z?
 
@@ -36,17 +36,28 @@ pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 
 &CINPUT
 gam      = 1.4D0          ! Ratio of specific heats
 Rgas     = 1.D0           ! Gas constant
-inviscid = .false.        ! Inviscid simulation?
+inviscid = .true.        ! Inviscid simulation?
 ns       = 2              ! Number of species
-nrestart = 1000           ! Number of steps between restart dumps
+nrestart = 500           ! Number of steps between restart dumps
 x_bc1    = 0              ! Left  X BC (0 => general, 1 => symmetric). Not used if periodic
-x_bcn    = 1              ! Right X BC (0 => general, 1 => symmetric). Not used if periodic
+x_bcn    = 0              ! Right X BC (0 => general, 1 => symmetric). Not used if periodic
 y_bc1    = 1              ! Left  Y BC (0 => general, 1 => symmetric). Not used if periodic
 y_bcn    = 1              ! Right Y BC (0 => general, 1 => symmetric). Not used if periodic
 /
 
 &PROBINPUT
-resdir   = '/home/akshays/Data/miranda/BW/IRM_30MODES_128_CORRECTED' ! Directory that contains Miranda restart files
-resfile  = 'IRM_30MODES_128_CORRECTED.res'                           ! Directory that contains Miranda restart files
-resdump  = 0                                                         ! Which restart dump to use?
+Lx      = 129.D0        ! Pantano 2002        
+Ly      = 172.D0        ! Pantano 2002
+Lz      = 86.D0         ! Pantano 2002
+Mach    = 0.7           ! Convective Mach number
+Re      = 800.D0        ! Reynolds number at +infty UL/nu
+Pr      = 0.7D0         ! Prandtl number nu/kappa 0.7
+Sc      = 1.D0          ! Schmidt number nu/massDiffusivity
+p_ref   = 1.D0          ! Reference pressure 
+T_ref   = 1.D0          ! Reference temp
+rho_ref = 1.D0          ! Reference density
+rho_ratio = 8.D0        ! Density ratio rho2/rho1
+noiseAmp = 1.D-3        ! noise amplitude 
+InitFileDirectory = "/home/kmatsuno/ShearLayerInput/PadeInput/" ! Dir for modal inits
+InitFileTag = "ShearLayer" ! File tag prefix for modal inits
 /

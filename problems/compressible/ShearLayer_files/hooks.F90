@@ -281,14 +281,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         c1 = sqrt(gam*p_ref/(rho_ref/Rgas1))
         c2 = sqrt(gam*p_ref/(rho_ref/Rgas2))
 		du = Mach*(c1+c2)
-        u   = half*(1+tanh(y))!du*(tmp-half)
+        u   = du*(tmp-half)
         v   = zero
         w   = zero
         p   = p_ref
-        T   = T_ref + half*(gam-1)*1**2*u*(1-u)
+        T   = T_ref + half*(gam-1)*1**2*u*(1-u) ! Jackson&Grosch1989
         rho = p / (mix%Rgas * T)
 
-        ! Modal perturbations
+        ! Modal perturbations: this must be specific for each problem.
         call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
                  upert, vpert, wpert, Tpert, ppert)
         u = u + noiseAmp*upert
@@ -298,12 +298,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         p = p + noiseAmp*ppert
         
         ! Gaussian noise
-        !call gaussian_random(upert,zero,one,seedu+100*nrank)
-        !call gaussian_random(vpert,zero,one,seedu+100*nrank)
-        !call gaussian_random(wpert,zero,one,seedu+100*nrank)
-        !u = u + noiseAmp*upert
-        !v = v + noiseAmp*vpert
-        !w = w + noiseAmp*wpert
+        call gaussian_random(upert,zero,one,seedu+100*nrank)
+        call gaussian_random(vpert,zero,one,seedu+100*nrank)
+        call gaussian_random(wpert,zero,one,seedu+100*nrank)
+        u = u + noiseAmp**2*upert
+        v = v + noiseAmp**2*vpert
+        w = w + noiseAmp**2*wpert
         deallocate(upert, vpert, wpert, Tpert, ppert)
 
         ! Initialize mygfil
