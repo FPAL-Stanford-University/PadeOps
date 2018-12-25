@@ -348,17 +348,37 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
                  diff => fields(:,:,:,Ys_index+mix%ns:Ys_index+2*mix%ns-1),        &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShearLayer_", vizcount, ".dat"
+        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShearLayer_", &
+            vizcount, ".dat"
 
-        ! open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
-        ! do i=1,decomp%ysz(1)
-        !     write(outputunit,'(12ES26.16)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
-        !                                    mu(i,1,1), bulk(i,1,1), kap(i,1,1), Ys(i,1,1,1), Ys(i,1,1,2), &
-        !                                    diff(i,1,1,1), diff(i,1,1,2)
-        ! 
-        ! end do
-        ! close(outputunit)
+        ! Get TKE and Enstrophy to output to file
+        tke = half*rho*(u*u + v*v + w*w)
+        call curl(decomp, der, u, v, w, vorticity)
+        enstrophy = vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2
 
+        write(str,'(I4.4)') decomp%ysz(2)
+        write(outputfile,'(2A)') trim(outputdir),"/taylorgreen_"//trim(str)//".dat"
+
+        if (vizcount == 0) then
+            tke0 = P_MEAN( tke )
+            enstrophy0 = P_MEAN( vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2 )
+            if (nrank == 0) then
+                open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
+                write(outputunit,'(3A26)') "Time", "TKE", "Enstrophy"
+            end if
+        else
+            if (nrank == 0) then
+                open(unit=outputunit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
+            end if
+        end if
+
+
+        tke_mean = P_MEAN(tke)
+        enstrophy_mean = P_MEAN(enstrophy)
+        if (nrank == 0) then
+            write(outputunit,'(3ES26.16)') tsim, tke_mean/tke0, enstrophy_mean/enstrophy0
+            close(outputunit)
+        end if
     end associate
 end subroutine
 
