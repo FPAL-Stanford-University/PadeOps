@@ -281,12 +281,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         c1 = sqrt(gam*p_ref/(rho_ref/Rgas1))
         c2 = sqrt(gam*p_ref/(rho_ref/Rgas2))
 		du = Mach*(c1+c2)
-        u   = du*(tmp-half)
+        u   = half*(one+tanh(y))!du*(tmp-half)
         v   = zero
         w   = zero
         p   = p_ref
-        T   = T_ref + half*(gam-1)*1**2*u*(1-u) ! Jackson&Grosch1989
-        rho = p / (mix%Rgas * T)
+        T   = T_ref! + half*(gam-1)*1**2*u*(1-u) ! Jackson&Grosch1989
+        rho = rho_ref!p / (mix%Rgas * T)
 
         ! Modal perturbations: this must be specific for each problem.
         call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
@@ -298,12 +298,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         p = p + noiseAmp*ppert
         
         ! Gaussian noise
-        call gaussian_random(upert,zero,one,seedu+100*nrank)
-        call gaussian_random(vpert,zero,one,seedu+100*nrank)
-        call gaussian_random(wpert,zero,one,seedu+100*nrank)
-        u = u + noiseAmp**2*upert
-        v = v + noiseAmp**2*vpert
-        w = w + noiseAmp**2*wpert
+        !call gaussian_random(upert,zero,one,seedu+100*nrank)
+        !call gaussian_random(vpert,zero,one,seedv+100*nrank)
+        !call gaussian_random(wpert,zero,one,seedw+100*nrank)
+        !u = u + noiseAmp*10*upert
+        !v = v + noiseAmp*10*vpert
+        !w = w + noiseAmp*10*wpert
         deallocate(upert, vpert, wpert, Tpert, ppert)
 
         ! Initialize mygfil
@@ -322,7 +322,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use decomp_2d,        only: decomp_info
     use DerivativesMod,   only: derivatives
     use MixtureEOSMod,    only: mixture
-
+    use reductions,       only: P_MEAN
     use ShearLayer_data
 
     implicit none
@@ -334,10 +334,11 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
-    integer                                     :: outputunit=229
-
-    character(len=clen) :: outputfile
-    integer :: i
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) ::&
+    tke,ubase
+    real(rkind) :: tke_mean,tke0
+    character(len=clen) :: outputfile,str
+    integer :: i,outputunit=229
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -351,32 +352,30 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
         write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShearLayer_", &
             vizcount, ".dat"
 
-        ! Get TKE and Enstrophy to output to file
-        tke = half*rho*(u*u + v*v + w*w)
-        call curl(decomp, der, u, v, w, vorticity)
-        enstrophy = vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2
+        ! Get total KE and Enstrophy to output to file
+        ubase = 0.5*(1+tanh(y))
+        tke = half*rho*((u-ubase)**2 + v*v + w*w)
 
         write(str,'(I4.4)') decomp%ysz(2)
         write(outputfile,'(2A)') trim(outputdir),"/taylorgreen_"//trim(str)//".dat"
 
         if (vizcount == 0) then
             tke0 = P_MEAN( tke )
-            enstrophy0 = P_MEAN( vorticity(:,:,:,1)**2 + vorticity(:,:,:,2)**2 + vorticity(:,:,:,3)**2 )
             if (nrank == 0) then
-                open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-                write(outputunit,'(3A26)') "Time", "TKE", "Enstrophy"
+                open(unit=outputunit, file=trim(outputfile), &
+                    form='FORMATTED', status='REPLACE')
+                write(outputunit,'(3A26)') "Time", "TKE"
             end if
         else
             if (nrank == 0) then
-                open(unit=outputunit, file=trim(outputfile), form='FORMATTED', position='APPEND', status='OLD')
+                open(unit=outputunit, file=trim(outputfile), &
+                    form='FORMATTED', position='APPEND', status='OLD')
             end if
         end if
 
-
         tke_mean = P_MEAN(tke)
-        enstrophy_mean = P_MEAN(enstrophy)
         if (nrank == 0) then
-            write(outputunit,'(3ES26.16)') tsim, tke_mean/tke0, enstrophy_mean/enstrophy0
+            write(outputunit,'(3ES26.16)') tsim, tke_mean/tke0
             close(outputunit)
         end if
     end associate
