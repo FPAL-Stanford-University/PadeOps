@@ -4,7 +4,7 @@ inputdir  = "/home/akshays/Data/PadeOps/ShearLayer_TKEBudget"
 outputdir = "/home/akshays/Data/PadeOps/ShearLayer_TKEBudget/outputs" 
 
 nx = 256                ! Number of points in X (256)
-ny = 128                ! Number of points in Y (192)
+ny = 192                ! Number of points in Y (192)
 nz = 128                ! Number of points in Z (128)
 
 dt = 1.0D-3               ! Fixed time step value (Set to negative to disable)
