@@ -437,9 +437,9 @@ contains
 
         ! Instantiate TKE budget object
         if (this%compute_tke_budget) then
-            if ( this%periodicx .or. this%periodicy .or. (.not. this%periodicz) ) then
-                call GracefulExit("TKE budgets only supported for Z direction averaging. Sorry :(", 2083)
-            end if
+            ! if ( this%periodicx .or. this%periodicy .or. (.not. this%periodicz) ) then
+            !     call GracefulExit("TKE budgets only supported for Z direction averaging. Sorry :(", 2083)
+            ! end if
             
             ! if (allocated(this%budget)) deallocate(this%budget)
             ! allocate(this%budget , source=tkeBudget(this%decomp, this%der, this%mesh, this%dx, this%dy, this%dz, &
