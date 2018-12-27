@@ -352,14 +352,16 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
         write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShearLayer_", &
             vizcount, ".dat"
 
-        ! Get total KE and Enstrophy to output to file
+        ! Get TKE
         ubase = 0.5*(1+tanh(y))
         tke = half*rho*((u-ubase)**2 + v*v + w*w)
 
         write(str,'(I4.4)') decomp%ysz(2)
-        write(outputfile,'(2A)') trim(outputdir),"/taylorgreen_"//trim(str)//".dat"
+        write(outputfile,'(2A)') trim(outputdir),"/ShearLayer_"//trim(str)//".dat"
 
         if (vizcount == 0) then
+            ! On the first step, get initial disturbance energy and
+            ! write the header for the output file.
             tke0 = P_MEAN( tke )
             if (nrank == 0) then
                 open(unit=outputunit, file=trim(outputfile), &
@@ -367,6 +369,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
                 write(outputunit,'(3A26)') "Time", "TKE"
             end if
         else
+            ! Open the previously started file
             if (nrank == 0) then
                 open(unit=outputunit, file=trim(outputfile), &
                     form='FORMATTED', position='APPEND', status='OLD')
