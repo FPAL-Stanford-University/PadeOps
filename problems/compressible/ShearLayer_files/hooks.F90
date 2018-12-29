@@ -166,8 +166,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     ! Need to set x, y and z as well as  dx, dy and dz
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-
-        call read_domain_info("/home1/05648/kmatsuno/ShearLayerInput/ModeInput/ShearLayer_domain_info.dat",Lx,Ly,Lz)
+        call read_domain_info("../ModeInput/ShearLayer_domain_info.dat",Lx,Ly,Lz)
         dx = Lx/real(nx,rkind)
         dy = Ly/real(ny,rkind)
         dz = Lz/real(nz,rkind)
@@ -184,7 +183,6 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
                 end do
             end do
         end do
-
     end associate
 end subroutine
 
@@ -289,21 +287,21 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         rho = rho_ref!p / (mix%Rgas * T)
 
         ! Modal perturbations: this must be specific for each problem.
-        call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
-                 upert, vpert, wpert, Tpert, ppert)
-        u = u + noiseAmp*upert
-        v = v + noiseAmp*vpert
-        w = w + noiseAmp*wpert
-        T = T + noiseAmp*Tpert
-        p = p + noiseAmp*ppert
+        ! call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
+        !          upert, vpert, wpert, Tpert, ppert)
+        ! u = u + noiseAmp*upert
+        ! v = v + noiseAmp*vpert
+        ! w = w + noiseAmp*wpert
+        ! T = T + noiseAmp*Tpert
+        ! p = p + noiseAmp*ppert
         
         ! Gaussian noise
-        !call gaussian_random(upert,zero,one,seedu+100*nrank)
-        !call gaussian_random(vpert,zero,one,seedv+100*nrank)
-        !call gaussian_random(wpert,zero,one,seedw+100*nrank)
-        !u = u + noiseAmp*10*upert
-        !v = v + noiseAmp*10*vpert
-        !w = w + noiseAmp*10*wpert
+        call gaussian_random(upert,zero,one,seedu+100*nrank)
+        call gaussian_random(vpert,zero,one,seedv+100*nrank)
+        call gaussian_random(wpert,zero,one,seedw+100*nrank)
+        u = u + noiseAmp*10*upert
+        v = v + noiseAmp*10*vpert
+        w = w + noiseAmp*10*wpert
         deallocate(upert, vpert, wpert, Tpert, ppert)
 
         ! Initialize mygfil

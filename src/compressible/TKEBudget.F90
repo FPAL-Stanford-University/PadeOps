@@ -93,8 +93,49 @@ contains
         ! Initialize averaging object in the y  pencil
         this%avg = averaging(this%gp, 2, this%averaging_directions)
 
-        if ( (this%avg%avg_dim /= 0) .and. (this%avg%avg_dim /= 2) ) then
-            call GracefulExit("Only all direction or 1 direction averaging is supported for now.", 4589)
+        ! if ( (this%avg%avg_dim /= 0) .and. (this%avg%avg_dim /= 2) ) then
+        !     call GracefulExit("Only all direction or 1 direction averaging is supported for now.", 4589)
+        ! end if
+
+        ! Averaging in all directions
+        if (this%avg%avg_dim == 0) then
+            ! Initialize HDF5 output object (only x,y,z indices of 1 since we're outputting a 0D field)
+            call this%tke_viz%init(mpi_comm_world, this%gp, 'y', outputdir, 'TKEBudget', reduce_precision=reduce_precision_, &
+                               read_only=.false., subdomain_lo=[1,1,1], subdomain_hi=[1,1,1], &
+                               jump_to_last=.true.)
+
+            if (this%ns > 1) then
+                ! Initialize HDF5 output object (only x,y,z indices of 1 since we're outputting a 0D field)
+                call this%mix_viz%init(mpi_comm_world, this%gp, 'y', outputdir, 'MixBudget', reduce_precision=reduce_precision_, &
+                                   read_only=.false., subdomain_lo=[1,1,1], subdomain_hi=[1,1,1], &
+                                   jump_to_last=.true.)
+            end if
+        end if
+
+        ! Averaging in X-Z directions
+        if (this%avg%avg_dim == 1) then
+            if (averaging_directions(2)) then
+                call GracefulExit("Averaging in Y is not supported for 1D budgets! :(", 4589)
+            end if
+
+            call this%der_avg%init( this%gp, &
+                                    dx, dy, dz, &
+                                    averaging_directions(1), averaging_directions(2), averaging_directions(3), &
+                                    der%getMethodx(), der%getMethody(), der%getMethodz() )
+
+            call this%der_avg%set_ysz( [1, this%gp%ysz(2), 1] )                 ! Set ysz to make arrays 1D
+
+            ! Initialize HDF5 output object (only x,z index of 1 since we're outputting a 1D field)
+            call this%tke_viz%init(mpi_comm_world, this%gp, 'y', outputdir, 'TKEBudget', reduce_precision=reduce_precision_, &
+                               read_only=.false., subdomain_lo=[1,1,1], subdomain_hi=[1,this%gp%ysz(2),1], &
+                               jump_to_last=.true.)
+
+            if (this%ns > 1) then
+                ! Initialize HDF5 output object (only x,z index of 1 since we're outputting a 2D field)
+                call this%mix_viz%init(mpi_comm_world, this%gp, 'y', outputdir, 'MixBudget', reduce_precision=reduce_precision_, &
+                                   read_only=.false., subdomain_lo=[1,1,1], subdomain_hi=[1,this%gp%ysz(2),1], &
+                                   jump_to_last=.true.)
+            end if
         end if
 
         if (this%avg%avg_dim == 2) then
@@ -107,11 +148,11 @@ contains
                 ! call this%der_avg%set_ysz( [1, this%gp%ysz(2), this%gp%ysz(3)] )                 ! Set ysz to make arrays 2D
                 ! call this%der_avg%set_zsz( [1, this%gp%zsz(2), this%gp%zsz(3)] )                 ! Set zsz to make arrays 2D
 
-                call GracefulExit("Averaging in X is not supported for budgets! :(", 4589)
+                call GracefulExit("Averaging in X is not supported for 2D budgets! :(", 4589)
             end if
 
             if (averaging_directions(2)) then
-                call GracefulExit("Averaging in Y is not supported for budgets! :(", 4589)
+                call GracefulExit("Averaging in Y is not supported for 2D budgets! :(", 4589)
             end if
 
             if (averaging_directions(3)) then
@@ -120,24 +161,29 @@ contains
 
                 call this%gp_avg%init(this%gp%xsz(1),this%gp%ysz(2),this%avg%xy_comm)
 
-                ! Initialize HDF5 output object (only z index of 1 since we're outputting a 1D field)
+                ! Initialize HDF5 output object (only z index of 1 since we're outputting a 2D field)
                 call this%tke_viz%init(mpi_comm_world, this%gp, 'y', outputdir, 'TKEBudget', reduce_precision=reduce_precision_, &
                                    read_only=.false., subdomain_lo=[1,1,1], subdomain_hi=[this%gp%xsz(1),this%gp%ysz(2),1], &
                                    jump_to_last=.true.)
 
-                ! Write the coordinates of subdomain out
-                call this%tke_viz%write_coords(mesh)
-
-                ! Initialize HDF5 output object (only z index of 1 since we're outputting a 1D field)
-                call this%mix_viz%init(mpi_comm_world, this%gp, 'y', outputdir, 'MixBudget', reduce_precision=reduce_precision_, &
-                                   read_only=.false., subdomain_lo=[1,1,1], subdomain_hi=[this%gp%xsz(1),this%gp%ysz(2),1], &
-                                   jump_to_last=.true.)
-
-                ! Write the coordinates of subdomain out
-                call this%mix_viz%write_coords(mesh)
+                if (this%ns > 1) then
+                    ! Initialize HDF5 output object (only z index of 1 since we're outputting a 2D field)
+                    call this%mix_viz%init(mpi_comm_world, this%gp, 'y', outputdir, 'MixBudget', reduce_precision=reduce_precision_, &
+                                       read_only=.false., subdomain_lo=[1,1,1], subdomain_hi=[this%gp%xsz(1),this%gp%ysz(2),1], &
+                                       jump_to_last=.true.)
+                end if
             end if
 
         end if
+
+        ! Write the coordinates of subdomain out
+        call this%tke_viz%write_coords(mesh)
+
+        if (this%ns > 1) then
+            ! Write the coordinates of subdomain out
+            call this%mix_viz%write_coords(mesh)
+        end if
+
 
     ! end function
     end subroutine
@@ -264,17 +310,18 @@ contains
         real(rkind), dimension(this%gp_avg%nx,this%gp_avg%ay,1) :: xbuf1, xbuf2 !!! HACK !!! Only works for Z averaging
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
 
-        if (this%avg%avg_dim == 0) then
-            duidxj_avg = zero
+        dudx => duidxj_avg(:,:,:,1); dudy => duidxj_avg(:,:,:,2); dudz => duidxj_avg(:,:,:,3);
+        dvdx => duidxj_avg(:,:,:,4); dvdy => duidxj_avg(:,:,:,5); dvdz => duidxj_avg(:,:,:,6);
+        dwdx => duidxj_avg(:,:,:,7); dwdy => duidxj_avg(:,:,:,8); dwdz => duidxj_avg(:,:,:,9);
 
-        else if (this%avg%avg_dim == 2) then
-            dudx => duidxj_avg(:,:,:,1); dudy => duidxj_avg(:,:,:,2); dudz => duidxj_avg(:,:,:,3);
-            dvdx => duidxj_avg(:,:,:,4); dvdy => duidxj_avg(:,:,:,5); dvdz => duidxj_avg(:,:,:,6);
-            dwdx => duidxj_avg(:,:,:,7); dwdy => duidxj_avg(:,:,:,8); dwdz => duidxj_avg(:,:,:,9);
+        ! Set Z derivatives to zero
+        dudz = zero; dvdz = zero; dwdz = zero
 
-            ! Set Z derivatives to zero
-            dudz = zero; dvdz = zero; dwdz = zero
-
+        if (this%averaging_directions(1)) then
+            dudx = zero
+            dvdx = zero
+            dwdx = zero
+        else
             ! dudx
             call this%gp_avg%transpose_y_to_x(u(:,:,1),xbuf1(:,:,1))
             call this%der_avg%ddx(xbuf1,xbuf2,-this%x_bc(1),-this%x_bc(2))
@@ -289,7 +336,13 @@ contains
             call this%gp_avg%transpose_y_to_x(w(:,:,1),xbuf1(:,:,1))
             call this%der_avg%ddx(xbuf1,xbuf2, this%x_bc(1), this%x_bc(2))
             call this%gp_avg%transpose_x_to_y(xbuf2(:,:,1),dwdx(:,:,1))
+        end if
 
+        if (this%averaging_directions(2)) then
+            dudy = zero
+            dvdy = zero
+            dwdy = zero
+        else
             call this%der_avg%ddy(u,dudy, this%y_bc(1), this%y_bc(2))
             call this%der_avg%ddy(v,dvdy,-this%y_bc(1),-this%y_bc(2))
             call this%der_avg%ddy(w,dwdy, this%y_bc(1), this%y_bc(2))
@@ -311,11 +364,19 @@ contains
         dpdz = zero
 
         ! dpdx
-        call this%gp_avg%transpose_y_to_x(p_avg(:,:,1),xbuf1(:,:,1))
-        call this%der_avg%ddx(xbuf1,xbuf2, this%x_bc(1), this%x_bc(2))
-        call this%gp_avg%transpose_x_to_y(xbuf2(:,:,1),dpdx(:,:,1))
+        if (this%averaging_directions(1)) then
+            dpdx = zero
+        else
+            call this%gp_avg%transpose_y_to_x(p_avg(:,:,1),xbuf1(:,:,1))
+            call this%der_avg%ddx(xbuf1,xbuf2, this%x_bc(1), this%x_bc(2))
+            call this%gp_avg%transpose_x_to_y(xbuf2(:,:,1),dpdx(:,:,1))
+        end if
         
-        call this%der_avg%ddy(p_avg,dpdy, this%y_bc(1), this%y_bc(2))
+        if (this%averaging_directions(2)) then
+            dpdy = zero
+        else
+            call this%der_avg%ddy(p_avg,dpdy, this%y_bc(1), this%y_bc(2))
+        end if
         
     end subroutine
 
@@ -335,29 +396,53 @@ contains
         divx => tau_avg_div(:,:,:,1); divy => tau_avg_div(:,:,:,2); divz => tau_avg_div(:,:,:,3);
 
         ! \frac{ \partial \tau_{1j} }{ \partial x_j }
-        call this%gp_avg%transpose_y_to_x(tauxx(:,:,1),xbuf1(:,:,1))
-        call this%der_avg%ddx(xbuf1,xbuf2, this%x_bc(1), this%x_bc(2))
-        call this%gp_avg%transpose_x_to_y(xbuf2(:,:,1),divx(:,:,1))
+        if (this%averaging_directions(1)) then
+            divx = zero
+        else
+            call this%gp_avg%transpose_y_to_x(tauxx(:,:,1),xbuf1(:,:,1))
+            call this%der_avg%ddx(xbuf1,xbuf2, this%x_bc(1), this%x_bc(2))
+            call this%gp_avg%transpose_x_to_y(xbuf2(:,:,1),divx(:,:,1))
+        end if
         
-        call this%der_avg%ddy(tauxy(:,:,1),tmp(:,:,1),-this%y_bc(1),-this%y_bc(2))
+        if (this%averaging_directions(2)) then
+            tmp = zero
+        else
+            call this%der_avg%ddy(tauxy(:,:,1),tmp(:,:,1),-this%y_bc(1),-this%y_bc(2))
+        end if
 
         divx = divx + tmp ! Z derivatives are zero
         
         ! \frac{ \partial \tau_{2j} }{ \partial x_j }
-        call this%gp_avg%transpose_y_to_x(tauxy(:,:,1),xbuf1(:,:,1))
-        call this%der_avg%ddx(xbuf1,xbuf2,-this%x_bc(1),-this%x_bc(2))
-        call this%gp_avg%transpose_x_to_y(xbuf2(:,:,1),divy(:,:,1))
+        if (this%averaging_directions(1)) then
+            divy = zero
+        else
+            call this%gp_avg%transpose_y_to_x(tauxy(:,:,1),xbuf1(:,:,1))
+            call this%der_avg%ddx(xbuf1,xbuf2,-this%x_bc(1),-this%x_bc(2))
+            call this%gp_avg%transpose_x_to_y(xbuf2(:,:,1),divy(:,:,1))
+        end if
         
-        call this%der_avg%ddy(tauyy(:,:,1),tmp(:,:,1), this%y_bc(1), this%y_bc(2))
+        if (this%averaging_directions(2)) then
+            tmp = zero
+        else
+            call this%der_avg%ddy(tauyy(:,:,1),tmp(:,:,1), this%y_bc(1), this%y_bc(2))
+        end if
 
         divy = divy + tmp ! Z derivatives are zero
         
         ! \frac{ \partial \tau_{3j} }{ \partial x_j }
-        call this%gp_avg%transpose_y_to_x(tauxz(:,:,1),xbuf1(:,:,1))
-        call this%der_avg%ddx(xbuf1,xbuf2,-this%x_bc(1),-this%x_bc(2))
-        call this%gp_avg%transpose_x_to_y(xbuf2(:,:,1),divz(:,:,1))
+        if (this%averaging_directions(1)) then
+            divz = zero
+        else
+            call this%gp_avg%transpose_y_to_x(tauxz(:,:,1),xbuf1(:,:,1))
+            call this%der_avg%ddx(xbuf1,xbuf2,-this%x_bc(1),-this%x_bc(2))
+            call this%gp_avg%transpose_x_to_y(xbuf2(:,:,1),divz(:,:,1))
+        end if
         
-        call this%der_avg%ddy(tauyz(:,:,1),tmp(:,:,1),-this%y_bc(1),-this%y_bc(2))
+        if (this%averaging_directions(2)) then
+            tmp = zero
+        else
+            call this%der_avg%ddy(tauyz(:,:,1),tmp(:,:,1),-this%y_bc(1),-this%y_bc(2))
+        end if
 
         divz = divz + tmp ! Z derivatives are zero
         
