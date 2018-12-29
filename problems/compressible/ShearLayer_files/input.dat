@@ -8,7 +8,7 @@ ny = 192                ! Number of points in Y (192)
 nz = 128                ! Number of points in Z (128)
 
 dt = 1.0D-3               ! Fixed time step value (Set to negative to disable)
-tstop = 250.D0            ! Physical time to stop the simulation
+tstop = 1.D0            ! Physical time to stop the simulation
 CFL = 0.5D0               ! CFL criterion for time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 

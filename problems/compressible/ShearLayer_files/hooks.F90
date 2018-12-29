@@ -167,7 +167,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     ! Need to set x, y and z as well as  dx, dy and dz
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        call read_domain_info("/home/kmatsuno/ShearLayerInput/PadeInput/ShearLayer_domain_info.dat",Lx,Ly,Lz)
+        call read_domain_info("/home1/05648/kmatsuno/ShearLayerInput/ModeInput/ShearLayer_domain_info.dat",Lx,Ly,Lz)
         dx = Lx/real(nx,rkind)
         dy = Ly/real(ny,rkind)
         dz = Lz/real(nz,rkind)
@@ -353,34 +353,34 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
             vizcount, ".dat"
 
         ! Get TKE
-        ubase = 0.5*(1+tanh(y))
-        tke = half*rho*((u-ubase)**2 + v*v + w*w)
+        !ubase = 0.5*(1+tanh(y))
+        !tke = half*rho*((u-ubase)**2 + v*v + w*w)
 
-        write(str,'(I4.4)') decomp%ysz(2)
-        write(outputfile,'(2A)') trim(outputdir),"/ShearLayer_"//trim(str)//".dat"
+        !write(str,'(I4.4)') decomp%ysz(2)
+        !write(outputfile,'(2A)') trim(outputdir),"/ShearLayer_"//trim(str)//".dat"
 
-        if (vizcount == 0) then
-            ! On the first step, get initial disturbance energy and
-            ! write the header for the output file.
-            tke0 = P_MEAN( tke )
-            if (nrank == 0) then
-                open(unit=outputunit, file=trim(outputfile), &
-                    form='FORMATTED', status='REPLACE')
-                write(outputunit,'(3A26)') "Time", "TKE"
-            end if
-        else
-            ! Open the previously started file
-            if (nrank == 0) then
-                open(unit=outputunit, file=trim(outputfile), &
-                    form='FORMATTED', position='APPEND', status='OLD')
-            end if
-        end if
+        !if (vizcount == 0) then
+        !    ! On the first step, get initial disturbance energy and
+        !    ! write the header for the output file.
+        !    tke0 = P_MEAN( tke )
+        !    if (nrank == 0) then
+        !        open(unit=outputunit, file=trim(outputfile), &
+        !            form='FORMATTED', status='REPLACE')
+        !        write(outputunit,'(3A26)') "Time", "TKE"
+        !    end if
+        !else
+        !    ! Open the previously started file
+        !    if (nrank == 0) then
+        !        open(unit=outputunit, file=trim(outputfile), &
+        !            form='FORMATTED', position='APPEND', status='OLD')
+        !    end if
+        !end if
 
-        tke_mean = P_MEAN(tke)
-        if (nrank == 0) then
-            write(outputunit,'(3ES26.16)') tsim, tke_mean/tke0
-            close(outputunit)
-        end if
+        !tke_mean = P_MEAN(tke)
+        !if (nrank == 0) then
+        !    write(outputunit,'(3ES26.16)') tsim, tke_mean/tke0
+        !    close(outputunit)
+        !end if
     end associate
 end subroutine
 
