@@ -10,7 +10,7 @@ module ShearLayer_data
     integer, parameter :: ns = 2
 
     ! Problem parameters
-    real(rkind) :: Mach = 0.7_rkind	          ! Convective Mach
+    real(rkind) :: Mc = 0.7_rkind	          ! Convective Mach
     real(rkind) :: Re = 800._rkind	          ! Reynolds number
     real(rkind) :: Sc = 1._rkind	          ! Schmidt number
     real(rkind) :: rho_ratio = one            ! rho2/rho1
@@ -225,7 +225,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
                    c1,c2,du, Rgas1, Rgas2, noiseAmp
     character(len=clen) :: InitFileTag, InitFileDirectory
     
-    namelist /PROBINPUT/ Mach, Re, Pr, Sc, rho_ref, p_ref, T_ref, rho_ratio,&
+    namelist /PROBINPUT/ Mc, Re, Pr, Sc, rho_ref, p_ref, T_ref, rho_ratio,&
                         gam, dtheta, InitFileTag, InitFileDirectory, noiseAmp,&
                         Lx, Ly, Lz
     ioUnit = 11
@@ -243,10 +243,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     allocate(Tpert(nx,ny,nz))
     allocate(ppert(nx,ny,nz))
 
-    associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),                    &
-                 v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),                    &
-                 p => fields(:,:,:,  p_index), T  => fields(:,:,:,T_index),                    &
-                 e => fields(:,:,:,  e_index), Ys => fields(:,:,:,Ys_index:Ys_index+mix%ns-1), &
+    associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
+                 v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
+                 p => fields(:,:,:,  p_index), T  => fields(:,:,:,T_index),&
+                 e => fields(:,:,:,  e_index), &
+                Ys => fields(:,:,:,Ys_index:Ys_index+mix%ns-1), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         if (mix%ns /= ns) call GracefulExit("Wrong number of species. Check your input file and make ns consistent with the problem file.",4562)
@@ -275,39 +276,39 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         Ys(:,:,:,2)  = one - Ys(:,:,:,1)
         call mix%update(Ys)
 		
-        ! Base flow profiles 
-        c1 = sqrt(gam*p_ref/(rho_ref/Rgas1))
-        c2 = sqrt(gam*p_ref/(rho_ref/Rgas2))
-		du = Mach*(c1+c2)
-        u   = half*(one+tanh(y))!du*(tmp-half)
-        v   = zero
-        w   = zero
-        p   = p_ref
-        T   = T_ref! + half*(gam-1)*1**2*u*(1-u) ! Jackson&Grosch1989
-        rho = rho_ref!p / (mix%Rgas * T)
+        ! Base flow profiles
+
+        c1 = 1!sqrt(gam*p_ref/(rho_ref/Rgas1))
+        c2 = c1*rho_ratio**-0.5! sqrt(gam*p_ref/(rho_ref/Rgas2))
+		du = Mc*(c1+c2)
+        u = half*(one+tanh(y))!du*(tmp-half)
+        v = zero
+        w = zero
+        p = p_ref
+        T = T_ref! + half*(gam-1)*1**2*u*(1-u) ! Jackson&Grosch1989
+        rho =rho_ref! p / (mix%Rgas * T)
 
         ! Modal perturbations: this must be specific for each problem.
-        ! call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
-        !          upert, vpert, wpert, Tpert, ppert)
-        ! u = u + noiseAmp*upert
-        ! v = v + noiseAmp*vpert
-        ! w = w + noiseAmp*wpert
-        ! T = T + noiseAmp*Tpert
-        ! p = p + noiseAmp*ppert
+        call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
+                 upert, vpert, wpert, Tpert, ppert)
+        u = u + 1D-2*upert
+        v = v + 1D-2*vpert
+        w = w + 1D-2*wpert
+        T = T + 1D-2*Tpert
+        p = p + 1D-2*ppert
         
         ! Gaussian noise
         call gaussian_random(upert,zero,one,seedu+100*nrank)
         call gaussian_random(vpert,zero,one,seedv+100*nrank)
         call gaussian_random(wpert,zero,one,seedw+100*nrank)
-        u = u + noiseAmp*10*upert
-        v = v + noiseAmp*10*vpert
-        w = w + noiseAmp*10*wpert
+        u = u + noiseAmp*upert
+        v = v + noiseAmp*vpert
+        w = w + noiseAmp*wpert
         deallocate(upert, vpert, wpert, Tpert, ppert)
 
         ! Initialize mygfil
-        call mygfil%init(                           decomp, &
-                          periodicx,  periodicy, periodicz, &
-                          "gaussian", "gaussian", "gaussian" )
+        call mygfil%init(decomp, periodicx, periodicy, periodicz, &
+                        "gaussian", "gaussian", "gaussian" )
 
     end associate
 end subroutine

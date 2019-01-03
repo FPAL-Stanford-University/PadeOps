@@ -7,8 +7,8 @@ nx = 256                ! Number of points in X (256)
 ny = 192                ! Number of points in Y (192)
 nz = 128                ! Number of points in Z (128)
 
-dt = 1.0D-3               ! Fixed time step value (Set to negative to disable)
-tstop = 10.D0             ! Physical time to stop the simulation
+dt = -1D-3               ! Fixed time step value (Set to negative to disable)
+tstop = 10.D0             ! Time to stop the simulation
 CFL = 0.5D0               ! CFL criterion for time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
@@ -20,13 +20,13 @@ periodicx = .true.       ! Periodic in X?
 periodicy = .false.       ! Periodic in Y?
 periodicz = .true.        ! Periodic in Z?
 
-derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
-derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
-derivative_z = "cd10"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
+derivative_x = "cd10"     ! derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! derivative to use in Z: "cd10", "cd06", "four", "cheb"
 
-filter_x = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
-filter_y = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
-filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_x = "cf90"         ! filter: "cf90", "gaussian", "lstsq", "spectral"
+filter_y = "cf90"         ! filter: "cf90", "gaussian", "lstsq", "spectral"
+filter_z = "cf90"         ! filter: "cf90", "gaussian", "lstsq", "spectral"
 
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
@@ -47,17 +47,16 @@ y_bcn    = 1              ! Right Y BC (0 => general, 1 => symmetric). Not used 
 /
 
 &PROBINPUT
-Lx      = 129.D0        ! Pantano 2002        
-Ly      = 172.D0        ! Pantano 2002
-Lz      = 86.D0         ! Pantano 2002
-Mach    = 1D-4           ! Convective Mach number
-Re      = 1D3        ! Reynolds number at +infty UL/nu
-Pr      = 0.7D0         ! Prandtl number nu/kappa 0.7
-Sc      = 1.D0          ! Schmidt number nu/massDiffusivity
-p_ref   = 1.D0          ! Reference pressure 
-T_ref   = 1.D0          ! Reference temp
-rho_ref = 1.D0          ! Reference density
-rho_ratio = 1.D0        ! Density ratio rho2/rho1
+Lx = 129.D0          ! Pantano 2002        
+Ly = 172.D0          ! Pantano 2002
+Lz = 86.D0           ! Pantano 2002
+Mc = 1D-4           ! Convective Mach number
+Re = 1D3            ! Reynolds number at +infty UL/nu
+Pr = 0.7D0         ! Prandtl number nu/kappa 0.7
+Sc = 0.7D0          ! Schmidt number nu/massDiffusivity
+rho_ref = 1.D0          ! Reference density rho1=1/R
+rho_ratio = 1.D0        ! free stream density ratio rho2/rho1
+vel_ratio = 1.D0        ! free stream velocity ratio U2/U1
 noiseAmp = 1.D-3        ! noise amplitude 
 InitFileDirectory = "/home/akshays/Data/PadeOps/ShearLayer_TKEBudget/perturbations/" ! Dir for modal inits
 InitFileTag = "ShearLayer" ! File tag prefix for modal inits
