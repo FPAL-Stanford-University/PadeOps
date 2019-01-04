@@ -249,7 +249,7 @@ contains
         end do  
 
         ! Go to hooks if a different mesh is desired 
-        call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
+        call meshgen(this%decomp,this%dx, this%dy, this%dz, this%mesh) 
 
         if (ns .LT. 1) call GracefulExit("Cannot have less than 1 species. Must have ns >= 1.",4568)
 

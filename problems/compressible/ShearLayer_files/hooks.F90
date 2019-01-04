@@ -13,13 +13,12 @@ module ShearLayer_data
     real(rkind) :: Mc = 0.7_rkind	          ! Convective Mach
     real(rkind) :: Re = 800._rkind	          ! Reynolds number
     real(rkind) :: Sc = 1._rkind	          ! Schmidt number
-    real(rkind) :: rho_ref = one/8.3144621    ! 1/R 
+    real(rkind) :: rho_ref = one              ! rho1 = 1/R?
     real(rkind) :: rho_ratio = one            ! rho2/rho1
     real(rkind) :: vel_ratio = one            ! U2/U1
-    real(rkind) :: dtheta0 = one              ! Base profile thickness 
-    real(rkind) :: noiseAmp = 1.D-3           ! Noise amplitude
+    real(rkind) :: dtheta0 = 1._rkind          ! Base profile thickness 
+    real(rkind) :: noiseAmp = 1D-3              ! white noise amplitude
     character(len=clen) :: InitFileTag, InitFileDirectory
-    
     ! Parameters for the 2 materials
     real(rkind):: gam=1.4_rkind
     real(rkind):: Pr=0.7_rkind 
@@ -156,10 +155,20 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
+    character(clen)                   :: inputfile
     real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     integer :: i,j,k,ioUnit, nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
 
+    inputfile = './input.dat'
+    namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
+                        rho_ref, rho_ratio, vel_ratio,&
+                        noiseAmp, InitFileTag, InitFileDirectory
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PROBINPUT)
+    close(ioUnit)
+    
     ! Global domain size 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
@@ -169,14 +178,16 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     ! Need to set x, y and z as well as  dx, dy and dz
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-        call read_domain_info("/home1/05648/kmatsuno/ShearLayerInput/ModeInput/ShearLayer_domain_info.dat",Lx,Ly,Lz)
+        if (nrank == 0) then
+            print *, "Domain size: ",Lx,Ly,Lz
+        end if
         dx = Lx/real(nx,rkind)
         dy = Ly/real(ny,rkind)
         dz = Lz/real(nz,rkind)
         x1 = 0._rkind! -Lx/2._rkind
         y1 = -Ly/2._rkind
         z1 = 0._rkind!-Lz/2._rkind
-
+        
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
@@ -224,11 +235,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(constPrandtlConductivity) :: thermcond
     real(rkind), dimension(:,:,:), allocatable :: &
         tmp, upert, vpert, wpert, Tpert, ppert
-    real(rkind) ::  c1,c2,du, Rgas1, Rgas2,mu_ref,T_ref,lambda,L
+    real(rkind) :: p_ref, mu_ref, T_ref, c1,c2,du, Rgas1, Rgas2,lambda
     
-    namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc, &
-             rho_ref, rho_ratio, vel_ratio,&
-             dtheta0, noiseAmp, InitFileTag, InitFileDirectory
+    namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
+                        rho_ref, rho_ratio, vel_ratio,&
+                        noiseAmp, InitFileTag, InitFileDirectory
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -257,15 +268,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         Rgas1 = (1+rho_ratio)/two			
         Rgas2 = (1+rho_ratio)/(two*rho_ratio) 
 		Rgas = [Rgas1, Rgas2]
-
+        
         ! Constant for the problem
-        L  = five*dtheta0
-        c1 = 1!sqrt(gam*p_ref/(rho_ref/Rgas1))
-        c2 = c1/sqrt(rho_ratio)! sqrt(gam*p_ref/(rho_ref/Rgas2))
+        c1 = one
+        c2 = c1/sqrt(rho_ratio)
 		du = Mc*(c1+c2)
         lambda = (1-rho_ratio)/(1+rho_ratio)
-        T_ref  = one/gam
-		mu_ref = rho_ref*dU*L/Re
+        T_ref = one/gam
+        mu_ref = rho_ref*dU*5*dtheta0/Re
 
         ! Set each material's transport coefficient object
         do i = 1,mix%ns
@@ -287,21 +297,20 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 		
         ! Base flow profiles
         rho = rho_ref*( 1+lambda*tanh(-y/(2*dtheta0)) ) 
-        u = dU*half*tanh(-y/(2*dtheta0))
+        u = dU*half*tanh(-y/(2*dtheta0))!du*(tmp-half)
         v = zero
         w = zero
         p = rho*c1**2/gam
         T = T_ref
 
         ! Modal perturbations: this must be specific for each problem.
-        !call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
-        !         upert, vpert, wpert, Tpert, ppert)
-        !u = u + 1D-2*upert
-        !v = v + 1D-2*vpert
-        !w = w + 1D-2*wpert
-        !T = T + 1D-2*Tpert
-        !p = p + 1D-2*ppert
-        
+        call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
+                 upert, vpert, wpert, Tpert, ppert)
+        u = u + noiseAmp*upert
+        v = v + noiseAmp*vpert
+        w = w + noiseAmp*wpert
+        T = T + noiseAmp*Tpert
+        p = p + noiseAmp*ppert
         ! Gaussian noise
         call gaussian_random(upert,zero,one,seedu+100*nrank)
         call gaussian_random(vpert,zero,one,seedv+100*nrank)
