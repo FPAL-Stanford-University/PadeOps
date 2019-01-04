@@ -35,8 +35,7 @@ pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 
 
 &CINPUT
 gam      = 1.4D0          ! Ratio of specific heats
-Rgas     = 1.D0           ! Gas constant
-inviscid = .true.        ! Inviscid simulation?
+inviscid = .false.        ! Inviscid simulation?
 ns       = 2              ! Number of species
 nrestart = 2000           ! Number of steps between restart dumps
 compute_tke_budget = .true. ! Compute TKE budgets?
@@ -54,10 +53,11 @@ Mc = 1D-4           ! Convective Mach number
 Re = 1D3            ! Reynolds number at +infty UL/nu
 Pr = 0.7D0         ! Prandtl number nu/kappa 0.7
 Sc = 0.7D0          ! Schmidt number nu/massDiffusivity
+dtheta0 = 1.D0      ! initial mixing layer (L=5*dtheta0 is 99% thickness)
 rho_ref = 1.D0          ! Reference density rho1=1/R
 rho_ratio = 1.D0        ! free stream density ratio rho2/rho1
-vel_ratio = 1.D0        ! free stream velocity ratio U2/U1
+vel_ratio = -1.D0        ! free stream velocity ratio U2/U1
 noiseAmp = 1.D-3        ! noise amplitude 
-InitFileDirectory = "/home/akshays/Data/PadeOps/ShearLayer_TKEBudget/perturbations/" ! Dir for modal inits
+InitFileDirectory = "/home1/05648/kmatsuno/ShearLayerInput/ModeInput/" ! Dir for modal inits
 InitFileTag = "ShearLayer" ! File tag prefix for modal inits
 /

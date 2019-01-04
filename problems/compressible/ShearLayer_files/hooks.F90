@@ -13,9 +13,13 @@ module ShearLayer_data
     real(rkind) :: Mc = 0.7_rkind	          ! Convective Mach
     real(rkind) :: Re = 800._rkind	          ! Reynolds number
     real(rkind) :: Sc = 1._rkind	          ! Schmidt number
+    real(rkind) :: rho_ref = one/8.3144621    ! 1/R 
     real(rkind) :: rho_ratio = one            ! rho2/rho1
-    real(rkind) :: dtheta = 1._rkind          ! Base profile thickness 
-
+    real(rkind) :: vel_ratio = one            ! U2/U1
+    real(rkind) :: dtheta0 = one              ! Base profile thickness 
+    real(rkind) :: noiseAmp = 1.D-3           ! Noise amplitude
+    character(len=clen) :: InitFileTag, InitFileDirectory
+    
     ! Parameters for the 2 materials
     real(rkind):: gam=1.4_rkind
     real(rkind):: Pr=0.7_rkind 
@@ -28,7 +32,6 @@ module ShearLayer_data
 
     ! Gaussian filter for sponge
     type(filters) :: mygfil
-
 contains
 
     subroutine read_domain_info(fname,Lx,Ly,Lz)
@@ -106,7 +109,7 @@ contains
         That_real = reshape(data2read(:,5),[ny,nmodes])
         phat_real = reshape(data2read(:,6),[ny,nmodes])
         deallocate(data2read)
-       
+        
         ! Init perturbation fields
         uhat = uhat_real + imi*uhat_imag
         vhat = vhat_real + imi*vhat_imag
@@ -166,7 +169,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     ! Need to set x, y and z as well as  dx, dy and dz
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-        call read_domain_info("../ModeInput/ShearLayer_domain_info.dat",Lx,Ly,Lz)
+        call read_domain_info("/home1/05648/kmatsuno/ShearLayerInput/ModeInput/ShearLayer_domain_info.dat",Lx,Ly,Lz)
         dx = Lx/real(nx,rkind)
         dy = Ly/real(ny,rkind)
         dz = Lz/real(nz,rkind)
@@ -188,9 +191,10 @@ end subroutine
 
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
-    use kind_parameters ,             only: rkind, clen
-    use constants,                   only: zero,half,one,two,pi,eight
-    use CompressibleGrid,            only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,Ys_index
+    use kind_parameters,             only: rkind, clen
+    use constants,                   only: zero,half,one,two,five,pi,eight
+    use CompressibleGrid,            only: rho_index,u_index,v_index,w_index,&
+                                           p_index,T_index,e_index,Ys_index
     use decomp_2d,                   only: decomp_info,nrank
     use MixtureEOSMod,               only: mixture
     use IdealGasEOS,                 only: idealgas
@@ -218,16 +222,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
-
     real(rkind), dimension(:,:,:), allocatable :: &
         tmp, upert, vpert, wpert, Tpert, ppert
-    real(rkind) :: p_ref=one, mu_ref=one, T_ref=one, rho_ref=one, &
-                   c1,c2,du, Rgas1, Rgas2, noiseAmp
-    character(len=clen) :: InitFileTag, InitFileDirectory
+    real(rkind) ::  c1,c2,du, Rgas1, Rgas2,mu_ref,T_ref,lambda,L
     
-    namelist /PROBINPUT/ Mc, Re, Pr, Sc, rho_ref, p_ref, T_ref, rho_ratio,&
-                        gam, dtheta, InitFileTag, InitFileDirectory, noiseAmp,&
-                        Lx, Ly, Lz
+    namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc, &
+             rho_ref, rho_ratio, vel_ratio,&
+             dtheta0, noiseAmp, InitFileTag, InitFileDirectory
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -251,12 +252,20 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         if (mix%ns /= ns) call GracefulExit("Wrong number of species. Check your input file and make ns consistent with the problem file.",4562)
-
+        
         ! First set the materials for rho_ratio = rho2/rho1
         Rgas1 = (1+rho_ratio)/two			
         Rgas2 = (1+rho_ratio)/(two*rho_ratio) 
 		Rgas = [Rgas1, Rgas2]
-		mu_ref = 1/Re
+
+        ! Constant for the problem
+        L  = five*dtheta0
+        c1 = 1!sqrt(gam*p_ref/(rho_ref/Rgas1))
+        c2 = c1/sqrt(rho_ratio)! sqrt(gam*p_ref/(rho_ref/Rgas2))
+		du = Mc*(c1+c2)
+        lambda = (1-rho_ratio)/(1+rho_ratio)
+        T_ref  = one/gam
+		mu_ref = rho_ref*dU*L/Re
 
         ! Set each material's transport coefficient object
         do i = 1,mix%ns
@@ -271,31 +280,27 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
         ! Set mass diffusivity object (Ensure that all units are consistent)
         call mix%set_massdiffusivity( constSchmidtDiffusivity( mu_ref,rho_ref,Sc))
-        tmp = half*(one-tanh(y/(2*dtheta)))
+        tmp = half*(one-tanh(y/(2*dtheta0)))
         Ys(:,:,:,1)  = one - tmp
         Ys(:,:,:,2)  = one - Ys(:,:,:,1)
         call mix%update(Ys)
 		
         ! Base flow profiles
-
-        c1 = 1!sqrt(gam*p_ref/(rho_ref/Rgas1))
-        c2 = c1*rho_ratio**-0.5! sqrt(gam*p_ref/(rho_ref/Rgas2))
-		du = Mc*(c1+c2)
-        u = half*(one+tanh(y))!du*(tmp-half)
+        rho = rho_ref*( 1+lambda*tanh(-y/(2*dtheta0)) ) 
+        u = dU*half*tanh(-y/(2*dtheta0))
         v = zero
         w = zero
-        p = p_ref
-        T = T_ref! + half*(gam-1)*1**2*u*(1-u) ! Jackson&Grosch1989
-        rho =rho_ref! p / (mix%Rgas * T)
+        p = rho*c1**2/gam
+        T = T_ref
 
         ! Modal perturbations: this must be specific for each problem.
-        call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
-                 upert, vpert, wpert, Tpert, ppert)
-        u = u + 1D-2*upert
-        v = v + 1D-2*vpert
-        w = w + 1D-2*wpert
-        T = T + 1D-2*Tpert
-        p = p + 1D-2*ppert
+        !call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
+        !         upert, vpert, wpert, Tpert, ppert)
+        !u = u + 1D-2*upert
+        !v = v + 1D-2*vpert
+        !w = w + 1D-2*wpert
+        !T = T + 1D-2*Tpert
+        !p = p + 1D-2*ppert
         
         ! Gaussian noise
         call gaussian_random(upert,zero,one,seedu+100*nrank)
@@ -309,7 +314,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         ! Initialize mygfil
         call mygfil%init(decomp, periodicx, periodicy, periodicz, &
                         "gaussian", "gaussian", "gaussian" )
-
     end associate
 end subroutine
 
