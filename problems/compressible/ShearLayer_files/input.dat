@@ -1,37 +1,32 @@
 &INPUT
 
-inputdir  = "/home/akshays/Data/PadeOps/ShearLayer_TKEBudget"
-outputdir = "/home/akshays/Data/PadeOps/ShearLayer_TKEBudget/outputs" 
+inputdir  = "/home1/05648/kmatsuno/ShearLayerInput"
+outputdir = "/scratch/05648/kmatsuno/ShearLayerData/Run01"
 
 nx = 256                ! Number of points in X (256)
 ny = 192                ! Number of points in Y (192)
 nz = 128                ! Number of points in Z (128)
 
-<<<<<<< HEAD
-dt = -1D-3               ! Fixed time step value (Set to negative to disable)
-tstop = 10.D0             ! Time to stop the simulation
-=======
-dt = -1.0D-3               ! Fixed time step value (Set to negative to disable)
-tstop = 10.D0             ! Physical time to stop the simulation
->>>>>>> my-temporary-work
+dt = -1.0D-4               ! Fixed time step value (Set to negative to disable)
+tstop = 1.D0             ! Physical time to stop the simulation
 CFL = 0.5D0               ! CFL criterion for time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
-tviz = 1.D-1              ! Time between visualization dumps (Set to negative to disable)
+tviz = 5.D-1      ! Time between visualization dumps (Set to negative to disable)
 vizprefix = "shearlayer"  ! Prefix for the visualization files
-reduce_precision = .true. ! Reduce precision for I/O?
+reduce_precision = .false. ! Reduce precision for I/O?
 
 periodicx = .true.       ! Periodic in X?
 periodicy = .false.       ! Periodic in Y?
 periodicz = .true.        ! Periodic in Z?
 
-derivative_x = "cd10"     ! derivative to use in X: "cd10", "cd06", "four", "cheb"
-derivative_y = "cd10"     ! derivative to use in Y: "cd10", "cd06", "four", "cheb"
-derivative_z = "cd10"     ! derivative to use in Z: "cd10", "cd06", "four", "cheb"
+derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
 
-filter_x = "cf90"         ! filter: "cf90", "gaussian", "lstsq", "spectral"
-filter_y = "cf90"         ! filter: "cf90", "gaussian", "lstsq", "spectral"
-filter_z = "cf90"         ! filter: "cf90", "gaussian", "lstsq", "spectral"
+filter_x = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_y = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
 
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
@@ -40,46 +35,33 @@ pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 
 
 &CINPUT
 gam      = 1.4D0          ! Ratio of specific heats
-<<<<<<< HEAD
-=======
 Rgas     = 1.D0           ! Gas constant
->>>>>>> my-temporary-work
+Cmu   = 0.D0
+Cbeta = 0.D0
+Ckap  = 0.D0
+Cdiff = 0.D0
+Cy    = 0.D0
 inviscid = .false.        ! Inviscid simulation?
 ns       = 2              ! Number of species
 nrestart = 2000           ! Number of steps between restart dumps
-compute_tke_budget = .true. ! Compute TKE budgets?
-x_bc1    = 0              ! Left  X BC (0 => general, 1 => symmetric). Not used if periodic
-x_bcn    = 0              ! Right X BC (0 => general, 1 => symmetric). Not used if periodic
+compute_tke_budget = .false. ! Compute TKE budgets?
 y_bc1    = 1              ! Left  Y BC (0 => general, 1 => symmetric). Not used if periodic
 y_bcn    = 1              ! Right Y BC (0 => general, 1 => symmetric). Not used if periodic
 /
 
 &PROBINPUT
-<<<<<<< HEAD
-Lx = 129.D0          ! Pantano 2002        
-Ly = 172.D0          ! Pantano 2002
-Lz = 86.D0           ! Pantano 2002
-Mc = 1D-4           ! Convective Mach number
-Re = 1D3            ! Reynolds number at +infty UL/nu
-Pr = 0.7D0         ! Prandtl number nu/kappa 0.7
-Sc = 0.7D0          ! Schmidt number nu/massDiffusivity
-dtheta0 = 1.D0      ! initial mixing layer (L=5*dtheta0 is 99% thickness)
-rho_ref = 1.D0          ! Reference density rho1=1/R
-rho_ratio = 1.D0        ! free stream density ratio rho2/rho1
-vel_ratio = -1.D0        ! free stream velocity ratio U2/U1
-=======
-Lx      = 129.D0        ! Pantano 2002        
-Ly      = 172.D0        ! Pantano 2002
-Lz      = 86.D0         ! Pantano 2002
-Mc      = 1D-4          ! Convective Mach number
-Re      = 1D3           ! Reynolds number at +infty UL/nu
+Lx      = 40.D0        ! Pantano 2002        
+Ly      = 40.D0        ! Pantano 2002
+Lz      = 20.D0        ! Pantano 2002
+Mc      = 1D-1         ! Convective Mach number
+Re      = 1D2           ! Reynolds number rho_Ref*dU*L/mu_ref
 Pr      = 0.7D0         ! Prandtl number nu/kappa 0.7
 Sc      = 1.D0          ! Schmidt number nu/massDiffusivity
+T_ref = 1.D0            ! Reference temp 
+p_ref = 1.D0            ! Reference press 
 rho_ref = 1.D0          ! Reference density
 rho_ratio = 1.D0        ! Density ratio rho2/rho1
-vel_ratio = -1.D0       ! Velocity ratio U2/U2 
->>>>>>> my-temporary-work
-noiseAmp = 1.D-3        ! noise amplitude 
-InitFileDirectory = "/home1/05648/kmatsuno/ShearLayerInput/ModeInput/" ! Dir for modal inits
+noiseAmp = 0.D0         ! noise amplitude 
+InitFileDirectory = "/home1/05648/kmatsuno/ShearLayerInput/ModeInput" ! Dir for modal inits
 InitFileTag = "ShearLayer" ! File tag prefix for modal inits
 /

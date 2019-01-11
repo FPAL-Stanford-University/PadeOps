@@ -13,9 +13,10 @@ module ShearLayer_data
     real(rkind) :: Mc = 0.7_rkind	          ! Convective Mach
     real(rkind) :: Re = 800._rkind	          ! Reynolds number
     real(rkind) :: Sc = 1._rkind	          ! Schmidt number
-    real(rkind) :: rho_ref = one              ! rho1 = 1/R?
+    real(rkind) :: p_ref = one                ! reference press
+    real(rkind) :: T_ref = one                ! reference temp
+    real(rkind) :: rho_ref = one              ! reference density
     real(rkind) :: rho_ratio = one            ! rho2/rho1
-    real(rkind) :: vel_ratio = one            ! U2/U1
     real(rkind) :: dtheta0 = 1._rkind          ! Base profile thickness 
     real(rkind) :: noiseAmp = 1D-3              ! white noise amplitude
     character(len=clen) :: InitFileTag, InitFileDirectory
@@ -155,14 +156,14 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
-    character(clen)                   :: inputfile
     real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
+    character(clen)                                :: inputfile
     integer :: i,j,k,ioUnit, nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
 
     inputfile = './input.dat'
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
-                        rho_ref, rho_ratio, vel_ratio,&
+                        T_ref, p_ref, rho_ref, rho_ratio,&
                         noiseAmp, InitFileTag, InitFileDirectory
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -235,10 +236,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(constPrandtlConductivity) :: thermcond
     real(rkind), dimension(:,:,:), allocatable :: &
         tmp, upert, vpert, wpert, Tpert, ppert
-    real(rkind) :: p_ref, mu_ref, T_ref, c1,c2,du, Rgas1, Rgas2,lambda
+    real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda
     
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
-                        rho_ref, rho_ratio, vel_ratio,&
+                        T_ref, p_ref, rho_ratio, rho_ref, &
                         noiseAmp, InitFileTag, InitFileDirectory
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -265,17 +266,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         if (mix%ns /= ns) call GracefulExit("Wrong number of species. Check your input file and make ns consistent with the problem file.",4562)
         
         ! First set the materials for rho_ratio = rho2/rho1
-        Rgas1 = (1+rho_ratio)/two			
-        Rgas2 = (1+rho_ratio)/(two*rho_ratio) 
+        Rgas1 = (one+rho_ratio)/two			
+        Rgas2 = (one+rho_ratio)/(two*rho_ratio) 
 		Rgas = [Rgas1, Rgas2]
-        
-        ! Constant for the problem
-        c1 = one
-        c2 = c1/sqrt(rho_ratio)
-		du = Mc*(c1+c2)
-        lambda = (1-rho_ratio)/(1+rho_ratio)
-        T_ref = one/gam
-        mu_ref = rho_ref*dU*5*dtheta0/Re
+        c1 = sqrt(gam*p_ref/(rho_ref/Rgas1))
+        c2 = sqrt(gam*p_ref/(rho_ref/Rgas2))
+        du = Mc*(c1+c2)
+        mu_ref = du*rho_ref*dtheta0/Re
 
         ! Set each material's transport coefficient object
         do i = 1,mix%ns
@@ -288,36 +285,46 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
                  thermcond = thermcond  )
         end do
 
+
         ! Set mass diffusivity object (Ensure that all units are consistent)
+        lambda = (one-rho_ratio)/(one+rho_ratio)
         call mix%set_massdiffusivity( constSchmidtDiffusivity( mu_ref,rho_ref,Sc))
-        tmp = half*(one-tanh(y/(2*dtheta0)))
+        tmp = half*(one+lambda*tanh(y/(2*dtheta0)))
         Ys(:,:,:,1)  = one - tmp
         Ys(:,:,:,2)  = one - Ys(:,:,:,1)
         call mix%update(Ys)
 		
         ! Base flow profiles
-        rho = rho_ref*( 1+lambda*tanh(-y/(2*dtheta0)) ) 
-        u = dU*half*tanh(-y/(2*dtheta0))!du*(tmp-half)
+        u = du*half*(tanh(y/(two*dtheta0)))
         v = zero
         w = zero
-        p = rho*c1**2/gam
+        p = p_ref
         T = T_ref
+        rho = p / (mix%Rgas * T)!*( 1+lambda*tanh(-y/(2*dtheta0)) ) 
+
+        if (nrank==0) then
+            print *, 'dU:', dU
+            print *, 'mu_ref:', mu_ref
+            print *, 'shearvisc:', shearvisc
+            print *, 'bulkvisc:', bulkvisc
+        endif
 
         ! Modal perturbations: this must be specific for each problem.
         call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
                  upert, vpert, wpert, Tpert, ppert)
-        u = u + noiseAmp*upert
-        v = v + noiseAmp*vpert
-        w = w + noiseAmp*wpert
-        T = T + noiseAmp*Tpert
-        p = p + noiseAmp*ppert
+        u = u + 1.D-5*upert
+        v = v + 1.D-5*vpert
+        w = w + 1.D-5*wpert
+        T = T + 1.D-5*Tpert
+        p = p + 1.D-5*ppert
+        
         ! Gaussian noise
-        call gaussian_random(upert,zero,one,seedu+100*nrank)
-        call gaussian_random(vpert,zero,one,seedv+100*nrank)
-        call gaussian_random(wpert,zero,one,seedw+100*nrank)
-        u = u + noiseAmp*upert
-        v = v + noiseAmp*vpert
-        w = w + noiseAmp*wpert
+        !call gaussian_random(upert,zero,one,seedu+100*nrank)
+        !call gaussian_random(vpert,zero,one,seedv+100*nrank)
+        !call gaussian_random(wpert,zero,one,seedw+100*nrank)
+        !u = u + noiseAmp*upert
+        !v = v + noiseAmp*vpert
+        !w = w + noiseAmp*wpert
         deallocate(upert, vpert, wpert, Tpert, ppert)
 
         ! Initialize mygfil
@@ -521,10 +528,10 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
                  diff => fields(:,:,:,Ys_index+mix%ns:Ys_index+2*mix%ns-1),        &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         call message(2,"Maximum v-velocity",P_MAXVAL(v))
-        !call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
-        !call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
-        !call message(2,"Maximum conductivity",P_MAXVAL(kap))
-        !call message(2,"Maximum diffusivity",P_MAXVAL(diff))
+        call message(2,"Maximum shear viscosity",P_MAXVAL(mu))
+        call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
+        call message(2,"Maximum conductivity",P_MAXVAL(kap))
+        call message(2,"Maximum diffusivity",P_MAXVAL(diff))
 
     end associate
 end subroutine
