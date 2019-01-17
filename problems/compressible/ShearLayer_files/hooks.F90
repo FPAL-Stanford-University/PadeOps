@@ -230,12 +230,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
 
     integer :: i, iounit, nx, ny, nz
-    integer :: seedu=321341, seedv=423424, seedw=131344
+    integer :: seedu=321341, seedv=423424, seedw=131344, &
+            seedr=452123,seedp=456321, seedT=321644
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
     real(rkind), dimension(:,:,:), allocatable :: &
-        tmp, upert, vpert, wpert, Tpert, ppert
+        tmp, upert, vpert, wpert, Tpert, ppert, rpert
     real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda
     
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
@@ -255,6 +256,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     allocate(wpert(nx,ny,nz))
     allocate(Tpert(nx,ny,nz))
     allocate(ppert(nx,ny,nz))
+    allocate(rpert(nx,ny,nz))
 
     associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
                  v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
@@ -272,7 +274,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         c1 = sqrt(gam*p_ref/(rho_ref/Rgas1))
         c2 = sqrt(gam*p_ref/(rho_ref/Rgas2))
         du = Mc*(c1+c2)
-        mu_ref = du*rho_ref*dtheta0/Re
+        mu_ref = one/Re
 
         ! Set each material's transport coefficient object
         do i = 1,mix%ns
@@ -289,18 +291,17 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         ! Set mass diffusivity object (Ensure that all units are consistent)
         lambda = (one-rho_ratio)/(one+rho_ratio)
         call mix%set_massdiffusivity( constSchmidtDiffusivity( mu_ref,rho_ref,Sc))
-        tmp = half*(one+lambda*tanh(y/(2*dtheta0)))
+        tmp = half*(one+lambda*tanh(y/(two*dtheta0)))
         Ys(:,:,:,1)  = one - tmp
         Ys(:,:,:,2)  = one - Ys(:,:,:,1)
         call mix%update(Ys)
 		
         ! Base flow profiles
-        u = du*half*(tanh(y/(two*dtheta0)))
+        u = du*half*tanh(y/(two*dtheta0))
         v = zero
         w = zero
         p = p_ref
         T = T_ref
-        rho = p / (mix%Rgas * T)!*( 1+lambda*tanh(-y/(2*dtheta0)) ) 
 
         if (nrank==0) then
             print *, 'dU:', dU
@@ -312,20 +313,26 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         ! Modal perturbations: this must be specific for each problem.
         call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
                  upert, vpert, wpert, Tpert, ppert)
-        u = u + 1.D-5*upert
-        v = v + 1.D-5*vpert
-        w = w + 1.D-5*wpert
-        T = T + 1.D-5*Tpert
-        p = p + 1.D-5*ppert
+        u = u + upert
+        v = v + vpert
+        w = w + wpert
+        T = T + Tpert
+        p = p + ppert
+        rho = p / (mix%Rgas * T)
         
         ! Gaussian noise
-        !call gaussian_random(upert,zero,one,seedu+100*nrank)
-        !call gaussian_random(vpert,zero,one,seedv+100*nrank)
-        !call gaussian_random(wpert,zero,one,seedw+100*nrank)
-        !u = u + noiseAmp*upert
-        !v = v + noiseAmp*vpert
-        !w = w + noiseAmp*wpert
-        deallocate(upert, vpert, wpert, Tpert, ppert)
+        call gaussian_random(upert,zero,one,seedu+100*nrank)
+        call gaussian_random(vpert,zero,one,seedv+100*nrank)
+        call gaussian_random(rpert,zero,one,seedr+100*nrank)
+        call gaussian_random(ppert,zero,one,seedp+100*nrank)
+        call gaussian_random(Tpert,zero,one,seedT+100*nrank)
+        u = u + noiseAmp*upert
+        v = v + noiseAmp*vpert
+        w = w + noiseAmp*wpert
+        p = p + noiseAmp*ppert
+        T = T + noiseAmp*Tpert
+        rho = rho + noiseAmp*rpert
+        deallocate(upert, vpert, wpert, Tpert, ppert, rpert)
 
         ! Initialize mygfil
         call mygfil%init(decomp, periodicx, periodicy, periodicz, &
@@ -437,8 +444,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         ! Sponge+bulk for exit bc
         ! Gradually apply the exit boundary conditions  
         dy = Ly/real(decomp%ysz(2)-1,rkind)
-        filpt = 10.0_rkind/dy 
-        thickT = real(10.D0, rkind)
+        filpt = 1.0_rkind/dy 
+        thickT = real(1.D0, rkind)
         do i=1,decomp%ysz(2)
             dumT(:,i,:)=half*(one-tanh( (real( decomp%yst(2) - 1 + i - 1, rkind)-filpt) / thickT ))
         end do
