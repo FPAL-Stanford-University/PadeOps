@@ -84,85 +84,100 @@ program StratifiedShearLayerWPV
       
       call message(0, "Reading fields for tid:", TIDX)
       call tic()
-      call ops%ReadField3D(buff4,"uVXi",TIDX)
-      call ops%ReadField3D(buff5,"vVXi",TIDX)
-      call ops%ReadField3D(buff6,"wVXi",TIDX)
       call ops%ReadField3D(buff1,"uVel",TIDX)
       call ops%ReadField3D(buff2,"vVel",TIDX)
       call ops%ReadField3D(w,"wVel",TIDX)
       call ops%ReadField3D(T,"potT",TIDX)
+      call ops%ReadField3D(buff4,"uVPi",TIDX)
+      call ops%ReadField3D(buff5,"vVPi",TIDX)
+      call ops%ReadField3D(buff6,"wVPi",TIDX)
       call message(0, "Read simulation data at time:", times(idx))
-
-      T = Rib*(T - Tref)  ! Rescale Potential temperature to buoyancy variable: b
 
       ! STEP 0: Compute Fluctuations
 
       call ops%getFluct_from_MeanZ(buff1,ufluct)
       call ops%getFluct_from_MeanZ(buff2,vfluct)
 
-
-      ! STEP 1: Compute Vorticity after Poisson Reconstruction
+      
+      ! Check Om_Pi dot Om_Xi is Point-wise 0
 
       call ops%getCurl(buff4,buff5,buff6, buff1,buff2,buff3,1,1,1,1)
-      call ops%WriteField3D(buff1, "vXXi", tidx)
-      call ops%WriteField3D(buff2, "vYXi", tidx)
-      call ops%WriteField3D(buff3, "vZXi", tidx)
+      buff7 = ufluct - buff4
+      buff8 = vfluct - buff5
+      buff9 = w - buff6
+      call ops%getCurl(buff7,buff8,buff9, buff4,buff5,buff6,1,1,1,1)
+      call ops%WriteField3D(buff1, "vXPi", tidx)
+      call ops%WriteField3D(buff2, "vYPi", tidx)
+      call ops%WriteField3D(buff3, "vZPi", tidx)
+      call ops%WriteField3D(buff4, "vXXi", tidx)
+      call ops%WriteField3D(buff5, "vYXi", tidx)
+      call ops%WriteField3D(buff6, "vZXi", tidx)
+
+      !buff7 = buff1*buff4 + buff2*buff5 + buff3*buff6
+      !err = buff7(512,512,512)!maxval(abs(buff7))
+      !call message(0, "Error in orthogonality:", buff7(512,512,512))
 
 
 
 
 
-      ! STEP 2: Compute Exact Wave-PV Decomposition of Vorticity
+      ! Check Om_Pi here is same as decomposition Om_Pi
 
-      call ops%initfilter(ops%gp%xsz(1)/4,ops%gp%ysz(2)/4,4)
-      !call ops%filterfield_inplace(T)
+
 
       call ops%getCurl(ufluct,vfluct,w, buff1,buff2,buff3,1,1,1,1)
       call ops%getGradient(T,           buff4,buff5,buff6,1,1)
-      
-      call ops%WriteField3D(buff1, "oXFu", tidx)
-      call ops%WriteField3D(buff2, "oYFu", tidx)
-      call ops%WriteField3D(buff3, "oZFu", tidx)
-
       buff7 = buff1 * buff4 + buff2 * buff5 + buff3 * buff6 ! Pi
-
-
       buff8 = buff4*buff4 + buff5*buff5 + buff6*buff6
-      buff8 = sqrt(buff8) + 1.d-14  ! |gradT|
-
+      buff8 = sqrt(buff8) ! |gradT|
       buff7 = buff7/buff8 ! |omega_Pi|
       
-     
-      buff4 = buff4/buff8
-      !call ops%filterfield_inplace(buff4)
-      buff9 = buff7*buff4
-      call ops%WriteField3D(buff9, "oXPi", tidx)
-      buff1 = buff1 - buff9
+      buff1 = buff7*buff4/buff8
+      buff2 = buff7*buff5/buff8
+      buff3 = buff7*buff6/buff8
+
+      call ops%WriteField3D(buff1, "oXPi", tidx)
+      call ops%WriteField3D(buff2, "oYPi", tidx)
+      call ops%WriteField3D(buff3, "oZPi", tidx)
+
+
+      !call ops%ReadField3D(buff4,"uVPi",TIDX)
+      !call ops%ReadField3D(buff5,"vVPi",TIDX)
+      !call ops%ReadField3D(buff6,"wVPi",TIDX)
+      !call ops%getCurl(buff4,buff5,buff6, buff7,buff8,buff9,1,1,1,1)
+
+
+      !buff1 = abs(buff7 - buff1) + abs(buff8 - buff2) + abs(buff9 - buff3)
+      !err = buff1(512,512,512)!maxval(abs(buff1))
+      !call message(0, "Error in comparing Omega_Pi:", buff1(512,512,512))
+
+
+
+
+
+
+      call ops%getCurl(ufluct,vfluct,w, buff4,buff5,buff6,1,1,1,1)
+
+      buff1 = buff4 - buff1
+      buff2 = buff5 - buff2
+      buff3 = buff6 - buff3 ! omega decomp
+
       call ops%WriteField3D(buff1, "oXXi", tidx)
-      
-      buff5 = buff5/buff8
-      !call ops%filterfield_inplace(buff5)
-      buff9 = buff7*buff5
-      call ops%WriteField3D(buff9, "oYPi", tidx)
-      buff1 = buff2 - buff9
-      call ops%WriteField3D(buff1, "oYXi", tidx)
-      
-      buff6 = buff6/buff8
-      !call ops%filterfield_inplace(buff6)
-      buff9 = buff7*buff6
-      call ops%WriteField3D(buff9, "oZPi", tidx)
-      buff1 = buff3 - buff9
-      call ops%WriteField3D(buff1, "oZXi", tidx)
+      call ops%WriteField3D(buff2, "oYXi", tidx)
+      call ops%WriteField3D(buff3, "oZXi", tidx)
 
+      !call ops%ReadField3D(buff4,"uVPi",TIDX)
+      !call ops%ReadField3D(buff5,"vVPi",TIDX)
+      !call ops%ReadField3D(buff6,"wVPi",TIDX)
 
+      !buff7 = ufluct - buff4
+      !buff8 = vfluct - buff5
+      !buff9 = w - buff6
+      !call ops%getCurl(buff7,buff8,buff9, buff4,buff5,buff6,1,1,1,1)
 
-
-
-
-
-
-
-
+      !buff1 = abs(buff4 - buff1) + abs(buff5 - buff2) + abs(buff6 - buff3)
+      !err = buff1(512,512,512)!maxval(abs(buff1))
+      !call message(0, "Error in comparing Omega_Xi:", buff1(512,512,512))
 
       idx = idx + 1
       call toc()
