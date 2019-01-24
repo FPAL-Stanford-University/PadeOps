@@ -155,18 +155,17 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use ShearLayer_data
 
     implicit none
+    character(clen)                                :: inputfile
     type(decomp_info),               intent(in)    :: decomp
     real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
-    character(clen)                                :: inputfile
     integer :: i,j,k,ioUnit, nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
 
-    inputfile = './input.dat'
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ref, rho_ratio,&
                         noiseAmp, InitFileTag, InitFileDirectory
     ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    open(unit=ioUnit, file='input.dat', form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
     
