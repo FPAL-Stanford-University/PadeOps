@@ -67,7 +67,7 @@ program test_ComputeF
 
 
 
-   call ComputeF(ops,ufluct,vfluct,w,T,buff1,buff2,buff3,buff4,buff5,buff6,buff7)
+   call ComputeF(ops,.TRUE.,ufluct,vfluct,w,T,buff1,buff2,buff3,buff4,buff5,buff6,buff7)
      
   
    ! Check Solution

@@ -13,8 +13,8 @@ program StratifiedShearLayerWPV
    implicit none
 
    real(rkind), dimension(:,:,:), allocatable :: buff1, buff2, buff3
-   real(rkind), dimension(:,:,:), allocatable :: buff4, buff5, buff6
-   real(rkind), dimension(:,:,:), allocatable :: buff7
+   real(rkind), dimension(:,:,:), allocatable :: buff4
+   real(rkind), dimension(:,:,:), allocatable :: Fx, Fy, Fz
    real(rkind), dimension(:,:,:), allocatable :: ufluct, vfluct, w, T
    real(rkind) :: dx, dy, dz, Re = 3000.d0, Rib = 0.05d0, Tref = 100.d0
    integer :: nx, ny, nz, RunID, TIDX
@@ -48,10 +48,20 @@ program StratifiedShearLayerWPV
    call ops%init(nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isZPeriodic, NumericalSchemeVert)
    call poiss%init(dx, dy, dz, ops%spect, ops%spectE, computeStokesPressure, two*Lz, .false., ops%gp, ops%derZ, .false., UseTrueWavenumbers)
 
-   call ops%allocate3DField(buff4)
-   call ops%allocate3DField(buff5)
-   call ops%allocate3DField(buff6)
 
+   ! Allocate all the needed memory
+   call ops%allocate3DField(ufluct)
+   call ops%allocate3DField(vfluct)
+   call ops%allocate3DField(w)
+   call ops%allocate3DField(T)
+   call ops%allocate3DField(Fx)
+   call ops%allocate3DField(Fy)
+   call ops%allocate3DField(Fz)
+
+   call ops%allocate3DField(buff1)
+   call ops%allocate3DField(buff2)
+   call ops%allocate3DField(buff3)   
+   call ops%allocate3DField(buff4)
 
    if (VizDump_Schedule == 1) then
       call ops%Read_VizSummary(times, timesteps)
@@ -75,16 +85,6 @@ program StratifiedShearLayerWPV
          times(idx) = ops%getSimTime(tidx)
       end if
       
-      ! Allocate all the needed memory
-      call ops%allocate3DField(ufluct)
-      call ops%allocate3DField(vfluct)
-      call ops%allocate3DField(w)
-      call ops%allocate3DField(T)
-
-      call ops%allocate3DField(buff1)
-      call ops%allocate3DField(buff2)
-      call ops%allocate3DField(buff3)
-      call ops%allocate3DField(buff7)
 
       call message(0, "Reading fields for tid:", TIDX)
       call tic()
@@ -99,32 +99,56 @@ program StratifiedShearLayerWPV
       call ops%getFluct_from_MeanZ(buff1,ufluct)
       call ops%getFluct_from_MeanZ(buff2,vfluct)
 
-      ! STEP 1: Compute Wave-PV Decomposition of Velocity
 
-      call ComputeF(ops,ufluct,vfluct,w,T,buff1,buff2,buff3,buff4,buff5,buff6,buff7)
+      ! STEP 1: Compute Wave-PV Decomposition of Pi and then Xi Velocities
 
-      deallocate(ufluct)
-      deallocate(vfluct)
-      deallocate(w)
-      deallocate(T)
-      deallocate(buff7)
+      call ComputeF(ops,.TRUE.,ufluct,vfluct,w,T,Fx,Fy,Fz,buff1,buff2,buff3,buff4)
       
-      call poiss%PoissonSolver_HomogeneousNeumannBCz(buff1,buff4)
-      call poiss%PoissonSolver_HomogeneousNeumannBCz(buff2,buff5)
-      call poiss%PoissonSolver_HomogeneousNeumannBCz(buff3,buff6)
-      
-      deallocate(buff1)
-      deallocate(buff2)
-      deallocate(buff3)
-      
-      ! #MemoryMonster 
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!call ops%project_divergencefree_BC(buff4,buff5,buff6,poiss) 
+      !!!! DIAGNOSTIC
+      call ops%WriteField3D(buff1, "oXPi", tidx) ! Omega_Pi before Decomposition
+      call ops%WriteField3D(buff2, "oYPi", tidx)
+      call ops%WriteField3D(buff3, "oZPi", tidx)
+      !!!
 
-      !call ops%WriteField3D(buff4, "uVXi", tidx)
-      !call ops%WriteField3D(buff5, "vVXi", tidx)
-      !call ops%WriteField3D(buff6, "wVXi", tidx)
+      call poiss%PoissonSolver_HomogeneousNeumannBCz(Fx,buff1)
+      call poiss%PoissonSolver_HomogeneousNeumannBCz(Fy,buff2)
+      call poiss%PoissonSolver_HomogeneousNeumannBCz(Fz,buff3)
+
+      call ops%WriteField3D(buff1, "uVPi", tidx)
+      call ops%WriteField3D(buff2, "vVPi", tidx)
+      call ops%WriteField3D(buff3, "wVPi", tidx)
       
-      print*, maxval(abs(buff6))
+      !!!! DIAGNOSTIC
+      call ops%getCurl(buff1,buff2,buff3, Fx,Fy,Fz,1,1,1,1)
+      call ops%WriteField3D(Fx, "vXPi", tidx) ! Omega_Pi after Decomposition
+      call ops%WriteField3D(Fy, "vYPi", tidx)
+      call ops%WriteField3D(Fz, "vZPi", tidx)
+      !!!!
+
+      
+      call ComputeF(ops,.FALSE.,ufluct,vfluct,w,T,Fx,Fy,Fz,buff1,buff2,buff3,buff4)
+      
+      !!!! DIAGNOSTIC
+      call ops%WriteField3D(buff1, "oXXi", tidx) ! Omega_Pi before Decomposition
+      call ops%WriteField3D(buff2, "oYXi", tidx)
+      call ops%WriteField3D(buff3, "oZXi", tidx)
+      !!!
+
+      call poiss%PoissonSolver_HomogeneousNeumannBCz(Fx,buff1)
+      call poiss%PoissonSolver_HomogeneousNeumannBCz(Fy,buff2)
+      call poiss%PoissonSolver_HomogeneousNeumannBCz(Fz,buff3)
+
+      call ops%WriteField3D(buff1, "uVXi", tidx)
+      call ops%WriteField3D(buff2, "vVXi", tidx)
+      call ops%WriteField3D(buff3, "wVXi", tidx)
+      
+      !!!! DIAGNOSTIC
+      call ops%getCurl(buff1,buff2,buff3, Fx,Fy,Fz,1,1,1,1)
+      call ops%WriteField3D(Fx, "vXXi", tidx) ! Omega_Pi after Decomposition
+      call ops%WriteField3D(Fy, "vYXi", tidx)
+      call ops%WriteField3D(Fz, "vZXi", tidx)
+      !!!!
+      
 
 
       idx = idx + 1
