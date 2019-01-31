@@ -129,7 +129,7 @@ program StratifiedShearLayerWPV
       call ComputeF(ops,.FALSE.,ufluct,vfluct,w,T,Fx,Fy,Fz,buff1,buff2,buff3,buff4)
       
       !!!! DIAGNOSTIC
-      call ops%WriteField3D(buff1, "oXXi", tidx) ! Omega_Pi before Decomposition
+      call ops%WriteField3D(buff1, "oXXi", tidx) ! Omega_Xi before Decomposition
       call ops%WriteField3D(buff2, "oYXi", tidx)
       call ops%WriteField3D(buff3, "oZXi", tidx)
       !!!
@@ -144,7 +144,7 @@ program StratifiedShearLayerWPV
       
       !!!! DIAGNOSTIC
       call ops%getCurl(buff1,buff2,buff3, Fx,Fy,Fz,1,1,1,1)
-      call ops%WriteField3D(Fx, "vXXi", tidx) ! Omega_Pi after Decomposition
+      call ops%WriteField3D(Fx, "vXXi", tidx) ! Omega_Xi after Decomposition
       call ops%WriteField3D(Fy, "vYXi", tidx)
       call ops%WriteField3D(Fz, "vZXi", tidx)
       !!!!

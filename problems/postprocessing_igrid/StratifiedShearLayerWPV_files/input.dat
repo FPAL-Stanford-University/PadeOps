@@ -1,0 +1,14 @@
+&INPUT
+inputdir                      = "/local/scratch/public/aw670/StratifiedShearWPV/testWPV/3DTG/output"   ! Directory for any input files
+outputdir                     = "/local/scratch/public/aw670/StratifiedShearWPV/testWPV/3DTG/output"   ! Directory for all output files
+RunID  = 10
+VizDump_Schedule = 1
+Lx     = 1
+Ly     = 1
+Lz     = 1
+nx     = 64
+ny     = 64
+nz     = 64
+Rib    = 0.05d0
+NumericalSchemeVert = 1
+/

@@ -25,7 +25,6 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use reductions,         only: p_maxval
     use constants,          only: pi, imi
     use cd06staggstuff,     only: cd06stagg
-    use StratifiedShearLayer_IO, only: get_perturbations 
 
     implicit none
     type(decomp_info),               intent(in)    :: decompC
@@ -37,18 +36,15 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, T, x, y, z
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: k, seed = 12331
-    real(rkind) :: lambda_x, lambda_y, A0 = 0.1d0, Tbase = 100.d0, kx, ky, maxTG = 1.d-2
-    integer :: N = 4, M= 2, nTG = 2, i, j
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, maxrandom = 1.d-4, deltaPhi = pi/2.d0, ScalePerturb = 1.d0 
-    real(rkind), dimension(:,:,:), allocatable :: randArr, uperturb, wperturb, vperturb, Tperturb
-    real(rkind) :: Psi, dPsi_dz, dz, eta = 1.d0
+    real(rkind) :: Tbase = 100.d0
+    integer :: NTGx, NTGy, NTGz, i, j
+    real(rkind) :: Lx, Ly, Lz
+    real(rkind) :: A0, dz
     real(rkind) :: a,b,c,Aa,Bb,Cc
-    real(rkind) :: nx = 2, ny = 3, nz = 2
     type(cd06stagg), allocatable :: derW
     integer :: ProblemMode = 0
     character(len=clen) :: domain_fname,InitFileTag,InitFileDirectory 
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta, ProblemMode, domain_fname, InitFileTag,InitFileDirectory, ScalePerturb 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, NTGx, NTGy, NTGz, A0, Tbase, ProblemMode, domain_fname, InitFileTag, InitFileDirectory
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -59,18 +55,16 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     u  => fieldsC(:,:,:,1); v  => fieldsC(:,:,:,2); wC => fieldsC(:,:,:,3)
     w  => fieldsE(:,:,:,1); T  => fieldsC(:,:,:,7) 
     z => mesh(:,:,:,3); y => mesh(:,:,:,2); x => mesh(:,:,:,1)
-    !allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    !allocate(randArr(size(T,1),size(T,2),size(T,3)))
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
     ! Wavenumbers:
-    a = 2.d0*pi*nx/Lx
-    b = 2.d0*pi*ny/Ly
-    c = 2.d0*pi*nz/Lz
+    a = 2.d0*pi*NTGx/Lx
+    b = 2.d0*pi*NTGy/Ly
+    c = 2.d0*pi*NTGz/Lz
 
-    Aa = maxTG
-    Bb = maxTG
+    Aa = A0
+    Bb = A0
     Cc = (-Aa*a - Bb*b) / c
 
     u = Aa*cos(a*x)*sin(b*y)*sin(c*z)
@@ -113,14 +107,7 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: wTh_surf
-    integer :: ioUnit, seed, N, M, nTG
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase, maxTG
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG
      
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PROBLEM_INPUT)
-    close(ioUnit)    
 
     ! Do nothing really since temperature BC is dirichlet
 end subroutine
@@ -132,18 +119,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=*),                intent(in)    :: inputfile
-    integer :: ioUnit, seed, N, M, nTG
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, A0, maxrandom, deltaPhi, Tbase, maxTG, eta
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta
-     
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PROBLEM_INPUT)
-    close(ioUnit)    
 
     dTsurf_dt = dTsurf_dt /  3600.d0
 
-    ! Normalize
     dTsurf_dt = 0.d0  
 
     Tsurf = one 
@@ -206,12 +184,12 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
-    integer :: ix1, ixn, iy1, iyn, iz1, izn, seed = 231454, N, M, nTG
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind)  :: maxrandom = 1.d-5, deltaPhi, Tbase, A0, maxTG, eta, ScalePerturb
+    integer :: ix1, ixn, iy1, iyn, iz1, izn
+    real(rkind)  :: Lx, Ly, Lz, NTGx, NTGy, NTGz, A0
+    real(rkind)  :: Tbase
     integer :: ProblemMode = 0
     character(len=clen) :: domain_fname,InitFileTag,InitFileDirectory 
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, seed, N, M, A0, deltaPhi, seed, maxrandom, Tbase, nTG, maxTG, eta, ProblemMode, domain_fname, InitFileTag,InitFileDirectory, ScalePerturb 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, NTGx, NTGy, NTGz, A0, Tbase, ProblemMode, domain_fname, InitFileTag, InitFileDirectory
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
