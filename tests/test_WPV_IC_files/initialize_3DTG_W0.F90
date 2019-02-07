@@ -1,4 +1,4 @@
-module StratifiedShearLayer_parameters
+module TestWPV_parameters
 
       ! TAKE CARE OF TIME NON-DIMENSIONALIZATION IN THIS MODULE
 
@@ -16,7 +16,7 @@ end module
 
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use StratifiedShearLayer_parameters
+    use TestWPV_parameters
     use kind_parameters,    only: rkind, clen 
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs, linspace
@@ -115,7 +115,7 @@ end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
-    use StratifiedShearLayer_parameters
+    use TestWPV_parameters
     use constants, only: one, zero 
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
@@ -130,7 +130,7 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 end subroutine
 
 subroutine set_planes_io(xplanes, yplanes, zplanes)
-    use StratifiedShearLayer_parameters 
+    use TestWPV_parameters 
     implicit none
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
@@ -173,11 +173,11 @@ end subroutine
 
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use StratifiedShearLayer_parameters    
+    use TestWPV_parameters    
     use kind_parameters,  only: rkind, clen 
     use constants,        only: one,two
     use decomp_2d,        only: decomp_info
-    use StratifiedShearLayer_IO, only: read_Domain_info 
+    use TestWPV_IO, only: read_Domain_info 
     implicit none
 
     type(decomp_info),                                          intent(in)    :: decomp

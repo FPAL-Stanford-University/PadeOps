@@ -15,8 +15,8 @@ module PVroutines
      !call ops%initfilter(ops%gp%xsz(1)/4,ops%gp%ysz(2)/4,4)
      !call ops%filterfield(T)
 
-     call ops%getCurl(ufluct,vfluct,w, buff1,buff2,buff3,1,1,1,1) 
-     call ops%getGradient(T, Fx,Fy,Fz,1,1)
+     call ops%getCurl(ufluct,vfluct,w, buff1,buff2,buff3,0,0,0,0) 
+     call ops%getGradient(T, Fx,Fy,Fz,0,0)
      
      buff4 = Fx*Fx + Fy*Fy + Fz*Fz
      buff4 = sqrt(buff4) + 1.d-14 ! |gradT|
@@ -47,10 +47,9 @@ module PVroutines
        buff2 = -buff2 + Fy * buff4
        buff3 = -buff3 + Fz * buff4
      end if
-     call ops%softdealias(buff1)
-     call ops%softdealias(buff2)
-     call ops%softdealias(buff3)
-
+     !call ops%softdealias(buff1)
+     !call ops%softdealias(buff2)
+     !call ops%softdealias(buff3)
 
      call ops%getCurl(buff1,buff2,buff3, Fx,Fy,Fz,0,0,0,0)
 

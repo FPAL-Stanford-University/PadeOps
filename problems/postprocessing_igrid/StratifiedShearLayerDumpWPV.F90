@@ -99,6 +99,13 @@ program StratifiedShearLayerWPV
       call ops%getFluct_from_MeanZ(buff1,ufluct)
       call ops%getFluct_from_MeanZ(buff2,vfluct)
 
+      call ops%getCurl(ufluct,vfluct,w,buff1,buff2,buff3,0,0,0,0)
+
+      !!!! DIAGNOSTIC
+      call ops%WriteField3D(buff1, "vorX", tidx)
+      call ops%WriteField3D(buff2, "vorY", tidx)
+      call ops%WriteField3D(buff3, "vorZ", tidx)
+      !!!!
 
       ! STEP 1: Compute Wave-PV Decomposition of Pi and then Xi Velocities
 
@@ -108,6 +115,9 @@ program StratifiedShearLayerWPV
       call ops%WriteField3D(buff1, "oXPi", tidx) ! Omega_Pi before Decomposition
       call ops%WriteField3D(buff2, "oYPi", tidx)
       call ops%WriteField3D(buff3, "oZPi", tidx)
+      call ops%WriteField3D(Fx, "FxPi", tidx) ! F_Pi before Decomposition
+      call ops%WriteField3D(Fy, "FyPi", tidx)
+      call ops%WriteField3D(Fz, "FzPi", tidx)
       !!!
 
       call poiss%PoissonSolver_HomogeneousNeumannBCz(Fx,buff1)
@@ -119,7 +129,7 @@ program StratifiedShearLayerWPV
       call ops%WriteField3D(buff3, "wVPi", tidx)
       
       !!!! DIAGNOSTIC
-      call ops%getCurl(buff1,buff2,buff3, Fx,Fy,Fz,1,1,1,1)
+      call ops%getCurl(buff1,buff2,buff3, Fx,Fy,Fz,0,0,0,0)
       call ops%WriteField3D(Fx, "vXPi", tidx) ! Omega_Pi after Decomposition
       call ops%WriteField3D(Fy, "vYPi", tidx)
       call ops%WriteField3D(Fz, "vZPi", tidx)
@@ -127,11 +137,15 @@ program StratifiedShearLayerWPV
 
       
       call ComputeF(ops,.FALSE.,ufluct,vfluct,w,T,Fx,Fy,Fz,buff1,buff2,buff3,buff4)
+
       
       !!!! DIAGNOSTIC
       call ops%WriteField3D(buff1, "oXXi", tidx) ! Omega_Xi before Decomposition
       call ops%WriteField3D(buff2, "oYXi", tidx)
       call ops%WriteField3D(buff3, "oZXi", tidx)
+      call ops%WriteField3D(Fx, "FxXi", tidx) ! F_Xi before Decomposition
+      call ops%WriteField3D(Fy, "FyXi", tidx)
+      call ops%WriteField3D(Fz, "FzXi", tidx)
       !!!
 
       call poiss%PoissonSolver_HomogeneousNeumannBCz(Fx,buff1)
@@ -143,7 +157,7 @@ program StratifiedShearLayerWPV
       call ops%WriteField3D(buff3, "wVXi", tidx)
       
       !!!! DIAGNOSTIC
-      call ops%getCurl(buff1,buff2,buff3, Fx,Fy,Fz,1,1,1,1)
+      call ops%getCurl(buff1,buff2,buff3, Fx,Fy,Fz,0,0,0,0)
       call ops%WriteField3D(Fx, "vXXi", tidx) ! Omega_Xi after Decomposition
       call ops%WriteField3D(Fy, "vYXi", tidx)
       call ops%WriteField3D(Fz, "vZXi", tidx)

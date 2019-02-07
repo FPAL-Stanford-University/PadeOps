@@ -1,4 +1,4 @@
-module StratifiedShearLayer_IO
+module TestWPV_IO
 
     use kind_parameters, only: rkind, clen
     use decomp_2d,       only: decomp_info,nrank,nproc

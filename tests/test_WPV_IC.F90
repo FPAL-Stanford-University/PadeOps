@@ -1,7 +1,7 @@
 ! Template for PadeOps
 
-#include "test_WPV_IC_files/initialize.F90"       
 #include "test_WPV_IC_files/io.F90"
+#include "test_WPV_IC_files/initialize.F90"       
 
 program test_WPV_IC_igrid
     use mpi
