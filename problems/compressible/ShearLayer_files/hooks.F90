@@ -18,7 +18,7 @@ module ShearLayer_data
     real(rkind) :: rho_ref = one              ! reference density
     real(rkind) :: rho_ratio = one            ! rho2/rho1
     real(rkind) :: dtheta0 = 1._rkind          ! Base profile thickness 
-    real(rkind) :: noiseAmp = 1D-3              ! white noise amplitude
+    real(rkind) :: noiseAmp = 1D-6              ! white noise amplitude
     character(len=clen) :: InitFileTag, InitFileDirectory
     ! Parameters for the 2 materials
     real(rkind):: gam=1.4_rkind
@@ -33,43 +33,40 @@ module ShearLayer_data
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 contains
+    !subroutine read_domain_info(fname,Lx,Ly,Lz)
+    !    character(len=*),   intent(in) :: fname 
+    !    real(rkind),        intent(out) :: Lx, Ly, Lz
+    !    integer :: funit=229
+    !    
+    !    ! Read in the y perturbation file
+    !    if (nrank == 0) then
+    !        open(unit=funit,file=trim(fname),form='FORMATTED',status='OLD')
+    !        read(funit,*) Lx
+    !        read(funit,*) Ly
+    !        read(funit,*) Lz
+    !        print *, "Domain size: ",Lx,Ly,Lz
+    !    end if
+    !end subroutine
 
-    subroutine read_domain_info(fname,Lx,Ly,Lz)
-        character(len=*),   intent(in) :: fname 
-        real(rkind),        intent(out) :: Lx, Ly, Lz
-        integer :: funit=229
-        
-        ! Read in the y perturbation file
-        if (nrank == 0) then
-            open(unit=funit,file=trim(fname),form='FORMATTED',status='OLD')
-            read(funit,*) Lx
-            read(funit,*) Ly
-            read(funit,*) Lz
-            print *, "Domain size: ",Lx,Ly,Lz
-        end if
-    end subroutine
-
-
-    subroutine get_perturbations(gp,x,z,InitFileTag,InitFileDirectory,u,v,w,T,p)
-        type(decomp_info),  intent(in) :: gp
-        character(len=*),   intent(in) :: InitFileTag, InitFileDirectory
-        real(rkind), dimension(:,:,:),    intent(in)    :: x, z
-        real(rkind), dimension(:,:,:),    intent(inout) :: u, v, w, T, p
+    subroutine get_pert(gp,x,z,InitFileTag,InitFileDirectory,q,qi)
+        type(decomp_info), intent(in)   :: gp
+        character(len=*), intent(in)    :: InitFileTag, InitFileDirectory
+        real(rkind), dimension(:,:,:), intent(in) :: x, z
+        real(rkind), dimension(:,:,:), intent(inout) :: q!the primitive var
+        integer, intent(in)       :: qi ! the primitive var col idx in input
     
-        real(rkind), dimension(:,:), allocatable :: & 
-                      data2read, uhat_real, uhat_imag, vhat_real, vhat_imag, &
-                      what_real, what_imag, That_real, That_imag, phat_real,phat_imag 
-        complex(rkind), dimension(:,:), allocatable :: uhat, vhat, what, That,phat
+        real(rkind), dimension(:,:), allocatable :: &
+            qhat_real, qhat_imag, qhat, data2read
         real(rkind), dimension(:), allocatable :: kx, kz
         real(rkind) :: arg1
         complex(rkind) :: e
         character(len=clen) :: fname 
-        integer :: nmodes, ny, modeID, i, j, k, nx, nz
+        integer :: nmodes=1, ny, modeID, i, j, k, nx, nz
        
         ! Read mode info in x and y
         fname = trim(InitFileDirectory)//"/"//trim(InitFileTag)//"_mode_info.dat"
         call read_2d_ascii(data2read,fname)
-        nmodes = size(data2read,1)
+        !nmodes = size(data2read,1)
         allocate(kx(nmodes), kz(nmodes))
         kx = data2read(:,1)!alpha
         kz = data2read(:,2)!beta
@@ -77,74 +74,46 @@ contains
         call message(0, "Number of normal modes being used:",nmodes)
        
         ! Local sizes of the chunk of domain on this proc:
+        ! Assuming y-decomp
         ny = gp%ysz(2)
         nx = size(x,1)
         nz = size(x,3)
-
+        
         ! Allocate based on global domain height
-        allocate(uhat_real(ny,nmodes),uhat_imag(ny,nmodes),uhat(ny,nmodes))
-        allocate(vhat_real(ny,nmodes),vhat_imag(ny,nmodes),vhat(ny,nmodes))
-        allocate(what_real(ny,nmodes),what_imag(ny,nmodes),what(ny,nmodes))
-        allocate(That_real(ny,nmodes),That_imag(ny,nmodes),That(ny,nmodes))
-        allocate(phat_real(ny,nmodes),phat_imag(ny,nmodes),phat(ny,nmodes))
+        allocate(qhat_real(ny,nmodes),qhat_imag(ny,nmodes),qhat(ny,nmodes))
     
         ! Read imaginary mode data 
         fname = trim(InitFileDirectory)//"/"//&
                 trim(InitFileTag)//"_init_info_imag.dat"
         call read_2d_ascii(data2read,fname)
-        uhat_imag = reshape(data2read(:,2),[ny,nmodes])
-        vhat_imag = reshape(data2read(:,3),[ny,nmodes])
-        what_imag = reshape(data2read(:,4),[ny,nmodes])
-        That_imag = reshape(data2read(:,5),[ny,nmodes])
-        phat_imag = reshape(data2read(:,6),[ny,nmodes])
+        qhat_imag = reshape(data2read(:,qi),[ny,nmodes])
         deallocate(data2read)
     
         ! Read real mode data 
         fname = trim(InitFileDirectory)//"/"//&
                 trim(InitFileTag)//"_init_info_real.dat"
         call read_2d_ascii(data2read,fname)
-        uhat_real = reshape(data2read(:,2),[ny,nmodes])
-        vhat_real = reshape(data2read(:,3),[ny,nmodes])
-        what_real = reshape(data2read(:,4),[ny,nmodes])
-        That_real = reshape(data2read(:,5),[ny,nmodes])
-        phat_real = reshape(data2read(:,6),[ny,nmodes])
+        qhat_real = reshape(data2read(:,qi),[ny,nmodes])
         deallocate(data2read)
         
         ! Init perturbation fields
-        uhat = uhat_real + imi*uhat_imag
-        vhat = vhat_real + imi*vhat_imag
-        what = what_real + imi*what_imag
-        That = That_real + imi*That_imag
-        phat = phat_real + imi*phat_imag
-        u = 0.d0
-        v = 0.d0
-        w = 0.d0
-        T = 0.d0
-        p = 0.d0
-      
+        qhat = qhat_real + imi*qhat_imag
+        q = 0.d0
+
         do modeID = 1,nmodes
             do j = 1,ny
                 do k = 1,nz
                     do i = 1,nx
                         e = exp(imi*(kx(modeID)*x(i,1,1) + kz(modeID)*z(1,1,k) ))
-                        u(i,j,k) = u(i,j,k) + real(uhat(j,modeID)*e,rkind) 
-                        v(i,j,k) = v(i,j,k) + real(vhat(j,modeID)*e,rkind) 
-                        w(i,j,k) = w(i,j,k) + real(what(j,modeID)*e,rkind)
-                        T(i,j,k) = T(i,j,k) + real(That(j,modeID)*e,rkind) 
-                        p(i,j,k) = p(i,j,k) + real(phat(j,modeID)*e,rkind)
+                        q(i,j,k) = q(i,j,k) + real(qhat(j,modeID)*e,rkind) 
                     end do !x 
                 end do !z 
             end do !y
         end do !modes
     
         deallocate(kx, kz)
-        deallocate(uhat_real,uhat_imag,uhat)
-        deallocate(vhat_real,vhat_imag,vhat)
-        deallocate(what_real,what_imag,what)
-        deallocate(That_real,That_imag,That)
-        deallocate(phat_real,phat_imag,phat)
+        deallocate(qhat_real,qhat_imag,qhat)
     end subroutine 
-
 end module
 
 
@@ -234,8 +203,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
-    real(rkind), dimension(:,:,:), allocatable :: &
-        tmp, upert, vpert, wpert, Tpert, ppert, rpert
+    real(rkind), dimension(:,:,:), allocatable :: tmp, pert
     real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda
     
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
@@ -249,13 +217,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     nx = decomp%xsz(1) 
     ny = decomp%ysz(2) 
     nz = decomp%zsz(3)
+    print *, "This domain size: ",nx,ny,nz
     allocate(tmp(nx,ny,nz))
-    allocate(upert(nx,ny,nz))
-    allocate(vpert(nx,ny,nz))
-    allocate(wpert(nx,ny,nz))
-    allocate(Tpert(nx,ny,nz))
-    allocate(ppert(nx,ny,nz))
-    allocate(rpert(nx,ny,nz))
+    allocate(pert(nx,ny,nz))
 
     associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
                  v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
@@ -286,9 +250,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
                  thermcond = thermcond  )
         end do
 
-
         ! Set mass diffusivity object (Ensure that all units are consistent)
-        lambda = (one-rho_ratio)/(one+rho_ratio)
+        lambda = (rho_ratio-1)/(rho_ratio+1)
         call mix%set_massdiffusivity( constSchmidtDiffusivity( mu_ref,rho_ref,Sc))
         tmp = half*(one+lambda*tanh(y/(two*dtheta0)))
         Ys(:,:,:,1)  = one - tmp
@@ -299,43 +262,44 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         u = du*half*tanh(y/(two*dtheta0))
         v = zero
         w = zero
-        p = p_ref
+        rho = rho_ref*(1 + lambda*tanh(y/(two*dtheta0)))
         T = T_ref
-
-        if (nrank==0) then
-            print *, 'dU:', dU
-            print *, 'mu_ref:', mu_ref
-            print *, 'shearvisc:', shearvisc
-            print *, 'bulkvisc:', bulkvisc
-        endif
+        p = p_ref
 
         ! Modal perturbations: this must be specific for each problem.
-        call get_perturbations(decomp, x, z, InitFileTag, InitFileDirectory, &
-                 upert, vpert, wpert, Tpert, ppert)
-        u = u + upert
-        v = v + vpert
-        w = w + wpert
-        T = T + Tpert
-        p = p + ppert
-        rho = p / (mix%Rgas * T)
+        call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 1)
+        rho = rho + pert
+        call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 2)
+        u = u + pert
+        call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 3)
+        v = v + pert
+        call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 4)
+        w = w + pert
+        call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 5)
+        T = T + pert
+        call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 6)
+        p = p + pert
         
-        ! Gaussian noise
-        call gaussian_random(upert,zero,one,seedu+100*nrank)
-        call gaussian_random(vpert,zero,one,seedv+100*nrank)
-        call gaussian_random(rpert,zero,one,seedr+100*nrank)
-        call gaussian_random(ppert,zero,one,seedp+100*nrank)
-        call gaussian_random(Tpert,zero,one,seedT+100*nrank)
-        u = u + noiseAmp*upert
-        v = v + noiseAmp*vpert
-        w = w + noiseAmp*wpert
-        p = p + noiseAmp*ppert
-        T = T + noiseAmp*Tpert
-        rho = rho + noiseAmp*rpert
-        deallocate(upert, vpert, wpert, Tpert, ppert, rpert)
+        ! Gaussian noise decaying exponentially
+        tmp = exp(-abs(y/(two*dtheta0)))
+        call gaussian_random(pert,zero,one,seedu+100*nrank)
+        u = u + noiseAmp*pert*tmp
+        call gaussian_random(pert,zero,one,seedv+100*nrank)
+        v = v + noiseAmp*pert*tmp
+        call gaussian_random(pert,zero,one,seedw+100*nrank)
+        w = w + noiseAmp*pert*tmp
+        call gaussian_random(pert,zero,one,seedr+100*nrank)
+        rho = rho + noiseAmp*pert*tmp
+        call gaussian_random(pert,zero,one,seedp+100*nrank)
+        p = p + noiseAmp*pert*tmp
+        call gaussian_random(pert,zero,one,seedT+100*nrank)
+        T = T + noiseAmp*pert*tmp
 
-        ! Initialize mygfil
+        ! Initialize gaussian filter mygfil
         call mygfil%init(decomp, periodicx, periodicy, periodicz, &
                         "gaussian", "gaussian", "gaussian" )
+        
+        deallocate(tmp,pert)
     end associate
 end subroutine
 
@@ -443,8 +407,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         ! Sponge+bulk for exit bc
         ! Gradually apply the exit boundary conditions  
         dy = Ly/real(decomp%ysz(2)-1,rkind)
-        filpt = 1.0_rkind/dy 
-        thickT = real(1.D0, rkind)
+        filpt = 5.0_rkind/dy 
+        thickT = real(5.D0, rkind)
         do i=1,decomp%ysz(2)
             dumT(:,i,:)=half*(one-tanh( (real( decomp%yst(2) - 1 + i - 1, rkind)-filpt) / thickT ))
         end do
