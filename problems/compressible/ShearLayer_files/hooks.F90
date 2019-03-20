@@ -48,7 +48,7 @@ contains
     !    end if
     !end subroutine
 
-    subroutine get_pert(gp,x,z,InitFileTag,InitFileDirectory,q,qi)
+    subroutine get_pert(gp,xgrid,zgrid,InitFileTag,InitFileDirectory,q,qi)
         type(decomp_info), intent(in)   :: gp
         character(len=*), intent(in)    :: InitFileTag, InitFileDirectory
         real(rkind), dimension(:,:,:), intent(in) :: x, z
@@ -113,6 +113,45 @@ contains
     
         deallocate(kx, kz)
         deallocate(qhat_real,qhat_imag,qhat)
+    end subroutine 
+    
+    
+    subroutine make_pert(gp,x,z,Lx,Lz,q)
+        type(decomp_info), intent(in)   :: gp
+        real(rkind), dimension(:,:,:), intent(in) :: xgrid, zgrid
+        real(rkind), intent(in) :: Lx, Lz
+        real(rkind), dimension(:,:,:), intent(inout) :: q!the primitive var
+        real(rkind) :: kx, kz, x,z
+        complex(rkind) :: e
+        integer :: nmodes=1, ny, modeID, i, j, k, nx, nz, gnx, gnz, Lx, Lz, wx, wz
+      
+        ! some global properties...
+        gNx = gp%xsz(1) 
+        gNz = gp%zsz(3)
+       
+        ! Local sizes of the chunk of domain on this proc:
+        ! Assuming y-decomp
+        ny = gp%ysz(2)
+        nx = size(x,1)
+        nz = size(x,3)
+       
+        ! 2D grids for each yslice:
+        x = xgrid(:,:,1)
+        z = zgrid(:,:,1)
+
+        ! Init perturbation fields
+        q = 0.d0
+        do j = 1,ny
+            do wx = -gNx/2,gNx/2-1
+            do wz = -gNz/2,gNz/2-1
+                kx = wx*2*pi/Lx
+                kz = wx*2*pi/Lz
+                e  = exp(imi*(kx*x + kz*z))
+                q(i,j,k) = q(i,j,k) + real( (kx**(-5/3)+kz**(-5/3))*e,rkind )
+            end do
+            end do
+        end do
+        
     end subroutine 
 end module
 
@@ -217,7 +256,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     nx = decomp%xsz(1) 
     ny = decomp%ysz(2) 
     nz = decomp%zsz(3)
-    print *, "This domain size: ",nx,ny,nz
     allocate(tmp(nx,ny,nz))
     allocate(pert(nx,ny,nz))
 
@@ -263,9 +301,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         v = zero
         w = zero
         rho = rho_ref*(1 + lambda*tanh(y/(two*dtheta0)))
-        T = T_ref
         p = p_ref
-
+        T = p/(rho*mix%Rgas) 
+        
         ! Modal perturbations: this must be specific for each problem.
         call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 1)
         rho = rho + pert
@@ -405,16 +443,16 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  diff => fields(:,:,:,Ys_index+mix%ns:Ys_index+2*mix%ns-1),        &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         ! Sponge+bulk for exit bc
-        ! Gradually apply the exit boundary conditions  
+        ! Gradually apply the exit boundary conditions
         dy = Ly/real(decomp%ysz(2)-1,rkind)
         filpt = 5.0_rkind/dy 
         thickT = real(5.D0, rkind)
+        
+        ! Gussian Filter for 
         do i=1,decomp%ysz(2)
             dumT(:,i,:)=half*(one-tanh( (real( decomp%yst(2) - 1 + i - 1, rkind)-filpt) / thickT ))
         end do
             
-            
-        ! Gussian Filter for last N points in x-direction to act as a sponge (A)
         dumF = u
         call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
         u = u + dumT*(dumF-u) 
@@ -435,12 +473,11 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
         rho = rho + dumT*(dumF-rho)
 
+        ! Gussian Filter for the top
         do i=1,decomp%ysz(2)
             dumT(:,i,:)=half*(one-tanh( (real(decomp%ysz(2)- (decomp%yst(2) - 1 + i - 1), rkind)-filpt) / thickT ))
         end do
-            
-            
-        ! Gussian Filter for last N points in x-direction to act as a sponge (A)
+
         dumF = u
         call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
         u = u + dumT*(dumF-u) 
