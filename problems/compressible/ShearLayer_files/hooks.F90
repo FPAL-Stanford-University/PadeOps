@@ -33,22 +33,7 @@ module ShearLayer_data
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 contains
-    !subroutine read_domain_info(fname,Lx,Ly,Lz)
-    !    character(len=*),   intent(in) :: fname 
-    !    real(rkind),        intent(out) :: Lx, Ly, Lz
-    !    integer :: funit=229
-    !    
-    !    ! Read in the y perturbation file
-    !    if (nrank == 0) then
-    !        open(unit=funit,file=trim(fname),form='FORMATTED',status='OLD')
-    !        read(funit,*) Lx
-    !        read(funit,*) Ly
-    !        read(funit,*) Lz
-    !        print *, "Domain size: ",Lx,Ly,Lz
-    !    end if
-    !end subroutine
-
-    subroutine get_pert(gp,xgrid,zgrid,InitFileTag,InitFileDirectory,q,qi)
+    subroutine get_pert(gp,x,z,InitFileTag,InitFileDirectory,q,qi)
         type(decomp_info), intent(in)   :: gp
         character(len=*), intent(in)    :: InitFileTag, InitFileDirectory
         real(rkind), dimension(:,:,:), intent(in) :: x, z
@@ -115,30 +100,26 @@ contains
         deallocate(qhat_real,qhat_imag,qhat)
     end subroutine 
     
-    
     subroutine make_pert(gp,x,z,Lx,Lz,q)
-        type(decomp_info), intent(in)   :: gp
-        real(rkind), dimension(:,:,:), intent(in) :: xgrid, zgrid
-        real(rkind), intent(in) :: Lx, Lz
+        type(decomp_info), intent(in)           :: gp
+        real(rkind), dimension(:,:), intent(in) :: x,z
+        real(rkind), intent(in)                 :: Lx, Lz
         real(rkind), dimension(:,:,:), intent(inout) :: q!the primitive var
-        real(rkind) :: kx, kz, x,z
-        complex(rkind) :: e
-        integer :: nmodes=1, ny, modeID, i, j, k, nx, nz, gnx, gnz, Lx, Lz, wx, wz
+
+        real(rkind) :: kx, kz
+        complex(rkind) :: coeff
+        complex(rkind), dimension(gp%ysz(1),gp%ysz(3)) :: e
+        integer :: ny, i, j, k, nx, nz, gnx, gnz, wx, wz
       
         ! some global properties...
         gNx = gp%xsz(1) 
         gNz = gp%zsz(3)
        
-        ! Local sizes of the chunk of domain on this proc:
-        ! Assuming y-decomp
+        ! Local sizes of the chunk of domain on this block: Assuming y-decomp
         ny = gp%ysz(2)
-        nx = size(x,1)
-        nz = size(x,3)
+        nx = gp%ysz(1)
+        nz = gp%ysz(3)
        
-        ! 2D grids for each yslice:
-        x = xgrid(:,:,1)
-        z = zgrid(:,:,1)
-
         ! Init perturbation fields
         q = 0.d0
         do j = 1,ny
@@ -147,11 +128,11 @@ contains
                 kx = wx*2*pi/Lx
                 kz = wx*2*pi/Lz
                 e  = exp(imi*(kx*x + kz*z))
-                q(i,j,k) = q(i,j,k) + real( (kx**(-5/3)+kz**(-5/3))*e,rkind )
+                coeff = (kx**(-5/3)+kz**(-5/3))!should be complex for phase speed
+                q(:,j,:) = q(:,j,:) + real( coeff*e,rkind )
             end do
             end do
         end do
-        
     end subroutine 
 end module
 
@@ -305,18 +286,20 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         T = p/(rho*mix%Rgas) 
         
         ! Modal perturbations: this must be specific for each problem.
-        call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 1)
-        rho = rho + pert
-        call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 2)
-        u = u + pert
-        call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 3)
-        v = v + pert
-        call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 4)
-        w = w + pert
-        call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 5)
-        T = T + pert
-        call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 6)
-        p = p + pert
+        call make_pert(decomp,x(:,1,:),z(:,1,:),Lx,Lz,pert)
+        rho = rho+pert
+        !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 1)
+        !rho = rho + pert
+        !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 2)
+        !u = u + pert
+        !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 3)
+        !v = v + pert
+        !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 4)
+        !w = w + pert
+        !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 5)
+        !T = T + pert
+        !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 6)
+        !p = p + pert
         
         ! Gaussian noise decaying exponentially
         tmp = exp(-abs(y/(two*dtheta0)))
