@@ -269,12 +269,25 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
                  thermcond = thermcond  )
         end do
 
+        ! Also add two passive tracers for each species
+        do i = mix%ns+1,mix%ns*2
+            shearvisc = powerLawViscosity( mu_ref, T_ref, 0._rkind)
+            bulkvisc  = constRatioBulkViscosity( zero )
+            thermcond = constPrandtlConductivity( Pr )
+            call mix%set_material( i, idealgas( gam, Rgas(i-mix%ns) ),&
+                 shearvisc = shearvisc, & 
+                 bulkvisc  = bulkvisc, &
+                 thermcond = thermcond  )
+        end do
+
         ! Set mass diffusivity object (Ensure that all units are consistent)
         lambda = (rho_ratio-1)/(rho_ratio+1)
         call mix%set_massdiffusivity( constSchmidtDiffusivity( mu_ref,rho_ref,Sc))
         tmp = half*(one+lambda*tanh(y/(two*dtheta0)))
         Ys(:,:,:,1)  = one - tmp
         Ys(:,:,:,2)  = one - Ys(:,:,:,1)
+        Ys(:,:,:,3)  = zero 
+        Ys(:,:,:,4)  = one 
         call mix%update(Ys)
 		
         ! Base flow profiles
