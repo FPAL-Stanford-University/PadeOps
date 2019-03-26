@@ -34,7 +34,7 @@ module ShearLayer_data
     type(filters) :: mygfil
 contains
     subroutine get_pert(gp,x,z,InitFileTag,InitFileDirectory,q,qi)
-        type(decomp_info), intent(in)   :: gp
+        typ e(decomp_info), intent(in)   :: gp
         character(len=*), intent(in)    :: InitFileTag, InitFileDirectory
         real(rkind), dimension(:,:,:), intent(in) :: x, z
         real(rkind), dimension(:,:,:), intent(inout) :: q!the primitive var
@@ -101,38 +101,39 @@ contains
     end subroutine 
     
     subroutine make_pert(gp,x,z,Lx,Lz,q)
+        use decomp_2d
         type(decomp_info), intent(in)           :: gp
         real(rkind), dimension(:,:), intent(in) :: x,z
         real(rkind), intent(in)                 :: Lx, Lz
         real(rkind), dimension(:,:,:), intent(inout) :: q!the primitive var
 
         real(rkind) :: kx, kz
-        complex(rkind) :: coeff
+        complex(rkind) :: qhat
         complex(rkind), dimension(gp%ysz(1),gp%ysz(3)) :: e
-        integer :: ny, i, j, k, nx, nz, gnx, gnz, wx, wz
+        integer :: i,j,k, nx,ny,nz, gnx,gny,gnz
       
         ! some global properties...
         gNx = gp%xsz(1) 
+        gNy = gp%ysz(2) 
         gNz = gp%zsz(3)
        
         ! Local sizes of the chunk of domain on this block: Assuming y-decomp
-        ny = gp%ysz(2)
         nx = gp%ysz(1)
+        ny = gp%ysz(2)
         nz = gp%ysz(3)
+
+        ! read the amplitudes
+        fname = trim(InitFileDirectory)//"/"//trim(InitFileTag)//"_kx_modes.dat"
+        call read_2d_ascii(data2read,fname)
+        nmodes = size(data2read,1)
+        allocate(qhat(nmodes))
+        qhat = data2read(:,1) + imi*data2read(:,2)
+        deallocate(data2read)
        
-        ! Init perturbation fields
-        q = 0.d0
-        do j = 1,ny
-            do wx = -gNx/2,gNx/2-1
-            do wz = -gNz/2,gNz/2-1
-                kx = wx*2*pi/Lx
-                kz = wx*2*pi/Lz
-                e  = exp(imi*(kx*x + kz*z))
-                coeff = (kx**(-5/3)+kz**(-5/3))!should be complex for phase speed
-                q(:,j,:) = q(:,j,:) + real( coeff*e,rkind )
-            end do
-            end do
-        end do
+        ! Transpose to x and do ifft
+        call 
+
+    
     end subroutine 
 end module
 
@@ -270,15 +271,15 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         end do
 
         ! Also add two passive tracers for each species
-        do i = mix%ns+1,mix%ns*2
-            shearvisc = powerLawViscosity( mu_ref, T_ref, 0._rkind)
-            bulkvisc  = constRatioBulkViscosity( zero )
-            thermcond = constPrandtlConductivity( Pr )
-            call mix%set_material( i, idealgas( gam, Rgas(i-mix%ns) ),&
-                 shearvisc = shearvisc, & 
-                 bulkvisc  = bulkvisc, &
-                 thermcond = thermcond  )
-        end do
+        !do i = mix%ns+1,mix%ns*2
+        !    shearvisc = powerLawViscosity( mu_ref, T_ref, 0._rkind)
+        !    bulkvisc  = constRatioBulkViscosity( zero )
+        !    thermcond = constPrandtlConductivity( Pr )
+        !    call mix%set_material( i, idealgas( gam, Rgas(i-mix%ns) ),&
+        !         shearvisc = shearvisc, & 
+        !         bulkvisc  = bulkvisc, &
+        !         thermcond = thermcond  )
+        !end do
 
         ! Set mass diffusivity object (Ensure that all units are consistent)
         lambda = (rho_ratio-1)/(rho_ratio+1)
@@ -286,8 +287,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         tmp = half*(one+lambda*tanh(y/(two*dtheta0)))
         Ys(:,:,:,1)  = one - tmp
         Ys(:,:,:,2)  = one - Ys(:,:,:,1)
-        Ys(:,:,:,3)  = zero 
-        Ys(:,:,:,4)  = one 
+        !Ys(:,:,:,3)  = zero 
+        !Ys(:,:,:,4)  = one 
         call mix%update(Ys)
 		
         ! Base flow profiles
@@ -299,8 +300,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         T = p/(rho*mix%Rgas) 
         
         ! Modal perturbations: this must be specific for each problem.
-        call make_pert(decomp,x(:,1,:),z(:,1,:),Lx,Lz,pert)
-        rho = rho+pert
+        !call make_pert(decomp,x(:,1,:),z(:,1,:),Lx,Lz,pert)
+        !rho = rho+pert
         !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 1)
         !rho = rho + pert
         !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 2)
