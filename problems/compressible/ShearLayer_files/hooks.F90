@@ -34,7 +34,7 @@ module ShearLayer_data
     type(filters) :: mygfil
 contains
     subroutine get_pert(gp,x,z,InitFileTag,InitFileDirectory,q,qi)
-        typ e(decomp_info), intent(in)   :: gp
+        type(decomp_info), intent(in)   :: gp
         character(len=*), intent(in)    :: InitFileTag, InitFileDirectory
         real(rkind), dimension(:,:,:), intent(in) :: x, z
         real(rkind), dimension(:,:,:), intent(inout) :: q!the primitive var
@@ -100,40 +100,70 @@ contains
         deallocate(qhat_real,qhat_imag,qhat)
     end subroutine 
     
-    subroutine make_pert(gp,x,z,Lx,Lz,q)
-        use decomp_2d
+    subroutine make_pert(gp,x,Lx,dir,InitFileTag,InitFileDirectory,q)
+        use decomp_2D
         type(decomp_info), intent(in)           :: gp
-        real(rkind), dimension(:,:), intent(in) :: x,z
-        real(rkind), intent(in)                 :: Lx, Lz
+        real(rkind), dimension(:,:,:), intent(in) :: x
+        real(rkind), intent(in)                 :: Lx
+        character(len=*), intent(in)            :: dir, InitFileTag, InitFileDirectory
         real(rkind), dimension(:,:,:), intent(inout) :: q!the primitive var
 
-        real(rkind) :: kx, kz
-        complex(rkind) :: qhat
-        complex(rkind), dimension(gp%ysz(1),gp%ysz(3)) :: e
-        integer :: i,j,k, nx,ny,nz, gnx,gny,gnz
-      
-        ! some global properties...
-        gNx = gp%xsz(1) 
-        gNy = gp%ysz(2) 
-        gNz = gp%zsz(3)
-       
-        ! Local sizes of the chunk of domain on this block: Assuming y-decomp
-        nx = gp%ysz(1)
-        ny = gp%ysz(2)
-        nz = gp%ysz(3)
+        character(len=clen) :: fname 
+        real(rkind), dimension(:,:), allocatable :: data2read
+        real(rkind), dimension(:), allocatable :: xvec 
+        complex(rkind), dimension(:), allocatable :: qhat, q1D 
+        real(rkind) :: kx 
+        integer :: i,j,k,m, nmodes, nx,gnx
+
+        ! Global and local domain sizes for ydecomp
+        if (dir=='x') then
+            gNx = gp%xsz(1)
+            Nx  = gp%ysz(1)
+            allocate(xvec(gNx))
+            xvec = x(:,1,1)
+        else if (dir=='z') then
+            print *,"z direction selected"
+            gNx = gp%zsz(3)
+            Nx  = gp%ysz(3)
+            allocate(xvec(gNx))
+            xvec = x(1,1,:)
+        else if (dir=='y') then
+            print *, "Y perturbations not supported yet"
+            pause
+        endif
 
         ! read the amplitudes
-        fname = trim(InitFileDirectory)//"/"//trim(InitFileTag)//"_kx_modes.dat"
+        fname = trim(InitFileDirectory)//"/"//trim(InitFileTag)//"_k"//dir//"_modes.dat"
         call read_2d_ascii(data2read,fname)
         nmodes = size(data2read,1)
+        print *, "Nmodes used:",nmodes
         allocate(qhat(nmodes))
-        qhat = data2read(:,1) + imi*data2read(:,2)
-        deallocate(data2read)
-       
-        ! Transpose to x and do ifft
-        call 
+        qhat = data2read(:,1) + imi*data2read(:,2) 
 
-    
+        ! do ifft for the entire domain, exclude the 0th wavenum
+        allocate(q1D(gnx))
+        q1D = 0.d0
+        do i=1,gnx
+            do m=1,nmodes
+                kx = 2*pi*m/Lx
+                q1D(i) = q1D(i) + qhat(m)*exp(imi*kx*xvec(i)) 
+            enddo
+        enddo
+        
+        ! put into global pert for this block
+        if (dir=='x') then
+            do i=1,Nx
+                q(i,:,:) = real(q1D(i),rkind) 
+            enddo
+        else if (dir=='z') then
+            do i=1,Nx
+                q(:,:,i) = real(q1D(i),rkind) 
+            enddo
+        endif
+
+        deallocate(data2read)
+        deallocate(q1D)
+        deallocate(qhat)
     end subroutine 
 end module
 
@@ -218,7 +248,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
 
-    integer :: i, iounit, nx, ny, nz
+    integer :: i, iounit, nx, ny,nz
     integer :: seedu=321341, seedv=423424, seedw=131344, &
             seedr=452123,seedp=456321, seedT=321644
     type(powerLawViscosity) :: shearvisc
@@ -300,35 +330,29 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         T = p/(rho*mix%Rgas) 
         
         ! Modal perturbations: this must be specific for each problem.
-        !call make_pert(decomp,x(:,1,:),z(:,1,:),Lx,Lz,pert)
-        !rho = rho+pert
-        !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 1)
-        !rho = rho + pert
-        !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 2)
-        !u = u + pert
-        !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 3)
-        !v = v + pert
-        !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 4)
-        !w = w + pert
-        !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 5)
-        !T = T + pert
+        call make_pert(decomp,x,Lx,'x',InitFileTag,InitFileDirectory,pert)
+        v = v + pert
+        call make_pert(decomp,z,Lz,'z',InitFileTag,InitFileDirectory,pert)
+        v = v + pert
         !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 6)
         !p = p + pert
         
         ! Gaussian noise decaying exponentially
         tmp = exp(-abs(y/(two*dtheta0)))
-        call gaussian_random(pert,zero,one,seedu+100*nrank)
-        u = u + noiseAmp*pert*tmp
-        call gaussian_random(pert,zero,one,seedv+100*nrank)
-        v = v + noiseAmp*pert*tmp
-        call gaussian_random(pert,zero,one,seedw+100*nrank)
-        w = w + noiseAmp*pert*tmp
-        call gaussian_random(pert,zero,one,seedr+100*nrank)
-        rho = rho + noiseAmp*pert*tmp
-        call gaussian_random(pert,zero,one,seedp+100*nrank)
-        p = p + noiseAmp*pert*tmp
-        call gaussian_random(pert,zero,one,seedT+100*nrank)
-        T = T + noiseAmp*pert*tmp
+        if (noiseAmp > 0) then
+            call gaussian_random(pert,zero,one,seedu+100*nrank)
+            u = u + noiseAmp*pert*tmp
+            call gaussian_random(pert,zero,one,seedv+100*nrank)
+            v = v + noiseAmp*pert*tmp
+            call gaussian_random(pert,zero,one,seedw+100*nrank)
+            w = w + noiseAmp*pert*tmp
+            call gaussian_random(pert,zero,one,seedr+100*nrank)
+            rho = rho + noiseAmp*pert*tmp
+            call gaussian_random(pert,zero,one,seedp+100*nrank)
+            p = p + noiseAmp*pert*tmp
+            call gaussian_random(pert,zero,one,seedT+100*nrank)
+            T = T + noiseAmp*pert*tmp
+        endif
 
         ! Initialize gaussian filter mygfil
         call mygfil%init(decomp, periodicx, periodicy, periodicz, &
