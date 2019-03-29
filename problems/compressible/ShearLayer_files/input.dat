@@ -62,6 +62,5 @@ p_ref = 1.D0            ! Reference press
 rho_ref = 1.D0          ! Reference density
 rho_ratio = 1.D0        ! Density ratio rho2/rho1
 noiseAmp = 0.D0         ! noise amplitude 
-InitFileDirectory = "/home1/05648/kmatsuno/ShearLayerInput/ModeInput" ! Dir for modal inits
-InitFileTag = "ShearLayer" ! File tag prefix for modal inits
+fname_prefix = "/home1/05648/kmatsuno/ShearLayerInput/ModeInput/ShearLayer" ! Dir for modal inits
 /

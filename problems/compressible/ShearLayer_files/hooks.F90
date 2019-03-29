@@ -19,7 +19,8 @@ module ShearLayer_data
     real(rkind) :: rho_ratio = one            ! rho2/rho1
     real(rkind) :: dtheta0 = 1._rkind          ! Base profile thickness 
     real(rkind) :: noiseAmp = 1D-6              ! white noise amplitude
-    character(len=clen) :: InitFileTag, InitFileDirectory
+    character(len=clen) :: fname_prefix,InitFileTag, InitFileDirectory
+    
     ! Parameters for the 2 materials
     real(rkind):: gam=1.4_rkind
     real(rkind):: Pr=0.7_rkind 
@@ -100,13 +101,14 @@ contains
         deallocate(qhat_real,qhat_imag,qhat)
     end subroutine 
     
-    subroutine make_pert(gp,x,Lx,dir,InitFileTag,InitFileDirectory,q)
-        use decomp_2D
+    subroutine make_pert(gp,x,Lx,dir,fname_prefix,q,qi)
         type(decomp_info), intent(in)           :: gp
-        real(rkind), dimension(:,:,:), intent(in) :: x
-        real(rkind), intent(in)                 :: Lx
-        character(len=*), intent(in)            :: dir, InitFileTag, InitFileDirectory
+        real(rkind), dimension(:,:,:), intent(in) :: x ! a 2D grid
+        real(rkind), intent(in)                 :: Lx  ! grid length in dir
+        character(len=*), intent(in)            :: dir ! x or z direction
+        character(len=*), intent(in)            :: fname_prefix 
         real(rkind), dimension(:,:,:), intent(inout) :: q!the primitive var
+        integer, intent(in)                     :: qi!the primitive var idx
 
         character(len=clen) :: fname 
         real(rkind), dimension(:,:), allocatable :: data2read
@@ -132,36 +134,46 @@ contains
             pause
         endif
 
-        ! read the amplitudes
-        fname = trim(InitFileDirectory)//"/"//trim(InitFileTag)//"_k"//dir//"_modes.dat"
+        ! read the real spectrum
+        fname = trim(fname_prefix)//"_k"//dir//"_real.dat"
         call read_2d_ascii(data2read,fname)
         nmodes = size(data2read,1)
-        print *, "Nmodes used:",nmodes
         allocate(qhat(nmodes))
-        qhat = data2read(:,1) + imi*data2read(:,2) 
+        qhat = data2read(:,qi)
+        deallocate(data2read)
+        
+        ! read the imag spectrum
+        fname = trim(fname_prefix)//"_k"//dir//"_real.dat"
+        call read_2d_ascii(data2read,fname)
+        qhat = qhat + imi*data2read(:,qi) 
+        deallocate(data2read)
 
         ! do ifft for the entire domain, exclude the 0th wavenum
         allocate(q1D(gnx))
         q1D = 0.d0
-        do i=1,gnx
+        do i=1,gnx-1
             do m=1,nmodes
                 kx = 2*pi*m/Lx
                 q1D(i) = q1D(i) + qhat(m)*exp(imi*kx*xvec(i)) 
             enddo
+            do m=-nmodes,-1
+                kx = 2*pi*m/Lx
+                q1D(i) = q1D(i) + conjg(qhat(abs(m)))*exp(imi*kx*xvec(i)) 
+            enddo
         enddo
+        q1D(gnX) = q1D(1)
         
         ! put into global pert for this block
         if (dir=='x') then
             do i=1,Nx
-                q(i,:,:) = real(q1D(i),rkind) 
+                q(i,:,:) = q(i,:,:) + real(q1D(i),rkind) 
             enddo
         else if (dir=='z') then
             do i=1,Nx
-                q(:,:,i) = real(q1D(i),rkind) 
+                q(:,:,i) = q(:,:,i) + real(q1D(i),rkind) 
             enddo
         endif
 
-        deallocate(data2read)
         deallocate(q1D)
         deallocate(qhat)
     end subroutine 
@@ -248,28 +260,27 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
 
-    integer :: i, iounit, nx, ny,nz
+    integer :: i,j,k, iounit, nx, ny,nz
     integer :: seedu=321341, seedv=423424, seedw=131344, &
-            seedr=452123,seedp=456321, seedT=321644
+            seedr=452123,seedp=456321
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
-    real(rkind), dimension(:,:,:), allocatable :: tmp, pert
+    real(rkind), dimension(:,:,:), allocatable :: tmp3D
     real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda
     
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ratio, rho_ref, &
-                        noiseAmp, InitFileTag, InitFileDirectory
+                        noiseAmp, fname_prefix 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
 
+    ! Local domain sizes
     nx = decomp%xsz(1) 
     ny = decomp%ysz(2) 
     nz = decomp%zsz(3)
-    allocate(tmp(nx,ny,nz))
-    allocate(pert(nx,ny,nz))
 
     associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
                  v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
@@ -300,65 +311,58 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
                  thermcond = thermcond  )
         end do
 
-        ! Also add two passive tracers for each species
-        !do i = mix%ns+1,mix%ns*2
-        !    shearvisc = powerLawViscosity( mu_ref, T_ref, 0._rkind)
-        !    bulkvisc  = constRatioBulkViscosity( zero )
-        !    thermcond = constPrandtlConductivity( Pr )
-        !    call mix%set_material( i, idealgas( gam, Rgas(i-mix%ns) ),&
-        !         shearvisc = shearvisc, & 
-        !         bulkvisc  = bulkvisc, &
-        !         thermcond = thermcond  )
-        !end do
-
         ! Set mass diffusivity object (Ensure that all units are consistent)
         lambda = (rho_ratio-1)/(rho_ratio+1)
         call mix%set_massdiffusivity( constSchmidtDiffusivity( mu_ref,rho_ref,Sc))
-        tmp = half*(one+lambda*tanh(y/(two*dtheta0)))
-        Ys(:,:,:,1)  = one - tmp
+        Ys(:,:,:,1)  = one - half*(one+lambda*tanh(y/(two*dtheta0)))
         Ys(:,:,:,2)  = one - Ys(:,:,:,1)
-        !Ys(:,:,:,3)  = zero 
-        !Ys(:,:,:,4)  = one 
         call mix%update(Ys)
 		
-        ! Base flow profiles
-        u = du*half*tanh(y/(two*dtheta0))
-        v = zero
-        w = zero
-        rho = rho_ref*(1 + lambda*tanh(y/(two*dtheta0)))
-        p = p_ref
-        T = p/(rho*mix%Rgas) 
-        
-        ! Modal perturbations: this must be specific for each problem.
-        call make_pert(decomp,x,Lx,'x',InitFileTag,InitFileDirectory,pert)
-        v = v + pert
-        call make_pert(decomp,z,Lz,'z',InitFileTag,InitFileDirectory,pert)
-        v = v + pert
-        !call get_pert(decomp, x, z, InitFileTag, InitFileDirectory, pert, 6)
-        !p = p + pert
-        
-        ! Gaussian noise decaying exponentially
-        tmp = exp(-abs(y/(two*dtheta0)))
+        ! Perturbations: this must be specific for each problem.
+        call make_pert(decomp,x,Lx,'x',fname_prefix,u,1)
+        call make_pert(decomp,z,Lz,'z',fname_prefix,u,1)
+        call make_pert(decomp,x,Lx,'x',fname_prefix,v,2)
+        call make_pert(decomp,z,Lz,'z',fname_prefix,v,2)
+        call make_pert(decomp,x,Lx,'x',fname_prefix,w,3)
+        call make_pert(decomp,z,Lz,'z',fname_prefix,w,3)
+        call make_pert(decomp,x,Lx,'x',fname_prefix,rho,4)
+        call make_pert(decomp,z,Lz,'z',fname_prefix,rho,4)
+        call make_pert(decomp,x,Lx,'x',fname_prefix,p,5)
+        call make_pert(decomp,z,Lz,'z',fname_prefix,p,5)
+
+        ! Add Gaussian noise
         if (noiseAmp > 0) then
-            call gaussian_random(pert,zero,one,seedu+100*nrank)
-            u = u + noiseAmp*pert*tmp
-            call gaussian_random(pert,zero,one,seedv+100*nrank)
-            v = v + noiseAmp*pert*tmp
-            call gaussian_random(pert,zero,one,seedw+100*nrank)
-            w = w + noiseAmp*pert*tmp
-            call gaussian_random(pert,zero,one,seedr+100*nrank)
-            rho = rho + noiseAmp*pert*tmp
-            call gaussian_random(pert,zero,one,seedp+100*nrank)
-            p = p + noiseAmp*pert*tmp
-            call gaussian_random(pert,zero,one,seedT+100*nrank)
-            T = T + noiseAmp*pert*tmp
+            allocate(tmp3D(nx,ny,nz))
+            call gaussian_random(tmp3D,zero,one,seedu+100*nrank)
+            u = u + noiseAmp*tmp3D
+            call gaussian_random(tmp3D,zero,one,seedv+100*nrank)
+            v = v + noiseAmp*tmp3D
+            call gaussian_random(tmp3D,zero,one,seedw+100*nrank)
+            w = w + noiseAmp*tmp3D
+            call gaussian_random(tmp3D,zero,one,seedr+100*nrank)
+            rho = rho + noiseAmp*tmp3D
+            call gaussian_random(tmp3D,zero,one,seedp+100*nrank)
+            p = p + noiseAmp*tmp3D
+            deallocate(tmp3D)
         endif
+
+        ! Apply decay factor in y-direction
+        do j=1,ny
+           v(:,j,:) = v(:,j,:)*exp(-abs(y(1,j,1)/(two*dtheta0)))
+        enddo
+
+        ! Add base flow profiles
+        u = u + du*half*tanh(y/(two*dtheta0))
+        v = v + zero
+        w = w + zero
+        rho = rho + rho_ref*(1 + lambda*tanh(y/(two*dtheta0)))
+        p = p + p_ref
+        T = p/(rho*mix%Rgas) 
 
         ! Initialize gaussian filter mygfil
         call mygfil%init(decomp, periodicx, periodicy, periodicz, &
                         "gaussian", "gaussian", "gaussian" )
         
-        deallocate(tmp,pert)
     end associate
 end subroutine
 
