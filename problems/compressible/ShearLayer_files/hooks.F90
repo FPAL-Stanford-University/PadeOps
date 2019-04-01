@@ -10,16 +10,16 @@ module ShearLayer_data
     integer, parameter :: ns = 2
 
     ! Problem parameters
-    real(rkind) :: Mc = 0.7_rkind	          ! Convective Mach
-    real(rkind) :: Re = 800._rkind	          ! Reynolds number
-    real(rkind) :: Sc = 1._rkind	          ! Schmidt number
-    real(rkind) :: p_ref = one                ! reference press
-    real(rkind) :: T_ref = one                ! reference temp
-    real(rkind) :: rho_ref = one              ! reference density
-    real(rkind) :: rho_ratio = one            ! rho2/rho1
-    real(rkind) :: dtheta0 = 1._rkind          ! Base profile thickness 
-    real(rkind) :: noiseAmp = 1D-6              ! white noise amplitude
-    character(len=clen) :: fname_prefix,InitFileTag, InitFileDirectory
+    real(rkind) :: Mc = 0.7_rkind           ! Convective Mach
+    real(rkind) :: Re = 800._rkind          ! Reynolds number
+    real(rkind) :: Sc = 1._rkind            ! Schmidt number
+    real(rkind) :: p_ref = one              ! reference press
+    real(rkind) :: T_ref = one              ! reference temp
+    real(rkind) :: rho_ref = one            ! reference density
+    real(rkind) :: rho_ratio = one          ! rho2/rho1
+    real(rkind) :: dtheta0 = 1._rkind       ! Base profile thickness 
+    real(rkind) :: noiseAmp = 1D-6          ! white noise amplitude
+    character(len=clen) :: fname_prefix
     
     ! Parameters for the 2 materials
     real(rkind):: gam=1.4_rkind
@@ -34,9 +34,9 @@ module ShearLayer_data
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 contains
-    subroutine get_pert(gp,x,z,InitFileTag,InitFileDirectory,q,qi)
+    subroutine get_pert(gp,x,z,fname_prefix,q,qi)
         type(decomp_info), intent(in)   :: gp
-        character(len=*), intent(in)    :: InitFileTag, InitFileDirectory
+        character(len=*), intent(in)    :: fname_prefix 
         real(rkind), dimension(:,:,:), intent(in) :: x, z
         real(rkind), dimension(:,:,:), intent(inout) :: q!the primitive var
         integer, intent(in)       :: qi ! the primitive var col idx in input
@@ -50,7 +50,7 @@ contains
         integer :: nmodes=1, ny, modeID, i, j, k, nx, nz
        
         ! Read mode info in x and y
-        fname = trim(InitFileDirectory)//"/"//trim(InitFileTag)//"_mode_info.dat"
+        fname = (fname_prefix)//"_mode_info.dat"
         call read_2d_ascii(data2read,fname)
         !nmodes = size(data2read,1)
         allocate(kx(nmodes), kz(nmodes))
@@ -69,15 +69,13 @@ contains
         allocate(qhat_real(ny,nmodes),qhat_imag(ny,nmodes),qhat(ny,nmodes))
     
         ! Read imaginary mode data 
-        fname = trim(InitFileDirectory)//"/"//&
-                trim(InitFileTag)//"_init_info_imag.dat"
+        fname = trim(fname_prefix)//"_init_info_imag.dat"
         call read_2d_ascii(data2read,fname)
         qhat_imag = reshape(data2read(:,qi),[ny,nmodes])
         deallocate(data2read)
     
         ! Read real mode data 
-        fname = trim(InitFileDirectory)//"/"//&
-                trim(InitFileTag)//"_init_info_real.dat"
+        fname = trim(fname_prefix)//"_init_info_imag.dat"
         call read_2d_ascii(data2read,fname)
         qhat_real = reshape(data2read(:,qi),[ny,nmodes])
         deallocate(data2read)
@@ -102,6 +100,7 @@ contains
     end subroutine 
     
     subroutine make_pert(gp,x,Lx,dir,fname_prefix,q,qi)
+        use exits,                       only: GracefulExit, message, nancheck
         type(decomp_info), intent(in)           :: gp
         real(rkind), dimension(:,:,:), intent(in) :: x ! a 2D grid
         real(rkind), intent(in)                 :: Lx  ! grid length in dir
@@ -115,7 +114,7 @@ contains
         real(rkind), dimension(:), allocatable :: xvec 
         complex(rkind), dimension(:), allocatable :: qhat, q1D 
         real(rkind) :: kx 
-        integer :: i,j,k,m, nmodes, nx,gnx
+        integer :: i,k,m, nmodes, nx,gnx
 
         ! Global and local domain sizes for ydecomp
         if (dir=='x') then
@@ -124,14 +123,12 @@ contains
             allocate(xvec(gNx))
             xvec = x(:,1,1)
         else if (dir=='z') then
-            print *,"z direction selected"
             gNx = gp%zsz(3)
             Nx  = gp%ysz(3)
             allocate(xvec(gNx))
             xvec = x(1,1,:)
-        else if (dir=='y') then
-            print *, "Y perturbations not supported yet"
-            pause
+        else
+            call GracefulExit("Y pertubations not supported yet.",4562)
         endif
 
         ! read the real spectrum
@@ -139,14 +136,22 @@ contains
         call read_2d_ascii(data2read,fname)
         nmodes = size(data2read,1)
         allocate(qhat(nmodes))
-        qhat = data2read(:,qi)
+        qhat = cmplx(data2read(:,qi),rkind)
         deallocate(data2read)
         
         ! read the imag spectrum
-        fname = trim(fname_prefix)//"_k"//dir//"_real.dat"
+        fname = trim(fname_prefix)//"_k"//dir//"_imag.dat"
         call read_2d_ascii(data2read,fname)
         qhat = qhat + imi*data2read(:,qi) 
         deallocate(data2read)
+
+        ! Check for nyquist limit
+        !if (nmodes>=Nx*2/3) then
+        !    print *, "Adjusting modes to use: " 
+        !    print *, "  Inputted: ", nmodes
+        !    print *, "  Using: ",Nx*2/3-1    
+        !    nmodes = Nx*2/3-1
+        !endif
 
         ! do ifft for the entire domain, exclude the 0th wavenum
         allocate(q1D(gnx))
@@ -154,28 +159,27 @@ contains
         do i=1,gnx-1
             do m=1,nmodes
                 kx = 2*pi*m/Lx
-                q1D(i) = q1D(i) + qhat(m)*exp(imi*kx*xvec(i)) 
-            enddo
-            do m=-nmodes,-1
-                kx = 2*pi*m/Lx
-                q1D(i) = q1D(i) + conjg(qhat(abs(m)))*exp(imi*kx*xvec(i)) 
+                q1D(i) = q1D(i) + real(qhat(m)*exp(imi*kx*xvec(i))) &
+                    + real(conjg(qhat(m))*exp(imi*-kx*xvec(i)))
             enddo
         enddo
-        q1D(gnX) = q1D(1)
+        q1D(gnx) = q1D(1)
+        q1D = q1D/gnx
         
         ! put into global pert for this block
         if (dir=='x') then
             do i=1,Nx
-                q(i,:,:) = q(i,:,:) + real(q1D(i),rkind) 
+                q(i,:,:) = q(i,:,:) + q1D(i)
             enddo
         else if (dir=='z') then
             do i=1,Nx
-                q(:,:,i) = q(:,:,i) + real(q1D(i),rkind) 
+                q(:,:,i) = q(:,:,i) + q1D(i)
             enddo
         endif
 
         deallocate(q1D)
         deallocate(qhat)
+        deallocate(xvec)
     end subroutine 
 end module
 
@@ -195,7 +199,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ref, rho_ratio,&
-                        noiseAmp, InitFileTag, InitFileDirectory
+                        noiseAmp, fname_prefix
     ioUnit = 11
     open(unit=ioUnit, file='input.dat', form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -241,7 +245,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use decomp_2d,                   only: decomp_info,nrank
     use MixtureEOSMod,               only: mixture
     use IdealGasEOS,                 only: idealgas
-    use PowerLawViscosityMod,		 only: powerLawViscosity
+    use PowerLawViscosityMod,        only: powerLawViscosity
     use ConstRatioBulkViscosityMod,  only: constRatioBulkViscosity
     use ConstPrandtlConductivityMod, only: constPrandtlConductivity
     use ConstSchmidtDiffusivityMod,  only: constSchmidtDiffusivity
@@ -260,7 +264,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
 
-    integer :: i,j,k, iounit, nx, ny,nz
+    integer :: i,j, iounit, nx, ny,nz
     integer :: seedu=321341, seedv=423424, seedw=131344, &
             seedr=452123,seedp=456321
     type(powerLawViscosity) :: shearvisc
@@ -292,9 +296,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         if (mix%ns /= ns) call GracefulExit("Wrong number of species. Check your input file and make ns consistent with the problem file.",4562)
         
         ! First set the materials for rho_ratio = rho2/rho1
-        Rgas1 = (one+rho_ratio)/two			
-        Rgas2 = (one+rho_ratio)/(two*rho_ratio) 
-		Rgas = [Rgas1, Rgas2]
+        Rgas1 = (one+rho_ratio)/two
+        Rgas2 = (one+rho_ratio)/(two*rho_ratio)
+        Rgas = [Rgas1, Rgas2]
         c1 = sqrt(gam*p_ref/(rho_ref/Rgas1))
         c2 = sqrt(gam*p_ref/(rho_ref/Rgas2))
         du = Mc*(c1+c2)
@@ -331,24 +335,29 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         call make_pert(decomp,z,Lz,'z',fname_prefix,p,5)
 
         ! Add Gaussian noise
-        if (noiseAmp > 0) then
-            allocate(tmp3D(nx,ny,nz))
-            call gaussian_random(tmp3D,zero,one,seedu+100*nrank)
-            u = u + noiseAmp*tmp3D
-            call gaussian_random(tmp3D,zero,one,seedv+100*nrank)
-            v = v + noiseAmp*tmp3D
-            call gaussian_random(tmp3D,zero,one,seedw+100*nrank)
-            w = w + noiseAmp*tmp3D
-            call gaussian_random(tmp3D,zero,one,seedr+100*nrank)
-            rho = rho + noiseAmp*tmp3D
-            call gaussian_random(tmp3D,zero,one,seedp+100*nrank)
-            p = p + noiseAmp*tmp3D
-            deallocate(tmp3D)
-        endif
+        !if (noiseAmp > zero) then
+        !    allocate(tmp3D(nx,ny,nz))
+        !    call gaussian_random(tmp3D,zero,one,seedu+100*nrank)
+        !    u = u + noiseAmp*tmp3D
+        !    call gaussian_random(tmp3D,zero,one,seedv+100*nrank)
+        !    v = v + noiseAmp*tmp3D
+        !    call gaussian_random(tmp3D,zero,one,seedw+100*nrank)
+        !    w = w + noiseAmp*tmp3D
+        !    call gaussian_random(tmp3D,zero,one,seedr+100*nrank)
+        !    rho = rho + noiseAmp*tmp3D
+        !    call gaussian_random(tmp3D,zero,one,seedp+100*nrank)
+        !    p = p + noiseAmp*tmp3D
+        !    deallocate(tmp3D)
+        !endif
 
         ! Apply decay factor in y-direction
         do j=1,ny
-           v(:,j,:) = v(:,j,:)*exp(-abs(y(1,j,1)/(two*dtheta0)))
+            lambda = exp(-abs(y(1,j,1)/(two*dtheta0)))
+            u(:,j,:) = u(:,j,:)*lambda
+            v(:,j,:) = v(:,j,:)*lambda
+            w(:,j,:) = w(:,j,:)*lambda
+            p(:,j,:) = p(:,j,:)*lambda
+            rho(:,j,:) = rho(:,j,:)*lambda
         enddo
 
         ! Add base flow profiles
@@ -362,7 +371,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         ! Initialize gaussian filter mygfil
         call mygfil%init(decomp, periodicx, periodicy, periodicz, &
                         "gaussian", "gaussian", "gaussian" )
-        
     end associate
 end subroutine
 
