@@ -115,19 +115,15 @@ contains
         real(rkind), dimension(:), allocatable :: xvec,q_nnz,qhat_real,qhat_imag
         complex(rkind) :: qhat
         real(rkind) :: kx 
-        integer :: i,k,m, nmodes, nx,gnx, ix1,ixN
+        integer :: i,m, nmodes, nx,gnx
 
         ! Global and local domain sizes for ydecomp
         if (dir=='x') then
-            ix1 = gp%yst(1)
-            ixN = gp%yen(1)
             gNx = gp%xsz(1)
             Nx  = gp%ysz(1)
             allocate(xvec(gNx))
             xvec = x(:,1,1)
         else if (dir=='z') then
-            ix1 = gp%yst(3)
-            ixN = gp%yen(3)
             gNx = gp%zsz(3)
             Nx  = gp%ysz(3)
             allocate(xvec(gNx))
@@ -151,18 +147,10 @@ contains
         qhat_imag = data2read(:,qi) 
         deallocate(data2read)
 
-        ! Check for nyquist limit
-        if (nmodes>=Nx*2/3) then
-            print *, "Adjusting modes to use: " 
-            print *, "  Inputted: ", nmodes
-            print *, "  Using: ",Nx*2/3-1    
-            nmodes = Nx*2/3-1
-        endif
-
-        ! do ifft for the entire domain, exclude the 0th wavenum
+        ! do ifft for this block, exclude the 0th wavenum
         allocate(q_nnz(gnx))
         q_nnz = 0.d0
-        do i=1,gnx-1
+        do i=1,Nx
             do m=1,nmodes
                 kx = 2*pi*m/Lx
                 qhat = qhat_real(m) + imi*qhat_imag(m)
@@ -170,16 +158,15 @@ contains
                     + real(conjg(qhat)*exp(imi*-kx*xvec(i)))
             enddo
         enddo
-        q_nnz(gnx) = q_nnz(1)
         q_nnz = q_nnz/gnx
         
         ! put into global pert for this block
         if (dir=='x') then
-            do i=ix1,ixn
+            do i=1,Nx
                 q(i,:,:) = q(i,:,:) + q_nnz(i)
             enddo
         else if (dir=='z') then
-            do i=ix1,ixn
+            do i=1,Nx
                 q(:,:,i) = q(:,:,i) + q_nnz(i)
             enddo
         endif
