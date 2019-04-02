@@ -34,7 +34,7 @@ module ShearLayer_data
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 contains
-    subroutine get_pert(gp,x,z,fname_prefix,q,qi)
+    subroutine lstab_pert(gp,x,z,fname_prefix,q,qi)
         type(decomp_info), intent(in)   :: gp
         character(len=*), intent(in)    :: fname_prefix 
         real(rkind), dimension(:,:,:), intent(in) :: x, z
@@ -101,8 +101,9 @@ contains
     
     subroutine make_pert(gp,x,Lx,dir,fname_prefix,q,qi)
         use exits,                       only: GracefulExit, message, nancheck
+        use decomp_2d,                   only: nrank
         type(decomp_info), intent(in)           :: gp
-        real(rkind), dimension(:,:,:), intent(in) :: x ! a 2D grid
+        real(rkind), dimension(:,:,:), intent(in) :: x ! a 3D grid
         real(rkind), intent(in)                 :: Lx  ! grid length in dir
         character(len=*), intent(in)            :: dir ! x or z direction
         character(len=*), intent(in)            :: fname_prefix 
@@ -111,18 +112,22 @@ contains
 
         character(len=clen) :: fname 
         real(rkind), dimension(:,:), allocatable :: data2read
-        real(rkind), dimension(:), allocatable :: xvec 
-        complex(rkind), dimension(:), allocatable :: qhat, q1D 
+        real(rkind), dimension(:), allocatable :: xvec,q_nnz,qhat_real,qhat_imag
+        complex(rkind) :: qhat
         real(rkind) :: kx 
-        integer :: i,k,m, nmodes, nx,gnx
+        integer :: i,k,m, nmodes, nx,gnx, ix1,ixN
 
         ! Global and local domain sizes for ydecomp
         if (dir=='x') then
+            ix1 = gp%yst(1)
+            ixN = gp%yen(1)
             gNx = gp%xsz(1)
             Nx  = gp%ysz(1)
             allocate(xvec(gNx))
             xvec = x(:,1,1)
         else if (dir=='z') then
+            ix1 = gp%yst(3)
+            ixN = gp%yen(3)
             gNx = gp%zsz(3)
             Nx  = gp%ysz(3)
             allocate(xvec(gNx))
@@ -135,50 +140,52 @@ contains
         fname = trim(fname_prefix)//"_k"//dir//"_real.dat"
         call read_2d_ascii(data2read,fname)
         nmodes = size(data2read,1)
-        allocate(qhat(nmodes))
-        qhat = cmplx(data2read(:,qi),rkind)
+        allocate(qhat_real(nmodes))
+        qhat_real = data2read(:,qi)
         deallocate(data2read)
         
         ! read the imag spectrum
         fname = trim(fname_prefix)//"_k"//dir//"_imag.dat"
         call read_2d_ascii(data2read,fname)
-        qhat = qhat + imi*data2read(:,qi) 
+        allocate(qhat_imag(nmodes))
+        qhat_imag = data2read(:,qi) 
         deallocate(data2read)
 
         ! Check for nyquist limit
-        !if (nmodes>=Nx*2/3) then
-        !    print *, "Adjusting modes to use: " 
-        !    print *, "  Inputted: ", nmodes
-        !    print *, "  Using: ",Nx*2/3-1    
-        !    nmodes = Nx*2/3-1
-        !endif
+        if (nmodes>=Nx*2/3) then
+            print *, "Adjusting modes to use: " 
+            print *, "  Inputted: ", nmodes
+            print *, "  Using: ",Nx*2/3-1    
+            nmodes = Nx*2/3-1
+        endif
 
         ! do ifft for the entire domain, exclude the 0th wavenum
-        allocate(q1D(gnx))
-        q1D = 0.d0
+        allocate(q_nnz(gnx))
+        q_nnz = 0.d0
         do i=1,gnx-1
             do m=1,nmodes
                 kx = 2*pi*m/Lx
-                q1D(i) = q1D(i) + real(qhat(m)*exp(imi*kx*xvec(i))) &
-                    + real(conjg(qhat(m))*exp(imi*-kx*xvec(i)))
+                qhat = qhat_real(m) + imi*qhat_imag(m)
+                q_nnz(i) = q_nnz(i) + real(qhat*exp(imi*kx*xvec(i))) &
+                    + real(conjg(qhat)*exp(imi*-kx*xvec(i)))
             enddo
         enddo
-        q1D(gnx) = q1D(1)
-        q1D = q1D/gnx
+        q_nnz(gnx) = q_nnz(1)
+        q_nnz = q_nnz/gnx
         
         ! put into global pert for this block
         if (dir=='x') then
-            do i=1,Nx
-                q(i,:,:) = q(i,:,:) + q1D(i)
+            do i=ix1,ixn
+                q(i,:,:) = q(i,:,:) + q_nnz(i)
             enddo
         else if (dir=='z') then
-            do i=1,Nx
-                q(:,:,i) = q(:,:,i) + q1D(i)
+            do i=ix1,ixn
+                q(:,:,i) = q(:,:,i) + q_nnz(i)
             enddo
         endif
 
-        deallocate(q1D)
-        deallocate(qhat)
+        deallocate(q_nnz)
+        deallocate(qhat_real,qhat_imag)
         deallocate(xvec)
     end subroutine 
 end module
@@ -335,20 +342,20 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         call make_pert(decomp,z,Lz,'z',fname_prefix,p,5)
 
         ! Add Gaussian noise
-        !if (noiseAmp > zero) then
-        !    allocate(tmp3D(nx,ny,nz))
-        !    call gaussian_random(tmp3D,zero,one,seedu+100*nrank)
-        !    u = u + noiseAmp*tmp3D
-        !    call gaussian_random(tmp3D,zero,one,seedv+100*nrank)
-        !    v = v + noiseAmp*tmp3D
-        !    call gaussian_random(tmp3D,zero,one,seedw+100*nrank)
-        !    w = w + noiseAmp*tmp3D
-        !    call gaussian_random(tmp3D,zero,one,seedr+100*nrank)
-        !    rho = rho + noiseAmp*tmp3D
-        !    call gaussian_random(tmp3D,zero,one,seedp+100*nrank)
-        !    p = p + noiseAmp*tmp3D
-        !    deallocate(tmp3D)
-        !endif
+        if (noiseAmp > zero) then
+            allocate(tmp3D(nx,ny,nz))
+            call gaussian_random(tmp3D,zero,one,seedu+100*nrank)
+            u = u + noiseAmp*tmp3D
+            call gaussian_random(tmp3D,zero,one,seedv+100*nrank)
+            v = v + noiseAmp*tmp3D
+            call gaussian_random(tmp3D,zero,one,seedw+100*nrank)
+            w = w + noiseAmp*tmp3D
+            call gaussian_random(tmp3D,zero,one,seedr+100*nrank)
+            rho = rho + noiseAmp*tmp3D
+            call gaussian_random(tmp3D,zero,one,seedp+100*nrank)
+            p = p + noiseAmp*tmp3D
+            deallocate(tmp3D)
+        endif
 
         ! Apply decay factor in y-direction
         do j=1,ny
@@ -364,8 +371,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         u = u + du*half*tanh(y/(two*dtheta0))
         v = v + zero
         w = w + zero
-        rho = rho + rho_ref*(1 + lambda*tanh(y/(two*dtheta0)))
         p = p + p_ref
+        rho = rho + rho_ref*(1 + lambda*tanh(y/(two*dtheta0)))
         T = p/(rho*mix%Rgas) 
 
         ! Initialize gaussian filter mygfil
