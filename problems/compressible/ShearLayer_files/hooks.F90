@@ -52,7 +52,7 @@ contains
         integer :: nmodes=1, ny, modeID, i, j, k, nx, nz
        
         ! Read mode info in x and y
-        fname = (fname_prefix)//"_mode_info.dat"
+        fname = trim(fname_prefix)//"_mode_info.dat"
         call read_2d_ascii(data2read,fname)
         nmodes = size(data2read,1)
         allocate(kx(nmodes), kz(nmodes))
