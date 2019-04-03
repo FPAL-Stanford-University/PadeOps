@@ -1,7 +1,9 @@
 &INPUT
 
-inputdir  =  "/home/akshays/Data/PadeOps/Multispecies_shock_gTg"      ! Directory for input files
-outputdir  = "/home/akshays/Data/PadeOps/Multispecies_shock_gTg"      ! Directory for output files
+!inputdir  =  "/home/akshays/Data/PadeOps/Multispecies_shock_gTg"      ! Directory for input files
+!outputdir  = "/home/akshays/Data/PadeOps/Multispecies_shock_gTg"      ! Directory for output files
+inputdir  = "/home/songhang/codes/PadeOps/problems/solids/Multispecies_shock_files"
+outputdir = "/home/songhang/codes/PadeOps/problems/solids/Multispecies_shock_files/output"
 
 nx = 201                  ! Number of points in X
 ny = 1                    ! Number of points in Y
