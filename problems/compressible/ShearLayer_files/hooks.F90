@@ -20,6 +20,7 @@ module ShearLayer_data
     real(rkind) :: dtheta0 = 1._rkind       ! Base profile thickness 
     real(rkind) :: noiseAmp = 1D-6          ! white noise amplitude
     character(len=clen) :: fname_prefix
+    logical :: use_lstab = .true. 
     
     ! Parameters for the 2 materials
     real(rkind):: gam=1.4_rkind
@@ -30,6 +31,7 @@ module ShearLayer_data
     real(rkind) :: Ly = 129._rkind, Lx=172._rkind, Lz=86._rkind
     real(rkind) :: x1, y1, z1
     logical :: periodicx = .true., periodicy = .false., periodicz = .true.
+
 
     ! Gaussian filter for sponge
     type(filters) :: mygfil
@@ -52,7 +54,7 @@ contains
         ! Read mode info in x and y
         fname = (fname_prefix)//"_mode_info.dat"
         call read_2d_ascii(data2read,fname)
-        !nmodes = size(data2read,1)
+        nmodes = size(data2read,1)
         allocate(kx(nmodes), kz(nmodes))
         kx = data2read(:,1)!alpha
         kz = data2read(:,2)!beta
@@ -155,7 +157,7 @@ contains
                 kx = 2*pi*m/Lx
                 qhat = qhat_real(m) + imi*qhat_imag(m)
                 q_nnz(i) = q_nnz(i) + real(qhat*exp(imi*kx*xvec(i))) &
-                    + real(conjg(qhat)*exp(imi*-kx*xvec(i)))
+                    + real(conjg(qhat)*exp(-imi*kx*xvec(i)))
             enddo
         enddo
         q_nnz = q_nnz/gnx
@@ -317,16 +319,24 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         call mix%update(Ys)
 		
         ! Perturbations: this must be specific for each problem.
-        call make_pert(decomp,x,Lx,'x',fname_prefix,u,1)
-        call make_pert(decomp,z,Lz,'z',fname_prefix,u,1)
-        call make_pert(decomp,x,Lx,'x',fname_prefix,v,2)
-        call make_pert(decomp,z,Lz,'z',fname_prefix,v,2)
-        call make_pert(decomp,x,Lx,'x',fname_prefix,w,3)
-        call make_pert(decomp,z,Lz,'z',fname_prefix,w,3)
-        call make_pert(decomp,x,Lx,'x',fname_prefix,rho,4)
-        call make_pert(decomp,z,Lz,'z',fname_prefix,rho,4)
-        call make_pert(decomp,x,Lx,'x',fname_prefix,p,5)
-        call make_pert(decomp,z,Lz,'z',fname_prefix,p,5)
+        if (use_lstab) then
+            call make_pert(decomp,x,z,fname_prefix,u,1)
+            call make_pert(decomp,x,z,fname_prefix,v,2)
+            call make_pert(decomp,x,z,fname_prefix,w,3)
+            call make_pert(decomp,x,z,fname_prefix,rho,4)
+            call make_pert(decomp,x,z,fname_prefix,p,5)
+        else
+            call make_pert(decomp,x,Lx,'x',fname_prefix,u,1)
+            call make_pert(decomp,z,Lz,'z',fname_prefix,u,1)
+            call make_pert(decomp,x,Lx,'x',fname_prefix,v,2)
+            call make_pert(decomp,z,Lz,'z',fname_prefix,v,2)
+            call make_pert(decomp,x,Lx,'x',fname_prefix,w,3)
+            call make_pert(decomp,z,Lz,'z',fname_prefix,w,3)
+            call make_pert(decomp,x,Lx,'x',fname_prefix,rho,4)
+            call make_pert(decomp,z,Lz,'z',fname_prefix,rho,4)
+            call make_pert(decomp,x,Lx,'x',fname_prefix,p,5)
+            call make_pert(decomp,z,Lz,'z',fname_prefix,p,5)
+        endif
 
         ! Add Gaussian noise
         if (noiseAmp > zero) then
