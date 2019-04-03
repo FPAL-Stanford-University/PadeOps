@@ -195,7 +195,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ref, rho_ratio,&
-                        noiseAmp, fname_prefix
+                        noiseAmp, fname_prefix, use_lstab
     ioUnit = 11
     open(unit=ioUnit, file='input.dat', form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -271,7 +271,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ratio, rho_ref, &
-                        noiseAmp, fname_prefix 
+                        noiseAmp, fname_prefix, use_lstab 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -320,11 +320,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 		
         ! Perturbations: this must be specific for each problem.
         if (use_lstab) then
-            call make_pert(decomp,x,z,fname_prefix,u,1)
-            call make_pert(decomp,x,z,fname_prefix,v,2)
-            call make_pert(decomp,x,z,fname_prefix,w,3)
-            call make_pert(decomp,x,z,fname_prefix,rho,4)
-            call make_pert(decomp,x,z,fname_prefix,p,5)
+            call lstab_pert(decomp,x,z,fname_prefix,u,2)
+            call lstab_pert(decomp,x,z,fname_prefix,v,3)
+            call lstab_pert(decomp,x,z,fname_prefix,w,4)
+            call lstab_pert(decomp,x,z,fname_prefix,rho,1)
+            call lstab_pert(decomp,x,z,fname_prefix,p,6)
         else
             call make_pert(decomp,x,Lx,'x',fname_prefix,u,1)
             call make_pert(decomp,z,Lz,'z',fname_prefix,u,1)
