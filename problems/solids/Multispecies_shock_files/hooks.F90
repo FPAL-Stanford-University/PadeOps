@@ -15,7 +15,7 @@ module Multispecies_shock_data
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = one, Lx = six, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    real(rkind) :: Ly = one, Lx = six, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
     logical     :: sliding = .false.
 
     type(filters) :: mygfil
@@ -192,7 +192,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, int_shape, yr
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, int_shape, yr, perturbations
     real(rkind), dimension(8) :: fparams
     real(rkind) :: fac
     integer, dimension(2) :: iparams
@@ -352,7 +352,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         u1 = u1 / rho1
         u2 = u2 / rho2
 
-        shock_init = interface_init - 1.0_rkind  ! (10*thick) grid points away from the interface
+        ! Initialize shock location
+        ! shock_init = interface_init - 1.0_rkind  ! (10*thick) grid points away from the interface
+        shock_init = interface_init + 0.1_rkind
         dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
 
         u   = (u2-u1)*dum
@@ -363,9 +365,16 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! eta0k is defined in Line 15; kwave is defined in Line 18
         ! yr and int_shape are defined in Line 195
         yr = (y - 0.5 * Ly) / (0.5 * Ly)
-        int_shape = (yr * yr - 0.5 * yr**4.0_rkind) * 3.0_rkind
+        ! int_shape = (yr * yr - 0.5 * yr**4.0_rkind) * 3.0_rkind
+        int_shape = abs(yr) * 2.5
+        kwave_i = 2.0_rkind
+        perturbations = 0.0_rkind
+        do while (kwave_i <= kwave)
+            perturbations = perturbations + eta0k/(2.0_rkind*pi*kwave_i)*sin(2.0_rkind*kwave_i*pi*y)
+            kwave_i = kwave_i + 2.0_rkind
+        end do
         ! tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
-        tmp = half * ( one - erf( (x-(interface_init+int_shape+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
+        tmp = half * ( one - erf( (x-(interface_init + int_shape + perturbations))/(thick*dx) ) )
 
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
