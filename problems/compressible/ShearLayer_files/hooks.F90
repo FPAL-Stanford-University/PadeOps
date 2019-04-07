@@ -84,7 +84,6 @@ contains
         
         ! Init perturbation fields
         qhat = qhat_real + imi*qhat_imag
-        q = 0.d0
 
         do modeID = 1,nmodes
             do j = 1,ny
