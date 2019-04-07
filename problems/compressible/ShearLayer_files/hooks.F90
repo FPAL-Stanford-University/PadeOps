@@ -77,7 +77,7 @@ contains
         deallocate(data2read)
     
         ! Read real mode data 
-        fname = trim(fname_prefix)//"_init_info_imag.dat"
+        fname = trim(fname_prefix)//"_init_info_real.dat"
         call read_2d_ascii(data2read,fname)
         qhat_real = reshape(data2read(:,qi),[ny,nmodes])
         deallocate(data2read)
