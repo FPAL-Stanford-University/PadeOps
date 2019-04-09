@@ -59,7 +59,6 @@ contains
         kx = data2read(:,1)!alpha
         kz = data2read(:,2)!beta
         deallocate(data2read)
-        call message(0, "Number of normal modes being used:",nmodes)
        
         ! Local sizes of the chunk of domain on this proc:
         ! Assuming y-decomp
@@ -70,14 +69,14 @@ contains
         ! Allocate based on global domain height
         allocate(qhat_real(ny,nmodes),qhat_imag(ny,nmodes),qhat(ny,nmodes))
     
-        ! Read imaginary mode data 
+        ! Read imaginary mode datai
         fname = trim(fname_prefix)//"_init_info_imag.dat"
         call read_2d_ascii(data2read,fname)
         qhat_imag = reshape(data2read(:,qi),[ny,nmodes])
         deallocate(data2read)
     
         ! Read real mode data 
-        fname = trim(fname_prefix)//"_init_info_imag.dat"
+        fname = trim(fname_prefix)//"_init_info_real.dat"
         call read_2d_ascii(data2read,fname)
         qhat_real = reshape(data2read(:,qi),[ny,nmodes])
         deallocate(data2read)
@@ -337,7 +336,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
             call make_pert(decomp,z,Lz,'z',fname_prefix,p,5)
         endif
 
-        ! Add Gaussian noise
+        ! Add Gaussian noise that decays exponentially
         if (noiseAmp > zero) then
             allocate(tmp3D(nx,ny,nz))
             call gaussian_random(tmp3D,zero,one,seedu+100*nrank)
@@ -352,16 +351,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
             p = p + noiseAmp*tmp3D
             deallocate(tmp3D)
         endif
-
-        ! Apply decay factor in y-direction
-        do j=1,ny
-            lambda = exp(-abs(y(1,j,1)/(two*dtheta0)))
-            u(:,j,:) = u(:,j,:)*lambda
-            v(:,j,:) = v(:,j,:)*lambda
-            w(:,j,:) = w(:,j,:)*lambda
-            p(:,j,:) = p(:,j,:)*lambda
-            rho(:,j,:) = rho(:,j,:)*lambda
-        enddo
 
         ! Add base flow profiles
         u = u + du*half*tanh(y/(two*dtheta0))
