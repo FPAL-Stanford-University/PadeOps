@@ -9,13 +9,15 @@ module Multispecies_shock_data
     real(rkind) :: minVF = 0.2_rkind, thick = one
     real(rkind) :: rhoRatio = one, pRatio = two
     logical     :: sharp = .FALSE.
+    real(rkind) :: uimpact = one, theta = 30._rkind
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
     real(rkind) :: rho1_2,rho2_2,u1_2,u2_2,g11_1_2,g11_2_2,grho1_2,grho2_2,a1_2,a2_2
     real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = one, Lx = six, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
+    !real(rkind) :: Ly = one, Lx = six, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
+    real(rkind) :: Ly = three, Lx = two, interface_init = 0.0_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
     logical     :: sliding = .false.
 
     type(filters) :: mygfil
@@ -159,7 +161,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx - two  ! x \in (-2,4]
+                    !x(i,j,k) = real( ix1     + i - 1, rkind ) * dx - two  ! x \in (-2,4]
+                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx - Lx/2.0_rkind  ! make it symmetric about x=0
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -171,7 +174,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
-    use kind_parameters,  only: rkind
+    use kind_parameters,  only: rkind,mpirkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
     use SolidGrid,        only: u_index,v_index,w_index
     use decomp_2d,        only: decomp_info, nrank
@@ -181,6 +184,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use SolidMixtureMod,  only: solid_mixture
     
     use Multispecies_shock_data
+
+    use mpi
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -199,9 +204,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
     logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
 
+    real(rkind) :: perturb_phase
+    integer :: mpi_ierr;
+
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
-                          plastic2, explPlast2, yield2, interface_init, kwave, sliding
+                          plastic2, explPlast2, yield2, interface_init, kwave, sliding, uimpact, theta, eta0k
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -364,18 +372,30 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! TODO
         ! eta0k is defined in Line 15; kwave is defined in Line 18
         ! yr and int_shape are defined in Line 195
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        ! Note: for impact simulation, set pressure ratio to 1 in the input file.
         yr = (y - 0.5 * Ly) / (0.5 * Ly)
         ! int_shape = (yr * yr - 0.5 * yr**4.0_rkind) * 3.0_rkind
-        int_shape = abs(yr) * 2.5
+        ! int_shape = abs(yr) * 2.5
+        int_shape = zero
         kwave_i = 2.0_rkind
         perturbations = 0.0_rkind
         do while (kwave_i <= kwave)
-            perturbations = perturbations + eta0k/(2.0_rkind*pi*kwave_i)*sin(2.0_rkind*kwave_i*pi*y)
-            kwave_i = kwave_i + 2.0_rkind
+            ! TODO generate random perturb_phase and bcast to all chuncks
+            call RANDOM_NUMBER(perturb_phase)
+            perturb_phase = perturb_phase * 2.0_rkind * pi
+            call MPI_BCAST(perturb_phase, 1, mpirkind, 0, MPI_COMM_WORLD, mpi_ierr)
+            ! call MPI_BARRIER(MPI_COMM_WORLD, mpi_ierr)
+            perturbations = perturbations + eta0k/(2.0_rkind*pi*kwave_i/Ly)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
+            kwave_i = kwave_i + 1.0_rkind
         end do
-        ! tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
         tmp = half * ( one - erf( (x-(interface_init + int_shape + perturbations))/(thick*dx) ) )
-
+        theta = theta * pi / 180._rkind ! Convert angle from degrees to radians
+        u   =uimpact*cos(theta)*(tmp-half)
+        v   =uimpact*sin(theta)*(tmp-half)
+        w   = zero
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        ! tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
         mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
