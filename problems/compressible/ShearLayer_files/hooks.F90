@@ -43,8 +43,9 @@ contains
         real(rkind), dimension(:,:,:), intent(inout) :: q!the primitive var
         integer, intent(in)       :: qi ! the primitive var col idx in input
     
+        complex(rkind), dimension(:,:), allocatable :: qhat
         real(rkind), dimension(:,:), allocatable :: &
-            qhat_real, qhat_imag, qhat, data2read
+            qhat_real, qhat_imag, data2read
         real(rkind), dimension(:), allocatable :: kx, kz
         real(rkind) :: arg1
         complex(rkind) :: e
@@ -89,7 +90,7 @@ contains
             do j = 1,ny
                 do k = 1,nz
                     do i = 1,nx
-                        e = exp(imi*(kx(modeID)*x(i,1,1) + kz(modeID)*z(1,1,k) ))
+                        e = exp(imi*(kx(modeID)*x(i,1,1) + kz(modeID)*z(1,1,k)))
                         q(i,j,k) = q(i,j,k) + real(qhat(j,modeID)*e,rkind) 
                     end do !x 
                 end do !z 
@@ -337,33 +338,24 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
             call make_pert(decomp,z,Lz,'z',fname_prefix,p,5)
         endif
 
-        ! Add Gaussian noise
+        ! Add Gaussian noise that decays exponentially
         if (noiseAmp > zero) then
             allocate(tmp3D(nx,ny,nz))
             call gaussian_random(tmp3D,zero,one,seedu+100*nrank)
-            u = u + noiseAmp*tmp3D
+            u = u + noiseAmp*tmp3D*exp(-abs(y/(4*dtheta0)))
             call gaussian_random(tmp3D,zero,one,seedv+100*nrank)
-            v = v + noiseAmp*tmp3D
+            v = v + noiseAmp*tmp3D*exp(-abs(y/(4*dtheta0)))
             call gaussian_random(tmp3D,zero,one,seedw+100*nrank)
-            w = w + noiseAmp*tmp3D
+            w = w + noiseAmp*tmp3D*exp(-abs(y/(4*dtheta0)))
             call gaussian_random(tmp3D,zero,one,seedr+100*nrank)
-            rho = rho + noiseAmp*tmp3D
+            rho = rho + noiseAmp*tmp3D*exp(-abs(y/(two*dtheta0)))
             call gaussian_random(tmp3D,zero,one,seedp+100*nrank)
-            p = p + noiseAmp*tmp3D
+            p = p + noiseAmp*tmp3D*exp(-abs(y/(4*dtheta0)))
             deallocate(tmp3D)
         endif
 
-        ! Apply decay factor in y-direction
-        do j=1,ny
-            lambda = exp(-abs(y(1,j,1)/(two*dtheta0)))
-            u(:,j,:) = u(:,j,:)*lambda
-            v(:,j,:) = v(:,j,:)*lambda
-            w(:,j,:) = w(:,j,:)*lambda
-            p(:,j,:) = p(:,j,:)*lambda
-            rho(:,j,:) = rho(:,j,:)*lambda
-        enddo
-
         ! Add base flow profiles
+        lambda = (rho_ratio-1)/(rho_ratio+1)
         u = u + du*half*tanh(y/(two*dtheta0))
         v = v + zero
         w = w + zero
