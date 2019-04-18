@@ -265,8 +265,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
-    real(rkind), dimension(:,:,:), allocatable :: tmp3D
-    real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda
+    real(rkind), dimension(:,:), allocatable :: tmp2D
+    real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda,mask
     
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ratio, rho_ref, &
@@ -339,18 +339,21 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
         ! Add Gaussian noise that decays exponentially
         if (noiseAmp > zero) then
-            allocate(tmp3D(nx,ny,nz))
-            call gaussian_random(tmp3D,zero,one,seedu+100*nrank)
-            u = u + noiseAmp*tmp3D*exp(-abs(y/(4*dtheta0)))
-            call gaussian_random(tmp3D,zero,one,seedv+100*nrank)
-            v = v + noiseAmp*tmp3D*exp(-abs(y/(4*dtheta0)))
-            call gaussian_random(tmp3D,zero,one,seedw+100*nrank)
-            w = w + noiseAmp*tmp3D*exp(-abs(y/(4*dtheta0)))
-            call gaussian_random(tmp3D,zero,one,seedr+100*nrank)
-            rho = rho + noiseAmp*tmp3D*exp(-abs(y/(two*dtheta0)))
-            call gaussian_random(tmp3D,zero,one,seedp+100*nrank)
-            p = p + noiseAmp*tmp3D*exp(-abs(y/(4*dtheta0)))
-            deallocate(tmp3D)
+            allocate(tmp2D(nx,ny))
+            do j=1,ny
+                mask = exp(-abs(y(1,j,1)/(4*dtheta0)))
+                call gaussian_random(tmp2D,zero,one,seedu+100*nrank)
+                u(:,j,:) = u(:,j,:) + noiseAmp*tmp2D*mask
+                call gaussian_random(tmp2D,zero,one,seedv+100*nrank)
+                v(:,j,:) = v(:,j,:) + noiseAmp*tmp2D*mask
+                call gaussian_random(tmp2D,zero,one,seedw+100*nrank)
+                w(:,j,:) = w(:,j,:) + noiseAmp*tmp2D*mask
+                call gaussian_random(tmp2D,zero,one,seedp+100*nrank)
+                p(:,j,:) = p(:,j,:) + noiseAmp*tmp2D*mask
+                call gaussian_random(tmp2D,zero,one,seedr+100*nrank)
+                rho(:,j,:) = rho(:,j,:) + noiseAmp*tmp2D*mask
+            enddo
+            deallocate(tmp2D)
         endif
 
         ! Add base flow profiles
