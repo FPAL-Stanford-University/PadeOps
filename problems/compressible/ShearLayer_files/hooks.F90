@@ -1,6 +1,6 @@
 module ShearLayer_data
     use kind_parameters,  only: rkind, mpirkind, clen
-    use constants,        only: zero, one, two, pi, imi
+    use constants,        only: zero, half, one, two, pi, imi
     use FiltersMod,       only: filters
     use decomp_2d,        only: decomp_info, nrank
     use basic_io,         only: read_2d_ascii 
@@ -32,7 +32,6 @@ module ShearLayer_data
     real(rkind) :: x1, y1, z1
     logical :: periodicx = .true., periodicy = .false., periodicz = .true.
 
-
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 contains
@@ -47,7 +46,7 @@ contains
         real(rkind), dimension(:,:), allocatable :: &
             qhat_real, qhat_imag, data2read
         real(rkind), dimension(:), allocatable :: kx, kz
-        real(rkind) :: arg1
+        real(rkind) :: ph 
         complex(rkind) :: e
         character(len=clen) :: fname 
         integer :: nmodes=1, ny, modeID, i, j, k, nx, nz
@@ -100,81 +99,33 @@ contains
         deallocate(qhat_real,qhat_imag,qhat)
     end subroutine 
     
-    subroutine make_pert(gp,x,Lx,dir,fname_prefix,q,qi)
-        use exits,                       only: GracefulExit, message, nancheck
-        use decomp_2d,                   only: nrank
-        type(decomp_info), intent(in)           :: gp
-        real(rkind), dimension(:,:,:), intent(in) :: x ! a 3D grid
-        real(rkind), intent(in)                 :: Lx  ! grid length in dir
-        character(len=*), intent(in)            :: dir ! x or z direction
-        character(len=*), intent(in)            :: fname_prefix 
-        real(rkind), dimension(:,:,:), intent(inout) :: q!the primitive var
-        integer, intent(in)                     :: qi!the primitive var idx
+    subroutine make_pert(gp,x,y,z,Lx,Lz,q,maskWidth,maxAmp,nmodes)
+        type(decomp_info), intent(in)               :: gp
+        real(rkind), dimension(:,:,:), intent(in)   :: x,y,z ! a 3D grid
+        real(rkind), intent(in)                     :: Lx,Lz  ! grid length
+        real(rkind), intent(in)                     :: maskWidth,maxAmp 
+        integer, intent(in)                         :: nmodes 
+        real(rkind), dimension(:,:,:), intent(inout) :: q !the primitive var
 
-        character(len=clen) :: fname 
-        real(rkind), dimension(:,:), allocatable :: data2read
-        real(rkind), dimension(:), allocatable :: xvec,q_nnz,qhat_real,qhat_imag
-        complex(rkind) :: qhat
-        real(rkind) :: kx 
-        integer :: i,m, nmodes, nx,gnx
+        real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: mask 
+        complex(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: e 
+        real(rkind) :: kx, kz, k, ph 
+        integer(rkind) :: j, m, mpi_ierr
 
-        ! Global and local domain sizes for ydecomp
-        if (dir=='x') then
-            gNx = gp%xsz(1)
-            Nx  = gp%ysz(1)
-            allocate(xvec(gNx))
-            xvec = x(:,1,1)
-        else if (dir=='z') then
-            gNx = gp%zsz(3)
-            Nx  = gp%ysz(3)
-            allocate(xvec(gNx))
-            xvec = x(1,1,:)
-        else
-            call GracefulExit("Y pertubations not supported yet.",4562)
-        endif
-
-        ! read the real spectrum
-        fname = trim(fname_prefix)//"_k"//dir//"_real.dat"
-        call read_2d_ascii(data2read,fname)
-        nmodes = size(data2read,1)
-        allocate(qhat_real(nmodes))
-        qhat_real = data2read(:,qi)
-        deallocate(data2read)
-        
-        ! read the imag spectrum
-        fname = trim(fname_prefix)//"_k"//dir//"_imag.dat"
-        call read_2d_ascii(data2read,fname)
-        allocate(qhat_imag(nmodes))
-        qhat_imag = data2read(:,qi) 
-        deallocate(data2read)
-
-        ! do ifft for this block, exclude the 0th wavenum
-        allocate(q_nnz(gnx))
-        q_nnz = 0.d0
-        do i=1,Nx
-            do m=1,nmodes
-                kx = 2*pi*m/Lx
-                qhat = qhat_real(m) + imi*qhat_imag(m)
-                q_nnz(i) = q_nnz(i) + real(qhat*exp(imi*kx*xvec(i))) &
-                    + real(conjg(qhat)*exp(-imi*kx*xvec(i)))
-            enddo
+        ! Mask for decaying amplitudes in y
+        mask = maxAmp*exp(-abs(y)/maskWidth)
+       
+        ! Add modes to field q
+        do m = 3,3+nmodes 
+            kx = two*pi/Lx * m
+            kz = two*pi/Lz * m
+            k  = (kx**two+kz**two)**half
+            call random_number(ph)
+            call mpi_bcast(ph,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+            e = exp(imi*(kx*x + kz*z)+ph*(Lx**2+Lz**2)**0.5)
+            q = q + real(k**(-5/3)*e,rkind) 
         enddo
-        q_nnz = q_nnz/gnx
-        
-        ! put into global pert for this block
-        if (dir=='x') then
-            do i=1,Nx
-                q(i,:,:) = q(i,:,:) + q_nnz(i)
-            enddo
-        else if (dir=='z') then
-            do i=1,Nx
-                q(:,:,i) = q(:,:,i) + q_nnz(i)
-            enddo
-        endif
-
-        deallocate(q_nnz)
-        deallocate(qhat_real,qhat_imag)
-        deallocate(xvec)
+        q = q*mask/maxval(q)
     end subroutine 
 end module
 
@@ -234,7 +185,7 @@ end subroutine
 
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
     use kind_parameters,             only: rkind, clen
-    use constants,                   only: zero,half,one,two,five,pi,eight
+    use constants,                   only: zero,half,one,two,four,five,pi,eight
     use CompressibleGrid,            only: rho_index,u_index,v_index,w_index,&
                                            p_index,T_index,e_index,Ys_index
     use decomp_2d,                   only: decomp_info,nrank
@@ -247,8 +198,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use reductions,                  only: P_MAXVAL,P_MINVAL
     use exits,                       only: GracefulExit, message, nancheck
     use random,                      only: gaussian_random                  
-    use mpi
+
     use ShearLayer_data
+    use mpi
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -259,14 +211,17 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
 
-    integer :: i,j, iounit, nx, ny,nz
-    integer :: seedu=321341, seedv=423424, seedw=131344, &
-            seedr=452123,seedp=456321
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
     real(rkind), dimension(:,:), allocatable :: tmp2D
-    real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda,mask
+    real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda,maskWidth,maxAmp
+    integer :: i,j, iounit, nx, ny, nz, nModes
+        
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: mask 
+    complex(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: e 
+    real(rkind) :: kx, kz, ph 
+    integer(rkind) :: m, mpi_ierr
     
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ratio, rho_ref, &
@@ -325,35 +280,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
             call lstab_pert(decomp,x,z,fname_prefix,rho,1)
             call lstab_pert(decomp,x,z,fname_prefix,p,6)
         else
-            call make_pert(decomp,x,Lx,'x',fname_prefix,u,1)
-            call make_pert(decomp,z,Lz,'z',fname_prefix,u,1)
-            call make_pert(decomp,x,Lx,'x',fname_prefix,v,2)
-            call make_pert(decomp,z,Lz,'z',fname_prefix,v,2)
-            call make_pert(decomp,x,Lx,'x',fname_prefix,w,3)
-            call make_pert(decomp,z,Lz,'z',fname_prefix,w,3)
-            call make_pert(decomp,x,Lx,'x',fname_prefix,rho,4)
-            call make_pert(decomp,z,Lz,'z',fname_prefix,rho,4)
-            call make_pert(decomp,x,Lx,'x',fname_prefix,p,5)
-            call make_pert(decomp,z,Lz,'z',fname_prefix,p,5)
-        endif
-
-        ! Add Gaussian noise that decays exponentially
-        if (noiseAmp > zero) then
-            allocate(tmp2D(nx,ny))
-            do j=1,ny
-                mask = exp(-abs(y(1,j,1)/(4*dtheta0)))
-                call gaussian_random(tmp2D,zero,one,seedu+100*nrank)
-                u(:,j,:) = u(:,j,:) + noiseAmp*tmp2D*mask
-                call gaussian_random(tmp2D,zero,one,seedv+100*nrank)
-                v(:,j,:) = v(:,j,:) + noiseAmp*tmp2D*mask
-                call gaussian_random(tmp2D,zero,one,seedw+100*nrank)
-                w(:,j,:) = w(:,j,:) + noiseAmp*tmp2D*mask
-                call gaussian_random(tmp2D,zero,one,seedp+100*nrank)
-                p(:,j,:) = p(:,j,:) + noiseAmp*tmp2D*mask
-                call gaussian_random(tmp2D,zero,one,seedr+100*nrank)
-                rho(:,j,:) = rho(:,j,:) + noiseAmp*tmp2D*mask
-            enddo
-            deallocate(tmp2D)
+            maskWidth = two*dtheta0
+            maxAmp = 1.D-3*du
+            nModes = 10 
+            call make_pert(decomp,x,y,z,Lx,Lz,u,maskWidth,maxAmp,nModes)
+            call make_pert(decomp,x,y,z,Lx,Lz,v,maskWidth,maxAmp,nModes)
+            call make_pert(decomp,x,y,z,Lx,Lz,w,maskWidth,maxAmp,nModes)
+            call make_pert(decomp,x,y,z,Lx,Lz,rho,maskWidth,maxAmp,nModes)
+            call make_pert(decomp,x,y,z,Lx,Lz,p,maskWidth,maxAmp,nModes)
         endif
 
         ! Add base flow profiles
