@@ -86,4 +86,6 @@ yield2     = 2.176d-3       ! Yield strength of material
 explPlast2 = .FALSE.        ! Logical to switch between explicit (F) and implicit (T) plastic update
 interface_init = 2.0D0     ! x location of interface at t = 0
 kwave = 2.0D0          ! x location of shock at t  = 0
+theta = 30             ! impact angle (deg); theta=0 is normal impact
+uimpact = 1.D0          ! impact speed
 /

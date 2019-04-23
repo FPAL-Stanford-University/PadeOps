@@ -14,7 +14,7 @@ module impact_welding_data
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = one, Lx = six, interface_init = zero, kwave = 4.0_rkind
+    real(rkind) :: Ly = one, Lx = six, interface_init = zero, kwave = 4.0_rkind, kwave_i = 2.0_rkind
 
     type(filters) :: mygfil
 
@@ -92,7 +92,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, int_shape, yr, perturbations
     real(rkind), dimension(8) :: fparams
     integer, dimension(2) :: iparams
 
@@ -147,7 +147,15 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%plast = plastic;  mix%material(1)%explPlast = explPlast
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
 
-        tmp = half*(one + erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) )) - rho_0_2/(rho_0 + rho_0_2)
+        ! TODO
+        kwave_i = 2.0_rkind
+        perturbations = 0.0_rkind
+        do while (kwave_i <= kwave)
+            perturbations = perturbations + eta0k/(2.0_rkind*pi*kwave_i)*sin(2.0_rkind*kwave_i*pi*y)
+            kwave_i = kwave_i + 1.0_rkind
+        end do
+        !tmp = half*(one + erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) )) - rho_0_2/(rho_0 + rho_0_2)
+        tmp = half*(one + erf( (x-(interface_init+perturbations))/(thick*dx) )) - rho_0_2/(rho_0 + rho_0_2)
 
         theta = theta * pi / 180._rkind ! Convert angle from degrees to radians
 
@@ -166,7 +174,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%p  = zero
         mix%material(2)%p  = mix%material(1)%p
 
-        tmp = half*(one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ))
+        ! TODO
+        tmp = half * ( one - erf( (x-(interface_init + perturbations))/(thick*dx) ) )
+        !tmp = half*(one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ))
         mix%material(1)%VF = minVF + (one-two*minVF)*tmp
         mix%material(2)%VF = one - mix%material(1)%VF
 
