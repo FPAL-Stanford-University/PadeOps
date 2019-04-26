@@ -42,6 +42,8 @@ contains
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if
+            call gp%check_stress_eqb(.false.)
+            call message(1,"Stress Eqb Err:",gp%stress_eqb_err)
             call message("==========================================================")
             call toc()
             call tic()

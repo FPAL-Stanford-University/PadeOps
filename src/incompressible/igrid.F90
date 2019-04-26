@@ -115,7 +115,7 @@ module IncompressibleGrid
 
         real(rkind), dimension(:,:,:,:), allocatable, public :: rbuffxC, rbuffyC, rbuffzC
         real(rkind), dimension(:,:,:,:), allocatable :: rbuffxE, rbuffyE, rbuffzE
-        
+        real(rkind), dimension(:,:), allocatable :: zbuffzC                
         complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffzC!, cbuffxC
         complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyE, cbuffzE
 
@@ -189,7 +189,7 @@ module IncompressibleGrid
         !---pointers for time-averaged statistics; linked to stats3D------
         integer :: tidSUM, tid_StatsDump, tid_compStats, tprev2, tprev1
         logical :: normByustar
-        real(rkind) :: tSimStartStats
+        real(rkind) :: tSimStartStats, stress_eqb_err
         real(rkind), dimension(:,:,:,:), allocatable :: F_rhs_sgs
         logical :: computeForcingTerm = .false., deleteInstructions 
 
@@ -357,6 +357,7 @@ module IncompressibleGrid
             procedure, private :: append_visualization_info
             procedure, private :: initialize_hdf5_io
             procedure, private :: destroy_hdf5_io
+            procedure          :: check_stress_eqb
             procedure          :: get_geostrophic_forcing
             procedure          :: InstrumentForBudgets
             procedure          :: GetMomentumTerms
@@ -655,6 +656,7 @@ contains
        allocate(this%rbuffxC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),4))
        allocate(this%rbuffyC(this%gpC%ysz(1),this%gpC%ysz(2),this%gpC%ysz(3),2))
        allocate(this%rbuffzC(this%gpC%zsz(1),this%gpC%zsz(2),this%gpC%zsz(3),4))
+       allocate(this%zbuffzC(this%gpC%zsz(3),5)) 
 
        allocate(this%rbuffxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2))
        allocate(this%rbuffyE(this%gpE%ysz(1),this%gpE%ysz(2),this%gpE%ysz(3),2))

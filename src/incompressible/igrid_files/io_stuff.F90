@@ -114,7 +114,7 @@
 
    subroutine dump_planes(this)
        use decomp_2d_io
-       class(igrid), intent(in) :: this
+       class(igrid), intent(inout) :: this
        integer :: nxplanes, nyplanes, nzplanes
        integer :: idx, pid, dirid, tid, sid
        character(len=clen) :: fname
@@ -455,8 +455,86 @@
                end if 
            end do 
        end if 
-       call message(1, "Dumped Planes.")        
+       call message(1, "Dumped Planes.")       
+
+       !! deliberately keeping this commented, but will uncomment this manually 
+       !! if and when needed -- Niranjan
+       !call this%check_stress_eqb(.true.)
+ 
    end subroutine 
+
+   subroutine check_stress_eqb(this, dumpProfile)
+       !use decomp_2d_io
+       use basic_io, only: write_2d_ascii
+       class(igrid), intent(inout), target :: this
+       logical, intent(in) :: dumpProfile
+       character(len=clen) :: fname
+       character(len=clen) :: tempname
+       integer :: tid, k
+       real(rkind), dimension(:,:,:), pointer :: rbuff2E, rbuff3E, rbuff3, rbuff1E, rbuff4, rbuff5, rbuff6
+       real(rkind), dimension(:    ), pointer :: zlinebuf1, zlinebuf2, zlinebuf3, zlinebuf4, zlinebuf5
+
+       ! compute u*w on E, interpolate to C
+       rbuff1E => this%rbuffxE(:,:,:,1);   rbuff2E => this%rbuffyE(:,:,:,1);
+       rbuff3E => this%rbuffzE(:,:,:,1);
+
+       rbuff3  => this%rbuffzC(:,:,:,1);   rbuff4  => this%rbuffzC(:,:,:,2);
+       rbuff5  => this%rbuffzC(:,:,:,3);   rbuff6  => this%rbuffzC(:,:,:,4)
+
+       zlinebuf1 => this%zbuffzC(:,1)
+       zlinebuf2 => this%zbuffzC(:,2)
+       zlinebuf3 => this%zbuffzC(:,3)
+       zlinebuf4 => this%zbuffzC(:,4)
+       zlinebuf5 => this%zbuffzC(:,5)
+
+
+       rbuff1E = this%uE * this%w
+       call transpose_x_to_y(rbuff1E,rbuff2E,this%gpE)
+       call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+       call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff3)
+
+       rbuff1E = this%uE
+       call transpose_x_to_y(rbuff1E,rbuff2E,this%gpE)
+       call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+       call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff4)
+
+       rbuff1E = this%w
+       call transpose_x_to_y(rbuff1E,rbuff2E,this%gpE)
+       call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+       call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff5)
+
+       rbuff1E = this%tau13
+       call transpose_x_to_y(rbuff1E,rbuff2E,this%gpE)
+       call transpose_y_to_z(rbuff2E,rbuff3E,this%gpE)
+       call this%OpsPP%InterpZ_Edge2Cell(rbuff3E,rbuff6)
+
+       rbuff3 = rbuff3 - rbuff4*rbuff5
+       call this%compute_z_mean(rbuff3, zlinebuf1) ! Reynolds
+
+       call this%compute_z_mean(rbuff4, zlinebuf3) ! u
+       call this%compute_z_mean(rbuff5, zlinebuf4) ! w
+       call this%compute_z_mean(rbuff6, zlinebuf5) ! tau13
+
+       call this%compute_z_mean(rbuff4*rbuff5, zlinebuf2) ! Dispersive
+       zlinebuf2 = zlinebuf2 - zlinebuf3*zlinebuf4
+
+       if (dumpProfile .and. (nrank == 0)) then
+           tid = this%step
+           write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run",this%RunID,"_t",tid,".uws"
+           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+           call write_2d_ascii(this%zbuffzC,fname)
+       endif
+
+       zlinebuf1 = zlinebuf1 + zlinebuf2 + zlinebuf5 ! total stress
+
+       ! exact profile
+       do k = 1, this%gpC%zsz(3)
+         zlinebuf2(k) = (real(k,rkind) - 0.5d0)*this%dz - 1.0d0
+       enddo
+       this%stress_eqb_err = sqrt(sum((zlinebuf1-zlinebuf2)**2)/real(this%gpC%zsz(3),rkind))
+
+    end subroutine
+
 
    
    subroutine finalize_io(this)
