@@ -101,7 +101,7 @@ subroutine init(this, inputDir, ActuatorLineID, xG, yG, zG, xyzPads)
                         reference_length, reference_velocity
 
     ! Read input file for this turbine    
-    write(tempname,"(A13,I3.3,A10)") "ActuatorLine_", ActuatorLineID, "_input.inp"
+    write(tempname,"(A13,I4.4,A10)") "ActuatorLine_", ActuatorLineID, "_input.inp"
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
 
     ioUnit = 55

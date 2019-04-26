@@ -74,7 +74,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
     ! Read input file for this turbine    
-    write(tempname,"(A13,I3.3,A10)") "ActuatorDisk_T2_", ActuatorDisk_T2ID, "_input.inp"
+    write(tempname,"(A13,I4.4,A10)") "ActuatorDisk_T2_", ActuatorDisk_T2ID, "_input.inp"
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
 
     ioUnit = 55
