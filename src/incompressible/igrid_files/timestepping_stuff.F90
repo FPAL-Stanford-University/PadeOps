@@ -534,6 +534,10 @@
               call this%dumpProbes()    
               call message(0,"Performed a forced dump for probes.")
           end if
+          if (this%probeCounter == this%probeTimeLimit-1) then
+              call this%dumpProbes()
+              call message(0,"probeTimeLimit reached. Performed a forced dump for probes.")
+          end if
       end if
 
       if (this%vizDump_Schedule == 1) then

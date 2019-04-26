@@ -871,16 +871,21 @@
 
    subroutine dumpProbes(this)
        use basic_io, only: write_2d_ascii
-       class(igrid), intent(in) :: this
+       use kind_parameters, only: mpirkind
+       class(igrid), intent(inout) :: this
        character(len=clen) :: tempname, fname
-       integer :: pid, idx
+       real(rkind), allocatable, dimension(:,:) :: temp_turbine_probe_data
+       integer :: pid, idx, datasize
 
-       do idx = 1,this%nprobes
+       ! Point probes
+       if(this%usePointProbes) then
+         do idx = 1,this%nprobes
            pid = this%probes(4,idx)
            write(tempname,"(A3,I2.2,A6,I3.3,A4,I6.6,A4,I6.6,A4)") "Run",this%runID, "_PROBE",pid,"_tst",this%probeStartStep,"_ten",this%step,".out"
            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-           call write_2d_ascii(transpose(this%probe_data(:,idx,this%probeStartStep:this%step)), fname)
-       end do 
+           call write_2d_ascii(transpose(this%probe_data(:,idx,0:this%probeCounter)), fname)
+         end do
+       end if 
 
        ! KS - preprocess
        if (this%PreprocessForKS) then
@@ -888,8 +893,34 @@
                pid = this%probes(4,idx)
                write(tempname,"(A3,I2.2,A9,I3.3,A4,I6.6,A4,I6.6,A4)") "Run",this%runID, "_PROBE_KS",pid,"_tst",this%probeStartStep,"_ten",this%step,".out"
                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-               call write_2d_ascii(transpose(this%KS_probe_data(:,idx,this%probeStartStep:this%step)), fname)
+               call write_2d_ascii(transpose(this%KS_probe_data(:,idx,0:this%probeCounter)), fname)
            end do 
        end if
-       
+
+       ! Wind Turbine Probes
+       if(this%useWindTurbineProbes) then
+           ! WRITE OUT turbine_probe_data
+           datasize = size(this%turbine_probe_data,1) * size(this%turbine_probe_data,2)
+           !datasize = 8*this%WindTurbineArr%nTurbines * (this%step-this%probeStartStep+1)
+           allocate(temp_turbine_probe_data(8*this%WindTurbineArr%nTurbines+1, 0:this%probeTimeLimit-1))
+           call MPI_reduce(this%turbine_probe_data(:,:), temp_turbine_probe_data(:,:), datasize, mpirkind, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+           if(nrank == 0) then
+             do idx = 1, this%WindTurbineArr%nTurbines
+               write(tempname,"(A3,I2.2,A9,I3.3,A4,I6.6,A4,I6.6,A4)") "Run",this%runID, "_PROBE_WT",idx,"_tst",this%probeStartStep,"_ten",this%step,".out"
+               fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+               call write_2d_ascii(transpose(temp_turbine_probe_data(8*idx-7:8*idx,0:this%probeCounter)), fname)
+             enddo
+
+             !write list of time instants
+             write(tempname,"(A3,I2.2,A16,I6.6,A4,I6.6,A4)") "Run",this%runID, "_PROBE_TIMES_tst",this%probeStartStep,"_ten",this%step,".out"
+             fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+             call write_2d_ascii(transpose(temp_turbine_probe_data(8*this%WindTurbineArr%nTurbines:8*this%WindTurbineArr%nTurbines+1,0:this%probeCounter)), fname)
+
+           endif
+           deallocate(temp_turbine_probe_data)
+       endif
+
+       this%probeCounter = 0
+       this%probeStartStep = this%step + 1
+
    end subroutine

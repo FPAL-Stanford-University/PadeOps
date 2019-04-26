@@ -163,30 +163,32 @@ subroutine updateProbes(this)
     class(igrid), intent(inout) :: this
     integer :: idx
 
-    if (this%doIhaveAnyProbes) then
+    if (this%usePointProbes) then
+      if (this%doIhaveAnyProbes) then
         do idx = 1,this%nprobes
-            this%probe_data(1,idx,this%step) = this%tsim
-            this%probe_data(2,idx,this%step) = this%u (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
-            this%probe_data(3,idx,this%step) = this%v (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
-            this%probe_data(4,idx,this%step) = this%wC(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+            this%probe_data(1,idx,this%probeCounter) = this%tsim
+            this%probe_data(2,idx,this%probeCounter) = this%u (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+            this%probe_data(3,idx,this%probeCounter) = this%v (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+            this%probe_data(4,idx,this%probeCounter) = this%wC(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
             if (this%isStratified) then
-                this%probe_data(5,idx,this%step) = this%T(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%probe_data(5,idx,this%probeCounter) = this%T(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
             end if
             if (this%fastCalcPressure) then
-                this%probe_data(6,idx,this%step) = this%Pressure(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%probe_data(6,idx,this%probeCounter) = this%Pressure(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
             end if
             if (this%computeDNSpressure) then
-                this%probe_data(7,idx,this%step) = this%Pressure_dns(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%probe_data(7,idx,this%probeCounter) = this%Pressure_dns(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
             end if 
 
             if (this%computeFringePressure) then
-                this%probe_data(8,idx,this%step) = this%Pressure_fringe(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%probe_data(8,idx,this%probeCounter) = this%Pressure_fringe(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
             end if
             
             if (this%computeTurbinePressure) then
-                this%probe_data(9,idx,this%step) = this%Pressure_turbine(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%probe_data(9,idx,this%probeCounter) = this%Pressure_turbine(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
             end if
         end do 
+      end if
     end if
 
     ! KS - preprocess
@@ -197,13 +199,21 @@ subroutine updateProbes(this)
         end if
         if (this%doIhaveAnyProbes) then
             do idx = 1,this%nprobes
-                this%KS_probe_data(1,idx,this%step) = this%tsim
-                this%KS_probe_data(2,idx,this%step) = this%ufil4KS (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
-                this%KS_probe_data(3,idx,this%step) = this%vfil4KS (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
-                this%KS_probe_data(4,idx,this%step) = this%wfil4KS(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%KS_probe_data(1,idx,this%probeCounter) = this%tsim
+                this%KS_probe_data(2,idx,this%probeCounter) = this%ufil4KS (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%KS_probe_data(3,idx,this%probeCounter) = this%vfil4KS (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%KS_probe_data(4,idx,this%probeCounter) = this%wfil4KS(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
             end do 
         end if
     end if
+
+    ! Wind Turbine Probes
+    if(this%useWindTurbineProbes) then
+        this%turbine_probe_data(1:8*this%WindTurbineArr%nTurbines,this%probeCounter) = this%inst_horz_avg_turb(1:8*this%WindTurbineArr%nTurbines)
+        this%turbine_probe_data(8*this%WindTurbineArr%nTurbines+1,this%probeCounter) = this%tsim
+    endif
+
+    this%probeCounter = this%probeCounter + 1
 
 end subroutine
 

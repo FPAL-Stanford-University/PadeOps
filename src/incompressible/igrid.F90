@@ -247,10 +247,11 @@ module IncompressibleGrid
         ! make it convenient us to later do transposes or to compute Sij.
 
         ! Probes
-        logical :: useProbes = .false., doIhaveAnyProbes = .false.  
+        logical :: useProbes = .false., doIhaveAnyProbes = .false., usePointProbes = .false., useWindTurbineProbes = .false.
         integer, dimension(:,:), allocatable :: probes
-        integer :: nprobes, probeTimeLimit = 1000000, probeStartStep = 0 
+        integer :: nprobes, probeTimeLimit = 1000000, probeStartStep = 0, probeCounter 
         real(rkind), dimension(:,:,:), allocatable :: probe_data
+        real(rkind), dimension(:,:  ), allocatable :: turbine_probe_data
         integer :: tpro
 
         ! Spin up for initialization
@@ -398,7 +399,8 @@ contains
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false., useControl = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
-        logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
+        logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.
+        logical :: usePointProbes = .false., useWindTurbineProbes = .false.
         real(rkind), dimension(:,:), allocatable :: probe_locs
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
@@ -419,7 +421,7 @@ contains
                         useRestartFile, restartFile_TID, restartFile_RID, CviscDT
         namelist /IO/ VizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                     & dump_NU_SGS, dump_KAPPA_SGS, t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe,&
-                    & t_stop_pointProbe, t_pointProbe
+                    & t_stop_pointProbe, t_pointProbe, usePointProbes, useWindTurbineProbes
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,useforcedStratification,&
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle, buoyancyDirection
@@ -468,6 +470,7 @@ contains
         this%P_dumpFreq = P_dumpFreq; this%P_compFreq = P_compFreq; this%timeAvgFullFields = timeAvgFullFields
         this%computeSpectra = computeSpectra; this%botBC_Temp = botBC_Temp; this%isInviscid = isInviscid
         this%assume_fplane = assume_fplane; this%useProbes = useProbes; this%PrandtlFluid = PrandtlFLuid
+        this%usePointProbes = usePointProbes; this%useWindTurbineProbes = useWindTurbineProbes
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact;this%useFringe = useFringe; this%useControl = useControl
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType; this%CviscDT = CviscDT 
@@ -692,7 +695,11 @@ contains
            this%tsim = zero
            !call this%dumpRestartfile()
        end if 
-   
+  
+       this%probeStartStep = this%step
+       this%probeCounter   = 0
+
+ 
        if (this%isStratified) then
            if (BuoyancyTermType == 1) then
                call set_Reference_Temperature(inputfile,this%ThetaRef)
@@ -940,7 +947,13 @@ contains
 
 
        ! STEP 14a : Probes
-       if (this%useProbes) then
+       if(this%useProbes) then
+          if((.not. this%usePointProbes) .and.  (.not. this%useWindTurbineProbes)) then
+              call GracefulExit("If useProbes is true, at least one among usePointProbes and useWindTurbineProbes must be true",12)
+          endif
+       endif
+
+       if (this%usePointProbes) then
            call hook_probes(inputfile, probe_locs)
            if (.not. allocated(probe_locs)) then
                call GracefulExit("You forgot to set the probe locations in initialize.F90 file for the problem.",123)
@@ -1015,7 +1028,7 @@ contains
            if (this%KSinitType == 0) then
                call this%LES2KS%init(this%spectC, this%gpC, this%dx, this%dy, this%outputdir, this%RunID, this%probes, this%KSFilFact, KSdoZfilter, nKSvertFilt)
                call this%LES2KS%link_pointers(this%uFil4KS, this%vFil4KS, this%wFil4KS)
-               if (this%useProbes) then
+               if (this%usePointProbes) then
                    if (this%doIhaveAnyProbes) then
                        allocate(this%KS_Probe_Data(1:4,1:this%nprobes,0:this%probeTimeLimit-1))
                    end if
@@ -1029,6 +1042,16 @@ contains
            this%KSupdated = .false. 
            call message(0, "KS Preprocessor initializaed successfully.")
        end if 
+
+       ! STEP 14c : Probes for turbine forces
+       if(this%useWindTurbineProbes) then
+         if(this%useWindTurbines) then
+             !print *, 'size reqd = ', (1+8*this%WindTurbineArr%nTurbines), this%probeTimeLimit, (1+8*this%WindTurbineArr%nTurbine)*this%probeTimeLimit
+             allocate(this%turbine_probe_data(1+8*this%WindTurbineArr%nTurbines,0:this%probeTimeLimit-1))
+         else
+             call GracefulExit("Turbine probes cannot be used without switching on turbines",12)
+         endif
+       endif
 
 
        ! STEP 15: Set up extra buffers for RK3
