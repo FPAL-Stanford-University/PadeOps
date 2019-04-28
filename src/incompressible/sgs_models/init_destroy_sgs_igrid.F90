@@ -109,9 +109,9 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   allocate(this%tau_ij(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),6))
   this%tau_11   => this%tau_ij(:,:,:,1)
   this%tau_12   => this%tau_ij(:,:,:,2)
-  this%tau_13C  => this%tau_ij(:,:,:,3) ! This always going to be zero
+  this%tau_13C  => this%tau_ij(:,:,:,3) ! This always going to be zero unless populated
   this%tau_22   => this%tau_ij(:,:,:,4)
-  this%tau_23C  => this%tau_ij(:,:,:,5) ! This always going to be zero 
+  this%tau_23C  => this%tau_ij(:,:,:,5) ! This always going to be zero unless populated
   this%tau_33   => this%tau_ij(:,:,:,6)
   allocate(this%tau_13(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
   allocate(this%tau_23(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))

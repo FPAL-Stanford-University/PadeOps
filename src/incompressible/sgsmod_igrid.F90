@@ -154,6 +154,7 @@ module sgsmod_igrid
             procedure          :: getMax_DynPrandtl
             procedure          :: usingDynProc
             procedure          :: set_BuoyancyFactor
+            procedure          :: populate_tauij_E_to_C 
     end type 
 
 contains
@@ -168,6 +169,7 @@ contains
 #include "sgs_models/wallmodel.F90"
 #include "sgs_models/accessors.F90"
 #include "sgs_models/scalar_bounding.F90"
+
 
 subroutine setTauBC(this, botwall, topwall)
    class(sgs_igrid), intent(inout) :: this

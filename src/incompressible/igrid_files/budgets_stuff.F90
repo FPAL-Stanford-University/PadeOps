@@ -44,6 +44,41 @@ subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc
     call this%set_budget_rhs_to_zero()
 end subroutine
 
+subroutine instrumentForBudgets_TimeAvg(this, uc, vc, wc, usgs, vsgs, wsgs,  px, py, pz, uturb)  
+    class(igrid), intent(inout) :: this
+    complex(rkind), dimension(:,:,:), intent(in), target :: uc, vc, wc, usgs, vsgs, wsgs, px, py, pz, uturb 
+
+    this%ucon => uc
+    this%vcon => vc
+    this%wcon => wc
+
+    this%usgs => usgs
+    this%vsgs => vsgs
+    this%wsgs => wsgs
+
+    this%px => px
+    this%py => py
+    this%pz => pz
+
+    this%uturb => uturb 
+
+    ! Safeguards
+    this%StoreForBudgets = .true. 
+    if (.not. this%fastCalcPressure) then
+        call GracefulExit("Cannot perform budget calculations if IGRID is initialized with FASTCALCPRESSURE=.false.", 324)
+    end if 
+  
+    if (.not. useSkewSymm) then
+        call message("WARNING: Advection term should be evaluated in the skew-symmetric form in order to perform budget calculations.")
+    end if 
+
+    if (this%useControl) then
+        call message("WARNING: Budget calculations ignore the frame angle controller effects.", 324)
+    end if 
+    call message(0, "Time averaging budget calculations instrumented within igrid!")
+
+    call this%set_budget_rhs_to_zero()
+end subroutine
 
 subroutine set_budget_rhs_to_zero(this)
     use constants, only: imi
@@ -65,12 +100,12 @@ subroutine set_budget_rhs_to_zero(this)
     this%py = czero 
     this%pz = czero
 
-    this%ucor = czero 
-    this%vcor = czero 
-    this%wcor = czero 
+    if (associated(this%ucor)) this%ucor = czero 
+    if (associated(this%vcor)) this%vcor = czero 
+    if (associated(this%wcor)) this%wcor = czero 
 
-    this%wb = czero 
-    this%uturb = czero 
+    if (associated(this%wb   )) this%wb = czero 
+    if (associated(this%uturb)) this%uturb = czero 
 
 end subroutine 
 

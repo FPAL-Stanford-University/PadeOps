@@ -359,6 +359,7 @@ module IncompressibleGrid
             procedure, private :: destroy_hdf5_io
             procedure          :: get_geostrophic_forcing
             procedure          :: InstrumentForBudgets
+            procedure          :: InstrumentForBudgets_TimeAvg
             procedure          :: GetMomentumTerms
             procedure          :: set_budget_rhs_to_zero
     end type
