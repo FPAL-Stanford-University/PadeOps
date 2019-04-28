@@ -1,0 +1,13 @@
+&INPUT
+inputdir  = "/scratch/04076/tg833754/StratifiedShearLayer/Ri0.2_DNS"        ! Directory for input files
+outputdir = "/scratch/04076/tg833754/StratifiedShearLayer/postprocess/PotentialEnstrophy/Ri0.2"        ! Directory for output files
+RunID  = 20
+tstart = 0
+tstop  = 13800
+tstep  = 100
+nx     = 1024
+ny     = 1024
+nz     = 1024
+Rib    = 0.20d0
+NumericalSchemeVert = 1
+/

@@ -2,7 +2,7 @@ module AD_Coriolis_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
-    use constants, only: kappa 
+    use constants, only: kappa, pi
     implicit none
     integer :: seedu = 321341
     integer :: seedv = 423424
@@ -28,8 +28,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, G_alpha
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, G_alpha
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -89,8 +89,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, G_alpha
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, G_alpha
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -108,10 +108,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     x => mesh(:,:,:,1)
  
    
-    u = one!z*(2 - z) + epsnd*(z/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
+    u = one * cos(G_alpha * pi / 180.d0)!z*(2 - z) + epsnd*(z/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
       !+ epsnd*((2-z)/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
     
-    v = zero!- epsnd*(z/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
+    v = one * sin(G_alpha * pi / 180.d0)!- epsnd*(z/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
         !- epsnd*((2-z)/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
     
     wC= zero  
@@ -186,6 +186,25 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 
 end subroutine
 
+subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
+    use kind_parameters,    only: rkind
+    use constants, only: one, zero 
+    implicit none
+
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), intent(out) :: wTh_surf
+    integer :: ioUnit 
+    real(rkind) :: ThetaRef, Lx, Ly, Lz
+    logical :: initPurturbations = .false. 
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
+     
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=AD_CoriolisINPUT)
+    close(ioUnit)    
+
+    ! Do nothing really since this is an unstratified simulation
+end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
@@ -194,9 +213,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, G_alpha
     integer :: iounit
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, G_alpha
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -215,10 +234,10 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz
+    real(rkind) :: Lx, Ly, Lz, G_alpha
     integer :: iounit
     
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, G_alpha
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -254,3 +273,27 @@ subroutine hook_probes(inputfile, probe_locs)
 
 
 end subroutine
+
+subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarField
+
+    scalarField = 0.d0
+end subroutine 
+
+subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
+
+    scalarSource = 0.d0
+end subroutine 

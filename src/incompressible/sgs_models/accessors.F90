@@ -78,6 +78,13 @@ pure function getMax_DynPrandtl(this) result(val)
 
 end function
 
+subroutine set_buoyancyFactor(this, buoyancyFact)
+   class(sgs_igrid), intent(inout) :: this
+   real(rkind), intent(in) :: buoyancyFact
+
+   this%buoyancyFact = buoyancyFact 
+
+end subroutine 
 
 pure function usingDynProc(this) result(val)
    class(sgs_igrid), intent(in) :: this
@@ -94,3 +101,22 @@ pure function get_dynamicProcedureType(this) result(val)
    val = this%DynamicProcedureType 
 
 end function
+
+subroutine populate_tauij_E_to_C(this)
+    class(sgs_igrid), intent(inout) :: this
+
+    ! This subroutine interpolates tau_13 and tau_23 to tau_13C and tau_23C (for
+    ! post-processing) 
+
+    call transpose_x_to_y(this%tau_13,this%rbuffyE(:,:,:,1),this%gpE)
+    call transpose_y_to_z(this%rbuffyE(:,:,:,1),this%rbuffzE(:,:,:,1),this%gpE)
+    call this%PadeDer%interpz_E2C(this%rbuffzE(:,:,:,1),this%rbuffzC(:,:,:,1),0,0)
+    call transpose_z_to_y(this%rbuffzC(:,:,:,1),this%rbuffyC(:,:,:,1),this%gpC)
+    call transpose_y_to_x(this%rbuffyC(:,:,:,1),this%tau_13C,this%gpC)
+
+    call transpose_x_to_y(this%tau_23,this%rbuffyE(:,:,:,1),this%gpE)
+    call transpose_y_to_z(this%rbuffyE(:,:,:,1),this%rbuffzE(:,:,:,1),this%gpE)
+    call this%PadeDer%interpz_E2C(this%rbuffzE(:,:,:,1),this%rbuffzC(:,:,:,1),0,0)
+    call transpose_z_to_y(this%rbuffzC(:,:,:,1),this%rbuffyC(:,:,:,1),this%gpC)
+    call transpose_y_to_x(this%rbuffyC(:,:,:,1),this%tau_23C,this%gpC)
+end subroutine 

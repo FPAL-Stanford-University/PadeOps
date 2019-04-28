@@ -1,0 +1,446 @@
+module budgets_time_avg_mod
+   use kind_parameters, only: rkind, clen, mpirkind
+   use decomp_2d
+   use reductions, only: p_sum
+   use incompressibleGrid, only: igrid  
+   use exits, only: message
+   use basic_io, only: read_2d_ascii, write_2d_ascii
+   use mpi 
+
+   implicit none 
+
+   private
+   public :: budgets_time_avg
+
+   ! BUDGET TYPE: 
+   ! BUDGET_0: 6 Reynolds stress terms + 3 temp fluxes + meanU + meanV + meanT
+   ! BUDGET_1: momentum equation terms (Budget0 also computed) 
+   ! BUDGET_2: MKE budget (Budget0 and Budget1 also computed) 
+   ! BUDGET 3: TKE budget (Budget 0, 1 and 2 also included)
+
+
+   ! BUDGET_0 term indices:
+   ! 1:  <U> 
+   ! 2:  <V>
+   ! 3:  <W>
+   ! 4:  <uu>
+   ! 5:  <uv> 
+   ! 6:  <uw>
+   ! 7:  <vv>
+   ! 8:  <vw>
+   ! 9:  <ww>
+   ! 10: <P>
+   ! 11: <tau11> 
+   ! 12: <tau12> 
+   ! 13: <tau13>
+   ! 14: <tau22> 
+   ! 15: <tau23> 
+   ! 16: <tau33> 
+
+
+   ! BUDGET_1 term indices:  
+   ! 1:  X eqn - Advection/convection term
+   ! 2:  X eqn - Pressure gradient term
+   ! 3:  X eqn - SGS term
+   ! 4:  X eqn - Actuator disk/turbine term 
+   
+   ! 5:  Y eqn - Advection/convection term
+   ! 6:  Y eqn - Pressure gradient term
+   ! 7:  Y eqn - SGS term
+
+   ! 8:  Z eqn - Advection term
+   ! 9:  Z eqn - Pressure gradient term 
+   ! 10: Z eqn - SGS term 
+
+
+   ! BUDGET_2 term indices: 
+   ! 1:  Loss to Resolved TKE
+   ! 2:  Convective transport 
+   ! 3:  Loss to SGS TKE + viscous dissipation 
+   ! 4:  SGS + viscous transport
+   ! 5:  Actuator disk sink
+
+
+   ! BUDGET_3 term indices:
+   ! 1. TKE production
+   ! 2. convective transport 
+   ! 3. Pressure transport
+   ! 4. SGS + viscous transport
+   ! 5. SGS + viscous dissipation
+   ! 6. Actuator disk/Turbine sink 
+   ! 7. Coriolis work (should be zero)
+   ! 8. Buoyancy transfer
+
+
+   ! BUDGET_4_ij term indices: 
+   ! <incomplete/not-needed for now>
+
+   type :: budgets_time_avg
+        private
+        integer :: budgetType = 1, run_id, nz
+
+        complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, px, py, pz, uturb 
+        type(igrid), pointer :: igrid_sim 
+        
+        real(rkind), dimension(:,:,:,:), allocatable :: budget_0, budget_1, budget_2, budget_3
+        integer :: counter
+        character(len=clen) :: budgets_dir
+
+        integer :: tidx_dump 
+        integer :: tidx_compute
+        integer :: tidx_budget_start 
+        logical :: do_budgets
+
+    contains
+        procedure           :: init
+        procedure           :: destroy
+        procedure           :: ResetBudget
+        procedure           :: DoBudgets
+        
+        procedure, private  :: updateBudget
+        procedure, private  :: DumpBudget
+        procedure, private  :: restartBudget
+        procedure, private  :: dump_budget_field 
+        
+        procedure, private  :: AssembleBudget0
+        procedure, private  :: DumpBudget0 
+        
+        procedure, private  :: AssembleBudget1
+        procedure, private  :: DumpBudget1
+        
+        procedure, private  :: AssembleBudget2
+        procedure, private  :: DumpBudget2
+        
+        procedure, private  :: AssembleBudget3
+        procedure, private  :: DumpBudget3
+   end type 
+
+
+contains 
+
+    subroutine init(this, inputfile, igrid_sim) 
+        class(budgets_time_avg), intent(inout) :: this
+        character(len=*), intent(in) :: inputfile 
+        type(igrid), intent(inout), target :: igrid_sim 
+        
+        character(len=clen) :: budgets_dir = "NULL"
+        integer :: ioUnit, ierr,  budgetType = 1, restart_tid = 0, restart_rid = 0, restart_counter = 0
+        logical :: restart_budgets = .false. 
+        integer :: tidx_compute = 1000000, tidx_dump = 1000000, tidx_budget_start = 0
+        logical :: do_budgets = .false. 
+        namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start 
+        
+        ! STEP 1: Read in inputs, link pointers and allocate budget vectors
+        ioUnit = 534
+        open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+        read(unit=ioUnit, NML=BUDGET_XY_AVG)
+        close(ioUnit)
+
+        this%igrid_sim => igrid_sim 
+        this%run_id = igrid_sim%runid
+        this%nz = igrid_sim%nz
+        this%do_budgets = do_budgets
+        this%tidx_dump = tidx_dump
+        this%tidx_compute = tidx_compute
+        this%tidx_budget_start = tidx_budget_start  
+
+        this%budgets_dir = budgets_dir
+        this%budgetType = budgetType 
+        
+        allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),16))
+        allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),10))
+        allocate(this%budget_2(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),05))
+        allocate(this%budget_3(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),08))
+
+        if ((trim(budgets_dir) .eq. "null") .or.(trim(budgets_dir) .eq. "NULL")) then
+            this%budgets_dir = igrid_sim%outputDir
+        end if 
+
+        if (restart_budgets) then
+            call this%RestartBudget(restart_rid, restart_tid, restart_counter)
+        else
+            call this%resetBudget()
+        end if
+
+        ! STEP 2: Allocate memory (massive amount of memory needed)
+        call igrid_sim%spectC%alloc_r2c_out(this%uc)
+        call igrid_sim%spectC%alloc_r2c_out(this%usgs)
+        call igrid_sim%spectC%alloc_r2c_out(this%px)
+        call igrid_sim%spectC%alloc_r2c_out(this%uturb)
+
+        call igrid_sim%spectC%alloc_r2c_out(this%vc)
+        call igrid_sim%spectC%alloc_r2c_out(this%vsgs)
+        call igrid_sim%spectC%alloc_r2c_out(this%py)
+
+        call igrid_sim%spectE%alloc_r2c_out(this%wc)
+        call igrid_sim%spectE%alloc_r2c_out(this%wsgs)
+        call igrid_sim%spectE%alloc_r2c_out(this%pz)
+
+
+        ! STEP 3: Now instrument igrid 
+        call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
+                   & this%px, this%py, this%pz, this%uturb)  
+
+    end subroutine 
+
+
+    subroutine doBudgets(this)
+        class(budgets_time_avg), intent(inout) :: this
+
+        if (this%do_budgets .and. (this%igrid_sim%step>this%tidx_budget_start)) then
+        
+            if (mod(this%igrid_sim%step,this%tidx_compute) .eq. 0) then
+                call this%updateBudget()
+            end if
+
+            if (mod(this%igrid_sim%step,this%tidx_dump) .eq. 0) then
+                call this%dumpBudget()
+                call message(0,"Dumped a budget .stt file")
+            end if 
+
+        end if 
+    end subroutine 
+
+    subroutine updateBudget(this)
+        class(budgets_time_avg), intent(inout) :: this
+   
+        call this%igrid_sim%getMomentumTerms()  
+
+        select case (this%budgetType)
+        case(0)
+            call this%AssembleBudget0()
+        case(1)
+            call this%AssembleBudget0()
+            call this%AssembleBudget1()
+        case(2)
+            call this%AssembleBudget0()
+            call this%AssembleBudget1()
+            ! Budget 2 need not be assembled now; it only needs to be assembled
+            ! before writing to disk 
+        case(3)
+            call this%AssembleBudget0()
+            call this%AssembleBudget1()
+            call this%AssembleBudget3()
+        end select
+
+        this%counter = this%counter + 1
+
+    end subroutine 
+
+
+    subroutine DumpBudget(this)
+        class(budgets_time_avg), intent(inout) :: this
+        
+        ! MKE budget is only assembled before dumping
+        if (this%budgetType>1) call this%AssembleBudget2() 
+       
+        ! Budget 0: 
+        call this%dumpbudget0()
+
+        ! Budget 1: 
+        if (this%budgetType>0) then
+            call this%dumpbudget1()
+        end if 
+        
+        ! Budget 2: 
+        if (this%budgetType>1) then
+            call this%dumpbudget2()
+        end if 
+
+        ! Budget 3: 
+        if (this%budgetType>2) then
+            call this%dumpbudget3()
+        end if 
+    end subroutine 
+
+    ! ---------------------- Budget 0 ------------------------
+    subroutine DumpBudget0(this)
+        class(budgets_time_avg), intent(inout) :: this
+        integer :: idx 
+        
+        ! Step 1: Get the average from sum
+        this%budget_0 = this%budget_0/(real(this%counter,rkind) + 1.d-18)
+        
+        ! Step 2: Get the <Rij> from <ui uj>
+        this%budget_0(:,:,:,4)  = this%budget_0(:,:,:,4)  - this%budget_0(:,:,:,1)*this%budget_0(:,:,:,1) ! R11
+        this%budget_0(:,:,:,5)  = this%budget_0(:,:,:,5)  - this%budget_0(:,:,:,1)*this%budget_0(:,:,:,2) ! R12
+        this%budget_0(:,:,:,6)  = this%budget_0(:,:,:,6)  - this%budget_0(:,:,:,1)*this%budget_0(:,:,:,3) ! R13
+        this%budget_0(:,:,:,7)  = this%budget_0(:,:,:,7)  - this%budget_0(:,:,:,2)*this%budget_0(:,:,:,2) ! R22
+        this%budget_0(:,:,:,8)  = this%budget_0(:,:,:,8)  - this%budget_0(:,:,:,2)*this%budget_0(:,:,:,3) ! R23
+        this%budget_0(:,:,:,9)  = this%budget_0(:,:,:,9)  - this%budget_0(:,:,:,3)*this%budget_0(:,:,:,3) ! R33
+        
+        ! Step 3: Dump the full budget 
+        do idx = 1,size(this%budget_0,4)
+            call this%dump_budget_field(this%budget_0(:,:,:,idx),idx,0)
+        end do 
+        
+        ! Step 4: Go back to <ui uj> from <Rij>
+        this%budget_0(:,:,:,4)  = this%budget_0(:,:,:,4)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,1) ! R11
+        this%budget_0(:,:,:,5)  = this%budget_0(:,:,:,5)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,2) ! R12
+        this%budget_0(:,:,:,6)  = this%budget_0(:,:,:,6)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,3) ! R13
+        this%budget_0(:,:,:,7)  = this%budget_0(:,:,:,7)  + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,2) ! R22
+        this%budget_0(:,:,:,8)  = this%budget_0(:,:,:,8)  + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,3) ! R23
+        this%budget_0(:,:,:,9)  = this%budget_0(:,:,:,9)  + this%budget_0(:,:,:,3)*this%budget_0(:,:,:,3) ! R33
+        
+        ! Step 5: Go back to summing instead of averaging
+        this%budget_0 = this%budget_0*(real(this%counter,rkind) + 1.d-18)
+
+    end subroutine 
+
+    subroutine AssembleBudget0(this)
+        class(budgets_time_avg), intent(inout) :: this
+
+        ! STEP 1: Compute mean U, V and W
+        this%budget_0(:,:,:,1) = this%budget_0(:,:,:,1) + this%igrid_sim%u
+        this%budget_0(:,:,:,2) = this%budget_0(:,:,:,2) + this%igrid_sim%v
+        this%budget_0(:,:,:,3) = this%budget_0(:,:,:,3) + this%igrid_sim%wC
+
+        ! STEP 2: Get Reynolds stresses (IMPORTANT: need to correct for fluctuation before dumping)
+        this%budget_0(:,:,:,4) = this%budget_0(:,:,:,4) + this%igrid_sim%u*this%igrid_sim%u
+        this%budget_0(:,:,:,5) = this%budget_0(:,:,:,5) + this%igrid_sim%u*this%igrid_sim%v
+        this%budget_0(:,:,:,6) = this%budget_0(:,:,:,6) + this%igrid_sim%u*this%igrid_sim%w
+        this%budget_0(:,:,:,7) = this%budget_0(:,:,:,7) + this%igrid_sim%v*this%igrid_sim%v
+        this%budget_0(:,:,:,8) = this%budget_0(:,:,:,8) + this%igrid_sim%v*this%igrid_sim%w
+        this%budget_0(:,:,:,9) = this%budget_0(:,:,:,9) + this%igrid_sim%w*this%igrid_sim%w
+
+        ! STEP 3: Pressure
+        this%budget_0(:,:,:,10) = this%budget_0(:,:,:,10) + this%igrid_sim%pressure
+
+        ! STEP 3: SGS stresses (also viscous stress if finite reynolds number is being used)
+        call this%igrid_sim%sgsmodel%populate_tauij_E_to_C()
+        this%budget_0(:,:,:,11:16) = this%budget_0(:,:,:,11:16) + this%igrid_sim%tauSGS_ij 
+
+    end subroutine 
+
+    ! ---------------------- Budget 1 ------------------------
+    subroutine AssembleBudget1(this)
+        class(budgets_time_avg), intent(inout) :: this
+
+        ! STEP 1: Get 4 terms from u-equation 
+        call this%igrid_sim%spectC%ifft(this%uc,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_1(:,:,:,1) = this%budget_1(:,:,:,1) + this%igrid_sim%rbuffxC(:,:,:,1)
+
+        call this%igrid_sim%spectC%ifft(this%px,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_1(:,:,:,2) = this%budget_1(:,:,:,2) + this%igrid_sim%rbuffxC(:,:,:,1)
+        
+        call this%igrid_sim%spectC%ifft(this%usgs,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_1(:,:,:,3) = this%budget_1(:,:,:,3) + this%igrid_sim%rbuffxC(:,:,:,1)
+        
+        call this%igrid_sim%spectC%ifft(this%uturb,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_1(:,:,:,4) = this%budget_1(:,:,:,4) + this%igrid_sim%rbuffxC(:,:,:,1)
+
+        ! STEP 2: Get 3 terms from v-equation 
+        call this%igrid_sim%spectC%ifft(this%vc,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_1(:,:,:,5) = this%budget_1(:,:,:,5) + this%igrid_sim%rbuffxC(:,:,:,1)
+
+        call this%igrid_sim%spectC%ifft(this%py,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_1(:,:,:,6) = this%budget_1(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)
+        
+        call this%igrid_sim%spectC%ifft(this%vsgs,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_1(:,:,:,7) = this%budget_1(:,:,:,7) + this%igrid_sim%rbuffxC(:,:,:,1)
+        
+        ! STEP 2: Get 3 terms from w-equation 
+        call this%igrid_sim%spectC%ifft(this%wc,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_1(:,:,:,8) = this%budget_1(:,:,:,8) + this%igrid_sim%rbuffxC(:,:,:,1)
+
+        call this%igrid_sim%spectC%ifft(this%pz,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_1(:,:,:,9) = this%budget_1(:,:,:,9) + this%igrid_sim%rbuffxC(:,:,:,1)
+        
+        call this%igrid_sim%spectC%ifft(this%wsgs,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_1(:,:,:,10) = this%budget_1(:,:,:,10) + this%igrid_sim%rbuffxC(:,:,:,1)
+        
+        
+    end subroutine
+
+    subroutine DumpBudget1(this)
+        class(budgets_time_avg), intent(inout) :: this
+        integer :: idx 
+
+        ! Step 1: Get the average from sum
+        this%budget_1 = this%budget_1/(real(this%counter,rkind) + 1.d-18)
+        
+        ! Step 2: Dump the full budget 
+        do idx = 1,size(this%budget_1,4)
+            call this%dump_budget_field(this%budget_1(:,:,:,idx),idx,1)
+        end do 
+        
+        ! Step 3: Go back to summing instead of averaging
+        this%budget_1 = this%budget_1*(real(this%counter,rkind) + 1.d-18)
+    end subroutine 
+
+    ! ---------------------- Budget 2 ------------------------
+    subroutine AssembleBudget2(this)
+        class(budgets_time_avg), intent(inout) :: this
+
+        if (this%counter > 0) then
+            ! < Incomplete: Look at budget_xy_avg for reference. > 
+        end if 
+
+    end subroutine 
+    
+    subroutine DumpBudget2(this)
+        class(budgets_time_avg), intent(inout) :: this
+
+    end subroutine 
+
+    
+    ! ---------------------- Budget 3 ------------------------
+    subroutine AssembleBudget3(this)
+        class(budgets_time_avg), intent(inout) :: this
+
+        ! < Incomplete: Look at budget_xy_avg for reference. > 
+    end subroutine 
+    
+    subroutine DumpBudget3(this)
+        class(budgets_time_avg), intent(inout) :: this
+
+    end subroutine 
+
+    
+
+    ! ----------------------supproting subroutines ------------------------
+    subroutine dump_budget_field(this, field, fieldID, BudgetID)
+        use decomp_2d_io
+        class(budgets_time_avg), intent(inout) :: this
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(in) :: field
+        integer, intent(in) :: fieldID, BudgetID
+        character(len=clen) :: fname, tempname 
+
+        write(tempname,"(A3,I2.2,A7,I1.1,A5,I2.2,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_budget",BudgetID,"_term",fieldID,"_t",this%igrid_sim%step,"_n",this%counter,".s3D"
+        fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+
+        call decomp_2d_write_one(1,field,fname, this%igrid_sim%gpC)
+
+    end subroutine 
+    
+    subroutine restartBudget(this, rid, tid, cid)
+        class(budgets_time_avg), intent(inout) :: this
+        integer, intent(in) :: rid, cid, tid
+        !character(len=clen) :: fname, tempname 
+
+        this%counter = cid
+
+        ! << Incomplete for now - write after completing dumpbudget and look at
+        ! budget_xy_avg for reference. >>
+    end subroutine 
+    
+    subroutine ResetBudget(this)
+        class(budgets_time_avg), intent(inout) :: this
+        
+        this%counter = 0
+        this%budget_0 = 0.d0 
+        this%budget_1 = 0.d0 
+        this%budget_2 = 0.d0 
+        this%budget_3 = 0.d0 
+    end subroutine 
+    
+    subroutine destroy(this)
+        class(budgets_time_avg), intent(inout) :: this
+
+        nullify(this%igrid_sim)
+        deallocate(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, this%px, this%py, this%pz, this%uturb)  
+        deallocate(this%budget_0, this%budget_1)
+
+    end subroutine 
+
+end module 

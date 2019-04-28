@@ -1,0 +1,11 @@
+&INPUT
+inputdir  = "/scratch/04076/tg833754/ActuatorDisk_Data/HIT_inflow/Case10/all_vel"        ! Directory for input files
+outputdir = "/scratch/04076/tg833754/ActuatorDisk_Data/HIT_inflow/Case10/all_vel"        ! Directory for output files
+RunID  = 6
+tstart = 168000
+tstop  = 345975 !247875
+tstep  = 75
+nx     = 1280
+ny     = 256
+nz     = 256
+/

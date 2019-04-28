@@ -3,19 +3,21 @@
 #include "neutral_pbl_files/initialize.F90"       
 #include "neutral_pbl_files/temporalHook.F90"  
 
-program neutral_pbl
+program neutral_pbl_igrid
     use mpi
     use kind_parameters,  only: clen
     use IncompressibleGrid, only: igrid
-    use temporalhook, only: doTemporalStuff
+    use temporalhook, only: doTemporalStuff!, initialize_controller_location
     use timer, only: tic, toc
     use exits, only: message
+    use budgets_xy_avg_mod, only: budgets_xy_avg  
 
     implicit none
 
     type(igrid), allocatable, target :: igp
     character(len=clen) :: inputfile
     integer :: ierr
+    type(budgets_xy_avg) :: budg
 
     call MPI_Init(ierr)               !<-- Begin MPI
 
@@ -25,18 +27,26 @@ program neutral_pbl
 
     call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
   
-    call igp%start_io(.true.)                !<-- Start I/O by creating a header file (see io.F90)
+    call igp%start_io(.false.)                !<-- Start I/O by creating a header file (see io.F90)
     
     call igp%printDivergence()
   
+    !call initialize_controller_location(igp, inputfile)  !<-- frame angle controller initialization 
+
+    call budg%init(inputfile, igp)   !<-- Budget class initialization 
+
     call tic() 
     do while (igp%tsim < igp%tstop) 
        
-       call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
-       call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
-       
+       call igp%timeAdvance()      !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
+       call doTemporalStuff(igp)   !<-- Go to the temporal hook (see temporalHook.F90)
+   
+       ! call budg%ResetBudgets()  !<--- call resetBudgets if the problem is non-stationary 
+       call budg%doBudgets()       !<--- perform budget related operations 
     end do 
  
+    call budg%destroy()             !<-- release memory taken by the budget class 
+
     call igp%finalize_io()                  !<-- Close the header file (wrap up i/o)
 
     call igp%destroy()                !<-- Destroy the IGRID derived type 

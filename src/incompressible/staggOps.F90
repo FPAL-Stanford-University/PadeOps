@@ -16,8 +16,8 @@ module staggOpsMod
         integer :: nxE, nyE, nzE
         integer :: nxC_cmplx, nyC_cmplx, nzC_cmplx
         integer :: nxE_cmplx, nyE_cmplx, nzE_cmplx
-        type(decomp_info), pointer :: cellDecomp
-        type(decomp_info), pointer :: edgeDecomp
+        class(decomp_info), pointer :: cellDecomp
+        class(decomp_info), pointer :: edgeDecomp
         integer :: stagg_scheme
         real(rkind) :: dx, dy, dz
         logical :: isBotSided = .false. 

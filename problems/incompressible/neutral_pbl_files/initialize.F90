@@ -1,8 +1,10 @@
 module neutral_pbl_parameters
 
+      ! TAKE CARE OF TIME NON-DIMENSIONALIZATION IN THIS MODULE
+
     use exits, only: message
     use kind_parameters,  only: rkind
-    use constants, only: zero, kappa 
+    use constants, only: zero, kappa, pi 
     implicit none
     integer :: seedu = 321341
     integer :: seedv = 423424
@@ -10,7 +12,7 @@ module neutral_pbl_parameters
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
     
-    real(rkind), parameter :: xdim = 1000._rkind, udim = 0.45_rkind
+    real(rkind), parameter :: xdim = 400._rkind, udim =5._rkind
     real(rkind), parameter :: timeDim = xdim/udim
 
 end module     
@@ -24,6 +26,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use random,             only: gaussian_random
     use decomp_2d          
     use reductions,         only: p_maxval
+    use constants,          only: pi
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -33,21 +36,16 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, T, x, y, z
-    real(rkind) :: z0init, epsnd = 0.1
-    real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
+    real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE, ztmp
     integer :: nz, nzE, k
-    real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0!, Zperiods = 1.d0
-    real(rkind) :: zpeak = 0.2d0, sig
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, Gx0 = one, Gy0 = zero;
-    real(rkind) :: thetam = 15._rkind + 273.15_rkind
-    real(rkind) :: cTemp = 0.5d0, aTemp = 2.45d0, bTemp = 0.05d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
+    real(rkind) :: sig
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, Tsurf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4, frameAngle = -26.d0 
     real(rkind), dimension(:,:,:), allocatable :: randArr, Tpurt, eta
-    ! New parameters added by MH, 6/22/17
-    real(rkind), dimension(:,:,:), allocatable :: fu, fv, signf
-    real(rkind), dimension(:,:,:), allocatable :: ub, vb
-    real(rkind) :: ustar = 0.28d0, kappaInit = 0.41d0
     
-    namelist /PROBLEM_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, Tsurf0, dTsurf_dt, z0init, frameAngle 
+    !real(rkind)  :: beta, sigma, phi_ref
+    !integer :: z_ref
+    !namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, Tsurf0, dTsurf_dt, z0init, frameAngle!, beta, sigma, phi_ref, z_ref
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -59,58 +57,43 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     u  => fieldsC(:,:,:,1); v  => fieldsC(:,:,:,2); wC => fieldsC(:,:,:,3)
     w  => fieldsE(:,:,:,1); T  => fieldsC(:,:,:,7) 
     z => mesh(:,:,:,3); y => mesh(:,:,:,2); x => mesh(:,:,:,1)
-    allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    allocate(eta(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    allocate(randArr(size(T,1),size(T,2),size(T,3)))
+    !allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    !allocate(randArr(size(T,1),size(T,2),size(T,3)))
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    ! MH allocate new variables
-    !allocate(fu(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3))) 
-    !allocate(fv(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    !allocate(signf(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    !allocate(ub(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    !allocate(vb(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
-    !ub => fieldsC(:,:,:,1); vb => fieldsC(:,:,:,2)
 
-    ! Compute initial velocity field
-    !fu = 1.57d0 * (z/h0Temp) - 2.68d0 * (z/h0Temp)**2
-    !fv = 13.2d0 * (z/h0Temp) - 8.70d0 * (z/h0Temp)**2
-    !ub = (ustar/kappaInit) * (log(z/z0init) + fu)
-    !vb = -(ustar/kappaInit) * fv * sign(fv,signf)
-    !u = ub*((1.d0-tanh(((z/z0init)-0.5d0)*2.d0*h0Temp/100.d0))/2.d0) + &
-    !    Gx0 * ((1.d0+tanh((z/z0init)*2.d0*h0Temp/100.d0))/2.d0)
-    !v = vb*((1.d0-tanh(((z/z0init)-0.5d0)*2.d0*h0Temp/100.d0))/2.d0) + &
-    !    Gy0 * ((1.d0+tanh((z/z0init)*2.d0*h0Temp/100.d0))/2.d0)
-    !deallocate(ub, vb, fu, fv, signf)
+    u = one
+    v = zero
+    wC = zero
+    ! Added to account for frame angle    
+    u = u * cos(frameAngle * pi / 180.d0)
+    v = v * sin(frameAngle * pi / 180.d0) 
 
-    ! Provide initial conditions for Velocities and Potential Temperature
-    u = Gx0           ! Could be a function of (x,y,z)
-    v = Gy0           ! Could be a function of (x,y,z)
-    wC = zero         ! Could be a function of (x,y,z) 
-   
-    eta = (z - h1Temp)/(cTemp*(h2Temp - h0Temp))
-    T = thetam + aTemp*(tanh(eta) + 1.d0)/2.d0 + bTemp*(log(2.d0*cosh(eta)) + eta)/2.d0 
+    allocate(ztmp(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
+    ztmp = z*xDim
+    T = 0.003d0*(ztmp - 700.d0) + 300.d0
+    where(ztmp < 100.d0)
+        T = 300.d0
+    end where
+    T = T + 0.0001d0*ztmp
 
-    ! write the variables to a file to test
-!    open(unit=1, file="T")
-!    write(1,*) T
-!    close(unit=1)
-
-
-    ! Generate Temperature perturbations 
+    ! Add random numbers
+    allocate(randArr(size(T,1),size(T,2),size(T,3)))
     call gaussian_random(randArr,zero,one,seedu + 10*nrank)
-    do k = 1,size(Tpurt,3)
-        sig = 0.08d0     ! Could be a z-dependent scaling 
+    !randArr = cos(4.d0*2.d0*pi*x)*sin(4.d0*2.d0*pi*y)
+    do k = 1,size(u,3)
+        sig = 0.08
         Tpurt(:,:,k) = sig*randArr(:,:,k)
-    end do  
-    ! Set random numbers in z > 0.25 to zero 
-    where (z > 0.25d0)
+    end do
+    deallocate(randArr)
+
+    where (ztmp > 50.d0)
         Tpurt = zero
     end where
-    
-    ! Add Temperature purturbations 
     T = T + Tpurt
 
+    deallocate(ztmp, Tpurt)
 
     !!!!!!!!!!!!!!!!!!!!! DON'T CHANGE ANYTHING UNDER THIS !!!!!!!!!!!!!!!!!!!!!!
     ! Interpolate wC to w
@@ -128,8 +111,6 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     call transpose_y_to_x(ybuffE,w,decompE) 
     ! Deallocate local memory 
     deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
-    deallocate(randArr)
-    deallocate(Tpurt, eta)
     nullify(u,v,w,x,y,z)
     call message(0,"Velocity Field Initialized")
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -137,26 +118,53 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
 
 end subroutine
 
+subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
+    use kind_parameters,    only: rkind
+    use constants, only: one, zero 
+    implicit none
+
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), intent(out) :: wTh_surf
+    integer :: ioUnit 
+    real(rkind) :: wt_surface 
+    namelist /BOUNDARY_FLUX/wt_surface 
+     
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=BOUNDARY_FLUX)
+    close(ioUnit)    
+
+    wTh_surf = wt_surface
+
+
+    ! Do nothing really since temperature BC is homogeneous Neumann
+end subroutine
+
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
     use neutral_pbl_parameters
+    use constants, only: one, zero 
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: Gx0, Gy0, Lx, Ly, Lz, z0init, Tref
     character(len=*),                intent(in)    :: inputfile
     integer :: ioUnit 
-    real(rkind) :: aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
-    namelist /PROBLEM_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
-     
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, Tsurf0 = one, z0init = 1.d-4, frameAngle = 0.d0
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, Tsurf0, dTsurf_dt, z0init, frameAngle  
+    !real(rkind)  :: beta, sigma, phi_ref
+    !integer :: z_ref
+    !namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, Tsurf0, dTsurf_dt, z0init, frameAngle!, beta, sigma, phi_ref, z_ref    
+ 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBLEM_INPUT)
     close(ioUnit)    
-    
-    ! This subroutine is never called for this problem, since it uses Neumann
-    ! BC.
 
-    Tsurf = 0.d0; dTsurf_dt = 0.d0
+    dTsurf_dt = dTsurf_dt /  3600.d0
+
+    ! Normalize
+    dTsurf_dt = dTsurf_dt * timeDim 
+
+    Tsurf = Tsurf0
 end subroutine
 
 subroutine set_planes_io(xplanes, yplanes, zplanes)
@@ -211,13 +219,13 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     type(decomp_info),                                          intent(in)    :: decomp
     real(rkind),                                                intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
-    real(rkind) :: z0init
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, Gx0 = one, Gy0 = zero;
-    real(rkind) :: cTemp = 1.d0/3.d0, aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
-    namelist /PROBLEM_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, Tsurf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4, frameAngle = 0.d0
+    !real(rkind)  :: beta, sigma, phi_ref
+    !integer :: z_ref 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, Tsurf0, dTsurf_dt, z0init, frameAngle 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -259,14 +267,17 @@ end subroutine
 
 subroutine set_Reference_Temperature(inputfile, Thetaref)
     use kind_parameters,    only: rkind
+    use constants, only: one, zero 
     implicit none
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Thetaref
-    real(rkind) :: Lx, Ly, Lz, z0init, Gx0, Gy0, Tref
     integer :: ioUnit 
-    real(rkind) :: aTemp = 1.5d0, bTemp = 0.04d0, h0Temp = 0.5d0, h1Temp = 0.55, h2Temp = 0.60 
-    namelist /PROBLEM_INPUT/ Gx0, Gy0, Lx, Ly, Lz, z0init, Tref, aTemp, bTemp, h0Temp, h1Temp, h2Temp 
-     
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, Tsurf0 = one, dTsurf_dt = -0.05d0, z0init = 2.5d-4, frameAngle = 0.d0 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, Tsurf0, dTsurf_dt, z0init, frameAngle  
+    !real(rkind)  :: beta, sigma, phi_ref
+    !integer :: z_ref
+    !namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, Tsurf0, dTsurf_dt, z0init, frameAngle!, beta, sigma, phi_ref, z_ref     
+
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBLEM_INPUT)
@@ -288,3 +299,26 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 
 end subroutine
 
+subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarField
+
+    scalarField = 0.d0
+end subroutine 
+
+subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
+
+    scalarSource = 0.d0
+end subroutine 

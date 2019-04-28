@@ -10,8 +10,8 @@ module temporalHook
     implicit none 
 
     integer :: nt_print2screen = 1
-    real(rkind) ::  maxDiv, DomMaxDiv
-    integer :: ierr 
+    real(rkind) ::  maxDiv, DomMaxDiv, time0
+    integer :: ierr, stepper=0 
 
 contains
 
@@ -26,6 +26,7 @@ contains
             call message(1,"TIDX:",igp%step)
             call message(1,"MaxDiv:",DomMaxDiv)
             call message(1,"Inv. Ob. Len:",igp%sgsmodel%get_InvObLength())
+            call message(1,"Surface Flux (K*nd velocity):",igp%wTh_surf)
             call message_min_max(1,"Bounds for u:", p_minval(minval(igp%u)), p_maxval(maxval(igp%u)))
             call message_min_max(1,"Bounds for v:", p_minval(minval(igp%v)), p_maxval(maxval(igp%v)))
             call message_min_max(1,"Bounds for w:", p_minval(minval(igp%w)), p_maxval(maxval(igp%w)))
@@ -47,7 +48,25 @@ contains
             end if
         end if 
 
+        if (stepper==0) then
+            time0 = igp%Tsim
+            stepper=1
+        end if
+
+        call update_surface_flux(igp%Tsim-time0, igp%wTh_surf)
+
     end subroutine
 
+    subroutine update_surface_flux(time, surfaceFlux)
+        real(rkind), intent(in) :: time
+        real(rkind), intent(inout) :: surfaceFlux
+
+        ! ADITYA TO MIKE: Set your function here
+        ! Nocturnal surface flux slope Kumar et al. 2006, -0.003 (K*m/s) / hour
+        ! -0.003 (K*m/s)/hour * (1 nd speed / G m/s) * (1hour/3600s) * (80s/T nd) = -1.3333e-05
+
+        surfaceFlux = -1.3333D-5 * time
+
+    end subroutine    
 
 end module 

@@ -1,0 +1,10 @@
+&INPUT
+nx                    = 256 
+ny                    = 256
+nz                    = 256
+Lz                    = 6.28318530
+outputdir             = "/projects/windFlowModeling/PadeOps/HIT_testing/output/"   ! Directory for all output files
+TID                   = 0          ! TimeID of the restart file for the original data
+RID                   = 5          ! RunID of the restart file for the original data
+matlabfile             = "/projects/windFlowModeling/PadeOps/HIT_testing/output/myfile.txt"   ! Directory for all output files
+/

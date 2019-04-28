@@ -63,6 +63,42 @@ module igrid_hooks
         end subroutine 
     end interface
 
+
+   interface initScalar
+      subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
+            import :: rkind
+            import :: decomp_info
+            type(decomp_info), intent(in) :: decompC
+            character(len=*), intent(in) :: inpDirectory
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            real(rkind), dimension(:,:,:), intent(out) :: scalarField
+            integer, intent(in) :: scalar_id
+      end subroutine 
+   end interface
+
+
+   interface SetScalar_source
+      subroutine SetScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource)
+            import :: rkind
+            import :: decomp_info
+            type(decomp_info), intent(in) :: decompC
+            character(len=*), intent(in) :: inpDirectory
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            real(rkind), dimension(:,:,:), intent(out) :: scalarSource
+            integer, intent(in) :: scalar_id
+      end subroutine 
+   end interface
+
+
+    interface setInhomogeneousNeumannBC_Temp
+        subroutine setInhomogeneousNeumannBC_Temp(inpDirectory, wTh_surf)
+            import :: rkind
+            character(len=*), intent(in) :: inpDirectory
+            real(rkind), intent(out) :: wTh_surf
+
+        end subroutine 
+    end interface
+
     interface setDirichletBC_Temp
         subroutine setDirichletBC_Temp(inpDirectory, Tsurf, dTsurfdt)
             import :: rkind

@@ -10,7 +10,7 @@ module fringeMethod
    type :: fringe 
       private
       logical                                       :: TargetsAssociated = .false. 
-      real(rkind), dimension(:,:,:), pointer        :: u_target, v_target, w_target, T_target
+      real(rkind), dimension(:,:,:), pointer        :: u_target, v_target, w_target, T_target, F_target
       real(rkind), dimension(:,:,:), allocatable    :: Fringe_kernel_cells, Fringe_kernel_edges
       real(rkind)                                   :: Fringe_Lambda_x
       type(spectral),    pointer                    :: spectC, spectE
@@ -20,6 +20,7 @@ module fringeMethod
       real(rkind)                                   :: LambdaFact
       integer :: myFringeID = 1
       logical :: useTwoFringex = .false. 
+      logical :: useFringeAsSponge_Scalar = .true. 
       contains
          procedure :: init
          procedure :: destroy
@@ -27,6 +28,8 @@ module fringeMethod
          procedure :: associateFringeTargets
          procedure :: allocateTargetArray_Cells
          procedure :: allocateTargetArray_Edges
+         procedure :: addFringeRHS_scalar
+         procedure :: associateFringeTarget_scalar
    end type
     
 contains
@@ -107,6 +110,24 @@ contains
 
    end subroutine
 
+   subroutine addFringeRHS_scalar(this, dt, Frhs, F)
+      class(fringe),                                                                      intent(inout)        :: this
+      complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)),intent(inout)        :: Frhs  
+      real(rkind),                                                                        intent(in)           :: dt
+      real(rkind),    dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)),         intent(in)           :: F 
+
+      if (this%useFringeAsSponge_Scalar) then
+            this%rbuffxC(:,:,:,1) = -(this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(F)
+            call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
+            Frhs = Frhs + this%cbuffyC(:,:,:,1)
+      else
+         if (associated(this%F_target)) then
+            this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%F_target - F)
+            call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
+            Frhs = Frhs + this%cbuffyC(:,:,:,1)
+         end if 
+      end if 
+   end subroutine
 
    subroutine destroy(this)
       class(fringe), intent(inout) :: this
@@ -116,6 +137,14 @@ contains
       this%TargetsAssociated = .false.
    end subroutine
 
+   subroutine associateFringeTarget_scalar(this, Ftarget)
+      class(fringe), intent(inout) :: this
+      real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in), target :: Ftarget
+
+      this%F_target => Ftarget
+      this%useFringeAsSponge_Scalar = .false. 
+
+   end subroutine 
 
    subroutine associateFringeTargets(this, utarget, vtarget, wtarget, Ttarget)
       class(fringe), intent(inout) :: this
@@ -188,6 +217,7 @@ contains
       this%cbuffyC => cbuffyC 
       this%cbuffyE => cbuffyE
 
+      this%useFringeAsSponge_Scalar = .true. 
       
       allocate(this%Fringe_kernel_cells(nx, gpC%xsz(2), gpC%xsz(3)))
       allocate(this%Fringe_kernel_edges(nx, gpE%xsz(2), gpE%xsz(3)))
@@ -292,6 +322,7 @@ contains
       real(rkind), dimension(:), intent(in)    :: x
       real(rkind), dimension(:), intent(out)   :: output
       integer :: i
+      real(rkind) :: exparg
 
       do i = 1,size(x)
         if (x(i) .le. 0.d0) then
@@ -299,7 +330,9 @@ contains
         else if (x(i) .ge. 1.d0) then
            output(i) = 1.d0
         else
-           output(i) = 1.d0/(1.d0 + exp((1.d0/(x(i) - 1.d0)) + (1.d0/(x(i)))))
+           exparg = 1.d0/(x(i) - 1.d0 + 1.0D-32) + 1.d0/(x(i) + 1.0D-32)
+           exparg = min(exparg,708.0d0) ! overflows if exparg > 709. need a better fix for this
+           output(i) = 1.d0/(1.d0 + exp(exparg))
         end if
       end do
 

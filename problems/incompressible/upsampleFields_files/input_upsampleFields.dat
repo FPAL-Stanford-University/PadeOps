@@ -1,13 +1,13 @@
 &INPUT
-nx                    = 96 
-ny                    = 96
-nz                    = 64
-inputdir              = "/home/jrwest/Codes/PadeOps/data/runs/run05"   ! Directory for any input files
-outputdir             = "/home/jrwest/Codes/PadeOps/data/runs/run07"   ! Directory for all output files
-inputFile_TID         = 018503       ! TimeID of the restart file for the original data
-inputFile_RID         = 05          ! RunID of the restart file for the original data
+nx                    = 256 
+ny                    = 128
+nz                    = 192
+inputdir              = "/scratch/04076/tg833754/Coriolis_ActuatorDisk/debug_data/0_tall"   ! Directory for any input files
+outputdir             = "/scratch/04076/tg833754/Coriolis_ActuatorDisk/primary_data/0_tall_up"   ! Directory for all output files
+inputFile_TID         = 0308000       ! TimeID of the restart file for the original data
+inputFile_RID         = 01          ! RunID of the restart file for the original data
 outputFile_TID        = 0       ! TimeID of the restart file with upsampled data
-outputFile_RID        = 07          ! RunID of the restart file with the upsampled data
+outputFile_RID        = 01          ! RunID of the restart file with the upsampled data
 upsampleInZ           = .TRUE.
-isStratified          = .FALSE.     ! Is there a restart file for potential temperature?
+isStratified          = .TRUE.     ! Is there a restart file for potential temperature?
 /

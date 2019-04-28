@@ -89,10 +89,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
     real(rkind) :: z0init, epsnd = 0.02
-    real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
+    real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
     real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0!, Zperiods = 1.d0
-    real(rkind) :: zpeak = 0.2d0
+    real(rkind) :: zpeak = 0.2d0, noiseAmp = 1.d-2
     real(rkind)  :: Lx = one, Ly = one, Lz = one
     logical :: initPurturbations = .true. 
     namelist /PBLINPUT/ Lx, Ly, Lz, z0init, initPurturbations
@@ -123,6 +123,15 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     end if 
     wC= zero  
    
+    allocate(randArr(size(wC,1),size(wC,2),size(wC,3)))
+    
+    call gaussian_random(randArr,zero,one,seedu + 100*nrank)
+    u  = u + noiseAmp*randArr
+    
+    call gaussian_random(randArr,zero,one,seedv + 100*nrank)
+    v  = v + noiseAmp*randArr
+
+    deallocate(randArr)
 
     ! Interpolate wC to w
     allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
@@ -178,6 +187,25 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 
 end subroutine
 
+subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
+    use kind_parameters,    only: rkind
+    use constants, only: one, zero 
+    implicit none
+
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), intent(out) :: wTh_surf
+    integer :: ioUnit 
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init
+    logical :: initPurturbations = .false. 
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, initPurturbations
+     
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PBLINPUT)
+    close(ioUnit)    
+
+    ! Do nothing really since this is an unstratified simulation
+end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
@@ -246,3 +274,27 @@ subroutine hook_probes(inputfile, probe_locs)
 
 
 end subroutine
+
+subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarField
+
+    scalarField = 0.d0
+end subroutine 
+
+subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
+
+    scalarSource = 0.d0
+end subroutine 

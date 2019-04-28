@@ -46,30 +46,30 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
 
       ! Tau_13
       call transpose_y_to_z(uhat, cbuffz, this%sp_gpC)
-      this%tauijWMhat_inZ(:,:,1,1) = this%WallMFactor*cbuffz(:,:,1) 
+      this%tauijWMhat_inZ(:,:,1,1) = this%WallMFactor*cbuffz(:,:,this%WM_matchingIndex) 
       call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,1), this%tauijWMhat_inY(:,:,:,1), this%sp_gpE)
       call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,1), this%tauijWM(:,:,:,1))
 
       ! Tau_23
       call transpose_y_to_z(vhat, cbuffz, this%sp_gpC)
-      this%tauijWMhat_inZ(:,:,1,2) = this%WallMFactor*cbuffz(:,:,1) 
+      this%tauijWMhat_inZ(:,:,1,2) = this%WallMFactor*cbuffz(:,:,this%WM_matchingIndex) 
       call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,2), this%tauijWMhat_inY(:,:,:,2), this%sp_gpE)
       call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,2), this%tauijWM(:,:,:,2))
 
    case (2) ! Bou-zeid Wall model 
-      this%WallMFactor = -(kappa/(log(this%dz/(two*this%z0)) + beta_m*this%InvObLength*this%dz/two))**2 
+      this%WallMFactor = -(kappa/(log(this%dz/(two*this%z0)) - this%PsiM))**2 
       call this%getfilteredSpeedSqAtWall(uhat, vhat)
       
       call this%spectC%fft(this%filteredSpeedSq, cbuffy)
       call transpose_y_to_z(cbuffy, cbuffz, this%sp_gpC)
       
       ! tau_13
-      this%tauijWMhat_inZ(:,:,1,1) = (this%WallMFactor*this%umn/this%Uspmn) * cbuffz(:,:,1) 
+      this%tauijWMhat_inZ(:,:,1,1) = (this%WallMFactor*this%umn/this%Uspmn) * cbuffz(:,:,this%WM_matchingIndex) 
       call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,1), this%tauijWMhat_inY(:,:,:,1), this%sp_gpE)
       call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,1), this%tauijWM(:,:,:,1))
       
       ! tau_23
-      this%tauijWMhat_inZ(:,:,1,2) = (this%WallMFactor*this%vmn/this%Uspmn) * cbuffz(:,:,1) 
+      this%tauijWMhat_inZ(:,:,1,2) = (this%WallMFactor*this%vmn/this%Uspmn) * cbuffz(:,:,this%WM_matchingIndex) 
       call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,2), this%tauijWMhat_inY(:,:,:,2), this%sp_gpE)
       call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,2), this%tauijWM(:,:,:,2))
    end select
@@ -120,9 +120,9 @@ subroutine compute_and_bcast_surface_Mn(this, u, v, uhat, vhat, That )
     call this%spectC%fft(rbuff,cbuff)
 
     if (nrank == 0) then
-        this%Umn = real(uhat(1,1,1),rkind)*this%meanFact
-        this%Vmn = real(vhat(1,1,1),rkind)*this%meanFact
-        this%Uspmn = real(cbuff(1,1,1),rkind)*this%meanFact
+        this%Umn = real(uhat(1,1,this%WM_matchingIndex),rkind)*this%meanFact
+        this%Vmn = real(vhat(1,1,this%WM_matchingIndex),rkind)*this%meanFact
+        this%Uspmn = real(cbuff(1,1,this%WM_matchingIndex),rkind)*this%meanFact
         if (this%isStratified .or. this%initSpinUp) this%Tmn = real(That(1,1,1),rkind)*this%meanFact
     end if
     call mpi_bcast(this%Umn,1,mpirkind,0,mpi_comm_world,ierr)
@@ -163,37 +163,85 @@ subroutine getSurfaceQuantities(this)
     class(sgs_igrid), intent(inout) :: this
     integer :: idx
     integer, parameter :: itermax = 100 
-    real(rkind) :: ustarNew, ustarDiff, dTheta, ustar
-    real(rkind) :: a, b, c, PsiH, PsiM, wTh, z, u, Linv
- 
+    real(rkind) :: ustarNew, ustarDiff, dTheta, ustar, at
+    real(rkind) :: a, b, c, PsiH, PsiM, wTh, u, Linv, xi, xisq
+    real(rkind) :: hwm
+
+    hwm = this%dz/two + (this%WM_matchingIndex - 1)*this%dz
     if (this%isStratified) then
       select case (this%botBC_Temp)
       case(0) ! Dirichlet BC for temperature 
           dTheta = this%Tsurf - this%Tmn; Linv = zero
-          z = this%dz/two ; ustarDiff = one; wTh = zero
-          a=log(z/this%z0); b=beta_h*this%dz/two; c=beta_m*this%dz/two 
+          ustarDiff = one; wTh = zero
+          a=log(hwm/this%z0); b=beta_h*hwm; c=beta_m*hwm
           PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
+          at=log(hwm/this%z0t)
+
+          !if(nrank==0) then
+          !   write(nrank+100,'(8(e19.12,1x),2(i5,1x))') this%ustar, this%invObLength, this%Tsurf, this%wTh_surf, ustarDiff, this%PsiM, u, PsiH, idx, itermax
+          !endif
+          ! Inside the do loop all the used variables are on the stored on the stack
+          ! After the while loop these variables are copied to their counterparts
+          ! on the heap (variables part of the derived type)
+          do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
+              ustarNew = u*kappa/(a - PsiM)
+              wTh = dTheta*ustarNew*kappa/(at - PsiH) 
+              Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
+              if (Linv .ge. zero) then 
+                ! similarity functions if stable stratification is present
+                PsiM = -c*Linv;         PsiH = -b*Linv; 
+              else
+                ! similarity functions if unstable stratification is present
+                xisq = sqrt(one-15.d0*hwm*Linv); xi = sqrt(xisq)
+                PsiM = two*log(half*(one+xi)) + log(half*(one+xisq)) - two*atan(xi) + piby2; 
+                PsiH = two*log(half*(one+xisq));
+              endif
+              ustarDiff = abs((ustarNew - ustar)/ustarNew)
+              ustar = ustarNew; idx = idx + 1
+          end do 
+          this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
+          this%PsiM = PsiM
+          !if(nrank==0) then
+          !   write(nrank+200,'(8(e19.12,1x),2(i5,1x))') this%ustar, this%invObLength, this%Tsurf, this%wTh_surf, ustarDiff, this%PsiM, u, PsiH, idx, itermax
+          !endif
+      case(1) ! Homogeneous Neumann BC for temperature
+          this%ustar = this%Uspmn*kappa/(log(hwm/this%z0))
+          this%invObLength = zero
+          this%wTh_surf = zero
+          this%PsiM = zero
+      case(2) ! Inhomogeneous Neumann BC for temperature
+          Linv = zero; !dTheta = this%Tsurf - this%Tmn;
+          ustarDiff = one; wTh = this%wTh_surf
+          a=log(hwm/this%z0); b=beta_h*hwm; c=beta_m*hwm
+          PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
+          at=log(hwm/this%z0t)
    
           ! Inside the do loop all the used variables are on the stored on the stack
           ! After the while loop these variables are copied to their counterparts
           ! on the heap (variables part of the derived type)
           do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
               ustarNew = u*kappa/(a - PsiM)
-              wTh = dTheta*ustarNew*kappa/(a - PsiH) 
               Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
-              PsiM = -c*Linv; PsiH = -b*Linv;
+              if (Linv .ge. zero) then 
+                ! similarity functions if stable stratification is present
+                PsiM = -c*Linv;         PsiH = -b*Linv; 
+              else
+                ! similarity functions if unstable stratification is present
+                xisq = sqrt(one-15.d0*hwm*Linv); xi = sqrt(xisq)
+                PsiM = two*log(half*(one+xi)) + log(half*(one+xisq)) - two*atan(xi) + piby2; 
+                PsiH = two*log(half*(one+xisq));
+              endif
               ustarDiff = abs((ustarNew - ustar)/ustarNew)
               ustar = ustarNew; idx = idx + 1
           end do 
-          this%ustar = ustar; this%invObLength = Linv; this%wTh_surf = wTh
-       case(1) ! Homogeneous Neumann BC for temperature
-          this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
-          this%invObLength = zero
-          this%wTh_surf = zero
+          this%ustar = ustar; this%invObLength = Linv; 
+          this%Tsurf = this%Tmn + wTh*(at-PsiH)/(ustar*kappa)
+          this%PsiM = PsiM
       end select
    else
-          this%ustar = this%Uspmn*kappa/(log(this%dz/two/this%z0))
+          this%ustar = this%Uspmn*kappa/(log(hwm/this%z0))
           this%invObLength = zero
           this%wTh_surf = zero
-   end if 
+          this%PsiM = zero
+    end if 
 end subroutine

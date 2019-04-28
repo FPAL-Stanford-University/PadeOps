@@ -47,11 +47,18 @@ module PadeDerOps
       procedure, private :: d2dz2_E2E_cmplx
       generic            :: ddz_C2E => ddz_C2E_real, ddz_C2E_cmplx
       generic            :: ddz_E2C => ddz_E2C_real, ddz_E2C_cmplx
+      procedure          :: ddz_C2C_real
+      procedure          :: ddz_C2C_cmplx
+      generic            :: ddz_C2C => ddz_C2C_real,ddz_C2C_cmplx
       generic            :: d2dz2_C2C => d2dz2_C2C_real, d2dz2_C2C_cmplx
       generic            :: d2dz2_E2E => d2dz2_E2E_real, d2dz2_E2E_cmplx
       generic            :: interpz_C2E => interpz_C2E_real, interpz_C2E_cmplx
       generic            :: interpz_E2C => interpz_E2C_real, interpz_E2C_cmplx
-   end type
+      procedure          :: ddz_1d_C2C
+      procedure          :: ddz_1d_C2E
+      procedure          :: interp_1d_E2C
+  end type
+
 contains
 
 subroutine init(this, gpC, sp_gpC, gpE, sp_gpE, dz, scheme, isPeriodic, spectC)
@@ -397,6 +404,178 @@ subroutine d2dz2_E2E_cmplx(this,input,output,bot,top)
          end select
       end select
    end if 
+
+end subroutine 
+
+
+subroutine ddz_C2C_real(this, input, output, bot, top)
+   class(Pade6stagg), intent(in) :: this
+   real(rkind), dimension(this%gp%zsz(1),this%gp%zsz(2),this%gp%zsz(3)), intent(in)  :: input
+   real(rkind), dimension(this%gp%zsz(1),this%gp%zsz(2),this%gp%zsz(3)), intent(out) :: output
+   integer, intent(in) :: bot, top
+
+   if (this%isPeriodic) then
+      select case(this%scheme) 
+      case (fourierColl)
+         call this%spectC%ddz_C2C_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%ddz_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+      case (fd02)    
+         call this%fd02_periodic%ddz_C2C(input, output,.false.,.false.)
+      end select
+   else 
+      select case (this%scheme) 
+      case(fd02)
+         select case (bot)
+         case(-1) 
+            if     (top == -1) then
+               call this%fd02_nn%ddz_C2C(input,output,.false.,.false.)
+            elseif (top ==  0) then
+               call this%fd02_sn%ddz_C2C(input,output,.true.,.false.)
+            elseif (top ==  1) then
+               call this%fd02_nn%ddz_C2C(input,output,.true.,.false.)
+            end if
+         case(0)  ! bottom = sided
+            if     (top == -1) then
+               call this%fd02_ns%ddz_C2C(input,output,.false.,.true.)
+            elseif (top ==  0) then
+               call this%fd02_ss%ddz_C2C(input,output,.false.,.true.)
+            elseif (top ==  1) then
+               call this%fd02_ns%ddz_C2C(input,output,.true.,.true.)
+            end if
+         case(1)  ! bottom = even
+            if     (top == -1) then
+               call this%fd02_nn%ddz_C2C(input,output,.false.,.true.)
+            elseif (top ==  0) then
+               call this%fd02_sn%ddz_C2C(input,output,.false.,.true.)
+            elseif (top ==  1) then
+               call this%fd02_nn%ddz_C2C(input,output,.true.,.true.)
+            end if
+         end select
+      case(cd06)
+         select case (bot)
+         case(-1) 
+            if     (top == -1) then
+               call this%derOO%ddz_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+            elseif (top ==  0) then
+               call this%derSO%ddz_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+            elseif (top ==  1) then
+               call this%derEO%ddz_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+            else 
+               output = 0.d0
+            end if
+         case(0)  ! bottom = sided
+            if     (top == -1) then
+               call this%derOS%ddz_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+            elseif (top ==  0) then
+               call this%derSS%ddz_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+            elseif (top ==  1) then
+               call this%derES%ddz_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+            else 
+               output = 0.d0
+            end if
+         case(1)  ! bottom = even
+            if     (top == -1) then
+               call this%derOE%ddz_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+            elseif (top ==  0) then
+               call this%derSE%ddz_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+            elseif (top ==  1) then
+               call this%derEE%ddz_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+            else 
+               output = 0.d0
+            end if
+         case default
+            output = 0.d0
+         end select
+      end select 
+   end if 
+
+
+end subroutine 
+
+
+subroutine ddz_C2C_cmplx(this, input, output, bot, top)
+   class(Pade6stagg), intent(in) :: this
+   complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)), intent(in)  :: input
+   complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)), intent(out) :: output
+   integer, intent(in) :: bot, top
+
+   if (this%isPeriodic) then
+      select case(this%scheme) 
+      case (fourierColl)
+         call this%spectC%ddz_C2C_spect(input, output)
+      case (cd06)
+         call this%derPeriodic%ddz_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+      case (fd02)    
+         call this%fd02_periodic%ddz_C2C(input, output,.false.,.false.)
+      end select
+   else 
+      select case (this%scheme) 
+      case(fd02)
+         select case (bot)
+         case(-1) 
+            if     (top == -1) then
+               call this%fd02_nn%ddz_C2C(input,output,.false.,.false.)
+            elseif (top ==  0) then
+               call this%fd02_sn%ddz_C2C(input,output,.true.,.false.)
+            elseif (top ==  1) then
+               call this%fd02_nn%ddz_C2C(input,output,.true.,.false.)
+            end if
+         case(0)  ! bottom = sided
+            if     (top == -1) then
+               call this%fd02_ns%ddz_C2C(input,output,.false.,.true.)
+            elseif (top ==  0) then
+               call this%fd02_ss%ddz_C2C(input,output,.false.,.true.)
+            elseif (top ==  1) then
+               call this%fd02_ns%ddz_C2C(input,output,.true.,.true.)
+            end if
+         case(1)  ! bottom = even
+            if     (top == -1) then
+               call this%fd02_nn%ddz_C2C(input,output,.false.,.true.)
+            elseif (top ==  0) then
+               call this%fd02_sn%ddz_C2C(input,output,.false.,.true.)
+            elseif (top ==  1) then
+               call this%fd02_nn%ddz_C2C(input,output,.true.,.true.)
+            end if
+         end select
+      case(cd06)
+         select case (bot)
+         case(-1) 
+            if     (top == -1) then
+               call this%derOO%ddz_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+            elseif (top ==  0) then
+               call this%derSO%ddz_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+            elseif (top ==  1) then
+               call this%derEO%ddz_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+            else 
+               output = 0.d0
+            end if
+         case(0)  ! bottom = sided
+            if     (top == -1) then
+               call this%derOS%ddz_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+            elseif (top ==  0) then
+               call this%derSS%ddz_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+            elseif (top ==  1) then
+               call this%derES%ddz_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+            else 
+               output = 0.d0
+            end if
+         case(1)  ! bottom = even
+            if     (top == -1) then
+               call this%derOE%ddz_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+            elseif (top ==  0) then
+               call this%derSE%ddz_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+            elseif (top ==  1) then
+               call this%derEE%ddz_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+            else 
+               output = 0.d0
+            end if
+         case default
+            output = 0.d0
+         end select
+      end select 
+   end if 
+
 
 end subroutine 
 
@@ -1016,14 +1195,16 @@ subroutine getModifiedWavenumbers(this, k, kp)
 end subroutine
 
 pure function getApproxPoincareConstant(this) result(const)
+   use constants, only: pi
    class(Pade6stagg), intent(in) :: this
    real(rkind) :: const   
 
+   const = 0.d0 
    select case(this%scheme)
    case (fourierColl)
-      const = 1.d0/sqrt(12.d0)
-   case (cd06)
-      const = 1.d0/sqrt(10.d0)
+      const = 1.d0/sqrt(pi**2)
+   case (cd06) ! For wall bounded flows the code gives second order near wall
+      const = 1.d0/sqrt(3.d0)
    case (fd02)
       const = 1.d0/sqrt(3.d0)
    end select 
@@ -1073,5 +1254,162 @@ pure subroutine getmodFD02stagg(k,dx,kp)
 
 end subroutine
 
+subroutine ddz_1d_C2C(this, input, output, bot, top)
+   class(Pade6stagg), intent(in) :: this
+   real(rkind), dimension(1,1,this%gp%zsz(3)), intent(in)  :: input
+   real(rkind), dimension(1,1,this%gp%zsz(3)), intent(out) :: output
+   integer, intent(in) :: bot, top
 
+   if (this%isPeriodic) then
+        output = 0.d0 
+   else 
+      select case (this%scheme) 
+      case(fd02)
+        call message(0,"WARNING: Second order FD cannot be used for 1D derivative evaluations.")
+        output = 0.d0
+      case(cd06)
+         select case (bot)
+         case(-1) 
+            if     (top == -1) then
+               call this%derOO%ddz_C2C(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSO%ddz_C2C(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derEO%ddz_C2C(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case(0)  ! bottom = sided
+            if     (top == -1) then
+               call this%derOS%ddz_C2C(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSS%ddz_C2C(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derES%ddz_C2C(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case(1)  ! bottom = even
+            if     (top == -1) then
+               call this%derOE%ddz_C2C(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSE%ddz_C2C(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derEE%ddz_C2C(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case default
+            output = 0.d0
+         end select
+      end select 
+   end if 
+
+end subroutine 
+
+subroutine ddz_1d_C2E(this, input, output, bot, top)
+   class(Pade6stagg), intent(in) :: this
+   real(rkind), dimension(1,1,this%gp%zsz(3)), intent(in)  :: input
+   real(rkind), dimension(1,1,this%gp%zsz(3)+1), intent(out) :: output
+   integer, intent(in) :: bot, top
+
+   if (this%isPeriodic) then
+        output = 0.d0 
+   else 
+      select case (this%scheme) 
+      case(fd02)
+        call message(0,"WARNING: Second order FD cannot be used for 1D derivative evaluations.")
+        output = 0.d0
+      case(cd06)
+         select case (bot)
+         case(-1) 
+            if     (top == -1) then
+               call this%derOO%ddz_C2E(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSO%ddz_C2E(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derEO%ddz_C2E(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case(0)  ! bottom = sided
+            if     (top == -1) then
+               call this%derOS%ddz_C2E(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSS%ddz_C2E(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derES%ddz_C2E(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case(1)  ! bottom = even
+            if     (top == -1) then
+               call this%derOE%ddz_C2E(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSE%ddz_C2E(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derEE%ddz_C2E(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case default
+            output = 0.d0
+         end select
+      end select 
+   end if 
+
+end subroutine 
+
+subroutine interp_1d_E2C(this,input,output,bot,top)
+   class(Pade6stagg), intent(in) :: this
+   real(rkind), dimension(1,1,this%gp%zsz(3)+1), intent(in)  :: input
+   real(rkind), dimension(1,1,this%gp%zsz(3)  ), intent(out) :: output
+   integer, intent(in) :: bot, top
+
+
+   if (this%isPeriodic) then
+        output = 0.d0 
+   else
+      select case(this%scheme)
+      case(fd02)
+            call message(0,"WARNING: Second order FD cannot be used for 1D derivative evaluations.")
+      case(cd06)
+         select case (bot)
+         case(-1) 
+            if     (top == -1) then
+               call this%derOO%interpz_E2C(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSO%interpz_E2C(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derEO%interpz_E2C(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case(0)  ! bottom = sided
+            if     (top == -1) then
+               call this%derOS%interpz_E2C(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSS%interpz_E2C(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derES%interpz_E2C(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case(1)  ! bottom = even
+            if     (top == -1) then
+               call this%derOE%interpz_E2C(input,output,1,1)
+            elseif (top ==  0) then
+               call this%derSE%interpz_E2C(input,output,1,1)
+            elseif (top ==  1) then
+               call this%derEE%interpz_E2C(input,output,1,1)
+            else 
+               output = 0.d0
+            end if
+         case default
+            output = 0.d0
+         end select
+      end select 
+   end if 
+
+end subroutine
 end module 

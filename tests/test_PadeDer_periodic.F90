@@ -80,7 +80,7 @@ program test_padeder_periodic
    ! ddz_C2C(fC)
    
    tmpC = fC
-   call spectC%ddz_C2C_real_inplace(tmpC)
+   call spectC%ddz_C2C_spect(tmpC)
    print*, "max error (ddz_C2C): ", maxval(tmpC - (-cos(x)*cos(y)*sin(z)))
 
    ! ddz_C2E(fC)
