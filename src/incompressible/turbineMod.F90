@@ -28,6 +28,8 @@ module turbineMod
 
     type :: TurbineArray
         integer :: nTurbines
+        integer :: num_active_turbines
+        integer :: num_owned_turbines
         integer :: myProc
         type(actuatorDisk), allocatable, dimension(:) :: turbArrayADM
         type(actuatorDisk_T2), allocatable, dimension(:) :: turbArrayADM_T2
@@ -57,10 +59,40 @@ module turbineMod
         procedure :: reset_turbArray 
         !procedure :: dumpFullField
         procedure :: link_pointers
+        procedure, private :: set_num_active_owned_turbines
 
     end type
 
 contains
+
+subroutine set_num_active_owned_turbines(this, ADM)
+    class(TurbineArray), intent(inout) :: this
+    logical, intent(in) :: ADM
+    integer :: i
+
+    this%num_active_turbines = 0
+    this%num_owned_turbines = 0
+
+    if(ADM) then
+      select case (this%ADM_Type)
+      case(1)
+          call GracefulExit("This isn't implemented in ActuatorDisk Type 1 yet.",423)
+      case(2)
+          do i = 1, this%nTurbines
+            if(this%turbArrayADM_T2(i)%Am_I_Active) then
+              this%num_active_turbines = this%num_active_turbines + 1
+            endif
+
+            if(this%turbArrayADM_T2(i)%Am_I_Owned) then
+              this%num_owned_turbines = this%num_owned_turbines + 1
+            endif
+          enddo
+      end select
+    else
+        call GracefulExit("Actuator Line implementation temporarily disabled. Talk to Aditya if you want to know why.",423)
+    endif
+
+end subroutine
 
 subroutine link_pointers(this,fxturb, fyturb, fzturb)
     class(TurbineArray), intent(in), target :: this
@@ -167,6 +199,8 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     !    call this%dumpFullField(this%fz, "wtfz")
     !    this%dumpTurbField = .false.
     !endif
+
+    call this%set_num_active_owned_turbines(ADM)
 
 end subroutine
 

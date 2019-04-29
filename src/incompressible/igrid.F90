@@ -1047,7 +1047,8 @@ contains
        if(this%useWindTurbineProbes) then
          if(this%useWindTurbines) then
              !print *, 'size reqd = ', (1+8*this%WindTurbineArr%nTurbines), this%probeTimeLimit, (1+8*this%WindTurbineArr%nTurbine)*this%probeTimeLimit
-             allocate(this%turbine_probe_data(1+8*this%WindTurbineArr%nTurbines,0:this%probeTimeLimit-1))
+             !allocate(this%turbine_probe_data(1+8*this%WindTurbineArr%nTurbines,0:this%probeTimeLimit-1))
+             allocate(this%turbine_probe_data(1+8*this%WindTurbineArr%num_owned_turbines,0:this%probeTimeLimit-1))
          else
              call GracefulExit("Turbine probes cannot be used without switching on turbines",12)
          endif

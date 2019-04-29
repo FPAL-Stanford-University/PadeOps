@@ -40,7 +40,7 @@ module actuatorDisk_T2mod
         real(rkind), dimension(:,:,:), allocatable :: smearing_base
 
         ! MPI communicator stuff
-        logical :: Am_I_Active, Am_I_Split
+        logical :: Am_I_Active, Am_I_Split, Am_I_Owned
         integer :: color, myComm, myComm_nproc, myComm_nrank
 
     contains
@@ -48,11 +48,24 @@ module actuatorDisk_T2mod
         procedure :: destroy
         procedure, private :: getMeanU
         procedure :: get_RHS
-        procedure, private :: smear_this_source 
+        procedure, private :: smear_this_source
+        procedure :: get_active_status 
     end type
 
 
 contains
+
+pure function get_active_status(this) result (active_status)
+    class(actuatorDisk_T2), intent(in) :: this
+    logical :: active_status
+   
+    if(this%myComm_nrank == 0) then
+        active_status = this%am_I_Active
+    else
+         active_status = .false.
+    endif
+
+end function
 
 subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     class(actuatorDisk_T2), intent(inout) :: this
@@ -144,8 +157,18 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
         call MPI_COMM_SIZE( this%mycomm, this%myComm_nproc, ierr )
     end if 
 
-     ntry = 2*ceiling(diam/min(dx, dy, dz))
-     ntry = p_maxval(ntry) ! prevents mismatch across processors due to roundoff
+    if(this%Am_I_Active) then
+      if((.not. this%Am_I_Split) .or. (this%Am_I_Split .and. this%myComm_nrank==0)) then
+        this%Am_I_Owned =.true.
+      else
+        this%Am_I_Owned =.false.
+      endif
+    else
+      this%Am_I_Owned =.false.
+    endif
+
+    ntry = 2*ceiling(diam/min(dx, dy, dz))
+    ntry = p_maxval(ntry) ! prevents mismatch across processors due to roundoff
     
     if (this%Am_I_Active) then
         allocate(this%rbuff(size(xG,2),size(xG,3)))
@@ -275,7 +298,8 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     rhszvals = zero
 
     !if (present(inst_val)) then
-      if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
+      !if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
+      if(this%Am_I_Owned) then 
         inst_val(1) = force
         inst_val(2) = force*sqrt(usp_sq)
         inst_val(3) = sqrt(usp_sq)
@@ -284,6 +308,8 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
         inst_val(6) = this%uface
         inst_val(7) = this%vface
         inst_val(8) = this%wface
+      else
+        inst_val(1:8) = zero
       end if
     !end if 
 

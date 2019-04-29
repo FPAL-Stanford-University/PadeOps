@@ -794,6 +794,14 @@ contains
         call this%get_xy_meanC_from_fhatC(this%uc, this%tmp_meanC)
         this%budget_1(:,1) = this%budget_1(:,1) + this%tmp_meanC
 
+
+
+        !--------do this for pointwise budgets---------
+        !call this%spectC%ifft(this%uc, this%rbuffxC)
+        !this%budget_1(:,:,:,1) = this%budget_1(:,:,:,1) + this%rbuffxC
+        !!--------do this for pointwise budgets---------
+
+
         call this%get_xy_meanC_from_fhatC(this%usgs, this%tmp_meanC)
         this%budget_1(:,2) = this%budget_1(:,2) + this%tmp_meanC
         
