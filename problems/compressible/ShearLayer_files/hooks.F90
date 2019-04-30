@@ -109,7 +109,7 @@ contains
 
         real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: mask 
         complex(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: e 
-        real(rkind) :: kx, kz, k, ph 
+        real(rkind) :: kx, kz, k, ph, qmax_local, qmax
         integer(rkind) :: j, m, mpi_ierr
 
         ! Mask for decaying amplitudes in y
@@ -122,10 +122,14 @@ contains
             k  = (kx**two+kz**two)**half
             call random_number(ph)
             call mpi_bcast(ph,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-            e = exp(imi*(kx*x + kz*z)+ph*(Lx**2+Lz**2)**0.5)
-            q = q + real(k**(-5/3)*e,rkind) 
+            e = exp(imi*(kx*x + kz*z)+ph*2*pi)
+            q = q + real(k**(-5._rkind/3._rkind)*e,rkind) 
         enddo
-        q = q*mask/maxval(q)
+
+        ! Get maxval and scale
+        qmax_local = maxval(q)
+        call mpi_allreduce(qmax_local, qmax, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD)
+        q = q*mask/qmax
     end subroutine 
 end module
 
@@ -278,7 +282,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
             call lstab_pert(decomp,x,z,fname_prefix,v,3)
             call lstab_pert(decomp,x,z,fname_prefix,w,4)
             call lstab_pert(decomp,x,z,fname_prefix,rho,1)
-            call lstab_pert(decomp,x,z,fname_prefix,p,6)
         else
             maskWidth = two*dtheta0
             maxAmp = 1.D-3*du
@@ -287,7 +290,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
             call make_pert(decomp,x,y,z,Lx,Lz,v,maskWidth,maxAmp,nModes)
             call make_pert(decomp,x,y,z,Lx,Lz,w,maskWidth,maxAmp,nModes)
             call make_pert(decomp,x,y,z,Lx,Lz,rho,maskWidth,maxAmp,nModes)
-            call make_pert(decomp,x,y,z,Lx,Lz,p,maskWidth,maxAmp,nModes)
         endif
 
         ! Add base flow profiles
