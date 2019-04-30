@@ -113,7 +113,14 @@ module budgets_time_avg_mod
         
         procedure, private  :: AssembleBudget3
         procedure, private  :: DumpBudget3
-   end type 
+        
+        procedure, private :: ddx_R2R
+        procedure, private :: ddy_R2R
+        procedure, private :: ddz_R2R
+        procedure, private :: ddx_C2R
+        procedure, private :: ddy_C2R
+        procedure, private :: ddz_C2R
+    end type 
 
 
 contains 
@@ -441,6 +448,70 @@ contains
         deallocate(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, this%px, this%py, this%pz, this%uturb)  
         deallocate(this%budget_0, this%budget_1)
 
+    end subroutine 
+
+    ! ----------------------private derivative operators ------------------------
+    subroutine ddx_R2R(this, f, dfdx)
+        class(budgets_time_avg), intent(inout) :: this
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(in) :: f
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: dfdx
+        
+        call this%igrid_sim%spectC%fft(f,this%igrid_sim%cbuffyC(:,:,:,1))
+        call this%igrid_sim%spectC%mtimes_ik1_ip(this%igrid_sim%cbuffyC(:,:,:,1))
+        call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1), dfdx)
+    end subroutine 
+
+    subroutine ddx_C2R(this, fhat, dfdx)
+        class(budgets_time_avg), intent(inout) :: this
+        complex(rkind), dimension(this%igrid_sim%spectC%spectdecomp%ysz(1),this%igrid_sim%spectC%spectdecomp%ysz(2),this%igrid_sim%spectC%spectdecomp%ysz(3)), intent(in) :: fhat
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: dfdx
+        
+        call this%igrid_sim%spectC%mtimes_ik1_oop(fhat,this%igrid_sim%cbuffyC(:,:,:,1))
+        call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1), dfdx)
+    end subroutine 
+    
+    subroutine ddy_R2R(this, f, dfdy)
+        class(budgets_time_avg), intent(inout) :: this
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(in) :: f
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: dfdy
+        
+        call this%igrid_sim%spectC%fft(f,this%igrid_sim%cbuffyC(:,:,:,1))
+        call this%igrid_sim%spectC%mtimes_ik2_ip(this%igrid_sim%cbuffyC(:,:,:,1))
+        call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1), dfdy)
+    end subroutine 
+
+    subroutine ddy_C2R(this, fhat, dfdy)
+        class(budgets_time_avg), intent(inout) :: this
+        complex(rkind), dimension(this%igrid_sim%spectC%spectdecomp%ysz(1),this%igrid_sim%spectC%spectdecomp%ysz(2),this%igrid_sim%spectC%spectdecomp%ysz(3)), intent(in) :: fhat
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: dfdy
+        
+        call this%igrid_sim%spectC%mtimes_ik2_oop(fhat,this%igrid_sim%cbuffyC(:,:,:,1))
+        call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1), dfdy)
+    end subroutine 
+    
+    subroutine ddz_R2R(this, f, dfdz)
+        class(budgets_time_avg), intent(inout) :: this
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(in) :: f
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: dfdz
+        
+        call transpose_x_to_y(f,this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
+        call transpose_y_to_z(this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%gpC)
+        call this%igrid_sim%Pade6opZ%ddz_C2C(this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,2),0,0)
+        call transpose_z_to_y(this%igrid_sim%rbuffzC(:,:,:,2),this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
+        call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,1),dfdz,this%igrid_sim%gpC)
+
+    end subroutine 
+    
+    subroutine ddz_C2R(this, fhat, dfdz)
+        class(budgets_time_avg), intent(inout) :: this
+        complex(rkind), dimension(this%igrid_sim%spectC%spectdecomp%ysz(1),this%igrid_sim%spectC%spectdecomp%ysz(2),this%igrid_sim%spectC%spectdecomp%ysz(3)), intent(in) :: fhat
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: dfdz
+        
+        call transpose_y_to_z(fhat,this%igrid_sim%cbuffzC(:,:,:,1),this%igrid_sim%sp_gpC)
+        call this%igrid_sim%Pade6opZ%ddz_C2C(this%igrid_sim%cbuffzC(:,:,:,1),this%igrid_sim%cbuffzC(:,:,:,2),0,0)
+        call transpose_z_to_y(this%igrid_sim%cbuffzC(:,:,:,2),this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%sp_gpC)
+        call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1), dfdz)
+        
     end subroutine 
 
 end module 
