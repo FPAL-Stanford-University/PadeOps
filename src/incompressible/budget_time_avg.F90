@@ -65,14 +65,13 @@ module budgets_time_avg_mod
 
 
    ! BUDGET_3 term indices:
-   ! 1. TKE production
-   ! 2. convective transport 
-   ! 3. Pressure transport
-   ! 4. SGS + viscous transport
-   ! 5. SGS + viscous dissipation
-   ! 6. Actuator disk/Turbine sink 
-   ! 7. Coriolis work (should be zero)
-   ! 8. Buoyancy transfer
+   ! 1. TKE production              (G)
+   ! 2. convective transport        (B)
+   ! 3. turbulent transport         (C)
+   ! 4. Pressure transport          (D)
+   ! 5. SGS + viscous transport     (E+F)
+   ! 6. SGS + viscous dissipation   (H+I)
+   ! 7. Actuator disk/Turbine sink  (J)
 
 
    ! BUDGET_4_ij term indices: 
@@ -123,6 +122,7 @@ module budgets_time_avg_mod
         procedure, private :: ddx_C2R
         procedure, private :: ddy_C2R
         procedure, private :: ddz_C2R
+        procedure, private :: interp_Edge2Cell
     end type 
 
 
@@ -138,12 +138,12 @@ contains
         logical :: restart_budgets = .false. 
         integer :: tidx_compute = 1000000, tidx_dump = 1000000, tidx_budget_start = 0
         logical :: do_budgets = .false. 
-        namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start 
+        namelist /BUDGET_TIME_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start 
         
         ! STEP 1: Read in inputs, link pointers and allocate budget vectors
         ioUnit = 534
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
-        read(unit=ioUnit, NML=BUDGET_XY_AVG)
+        read(unit=ioUnit, NML=BUDGET_TIME_AVG)
         close(ioUnit)
 
         this%igrid_sim => igrid_sim 
@@ -167,6 +167,7 @@ contains
         end if 
 
         if (restart_budgets) then
+            call GracefulExit("To be done",1234)
             call this%RestartBudget(restart_rid, restart_tid, restart_counter)
         else
             call this%resetBudget()
@@ -350,13 +351,16 @@ contains
         this%budget_1(:,:,:,7) = this%budget_1(:,:,:,7) + this%igrid_sim%rbuffxC(:,:,:,1)
         
         ! STEP 2: Get 3 terms from w-equation 
-        call this%igrid_sim%spectC%ifft(this%wc,this%igrid_sim%rbuffxC(:,:,:,1))
+        call this%igrid_sim%spectE%ifft(this%wc,this%igrid_sim%rbuffxE(:,:,:,1))
+        call this%interp_Edge2Cell(this%igrid_sim%rbuffxE(:,:,:,1), this%igrid_sim%rbuffxC(:,:,:,1))
         this%budget_1(:,:,:,8) = this%budget_1(:,:,:,8) + this%igrid_sim%rbuffxC(:,:,:,1)
 
-        call this%igrid_sim%spectC%ifft(this%pz,this%igrid_sim%rbuffxC(:,:,:,1))
+        call this%igrid_sim%spectE%ifft(this%pz,this%igrid_sim%rbuffxE(:,:,:,1))
+        call this%interp_Edge2Cell(this%igrid_sim%rbuffxE(:,:,:,1), this%igrid_sim%rbuffxC(:,:,:,1))
         this%budget_1(:,:,:,9) = this%budget_1(:,:,:,9) + this%igrid_sim%rbuffxC(:,:,:,1)
         
-        call this%igrid_sim%spectC%ifft(this%wsgs,this%igrid_sim%rbuffxC(:,:,:,1))
+        call this%igrid_sim%spectE%ifft(this%wsgs,this%igrid_sim%rbuffxE(:,:,:,1))
+        call this%interp_Edge2Cell(this%igrid_sim%rbuffxE(:,:,:,1), this%igrid_sim%rbuffxC(:,:,:,1))
         this%budget_1(:,:,:,10) = this%budget_1(:,:,:,10) + this%igrid_sim%rbuffxC(:,:,:,1)
         
         
@@ -495,11 +499,148 @@ contains
     subroutine AssembleBudget3(this)
         class(budgets_time_avg), intent(inout) :: this
 
-        ! < Incomplete: Look at budget_xy_avg for reference. > 
+        call this%igrid_sim%sgsmodel%populate_tauij_E_to_C()
+
+        ! 3. turbulent transport         (C)
+        call this%igrid_sim%spectC%ifft(this%uc,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_3(:,:,:,3) = this%budget_3(:,:,:,3) + this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,1)
+
+        call this%igrid_sim%spectC%ifft(this%vc,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_3(:,:,:,3) = this%budget_3(:,:,:,3) + this%igrid_sim%v*this%igrid_sim%rbuffxC(:,:,:,1)
+
+        call this%igrid_sim%spectE%ifft(this%wc,this%igrid_sim%rbuffxE(:,:,:,1))
+        call this%interp_Edge2Cell(this%igrid_sim%rbuffxE(:,:,:,1), this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_3(:,:,:,3) = this%budget_3(:,:,:,3) + this%igrid_sim%wC*this%igrid_sim%rbuffxC(:,:,:,1)
+
+
+        ! 4. Pressure transport          (D)
+        call this%igrid_sim%spectC%ifft(this%px,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_3(:,:,:,4) = this%budget_3(:,:,:,4) + this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,1)
+        
+        call this%igrid_sim%spectC%ifft(this%py,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_3(:,:,:,4) = this%budget_3(:,:,:,4) + this%igrid_sim%v*this%igrid_sim%rbuffxC(:,:,:,1)
+
+        call this%igrid_sim%spectE%ifft(this%pz,this%igrid_sim%rbuffxE(:,:,:,1))
+        call this%interp_Edge2Cell(this%igrid_sim%rbuffxE(:,:,:,1), this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_3(:,:,:,4) = this%budget_3(:,:,:,4) + this%igrid_sim%wC*this%igrid_sim%rbuffxC(:,:,:,1)
+
+
+        ! 5. SGS + viscous transport     (E+F)
+        call this%igrid_sim%spectC%ifft(this%usgs,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_3(:,:,:,5) = this%budget_3(:,:,:,5) + this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,1)
+        
+        call this%igrid_sim%spectC%ifft(this%vsgs,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_3(:,:,:,5) = this%budget_3(:,:,:,5) + this%igrid_sim%v*this%igrid_sim%rbuffxC(:,:,:,1)
+
+        call this%igrid_sim%spectE%ifft(this%wsgs,this%igrid_sim%rbuffxE(:,:,:,1))
+        call this%interp_Edge2Cell(this%igrid_sim%rbuffxE(:,:,:,1), this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_3(:,:,:,5) = this%budget_3(:,:,:,5) + this%igrid_sim%wC*this%igrid_sim%rbuffxC(:,:,:,1)
+        
+
+        ! 6. SGS + viscous dissipation   (H+I)
+        call this%ddx_R2R(this%igrid_sim%u, this%igrid_sim%rbuffxC(:,:,:,1)); 
+        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,1)
+
+        call this%ddx_R2R(this%igrid_sim%v, this%igrid_sim%rbuffxC(:,:,:,1)); 
+        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,2)
+
+        call this%ddx_R2R(this%igrid_sim%wC, this%igrid_sim%rbuffxC(:,:,:,1)); 
+        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,3)
+
+        call this%ddy_R2R(this%igrid_sim%u, this%igrid_sim%rbuffxC(:,:,:,1)); 
+        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,2)
+
+        call this%ddy_R2R(this%igrid_sim%v, this%igrid_sim%rbuffxC(:,:,:,1)); 
+        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,4)
+
+        call this%ddy_R2R(this%igrid_sim%wC, this%igrid_sim%rbuffxC(:,:,:,1)); 
+        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,5)
+
+        call this%ddz_R2R(this%igrid_sim%u, this%igrid_sim%rbuffxC(:,:,:,1)); 
+        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,3)
+
+        call this%ddz_R2R(this%igrid_sim%v, this%igrid_sim%rbuffxC(:,:,:,1)); 
+        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,5)
+
+        call this%ddz_R2R(this%igrid_sim%wC, this%igrid_sim%rbuffxC(:,:,:,1)); 
+        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,6)
+
+
+        ! 7. Actuator disk/Turbine sink  (J)
+        call this%igrid_sim%spectC%ifft(this%uturb,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_3(:,:,:,7) = this%budget_3(:,:,:,7) + this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,1)
+ 
     end subroutine 
     
     subroutine DumpBudget3(this)
-        class(budgets_time_avg), intent(inout) :: this
+        class(budgets_time_avg), intent(inout), target :: this
+        integer :: idx
+        real(rkind), dimension(:,:,:), pointer :: Umn, Vmn, Wmn, R11, R12, R13, R22, R23, R33
+        real(rkind), dimension(:,:,:), pointer :: Pmn, tau11, tau12, tau13, tau22, tau23, tau33
+        real(rkind), dimension(:,:,:), pointer :: buff, buff2
+
+
+        ! Get the average from sum
+        this%budget_0 = this%budget_0/(real(this%counter,rkind) + 1.d-18)
+        this%budget_0(:,:,:,4)  = this%budget_0(:,:,:,4)  - this%budget_0(:,:,:,1)*this%budget_0(:,:,:,1) ! R11
+        this%budget_0(:,:,:,5)  = this%budget_0(:,:,:,5)  - this%budget_0(:,:,:,1)*this%budget_0(:,:,:,2) ! R12
+        this%budget_0(:,:,:,6)  = this%budget_0(:,:,:,6)  - this%budget_0(:,:,:,1)*this%budget_0(:,:,:,3) ! R13
+        this%budget_0(:,:,:,7)  = this%budget_0(:,:,:,7)  - this%budget_0(:,:,:,2)*this%budget_0(:,:,:,2) ! R22
+        this%budget_0(:,:,:,8)  = this%budget_0(:,:,:,8)  - this%budget_0(:,:,:,2)*this%budget_0(:,:,:,3) ! R23
+        this%budget_0(:,:,:,9)  = this%budget_0(:,:,:,9)  - this%budget_0(:,:,:,3)*this%budget_0(:,:,:,3) ! R33
+        this%budget_1 = this%budget_1/(real(this%counter,rkind) + 1.d-18)
+        this%budget_3 = this%budget_3/(real(this%counter,rkind) + 1.d-18)
+
+        Umn => this%budget_0(:,:,:,1);    Vmn => this%budget_0(:,:,:,2);      Wmn => this%budget_0(:,:,:,3);
+        R11 => this%budget_0(:,:,:,4);    R12 => this%budget_0(:,:,:,5);      R13 => this%budget_0(:,:,:,6)
+        R22 => this%budget_0(:,:,:,7);    R23 => this%budget_0(:,:,:,8);      R33 => this%budget_0(:,:,:,9)
+        Pmn => this%budget_0(:,:,:,10);   tau11 => this%budget_0(:,:,:,11);   tau12 => this%budget_0(:,:,:,12)
+        tau13 => this%budget_0(:,:,:,13); tau22 => this%budget_0(:,:,:,14);   tau23 => this%budget_0(:,:,:,15)
+        tau33 => this%budget_0(:,:,:,16); buff => this%igrid_sim%rbuffxC(:,:,:,1); buff2 => this%igrid_sim%rbuffxC(:,:,:,2)
+
+        ! 1. TKE production              (G)
+        this%budget_3(:,:,:,1) = -this%budget_2(:,:,:,1)
+
+        ! 2. convective transport        (B)
+        buff2 = half*(R11*R11 + R22*R22 + R33*R33)
+        call this%ddx_R2R(buff2,buff); this%budget_3(:,:,:,2) = -Umn*buff
+        call this%ddy_R2R(buff2,buff); this%budget_3(:,:,:,2) = this%budget_3(:,:,:,2) - Vmn*buff
+        call this%ddz_R2R(buff2,buff); this%budget_3(:,:,:,2) = this%budget_3(:,:,:,2) - Wmn*buff
+
+        ! 3. turbulent transport         (C)
+        this%budget_3(:,:,:,3) = this%budget_3(:,:,:,3) - this%budget_3(:,:,:,2) - this%budget_2(:,:,:,2) - this%budget_2(:,:,:,3)
+
+        ! 4. Pressure transport          (D)
+        this%budget_3(:,:,:,4) = this%budget_3(:,:,:,4) - this%budget_2(:,:,:,4)
+
+        ! 5. SGS + viscous transport     (E+F)
+        this%budget_3(:,:,:,5) = this%budget_3(:,:,:,5) - this%budget_3(:,:,:,6) - this%budget_2(:,:,:,5) - this%budget_2(:,:,:,6)
+
+        ! 6. SGS + viscous dissipation   (H+I)
+        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) - this%budget_2(:,:,:,6)
+
+        ! 7. Actuator disk/Turbine sink  (J)
+        this%budget_3(:,:,:,7) = this%budget_3(:,:,:,7) - Umn*this%budget_1(:,:,:,4)
+
+
+        ! Dump the full budget 
+        do idx = 1,size(this%budget_3,4)
+            call this%dump_budget_field(this%budget_3(:,:,:,idx),idx,3)
+        end do 
+
+
+        nullify(Umn,Vmn,Wmn,R11,R12,R13,R22,R23,R33,Pmn,tau11,tau12,tau13,tau22,tau23,tau33,buff,buff2)
+
+        ! Go back to sum
+        this%budget_3 = this%budget_3*(real(this%counter,rkind) + 1.d-18)
+        this%budget_1 = this%budget_1*(real(this%counter,rkind) + 1.d-18)
+        this%budget_0(:,:,:,4)  = this%budget_0(:,:,:,4)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,1) ! R11
+        this%budget_0(:,:,:,5)  = this%budget_0(:,:,:,5)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,2) ! R12
+        this%budget_0(:,:,:,6)  = this%budget_0(:,:,:,6)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,3) ! R13
+        this%budget_0(:,:,:,7)  = this%budget_0(:,:,:,7)  + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,2) ! R22
+        this%budget_0(:,:,:,8)  = this%budget_0(:,:,:,8)  + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,3) ! R23
+        this%budget_0(:,:,:,9)  = this%budget_0(:,:,:,9)  + this%budget_0(:,:,:,3)*this%budget_0(:,:,:,3) ! R33
+        this%budget_0 = this%budget_0*(real(this%counter,rkind) + 1.d-18)
 
     end subroutine 
 
@@ -614,4 +755,16 @@ contains
         
     end subroutine 
 
+    subroutine interp_Edge2Cell(this, fE, fC)
+        class(budgets_time_avg), intent(inout) :: this
+        real(rkind), dimension(this%igrid_sim%gpE%xsz(1),this%igrid_sim%gpE%xsz(2),this%igrid_sim%gpE%xsz(3)), intent(in) :: fE
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: fC
+
+        call transpose_x_to_y(fE,this%igrid_sim%rbuffyE(:,:,:,1),this%igrid_sim%gpE)
+        call transpose_y_to_z(this%igrid_sim%rbuffyE(:,:,:,1),this%igrid_sim%rbuffzE(:,:,:,1),this%igrid_sim%gpE)
+        call this%igrid_sim%Pade6opZ%interpz_E2C(this%igrid_sim%rbuffzE(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,2),0,0)
+        call transpose_z_to_y(this%igrid_sim%rbuffzC(:,:,:,2),this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
+        call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,1),fC,this%igrid_sim%gpC)
+        
+    end subroutine 
 end module 
