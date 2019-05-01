@@ -181,72 +181,75 @@ contains
         this%budgets_dir = budgets_dir
         this%budgetType = budgetType 
         this%avgFact = 1.d0/(real(igrid_sim%nx,rkind)*real(igrid_sim%ny,rkind))
-        allocate(this%Budget_0s(this%nz,21))
-        allocate(this%Budget_0(this%nz,21))
-        allocate(this%Budget_1(this%nz,14))
-        allocate(this%Budget_1s(this%nz,14))
-        allocate(this%Budget_2(this%nz,7))
-        allocate(this%Budget_3(this%nz,8))
-        allocate(this%Budget_3s(this%nz,8))
-        
-        allocate(this%Budget_4s(this%nz,9))
-        allocate(this%Budget_4_13(this%nz,9))
-        allocate(this%Budget_4_23(this%nz,9))
-        allocate(this%Budget_4_33(this%nz,9))
-        allocate(this%Budget_4_11(this%nz,9))
 
-        if ((trim(budgets_dir) .eq. "null") .or.(trim(budgets_dir) .eq. "NULL")) then
-            this%budgets_dir = igrid_sim%outputDir
+        if(this%do_budgets) then
+            allocate(this%Budget_0s(this%nz,21))
+            allocate(this%Budget_0(this%nz,21))
+            allocate(this%Budget_1(this%nz,14))
+            allocate(this%Budget_1s(this%nz,14))
+            allocate(this%Budget_2(this%nz,7))
+            allocate(this%Budget_3(this%nz,8))
+            allocate(this%Budget_3s(this%nz,8))
+            
+            allocate(this%Budget_4s(this%nz,9))
+            allocate(this%Budget_4_13(this%nz,9))
+            allocate(this%Budget_4_23(this%nz,9))
+            allocate(this%Budget_4_33(this%nz,9))
+            allocate(this%Budget_4_11(this%nz,9))
+
+            if ((trim(budgets_dir) .eq. "null") .or.(trim(budgets_dir) .eq. "NULL")) then
+                this%budgets_dir = igrid_sim%outputDir
+            end if 
+
+            if (restart_budgets) then
+                call this%RestartBudget(restart_rid, restart_tid, restart_counter)
+            else
+                call this%resetBudget()
+            end if
+
+            allocate(this%tmp_meanC(this%nz)) 
+            allocate(this%tmp_meanE(this%nz+1)) 
+            allocate(this%tmpC_1d(1,1,this%nz)) 
+            allocate(this%ddz_tmpC_1d(1,1,this%nz)) 
+            allocate(this%tmpE_1d(1,1,this%nz+1)) 
+            allocate(this%U_mean(this%nz), this%V_mean(this%nz))
+            allocate(this%dUdz(this%nz), this%dVdz(this%nz))
+            allocate(this%dUdzE(this%nz+1), this%dVdzE(this%nz+1))
+            allocate(this%uw(this%nz), this%vw(this%nz))
+            allocate(this%wTh(this%nz))
+            allocate(this%P_mean(this%nz))
+            allocate(this%tau_13_mean(this%nz), this%tau_23_mean(this%nz), this%tau_33_mean(this%nz))
+            allocate(this%buoy_hydrostatic(this%nz)) 
+            allocate(this%meanZ_bcast(this%nz)) 
+
+
+            ! STEP 2: Allocate memory (massive amount of memory needed)
+            call igrid_sim%spectC%alloc_r2c_out(this%uc)
+            call igrid_sim%spectC%alloc_r2c_out(this%usgs)
+            call igrid_sim%spectC%alloc_r2c_out(this%uvisc)
+            call igrid_sim%spectC%alloc_r2c_out(this%ucor)
+            call igrid_sim%spectC%alloc_r2c_out(this%px)
+            call igrid_sim%spectC%alloc_r2c_out(this%uturb)
+
+            call igrid_sim%spectC%alloc_r2c_out(this%vc)
+            call igrid_sim%spectC%alloc_r2c_out(this%vsgs)
+            call igrid_sim%spectC%alloc_r2c_out(this%vvisc)
+            call igrid_sim%spectC%alloc_r2c_out(this%vcor)
+            call igrid_sim%spectC%alloc_r2c_out(this%py)
+
+            call igrid_sim%spectE%alloc_r2c_out(this%wc)
+            call igrid_sim%spectE%alloc_r2c_out(this%wsgs)
+            call igrid_sim%spectE%alloc_r2c_out(this%wvisc)
+            call igrid_sim%spectE%alloc_r2c_out(this%wcor)
+            call igrid_sim%spectE%alloc_r2c_out(this%pz)
+            call igrid_sim%spectE%alloc_r2c_out(this%wb)
+
+
+            ! STEP 3: Now instrument igrid 
+            call igrid_sim%instrumentForBudgets(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
+                       & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
+                       & this%vcor, this%wcor, this%uturb) 
         end if 
-
-        if (restart_budgets) then
-            call this%RestartBudget(restart_rid, restart_tid, restart_counter)
-        else
-            call this%resetBudget()
-        end if
-
-        allocate(this%tmp_meanC(this%nz)) 
-        allocate(this%tmp_meanE(this%nz+1)) 
-        allocate(this%tmpC_1d(1,1,this%nz)) 
-        allocate(this%ddz_tmpC_1d(1,1,this%nz)) 
-        allocate(this%tmpE_1d(1,1,this%nz+1)) 
-        allocate(this%U_mean(this%nz), this%V_mean(this%nz))
-        allocate(this%dUdz(this%nz), this%dVdz(this%nz))
-        allocate(this%dUdzE(this%nz+1), this%dVdzE(this%nz+1))
-        allocate(this%uw(this%nz), this%vw(this%nz))
-        allocate(this%wTh(this%nz))
-        allocate(this%P_mean(this%nz))
-        allocate(this%tau_13_mean(this%nz), this%tau_23_mean(this%nz), this%tau_33_mean(this%nz))
-        allocate(this%buoy_hydrostatic(this%nz)) 
-        allocate(this%meanZ_bcast(this%nz)) 
-
-
-        ! STEP 2: Allocate memory (massive amount of memory needed)
-        call igrid_sim%spectC%alloc_r2c_out(this%uc)
-        call igrid_sim%spectC%alloc_r2c_out(this%usgs)
-        call igrid_sim%spectC%alloc_r2c_out(this%uvisc)
-        call igrid_sim%spectC%alloc_r2c_out(this%ucor)
-        call igrid_sim%spectC%alloc_r2c_out(this%px)
-        call igrid_sim%spectC%alloc_r2c_out(this%uturb)
-
-        call igrid_sim%spectC%alloc_r2c_out(this%vc)
-        call igrid_sim%spectC%alloc_r2c_out(this%vsgs)
-        call igrid_sim%spectC%alloc_r2c_out(this%vvisc)
-        call igrid_sim%spectC%alloc_r2c_out(this%vcor)
-        call igrid_sim%spectC%alloc_r2c_out(this%py)
-
-        call igrid_sim%spectE%alloc_r2c_out(this%wc)
-        call igrid_sim%spectE%alloc_r2c_out(this%wsgs)
-        call igrid_sim%spectE%alloc_r2c_out(this%wvisc)
-        call igrid_sim%spectE%alloc_r2c_out(this%wcor)
-        call igrid_sim%spectE%alloc_r2c_out(this%pz)
-        call igrid_sim%spectE%alloc_r2c_out(this%wb)
-
-
-        ! STEP 3: Now instrument igrid 
-        call igrid_sim%instrumentForBudgets(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
-                   & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
-                   & this%vcor, this%wcor, this%uturb)  
 
     end subroutine 
 
@@ -287,10 +290,12 @@ contains
         class(budgets_xy_avg), intent(inout) :: this
 
         nullify(this%igrid_sim)
-        deallocate(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
-                   & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
-                   & this%vcor, this%wcor, this%uturb)  
-        deallocate(this%budget_0, this%budget_1)
+        if(this%do_budgets) then    !---should we ideally check if (allocated(...)) for each array before deallocating ??
+            deallocate(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
+                       & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
+                       & this%vcor, this%wcor, this%uturb)  
+            deallocate(this%budget_0, this%budget_1)
+        endif
 
     end subroutine 
 

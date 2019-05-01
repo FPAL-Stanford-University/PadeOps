@@ -3,7 +3,7 @@ module budgets_time_avg_mod
    use decomp_2d
    use reductions, only: p_sum
    use incompressibleGrid, only: igrid  
-   use exits, only: message
+   use exits, only: message, GracefulExit
    use basic_io, only: read_2d_ascii, write_2d_ascii
    use constants, only: half
    use mpi 
@@ -156,41 +156,44 @@ contains
 
         this%budgets_dir = budgets_dir
         this%budgetType = budgetType 
-        
-        allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),16))
-        allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),10))
-        allocate(this%budget_2(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),07))
-        allocate(this%budget_3(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),08))
+       
+        if(this%do_budgets) then 
+            allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),16))
+            allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),10))
+            allocate(this%budget_2(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),07))
+            allocate(this%budget_3(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),08))
 
-        if ((trim(budgets_dir) .eq. "null") .or.(trim(budgets_dir) .eq. "NULL")) then
-            this%budgets_dir = igrid_sim%outputDir
-        end if 
+            if ((trim(budgets_dir) .eq. "null") .or.(trim(budgets_dir) .eq. "NULL")) then
+                this%budgets_dir = igrid_sim%outputDir
+            end if 
 
-        if (restart_budgets) then
-            call GracefulExit("To be done",1234)
-            call this%RestartBudget(restart_rid, restart_tid, restart_counter)
-        else
-            call this%resetBudget()
+            if (restart_budgets) then
+                call GracefulExit("To be done",1234)
+                call this%RestartBudget(restart_rid, restart_tid, restart_counter)
+            else
+                call this%resetBudget()
+            end if
+
+            ! STEP 2: Allocate memory (massive amount of memory needed)
+            call igrid_sim%spectC%alloc_r2c_out(this%uc)
+            call igrid_sim%spectC%alloc_r2c_out(this%usgs)
+            call igrid_sim%spectC%alloc_r2c_out(this%px)
+            call igrid_sim%spectC%alloc_r2c_out(this%uturb)
+
+            call igrid_sim%spectC%alloc_r2c_out(this%vc)
+            call igrid_sim%spectC%alloc_r2c_out(this%vsgs)
+            call igrid_sim%spectC%alloc_r2c_out(this%py)
+
+            call igrid_sim%spectE%alloc_r2c_out(this%wc)
+            call igrid_sim%spectE%alloc_r2c_out(this%wsgs)
+            call igrid_sim%spectE%alloc_r2c_out(this%pz)
+
+
+            ! STEP 3: Now instrument igrid 
+            call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
+                       & this%px, this%py, this%pz, this%uturb)  
+
         end if
-
-        ! STEP 2: Allocate memory (massive amount of memory needed)
-        call igrid_sim%spectC%alloc_r2c_out(this%uc)
-        call igrid_sim%spectC%alloc_r2c_out(this%usgs)
-        call igrid_sim%spectC%alloc_r2c_out(this%px)
-        call igrid_sim%spectC%alloc_r2c_out(this%uturb)
-
-        call igrid_sim%spectC%alloc_r2c_out(this%vc)
-        call igrid_sim%spectC%alloc_r2c_out(this%vsgs)
-        call igrid_sim%spectC%alloc_r2c_out(this%py)
-
-        call igrid_sim%spectE%alloc_r2c_out(this%wc)
-        call igrid_sim%spectE%alloc_r2c_out(this%wsgs)
-        call igrid_sim%spectE%alloc_r2c_out(this%pz)
-
-
-        ! STEP 3: Now instrument igrid 
-        call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
-                   & this%px, this%py, this%pz, this%uturb)  
 
     end subroutine 
 
@@ -686,8 +689,10 @@ contains
         class(budgets_time_avg), intent(inout) :: this
 
         nullify(this%igrid_sim)
-        deallocate(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, this%px, this%py, this%pz, this%uturb)  
-        deallocate(this%budget_0, this%budget_1)
+        if(this%do_budgets) then
+            deallocate(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, this%px, this%py, this%pz, this%uturb)  
+            deallocate(this%budget_0, this%budget_1)
+        end if
 
     end subroutine 
 

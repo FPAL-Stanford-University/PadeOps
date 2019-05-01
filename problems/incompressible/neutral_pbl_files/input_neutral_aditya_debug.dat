@@ -141,6 +141,18 @@ restart_tid                   = 99999     ! Restart budget file time index
 restart_counter               = 11111     ! Restart budget file counter 
 /
 /
+&BUDGET_TIME_AVG
+do_budgets                    = .TRUE.    ! Perform budget calculations? 
+budgetType                    = 3         ! See type descriptions in budget_time_avg.F90
+budgets_dir                   = "/scratch/04076/tg833754/Coriolis_ActuatorDisk/debug_data/budgets/" ! "Directory for budget files"
+tidx_compute                  = 5         ! How often should budgets be computed?  
+tidx_dump                     = 1000      ! How often should budget files be written to disk? 
+restart_budgets               = .FALSE.   ! use existing budget file to restart budget calculations? 
+restart_rid                   = 2         ! Restart budget file run index
+restart_tid                   = 99999     ! Restart budget file time index
+restart_counter               = 11111     ! Restart budget file counter 
+/
+/
 &PROBLEM_INPUT
 Lx                            =  16.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Ly                            =  8.0d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)

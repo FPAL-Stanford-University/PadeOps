@@ -11,13 +11,15 @@ program neutral_pbl_igrid
     use timer, only: tic, toc
     use exits, only: message
     use budgets_xy_avg_mod, only: budgets_xy_avg  
+    use budgets_time_avg_mod, only: budgets_time_avg  
 
     implicit none
 
     type(igrid), allocatable, target :: igp
     character(len=clen) :: inputfile
     integer :: ierr
-    type(budgets_xy_avg) :: budg
+    type(budgets_xy_avg) :: budg_xy
+    type(budgets_time_avg) :: budg_tavg
 
     call MPI_Init(ierr)               !<-- Begin MPI
 
@@ -27,29 +29,36 @@ program neutral_pbl_igrid
 
     call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
   
-    call igp%start_io(.false.)                !<-- Start I/O by creating a header file (see io.F90)
+    call igp%start_io(.false.)        !<-- Start I/O by creating a header file (see io.F90)
     
     call igp%printDivergence()
   
     !call initialize_controller_location(igp, inputfile)  !<-- frame angle controller initialization 
 
-    call budg%init(inputfile, igp)   !<-- Budget class initialization 
+    call budg_xy%init(inputfile, igp)   !<-- Budget class initialization 
+
+    call budg_tavg%init(inputfile, igp) !<-- Budget class initialization 
 
     call tic() 
     do while (igp%tsim < igp%tstop) 
        
-       call igp%timeAdvance()      !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
-       call doTemporalStuff(igp)   !<-- Go to the temporal hook (see temporalHook.F90)
+       call igp%timeAdvance()           !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
+       call doTemporalStuff(igp)        !<-- Go to the temporal hook (see temporalHook.F90)
    
-       ! call budg%ResetBudgets()  !<--- call resetBudgets if the problem is non-stationary 
-       call budg%doBudgets()       !<--- perform budget related operations 
+       ! call budg_xy%ResetBudgets()    !<--- call resetBudgets if the problem is non-stationary 
+       call budg_xy%doBudgets()         !<--- perform budget related operations 
+   
+       ! call budg_tavg%ResetBudgets()  !<--- call resetBudgets if the problem is non-stationary 
+       call budg_tavg%doBudgets()       !<--- perform budget related operations 
     end do 
  
-    call budg%destroy()             !<-- release memory taken by the budget class 
+    call budg_tavg%destroy()           !<-- release memory taken by the budget class 
 
-    call igp%finalize_io()                  !<-- Close the header file (wrap up i/o)
+    call budg_xy%destroy()             !<-- release memory taken by the budget class 
 
-    call igp%destroy()                !<-- Destroy the IGRID derived type 
+    call igp%finalize_io()             !<-- Close the header file (wrap up i/o)
+
+    call igp%destroy()                 !<-- Destroy the IGRID derived type 
    
 
     deallocate(igp)                   !<-- Deallocate all the memory associated with scalar defaults
