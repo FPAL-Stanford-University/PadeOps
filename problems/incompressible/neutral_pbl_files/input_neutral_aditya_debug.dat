@@ -4,14 +4,14 @@ outputdir                     = "/scratch/04076/tg833754/Coriolis_ActuatorDisk/d
 nx                            = 256         ! Number of points in X
 ny                            = 128         ! Number of points in Y
 nz                            = 192         ! Number of points in Z
-tstop                         = 21000.D0      ! Physical time to stop the simulation, ADITYA: Restarting from around 20000 ND time
+tstop                         = 21000.D0    ! Physical time to stop the simulation, ADITYA: Restarting from around 20000 ND time
 CFL                           = 1.0D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 0280000        ! TimeID of the restart file being used
-restartFile_RID               = 1          ! RunID of the restart file being used
+useRestartFile                = .TRUE.      ! Set to false if it's a fresh simulation 
+restartFile_TID               = 0280000     ! TimeID of the restart file being used
+restartFile_RID               = 1           ! RunID of the restart file being used
 /
 /
 &NUMERICS
@@ -26,24 +26,24 @@ useExhaustiveFFT              = .TRUE.
 /
 &IO
 RunID                         = 2         ! Run Label (All output files will be tagged with this nubber)
-t_restartDump                 = 1000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump                    = 1000         ! Data dumping frequency (# of timesteps)
-ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
-dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
-t_planeDump                   = 10         ! Plane dumping frequency (# of timesteps)
-t_start_planeDump             = 3500           ! When do you want to start dumping planes?
-t_stop_planeDump              = 5000        ! When do you want to stop dumping planes?
+t_restartDump                 = 1000      ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump                    = 1000      ! Data dumping frequency (# of timesteps)
+ioType                        = 0         ! 0: Fortran Binaries, 1: .vtk files
+dumpPlanes                    = .FALSE.   ! Dump plane visualations. Select planes in initialize.F90
+t_planeDump                   = 10        ! Plane dumping frequency (# of timesteps)
+t_start_planeDump             = 3500      ! When do you want to start dumping planes?
+t_stop_planeDump              = 5000      ! When do you want to stop dumping planes?
 dump_NU_SGS                   = .TRUE.
 dump_KAPPA_SGS                = .TRUE.
 /
 /
 &STATS
-tid_StatsDump                 = 5000       ! Dumping Frequency for Statistics file (# of time steps)
-tid_compStats                 = 1          ! Frequency of Computing Statistics
-tSimStartStats                = 520.d0       ! Simulation time for starting stats calculations 
-normStatsByUstar              = .FALSE.      ! Normalize Statistics by ustar at each instant
-computeSpectra                = .FALSE.     ! Compute and time average x - spectra on the run
-timeAvgFullFields             = .TRUE.     ! Time average and store fields on the run
+tid_StatsDump                 = 5000      ! Dumping Frequency for Statistics file (# of time steps)
+tid_compStats                 = 1         ! Frequency of Computing Statistics
+tSimStartStats                = 520.d0    ! Simulation time for starting stats calculations 
+normStatsByUstar              = .FALSE.   ! Normalize Statistics by ustar at each instant
+computeSpectra                = .FALSE.   ! Compute and time average x - spectra on the run
+timeAvgFullFields             = .TRUE.    ! Time average and store fields on the run
 /
 /
 &OS_INTERACTIONS
@@ -64,37 +64,37 @@ Fr                            = 0.0798188571D0    ! Froude number; used when isS
 useSGS                        = .true.      ! Do you want to use the SGS model?
 useGeostrophicForcing         = .TRUE.      ! This is true if forcing is provided using the coriolis term  
 G_geostrophic                 = 1.D0        ! Geostrophic wind speed
-G_alpha                       = -1.523D1        ! Geostrophic wind angle (degrees, from +x axis)
+G_alpha                       = -1.523D1    ! Geostrophic wind angle (degrees, from +x axis)
 dPfdx                         = 0.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                         = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                         = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
-assume_fplane                 = .FALSE.      ! F-plane assumption for horizontal component?
+assume_fplane                 = .FALSE.     ! F-plane assumption for horizontal component?
 latitude                      = 45.d0       ! latitude
 useHITForcing                 = .FALSE.     ! Use an extra forcing term used for HIT?
-frameAngle                    = 1.523D1        ! Frame angle (degrees)
+frameAngle                    = 1.523D1     ! Frame angle (degrees)
 /
 /
 &PRESSURE_CALC
-fastCalcPressure              = .TRUE.     ! Compute and store pressure at every time step using the faster algorithm?
+fastCalcPressure              = .TRUE.      ! Compute and store pressure at every time step using the faster algorithm?
 storePressure                 = .FALSE.     ! Would you like to compute and store pressure?
 P_dumpFreq                    = 100         ! How often (timesteps) do you want to dump pressure?
-P_compFreq                    = 100          ! How often (timesteps) do you want to compute pressure? 
+P_compFreq                    = 100         ! How often (timesteps) do you want to compute pressure? 
 /
 /
 &BCs
 botWall                       = 3           ! no_slip = 1, slip = 2, wall model = 3 
 topWall                       = 2           ! no_slip = 1, slip = 2, wall model = 3
 useSpongeLayer                = .TRUE.      ! Use a sponge layer at the top 
-zstSponge                     = 0.75d0       ! Height above which the sponge layer is active
+zstSponge                     = 0.75d0      ! Height above which the sponge layer is active
 SpongeTscale                  = 40.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
 useFringe                     = .FALSE.     ! This is false if simulation is periodic. 
 botBC_Temp                    = 1           ! 0: Dirichlet (could be time dependent),  1: Homog. Neumann (no-flux)
-useControl                    = .FALSE.      ! Use PI control to fix yaw angle at the height specified below
+useControl                    = .FALSE.     ! Use PI control to fix yaw angle at the height specified below
 /
 /
 &SGS_MODEL
 SGSModelID                    = 1           ! 0: smagorinsky (w/ wall function), 1: sigma
-Csgs                          = 0.90d0       ! Model constant (asymptotic value in case wall function is used) 
+Csgs                          = 0.90d0      ! Model constant (asymptotic value in case wall function is used) 
 WallModelType                 = 1           ! 1: Moeng, 2: Bou-zeid et. al.  
 z0                            = 2.5d-4      ! Roughness length scale (CAUTION: this assumes appropriate non-dimensionalization)
 DynamicProcedureType          = 0           ! 0: No dynamic procedure, 1: Planar Avg. Dynamic Proc., 2: Global Dynamic Proc.  
@@ -102,11 +102,11 @@ useVerticalTfilter            = .false.     ! Use test filtering in vertical dir
 DynProcFreq                   = 5           ! Dynamic procedure used every DYNPROCFREQ timesteps. 
 useWallDamping                = .FALSE.     ! Use the Wall Damping Function 
 ncWall                        = 3.d0        ! Wall Damping Function Exponent
-explicitCalcEdgeEddyViscosity = .false.      ! Explicitly calculate or interpolate edge values for eddy viscosity? 
+explicitCalcEdgeEddyViscosity = .false.     ! Explicitly calculate or interpolate edge values for eddy viscosity? 
 /
 /
 &WINDTURBINES
-useWindTurbines               = .TRUE.     ! Do you want to use Wind turbines ?
+useWindTurbines               = .TRUE.      ! Do you want to use Wind turbines ?
 num_turbines                  = 72          ! How many turbines? 
 ADM                           = .TRUE.      ! Are these actuator disks?
 turbInfoDir                   = "/scratch/04076/tg833754/Coriolis_ActuatorDisk/bin/12x6array" ! Where are the turbine info files located? 
@@ -120,13 +120,13 @@ t_dumpKSprep                  = 10         ! Dumping Frequency for KS files
 /
 /
 &CONTROL
-beta                          =  0.03d0      ! 0.08d3,0.0278 Integrator tuning parameter (appropriate non-dimensionalized)
-sigma                         =  3.995d0     ! 3.995d0 Time constant for filter for rotation rate 
-phi_ref                       =  0.d0        ! Desired degrees at z_ref
+beta                          =  0.03d0    ! 0.08d3,0.0278 Integrator tuning parameter (appropriate non-dimensionalized)
+sigma                         =  3.995d0   ! 3.995d0 Time constant for filter for rotation rate 
+phi_ref                       =  0.d0      ! Desired degrees at z_ref
 z_ref                         =  9         ! Index of desired phi_ref
-alpha                         =  0.d0        ! Proportional gain constant
-controlType                   =  1           ! 1: Meneveau 2014, 2: Control G_alpha
-angleTrigger                  =  0.1d0         ! Angle at z_ref where control turns on
+alpha                         =  0.d0      ! Proportional gain constant
+controlType                   =  1         ! 1: Meneveau 2014, 2: Control G_alpha
+angleTrigger                  =  0.1d0     ! Angle at z_ref where control turns on
 /
 /
 &BUDGET_XY_AVG
@@ -135,6 +135,7 @@ budgetType                    = 1         ! See type descriptions in budget_xy_a
 budgets_dir                   = "/scratch/04076/tg833754/Coriolis_ActuatorDisk/debug_data/budgets/" ! "Directory for budget files"
 tidx_compute                  = 5         ! How often should budgets be computed?  
 tidx_dump                     = 1000      ! How often should budget files be written to disk? 
+tidx_budget_start             = 1000      ! Start budget computation from this timestep onward
 restart_budgets               = .FALSE.   ! use existing budget file to restart budget calculations? 
 restart_rid                   = 2         ! Restart budget file run index
 restart_tid                   = 99999     ! Restart budget file time index
@@ -147,6 +148,7 @@ budgetType                    = 3         ! See type descriptions in budget_time
 budgets_dir                   = "/scratch/04076/tg833754/Coriolis_ActuatorDisk/debug_data/budgets/" ! "Directory for budget files"
 tidx_compute                  = 5         ! How often should budgets be computed?  
 tidx_dump                     = 1000      ! How often should budget files be written to disk? 
+tidx_budget_start             = 1000      ! Start budget computation from this timestep onward
 restart_budgets               = .FALSE.   ! use existing budget file to restart budget calculations? 
 restart_rid                   = 2         ! Restart budget file run index
 restart_tid                   = 99999     ! Restart budget file time index
@@ -154,12 +156,12 @@ restart_counter               = 11111     ! Restart budget file counter
 /
 /
 &PROBLEM_INPUT
-Lx                            =  16.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Lx                            =  16.0d0      ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Ly                            =  8.0d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
 Lz                            =  6.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
 Tref                          =  263.5d0     ! Reference Temp. 
 Tsurf0                        =  265.0d0     ! Surface Temp. (at tsim=0) in K (need to take care of the dimensions)
-dTsurf_dt                     =  0.0D0      ! Surface Temp. decrease rate in K/hr. (need to take care of the dimensions)
-z0init                        =  2.5d-4       ! Roughness scale used to initialize the profile
-frameAngle                    =  0.d0      ! Frame angle set to be the same as above, used for initialization 
+dTsurf_dt                     =  0.0D0       ! Surface Temp. decrease rate in K/hr. (need to take care of the dimensions)
+z0init                        =  2.5d-4      ! Roughness scale used to initialize the profile
+frameAngle                    =  0.d0        ! Frame angle set to be the same as above, used for initialization 
 /
