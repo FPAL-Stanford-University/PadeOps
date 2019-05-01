@@ -125,7 +125,9 @@ subroutine getMomentumTerms(this)
         call this%spectC%mtimes_ik2_oop(this%cbuffyC(:,:,:,1),this%py)
         call transpose_y_to_z(this%cbuffyC(:,:,:,1),this%cbuffzC(:,:,:,1),this%sp_gpC)
         call this%Pade6opZ%ddz_C2E(this%cbuffzC(:,:,:,1),this%cbuffzE(:,:,:,1),0,0)  ! Safest to do 0,0 for BC because it's most general
-        this%cbuffyE(:,:,:,1) = this%wcon + this%wb + this%wcor + this%wsgs
+        this%cbuffyE(:,:,:,1) = this%wcon + this%wsgs
+        if(associated(this%wb)) this%cbuffyE(:,:,:,1) = this%cbuffyE(:,:,:,1) + this%wb
+        if(associated(this%wcor)) this%cbuffyE(:,:,:,1) = this%cbuffyE(:,:,:,1) + this%wcor
         ! Set the true BC for dpdz:
         call transpose_y_to_z(this%cbuffyE(:,:,:,1),this%cbuffzE(:,:,:,2),this%sp_gpE)
         this%cbuffzE(:,:,1,1) = -this%cbuffzE(:,:,1,2)
