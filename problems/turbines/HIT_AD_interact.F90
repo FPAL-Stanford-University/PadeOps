@@ -106,7 +106,7 @@ program HIT_AD_interact
       end if 
     end if 
 
-    call budg_tavg%init(inputfile, adsim)   !<-- Budget class initialization 
+    call budg_tavg%init(AD_Inputfile, adsim)   !<-- Budget class initialization 
 
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")

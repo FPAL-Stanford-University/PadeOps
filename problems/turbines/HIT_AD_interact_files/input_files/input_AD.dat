@@ -92,7 +92,7 @@ assume_fplane         = .true.      ! Assume fplane (ignore horizontal component
 latitude              = 90.d0       ! Latitude; important if useCoriolis is TRUE && assume_fplane is FALSE
 frameAngle            = 0.D0        ! Mean wind direction; important if assume_fplane is FALSE
 useHITforcing         = .false.     ! Use additional HIT forcing? 
-useScalars            = .true.      ! Do you want to use scalars? 
+useScalars            = .false.     ! Do you want to use scalars? ---- Why was this true for AD????
 buoyancyDirection     = 3           ! Are 1 and 2 implemented????
 /
 /
@@ -114,7 +114,7 @@ topWall               = 2           ! no_slip = 1, slip = 2
 useSpongeLayer        = .FALSE.     ! Use a sponge layer at the top 
 zstSponge             = 0.8d0       ! Height above which the sponge layer is active
 SpongeTscale          = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
-spongeType            = 1           ! 1 or 2; used if useSpongeLayer is TRUE
+sponge_type           = 1           ! 1 or 2; used if useSpongeLayer is TRUE
 botBC_Temp            = 1           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 topBC_temp            = 0           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 useTopAndBottomSymmetricSponge = .FALSE. 
@@ -178,9 +178,22 @@ KSoutputDir           = "SomeLocation" ! Directory where KS files are dumped.
 KSRunID               = 99             ! RunID tag for KS files
 t_dumpKSprep          = 10             ! Dumping Frequency for KS files
 KSInitType            = 0
-KSFiltFact            = 4.D0
+KSFilFact             = 4.D0
 KSdoZfilter           = .true.
 nKSvertFilt           = 1
+/
+/
+&BUDGET_TIME_AVG
+do_budgets            = .TRUE.    ! Perform budget calculations? 
+budgetType            = 3         ! See type descriptions in budget_time_avg.F90
+budgets_dir           = "null"    ! Write in default output directory
+tidx_compute          = 10        ! How often should budgets be computed?  
+tidx_dump             = 1000      ! How often should budget files be written to disk? 
+tidx_budget_start     = 2000      ! Start budget computation from this timestep onward
+restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations? 
+restart_rid           = 2         ! Restart budget file run index
+restart_tid           = 99999     ! Restart budget file time index
+restart_counter       = 11111     ! Restart budget file counter 
 /
 /
 &SCALARS

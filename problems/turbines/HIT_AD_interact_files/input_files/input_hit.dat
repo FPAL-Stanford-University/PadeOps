@@ -114,7 +114,7 @@ topWall               = 2           ! no_slip = 1, slip = 2
 useSpongeLayer        = .FALSE.     ! Use a sponge layer at the top 
 zstSponge             = 0.8d0       ! Height above which the sponge layer is active
 SpongeTscale          = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50)
-spongeType            = 1           ! 1 or 2; used if useSpongeLayer is TRUE
+sponge_type           = 1           ! 1 or 2; used if useSpongeLayer is TRUE
 botBC_Temp            = 1           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 topBC_temp            = 0           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 useTopAndBottomSymmetricSponge = .FALSE. 
@@ -165,7 +165,7 @@ KSoutputDir           = "SomeLocation" ! Directory where KS files are dumped.
 KSRunID               = 99             ! RunID tag for KS files
 t_dumpKSprep          = 10             ! Dumping Frequency for KS files
 KSInitType            = 0
-KSFiltFact            = 4.D0
+KSFilFact             = 4.D0
 KSdoZfilter           = .true.
 nKSvertFilt           = 1
 /
