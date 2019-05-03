@@ -146,7 +146,7 @@ function getMaxKE(this) result(maxKE)
     real(rkind)  :: maxKE
 
     this%rbuffxC(:,:,:,1) = this%u**2 + this%v**2 + this%wC**2
-    maxKE = half*p_maxval(maxval(this%rbuffxC))
+    maxKE = half*p_maxval(maxval(this%rbuffxC(:,:,:,1)))
 
 end function
 
@@ -155,7 +155,7 @@ function getMeanKE(this) result(meanTKE)
      real(rkind)  :: meanTKE
 
      this%rbuffxC(:,:,:,1) = this%u**2 + this%v**2 + this%wC**2
-     meanTKE = half*p_sum(sum(this%rbuffxC))/(real(this%nx)*real(this%ny)*real(this%nz))
+     meanTKE = half*p_sum(sum(this%rbuffxC(:,:,:,1)))/(real(this%nx)*real(this%ny)*real(this%nz))
 
 end function
 

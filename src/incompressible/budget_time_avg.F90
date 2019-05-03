@@ -632,6 +632,15 @@ contains
         end do 
 
 
+        ! Revert arrays to the correct state for Assemble (Order is very
+        ! important throughout this subroutine, particularly indices 5 and 6)
+        this%budget_3(:,:,:,7) = this%budget_3(:,:,:,7) + Umn*this%budget_1(:,:,:,4)
+        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%budget_2(:,:,:,6)
+        this%budget_3(:,:,:,5) = this%budget_3(:,:,:,5) + this%budget_3(:,:,:,6) + this%budget_2(:,:,:,5) + this%budget_2(:,:,:,6)
+        this%budget_3(:,:,:,4) = this%budget_3(:,:,:,4) + this%budget_2(:,:,:,4)
+        this%budget_3(:,:,:,3) = this%budget_3(:,:,:,3) + this%budget_3(:,:,:,2) + this%budget_2(:,:,:,2) + this%budget_2(:,:,:,3)
+        
+
         nullify(Umn,Vmn,Wmn,R11,R12,R13,R22,R23,R33,Pmn,tau11,tau12,tau13,tau22,tau23,tau33,buff,buff2)
 
         ! Go back to sum
