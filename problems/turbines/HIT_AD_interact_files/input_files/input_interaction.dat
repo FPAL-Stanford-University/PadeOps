@@ -1,9 +1,9 @@
 &concurrent
-HIT_InputFile                 = "/projects/windsim/PadeOps/bin/HIT_Interact/SPOD_Case/Case10/input_files/input_hit.dat"
-AD_InputFile                  = "/projects/windsim/PadeOps/bin/HIT_Interact/SPOD_Case/Case10/input_files/input_AD.dat"
+HIT_InputFile                 = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1/input_files/input_hit.dat"
+AD_InputFile                  = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1/input_files/input_AD.dat"
 InflowSpeed                   = 2.d0
 k_bandpass_left               = 4.0d0
-k_bandpass_right              = 128.d0
+k_bandpass_right              = 064.d0
 /
 /
 &FILTER_INFO
