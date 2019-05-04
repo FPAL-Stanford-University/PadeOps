@@ -155,7 +155,7 @@ WM_MatchingIndex              = 1
 useWindTurbines       = .TRUE.    ! Do you want to use Wind turbines ?
 num_turbines          = 1
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
-turbInfoDir           = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1"
+turbInfoDir           = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1/input_files/1rot"
 ADM_Type              = 2         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
 /
 /
