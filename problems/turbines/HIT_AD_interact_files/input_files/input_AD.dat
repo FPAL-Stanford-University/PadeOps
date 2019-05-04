@@ -1,9 +1,9 @@
 &INPUT
-inputdir              = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1/ad_data"   ! Directory for any input files
-outputdir             = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1/ad_data"   ! Directory for all output files
-nx                    = 0640         ! Number of points in X
-ny                    = 128          ! Number of points in Y
-nz                    = 128          ! Number of points in Z
+inputdir              = "/nobackup/aghate/ad_channel/AD"   ! Directory for any input files
+outputdir             = "/nobackup/aghate/ad_channel/AD"   ! Directory for all output files
+nx                    = 1280         ! Number of points in X
+ny                    = 256          ! Number of points in Y
+nz                    = 256          ! Number of points in Z
 tstop                 = 12800.D-2    ! Physical time to stop the simulation
 CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
@@ -31,11 +31,11 @@ donot_dealias         = .FALSE.
 /
 /
 &IO
-RunID                 = 2          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 1000       ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 1000       ! Data dumping frequency (# of timesteps)
+RunID                 = 10          ! Run Label (All output files will be tagged with this nubber)
+t_restartDump         = 50000       ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump            = 10000       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
-dumpPlanes            = .TRUE.     ! Dump plane visualations. Select planes in initialize.F90
+dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 20         ! Plane dumping frequency (# of timesteps)
 t_start_planeDump     = 1          ! When do you want to start dumping planes?
 t_stop_planeDump      = 1000       ! When do you want to stop dumping planes?
@@ -104,7 +104,7 @@ P_compFreq            = 10          ! How often (timesteps) do you want to compu
 computeDNSPressure    = .TRUE.
 computeFringePressure = .TRUE.
 computeTurbinePressure    = .TRUE.
-computeRapidSlowPressure  = .TRUE.
+computeRapidSlowPressure  = .FALSE.
 /
 /
 &BCs
@@ -155,7 +155,7 @@ WM_MatchingIndex              = 1
 useWindTurbines       = .TRUE.    ! Do you want to use Wind turbines ?
 num_turbines          = 1
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
-turbInfoDir           = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1/input_files/1rot"
+turbInfoDir           = "/home5/aghate/fpal_padeops/PadeOps/bin/skylake/channel_ad/input_files/1rot"
 ADM_Type              = 2         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
 /
 /
@@ -175,10 +175,10 @@ LambdaFact2           = 0.75d0
 &BUDGET_TIME_AVG
 do_budgets            = .TRUE.    ! Perform budget calculations? 
 budgetType            = 3         ! See type descriptions in budget_time_avg.F90
-budgets_dir           = "null"    ! Write in default output directory
+budgets_dir           = "/nobackup/aghate/ad_channel/budgets"    ! Write in default output directory
 tidx_compute          = 10        ! How often should budgets be computed?  
-tidx_dump             = 1000      ! How often should budget files be written to disk? 
-tidx_budget_start     = 2000      ! Start budget computation from this timestep onward
+tidx_dump             = 10000      ! How often should budget files be written to disk? 
+tidx_budget_start     = 5000      ! Start budget computation from this timestep onward
 restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations? 
 restart_rid           = 2         ! Restart budget file run index
 restart_tid           = 99999     ! Restart budget file time index

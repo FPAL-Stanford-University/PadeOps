@@ -1,6 +1,6 @@
 &INPUT
-inputdir                      = "/scratch/04076/tg833754/Coriolis_ActuatorDisk/debug_data/precursor"   ! Directory for any input files
-outputdir                     = "/home/lele/mhowland/igridSGSYaw/data/neutral_fplane_true"   ! Directory for all output files
+inputdir                      = "/nobackup/aghate/pbl_channel/neutral"   ! Directory for any input files
+outputdir                     = "/nobackup/aghate/pbl_channel/neutral"   ! Directory for all output files
 nx                            = 256         ! Number of points in X
 ny                            = 128         ! Number of points in Y
 nz                            = 192         ! Number of points in Z
@@ -140,10 +140,23 @@ z0init                        =  2.5d-4       ! Roughness scale used to initiali
 frameAngle                    =  0.d0      ! Frame angle set to be the same as above, used for initialization
 /
 /
+&BUDGET_TIME_AVG
+do_budgets            = .FALSE.    ! Perform budget calculations? 
+budgetType            = 3         ! See type descriptions in budget_time_avg.F90
+budgets_dir           = "null"    ! Write in default output directory
+tidx_compute          = 10        ! How often should budgets be computed?  
+tidx_dump             = 1000      ! How often should budget files be written to disk? 
+tidx_budget_start     = 2000      ! Start budget computation from this timestep onward
+restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations? 
+restart_rid           = 2         ! Restart budget file run index
+restart_tid           = 99999     ! Restart budget file time index
+restart_counter       = 11111     ! Restart budget file counter 
+/
+/
 &BUDGET_XY_AVG
 do_budgets                    = .TRUE.    ! Perform budget calculations?
 budgetType                    = 4         ! See type descriptions in budget_xy_avg.F90
-budgets_dir                   = "/home/lele/mhowland/igridSGSYaw/data/neutral_fplane_true" ! "Directory for budget files"
+budgets_dir                   = "/nobackup/aghate/pbl_channel/neutral/budget_files" ! "Directory for budget files"
 tidx_compute                  = 5         ! How often should budgets be computed?
 tidx_dump                     = 1000      ! How often should budget files be written to disk?
 restart_budgets               = .FALSE.   ! use existing budget file to restart budget calculations?
