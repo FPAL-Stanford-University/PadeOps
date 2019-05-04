@@ -37,6 +37,15 @@ module budgets_time_avg_mod
    ! 14: <tau22> 
    ! 15: <tau23> 
    ! 16: <tau33> 
+   ! 17: <p'u'>
+   ! 18: <p'v'>
+   ! 19: <p'w'>
+   ! 20: <u'k'>
+   ! 21: <v'k'>
+   ! 22: <w'k'>
+   ! 23: <u_j'tau_1j'>
+   ! 24: <u_j'tau_2j'>
+   ! 25: <u_j'tau_3j'>
 
 
    ! BUDGET_1 term indices:  
@@ -158,7 +167,7 @@ contains
         this%budgetType = budgetType 
        
         if(this%do_budgets) then 
-            allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),16))
+            allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),25))
             allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),10))
             allocate(this%budget_2(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),07))
             allocate(this%budget_3(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),08))
@@ -282,13 +291,59 @@ contains
         this%budget_0(:,:,:,7)  = this%budget_0(:,:,:,7)  - this%budget_0(:,:,:,2)*this%budget_0(:,:,:,2) ! R22
         this%budget_0(:,:,:,8)  = this%budget_0(:,:,:,8)  - this%budget_0(:,:,:,2)*this%budget_0(:,:,:,3) ! R23
         this%budget_0(:,:,:,9)  = this%budget_0(:,:,:,9)  - this%budget_0(:,:,:,3)*this%budget_0(:,:,:,3) ! R33
-        
-        ! Step 3: Dump the full budget 
+       
+        ! Step 3: Pressure transport for TKE budget
+        this%budget_0(:,:,:,17) = this%budget_0(:,:,:,17) - this%budget_0(:,:,:,1)*this%budget_0(:,:,:,10)
+        this%budget_0(:,:,:,18) = this%budget_0(:,:,:,18) - this%budget_0(:,:,:,2)*this%budget_0(:,:,:,10)
+        this%budget_0(:,:,:,19) = this%budget_0(:,:,:,19) - this%budget_0(:,:,:,3)*this%budget_0(:,:,:,10)
+ 
+        ! Step 4: Turbulent convective transport for TKE budget
+        this%igrid_sim%rbuffxC(:,:,:,1) = half*(this%budget_0(:,:,:,4) + this%budget_0(:,:,:,7) + this%budget_0(:,:,:,9))
+        this%budget_0(:,:,:,20) = this%budget_0(:,:,:,20) - this%budget_0(:,:,:,1)*this%igrid_sim%rbuffxC(:,:,:,1)
+        this%budget_0(:,:,:,21) = this%budget_0(:,:,:,21) - this%budget_0(:,:,:,2)*this%igrid_sim%rbuffxC(:,:,:,1)
+        this%budget_0(:,:,:,22) = this%budget_0(:,:,:,22) - this%budget_0(:,:,:,3)*this%igrid_sim%rbuffxC(:,:,:,1)
+
+        ! STEP 5: SGS flux for TKE transport
+        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) - this%budget_0(:,:,:,11)*this%budget_0(:,:,:,1)
+        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) - this%budget_0(:,:,:,12)*this%budget_0(:,:,:,2)
+        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) - this%budget_0(:,:,:,13)*this%budget_0(:,:,:,3)
+
+        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) - this%budget_0(:,:,:,12)*this%budget_0(:,:,:,1)
+        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) - this%budget_0(:,:,:,14)*this%budget_0(:,:,:,2)
+        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) - this%budget_0(:,:,:,15)*this%budget_0(:,:,:,3)
+
+        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) - this%budget_0(:,:,:,13)*this%budget_0(:,:,:,1)
+        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) - this%budget_0(:,:,:,15)*this%budget_0(:,:,:,2)
+        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) - this%budget_0(:,:,:,16)*this%budget_0(:,:,:,3)
+
+        ! Step 6: Dump the full budget 
         do idx = 1,size(this%budget_0,4)
             call this%dump_budget_field(this%budget_0(:,:,:,idx),idx,0)
         end do 
         
-        ! Step 4: Go back to <ui uj> from <Rij>
+        ! Step 7: Go back to summing
+        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%budget_0(:,:,:,13)*this%budget_0(:,:,:,1)
+        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%budget_0(:,:,:,15)*this%budget_0(:,:,:,2)
+        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%budget_0(:,:,:,16)*this%budget_0(:,:,:,3)
+
+        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%budget_0(:,:,:,12)*this%budget_0(:,:,:,1)
+        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%budget_0(:,:,:,14)*this%budget_0(:,:,:,2)
+        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%budget_0(:,:,:,15)*this%budget_0(:,:,:,3)
+
+        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%budget_0(:,:,:,11)*this%budget_0(:,:,:,1)
+        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%budget_0(:,:,:,12)*this%budget_0(:,:,:,2)
+        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%budget_0(:,:,:,13)*this%budget_0(:,:,:,3)
+
+        this%igrid_sim%rbuffxC(:,:,:,1) = half*(this%budget_0(:,:,:,4) + this%budget_0(:,:,:,7) + this%budget_0(:,:,:,9))
+        this%budget_0(:,:,:,22) = this%budget_0(:,:,:,22) + this%budget_0(:,:,:,3)*this%igrid_sim%rbuffxC(:,:,:,1)
+        this%budget_0(:,:,:,21) = this%budget_0(:,:,:,21) + this%budget_0(:,:,:,2)*this%igrid_sim%rbuffxC(:,:,:,1)
+        this%budget_0(:,:,:,20) = this%budget_0(:,:,:,20) + this%budget_0(:,:,:,1)*this%igrid_sim%rbuffxC(:,:,:,1)
+
+        this%budget_0(:,:,:,19) = this%budget_0(:,:,:,19) + this%budget_0(:,:,:,3)*this%budget_0(:,:,:,10)
+        this%budget_0(:,:,:,18) = this%budget_0(:,:,:,18) + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,10)
+        this%budget_0(:,:,:,17) = this%budget_0(:,:,:,17) + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,10)
+ 
+        ! Step 8: Go back to <ui uj> from <Rij>
         this%budget_0(:,:,:,4)  = this%budget_0(:,:,:,4)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,1) ! R11
         this%budget_0(:,:,:,5)  = this%budget_0(:,:,:,5)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,2) ! R12
         this%budget_0(:,:,:,6)  = this%budget_0(:,:,:,6)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,3) ! R13
@@ -296,7 +351,7 @@ contains
         this%budget_0(:,:,:,8)  = this%budget_0(:,:,:,8)  + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,3) ! R23
         this%budget_0(:,:,:,9)  = this%budget_0(:,:,:,9)  + this%budget_0(:,:,:,3)*this%budget_0(:,:,:,3) ! R33
         
-        ! Step 5: Go back to summing instead of averaging
+        ! Step 9: Go back to summing instead of averaging
         this%budget_0 = this%budget_0*(real(this%counter,rkind) + 1.d-18)
 
     end subroutine 
@@ -320,9 +375,35 @@ contains
         ! STEP 3: Pressure
         this%budget_0(:,:,:,10) = this%budget_0(:,:,:,10) + this%igrid_sim%pressure
 
-        ! STEP 3: SGS stresses (also viscous stress if finite reynolds number is being used)
+        ! STEP 4: SGS stresses (also viscous stress if finite reynolds number is being used)
         call this%igrid_sim%sgsmodel%populate_tauij_E_to_C()
         this%budget_0(:,:,:,11:16) = this%budget_0(:,:,:,11:16) + this%igrid_sim%tauSGS_ij 
+
+        ! STEP 5: Pressure flux for TKE transport
+        this%budget_0(:,:,:,17) = this%budget_0(:,:,:,17) + this%igrid_sim%pressure*this%igrid_sim%u
+        this%budget_0(:,:,:,18) = this%budget_0(:,:,:,18) + this%igrid_sim%pressure*this%igrid_sim%v
+        this%budget_0(:,:,:,19) = this%budget_0(:,:,:,19) + this%igrid_sim%pressure*this%igrid_sim%wC
+
+        ! STEP 6: Turbulent flux for TKE transport
+        this%igrid_sim%rbuffxC(:,:,:,1) = half*(this%igrid_sim%u * this%igrid_sim%u + &
+                                                this%igrid_sim%v * this%igrid_sim%v + &
+                                                this%igrid_sim%wC* this%igrid_sim%wC ) 
+        this%budget_0(:,:,:,20) = this%budget_0(:,:,:,20) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%u
+        this%budget_0(:,:,:,21) = this%budget_0(:,:,:,21) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%v
+        this%budget_0(:,:,:,22) = this%budget_0(:,:,:,22) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%wC
+
+        ! STEP 7: SGS flux for TKE transport
+        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%igrid_sim%tauSGS_ij(:,:,:,1)*this%igrid_sim%u
+        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%igrid_sim%tauSGS_ij(:,:,:,2)*this%igrid_sim%v
+        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%igrid_sim%tauSGS_ij(:,:,:,3)*this%igrid_sim%wC
+
+        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%igrid_sim%tauSGS_ij(:,:,:,2)*this%igrid_sim%u
+        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%igrid_sim%tauSGS_ij(:,:,:,4)*this%igrid_sim%v
+        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%igrid_sim%tauSGS_ij(:,:,:,5)*this%igrid_sim%wC
+
+        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%igrid_sim%tauSGS_ij(:,:,:,3)*this%igrid_sim%u
+        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%igrid_sim%tauSGS_ij(:,:,:,5)*this%igrid_sim%v
+        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%igrid_sim%tauSGS_ij(:,:,:,6)*this%igrid_sim%wC
 
     end subroutine 
 
