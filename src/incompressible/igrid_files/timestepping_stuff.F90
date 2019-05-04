@@ -401,7 +401,7 @@
                    if (nrank .ne. 0) close(777)
                    call mpi_barrier(mpi_comm_world, ierr2)
                    !if(nrank==0) close(777, status='delete')
-                   if (this%deleteInstructions) then
+                   if (this%deleteInstructions .and. this%Am_I_Primary) then
                       if(nrank==0) close(777, status='delete')
                    else
                       if(nrank==0) close(777)
@@ -420,7 +420,7 @@
                        if (nrank .ne. 0) close(777)
                        call mpi_barrier(mpi_comm_world, ierr2)
                        !if(nrank==0) close(777, status='delete')
-                       if (this%deleteInstructions) then
+                       if (this%deleteInstructions .and. this%Am_I_Primary) then
                           if(nrank==0) close(777, status='delete')
                        else
                           if(nrank==0) close(777)
@@ -438,7 +438,7 @@
                        if (nrank .ne. 0) close(777)
                        call mpi_barrier(mpi_comm_world, ierr2)
                        !if (nrank==0) close(777, status='delete')
-                       if (this%deleteInstructions) then
+                       if (this%deleteInstructions .and. this%Am_I_Primary) then
                           if(nrank==0) close(777, status='delete')
                        else
                           if(nrank==0) close(777)
@@ -456,7 +456,7 @@
                    if (nrank .ne. 0) close(777)
                    call mpi_barrier(mpi_comm_world, ierr2)
                    !if(nrank==0) close(777, status='delete')
-                   if (this%deleteInstructions) then
+                   if (this%deleteInstructions .and. this%Am_I_Primary) then
                       if(nrank==0) close(777, status='delete')
                    else
                       if(nrank==0) close(777)

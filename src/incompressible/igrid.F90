@@ -75,6 +75,7 @@ module IncompressibleGrid
         character(len=clen) :: filter_y          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
         character(len=clen) :: filter_z          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
         integer      :: step, nsteps = 999999
+        logical :: Am_I_Primary = .true.
 
         type(decomp_info), allocatable :: gpC, gpE
         type(decomp_info), pointer :: Sp_gpC, Sp_gpE

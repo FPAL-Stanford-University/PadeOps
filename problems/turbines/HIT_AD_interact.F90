@@ -55,7 +55,8 @@ program HIT_AD_interact
     call mpi_barrier(mpi_comm_world, ierr)
 
     simulationID = 2
-    call hit%init(HIT_InputFile, .false.)                                            
+    call hit%init(HIT_InputFile, .false.)                                           
+    hit%Am_I_Primary = .false. 
     call hit%start_io(.true.)                                           
     call hit%printDivergence()
     

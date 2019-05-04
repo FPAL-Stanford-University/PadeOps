@@ -312,10 +312,10 @@ contains
         ! STEP 2: Get Reynolds stresses (IMPORTANT: need to correct for fluctuation before dumping)
         this%budget_0(:,:,:,4) = this%budget_0(:,:,:,4) + this%igrid_sim%u*this%igrid_sim%u
         this%budget_0(:,:,:,5) = this%budget_0(:,:,:,5) + this%igrid_sim%u*this%igrid_sim%v
-        this%budget_0(:,:,:,6) = this%budget_0(:,:,:,6) + this%igrid_sim%u*this%igrid_sim%w
+        this%budget_0(:,:,:,6) = this%budget_0(:,:,:,6) + this%igrid_sim%u*this%igrid_sim%wC
         this%budget_0(:,:,:,7) = this%budget_0(:,:,:,7) + this%igrid_sim%v*this%igrid_sim%v
-        this%budget_0(:,:,:,8) = this%budget_0(:,:,:,8) + this%igrid_sim%v*this%igrid_sim%w
-        this%budget_0(:,:,:,9) = this%budget_0(:,:,:,9) + this%igrid_sim%w*this%igrid_sim%w
+        this%budget_0(:,:,:,8) = this%budget_0(:,:,:,8) + this%igrid_sim%v*this%igrid_sim%wC
+        this%budget_0(:,:,:,9) = this%budget_0(:,:,:,9) + this%igrid_sim%wC*this%igrid_sim%wC
 
         ! STEP 3: Pressure
         this%budget_0(:,:,:,10) = this%budget_0(:,:,:,10) + this%igrid_sim%pressure
@@ -713,6 +713,7 @@ contains
         
         call this%igrid_sim%spectC%fft(f,this%igrid_sim%cbuffyC(:,:,:,1))
         call this%igrid_sim%spectC%mtimes_ik1_ip(this%igrid_sim%cbuffyC(:,:,:,1))
+        call this%igrid_sim%spectC%dealias(this%igrid_sim%cbuffyC(:,:,:,1))
         call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1), dfdx)
     end subroutine 
 
@@ -722,6 +723,7 @@ contains
         real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: dfdx
         
         call this%igrid_sim%spectC%mtimes_ik1_oop(fhat,this%igrid_sim%cbuffyC(:,:,:,1))
+        call this%igrid_sim%spectC%dealias(this%igrid_sim%cbuffyC(:,:,:,1))
         call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1), dfdx)
     end subroutine 
     
@@ -732,6 +734,7 @@ contains
         
         call this%igrid_sim%spectC%fft(f,this%igrid_sim%cbuffyC(:,:,:,1))
         call this%igrid_sim%spectC%mtimes_ik2_ip(this%igrid_sim%cbuffyC(:,:,:,1))
+        call this%igrid_sim%spectC%dealias(this%igrid_sim%cbuffyC(:,:,:,1))
         call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1), dfdy)
     end subroutine 
 
@@ -741,6 +744,7 @@ contains
         real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: dfdy
         
         call this%igrid_sim%spectC%mtimes_ik2_oop(fhat,this%igrid_sim%cbuffyC(:,:,:,1))
+        call this%igrid_sim%spectC%dealias(this%igrid_sim%cbuffyC(:,:,:,1))
         call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1), dfdy)
     end subroutine 
     
@@ -749,11 +753,14 @@ contains
         real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(in) :: f
         real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: dfdz
         
-        call transpose_x_to_y(f,this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
-        call transpose_y_to_z(this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%gpC)
-        call this%igrid_sim%Pade6opZ%ddz_C2C(this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,2),0,0)
-        call transpose_z_to_y(this%igrid_sim%rbuffzC(:,:,:,2),this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
-        call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,1),dfdz,this%igrid_sim%gpC)
+        !call transpose_x_to_y(f,this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
+        !call transpose_y_to_z(this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%gpC)
+        !call this%igrid_sim%Pade6opZ%ddz_C2C(this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,2),0,0)
+        !call transpose_z_to_y(this%igrid_sim%rbuffzC(:,:,:,2),this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
+        !call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,1),dfdz,this%igrid_sim%gpC)
+
+        call this%igrid_sim%spectC%fft(f,this%igrid_sim%cbuffyC(:,:,:,2))
+        call this%ddz_C2R(this%igrid_sim%cbuffyC(:,:,:,2), dfdz)
 
     end subroutine 
     
@@ -765,6 +772,7 @@ contains
         call transpose_y_to_z(fhat,this%igrid_sim%cbuffzC(:,:,:,1),this%igrid_sim%sp_gpC)
         call this%igrid_sim%Pade6opZ%ddz_C2C(this%igrid_sim%cbuffzC(:,:,:,1),this%igrid_sim%cbuffzC(:,:,:,2),0,0)
         call transpose_z_to_y(this%igrid_sim%cbuffzC(:,:,:,2),this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%sp_gpC)
+        call this%igrid_sim%spectC%dealias(this%igrid_sim%cbuffyC(:,:,:,1))
         call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1), dfdz)
         
     end subroutine 
