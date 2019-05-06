@@ -108,7 +108,7 @@ contains
         real(rkind), intent(in)                     :: Mc ! should we use supersonic modes? 
         real(rkind), dimension(:,:,:), intent(inout) :: q !the primitive var
 
-        real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: mask,tmp 
+        real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: tmp 
         complex(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: e 
         real(rkind) :: kx, kz, k, ph, qmax_local, qmax
         integer(rkind) :: j, m, mx, mz, mpi_ierr
@@ -127,29 +127,27 @@ contains
         ! Get maxval and scale
         qmax_local = maxval(q)
         call mpi_allreduce(qmax_local, qmax, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD)
-        mask = maxAmp*exp(-abs(y)/maskWidth)
-        q = q*mask/qmax
+        tmp = maxAmp*exp(-abs(y)/maskWidth)
+        q = q/qmax * tmp
 
         ! We also need more oscillatory modes at higher Mc
         if (Mc > 0.8) then
-            tmp=0.D0
-            do mx = 3,3+nmodes/2
-            do mz = 3,3+nmodes/2
+            tmp = 0.D0
+            do mx = 3,6
+            do mz = 3,6
                 kx = two*pi/Lx * mx
                 kz = two*pi/Lz * mz
-                k  = (kx**two+kz**two)**half
                 call random_number(ph)
                 call mpi_bcast(ph,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
                 e = exp(imi*(kx*x + kz*z)+ph*2*pi)
-                tmp = tmp + real(k**(-5._rkind/3._rkind)*e,rkind) 
+                tmp = tmp + real(e,rkind) 
             enddo
             enddo
 
-            ! Get maxval and scale
+            ! Get maxval and scale. Make oscillatory mask
             qmax_local = maxval(tmp)
             call mpi_allreduce(qmax_local, qmax, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD)
-            mask = 0.5*maxAmp*exp(-abs(y)/maxval(y))*sin(y*2.D0*pi/maskWidth/2)
-            q = q + tmp*mask/qmax
+            q = q + tmp/qmax * 0.5*maxAmp*exp(-abs(y)/maxval(y))*sin(y*2.D0*pi/maskWidth/2)
         endif
 
     end subroutine 
