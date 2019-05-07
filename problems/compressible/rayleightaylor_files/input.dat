@@ -1,0 +1,63 @@
+&INPUT
+
+inputdir  = "/scratch/users/kcherng/PadeOps/RT9/"      ! Directory for input files
+outputdir = "/scratch/users/kcherng/PadeOps/RT9/"      ! Directory for output files
+
+nx = 256                  ! Number of points in X
+ny = 1                    ! Number of points in Y
+nz = 704                  ! Number of points in Z
+
+dt = 1.0D-2               ! Fixed time step value (Set to negative to disable)
+tstop = 7.0D0             ! Physical time to stop the simulation
+CFL = 0.5D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
+
+tviz = 1.0D-1             ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "RT"          ! Prefix for the visualization files
+reduce_precision = .true. ! Reduce precision for I/O?
+
+periodicx = .true.       ! Periodic in X?
+periodicy = .true.       ! Periodic in Y?
+periodicz = .false.      ! Periodic in Z?
+
+derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
+
+filter_x = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_y = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+
+prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+
+/
+
+&CINPUT
+gam      = 1.4D0          ! Ratio of specific heats
+Rgas     = 1.D0           ! Gas constant
+inviscid = .false.        ! Inviscid simulation?
+ns       = 2              ! Number of species
+nrestart = 100            ! Number of steps between restart dumps
+x_bc1    = 0              ! Left  X BC (0 => general, 1 => symmetric). Not used if periodic
+x_bcn    = 0              ! Right X BC (0 => general, 1 => symmetric). Not used if periodic
+y_bc1    = 0              ! Left  Y BC (0 => general, 1 => symmetric). Not used if periodic
+y_bcn    = 0              ! Right Y BC (0 => general, 1 => symmetric). Not used if periodic
+z_bc1    = 1              ! Left  Y BC (0 => general, 1 => symmetric). Not used if periodic
+z_bcn    = 1              ! Right Y BC (0 => general, 1 => symmetric). Not used if periodic
+/
+
+&PROBINPUT
+threeD      = .true.         ! Is problem 3D?
+rhoRatio    = 3D0            ! Density ratio
+Re          = 100D0          ! Reynolds number (with respect to fluid 1)
+Sc          = 2D1            ! Schmidt number (with respect to fluid 1)
+Pr1         = 1D0            ! Prandtl number (with respect to fluid 1)
+gravity     = 1D0            ! Normalized gravity magnitude, =1 to best fit this specific nondimensionalization (unless you want to increase it)
+z_interface = 5.5D0          ! Location of interface
+L_int       = 2D-1           ! Thickness of interface
+amp         = 1D-1           ! Amplitude of perturbation
+bulk_Ratio  = 1D0            ! Bulk Viscosity ratio B2/B1
+mu_Ratio    = 1D0            ! Viscosity ratio mu2/mu1
+kap_ratio   = 1D0            ! Thermal Conductivity ratio k2/k1
+/
