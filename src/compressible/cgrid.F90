@@ -68,8 +68,8 @@ module CompressibleGrid
         logical                  :: compute_scale_decomposition
         type(scaleDecomposition) :: scaledecomp
 
-        real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
-        real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
+        real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv              ! Conserved variables
+        real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf    ! Buffers
        
         real(rkind) :: Cmu, Cbeta, Ckap, Cdiff, CY
 
@@ -604,7 +604,8 @@ contains
         ! call this%get_dt(stability)
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
-        allocate( gradYs(this%nxp, this%nyp, this%nzp,3*this%mix%ns) )
+        allocate( tauij( this%nxp, this%nyp, this%nzp, 6) )
+        allocate( gradYs(this%nxp, this%nyp, this%nzp, 3*this%mix%ns) )
         
         ! Get artificial properties for initial condition output file
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
@@ -691,15 +692,16 @@ contains
                 end if
 
                 ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
-                call this%get_tau( duidxj )
+                !tauij(:,:,:,1) = duidxj(:,:,:,tauxxidx)
+                !tauij(:,:,:,2) = duidxj(:,:,:,tauxyidx)
+                !tauij(:,:,:,3) = duidxj(:,:,:,tauxzidx)
+                !tauij(:,:,:,4) = duidxj(:,:,:,tauyyidx)
+                !tauij(:,:,:,5) = duidxj(:,:,:,tauyzidx)
+                !tauij(:,:,:,6) = duidxj(:,:,:,tauzzidx)
                 allocate( tauij (this%nxp,this%nyp,this%nzp,6) )
-                ! Now, associate the pointers to understand what's going on better
-                tauij(:,:,:,1) = duidxj(:,:,:,tauxxidx)
-                tauij(:,:,:,2) = duidxj(:,:,:,tauxyidx)
-                tauij(:,:,:,3) = duidxj(:,:,:,tauxzidx)
-                tauij(:,:,:,4) = duidxj(:,:,:,tauyyidx)
-                tauij(:,:,:,5) = duidxj(:,:,:,tauyzidx)
-                tauij(:,:,:,6) = duidxj(:,:,:,tauzzidx)
+                call this%get_tau( duidxj,tauij )
+
+
 
                 ! dt_tke = one
                 if (this%compute_tke_budget) then
@@ -1022,15 +1024,8 @@ contains
                     deallocate( gradYs )
 
                     ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
-                    call this%get_tau( duidxj )
                     allocate( tauij (this%nxp,this%nyp,this%nzp,6) )
-                    ! Now, associate the pointers to understand what's going on better
-                    tauij(:,:,:,1) = duidxj(:,:,:,tauxxidx)
-                    tauij(:,:,:,2) = duidxj(:,:,:,tauxyidx)
-                    tauij(:,:,:,3) = duidxj(:,:,:,tauxzidx)
-                    tauij(:,:,:,4) = duidxj(:,:,:,tauyyidx)
-                    tauij(:,:,:,5) = duidxj(:,:,:,tauyzidx)
-                    tauij(:,:,:,6) = duidxj(:,:,:,tauzzidx)
+                    call this%get_tau( duidxj,tauij )
                     deallocate( duidxj )
 
                     if (this%compute_tke_budget) then
@@ -1188,10 +1183,11 @@ contains
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv), intent(out) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,6), target :: tauij        ! change this allocation later
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,3*this%mix%ns), target :: gradYs
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
-        real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
         real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
+        real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
         real(rkind), dimension(:,:,:), pointer :: qx,qy,qz
         real(rkind), dimension(:,:,:,:), pointer :: Jx,Jy,Jz
         integer :: i
@@ -1221,13 +1217,6 @@ contains
                              dvdx, dvdy, dvdz,&
                              dwdx, dwdy, dwdz )
         end if
-        
-        ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
-        call this%get_tau( duidxj )
-        ! Now, associate the pointers to understand what's going on better
-        tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
-                                         tauyy => duidxj(:,:,:,tauyyidx); tauyz => duidxj(:,:,:,tauyzidx);
-                                                                          tauzz => duidxj(:,:,:,tauzzidx);
 
         ! Get species mass fluxes. Put in components on gradYs
         if (this%mix%ns .GT. 1) then
@@ -1235,42 +1224,43 @@ contains
         end if
         Jx => gradYs(:,:,:,1:this%mix%ns); Jy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns); Jz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);
 
+        ! Get tauij
+        call this%get_tau(duidxj,tauij)
+        tauxx => tauij(:,:,:,1); tauxy => tauij(:,:,:,2); tauxz => tauij(:,:,:,3);
+                                 tauyy => tauij(:,:,:,4); tauyz => tauij(:,:,:,5);
+                                                          tauzz => tauij(:,:,:,6);
+
+        ! Get  q (heat conduction) vector. Put in components of duidxj
         call this%get_q  ( duidxj, Jx, Jy, Jz )
         qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
 
-
         rhs = zero
-        call this%getRHS_x(              rhs,&
-                           tauxx,tauxy,tauxz,&
-                               qx, Jx )
+        call this%getRHS_x( rhs, dudx,dudy,dudx,dvdy,dwdz,tauxx,tauxy,tauxz, qx, Jx )
+        !call this%getRHS_y( rhs, dvdx,dvdy,dvdx,dudx,dwdz,tauxy,tauyy,tauyz, qy, Jy )
+        !call this%getRHS_z( rhs, dwdx,dwdy,dwdx,dwdx,dvdy,tauxz,tauyz,tauzz, qz, Jz )
+        call this%getRHS_y( rhs,tauxy,tauyy,tauyz,qy,Jy)
+        call this%getRHS_z( rhs,tauxy,tauyy,tauyz,qy,Jy)
 
-        call this%getRHS_y(              rhs,&
-                           tauxy,tauyy,tauyz,&
-                               qy, Jy )
-
-        call this%getRHS_z(              rhs,&
-                           tauxz,tauyz,tauzz,&
-                               qz, Jz )
 
         ! Call problem source hook
         call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
 
     end subroutine
 
-    subroutine getRHS_x(       this,  rhs,&
-                        tauxx,tauxy,tauxz,&
-                            qx, Jx )
+    subroutine getRHS_x( this,rhs,dudx,dudy,dudz,dvdy,dwdz,tauxx,tauxy,tauxz,qx,Jx )
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: &
+            dudx,dudy,dudz,dvdy,dwdz,tauxx,tauxy,tauxz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, this%mix%ns), intent(in) :: Jx
 
         real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: flux
-        real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
+        real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2,dmudx
         integer :: i
 
         xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
+        dmudx => this%xbuf(:,:,:,3);
 
         select case(this%mix%ns)
         case(1)
@@ -1288,26 +1278,66 @@ contains
                 rhs(:,:,:,i) = rhs(:,:,:,i) - flux
             end do
         end select
+        
+        ! First get the viscous stuff
+        ! Now the dmudx derivative
+        call transpose_y_to_x(this%mu,xtmp1,this%decomp)
+        call this%der%ddx(xtmp1,xtmp2, this%x_bc(1), this%x_bc(2))
+        call transpose_x_to_y(xtmp2,dmudx,this%decomp)
 
-        flux = this%Wcnsrv(:,:,:,mom_index  )*this%u + this%p - tauxx ! x-momentum
+        ! for x momentum
+        call transpose_y_to_x(this%u,xtmp1,this%decomp)
+        call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+        call transpose_x_to_y(xtmp2,xtmp1,this%decomp)
+        flux = four/three*(dmudx*dudx + this%mu*xtmp1) !xtmp1=d2u/dx2
+        flux = flux + four/three*(dvdy+dwdz)
+        call transpose_y_to_x((dvdy+dwdz),xtmp1,this%decomp)
+        call this%der%ddx(xtmp1,xtmp2, this%x_bc(1), this%x_bc(2))
+        call transpose_x_to_y(xtmp2,xtmp1,this%decomp)
+        flux = flux + four/three*xtmp1 !xtmp1=ddx(dvdy+dwdz)
+        rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) + flux
+
+        ! y momentum: no transpose bc y pencils
+        flux = dmudx*dudy 
+        call this%der%d2dy2(this%u,xtmp1,this%y_bc(1),this%y_bc(2))
+        flux = flux + this%mu*xtmp1
+        rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) + flux
+
+        ! z momentum: 
+        flux = dmudx*dudz 
+        call transpose_y_to_z(this%u,xtmp1,this%decomp)
+        call this%der%d2dz2(xtmp1,xtmp2,this%z_bc(1),this%z_bc(2))
+        call transpose_z_to_y(xtmp2,xtmp1,this%decomp)
+        flux = flux + this%mu*xtmp1
+        rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) + flux
+
+        ! energy:
+        flux = this%u*rhs(:,:,:,mom_index)  & ! u*ddx(tauxx) 
+             + this%v*rhs(:,:,:,mom_index+1) &! v*ddx(tauxy)
+             + this%w*rhs(:,:,:,mom_index+2)  ! w*ddx(tauxz)
+        flux = flux + tauxx*dudx + tauxy*dvdy + tauxz*dwdz 
+        rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) + flux
+
+        ! These are the convective/ pressure stuffs
+        flux = this%Wcnsrv(:,:,:,mom_index  )*this%u + this%p! x-momentum
         call transpose_y_to_x(flux,xtmp1,this%decomp)
         call this%der%ddx(xtmp1,xtmp2, this%x_bc(1), this%x_bc(2)) ! Symmetric for x-momentum
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
 
-        flux = this%Wcnsrv(:,:,:,mom_index  )*this%v          - tauxy ! y-momentum
+        flux = this%Wcnsrv(:,:,:,mom_index  )*this%v ! y-momentum
         call transpose_y_to_x(flux,xtmp1,this%decomp)
         call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
 
-        flux = this%Wcnsrv(:,:,:,mom_index  )*this%w          - tauxz ! z-momentum
+        flux = this%Wcnsrv(:,:,:,mom_index  )*this%w ! z-momentum
         call transpose_y_to_x(flux,xtmp1,this%decomp)
         call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
 
-        flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz + qx ! Total Energy
+        flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p)*this%u + qx ! Total Energy
         call transpose_y_to_x(flux,xtmp1,this%decomp)
         call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
         call transpose_x_to_y(xtmp2,flux,this%decomp)
@@ -1721,11 +1751,13 @@ contains
 
     end subroutine  
 
-    subroutine get_tau(this,duidxj)
+    subroutine get_tau(this,duidxj,tauij)
         class(cgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), target, intent(inout) :: duidxj
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), target, intent(in) :: duidxj
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), target, intent(out) :: tauij
 
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz 
         real(rkind), dimension(:,:,:), pointer :: lambda, bambda
 
         lambda => this%ybuf(:,:,:,1)
@@ -1734,6 +1766,10 @@ contains
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+        
+        tauxx => tauij(:,:,:,1); tauxy => tauij(:,:,:,2); tauxz => tauij(:,:,:,3);
+                                 tauyy => tauij(:,:,:,4); tauyz => tauij(:,:,:,5);
+                                                          tauzz => tauij(:,:,:,6);
        
         ! Compute the multiplying factors (thermo-shit)
         bambda = (four/three)*this%mu + this%bulk
@@ -1741,29 +1777,29 @@ contains
 
         ! Step 1: Get tau_12  (dudy is destroyed)
         dudy =  dudy + dvdx
-        dudy = this%mu*dudy
+        tauxy = this%mu*dudy
         !tauxyidz = 2
     
         ! Step 2: Get tau_13 (dudz is destroyed)
         dudz = dudz + dwdx
-        dudz = this%mu*dudz
+        tauxz = this%mu*dudz
         !tauxzidx = 3
 
         ! Step 3: Get tau_23 (dvdz is destroyed)
         dvdz = dvdz + dwdy
-        dvdz = this%mu*dvdz
+        tauyz = this%mu*dvdz
         !tauyzidx = 6
 
         ! Step 4: Get tau_11 (dvdx is destroyed)
-        dvdx = bambda*dudx + lambda*(dvdy + dwdz)
+        tauxx = bambda*dudx + lambda*(dvdy + dwdz)
         !tauxxidx = 4
 
         ! Step 5: Get tau_22 (dwdx is destroyed)
-        dwdx = bambda*dvdy + lambda*(dudx + dwdz)
+        tauyy = bambda*dvdy + lambda*(dudx + dwdz)
         !tauyyidx = 7
 
         ! Step 6: Get tau_33 (dwdy is destroyed)
-        dwdy = bambda*dwdz + lambda*(dudx + dvdy)
+        tauzz = bambda*dwdz + lambda*(dudx + dvdy)
         !tauzzidx = 8
 
         ! Done 
