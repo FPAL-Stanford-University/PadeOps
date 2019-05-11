@@ -1,6 +1,6 @@
 module ShearLayer_data
     use kind_parameters,  only: rkind, mpirkind, clen
-    use constants,        only: zero, half, one, two, pi, imi
+    use constants,        only: zero, half, one, two, four, pi, imi
     use FiltersMod,       only: filters
     use decomp_2d,        only: decomp_info, nrank
     use basic_io,         only: read_2d_ascii 
@@ -113,25 +113,25 @@ contains
         real(rkind) :: kx, kz, k, ph, qmax_local, qmax
         integer(rkind) :: j, m, mx, mz, mpi_ierr
 
-        ! Add modes to field q
-        do m = 3,3+nmodes 
-            kx = two*pi/Lx * m
-            kz = two*pi/Lz * m
-            k  = (kx**two+kz**two)**half
-            call random_number(ph)
-            call mpi_bcast(ph,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-            e = exp(imi*(kx*x + kz*z)+ph*2*pi)
-            q = q + real(k**(-5._rkind/3._rkind)*e,rkind) 
-        enddo
+        if (Mc < 0.8) then
+            ! Add modes to field q
+            do m = 3,3+nmodes 
+                kx = two*pi/Lx * m
+                kz = two*pi/Lz * m
+                k  = (kx**two+kz**two)**half
+                call random_number(ph)
+                call mpi_bcast(ph,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+                e = exp(imi*(kx*x + kz*z)+ph*2*pi)
+                q = q + real(k**(-5._rkind/3._rkind)*e,rkind) 
+            enddo
 
-        ! Get maxval and scale
-        qmax_local = maxval(q)
-        call mpi_allreduce(qmax_local, qmax, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD)
-        mask = maxAmp*exp(-abs(y)/maskWidth)
-        q = q*mask/qmax
-
-        ! We also need more oscillatory modes at higher Mc
-        if (Mc > 0.8) then
+            ! Get maxval and scale
+            qmax_local = maxval(q)
+            call mpi_allreduce(qmax_local, qmax, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD)
+            mask = maxAmp*exp(-abs(y)/maskWidth)
+            q = q*mask/qmax
+        else
+            ! We also need more oscillatory modes at higher Mc
             tmp=0.D0
             do mx = 3,3+nmodes/2
             do mz = 3,3+nmodes/2
@@ -151,6 +151,39 @@ contains
             mask = 0.5*maxAmp*exp(-abs(y)/maxval(y))*sin(y*2.D0*pi/maskWidth/2)
             q = q + tmp*mask/qmax
         endif
+
+    end subroutine 
+    
+    subroutine perturb_potential(gp,x,y,z,Lx,Lz,u,v,w)
+        type(decomp_info), intent(in)               :: gp
+        real(rkind), dimension(:,:,:), intent(in)   :: x,y,z
+        real(rkind), dimension(:,:,:), intent(inout):: u,v,w 
+        real(rkind), intent(in)                     :: Lx,Lz
+
+        real(rkind) :: kx, kz, phx, phz, A, eps=0.15, sigma=5.D0
+        integer(rkind) :: i,j, m, mx, mz, nmodes=75, mpi_ierr
+
+        do i = 1, nmodes 
+        do j = 1, nmodes
+
+            kx = two*pi/Lx * i 
+            kz = two*pi/Lx * j
+            call random_number(phx)
+            call random_number(phz)
+            call mpi_bcast(phx,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+            call mpi_bcast(phz,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+
+            A = eps/(four*pi**2*kx*kz)
+            u = u + -A * -kx*sin(kx*x+phx*two*pi) * cos(kz*z+phz*two*pi) *&
+                exp(-(sigma*y**2))*( sin(y) + 2*sigma*y*cos(y) )
+            w = w + -A * cos(kx*x+phx*two*pi) * -kz*sin(kz*z+phz*two*pi) *&
+                exp(-(sigma*y**2))*( sin(y) + 2*sigma*y*cos(y) )
+            v = v + -A * cos(kx*x+phx*two*pi) * -kz*sin(kz*z+phz*two*pi) *&
+                ( -two*sigma*y*exp(-(sigma*y**2))*( sin(y) + 2*sigma*y*cos(y) ) + &
+                exp(-(sigma*y**2))*( cos(y) + -2*sigma*y*sin(y) ) )
+
+        enddo
+        enddo
 
     end subroutine 
 end module
@@ -305,14 +338,15 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
             call lstab_pert(decomp,x,z,fname_prefix,w,4)
             call lstab_pert(decomp,x,z,fname_prefix,rho,1)
         else
-            maskWidth = two*dtheta0
-            maxAmp = 1.D-3*du
-            nModes = 10 
-            call make_pert(decomp,x,y,z,Lx,Lz,u,maskWidth,maxAmp,nModes,Mc)
-            call make_pert(decomp,x,y,z,Lx,Lz,v,maskWidth,maxAmp,nModes,Mc)
-            call make_pert(decomp,x,y,z,Lx,Lz,w,maskWidth,maxAmp,nModes,Mc)
-            call make_pert(decomp,x,y,z,Lx,Lz,p,maskWidth,maxAmp,nModes,Mc)
-            call make_pert(decomp,x,y,z,Lx,Lz,rho,maskWidth,maxAmp,nModes,Mc)
+            call perturb_potential(decomp,x,y,z,Lx,Lz,u,v,w)
+            !maskWidth = two*dtheta0
+            !maxAmp = 1.D-3*du
+            !nModes = 10 
+            !call make_pert(decomp,x,y,z,Lx,Lz,u,maskWidth,maxAmp,nModes,Mc)
+            !call make_pert(decomp,x,y,z,Lx,Lz,v,maskWidth,maxAmp,nModes,Mc)
+            !call make_pert(decomp,x,y,z,Lx,Lz,w,maskWidth,maxAmp,nModes,Mc)
+            !call make_pert(decomp,x,y,z,Lx,Lz,p,maskWidth,maxAmp,nModes,Mc)
+            !call make_pert(decomp,x,y,z,Lx,Lz,rho,maskWidth,maxAmp,nModes,Mc)
         endif
 
         ! Add base flow profiles
