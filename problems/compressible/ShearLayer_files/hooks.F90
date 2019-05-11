@@ -242,8 +242,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda,maskWidth,maxAmp
     integer :: i,j, iounit, nx, ny, nz, nModes
         
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: mask 
-    complex(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: e 
     real(rkind) :: kx, kz, ph 
     integer(rkind) :: m, mpi_ierr
     
