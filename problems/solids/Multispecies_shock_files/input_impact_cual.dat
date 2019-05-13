@@ -1,0 +1,95 @@
+&INPUT
+
+!inputdir  =  "/home/nghaisas/PadeRuns/sgrid_multispecies/Multispecies_2Dshock/n128"
+!outputdir  =  "/home/nghaisas/PadeRuns/sgrid_multispecies/Multispecies_2Dshock/n128"
+inputdir  = "/home/songhang/data/Multispecies_imapct_plastic"
+outputdir = "/farmshare/user_data/songhang/PadeOps_data/Multispecies_plastic_pure_impact"
+
+nx = 192                  ! Number of points in X
+ny = 96                   ! Number of points in Y
+nz = 1                    ! Number of points in Z
+
+dt = 1.0D-4               ! Fixed time step value (Set to negative to disable)
+tstop = 4.00D0            ! Physical time to stop the simulation
+CFL =  0.8D0              ! CFL criterion for calculating the time step (Set to negative to disable)
+nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
+
+tviz = 1.0D-2             ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "oblique_impact" ! Prefix for the visualization files
+
+periodicx = .FALSE.       ! Periodic in X?
+periodicy = .TRUE.        ! Periodic in Y?
+periodicz = .TRUE.        ! Periodic in Z?
+
+derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
+
+filter_x = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_y = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+
+prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+
+/
+
+&CINPUT
+gam  = 1.4D0              ! Ratio of specific heats
+Rgas = 1.D0               ! Gas constant
+/
+
+&IINPUT
+nu = 0.02D0               ! Kinematic viscosity
+/
+
+&SINPUT
+gam     = 1.4D0           ! Ratio of specific heats
+Rgas    = 1.D0            ! Gas constant
+PInf    = 1.D0            ! P_infinity, material stiffness
+shmod   = 1.D1            ! Shear modulus
+PTeqb = .TRUE.            ! Yield strength of material
+SOSmodel = .FALSE.        ! Yield strength of material
+ns      = 2               ! Number of species
+Cmu     = 2.D-3           ! Coefficient for artificial shear viscosity
+Cbeta   = 1.D0            ! Coefficient for artificial bulk viscosity
+Ckap    = 1.D-2           ! Coefficient for artificial thermal conductivity
+Cdiff   = 3.D-3           ! Coefficient for artificial thermal conductivity
+CY      = 1.D2            ! Coefficient for artificial thermal conductivity
+x_bc1   = 0
+x_bcn   = 1
+y_bc1   = 0
+y_bcn   = 0
+z_bc1   = 0
+z_bcn   = 0
+/
+
+&PROBINPUT
+gamma    = 2.0D0          ! Ratio of specific heats  -- copper
+Rgas     = 1.D0           ! Gas constant
+p_infty  = 1.D0           ! P_infinity, material stiffness
+mu       = 0.2886D0       ! Shear modulus
+rho_0    = 1.D0           ! No deformation density
+p_amb    = 5.D-2          ! Ambient pressure
+minVF    = 1.0D-6         ! Minimum mass fraction at initialization
+rhoRatio = -0.53333D0     ! Density ratio
+pRatio   = 1.0D0          ! Density ratio
+thick    = 3.0D0          ! Initial thickness in grid units for interface
+gamma_2    = 2.088D0      ! Ratio of specific heats   -- aluminium
+Rgas_2     = 1.D0         ! Gas constant
+p_infty_2  = 0.5047D0     ! P_infinity, material stiffness
+mu_2       = 0.1985D0     ! Shear modulus
+rho_0_2    = 0.3037D0     ! No deformation density
+plastic    = .TRUE.       ! Logical to turn on plasticity
+yield      = 8.79d-4      ! Yield strength of material
+explPlast  = .FALSE.      ! Logical to switch between explicit (F) and implicit (T) plastic update
+plastic2   = .TRUE.       ! Logical to turn on plasticity
+yield2     = 2.176d-3     ! Yield strength of material
+explPlast2 = .FALSE.      ! Logical to switch between explicit (F) and implicit (T) plastic update
+interface_init = -0.10D0  ! x location of interface at t = 0
+kwave = 16.0D0            ! x location of shock at t  = 0
+uimpact = 1.0D0           ! impact speed
+theta = 30.0D0            ! impact angle (deg) 0 is normal impact
+eta0k = 1.0D-2            ! overall perturbation amplitude
+reflect_bcn = .TRUE.      ! reflect bc on the right. Needs to set x_bcn = 1 for TRUE, and x_bcn=0 for FALSE
+/
