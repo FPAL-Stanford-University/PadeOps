@@ -5,12 +5,12 @@
 inputdir  = "/farmshare/user_data/songhang/PadeOps_data/Impact_768x384"
 outputdir = "/farmshare/user_data/songhang/PadeOps_data/Impact_768x384"
 
-nx = 768                  ! Number of points in X
-ny = 384                  ! Number of points in Y
+nx = 196                  ! Number of points in X
+ny = 92                   ! Number of points in Y
 nz = 1                    ! Number of points in Z
 
 dt = 1.0D-4               ! Fixed time step value (Set to negative to disable)
-tstop = 4.00D0            ! Physical time to stop the simulation
+tstop = 2.00D-2            ! Physical time to stop the simulation
 CFL =  0.8D0              ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
