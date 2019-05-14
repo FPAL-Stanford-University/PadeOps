@@ -710,10 +710,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         endif
 
         ! xspng = -0.75_rkind * Lx / 2
-        ! tspng = 0.1_rkind * Lx
+        tspng = 0.18_rkind
         dx = x(2,1,1) - x(1,1,1)
         xspng = 0.25 - real(Lx, rkind) / 2._rkind
-        tspng = 10._rkind * dx
+        !tspng = 10._rkind * dx
         dum = half*(one - tanh( (x-xspng)/(tspng) ))
 
         if (x_bc(2)==0) then
