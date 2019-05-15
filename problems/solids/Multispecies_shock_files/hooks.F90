@@ -389,7 +389,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             perturb_phase = perturb_phase * 2.0_rkind * pi
             call MPI_BCAST(perturb_phase, 1, mpirkind, 0, MPI_COMM_WORLD, mpi_ierr)
             ! call MPI_BARRIER(MPI_COMM_WORLD, mpi_ierr)
-            perturbations = perturbations + eta0k/(2.0_rkind*pi*kwave_i/Ly)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
+            !perturbations = perturbations + eta0k/(2.0_rkind*pi*kwave_i/Ly)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
+            perturbations = perturbations + eta0k/(2.0_rkind*pi)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
             kwave_i = kwave_i + 1.0_rkind
         end do
         tmp = half * ( one - erf( (x-(interface_init + int_shape + perturbations))/(thick*dx) ) )
