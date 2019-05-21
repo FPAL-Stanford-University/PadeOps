@@ -389,8 +389,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             perturb_phase = perturb_phase * 2.0_rkind * pi
             call MPI_BCAST(perturb_phase, 1, mpirkind, 0, MPI_COMM_WORLD, mpi_ierr)
             ! call MPI_BARRIER(MPI_COMM_WORLD, mpi_ierr)
-            !perturbations = perturbations + eta0k/(2.0_rkind*pi*kwave_i/Ly)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
-            perturbations = perturbations + eta0k/(2.0_rkind*pi)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
+            ! constant slope perturbation
+            perturbations = perturbations + eta0k/(2.0_rkind*pi*kwave_i/Ly)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
+            ! constant amplitude perturbation
+            !perturbations = perturbations + eta0k/(2.0_rkind*pi)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
             kwave_i = kwave_i + 1.0_rkind
         end do
         tmp = half * ( one - erf( (x-(interface_init + int_shape + perturbations))/(thick*dx) ) )
@@ -710,11 +712,9 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
           endif
         endif
 
-        ! xspng = -0.75_rkind * Lx / 2
-        tspng = 0.18_rkind
+        tspng = 0.1_rkind
         dx = x(2,1,1) - x(1,1,1)
-        xspng = 0.25 - real(Lx, rkind) / 2._rkind
-        !tspng = 10._rkind * dx
+        xspng = 0.35 - real(Lx, rkind) / 2._rkind
         dum = half*(one - tanh( (x-xspng)/(tspng) ))
 
         if (x_bc(2)==0) then
