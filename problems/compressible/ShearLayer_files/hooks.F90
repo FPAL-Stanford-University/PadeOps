@@ -172,13 +172,13 @@ contains
             call mpi_bcast(phz,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
 
             A = eps/(four*pi**2*kx*kz)
-            u = u + -A * -kx*sin(kx*x+phx*two*pi) * cos(kz*z+phz*two*pi) *&
+            u = u + A * kx*sin(kx*x+phx*two*pi) * cos(kz*z+phz*two*pi) *&
                 exp(-(sigma*y**2))*( sin(y) + 2*sigma*y*cos(y) )
-            w = w + -A * cos(kx*x+phx*two*pi) * -kz*sin(kz*z+phz*two*pi) *&
+            w = w + A * cos(kx*x+phx*two*pi) * kz*sin(kz*z+phz*two*pi) *&
                 exp(-(sigma*y**2))*( sin(y) + 2*sigma*y*cos(y) )
-            v = v + -A * cos(kx*x+phx*two*pi) * -kz*sin(kz*z+phz*two*pi) *&
+            v = v + A * cos(kx*x+phx*two*pi) * kz*sin(kz*z+phz*two*pi) *&
                 ( -two*sigma*y*exp(-(sigma*y**2))*( sin(y) + 2*sigma*y*cos(y) ) + &
-                exp(-(sigma*y**2))*( cos(y) + -2*sigma*y*sin(y) ) )
+                exp(-(sigma*y**2))*( cos(y) - 2*sigma*y*sin(y) ) )
 
         enddo
         enddo

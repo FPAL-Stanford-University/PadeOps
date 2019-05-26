@@ -46,6 +46,7 @@ module TKEBudgetMod
         procedure          :: get_production
         procedure          :: get_p_dil
         procedure          :: get_dissipation
+        procedure          :: get_transport
         procedure          :: tke_budget
         procedure          :: get_rhoPsi_bar
         procedure          :: mixing_budget
@@ -556,6 +557,38 @@ contains
 
     end subroutine
 
+    subroutine get_transport(this, rho_bar, v_tilde, tke, rho,&
+        p_prime, u_pprime, v_pprime, w_pprime, tauij, trans_conv, trans_turb)
+        class(tkeBudget),                                                                      intent(inout) :: this
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),intent(in) :: rho_bar
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),intent(in) ::v_tilde
+        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3)), intent(in) :: tke, rho, u_pprime, v_pprime, w_pprime, p_prime
+        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3), 6), target, intent(in)    :: tauij
+
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),intent(out) :: trans_conv 
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),intent(out) :: trans_turb 
+
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: tmpy1, tmpy2
+        real(rkind), dimension(:,:,:), pointer :: tauxx, tauxy, tauxz, tauyy, tauyz, tauzz
+        
+        tauxx => tauij(:,:,:,1); tauxy => tauij(:,:,:,2); tauxz => tauij(:,:,:,3);
+                                 tauyy => tauij(:,:,:,4); tauyz => tauij(:,:,:,5);
+                                                          tauzz => tauij(:,:,:,6);
+        ! Turb transport
+        call this%favre_avg(rho, tke*v_pprime, tmpy1 );
+        tmpy1 = -rho_bar*tmpy1
+        call this%reynolds_avg( - p_prime*v_pprime,tmpy2)
+        tmpy1 = tmpy1 + tmpy2
+        call this%reynolds_avg(tauxy*u_pprime + tauyy*v_pprime + tauyz*w_pprime,tmpy2 )
+        tmpy1 = tmpy1 + tmpy2
+        call this%der_avg%ddy( tmpy1, trans_turb, this%y_bc(1), this%y_bc(2))
+
+        ! Mean convective transport terms
+        call this%favre_avg(rho, tke, tmpy1 );
+        call this%der_avg%ddy( rho_bar*tmpy1*v_tilde, trans_conv, this%y_bc(1), this%y_bc(2))
+
+    end subroutine 
+    
     subroutine tke_budget(this, rho, u, v, w, p, tauij, tke_old, tke_prefilter, tke_postfilter, tsim, dt)
         use RKCoeffs, only: RK45_steps
         class(tkeBudget),                                                                                  intent(inout) :: this
@@ -575,6 +608,8 @@ contains
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: diss_mass_flux
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: diss_fluct
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: dissipation_num
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: trans_conv 
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: trans_turb 
 
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3))   :: rho_bar, p_bar
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3))   :: u_tilde, v_tilde, w_tilde
@@ -641,7 +676,8 @@ contains
 
 
         ! Get pressure dilatation correlation terms (includes baropycnal work term)
-        call this%get_p_dil(p, p_prime, u_pprime_bar, grad_p_bar, grad_u_pprime, p_dil_fluct, baropycnal, fluct_p_dil)
+        call this%get_p_dil(p, p_prime, u_pprime_bar, grad_p_bar, grad_u_pprime,&
+            p_dil_fluct, baropycnal, fluct_p_dil)
 
         ! Get mean and fluctuating shear stresses
         do i = 1, 6
@@ -649,7 +685,11 @@ contains
         end do
 
         ! Get dissipation terms
-        call this%get_dissipation(tauij, tau_bar, tau_prime, u_pprime_bar, grad_u_pprime, dissipation, diss_mass_flux, diss_fluct)
+        call this%get_dissipation(tauij, tau_bar, tau_prime, u_pprime_bar, &
+            grad_u_pprime, dissipation, diss_mass_flux, diss_fluct)
+    
+        call this%get_transport(rho_bar, v_tilde, tmp, rho,&
+            p_prime, u_pprime, v_pprime, w_pprime, tauij, trans_conv, trans_turb)
 
         ! Write out data to output file
         call this%tke_viz%start_viz(tsim)
@@ -697,6 +737,8 @@ contains
         call this%tke_viz%write_variable(diss_mass_flux,  'diss_mass_flux')
         call this%tke_viz%write_variable(diss_fluct,      'diss_fluct')
         call this%tke_viz%write_variable(dissipation_num, 'dissipation_num')
+        call this%tke_viz%write_variable(trans_conv,      'trans_conv')
+        call this%tke_viz%write_variable(trans_turb,      'trans_turb')
 
         call this%tke_viz%end_viz()
 
