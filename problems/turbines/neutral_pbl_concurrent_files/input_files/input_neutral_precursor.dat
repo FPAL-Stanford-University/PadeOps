@@ -1,6 +1,6 @@
 &INPUT
 inputdir              = "/nobackup/aghate/neutral_concurrent/precursor"   ! Directory for any input files
-outputdir             = "/nobackup/aghate/neutral_concurrent/precursor"   ! Directory for all output files
+outputdir             = "/home/lele/mhowland/igridSGSYaw/data/finite_6x6_0"   ! Directory for all output files
 nx                    = 320         ! Number of points in X
 ny                    = 160          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
@@ -19,7 +19,7 @@ CviscDT               = 1.D0
 &NUMERICS
 AdvectionTerm         = 1           ! 0: Rotational Form, 1: Skew-Symmetric Form (use this for Compact Scheme)
 ComputeStokesPressure = .TRUE.      ! This would be FALSE only is very special circumstances.  
-NumericalSchemeVert   = 2           ! 0: Second order FD, 1: Sixth order Compact Difference (CD06), 2: Fourier Collocation
+NumericalSchemeVert   = 1           ! 0: Second order FD, 1: Sixth order Compact Difference (CD06), 2: Fourier Collocation
 useDealiasFilterVert  = .FALSE.     ! Dealiasing filter used in vertical direction
 t_DivergenceCheck     = 50          ! Check divergence every $ timesteps. Reproject if needed.
 TimeSteppingScheme    = 2           ! 0: Adams-Bashforth, 1: TVD-RK3, 2: SSP-RK45
