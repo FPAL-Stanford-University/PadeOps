@@ -215,6 +215,10 @@
                call this%fringe_x1%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
                call this%fringe_x2%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
            end if 
+           if (this%isStratified .or. this%initspinup) then
+               call this%fringe_x1%addFringeRHS_scalar(this%dt, this%T_rhs, this%T)
+               call this%fringe_x2%addFringeRHS_scalar(this%dt, this%T_rhs, this%T)
+           end if
        else
            if (this%useFringe) then
               if (copyFringeRHS) then
@@ -223,6 +227,9 @@
               else
                   call this%fringe_x%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
               end if 
+              if (this%isStratified .or. this%initspinup) then
+                  call this%fringe_x%addFringeRHS_scalar(this%dt, this%T_rhs, this%T)
+              end if
            end if 
        end if 
 
