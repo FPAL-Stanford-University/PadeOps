@@ -39,9 +39,10 @@ program neutral_pbl_concurrent
     call precursor%init(precursor_inputFile, .false.)                                           
     precursor%Am_I_Primary = .false. 
     call precursor%start_io(.true.)                                           
-    
-    call primary%fringe_x%associateFringeTargets(precursor%u, precursor%v, precursor%wC, precursor%T) 
-
+   
+    if (primary%usefringe) then
+        call primary%fringe_x%associateFringeTargets(precursor%u, precursor%v, precursor%wC, precursor%T) 
+    end if 
 
     call budg_tavg%init(primary_inputfile, primary)   !<-- Budget class initialization 
 
