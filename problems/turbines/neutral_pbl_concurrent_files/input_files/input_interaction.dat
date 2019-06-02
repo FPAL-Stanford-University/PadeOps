@@ -1,4 +1,4 @@
 &concurrent
-primary_InputFile                 = "/home5/aghate/fpal_padeops/PadeOps/bin/skylake/channel_ad/input_files/input_hit.dat"
-precursor_InputFile                  = "/home5/aghate/fpal_padeops/PadeOps/bin/skylake/channel_ad/input_files/input_AD.dat"
+primary_InputFile       = "/home5/aghate/fpal_padeops/PadeOps/bin/broadwell/concurrent_pbl/input_files/input_neutral_primary.dat"
+precursor_InputFile     = "/home5/aghate/fpal_padeops/PadeOps/bin/broadwell/concurrent_pbl/input_files/input_neutral_precursor.dat"
 /

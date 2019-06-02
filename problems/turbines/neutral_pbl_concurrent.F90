@@ -36,8 +36,6 @@ program neutral_pbl_concurrent
     call primary%start_io(.true.)                                          
     call primary%printDivergence()
    
-    call mpi_barrier(mpi_comm_world, ierr)
-
     call precursor%init(precursor_inputFile, .false.)                                           
     precursor%Am_I_Primary = .false. 
     call precursor%start_io(.true.)                                           

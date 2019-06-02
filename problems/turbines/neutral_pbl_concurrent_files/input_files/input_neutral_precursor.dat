@@ -1,6 +1,6 @@
 &INPUT
-inputdir              = "/nobackup/aghate/ad_channel/AD"   ! Directory for any input files
-outputdir             = "/nobackup/aghate/ad_channel/AD"   ! Directory for all output files
+inputdir              = "/nobackup/aghate/neutral_concurrent/precursor"   ! Directory for any input files
+outputdir             = "/nobackup/aghate/neutral_concurrent/precursor"   ! Directory for all output files
 nx                    = 320         ! Number of points in X
 ny                    = 160          ! Number of points in Y
 nz                    = 192          ! Number of points in Z

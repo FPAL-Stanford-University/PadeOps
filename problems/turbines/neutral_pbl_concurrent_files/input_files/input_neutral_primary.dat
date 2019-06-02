@@ -1,6 +1,6 @@
 &INPUT
-inputdir              = "/nobackup/aghate/ad_channel/AD"   ! Directory for any input files
-outputdir             = "/nobackup/aghate/ad_channel/AD"   ! Directory for all output files
+inputdir              = "/nobackup/aghate/neutral_concurrent/primary"   ! Directory for any input files
+outputdir             = "/nobackup/aghate/neutral_concurrent/primary"   ! Directory for all output files
 nx                    = 320         ! Number of points in X
 ny                    = 160          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
@@ -152,7 +152,7 @@ WM_MatchingIndex              = 1
 useWindTurbines       = .TRUE.    ! Do you want to use Wind turbines ?
 num_turbines          = 36
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
-turbInfoDir           = "XXXX"
+turbInfoDir           = "/home5/aghate/fpal_padeops/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/6x6array"
 ADM_Type              = 2         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
 /
 /
