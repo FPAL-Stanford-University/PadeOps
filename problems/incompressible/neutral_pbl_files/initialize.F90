@@ -73,7 +73,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     ztmp = z*xDim
     T = 0.003d0*(ztmp - 700.d0) + 300.d0
-    where(ztmp < 100.d0)
+    where(ztmp < 700.d0)
         T = 300.d0
     end where
     T = T + 0.0001d0*ztmp
