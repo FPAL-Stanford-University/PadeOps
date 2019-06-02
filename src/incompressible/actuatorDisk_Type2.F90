@@ -74,11 +74,11 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
     ! Read input file for this turbine    
-    write(tempname,"(A13,I4.4,A10)") "ActuatorDisk_T2_", ActuatorDisk_T2ID, "_input.inp"
+    write(tempname,"(A13,I4.4,A10)") "ActuatorDisk_", ActuatorDisk_T2ID, "_input.inp"
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
 
     ioUnit = 55
-    open(unit=ioUnit, file=trim(fname), form='FORMATTED')
+    open(unit=ioUnit, file=trim(fname), form='FORMATTED', action="read")
     read(unit=ioUnit, NML=ACTUATOR_DISK)
     close(ioUnit)
     
@@ -259,7 +259,6 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
     real(rkind), dimension(8),                                  intent(out)   :: inst_val
-    integer :: j
     real(rkind) :: usp_sq, force
 
     call this%getMeanU(u,v,w)
