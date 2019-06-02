@@ -31,7 +31,7 @@ donot_dealias         = .FALSE.
 /
 /
 &IO
-RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
+RunID                 = 2          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump         = 1000       ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump            = 1000       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
@@ -97,13 +97,13 @@ buoyancyDirection     = 3           ! Are 1 and 2 implemented????
 /
 /
 &PRESSURE_CALC
-fastCalcPressure      = .TRUE.      ! Compute and store pressure at every time step using the faster algorithm?
+fastCalcPressure      = .FALSE.      ! Compute and store pressure at every time step using the faster algorithm?
 storePressure         = .FALSE.     ! Would you like to compute and store pressure?
 P_dumpFreq            = 100         ! How often (timesteps) do you want to dump pressure?
 P_compFreq            = 10          ! How often (timesteps) do you want to compute pressure? 
-computeDNSPressure    = .TRUE.
-computeFringePressure = .TRUE.
-computeTurbinePressure    = .TRUE.
+computeDNSPressure    = .FALSE.
+computeFringePressure = .FALSE.
+computeTurbinePressure    = .FALSE.
 computeRapidSlowPressure  = .FALSE.
 /
 /
@@ -118,7 +118,7 @@ sponge_type           = 1           ! 1 or 2; used if useSpongeLayer is TRUE
 botBC_Temp            = 1           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 topBC_temp            = 0           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 useTopAndBottomSymmetricSponge = .FALSE. 
-useFringe             = .TRUE.     ! Use Fringe/Buffer region in x or y directions?
+useFringe             = .FALSE.     ! Use Fringe/Buffer region in x or y directions?
 usedoubleFringex      = .FALSE.      ! Use two fringes (in x)?
 usecontrol            = .FALSE.     ! Use frame angle controller?
 /
@@ -149,7 +149,7 @@ WM_MatchingIndex              = 1
 /
 /
 &WINDTURBINES
-useWindTurbines       = .TRUE.    ! Do you want to use Wind turbines ?
+useWindTurbines       = .FALSE.    ! Do you want to use Wind turbines ?
 num_turbines          = 36
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
 turbInfoDir           = "XXXX"
@@ -171,7 +171,7 @@ Fringe_delta_en_y    = 0.05d0
 /
 /
 &BUDGET_TIME_AVG
-do_budgets            = .TRUE.    ! Perform budget calculations? 
+do_budgets            = .FALSE.    ! Perform budget calculations? 
 budgetType            = 0         ! See type descriptions in budget_time_avg.F90
 budgets_dir           = "XXXX"    ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?  
