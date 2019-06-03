@@ -1,6 +1,6 @@
 &INPUT
 inputdir              = "/nobackup/aghate/neutral_concurrent/primary"   ! Directory for any input files
-outputdir             = "/home/lele/mhowland/igridSGSYaw/data/finite_6x6_0"   ! Directory for all output files
+outputdir             = "/home/lele/mhowland/igridSGSYaw/data/finite_6x6_180"   ! Directory for all output files
 nx                    = 320         ! Number of points in X
 ny                    = 160          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
@@ -90,7 +90,7 @@ dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useE
 dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
 assume_fplane         = .FALSE.      ! Assume fplane (ignore horizontal component of Coriolis force)? 
 latitude              = 45.d0       ! Latitude; important if useCoriolis is TRUE && assume_fplane is FALSE
-frameAngle            = 0.D0        ! Mean wind direction; important if assume_fplane is FALSE
+frameAngle            = 180.D0        ! Mean wind direction; important if assume_fplane is FALSE
 useHITforcing         = .false.     ! Use additional HIT forcing? 
 useScalars            = .false.     ! Do you want to use scalars? --Why was this true for AD????
 buoyancyDirection     = 3           ! Are 1 and 2 implemented????
@@ -173,7 +173,7 @@ Fringe_delta_en_y    = 0.05d0
 &BUDGET_TIME_AVG
 do_budgets            = .TRUE.    ! Perform budget calculations? 
 budgetType            = 0         ! See type descriptions in budget_time_avg.F90
-budgets_dir           = "/home/lele/mhowland/igridSGSYaw/data/finite_6x6_0"    ! Write in default output directory
+budgets_dir           = "/home/lele/mhowland/igridSGSYaw/data/finite_6x6_180"    ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?  
 tidx_dump             = 10000      ! How often should budget files be written to disk? 
 tidx_budget_start     = 30000      ! Start budget computation from this timestep onward
