@@ -665,6 +665,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               do i=1,5
                   mix%material(1)%p( i,:,:) = mix%material(1)%p(6,:,:)
                   mix%material(2)%p( i,:,:) = mix%material(2)%p(6,:,:)
+                  mix%material(1)%VF ( i,:,:) = VFL
+                  mix%material(2)%VF ( i,:,:) = one - VFL
+                  mix%material(1)%Ys ( i,:,:) = YsL
+                  mix%material(2)%Ys ( i,:,:) = one - YsL
               end do
               
               ! mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
@@ -678,8 +682,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               ! mix%material(1)%Ys ( 1,:,:) = YsL
               ! mix%material(2)%Ys ( 1,:,:) = one - YsL
   
-              mix%material(1)%VF ( 1,:,:) = VFL
-              mix%material(2)%VF ( 1,:,:) = one - VFL
+              ! mix%material(1)%VF ( 1,:,:) = VFL
+              ! mix%material(2)%VF ( 1,:,:) = one - VFL
           end if
         endif
 
@@ -692,6 +696,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             do i=0,4
                 mix%material(1)%p(nx-i,:,:) = mix%material(1)%p(nx-5,:,:)
                 mix%material(2)%p(nx-i,:,:) = mix%material(2)%p(nx-5,:,:)
+                mix%material(1)%VF (nx-i,:,:) = VFR
+                mix%material(2)%VF (nx-i,:,:) = one - VFR
+                mix%material(1)%Ys (nx-i,:,:) = YsR
+                mix%material(2)%Ys (nx-i,:,:) = one - YsR
             end do
             ! mix%material(1)%p  (nx,:,:) = p1 ! mix%material(1)%p(nx-1,:,:)
             ! mix%material(2)%p  (nx,:,:) = p1 ! mix%material(2)%p(nx-1,:,:)
@@ -707,8 +715,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             ! mix%material(1)%Ys (nx,:,:) = YsR
             ! mix%material(2)%Ys (nx,:,:) = one - YsR
   
-            mix%material(1)%VF (nx,:,:) = VFR
-            mix%material(2)%VF (nx,:,:) = one - VFR
+            ! mix%material(1)%VF (nx,:,:) = VFR
+            ! mix%material(2)%VF (nx,:,:) = one - VFR
           endif
         endif
 
