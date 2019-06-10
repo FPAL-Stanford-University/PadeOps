@@ -118,6 +118,7 @@ module CompressibleGrid
             procedure, private :: write_viz
             procedure, private :: write_restart
             procedure          :: read_restart
+            procedure          :: seed_turb 
             ! procedure, private :: read_restart
             procedure          :: setup_postprocessing
     end type
@@ -1992,6 +1993,68 @@ contains
 
         ! Get primitive variables from conserved
         call this%get_primitive()
+
+    end subroutine
+    
+    subroutine seed_turb(this, seed)
+        use exits, only: message
+        use reductions, only: P_MEAN
+        use timer, only: tic, toc
+        class(cgrid), intent(inout) :: this, seed
+        character(len=clen) :: charout
+        real(rkind) :: cputime
+        integer :: i, vizcount=0, nx, ny, nz, i, j
+
+        ! Start reading restart file
+        write(charout,'(A,A)') "Reading seed restart dump from ", adjustl(trim(seed%restart%filename))
+        call message(charout)
+        call seed%restart%start_reading(vizcount)
+        call tic()
+
+        ! Read conserved variables
+        if (seed%mix%ns > 1) then
+            do i = 1,seed%mix%ns
+                write(charout,'(I4.4)') i
+                call seed%restart%read_dataset(seed%Wcnsrv(:,:,:,i), 'rhoY_'//adjustl(trim(charout)) )
+            end do
+        else
+            call seed%restart%read_dataset(seed%Wcnsrv(:,:,:,mass_index), 'rho' )
+        end if
+        call seed%restart%read_dataset(seed%Wcnsrv(:,:,:,mom_index  ), 'rhou')
+        call seed%restart%read_dataset(seed%Wcnsrv(:,:,:,mom_index+1), 'rhov')
+        call seed%restart%read_dataset(seed%Wcnsrv(:,:,:,mom_index+2), 'rhow')
+        call seed%restart%read_dataset(seed%Wcnsrv(:,:,:, TE_index  ), 'TE')
+
+        ! update the current step
+        this%step = 0
+        this%tsim = 0.D0
+
+        ! End visualization dump
+        call seed%restart%end_reading()
+        call toc(cputime)
+        write(charout,'(A,ES11.3,A)') "Finished reading seed restart dump in ", cputime, " seconds"
+        call message(charout)
+
+        ! Get primitive variables from conserved
+        !call seed%get_primitive()
+
+        ! Check that the grid sizes are the same?
+        !nx = this%nxp; if (seed%nxp .ne. nx) call message("Nx mismatch")
+        !ny = this%nyp; if (seed%nyp .ne. ny) call message("Ny mismatch")
+        !nz = this%nzp; if (seed%nzp .ne. nz) call message("Nz mismatch")
+
+        ! Add the fluctuations
+        do j=1,ny
+            do i=1,5
+                this%Wcnsrv(:,j,:,i) = this%Wcnsrv(:,j,:,i) &
+                    + seed%Wcnsrv(:,j,:,i) &
+                    - P_MEAN(seed%Wcnsrv(:,j,:,i ))
+            enddo
+        enddo
+
+        ! write restart file
+        call this%write_restart()
+
     end subroutine
 
     subroutine setup_postprocessing(this, nrestarts)

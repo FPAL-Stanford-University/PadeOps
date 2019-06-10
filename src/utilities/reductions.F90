@@ -22,7 +22,7 @@ module reductions
     end interface
 
     interface P_MEAN
-        module procedure P_MEAN_arr3, P_MEAN_sca
+        module procedure P_MEAN_arr2, P_MEAN_arr3, P_MEAN_sca
     end interface
 contains
     
@@ -37,6 +37,18 @@ contains
 
     end function
     
+    function P_MEAN_arr2(x) result(mean)
+        real(rkind), dimension(:,:), intent(in) :: x
+        real(rkind) :: mean
+        real(rkind) :: mysum
+        real(rkind) :: summation
+        integer :: ierr
+
+        mysum = sum(x)
+        call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+        mean = summation/( real(size(x,1)*size(x,2)*nproc,rkind))
+
+    end function
     function P_MEAN_arr3(x) result(mean)
         real(rkind), dimension(:,:,:), intent(in) :: x
         real(rkind) :: mean
