@@ -206,6 +206,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     logical :: reflect_bcn = .TRUE.
 
     real(rkind) :: perturb_phase
+    integer, dimension(1) :: seed
     integer :: mpi_ierr;
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
@@ -383,6 +384,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         int_shape = zero
         kwave_i = 2.0_rkind
         perturbations = 0.0_rkind
+        seed(1) = 20190621
+        call RANDOM_SEED(PUT=seed)
         do while (kwave_i <= kwave)
             ! TODO generate random perturb_phase and bcast to all chuncks
             call RANDOM_NUMBER(perturb_phase)
