@@ -158,6 +158,7 @@ contains
 
       if (present(Ttarget)) then
          this%T_target => Ttarget
+         this%useFringeAsSponge_Scalar = .false. 
       end if
       this%TargetsAssociated = .true.
 
@@ -165,7 +166,9 @@ contains
    end subroutine
 
    subroutine init(this, inputfile, dx, x, dy, y, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE, fringeID)
-      use reductions, only: p_maxval
+      use reductions, only: p_minval, p_maxval
+      use exits, only: message_min_max
+       use decomp_2d_io
       use mpi
       class(fringe), intent(inout) :: this
       character(len=clen), intent(in) :: inputfile 
@@ -276,6 +279,9 @@ contains
          end do
          deallocate(x1, x2, S1, S2, Fringe_func)
       end if 
+       
+      call message_min_max(1,"Bounds for Fringe_funcC:", p_minval(minval(this%Fringe_kernel_cells)), p_maxval(maxval(this%Fringe_kernel_cells)))
+      call message_min_max(1,"Bounds for Fringe_funcE:", p_minval(minval(this%Fringe_kernel_edges)), p_maxval(maxval(this%Fringe_kernel_edges)))
 
       if (Apply_y_fringe) then
          Fringe_yst        = Fringe_yst*Ly
@@ -311,7 +317,16 @@ contains
             end do 
          end do
          deallocate(y1, y2, S1, S2, Fringe_func)
+      
+         call message_min_max(1,"Bounds for Fringe_funcC:", p_minval(minval(this%Fringe_kernel_cells)), p_maxval(maxval(this%Fringe_kernel_cells)))
+      
+         call message_min_max(1,"Bounds for Fringe_funcE:", p_minval(minval(this%Fringe_kernel_edges)), p_maxval(maxval(this%Fringe_kernel_edges)))
+
       end if 
+      
+      where (this%Fringe_kernel_cells > 1) this%Fringe_kernel_cells = 1.d0 
+      where (this%Fringe_kernel_edges > 1) this%Fringe_kernel_edges = 1.d0 
+
 
       call message(0, "Fringe initialized successfully.")
 

@@ -1,4 +1,4 @@
-module neutral_pbl_parameters
+module neutral_pbl_concurrent_parameters
 
       ! TAKE CARE OF TIME NON-DIMENSIONALIZATION IN THIS MODULE
 
@@ -19,7 +19,7 @@ end module
 
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use neutral_pbl_parameters
+    use neutral_pbl_concurrent_parameters
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
@@ -142,7 +142,7 @@ end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
-    use neutral_pbl_parameters
+    use neutral_pbl_concurrent_parameters
     use constants, only: one, zero 
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
@@ -210,7 +210,7 @@ end subroutine
 
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use neutral_pbl_parameters    
+    use neutral_pbl_concurrent_parameters    
     use kind_parameters,  only: rkind
     use constants,        only: one,two
     use decomp_2d,        only: decomp_info

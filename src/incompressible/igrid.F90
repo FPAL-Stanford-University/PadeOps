@@ -263,7 +263,7 @@ module IncompressibleGrid
         type(fringe), allocatable, public :: fringe_x, fringe_x1, fringe_x2
 
         ! Control
-        logical                           :: useControl = .false.
+        logical                            :: useControl = .false.
         type(angCont), allocatable, public :: angCont_yaw
         real(rkind) :: angleHubHeight, totalAngle, wFilt, restartPhi, deltaGalpha, angleTrigger
         integer :: zHubIndex = 16
