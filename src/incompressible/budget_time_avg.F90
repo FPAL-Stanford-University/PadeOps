@@ -90,7 +90,7 @@ module budgets_time_avg_mod
         private
         integer :: budgetType = 1, run_id, nz
 
-        complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, px, py, pz, uturb 
+        complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, px, py, pz, uturb, pxdns, pydns, pzdns 
         type(igrid), pointer :: igrid_sim 
         
         real(rkind), dimension(:,:,:,:), allocatable :: budget_0, budget_1, budget_2, budget_3
@@ -132,6 +132,8 @@ module budgets_time_avg_mod
         procedure, private :: ddy_C2R
         procedure, private :: ddz_C2R
         procedure, private :: interp_Edge2Cell
+        procedure, private :: interp_Cell2Edge
+        procedure, private :: multiply_CellFieldsOnEdges
     end type 
 
 
@@ -197,10 +199,17 @@ contains
             call igrid_sim%spectE%alloc_r2c_out(this%wsgs)
             call igrid_sim%spectE%alloc_r2c_out(this%pz)
 
-
             ! STEP 3: Now instrument igrid 
-            call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
+            if(this%SplitPressureDNS) then
+              call igrid_sim%spectC%alloc_r2c_out(this%pxdns)
+              call igrid_sim%spectC%alloc_r2c_out(this%pydns)
+              call igrid_sim%spectC%alloc_r2c_out(this%pzdns)
+              call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
+                       & this%px, this%py, this%pz, this%uturb, this%pxdns, this%pydns, this%pzdns)  
+            else
+              call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
                        & this%px, this%py, this%pz, this%uturb)  
+            endif
 
         end if
 
@@ -869,5 +878,41 @@ contains
         call transpose_z_to_y(this%igrid_sim%rbuffzC(:,:,:,2),this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
         call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,1),fC,this%igrid_sim%gpC)
         
+    end subroutine 
+
+    subroutine interp_Cell2Edge(this, fC, fE)
+        class(budgets_time_avg), intent(inout) :: this
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(in) :: fC
+        real(rkind), dimension(this%igrid_sim%gpE%xsz(1),this%igrid_sim%gpE%xsz(2),this%igrid_sim%gpE%xsz(3)), intent(out) :: fE
+
+        call transpose_x_to_y(fC,this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
+        call transpose_y_to_z(this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%gpC)
+        call this%igrid_sim%Pade6opZ%interpz_C2E(this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%rbuffzE(:,:,:,1),0,0)
+        call transpose_z_to_y(this%igrid_sim%rbuffzE(:,:,:,1),this%igrid_sim%rbuffyE(:,:,:,1),this%igrid_sim%gpE)
+        call transpose_y_to_x(this%igrid_sim%rbuffyE(:,:,:,1),fE,this%igrid_sim%gpE)
+        
+    end subroutine 
+        
+    subroutine multiply_CellFieldsOnEdges(this, f1C, f2C, fmultC)
+        class(budgets_time_avg), intent(inout) :: this
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(in) :: f1C,f2C
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: fmultC
+
+        ! interpolate 1st Cell field
+        call transpose_x_to_y(f1C,this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
+        call transpose_y_to_z(this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%gpC)
+        call this%igrid_sim%Pade6opZ%interpz_C2E(this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%rbuffzE(:,:,:,1),0,0)
+
+        ! interpolate 2nd Cell field
+        call transpose_x_to_y(f2C,this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
+        call transpose_y_to_z(this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%gpC)
+        call this%igrid_sim%Pade6opZ%interpz_C2E(this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%rbuffzE(:,:,:,2),0,0)
+
+        ! multiply on Edges and interpolate back to Cells
+        this%igrid_sim%rbuffzE(:,:,:,1) = this%igrid_sim%rbuffzE(:,:,:,1) * this%igrid_sim%rbuffzE(:,:,:,2)
+        call this%igrid_sim%Pade6opZ%interpz_E2C(this%igrid_sim%rbuffzE(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,1),0,0)
+        call transpose_z_to_y(this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
+        call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,1),fmultC,this%igrid_sim%gpC)
+
     end subroutine 
 end module 
