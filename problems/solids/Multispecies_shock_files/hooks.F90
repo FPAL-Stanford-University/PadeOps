@@ -403,7 +403,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! 1 >= tmp >= 0
         if (reflect_bcn) then
             u   =uimpact*cos(theta)*(tmp)
-            v   =uimpact*sin(theta)*(tmp-0.5)
+            v   =uimpact*sin(theta)*(tmp)
+           !v   =uimpact*sin(theta)*(tmp-0.5)
         else
             u   =uimpact*cos(theta)*(tmp-0.5)
             v   =uimpact*sin(theta)*(tmp-0.5)
