@@ -17,7 +17,7 @@ module Multispecies_shock_data
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
     !real(rkind) :: Ly = one, Lx = six, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
-    real(rkind) :: Ly = one, Lx = two, interface_init = 0.0_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
+    real(rkind) :: Ly = 0.3_rkind, Lx = 0.6_rkind, interface_init = 0.0_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
     logical     :: sliding = .false.
 
     type(filters) :: mygfil
@@ -398,7 +398,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             !perturbations = perturbations + eta0k/(2.0_rkind*pi)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
             kwave_i = kwave_i + 1.0_rkind
         end do
-        tmp = half * ( one - erf( (x-(interface_init + int_shape + perturbations))/(thick*dx) ) )
+        tmp = half * ( one - erf( (x-(interface_init*Lx/2.0_rkind + int_shape + perturbations))/(thick*dx) ) )
         theta = theta * pi / 180._rkind ! Convert angle from degrees to radians
         ! 1 >= tmp >= 0
         if (reflect_bcn) then
@@ -662,9 +662,11 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
         if(decomp%yst(1)==1) then
           if(x_bc(1)==0) then
-              ! rho( 1,:,:) = rhoL
-              ! u  ( 1,:,:) = (u2-u1)
-              ! v  ( 1,:,:) = zero
+              rho( 1,:,:) = rhoL
+              u  ( 1,:,:) = uimpact * cos(theta)
+              v  ( 1,:,:) = uimpact * sin(theta)
+              !u  ( 1,:,:) = (u2-u1)
+              !v  ( 1,:,:) = v1
               w  ( 1,:,:) = zero
               do i=1,5
                   mix%material(1)%p( i,:,:) = mix%material(1)%p(6,:,:)
@@ -724,9 +726,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
           endif
         endif
 
-        tspng = 0.1_rkind
+        tspng = 0.05_rkind * Lx
         dx = x(2,1,1) - x(1,1,1)
-        xspng = 0.35 - real(Lx, rkind) / 2._rkind
+        !xspng = 0.35 - real(Lx, rkind) / 2._rkind
+        xspng = -0.325 * real(Lx, rkind)
         dum = half*(one - tanh( (x-xspng)/(tspng) ))
 
         if (x_bc(2)==0) then
