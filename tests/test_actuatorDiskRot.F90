@@ -1,25 +1,21 @@
-program test_actuatorDisk
+program test_actuatorDiscRot
     use kind_parameters, only: rkind, clen
     use constants, only: pi, two, one, imi, zero, half, kappa
-    use reductions, only: p_maxval, p_sum 
+    use reductions, only: p_maxval, p_sum, p_minval 
     use timer, only: tic, toc
     use decomp_2d
     use decomp_2d_io
-    use actuatorDisk_T2Mod, only: actuatorDisk_T2
-    use actuatorDiskMod, only: actuatorDisk
+    use actuatorDisk_RotMod, only: actuatorDisk_Rot
     use exits, only: message
     use mpi
 
     implicit none 
 
-    type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
-    type(actuatorDisk), dimension(:), allocatable :: hawts
+    type(actuatorDisk_Rot), dimension(:), allocatable :: hawts_Rot
     integer, parameter :: nx = 192, ny = 96, nz = 128
-    !character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/"
     character(len=clen) :: inputDir = "/fastscratch/nghaisas/runs/PadeOps/wupa/run3/deb/turbInfo"
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
     real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs1, rhsv, rhsw, rhs2
-    !real(rkind), parameter :: Lx = pi, Ly = 0.5d0*pi, Lz = 1.0d0
     real(rkind), parameter :: Lx = 28.8d0, Ly = 4.8d0, Lz = 3.0d0
     real(rkind) :: dx, dy, dz, diam, CT
     type(decomp_info) :: gp 
@@ -60,49 +56,33 @@ program test_actuatorDisk
     v = zero 
     w = zero  
     u = one; v = zero; w = zero
-    allocate(hawts(num_turbines))
-    allocate(hawts_T2(num_turbines))
+    allocate(hawts_Rot(num_turbines))
     do idx = 1,num_turbines
-        call hawts(idx)%init(inputDir, idx, xG, yG, zG, gp)
-        call hawts_T2(idx)%init(inputDir, idx, xG, yG, zG)
+        call hawts_Rot(idx)%init(inputDir, idx, xG, yG, zG)
     end do 
-
+call message(1,"Done Init")
     ! reset diam, CT
-    diam = hawts(1)%diam
-    CT   = hawts(1)%CT
+    diam = hawts_Rot(1)%diam
+    !CT   = hawts(1)%CT
  
     rhs1 = 0.d0
     call mpi_barrier(mpi_comm_world, ierr)
     call tic()
     do idx = 1,num_turbines
-        call hawts(idx)%get_RHS(u, v, w, rhs1, rhsv, rhsw, inst_val)
+        call hawts_Rot(idx)%get_RHS(u, v, w, rhs1, rhsv, rhsw, inst_val)
     end do 
     call mpi_barrier(mpi_comm_world, ierr)
     call toc()
     call decomp_2d_write_one(1,rhs1,"temp_T1.bin", gp)
-    call message(2,"Computed Source (T1):", p_sum(sum(rhs1)) * dx*dy*dz)
-    call message(3,"absolute error:", p_sum(sum(rhs1)) * dx*dy*dz + (num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
+    call message(2,"Computed Source fx (T1):", p_sum(sum(rhs1)) * dx*dy*dz)
+    call message(2,"Computed Source fy (T1):", p_sum(sum(rhsv)) * dx*dy*dz)
+    call message(2,"Computed Source fz (T1):", p_sum(sum(rhsw)) * dx*dy*dz)
+    !call message(3,"absolute error:", p_sum(sum(rhs1)) * dx*dy*dz + (num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
+    call message(2,"Relative Error  fx (T1):", (one-p_sum(inst_val(1))/(p_sum(sum(rhs1))*dx*dy*dz)))
+    call message(2,"Expected Source fy (T1):", zero)
+    call message(2,"Expected Source fz (T1):", zero)
     
-    rhs2 = 0.d0
-    call mpi_barrier(mpi_comm_world, ierr)
-    call tic()
-    do idx = 1,num_turbines
-        call hawts_T2(idx)%get_RHS(u, v, w, rhs2, rhsv, rhsw, inst_val)
-    end do 
-    call mpi_barrier(mpi_comm_world, ierr)
-    call toc()
-    call decomp_2d_write_one(1,rhs2,"temp_T2.bin", gp)
-    
-    call message(2,"Computed Source (T2):", p_sum(sum(rhs2)) * dx*dy*dz)
-    call message(3,"absolute error:", p_sum(sum(rhs2)) * dx*dy*dz + (num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
-    call message(2,"Expected Source:", -(num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
-
-    maxDiff = p_maxval(abs(rhs2 - rhs1))*dx*dy*dz
-    call message(2,"RHS AD Type2 - Type 1: ", maxDiff)
-    do idx = 1,num_turbines
-    !  call hawts(idx)%destroy()
-    end do 
-    deallocate(hawts)
+    deallocate(hawts_Rot)
     deallocate(xG, yG, zG, u, v, w, rhs1, rhs2)
     call MPI_Finalize(ierr)
-end program 
+end program

@@ -5,6 +5,7 @@ module turbineMod
     use StaggOpsMod, only: staggOps  
     use actuatorDiskMod, only: actuatorDisk
     use actuatorDisk_T2Mod, only: actuatorDisk_T2
+    use actuatorDisk_RotMod, only: actuatorDisk_Rot
     use actuatorLineMod, only: actuatorLine
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
@@ -31,6 +32,7 @@ module turbineMod
         integer :: myProc
         type(actuatorDisk), allocatable, dimension(:) :: turbArrayADM
         type(actuatorDisk_T2), allocatable, dimension(:) :: turbArrayADM_T2
+        type(actuatorDisk_Rot), allocatable, dimension(:) :: turbArrayADM_Rot
         type(actuatorLine), allocatable, dimension(:) :: turbArrayALM
 
         type(decomp_info), pointer :: gpC, sp_gpC, gpE, sp_gpE
@@ -146,6 +148,12 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
             call this%turbArrayADM_T2(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
          end do
          call message(0,"WIND TURBINE ADM (Type 2) array initialized")
+      case (3)
+         allocate (this%turbArrayADM_Rot(this%nTurbines))
+         do i = 1, this%nTurbines
+            call this%turbArrayADM_Rot(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
+         end do
+         call message(0,"WIND TURBINE ROT ADM (Type 3) array initialized")
       end select 
     else
       call GracefulExit("Actuator Line implementation temporarily disabled. Talk to Aditya if you want to know why.",423)
@@ -183,13 +191,17 @@ subroutine destroy(this)
 
     !if(ADM) then
     select case (this%ADM_Type)
-    case (0)
+    case (1)
       do i = 1, this%nTurbines
         call this%turbArrayADM(i)%destroy()
       end do
-    case (1)
+    case (2)
       do i = 1, this%nTurbines
         call this%turbArrayADM_T2(i)%destroy()
+      end do
+    case (3)
+      do i = 1, this%nTurbines
+        call this%turbArrayADM_Rot(i)%destroy()
       end do
     end select
       !deallocate(this%turbArrayADM)
@@ -389,7 +401,18 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                !     call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
                !  end if 
                end do
-               call mpi_barrier(mpi_comm_world, ierr)
+               !print '(a,i5,3(e19.12,1x))', 'rhsxyz- AD2: ', nrank, maxval(abs(this%fx)), maxval(abs(this%fy)), maxval(abs(this%fz))
+               !call mpi_barrier(mpi_comm_world, ierr)
+           case(3)
+               do i = 1, this%nTurbines
+               !  if (present(inst_horz_avg)) then
+                    call this%turbArrayADM_Rot(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz, inst_horz_avg(8*i-7:8*i))
+               !  else
+               !     call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
+               !  end if 
+               end do
+               !print '(a,i5,3(e19.12,1x))', 'rhsxyz- AD3: ', nrank, maxval(abs(this%fx)), maxval(abs(this%fy)), maxval(abs(this%fz))
+               !call mpi_barrier(mpi_comm_world, ierr)
            end select 
          !else
          !   !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Starting halo communication"); call mpi_barrier(mpi_comm_world, ierr)

@@ -101,6 +101,7 @@ module budgets_time_avg_mod
         integer :: tidx_compute
         integer :: tidx_budget_start 
         logical :: do_budgets
+        logical :: splitPressureDNS
 
     contains
         procedure           :: init
@@ -166,8 +167,10 @@ contains
         this%tidx_budget_start = tidx_budget_start  
 
         this%budgets_dir = budgets_dir
-        this%budgetType = budgetType 
-       
+        this%budgetType = budgetType
+
+        this%splitPressureDNS = this%igrid_sim%computeDNSPressure
+ 
         if(this%do_budgets) then 
             allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),25))
             allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),10))
@@ -200,7 +203,7 @@ contains
             call igrid_sim%spectE%alloc_r2c_out(this%pz)
 
             ! STEP 3: Now instrument igrid 
-            if(this%SplitPressureDNS) then
+            if(this%splitPressureDNS) then
               call igrid_sim%spectC%alloc_r2c_out(this%pxdns)
               call igrid_sim%spectC%alloc_r2c_out(this%pydns)
               call igrid_sim%spectC%alloc_r2c_out(this%pzdns)
