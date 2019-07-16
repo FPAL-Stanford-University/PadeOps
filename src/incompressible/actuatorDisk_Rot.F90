@@ -18,7 +18,7 @@ module actuatorDisk_Rotmod
 
     type :: actuatorDisk_Rot
         ! Actuator Disk_Rot Info
-        integer :: xLoc_idx, ActuatorDisk_RotID, diagnostic_counter, NacelleRadInd
+        integer :: xLoc_idx, ActuatorDisk_RotID, diagnostic_counter, NacelleRadInd, diagnostics_write_freq=100
         integer, dimension(:,:), allocatable :: tag_face 
         real(rkind) :: yaw, tilt, TSR, Omega
         real(rkind) :: xLoc, yLoc, zLoc, diam, blade_pitch, NacelleRad
@@ -49,8 +49,8 @@ module actuatorDisk_Rotmod
     contains
         procedure :: init
         procedure :: destroy
-        procedure, private :: getMeanU
         procedure :: get_RHS
+        procedure, private :: getMeanU
         procedure, private :: smear_this_source 
         procedure, private :: sample_on_circle_rtheta
         procedure, private :: get_induction_factors
@@ -69,7 +69,7 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG)
     integer, intent(in) :: ActuatorDisk_RotID
     character(len=*), intent(in) :: inputDir
     character(len=clen) :: tempname, fname
-    integer :: ioUnit, tmpSum, totSum, RPMController=0, num_blades=3, bladeTypeID=1
+    integer :: ioUnit, tmpSum, totSum, RPMController=0, num_blades=3, bladeTypeID=1, diagnostics_write_freq=100
     real(rkind) :: xLoc=1.d0, yLoc=1.d0, zLoc=0.1d0, diam=0.08d0
     real(rkind) :: TSR=8.d0, Omega = 1120.d0, blade_pitch, reference_length, NacelleRad
     real(rkind) :: yaw=0.d0, tilt=0.d0, epsFact = 1.5d0, dx, dy, dz
@@ -81,7 +81,7 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG)
     integer  :: ntry = 100, xsize, ysize, zsize
     real(rkind) :: time2initialize = 0, correction_factor = one, sampleUpsDist = zero
 
-    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, RPMController, TSR, Omega, yaw, tilt, blade_pitch, num_blades, reference_length, NacelleRad, bladeTypeID, sampleUpsDist
+    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, RPMController, TSR, Omega, yaw, tilt, blade_pitch, num_blades, reference_length, NacelleRad, bladeTypeID, sampleUpsDist, diagnostics_write_freq
     
     ! Read input file for this turbine    
     write(tempname,"(A17,I4.4,A10)") "ActuatorDisk_Rot_", ActuatorDisk_RotID, "_input.inp"
@@ -97,7 +97,7 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG)
     this%RPMController = RPMController;   this%tilt       = tilt
     this%blade_pitch   = blade_pitch;     this%num_blades = num_blades
     this%NacelleRad    = NacelleRad;      this%Omega      = Omega*rpm_to_radpersec
-    this%sampleUpsDist = sampleUpsDist;
+    this%sampleUpsDist = sampleUpsDist;   this%diagnostics_write_freq = diagnostics_write_freq
 
     dx=xG(2,1,1)-xG(1,1,1); dy=yG(1,2,1)-yG(1,1,1); dz=zG(1,1,2)-zG(1,1,1)
     this%nxLoc = size(xG,1); this%nyLoc = size(xG,2); this%nzLoc = size(xG,3)
@@ -175,7 +175,7 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG)
         call MPI_COMM_SIZE( this%mycomm, this%myComm_nproc, ierr )
     end if 
 
-    ntry = 2*ceiling(diam/min(dx, dy, dz))
+    ntry = 4*ceiling(diam/min(dx, dy, dz))
     ntry = p_maxval(ntry) ! prevents mismatch across processors due to roundoff
 
     if (this%Am_I_Active) then
@@ -612,7 +612,7 @@ subroutine get_induction_factors(this,radind,dthrust,dtangen)
         !if(nrank==4) then
         error = one; stopping_tol = 1.0d-4; num_iter = 0; max_iters = 100
         do while((error > stopping_tol) .and. (num_iter < max_iters))
-            !if(nrank==4 .and. radind==15) then
+            !if(nrank==0 .and. radind==3) then
             !  write(*,'(a,i5,1x,14(e19.12,1x))') '---deb---', num_iter, unrm, utan, urel, &
             !               cosphi, sinphi, phi, aoa, cl, cd, dfn, dft, indfac, aprime, error
             !endif
@@ -641,7 +641,7 @@ subroutine get_induction_factors(this,radind,dthrust,dtangen)
 
             ! realizability constraint
             if(indfac>half) then
-              print *, 'induction factor is beyond 0.5. Check details'
+              print *, 'induction factor is beyond 0.5. Check details', radind
               stop
             endif
 
@@ -691,7 +691,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
     real(rkind), dimension(8),                                  intent(out)   :: inst_val
     real(rkind) :: dthrust, dtangen, total_thrust, total_torque
-    integer     :: i, ist, ien, jst, jen, kst, ken, ioUnit
+    integer     :: i, ist, ien, jst, jen, kst, ken, ioUnit, ierr
     character(len=clen) :: tempname, fname
 
     call this%getMeanU(u,v,w)
@@ -748,7 +748,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
             inst_val(8) = this%wface
 
             this%diagnostic_counter = this%diagnostic_counter + 1
-            if(mod(this%diagnostic_counter, 1)==0) then
+            if(mod(this%diagnostic_counter, this%diagnostics_write_freq)==0) then
                 ioUnit = 100; write(tempname,"(a6,i4.4,a12,i5.5,a4)") 'ADRot_', this%ActuatorDisk_RotID, '_diagnostic_', this%diagnostic_counter, '.dat'
                 fname = trim(tempname)
                 open(ioUnit,file=fname,form='formatted',action='write',status='unknown')

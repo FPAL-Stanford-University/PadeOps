@@ -1,0 +1,4 @@
+cp WuPA_RenewEnergy2014_InputData_pitch0p8.dat WuPA_RenewEnergy2014_InputData.dat  
+mpiexec -n 2 ~/Codes/PadeOps2/PadeOps/build_debug/tests/test_BEMTheory  > log   
+mkdir nac_cd4p0_pitch0p8
+mv ADRot_0001_diagnostic_* WuPA_RenewEnergy2014_OutputData_000* log nac_cd4p0_pitch0p8/
