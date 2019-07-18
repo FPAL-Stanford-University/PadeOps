@@ -17,7 +17,7 @@ module Multispecies_shock_data
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
     !real(rkind) :: Ly = one, Lx = six, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
-    real(rkind) :: Ly = 0.3_rkind, Lx = 0.6_rkind, interface_init = 0.0_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
+    real(rkind) :: Ly = one, Lx = two, interface_init = 0.0_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
     logical     :: sliding = .false.
 
     type(filters) :: mygfil
@@ -383,21 +383,24 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! int_shape = abs(yr) * 2.5
         int_shape = zero
         kwave_i = 2.0_rkind
-        perturbations = 0.0_rkind
-        seed(1) = 20190621
-        call RANDOM_SEED(PUT=seed)
-        do while (kwave_i <= kwave)
-            ! TODO generate random perturb_phase and bcast to all chuncks
-            call RANDOM_NUMBER(perturb_phase)
-            perturb_phase = perturb_phase * 2.0_rkind * pi
-            call MPI_BCAST(perturb_phase, 1, mpirkind, 0, MPI_COMM_WORLD, mpi_ierr)
-            ! call MPI_BARRIER(MPI_COMM_WORLD, mpi_ierr)
-            ! constant slope perturbation
-            perturbations = perturbations + eta0k/(2.0_rkind*pi*kwave_i/Ly)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
-            ! constant amplitude perturbation
-            !perturbations = perturbations + eta0k/(2.0_rkind*pi)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
-            kwave_i = kwave_i + 1.0_rkind
-        end do
+
+        perturbations = eta0k/(2.0_rkind*pi*6.0/Ly)*sin(2.0_rkind*6.0*pi*y/Ly)
+
+!        perturbations = 0.0_rkind
+!        seed(1) = 20190621
+!        call RANDOM_SEED(PUT=seed)
+!        do while (kwave_i <= kwave)
+!            ! TODO generate random perturb_phase and bcast to all chuncks
+!            call RANDOM_NUMBER(perturb_phase)
+!            perturb_phase = perturb_phase * 2.0_rkind * pi
+!            call MPI_BCAST(perturb_phase, 1, mpirkind, 0, MPI_COMM_WORLD, mpi_ierr)
+!            ! call MPI_BARRIER(MPI_COMM_WORLD, mpi_ierr)
+!            ! constant slope perturbation
+!            !perturbations = perturbations + eta0k/(2.0_rkind*pi*kwave_i/Ly)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
+!            ! constant amplitude perturbation
+!            perturbations = perturbations + eta0k/(2.0_rkind*pi)           *sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
+!            kwave_i = kwave_i + 1.0_rkind
+!        end do
         tmp = half * ( one - erf( (x-(interface_init*Lx/2.0_rkind + int_shape + perturbations))/(thick*dx) ) )
         theta = theta * pi / 180._rkind ! Convert angle from degrees to radians
         ! 1 >= tmp >= 0
