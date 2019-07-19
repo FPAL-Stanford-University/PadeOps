@@ -384,7 +384,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         int_shape = zero
         kwave_i = 2.0_rkind
 
-        perturbations = eta0k/(2.0_rkind*pi*6.0/Ly)*sin(2.0_rkind*6.0*pi*y/Ly)
+        perturbations = eta0k/(2.0_rkind*pi)*sin(2.0_rkind*6.0*pi*y/Ly)
 
 !        perturbations = 0.0_rkind
 !        seed(1) = 20190621
