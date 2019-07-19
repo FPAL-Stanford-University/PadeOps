@@ -20,7 +20,7 @@ module actuatorDisk_Rotmod
         ! Actuator Disk_Rot Info
         integer :: xLoc_idx, ActuatorDisk_RotID, diagnostic_counter, NacelleRadInd, diagnostics_write_freq=100
         integer, dimension(:,:), allocatable :: tag_face 
-        real(rkind) :: yaw, tilt, TSR, Omega
+        real(rkind) :: yaw, tilt, TSR, Omega, Lref
         real(rkind) :: xLoc, yLoc, zLoc, diam, blade_pitch, NacelleRad
         real(rkind) :: pfactor, OneBydelSq, normfactor, sampleUpsDist
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
@@ -63,10 +63,11 @@ module actuatorDisk_Rotmod
 
 contains
 
-subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG)
+subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG, ntryparam)
     class(actuatorDisk_Rot), intent(inout) :: this
     real(rkind), intent(in), dimension(:,:,:), target :: xG, yG, zG
     integer, intent(in) :: ActuatorDisk_RotID
+    integer, intent(in), optional :: ntryparam
     character(len=*), intent(in) :: inputDir
     character(len=clen) :: tempname, fname
     integer :: ioUnit, tmpSum, totSum, RPMController=0, num_blades=3, bladeTypeID=1, diagnostics_write_freq=100
@@ -98,6 +99,7 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG)
     this%blade_pitch   = blade_pitch;     this%num_blades = num_blades
     this%NacelleRad    = NacelleRad;      this%Omega      = Omega*rpm_to_radpersec
     this%sampleUpsDist = sampleUpsDist;   this%diagnostics_write_freq = diagnostics_write_freq
+    this%Lref = reference_length
 
     dx=xG(2,1,1)-xG(1,1,1); dy=yG(1,2,1)-yG(1,1,1); dz=zG(1,1,2)-zG(1,1,1)
     this%nxLoc = size(xG,1); this%nyLoc = size(xG,2); this%nzLoc = size(xG,3)
@@ -175,7 +177,11 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG)
         call MPI_COMM_SIZE( this%mycomm, this%myComm_nproc, ierr )
     end if 
 
-    ntry = 4*ceiling(diam/min(dx, dy, dz))
+    if (present(ntryparam)) then
+        ntry = ntryparam*ceiling(diam/min(dx, dy, dz))
+    else
+        ntry = 2*ceiling(diam/min(dx, dy, dz))
+    endif
     ntry = p_maxval(ntry) ! prevents mismatch across processors due to roundoff
 
     if (this%Am_I_Active) then
@@ -395,9 +401,14 @@ subroutine read_blade_properties(this, InputDir, fname, reference_length)
     enddo
 
     this%solidity_elem = this%num_blades*this%chord_elem/twopi/this%radius_elem
-    where(this%radius_elem<this%NacelleRad)
-        this%solidity_elem = one
-    end where
+    !where(this%radius_elem<this%NacelleRad)
+    !    this%solidity_elem = one
+    !end where
+    do k = 1, this%num_radial_elems
+        if(this%radius_elem(k) < this%NacelleRad) then
+          this%solidity_elem(k) = one
+        endif
+    enddo
 
     deallocate(twistAngTable, chordTable, airfoilIDTable)
 
@@ -612,8 +623,8 @@ subroutine get_induction_factors(this,radind,dthrust,dtangen)
         !if(nrank==4) then
         error = one; stopping_tol = 1.0d-4; num_iter = 0; max_iters = 100
         do while((error > stopping_tol) .and. (num_iter < max_iters))
-            !if(nrank==0 .and. radind==3) then
-            !  write(*,'(a,i5,1x,14(e19.12,1x))') '---deb---', num_iter, unrm, utan, urel, &
+            !if(nrank==0) then! .and. radind==3) then
+            !  write(*,'(a,2(i5,1x),14(e19.12,1x))') '---deb---', radind, num_iter, unrm, utan, urel, &
             !               cosphi, sinphi, phi, aoa, cl, cd, dfn, dft, indfac, aprime, error
             !endif
             indfac_old = indfac; aprime_old = aprime
@@ -641,8 +652,8 @@ subroutine get_induction_factors(this,radind,dthrust,dtangen)
 
             ! realizability constraint
             if(indfac>half) then
-              print *, 'induction factor is beyond 0.5. Check details', radind
-              stop
+              print *, 'induction factor is beyond 0.5. Check details', radind, indfac
+              !stop
             endif
 
             ! stopping condition

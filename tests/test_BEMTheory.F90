@@ -12,8 +12,9 @@ program test_BEMTheory
     implicit none 
 
     type(actuatorDisk_Rot), dimension(:), allocatable :: hawts_Rot
-    integer, parameter :: nx = 64, ny = 16, nz = 16
+    integer :: nx = 64, ny = 16, nz = 16, ntryparam = 2
     character(len=clen) :: inputDir = "/home/lele/nghaisas/Codes/PadeOps2/PadeOps/tests/test_BEMTheory_files"
+    !character(len=clen) :: inputDir = "/fastscratch/nghaisas/runs/PadeOps/wupa/run3/bemt/4rot"
     character(len=clen) :: tempname, fname 
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
     real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs1, rhsv, rhsw, rhs2
@@ -27,6 +28,13 @@ program test_BEMTheory
     real(rkind) :: inst_val(8), inst_val_p(8), rhoRef, Uref, Lref, comp1, comp2, maxdiff
 
     call MPI_Init(ierr)
+
+    ioUnit = 100; write(tempname,"(a)") 'input.dat'
+    fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
+    open(ioUnit,file=fname,form='formatted',action='read',status='old')
+    read(ioUnit,*) nx, ny, nz, ntryparam
+    close(ioUnit)
+
     call decomp_2d_init(nx, ny, nz, prow, pcol)
     call get_decomp_info(gp)
 
@@ -69,28 +77,28 @@ program test_BEMTheory
     enddo
     close(ioUnit)
 
+    num_turbines = 1
+    allocate(hawts_Rot(num_turbines))
+    do idx = 1,num_turbines
+        call hawts_Rot(idx)%init(inputDir, idx, xG, yG, zG, ntryparam)
+    end do 
+
     rhoRef = 1.2d0
     Uref = 10.0d0 ! m/s
-    Lref = 80.0d0 ! m (make sure this is cosnistent with turbine input files)
+    Lref = hawts_Rot(1)%Lref ! m (make sure this is cosnistent with turbine input files)
 
     ! non-dimensionalize all variables
     windspeed = windspeed/Uref
     angularspeed = angularspeed*2.0d0*pi/60.0d0 / (Uref/Lref)
     pitch = pitch*pi/180.0d0
 
-    num_turbines = 1
-    allocate(hawts_Rot(num_turbines))
-    do idx = 1,num_turbines
-        call hawts_Rot(idx)%init(inputDir, idx, xG, yG, zG)
-    end do 
-
     ! reset diam, CT
     diam = hawts_Rot(1)%diam
  
     rhs1 = 0.d0; rhsv = 0.0d0; rhsw = 0.0d0
-    call mpi_barrier(mpi_comm_world, ierr)
     call tic()
     do j = 1, num_windspeeds
+      call mpi_barrier(mpi_comm_world, ierr)
       u = windspeed(j)
       do idx = 1,num_turbines
           hawts_Rot(idx)%TSR = angularspeed(j)*diam/two/windspeed(j)
@@ -105,8 +113,9 @@ program test_BEMTheory
 
       inst_val_p = 0.0d0; inst_val = 0.0d0
 
+      call mpi_barrier(mpi_comm_world, ierr)
+      call message(2,"CT ",thrustcoeff(j))
     enddo
-    call mpi_barrier(mpi_comm_world, ierr)
     call toc()
 
     windspeed = windspeed*Uref
