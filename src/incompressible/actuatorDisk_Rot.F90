@@ -18,12 +18,13 @@ module actuatorDisk_Rotmod
 
     type :: actuatorDisk_Rot
         ! Actuator Disk_Rot Info
-        integer :: xLoc_idx, ActuatorDisk_RotID, diagnostic_counter, NacelleRadInd, diagnostics_write_freq=100
+        integer :: xface_idx, xdisk_idx, ActuatorDisk_RotID, diagnostic_counter, NacelleRadInd, diagnostics_write_freq=100
         integer, dimension(:,:), allocatable :: tag_face 
         real(rkind) :: yaw, tilt, TSR, Omega, Lref
         real(rkind) :: xLoc, yLoc, zLoc, diam, blade_pitch, NacelleRad
         real(rkind) :: pfactor, OneBydelSq, normfactor, sampleUpsDist
-        real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
+        real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0 ! goes with xface_idx - can be upstream of disk
+        real(rkind) :: udisk = 0.d0, vdisk = 0.d0, wdisk = 0.d0 ! goes with xdisk_idx - always closest to disk
         integer :: totPointsOnFace, RPMController=0, num_radial_elems=40, num_azimut_elems=40, num_blades=3
         real(rkind), dimension(:,:,:), allocatable :: eta_delta, dsq, clTable, cdTable
         real(rkind), dimension(:,:),   allocatable :: xp, yp, zp, diagnosticarr
@@ -134,7 +135,8 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG, ntryparam)
     this%xG => xG; this%yG => yG; this%zG => zG
     
     this%xLine = xG(:,1,1); this%yLine = yG(1,:,1); this%zLine = zG(1,1,:)
-    locator = minloc(abs(this%xLine - (xLoc-this%sampleUpsDist*this%diam))); this%xLoc_idx = locator(1)
+    locator = minloc(abs(this%xLine - (xLoc-this%sampleUpsDist*this%diam))); this%xface_idx = locator(1)
+    locator = minloc(abs(this%xLine - (xLoc)));                              this%xdisk_idx = locator(1)
 
     tmp = sqrt((yG(1,:,:) - yLoc)**2 + (zG(1,:,:) - zLoc)**2)
     this%tag_face = 0
@@ -217,7 +219,7 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG, ntryparam)
     end if 
 
     call message(1, "Initializing Rotating Actuator Disk (ADM Type=3) number", ActuatorDisk_RotID)
-    call message(2, "Sampling velocity at ", this%xLine(this%xLoc_idx))
+    call message(2, "Sampling velocity at ", this%xLine(this%xface_idx))
     call tic()
     if(this%Am_I_Active) then
         xsize = this%startEnds_global(4)-this%startEnds_global(1) + 1
@@ -511,7 +513,7 @@ subroutine getMeanU(this, u, v, w)
     
     if (this%AM_I_ACTIVE) then
         ! Get u face
-        this%rbuff = u(this%xLoc_idx,:,:)
+        this%rbuff = u(this%xface_idx,:,:)
         this%rbuff = this%rbuff*this%tag_face
         if (this%AM_I_Split) then
             tmpSum = p_sum(sum(this%rbuff),this%myComm) 
@@ -521,7 +523,7 @@ subroutine getMeanU(this, u, v, w)
         end if
 
         ! Get v face
-        this%rbuff = v(this%xLoc_idx,:,:)
+        this%rbuff = v(this%xface_idx,:,:)
         this%rbuff = this%rbuff*this%tag_face
         if (this%AM_I_Split) then
             tmpSum = p_sum(sum(this%rbuff),this%myComm) 
@@ -531,7 +533,7 @@ subroutine getMeanU(this, u, v, w)
         end if
         
         ! Get w face
-        this%rbuff = w(this%xLoc_idx,:,:)
+        this%rbuff = w(this%xface_idx,:,:)
         this%rbuff = this%rbuff*this%tag_face
         if (this%AM_I_Split) then
             tmpSum = p_sum(sum(this%rbuff),this%myComm) 
@@ -543,6 +545,40 @@ subroutine getMeanU(this, u, v, w)
         this%uface = this%alpha_tau*umn + (1.d0 - this%alpha_tau)*this%uface
         this%vface = this%alpha_tau*vmn + (1.d0 - this%alpha_tau)*this%vface
         this%wface = this%alpha_tau*wmn + (1.d0 - this%alpha_tau)*this%wface
+
+        ! Get u disk
+        this%rbuff = u(this%xdisk_idx,:,:)
+        this%rbuff = this%rbuff*this%tag_face
+        if (this%AM_I_Split) then
+            tmpSum = p_sum(sum(this%rbuff),this%myComm) 
+            umn = tmpSum/real(this%totPointsOnFace,rkind)
+        else
+            umn = sum(this%rbuff)/real(this%totPointsOnFace,rkind)
+        end if
+
+        ! Get v disk
+        this%rbuff = v(this%xdisk_idx,:,:)
+        this%rbuff = this%rbuff*this%tag_face
+        if (this%AM_I_Split) then
+            tmpSum = p_sum(sum(this%rbuff),this%myComm) 
+            vmn = (tmpSum)/real(this%totPointsOnFace,rkind)
+        else
+            vmn = sum(this%rbuff)/real(this%totPointsOnFace,rkind)
+        end if
+        
+        ! Get w disk
+        this%rbuff = w(this%xdisk_idx,:,:)
+        this%rbuff = this%rbuff*this%tag_face
+        if (this%AM_I_Split) then
+            tmpSum = p_sum(sum(this%rbuff),this%myComm) 
+            wmn = (tmpSum)/real(this%totPointsOnFace,rkind)
+        else
+            wmn = sum(this%rbuff)/real(this%totPointsOnFace,rkind)
+        end if
+
+        this%udisk = this%alpha_tau*umn + (1.d0 - this%alpha_tau)*this%udisk
+        this%vdisk = this%alpha_tau*vmn + (1.d0 - this%alpha_tau)*this%vdisk
+        this%wdisk = this%alpha_tau*wmn + (1.d0 - this%alpha_tau)*this%wdisk
     end if 
     this%alpha_tau = alpha_smooth
 
@@ -652,7 +688,10 @@ subroutine get_induction_factors(this,radind,dthrust,dtangen)
 
             ! realizability constraint
             if(indfac>half) then
-              print *, 'induction factor is beyond 0.5. Check details', radind, indfac
+              ! stop iterating and suppress the "error>stopping_tol" error message
+              print '(a,i5,1x,5(e19.12,1x))', 'induction factor is beyond 0.5. Check details: ', radind, indfac, aprime, cl, cd, phi
+              indfac_old = indfac; aprime_old = aprime 
+              num_iter = max_iters + 2
               !stop
             endif
 
@@ -750,13 +789,13 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
         !if (present(inst_val)) then
           if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
             inst_val(1) = total_thrust
-            inst_val(2) = total_thrust*sqrt(this%uface**2+this%vface**2+this%wface**2)
+            inst_val(2) = total_thrust*sqrt(this%udisk**2+this%vdisk**2+this%wdisk**2)
             inst_val(3) = total_torque
             inst_val(4) = this%Omega
             inst_val(5) = total_torque*this%Omega
-            inst_val(6) = this%uface
-            inst_val(7) = this%vface
-            inst_val(8) = this%wface
+            inst_val(6) = this%udisk
+            inst_val(7) = this%vdisk
+            inst_val(8) = this%wdisk
 
             this%diagnostic_counter = this%diagnostic_counter + 1
             if(mod(this%diagnostic_counter, this%diagnostics_write_freq)==0) then
