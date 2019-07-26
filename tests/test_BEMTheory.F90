@@ -13,7 +13,7 @@ program test_BEMTheory
 
     type(actuatorDisk_Rot), dimension(:), allocatable :: hawts_Rot
     integer :: nx = 64, ny = 16, nz = 16, ntryparam = 2
-    character(len=clen) :: inputDir = "/home/lele/nghaisas/Codes/PadeOps2/PadeOps/tests/test_BEMTheory_files"
+    character(len=clen) :: inputDir = "/home1/04769/ghaisasn/bemt"
     !character(len=clen) :: inputDir = "/fastscratch/nghaisas/runs/PadeOps/wupa/run3/bemt/4rot"
     character(len=clen) :: tempname, fname 
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
@@ -97,7 +97,7 @@ program test_BEMTheory
  
     rhs1 = 0.d0; rhsv = 0.0d0; rhsw = 0.0d0
     call tic()
-    do j = 1, num_windspeeds
+    do j = 11,11!1, num_windspeeds
       call mpi_barrier(mpi_comm_world, ierr)
       u = windspeed(j)
       do idx = 1,num_turbines

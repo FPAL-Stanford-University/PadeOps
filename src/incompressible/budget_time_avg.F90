@@ -5,7 +5,7 @@ module budgets_time_avg_mod
    use incompressibleGrid, only: igrid  
    use exits, only: message, GracefulExit
    use basic_io, only: read_2d_ascii, write_2d_ascii
-   use constants, only: half
+   use constants, only: half, zero
    use mpi 
 
    implicit none 
@@ -97,6 +97,9 @@ module budgets_time_avg_mod
         integer :: counter
         character(len=clen) :: budgets_dir
 
+        logical :: useWindTurbines, isStratified
+        real(rkind), allocatable, dimension(:) :: runningSum_sc, runningSum_sc_turb, runningSum_turb
+
         integer :: tidx_dump 
         integer :: tidx_compute
         integer :: tidx_budget_start 
@@ -125,6 +128,9 @@ module budgets_time_avg_mod
         
         procedure, private  :: AssembleBudget3
         procedure, private  :: DumpBudget3
+        
+        procedure, private  :: AssembleScalarStats
+        procedure, private  :: DumpScalarStats
         
         procedure, private :: ddx_R2R
         procedure, private :: ddy_R2R
@@ -165,6 +171,8 @@ contains
         this%tidx_dump = tidx_dump
         this%tidx_compute = tidx_compute
         this%tidx_budget_start = tidx_budget_start  
+        this%useWindTurbines = igrid_sim%useWindTurbines
+        this%isStratified    = igrid_sim%isStratified
 
         this%budgets_dir = budgets_dir
         this%budgetType = budgetType
@@ -214,6 +222,18 @@ contains
                        & this%px, this%py, this%pz, this%uturb)  
             endif
 
+            ! STEP 4: For horizontally-averaged surface quantities (called
+            ! Scalar here), and turbine statistics
+            !allocate(this%inst_horz_avg(5)) ! [ustar, uw, vw, Linv, wT]
+            allocate(this%runningSum_sc(5))
+            this%runningSum_sc = zero
+            if(this%useWindTurbines) then
+                allocate(this%runningSum_sc_turb(8*this%igrid_sim%WindTurbineArr%nTurbines))
+                allocate(this%runningSum_turb   (8*this%igrid_sim%WindTurbineArr%nTurbines))
+                this%runningSum_sc_turb = zero
+                this%runningSum_turb = zero
+            endif
+
         end if
 
     end subroutine 
@@ -258,6 +278,8 @@ contains
             call this%AssembleBudget3()
         end select
 
+        call this%AssembleScalarStats()
+
         this%counter = this%counter + 1
 
     end subroutine 
@@ -286,6 +308,9 @@ contains
         if (this%budgetType>2) then
             call this%dumpbudget3()
         end if 
+
+        ! Scalar and Turbine Stats
+        call this%DumpScalarStats()
     end subroutine 
 
     ! ---------------------- Budget 0 ------------------------
@@ -749,7 +774,54 @@ contains
 
     end subroutine 
 
+    subroutine AssembleScalarStats(this)
+        use decomp_2d_io
+        class(budgets_time_avg), intent(inout) :: this
+
+        ! horizontally-averaged surface quantities and turbine statistics
+        this%igrid_sim%inst_horz_avg(1) = this%igrid_sim%sgsmodel%get_ustar()
+        this%igrid_sim%inst_horz_avg(2) = this%igrid_sim%sgsmodel%get_uw_surf()
+        this%igrid_sim%inst_horz_avg(3) = this%igrid_sim%sgsmodel%get_vw_surf()
+        if(this%isStratified) then
+            this%igrid_sim%inst_horz_avg(4) = this%igrid_sim%sgsmodel%get_InvObLength()
+            this%igrid_sim%inst_horz_avg(5) = this%igrid_sim%wTh_surf
+        endif
+        this%runningSum_sc = this%runningSum_sc + this%igrid_sim%inst_horz_avg
+        if(this%useWindTurbines) then
+            this%runningSum_sc_turb = this%runningSum_sc_turb + this%igrid_sim%inst_horz_avg_turb
+        endif
+
+    end subroutine 
+
+    subroutine DumpScalarStats(this)
+        use decomp_2d_io
+        class(budgets_time_avg), intent(inout) :: this
+
+        character(len=clen) :: fname, tempname 
+        integer :: ierr
+
+        ! dump horizontal averages
+        if(this%useWindTurbines) then
+            this%runningSum_turb = zero
+            call MPI_reduce(this%runningSum_sc_turb, this%runningSum_turb, 8*this%igrid_sim%WindTurbineArr%nTurbines, mpirkind, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+        endif
+        if (nrank == 0) then
+            write(tempname,"(A3,I2.2,A2,I6.6,A4)") "Run", this%run_id,"_t",this%igrid_sim%step,".sth"   ! time and horz averages of scalars
+            fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+            open(unit=771,file=fname,status='unknown')
+            if(this%useWindTurbines) then
+                write(771,'(e19.12,1x,i7,1x,16016(e19.12,1x))') this%igrid_sim%tsim, this%counter, &
+                this%runningSum_sc  /(real(this%counter, rkind) + 1.0d-18), &
+                this%runningSum_turb/(real(this%counter, rkind) + 1.0d-18) ! change if using more than 2000 turbines
+            else
+                write(771,'(e19.12,1x,i7,1x,5(e19.12,1x))') this%igrid_sim%tsim, this%counter, &
+                this%runningSum_sc  /(real(this%counter, rkind) + 1.0d-18)
+            endif
+            close(771)
+        end if
     
+    end subroutine 
+
 
     ! ----------------------supproting subroutines ------------------------
     subroutine dump_budget_field(this, field, fieldID, BudgetID)
@@ -795,6 +867,11 @@ contains
             deallocate(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, this%px, this%py, this%pz, this%uturb)  
             deallocate(this%budget_0, this%budget_1)
         end if
+        deallocate(this%runningSum_sc)
+        if(this%useWindTurbines) then
+            deallocate(this%runningSum_sc_turb)
+            deallocate(this%runningSum_turb)
+        endif
 
     end subroutine 
 

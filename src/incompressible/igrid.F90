@@ -934,7 +934,11 @@ contains
            allocate(this%WindTurbineArr)
            call this%WindTurbineArr%init(inputFile, this%gpC, this%gpE, this%spectC, this%spectE, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
            allocate(this%inst_horz_avg_turb(8*this%WindTurbineArr%nTurbines))
+           this%inst_horz_avg_turb = zero
        end if
+       allocate(this%inst_horz_avg(5))
+       this%inst_horz_avg = zero
+
        ! STEP 13: Set visualization planes for io
        call set_planes_io(this%xplanes, this%yplanes, this%zplanes)
 
