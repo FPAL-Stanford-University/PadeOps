@@ -20,7 +20,9 @@ module fringeMethod
       real(rkind)                                   :: LambdaFact
       integer :: myFringeID = 1
       logical :: useTwoFringex = .false. 
-      logical :: useFringeAsSponge_Scalar = .true. 
+      logical, public :: useFringeAsSponge_Scalar = .true. 
+      logical :: firstCallComplete = .false.
+      logical :: firstCallCompleteScalar = .false.
       contains
          procedure :: init
          procedure :: destroy
@@ -116,17 +118,21 @@ contains
       real(rkind),                                                                        intent(in)           :: dt
       real(rkind),    dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)),         intent(in)           :: F 
 
-      if (this%useFringeAsSponge_Scalar) then
-            this%rbuffxC(:,:,:,1) = -(this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(F)
-            call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
-            Frhs = Frhs + this%cbuffyC(:,:,:,1)
+      if (this%firstCallCompleteScalar) then      
+          if (this%useFringeAsSponge_Scalar) then
+                this%rbuffxC(:,:,:,1) = -(this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(F)
+                call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
+                Frhs = Frhs + this%cbuffyC(:,:,:,1)
+          else
+             if (associated(this%F_target)) then
+                this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%F_target - F)
+                call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
+                Frhs = Frhs + this%cbuffyC(:,:,:,1)
+             end if 
+          end if 
       else
-         if (associated(this%F_target)) then
-            this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%F_target - F)
-            call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
-            Frhs = Frhs + this%cbuffyC(:,:,:,1)
-         end if 
-      end if 
+          this%firstCallCompleteScalar = .true.
+      end if
    end subroutine
 
    subroutine destroy(this)
@@ -327,6 +333,8 @@ contains
       where (this%Fringe_kernel_cells > 1) this%Fringe_kernel_cells = 1.d0 
       where (this%Fringe_kernel_edges > 1) this%Fringe_kernel_edges = 1.d0 
 
+      this%firstCallComplete = .false.
+      this%firstCallCompleteScalar = .false.
 
       call message(0, "Fringe initialized successfully.")
 

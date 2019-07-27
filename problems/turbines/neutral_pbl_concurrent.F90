@@ -48,7 +48,7 @@ program neutral_pbl_concurrent
 
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
-    call tic() 
+    call tic()
     do while (primary%tsim < primary%tstop) 
        dt1 = primary%get_dt(recompute=.true.)
        dt2 = precursor%get_dt(recompute=.true.)
