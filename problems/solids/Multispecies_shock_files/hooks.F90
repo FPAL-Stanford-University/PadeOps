@@ -20,6 +20,9 @@ module Multispecies_shock_data
     real(rkind) :: Ly = one, Lx = two, interface_init = 0.0_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
     logical     :: sliding = .false.
 
+    logical     :: acc_force_mode = .TRUE.
+    real(rkind) :: time_acc = 5.0D-4
+
     type(filters) :: mygfil
 
 contains
@@ -212,7 +215,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
                           plastic2, explPlast2, yield2, interface_init, kwave, sliding, uimpact, theta, eta0k, &
-                          reflect_bcn
+                          reflect_bcn, acc_force_mode
 
     
     ioUnit = 11
@@ -414,6 +417,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             v   =uimpact*sin(theta)*(tmp-0.5)
         endif
         w   = zero
+        if (acc_force_mode) then
+            u = zero
+            v = zero
+            time_acc = 1.5_rkind * dx / (uimpact) ! watch out stability
+        endif
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         ! tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
@@ -667,8 +675,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         if(decomp%yst(1)==1) then
           if(x_bc(1)==0) then
               rho( 1,:,:) = rhoL
-              u  ( 1,:,:) = uimpact * cos(theta)
-              v  ( 1,:,:) = uimpact * sin(theta)
+              if (tsim .GE. time_acc) then
+                  u  ( 1,:,:) = uimpact * cos(theta)
+                  v  ( 1,:,:) = uimpact * sin(theta)
+              endif
               !u  ( 1,:,:) = (u2-u1)
               !v  ( 1,:,:) = v1
               w  ( 1,:,:) = zero
@@ -840,12 +850,27 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
     type(solid_mixture),             intent(in)    :: mix
 
+    real(rkind) :: acc, acc_x, acc_y
+
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+    
+    ! Calculate acceleration body force
+    if (acc_force_mode) then
+        acc = uimpact / time_acc
+        acc_x = acc * cos(theta)
+        acc_y = acc * sin(theta)
+        if (tsim .LT. time_acc) then
+            rhs(:,:,:, mom_index  ) = rhs(:,:,:, mom_index)   + rho * mix%material(1)%VF * acc_x
+            rhs(:,:,:, mom_index+1) = rhs(:,:,:, mom_index+1) + rho * mix%material(1)%VF * acc_y
+            rhs(:,:,:, TE_index)    = rhs(:,:,:, TE_index)    + rho * mix%material(1)%VF * ((acc_x * u) + (acc_y * v))
+        endif
+    endif
+
     end associate
 end subroutine
 
