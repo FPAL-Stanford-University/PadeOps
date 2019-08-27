@@ -1,4 +1,0 @@
-&concurrent
-primary_InputFile                 = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/input_files_debug_2/input_neutral_primary.dat"
-precursor_InputFile                  = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/input_files_debug_2/input_neutral_precursor.dat"
-/

@@ -17,7 +17,7 @@ module fringeMethod
       type(decomp_info), pointer                    :: gpC, gpE, sp_gpC, sp_gpE
       real(rkind),    dimension(:,:,:,:), pointer   :: rbuffxC, rbuffxE
       complex(rkind), dimension(:,:,:,:), pointer   :: cbuffyC, cbuffyE
-      real(rkind)                                   :: LambdaFact
+      real(rkind)                                   :: LambdaFact, LambdaFactPotTemp
       integer :: myFringeID = 1
       logical :: useTwoFringex = .false. 
       logical, public :: useFringeAsSponge_Scalar = .true. 
@@ -120,12 +120,12 @@ contains
 
       if (this%firstCallCompleteScalar) then      
           if (this%useFringeAsSponge_Scalar) then
-                this%rbuffxC(:,:,:,1) = -(this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(F)
+                this%rbuffxC(:,:,:,1) = -(this%LambdafactPotTemp/dt)*(this%Fringe_kernel_cells)*(F)
                 call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
                 Frhs = Frhs + this%cbuffyC(:,:,:,1)
           else
              if (associated(this%F_target)) then
-                this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%F_target - F)
+                this%rbuffxC(:,:,:,1) = (this%LambdafactPotTemp/dt)*(this%Fringe_kernel_cells)*(this%F_target - F)
                 call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
                 Frhs = Frhs + this%cbuffyC(:,:,:,1)
              end if 
@@ -187,7 +187,7 @@ contains
       complex(rkind), dimension(:,:,:,:), target, intent(in) :: cbuffyC, cbuffyE
       integer, intent(in), optional :: fringeID
 
-      real(rkind) :: Lx, Ly, LambdaFact = 2.45d0, LambdaFact2 = 2.45d0
+      real(rkind) :: Lx, Ly, LambdaFact = 2.45d0, LambdaFact2 = 2.45d0, LambdaFactPotTemp = 2.45d0
       real(rkind) :: Fringe_yst = 1.d0, Fringe_yen = 1.d0
       real(rkind) :: Fringe_xst = 0.75d0, Fringe_xen = 1.d0
       real(rkind) :: Fringe_delta_st_x = 1.d0, Fringe_delta_st_y = 1.d0, Fringe_delta_en_x = 1.d0, Fringe_delta_en_y = 1.d0
@@ -201,7 +201,7 @@ contains
       real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2
       logical :: Apply_x_fringe = .true., Apply_y_fringe = .false.
       namelist /FRINGE/ Apply_x_fringe, Apply_y_fringe, Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, &
-                        Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, LambdaFact2, Fringe_yen, Fringe_yst, Fringe1_delta_st_x, &
+                        Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, LambdaFactPotTemp, LambdaFact2, Fringe_yen, Fringe_yst, Fringe1_delta_st_x, &
                         Fringe2_delta_st_x, Fringe1_delta_en_x, Fringe2_delta_en_x, Fringe1_xst, Fringe2_xst, Fringe1_xen, Fringe2_xen
     
       if (present(fringeID)) then
@@ -233,7 +233,9 @@ contains
       
       this%Fringe_kernel_cells = 0.d0
       this%Fringe_kernel_edges = 0.d0
-
+      ! Maybe need a flag to ensure that it is define and the problem is
+      ! stratified
+      this%LambdaFactPotTemp = LambdaFactPotTemp
    
       if (this%usetwoFringex) then
          select case (this%myFringeID)

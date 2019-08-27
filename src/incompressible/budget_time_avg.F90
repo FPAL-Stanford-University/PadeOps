@@ -46,7 +46,7 @@ module budgets_time_avg_mod
    ! 23: <u_j'tau_1j'>
    ! 24: <u_j'tau_2j'>
    ! 25: <u_j'tau_3j'>
-
+   ! 26: <T>
 
    ! BUDGET_1 term indices:  
    ! 1:  X eqn - Advection/convection term
@@ -180,7 +180,11 @@ contains
         this%splitPressureDNS = this%igrid_sim%computeDNSPressure
  
         if(this%do_budgets) then 
-            allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),25))
+            if (this%isStratified) then
+                allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),26))
+            else
+                allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),25))
+            end if
             allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),10))
             allocate(this%budget_2(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),07))
             allocate(this%budget_3(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),08))
@@ -400,6 +404,9 @@ contains
         this%budget_0(:,:,:,1) = this%budget_0(:,:,:,1) + this%igrid_sim%u
         this%budget_0(:,:,:,2) = this%budget_0(:,:,:,2) + this%igrid_sim%v
         this%budget_0(:,:,:,3) = this%budget_0(:,:,:,3) + this%igrid_sim%wC
+        if (this%isStratified) then
+            this%budget_0(:,:,:,26) = this%budget_0(:,:,:,26) + this%igrid_sim%T
+        end if 
 
         ! STEP 2: Get Reynolds stresses (IMPORTANT: need to correct for fluctuation before dumping)
         this%budget_0(:,:,:,4) = this%budget_0(:,:,:,4) + this%igrid_sim%u*this%igrid_sim%u
