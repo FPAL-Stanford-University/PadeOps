@@ -337,7 +337,7 @@ module IncompressibleGrid
             procedure, private :: populate_rhs_for_budgets
             procedure, private :: populate_RHS_extraTerms 
             procedure, private :: project_and_prep
-            procedure, private :: wrapup_timestep
+            procedure          :: wrapup_timestep
             procedure, private :: reset_pointers
             procedure, private :: compute_vorticity
             procedure, private :: finalize_stats3D
@@ -363,7 +363,13 @@ module IncompressibleGrid
             procedure          :: InstrumentForBudgets_TimeAvg
             procedure          :: GetMomentumTerms
             procedure          :: set_budget_rhs_to_zero
-    end type
+            procedure, private :: advance_SSP_RK45_all_stages
+            procedure          :: advance_SSP_RK45_Stage_1 
+            procedure          :: advance_SSP_RK45_Stage_2 
+            procedure          :: advance_SSP_RK45_Stage_3 
+            procedure          :: advance_SSP_RK45_Stage_4 
+            procedure          :: advance_SSP_RK45_Stage_5 
+   end type
 
 contains 
 
@@ -374,6 +380,7 @@ contains
 #include "igrid_files/prep_wrapup_stuff.F90"
 #include "igrid_files/budgets_stuff.F90"
 #include "igrid_files/popRHS_stuff.F90"
+#include "igrid_files/RK45_staging.F90"
 
     subroutine init(this,inputfile, initialize2decomp)
         class(igrid), intent(inout), target :: this        
@@ -1305,7 +1312,15 @@ contains
            else
              call this%SSP_rk45()
            endif
-       end select
+        case(3)
+           ! Does the exact same operations as case 2
+           ! written to debug case 2
+           if(present(dtforced)) then
+             call this%advance_SSP_RK45_all_stages(dtforced)
+           else
+             call this%advance_SSP_RK45_all_stages()
+           end if
+        end select
 
    end subroutine
 

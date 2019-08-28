@@ -18,8 +18,9 @@ program neutral_pbl_concurrent
     integer :: ierr, ioUnit
     type(budgets_time_avg) :: budg_tavg
     real(rkind) :: dt1, dt2, dt
+    logical :: synchronize_RK_fringe = .true.
 
-    namelist /concurrent/ primary_inputfile, precursor_inputfile
+    namelist /concurrent/ primary_inputfile, precursor_inputfile, synchronize_RK_fringe
 
     call MPI_Init(ierr)                                                
 
@@ -53,10 +54,31 @@ program neutral_pbl_concurrent
        dt1 = primary%get_dt(recompute=.true.)
        dt2 = precursor%get_dt(recompute=.true.)
        dt = min(dt1, dt2)
-       
-       call primary%timeAdvance(dt)
-
-       call precursor%timeAdvance(dt)
+       if (synchronize_RK_fringe) then
+           primary%dt = dt
+           precursor%dt = dt
+           ! Stage 1
+           call primary%advance_SSP_RK45_Stage_1()
+           call precursor%advance_SSP_RK45_Stage_1()
+           ! Stage 2
+           call primary%advance_SSP_RK45_Stage_2()
+           call precursor%advance_SSP_RK45_Stage_2()
+           ! Stage 3
+           call primary%advance_SSP_RK45_Stage_3()
+           call precursor%advance_SSP_RK45_Stage_3()
+           ! Stage 4
+           call primary%advance_SSP_RK45_Stage_4()
+           call precursor%advance_SSP_RK45_Stage_4()
+           ! Stage 5
+           call primary%advance_SSP_RK45_Stage_5()
+           call precursor%advance_SSP_RK45_Stage_5()
+           ! Call wrap up 
+           call primary%wrapup_timestep()
+           call precursor%wrapup_timestep() 
+       else 
+           call primary%timeAdvance(dt)
+           call precursor%timeAdvance(dt)
+       end if
        
        call budg_tavg%doBudgets()       
 

@@ -1,6 +1,6 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x6_coarse_0_debug_noTurbines"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x6_coarse_0_debug_noTurbines"   ! Directory for all output files
+inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x6_coarse_0_debug"   ! Directory for any input files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x6_coarse_0_debug_bigLambda_180"   ! Directory for all output files
 nx                    = 160         ! Number of points in X
 ny                    = 80          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
@@ -11,7 +11,7 @@ nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .FALSE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 11130       ! TimeID of the restart file being used
+restartFile_TID       = 12171       ! TimeID of the restart file being used
 restartFile_RID       = 1            ! RunID of the restart file being used
 CviscDT               = 1.D0
 /
@@ -90,7 +90,7 @@ dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useE
 dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
 assume_fplane         = .FALSE.      ! Assume fplane (ignore horizontal component of Coriolis force)? 
 latitude              = 45.d0       ! Latitude; important if useCoriolis is TRUE && assume_fplane is FALSE
-frameAngle            = 0.D0        ! Mean wind direction; important if assume_fplane is FALSE
+frameAngle            = 180.D0        ! Mean wind direction; important if assume_fplane is FALSE
 useHITforcing         = .false.     ! Use additional HIT forcing? 
 useScalars            = .false.     ! Do you want to use scalars? --Why was this true for AD????
 buoyancyDirection     = 3           ! Are 1 and 2 implemented????
@@ -149,7 +149,7 @@ WM_MatchingIndex              = 1
 /
 /
 &WINDTURBINES
-useWindTurbines       = .FALSE.    ! Do you want to use Wind turbines ?
+useWindTurbines       = .TRUE.    ! Do you want to use Wind turbines ?
 num_turbines          = 9
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
 turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/3x3array"
@@ -163,8 +163,8 @@ Fringe_xst           = 0.65d0 ! It starts at this point, the fringe is off befor
 Fringe_xen           = 0.95d0 ! This is the end of the fringe, the fringe is zero after
 Fringe_delta_st_x    = 0.2d0 ! How much distance to use to ramp up
 Fringe_delta_en_x    = 0.05d0 ! How much distance to ramp down
-LambdaFact           = 1.5d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
-LambdaFactPotTemp    = 5.0d0
+LambdaFact           = 2.5d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
+LambdaFactPotTemp    = 100.0d0
 Fringe_yst           = 0.65d0 ! Same but for y        
 Fringe_yen           = 0.95d0
 Fringe_delta_st_y    = 0.2d0
@@ -174,7 +174,7 @@ Fringe_delta_en_y    = 0.05d0
 &BUDGET_TIME_AVG
 do_budgets            = .TRUE.    ! Perform budget calculations? 
 budgetType            = 0         ! See type descriptions in budget_time_avg.F90
-budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/6x6_coarse_0_debug_noTurbines"   ! Write in default output directory
+budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/6x6_coarse_0_debug_bigLambda_180"   ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?  
 tidx_dump             = 1000      ! How often should budget files be written to disk? 
 tidx_budget_start     = 10000      ! Start budget computation from this timestep onward

@@ -91,7 +91,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     where (ztmp > 50.d0)
         Tpurt = zero
     end where
-    T = T + Tpurt
+    !T = T + Tpurt
 
     deallocate(ztmp, Tpurt)
 
