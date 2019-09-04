@@ -1,8 +1,8 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x6_coarse_0_debug"   ! Directory for any input files
+inputdir              = "/scratch/05294/mhowland/neutral_concurrent/8x8_production_coarse_0"   ! Directory for any input files
 outputdir             = "/scratch/05294/mhowland/neutral_concurrent/8x8_production_coarse_0"   ! Directory for all output files
 nx                    = 320         ! Number of points in X
-ny                    = 80          ! Number of points in Y
+ny                    = 160          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
 tstop                 = 3000.D0    ! Physical time to stop the simulation
 CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
@@ -11,7 +11,7 @@ nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .FALSE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 12171       ! TimeID of the restart file being used
+restartFile_TID       = 1000       ! TimeID of the restart file being used
 restartFile_RID       = 1            ! RunID of the restart file being used
 CviscDT               = 1.D0
 /
@@ -159,15 +159,15 @@ ADM_Type              = 2         ! 1 or 2. 2 is optimized and well tested. Use 
 &FRINGE
 apply_x_fringe = .TRUE.
 apply_y_fringe = .TRUE.
-Fringe_xst           = 0.75d0 ! It starts at this point, the fringe is off before this point         
+Fringe_xst           = 0.85d0 ! It starts at this point, the fringe is off before this point         
 Fringe_xen           = 0.95d0 ! This is the end of the fringe, the fringe is zero after
-Fringe_delta_st_x    = 0.15d0 ! How much distance to use to ramp up
+Fringe_delta_st_x    = 0.05d0 ! How much distance to use to ramp up
 Fringe_delta_en_x    = 0.05d0 ! How much distance to ramp down
 LambdaFact           = 0.6d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
-LambdaFactPotTemp    = 100.0d0
-Fringe_yst           = 0.75d0 ! Same but for y        
+LambdaFactPotTemp    = 10.0d0
+Fringe_yst           = 0.85d0 ! Same but for y        
 Fringe_yen           = 0.95d0
-Fringe_delta_st_y    = 0.15d0
+Fringe_delta_st_y    = 0.05d0
 Fringe_delta_en_y    = 0.05d0
 /
 /
