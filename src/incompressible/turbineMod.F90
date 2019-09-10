@@ -7,6 +7,7 @@ module turbineMod
     use actuatorDisk_T2Mod, only: actuatorDisk_T2
     use actuatorDisk_RotMod, only: actuatorDisk_Rot
     use actuatorLineMod, only: actuatorLine
+    use actuatorDisk_YawMod, only: actuatorDisk_yaw
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
     use mpi 
@@ -34,6 +35,7 @@ module turbineMod
         type(actuatorDisk_T2), allocatable, dimension(:) :: turbArrayADM_T2
         type(actuatorDisk_Rot), allocatable, dimension(:) :: turbArrayADM_Rot
         type(actuatorLine), allocatable, dimension(:) :: turbArrayALM
+        type(actuatorDisk_yaw), allocatable, dimension(:) :: turbArrayADM_Tyaw
 
         type(decomp_info), pointer :: gpC, sp_gpC, gpE, sp_gpE
         type(spectral), pointer :: spectC, spectE
@@ -41,6 +43,7 @@ module turbineMod
  
         real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz
         complex(rkind), dimension(:,:,:), pointer :: fChat, fEhat, zbuffC, zbuffE
+        real(rkind), dimension(:), allocatable :: gamma, theta
 
         ! variables needed for halo communication
         integer :: neighbour(6), coord(2), dims(2), tag_s, tag_n, tag_b, tag_t
@@ -133,6 +136,10 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     ! set number of turbines
     this%nTurbines = num_turbines;
 
+    ! Initialize the yaw and tilf
+    allocate(this%gamma(this%nTurbines))
+    allocate(this%theta(this%nTurbines))
+
     if(ADM) then
       this%ADM_Type = ADM_Type
       select case (ADM_Type)
@@ -154,6 +161,13 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
             call this%turbArrayADM_Rot(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
          end do
          call message(0,"WIND TURBINE ROT ADM (Type 3) array initialized")
+      case (4)
+         allocate (this%turbArrayADM_Tyaw(this%nTurbines))
+         do i = 1, this%nTurbines
+             call this%turbArrayADM_Tyaw(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
+             this%gamma(i) = 0.d0
+             this%theta(i) = 0.d0
+         end do
       end select 
     else
       call GracefulExit("Actuator Line implementation temporarily disabled. Talk to Aditya if you want to know why.",423)
@@ -202,6 +216,10 @@ subroutine destroy(this)
     case (3)
       do i = 1, this%nTurbines
         call this%turbArrayADM_Rot(i)%destroy()
+      end do
+    case (4)
+      do i = 1, this%nTurbines
+        call this%turbArrayADM_Tyaw(i)%destroy()
       end do
     end select
       !deallocate(this%turbArrayADM)
@@ -413,6 +431,13 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                end do
                !print '(a,i5,3(e19.12,1x))', 'rhsxyz- AD3: ', nrank, maxval(abs(this%fx)), maxval(abs(this%fy)), maxval(abs(this%fz))
                !call mpi_barrier(mpi_comm_world, ierr)
+           case (4)
+               ! Need a way to pass in the new yaw and tilt angles
+               ! the optimal yaw angles will be computed dynamically by the yaw
+               ! control protocol
+               do i = 1, this%nTurbines
+                   call this%turbArrayADM_Tyaw(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i))
+               end do
            end select 
          !else
          !   !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Starting halo communication"); call mpi_barrier(mpi_comm_world, ierr)
