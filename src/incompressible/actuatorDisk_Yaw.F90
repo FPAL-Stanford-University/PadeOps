@@ -20,7 +20,7 @@ module actuatorDisk_YawMod
         ! Actuator Disk_T2 Info
         integer :: xLoc_idx, ActutorDisk_T2ID
         integer, dimension(:,:), allocatable :: tag_face 
-        real(rkind) :: yaw, tilt
+        real(rkind) :: yaw, tilt, ut
         real(rkind) :: xLoc, yLoc, zLoc, dx, dy, dz
         real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
@@ -49,6 +49,7 @@ module actuatorDisk_YawMod
         procedure :: get_RHS
         procedure, private :: AD_force
         procedure, private :: Sfunc 
+        procedure :: get_power
     end type
 
 
@@ -108,7 +109,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
     class(actuatordisk_yaw), intent(inout) :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
-    real(rkind) :: usp_sq, force, ut, gamma
+    real(rkind) :: usp_sq, force, gamma
     real(rkind), dimension(3,3) :: R, T
     real(rkind), dimension(3,1) :: xn, Ft, n
     real(rkind), intent(in) :: gamma_negative, theta
@@ -162,9 +163,9 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         blanks = 0.
     end where
     numPoints = p_sum(blanks)
-    ut = p_sum(blanks*speed)/numPoints    
+    this%ut = p_sum(blanks*speed)/numPoints    
     ! Mean speed at the turbine
-    usp_sq = (ut)**2
+    usp_sq = (this%ut)**2
     force = -this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
     Ft = reshape((/ force, 0.d0, 0.d0 /), shape(Ft))
     Ft = matmul(matmul(transpose(R), transpose(T)), Ft)
@@ -183,6 +184,13 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
     deallocate(Znew)
     deallocate(scalarSource)
     deallocate(tmp)
+
+end subroutine
+
+subroutine get_power(this)
+    class(actuatordisk_yaw), intent(inout) :: this
+
+    this%power = -this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*(this%ut)**3
 
 end subroutine
 
