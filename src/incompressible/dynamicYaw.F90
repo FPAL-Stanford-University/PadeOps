@@ -7,6 +7,7 @@ module dynamicYawMod
     use reductions, only: p_maxval, p_sum
     use timer, only: tic, toc
     use Gridtools, only: linspace
+    use sorting_mod, only: Qsort
 
     implicit none
 
@@ -32,24 +33,32 @@ module dynamicYawMod
         integer :: Nx
         ! Wind conditions
         real(rkind) :: wind_speed, wind_direction
+        real(rkind), dimension(:), allocatable :: powerObservation
+        integer :: conditionTurb
+        ! Other stuff
+        integer, dimension(:), allocatable :: indSorted, unsort
 
     contains
         procedure :: init
         procedure :: destroy
         procedure, private :: forward
-        procedure, private :: EnKF_step
+        procedure, private :: EnKF_update
         procedure, private :: backward
-        procedure :: yawOptimize 
+        procedure, private :: observeField
+        procedure, private :: rotate
+        procedure, private :: yawOptimize 
+        procedure, private :: onlineUpdate 
+        procedure :: update_and_yaw
     end type
 
 
 contains
 
-subroutine init(this, inputDir)
-    class(actuatorDisk_yaw), intent(inout) :: this
-    character(len=*), intent(in) :: inputDir
+subroutine init(this, inputfile)
+    class(dynamicYaw), intent(inout) :: this
+    character(len=*), intent(in) :: inputfile
     character(len=clen) :: tempname, fname
-    integer :: ioUnit
+    integer :: ioUnit, conditionTurb, ierr
     real(rkind) :: beta1 = 0.9d0, beta2 = 0.999d0, learning_rate_yaw = 10D-4
     integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20, Nt = 2
     real(rkind) :: var_p = 0.04d0, var_k = 9D-6, var_sig = 9D-6
@@ -64,6 +73,13 @@ subroutine init(this, inputDir)
     this%Nt = Nt; this%var_p = var_p; this%var_k = var_k; this%var_sig = var_sig;
     this%epochsYaw = epochsYaw; this%stateEstimationEpochs = stateEstimationEpochs;
     this%Ne = Ne
+    this%conditionTurb = 1
+    
+    ! Allocate
+    allocate(this%indSorted(this%Nt))
+    allocate(this%unsort(this%Nt))
+    allocate(this%powerObservation(this%Nt))
+
  
 end subroutine 
 
@@ -72,23 +88,86 @@ subroutine destroy(this)
 
 end subroutine 
 
-subroutine yawOptimize(this)
+subroutine update_and_yaw(this)
     class(dynamicYaw), intent(inout) :: this
+    real(rkind), dimension(:,:), allocatable :: X
+
+    ! allocate
+    allocate(X(this%Nt,2))
 
     ! Field data observation
     call this%observeField()
     ! Rotate domain
-    [ XR, indSorted, unsort ] = rotate( X, a, conditionTurb );
-    params.P = params.P(indSorted) / params.P(conditionTurb);
-    turbine.turbCenter = XR;
-    % Online control update
-    [yaws, P_opti, P_baseline, params, errorOut{t}] = onlineUpdate(turbine, atm, params, params_opti); 
-    % Store
-    yaw_store(:,t) = yaws(unsort);
-    P_opti_store(:,t) = P_opti(unsort);
-    P_baseline_store(:,t) = P_baseline(unsort);
+    X = this%turbCenter
+    call this%rotate(X)
+    ! Normalize the power production
+    this%powerObservation = this%powerObservation(this%indSorted) / this%powerObservation(this%conditionTurb)
+    ! Online control update
+    call this%onlineUpdate(X)
 
-end
+    deallocate(X)
+
+end subroutine
+
+subroutine onlineUpdate(this, X)
+    class(dynamicYaw), intent(inout) :: this
+    real(rkind), dimension(:,:), intent(inout) :: X
+    real(rkind), dimension(:), allocatable :: kw, sigma_0, Phat, kwBest, sigmaBest
+    real(rkind), dimension(:,:), allocatable :: psi_kp1
+    real(rkind), dimension(this%stateEstimationEpochs) :: error
+    real(rkind) :: lowestError
+    integer :: nt2, i, t
+
+    ! Allocate
+    allocate(kw(this%Nt))
+    allocate(kwBest(this%Nt))
+    allocate(sigma_0(this%Nt))
+    allocate(sigmaBest(this%Nt))
+    allocate(Phat(this%Nt))
+    nt2 = this%Nt*2
+    allocate(psi_kp1(nt2,this%Ne))
+ 
+    ! State estimation
+    error = 0.d0; lowestError = 100.d0
+    do i=1, this%Ne
+        psi_kp1(1:this%Nt,i) = reshape(this%kw, (/this%Nt,1/))
+        psi_kp1(this%Nt:nt2,i) = reshape(this%sigma_0, (/this%Nt,1/))
+    end do
+    bestParams = params; lowestError = 10; bestStep = 1;
+    do t=1, this%stateEstimationEpochs;
+        call this%EnKF_update( psi_kp1, P_kp1, kw, sigma_0, psi_kp1 )
+        ! Run forward model pass
+        call this%forward(kw, sigma_0, Phat)
+        ! Normalized
+        Phat = Phat / Phat(1)
+        error(t) = p_sum(abs(Phat-P_kp1)/Phat(1)) / real(this%Nt)
+        if (error(t)<lowestError) then
+            lowestError=error(t); bestStep = t;
+            kwBest = kw; sigmaBest = sigma_0
+        end if
+    end do
+
+    ! Generate optimal yaw angles
+    call this%yawOptimize(kwBest, sigmaBest)
+    ! Store the unsorted parameters
+    this%kw = kwBest(this%unsort); this%sigma_0 = sigmaBest(this%unsort)   
+
+    ! Deallocate
+    deallocate(kw)
+    deallocate(kwBest)
+    deallocate(sigmaBest)
+    deallocate(sigma_0)
+    deallocate(Phat)
+ 
+end subroutine
+
+subroutine EnKF_update(this)
+    class(dynamicYaw), intent(inout) :: this
+
+end subroutine
+
+subroutine yawOptimize(this)
+    class(dynamicYaw), intent(inout) :: this
 
 end subroutine
 
@@ -97,5 +176,45 @@ subroutine observeField(this)
     this%wind_speed = 8.d0
     this%wind_direction = 0.d0
     this%powerObservation = 1.d0 ! Get the power production from ADM code 
+
+end subroutine
+
+subroutine rotate(this, X)
+    class(dynamicYaw), intent(inout) :: this
+    real(rkind), dimension(2,2) ::  R
+    real(rkind), dimension(:,:), intent(inout) :: X
+    integer, dimension(:), allocatable :: indSorted
+    type group
+        integer :: order    ! original order of unsorted data
+        real :: value       ! values to be sorted by
+    end type group
+    type(group), dimension(1) :: x_for_sorting
+    integer :: i
+ 
+    a = (this%wind_direction - 270.d0) * pi / 180.d0
+    R = reshape((/cos(a), sin(a), -sin(a), cos(a)/), shape(R))
+    do i=1,this%Nt
+        X(i,:) = R * transpose(this%turbCenter(i,:))
+        x_for_sorting(i)%value = X(i,1)
+        x_for_sorting(i)%order = i
+        this%unsort(i) = i
+    end do
+
+    ! Sort the turbines by upwind location
+    call Qsort(x_for_sorting,1)
+    this%indSorted = x_for_sorting%order 
+    this%unsort(indSorted) = this%unsort      
+
+end subroutine
+
+subroutine forward(this)
+    class(dynamicYaw), intent(inout) :: this
+
+end subroutine
+
+subroutine backward(this)
+    class(dynamicYaw), intent(inout) :: this
+
+end subroutine
 
 end module 
