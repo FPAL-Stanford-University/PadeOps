@@ -8,6 +8,7 @@ module dynamicYawMod
     use timer, only: tic, toc
     use Gridtools, only: linspace
     use sorting_mod, only: Qsort
+    use random,             only: gaussian_random
 
     implicit none
 
@@ -43,7 +44,6 @@ module dynamicYawMod
         procedure :: destroy
         procedure, private :: forward
         procedure, private :: EnKF_update
-        procedure, private :: backward
         procedure, private :: observeField
         procedure, private :: rotate
         procedure, private :: yawOptimize 
@@ -116,7 +116,7 @@ subroutine onlineUpdate(this, X)
     real(rkind), dimension(:,:), allocatable :: psi_kp1
     real(rkind), dimension(this%stateEstimationEpochs) :: error
     real(rkind) :: lowestError
-    integer :: nt2, i, t
+    integer :: nt2, i, t, bestStep
 
     ! Allocate
     allocate(kw(this%Nt))
@@ -130,17 +130,18 @@ subroutine onlineUpdate(this, X)
     ! State estimation
     error = 0.d0; lowestError = 100.d0
     do i=1, this%Ne
-        psi_kp1(1:this%Nt,i) = reshape(this%kw, (/this%Nt,1/))
-        psi_kp1(this%Nt:nt2,i) = reshape(this%sigma_0, (/this%Nt,1/))
+        psi_kp1(1:this%Nt,i) = this%kw !reshape(this%kw, (/this%Nt,1/))
+        psi_kp1(this%Nt:nt2,i) = this%sigma_0 !reshape(this%sigma_0, (/this%Nt,1/))
     end do
-    bestParams = params; lowestError = 10; bestStep = 1;
+    lowestError = 10; bestStep = 1;
+    kw = this%kw; sigma_0 = this%sigma_0
     do t=1, this%stateEstimationEpochs;
-        call this%EnKF_update( psi_kp1, P_kp1, kw, sigma_0, psi_kp1 )
+        call this%EnKF_update( psi_kp1, this%powerObservation, kw, sigma_0)
         ! Run forward model pass
         call this%forward(kw, sigma_0, Phat)
         ! Normalized
         Phat = Phat / Phat(1)
-        error(t) = p_sum(abs(Phat-P_kp1)/Phat(1)) / real(this%Nt)
+        error(t) = p_sum(abs(Phat-this%powerObservation)/Phat(1)) / real(this%Nt)
         if (error(t)<lowestError) then
             lowestError=error(t); bestStep = t;
             kwBest = kw; sigmaBest = sigma_0
@@ -148,7 +149,8 @@ subroutine onlineUpdate(this, X)
     end do
 
     ! Generate optimal yaw angles
-    call this%yawOptimize(kwBest, sigmaBest)
+    this%kw = kwBest; this%sigma_0 = sigmaBest;
+    call this%yawOptimize()
     ! Store the unsorted parameters
     this%kw = kwBest(this%unsort); this%sigma_0 = sigmaBest(this%unsort)   
 
@@ -161,8 +163,84 @@ subroutine onlineUpdate(this, X)
  
 end subroutine
 
-subroutine EnKF_update(this)
+subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0)
     class(dynamicYaw), intent(inout) :: this
+    real(rkind), dimension(:,:), intent(in) :: psi_k
+    real(rkind), dimension(:), intent(in) :: P_kp1
+    real(rkind), dimension(:), intent(inout) :: kw, sigma_0
+    integer :: NN, i
+    real(rkind), dimension(:,:), allocatable :: randArr, randArr2, chi, rbuff
+    real(rkind), dimension(:,:), allocatable :: psi_kp, psi_kp1, psiHat_kp, ones_Ne, psi_kpp, psiHat_kpp
+    real(rkind), dimension(:), allocatable :: Phat
+    integer :: seedu = 321341
+    integer :: seedv = 423424
+    integer :: seedw = 131344
+
+    ! Define relevant parameters
+    NN = this%Nt * 2
+    allocate(randArr(this%Nt, size(psi_kp,2)))
+    allocate(randArr2(this%Nt, size(psi_kp,2)))
+    allocate(psi_kp1(size(psi_kp,1), size(psi_kp,2)))
+    allocate(psi_kpp(size(psi_kp,1), size(psi_kp,2)))
+    allocate(chi(size(psi_kp,1), size(psi_kp,2)))
+    allocate(psiHat_kp(size(psi_kp,1), size(psi_kp,2)))
+    allocate(psiHat_kpp(size(psi_kp,1), size(psi_kp,2)))
+    allocate(Phat(this%Nt))
+    allocate(ones_Ne(this%Ne, this%Ne))
+    allocate(rbuff(size(psi_kp,1), size(psi_kp,2)))
+    
+    ! Random noise
+    call gaussian_random(randArr,zero,this%var_k**0.5,seedu + 10*nrank)
+    call gaussian_random(randArr2,zero,this%var_sig**0.5,seedv + 10*nrank)
+    chi(1:this%Nt, :) = randArr
+    chi(this%Nt+1:NN, :) = randArr2
+    psi_kp = psi_k + chi
+    randArr = psi_kp(1:this%Nt,:)
+    randArr2 = psi_kp(this%Nt+1:NN, :)
+
+    ! Intermediate forcast step
+    do i=1,this%Ne
+        ! Lifting line model
+        call this%forward(randArr(:,i), randArr2(:,i), Phat)
+        ! Normalize by first turbine
+        psiHat_kp(:,i) = Phat/Phat(1)
+    end do
+
+
+    ! Perturbation
+    ones_Ne = 1. / real(this%Ne)
+    rbuff = matmul(psi_kp, ones_Ne)
+    psi_kpp = psi_kp - rbuff
+    rbuff = matmul(psiHat_kp, ones_Ne)
+    psiHat_kpp = psiHat_kp - rbuff
+    
+    ! Perturbation matrices
+    call gaussian_random(randArr,zero,this%var_p**0.5,seedw + 10*nrank)
+    do i = 1, this%Ne
+        randArr2(:,i) = P_kp1
+    end do
+    randArr2 = randArr2 + randArr
+    
+    
+    ! Measurement analysis step
+    !psi_kp1 = psi_kp + matmul(matmul(matmul(psi_kpp, transpose(psiHat_kpp)), & 
+    !        inv(matmul(psiHat_kpp,transpose(psiHat_kpp)) + &
+    !        matmul(randArr, transpose(randArr)))), (randArr2 - psiHat_kp))
+    !!!!!!!!!
+    ! Fake one just to compile, removes inverse!!!
+    !!!!!!!!    
+    psi_kp1 = psi_kp + matmul(matmul(matmul(psi_kpp, transpose(psiHat_kpp)), & 
+            matmul(psiHat_kpp,transpose(psiHat_kpp)) + &
+            matmul(randArr, transpose(randArr))), (randArr2 - psiHat_kp))
+
+
+
+    ! Ouput the final values
+    psi_kp1 = psi_kp1*ones_Ne;
+    kw = psi_kp1(1:this%Nt,1);
+    sigma_0 = psi_kp1(this%Nt+1:NN,1);
+    !error = p_sum(abs(rbuff(:,1)-P_kp1)) / real(this%Nt)
+    
 
 end subroutine
 
@@ -190,11 +268,12 @@ subroutine rotate(this, X)
     end type group
     type(group), dimension(1) :: x_for_sorting
     integer :: i
+    real(rkind) :: a
  
     a = (this%wind_direction - 270.d0) * pi / 180.d0
     R = reshape((/cos(a), sin(a), -sin(a), cos(a)/), shape(R))
     do i=1,this%Nt
-        X(i,:) = R * transpose(this%turbCenter(i,:))
+        X(i,:) = matmul(this%turbCenter(i,:), transpose(R))
         x_for_sorting(i)%value = X(i,1)
         x_for_sorting(i)%order = i
         this%unsort(i) = i
@@ -204,11 +283,14 @@ subroutine rotate(this, X)
     call Qsort(x_for_sorting,1)
     this%indSorted = x_for_sorting%order 
     this%unsort(indSorted) = this%unsort      
+    X = X(this%indSorted,:)
 
 end subroutine
 
-subroutine forward(this)
+subroutine forward(this, kw, sigma_0, Phat)
     class(dynamicYaw), intent(inout) :: this
+    real(rkind), dimension(:), intent(in) :: kw, sigma_0
+    real(rkind), dimension(:), intent(out) :: Phat
 
 end subroutine
 

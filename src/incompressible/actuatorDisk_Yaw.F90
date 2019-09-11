@@ -20,7 +20,7 @@ module actuatorDisk_YawMod
         ! Actuator Disk_T2 Info
         integer :: xLoc_idx, ActutorDisk_T2ID
         integer, dimension(:,:), allocatable :: tag_face 
-        real(rkind) :: yaw, tilt, ut
+        real(rkind) :: yaw, tilt, ut, power
         real(rkind) :: xLoc, yLoc, zLoc, dx, dy, dz
         real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
@@ -76,7 +76,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
    
     this%dx=xG(2,1,1)-xG(1,1,1); this%dy=yG(1,2,1)-yG(1,1,1); this%dz=zG(1,1,2)-zG(1,1,1)
     this%xLoc = xLoc; this%yLoc = yLoc; this%zLoc = zLoc
-    this%cT = cT; this%diam = diam; this%yaw = this%yaw
+    this%cT = cT; this%diam = diam; this%yaw = yaw; this%ut = 1.d0
     this%nxLoc = size(xG,1); this%nyLoc = size(xG,2); this%nzLoc = size(xG,3)
 
     !Allocate stuff
