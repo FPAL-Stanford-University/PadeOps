@@ -49,6 +49,7 @@ module turbineMod
         integer :: neighbour(6), coord(2), dims(2), tag_s, tag_n, tag_b, tag_t
         real(rkind), allocatable, dimension(:,:,:) :: ySendBuf, zSendBuf, yRightHalo, zRightHalo, zLeftHalo
 
+        real(rkind), dimension(:,:,:), allocatable :: rbuff, blanks, speed, X, Y, Z, Xnew, Ynew, Znew, scalarSource
         logical :: dumpTurbField = .false.
         integer :: step = 0, ADM_Type 
     contains
@@ -163,11 +164,25 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
          call message(0,"WIND TURBINE ROT ADM (Type 3) array initialized")
       case (4)
          allocate (this%turbArrayADM_Tyaw(this%nTurbines))
+         allocate (this%rbuff(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+         allocate (this%blanks(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+         allocate (this%speed(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+         allocate (this%X(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+         allocate (this%Y(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+         allocate (this%Z(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+         allocate (this%Xnew(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+         allocate (this%Ynew(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+         allocate (this%Znew(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+         allocate (this%scalarSource(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+         
          do i = 1, this%nTurbines
              call this%turbArrayADM_Tyaw(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
              this%gamma(i) = 0.d0
              this%theta(i) = 0.d0
+             call this%turbArrayADM_Tyaw(i)%link_memory_buffers(this%rbuff, this%blanks, this%speed,  & 
+                   this%X, this%Y, this%Z, this%Xnew, this%Ynew, this%Znew, this%scalarSource)
          end do
+         call message(0,"YAWING WIND TURBINE (Type 4) array initialized")
       end select 
     else
       call GracefulExit("Actuator Line implementation temporarily disabled. Talk to Aditya if you want to know why.",423)
@@ -283,9 +298,6 @@ subroutine init_halo_communication(this, xG, yG, zG, dx, dy, dz ,xyzPads)
      this%tag_t = this%coord(2) + 1
   end if
 
-  !write(*,'(5(i5,1x),2(L4,1x))') nrank, this%coord(1:2), this%dims(1:2), periodic(1:2)
-  !write(*,'(13(i5,1x))') nrank, this%neighbour(1:6), this%tag_s, this%tag_n, this%coord(1:2), this%dims(1:2)
-
   ! populate xyzPads
   ! we are in x decomp
   xyzPads(1) = xG(1,1,1)                  !- this is not needed so far
@@ -305,17 +317,8 @@ subroutine init_halo_communication(this, xG, yG, zG, dx, dy, dz ,xyzPads)
      xyzPads(4) = yG(1,this%gpC%xsz(2),1) + dy
   endif
 
-  !if(this%coord(2)==0) then
-     xyzPads(5) = zG(1,1,1) - 0.5D0*dz
-  !else
-  !   xyzPads(5) = zG(1,1,1) - dz
-  !endif
-  
-  !if(this%coord(2)==this%dims(2)-1) then
-     xyzPads(6) = zG(1,1,this%gpC%xsz(3)) + 0.5D0*dz
-  !else
-  !   xyzPads(6) = zG(1,1,this%gpC%xsz(3)) + dz
-  !endif
+  xyzPads(5) = zG(1,1,1) - 0.5D0*dz
+  xyzPads(6) = zG(1,1,this%gpC%xsz(3)) + 0.5D0*dz
 
 end subroutine
 
@@ -394,65 +397,28 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
     real(rkind),    dimension(:),                                                        intent(out)   :: inst_horz_avg
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout), optional :: uturb, vturb
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout), optional :: wturb
-    integer :: i, ierr
-    !integer :: ierr
+    integer :: i
 
     if (newTimeStep) then
          this%fx = zero; this%fy = zero; this%fz = zero
-         !if(ADM) then
            select case (this%ADM_Type)
            case(1)
               do i = 1, this%nTurbines
-              !! CHANGED to allow avoiding inst_horz_avg calculations - useful for
-              !! testing/debugging
-              !   if (present(inst_horz_avg)) then
                     call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz,inst_horz_avg(8*i-7:8*i))
-              !   else
-              !      call this%turbArrayADM(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)   
-              !   end if 
               end do
            case(2)
                do i = 1, this%nTurbines
-               !  if (present(inst_horz_avg)) then
                     call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz, inst_horz_avg(8*i-7:8*i))
-               !  else
-               !     call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
-               !  end if 
                end do
-               !print '(a,i5,3(e19.12,1x))', 'rhsxyz- AD2: ', nrank, maxval(abs(this%fx)), maxval(abs(this%fy)), maxval(abs(this%fz))
-               !call mpi_barrier(mpi_comm_world, ierr)
            case(3)
                do i = 1, this%nTurbines
-               !  if (present(inst_horz_avg)) then
                     call this%turbArrayADM_Rot(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz, inst_horz_avg(8*i-7:8*i))
-               !  else
-               !     call this%turbArrayADM_T2(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz)
-               !  end if 
                end do
-               !print '(a,i5,3(e19.12,1x))', 'rhsxyz- AD3: ', nrank, maxval(abs(this%fx)), maxval(abs(this%fy)), maxval(abs(this%fz))
-               !call mpi_barrier(mpi_comm_world, ierr)
            case (4)
-               ! Need a way to pass in the new yaw and tilt angles
-               ! the optimal yaw angles will be computed dynamically by the yaw
-               ! control protocol
                do i = 1, this%nTurbines
                    call this%turbArrayADM_Tyaw(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i))
                end do
            end select 
-         !else
-         !   !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Starting halo communication"); call mpi_barrier(mpi_comm_world, ierr)
-         !  call this%halo_communication(u, v, wC)
-         !   !call mpi_barrier(mpi_comm_world, ierr); call message(1,"Done halo communication"); call mpi_barrier(mpi_comm_world, ierr)
-         !  do i = 1, this%nTurbines
-         !    ! CHANGED to allow avoiding inst_horz_avg calculations - useful for
-         !    ! testing/debugging
-         !    if (present(inst_horz_avg)) then
-         !        call this%turbArrayALM(i)%get_RHS(dt, u, v, wC, this%yRightHalo, this%zLeftHalo, this%zRightHalo, this%fx, this%fy, this%fz, inst_horz_avg(8*i-7:8*i))
-         !    else
-         !        call this%turbArrayALM(i)%get_RHS(dt, u, v, wC, this%yRightHalo, this%zLeftHalo, this%zRightHalo, this%fx, this%fy, this%fz)   
-         !    end if 
-         !  end do
-         !endif
     end if 
 
     ! add forces to rhs
@@ -473,21 +439,6 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
     if (present(wturb)) wturb = this%fEhat
 
 end subroutine 
-
-    !subroutine dumpFullField(this,arr,label)
-    !    use decomp_2d_io
-    !    use mpi
-    !    use exits, only: message
-    !    class(TurbineArray), intent(in) :: this
-    !    character(len=clen) :: tempname!, fname
-    !    real(rkind), dimension(:,:,:), intent(in) :: arr
-    !    character(len=4), intent(in) :: label
-
-    !    write(tempname,"(A6,A4,A2,I6.6,A4)") "Run02_",label,"_t",this%step,".out"
-    !    !fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-    !    call decomp_2d_write_one(1,arr,tempname)
-
-    !end subroutine
 
 
 end module

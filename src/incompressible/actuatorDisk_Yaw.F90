@@ -19,13 +19,11 @@ module actuatorDisk_YawMod
     type :: actuatorDisk_yaw
         ! Actuator Disk_T2 Info
         integer :: xLoc_idx, ActutorDisk_T2ID
-        integer, dimension(:,:), allocatable :: tag_face 
         real(rkind) :: yaw, tilt, ut, power
         real(rkind) :: xLoc, yLoc, zLoc, dx, dy, dz
         real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
         integer :: totPointsOnFace
-        real(rkind), dimension(:,:,:), allocatable :: eta_delta, dsq
         real(rkind), dimension(:,:), allocatable :: xp, yp, zp
         real(rkind), dimension(:), allocatable :: xs, ys, zs
         integer, dimension(:,:), allocatable :: startEnds
@@ -34,10 +32,12 @@ module actuatorDisk_YawMod
         integer :: nxLoc, nyLoc, nzLoc 
         real(rkind) :: delta ! Smearing size
         real(rkind) :: alpha_tau = 1.d0! Smoothing parameter (set to 1 for initialization) 
-        real(rkind), dimension(:,:,:), allocatable :: rbuff
-        real(rkind), dimension(:), allocatable :: dline, xline, yline, zline
+        real(rkind), dimension(:), allocatable :: xline, yline, zline
         real(rkind), dimension(:,:,:), pointer :: xG, yG, zG
-        real(rkind), dimension(:,:,:), allocatable :: smearing_base
+        
+        ! Pointers to memory buffers 
+        logical :: memory_buffers_linked = .false.
+        real(rkind), dimension(:,:,:), pointer :: rbuff, blanks, speed, X, Y, Z, Xnew, Ynew, Znew, scalarSource
 
         ! MPI communicator stuff
         logical :: Am_I_Active, Am_I_Split
@@ -47,8 +47,9 @@ module actuatorDisk_YawMod
         procedure :: init
         procedure :: destroy
         procedure :: get_RHS
+        procedure :: link_memory_buffers
         procedure, private :: AD_force
-        procedure, private :: Sfunc 
+        !procedure, private :: Sfunc 
         procedure :: get_power
     end type
 
@@ -61,7 +62,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     integer, intent(in) :: ActuatorDisk_T2ID
     character(len=*), intent(in) :: inputDir
     character(len=clen) :: tempname, fname
-    integer :: ioUnit, tmpSum, totSum
+    integer :: ioUnit
     real(rkind) :: xLoc=1.d0, yLoc=1.d0, zLoc=0.1d0, diam=0.08d0, cT=0.65d0, yaw=0.d0, tilt=0.d0
       
     ! Read input file for this turbine    
@@ -80,28 +81,42 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     this%nxLoc = size(xG,1); this%nyLoc = size(xG,2); this%nzLoc = size(xG,3)
 
     !Allocate stuff
-    allocate(this%tag_face(size(xG,2),size(xG,3)))
     allocate(this%xLine(size(xG,1)))
     allocate(this%yLine(size(xG,2)))
     allocate(this%zLine(size(xG,3)))
-    allocate(this%dsq(2*xReg+1,2*yReg+1,2*zReg+1))
-    allocate(this%dline(2*xReg+1))
     allocate(this%rbuff(size(xG,1), size(xG,2), size(xG,3)))
 
 
-    ! Declarations and targets
-    this%dsq = 0.d0
     this%xG => xG; this%yG => yG; this%zG => zG
+    this%memory_buffers_linked = .false.
    
  
+end subroutine 
+
+! Need to create pointers instead of allocating fresh memory for scaling (in
+! termsof numturbines) and performance (allocating/deallocating is expensive)
+subroutine link_memory_buffers(this, rbuff, blanks, speed, X, Y, Z, Xnew, Ynew, Znew, scalarSource)
+    class(actuatordisk_yaw), intent(inout) :: this
+    real(rkind), dimension(:,:,:), intent(in), target :: rbuff, blanks, speed, X, Y, Z, Xnew, Ynew, Znew, scalarSource
+    this%rbuff => rbuff
+    this%speed => speed
+    this%X     => X
+    this%Y     => Y
+    this%Z     => Z
+    this%Xnew  => Xnew 
+    this%Ynew  => Ynew
+    this%Znew  => Znew
+    this%scalarSource => scalarSource
+    this%memory_buffers_linked = .true. 
 end subroutine 
 
 subroutine destroy(this)
     class(actuatordisk_yaw), intent(inout) :: this
 
-    if (Allocated(this%rbuff))  deallocate(this%rbuff)
-    if (Allocated(this%tag_face))  deallocate(this%tag_face)
+    this%memory_buffers_linked = .false.
     
+    nullify(this%rbuff, this%blanks, this%speed, this%X, this%Y, this%Z, & 
+        this%Xnew, this%Ynew, this%Znew, this%scalarSource)
     nullify(this%xG, this%yG, this%zG)
 end subroutine 
 
@@ -109,81 +124,51 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
     class(actuatordisk_yaw), intent(inout) :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
+    real(rkind), intent(in) :: gamma_negative, theta
     real(rkind) :: usp_sq, force, gamma
     real(rkind), dimension(3,3) :: R, T
     real(rkind), dimension(3,1) :: xn, Ft, n
-    real(rkind), intent(in) :: gamma_negative, theta
-    integer :: tmpSum, totSum
-    real(rkind) :: xLoc=1.d0, yLoc=1.d0, zLoc=0.1d0, diam=0.08d0, cT=0.65d0
-    real(rkind) :: tilt=0.d0, epsFact = 1.5d0
-    real(rkind), dimension(:,:,:), allocatable :: tmp
-    integer, dimension(:,:,:), allocatable :: tmp_tag
-    integer :: j, locator(1)
-    integer :: xLc(1), yLc(1), zLc(1), xst, xen, yst, yen, zst, zen, ierr, xlen
-    integer  :: ntry = 100
-    real(rkind) :: time2initialize = 0, correction_factor = 1.0d0, normfact_p, numPoints
-    real(rkind), dimension(:,:,:), allocatable :: blanks, speed, X, Y, Z, scalarSource
-    real(rkind), dimension(:,:,:), allocatable :: Xnew, Ynew, Znew
+    real(rkind) ::  numPoints
      
-    ! allocate stuff
-    allocate(blanks(size(this%xG,1), size(this%xG,2), size(this%xG,3)))
-    allocate(speed(size(this%xG,1), size(this%xG,2), size(this%xG,3)))
-    allocate(X(size(this%xG,1), size(this%xG,2), size(this%xG,3)))
-    allocate(Y(size(this%xG,1), size(this%xG,2), size(this%xG,3)))
-    allocate(Z(size(this%xG,1), size(this%xG,2), size(this%xG,3)))
-    allocate(Xnew(size(this%xG,1), size(this%xG,2), size(this%xG,3)))
-    allocate(Ynew(size(this%xG,1), size(this%xG,2), size(this%xG,3)))
-    allocate(Znew(size(this%xG,1), size(this%xG,2), size(this%xG,3)))
-    allocate(scalarSource(size(this%xG,1), size(this%xG,2), size(this%xG,3)))
-    allocate(tmp(size(this%xG,1), size(this%xG,2), size(this%xG,3)))
-
-    ! Normal vector
-    ! Adjust the yaw misalignment angle as per the convention of
-    ! Howland et al. 2019 and Shapiro et al. 2019
-    gamma = -gamma_negative
-    xn = reshape((/1.0d0, 0.d0, 0.d0 /), shape(xn))
-    R = reshape((/cos(gamma), sin(gamma), 0.d0, -sin(gamma), cos(gamma), 0.d0, 0.d0, 0.d0, 1.d0/), shape(R))
-    T = reshape((/1.d0, 0.d0, 0.d0, 0.d0, cos(theta), sin(theta), 0.d0, -sin(theta), cos(theta)/), shape(T)) 
-    n = matmul(matmul(transpose(R), transpose(T)), xn)
-    ! Translate and rotate domain
-    X = this%xG-this%xLoc 
-    Y = this%yG-this%yLoc
-    Z = this%zG-this%zLoc
-    Xnew = X*cos(gamma) - Y*sin(gamma)
-    Ynew = X*sin(gamma) + Y*cos(gamma)
-    Znew = Z
-    X = Xnew
-    Y = Ynew*cos(theta) - Znew*sin(theta)
-    Z = Ynew*sin(theta) + Znew*cos(theta)
-    call this%AD_force(X, Y, Z, scalarSource)
-    ! Get the mean velocities at the turbine face
-    speed = u*n(1,1) + v*n(2,1) + w*n(3,1)
-    blanks = 1.
-    where(abs(scalarSource)<1D-10)
-        blanks = 0.
-    end where
-    numPoints = p_sum(blanks)
-    this%ut = p_sum(blanks*speed)/numPoints    
-    ! Mean speed at the turbine
-    usp_sq = (this%ut)**2
-    force = -this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
-    Ft = reshape((/ force, 0.d0, 0.d0 /), shape(Ft))
-    Ft = matmul(matmul(transpose(R), transpose(T)), Ft)
-    rhsxvals = rhsxvals + Ft(1,1) * scalarSource 
-    rhsyvals = rhsyvals + Ft(2,1) * scalarSource
-    rhszvals = rhszvals + Ft(3,1) * scalarSource
-
-    ! Deallocate
-    deallocate(blanks)
-    deallocate(speed)
-    deallocate(X)
-    deallocate(Y)
-    deallocate(Z)
-    deallocate(Xnew)
-    deallocate(Ynew)
-    deallocate(Znew)
-    deallocate(scalarSource)
-    deallocate(tmp)
+    if (this%memory_buffers_linked) then
+        ! Normal vector
+        ! Adjust the yaw misalignment angle as per the convention of
+        ! Howland et al. 2019 and Shapiro et al. 2019
+        gamma = -gamma_negative
+        xn = reshape([1.0d0, 0.d0, 0.d0], shape(xn))
+        R = reshape([cos(gamma), sin(gamma), 0.d0, -sin(gamma), cos(gamma), 0.d0, 0.d0, 0.d0, 1.d0], shape(R))
+        T = reshape([1.d0, 0.d0, 0.d0, 0.d0, cos(theta), sin(theta), 0.d0, -sin(theta), cos(theta)], shape(T)) 
+        n = matmul(matmul(transpose(R), transpose(T)), xn)
+        ! Translate and rotate domain
+        this%X = this%xG-this%xLoc 
+        this%Y = this%yG-this%yLoc
+        this%Z = this%zG-this%zLoc
+        this%Xnew = this%X*cos(gamma) - this%Y*sin(gamma)
+        this%Ynew = this%X*sin(gamma) + this%Y*cos(gamma)
+        this%Znew = this%Z
+        this%X = this%Xnew
+        this%Y = this%Ynew*cos(theta) - this%Znew*sin(theta)
+        this%Z = this%Ynew*sin(theta) + this%Znew*cos(theta)
+        call this%AD_force(this%X, this%Y, this%Z, this%scalarSource)
+        ! Get the mean velocities at the turbine face
+        this%speed = u*n(1,1) + v*n(2,1) + w*n(3,1)
+        this%blanks = 1.d0
+        where(abs(this%scalarSource)<1D-10)
+            this%blanks = 0.
+        end where
+        numPoints = p_sum(this%blanks)
+        this%rbuff = this%blanks*this%speed
+        this%ut = p_sum(this%rbuff)/numPoints    
+        ! Mean speed at the turbine
+        usp_sq = (this%ut)**2
+        force = -this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
+        Ft = reshape([force, 0.d0, 0.d0], shape(Ft))
+        Ft = matmul(matmul(transpose(R), transpose(T)), Ft)
+        rhsxvals = rhsxvals + Ft(1,1) * this%scalarSource 
+        rhsyvals = rhsyvals + Ft(2,1) * this%scalarSource
+        rhszvals = rhszvals + Ft(3,1) * this%scalarSource
+    
+    end if 
 
 end subroutine
 
@@ -201,20 +186,21 @@ subroutine AD_force(this, X, Y, Z, scalarSource)
     real(rkind) :: delta_r = 0.22d0, smear_x = 1.5d0, delta, R, sumVal
 
     ! X,Y,Z are shifted to xc, yc, zx zero center as per AD location
-    R = this%diam / 2.
+    R = this%diam / 2.d0
     this%rbuff = sqrt((Y/R)**2 + (Z/R)**2)
-    this%rbuff = (this%rbuff-1.)/delta_r + 1.
-    call this%Sfunc(this%rbuff, this%rbuff)
-    this%rbuff = 1.-this%rbuff
+    this%rbuff = (this%rbuff-1.d0)/delta_r + 1.d0
+    !call Sfunc(this%rbuff, this%rbuff) << Can't operate in-place here because Sfunc uses in/out declarations.
+    call Sfunc(this%rbuff, scalarSource)
+    this%rbuff = 1.d0 - scalarSource
     delta = (this%dx)*smear_x
-    scalarSource = this%rbuff * (1./(delta*sqrt(2.*pi))) * exp(-0.5*(X**2)/(delta**2))
+    scalarSource = this%rbuff * (1.d0/(delta*sqrt(2.d0*pi))) * exp(-0.5d0*(X**2)/(delta**2))
     sumVal = p_sum(scalarSource) * this%dx**3
     scalarSource = scalarSource / sumVal
 
 end subroutine
 
-subroutine Sfunc(this, x, val)
-    class(actuatordisk_yaw), intent(inout) :: this
+pure subroutine Sfunc(x, val)
+    !class(actuatordisk_yaw), intent(inout) :: this
     real(rkind), dimension(:,:,:), intent(in)  :: x
     real(rkind), dimension(:,:,:), intent(out) :: val
     
