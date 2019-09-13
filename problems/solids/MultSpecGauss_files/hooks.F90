@@ -7,7 +7,7 @@ module MultSpecGauss_data
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one, p_amb_2 = 0.1_rkind
     real(rkind) :: K0 = one, alp = one, CV = one, T0 = one
     real(rkind) :: K0_2 = one, alp_2 = one, CV_2 = one, T0_2 = one
-    real(rkind) :: minVF = 0.2_rkind, thick = one, rho_ratio = two, thickness = 0.001_rkind, yield = 0.1_rkind, yield_2 = 0.1_rkind, interfloc = 0.5_rkind, interfwidth = 0.4_rkind
+    real(rkind) :: minVF = 0.2_rkind, thick = one, rho_ratio = two, thickness = 0.001_rkind, yield = 0.1_rkind, yield_2 = 0.1_rkind, interfloc = 0.5_rkind, interfwidth = 0.4_rkind, tau0 = 1.0d-14, tau0_2 = 1.0d-14
     logical     :: plastic = .false., plastic_2 = .false.
     real(rkind) :: rhomax, rhomin, umax, umin, vmax, vmin, wmax, wmin, pmax, pmin, Tmax, Tmin, vfmax, vfmin
     real(rkind) :: Ys1max, Ys1min, eh1max, eh1min, g1max, g1min, Ys2max, Ys2min, eh2max, eh2min, g2max, g2min
@@ -88,7 +88,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rho_ratio, &
                           p_infty_2, gamma_2, mu_2, rho_0_2, p_amb_2, sigma_0, SOSmodel, thickness, &
-                          plastic, plastic_2, yield, yield_2, iprob, &
+                          plastic, plastic_2, yield, yield_2, tau0, tau0_2, iprob, &
                           K0, alp, CV, T0, K0_2, alp_2, CV_2, T0_2, interfloc, interfwidth
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -104,48 +104,49 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         mix%SOSmodel = SOSmodel
 
-        !!if(hydroeostype==StiffGasEOS) then
-        !    p_star = gamma*p_infty + (four/three)*mu
-        !    rho_star = rho_0
-        !    c_star = sqrt(p_star/rho_star)
-        !    sigma_0 = sigma_0 / p_star
-        !    tstop = tstop * c_star
-        !    dt = dt * c_star
-        !    tviz = tviz * c_star
+        !if(hydroeostype==StiffGasEOS) then
+            p_star = gamma*p_infty + (four/three)*mu
+            rho_star = rho_0
+            c_star = sqrt(p_star/rho_star)
+            sigma_0 = sigma_0 / p_star
+            tstop = tstop * c_star
+            dt = dt * c_star
+            tviz = tviz * c_star
+            tau0 = tau0 * c_star
+            tau0_2 = tau0_2 * c_star
+            !dtprob = dt
+            !print*, "p_star = ", p_star
+            !print*, "rho_star = ", rho_star
+            !print*, "c_star = ", c_star
+            !print*, "sigma_0 = ", sigma_0
+            !print*, "tstop = ", tstop
+            !print*, "dt = ", dt
+            !print*, "tviz = ", tviz
 
-        !    !dtprob = dt
-        !    !print*, "p_star = ", p_star
-        !    !print*, "rho_star = ", rho_star
-        !    !print*, "c_star = ", c_star
-        !    !print*, "sigma_0 = ", sigma_0
-        !    !print*, "tstop = ", tstop
-        !    !print*, "dt = ", dt
-        !    !print*, "tviz = ", tviz
+            ! Non-dimensionalize problem parameters
+            rho_0 = rho_0 / rho_star;     rho_0_2 = rho_0_2 / rho_star
+            mu = mu / p_star;             mu_2 = mu_2 / p_star
+            p_infty = p_infty / p_star;   p_infty_2 = p_infty_2 / p_star
 
-        !    ! Non-dimensionalize problem parameters
-        !    rho_0 = rho_0 / rho_star;     rho_0_2 = rho_0_2 / rho_star
-        !    mu = mu / p_star;             mu_2 = mu_2 / p_star
-        !    p_infty = p_infty / p_star;   p_infty_2 = p_infty_2 / p_star
+            ! Set materials
+            if(rho_ratio > zero) then
+              ! if rho_ratio > 0, (both have same gamma here)
+              p_amb_2 = p_amb
+              p_infty_2 = p_infty!rho_ratio*p_infty + p_amb/gamma*(rho_ratio-one)
+              Rgas_2 = Rgas/rho_ratio*(p_amb_2+p_infty_2)/(p_amb+p_infty)
+              mu_2 = mu
+              rho_0_2 = rho_ratio*rho_0
+              gamma_2 = gamma
+            else
+              Rgas_2 = Rgas*rho_0/rho_0_2*(p_amb_2+p_infty_2)/(p_amb+p_infty)
+            endif
+            call mix%set_material(1,stiffgas(gamma,  Rgas,  p_infty  ), sep1solid(  rho_0,mu,  yield,  tau0))
+            call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2), sep1solid(rho_0_2,mu_2,yield_2,tau0_2))
 
-        !    ! Set materials
-        !    if(rho_ratio > zero) then
-        !      ! if rho_ratio > 0, (both have same gamma here)
-        !      p_amb_2 = p_amb
-        !      p_infty_2 = p_infty!rho_ratio*p_infty + p_amb/gamma*(rho_ratio-one)
-        !      Rgas_2 = Rgas/rho_ratio*(p_amb_2+p_infty_2)/(p_amb+p_infty)
-        !      mu_2 = mu
-        !      rho_0_2 = rho_ratio*rho_0
-        !      gamma_2 = gamma
-        !    else
-        !      Rgas_2 = Rgas*rho_0/rho_0_2*(p_amb_2+p_infty_2)/(p_amb+p_infty)
-        !    endif
-        !    call mix%set_material(1,stiffgas(gamma,  Rgas,  p_infty  ), sep1solid(  rho_0,mu,  yield,  1.0D-14))
-        !    call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2), sep1solid(rho_0_2,mu_2,yield_2,1.0D-14))
-
-        !elseif(hydroeostype==GRhydroeos) then
-            call mix%set_material(1,stiffgas(rho_0,   K0,   alp,   gamma  , CV,   T0  ), sep1solid(rho_0  ,mu  ,yield,1.0D-14))
-            call mix%set_material(2,stiffgas(rho_0_2, K0_2, alp_2, gamma_2, CV_2, T0_2), sep1solid(rho_0_2,mu_2,yield_2,1.0D-14))
-        !endif
+        !!elseif(hydroeostype==GRhydroeos) then
+        !    call mix%set_material(1,stiffgas(rho_0,   K0,   alp,   gamma  , CV,   T0  ), sep1solid(rho_0  ,mu  ,yield,1.0D-14))
+        !    call mix%set_material(2,stiffgas(rho_0_2, K0_2, alp_2, gamma_2, CV_2, T0_2), sep1solid(rho_0_2,mu_2,yield_2,1.0D-14))
+        !!endif
 
         mix%material(1)%plast = plastic
         mix%material(2)%plast = plastic_2
@@ -181,12 +182,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         !if(iprob == 1) then
 
           ! set linear wave speeds
-          !lamL = gamma * p_infty - (two/three)*mu ! hydroeos = stiffgas
-          lamL = rho_0*K0 - (two/three)*mu !-gam**2*rho_0*CV*T0 (?) ! GReos
+          lamL = gamma * p_infty - (two/three)*mu ! hydroeos = stiffgas
+          !lamL = rho_0*K0 - (two/three)*mu !-gam**2*rho_0*CV*T0 (?) ! GRhydroeos
           cL = sqrt( (lamL + two*mu)/ rho_0 )
 
-          !lamL_2 = gamma_2 * p_infty_2 - (two/three)*mu_2 ! hydroeos = stiffgas
-          lamL_2 = rho_0_2*K0_2 - (two/three)*mu_2 !-gam_2**2*rho_0_2*CV_2*T0_2 (?) ! GReos
+          lamL_2 = gamma_2 * p_infty_2 - (two/three)*mu_2 ! hydroeos = stiffgas
+          !lamL_2 = rho_0_2*K0_2 - (two/three)*mu_2 !-gam_2**2*rho_0_2*CV_2*T0_2 (?) ! GRhydroeos
           cL_2 = sqrt( (lamL_2 + two*mu_2)/ rho_0_2 )
 
           ! mixture wave speed
@@ -223,15 +224,15 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
           w   = zero
 
           mix%material(1)%g11 = one / (one + eps11)
-          !mix%material(1)%p = p_infty*(mix%material(1)%g11**gamma - one) ! hydroeos = stiffgas
+          mix%material(1)%p = p_infty*(mix%material(1)%g11**gamma - one) ! hydroeos = stiffgas
           mix%material(1)%T = T0*mix%material(1)%g11**gamma
-          mix%material(1)%p = -(lamL + two/three*mu)*eps11
+          !mix%material(1)%p = -(lamL + two/three*mu)*eps11     !GRhydroeos
           !mix%material(1)%p = rho_0*mix%material(1)%g11*(K0/alp*mix%material(1)%g11**alp*(mix%material(1)%g11**alp-one))
 
           mix%material(2)%g11 = one / (one + eps11)
-          !mix%material(2)%p = p_infty_2*(mix%material(2)%g11**gamma_2 - one) ! hydroeos = stiffgas
+          mix%material(2)%p = p_infty_2*(mix%material(2)%g11**gamma_2 - one) ! hydroeos = stiffgas
           mix%material(2)%T = T0_2*mix%material(2)%g11**gamma_2
-          mix%material(2)%p = mix%material(1)%p  !-(lamL_2 + two/three*mu_2)*eps11
+          !mix%material(2)%p = mix%material(1)%p  !-(lamL_2 + two/three*mu_2)*eps11     !GRhydroeos
           !mix%material(2)%p = rho_0_2*mix%material(2)%g11*(K0_2/alp_2*mix%material(2)%g11**alp_2*(mix%material(2)%g11**alp_2-one))
 
         !else

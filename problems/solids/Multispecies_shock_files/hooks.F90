@@ -1,6 +1,6 @@
 module Multispecies_shock_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,two,eight,three,six
+    use constants,        only: one,two,eight,three,six,four
     use FiltersMod,       only: filters
     implicit none
 
@@ -9,7 +9,8 @@ module Multispecies_shock_data
     real(rkind) :: K0 = one, alp = one, CV = one, T0 = one
     real(rkind) :: K0_2 = one, alp_2 = one, CV_2 = one, T0_2 = one
     integer     :: eostype = 1 ! 1 :: separable; 2 :: Godunov-Romenski Hydro
-    real(rkind) :: minVF = 0.2_rkind, thick = one
+    integer     :: iprob = 2 ! 1 :: right-moving shock initialized; 2 :: impact problem initialized
+    real(rkind) :: minVF = 0.2_rkind, int_thick = one, shock_thick = one
     real(rkind) :: rhoRatio = one, pRatio = two
     logical     :: sharp = .FALSE.
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
@@ -202,10 +203,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
     logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
 
-    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
+    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, int_thick, shock_thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
                           K0, alp, CV, T0, K0_2, alp_2, CV_2, T0_2, eostype, p1, p2, u1, u2, &
-                          plastic2, explPlast2, yield2, interface_init, kwave, sliding
+                          plastic2, explPlast2, yield2, interface_init, kwave, sliding, iprob
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -222,6 +223,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         
         if (mix%ns /= 2) then
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
+        end if
+
+        if (iprob==1 .and. eostype==2) then
+            call GracefulExit("iprob=1 and eostype=2 not implemented yet. Check the input file.",928)
         end if
 
         if(eostype==1) then
@@ -288,7 +293,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%sliding = sliding
         mix%material(2)%sliding = sliding
 
-        if(eostype==1) then
+        if(eostype==1 .and. iprob==1) then
             ! determine jump conditions for material 1
             p1 = p_amb
             rho1 = rho_0
@@ -379,13 +384,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             u2 = u2 / rho2
 
             shock_init = interface_init - 1.0_rkind  ! (10*thick) grid points away from the interface
-            dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
+            dum = half * ( one - erf( (x-shock_init)/(shock_thick*dx) ) )
 
             u   = (u2-u1)*dum
             v   = zero
             w   = zero
 
-            tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
+            tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(int_thick*dx) ) )
 
             mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
             mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
@@ -400,14 +405,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
             mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
-            mix%material(2)%g11 = (rho2*dum + rho1*(one-dum))/rho_0_2
-            if (mix%use_gTg) then
-                mix%material(2)%g11 = mix%material(2)%g11**2
-            end if
-
-            if(mix%useOneG) then
-                mix%material(2)%g11 = mix%material(1)%g11
-            endif
+            mix%material(2)%g11 = mix%material(1)%g11 !----we ALWAYS start with an elastic deformation initially----
 
             mix%material(1)%p  = p2*dum + p1*(one-dum)
             mix%material(2)%p  = mix%material(1)%p
@@ -422,10 +420,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             end if
             mix%material(1)%Ys = mix%material(1)%VF * rho_0 / tmp
             mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
-        elseif(eostype==2) then
-            shock_init = interface_init - 1.0_rkind  ! (10*thick) grid points away from the interface
-            dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
-            tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
+        !elseif(eostype==2) then
+        elseif(iprob==2) then
+            shock_init = interface_init - 1.5_rkind  ! (10*thick) grid points away from the interface
+            dum = half * ( one - erf( (x-shock_init)/(shock_thick*dx) ) )
+            tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(int_thick*dx) ) )
 
             u   = u2 + dum*(u1-u2)
             v   = zero
@@ -520,10 +519,10 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        end if
 
        if (decomp%ysz(2) == 1) then
-           write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_shock_"//trim(str)//"_", vizcount, ".dat"
+           write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/msshock_"//trim(str)//"_", vizcount, ".dat"
 
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
-           write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rhoRatio
+           write(outputunit,'(4ES27.16E3)') tsim, minVF, int_thick, rhoRatio
            do i=1,decomp%ysz(1)
                write(outputunit,'(23ES27.16E3)') x(i,1,1), rho(i,1,1), u(i,1,1), e(i,1,1), p(i,1,1), &
                                               mix%material(1)%p (i,1,1), mix%material(2)%p (i,1,1), &
@@ -691,11 +690,11 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               ! mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
               ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
               
-              !mix%material(1)%Ys ( 1,:,:) = YsL
-              !mix%material(2)%Ys ( 1,:,:) = one - YsL
+              mix%material(1)%Ys ( 1,:,:) = YsL
+              mix%material(2)%Ys ( 1,:,:) = one - YsL
   
-               mix%material(1)%VF ( 1,:,:) = VFL
-               mix%material(2)%VF ( 1,:,:) = one - VFL
+              !mix%material(1)%VF ( 1,:,:) = VFL
+              !mix%material(2)%VF ( 1,:,:) = one - VFL
           end if
         endif
 
