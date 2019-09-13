@@ -65,8 +65,8 @@ module SolidMixtureMod
         procedure :: get_mixture_properties
         procedure :: checkNaN
         procedure :: fnumden
-        procedure :: get_eh_p_from_rhoT
-        procedure :: get_f_gradf
+        !procedure :: get_eh_p_from_rhoT
+        !procedure :: get_f_gradf
         procedure :: rootfind_nr_1d
         final     :: destroy
 
@@ -421,73 +421,75 @@ stop
 
     end subroutine
 
-    subroutine get_eh_p_from_rhoT(this,rho1,rho2,T,eh1,eh2,p1,p2)
-        class(solid_mixture), intent(in) :: this
-        real(rkind), intent(in ) :: rho1, rho2, T
-        real(rkind), intent(out) :: eh1,eh2,p1,p2
+!-------------BLOCK FOR GRVOLUMETRIC EOS------------------------------------------
+    !subroutine get_eh_p_from_rhoT(this,rho1,rho2,T,eh1,eh2,p1,p2)
+    !    class(solid_mixture), intent(in) :: this
+    !    real(rkind), intent(in ) :: rho1, rho2, T
+    !    real(rkind), intent(out) :: eh1,eh2,p1,p2
    
-        real(rkind) :: rhobyrho0, CV_, K0_, alp_, gam_, rho0_, T0_
+    !    real(rkind) :: rhobyrho0, CV_, K0_, alp_, gam_, rho0_, T0_
  
-        CV_   = this%material(1)%hydro%CV
-        K0_   = this%material(1)%hydro%K0
-        alp_  = this%material(1)%hydro%alp
-        gam_  = this%material(1)%hydro%gam
-        rho0_ = this%material(1)%hydro%rho0
-        T0_   = this%material(1)%hydro%T0
-        rhobyrho0 = rho1/rho0_
-        eh1 = CV_*(T-T0_*rhobyrho0**gam_) + half*K0_/alp_**2*(rhobyrho0**alp_-one)**2
-        p1 = gam_*rho1*eh1 + rho1*K0_/alp_*(rhobyrho0**alp_-one)*(rhobyrho0**alp_*(one-half*gam_/alp_) + half*gam_/alp_)
-    
-        CV_   = this%material(2)%hydro%CV
-        K0_   = this%material(2)%hydro%K0
-        alp_  = this%material(2)%hydro%alp
-        gam_  = this%material(2)%hydro%gam
-        rho0_ = this%material(2)%hydro%rho0
-        T0_   = this%material(2)%hydro%T0
-        rhobyrho0 = rho2/rho0_
-        eh2 = CV_*(T-T0_*rhobyrho0**gam_) + half*K0_/alp_**2*(rhobyrho0**alp_-one)**2
-        p2 = gam_*rho2*eh2 + rho2*K0_/alp_*(rhobyrho0**alp_-one)*(rhobyrho0**alp_*(one-half*gam_/alp_) + half*gam_/alp_)
-    end subroutine
+    !    CV_   = this%material(1)%hydro%CV
+    !    K0_   = this%material(1)%hydro%K0
+    !    alp_  = this%material(1)%hydro%alp
+    !    gam_  = this%material(1)%hydro%gam
+    !    rho0_ = this%material(1)%hydro%rho0
+    !    T0_   = this%material(1)%hydro%T0
+    !    rhobyrho0 = rho1/rho0_
+    !    eh1 = CV_*(T-T0_*rhobyrho0**gam_) + half*K0_/alp_**2*(rhobyrho0**alp_-one)**2
+    !    p1 = gam_*rho1*eh1 + rho1*K0_/alp_*(rhobyrho0**alp_-one)*(rhobyrho0**alp_*(one-half*gam_/alp_) + half*gam_/alp_)
+    !
+    !    CV_   = this%material(2)%hydro%CV
+    !    K0_   = this%material(2)%hydro%K0
+    !    alp_  = this%material(2)%hydro%alp
+    !    gam_  = this%material(2)%hydro%gam
+    !    rho0_ = this%material(2)%hydro%rho0
+    !    T0_   = this%material(2)%hydro%T0
+    !    rhobyrho0 = rho2/rho0_
+    !    eh2 = CV_*(T-T0_*rhobyrho0**gam_) + half*K0_/alp_**2*(rhobyrho0**alp_-one)**2
+    !    p2 = gam_*rho2*eh2 + rho2*K0_/alp_*(rhobyrho0**alp_-one)*(rhobyrho0**alp_*(one-half*gam_/alp_) + half*gam_/alp_)
+    !end subroutine
 
-    subroutine get_f_gradf(this,rho1,rho2,T,eh1,eh2,p1,p2,Y1,Y2,f,gradf)
-        class(solid_mixture), intent(in) :: this
-        real(rkind), intent(in ) :: rho1, rho2, T,eh1,eh2,p1,p2,Y1,Y2
-        real(rkind), dimension(3), intent(out) :: f
-        real(rkind), dimension(3,3), intent(out) :: gradf
+    !subroutine get_f_gradf(this,rho1,rho2,T,eh1,eh2,p1,p2,Y1,Y2,f,gradf)
+    !    class(solid_mixture), intent(in) :: this
+    !    real(rkind), intent(in ) :: rho1, rho2, T,eh1,eh2,p1,p2,Y1,Y2
+    !    real(rkind), dimension(3), intent(out) :: f
+    !    real(rkind), dimension(3,3), intent(out) :: gradf
    
-        real(rkind) :: dedr1, dedr2, dedT1, dedT2, dpdr1, dpdr2, dpdT1, dpdT2, rhobyrho0
-        real(rkind) :: rhobyrho01, CV1, K01, alp1, gam1, rho01, T01
-        real(rkind) :: rhobyrho02, CV2, K02, alp2, gam2, rho02, T02
+    !    real(rkind) :: dedr1, dedr2, dedT1, dedT2, dpdr1, dpdr2, dpdT1, dpdT2, rhobyrho0
+    !    real(rkind) :: rhobyrho01, CV1, K01, alp1, gam1, rho01, T01
+    !    real(rkind) :: rhobyrho02, CV2, K02, alp2, gam2, rho02, T02
  
-        CV1   = this%material(1)%hydro%CV;    CV2   = this%material(2)%hydro%CV;
-        K01   = this%material(1)%hydro%K0;    K02   = this%material(2)%hydro%K0;
-        T01   = this%material(1)%hydro%T0;    T02   = this%material(2)%hydro%T0;
-        alp1  = this%material(1)%hydro%alp;   alp2  = this%material(2)%hydro%alp;
-        gam1  = this%material(1)%hydro%gam;   gam2  = this%material(2)%hydro%gam;
-        rho01 = this%material(1)%hydro%rho0;  rho02 = this%material(2)%hydro%rho0;
-        rhobyrho01 = rho1/rho01;              rhobyrho02 = rho2/rho02;
+    !    CV1   = this%material(1)%hydro%CV;    CV2   = this%material(2)%hydro%CV;
+    !    K01   = this%material(1)%hydro%K0;    K02   = this%material(2)%hydro%K0;
+    !    T01   = this%material(1)%hydro%T0;    T02   = this%material(2)%hydro%T0;
+    !    alp1  = this%material(1)%hydro%alp;   alp2  = this%material(2)%hydro%alp;
+    !    gam1  = this%material(1)%hydro%gam;   gam2  = this%material(2)%hydro%gam;
+    !    rho01 = this%material(1)%hydro%rho0;  rho02 = this%material(2)%hydro%rho0;
+    !    rhobyrho01 = rho1/rho01;              rhobyrho02 = rho2/rho02;
 
-        ! Function value
-        f(1) = Y1/rho1 + Y2/rho2; f(2) = Y1*eh1 + Y2*eh2; f(3) = p1-p2
+    !    ! Function value
+    !    f(1) = Y1/rho1 + Y2/rho2; f(2) = Y1*eh1 + Y2*eh2; f(3) = p1-p2
 
-        ! derivatives of energy
-        dedr1 = K01/alp1/rho1*(rhobyrho01**alp1-one)*rhobyrho01**alp1 - gam1*CV1*T01*rhobyrho01**gam1/rho1; 
-        dedr2 = K02/alp2/rho2*(rhobyrho02**alp2-one)*rhobyrho02**alp2 - gam2*CV2*T02*rhobyrho02**gam2/rho2;
-        dedT1 = CV1
-        dedT2 = CV2
+    !    ! derivatives of energy
+    !    dedr1 = K01/alp1/rho1*(rhobyrho01**alp1-one)*rhobyrho01**alp1 - gam1*CV1*T01*rhobyrho01**gam1/rho1; 
+    !    dedr2 = K02/alp2/rho2*(rhobyrho02**alp2-one)*rhobyrho02**alp2 - gam2*CV2*T02*rhobyrho02**gam2/rho2;
+    !    dedT1 = CV1
+    !    dedT2 = CV2
 
-        ! derivatives of pressure
-        dpdr1 = p1/rho1 + rhobyrho01**alp1*(K01*(two*rhobyrho01**alp1-one) - gam1*gam1*CV1*T01*rhobyrho01**gam1);
-        dpdr2 = p2/rho2 + rhobyrho02**alp2*(K02*(two*rhobyrho02**alp2-one) - gam2*gam2*CV2*T02*rhobyrho02**gam2);
-        dpdT1 = CV1*gam1*rho1
-        dpdT2 = CV2*gam2*rho2
+    !    ! derivatives of pressure
+    !    dpdr1 = p1/rho1 + rhobyrho01**alp1*(K01*(two*rhobyrho01**alp1-one) - gam1*gam1*CV1*T01*rhobyrho01**gam1);
+    !    dpdr2 = p2/rho2 + rhobyrho02**alp2*(K02*(two*rhobyrho02**alp2-one) - gam2*gam2*CV2*T02*rhobyrho02**gam2);
+    !    dpdT1 = CV1*gam1*rho1
+    !    dpdT2 = CV2*gam2*rho2
 
 
-        ! Get newton step
-        gradf(1,1) = -Y1/rho1**2; gradf(1,2) =  -Y2/rho2**2; gradf(1,3) = zero
-        gradf(2,1) = Y1*dedr1;    gradf(2,2) = Y2*dedr2;     gradf(2,3) = Y1*dedT1 + Y2*dedT2
-        gradf(3,1) = dpdr1;       gradf(3,2) = -dpdr2;       gradf(3,3) = dpdT1 - dpdT2
-    end subroutine
+    !    ! Get newton step
+    !    gradf(1,1) = -Y1/rho1**2; gradf(1,2) =  -Y2/rho2**2; gradf(1,3) = zero
+    !    gradf(2,1) = Y1*dedr1;    gradf(2,2) = Y2*dedr2;     gradf(2,3) = Y1*dedT1 + Y2*dedT2
+    !    gradf(3,1) = dpdr1;       gradf(3,2) = -dpdr2;       gradf(3,3) = dpdT1 - dpdT2
+    !end subroutine
+!-------------BLOCK FOR GRVOLUMETRIC EOS------------------------------------------
 
     subroutine equilibratePressureTemperature(this,mixRho,mixE,mixP,mixT)
         use decomp_2d,       only: nrank
@@ -518,230 +520,226 @@ stop
         do imat = 1, this%ns
             ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
         enddo
-!print *, 'ehmix: ', maxval(abs(ehmix))
-!pri!nt *, 'pinpiut: ', mixE(89,1,1), ehmix(89,1,1), mixRho(89,1,1)
-!pri!nt *, 'VF     : ', this%material(1)%VF(89,1,1), this%material(2)%VF(89,1,1)
-!pri!nt *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
 
 !-------------BLOCK FOR SEPARABLE EOS------------------------------------------
-    !    do k=1,this%nzp
-    !     do j=1,this%nyp
-    !      do i=1,this%nxp
-    !        ! set fparams
-    !        fparams(1) = mixRho(i,j,k)*ehmix(i,j,k)
-
-    !        ! set iparams
-    !        iparams(1) = 2
-    !        iparams(2) = i; iparams(3) = j; iparams(4) = k;
-
-    !        maxp = zero; peqb = zero
-    !        do imat=1,this%ns
-    !          !! determine max over all PInfs
-    !          !maxp = maxval(maxp, this%material(imat)%hydro%PInf)
-
-    !          ! set initial guess
-    !          peqb = peqb + this%material(imat)%VF(i,j,k)*this%material(imat)%p(i,j,k)
-    !        end do
-    !        !pest = peqb
-
-    !        ! solve non-linear equation
-    !        call this%rootfind_nr_1d(peqb,fparams,iparams)
-    !        !pdiffmax = max(dabs(pest-peqb),pdiffmax)
-
-    !        !! rescale all pressures by maxp
-    !        !fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*maxp
-    !        mixP(i,j,k) = peqb !*maxp
-
-    !      enddo
-    !     enddo
-    !    enddo
-!pri!nt *, 'pafter: ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
-
-    !    mixT = zero
-    !    do i = 1, this%ns
-    !      mixT = mixT + this%material(i)%Ys*this%material(i)%hydro%Cv * &
-    !            (mixP + this%material(i)%hydro%gam*this%material(i)%hydro%PInf)/(mixP + this%material(i)%hydro%PInf)
-    !    enddo
-    !    mixT = ehmix/mixT
-
-    !    do i = 1, this%ns
-    !        this%material(i)%T = mixT
-    !        this%material(i)%p = mixP
-    !        this%material(i)%VF = mixRho*this%material(i)%Ys*(this%material(i)%hydro%gam-one)* &
-    !                                     this%material(i)%hydro%Cv*mixT/(mixP + this%material(i)%hydro%PInf)
-
-    !        this%material(i)%eh = this%material(i)%hydro%Cv*mixT*(mixP + this%material(i)%hydro%gam*this%material(i)%hydro%PInf) / &
-    !                                                             (mixP + this%material(i)%hydro%PInf)
-    !    end do
-!-------------BLOCK FOR SEPARABLE EOS------------------------------------------
-
-!-------------BLOCK FOR GRVOLUMETRIC EOS------------------------------------------
-        allocate(beta(3), f(3), dbeta(3), beta_new(3), dbeta_new(3), f1(3), f2(3))
-        allocate(gradf(3,3), gradf_new(3,3))
-!write(*,*) '>>>>--------------------------<<<<'
-!write(*,*) '>>>>p1: ', maxval(this%material(1)%p), minval(this%material(1)%p)
-!write(*,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
-        call this%material(1)%getSpeciesDensity_from_g(rhoinit(:,:,:,1))
-        call this%material(2)%getSpeciesDensity_from_g(rhoinit(:,:,:,2))
         do k=1,this%nzp
          do j=1,this%nyp
           do i=1,this%nxp
-            Y1   = this%material(1)%Ys(i,j,k);      Y2   = this%material(2)%Ys(i,j,k)
-            p1   = this%material(1)%p(i,j,k);       p2   = this%material(2)%p(i,j,k)
-            eh1  = this%material(1)%eh(i,j,k);      eh2  = this%material(2)%eh(i,j,k)
-            Temp1 = this%material(1)%T(i,j,k);       Temp2   = this%material(2)%T(i,j,k)
-            Tempf = Y1*Temp1+Y2*Temp2
-            !rho1 = mixRho(i,j,k)*Y1/this%material(1)%VF(i,j,k); rho2 = mixRho(i,j,k)*Y2/this%material(2)%VF(i,j,k)
-!if(i==41) rho2 = 0.9995d0
-            rho1 = rhoinit(i,j,k,1); rho2 = rhoinit(i,j,k,2)
+            ! set fparams
+            fparams(1) = mixRho(i,j,k)*ehmix(i,j,k)
 
-            ! solution variable
-            beta(1) = rho1; beta(2) = rho2; beta(3) = Tempf
+            ! set iparams
+            iparams(1) = 2
+            iparams(2) = i; iparams(3) = j; iparams(4) = k;
 
-            ! New function value (target to attain)
-            f(1) = one/mixRho(i,j,k); f(2) = ehmix(i,j,k); f(3) = zero
+            maxp = zero; peqb = zero
+            do imat=1,this%ns
+              !! determine max over all PInfs
+              !maxp = maxval(maxp, this%material(imat)%hydro%PInf)
 
-            ! Compute current function value and jacobian           
-            call this%get_eh_p_from_rhoT(rho1,rho2,Tempf,eh1,eh2,p1,p2)
-            call this%get_f_gradf(rho1,rho2,Tempf,eh1,eh2,p1,p2,Y1,Y2,f1,gradf)
-!if(i==41 .and. j==1 .and. k==1) then
-!!  write(*,'(a,9(e19.12,1x))') 'rho T: ', rho1, rho2, Tempf
-!  write(*,'(a,9(e19.12,1x))') 'eh   : ', eh1, eh2
-!  write(*,'(a,9(e19.12,1x))') 'p    : ', p1, p2
-!  write(*,'(a,9(e19.12,1x))') 'Y    : ', Y1, Y2
-!  write(*,'(a,9(e19.12,1x))') 'T    : ', Temp1, Temp2
-!  write(*,'(a,9(e19.12,1x))') 'VF   : ', this%material(1)%VF(i,j,k), this%material(2)%VF(i,j,k)
-!  write(*,'(a,9(e19.12,1x))') 'specr: ', this%material(1)%rhom(i,j,k), this%material(2)%rhom(i,j,k)
-!  write(*,'(a,9(e19.12,1x))') 'rfg  : ', rhoinit(i,j,k,1), rhoinit(i,j,k,2)
-!  write(*,'(a,9(e19.12,1x))') 'mixrE: ', mixRho(i,j,k), ehmix(i,j,k)
-!  write(*,'(a,9(e19.12,1x))') 'f    : ', f
-!  write(*,'(a,9(e19.12,1x))') 'f1   : ', f1
-!  write(*,'(a,9(e19.12,1x))') 'gradf: ', gradf(1,:)
-!  write(*,'(a,9(e19.12,1x))') 'gradf: ', gradf(2,:)
-!  write(*,'(a,9(e19.12,1x))') 'gradf: ', gradf(3,:)
-!endif
-            ! Initiate iteration
-            dbeta = (f-f1)
-            call dgesv(3, 1, gradf, 3, ipiv, dbeta, 3, info)
-            if(info .ne. 0) then
-                print *, '----dgesv level 0-----'
-                print *, '----info = ', info
-                print *, '----at: ', i, j, k, nrank
-                stop
-            endif
-            
-            ! Compute residual
-            !residual = -sum( (f1-f)*dbeta )                                    ! lambda**2
-            residual = maxval(abs( (f1-f) ))                                    ! lambda**2
-            iters = 0
-            t = 1._rkind
-            do while ( (iters < niters) .AND. (abs(residual) .GT. tol) )
-                ! Backtracking line search
-                t = 1._rkind
-                beta_new = beta + t * dbeta
-
-                ! Get new residual
-                rho1 = beta_new(1); rho2 = beta_new(2); Tempf = beta_new(3)
-                call this%get_eh_p_from_rhoT(rho1,rho2,Tempf,eh1,eh2,p1,p2)
-                call this%get_f_gradf(rho1,rho2,Tempf,eh1,eh2,p1,p2,Y1,Y2,f2,gradf_new)
-
-                dbeta_new = (f-f2)
-                call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
-                if(info .ne. 0) then
-                    print *, '----dgesv level 1-----'
-                    print *, '----info = ', info
-                    print *, '----at: ', i, j, k, nrank
-                    stop
-                endif
-                !residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
-                residual_new = maxval(abs( (f2-f) ))                                    ! lambda**2
-
-                iters_l2 = 0
-                do while ( (abs(residual_new) .GE. abs(residual)) .AND. (t > eps) )
-                    if (iters .GT. (niters - 10)) then
-                        print '(A,I0,3(A,ES15.5))', 'iters = ', iters, ', t = ', t, ', residual_new = ', residual_new, ', residual = ', residual
-                    end if
-
-                    t = half*t
-                    beta_new = beta + t * dbeta
-
-                    ! Get new residual
-                    rho1 = beta_new(1); rho2 = beta_new(2); Tempf = beta_new(3)
-                    call this%get_eh_p_from_rhoT(rho1,rho2,Tempf,eh1,eh2,p1,p2)
-                    call this%get_f_gradf(rho1,rho2,Tempf,eh1,eh2,p1,p2,Y1,Y2,f2,gradf)
-
-                    dbeta_new = (f-f2)
-                    call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
-                    if(info .ne. 0) then
-                        print *, '----dgesv level 2-----'
-                        print *, '----info = ', info
-                        print *, '----at: ', i, j, k, nrank
-                        stop
-                    endif
-                    !residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
-                    residual_new = maxval(abs( (f2-f) ))                                    ! lambda**2
-                    iters_l2 = iters_l2 + 1
-                end do
-                beta = beta_new
-                f1 = f2
-                dbeta = dbeta_new
-                residual = residual_new
-
-                iters = iters + 1
-                if (t <= eps) then
-                    print '(A)', 'Newton solve in p-T equilibration did not converge'
-                    exit
-                end if
+              ! set initial guess
+              peqb = peqb + this%material(imat)%VF(i,j,k)*this%material(imat)%p(i,j,k)
             end do
-            !print *, '---------i = ', i, '------'
-            !print *, 'iters, iters_l2: ', iters, iters_l2
-            !print *, 'residual       : ', residual
-            !print *, 'f1             : ', f1
-            !print *, 'f              : ', f
-            !print *, 'dbeta          : ', dbeta
-            if ((iters >= niters) .OR. (t <= eps)) then
-                write(charout,'(4(A,I0))') 'Newton solve in p-T equilibartion did not converge at index ',i,',',j,',',k,' of process ',nrank
-            !    print '(A)', charout
-            !    print '(A)', 'g = '
-            !    print '(4X,3(ES15.5))', gfull(i,j,k,1), gfull(i,j,k,2), gfull(i,j,k,3)
-            !    print '(4X,3(ES15.5))', gfull(i,j,k,4), gfull(i,j,k,5), gfull(i,j,k,6)
-            !    print '(4X,3(ES15.5))', gfull(i,j,k,7), gfull(i,j,k,8), gfull(i,j,k,9)
-            !    print '(A,ES15.5)', '( ||S||^2 - (2/3) sigma_Y^2 )/mu^2 = ', ycrit
+            !pest = peqb
 
-                print '(A,ES15.5)', 'Relaxation, t = ', t
-                print '(A,ES15.5)', 'Residual = ', residual
-                print '(A,2(ES15.5))', 'Y = ', Y1, Y2
-                print '(A,3(ES15.5))', 'f = ', f
-                print '(A,3(ES15.5))', 'f1 = ', f1
-                print '(A,3(ES15.5))', 'beta = ', beta
-                print '(A,4(ES15.5))', 'betainit = ', rhoinit(i,j,k,1), rhoinit(i,j,k,2), Temp1, Temp2
-                call GracefulExit(charout,6382)
-            end if
+            ! solve non-linear equation
+            call this%rootfind_nr_1d(peqb,fparams,iparams)
+            !pdiffmax = max(dabs(pest-peqb),pdiffmax)
 
-            rho1 = beta(1); rho2 = beta(2); Tempf = beta(3)
-            call this%get_eh_p_from_rhoT(rho1,rho2,Tempf,eh1,eh2,p1,p2)
-            call this%get_f_gradf(rho1,rho2,Tempf,eh1,eh2,p1,p2,Y1,Y2,f2,gradf)
-
-            mixT(i,j,k) = Tempf; mixP(i,j,k) = half*(p1+p2)
-
-            this%material(1)%rhom(i,j,k) = rho1;                this%material(2)%rhom(i,j,k) = rho2
-            this%material(1)%p(i,j,k)  = mixP(i,j,k);           this%material(2)%p(i,j,k)  = mixP(i,j,k)
-            this%material(1)%eh(i,j,k) = eh1;                   this%material(2)%eh(i,j,k) = eh2
-            this%material(1)%T(i,j,k)  = Tempf;                 this%material(2)%T(i,j,k)  = Tempf
-            this%material(1)%VF(i,j,k) = mixRho(i,j,k)*Y1/rho1; this%material(2)%VF(i,j,k) = mixRho(i,j,k)*Y2/rho2
+            !! rescale all pressures by maxp
+            !fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*maxp
+            mixP(i,j,k) = peqb !*maxp
 
           enddo
          enddo
         enddo
-        deallocate(beta, f, dbeta, beta_new, dbeta_new, f1,f2)
-        deallocate(gradf, gradf_new)
-!write(*,*) '>>>>p1: ', maxval(this%material(1)%p), minval(this%material(1)%p)
-!write(*,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
-!i1 = maxloc(this%material(1)%p(:,1,1),1); j1 = 1; k1=1
-!write(*,'(a,3(e19.12,1x))') 'rho, p, eh:', this%material(1)%rhom(i1,j1,k1), this%material(1)%p(i1,j1,k1), this%material(1)%eh(i1,j1,k1)
-!write(*,'(a,3(e19.12,1x))') 'T VF      :', this%material(1)%T(i1,j1,k1), this%material(1)%VF(i1,j1,k1)
+
+        mixT = zero
+        do i = 1, this%ns
+          mixT = mixT + this%material(i)%Ys*this%material(i)%hydro%Cv * &
+                (mixP + this%material(i)%hydro%gam*this%material(i)%hydro%PInf)/(mixP + this%material(i)%hydro%PInf)
+        enddo
+        mixT = ehmix/mixT
+
+        do i = 1, this%ns
+            this%material(i)%T = mixT
+            this%material(i)%p = mixP
+            this%material(i)%VF = mixRho*this%material(i)%Ys*(this%material(i)%hydro%gam-one)* &
+                                         this%material(i)%hydro%Cv*mixT/(mixP + this%material(i)%hydro%PInf)
+
+            this%material(i)%eh = this%material(i)%hydro%Cv*mixT*(mixP + this%material(i)%hydro%gam*this%material(i)%hydro%PInf) / &
+                                                                 (mixP + this%material(i)%hydro%PInf)
+        end do
+!-------------BLOCK FOR SEPARABLE EOS------------------------------------------
+
+!-------------BLOCK FOR GRVOLUMETRIC EOS------------------------------------------
+        !allocate(beta(3), f(3), dbeta(3), beta_new(3), dbeta_new(3), f1(3), f2(3))
+        !allocate(gradf(3,3), gradf_new(3,3))
+!write(*!,*) '>>>>--------------------------<<<<'
+!write(*!,*) '>>>>p1: ', maxval(this%material(1)%p), minval(this%material(1)%p)
+!write(*!,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
+        !call this%material(1)%getSpeciesDensity_from_g(rhoinit(:,:,:,1))
+        !call this%material(2)%getSpeciesDensity_from_g(rhoinit(:,:,:,2))
+        !do k=1,this%nzp
+        ! do j=1,this%nyp
+        !  do i=1,this%nxp
+        !    Y1   = this%material(1)%Ys(i,j,k);      Y2   = this%material(2)%Ys(i,j,k)
+        !    p1   = this%material(1)%p(i,j,k);       p2   = this%material(2)%p(i,j,k)
+        !    eh1  = this%material(1)%eh(i,j,k);      eh2  = this%material(2)%eh(i,j,k)
+        !    Temp1 = this%material(1)%T(i,j,k);       Temp2   = this%material(2)%T(i,j,k)
+        !    Tempf = Y1*Temp1+Y2*Temp2
+        !    !rho1 = mixRho(i,j,k)*Y1/this%material(1)%VF(i,j,k); rho2 = mixRho(i,j,k)*Y2/this%material(2)%VF(i,j,k)
+!if(i==4!1) rho2 = 0.9995d0
+        !    rho1 = rhoinit(i,j,k,1); rho2 = rhoinit(i,j,k,2)
+
+        !    ! solution variable
+        !    beta(1) = rho1; beta(2) = rho2; beta(3) = Tempf
+
+        !    ! New function value (target to attain)
+        !    f(1) = one/mixRho(i,j,k); f(2) = ehmix(i,j,k); f(3) = zero
+
+        !    ! Compute current function value and jacobian           
+        !    call this%get_eh_p_from_rhoT(rho1,rho2,Tempf,eh1,eh2,p1,p2)
+        !    call this%get_f_gradf(rho1,rho2,Tempf,eh1,eh2,p1,p2,Y1,Y2,f1,gradf)
+!if(i==4!1 .and. j==1 .and. k==1) then
+!!  writ!e(*,'(a,9(e19.12,1x))') 'rho T: ', rho1, rho2, Tempf
+!  write!(*,'(a,9(e19.12,1x))') 'eh   : ', eh1, eh2
+!  write!(*,'(a,9(e19.12,1x))') 'p    : ', p1, p2
+!  write!(*,'(a,9(e19.12,1x))') 'Y    : ', Y1, Y2
+!  write!(*,'(a,9(e19.12,1x))') 'T    : ', Temp1, Temp2
+!  write!(*,'(a,9(e19.12,1x))') 'VF   : ', this%material(1)%VF(i,j,k), this%material(2)%VF(i,j,k)
+!  write!(*,'(a,9(e19.12,1x))') 'specr: ', this%material(1)%rhom(i,j,k), this%material(2)%rhom(i,j,k)
+!  write!(*,'(a,9(e19.12,1x))') 'rfg  : ', rhoinit(i,j,k,1), rhoinit(i,j,k,2)
+!  write!(*,'(a,9(e19.12,1x))') 'mixrE: ', mixRho(i,j,k), ehmix(i,j,k)
+!  write!(*,'(a,9(e19.12,1x))') 'f    : ', f
+!  write!(*,'(a,9(e19.12,1x))') 'f1   : ', f1
+!  write!(*,'(a,9(e19.12,1x))') 'gradf: ', gradf(1,:)
+!  write!(*,'(a,9(e19.12,1x))') 'gradf: ', gradf(2,:)
+!  write!(*,'(a,9(e19.12,1x))') 'gradf: ', gradf(3,:)
+!endif
+        !    ! Initiate iteration
+        !    dbeta = (f-f1)
+        !    call dgesv(3, 1, gradf, 3, ipiv, dbeta, 3, info)
+        !    if(info .ne. 0) then
+        !        print *, '----dgesv level 0-----'
+        !        print *, '----info = ', info
+        !        print *, '----at: ', i, j, k, nrank
+        !        stop
+        !    endif
+        !    
+        !    ! Compute residual
+        !    !residual = -sum( (f1-f)*dbeta )                                    ! lambda**2
+        !    residual = maxval(abs( (f1-f) ))                                    ! lambda**2
+        !    iters = 0
+        !    t = 1._rkind
+        !    do while ( (iters < niters) .AND. (abs(residual) .GT. tol) )
+        !        ! Backtracking line search
+        !        t = 1._rkind
+        !        beta_new = beta + t * dbeta
+
+        !        ! Get new residual
+        !        rho1 = beta_new(1); rho2 = beta_new(2); Tempf = beta_new(3)
+        !        call this%get_eh_p_from_rhoT(rho1,rho2,Tempf,eh1,eh2,p1,p2)
+        !        call this%get_f_gradf(rho1,rho2,Tempf,eh1,eh2,p1,p2,Y1,Y2,f2,gradf_new)
+
+        !        dbeta_new = (f-f2)
+        !        call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
+        !        if(info .ne. 0) then
+        !            print *, '----dgesv level 1-----'
+        !            print *, '----info = ', info
+        !            print *, '----at: ', i, j, k, nrank
+        !            stop
+        !        endif
+        !        !residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
+        !        residual_new = maxval(abs( (f2-f) ))                                    ! lambda**2
+
+        !        iters_l2 = 0
+        !        do while ( (abs(residual_new) .GE. abs(residual)) .AND. (t > eps) )
+        !            if (iters .GT. (niters - 10)) then
+        !                print '(A,I0,3(A,ES15.5))', 'iters = ', iters, ', t = ', t, ', residual_new = ', residual_new, ', residual = ', residual
+        !            end if
+
+        !            t = half*t
+        !            beta_new = beta + t * dbeta
+
+        !            ! Get new residual
+        !            rho1 = beta_new(1); rho2 = beta_new(2); Tempf = beta_new(3)
+        !            call this%get_eh_p_from_rhoT(rho1,rho2,Tempf,eh1,eh2,p1,p2)
+        !            call this%get_f_gradf(rho1,rho2,Tempf,eh1,eh2,p1,p2,Y1,Y2,f2,gradf)
+
+        !            dbeta_new = (f-f2)
+        !            call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
+        !            if(info .ne. 0) then
+        !                print *, '----dgesv level 2-----'
+        !                print *, '----info = ', info
+        !                print *, '----at: ', i, j, k, nrank
+        !                stop
+        !            endif
+        !            !residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
+        !            residual_new = maxval(abs( (f2-f) ))                                    ! lambda**2
+        !            iters_l2 = iters_l2 + 1
+        !        end do
+        !        beta = beta_new
+        !        f1 = f2
+        !        dbeta = dbeta_new
+        !        residual = residual_new
+
+        !        iters = iters + 1
+        !        if (t <= eps) then
+        !            print '(A)', 'Newton solve in p-T equilibration did not converge'
+        !            exit
+        !        end if
+        !    end do
+        !    !print *, '---------i = ', i, '------'
+        !    !print *, 'iters, iters_l2: ', iters, iters_l2
+        !    !print *, 'residual       : ', residual
+        !    !print *, 'f1             : ', f1
+        !    !print *, 'f              : ', f
+        !    !print *, 'dbeta          : ', dbeta
+        !    if ((iters >= niters) .OR. (t <= eps)) then
+        !        write(charout,'(4(A,I0))') 'Newton solve in p-T equilibartion did not converge at index ',i,',',j,',',k,' of process ',nrank
+        !    !    print '(A)', charout
+        !    !    print '(A)', 'g = '
+        !    !    print '(4X,3(ES15.5))', gfull(i,j,k,1), gfull(i,j,k,2), gfull(i,j,k,3)
+        !    !    print '(4X,3(ES15.5))', gfull(i,j,k,4), gfull(i,j,k,5), gfull(i,j,k,6)
+        !    !    print '(4X,3(ES15.5))', gfull(i,j,k,7), gfull(i,j,k,8), gfull(i,j,k,9)
+        !    !    print '(A,ES15.5)', '( ||S||^2 - (2/3) sigma_Y^2 )/mu^2 = ', ycrit
+
+        !        print '(A,ES15.5)', 'Relaxation, t = ', t
+        !        print '(A,ES15.5)', 'Residual = ', residual
+        !        print '(A,2(ES15.5))', 'Y = ', Y1, Y2
+        !        print '(A,3(ES15.5))', 'f = ', f
+        !        print '(A,3(ES15.5))', 'f1 = ', f1
+        !        print '(A,3(ES15.5))', 'beta = ', beta
+        !        print '(A,4(ES15.5))', 'betainit = ', rhoinit(i,j,k,1), rhoinit(i,j,k,2), Temp1, Temp2
+        !        call GracefulExit(charout,6382)
+        !    end if
+
+        !    rho1 = beta(1); rho2 = beta(2); Tempf = beta(3)
+        !    call this%get_eh_p_from_rhoT(rho1,rho2,Tempf,eh1,eh2,p1,p2)
+        !    call this%get_f_gradf(rho1,rho2,Tempf,eh1,eh2,p1,p2,Y1,Y2,f2,gradf)
+
+        !    mixT(i,j,k) = Tempf; mixP(i,j,k) = half*(p1+p2)
+
+        !    this%material(1)%rhom(i,j,k) = rho1;                this%material(2)%rhom(i,j,k) = rho2
+        !    this%material(1)%p(i,j,k)  = mixP(i,j,k);           this%material(2)%p(i,j,k)  = mixP(i,j,k)
+        !    this%material(1)%eh(i,j,k) = eh1;                   this%material(2)%eh(i,j,k) = eh2
+        !    this%material(1)%T(i,j,k)  = Tempf;                 this%material(2)%T(i,j,k)  = Tempf
+        !    this%material(1)%VF(i,j,k) = mixRho(i,j,k)*Y1/rho1; this%material(2)%VF(i,j,k) = mixRho(i,j,k)*Y2/rho2
+
+        !  enddo
+        ! enddo
+        !enddo
+        !deallocate(beta, f, dbeta, beta_new, dbeta_new, f1,f2)
+        !deallocate(gradf, gradf_new)
+!write(*!,*) '>>>>p1: ', maxval(this%material(1)%p), minval(this%material(1)%p)
+!write(*!,*) '>>>>p2: ', maxval(this%material(2)%p), minval(this%material(2)%p)
+!i1 = ma!xloc(this%material(1)%p(:,1,1),1); j1 = 1; k1=1
+!write(*!,'(a,3(e19.12,1x))') 'rho, p, eh:', this%material(1)%rhom(i1,j1,k1), this%material(1)%p(i1,j1,k1), this%material(1)%eh(i1,j1,k1)
+!write(*!,'(a,3(e19.12,1x))') 'T VF      :', this%material(1)%T(i1,j1,k1), this%material(1)%VF(i1,j1,k1)
 !
-!write(*,*) '>>>>--------------------------<<<<'
+!write(*!,*) '>>>>--------------------------<<<<'
+!-------------BLOCK FOR GRVOLUMETRIC EOS------------------------------------------
 
     end subroutine
 
@@ -1324,36 +1322,38 @@ stop
         real(rkind), dimension(:), pointer :: vf, gam, psph, pinf
         real(rkind) :: fac, gm1, YCv, pinfloc, rhoE
 
-        !if(iparams(1) == 1) then
-        !    ! relaxPressure
-        !    vf   => fparams(  1:this%ns)
-        !    gam  => fparams(  this%ns+1:2*this%ns)
-        !    psph => fparams(2*this%ns+1:3*this%ns)
-        !    pinf => fparams(3*this%ns+1:4*this%ns)
-        !    
-        !    num = zero; den = zero;
-        !    do im = 1, this%ns
-        !      fac = vf(im)/gam(im)/(pinf(im)+pf)
-        !      num = num + fac*(psph(im)-pf)
-        !      !den = den + fac*(psph(im)-pinf(im)-two*pf)/(pinf(im)+pf)
-        !      den = den - fac*(psph(im)+pinf(im))/(pinf(im)+pf)
-        !      !write(*,*) im, psph(im), pf!-pinf(im)-two*pf, -(psph(im)+pinf(im))
-        !    enddo
-        !    nullify(vf,gam,psph,pinf)
-        !elseif(iparams(1)==2) then
-        !    ! equilibratePressureTemperature
-        !    i = iparams(2); j = iparams(3); k = iparams(4)
-        !    num = zero; den = zero
-        !    do im = 1, this%ns
-        !      gm1 = this%material(im)%hydro%gam-one
-        !      YCv = this%material(im)%Ys(i,j,k) * this%material(im)%hydro%Cv
-        !      pinfloc = this%material(im)%hydro%PInf
-        !      rhoE = fparams(1)
+!-------------BLOCK FOR SEPARABLE EOS------------------------------------------
+        if(iparams(1) == 1) then
+            ! relaxPressure
+            vf   => fparams(  1:this%ns)
+            gam  => fparams(  this%ns+1:2*this%ns)
+            psph => fparams(2*this%ns+1:3*this%ns)
+            pinf => fparams(3*this%ns+1:4*this%ns)
+            
+            num = zero; den = zero;
+            do im = 1, this%ns
+              fac = vf(im)/gam(im)/(pinf(im)+pf)
+              num = num + fac*(psph(im)-pf)
+              !den = den + fac*(psph(im)-pinf(im)-two*pf)/(pinf(im)+pf)
+              den = den - fac*(psph(im)+pinf(im))/(pinf(im)+pf)
+              !write(*,*) im, psph(im), pf!-pinf(im)-two*pf, -(psph(im)+pinf(im))
+            enddo
+            nullify(vf,gam,psph,pinf)
+        elseif(iparams(1)==2) then
+            ! equilibratePressureTemperature
+            i = iparams(2); j = iparams(3); k = iparams(4)
+            num = zero; den = zero
+            do im = 1, this%ns
+              gm1 = this%material(im)%hydro%gam-one
+              YCv = this%material(im)%Ys(i,j,k) * this%material(im)%hydro%Cv
+              pinfloc = this%material(im)%hydro%PInf
+              rhoE = fparams(1)
 
-        !      num = num + YCv*(gm1*rhoE-(pf+this%material(im)%hydro%gam*pinfloc))/(pf+pinfloc)
-        !      den = den + YCv*gm1*(pinfloc-rhoE) / (pf+pinfloc)**2
-        !    enddo
-        !endif
+              num = num + YCv*(gm1*rhoE-(pf+this%material(im)%hydro%gam*pinfloc))/(pf+pinfloc)
+              den = den + YCv*gm1*(pinfloc-rhoE) / (pf+pinfloc)**2
+            enddo
+        endif
+!-------------BLOCK FOR SEPARABLE EOS------------------------------------------
 
     end subroutine
 

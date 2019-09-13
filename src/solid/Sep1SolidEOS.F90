@@ -189,7 +189,7 @@ contains
 
     end subroutine
 
-    subroutine plastic_deformation(this, gfull, use_gTg, mumix, yieldmix)
+    subroutine plastic_deformation(this, gfull, use_gTg, dt, mumix, yieldmix)
         use kind_parameters, only: clen
         use constants,       only: eps, twothird
         use decomp_2d,       only: nrank
@@ -197,11 +197,12 @@ contains
         class(sep1solid), target, intent(inout) :: this
         real(rkind), dimension(:,:,:,:), intent(inout) :: gfull
         logical, intent(in) :: use_gTg
+        real(rkind), intent(in) :: dt
         real(rkind), dimension(:,:,:), intent(in), optional :: mumix, yieldmix
 
         real(rkind), dimension(3,3) :: g, u, vt, gradf, gradf_new
         real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new, dbeta_new
-        real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t
+        real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t, zetsq, t0fac
         real(rkind) :: tol = real(1.D-12,rkind), residual, residual_new
         integer :: i,j,k
         integer :: iters
@@ -270,7 +271,8 @@ contains
                     Sa = -mulocal(i,j,k)*sqrt_om * ( beta*(beta-one) - betasum )
 
                     Sabymu_sq = sum(Sa**two) / mulocal(i,j,k)**two
-                    ycrit = Sabymu_sq - (two/three)*(yieldlocal(i,j,k)/mulocal(i,j,k))**two
+                    zetsq =  (two/three)*(yieldlocal(i,j,k)/mulocal(i,j,k))**two
+                    ycrit = Sabymu_sq - zetsq
 
                     if (ycrit .LE. zero) then
                         ! print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
@@ -278,7 +280,8 @@ contains
                     end if
 
                     C0 = Sabymu_sq / ycrit
-                    Sa = Sa*( sqrt(C0 - one)/sqrt(C0) )
+                    t0fac = exp(-two*zetsq*dt/this%tau0)
+                    Sa = Sa*( sqrt( (C0 - one)/(C0 - t0fac) ) )
 
                     ! Now get new beta
                     f = Sa / (mulocal(i,j,k)*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)

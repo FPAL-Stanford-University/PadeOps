@@ -489,9 +489,9 @@ contains
                 if(this%PTeqb) this%kap = sqrt(two/three*this%modDevSigma) !-- is this temporary storage ?? -- NSG
 
                 if(present(yieldmix) .and. present(mumix)) then
-                    call this%elastic%plastic_deformation(this%g, this%use_gTg, mumix, yieldmix)
+                    call this%elastic%plastic_deformation(this%g, this%use_gTg, dt, mumix, yieldmix)
                 else
-                    call this%elastic%plastic_deformation(this%g, this%use_gTg)
+                    call this%elastic%plastic_deformation(this%g, this%use_gTg, dt)
                 endif
 
                 if(present(rho0mix) .and. present(mumix)) then
@@ -730,9 +730,9 @@ contains
         if(this%plast) then
             if (.NOT. this%explPlast) then
                 if(present(yieldmix) .and. present(mumix)) then
-                    call this%elastic%plastic_deformation(this%g, this%use_gTg, mumix, yieldmix)
+                    call this%elastic%plastic_deformation(this%g, this%use_gTg, dt, mumix, yieldmix)
                 else
-                    call this%elastic%plastic_deformation(this%g, this%use_gTg)
+                    call this%elastic%plastic_deformation(this%g, this%use_gTg, dt)
                 endif
             end if
         end if

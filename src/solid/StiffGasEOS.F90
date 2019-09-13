@@ -1,21 +1,21 @@
-!module GRVolumetricEOS
 module StiffGasEOS
 
     use kind_parameters, only: rkind
-    use constants,       only: half,one,two
+    use constants,       only: half,one
     use EOSMod,          only: eos
 
     implicit none
 
-    !type, extends(eos) :: grvolumetric
     type, extends(eos) :: stiffgas
 
-        real(rkind) :: rho0 = 1.0_rkind  ! Reference density
-        real(rkind) :: K0   = 1.0_rkind  ! Dimensions of velocity^2
-        real(rkind) :: alp  = 1.0_rkind  ! Exponent, dimensionless
-        real(rkind) :: gam  = 1.4_rkind  ! Ratio of specific heats
-        real(rkind) :: CV   = 1.0_rkind  ! Specific heat at constant volume
-        real(rkind) :: T0   = 1.0_rkind  ! Reference temperature
+        real(rkind) :: gam = 1.4_rkind                     ! Ratio of specific heats
+        real(rkind) :: onebygam_m1 = one/(1.4_rkind-one)   ! 1/(gamma-1)
+        
+        real(rkind) :: Rgas = one           ! Gas constant
+        real(rkind) :: onebyRgas = one      ! 1/Rgas
+
+        real(rkind) :: PInf = one           ! Gas constant
+        real(rkind) :: Cv = one           ! Gas constant
 
     contains
 
@@ -30,115 +30,97 @@ module StiffGasEOS
 
     end type
 
-    !interface grvolumetric
     interface stiffgas
         module procedure init
     end interface
 
 contains
 
-    function init(rho0_,K0_,alp_,gam_,CV_,T0_) result(this)
-        !type(grvolumetric) :: this
+    function init(gam_,Rgas_,PInf_) result(this)
         type(stiffgas) :: this
-        real(rkind) :: rho0_
-        real(rkind) :: K0_
-        real(rkind) :: alp_
         real(rkind) :: gam_
-        real(rkind) :: CV_
-        real(rkind) :: T0_
+        real(rkind) :: Rgas_
+        real(rkind) :: PInf_
 
-        this%rho0 = rho0_
-        this%K0   = K0_
-        this%alp  = alp_
-        this%gam  = gam_
-        this%CV   = CV_
-        this%T0   = T0_
+        this%gam = gam_
+        this%onebygam_m1 = one/(this%gam-one)
+
+        this%Rgas = Rgas_
+        this%onebyRgas = one/this%Rgas
+
+        this%PInf = PInf_
+        this%Cv = this%Rgas/(this%gam-one)
 
     end function
 
     pure subroutine get_p(this,rho,e,p)
-        !class(grvolumetric), intent(in) :: this
         class(stiffgas), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: rho,e
         real(rkind), dimension(:,:,:), intent(out) :: p
 
-        p = (rho/this%rho0)**this%alp
-        p = this%gam*rho*e + this%K0/this%alp*rho*(p-one)*(p*(one-half*this%gam/this%alp) + half*this%gam/this%alp)
+        p = (this%gam-one)*rho*e - this%gam*this%PInf
 
     end subroutine
 
     pure subroutine get_e_from_p(this,rho,p,e)
-        !class(grvolumetric), intent(in) :: this
         class(stiffgas), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: rho,p
         real(rkind), dimension(:,:,:), intent(out) :: e
 
-        e = (rho/this%rho0)**this%alp
-        e = p/rho/this%gam - this%K0/(this%alp*this%gam)*(e-one)*(e*(one-half*this%gam/this%alp) + half*this%gam/this%alp)
+        e = (p + this%gam*this%PInf) * this%onebygam_m1 / rho
 
     end subroutine
 
     pure subroutine get_e_from_T(this,rho,T,e)
-        !class(grvolumetric), intent(in) :: this
         class(stiffgas), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: rho,T
         real(rkind), dimension(:,:,:), intent(out) :: e
 
-        e = (rho/this%rho0)
-        e = this%CV * (T-this%T0*e**this%gam) + half*this%K0/this%alp/this%alp*(e**this%alp-one)**2
+        e = this%Cv * T + this%PInf/rho
 
     end subroutine
 
-    !pure subroutine get_CV(this,CV_)
-    !    !class(grvolumetric), intent(in) :: this
+    !pure subroutine get_Cv(this,Cv_)
     !    class(stiffgas), intent(in) :: this
-    !    real(rkind), intent(out)  :: CV_
+    !    real(rkind), intent(out)  :: Cv_
 
-    !    CV_ = this%Rgas / (this%gam-one)
+    !    Cv_ = this%Rgas / (this%gam-one)
 
     !end subroutine
 
     pure subroutine get_T(this,e,T,rho)
-        !class(grvolumetric), intent(in) :: this
         class(stiffgas), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: e
         real(rkind), dimension(:,:,:), intent(out) :: T
         real(rkind), dimension(:,:,:), intent(in), optional  :: rho
-        real(rkind), dimension(size(e,1),size(e,2),size(e,3))  :: I3alp
 
-        T = (rho/this%rho0)
-        T = this%T0*T**this%gam + (e - half*this%K0/this%alp/this%alp*(T**this%alp-one)**2)/this%CV
+        T =  (e - this%PInf/rho)/this%Cv
 
     end subroutine
 
     pure subroutine get_enthalpy(this,T,e,p,rho,enthalpy)
-        !class(grvolumetric), intent(in) :: this
         class(stiffgas), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: T,e,p,rho
         real(rkind), dimension(:,:,:), intent(out) :: enthalpy
 
-        enthalpy = e + p/rho
+        enthalpy = this%gam*this%Cv*T
     end subroutine
 
     pure subroutine get_sos(this,rho,p,sos)
-        !class(grvolumetric), intent(in) :: this
         class(stiffgas), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: rho,p
         real(rkind), dimension(:,:,:), intent(out) :: sos
 
-        sos = (rho/this%rho0)**(two*this%alp)  ! I3**(alp)
-        sos = sqrt(p/rho*(one+this%alp) + this%K0*sos)
+        sos = sqrt(this%gam*(p+this%PInf)/rho)
 
     end subroutine
 
     pure subroutine get_sos2(this,rho,p,sos)
-        !class(grvolumetric), intent(in) :: this
         class(stiffgas), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: rho,p
         real(rkind), dimension(:,:,:), intent(out) :: sos
 
-        sos = (rho/this%rho0)**(two*this%alp)  ! I3**(alp)
-        sos = p/rho*(one+this%alp) + this%K0*sos
+        sos = this%gam*(p+this%PInf)/rho
 
     end subroutine
 

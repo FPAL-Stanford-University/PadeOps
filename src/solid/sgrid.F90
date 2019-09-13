@@ -891,9 +891,6 @@ contains
         this%Wcnsrv(:,:,:,mom_index  ) = this%rho * this%u
         this%Wcnsrv(:,:,:,mom_index+1) = this%rho * this%v
         this%Wcnsrv(:,:,:,mom_index+2) = this%rho * this%w
-!print *, 'rho: ', maxval(this%rho), minval(this%rho)
-!print *, 'u: ', maxval(this%u), minval(this%u)
-!print *, 'e: ', maxval(this%e), minval(this%e)
         this%Wcnsrv(:,:,:, TE_index  ) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
 
         ! add 2M (mass fraction and hydrodynamic energy) variables here
