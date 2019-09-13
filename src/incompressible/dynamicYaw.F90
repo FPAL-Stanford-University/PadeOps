@@ -263,69 +263,57 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0)
 
 end subroutine
 
-subroutine yawOptimize(this)
+subroutine yawOptimize(this, kw, sigma_0, yaw)
     class(dynamicYaw), intent(inout) :: this
+    real(rkind), dimension(:), intent(in) :: kw, sigma_0
+    real(rkind), dimension(:), intent(inout) :: yaw
+    real(rkind), dimension(this%Nt) :: P, P_baseline, bestPower, bestYaw
+    real(rkind), dimension(this%Nt) :: m, v
+    real(rkind), dimension(this%epochsYaw) :: Ptot, 
+    real(rkind) :: Ptot_baseline
+    integer :: k
+    logical :: check
+    real(rkind), dimension(this%epochsYaw, this%Nt) :: P_time, yawTime
 
     ! Model
     ! Load model inputs
-    [ P, cache, ~ ] = lifting_line_forward_dynamic(turbine, atm, params);
-    Ptot_baseline = sum(P); P_baseline = P;
+    call this%forward(kw, sigma_0, P, yaw)
+    Ptot_baseline = p_sum(P); P_baseline = P;
     
-    % eps also determines the termination condition
-    k=1; check = false; 
+    ! eps also determines the termination condition
+    k=1; check = 0; 
+    bestYaw = 0.d0; Ptot = 0.d0; P_time = 0.d0; P_time = 0.d0; yawTime = 0.d0
     m=zeros(turbine.Nt,1); v=zeros(turbine.Nt,1);
     bestPower = 0; bestYaw = zeros(turbine.Nt,1);
-    Ptot = zeros(params_opti.epochsYaw,1); 
-    P_time = zeros(params_opti.epochsYaw, turbine.Nt);
-    yawTime = zeros(params_opti.epochsYaw, turbine.Nt);
-    while k < params_opti.epochsYaw && check == false;
+    while (k < this%epochsYaw .and. check == false) do
     
-        % Forward prop
-        [ P, cache, ~ ] = lifting_line_forward_dynamic(turbine, atm, params);
-        yawTime(k+1,:) = turbine.yaw;
-        Ptot(k) = sum(P);
+        ! Forward prop
+        call this%forward(kw, sigma_0, P, yaw)
+        yawTime(k+1,:) = yaw;
+        Ptot(k) = p_sum(P);
         P_time(k,:) = P;
-        yawOld = turbine.yaw;
-        if isfield(cache, 'Cp')==0;
-            k=k+1;
-            break
-        end
-        [ grads ] = lifting_line_backward_dynamic(turbine, atm, params, cache);
+        call this%backward(this, kw, sigma_0, yaw)    
     
-        % Gradient ascent update yaw
-        if strcmp(params_opti.optimizer, 'vanilla') == true;
-            % Vanilla
-            turbine.yaw = turbine.yaw +
-    params_opti.learning_rate_yaw*grads.dp_dgamma;
-        elseif strcmp(params_opti.optimizer, 'adam') == true;
-            % Adam
-            m = params_opti.beta1*m + (1-params_opti.beta1)*grads.dp_dgamma;
-            v = params_opti.beta2*v + (1-params_opti.beta2)*(grads.dp_dgamma.^2);
-            turbine.yaw = turbine.yaw + params_opti.learning_rate_yaw .* m ./
-    (sqrt(v) + params.eps);
-        end
-        if mod(k, params_opti.printInteger) == 0;
-           Ptot(k)/Ptot_baseline 
-           k
-        end
-        if Ptot(k) > bestPower;
-           bestPower = Ptot(k);
-           bestYaw = turbine.yaw;
+        ! Gradient ascent update yaw
+        ! Adam
+        m = params_opti.beta1*m + (1-params_opti.beta1)*grads.dp_dgamma;
+        v = params_opti.beta2*v + (1-params_opti.beta2)*(grads.dp_dgamma.^2);
+        yaw = yaw + this%learning_rate_yaw * m / & 
+                   (sqrt(v) + this%eps)
+        if (Ptot(k) > bestPower) then
+           bestPower = Ptot(k)
+           bestYaw = yaw
         end
         k = k+1;
-        if k > 10;
-            if abs(Ptot(k-1)-Ptot(k-2))/abs(Ptot(k-1)) < 10^-9;%params.eps;
+        if (k > 10) then
+            if (abs(Ptot(k-1)-Ptot(k-2))/abs(Ptot(k-1)) < 10D-9) then
                 check = true;
-            end
-            if isnan(Ptot(k-1))==1 || Ptot_baseline==0;
-               check=true; 
-            end
-        end
-    end
+            end if
+        end if
+    end do
     
-    % Final results
-    yaws = bestYaw * 180/pi;
-    P_opti = P;
+    ! Final results
+    yaw = bestYaw
 
 end subroutine
 
