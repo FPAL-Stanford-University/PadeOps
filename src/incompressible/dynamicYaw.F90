@@ -14,9 +14,6 @@ module dynamicYawMod
 
     private
     public :: dynamicYaw
-    
-    real(rkind), parameter :: alpha_Smooth = 1.d0 ! 0.9d0 ! Exonential smoothing constant
-    integer, parameter :: xReg = 8, yReg = 8, zReg = 8
 
     type :: dynamicYaw
         ! Optimization parameters
@@ -66,7 +63,6 @@ contains
 subroutine init(this, inputfile)
     class(dynamicYaw), intent(inout) :: this
     character(len=*), intent(in) :: inputfile
-    character(len=clen) :: tempname, fname
     integer :: ioUnit, conditionTurb, ierr
     real(rkind) :: beta1 = 0.9d0, beta2 = 0.999d0, learning_rate_yaw = 10D-4
     integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20, Nt = 2, Nx = 100
@@ -84,12 +80,12 @@ subroutine init(this, inputfile)
     this%Nt = Nt; this%var_p = var_p; this%var_k = var_k; this%var_sig = var_sig;
     this%epochsYaw = epochsYaw; this%stateEstimationEpochs = stateEstimationEpochs;
     this%Ne = Ne
-    this%conditionTurb = 1
+    this%conditionTurb = conditionTurb
     this%Nx = Nx ! for spatial integration of the spanwise velocity
     this%D = D
     this%Ct = Ct
     this%eta = eta; this%beta1 = beta1; this%beta2= beta2;
-       
+    this%learning_rate_yaw = learning_rate_yaw   
  
     ! Allocate
     allocate(this%yaw(this%Nt))
@@ -344,6 +340,10 @@ subroutine rotate(this)
  
     a = (this%wind_direction - 270.d0) * pi / 180.d0
     R = reshape((/cos(a), sin(a), -sin(a), cos(a)/), shape(R))
+    ! shift
+    this%turbCenter(:,1) = this%turbCenter(:,1) - this%turbCenter(this%conditionTurb,1)
+    this%turbCenter(:,2) = this%turbCenter(:,2) - this%turbCenter(this%conditionTurb,2)
+    ! rotate
     do i=1,this%Nt
         X(i,:) = matmul(this%turbCenter(i,:), transpose(R))
         x_for_sorting(i)%value = X(i,1)
@@ -366,10 +366,6 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
     real(rkind) :: D, R, dx, boundLow, boundHigh, edgeLow, edgeHigh
     integer :: Nx, i, j, k
     real(rkind), dimension(this%Nt) :: delta_v0, a_mom 
-    real(rkind), dimension(this%Nt) :: delta_u0
-    real(rkind), dimension(this%Nt) :: duCache, du_no_a_cache
-    real(rkind), dimension(this%Nt) :: duSum
-    real(rkind), dimension(this%Nt) :: dCt_dyaw
     real(rkind) :: dw, aPrev, du, gaussian, delta_u_face
     logical, dimension(this%Nt, this%Nt) :: turbinesInFront
     real(rkind), dimension(this%Nx) :: xpFront, delta_v
