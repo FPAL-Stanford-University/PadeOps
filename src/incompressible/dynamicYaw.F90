@@ -128,19 +128,20 @@ subroutine update_and_yaw(this)
     call this%observeField()
     ! Rotate domain
     X = this%turbCenter
-    call this%rotate(X)
+    call this%rotate()
     ! Normalize the power production
     this%powerObservation = this%powerObservation(this%indSorted) / this%powerObservation(this%conditionTurb)
     ! Online control update
-    call this%onlineUpdate(X)
+    call this%onlineUpdate()
+    ! Restore original layout
+    this%turbCenter = X
 
     deallocate(X)
 
 end subroutine
 
-subroutine onlineUpdate(this, X)
+subroutine onlineUpdate(this)
     class(dynamicYaw), intent(inout) :: this
-    real(rkind), dimension(:,:), intent(inout) :: X
     real(rkind), dimension(:), allocatable :: kw, sigma_0, Phat, kwBest, sigmaBest, yaw
     real(rkind), dimension(:,:), allocatable :: psi_kp1
     real(rkind), dimension(this%stateEstimationEpochs) :: error
@@ -168,7 +169,7 @@ subroutine onlineUpdate(this, X)
     kw = this%kw(this%indSorted); sigma_0 = this%sigma_0(this%indSorted)
     yaw = this%yaw(this%indSorted)
     do t=1, this%stateEstimationEpochs;
-        call this%EnKF_update( psi_kp1, this%powerObservation, kw, sigma_0)
+        call this%EnKF_update( psi_kp1, this%powerObservation, kw, sigma_0, yaw)
         ! Run forward model pass
         call this%forward(kw, sigma_0, Phat, yaw)
         ! Normalized
@@ -197,10 +198,10 @@ subroutine onlineUpdate(this, X)
  
 end subroutine
 
-subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0)
+subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:,:), intent(in) :: psi_k
-    real(rkind), dimension(:), intent(in) :: P_kp1
+    real(rkind), dimension(:), intent(in) :: P_kp1, yaw
     real(rkind), dimension(:), intent(inout) :: kw, sigma_0
     integer :: NN, i
     real(rkind), dimension(:,:), allocatable :: randArr, randArr2, chi, rbuff
@@ -235,7 +236,7 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0)
     ! Intermediate forcast step
     do i=1,this%Ne
         ! Lifting line model
-        call this%forward(randArr(:,i), randArr2(:,i), Phat, this%yaw)
+        call this%forward(randArr(:,i), randArr2(:,i), Phat, yaw)
         ! Normalize by first turbine
         psiHat_kp(:,i) = Phat/Phat(1)
     end do
@@ -332,10 +333,10 @@ subroutine observeField(this)
 
 end subroutine
 
-subroutine rotate(this, X)
+subroutine rotate(this)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(2,2) ::  R
-    real(rkind), dimension(:,:), intent(inout) :: X
+    real(rkind), dimension(this%Nt,2) :: X
     integer, dimension(:), allocatable :: indSorted
     type(sortgroup), dimension(1) :: x_for_sorting
     integer :: i
@@ -354,7 +355,7 @@ subroutine rotate(this, X)
     call Qsort(x_for_sorting,1)
     this%indSorted = x_for_sorting%zpos
     this%unsort(indSorted) = this%unsort      
-    X = X(this%indSorted,:)
+    this%turbCenter = X(this%indSorted,:)
 
 end subroutine
 
@@ -412,7 +413,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
         do k = 1, this%Nt
             if (turbinesInFront(j,k) == 1) then
                 ! sum of squared deficits
-                aPrev = 0.5*(1.d0-sqrt(1.d0-this%Ct*cos(this%yaw(k))**2))
+                aPrev = 0.5*(1.d0-sqrt(1.d0-this%Ct*cos(yaw(k))**2))
                 dx = this%turbCenter(j, 1) - this%turbCenter(k, 1)
                 xpFront = linspace(0.d0, dx, Nx)
                 dw = 1.d0 + kw(k) * log(1.d0 + exp((dx - 2.0 * R) / R));
