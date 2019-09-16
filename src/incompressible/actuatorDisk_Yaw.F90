@@ -155,7 +155,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         this%speed = u*n(1,1) + v*n(2,1) + w*n(3,1)
         this%blanks = 1.d0
         where(abs(this%scalarSource)<1D-10)
-            this%blanks = 0.
+            this%blanks = 0.d0
         end where
         numPoints = p_sum(this%blanks)
         this%rbuff = this%blanks*this%speed
@@ -168,11 +168,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         rhsxvals = rhsxvals + Ft(1,1) * this%scalarSource 
         rhsyvals = rhsyvals + Ft(2,1) * this%scalarSource
         rhszvals = rhszvals + Ft(3,1) * this%scalarSource
-        call message(2,"ft", Ft(1,1))
-        call message(2,"ft", Ft(2,1))
-        call message(2,"ft", Ft(3,1))
-        call message(2,"ct", this%Ct)
-    
+ 
     end if 
 
 end subroutine

@@ -117,7 +117,7 @@ program test_actuatorDisk
     rhs3 = 0.d0
     call mpi_barrier(mpi_comm_world, ierr)
     call tic()
-    gamma_negative = 0.d0
+    gamma_negative = 0.d0 * pi / 180.d0
     theta = 0.d0
     do idx = 1,num_turbines
         call hawts_Tyaw(idx)%get_RHS(u, v, w, rhs3, rhsv, rhsw, gamma_negative, theta)
