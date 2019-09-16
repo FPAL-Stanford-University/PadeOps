@@ -56,6 +56,7 @@ module dynamicYawMod
         procedure, private :: rotate
         procedure, private :: yawOptimize 
         procedure, private :: onlineUpdate 
+        procedure, private :: backward
         procedure :: update_and_yaw
     end type
 
@@ -68,13 +69,13 @@ subroutine init(this, inputfile)
     character(len=clen) :: tempname, fname
     integer :: ioUnit, conditionTurb, ierr
     real(rkind) :: beta1 = 0.9d0, beta2 = 0.999d0, learning_rate_yaw = 10D-4
-    integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20, Nt = 2
+    integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20, Nt = 2, Nx = 100
     real(rkind) :: var_p = 0.04d0, var_k = 9D-6, var_sig = 9D-6, D = 0.315
     real(rkind) :: Ct = 0.75, eta = 0.7
  
     ! Read input file for this turbine    
     namelist /DYNAMIC_YAW/ Nt, var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
-                           Ne, D, Ct, eta
+                           Ne, D, Ct, eta, beta1, beta2
     ioUnit = 534
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=DYNAMIC_YAW)
@@ -84,11 +85,12 @@ subroutine init(this, inputfile)
     this%epochsYaw = epochsYaw; this%stateEstimationEpochs = stateEstimationEpochs;
     this%Ne = Ne
     this%conditionTurb = 1
-    this%Nx = 100; ! for spatial integration
+    this%Nx = Nx ! for spatial integration of the spanwise velocity
     this%D = D
     this%Ct = Ct
-    this%eta = eta
-    
+    this%eta = eta; this%beta1 = beta1; this%beta2= beta2;
+       
+ 
     ! Allocate
     allocate(this%yaw(this%Nt))
     allocate(this%dp_dgamma(this%Nt))
@@ -139,7 +141,7 @@ end subroutine
 subroutine onlineUpdate(this, X)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:,:), intent(inout) :: X
-    real(rkind), dimension(:), allocatable :: kw, sigma_0, Phat, kwBest, sigmaBest
+    real(rkind), dimension(:), allocatable :: kw, sigma_0, Phat, kwBest, sigmaBest, yaw
     real(rkind), dimension(:,:), allocatable :: psi_kp1
     real(rkind), dimension(this%stateEstimationEpochs) :: error
     real(rkind) :: lowestError
@@ -147,6 +149,7 @@ subroutine onlineUpdate(this, X)
 
     ! Allocate
     allocate(kw(this%Nt))
+    allocate(yaw(this%Nt))
     allocate(kwBest(this%Nt))
     allocate(sigma_0(this%Nt))
     allocate(sigmaBest(this%Nt))
@@ -157,15 +160,17 @@ subroutine onlineUpdate(this, X)
     ! State estimation
     error = 0.d0; lowestError = 100.d0
     do i=1, this%Ne
-        psi_kp1(1:this%Nt,i) = this%kw !reshape(this%kw, (/this%Nt,1/))
-        psi_kp1(this%Nt:nt2,i) = this%sigma_0 !reshape(this%sigma_0, (/this%Nt,1/))
+        psi_kp1(1:this%Nt,i) = this%kw 
+        psi_kp1(this%Nt:nt2,i) = this%sigma_0 
     end do
     lowestError = 10; bestStep = 1;
-    kw = this%kw; sigma_0 = this%sigma_0
+    ! Store local parameter and rotate
+    kw = this%kw(this%indSorted); sigma_0 = this%sigma_0(this%indSorted)
+    yaw = this%yaw(this%indSorted)
     do t=1, this%stateEstimationEpochs;
         call this%EnKF_update( psi_kp1, this%powerObservation, kw, sigma_0)
         ! Run forward model pass
-        call this%forward(kw, sigma_0, Phat, this%yaw)
+        call this%forward(kw, sigma_0, Phat, yaw)
         ! Normalized
         Phat = Phat / Phat(1)
         error(t) = p_sum(abs(Phat-this%powerObservation)/Phat(1)) / real(this%Nt)
@@ -177,9 +182,10 @@ subroutine onlineUpdate(this, X)
 
     ! Generate optimal yaw angles
     this%kw = kwBest; this%sigma_0 = sigmaBest;
-    call this%yawOptimize()
+    call this%yawOptimize(kw, sigma_0, yaw)
     ! Store the unsorted parameters
     this%kw = kwBest(this%unsort); this%sigma_0 = sigmaBest(this%unsort)   
+    this%yaw = yaw(this%unsort) 
 
     ! Deallocate
     deallocate(kw)
@@ -187,6 +193,7 @@ subroutine onlineUpdate(this, X)
     deallocate(sigmaBest)
     deallocate(sigma_0)
     deallocate(Phat)
+    deallocate(yaw)
  
 end subroutine
 
@@ -267,10 +274,10 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:), intent(in) :: kw, sigma_0
     real(rkind), dimension(:), intent(inout) :: yaw
-    real(rkind), dimension(this%Nt) :: P, P_baseline, bestPower, bestYaw
+    real(rkind), dimension(this%Nt) :: P, P_baseline, bestYaw
     real(rkind), dimension(this%Nt) :: m, v
-    real(rkind), dimension(this%epochsYaw) :: Ptot, 
-    real(rkind) :: Ptot_baseline
+    real(rkind), dimension(this%epochsYaw) :: Ptot
+    real(rkind) :: Ptot_baseline, bestPower
     integer :: k
     logical :: check
     real(rkind), dimension(this%epochsYaw, this%Nt) :: P_time, yawTime
@@ -283,31 +290,31 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     ! eps also determines the termination condition
     k=1; check = 0; 
     bestYaw = 0.d0; Ptot = 0.d0; P_time = 0.d0; P_time = 0.d0; yawTime = 0.d0
-    m=zeros(turbine.Nt,1); v=zeros(turbine.Nt,1);
-    bestPower = 0; bestYaw = zeros(turbine.Nt,1);
-    while (k < this%epochsYaw .and. check == false) do
+    m=0.d0; v=0.d0;
+    bestPower = 0.d0; bestYaw = 0.d0;
+    do while (k < this%epochsYaw .and. check == 0) 
     
         ! Forward prop
         call this%forward(kw, sigma_0, P, yaw)
         yawTime(k+1,:) = yaw;
         Ptot(k) = p_sum(P);
         P_time(k,:) = P;
-        call this%backward(this, kw, sigma_0, yaw)    
+        call this%backward(kw, sigma_0, yaw)    
     
         ! Gradient ascent update yaw
         ! Adam
-        m = params_opti.beta1*m + (1-params_opti.beta1)*grads.dp_dgamma;
-        v = params_opti.beta2*v + (1-params_opti.beta2)*(grads.dp_dgamma.^2);
+        m = this%beta1*m + (1.d0-this%beta1)*this%dp_dgamma;
+        v = this%beta2*v + (1.d0-this%beta2)*(this%dp_dgamma**2);
         yaw = yaw + this%learning_rate_yaw * m / & 
                    (sqrt(v) + this%eps)
         if (Ptot(k) > bestPower) then
            bestPower = Ptot(k)
            bestYaw = yaw
-        end
-        k = k+1;
+        end if
+        k = k+1
         if (k > 10) then
             if (abs(Ptot(k-1)-Ptot(k-2))/abs(Ptot(k-1)) < 10D-9) then
-                check = true;
+                check = 1
             end if
         end if
     end do
