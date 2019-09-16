@@ -7,6 +7,7 @@ program test_actuatorDisk
     use decomp_2d_io
     use actuatorDisk_T2Mod, only: actuatorDisk_T2
     use actuatorDiskMod, only: actuatorDisk
+    use actuatorDisk_YawMod, only: actuatorDisk_yaw
     use exits, only: message
     use mpi
 
@@ -14,19 +15,24 @@ program test_actuatorDisk
 
     type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
     type(actuatorDisk), dimension(:), allocatable :: hawts
+    type(actuatorDisk_yaw), dimension(:), allocatable :: hawts_Tyaw
     integer, parameter :: nx = 192, ny = 96, nz = 128
     !character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/"
-    character(len=clen) :: inputDir = "/fastscratch/nghaisas/runs/PadeOps/wupa/run3/deb/turbInfo"
+    !character(len=clen) :: inputDir = "/fastscratch/nghaisas/runs/PadeOps/wupa/run3/deb/turbInfo"
+    character(len=clen) :: inputDir = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/1x1array"
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
-    real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs1, rhsv, rhsw, rhs2
+    real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs1, rhsv, rhsw, rhs2, rhs3
     !real(rkind), parameter :: Lx = pi, Ly = 0.5d0*pi, Lz = 1.0d0
-    real(rkind), parameter :: Lx = 28.8d0, Ly = 4.8d0, Lz = 3.0d0
+    real(rkind), parameter :: Lx = 2.d0, Ly = 2.d0, Lz = 2.0d0
     real(rkind) :: dx, dy, dz, diam, CT
     type(decomp_info) :: gp 
     integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0, num_turbines 
     real(rkind) :: xPeriods = 2.d0, yPeriods = 2.d0, zpeak = 0.3d0, epsnd = 5.d0, z0init = 1.d-4 
     real(rkind) :: inst_val(8)
     real(rkind) :: comp1, comp2, maxdiff
+    real(rkind) :: gamma_negative, theta
+    real(rkind), dimension(:,:,:), allocatable :: rbuff, blanks, speed, X
+    real(rkind), dimension(:,:,:), allocatable :: Y, Z, Xnew, Ynew, Znew, scalarSource
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -37,8 +43,20 @@ program test_actuatorDisk
     allocate(v(gp%xsz(1),gp%xsz(2),gp%xsz(3))); allocate(w(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
     allocate(rhs1(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
     allocate(rhs2(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(rhs3(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
     allocate(rhsv(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
     allocate(rhsw(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    ! Yaw stuff
+    allocate(rbuff(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(blanks(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(speed(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(X(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(Y(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(Z(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(Xnew(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(Ynew(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(Znew(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
+    allocate(scalarSource(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
 
     num_turbines = 1
 
@@ -62,9 +80,13 @@ program test_actuatorDisk
     u = one; v = zero; w = zero
     allocate(hawts(num_turbines))
     allocate(hawts_T2(num_turbines))
+    allocate(hawts_Tyaw(num_turbines))
     do idx = 1,num_turbines
         call hawts(idx)%init(inputDir, idx, xG, yG, zG, gp)
         call hawts_T2(idx)%init(inputDir, idx, xG, yG, zG)
+        call hawts_Tyaw(idx)%init(inputDir, idx, xG, yG, zG)
+        call hawts_Tyaw(idx)%link_memory_buffers(rbuff, blanks, speed, X, &
+                                Y, Z, Xnew, Ynew, Znew, scalarSource)
     end do 
 
     ! reset diam, CT
@@ -91,18 +113,37 @@ program test_actuatorDisk
     end do 
     call mpi_barrier(mpi_comm_world, ierr)
     call toc()
-    call decomp_2d_write_one(1,rhs2,"temp_T2.bin", gp)
     
+    rhs3 = 0.d0
+    call mpi_barrier(mpi_comm_world, ierr)
+    call tic()
+    gamma_negative = 0.d0
+    theta = 0.d0
+    do idx = 1,num_turbines
+        call hawts_Tyaw(idx)%get_RHS(u, v, w, rhs3, rhsv, rhsw, gamma_negative, theta)
+    end do 
+    call mpi_barrier(mpi_comm_world, ierr)
+    call toc()
+    
+    
+    call decomp_2d_write_one(1,rhs2,"temp_T2.bin", gp)
     call message(2,"Computed Source (T2):", p_sum(sum(rhs2)) * dx*dy*dz)
     call message(3,"absolute error:", p_sum(sum(rhs2)) * dx*dy*dz + (num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
     call message(2,"Expected Source:", -(num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
 
+    call message(2,"Computed Source (Tyaw):", p_sum(sum(rhs3)) * dx*dy*dz)
+    call message(3,"absolute error:", p_sum(sum(rhs3)) * dx*dy*dz + (num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
+    call message(2,"Expected Source:", -(num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
+    
     maxDiff = p_maxval(abs(rhs2 - rhs1))*dx*dy*dz
     call message(2,"RHS AD Type2 - Type 1: ", maxDiff)
+    maxDiff = p_maxval(abs(rhs3 - rhs1))*dx*dy*dz
+    call message(2,"RHS AD Type3 - Type 1: ", maxDiff)
     do idx = 1,num_turbines
     !  call hawts(idx)%destroy()
     end do 
     deallocate(hawts)
-    deallocate(xG, yG, zG, u, v, w, rhs1, rhs2)
+    deallocate(xG, yG, zG, u, v, w, rhs1, rhs2, rhs3)
+    deallocate(rbuff, blanks, speed, X, Y, Z, Xnew, Ynew, Znew, scalarSource)
     call MPI_Finalize(ierr)
 end program 

@@ -107,6 +107,7 @@ subroutine link_memory_buffers(this, rbuff, blanks, speed, X, Y, Z, Xnew, Ynew, 
     this%Ynew  => Ynew
     this%Znew  => Znew
     this%scalarSource => scalarSource
+    this%blanks => blanks
     this%memory_buffers_linked = .true. 
 end subroutine 
 
@@ -161,12 +162,16 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         this%ut = p_sum(this%rbuff)/numPoints    
         ! Mean speed at the turbine
         usp_sq = (this%ut)**2
-        force = -this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
+        force = -0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
         Ft = reshape([force, 0.d0, 0.d0], shape(Ft))
         Ft = matmul(matmul(transpose(R), transpose(T)), Ft)
         rhsxvals = rhsxvals + Ft(1,1) * this%scalarSource 
         rhsyvals = rhsyvals + Ft(2,1) * this%scalarSource
         rhszvals = rhszvals + Ft(3,1) * this%scalarSource
+        call message(2,"ft", Ft(1,1))
+        call message(2,"ft", Ft(2,1))
+        call message(2,"ft", Ft(3,1))
+        call message(2,"ct", this%Ct)
     
     end if 
 
@@ -194,7 +199,7 @@ subroutine AD_force(this, X, Y, Z, scalarSource)
     this%rbuff = 1.d0 - scalarSource
     delta = (this%dx)*smear_x
     scalarSource = this%rbuff * (1.d0/(delta*sqrt(2.d0*pi))) * exp(-0.5d0*(X**2)/(delta**2))
-    sumVal = p_sum(scalarSource) * this%dx**3
+    sumVal = p_sum(scalarSource) * this%dx*this%dy*this%dz
     scalarSource = scalarSource / sumVal
 
 end subroutine
