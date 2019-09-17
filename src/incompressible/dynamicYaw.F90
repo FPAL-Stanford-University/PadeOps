@@ -9,6 +9,7 @@ module dynamicYawMod
     use Gridtools, only: linspace, mytrapz
     use sorting_mod
     use random,             only: gaussian_random
+    use actuatorDisk_YawMod, only: actuatorDisk_yaw
 
     implicit none
 
@@ -60,10 +61,11 @@ module dynamicYawMod
 
 contains
 
-subroutine init(this, inputfile)
+subroutine init(this, inputfile, ad)
     class(dynamicYaw), intent(inout) :: this
+    type(actuatorDisk_yaw), intent(in), dimension(:) :: ad
     character(len=*), intent(in) :: inputfile
-    integer :: ioUnit, conditionTurb, ierr
+    integer :: ioUnit, conditionTurb, ierr, i
     real(rkind) :: beta1 = 0.9d0, beta2 = 0.999d0, learning_rate_yaw = 10D-4
     integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20, Nt = 2, Nx = 100
     real(rkind) :: var_p = 0.04d0, var_k = 9D-6, var_sig = 9D-6, D = 0.315
@@ -71,7 +73,7 @@ subroutine init(this, inputfile)
  
     ! Read input file for this turbine    
     namelist /DYNAMIC_YAW/ Nt, var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
-                           Ne, D, Ct, eta, beta1, beta2
+                           Ne, D, Ct, eta, beta1, beta2, conditionTurb
     ioUnit = 534
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=DYNAMIC_YAW)
@@ -100,11 +102,23 @@ subroutine init(this, inputfile)
     allocate(this%ap(this%Nt))
     allocate(this%delta_u_face_store(this%Nt))
     allocate(this%gaussianStore(this%Nt,this%Nt))
+    allocate(this%deltaUIndividual(this%Nt,this%Nt))
     allocate(this%y_c(this%Nt,this%Nt))
     allocate(this%yCenter(this%Nt,this%Nt))
+    allocate(this%turbCenter(this%Nt,2))
+    allocate(this%kw(this%Nt))
+    allocate(this%sigma_0(this%Nt))
 
     ! Define
     this%yaw = 0.d0
+    this%kw = 0.1d0
+    this%sigma_0 = 0.25
+
+    ! Get the wind turbine locations
+    do i=1,this%Nt
+        this%turbCenter(i,1) = ad(i)%xLoc / this%D
+        this%turbCenter(i,2) = ad(i)%yLoc / this%D
+    end do
 
 end subroutine 
 
@@ -113,9 +127,10 @@ subroutine destroy(this)
 
 end subroutine 
 
-subroutine update_and_yaw(this)
+subroutine update_and_yaw(this, yaw)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:,:), allocatable :: X
+    real(rkind), dimension(:), intent(in) :: yaw
 
     ! allocate
     allocate(X(this%Nt,2))
@@ -128,9 +143,11 @@ subroutine update_and_yaw(this)
     ! Normalize the power production
     this%powerObservation = this%powerObservation(this%indSorted) / this%powerObservation(this%conditionTurb)
     ! Online control update
+    this%yaw = yaw(this%indSorted)
     call this%onlineUpdate()
     ! Restore original layout
     this%turbCenter = X
+    this%yaw = yaw(this%unsort)
 
     deallocate(X)
 
@@ -154,22 +171,26 @@ subroutine onlineUpdate(this)
     nt2 = this%Nt*2
     allocate(psi_kp1(nt2,this%Ne))
  
-    ! State estimation
-    error = 0.d0; lowestError = 100.d0
-    do i=1, this%Ne
-        psi_kp1(1:this%Nt,i) = this%kw 
-        psi_kp1(this%Nt:nt2,i) = this%sigma_0 
-    end do
-    lowestError = 10; bestStep = 1;
     ! Store local parameter and rotate
     kw = this%kw(this%indSorted); sigma_0 = this%sigma_0(this%indSorted)
     yaw = this%yaw(this%indSorted)
+    ! State estimation
+    error = 0.d0; lowestError = 100.d0
+    do i=1, this%Ne
+        do t=1,this%Nt
+            psi_kp1(t,i) = kw(t)
+            psi_kp1(this%Nt+t,i) = sigma_0(t)
+        end do
+    end do
+    lowestError = 10; bestStep = 1;
     do t=1, this%stateEstimationEpochs;
+        write(*,*) this%powerObservation
         call this%EnKF_update( psi_kp1, this%powerObservation, kw, sigma_0, yaw)
         ! Run forward model pass
         call this%forward(kw, sigma_0, Phat, yaw)
         ! Normalized
         Phat = Phat / Phat(1)
+        write(*,*) Phat
         error(t) = p_sum(abs(Phat-this%powerObservation)/Phat(1)) / real(this%Nt)
         if (error(t)<lowestError) then
             lowestError=error(t); bestStep = t;
@@ -183,6 +204,7 @@ subroutine onlineUpdate(this)
     ! Store the unsorted parameters
     this%kw = kwBest(this%unsort); this%sigma_0 = sigmaBest(this%unsort)   
     this%yaw = yaw(this%unsort) 
+    write(*,*) this%kw
 
     ! Deallocate
     deallocate(kw)
@@ -199,7 +221,7 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     real(rkind), dimension(:,:), intent(in) :: psi_k
     real(rkind), dimension(:), intent(in) :: P_kp1, yaw
     real(rkind), dimension(:), intent(inout) :: kw, sigma_0
-    integer :: NN, i
+    integer :: NN, i, j
     real(rkind), dimension(:,:), allocatable :: randArr, randArr2, chi, rbuff
     real(rkind), dimension(:,:), allocatable :: psi_kp, psi_kp1, psiHat_kp, ones_Ne, psi_kpp, psiHat_kpp
     real(rkind), dimension(:), allocatable :: Phat
@@ -209,20 +231,22 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
 
     ! Define relevant parameters
     NN = this%Nt * 2
-    allocate(randArr(this%Nt, size(psi_kp,2)))
-    allocate(randArr2(this%Nt, size(psi_kp,2)))
+    allocate(psi_kp(size(psi_k,1), size(psi_k,2)))
     allocate(psi_kp1(size(psi_kp,1), size(psi_kp,2)))
     allocate(psi_kpp(size(psi_kp,1), size(psi_kp,2)))
     allocate(chi(size(psi_kp,1), size(psi_kp,2)))
-    allocate(psiHat_kp(size(psi_kp,1), size(psi_kp,2)))
-    allocate(psiHat_kpp(size(psi_kp,1), size(psi_kp,2)))
+    allocate(psiHat_kp(this%Nt, size(psi_kp,2)))
+    allocate(psiHat_kpp(this%Nt, size(psi_kp,2)))
     allocate(Phat(this%Nt))
     allocate(ones_Ne(this%Ne, this%Ne))
     allocate(rbuff(size(psi_kp,1), size(psi_kp,2)))
-    
+    allocate(randArr(this%Nt, this%Ne))
+    allocate(randArr2(this%Nt, this%Ne))
+ 
     ! Random noise
-    call gaussian_random(randArr,zero,this%var_k**0.5,seedu + 10*nrank)
-    call gaussian_random(randArr2,zero,this%var_sig**0.5,seedv + 10*nrank)
+    call gaussian_random(randArr,zero,this%var_k**0.5)!,seedu + 10*nrank)
+    call gaussian_random(randArr2,zero,this%var_sig**0.5)!,seedv + 10*nrank)
+    chi = 0.d0
     chi(1:this%Nt, :) = randArr
     chi(this%Nt+1:NN, :) = randArr2
     psi_kp = psi_k + chi
@@ -239,14 +263,15 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
 
 
     ! Perturbation
-    ones_Ne = 1. / real(this%Ne)
+    ones_Ne = 1.d0 / real(this%Ne)
     rbuff = matmul(psi_kp, ones_Ne)
     psi_kpp = psi_kp - rbuff
     rbuff = matmul(psiHat_kp, ones_Ne)
     psiHat_kpp = psiHat_kp - rbuff
     
     ! Perturbation matrices
-    call gaussian_random(randArr,zero,this%var_p**0.5,seedw + 10*nrank)
+    randArr = 0.d0; randArr2 = 0.d0
+    call gaussian_random(randArr,zero,this%var_p**0.5)!,seedw + 10*nrank)
     do i = 1, this%Ne
         randArr2(:,i) = P_kp1
     end do
@@ -264,6 +289,9 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     sigma_0 = psi_kp1(this%Nt+1:NN,1);
     !error = p_sum(abs(rbuff(:,1)-P_kp1)) / real(this%Nt)
     
+    ! Deallocate
+    deallocate(psi_kp1,psi_kpp,chi,psiHat_kp,psiHat_kpp,Phat,ones_Ne)
+    deallocate(rbuff,randArr,randArr2) 
 
 end subroutine
 
@@ -323,9 +351,9 @@ end subroutine
 
 subroutine observeField(this)
     class(dynamicYaw), intent(inout) :: this
-    this%wind_speed = 8.d0
-    this%wind_direction = 0.d0
-    this%powerObservation = 1.d0 ! Get the power production from ADM code 
+    this%wind_speed = 8.d0 ! Get this from the data
+    this%wind_direction = 270.d0 ! Get this from the data
+    this%powerObservation = (/1.d0, 0.7d0/) ! Get the power production from ADM code 
 
 end subroutine
 
@@ -334,7 +362,7 @@ subroutine rotate(this)
     real(rkind), dimension(2,2) ::  R
     real(rkind), dimension(this%Nt,2) :: X
     integer, dimension(:), allocatable :: indSorted
-    type(sortgroup), dimension(1) :: x_for_sorting
+    type(sortgroup), dimension(this%Nt) :: x_for_sorting
     integer :: i
     real(rkind) :: a
  
@@ -365,7 +393,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
     real(rkind), dimension(this%Nt), intent(out) :: Phat
     real(rkind) :: D, R, dx, boundLow, boundHigh, edgeLow, edgeHigh
     integer :: Nx, i, j, k
-    real(rkind), dimension(this%Nt) :: delta_v0, a_mom 
+    real(rkind), dimension(this%Nt) :: delta_v0
     real(rkind) :: dw, aPrev, du, gaussian, delta_u_face
     logical, dimension(this%Nt, this%Nt) :: turbinesInFront
     real(rkind), dimension(this%Nx) :: xpFront, delta_v
@@ -375,7 +403,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
     turbinesInFront = 0
     this%A = this%D ** 2. * pi / 4
     D = this%D / this%D
-    R = D/2.
+    R = D/2.d0
     ! Atmospheric conditions
     this%rho = 1.225
     ! Model parameters
@@ -386,7 +414,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
         ! Find the leading turbine
         do i = 1,this%Nt
             dx = this%turbCenter(j, 1) - this%turbCenter(i, 1);
-            if (dx > 0) then
+            if (dx > 0.d0) then
                dw = 1.d0 + kw(i) * log(1.d0 + exp((dx - 2.0d0 * R) / R));
                boundLow = this%turbCenter(i,2)-dw/2;
                boundHigh = this%turbCenter(i,2)+dw/2;
@@ -399,7 +427,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
                if (edgeHigh>=boundLow .and. edgeHigh<=boundHigh) then
                    check = 1
                end if
-               if (check == 1) then
+               if (check == .TRUE.) then
                    turbinesInFront(j,i) = 1
                end if
             end if
@@ -407,11 +435,11 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
         ! sum of squared deficits, loop over front turbines
         delta_u_face = 0.d0
         do k = 1, this%Nt
-            if (turbinesInFront(j,k) == 1) then
+            if (turbinesInFront(j,k) == .TRUE.) then
                 ! sum of squared deficits
                 aPrev = 0.5*(1.d0-sqrt(1.d0-this%Ct*cos(yaw(k))**2))
                 dx = this%turbCenter(j, 1) - this%turbCenter(k, 1)
-                xpFront = linspace(0.d0, dx, Nx)
+                xpFront = linspace(0.d0, dx, this%Nx)
                 dw = 1.d0 + kw(k) * log(1.d0 + exp((dx - 2.0 * R) / R));
 
                 du = this%wind_speed * aPrev/(dw**2+this%eps) * & 
@@ -446,9 +474,9 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
             this%u_eff(j) = (1.d0/D) * (D*this%wind_speed - delta_u_face);
         end do
         ! Calculate the induction factor at the end
-        this%a_mom(j) = 0.5*(1.d0-sqrt(1.d0-this%Ct*cos(yaw(j))**2))
+        !this%a_mom(j) = 0.5*(1.d0-sqrt(1.d0-this%Ct*cos(yaw(j))**2))
         ! Power
-        this%ap(j) = 0.5*(1-sqrt(1-this%Ct))
+        this%ap(j) = 0.5d0*(1.d0 - sqrt(1.d0-this%Ct))
         this%Cp(j) = 4.d0*this%eta*this%ap(j)*(1.d0-this%ap(j))**2 * & 
                        cos(yaw(j))**this%powerExp
         Phat(j) = 0.5 * this%rho * this%A * this%Cp(j) * this%u_eff(j)**3;  

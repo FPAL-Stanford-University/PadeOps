@@ -37,7 +37,7 @@ module actuatorDisk_YawMod
         
         ! Pointers to memory buffers 
         logical :: memory_buffers_linked = .false.
-        real(rkind), dimension(:,:,:), pointer :: rbuff, blanks, speed, X, Y, Z, Xnew, Ynew, Znew, scalarSource
+        real(rkind), dimension(:,:,:), pointer :: rbuff, blanks, speed, X, Y, Z, scalarSource
 
         ! MPI communicator stuff
         logical :: Am_I_Active, Am_I_Split
@@ -49,6 +49,7 @@ module actuatorDisk_YawMod
         procedure :: get_RHS
         procedure :: link_memory_buffers
         procedure, private :: AD_force
+        procedure, private :: AD_force_point
         !procedure, private :: Sfunc 
         procedure :: get_power
     end type
@@ -97,15 +98,12 @@ end subroutine
 ! termsof numturbines) and performance (allocating/deallocating is expensive)
 subroutine link_memory_buffers(this, rbuff, blanks, speed, X, Y, Z, Xnew, Ynew, Znew, scalarSource)
     class(actuatordisk_yaw), intent(inout) :: this
-    real(rkind), dimension(:,:,:), intent(in), target :: rbuff, blanks, speed, X, Y, Z, Xnew, Ynew, Znew, scalarSource
+    real(rkind), dimension(:,:,:), intent(in), target :: rbuff, blanks, speed, X, Y, Z, scalarSource, Xnew, Ynew, Znew
     this%rbuff => rbuff
     this%speed => speed
     this%X     => X
     this%Y     => Y
     this%Z     => Z
-    this%Xnew  => Xnew 
-    this%Ynew  => Ynew
-    this%Znew  => Znew
     this%scalarSource => scalarSource
     this%blanks => blanks
     this%memory_buffers_linked = .true. 
@@ -116,8 +114,7 @@ subroutine destroy(this)
 
     this%memory_buffers_linked = .false.
     
-    nullify(this%rbuff, this%blanks, this%speed, this%X, this%Y, this%Z, & 
-        this%Xnew, this%Ynew, this%Znew, this%scalarSource)
+    nullify(this%rbuff, this%blanks, this%speed, this%X, this%Y, this%Z, this%scalarSource)
     nullify(this%xG, this%yG, this%zG)
 end subroutine 
 
@@ -129,7 +126,9 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
     real(rkind) :: usp_sq, force, gamma
     real(rkind), dimension(3,3) :: R, T
     real(rkind), dimension(3,1) :: xn, Ft, n
-    real(rkind) ::  numPoints
+    real(rkind) ::  numPoints, x, y, z
+    real(rkind) :: xnew, ynew, znew, cgamma, sgamma, ctheta, stheta
+    integer :: i,j,k
      
     if (this%memory_buffers_linked) then
         ! Normal vector
@@ -140,23 +139,38 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         R = reshape([cos(gamma), sin(gamma), 0.d0, -sin(gamma), cos(gamma), 0.d0, 0.d0, 0.d0, 1.d0], shape(R))
         T = reshape([1.d0, 0.d0, 0.d0, 0.d0, cos(theta), sin(theta), 0.d0, -sin(theta), cos(theta)], shape(T)) 
         n = matmul(matmul(transpose(R), transpose(T)), xn)
+        
+        ! Above this is fast
         ! Translate and rotate domain
-        this%X = this%xG-this%xLoc 
-        this%Y = this%yG-this%yLoc
-        this%Z = this%zG-this%zLoc
-        this%Xnew = this%X*cos(gamma) - this%Y*sin(gamma)
-        this%Ynew = this%X*sin(gamma) + this%Y*cos(gamma)
-        this%Znew = this%Z
-        this%X = this%Xnew
-        this%Y = this%Ynew*cos(theta) - this%Znew*sin(theta)
-        this%Z = this%Ynew*sin(theta) + this%Znew*cos(theta)
+        ctheta = cos(theta); stheta = sin(theta)
+        cgamma = cos(gamma); sgamma = sin(gamma)
+
+        do k = 1,size(this%X,3)
+            z = this%zG(1,1,k) - this%zLoc
+            do j = 1,size(this%X,2)
+                y = this%yG(1,j,1) - this%yLoc
+                !$omp simd
+                do i = 1,size(this%X,1)  
+                  x = this%xG(i,1,1) - this%xLoc
+                  xnew = x * cgamma - y * sgamma
+                  ynew = y * sgamma + y * cgamma
+                  znew = z
+                  this%X(i,j,k) = xnew
+                  this%Y(i,j,k) = ynew*ctheta - znew*stheta
+                  this%Z(i,j,k) = ynew*stheta + znew*ctheta
+                end do
+            end do
+        end do
         call this%AD_force(this%X, this%Y, this%Z, this%scalarSource)
         ! Get the mean velocities at the turbine face
         this%speed = u*n(1,1) + v*n(2,1) + w*n(3,1)
         this%blanks = 1.d0
+        !!!!!!!!!!!!
+        ! put this into the do loop
         where(abs(this%scalarSource)<1D-10)
             this%blanks = 0.d0
         end where
+        !!!!!!!!!!!!
         numPoints = p_sum(this%blanks)
         this%rbuff = this%blanks*this%speed
         this%ut = p_sum(this%rbuff)/numPoints    
@@ -165,10 +179,11 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         force = -0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
         Ft = reshape([force, 0.d0, 0.d0], shape(Ft))
         Ft = matmul(matmul(transpose(R), transpose(T)), Ft)
+        ! Can we avoid the above matmul? Just write it out
         rhsxvals = rhsxvals + Ft(1,1) * this%scalarSource 
         rhsyvals = rhsyvals + Ft(2,1) * this%scalarSource
-        rhszvals = rhszvals + Ft(3,1) * this%scalarSource
- 
+        rhszvals = rhszvals + Ft(3,1) * this%scalarSource 
+
     end if 
 
 end subroutine
@@ -179,6 +194,32 @@ subroutine get_power(this)
     this%power = -this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*(this%ut)**3
 
 end subroutine
+
+subroutine AD_force_point(this, X, Y, Z, scalarSource)
+    class(actuatordisk_yaw), intent(inout) :: this
+    real(rkind), intent(inout), dimension(:,:,:) :: scalarSource
+    real(rkind), intent(in), dimension(:,:,:) :: X, Y, Z
+    real(rkind) :: delta_r = 0.22d0, smear_x = 1.5d0, delta, R, sumVal
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Do everything in the i,j,k loop in the rhs call
+
+    ! X,Y,Z are shifted to xc, yc, zx zero center as per AD location
+    R = this%diam / 2.d0
+    this%rbuff = sqrt((Y/R)**2 + (Z/R)**2)
+    this%rbuff = (this%rbuff-1.d0)/delta_r + 1.d0
+    !call Sfunc(this%rbuff, this%rbuff) << Can't operate in-place here because Sfunc uses in/out declarations.
+    call Sfunc(this%rbuff, scalarSource)
+    this%rbuff = 1.d0 - scalarSource
+    delta = (this%dx)*smear_x
+    scalarSource = this%rbuff * (1.d0/(delta*sqrt(2.d0*pi))) * exp(-0.5d0*(X**2)/(delta**2))
+
+    ! this part needs to be done at the end of the loops
+    sumVal = p_sum(scalarSource) * this%dx*this%dy*this%dz
+    scalarSource = scalarSource / sumVal
+
+end subroutine
+
 
 subroutine AD_force(this, X, Y, Z, scalarSource)
     class(actuatordisk_yaw), intent(inout) :: this
