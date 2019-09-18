@@ -73,13 +73,15 @@ program test_dynamicYaw
     call dyaw%init(inputDir, ad)
 
     ! Run the full dynamic yaw state estimation and yaw optimize
-    yaw = 10.d0 * pi / 180.d0
+    yaw = 0.d0 * pi / 180.d0
     ! Input
     write(*,*) yaw*180.d0/pi
     call dyaw%update_and_yaw(yaw)
 
     ! Output
     write(*,*) dyaw%yaw*180.d0/pi
+    call message(2, 'Ptot initial', dyaw%Ptot_initial)
+    call message(2, 'Ptot final', dyaw%Ptot_final)
 
     call MPI_Finalize(ierr)
 end program 

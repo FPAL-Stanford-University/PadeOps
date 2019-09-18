@@ -36,6 +36,7 @@ module dynamicYawMod
         integer :: conditionTurb
         ! Other stuff
         integer, dimension(:), allocatable :: indSorted, unsort
+        real(rkind) :: Ptot_initial, Ptot_final
         ! Cache stuff
         real(rkind), dimension(:), allocatable :: u_eff, Cp, a_mom
         real(rkind), dimension(:), allocatable :: ap, delta_u_face_store
@@ -67,7 +68,7 @@ subroutine init(this, inputfile, ad)
     character(len=*), intent(in) :: inputfile
     integer :: ioUnit, conditionTurb, ierr, i
     real(rkind) :: beta1 = 0.9d0, beta2 = 0.999d0, learning_rate_yaw = 10D-4
-    integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20, Nt = 2, Nx = 100
+    integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20, Nt = 2, Nx = 500
     real(rkind) :: var_p = 0.04d0, var_k = 9D-6, var_sig = 9D-6, D = 0.315
     real(rkind) :: Ct = 0.75, eta = 0.7
  
@@ -184,7 +185,7 @@ subroutine onlineUpdate(this)
             psi_kp1(this%Nt+t,i) = sigma_0(t)
         end do
     end do
-    lowestError = 10; bestStep = 1;
+    lowestError = 10; bestStep = 1; kwBest = kw; sigmaBest = sigma_0;
     do t=1, this%stateEstimationEpochs;
         call this%EnKF_update( psi_kp1, this%powerObservation, kw, sigma_0, yaw)
         ! Run forward model pass
@@ -195,12 +196,13 @@ subroutine onlineUpdate(this)
         if (error(t)<lowestError) then
             lowestError=error(t); bestStep = t;
             kwBest = kw; sigmaBest = sigma_0
+            this%Ptot_initial = p_sum(Phat)
         end if
     end do
 
     ! Generate optimal yaw angles
     this%kw = kwBest; this%sigma_0 = sigmaBest;
-    call this%yawOptimize(kw, sigma_0, yaw)
+    call this%yawOptimize(kwBest, sigmaBest, yaw)
     ! Store the unsorted parameters
     this%kw = kwBest(this%unsort); this%sigma_0 = sigmaBest(this%unsort)   
     this%yaw = yaw(this%unsort) 
@@ -310,7 +312,7 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
 
     ! Model
     ! Load model inputs
-    call this%forward(kw, sigma_0, P, yaw)
+    call this%forward(kw, sigma_0, P, yaw*0.d0)
     Ptot_baseline = p_sum(P); P_baseline = P;
     
     ! eps also determines the termination condition
@@ -323,8 +325,6 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
         ! Forward prop
         this%dp_dgamma = 0.d0
         call this%forward(kw, sigma_0, P, yaw)
-        !call message(2,'yc',this%y_c(1,2))
-        !call message(2,'yc',this%y_c(2,1))
         yawTime(k+1,:) = yaw;
         Ptot(k) = p_sum(P);
         P_time(k,:) = P;
@@ -336,10 +336,6 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
         v = this%beta2*v + (1.d0-this%beta2)*(this%dp_dgamma**2);
         yaw = yaw + this%learning_rate_yaw * m / & 
                    (sqrt(v) + this%eps)
-        call message(2,'ptot', Ptot(k))
-        call message(2,'yaw', yaw(1)*180.d0/pi)
-        !write(*,*) P
-        !write(*,*) yaw
         if (Ptot(k) > bestPower) then
            bestPower = Ptot(k)
            bestYaw = yaw
@@ -354,6 +350,7 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     
     ! Final results
     yaw = bestYaw
+    this%Ptot_final = bestPower / P_baseline(1)
 
 end subroutine
 
@@ -404,13 +401,13 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
     real(rkind), dimension(this%Nt) :: delta_v0
     real(rkind) :: dw, aPrev, du, gaussian, delta_u_face, L
     logical, dimension(this%Nt, this%Nt) :: turbinesInFront
-    real(rkind), dimension(this%Nx) :: xpFront, delta_v
+    real(rkind), dimension(this%Nx) :: xpFront, delta_v, dwVect
     logical :: check
     
     ! Definitions
     ! Set the relevant turbine length scale
     L = 100.d0
-    turbinesInFront = 0
+    turbinesInFront = .false.
     this%A = (this%D*L) ** 2. * pi / 4
     D = this%D / this%D
     R = D/2.d0
@@ -438,7 +435,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
                    check = 1
                end if
                if (check == .TRUE.) then
-                   turbinesInFront(j,i) = 1
+                   turbinesInFront(j,i) = .true.
                end if
             end if
         end do
@@ -457,24 +454,26 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
                 this%deltaUIndividual(j,k) = du
 
                 ! Deflection
+                dwVect = 1.d0 + kw(k) * log(1.d0 + exp((xpFront - 2.0 * R) / R));
                 delta_v0(j) = 0.25 * this%Ct * cos(yaw(k))**2 * sin(yaw(k))
                 ! Velocity deficit
-                delta_v = (delta_v0(j) / (dw**2+this%eps)) * 0.5 * (1.d0 + erf(xpFront & 
+                delta_v = (delta_v0(j) / (dwVect**2+this%eps)) * 0.5 * (1.d0 + erf(xpFront & 
                           / (R*sqrt(2.d0))))
                 where (xpFront<0.d0)
                     delta_v = 0.d0
                 end where
                 ! y_c
-                this%y_c(k, j) = integrate(xpFront, -delta_v) !mytrapz(xpFront, -delta_v)
+                !this%y_c(k, j) = integrate(xpFront, -delta_v) !mytrapz(xpFront, -delta_v)
+                this%y_c(k, j) = mytrapz(xpFront, -delta_v)
                 ! Local y frame
                 this%sigmaEnd(k, j) = sigma_0(k) * dw 
                 ! take the last value of sigma which is at the next turbine
                 this%yCenter(k, j) = this%y_c(k, j) + this%turbCenter(k, 2);
                 ! Effective velocity at turbine face
                 gaussian = erf((this%turbCenter(j, 2)+D/2.d0-this%yCenter(k,j))/ & 
-                             sqrt(2.d0*this%sigmaEnd(k, j)**2)) - &
+                             sqrt(2.d0*this%sigmaEnd(k, j)**2+this%eps)) - &
                              erf((this%turbCenter(j, 2)-D/2.d0-this%yCenter(k, j))/ & 
-                             sqrt(2.d0*this%sigmaEnd(k,j)**2));
+                             sqrt(2.d0*this%sigmaEnd(k,j)**2+this%eps));
                 gaussian = gaussian * (D**2)/(16.d0*sigma_0(k)**2) & 
                            * this%sigmaEnd(k,j)*sqrt(2.d0*pi)
                 delta_u_face = delta_u_face + du * gaussian;
@@ -501,11 +500,12 @@ subroutine backward(this, kw, sigma_0, yaw)
     integer :: i, j, k
     real(rkind), dimension(this%Nt) :: dp_du_eff, dp_dcp, dcp_dap
     real(rkind), dimension(this%Nt) :: du_eff_dyc, dy_c_dgamma
-    real(rkind), dimension(this%Nt) :: dcp_dgamma, da_dgamma, xpFront
+    real(rkind), dimension(this%Nt) :: dcp_dgamma, da_dgamma
     real(rkind) :: dx, R=0.5
     logical :: check
     real(rkind) :: boundLow, boundHigh, edgeLow, edgeHigh, dw, du_eff_da
     logical, dimension(this%Nt) :: turbinesInBack
+    real(rkind), dimension(this%Nx) :: dwVect, xpFront
 
     !! Backprop
     this%dp_dgamma = 0.d0
@@ -569,11 +569,12 @@ subroutine backward(this, kw, sigma_0, yaw)
                 dx = this%turbCenter(k, 1) - this%turbCenter(i, 1)
                 xpFront = linspace(0.d0, dx, this%Nx)
                 dw = 1.d0 + kw(i) * log(1.d0 + exp((dx - 2.0d0 * R) / R))
+                dwVect = 1.d0 + kw(i) * log(1.d0 + exp((xpFront - 2.0d0 * R) / R))
                 ! Changed this when using the local velocity to compute y_c
                 dy_c_dgamma(i) = (cos(yaw(i))**3 - 2.d0*sin(yaw(i))**2 * & 
                                  cos(yaw(i))) * &
                                  mytrapz(xpFront, -0.25d0*this%Ct*0.5d0*(1.d0+erf(xpFront/ & 
-                                 (R*sqrt(2.d0))))/dw**2)
+                                 (R*sqrt(2.d0))))/dwVect**2)
                 ! Sum together to get dP / dgamma
                 this%dp_dgamma(i) = this%dp_dgamma(i) + & 
                                     dp_du_eff(k)*du_eff_dyc(i)*dy_c_dgamma(i) 
