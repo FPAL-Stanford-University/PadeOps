@@ -96,9 +96,9 @@ end subroutine
 
 ! Need to create pointers instead of allocating fresh memory for scaling (in
 ! termsof numturbines) and performance (allocating/deallocating is expensive)
-subroutine link_memory_buffers(this, rbuff, blanks, speed, X, Y, Z, Xnew, Ynew, Znew, scalarSource)
+subroutine link_memory_buffers(this, rbuff, blanks, speed, X, Y, Z, scalarSource)
     class(actuatordisk_yaw), intent(inout) :: this
-    real(rkind), dimension(:,:,:), intent(in), target :: rbuff, blanks, speed, X, Y, Z, scalarSource, Xnew, Ynew, Znew
+    real(rkind), dimension(:,:,:), intent(in), target :: rbuff, blanks, speed, X, Y, Z, scalarSource
     this%rbuff => rbuff
     this%speed => speed
     this%X     => X
@@ -126,7 +126,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
     real(rkind) :: usp_sq, force, gamma
     real(rkind), dimension(3,3) :: R, T
     real(rkind), dimension(3,1) :: xn, Ft, n
-    real(rkind) ::  numPoints, x, y, z
+    real(rkind) ::  numPoints, x, y, z, scalarSource, sumVal
     real(rkind) :: xnew, ynew, znew, cgamma, sgamma, ctheta, stheta
     integer :: i,j,k
      
@@ -158,19 +158,27 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
                   this%X(i,j,k) = xnew
                   this%Y(i,j,k) = ynew*ctheta - znew*stheta
                   this%Z(i,j,k) = ynew*stheta + znew*ctheta
+                  call this%AD_force_point(this%X(i,j,k), this%Y(i,j,k), & 
+                                           this%Z(i,j,k), scalarSource)
+                  this%scalarSource(i,j,k) = scalarSource
                 end do
             end do
         end do
-        call this%AD_force(this%X, this%Y, this%Z, this%scalarSource)
+        ! this part needs to be done at the end of the loops
+        sumVal = p_sum(this%scalarSource) * this%dx*this%dy*this%dz
+        this%scalarSource = this%scalarSource / sumVal
         ! Get the mean velocities at the turbine face
         this%speed = u*n(1,1) + v*n(2,1) + w*n(3,1)
         this%blanks = 1.d0
-        !!!!!!!!!!!!
-        ! put this into the do loop
-        where(abs(this%scalarSource)<1D-10)
-            this%blanks = 0.d0
-        end where
-        !!!!!!!!!!!!
+        do k = 1,size(this%X,3)
+            do j = 1, size(this%X,2)
+                do i = 1,size(this%X,1)
+                    if (abs(this%scalarSource(i,j,k))<1D-10) then
+                        this%blanks(i,j,k) = 0.d0
+                    end if
+                end do
+            end do
+        end do
         numPoints = p_sum(this%blanks)
         this%rbuff = this%blanks*this%speed
         this%ut = p_sum(this%rbuff)/numPoints    
@@ -197,26 +205,23 @@ end subroutine
 
 subroutine AD_force_point(this, X, Y, Z, scalarSource)
     class(actuatordisk_yaw), intent(inout) :: this
-    real(rkind), intent(inout), dimension(:,:,:) :: scalarSource
-    real(rkind), intent(in), dimension(:,:,:) :: X, Y, Z
+    real(rkind), intent(inout) :: scalarSource
+    real(rkind), intent(in) :: X,Y,Z
     real(rkind) :: delta_r = 0.22d0, smear_x = 1.5d0, delta, R, sumVal
+    real(rkind) :: tmp
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Do everything in the i,j,k loop in the rhs call
 
     ! X,Y,Z are shifted to xc, yc, zx zero center as per AD location
     R = this%diam / 2.d0
-    this%rbuff = sqrt((Y/R)**2 + (Z/R)**2)
-    this%rbuff = (this%rbuff-1.d0)/delta_r + 1.d0
-    !call Sfunc(this%rbuff, this%rbuff) << Can't operate in-place here because Sfunc uses in/out declarations.
-    call Sfunc(this%rbuff, scalarSource)
-    this%rbuff = 1.d0 - scalarSource
+    tmp = sqrt((Y/R)**2 + (Z/R)**2)
+    tmp = (tmp-1.d0)/delta_r + 1.d0
+    call Sfunc_point(tmp, scalarSource)
+    tmp = 1.d0 - scalarSource
     delta = (this%dx)*smear_x
-    scalarSource = this%rbuff * (1.d0/(delta*sqrt(2.d0*pi))) * exp(-0.5d0*(X**2)/(delta**2))
+    scalarSource = tmp * (1.d0/(delta*sqrt(2.d0*pi))) * exp(-0.5d0*(X**2)/(delta**2))
 
-    ! this part needs to be done at the end of the loops
-    sumVal = p_sum(scalarSource) * this%dx*this%dy*this%dz
-    scalarSource = scalarSource / sumVal
 
 end subroutine
 
@@ -238,6 +243,21 @@ subroutine AD_force(this, X, Y, Z, scalarSource)
     scalarSource = this%rbuff * (1.d0/(delta*sqrt(2.d0*pi))) * exp(-0.5d0*(X**2)/(delta**2))
     sumVal = p_sum(scalarSource) * this%dx*this%dy*this%dz
     scalarSource = scalarSource / sumVal
+
+end subroutine
+
+pure subroutine Sfunc_point(x, val)
+    !class(actuatordisk_yaw), intent(inout) :: this
+    real(rkind), intent(in)  :: x
+    real(rkind), intent(out) :: val
+    
+    val = 1.d0 / (1.d0 + exp(min(1.d0/(x-1.d0+1D-18) + 1.d0/(x + 1D-18), 50.d0)))
+    if (x>1.d0) then
+        val = 1.d0
+    end if
+    if (x<0.d0) then
+        val = 0.d0
+    end if
 
 end subroutine
 

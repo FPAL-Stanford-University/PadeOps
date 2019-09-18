@@ -147,7 +147,6 @@ subroutine update_and_yaw(this, yaw)
     call this%onlineUpdate()
     ! Restore original layout
     this%turbCenter = X
-    this%yaw = yaw(this%unsort)
 
     deallocate(X)
 
@@ -156,6 +155,7 @@ end subroutine
 subroutine onlineUpdate(this)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:), allocatable :: kw, sigma_0, Phat, kwBest, sigmaBest, yaw
+    real(rkind), dimension(:), allocatable :: Phat_zeroYaw
     real(rkind), dimension(:,:), allocatable :: psi_kp1
     real(rkind), dimension(this%stateEstimationEpochs) :: error
     real(rkind) :: lowestError
@@ -168,12 +168,14 @@ subroutine onlineUpdate(this)
     allocate(sigma_0(this%Nt))
     allocate(sigmaBest(this%Nt))
     allocate(Phat(this%Nt))
+    allocate(Phat_zeroYaw(this%Nt))
     nt2 = this%Nt*2
     allocate(psi_kp1(nt2,this%Ne))
  
     ! Store local parameter and rotate
     kw = this%kw(this%indSorted); sigma_0 = this%sigma_0(this%indSorted)
     yaw = this%yaw(this%indSorted)
+    call this%forward(kw, sigma_0, Phat_zeroYaw, yaw*0.d0)
     ! State estimation
     error = 0.d0; lowestError = 100.d0
     do i=1, this%Ne
@@ -184,14 +186,12 @@ subroutine onlineUpdate(this)
     end do
     lowestError = 10; bestStep = 1;
     do t=1, this%stateEstimationEpochs;
-        write(*,*) this%powerObservation
         call this%EnKF_update( psi_kp1, this%powerObservation, kw, sigma_0, yaw)
         ! Run forward model pass
         call this%forward(kw, sigma_0, Phat, yaw)
         ! Normalized
-        Phat = Phat / Phat(1)
-        write(*,*) Phat
-        error(t) = p_sum(abs(Phat-this%powerObservation)/Phat(1)) / real(this%Nt)
+        Phat = Phat / Phat_zeroYaw(1)
+        error(t) = p_sum(abs(Phat-this%powerObservation)/Phat_zeroYaw(1)) / real(this%Nt)
         if (error(t)<lowestError) then
             lowestError=error(t); bestStep = t;
             kwBest = kw; sigmaBest = sigma_0
@@ -204,7 +204,6 @@ subroutine onlineUpdate(this)
     ! Store the unsorted parameters
     this%kw = kwBest(this%unsort); this%sigma_0 = sigmaBest(this%unsort)   
     this%yaw = yaw(this%unsort) 
-    write(*,*) this%kw
 
     ! Deallocate
     deallocate(kw)
@@ -224,7 +223,7 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     integer :: NN, i, j
     real(rkind), dimension(:,:), allocatable :: randArr, randArr2, chi, rbuff
     real(rkind), dimension(:,:), allocatable :: psi_kp, psi_kp1, psiHat_kp, ones_Ne, psi_kpp, psiHat_kpp
-    real(rkind), dimension(:), allocatable :: Phat
+    real(rkind), dimension(:), allocatable :: Phat, Phat_zeroYaw
     integer :: seedu = 321341
     integer :: seedv = 423424
     integer :: seedw = 131344
@@ -238,6 +237,7 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     allocate(psiHat_kp(this%Nt, size(psi_kp,2)))
     allocate(psiHat_kpp(this%Nt, size(psi_kp,2)))
     allocate(Phat(this%Nt))
+    allocate(Phat_zeroYaw(this%Nt))
     allocate(ones_Ne(this%Ne, this%Ne))
     allocate(rbuff(size(psi_kp,1), size(psi_kp,2)))
     allocate(randArr(this%Nt, this%Ne))
@@ -254,11 +254,12 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     randArr2 = psi_kp(this%Nt+1:NN, :)
 
     ! Intermediate forcast step
+    call this%forward(kw, sigma_0, Phat_zeroYaw, yaw*0.d0)
     do i=1,this%Ne
         ! Lifting line model
         call this%forward(randArr(:,i), randArr2(:,i), Phat, yaw)
         ! Normalize by first turbine
-        psiHat_kp(:,i) = Phat/Phat(1)
+        psiHat_kp(:,i) = Phat/Phat_zeroYaw(1)
     end do
 
 
@@ -284,7 +285,7 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
             matmul(randArr, transpose(randArr)))), (randArr2 - psiHat_kp))
 
     ! Ouput the final values
-    psi_kp1 = psi_kp1*ones_Ne;
+    psi_kp1 = matmul(psi_kp1,ones_Ne)
     kw = psi_kp1(1:this%Nt,1);
     sigma_0 = psi_kp1(this%Nt+1:NN,1);
     !error = p_sum(abs(rbuff(:,1)-P_kp1)) / real(this%Nt)
@@ -317,10 +318,13 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     bestYaw = 0.d0; Ptot = 0.d0; P_time = 0.d0; P_time = 0.d0; yawTime = 0.d0
     m=0.d0; v=0.d0;
     bestPower = 0.d0; bestYaw = 0.d0;
-    do while (k < this%epochsYaw .and. check == 0) 
+    do while (k < this%epochsYaw .and. check == .false.) 
     
         ! Forward prop
+        this%dp_dgamma = 0.d0
         call this%forward(kw, sigma_0, P, yaw)
+        !call message(2,'yc',this%y_c(1,2))
+        !call message(2,'yc',this%y_c(2,1))
         yawTime(k+1,:) = yaw;
         Ptot(k) = p_sum(P);
         P_time(k,:) = P;
@@ -332,6 +336,10 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
         v = this%beta2*v + (1.d0-this%beta2)*(this%dp_dgamma**2);
         yaw = yaw + this%learning_rate_yaw * m / & 
                    (sqrt(v) + this%eps)
+        call message(2,'ptot', Ptot(k))
+        call message(2,'yaw', yaw(1)*180.d0/pi)
+        !write(*,*) P
+        !write(*,*) yaw
         if (Ptot(k) > bestPower) then
            bestPower = Ptot(k)
            bestYaw = yaw
@@ -339,7 +347,7 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
         k = k+1
         if (k > 10) then
             if (abs(Ptot(k-1)-Ptot(k-2))/abs(Ptot(k-1)) < 10D-9) then
-                check = 1
+                check = .true.
             end if
         end if
     end do
@@ -353,7 +361,7 @@ subroutine observeField(this)
     class(dynamicYaw), intent(inout) :: this
     this%wind_speed = 8.d0 ! Get this from the data
     this%wind_direction = 270.d0 ! Get this from the data
-    this%powerObservation = (/1.d0, 0.7d0/) ! Get the power production from ADM code 
+    this%powerObservation = (/1.d0, 0.6d0/) ! Get the power production from ADM code 
 
 end subroutine
 
@@ -394,14 +402,16 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
     real(rkind) :: D, R, dx, boundLow, boundHigh, edgeLow, edgeHigh
     integer :: Nx, i, j, k
     real(rkind), dimension(this%Nt) :: delta_v0
-    real(rkind) :: dw, aPrev, du, gaussian, delta_u_face
+    real(rkind) :: dw, aPrev, du, gaussian, delta_u_face, L
     logical, dimension(this%Nt, this%Nt) :: turbinesInFront
     real(rkind), dimension(this%Nx) :: xpFront, delta_v
     logical :: check
     
     ! Definitions
+    ! Set the relevant turbine length scale
+    L = 100.d0
     turbinesInFront = 0
-    this%A = this%D ** 2. * pi / 4
+    this%A = (this%D*L) ** 2. * pi / 4
     D = this%D / this%D
     R = D/2.d0
     ! Atmospheric conditions
@@ -452,10 +462,10 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
                 delta_v = (delta_v0(j) / (dw**2+this%eps)) * 0.5 * (1.d0 + erf(xpFront & 
                           / (R*sqrt(2.d0))))
                 where (xpFront<0.d0)
-                    delta_v = 0
+                    delta_v = 0.d0
                 end where
                 ! y_c
-                this%y_c(k, j) = mytrapz(xpFront, -delta_v)
+                this%y_c(k, j) = integrate(xpFront, -delta_v) !mytrapz(xpFront, -delta_v)
                 ! Local y frame
                 this%sigmaEnd(k, j) = sigma_0(k) * dw 
                 ! take the last value of sigma which is at the next turbine
@@ -498,7 +508,6 @@ subroutine backward(this, kw, sigma_0, yaw)
     logical, dimension(this%Nt) :: turbinesInBack
 
     !! Backprop
-    turbinesInBack = 0
     this%dp_dgamma = 0.d0
     ! Loop over turbines
     do i = this%Nt, 1, -1
@@ -518,6 +527,7 @@ subroutine backward(this, kw, sigma_0, yaw)
         this%dp_dgamma(i) = this%dp_dgamma(i) + dp_dcp(i)*dcp_dgamma(i);
     end do
     do i = this%Nt, 1, -1
+        turbinesInBack = .false.
         do j = 1, this%Nt
             dx = this%turbCenter(j, 1) - this%turbCenter(i, 1);
             if (dx > 0) then
@@ -526,15 +536,15 @@ subroutine backward(this, kw, sigma_0, yaw)
                boundHigh = this%turbCenter(i,2)+dw/2.d0;
                edgeLow = this%turbCenter(j,2)-this%D/2.d0;
                edgeHigh = this%turbCenter(j,2)+this%D/2.d0;
-               check = 0
+               check = .false.
                if (edgeLow>=boundLow .and. edgeLow<=boundHigh) then
-                   check = 1
+                   check = .true.
                end if
                if (edgeHigh>=boundLow .and. edgeHigh<=boundHigh) then
-                   check = 1
+                   check = .true.
                end if
-               if (check == 1) then
-                   turbinesInBack(i) = 1
+               if (check == .true.) then
+                   turbinesInBack(j) = .true.
                end if
             end if
         end do
@@ -542,7 +552,7 @@ subroutine backward(this, kw, sigma_0, yaw)
         ! Flip over whether the turbine sees a wake or not
         du_eff_da = 0;
         do k = 1, this%Nt
-            if (turbinesInBack(k) == 1) then
+            if (turbinesInBack(k) == .true.) then
                 du_eff_da = -this%deltaUIndividual(k,i) / (this%a_mom(i)+this%eps) * & 
                             this%gaussianStore(i,k)
                 this%dp_dgamma(i) = this%dp_dgamma(i) + & 
@@ -609,5 +619,20 @@ function inv(A) result(Ainv)
      stop 'Matrix inversion failed!'
   end if
 end function inv
+
+  pure function integrate(x, y) result(r)
+    !! Calculates the integral of an array y with respect to x using the
+    !trapezoid
+    !! approximation. Note that the mesh spacing of x does not have to be
+    !uniform.
+    real(rkind), intent(in)  :: x(:)         !! Variable x
+    real(rkind), intent(in)  :: y(size(x))   !! Function y(x)
+    real(rkind)              :: r            !! Integral ∫y(x)·dx
+
+    ! Integrate using the trapezoidal rule
+    associate(n => size(x))
+      r = sum((y(1+1:n-0) + y(1+0:n-1))*(x(1+1:n-0) - x(1+0:n-1)))/2
+    end associate
+  end function
 
 end module 

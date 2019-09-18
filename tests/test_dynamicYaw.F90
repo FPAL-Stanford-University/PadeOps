@@ -23,7 +23,7 @@ program test_dynamicYaw
     integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0, num_turbines 
     type(decomp_info) :: gp 
     real(rkind), dimension(:,:,:), allocatable :: rbuff, blanks, speed, X
-    real(rkind), dimension(:,:,:), allocatable :: Y, Z, Xnew, Ynew, Znew, scalarSource
+    real(rkind), dimension(:,:,:), allocatable :: Y, Z, scalarSource
     real(rkind), dimension(:), allocatable :: yaw
 
     call MPI_Init(ierr)
@@ -58,16 +58,13 @@ program test_dynamicYaw
     allocate(X(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
     allocate(Y(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
     allocate(Z(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
-    allocate(Xnew(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
-    allocate(Ynew(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
-    allocate(Znew(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
     allocate(scalarSource(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
     allocate(yaw(num_turbines)) 
          
    do i = 1, num_turbines
         call ad(i)%init(inputDir_turb, i, xG, yG, zG)
         call ad(i)%link_memory_buffers(rbuff, blanks, speed, X, &
-                            Y, Z, Xnew, Ynew, Znew, scalarSource)
+                            Y, Z, scalarSource)
     end do
     call message(0,"YAWING WIND TURBINE (Type 4) array initialized")
 
@@ -76,7 +73,9 @@ program test_dynamicYaw
     call dyaw%init(inputDir, ad)
 
     ! Run the full dynamic yaw state estimation and yaw optimize
-    yaw = 0.d0
+    yaw = 10.d0 * pi / 180.d0
+    ! Input
+    write(*,*) yaw*180.d0/pi
     call dyaw%update_and_yaw(yaw)
 
     ! Output

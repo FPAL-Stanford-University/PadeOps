@@ -32,7 +32,7 @@ program test_actuatorDisk
     real(rkind) :: comp1, comp2, maxdiff
     real(rkind) :: gamma_negative, theta
     real(rkind), dimension(:,:,:), allocatable :: rbuff, blanks, speed, X
-    real(rkind), dimension(:,:,:), allocatable :: Y, Z, Xnew, Ynew, Znew, scalarSource
+    real(rkind), dimension(:,:,:), allocatable :: Y, Z, scalarSource
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -53,9 +53,6 @@ program test_actuatorDisk
     allocate(X(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
     allocate(Y(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
     allocate(Z(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
-    allocate(Xnew(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
-    allocate(Ynew(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
-    allocate(Znew(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
     allocate(scalarSource(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
 
     num_turbines = 1
@@ -86,7 +83,7 @@ program test_actuatorDisk
         call hawts_T2(idx)%init(inputDir, idx, xG, yG, zG)
         call hawts_Tyaw(idx)%init(inputDir, idx, xG, yG, zG)
         call hawts_Tyaw(idx)%link_memory_buffers(rbuff, blanks, speed, X, &
-                                Y, Z, Xnew, Ynew, Znew, scalarSource)
+                                Y, Z, scalarSource)
     end do 
 
     ! reset diam, CT
@@ -144,6 +141,6 @@ program test_actuatorDisk
     end do 
     deallocate(hawts)
     deallocate(xG, yG, zG, u, v, w, rhs1, rhs2, rhs3)
-    deallocate(rbuff, blanks, speed, X, Y, Z, Xnew, Ynew, Znew, scalarSource)
+    deallocate(rbuff, blanks, speed, X, Y, Z, scalarSource)
     call MPI_Finalize(ierr)
 end program 
