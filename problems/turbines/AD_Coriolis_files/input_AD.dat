@@ -1,10 +1,10 @@
 &INPUT
-inputdir                      = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/output"   ! Directory for any input files
-outputdir                     = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/output"   ! Directory for all output files
-nx                            = 1280          ! Number of points in X
-ny                            = 256          ! Number of points in Y
-nz                            = 256          ! Number of points in Z
-tstop                         = 500.D0       ! Physical time to stop the simulation
+inputdir                      = "/scratch/05294/mhowland/AD_Coriolis/Ro_inf"   ! Directory for any input files
+outputdir                     = "/scratch/05294/mhowland/AD_Coriolis/Ro_inf"   ! Directory for all output files
+nx                            = 128          ! Number of points in X
+ny                            = 32          ! Number of points in Y
+nz                            = 32          ! Number of points in Z
+tstop                         = 1000.D0       ! Physical time to stop the simulation
 CFL                           = 1.4D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
@@ -25,7 +25,7 @@ dealiasFact                   = 0.6667d0
 /
 /
 &IO
-RunID                         = 5          ! Run Label (All output files will be tagged with this nubber)
+RunID                         = 1          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump                 = 1000        ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump                    = 100        ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
@@ -39,7 +39,7 @@ t_stop_planeDump              = 5000        ! When do you want to stop dumping p
 tid_StatsDump                 = 20000        ! Dumping Frequency for Statistics file (# of time steps)
 tid_compStats                 = 10         ! Frequency of Computing Statistics
 tSimStartStats                = 20.d0       ! Simulation time for starting stats calculations 
-normStatsByUstar              = .TRUE.      ! Normalize Statistics by ustar at each instant
+normStatsByUstar              = .FALSE.      ! Normalize Statistics by ustar at each instant
 computeSpectra                = .FALSE.     ! Compute and time average x - spectra on the run
 timeAvgFullFields             = .FALSE.     ! Time average and store fields on the run
 /
@@ -62,7 +62,7 @@ Re                            = 1.D10       ! Reynolds Number; used when isInvis
 Fr                            = 1.D10       ! Froude number; used when isStratified is TRUE
 G_geostrophic                 = 1.D0        ! Geostrophic wind speed 
 G_alpha                       = 0.D0        ! Geostrophic wind angle (degrees, from +x axis)
-latitude                      = 90.d0       ! Latitude 
+latitude                      = 45.d0       ! Latitude 
 dPfdx                         = 0.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                         = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                         = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
@@ -103,14 +103,14 @@ DynProcFreq                   = 5          ! Frequency of dynamic procedure
 useWindTurbines               = .TRUE.    ! Do you want to use Wind turbines ?
 num_turbines                  = 1
 ADM                           = .TRUE.
-turbInfoDir                   = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/"
-ADM_Type                      = 1
+turbInfoDir                   = "/home1/05294/mhowland/PadeOps/build/build_debug/problems/turbines/AD_Coriolis_files/turbInfo/"
+ADM_Type                      = 2
 /
 /
 &FRINGE
-Fringe_xst                    = 0.500d0         
-Fringe_xen                    = 0.850d0
-Fringe_delta_st_x             = 0.275d0
+Fringe_xst                    = 0.75d0         
+Fringe_xen                    = 0.95d0
+Fringe_delta_st_x             = 0.15d0
 Fringe_delta_en_x             = 0.05d0
 Fringe_yst                    = 0.80d0         
 Fringe_yen                    = 1.00d0
@@ -127,7 +127,7 @@ t_dumpKSprep                  = 10             ! Dumping Frequency for KS files
 /
 /
 &AD_CoriolisINPUT
-Lx                            = 31.415926535897d0                        ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            = 6.2831853071795d0           ! Domain Width  (appropriate dimesions/non-dimensionalized)
-Lz                            = 6.2831853071795d0           ! Domain Height (appropriate dimesnions/non-dimensionalized)
+Lx                            = 25.d0                        ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            = 5.d0           ! Domain Width  (appropriate dimesions/non-dimensionalized)
+Lz                            = 5.d0           ! Domain Height (appropriate dimesnions/non-dimensionalized)
 /
