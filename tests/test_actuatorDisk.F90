@@ -124,6 +124,7 @@ program test_actuatorDisk
     call message(3,"absolute error:", p_sum(sum(rhs2)) * dx*dy*dz + (num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
     call message(2,"Expected Source:", -(num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
 
+    call decomp_2d_write_one(1,rhs3,"temp_T4.bin", gp)
     call message(2,"Computed Source (Tyaw):", p_sum(sum(rhs3)) * dx*dy*dz)
     call message(3,"absolute error:", p_sum(sum(rhs3)) * dx*dy*dz + (num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
     call message(2,"Expected Source:", -(num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
