@@ -13,7 +13,6 @@ pcol                  = 0            ! Number of rows in 2D processor decomposit
 useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
 restartFile_TID       = 0       ! TimeID of the restart file being used
 restartFile_RID       = 3            ! RunID of the restart file being used
-CviscDT               = 1.D0
 /
 /
 &NUMERICS

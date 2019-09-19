@@ -4,7 +4,7 @@ outputdir                     = "/scratch/05294/mhowland/AD_Coriolis/Ro_inf"   !
 nx                            = 128          ! Number of points in X
 ny                            = 32          ! Number of points in Y
 nz                            = 32          ! Number of points in Z
-tstop                         = 1000.D0       ! Physical time to stop the simulation
+tstop                         = 100.D0       ! Physical time to stop the simulation
 CFL                           = 1.4D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
@@ -103,8 +103,8 @@ DynProcFreq                   = 5          ! Frequency of dynamic procedure
 useWindTurbines               = .TRUE.    ! Do you want to use Wind turbines ?
 num_turbines                  = 1
 ADM                           = .TRUE.
-turbInfoDir                   = "/home1/05294/mhowland/PadeOps/build/build_debug/problems/turbines/AD_Coriolis_files/turbInfo/"
-ADM_Type                      = 2
+turbInfoDir                   = "/home1/05294/mhowland/PadeOps/problems/turbines/AD_Coriolis_files/turbInfo/1x1array"
+ADM_Type                      = 4
 /
 /
 &FRINGE
@@ -128,6 +128,6 @@ t_dumpKSprep                  = 10             ! Dumping Frequency for KS files
 /
 &AD_CoriolisINPUT
 Lx                            = 25.d0                        ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            = 5.d0           ! Domain Width  (appropriate dimesions/non-dimensionalized)
-Lz                            = 5.d0           ! Domain Height (appropriate dimesnions/non-dimensionalized)
+Ly                            = 2.5d0           ! Domain Width  (appropriate dimesions/non-dimensionalized)
+Lz                            = 2.5d0           ! Domain Height (appropriate dimesnions/non-dimensionalized)
 /

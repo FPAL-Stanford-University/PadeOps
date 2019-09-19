@@ -49,7 +49,7 @@ module turbineMod
         integer :: neighbour(6), coord(2), dims(2), tag_s, tag_n, tag_b, tag_t
         real(rkind), allocatable, dimension(:,:,:) :: ySendBuf, zSendBuf, yRightHalo, zRightHalo, zLeftHalo
 
-        real(rkind), dimension(:,:,:), allocatable :: rbuff, blanks, speed, X, Y, Z, scalarSource
+        real(rkind), dimension(:,:,:), allocatable :: rbuff, blanks, speed, scalarSource
         logical :: dumpTurbField = .false.
         integer :: step = 0, ADM_Type 
     contains
@@ -167,9 +167,6 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
          allocate (this%rbuff(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
          allocate (this%blanks(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
          allocate (this%speed(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
-         allocate (this%X(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
-         allocate (this%Y(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
-         allocate (this%Z(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
          allocate (this%scalarSource(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
          
          do i = 1, this%nTurbines
@@ -177,7 +174,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
              this%gamma(i) = 0.d0
              this%theta(i) = 0.d0
              call this%turbArrayADM_Tyaw(i)%link_memory_buffers(this%rbuff, this%blanks, this%speed,  & 
-                   this%X, this%Y, this%Z, this%scalarSource)
+                   this%scalarSource)
          end do
          call message(0,"YAWING WIND TURBINE (Type 4) array initialized")
       end select 

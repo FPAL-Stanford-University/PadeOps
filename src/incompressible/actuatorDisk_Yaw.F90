@@ -37,7 +37,7 @@ module actuatorDisk_YawMod
         
         ! Pointers to memory buffers 
         logical :: memory_buffers_linked = .false.
-        real(rkind), dimension(:,:,:), pointer :: rbuff, blanks, speed, X, Y, Z, scalarSource
+        real(rkind), dimension(:,:,:), pointer :: rbuff, blanks, speed, scalarSource
 
         ! MPI communicator stuff
         logical :: Am_I_Active, Am_I_Split
@@ -96,14 +96,11 @@ end subroutine
 
 ! Need to create pointers instead of allocating fresh memory for scaling (in
 ! termsof numturbines) and performance (allocating/deallocating is expensive)
-subroutine link_memory_buffers(this, rbuff, blanks, speed, X, Y, Z, scalarSource)
+subroutine link_memory_buffers(this, rbuff, blanks, speed, scalarSource)
     class(actuatordisk_yaw), intent(inout) :: this
-    real(rkind), dimension(:,:,:), intent(in), target :: rbuff, blanks, speed, X, Y, Z, scalarSource
+    real(rkind), dimension(:,:,:), intent(in), target :: rbuff, blanks, speed, scalarSource
     this%rbuff => rbuff
     this%speed => speed
-    this%X     => X
-    this%Y     => Y
-    this%Z     => Z
     this%scalarSource => scalarSource
     this%blanks => blanks
     this%memory_buffers_linked = .true. 
@@ -114,7 +111,7 @@ subroutine destroy(this)
 
     this%memory_buffers_linked = .false.
     
-    nullify(this%rbuff, this%blanks, this%speed, this%X, this%Y, this%Z, this%scalarSource)
+    nullify(this%rbuff, this%blanks, this%speed, this%scalarSource)
     nullify(this%xG, this%yG, this%zG)
 end subroutine 
 
@@ -127,7 +124,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
     real(rkind), dimension(3,3) :: R, T
     real(rkind), dimension(3,1) :: xn, Ft, n
     real(rkind) ::  numPoints, x, y, z, scalarSource, sumVal
-    real(rkind) :: xnew, ynew, znew, cgamma, sgamma, ctheta, stheta
+    real(rkind) :: xnew, ynew, znew, cgamma, sgamma, ctheta, stheta, x2, y2, z2
     integer :: i,j,k
      
     if (this%memory_buffers_linked) then
@@ -144,22 +141,22 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         ! Translate and rotate domain
         ctheta = cos(theta); stheta = sin(theta)
         cgamma = cos(gamma); sgamma = sin(gamma)
+        this%scalarSource = 0.d0
 
-        do k = 1,size(this%X,3)
+        do k = 1,size(this%xG,3)
             z = this%zG(1,1,k) - this%zLoc
-            do j = 1,size(this%X,2)
+            do j = 1,size(this%xG,2)
                 y = this%yG(1,j,1) - this%yLoc
                 !$omp simd
-                do i = 1,size(this%X,1)  
+                do i = 1,size(this%xG,1)  
                   x = this%xG(i,1,1) - this%xLoc
                   xnew = x * cgamma - y * sgamma
-                  ynew = y * sgamma + y * cgamma
+                  ynew = x * sgamma + y * cgamma
                   znew = z
-                  this%X(i,j,k) = xnew
-                  this%Y(i,j,k) = ynew*ctheta - znew*stheta
-                  this%Z(i,j,k) = ynew*stheta + znew*ctheta
-                  call this%AD_force_point(this%X(i,j,k), this%Y(i,j,k), & 
-                                           this%Z(i,j,k), scalarSource)
+                  x2 = xnew
+                  y2 = ynew*ctheta - znew*stheta
+                  z2 = ynew*stheta + znew*ctheta
+                  call this%AD_force_point(x2, y2, z2, scalarSource)
                   this%scalarSource(i,j,k) = scalarSource
                 end do
             end do
@@ -170,9 +167,9 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         ! Get the mean velocities at the turbine face
         this%speed = u*n(1,1) + v*n(2,1) + w*n(3,1)
         this%blanks = 1.d0
-        do k = 1,size(this%X,3)
-            do j = 1, size(this%X,2)
-                do i = 1,size(this%X,1)
+        do k = 1,size(this%xG,3)
+            do j = 1, size(this%xG,2)
+                do i = 1,size(this%xG,1)
                     if (abs(this%scalarSource(i,j,k))<1D-10) then
                         this%blanks(i,j,k) = 0.d0
                     end if
@@ -199,13 +196,13 @@ end subroutine
 subroutine get_power(this)
     class(actuatordisk_yaw), intent(inout) :: this
 
-    this%power = -this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*(this%ut)**3
+    this%power = -0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*(this%ut)**3
 
 end subroutine
 
 subroutine AD_force_point(this, X, Y, Z, scalarSource)
     class(actuatordisk_yaw), intent(inout) :: this
-    real(rkind), intent(inout) :: scalarSource
+    real(rkind), intent(out) :: scalarSource
     real(rkind), intent(in) :: X,Y,Z
     real(rkind) :: delta_r = 0.22d0, smear_x = 1.5d0, delta, R, sumVal
     real(rkind) :: tmp
@@ -221,7 +218,6 @@ subroutine AD_force_point(this, X, Y, Z, scalarSource)
     tmp = 1.d0 - scalarSource
     delta = (this%dx)*smear_x
     scalarSource = tmp * (1.d0/(delta*sqrt(2.d0*pi))) * exp(-0.5d0*(X**2)/(delta**2))
-
 
 end subroutine
 
