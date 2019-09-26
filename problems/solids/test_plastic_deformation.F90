@@ -259,7 +259,7 @@ program test_plastic_deformation
     g21 = 4.10132D-02;   g22 =  4.88385D-02;    g23 = 0.00000D+00
     g31 = 0.00000D+00;   g32 =  0.00000D+00;    g33 = 1.98846D-01
     
-    call elastic%plastic_deformation(g)
+!    call elastic%plastic_deformation(g)
 
     call get_SS(g,SS)
     write(*,*) "Final g:"

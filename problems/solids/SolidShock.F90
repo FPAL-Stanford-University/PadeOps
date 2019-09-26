@@ -1,4 +1,4 @@
-#include "SolidShock_files/hooks.F90"
+!#include "SolidShock_files/hooks.F90"
 
 program SolidShock
 
@@ -13,17 +13,17 @@ program SolidShock
     ! Start MPI
     call MPI_Init(ierr)
 
-    ! Get file location 
-    call GETARG(1,inputfile)
-    
-    ! Initialize the grid object
-    call sgp%init(inputfile)
-
-    ! Time advance
-    call sgp%simulate()
-        
-    ! Destroy everythin before ending
-    call sgp%destroy()
+!    ! Get file location 
+!    call GETARG(1,inputfile)
+!    
+!    ! Initialize the grid object
+!    call sgp%init(inputfile)
+!
+!    ! Time advance
+!    call sgp%simulate()
+!        
+!    ! Destroy everythin before ending
+!    call sgp%destroy()
 
     ! End the run
     call MPI_Finalize(ierr)

@@ -1,4 +1,4 @@
-#include "impact_files/hooks.F90"
+!#include "impact_files/hooks.F90"
 
 program impact
 
@@ -16,14 +16,14 @@ program impact
     ! Get file location 
     call GETARG(1,inputfile)
     
-    ! Initialize the grid object
-    call sgp%init(inputfile)
-
-    ! Time advance
-    call sgp%simulate()
-        
-    ! Destroy everythin before ending
-    call sgp%destroy()
+!    ! Initialize the grid object
+!    call sgp%init(inputfile)
+!
+!    ! Time advance
+!    call sgp%simulate()
+!        
+!    ! Destroy everythin before ending
+!    call sgp%destroy()
 
     ! End the run
     call MPI_Finalize(ierr)
