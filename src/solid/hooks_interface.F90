@@ -8,12 +8,13 @@ module sgrid_hooks
     implicit none
 
     interface meshgen
-        subroutine meshgen(decomp, dx, dy, dz, mesh)
+        subroutine meshgen(decomp, dx, dy, dz, mesh, xcentered)
             import :: rkind
             import :: decomp_info
             type(decomp_info), intent(in) :: decomp
             real(rkind), intent(inout) :: dx, dy, dz
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            logical, intent(in) :: xcentered
         end subroutine 
     end interface
 

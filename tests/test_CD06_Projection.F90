@@ -92,9 +92,9 @@ program test_projection
     call spect%init("x", nx, ny, nz, dx, dy, dz, "four", "2/3rd", dimTransform,.false.)
     call spectE%init("x", nx, ny, nz+1, dx, dy, dz, "four", "2/3rd", dimTransform,.false.,.false.,.false.,.false.)
     call poiss%init(dx, dy, dz, spect, spectE, der)
-    ierr = filzC%init(nz,.false.)
+    ierr = filzC%init(nz,.false.,.false.)
     print*, ierr
-    ierr = filzE%init(nz,.false.)
+    ierr = filzE%init(nz,.false.,.false.)
     print*, ierr
 
     allocate(ctmp1(spect%spectdecomp%zsz(1),spect%spectdecomp%zsz(2),spect%spectdecomp%zsz(3)))

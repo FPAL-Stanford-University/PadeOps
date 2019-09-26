@@ -349,8 +349,8 @@ contains
         
         if (this%useVerticalFilter) then
             allocate(this%filzC, this%filzE)
-            ierr = this%filzC%init(nz  , .false.)
-            ierr = this%filzE%init(nz+1, .false.)
+            ierr = this%filzC%init(nz  , .false., .false.)
+            ierr = this%filzE%init(nz+1, .false., .false.)
         end if 
 
         ! STEP 6: ALLOCATE MEMORY FOR FIELD ARRAYS

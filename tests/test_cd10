@@ -13,18 +13,18 @@ program test_cd10
 
     type( cd10 ) :: xcd10, ycd10, zcd10
     real(rkind), dimension(:,:,:), allocatable :: x,y,z,f,df,df_exact,d2f,d2f_exact
+    real(rkind) :: dx, dy, dz, xfst, x1err, x2err, y1err, y2err, z1err, z2err
     real(rkind), parameter :: omega = 1._rkind
 
-    real(rkind) :: dx, dy, dz, xfst, x1err, x2err, y1err, y2err, z1err, z2err, Lx
-    integer :: i,ierr, j, k,xa=0,xb=0,iprob=1
-    character(len=18) :: fname
+    integer :: i,ierr, j, k,xa=0,xb=0
+    character(len=15) :: fname
     character :: per_str,cent_str,xa_str,xb_str
 
     open(10,file='input.in',status='old',action='read')
     read(10,*) nx, ny, nz
     read(10,*) periodic
     read(10,*) xcentered
-    read(10,*) xa, xb, iprob
+    read(10,*) xa, xb
     close(10)
 
     allocate( x(nx,ny,nz) )
@@ -37,28 +37,23 @@ program test_cd10
     allocate( d2f_exact(nx,ny,nz) )
 
     if (periodic) then
-        Lx = two*pi
         dx = two*pi/real(nx,rkind)
         dy = two*pi/real(ny,rkind)
         dz = two*pi/real(nz,rkind)
-        xfst = zero
     else
-        if(iprob==1 .or. iprob==2) then
-            Lx = pi/two
-        else
-            Lx = pi
-        endif
-        if(xcentered) then
-            dx = Lx/real(nx,rkind)
-            xfst = half*dx
-        else
-            dx = Lx/real(nx-1,rkind)
-            xfst = zero
-        endif
+        dx = pi/two/real(nx-1,rkind)
         dy = pi/two/real(ny-1,rkind)
         dz = pi/two/real(nz-1,rkind)
     end if
     
+    if(xcentered) then
+      xfst = half*dx
+      dx = pi/two/real(nx,rkind)
+    else
+      xfst = zero
+    endif
+
+
     do k=1,nz
         do j=1,ny
             do i=1,nx
@@ -70,11 +65,7 @@ program test_cd10
     end do 
     !print*, "Created initial data"
 
-    if(iprob==1 .or. iprob==3) then
-        f = cos(omega * x) * cos(omega * y) * cos(omega * z)
-    elseif(iprob==2 .or. iprob==4) then
-        f = sin(omega * x) * cos(omega * y) * cos(omega * z)
-    endif
+    f = cos(omega * x) * cos(omega * y) * cos(omega * z)
     ierr = xcd10%init( nx, dx, periodic, xcentered, 0, 0)
     ierr = ycd10%init( ny, dy, periodic, .false., 0, 0)
     ierr = zcd10%init( nz, dz, periodic, .false., 0, 0)
@@ -83,17 +74,12 @@ program test_cd10
     call xcd10 % dd1(f,df,ny,nz,xa,xb)
     call xcd10 % d2d1(f,d2f,ny,nz,xa,xb)
     !call toc ("Time to get the x derivative:")
-    if(iprob==1 .or. iprob==3) then
-        df_exact =  -omega* sin(omega * x)  * cos(omega * y) * cos(omega * z)
-        d2f_exact = -omega* omega* cos(omega * x)  * cos(omega * y) * cos(omega * z)
-    elseif(iprob==2 .or. iprob==4) then
-        df_exact =   omega* cos(omega * x)  * cos(omega * y) * cos(omega * z)
-        d2f_exact = -omega* omega* sin(omega * x)  * cos(omega * y) * cos(omega * z)
-    endif
+    df_exact =-omega* sin(omega * x)  * cos(omega * y) * cos(omega * z)
+    d2f_exact = -omega* omega* cos(omega * x)  * cos(omega * y) * cos(omega * z)
     !print*, "Maximum error (first  der) = ", MAXVAL( ABS(df - df_exact)), " at ", MAXLOC(ABS(df - df_exact))
     !print*, "Maximum error (second der) = ", MAXVAL( ABS(d2f - d2f_exact)), " at ", MAXLOC(ABS(d2f - d2f_exact))
-    write(*,'(a,7(e19.12,1x))') 'exact: ', df_exact(1:7,1,1)
-    write(*,'(a,7(e19.12,1x))') 'numer: ', df(1:7,1,1)
+    !write(*,'(a,7(e19.12,1x))') 'exact: ', df_exact(1:7,1,1)
+    !write(*,'(a,7(e19.12,1x))') 'numer: ', df(1:7,1,1)
     x1err = MAXVAL(ABS(df-df_exact))
     x2err = MAXVAL(ABS(d2f-d2f_exact))
 
@@ -147,7 +133,7 @@ program test_cd10
       xb_str = 'A'
     endif
 
-    write(fname,'(a7,i2.2,5(a1),a4)') 'errors_', iprob, '_', per_str, cent_str, xa_str, xb_str, '.dat'
+    write(fname,'(a7,4(a1),a4)') 'errors_', per_str, cent_str, xa_str, xb_str, '.dat'
     open(10,file=fname,status='unknown',action='write',position='append')
     write(10,'(3(i4.4,1x),6(e12.5,1x))') nx, ny, nz, x1err, x2err, y1err, y2err, z1err, z2err
     close(10)

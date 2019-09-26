@@ -1,7 +1,7 @@
 program test_cd10
 
     use kind_parameters, only: rkind
-    use constants,       only: two,pi
+    use constants,       only: two,pi,half,zero
     use timer,           only: tic,toc
     use cd10stuff,       only: cd10
     implicit none
@@ -9,10 +9,11 @@ program test_cd10
     integer :: nx = 32, ny=32, nz=32
 
     logical, parameter :: periodic = .TRUE.
+    logical, parameter :: xcentered = .TRUE.
 
     type( cd10 ) :: xcd10, ycd10, zcd10
     real(rkind), dimension(:,:,:), allocatable :: x,y,z,f,df,df_exact,d2f,d2f_exact
-    real(rkind) :: dx, dy, dz
+    real(rkind) :: dx, dy, dz, xfst
     real(rkind), parameter :: omega = 1._rkind
 
     integer :: i,ierr, j, k
@@ -36,11 +37,17 @@ program test_cd10
         dz = two*pi/real(nz-1,rkind)
     end if
     
+    if(xcentered) then
+      xfst = half*dx
+    else
+      xfst = zero
+    endif
+
 
     do k=1,nz
         do j=1,ny
             do i=1,nx
-                x(i,j,k) = real(i-1,rkind)*dx
+                x(i,j,k) = real(i-1,rkind)*dx + xfst
                 y(i,j,k) = real(j-1,rkind)*dy
                 z(i,j,k) = real(k-1,rkind)*dz
             end do
@@ -49,9 +56,9 @@ program test_cd10
     print*, "Created initial data"
 
     f = sin(omega * x) + sin(omega * y) + sin(omega * z)
-    ierr = xcd10%init( nx, dx, periodic, 0, 0)
-    ierr = ycd10%init( ny, dy, periodic, 0, 0)
-    ierr = zcd10%init( nz, dz, periodic, 0, 0)
+    ierr = xcd10%init( nx, dx, periodic, xcentered, 0, 0)
+    ierr = ycd10%init( ny, dy, periodic, .false., 0, 0)
+    ierr = zcd10%init( nz, dz, periodic, .false., 0, 0)
 
     call tic() 
     call xcd10 % dd1(f,df,ny,nz)

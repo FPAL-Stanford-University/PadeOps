@@ -162,16 +162,19 @@ contains
         real(rkind) :: Ckap = 0.01_rkind
         real(rkind) :: Cdiff = 0.003_rkind
         real(rkind) :: CY = 100._rkind
+        real(rkind) :: xfst
         logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
         logical     :: use_gTg = .FALSE., useOneG = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
+        logical     :: xcentered = .FALSE., ycentered = .false., zcentered = .false. ! required for cylindrical/spherical systems
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                              inputdir, outputdir, vizprefix, tviz, &
                                   periodicx, periodicy, periodicz, &
                          derivative_x, derivative_y, derivative_z, &
-                                     filter_x, filter_y, filter_z, &
+                                   filter_x,  filter_y,  filter_z, &
+                                  xcentered, ycentered, zcentered, &
                                                        prow, pcol, &
                                                          SkewSymm  
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
@@ -255,6 +258,12 @@ contains
         this%nyp = this%decomp%ysz(2)
         this%nzp = this%decomp%ysz(3)
 
+        this%xcentered = xcentered    
+        this%ycentered = ycentered    
+        this%zcentered = zcentered  
+        if (this%ycentered) call GracefulExit("Mesh cannot be ycentered at present",4634)
+        if (this%zcentered) call GracefulExit("Mesh cannot be zcentered at present",4634)
+
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         call alloc_buffs(this%mesh,3,'y',this%decomp)
@@ -270,10 +279,15 @@ contains
         this%dz = two/nz
 
         ! Generate default mesh 
+        if(this%xcentered) then
+            xfst = -one+half*this%dx
+        else
+            xfst = -one
+        endif
         do k = 1,size(this%mesh,3)
             do j = 1,size(this%mesh,2)
                 do i = 1,size(this%mesh,1)
-                    this%mesh(i,j,k,1) = -one + (this%decomp%yst(1) - 1 + i - 1)*this%dx           
+                    this%mesh(i,j,k,1) = xfst + (this%decomp%yst(1) - 1 + i - 1)*this%dx           
                     this%mesh(i,j,k,2) = -one + (this%decomp%yst(2) - 1 + j - 1)*this%dy           
                     this%mesh(i,j,k,3) = -one + (this%decomp%yst(3) - 1 + k - 1)*this%dz           
                 end do 
@@ -281,18 +295,19 @@ contains
         end do  
 
         ! Go to hooks if a different mesh is desired 
-        call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
+        call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh, this%xcentered) 
 
         ! Allocate der
         if ( allocated(this%der) ) deallocate(this%der)
         allocate(this%der)
 
         ! Initialize derivatives 
-        call this%der%init(                           this%decomp, &
-                           this%dx,       this%dy,        this%dz, &
-                         periodicx,     periodicy,      periodicz, &
-                      derivative_x,  derivative_y,   derivative_z, &
-                           .false.,       .false.,        .false., &
+        call this%der%init(                            this%decomp, &
+                           this%dx,        this%dy,        this%dz, &
+                         periodicx,      periodicy,      periodicz, &
+                      derivative_x,   derivative_y,   derivative_z, &
+                           .false.,        .false.,        .false., &
+                    this%xcentered, this%ycentered, this%zcentered, &
                            .false.)      
 
         ! Allocate fil and gfil
@@ -304,10 +319,12 @@ contains
         ! Initialize filters
         call this%fil%init(                           this%decomp, &
                          periodicx,     periodicy,      periodicz, &
-                          filter_x,      filter_y,       filter_z  )      
+                          filter_x,      filter_y,       filter_z, &
+                    this%xcentered, this%ycentered, this%zcentered )
         call this%gfil%init(                          this%decomp, &
                          periodicx,     periodicy,      periodicz, &
-                        "gaussian",    "gaussian",     "gaussian"  )      
+                        "gaussian",    "gaussian",     "gaussian", &
+                    this%xcentered, this%ycentered, this%zcentered )
 
         ! Allocate LAD object
         if ( allocated(this%LAD) ) deallocate(this%LAD)

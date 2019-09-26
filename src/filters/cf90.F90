@@ -58,6 +58,7 @@ module cf90stuff
         integer     :: n
 
         logical     :: periodic=.TRUE.
+        logical     :: centered=.FALSE.
 
         real(rkind), allocatable, dimension(:,:) :: LU
         real(rkind), allocatable, dimension(:,:) :: penta_nn
@@ -104,16 +105,18 @@ module cf90stuff
 
 contains
 
-    function init(this, n_, periodic_) result(ierr)
+    function init(this, n_, periodic_, centered_) result(ierr)
    
         class( cf90 ), intent(inout) :: this
         integer, intent(in) :: n_
         logical, intent(in) :: periodic_
+        logical, intent(in) :: centered_
         integer :: ierr
         
         this%n = n_
 
         this%periodic = periodic_
+        this%centered = centered_
 
         if (periodic_) then 
             ! Allocate LU matrix
@@ -318,6 +321,19 @@ contains
                 a (4) = b4_alpha90
                 at(4) = b4_beta90
             case(1)
+              if(this%centered) then
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one + alpha90
+                a (1) = alpha90 + beta90
+                at(1) = beta90
+
+                bt(2) = zero
+                b (2) = alpha90 + beta90
+                d (2) = one
+                a (2) = alpha90
+                at(2) = beta90
+              else
                 bt(1) = zero
                 b (1) = zero
                 d (1) = one
@@ -329,7 +345,21 @@ contains
                 d (2) = one + beta90
                 a (2) = alpha90
                 at(2) = beta90
+              endif
             case(-1)
+              if(this%centered) then
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one - alpha90
+                a (1) = alpha90 - beta90
+                at(1) = beta90
+
+                bt(2) = zero
+                b (2) = alpha90 - beta90
+                d (2) = one
+                a (2) = alpha90
+                at(2) = beta90
+              else
                 bt(1) = zero
                 b (1) = zero
                 d (1) = one
@@ -341,6 +371,7 @@ contains
                 d (2) = one - beta90
                 a (2) = alpha90
                 at(2) = beta90
+              endif
             end select
             
             ! BC at n    
@@ -370,6 +401,19 @@ contains
                 a (this%n-3) = b4_alpha90
                 at(this%n-3) = b4_beta90
             case(1)
+              if(this%centered) then
+                bt(this%n  ) = beta90
+                b (this%n  ) = alpha90 + beta90
+                d (this%n  ) = one + alpha90
+                a (this%n  ) = zero
+                at(this%n  ) = zero
+
+                bt(this%n-1) = beta90
+                b (this%n-1) = alpha90
+                d (this%n-1) = one
+                a (this%n-1) = alpha90 + beta90
+                at(this%n-1) = zero
+              else
                 bt(this%n  ) = two*beta90
                 b (this%n  ) = two*alpha90
                 d (this%n  ) = one
@@ -381,7 +425,21 @@ contains
                 d (this%n-1) = one + beta90
                 a (this%n-1) = alpha90
                 at(this%n-1) = zero
+              endif
             case(-1)
+              if(this%centered) then
+                bt(this%n  ) = beta90
+                b (this%n  ) = alpha90 - beta90
+                d (this%n  ) = one - alpha90
+                a (this%n  ) = zero 
+                at(this%n  ) = zero
+
+                bt(this%n-1) = beta90
+                b (this%n-1) = alpha90
+                d (this%n-1) = one
+                a (this%n-1) = alpha90 - beta90
+                at(this%n-1) = zero
+              else
                 bt(this%n  ) = zero
                 b (this%n  ) = zero
                 d (this%n  ) = one
@@ -393,6 +451,7 @@ contains
                 d (this%n-1) = one - beta90
                 a (this%n-1) = alpha90
                 at(this%n-1) = zero
+              endif
             end select
             
             ! Step 1
@@ -689,6 +748,28 @@ contains
                                             + b4_c90 * ( f(         6,j,k) + f(         2,j,k) ) &
                                             + b4_d90 * ( f(         7,j,k) + f(         1,j,k) ) 
                     case(1)
+                      if(this%centered) then
+                        RHS(1,j,k) =    a90 * ( f(1,j,k) )            &
+                                   +    b90 * ( f(2,j,k) + f(1,j,k) ) &
+                                   +    c90 * ( f(3,j,k) + f(2,j,k) ) &
+                                   +    d90 * ( f(4,j,k) + f(3,j,k) ) &
+                                   +    e90 * ( f(5,j,k) + f(4,j,k) )
+                        RHS(2,j,k) =    a90 * ( f(2,j,k) )            &
+                                   +    b90 * ( f(3,j,k) + f(1,j,k) ) &
+                                   +    c90 * ( f(4,j,k) + f(1,j,k) ) &
+                                   +    d90 * ( f(5,j,k) + f(2,j,k) ) &
+                                   +    e90 * ( f(6,j,k) + f(3,j,k) )
+                        RHS(3,j,k) =    a90 * ( f(3,j,k) )            &
+                                   +    b90 * ( f(4,j,k) + f(2,j,k) ) &
+                                   +    c90 * ( f(5,j,k) + f(1,j,k) ) &
+                                   +    d90 * ( f(6,j,k) + f(1,j,k) ) &
+                                   +    e90 * ( f(7,j,k) + f(2,j,k) )
+                        RHS(4,j,k) =    a90 * ( f(4,j,k) )            &
+                                   +    b90 * ( f(5,j,k) + f(3,j,k) ) &
+                                   +    c90 * ( f(6,j,k) + f(2,j,k) ) &
+                                   +    d90 * ( f(7,j,k) + f(1,j,k) ) &
+                                   +    e90 * ( f(8,j,k) + f(1,j,k) )
+                      else
                         RHS(1,j,k) =    a90 * ( f(1,j,k) )            &
                                    +    b90 * ( f(2,j,k) + f(2,j,k) ) &
                                    +    c90 * ( f(3,j,k) + f(3,j,k) ) &
@@ -709,7 +790,30 @@ contains
                                    +    c90 * ( f(6,j,k) + f(2,j,k) ) &
                                    +    d90 * ( f(7,j,k) + f(1,j,k) ) &
                                    +    e90 * ( f(8,j,k) + f(2,j,k) )
+                      endif
                     case(-1)
+                      if(this%centered) then
+                        RHS(1,j,k) =    a90 * ( f(1,j,k) )            &
+                                   +    b90 * ( f(2,j,k) - f(1,j,k) ) &
+                                   +    c90 * ( f(3,j,k) - f(2,j,k) ) &
+                                   +    d90 * ( f(4,j,k) - f(3,j,k) ) &
+                                   +    e90 * ( f(5,j,k) - f(4,j,k) )
+                        RHS(2,j,k) =    a90 * ( f(2,j,k) )            &
+                                   +    b90 * ( f(3,j,k) + f(1,j,k) ) &
+                                   +    c90 * ( f(4,j,k) - f(1,j,k) ) &
+                                   +    d90 * ( f(5,j,k) - f(2,j,k) ) &
+                                   +    e90 * ( f(6,j,k) - f(3,j,k) )
+                        RHS(3,j,k) =    a90 * ( f(3,j,k) )            &
+                                   +    b90 * ( f(4,j,k) + f(2,j,k) ) &
+                                   +    c90 * ( f(5,j,k) + f(1,j,k) ) &
+                                   +    d90 * ( f(6,j,k) - f(1,j,k) ) &
+                                   +    e90 * ( f(7,j,k) - f(2,j,k) )
+                        RHS(4,j,k) =    a90 * ( f(4,j,k) )            &
+                                   +    b90 * ( f(5,j,k) + f(3,j,k) ) &
+                                   +    c90 * ( f(6,j,k) + f(2,j,k) ) &
+                                   +    d90 * ( f(7,j,k) + f(1,j,k) ) &
+                                   +    e90 * ( f(8,j,k) - f(1,j,k) )
+                      else
                         RHS(1,j,k) =    a90 * ( f(1,j,k) )            &
                                    +    b90 * ( f(2,j,k) - f(2,j,k) ) &
                                    +    c90 * ( f(3,j,k) - f(3,j,k) ) &
@@ -730,6 +834,7 @@ contains
                                    +    c90 * ( f(6,j,k) + f(2,j,k) ) &
                                    +    d90 * ( f(7,j,k) + f(1,j,k) ) &
                                    +    e90 * ( f(8,j,k) - f(2,j,k) )
+                      endif
                     end select
 
                     RHS(5:this%n-4,j,k) =    a90 * ( f(5:this%n-4,j,k) )                     &
@@ -754,6 +859,28 @@ contains
 
                         RHS(    this%n,j,k) =    one * ( f(    this%n,j,k) )                     
                     case(1)
+                      if(this%centered) then
+                        RHS(this%n-3,j,k) =    a90 * ( f(this%n-3,j,k) )                   &
+                                          +    b90 * ( f(this%n-2,j,k) + f(this%n-4,j,k) ) &
+                                          +    c90 * ( f(this%n-1,j,k) + f(this%n-5,j,k) ) &
+                                          +    d90 * ( f(this%n  ,j,k) + f(this%n-6,j,k) ) &
+                                          +    e90 * ( f(this%n  ,j,k) + f(this%n-7,j,k) )
+                        RHS(this%n-2,j,k) =    a90 * ( f(this%n-2,j,k) )                   &
+                                          +    b90 * ( f(this%n-1,j,k) + f(this%n-3,j,k) ) &
+                                          +    c90 * ( f(this%n  ,j,k) + f(this%n-4,j,k) ) &
+                                          +    d90 * ( f(this%n  ,j,k) + f(this%n-5,j,k) ) &
+                                          +    e90 * ( f(this%n-1,j,k) + f(this%n-6,j,k) )
+                        RHS(this%n-1,j,k) =    a90 * ( f(this%n-1,j,k) )                   &
+                                          +    b90 * ( f(this%n  ,j,k) + f(this%n-2,j,k) ) &
+                                          +    c90 * ( f(this%n  ,j,k) + f(this%n-3,j,k) ) &
+                                          +    d90 * ( f(this%n-1,j,k) + f(this%n-4,j,k) ) &
+                                          +    e90 * ( f(this%n-2,j,k) + f(this%n-5,j,k) )
+                        RHS(this%n  ,j,k) =    a90 * ( f(this%n  ,j,k) )                   &
+                                          +    b90 * ( f(this%n  ,j,k) + f(this%n-1,j,k) ) &
+                                          +    c90 * ( f(this%n-1,j,k) + f(this%n-2,j,k) ) &
+                                          +    d90 * ( f(this%n-2,j,k) + f(this%n-3,j,k) ) &
+                                          +    e90 * ( f(this%n-3,j,k) + f(this%n-4,j,k) )
+                      else
                         RHS(this%n-3,j,k) =    a90 * ( f(this%n-3,j,k) )                   &
                                           +    b90 * ( f(this%n-2,j,k) + f(this%n-4,j,k) ) &
                                           +    c90 * ( f(this%n-1,j,k) + f(this%n-5,j,k) ) &
@@ -774,7 +901,30 @@ contains
                                           +    c90 * ( f(this%n-2,j,k) + f(this%n-2,j,k) ) &
                                           +    d90 * ( f(this%n-3,j,k) + f(this%n-3,j,k) ) &
                                           +    e90 * ( f(this%n-4,j,k) + f(this%n-4,j,k) )
+                      endif
                     case(-1)
+                      if(this%centered) then
+                        RHS(this%n-3,j,k) =    a90 * ( f(this%n-3,j,k) )                   &
+                                          +    b90 * ( f(this%n-2,j,k) + f(this%n-4,j,k) ) &
+                                          +    c90 * ( f(this%n-1,j,k) + f(this%n-5,j,k) ) &
+                                          +    d90 * ( f(this%n  ,j,k) + f(this%n-6,j,k) ) &
+                                          +    e90 * (-f(this%n  ,j,k) + f(this%n-7,j,k) )
+                        RHS(this%n-2,j,k) =    a90 * ( f(this%n-2,j,k) )                   &
+                                          +    b90 * ( f(this%n-1,j,k) + f(this%n-3,j,k) ) &
+                                          +    c90 * ( f(this%n  ,j,k) + f(this%n-4,j,k) ) &
+                                          +    d90 * (-f(this%n  ,j,k) + f(this%n-5,j,k) ) &
+                                          +    e90 * (-f(this%n-1,j,k) + f(this%n-6,j,k) )
+                        RHS(this%n-1,j,k) =    a90 * ( f(this%n-1,j,k) )                   &
+                                          +    b90 * ( f(this%n  ,j,k) + f(this%n-2,j,k) ) &
+                                          +    c90 * (-f(this%n  ,j,k) + f(this%n-3,j,k) ) &
+                                          +    d90 * (-f(this%n-1,j,k) + f(this%n-4,j,k) ) &
+                                          +    e90 * (-f(this%n-2,j,k) + f(this%n-5,j,k) )
+                        RHS(this%n  ,j,k) =    a90 * ( f(this%n  ,j,k) )                   &
+                                          +    b90 * (-f(this%n  ,j,k) + f(this%n-1,j,k) ) &
+                                          +    c90 * (-f(this%n-1,j,k) + f(this%n-2,j,k) ) &
+                                          +    d90 * (-f(this%n-2,j,k) + f(this%n-3,j,k) ) &
+                                          +    e90 * (-f(this%n-3,j,k) + f(this%n-4,j,k) )
+                      else
                         RHS(this%n-3,j,k) =    a90 * ( f(this%n-3,j,k) )                   &
                                           +    b90 * ( f(this%n-2,j,k) + f(this%n-4,j,k) ) &
                                           +    c90 * ( f(this%n-1,j,k) + f(this%n-5,j,k) ) &
@@ -795,6 +945,7 @@ contains
                                           +    c90 * (-f(this%n-2,j,k) + f(this%n-2,j,k) ) &
                                           +    d90 * (-f(this%n-3,j,k) + f(this%n-3,j,k) ) &
                                           +    e90 * (-f(this%n-4,j,k) + f(this%n-4,j,k) )
+                      endif
                     end select
                 
                end do 

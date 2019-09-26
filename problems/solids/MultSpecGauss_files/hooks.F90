@@ -15,21 +15,23 @@ module MultSpecGauss_data
 
 end module
 
-subroutine meshgen(decomp, dx, dy, dz, mesh)
+subroutine meshgen(decomp, dx, dy, dz, mesh, xcentered)
     use kind_parameters,  only: rkind
-    use constants,        only: one
+    use constants,        only: one, half, zero
     use decomp_2d,        only: decomp_info
 
     use MultSpecGauss_data
 
     implicit none
 
-    type(decomp_info),                                          intent(in)    :: decomp
-    real(rkind),                                                intent(inout) :: dx,dy,dz
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
+    logical,                         intent(in)    :: xcentered
 
     integer :: i,j,k
     integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
+    real(rkind) :: xfst
 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
@@ -46,10 +48,16 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         dy = dx
         dz = dx
 
+        if(xcentered) then
+           xfst = half*dx
+        else
+           xfst = zero
+        endif
+
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx + xfst
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do

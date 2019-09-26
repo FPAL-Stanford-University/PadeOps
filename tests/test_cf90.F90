@@ -69,9 +69,9 @@ program test_cf90
     end do
     print*, "Created initial data"
 
-    ierr = xcf90%init( nx, periodic)
-    ierr = ycf90%init( ny, periodic)
-    ierr = zcf90%init( nz, periodic)
+    ierr = xcf90%init( nx, periodic, .false.)
+    ierr = ycf90%init( ny, periodic, .false.)
+    ierr = zcf90%init( nz, periodic, .false.)
 
     call tic() 
     call xcf90 % filter1(f,df,ny,nz)

@@ -63,9 +63,9 @@ program test_transpose
     dy = dx
     dz = dx
 
-    ierr = xcd10%init( nx, dx, periodicx, 0, 0)
-    ierr = ycd10%init( ny, dy, periodicy, 0, 0)
-    ierr = zcd10%init( nz, dz, periodicz, 0, 0)
+    ierr = xcd10%init( nx, dx, periodicx, .false., 0, 0)
+    ierr = ycd10%init( ny, dy, periodicy, .false., 0, 0)
+    ierr = zcd10%init( nz, dz, periodicz, .false., 0, 0)
 
     do k=1,gp%ysz(3)
         do j=1,gp%ysz(2)

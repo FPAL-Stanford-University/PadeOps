@@ -69,9 +69,9 @@ program test_gaussian
     end do
     print*, "Created initial data"
 
-    ierr = xgaussian%init( nx, periodic)
-    ierr = ygaussian%init( ny, periodic)
-    ierr = zgaussian%init( nz, periodic)
+    ierr = xgaussian%init( nx, periodic, .false.)
+    ierr = ygaussian%init( ny, periodic, .false.)
+    ierr = zgaussian%init( nz, periodic, .false.)
 
     call tic() 
     call xgaussian % filter1(f,df,ny,nz)

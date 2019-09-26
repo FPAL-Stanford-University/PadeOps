@@ -115,6 +115,7 @@ module cd10stuff
         real(rkind) :: onebydx2
 
         logical     :: periodic=.TRUE.
+        logical     :: centered=.FALSE.
         integer     :: bc1=0                               ! Boundary condition type. 0=Dirichlet, 1=Neumann
         integer     :: bcn=0                               ! Boundary condition type. 0=Dirichlet, 1=Neumann 
 
@@ -192,12 +193,12 @@ contains
         val = this%n
     end function
 
-    function init(this, n_, dx_, periodic_, bc1_, bcn_) result(ierr)
+    function init(this, n_, dx_, periodic_, centered_, bc1_, bcn_) result(ierr)
    
         class( cd10 ), intent(inout) :: this
         integer, intent(in) :: n_
         real(rkind), intent(in) :: dx_
-        logical, intent(in) :: periodic_
+        logical, intent(in) :: periodic_, centered_
         integer, intent(in) :: bc1_, bcn_
         integer :: ierr
         
@@ -207,6 +208,7 @@ contains
         this%onebydx2 = this%onebydx/dx_
 
         this%periodic = periodic_
+        this%centered = centered_
 
         this%bc1 = bc1_
         this%bcn = bcn_
@@ -471,6 +473,22 @@ contains
                 at(4) = w4*beta_ppp
             case(1)
 
+              if(this%centered) then
+
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one - alpha_hat
+                a (1) = alpha_hat - beta_hat
+                at(1) = zero
+
+                bt(2) = zero
+                b (2) = alpha_hat - beta_hat
+                d (2) = one
+                a (2) = alpha_hat
+                at(2) = beta_hat
+
+              else
+
                 bt(1) = zero
                 b (1) = zero
                 d (1) = one
@@ -483,7 +501,25 @@ contains
                 a (2) = alpha_hat
                 at(2) = beta_hat
 
+              endif
+
             case(-1)
+
+              if(this%centered) then
+
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one + alpha_hat
+                a (1) = alpha_hat + beta_hat
+                at(1) = beta_hat
+
+                bt(2) = zero
+                b (2) = alpha_hat + beta_hat
+                d (2) = one
+                a (2) = alpha_hat
+                at(2) = beta_hat
+
+              else
 
                 bt(1) = zero
                 b (1) = zero
@@ -496,6 +532,8 @@ contains
                 d (2) = one + beta_hat
                 a (2) = alpha_hat
                 at(2) = beta_hat
+
+              endif
 
             end select
             
@@ -527,6 +565,22 @@ contains
             
             case(1)
 
+              if(this%centered) then
+
+                bt(this%n  ) = beta_hat
+                b (this%n  ) = alpha_hat - beta_hat
+                d (this%n  ) = one - alpha_hat
+                a (this%n  ) = zero
+                at(this%n  ) = zero
+
+                bt(this%n-1) = beta_hat
+                b (this%n-1) = alpha_hat
+                d (this%n-1) = one
+                a (this%n-1) = alpha_hat - beta_hat
+                at(this%n-1) = zero
+
+              else
+
                 bt(this%n  ) = zero
                 b (this%n  ) = zero
                 d (this%n  ) = one
@@ -539,7 +593,25 @@ contains
                 a (this%n-1) = alpha_hat
                 at(this%n-1) = zero
 
+              endif
+
             case(-1)
+
+              if(this%centered) then
+
+                bt(this%n  ) = beta_hat
+                b (this%n  ) = alpha_hat + beta_hat
+                d (this%n  ) = one + alpha_hat
+                a (this%n  ) = zero
+                at(this%n  ) = zero
+                           
+                bt(this%n-1) = beta_hat
+                b (this%n-1) = alpha_hat
+                d (this%n-1) = one
+                a (this%n-1) = alpha_hat + beta_hat
+                at(this%n-1) = zero
+
+              else
 
                 bt(this%n  ) = two*beta_hat
                 b (this%n  ) = two*alpha_hat
@@ -552,6 +624,8 @@ contains
                 d (this%n-1) = one + beta_hat
                 a (this%n-1) = alpha_hat
                 at(this%n-1) = zero
+
+              endif
 
             end select
 
@@ -615,6 +689,19 @@ contains
                 a (3) = b3_alpha10d2
                 at(3) = b3_beta10d2
             case(1)
+              if(this%centered) then
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one + alpha10d2
+                a (1) = alpha10d2 + beta10d2
+                at(1) = beta10d2
+
+                bt(2) = zero
+                b (2) = alpha10d2 + beta10d2
+                d (2) = one
+                a (2) = alpha10d2
+                at(2) = beta10d2
+              else
                 bt(1) = zero
                 b (1) = zero
                 d (1) = one
@@ -626,7 +713,21 @@ contains
                 d (2) = one + beta10d2
                 a (2) = alpha10d2
                 at(2) = beta10d2
+              endif
             case(-1)
+              if(this%centered) then
+                bt(1) = zero
+                b (1) = zero
+                d (1) = one - alpha10d2
+                a (1) = alpha10d2 - beta10d2
+                at(1) = beta10d2
+
+                bt(2) = zero
+                b (2) = alpha10d2 - beta10d2
+                d (2) = one
+                a (2) = alpha10d2
+                at(2) = beta10d2
+              else
                 bt(1) = zero
                 b (1) = zero
                 d (1) = one
@@ -638,6 +739,7 @@ contains
                 d (2) = one - beta10d2
                 a (2) = alpha10d2
                 at(2) = beta10d2
+              endif
             end select
 
             select case(bcn)
@@ -660,6 +762,19 @@ contains
                 a (this%n) = zero
                 at(this%n) = zero
             case(1)
+              if(this%centered) then
+                bt(this%n - 1) = beta10d2
+                b (this%n - 1) = alpha10d2
+                d (this%n - 1) = one
+                a (this%n - 1) = alpha10d2 + beta10d2
+                at(this%n - 1) = zero
+
+                bt(this%n) = beta10d2
+                b (this%n) = alpha10d2 + beta10d2
+                d (this%n) = one + alpha10d2
+                a (this%n) = zero
+                at(this%n) = zero
+              else
                 bt(this%n - 1) = beta10d2
                 b (this%n - 1) = alpha10d2
                 d (this%n - 1) = one + beta10d2
@@ -671,7 +786,21 @@ contains
                 d (this%n) = one
                 a (this%n) = zero
                 at(this%n) = zero
+              endif
             case(-1)
+              if(this%centered) then
+                bt(this%n - 1) = beta10d2
+                b (this%n - 1) = alpha10d2
+                d (this%n - 1) = one
+                a (this%n - 1) = alpha10d2 - beta10d2
+                at(this%n - 1) = zero
+
+                bt(this%n) = beta10d2
+                b (this%n) = alpha10d2 - beta10d2
+                d (this%n) = one - alpha10d2
+                a (this%n) = zero
+                at(this%n) = zero
+              else
                 bt(this%n - 1) = beta10d2
                 b (this%n - 1) = alpha10d2
                 d (this%n - 1) = one - beta10d2
@@ -683,6 +812,7 @@ contains
                 d (this%n) = one
                 a (this%n) = zero
                 at(this%n) = zero
+              endif
             end select
 
 
@@ -1123,7 +1253,8 @@ contains
     end subroutine
 
 
-    pure subroutine ComputeXD1RHS(this, f, RHS, n2, n3, bc1, bcn)
+    subroutine ComputeXD1RHS(this, f, RHS, n2, n3, bc1, bcn)
+    !pure subroutine ComputeXD1RHS(this, f, RHS, n2, n3, bc1, bcn)
     
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: n2, n3
@@ -1202,7 +1333,32 @@ contains
                         RHS(4         ,j,k) =   a_np_4*(f(5         ,j,k) -         f(3         ,j,k)) &
                                             +   b_np_4*(f(6         ,j,k) -         f(2         ,j,k)) &
                                             +   c_np_4*(f(7         ,j,k) -         f(1         ,j,k))
+                        if(j==1 .and. k==1) then
+                            write(*,*) 'F_XX'
+                            write(*,'(4(e19.12,1x))') RHS(1:4,j,k)
+                        endif
                     case(1)
+                      if(this%centered) then
+                        RHS(1,j,k) =   a10   *(f(2,j,k) - f(1,j,k)) &
+                                   +   b10   *(f(3,j,k) - f(2,j,k)) &
+                                   +   c10   *(f(4,j,k) - f(3,j,k)) 
+                   
+                        RHS(2,j,k) =   a10   *(f(3,j,k) - f(1,j,k)) &
+                                   +   b10   *(f(4,j,k) - f(1,j,k)) &
+                                   +   c10   *(f(5,j,k) - f(2,j,k)) 
+                        
+                        RHS(3,j,k) =   a10   *(f(4,j,k) - f(2,j,k)) &
+                                   +   b10   *(f(5,j,k) - f(1,j,k)) &
+                                   +   c10   *(f(6,j,k) - f(1,j,k)) 
+                    
+                        RHS(4,j,k) =   a10   *(f(5,j,k) - f(3,j,k)) &
+                                   +   b10   *(f(6,j,k) - f(2,j,k)) &
+                                   +   c10   *(f(7,j,k) - f(1,j,k)) 
+                        if(j==1 .and. k==1) then
+                            write(*,*) 'FTSX'
+                            write(*,'(4(e19.12,1x))') RHS(1:4,j,k)
+                        endif
+                      else
                         RHS(1,j,k) =   zero
                    
                         RHS(2,j,k) =   a10   *(f(3,j,k) - f(1,j,k)) &
@@ -1216,7 +1372,29 @@ contains
                         RHS(4,j,k) =   a10   *(f(5,j,k) - f(3,j,k)) &
                                    +   b10   *(f(6,j,k) - f(2,j,k)) &
                                    +   c10   *(f(7,j,k) - f(1,j,k)) 
+                        if(j==1 .and. k==1) then
+                            write(*,*) 'FFSX'
+                            write(*,'(4(e19.12,1x))') RHS(1:4,j,k)
+                        endif
+                      endif
                     case(-1)
+                      if(this%centered) then
+                        RHS(1,j,k) =   a10   *(f(2,j,k) + f(1,j,k)) &
+                                   +   b10   *(f(3,j,k) + f(2,j,k)) &
+                                   +   c10   *(f(4,j,k) + f(3,j,k)) 
+                        
+                        RHS(2,j,k) =   a10   *(f(3,j,k) - f(1,j,k)) &
+                                   +   b10   *(f(4,j,k) + f(1,j,k)) &
+                                   +   c10   *(f(5,j,k) + f(2,j,k)) 
+                        
+                        RHS(3,j,k) =   a10   *(f(4,j,k) - f(2,j,k)) &
+                                   +   b10   *(f(5,j,k) - f(1,j,k)) &
+                                   +   c10   *(f(6,j,k) + f(1,j,k)) 
+                    
+                        RHS(4,j,k) =   a10   *(f(5,j,k) - f(3,j,k)) &
+                                   +   b10   *(f(6,j,k) - f(2,j,k)) &
+                                   +   c10   *(f(7,j,k) - f(1,j,k)) 
+                      else
                         RHS(1,j,k) =   a10   *(f(2,j,k) + f(2,j,k)) &
                                    +   b10   *(f(3,j,k) + f(3,j,k)) &
                                    +   c10   *(f(4,j,k) + f(4,j,k)) 
@@ -1232,6 +1410,7 @@ contains
                         RHS(4,j,k) =   a10   *(f(5,j,k) - f(3,j,k)) &
                                    +   b10   *(f(6,j,k) - f(2,j,k)) &
                                    +   c10   *(f(7,j,k) - f(1,j,k)) 
+                      endif
                     end select
                     
                     RHS(5:this%n-4,j,k) =   a10   *(f(6:this%n-3,j,k) -         f(4:this%n-5,j,k)) &
@@ -1252,6 +1431,23 @@ contains
                         RHS(this%n    ,j,k) =  -a_np_1* f(this%n    ,j,k) -  b_np_1*f(this%n-1  ,j,k)   &
                                             -   c_np_1* f(this%n-2  ,j,k) -  d_np_1*f(this%n-3  ,j,k)
                     case(1)
+                      if(this%centered) then
+                        RHS(this%n-3,j,k) =   a10   *( f(this%n-2,j,k) - f(this%n-4,j,k)) &
+                                          +   b10   *( f(this%n-1,j,k) - f(this%n-5,j,k)) &
+                                          +   c10   *( f(this%n  ,j,k) - f(this%n-6,j,k)) 
+
+                        RHS(this%n-2,j,k) =   a10   *( f(this%n-1,j,k) - f(this%n-3,j,k)) &
+                                          +   b10   *( f(this%n  ,j,k) - f(this%n-4,j,k)) &
+                                          +   c10   *( f(this%n  ,j,k) - f(this%n-5,j,k)) 
+
+                        RHS(this%n-1,j,k) =   a10   *( f(this%n  ,j,k) - f(this%n-2,j,k)) &
+                                          +   b10   *( f(this%n  ,j,k) - f(this%n-3,j,k)) &
+                                          +   c10   *( f(this%n-2,j,k) - f(this%n-4,j,k)) 
+
+                        RHS(this%n  ,j,k) =   a10   *( f(this%n  ,j,k) - f(this%n-1,j,k)) &
+                                          +   b10   *( f(this%n-1,j,k) - f(this%n-2,j,k)) &
+                                          +   c10   *( f(this%n-2,j,k) - f(this%n-3,j,k)) 
+                      else
                         RHS(this%n-3,j,k) =   a10   *( f(this%n-2,j,k) - f(this%n-4,j,k)) &
                                           +   b10   *( f(this%n-1,j,k) - f(this%n-5,j,k)) &
                                           +   c10   *( f(this%n  ,j,k) - f(this%n-6,j,k)) 
@@ -1265,8 +1461,26 @@ contains
                                           +   c10   *( f(this%n-2,j,k) - f(this%n-4,j,k)) 
 
                         RHS(this%n  ,j,k) =   zero
+                      endif
 
                     case(-1)
+                      if(this%centered) then
+                        RHS(this%n-3,j,k) =   a10   *( f(this%n-2,j,k) - f(this%n-4,j,k)) &
+                                          +   b10   *( f(this%n-1,j,k) - f(this%n-5,j,k)) &
+                                          +   c10   *( f(this%n  ,j,k) - f(this%n-6,j,k)) 
+
+                        RHS(this%n-2,j,k) =   a10   *( f(this%n-1,j,k) - f(this%n-3,j,k)) &
+                                          +   b10   *( f(this%n  ,j,k) - f(this%n-4,j,k)) &
+                                          +   c10   *(-f(this%n  ,j,k) - f(this%n-5,j,k)) 
+
+                        RHS(this%n-1,j,k) =   a10   *( f(this%n  ,j,k) - f(this%n-2,j,k)) &
+                                          +   b10   *(-f(this%n  ,j,k) - f(this%n-3,j,k)) &
+                                          +   c10   *(-f(this%n-1,j,k) - f(this%n-4,j,k)) 
+
+                        RHS(this%n  ,j,k) =   a10   *(-f(this%n  ,j,k) - f(this%n-1,j,k)) &
+                                          +   b10   *(-f(this%n-1,j,k) - f(this%n-2,j,k)) &
+                                          +   c10   *(-f(this%n-2,j,k) - f(this%n-3,j,k)) 
+                      else
                         RHS(this%n-3,j,k) =   a10   *( f(this%n-2,j,k) - f(this%n-4,j,k)) &
                                           +   b10   *( f(this%n-1,j,k) - f(this%n-5,j,k)) &
                                           +   c10   *( f(this%n  ,j,k) - f(this%n-6,j,k)) 
@@ -1282,6 +1496,7 @@ contains
                         RHS(this%n  ,j,k) =   a10   *(-f(this%n-1,j,k) - f(this%n-1,j,k)) &
                                           +   b10   *(-f(this%n-2,j,k) - f(this%n-2,j,k)) &
                                           +   c10   *(-f(this%n-3,j,k) - f(this%n-3,j,k)) 
+                      endif
 
                     end select
                end do 
@@ -1716,6 +1931,19 @@ contains
                         RHS(3         ,j,k) = a_np_3 * ( f(4          ,j,k)   - two*f(3            ,j,k) + f(2         ,j,k)) &
                                             + b_np_3 * ( f(5          ,j,k)   - two*f(3            ,j,k) + f(1         ,j,k)) 
                     case(1)
+                      if(this%centered) then
+                        RHS(1,j,k) = a10 * ( f(2,j,k)   - two*f(1,j,k) + f(1,j,k)) &
+                                   + b10 * ( f(3,j,k)   - two*f(1,j,k) + f(2,j,k)) &
+                                   + c10 * ( f(4,j,k)   - two*f(1,j,k) + f(3,j,k))
+                        
+                        RHS(2,j,k) = a10 * ( f(3,j,k)   - two*f(2,j,k) + f(1,j,k)) &
+                                   + b10 * ( f(4,j,k)   - two*f(2,j,k) + f(1,j,k)) &
+                                   + c10 * ( f(5,j,k)   - two*f(2,j,k) + f(2,j,k))
+                        
+                        RHS(3,j,k) = a10 * ( f(4,j,k)   - two*f(3,j,k) + f(2,j,k)) &
+                                   + b10 * ( f(5,j,k)   - two*f(3,j,k) + f(1,j,k)) &
+                                   + c10 * ( f(6,j,k)   - two*f(3,j,k) + f(1,j,k))
+                      else
                         RHS(1,j,k) = a10 * ( f(2,j,k)   - two*f(1,j,k) + f(2,j,k)) &
                                    + b10 * ( f(3,j,k)   - two*f(1,j,k) + f(3,j,k)) &
                                    + c10 * ( f(4,j,k)   - two*f(1,j,k) + f(4,j,k))
@@ -1727,7 +1955,21 @@ contains
                         RHS(3,j,k) = a10 * ( f(4,j,k)   - two*f(3,j,k) + f(2,j,k)) &
                                    + b10 * ( f(5,j,k)   - two*f(3,j,k) + f(1,j,k)) &
                                    + c10 * ( f(6,j,k)   - two*f(3,j,k) + f(2,j,k))
+                      endif
                     case(-1)
+                      if(this%centered) then
+                        RHS(1,j,k) = a10 * ( f(2,j,k)   - two*f(1,j,k) - f(1,j,k)) &
+                                   + b10 * ( f(3,j,k)   - two*f(1,j,k) - f(2,j,k)) &
+                                   + c10 * ( f(4,j,k)   - two*f(1,j,k) - f(3,j,k))
+                        
+                        RHS(2,j,k) = a10 * ( f(3,j,k)   - two*f(2,j,k) + f(1,j,k)) &
+                                   + b10 * ( f(4,j,k)   - two*f(2,j,k) - f(1,j,k)) &
+                                   + c10 * ( f(5,j,k)   - two*f(2,j,k) - f(2,j,k))
+                        
+                        RHS(3,j,k) = a10 * ( f(4,j,k)   - two*f(3,j,k) + f(2,j,k)) &
+                                   + b10 * ( f(5,j,k)   - two*f(3,j,k) + f(1,j,k)) &
+                                   + c10 * ( f(6,j,k)   - two*f(3,j,k) - f(1,j,k))
+                      else
                         RHS(1,j,k) = a10 * ( f(2,j,k)   - two*f(1,j,k) - f(2,j,k)) &
                                    + b10 * ( f(3,j,k)   - two*f(1,j,k) - f(3,j,k)) &
                                    + c10 * ( f(4,j,k)   - two*f(1,j,k) - f(4,j,k))
@@ -1739,6 +1981,7 @@ contains
                         RHS(3,j,k) = a10 * ( f(4,j,k)   - two*f(3,j,k) + f(2,j,k)) &
                                    + b10 * ( f(5,j,k)   - two*f(3,j,k) + f(1,j,k)) &
                                    + c10 * ( f(6,j,k)   - two*f(3,j,k) - f(2,j,k))
+                      endif
                     end select
                     
                     RHS(4:this%n-3,j,k) = a10 * ( f(5:this%n-2 ,j,k)   - two*f(4:this%n-3   ,j,k) + f(3:this%n-4,j,k)) &
@@ -1756,6 +1999,19 @@ contains
                                             &  c_np_1*f(this%n-2,j,k) + d_np_1*f(this%n-3,j,k) + &
                                             &  e_np_1*f(this%n-4,j,k)
                     case(1)
+                      if(this%centered) then
+                        RHS(this%n-2,j,k) = a10 * ( f(this%n-1,j,k)   - two*f(this%n-2,j,k) + f(this%n-3,j,k)) &
+                                          + b10 * ( f(this%n  ,j,k)   - two*f(this%n-2,j,k) + f(this%n-4,j,k)) &
+                                          + c10 * ( f(this%n  ,j,k)   - two*f(this%n-2,j,k) + f(this%n-5,j,k))
+                        
+                        RHS(this%n-1,j,k) = a10 * ( f(this%n  ,j,k)   - two*f(this%n-1,j,k) + f(this%n-2,j,k)) &
+                                          + b10 * ( f(this%n  ,j,k)   - two*f(this%n-1,j,k) + f(this%n-3,j,k)) &
+                                          + c10 * ( f(this%n-1,j,k)   - two*f(this%n-1,j,k) + f(this%n-4,j,k))
+                        
+                        RHS(this%n  ,j,k) = a10 * ( f(this%n  ,j,k)   - two*f(this%n  ,j,k) + f(this%n-1,j,k)) &
+                                          + b10 * ( f(this%n-1,j,k)   - two*f(this%n  ,j,k) + f(this%n-2,j,k)) &
+                                          + c10 * ( f(this%n-2,j,k)   - two*f(this%n  ,j,k) + f(this%n-3,j,k))
+                      else
                         RHS(this%n-2,j,k) = a10 * ( f(this%n-1,j,k)   - two*f(this%n-2,j,k) + f(this%n-3,j,k)) &
                                           + b10 * ( f(this%n  ,j,k)   - two*f(this%n-2,j,k) + f(this%n-4,j,k)) &
                                           + c10 * ( f(this%n-1,j,k)   - two*f(this%n-2,j,k) + f(this%n-5,j,k))
@@ -1767,7 +2023,21 @@ contains
                         RHS(this%n  ,j,k) = a10 * ( f(this%n-1,j,k)   - two*f(this%n  ,j,k) + f(this%n-1,j,k)) &
                                           + b10 * ( f(this%n-2,j,k)   - two*f(this%n  ,j,k) + f(this%n-2,j,k)) &
                                           + c10 * ( f(this%n-3,j,k)   - two*f(this%n  ,j,k) + f(this%n-3,j,k))
+                      endif
                     case(-1)
+                      if(this%centered) then
+                        RHS(this%n-2,j,k) = a10 * ( f(this%n-1,j,k)   - two*f(this%n-2,j,k) + f(this%n-3,j,k)) &
+                                          + b10 * ( f(this%n  ,j,k)   - two*f(this%n-2,j,k) + f(this%n-4,j,k)) &
+                                          + c10 * (-f(this%n  ,j,k)   - two*f(this%n-2,j,k) + f(this%n-5,j,k))
+                        
+                        RHS(this%n-1,j,k) = a10 * ( f(this%n  ,j,k)   - two*f(this%n-1,j,k) + f(this%n-2,j,k)) &
+                                          + b10 * (-f(this%n  ,j,k)   - two*f(this%n-1,j,k) + f(this%n-3,j,k)) &
+                                          + c10 * (-f(this%n-1,j,k)   - two*f(this%n-1,j,k) + f(this%n-4,j,k))
+                        
+                        RHS(this%n  ,j,k) = a10 * (-f(this%n  ,j,k)   - two*f(this%n  ,j,k) + f(this%n-1,j,k)) &
+                                          + b10 * (-f(this%n-1,j,k)   - two*f(this%n  ,j,k) + f(this%n-2,j,k)) &
+                                          + c10 * (-f(this%n-2,j,k)   - two*f(this%n  ,j,k) + f(this%n-3,j,k))
+                      else
                         RHS(this%n-2,j,k) = a10 * ( f(this%n-1,j,k)   - two*f(this%n-2,j,k) + f(this%n-3,j,k)) &
                                           + b10 * ( f(this%n  ,j,k)   - two*f(this%n-2,j,k) + f(this%n-4,j,k)) &
                                           + c10 * (-f(this%n-1,j,k)   - two*f(this%n-2,j,k) + f(this%n-5,j,k))
@@ -1779,6 +2049,7 @@ contains
                         RHS(this%n  ,j,k) = a10 * (-f(this%n-1,j,k)   - two*f(this%n  ,j,k) + f(this%n-1,j,k)) &
                                           + b10 * (-f(this%n-2,j,k)   - two*f(this%n  ,j,k) + f(this%n-2,j,k)) &
                                           + c10 * (-f(this%n-3,j,k)   - two*f(this%n  ,j,k) + f(this%n-3,j,k))
+                      endif
                     end select
 
                 end do 
@@ -2120,6 +2391,11 @@ contains
                 select case(bcn)
                 case(0)  ! Normal non-periodic right boundary
                     call this%SolveXPenta1(this%penta1_nn, df, na, nb)
+                    write(*,*) 'F_XX'
+                    write(*,'(5(e19.12,1x))') transpose(this%penta1_nn(1:7,1:5))
+                    write(*,*) '----------------'
+                    write(*,'(7(e19.12,1x))') df(1:7,1,1)
+                    write(*,*) '----------------'
                 case(1) ! Symmetric right boundary
                     call this%SolveXPenta1(this%penta1_ns, df, na, nb)
                 case(-1) ! Antisymmetric right boundary
@@ -2129,6 +2405,11 @@ contains
                 select case(bcn)
                 case(0)  ! Normal non-periodic right boundary
                     call this%SolveXPenta1(this%penta1_sn, df, na, nb)
+                    write(*,*) 'F_SX'
+                    write(*,'(5(e19.12,1x))') transpose(this%penta1_sn(1:7,1:5))
+                    write(*,*) '----------------'
+                    write(*,'(7(e19.12,1x))') df(1:7,1,1)
+                    write(*,*) '----------------'
                 case(1)  ! Symmetric right boundary
                     call this%SolveXPenta1(this%penta1_ss, df, na, nb)
                 case(-1) ! Antisymmetric right boundary

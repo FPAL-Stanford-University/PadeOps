@@ -30,6 +30,10 @@ module DerivativesMod
         logical                        :: ymetric = .false.
         logical                        :: zmetric = .false.
 
+        logical                        :: xcentered = .false.
+        logical                        :: ycentered = .false.
+        logical                        :: zcentered = .false.
+
         integer                        :: nxg, nyg, nzg ! Global sizes
         integer, dimension(3)          :: xsz, ysz, zsz ! Local decomposition sizes
         
@@ -142,6 +146,7 @@ contains
                         periodic_x, periodic_y, periodic_z, &
                           method_x,   method_y,   method_z, &
                            xmetric,    ymetric,    zmetric, &
+                         xcentered,  ycentered,  zcentered, &
                        curvilinear)
         
         class(derivatives), intent(inout)          :: this
@@ -154,9 +159,36 @@ contains
         logical           , intent(in),   optional :: xmetric
         logical           , intent(in),   optional :: ymetric
         logical           , intent(in),   optional :: zmetric
+        logical           , intent(in),   optional :: xcentered
+        logical           , intent(in),   optional :: ycentered
+        logical           , intent(in),   optional :: zcentered
         logical           , intent(in),   optional :: curvilinear
         
 
+
+        if (present(xcentered)) then
+            this%xcentered = xcentered
+        end if 
+
+        if (present(ycentered)) then
+            this%ycentered = ycentered
+        end if 
+
+        if (present(zcentered)) then
+            this%zcentered = zcentered
+        end if 
+
+        if(this%ycentered) then
+            call GracefulExit("Centered storage not supported in y direction at present. Change ycentered.",453)
+        endif
+
+        if(this%zcentered) then
+            call GracefulExit("Centered storage not supported in z direction at present. Change zcentered.",453)
+        endif
+
+        if(this%xcentered .and. (.not. (method_x=="cd10"))) then
+            call GracefulExit("Centered storage only supported for cd10.",453)
+        endif
 
        
         if (this%initialized) then
@@ -197,6 +229,7 @@ contains
                         periodic_x, periodic_y, periodic_z, &
                           method_x,   method_y,   method_z, &
                            xmetric,    ymetric,    zmetric, &
+                         xcentered,  ycentered,  zcentered, &
                        curvilinear)
         
         class(derivatives), intent(inout)          :: this
@@ -209,8 +242,35 @@ contains
         logical           , intent(in),   optional :: xmetric
         logical           , intent(in),   optional :: ymetric
         logical           , intent(in),   optional :: zmetric
+        logical           , intent(in),   optional :: xcentered
+        logical           , intent(in),   optional :: ycentered
+        logical           , intent(in),   optional :: zcentered
         logical           , intent(in),   optional :: curvilinear
         
+
+        if (present(xcentered)) then
+            this%xcentered = xcentered
+        end if 
+
+        if (present(ycentered)) then
+            this%ycentered = ycentered
+        end if 
+
+        if (present(zcentered)) then
+            this%zcentered = zcentered
+        end if 
+
+        if(this%ycentered) then
+            call GracefulExit("Centered storage not supported in y direction at present. Change ycentered.",453)
+        endif
+
+        if(this%zcentered) then
+            call GracefulExit("Centered storage not supported in z direction at present. Change zcentered.",453)
+        endif
+
+        if(this%xcentered .and. (.not. (method_x=="cd10"))) then
+            call GracefulExit("Centered storage only supported for cd10.",453)
+        endif
 
        
         if (this%initialized) then
@@ -296,7 +356,7 @@ contains
         select case (method_x)
         case ("cd10")
             allocate(this%xcd10)
-            ierr = this % xcd10%init( this%xsz(1), dx, periodic_x, 0, 0)
+            ierr = this % xcd10%init( this%xsz(1), dx, periodic_x, this%xcentered, 0, 0)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing cd10 failed in X ",11)
             end if
@@ -330,7 +390,7 @@ contains
         select case (method_y)
         case ("cd10")
             allocate(this%ycd10)
-            ierr = this % ycd10%init( this%ysz(2), dy, periodic_y, 0, 0)
+            ierr = this % ycd10%init( this%ysz(2), dy, periodic_y, this%ycentered, 0, 0)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing cd10 failed in Y ",11)
             end if 
@@ -365,7 +425,7 @@ contains
         select case (method_z)
         case ("cd10")
             allocate(this%zcd10)
-            ierr = this % zcd10%init( this%zsz(3), dz, periodic_z, 0, 0)
+            ierr = this % zcd10%init( this%zsz(3), dz, periodic_z, this%zcentered, 0, 0)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing cd10 failed in Z ",11)
             end if 

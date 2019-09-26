@@ -23,6 +23,10 @@ module FiltersMod
         
         logical                        :: initialized = .false. 
 
+        logical                        :: xcentered = .false.
+        logical                        :: ycentered = .false.
+        logical                        :: zcentered = .false.
+
         contains
             procedure, private :: init_parallel
             procedure, private :: init_serial
@@ -94,7 +98,7 @@ contains
         
         case ("cf90")
             allocate (this%xcf90)
-            ierr = this%xcf90%init( nx, periodicx)
+            ierr = this%xcf90%init( nx, periodicx, this%xcentered)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing cf90 failed in X ",51)
             end if
@@ -102,7 +106,7 @@ contains
         
         case("gaussian") 
             allocate (this%xgauf)
-            ierr = this%xgauf%init( nx, periodicx)
+            ierr = this%xgauf%init( nx, periodicx, this%xcentered)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing gaussian filter failed in X ",51)
             end if
@@ -125,7 +129,7 @@ contains
         
         case ("cf90")
             allocate (this%ycf90)
-            ierr = this%ycf90%init( ny, periodicy)
+            ierr = this%ycf90%init( ny, periodicy, this%ycentered)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing cf90 failed in Y ",51)
             end if
@@ -133,7 +137,7 @@ contains
         
         case("gaussian") 
             allocate (this%ygauf)
-            ierr = this%ygauf%init( ny, periodicy)
+            ierr = this%ygauf%init( ny, periodicy, this%ycentered)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing gaussian filter failed in Y ",51)
             end if
@@ -155,7 +159,7 @@ contains
 
         case ("cf90")
             allocate (this%zcf90)
-            ierr = this%zcf90%init( nz, periodicz)
+            ierr = this%zcf90%init( nz, periodicz, this%zcentered)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing cf90 failed in Z ",51)
             end if
@@ -163,7 +167,7 @@ contains
         
         case("gaussian") 
             allocate (this%zgauf)
-            ierr = this%zgauf%init( nz, periodicz)
+            ierr = this%zgauf%init( nz, periodicz, this%zcentered)
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing gaussian filter failed in Z ",51)
             end if
@@ -273,12 +277,37 @@ contains
     
     subroutine init_parallel(this,                              gp  , &
                                      periodicx, periodicy, periodicz, & 
-                                     methodx  , methody  , methodz    )
+                                     methodx  , methody  , methodz  , &
+                                     xcentered, ycentered, zcentered  )
         class( filters )   , intent(inout) :: this
         class( decomp_info), intent(in)  :: gp 
         character(len=*)   , intent(in)    :: methodx, methody, methodz 
         logical            , intent(in)    :: periodicx, periodicy, periodicz
+        logical, optional  , intent(in)    :: xcentered, ycentered, zcentered
         
+        if (present(xcentered)) then
+            this%xcentered = xcentered
+        end if 
+
+        if (present(ycentered)) then
+            this%ycentered = ycentered
+        end if 
+
+        if (present(zcentered)) then
+            this%zcentered = zcentered
+        end if 
+
+        if(this%ycentered) then
+            call GracefulExit("Centered storage not supported in y direction at present. Change ycentered.",453)
+        endif
+
+        if(this%zcentered) then
+            call GracefulExit("Centered storage not supported in z direction at present. Change zcentered.",453)
+        endif
+
+        if(this%xcentered .and. (.not. ((methodx=="cf90") .or. (methodx=="gaussian") ))) then
+            call GracefulExit("Centered storage only supported for cf90 and gaussian.",453)
+        endif
 
         if (this%initialized) then
             call message("WARNING: Reinitializing the FILTER class!")
@@ -298,12 +327,38 @@ contains
 
     subroutine init_serial(this,          nx  ,      ny  ,       nz , &
                                      periodicx, periodicy, periodicz, &
-                                     methodx  , methody  , methodz  )
+                                     methodx  , methody  , methodz  , &
+                                     xcentered, ycentered, zcentered  )
 
         class( filters ) , intent(inout) :: this
         integer          , intent(in)    :: nx, ny, nz
         character(len=*) , intent(in)    :: methodx, methody, methodz 
         logical          , intent(in)    :: periodicx, periodicy, periodicz
+        logical, optional  , intent(in)  :: xcentered, ycentered, zcentered
+        
+        if (present(xcentered)) then
+            this%xcentered = xcentered
+        end if 
+
+        if (present(ycentered)) then
+            this%ycentered = ycentered
+        end if 
+
+        if (present(zcentered)) then
+            this%zcentered = zcentered
+        end if 
+
+        if(this%ycentered) then
+            call GracefulExit("Centered storage not supported in y direction at present. Change ycentered.",453)
+        endif
+
+        if(this%zcentered) then
+            call GracefulExit("Centered storage not supported in z direction at present. Change zcentered.",453)
+        endif
+
+        if(this%xcentered .and. (.not. ((methodx=="cf90") .or. (methodx=="gaussian") ))) then
+            call GracefulExit("Centered storage only supported for cf90 and gaussian.",453)
+        endif
 
         if (this%initialized) then
             call message("WARNING: Reinitializing the FILTER class!")

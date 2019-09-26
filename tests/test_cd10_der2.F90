@@ -20,7 +20,7 @@ program test_Cd10_Der2
     f = cos(x)
     d2f_exact = -cos(x)
 
-    ierr =  xcd10%init ( nx, dx , .false., 0, 0) 
+    ierr =  xcd10%init ( nx, dx , .false., .false., 0, 0) 
 
     call xcd10%d2d1(f,d2f,ny,nz)
 

@@ -21,6 +21,10 @@ module GridMod
         logical                                              :: periodicy         ! Periodic in Y?
         logical                                              :: periodicz         ! Periodic in Z?
 
+        logical                                              :: xcentered         ! Centered in X?
+        logical                                              :: ycentered         ! Centered in Y?
+        logical                                              :: zcentered         ! Centered in Z?
+
         type( derivatives ), allocatable                     :: der               ! Derivative object
         character(len=clen)                                  :: derivative_x      ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
         character(len=clen)                                  :: derivative_y      ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"

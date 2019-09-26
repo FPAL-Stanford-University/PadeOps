@@ -53,6 +53,7 @@ module gaussianstuff
         integer     :: n
 
         logical     :: periodic=.TRUE.
+        logical     :: centered=.FALSE.
         logical     :: initialized=.FALSE.
 
         contains
@@ -70,11 +71,12 @@ module gaussianstuff
 
 contains
 
-    function init(this, n_, periodic_) result(ierr)
+    function init(this, n_, periodic_, centered_) result(ierr)
    
         class( gaussian ), intent(inout) :: this
         integer, intent(in) :: n_
         logical, intent(in) :: periodic_
+        logical, intent(in) :: centered_
         integer :: ierr
         
         if (this%initialized) then
@@ -85,6 +87,7 @@ contains
         this%n = n_
 
         this%periodic = periodic_
+        this%centered = centered_
 
         ! If everything passes
         ierr = 0
@@ -206,6 +209,31 @@ contains
                                             + b4_cgf * ( f(         6,j,k) + f(         2,j,k) ) &
                                             + b4_dgf * ( f(         7,j,k) + f(         1,j,k) ) 
                     case(1)
+                      if(this%centered) then
+                        fil(1,j,k) =    agf * ( f(1,j,k) )            &
+                                   +    bgf * ( f(2,j,k) + f(1,j,k) ) &
+                                   +    cgf * ( f(3,j,k) + f(2,j,k) ) &
+                                   +    dgf * ( f(4,j,k) + f(3,j,k) ) &
+                                   +    egf * ( f(5,j,k) + f(4,j,k) )
+
+                        fil(2,j,k) =    agf * ( f(2,j,k) )            &
+                                   +    bgf * ( f(3,j,k) + f(1,j,k) ) &
+                                   +    cgf * ( f(4,j,k) + f(1,j,k) ) &
+                                   +    dgf * ( f(5,j,k) + f(2,j,k) ) &
+                                   +    egf * ( f(6,j,k) + f(3,j,k) )
+
+                        fil(3,j,k) =    agf * ( f(3,j,k) )            &
+                                   +    bgf * ( f(4,j,k) + f(2,j,k) ) &
+                                   +    cgf * ( f(5,j,k) + f(1,j,k) ) &
+                                   +    dgf * ( f(6,j,k) + f(1,j,k) ) &
+                                   +    egf * ( f(7,j,k) + f(2,j,k) )
+
+                        fil(4,j,k) =    agf * ( f(4,j,k) )            &
+                                   +    bgf * ( f(5,j,k) + f(3,j,k) ) &
+                                   +    cgf * ( f(6,j,k) + f(2,j,k) ) &
+                                   +    dgf * ( f(7,j,k) + f(1,j,k) ) &
+                                   +    egf * ( f(8,j,k) + f(1,j,k) )
+                      else
                         fil(1,j,k) =    agf * ( f(1,j,k) )            &
                                    +    bgf * ( f(2,j,k) + f(2,j,k) ) &
                                    +    cgf * ( f(3,j,k) + f(3,j,k) ) &
@@ -229,7 +257,33 @@ contains
                                    +    cgf * ( f(6,j,k) + f(2,j,k) ) &
                                    +    dgf * ( f(7,j,k) + f(1,j,k) ) &
                                    +    egf * ( f(8,j,k) + f(2,j,k) )
+                      endif
                     case(-1)
+                      if(this%centered) then
+                        fil(1,j,k) =    agf * ( f(1,j,k) )            &
+                                   +    bgf * ( f(2,j,k) - f(1,j,k) ) &
+                                   +    cgf * ( f(3,j,k) - f(2,j,k) ) &
+                                   +    dgf * ( f(4,j,k) - f(3,j,k) ) &
+                                   +    egf * ( f(5,j,k) - f(4,j,k) )
+
+                        fil(2,j,k) =    agf * ( f(2,j,k) )            &
+                                   +    bgf * ( f(3,j,k) + f(1,j,k) ) &
+                                   +    cgf * ( f(4,j,k) - f(1,j,k) ) &
+                                   +    dgf * ( f(5,j,k) - f(2,j,k) ) &
+                                   +    egf * ( f(6,j,k) - f(3,j,k) )
+
+                        fil(3,j,k) =    agf * ( f(3,j,k) )            &
+                                   +    bgf * ( f(4,j,k) + f(2,j,k) ) &
+                                   +    cgf * ( f(5,j,k) + f(1,j,k) ) &
+                                   +    dgf * ( f(6,j,k) - f(1,j,k) ) &
+                                   +    egf * ( f(7,j,k) - f(2,j,k) )
+
+                        fil(4,j,k) =    agf * ( f(4,j,k) )            &
+                                   +    bgf * ( f(5,j,k) + f(3,j,k) ) &
+                                   +    cgf * ( f(6,j,k) + f(2,j,k) ) &
+                                   +    dgf * ( f(7,j,k) + f(1,j,k) ) &
+                                   +    egf * ( f(8,j,k) - f(1,j,k) )
+                      else
                         fil(1,j,k) =    agf * ( f(1,j,k) )            &
                                    +    bgf * ( f(2,j,k) - f(2,j,k) ) &
                                    +    cgf * ( f(3,j,k) - f(3,j,k) ) &
@@ -253,6 +307,7 @@ contains
                                    +    cgf * ( f(6,j,k) + f(2,j,k) ) &
                                    +    dgf * ( f(7,j,k) + f(1,j,k) ) &
                                    +    egf * ( f(8,j,k) - f(2,j,k) )
+                      endif
                     end select
 
                     fil(5:this%n-4,j,k) =    agf * ( f(5:this%n-4,j,k) )                     &
@@ -278,6 +333,31 @@ contains
                         fil(    this%n,j,k) = b1_agf * ( f(    this%n,j,k) )                     &
                                             + b1_bgf * ( f(  this%n-1,j,k) ) 
                     case(1)
+                      if(this%centered) then
+                        fil(this%n-3,j,k) =    agf * ( f(this%n-3,j,k) )                   &
+                                          +    bgf * ( f(this%n-2,j,k) + f(this%n-4,j,k) ) &
+                                          +    cgf * ( f(this%n-1,j,k) + f(this%n-5,j,k) ) &
+                                          +    dgf * ( f(this%n  ,j,k) + f(this%n-6,j,k) ) &
+                                          +    egf * ( f(this%n  ,j,k) + f(this%n-7,j,k) )
+
+                        fil(this%n-2,j,k) =    agf * ( f(this%n-2,j,k) )                   &
+                                          +    bgf * ( f(this%n-1,j,k) + f(this%n-3,j,k) ) &
+                                          +    cgf * ( f(this%n  ,j,k) + f(this%n-4,j,k) ) &
+                                          +    dgf * ( f(this%n  ,j,k) + f(this%n-5,j,k) ) &
+                                          +    egf * ( f(this%n-1,j,k) + f(this%n-6,j,k) )
+
+                        fil(this%n-1,j,k) =    agf * ( f(this%n-1,j,k) )                   &
+                                          +    bgf * ( f(this%n  ,j,k) + f(this%n-2,j,k) ) &
+                                          +    cgf * ( f(this%n  ,j,k) + f(this%n-3,j,k) ) &
+                                          +    dgf * ( f(this%n-1,j,k) + f(this%n-4,j,k) ) &
+                                          +    egf * ( f(this%n-2,j,k) + f(this%n-5,j,k) )
+
+                        fil(this%n  ,j,k) =    agf * ( f(this%n  ,j,k) )                   &
+                                          +    bgf * ( f(this%n  ,j,k) + f(this%n-1,j,k) ) &
+                                          +    cgf * ( f(this%n-1,j,k) + f(this%n-2,j,k) ) &
+                                          +    dgf * ( f(this%n-2,j,k) + f(this%n-3,j,k) ) &
+                                          +    egf * ( f(this%n-3,j,k) + f(this%n-4,j,k) )
+                      else
                         fil(this%n-3,j,k) =    agf * ( f(this%n-3,j,k) )                   &
                                           +    bgf * ( f(this%n-2,j,k) + f(this%n-4,j,k) ) &
                                           +    cgf * ( f(this%n-1,j,k) + f(this%n-5,j,k) ) &
@@ -301,7 +381,33 @@ contains
                                           +    cgf * ( f(this%n-2,j,k) + f(this%n-2,j,k) ) &
                                           +    dgf * ( f(this%n-3,j,k) + f(this%n-3,j,k) ) &
                                           +    egf * ( f(this%n-4,j,k) + f(this%n-4,j,k) )
+                      endif
                     case(-1)
+                      if(this%centered) then
+                        fil(this%n-3,j,k) =    agf * ( f(this%n-3,j,k) )                   &
+                                          +    bgf * ( f(this%n-2,j,k) + f(this%n-4,j,k) ) &
+                                          +    cgf * ( f(this%n-1,j,k) + f(this%n-5,j,k) ) &
+                                          +    dgf * ( f(this%n  ,j,k) + f(this%n-6,j,k) ) &
+                                          +    egf * (-f(this%n  ,j,k) + f(this%n-7,j,k) )
+
+                        fil(this%n-2,j,k) =    agf * ( f(this%n-2,j,k) )                   &
+                                          +    bgf * ( f(this%n-1,j,k) + f(this%n-3,j,k) ) &
+                                          +    cgf * ( f(this%n  ,j,k) + f(this%n-4,j,k) ) &
+                                          +    dgf * (-f(this%n  ,j,k) + f(this%n-5,j,k) ) &
+                                          +    egf * (-f(this%n-1,j,k) + f(this%n-6,j,k) )
+
+                        fil(this%n-1,j,k) =    agf * ( f(this%n-1,j,k) )                   &
+                                          +    bgf * ( f(this%n  ,j,k) + f(this%n-2,j,k) ) &
+                                          +    cgf * (-f(this%n  ,j,k) + f(this%n-3,j,k) ) &
+                                          +    dgf * (-f(this%n-1,j,k) + f(this%n-4,j,k) ) &
+                                          +    egf * (-f(this%n-2,j,k) + f(this%n-5,j,k) )
+
+                        fil(this%n  ,j,k) =    agf * ( f(this%n  ,j,k) )                   &
+                                          +    bgf * (-f(this%n  ,j,k) + f(this%n-1,j,k) ) &
+                                          +    cgf * (-f(this%n-1,j,k) + f(this%n-2,j,k) ) &
+                                          +    dgf * (-f(this%n-2,j,k) + f(this%n-3,j,k) ) &
+                                          +    egf * (-f(this%n-3,j,k) + f(this%n-4,j,k) )
+                      else
                         fil(this%n-3,j,k) =    agf * ( f(this%n-3,j,k) )                   &
                                           +    bgf * ( f(this%n-2,j,k) + f(this%n-4,j,k) ) &
                                           +    cgf * ( f(this%n-1,j,k) + f(this%n-5,j,k) ) &
@@ -325,6 +431,7 @@ contains
                                           +    cgf * (-f(this%n-2,j,k) + f(this%n-2,j,k) ) &
                                           +    dgf * (-f(this%n-3,j,k) + f(this%n-3,j,k) ) &
                                           +    egf * (-f(this%n-4,j,k) + f(this%n-4,j,k) )
+                      endif
                     end select
                end do 
             end do 
