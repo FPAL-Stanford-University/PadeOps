@@ -171,7 +171,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
          
          do i = 1, this%nTurbines
              call this%turbArrayADM_Tyaw(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
-             this%gamma(i) = 0.d0
+             this%gamma(i) = this%turbArrayADM_Tyaw(i)%yaw
              this%theta(i) = 0.d0
              call this%turbArrayADM_Tyaw(i)%link_memory_buffers(this%rbuff, this%blanks, this%speed,  & 
                    this%scalarSource)

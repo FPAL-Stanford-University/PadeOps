@@ -205,7 +205,7 @@ subroutine AD_force_point(this, X, Y, Z, scalarSource)
     real(rkind), intent(out) :: scalarSource
     real(rkind), intent(in) :: X,Y,Z
     real(rkind) :: delta_r = 0.8d0, smear_x = 1.5d0, delta, R, sumVal
-    real(rkind) :: tmp, tmp2, diamFactor = 2.d0
+    real(rkind) :: tmp, tmp2, diamFactor = 1.8d0
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Do everything in the i,j,k loop in the rhs call
