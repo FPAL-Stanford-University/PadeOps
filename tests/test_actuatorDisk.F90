@@ -16,7 +16,7 @@ program test_actuatorDisk
     type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
     type(actuatorDisk), dimension(:), allocatable :: hawts
     type(actuatorDisk_yaw), dimension(:), allocatable :: hawts_Tyaw
-    integer, parameter :: nx = 192, ny = 96, nz = 128
+    integer, parameter :: nx = 128, ny = 32, nz = 32
     !character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/"
     !character(len=clen) :: inputDir = "/fastscratch/nghaisas/runs/PadeOps/wupa/run3/deb/turbInfo"
     character(len=clen) :: inputDir = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/1x1array"

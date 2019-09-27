@@ -204,18 +204,18 @@ subroutine AD_force_point(this, X, Y, Z, scalarSource)
     class(actuatordisk_yaw), intent(inout) :: this
     real(rkind), intent(out) :: scalarSource
     real(rkind), intent(in) :: X,Y,Z
-    real(rkind) :: delta_r = 0.22d0, smear_x = 1.5d0, delta, R, sumVal
-    real(rkind) :: tmp
+    real(rkind) :: delta_r = 0.8d0, smear_x = 1.5d0, delta, R, sumVal
+    real(rkind) :: tmp, tmp2, diamFactor = 2.d0
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Do everything in the i,j,k loop in the rhs call
 
     ! X,Y,Z are shifted to xc, yc, zx zero center as per AD location
-    R = this%diam / 2.d0
+    R = this%diam / 2.d0 * diamFactor ! Added to try and smear the forcing out more
     tmp = sqrt((Y/R)**2 + (Z/R)**2)
     tmp = (tmp-1.d0)/delta_r + 1.d0
-    call Sfunc_point(tmp, scalarSource)
-    tmp = 1.d0 - scalarSource
+    call Sfunc_point(tmp, tmp2)
+    tmp = 1.d0 - tmp2
     delta = (this%dx)*smear_x
     scalarSource = tmp * (1.d0/(delta*sqrt(2.d0*pi))) * exp(-0.5d0*(X**2)/(delta**2))
 
