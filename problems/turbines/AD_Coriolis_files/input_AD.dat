@@ -104,7 +104,7 @@ useWindTurbines               = .TRUE.    ! Do you want to use Wind turbines ?
 num_turbines                  = 1
 ADM                           = .TRUE.
 turbInfoDir                   = "/home1/05294/mhowland/PadeOps/problems/turbines/AD_Coriolis_files/turbInfo/1x1array"
-ADM_Type                      = 4
+ADM_Type                      = 2
 /
 /
 &FRINGE

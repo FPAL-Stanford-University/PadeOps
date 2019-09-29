@@ -318,8 +318,8 @@ program upsampleFields
     logical :: periodicInZ = .false. 
     integer :: nxf, nyf, nzf
     namelist /INPUT/ nx, ny, nz, inputdir, outputdir, inputFile_TID, inputFile_RID, &
-    outputFile_TID, outputFile_RID, UpsampleInZ, isStratified, PeriodicInZ, &
-    nxf, nyf, nzf
+    outputFile_TID, outputFile_RID, UpsampleInZ, isStratified, PeriodicInZ
+    !nxf, nyf, nzf
 
     call MPI_Init(ierr)               !<-- Begin MPI
     call GETARG(1,inputfile)          !<-- Get the location of the input file
@@ -332,7 +332,15 @@ program upsampleFields
     call decomp_2d_init(nx, ny, nz, 0, 0)
     call get_decomp_info(gpC)
     call decomp_info_init(nx,ny,nz+1,gpE)
-    
+    if (upSampleInZ) then   
+        nxf = nx*2 
+        nyf = ny*2 
+        nzf = nz*2 
+    else
+        nxf = nx*2 
+        nyf = ny*2 
+        nzf = nz 
+    end if
     call decomp_info_init(nxf, ny , nz   , gpC_upX  )
     call decomp_info_init(nxf, nyf, nz   , gpC_upXY )
     call decomp_info_init(nxf, nyf, nzf  , gpC_upXYZ)
