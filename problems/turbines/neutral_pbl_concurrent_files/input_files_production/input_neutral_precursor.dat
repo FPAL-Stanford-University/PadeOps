@@ -12,7 +12,7 @@ prow                  = 0            ! Number of rows in 2D processor decomposit
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
 restartFile_TID       = 0       ! TimeID of the restart file being used
-restartFile_RID       = 4            ! RunID of the restart file being used
+restartFile_RID       = 2            ! RunID of the restart file being used
 /
 /
 &NUMERICS
@@ -30,7 +30,7 @@ donot_dealias         = .FALSE.
 /
 /
 &IO
-RunID                 = 4          ! Run Label (All output files will be tagged with this nubber)
+RunID                 = 2          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump         = 1000       ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump            = 500       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
