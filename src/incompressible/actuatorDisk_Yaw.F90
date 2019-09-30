@@ -52,6 +52,7 @@ module actuatorDisk_YawMod
         procedure, private :: AD_force_point
         !procedure, private :: Sfunc 
         procedure :: get_power
+        procedure :: dumpPower
     end type
 
 
@@ -196,7 +197,7 @@ end subroutine
 subroutine get_power(this)
     class(actuatordisk_yaw), intent(inout) :: this
 
-    this%power = -0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*(this%ut)**3
+    this%power = 0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*(this%ut)**3
 
 end subroutine
 
@@ -271,5 +272,22 @@ pure subroutine Sfunc(x, val)
     end where
 
 end subroutine
+
+subroutine dumpPower(this, outputfile, tempname)
+    class(actuatordisk_yaw), intent(inout) :: this
+    character(len=*),    intent(in)            :: outputfile, tempname
+    integer :: fid = 1234
+    character(len=clen) :: fname
+
+    ! Get power
+    call this%get_power()
+    ! Write power
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname)
+    !open(fid,file=trim(fname), form='unformatted',action='write',position='append')
+    open(fid,file=trim(fname), form='formatted', action='write',position='append')
+    write(fid, *) this%power
+    close(fid)
+
+end subroutine    
 
 end module 

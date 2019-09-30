@@ -52,6 +52,7 @@ module turbineMod
         real(rkind), dimension(:,:,:), allocatable :: rbuff, blanks, speed, scalarSource
         logical :: dumpTurbField = .false.
         integer :: step = 0, ADM_Type 
+        character(len=clen)                           :: powerDumpDir
     contains
 
         procedure :: init
@@ -97,6 +98,7 @@ end subroutine
 subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbuffzC, cbuffzE, mesh, dx, dy, dz)
     class(TurbineArray), intent(inout), target :: this
     character(len=*),    intent(in)            :: inputFile
+    character(len=clen)                           :: powerDumpDir
     type(spectral), target, intent(in) :: spectC, spectE
     type(decomp_info), target, intent(in) :: gpC, gpE!, sp_gpC, sp_gpE
     !real(rkind), dimension(:,:,:,:), target, intent(inout) :: rbuffxC   ! actually 3 are required
@@ -109,7 +111,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
 
     integer :: i, ierr, ADM_Type = 2
 
-    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, WriteTurbineForce
+    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, WriteTurbineForce, powerDumpDir
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -136,6 +138,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
 
     ! set number of turbines
     this%nTurbines = num_turbines;
+    this%powerDumpDir = powerDumpDir
 
     ! Initialize the yaw and tilf
     allocate(this%gamma(this%nTurbines))
@@ -168,6 +171,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
          allocate (this%blanks(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
          allocate (this%speed(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
          allocate (this%scalarSource(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+         this%powerDumpDir = powerDumpDir
          
          do i = 1, this%nTurbines
              call this%turbArrayADM_Tyaw(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
@@ -392,6 +396,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout), optional :: uturb, vturb
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout), optional :: wturb
     integer :: i
+    character(len=clen) :: tempname
 
     if (newTimeStep) then
          this%fx = zero; this%fy = zero; this%fz = zero
@@ -411,6 +416,8 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
            case (4)
                do i = 1, this%nTurbines
                    call this%turbArrayADM_Tyaw(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i))
+                   write(tempname,"(A6,I3.3,A4)") "power_",i,".txt"
+                   call this%turbArrayADM_Tyaw(i)%dumpPower(this%powerDumpDir, tempname)
                end do
            end select 
     end if 

@@ -289,14 +289,14 @@ subroutine hook_probes(inputfile, probe_locs)
     ! each turbine. For a more generic implementation of probes check the
     ! initialization.F90 files for other igridWallM problems. 
 
-    integer :: num_Turbines, nprobes = 2, ActuatorDiskID, ioUnit, ii 
+    integer :: num_Turbines, nprobes = 2, ActuatorDiskID, ioUnit, ii, ADM_Type 
     logical :: useWindTurbines, ADM
     real(rkind) :: xloc, yloc, zloc, diam, ct, yaw, tilt
     real(rkind) :: upstreamdisplacement = 0.05d0 ! Place the probes this far upstream of the turbine centers
     character(len=clen) :: turbInfoDir, fname, tempname
 
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
-    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir
+    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type
     
     
     ioUnit = 11
@@ -312,7 +312,7 @@ subroutine hook_probes(inputfile, probe_locs)
 
     ! Set 1: Located at Hub height 
     do ActuatorDiskID = 1,num_turbines
-        write(tempname,"(A13,I3.3,A10)") "ActuatorDisk_", ActuatorDiskID, "_input.inp"
+        write(tempname,"(A13,I4.4,A10)") "ActuatorDisk_", ActuatorDiskID, "_input.inp"
         fname = turbInfoDir(:len_trim(turbInfoDir))//"/"//trim(tempname)
 
         ioUnit = 55
