@@ -7,24 +7,27 @@ module Multispecies_data
     real(rkind) :: minVF = 0.2_rkind, thick = one
     real(rkind) :: rhoRatio = one
     logical     :: sharp = .FALSE.
+    integer     :: tviz_counter = -1
 
 end module
 
-subroutine meshgen(decomp, dx, dy, dz, mesh)
+subroutine meshgen(decomp, dx, dy, dz, mesh, xcentered)
     use kind_parameters,  only: rkind
-    use constants,        only: one
+    use constants,        only: one, half, zero
     use decomp_2d,        only: decomp_info
 
     use Multispecies_data
 
     implicit none
 
-    type(decomp_info),                                          intent(in)    :: decomp
-    real(rkind),                                                intent(inout) :: dx,dy,dz
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
+    logical,                         intent(in)    :: xcentered
 
     integer :: i,j,k
     integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
+    real(rkind) :: xfst
 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
@@ -41,10 +44,16 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         dy = dx
         dz = dx
 
+        if(xcentered) then
+            xfst = half*dx
+        else
+            xfst = zero
+        endif
+
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx + xfst
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -128,6 +137,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     end associate
 
+    tviz_counter = -1
+
 end subroutine
 
 subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,x_bc,y_bc,z_bc)
@@ -152,8 +163,13 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     integer, dimension(2),           intent(in) :: x_bc, y_bc, z_bc
     integer                                     :: outputunit=229
 
-    character(len=clen) :: outputfile, str
+    character(len=clen) :: outputfile, str,fname
     integer :: i
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, xnew
+    real(rkind), dimension(decomp%ysz(1),6) :: exsoln
+    real(rkind) :: err2, err3, err4, err5, err6, mat1vf, mat2vf, mat1ys, mat2ys, mxtrho
+
+    tviz_counter = tviz_counter + 1
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -191,6 +207,62 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
         end do
         close(outputunit)
 
+        ! compute exact solution
+        if ( sharp ) then
+            tmp = half * ( erf( (x-half+0.1_rkind)/(thick*dx) ) - erf( (x-half-0.1_rkind)/(thick*dx) ) )
+        else
+            xnew = x-half-half*tsim
+            where(xnew > 0.5d0)
+              xnew = xnew - one
+            endwhere
+            where(xnew < -0.5d0)
+              xnew = xnew + one
+            endwhere
+            tmp = exp(-(xnew/0.1_rkind)**2)
+        end if
+
+        err2 = 0.0d0; err3 = 0.0d0; err4 = 0.0d0; err5 = 0.0d0; err6 = 0.0d0
+        do i=1,decomp%ysz(1)
+!print *, i, xnew(i,1,1), tmp(i,1,1)
+            mat1vf = minVF + (one-two*minVF)*tmp(i,1,1)
+            mat2vf = one - mat1vf
+
+            mxtrho = rho_0*(mat1vf+rhoRatio*(one-mat1vf)) ! Mixture density
+            mat1ys = mat1vf * rho_0 / mxtrho
+            mat2ys = one - mat1ys ! Enforce sum to unity
+
+            exsoln(i,1) = x(i,1,1); exsoln(i,2) = mxtrho; 
+            exsoln(i,3) = mat1vf;   exsoln(i,4) = mat2vf;  
+            exsoln(i,5) = mat1ys;   exsoln(i,6) = mat2ys;  
+
+            err2 = err2 + (exsoln(i,2) - rho(i,1,1))**2
+            err3 = err3 + (exsoln(i,3) - mix%material(1)%VF(i,1,1))**2
+            err4 = err4 + (exsoln(i,4) - mix%material(2)%VF(i,1,1))**2
+            err5 = err5 + (exsoln(i,5) - mix%material(1)%Ys(i,1,1))**2
+            err6 = err6 + (exsoln(i,6) - mix%material(2)%Ys(i,1,1))**2
+        enddo
+!stop
+        err2 = sqrt(err2/decomp%ysz(1))
+        err3 = sqrt(err3/decomp%ysz(1))
+        err4 = sqrt(err4/decomp%ysz(1))
+        err5 = sqrt(err5/decomp%ysz(1))
+        err6 = sqrt(err6/decomp%ysz(1))
+
+        if(tviz_counter==0) then
+          open(10,file='exact_solution.dat',status='replace',action='write')
+        else
+          open(10,file='exact_solution.dat',status='unknown',action='write',position='append')
+        endif
+        write(10,'(a,e19.12,a,i5)') 'ZONE T="', tsim, '", F=POINT, I=', decomp%ysz(1)
+        do i=1,decomp%ysz(1)
+          write(10,'(7(e19.12,1x))') exsoln(i,:), tmp(i,1,1)
+        enddo
+        close(10)
+
+        write(fname,'(a17,i4.4,a4)') 'errors_compiled_t', tviz_counter, '.dat'
+        open(10,file=trim(fname),status='unknown',action='write',position='append')
+        write(10,'(i5,1x,5(e19.12,1x))') decomp%ysz(1), err2, err3, err4, err5, err6
+        close(10)
     end associate
 end subroutine
 

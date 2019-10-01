@@ -1253,8 +1253,8 @@ contains
     end subroutine
 
 
-    subroutine ComputeXD1RHS(this, f, RHS, n2, n3, bc1, bcn)
-    !pure subroutine ComputeXD1RHS(this, f, RHS, n2, n3, bc1, bcn)
+    !subroutine ComputeXD1RHS(this, f, RHS, n2, n3, bc1, bcn)
+    pure subroutine ComputeXD1RHS(this, f, RHS, n2, n3, bc1, bcn)
     
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: n2, n3
@@ -1333,10 +1333,10 @@ contains
                         RHS(4         ,j,k) =   a_np_4*(f(5         ,j,k) -         f(3         ,j,k)) &
                                             +   b_np_4*(f(6         ,j,k) -         f(2         ,j,k)) &
                                             +   c_np_4*(f(7         ,j,k) -         f(1         ,j,k))
-                        if(j==1 .and. k==1) then
-                            write(*,*) 'F_XX'
-                            write(*,'(4(e19.12,1x))') RHS(1:4,j,k)
-                        endif
+                        !if(j==1 .and. k==1) then
+                        !    write(*,*) 'F_XX'
+                        !    write(*,'(4(e19.12,1x))') RHS(1:4,j,k)
+                        !endif
                     case(1)
                       if(this%centered) then
                         RHS(1,j,k) =   a10   *(f(2,j,k) - f(1,j,k)) &
@@ -1354,10 +1354,10 @@ contains
                         RHS(4,j,k) =   a10   *(f(5,j,k) - f(3,j,k)) &
                                    +   b10   *(f(6,j,k) - f(2,j,k)) &
                                    +   c10   *(f(7,j,k) - f(1,j,k)) 
-                        if(j==1 .and. k==1) then
-                            write(*,*) 'FTSX'
-                            write(*,'(4(e19.12,1x))') RHS(1:4,j,k)
-                        endif
+                        !if(j==1 .and. k==1) then
+                        !    write(*,*) 'FTSX'
+                        !    write(*,'(4(e19.12,1x))') RHS(1:4,j,k)
+                        !endif
                       else
                         RHS(1,j,k) =   zero
                    
@@ -1372,10 +1372,10 @@ contains
                         RHS(4,j,k) =   a10   *(f(5,j,k) - f(3,j,k)) &
                                    +   b10   *(f(6,j,k) - f(2,j,k)) &
                                    +   c10   *(f(7,j,k) - f(1,j,k)) 
-                        if(j==1 .and. k==1) then
-                            write(*,*) 'FFSX'
-                            write(*,'(4(e19.12,1x))') RHS(1:4,j,k)
-                        endif
+                        !if(j==1 .and. k==1) then
+                        !    write(*,*) 'FFSX'
+                        !    write(*,'(4(e19.12,1x))') RHS(1:4,j,k)
+                        !endif
                       endif
                     case(-1)
                       if(this%centered) then
@@ -2391,11 +2391,11 @@ contains
                 select case(bcn)
                 case(0)  ! Normal non-periodic right boundary
                     call this%SolveXPenta1(this%penta1_nn, df, na, nb)
-                    write(*,*) 'F_XX'
-                    write(*,'(5(e19.12,1x))') transpose(this%penta1_nn(1:7,1:5))
-                    write(*,*) '----------------'
-                    write(*,'(7(e19.12,1x))') df(1:7,1,1)
-                    write(*,*) '----------------'
+                    !write(*,*) 'F_XX'
+                    !write(*,'(5(e19.12,1x))') transpose(this%penta1_nn(1:7,1:5))
+                    !write(*,*) '----------------'
+                    !write(*,'(7(e19.12,1x))') df(1:7,1,1)
+                    !write(*,*) '----------------'
                 case(1) ! Symmetric right boundary
                     call this%SolveXPenta1(this%penta1_ns, df, na, nb)
                 case(-1) ! Antisymmetric right boundary
@@ -2405,11 +2405,11 @@ contains
                 select case(bcn)
                 case(0)  ! Normal non-periodic right boundary
                     call this%SolveXPenta1(this%penta1_sn, df, na, nb)
-                    write(*,*) 'F_SX'
-                    write(*,'(5(e19.12,1x))') transpose(this%penta1_sn(1:7,1:5))
-                    write(*,*) '----------------'
-                    write(*,'(7(e19.12,1x))') df(1:7,1,1)
-                    write(*,*) '----------------'
+                    !write(*,*) 'F_SX'
+                    !write(*,'(5(e19.12,1x))') transpose(this%penta1_sn(1:7,1:5))
+                    !write(*,*) '----------------'
+                    !write(*,'(7(e19.12,1x))') df(1:7,1,1)
+                    !write(*,*) '----------------'
                 case(1)  ! Symmetric right boundary
                     call this%SolveXPenta1(this%penta1_ss, df, na, nb)
                 case(-1) ! Antisymmetric right boundary

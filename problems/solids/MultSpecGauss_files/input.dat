@@ -3,7 +3,7 @@
 inputdir  =  "/home/akshays/Data/PadeOps/Multispecies"      ! Directory for input files
 outputdir  = "/home/akshays/Data/PadeOps/Multispecies"      ! Directory for output files
 
-nx = 201                  ! Number of points in X
+nx = 100                  ! Number of points in X
 ny = 1                    ! Number of points in Y
 nz = 1                    ! Number of points in Z
 
@@ -27,9 +27,14 @@ filter_x = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq"
 filter_y = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
 filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
 
+xcentered = .FALSE.        ! Centered in X? -- necessary for Cyl/Sph coordinates
+ycentered = .FALSE.        ! Centered in Y? -- not supported currently
+zcentered = .FALSE.        ! Centered in Z? -- not supported currently
+
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 
+SkewSymm = .FALSE.        ! ??? 
 /
 
 &CINPUT
@@ -42,27 +47,68 @@ nu = 0.02D0               ! Kinematic viscosity
 /
 
 &SINPUT
-gam     = 1.4D0           ! Ratio of specific heats
-Rgas    = 1.D0            ! Gas constant
-PInf    = 1.D0            ! P_infinity, material stiffness
-shmod   = 1.D1            ! Shear modulus
-rho0    = 1.D0            ! No deformation density
-Cmu     = 2.D-3           ! Coefficient for artificial shear viscosity
-Cbeta   = 1.D0            ! Coefficient for artificial bulk viscosity
-Ckap    = 1.D-2           ! Coefficient for artificial thermal conductivity
-plastic = .FALSE.         ! Logical to turn on plasticity
-yield   = 2.49D9          ! Yield strength of material
-ns      = 2               ! Number of species
+gam        = 1.4D0        ! Ratio of specific heats
+Rgas       = 1.D0         ! Gas constant
+PInf       = 1.D0         ! P_infinity, material stiffness
+shmod      = 1.D1         ! Shear modulus
+Cmu        = 2.D-3        ! Coefficient for artificial shear viscosity
+Cbeta      = 1.D0         ! Coefficient for artificial bulk viscosity
+Ckap       = 1.D-2        ! Coefficient for artificial thermal conductivity
+CDiff      = 1.D-4        ! Coefficient for artificial species diffusivity - diffusivity part
+CY         = 1.D2         ! Coefficient for artificial species diffusivity - penalty part
+ns         = 2            ! Number of species
+PTEqb      = .TRUE.       ! Default thermodynamic condition
+pEqb       = .FALSE.      ! Not fully correct yet. Alternative to PTEqb and pRelax
+pRelax     = .FALSE.      ! Not fully correct yet. Alternative to PTEqb and pEqb
+SOSmodel   = .FALSE.      ! F=>Frozen model; T=> equilibrium model; Saurel et al. (2009)
+use_gTg    = .FALSE.      ! Use Finger tensor instead of inv. def. gradient tensor
+useOneG    = .FALSE.      ! Single-g formulation; Implemented only for use_gTg = false for now
+updateEtot = .FALSE.      ! Update Etot (not Ehydro) for use with pRelax
+x_bc1      = 0            ! 0: sided; 1: symm/anti-symm; irrelevant for periodic 
+x_bcn      = 0            ! 0: sided; 1: symm/anti-symm; irrelevant for periodic 
+y_bc1      = 0            ! 0: sided; 1: symm/anti-symm; irrelevant for periodic 
+y_bcn      = 0            ! 0: sided; 1: symm/anti-symm; irrelevant for periodic 
+z_bc1      = 0            ! 0: sided; 1: symm/anti-symm; irrelevant for periodic 
+z_bcn      = 0            ! 0: sided; 1: symm/anti-symm; irrelevant for periodic 
 /
 
 &PROBINPUT
-gamma   = 1.4D0           ! Ratio of specific heats
-Rgas    = 1.D0            ! Gas constant
-p_infty = 1.D0            ! P_infinity, material stiffness
-mu      = 1.D1            ! Shear modulus
-rho_0   = 1.D0            ! No deformation density
-p_amb   = 1.D-1           ! Ambient pressure
-minYs   = 0.2D0           ! Minimum mass fraction at initialization
-sharp   = .FALSE.         ! Use sharp interface initializaion
-thick   = 1.D0            ! Initial thickness in grid units for interface
+gamma       = 1.4D0          ! Ratio of specific heats
+Rgas        = 1.D0           ! Gas constant
+p_infty     = 1.D0           ! P_infinity, material stiffness
+mu          = 1.D0           ! Shear modulus
+rho_0       = 1.D0           ! No deformation density
+p_amb       = 1.D-1          ! Ambient pressure
+plastic     = .false.
+yield       = 0.1d0
+tau0        = 1.0d-14
+K0          = 1.0d0
+alp         = 2.0d0
+CV          = 1.0d0
+T0          = 3.0d2
+
+gamma_2     = 1.4D0  
+Rgas_2      = 1.D0
+p_infty_2   = 1.0D0 
+mu_2        = 1.D0  
+rho_0_2     = 1.D0  
+p_amb_2     = 1.D-1  
+plastic_2   = .false.
+yield_2     = 0.1d0 
+tau0_2      = 1.0d-14
+K0_2        = 1.0d0 
+alp_2       = 2.0d0
+CV_2        = 1.0d0
+T0_2        = 3.0d2
+            = 
+rho_ratio   = -1.0d0
+
+sigma_0     = 1.0d-5      ! Strength of Gaussian pulse
+minVF       = 0.2D0       ! Minimum volume fraction at initialization
+thick       = 1.D0        ! Initial thickness in grid units for interface
+thickness   = 0.001d0     ! Initial thickness in absolute value; aused if thick < 0
+iprob       = 1           ! Default is 1; 2 => some trial problem
+interfloc   = 0.5d0       ! leading edge of interface
+interfwidth = 0.4d0       ! trailing edge of interface from the leading edge
+SOSmodel    = .false.     ! Override SOSmodel set in SINPUT if needed
 /
