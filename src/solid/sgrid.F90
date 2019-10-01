@@ -373,9 +373,7 @@ contains
                         this%mix, this%tstop, this%dtfixed, tviz)
         ! Get hydrodynamic and elastic energies, stresses
         call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
-      print *, '1 T:', maxval(abs(this%mix%material(1)%T)) , maxval(abs(this%mix%material(2)%T)) 
         call this%post_bc()
-      print *, '3 T:', maxval(abs(this%mix%material(1)%T)) , maxval(abs(this%mix%material(2)%T)) 
         
         ! Allocate 2 buffers for each of the three decompositions
         call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
@@ -595,7 +593,6 @@ contains
         call this%get_dt(stability)
 
         ! Write out initial conditions
-        ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
         call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
         vizcond = .FALSE.
@@ -643,7 +640,6 @@ contains
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
-                ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
                 call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
                 vizcond = .FALSE.
@@ -707,10 +703,7 @@ contains
         Qtmpt = zero
 
         do isub = 1,RK45_steps
-!            print *, '----', nrank, isub
-!print *, '1 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
             call this%get_conserved()
-!print *, '2 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
                 call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
@@ -725,7 +718,6 @@ contains
             call this%mix%getLAD(this%rho,this%e,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
-!print *, '3 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
 
             ! Update total mixture conserved variables
             call this%getRHS(rhs,divu,viscwork)
@@ -736,15 +728,10 @@ contains
             if(.not. this%PTeqb) call this%mix%calculate_source(this%rho,divu,this%u,this%v,this%w,this%p,Fsource,this%x_bc,this%y_bc,this%z_bc) ! -- actually, source terms should be included for PTeqb as well --NSG
 
             ! Now update all the individual species variables
-            !do i = 1, size(this%mix%material(1)%g11, 1)
-            !    print '(9(e19.12,1x))', this%mix%material(1)%g11(i,1,1)-this%mix%material(2)%g11(i,1,1), this%mix%material(1)%g22(i,1,1)-this%mix%material(2)%g22(i,1,1), this%mix%material(1)%g33(i,1,1)-this%mix%material(2)%g33(i,1,1) 
-            !enddo
-            !print '(9(e19.12,1x))', maxval(abs(this%mix%material(1)%g11-this%mix%material(2)%g11)), maxval(abs(this%mix%material(1)%g22-this%mix%material(2)%g22)), maxval(abs(this%mix%material(1)%g33-this%mix%material(2)%g33)) 
-            !print *, maxloc(abs(this%mix%material(1)%g11-this%mix%material(2)%g11))!, maxval(abs(this%mix%material(1)%g22-this%mix%material(2)%g22)), maxval(abs(this%mix%material(1)%g33-this%mix%material(2)%g33)) 
-!print *, '4 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
             call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,Fsource,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
-!print *, '5 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
+
             call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
+
             !if (.NOT. this%PTeqb) then
             if(this%pEqb) then
                 call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
@@ -756,28 +743,17 @@ contains
             ! Integrate simulation time to keep it in sync with RK substep
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
-            !print *, '-----', 8, this%Wcnsrv(179,1,1,1:4)
-            !do i = 1, size(this%Wcnsrv,1)
-            !    write(*,'(4(e21.14,1x))') this%Wcnsrv(i,1,1,1:4)
-            !enddo
 
             ! Filter the conserved variables
             call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
             call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
             call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
             call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
-            !print *, '-----', 9, this%Wcnsrv(179,1,1,1:4)
-            !do i = 1, size(this%Wcnsrv,1)
-            !    write(*,'(4(e21.14,1x))') this%Wcnsrv(i,1,1,1:4)
-            !enddo
 
             ! Filter the individual species variables
             call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
-!print *, '6 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
             
             call this%get_primitive()
-!print *, '7 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
-            !print *, nrank, 10, this%e(179,1,1), this%rho(179,1,1), this%u(179,1,1)
 
             ! if (.NOT. this%explPlast) then
             !     if (this%plastic) then
@@ -806,13 +782,9 @@ contains
                 !call this%mix%relaxPressure_os(this%rho, this%u, this%v, this%w, this%e, this%dt, this%p)
             end if
             !print *, nrank, 11
-!print *, '8 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
-!print *, '9 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
             call this%post_bc()
-!print *, '10 T:', maxval(abs(this%mix%material(1)%eh)), maxval(abs(this%mix%material(1)%rhom))
-            !print *, nrank, 12
         end do
 
         this%step = this%step + 1
@@ -974,8 +946,6 @@ contains
         tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
                                          tauyy => duidxj(:,:,:,tauyyidx); tauyz => duidxj(:,:,:,tauyzidx);
                                                                           tauzz => duidxj(:,:,:,tauzzidx);
-!print '(a,9(e21.14,1x))', 'dudx ', duidxj(89,1,1,1:9)
-!print '(a,9(e21.14,1x))', 'tauxx', tauxx(89,1,1)
         ! Add the deviatoric stress to the tau for use in fluxes 
         tauxx = tauxx + this%sxx; tauxy = tauxy + this%sxy; tauxz = tauxz + this%sxz
                                   tauyy = tauyy + this%syy; tauyz = tauyz + this%syz
@@ -997,16 +967,16 @@ contains
         call this%getRHS_x(              rhs,&
                            tauxx,tauxy,tauxz,&
                                qx )
-!print '(a,4(e21.14,1x))', 'rhsx: ', rhs(179,1,1,1:4)
+
         call this%getRHS_y(              rhs,&
                            tauxy,tauyy,tauyz,&
                                qy )
-!print '(a,4(e21.14,1x))', 'rhsy: ', rhs(179,1,1,1:4)
+
 
         call this%getRHS_z(              rhs,&
                            tauxz,tauyz,tauzz,&
                                qz )
-!print '(a,4(e21.14,1x))', 'rhsz: ', rhs(179,1,1,1:4)
+
 
         ! Call problem source hook
         call hook_mixture_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
@@ -1028,12 +998,8 @@ contains
         xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
 
         flux = this%Wcnsrv(:,:,:,mom_index  )*this%u + this%p - tauxx ! x-momentum
-!print *, 'flux 1', flux(89,1,1), this%u(89,1,1), this%p(89,1,1), tauxx(89,1,1)
         call transpose_y_to_x(flux,xtmp1,this%decomp)
         call this%der%ddx(xtmp1,xtmp2, this%x_bc(1), this%x_bc(2)) ! Symmetric for x-momentum
-!do i = 1, size(flux,1)
-!  write(*,'(4(e21.14,1x))') xtmp1(i,1,1), xtmp2(i,1,1)
-!enddo
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
 

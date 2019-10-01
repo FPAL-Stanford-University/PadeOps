@@ -461,13 +461,10 @@ contains
         ! advance sub-step
         if(isub==1) this%Qtmpg = zero                   ! not really needed, since RK45_A(1) = 0
         this%Qtmpg  = dt*rhsg + RK45_A(isub)*this%Qtmpg
-        !print *, 'Before : ', this%g11(89,1,1), rhsg(89,1,1,1)
         this%g = this%g  + RK45_B(isub)*this%Qtmpg
-        !print *, 'After 1: ', this%g11(89,1,1)
 
-        !! Now project g tensor to SPD space
+        ! Now project g tensor to SPD space
         call this%elastic%make_tensor_SPD(this%g)
-        !!print *, 'After 2: ', this%g11(89,1,1)
 
         ! Sliding treatment using plasticity (Using zero yield everywhere for now)
         if (this%sliding) call this%sliding_deformation(normal, mask)
@@ -509,7 +506,6 @@ contains
                 
             end if
         end if
-        !print *, 'After 3: ', this%g11(89,1,1)
 
     end subroutine
 
@@ -642,10 +638,6 @@ contains
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-x_bc, y_bc, z_bc)
-        !do i = 1, size(u,1)
-        !  print '(4(e19.12,1x))', u(i,1,1), this%g11(i,1,1), tmp(i,1,1), rhsg(i,1,1,1)
-        !enddo
-        !print *, 'rhsg 1 : ', rhsg(89,1,1,1)
         
         call curl(this%decomp, this%der, this%g11, this%g12, this%g13, curlg, -x_bc, y_bc, z_bc)
         ! call P_MAXLOC( abs(penalty*this%g11), pmax, imax, jmax, kmax, rmax)
@@ -666,11 +658,6 @@ contains
         rhsg(:,:,:,1) = rhsg(:,:,:,1) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g11 + mask*(this%g11*dutdx + this%g12*dvtdx + this%g13*dwtdx)
         rhsg(:,:,:,2) = rhsg(:,:,:,2) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g12 + mask*(this%g11*dutdy + this%g12*dvtdy + this%g13*dwtdy)
         rhsg(:,:,:,3) = rhsg(:,:,:,3) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g13 + mask*(this%g11*dutdz + this%g12*dvtdz + this%g13*dwtdz)
-        !print *, 'rhsg 2 : ', rhsg(89,1,1,1)
-        !print *, '------ : ', v(89,1,1), curlg(89,1,1,3)
-        !print *, '------ : ', w(89,1,1), curlg(89,1,1,2)
-        !print *, '------ : ', penalty(89,1,1), this%g11(89,1,1)
-        !print *, '------ : ', mask(89,1,1)
  
         tmp = -u*this%g21-v*this%g22-w*this%g23
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6), x_bc,-y_bc, z_bc)   
@@ -699,7 +686,6 @@ contains
                rhsg(:,:,:,i) = rhsg(:,:,:,i) * solidVF
            enddo
         endif
-        !print *, 'rhsg 3 : ', rhsg(89,1,1,1)
 
     end subroutine
 
@@ -890,9 +876,6 @@ contains
         if(isub==1) this%QtmpYs = zero                   ! not really needed, since RK45_A(1) = 0
         this%QtmpYs  = dt*rhsYs + RK45_A(isub)*this%QtmpYs
         this%consrv(:,:,:,1) = this%consrv(:,:,:,1)  + RK45_B(isub)*this%QtmpYs
-!print *, 'rhs Ys:', rhsYs(89,1,1), rho(89,1,1), this%Ys(89,1,1)
-!print *, 'Ji:    ', this%Ji(89,1,1,1), this%Ji(89,1,1,2), this%Ji(89,1,1,3)
-!print *, 'cns Ys:', this%consrv(89,1,1,1)
     end subroutine
 
     subroutine getRHS_Ys(this,rho,u,v,w,rhsYs,x_bc,y_bc,z_bc)
