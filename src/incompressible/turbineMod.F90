@@ -8,6 +8,7 @@ module turbineMod
     use actuatorDisk_RotMod, only: actuatorDisk_Rot
     use actuatorLineMod, only: actuatorLine
     use actuatorDisk_YawMod, only: actuatorDisk_yaw
+    use dynamicYawMod, only: dynamicYaw
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
     use mpi 
@@ -36,6 +37,7 @@ module turbineMod
         type(actuatorDisk_Rot), allocatable, dimension(:) :: turbArrayADM_Rot
         type(actuatorLine), allocatable, dimension(:) :: turbArrayALM
         type(actuatorDisk_yaw), allocatable, dimension(:) :: turbArrayADM_Tyaw
+        type(dynamicYaw) :: dyaw
 
         type(decomp_info), pointer :: gpC, sp_gpC, gpE, sp_gpE
         type(spectral), pointer :: spectC, spectE
@@ -43,14 +45,16 @@ module turbineMod
  
         real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz
         complex(rkind), dimension(:,:,:), pointer :: fChat, fEhat, zbuffC, zbuffE
-        real(rkind), dimension(:), allocatable :: gamma, theta
+        real(rkind), dimension(:), allocatable :: gamma, theta, meanP, gamma_nm1
+        real(rkind), dimension(:), allocatable :: power_minus_n
+        integer :: n_moving_average, timeStep 
 
         ! variables needed for halo communication
         integer :: neighbour(6), coord(2), dims(2), tag_s, tag_n, tag_b, tag_t
         real(rkind), allocatable, dimension(:,:,:) :: ySendBuf, zSendBuf, yRightHalo, zRightHalo, zLeftHalo
 
         real(rkind), dimension(:,:,:), allocatable :: rbuff, blanks, speed, scalarSource
-        logical :: dumpTurbField = .false.
+        logical :: dumpTurbField = .false., useDynamicYaw
         integer :: step = 0, ADM_Type 
         character(len=clen)                           :: powerDumpDir
     contains
@@ -105,13 +109,17 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     complex(rkind), dimension(:,:,:,:), target, intent(inout) :: cbuffyC, cbuffyE, cbuffzC, cbuffzE
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), intent(in) :: dx, dy, dz
-    logical :: useWindTurbines = .TRUE. ! .FALSE. implies ALM
+    logical :: useWindTurbines = .TRUE., useDynamicYaw = .FALSE. ! .FALSE. implies ALM
     real(rkind) :: xyzPads(6)
     logical :: ADM = .TRUE., WriteTurbineForce  ! .FALSE. implies ALM
+    ! Dynamic yaw stuff
+    character(len=clen) :: inputDirDyaw = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw.inp"
+    real(rkind), dimension(:), allocatable :: xLoc, yLoc
 
     integer :: i, ierr, ADM_Type = 2
 
-    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, WriteTurbineForce, powerDumpDir
+    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, & 
+                            WriteTurbineForce, powerDumpDir, useDynamicYaw
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -139,10 +147,14 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     ! set number of turbines
     this%nTurbines = num_turbines;
     this%powerDumpDir = powerDumpDir
+    this%useDynamicYaw = useDynamicYaw
 
     ! Initialize the yaw and tilf
     allocate(this%gamma(this%nTurbines))
     allocate(this%theta(this%nTurbines))
+    allocate(this%meanP(this%nTurbines))
+    allocate(xLoc(this%nTurbines))
+    allocate(yLoc(this%nTurbines))
 
     if(ADM) then
       this%ADM_Type = ADM_Type
@@ -172,13 +184,16 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
          allocate (this%speed(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
          allocate (this%scalarSource(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
          this%powerDumpDir = powerDumpDir
-         
+         this%timeStep = 1
+         this%meanP = 0.d0
          do i = 1, this%nTurbines
              call this%turbArrayADM_Tyaw(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
              this%gamma(i) = this%turbArrayADM_Tyaw(i)%yaw
              this%theta(i) = 0.d0
              call this%turbArrayADM_Tyaw(i)%link_memory_buffers(this%rbuff, this%blanks, this%speed,  & 
                    this%scalarSource)
+             xLoc(i) = this%turbArrayADM_Tyaw(i)%xLoc
+             yLoc(i) = this%turbArrayADM_Tyaw(i)%yLoc
          end do
          call message(0,"YAWING WIND TURBINE (Type 4) array initialized")
       end select 
@@ -194,6 +209,10 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
       end do
       call message(1,"WIND TURBINE ALM model initialized")
     endif
+
+    if (this%useDynamicYaw) then
+        call this%dyaw%init(inputDirDyaw, xLoc, yLoc)
+    end if
 
     !if(this%dumpTurbField) then
     !    this%fx = zero; this%fy = zero; this%fz = zero
@@ -397,6 +416,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout), optional :: wturb
     integer :: i
     character(len=clen) :: tempname
+    real(rkind) :: tmp
 
     if (newTimeStep) then
          this%fx = zero; this%fy = zero; this%fz = zero
@@ -418,7 +438,18 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                    call this%turbArrayADM_Tyaw(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i))
                    write(tempname,"(A6,I3.3,A4)") "power_",i,".txt"
                    call this%turbArrayADM_Tyaw(i)%dumpPower(this%powerDumpDir, tempname)
-               end do
+                   if (this%useDynamicYaw) then
+                       call this%dyaw%simpleMovingAverage(this%meanP(i), &
+                            this%turbArrayADM_Tyaw(i)%power, this%timeStep)
+                   end if
+               end do    
+               if (this%useDynamicYaw) then
+                   this%timeStep = this%timeStep+1  
+                   tmp = p_sum(this%gamma) - p_sum(this%gamma_nm1)
+                   if (tmp/=0.d0) then
+                       this%timeStep = 1
+                   end if
+               end if
            end select 
     end if 
 

@@ -117,7 +117,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     wC= zero  
    
     !Add random numbers
-    randomScaleFact = 0.0d0
+    randomScaleFact = 0.1d0
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
     call gaussian_random(randArr,zero,one,seedu + 10*nrank)
     do k = 1,size(u,3)

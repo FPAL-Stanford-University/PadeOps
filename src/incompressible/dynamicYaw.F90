@@ -45,6 +45,9 @@ module dynamicYawMod
         real(rkind) :: A, rho
         ! Backward stuff
         real(rkind), dimension(:), allocatable :: dp_dgamma 
+        ! Moving average stuff
+        integer :: n_moving_average
+        real(rkind), dimension(:), allocatable :: power_minus_n
 
     contains
         procedure :: init
@@ -57,24 +60,25 @@ module dynamicYawMod
         procedure, private :: onlineUpdate 
         procedure, private :: backward
         procedure :: update_and_yaw
+        procedure :: simpleMovingAverage
     end type
 
 
 contains
 
-subroutine init(this, inputfile, ad)
+subroutine init(this, inputfile, xLoc, yLoc)
     class(dynamicYaw), intent(inout) :: this
-    type(actuatorDisk_yaw), intent(in), dimension(:) :: ad
     character(len=*), intent(in) :: inputfile
-    integer :: ioUnit, conditionTurb, ierr, i
+    integer :: ioUnit, conditionTurb, ierr, i, n_moving_average
     real(rkind) :: beta1 = 0.9d0, beta2 = 0.999d0, learning_rate_yaw = 10D-4
     integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20, Nt = 2, Nx = 500
     real(rkind) :: var_p = 0.04d0, var_k = 9D-6, var_sig = 9D-6, D = 0.315
     real(rkind) :: Ct = 0.75, eta = 0.7
+    real(rkind), dimension(:), intent(in) :: xLoc, yLoc
  
     ! Read input file for this turbine    
     namelist /DYNAMIC_YAW/ Nt, var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
-                           Ne, D, Ct, eta, beta1, beta2, conditionTurb
+                           Ne, D, Ct, eta, beta1, beta2, conditionTurb, n_moving_average
     ioUnit = 534
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=DYNAMIC_YAW)
@@ -89,7 +93,8 @@ subroutine init(this, inputfile, ad)
     this%Ct = Ct
     this%eta = eta; this%beta1 = beta1; this%beta2= beta2;
     this%learning_rate_yaw = learning_rate_yaw   
- 
+    this%n_moving_average = n_moving_average 
+
     ! Allocate
     allocate(this%yaw(this%Nt))
     allocate(this%dp_dgamma(this%Nt))
@@ -109,16 +114,18 @@ subroutine init(this, inputfile, ad)
     allocate(this%turbCenter(this%Nt,2))
     allocate(this%kw(this%Nt))
     allocate(this%sigma_0(this%Nt))
+    allocate(this%power_minus_n(this%Nt))
 
     ! Define
     this%yaw = 0.d0
     this%kw = 0.1d0
     this%sigma_0 = 0.25
+    this%power_minus_n = 0.d0
 
     ! Get the wind turbine locations
     do i=1,this%Nt
-        this%turbCenter(i,1) = ad(i)%xLoc / this%D
-        this%turbCenter(i,2) = ad(i)%yLoc / this%D
+        this%turbCenter(i,1) = xLoc(i) / this%D
+        this%turbCenter(i,2) = yLoc(i) / this%D
     end do
 
 end subroutine 
@@ -583,6 +590,25 @@ subroutine backward(this, kw, sigma_0, yaw)
     end do
     
 end subroutine
+
+
+subroutine simpleMovingAverage(this, meanP, power, i)
+    class(dynamicYaw), intent(inout) :: this
+    real(rkind), intent(inout) :: meanP
+    real(rkind), intent(in) :: power
+    integer, intent(in) :: i
+
+    if (i>this%n_moving_average) then
+        meanP = meanP + (1.d0/real(this%n_moving_average)) * (power - this%power_minus_n(1))
+        this%power_minus_n(1:this%n_moving_average-1) = this%power_minus_n(2:this%n_moving_average)
+        this%power_minus_n(this%n_moving_average) = power
+    else
+        meanP = p_sum(this%power_minus_n(1:i)) / real(i)
+        this%power_minus_n(i) = power
+    end if
+
+end subroutine
+
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !! LAPACK
