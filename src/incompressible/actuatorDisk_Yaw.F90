@@ -53,6 +53,7 @@ module actuatorDisk_YawMod
         !procedure, private :: Sfunc 
         procedure :: get_power
         procedure :: dumpPower
+        procedure :: dumpPowerUpdate
     end type
 
 
@@ -286,6 +287,24 @@ subroutine dumpPower(this, outputfile, tempname)
     !open(fid,file=trim(fname), form='unformatted',action='write',position='append')
     open(fid,file=trim(fname), form='formatted', action='write',position='append')
     write(fid, *) this%power
+    close(fid)
+
+end subroutine    
+
+subroutine dumpPowerUpdate(this, outputfile, tempname, powerUpdate)
+    class(actuatordisk_yaw), intent(inout) :: this
+    character(len=*),    intent(in)            :: outputfile, tempname
+    integer :: fid = 1234
+    character(len=clen) :: fname
+    real(rkind), dimension(:), intent(in) :: powerUpdate
+
+    ! Get power
+    call this%get_power()
+    ! Write power
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname)
+    !open(fid,file=trim(fname), form='unformatted',action='write',position='append')
+    open(fid,file=trim(fname), form='formatted', action='write',position='append')
+    write(fid, *) powerUpdate
     close(fid)
 
 end subroutine    

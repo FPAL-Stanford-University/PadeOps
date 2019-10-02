@@ -18,7 +18,7 @@ module dynamicYawMod
 
     type :: dynamicYaw
         ! Optimization parameters
-        real(rkind) :: beta1 = 0.9d0, beta2 = 0.999d0, learning_rate_yaw = 10D-4
+        real(rkind) :: beta1 = 0.9d0, beta2 = 0.999d0, learning_rate_yaw = 10.D-4
         integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20
         real(rkind) :: var_p = 0.04d0, var_k = 9D-6, var_sig = 9D-6
         ! Turbine parameters
@@ -47,7 +47,7 @@ module dynamicYawMod
         real(rkind), dimension(:), allocatable :: dp_dgamma 
         ! Moving average stuff
         integer :: n_moving_average
-        real(rkind), dimension(:), allocatable :: power_minus_n
+        real(rkind), dimension(:,:), allocatable :: power_minus_n, ws_minus_n
 
     contains
         procedure :: init
@@ -114,13 +114,15 @@ subroutine init(this, inputfile, xLoc, yLoc)
     allocate(this%turbCenter(this%Nt,2))
     allocate(this%kw(this%Nt))
     allocate(this%sigma_0(this%Nt))
-    allocate(this%power_minus_n(this%Nt))
+    allocate(this%power_minus_n(this%n_moving_average,this%Nt))
+    allocate(this%ws_minus_n(this%n_moving_average,this%Nt))
 
     ! Define
     this%yaw = 0.d0
     this%kw = 0.1d0
     this%sigma_0 = 0.25
     this%power_minus_n = 0.d0
+    this%ws_minus_n = 0.d0
 
     ! Get the wind turbine locations
     do i=1,this%Nt
@@ -135,16 +137,21 @@ subroutine destroy(this)
 
 end subroutine 
 
-subroutine update_and_yaw(this, yaw)
+subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservation)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:,:), allocatable :: X
-    real(rkind), dimension(:), intent(in) :: yaw
+    real(rkind), dimension(:), intent(inout) :: yaw
+    real(rkind), dimension(:), intent(in) :: powerObservation
+    real(rkind), intent(in) :: wind_speed, wind_direction
 
     ! allocate
     allocate(X(this%Nt,2))
 
     ! Field data observation
-    call this%observeField()
+    this%wind_speed = wind_speed ! Get this from the data
+    this%wind_direction = wind_direction ! Get this from the data
+    this%powerObservation = powerObservation ! Get the power production from ADM code 
+    !call this%observeField()
     ! Rotate domain
     X = this%turbCenter
     call this%rotate()
@@ -153,6 +160,7 @@ subroutine update_and_yaw(this, yaw)
     ! Online control update
     this%yaw = yaw(this%indSorted)
     call this%onlineUpdate()
+    yaw = this%yaw
     ! Restore original layout
     this%turbCenter = X
 
@@ -192,14 +200,16 @@ subroutine onlineUpdate(this)
             psi_kp1(this%Nt+t,i) = sigma_0(t)
         end do
     end do
-    lowestError = 10; bestStep = 1; kwBest = kw; sigmaBest = sigma_0;
+    bestStep = 1; kwBest = kw; sigmaBest = sigma_0;
     do t=1, this%stateEstimationEpochs;
         call this%EnKF_update( psi_kp1, this%powerObservation, kw, sigma_0, yaw)
         ! Run forward model pass
         call this%forward(kw, sigma_0, Phat, yaw)
         ! Normalized
         Phat = Phat / Phat_zeroYaw(1)
-        error(t) = p_sum(abs(Phat-this%powerObservation)/Phat_zeroYaw(1)) / real(this%Nt)
+        write(*,*) Phat
+        write(*,*) this%powerObservation
+        error(t) = p_sum(abs(Phat-this%powerObservation)) / real(this%Nt)
         if (error(t)<lowestError) then
             lowestError=error(t); bestStep = t;
             kwBest = kw; sigmaBest = sigma_0
@@ -209,7 +219,9 @@ subroutine onlineUpdate(this)
 
     ! Generate optimal yaw angles
     this%kw = kwBest; this%sigma_0 = sigmaBest;
+    yaw = yaw + -10.d0 * pi / 180.d0
     call this%yawOptimize(kwBest, sigmaBest, yaw)
+    write(*,*) yaw
     ! Store the unsorted parameters
     this%kw = kwBest(this%unsort); this%sigma_0 = sigmaBest(this%unsort)   
     this%yaw = yaw(this%unsort) 
@@ -327,6 +339,12 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     bestYaw = 0.d0; Ptot = 0.d0; P_time = 0.d0; P_time = 0.d0; yawTime = 0.d0
     m=0.d0; v=0.d0;
     bestPower = 0.d0; bestYaw = 0.d0;
+        write(*,*) 'kw'
+        write(*,*) kw
+        write(*,*) 'sigma'
+        write(*,*) sigma_0
+        write(*,*) 'yaw'
+        write(*,*) yaw
     do while (k < this%epochsYaw .and. check == .false.) 
     
         ! Forward prop
@@ -343,6 +361,14 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
         v = this%beta2*v + (1.d0-this%beta2)*(this%dp_dgamma**2);
         yaw = yaw + this%learning_rate_yaw * m / & 
                    (sqrt(v) + this%eps)
+        write(*,*) 'Baseline'
+        write(*,*) Ptot_baseline
+        write(*,*) 'Opti'
+        write(*,*) Ptot(k)
+        write(*,*) 'Yaw'
+        write(*,*) yaw
+        write(*,*) 'Power'
+        write(*,*) P
         if (Ptot(k) > bestPower) then
            bestPower = Ptot(k)
            bestYaw = yaw
@@ -432,8 +458,8 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
                dw = 1.d0 + kw(i) * log(1.d0 + exp((dx - 2.0d0 * R) / R));
                boundLow = this%turbCenter(i,2)-dw/2;
                boundHigh = this%turbCenter(i,2)+dw/2;
-               edgeLow = this%turbCenter(j,2)-this%D/2;
-               edgeHigh = this%turbCenter(j,2)+this%D/2;
+               edgeLow = this%turbCenter(j,2)-D/2;
+               edgeHigh = this%turbCenter(j,2)+D/2;
                check = 0
                if (edgeLow>=boundLow .and. edgeLow<=boundHigh) then
                    check = 1
@@ -486,11 +512,11 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
                 delta_u_face = delta_u_face + du * gaussian;
                 this%gaussianStore(k, j) = gaussian;
             end if
-            this%delta_u_face_store(j) = delta_u_face;
-            this%u_eff(j) = (1.d0/D) * (D*this%wind_speed - delta_u_face);
         end do
+        this%delta_u_face_store(j) = delta_u_face;
+        this%u_eff(j) = (1.d0/D) * (D*this%wind_speed - delta_u_face);
         ! Calculate the induction factor at the end
-        !this%a_mom(j) = 0.5*(1.d0-sqrt(1.d0-this%Ct*cos(yaw(j))**2))
+        this%a_mom(j) = 0.5*(1.d0-sqrt(1.d0-this%Ct*cos(yaw(j))**2))
         ! Power
         this%ap(j) = 0.5d0*(1.d0 - sqrt(1.d0-this%Ct))
         this%Cp(j) = 4.d0*this%eta*this%ap(j)*(1.d0-this%ap(j))**2 * & 
@@ -508,7 +534,7 @@ subroutine backward(this, kw, sigma_0, yaw)
     real(rkind), dimension(this%Nt) :: dp_du_eff, dp_dcp, dcp_dap
     real(rkind), dimension(this%Nt) :: du_eff_dyc, dy_c_dgamma
     real(rkind), dimension(this%Nt) :: dcp_dgamma, da_dgamma
-    real(rkind) :: dx, R=0.5
+    real(rkind) :: dx, R=0.5, D = 1.d0
     logical :: check
     real(rkind) :: boundLow, boundHigh, edgeLow, edgeHigh, dw, du_eff_da
     logical, dimension(this%Nt) :: turbinesInBack
@@ -541,8 +567,8 @@ subroutine backward(this, kw, sigma_0, yaw)
                dw = 1.d0 + kw(i) * log(1.d0 + exp((dx - 2.0 * R) / R));
                boundLow = this%turbCenter(i,2)-dw/2.d0;
                boundHigh = this%turbCenter(i,2)+dw/2.d0;
-               edgeLow = this%turbCenter(j,2)-this%D/2.d0;
-               edgeHigh = this%turbCenter(j,2)+this%D/2.d0;
+               edgeLow = this%turbCenter(j,2)-D/2.d0;
+               edgeHigh = this%turbCenter(j,2)+D/2.d0;
                check = .false.
                if (edgeLow>=boundLow .and. edgeLow<=boundHigh) then
                    check = .true.
@@ -565,11 +591,11 @@ subroutine backward(this, kw, sigma_0, yaw)
                 this%dp_dgamma(i) = this%dp_dgamma(i) + & 
                                     dp_du_eff(k)*du_eff_da*da_dgamma(i)
                 ! d u_eff / d y_c
-                du_eff_dyc(i) = -(1.d0/this%D) * (this%delta_u_face_store(k) * & 
-                                this%D**2 / (8.d0*sigma_0(i)**2) * &
-                                (-exp(-(this%turbCenter(k, 2)+this%D/2.d0-&
+                du_eff_dyc(i) = -(1.d0/D) * (this%delta_u_face_store(k) * & 
+                                D**2 / (8.d0*sigma_0(i)**2) * &
+                                (-exp(-(this%turbCenter(k, 2)+D/2.d0-&
                                 this%yCenter(i, k))**2/(2.d0*this%sigmaEnd(i,k)**2))+& 
-                                exp(-(this%turbCenter(k, 2)-this%D/2.d0-&
+                                exp(-(this%turbCenter(k, 2)-D/2.d0-&
                                 this%yCenter(i, k))**2/(2.d0*this%sigmaEnd(i,k)**2))) )
                 !!!
                 ! d y_c / d gamma
@@ -592,20 +618,36 @@ subroutine backward(this, kw, sigma_0, yaw)
 end subroutine
 
 
-subroutine simpleMovingAverage(this, meanP, power, i)
+subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, i, t)
     class(dynamicYaw), intent(inout) :: this
-    real(rkind), intent(inout) :: meanP
-    real(rkind), intent(in) :: power
-    integer, intent(in) :: i
+    real(rkind), intent(inout) :: meanP, meanWs
+    real(rkind), intent(in) :: power, ws
+    integer, intent(in) :: i, t
 
     if (i>this%n_moving_average) then
-        meanP = meanP + (1.d0/real(this%n_moving_average)) * (power - this%power_minus_n(1))
-        this%power_minus_n(1:this%n_moving_average-1) = this%power_minus_n(2:this%n_moving_average)
-        this%power_minus_n(this%n_moving_average) = power
+        ! Power
+        meanP = meanP + (1.d0/real(this%n_moving_average)) * (power - this%power_minus_n(1,t))
+        this%power_minus_n(1:this%n_moving_average-1,t) = this%power_minus_n(2:this%n_moving_average,t)
+        this%power_minus_n(this%n_moving_average,t) = power
+        ! Wind speed
+        meanWs = meanWs + (1.d0/real(this%n_moving_average)) * (ws - this%ws_minus_n(1,t))
+        this%ws_minus_n(1:this%n_moving_average-1,t) = this%ws_minus_n(2:this%n_moving_average,t)
+        this%ws_minus_n(this%n_moving_average,t) = ws
     else
-        meanP = p_sum(this%power_minus_n(1:i)) / real(i)
-        this%power_minus_n(i) = power
+        ! Power
+        this%power_minus_n(i,t) = power
+        meanP = p_sum(this%power_minus_n(1:i,t)) / real(i)
+        ! Wind speed
+        this%ws_minus_n(i,t) = ws
+        meanWs = p_sum(this%ws_minus_n(1:i,t)) / real(i)
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        ! Need to divide the final output by the number of processors!!
+        ! this is a problem...
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        meanP = meanP / 48.d0
+        meanWs = meanWs / 48.d0
     end if
+
 
 end subroutine
 
