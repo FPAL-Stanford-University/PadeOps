@@ -207,8 +207,6 @@ subroutine onlineUpdate(this)
         call this%forward(kw, sigma_0, Phat, yaw)
         ! Normalized
         Phat = Phat / Phat_zeroYaw(1)
-        write(*,*) Phat
-        write(*,*) this%powerObservation
         error(t) = p_sum(abs(Phat-this%powerObservation)) / real(this%Nt)
         if (error(t)<lowestError) then
             lowestError=error(t); bestStep = t;
@@ -219,9 +217,7 @@ subroutine onlineUpdate(this)
 
     ! Generate optimal yaw angles
     this%kw = kwBest; this%sigma_0 = sigmaBest;
-    yaw = yaw + -10.d0 * pi / 180.d0
     call this%yawOptimize(kwBest, sigmaBest, yaw)
-    write(*,*) yaw
     ! Store the unsorted parameters
     this%kw = kwBest(this%unsort); this%sigma_0 = sigmaBest(this%unsort)   
     this%yaw = yaw(this%unsort) 
@@ -339,12 +335,6 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     bestYaw = 0.d0; Ptot = 0.d0; P_time = 0.d0; P_time = 0.d0; yawTime = 0.d0
     m=0.d0; v=0.d0;
     bestPower = 0.d0; bestYaw = 0.d0;
-        write(*,*) 'kw'
-        write(*,*) kw
-        write(*,*) 'sigma'
-        write(*,*) sigma_0
-        write(*,*) 'yaw'
-        write(*,*) yaw
     do while (k < this%epochsYaw .and. check == .false.) 
     
         ! Forward prop
@@ -361,14 +351,6 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
         v = this%beta2*v + (1.d0-this%beta2)*(this%dp_dgamma**2);
         yaw = yaw + this%learning_rate_yaw * m / & 
                    (sqrt(v) + this%eps)
-        write(*,*) 'Baseline'
-        write(*,*) Ptot_baseline
-        write(*,*) 'Opti'
-        write(*,*) Ptot(k)
-        write(*,*) 'Yaw'
-        write(*,*) yaw
-        write(*,*) 'Power'
-        write(*,*) P
         if (Ptot(k) > bestPower) then
            bestPower = Ptot(k)
            bestYaw = yaw

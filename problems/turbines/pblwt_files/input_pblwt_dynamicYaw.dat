@@ -10,7 +10,7 @@ CFL                   = 0.8D0       ! CFL criterion for calculating the time ste
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.     ! Set to false if it's a fresh simulation 
-restartFile_TID       = 10000      ! TimeID of the restart file being used
+restartFile_TID       = 20000      ! TimeID of the restart file being used
 restartFile_RID       = 1          ! RunID of the restart file being used
 /
 /
@@ -107,7 +107,7 @@ turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/pblwt_f
 ADM_Type              = 4
 powerDumpDir          = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic"
 useDynamicYaw         = .TRUE.
-yawUpdateInterval     = 2
+yawUpdateInterval     = 1000
 /
 /
 &FRINGE

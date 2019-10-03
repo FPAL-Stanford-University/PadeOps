@@ -19,12 +19,12 @@ program test_dynamicYaw
     integer, parameter :: nx = 192, ny = 96, nz = 128
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
     real(rkind), parameter :: Lx = 2.d0, Ly = 2.d0, Lz = 2.0d0
-    real(rkind) :: dx, dy, dz, diam, CT
+    real(rkind) :: dx, dy, dz, diam, CT, wind_speed, wind_direction
     integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0, num_turbines 
     type(decomp_info) :: gp 
     real(rkind), dimension(:,:,:), allocatable :: rbuff, blanks, speed, X
     real(rkind), dimension(:,:,:), allocatable :: Y, Z, scalarSource
-    real(rkind), dimension(:), allocatable :: yaw, xLoc, yLoc
+    real(rkind), dimension(:), allocatable :: yaw, xLoc, yLoc, power
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -62,6 +62,7 @@ program test_dynamicYaw
     allocate(yaw(num_turbines)) 
     allocate(xLoc(num_turbines)) 
     allocate(yLoc(num_turbines)) 
+    allocate(power(num_turbines)) 
          
    do i = 1, num_turbines
         call ad(i)%init(inputDir_turb, i, xG, yG, zG)
@@ -81,7 +82,10 @@ program test_dynamicYaw
     yaw = 0.d0 * pi / 180.d0
     ! Input
     write(*,*) yaw*180.d0/pi
-    call dyaw%update_and_yaw(yaw)
+    power = (/1.d0, 0.6d0/)
+    wind_speed = 8.d0
+    wind_direction = 270.d0
+    call dyaw%update_and_yaw(yaw, wind_speed, wind_direction, power)
 
     ! Output
     write(*,*) dyaw%yaw*180.d0/pi
