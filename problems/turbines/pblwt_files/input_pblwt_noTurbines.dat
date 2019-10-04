@@ -1,6 +1,6 @@
 &INPUT
 inputdir              = "/scratch/05294/mhowland/channel_yaw/six_turbines"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe_debug"   ! Directory for all output files
+outputdir             = "/scratch/05294/mhowland/channel_yaw/no_turbines_dana"   ! Directory for all output files
 nx                    = 192         ! Number of points in X
 ny                    = 96         ! Number of points in Y
 nz                    = 64         ! Number of points in Z
@@ -100,7 +100,7 @@ SGSDynamicRestartFile = "null"      ! Clip the constant values when they are neg
 /
 /
 &WINDTURBINES
-useWindTurbines       = .TRUE.
+useWindTurbines       = .FALSE.
 num_turbines          = 2
 ADM                   = .TRUE.
 turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/pblwt_files/turbInfo_yaw/6x1array_yaw"
@@ -111,8 +111,8 @@ yawUpdateInterval     = 1000
 /
 /
 &FRINGE
-apply_x_fringe        = .TRUE.
-apply_y_fringe        = .FALSE.
+apply_x_fringe        = .false.
+apply_y_fringe        = .false.
 Fringe_xst            = 0.75d0         
 Fringe_xen            = 1.00d0
 Fringe_delta_st_x     = 0.20d0

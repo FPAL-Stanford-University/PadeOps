@@ -463,12 +463,14 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                    if (mod(this%timeStep, this%yawUpdateInterval) == 0 .and. this%timeStep /= 1) then
                        call this%dyaw%update_and_yaw(this%gamma, this%meanWs(1), & 
                                                      270.d0, this%meanP)
-                       write(*,*) this%gamma
                    end if
                    if (mod(this%timeStep, this%yawUpdateInterval) == 0 .and. this%timeStep /= 1) then
                        do i=1,this%nTurbines
-                           write(tempname,"(A6,I3.3,A8,I3.3,A4)") "powerUpdate_",i,"_update_",this%updateCounter,".txt"
-                           call this%turbArrayADM_Tyaw(i)%dumpPowerUpdate(this%powerDumpDir, tempname, this%powerUpdate(:,i))
+                           write(tempname,"(A12,I3.3,A8,I3.3,A4)") "powerUpdate_",i,"_update_",this%updateCounter,".txt"
+                           call this%turbArrayADM_Tyaw(i)%dumpPowerUpdate(this%powerDumpDir,& 
+                                tempname, this%powerUpdate(:,i), this%dyaw%Phat, & 
+                                this%gamma, this%gamma_nm1, this%meanP, &
+                                this%dyaw%kw, this%dyaw%sigma_0, this%updateCounter)
                        end do
                        this%timeStep = 0
                        this%updateCounter=this%updateCounter+1

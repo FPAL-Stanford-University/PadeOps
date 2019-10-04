@@ -21,7 +21,7 @@ module actuatorDisk_YawMod
         integer :: xLoc_idx, ActutorDisk_T2ID
         real(rkind) :: yaw, tilt, ut, power
         real(rkind) :: xLoc, yLoc, zLoc, dx, dy, dz
-        real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq
+        real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq, Cp
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
         integer :: totPointsOnFace
         real(rkind), dimension(:,:), allocatable :: xp, yp, zp
@@ -66,7 +66,8 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     character(len=*), intent(in) :: inputDir
     character(len=clen) :: tempname, fname
     integer :: ioUnit
-    real(rkind) :: xLoc=1.d0, yLoc=1.d0, zLoc=0.1d0, diam=0.08d0, cT=0.65d0, yaw=0.d0, tilt=0.d0
+    real(rkind) :: xLoc=1.d0, yLoc=1.d0, zLoc=0.1d0
+    real(rkind) :: diam=0.08d0, cT=0.65d0, yaw=0.d0, tilt=0.d0, Cp = 0.3
  
     ! Read input file for this turbine    
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
@@ -80,7 +81,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
    
     this%dx=xG(2,1,1)-xG(1,1,1); this%dy=yG(1,2,1)-yG(1,1,1); this%dz=zG(1,1,2)-zG(1,1,1)
     this%xLoc = xLoc; this%yLoc = yLoc; this%zLoc = zLoc
-    this%cT = cT; this%diam = diam; this%yaw = yaw; this%ut = 1.d0
+    this%cT = cT; this%diam = diam; this%yaw = yaw; this%ut = 1.d0; this%Cp = Cp;
     this%nxLoc = size(xG,1); this%nyLoc = size(xG,2); this%nzLoc = size(xG,3)
 
     !Allocate stuff
@@ -198,7 +199,7 @@ end subroutine
 subroutine get_power(this)
     class(actuatordisk_yaw), intent(inout) :: this
 
-    this%power = 0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*(this%ut)**3
+    this%power = 0.5d0*this%Cp*(pi*(this%diam**2)/4.d0)*(this%ut)**3
 
 end subroutine
 
@@ -291,20 +292,57 @@ subroutine dumpPower(this, outputfile, tempname)
 
 end subroutine    
 
-subroutine dumpPowerUpdate(this, outputfile, tempname, powerUpdate)
+subroutine dumpPowerUpdate(this, outputfile, tempname, & 
+                           powerUpdate, Phat, yaw, yawOld, meanP, kw, sigma, i)
     class(actuatordisk_yaw), intent(inout) :: this
     character(len=*),    intent(in)            :: outputfile, tempname
     integer :: fid = 1234
-    character(len=clen) :: fname
-    real(rkind), dimension(:), intent(in) :: powerUpdate
+    integer, intent(in) :: i
+    character(len=clen) :: fname, tempname2
+    real(rkind), dimension(:), intent(in) :: powerUpdate, Phat, yaw, yawOld, meanP
+    real(rkind), dimension(:), intent(in) :: kw, sigma
 
-    ! Get power
-    call this%get_power()
     ! Write power
     fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname)
     !open(fid,file=trim(fname), form='unformatted',action='write',position='append')
-    open(fid,file=trim(fname), form='formatted', action='write',position='append')
+    open(fid,file=trim(fname), form='formatted')
     write(fid, *) powerUpdate
+    close(fid)
+    ! Write Phat
+    write(tempname2,"(A5,I3.3,A4)") "Phat_",i,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) Phat
+    close(fid)
+    ! Write yaw opti
+    write(tempname2,"(A8,I3.3,A4)") "YawOpti_",i,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) yaw
+    close(fid)
+    ! Write yaw original in this time interval
+    write(tempname2,"(A12,I3.3,A4)") "YawInterval_",i,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) yawOld
+    close(fid)
+    ! Write mean power in this time interval
+    write(tempname2,"(A6,I3.3,A4)") "MeanP_",i,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) meanP
+    close(fid)
+    ! Write kw in this time interval
+    write(tempname2,"(A3,I3.3,A4)") "kw_",i,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) kw
+    close(fid)
+    ! Write sigma in this time interval
+    write(tempname2,"(A6,I3.3,A4)") "sigma_",i,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) sigma
     close(fid)
 
 end subroutine    

@@ -1,6 +1,6 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/channel_yaw/six_turbines"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe_debug"   ! Directory for all output files
+inputdir              = "/scratch/05294/mhowland/channel_yaw/two_turbines_noYaw"   ! Directory for any input files
+outputdir             = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_debug"   ! Directory for all output files
 nx                    = 192         ! Number of points in X
 ny                    = 96         ! Number of points in Y
 nz                    = 64         ! Number of points in Z
@@ -9,9 +9,9 @@ dt                    = -0.0001D0   ! Fixed time step value (only used if CFL is
 CFL                   = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
-restartFile_TID       = 194069      ! TimeID of the restart file being used
-restartFile_RID       = 10          ! RunID of the restart file being used
+useRestartFile        = .TRUE.     ! Set to false if it's a fresh simulation 
+restartFile_TID       = 20000      ! TimeID of the restart file being used
+restartFile_RID       = 1          ! RunID of the restart file being used
 /
 /
 &NUMERICS
@@ -105,14 +105,14 @@ num_turbines          = 2
 ADM                   = .TRUE.
 turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/pblwt_files/turbInfo_yaw/6x1array_yaw"
 ADM_Type              = 4
-powerDumpDir          = "/scratch/05294/mhowland/channel_yaw/six_turbines"
-useDynamicYaw         = .FALSE.
-yawUpdateInterval     = 1000
+powerDumpDir          = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_debug/modelDumps"
+useDynamicYaw         = .TRUE.
+yawUpdateInterval     = 5000
 /
 /
 &FRINGE
-apply_x_fringe        = .TRUE.
-apply_y_fringe        = .FALSE.
+apply_x_fringe        = .false.
+apply_y_fringe        = .false.
 Fringe_xst            = 0.75d0         
 Fringe_xen            = 1.00d0
 Fringe_delta_st_x     = 0.20d0

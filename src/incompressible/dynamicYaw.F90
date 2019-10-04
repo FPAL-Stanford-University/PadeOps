@@ -48,6 +48,7 @@ module dynamicYawMod
         ! Moving average stuff
         integer :: n_moving_average
         real(rkind), dimension(:,:), allocatable :: power_minus_n, ws_minus_n
+        real(rkind), dimension(:), allocatable :: Phat
 
     contains
         procedure :: init
@@ -114,6 +115,7 @@ subroutine init(this, inputfile, xLoc, yLoc)
     allocate(this%turbCenter(this%Nt,2))
     allocate(this%kw(this%Nt))
     allocate(this%sigma_0(this%Nt))
+    allocate(this%Phat(this%Nt))
     allocate(this%power_minus_n(this%n_moving_average,this%Nt))
     allocate(this%ws_minus_n(this%n_moving_average,this%Nt))
 
@@ -150,7 +152,7 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     ! Field data observation
     this%wind_speed = wind_speed ! Get this from the data
     this%wind_direction = wind_direction ! Get this from the data
-    this%powerObservation = powerObservation ! Get the power production from ADM code 
+    this%powerObservation = powerObservation ! Get the power production from ADM code
     !call this%observeField()
     ! Rotate domain
     X = this%turbCenter
@@ -206,7 +208,7 @@ subroutine onlineUpdate(this)
         ! Run forward model pass
         call this%forward(kw, sigma_0, Phat, yaw)
         ! Normalized
-        Phat = Phat / Phat_zeroYaw(1)
+        Phat = Phat / Phat(1)
         error(t) = p_sum(abs(Phat-this%powerObservation)) / real(this%Nt)
         if (error(t)<lowestError) then
             lowestError=error(t); bestStep = t;
@@ -328,8 +330,8 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     ! Model
     ! Load model inputs
     call this%forward(kw, sigma_0, P, yaw*0.d0)
-    Ptot_baseline = p_sum(P); P_baseline = P;
-    
+    Ptot_baseline = p_sum(P); P_baseline = P; this%Phat = P_baseline;
+ 
     ! eps also determines the termination condition
     k=1; check = 0; 
     bestYaw = 0.d0; Ptot = 0.d0; P_time = 0.d0; P_time = 0.d0; yawTime = 0.d0
@@ -421,13 +423,13 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
     
     ! Definitions
     ! Set the relevant turbine length scale
-    L = 100.d0
+    L = 1.d0
     turbinesInFront = .false.
-    this%A = (this%D*L) ** 2. * pi / 4
+    this%A = (this%D*L) ** 2. * pi / 4.d0
     D = this%D / this%D
     R = D/2.d0
     ! Atmospheric conditions
-    this%rho = 1.225
+    this%rho = 1.d0
     ! Model parameters
 
     !! Forward prop
@@ -618,16 +620,10 @@ subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, i, t)
     else
         ! Power
         this%power_minus_n(i,t) = power
-        meanP = p_sum(this%power_minus_n(1:i,t)) / real(i)
+        meanP = sum(this%power_minus_n(1:i,t)) / real(i)
         ! Wind speed
         this%ws_minus_n(i,t) = ws
-        meanWs = p_sum(this%ws_minus_n(1:i,t)) / real(i)
-        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        ! Need to divide the final output by the number of processors!!
-        ! this is a problem...
-        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        meanP = meanP / 48.d0
-        meanWs = meanWs / 48.d0
+        meanWs = sum(this%ws_minus_n(1:i,t)) / real(i)
     end if
 
 
