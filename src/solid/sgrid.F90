@@ -167,6 +167,7 @@ contains
         logical     :: use_gTg = .FALSE., useOneG = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
         logical     :: xcentered = .FALSE., ycentered = .false., zcentered = .false. ! required for cylindrical/spherical systems
+        integer     :: coordsys = 0 ! 0: Cartesian, 1: Cylindrical, 2: Spherical
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
@@ -175,7 +176,7 @@ contains
                          derivative_x, derivative_y, derivative_z, &
                                    filter_x,  filter_y,  filter_z, &
                                   xcentered, ycentered, zcentered, &
-                                                       prow, pcol, &
+                                             coordsys, prow, pcol, &
                                                          SkewSymm  
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
                            PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
@@ -263,6 +264,12 @@ contains
         this%zcentered = zcentered  
         if (this%ycentered) call GracefulExit("Mesh cannot be ycentered at present",4634)
         if (this%zcentered) call GracefulExit("Mesh cannot be zcentered at present",4634)
+
+        this%coordsys = coordsys
+        if( ((this%coordsys==1) .or. (this%coordsys==2)) .and. (.not. this%xcentered) ) then
+            call GracefulExit("xcentered must be true of coordsys is Cylindrical or Spherical",4634)
+        endif
+        if(this%coordsys==2) call GracefulExit("Spherical coordinates not implemented yet",4634)
 
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
@@ -572,7 +579,7 @@ contains
 
         ! compute artificial shear and bulk viscosities
         call this%getPhysicalProperties()
-        call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
+        call this%LAD%get_viscosities(this%rho,this%x,this%y,this%z,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%coordsys)
 
         if (this%PTeqb) then
             ehmix => duidxj(:,:,:,4) ! use some storage space
@@ -580,14 +587,14 @@ contains
             do imat = 1, this%mix%ns
                 ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
             enddo
-            call this%LAD%get_conductivity(this%rho,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
+            call this%LAD%get_conductivity(this%rho,this%x,this%y,this%z,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%coordsys)
         end if
 
         nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz,ehmix)
         deallocate( duidxj )
 
         ! compute species artificial conductivities and diffusivities
-        call this%mix%getLAD(this%rho,this%e,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
+        call this%mix%getLAD(this%rho,this%x,this%y,this%z,this%e,this%sos,this%x_bc,this%y_bc,this%z_bc,this%coordsys)  ! Compute species LAD (kap, diff)
         ! ------------------------------------------------
 
         call this%get_dt(stability)
@@ -715,7 +722,7 @@ contains
 
             ! Pre-compute stress, LAD, J, etc.
             ! call this%mix%getSOS(this%rho,this%p,this%sos)
-            call this%mix%getLAD(this%rho,this%e,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
+            call this%mix%getLAD(this%rho,this%x,this%y,this%z,this%e,this%sos,this%x_bc,this%y_bc,this%z_bc,this%coordsys)  ! Compute species LAD (kap, diff)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
 
@@ -725,19 +732,19 @@ contains
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
             ! calculate sources if they are needed
-            if(.not. this%PTeqb) call this%mix%calculate_source(this%rho,divu,this%u,this%v,this%w,this%p,Fsource,this%x_bc,this%y_bc,this%z_bc) ! -- actually, source terms should be included for PTeqb as well --NSG
+            if(.not. this%PTeqb) call this%mix%calculate_source(this%rho,divu,this%u,this%v,this%w,this%p,this%x,this%y,this%z,Fsource,this%x_bc,this%y_bc,this%z_bc,this%coordsys) ! -- actually, source terms should be included for PTeqb as well --NSG
 
             ! Now update all the individual species variables
-            call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,Fsource,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
+            call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,Fsource,this%tsim,this%x_bc,this%y_bc,this%z_bc,this%coordsys)               ! g tensor
 
-            call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
+            call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc,this%coordsys)               ! Volume Fraction
 
             !if (.NOT. this%PTeqb) then
             if(this%pEqb) then
-                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
+                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%x_bc,this%y_bc,this%z_bc,this%coordsys)                        ! Volume Fraction
             elseif(this%pRelax) then
-                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
-                call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%devstress,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
+                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%x_bc,this%y_bc,this%z_bc,this%coordsys)                        ! Volume Fraction
+                call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%devstress,this%x_bc,this%y_bc,this%z_bc,this%coordsys) ! Hydrodynamic energy
             end if
 
             ! Integrate simulation time to keep it in sync with RK substep
@@ -779,7 +786,7 @@ contains
                 call this%mix%equilibratePressure(this%rho, this%e, this%p)
             elseif (this%pRelax) then
                 call this%mix%relaxPressure(this%rho, this%e, this%p)
-                !call this%mix%relaxPressure_os(this%rho, this%u, this%v, this%w, this%e, this%dt, this%p)
+                !call this%mix%relaxPressure_os(this%rho, this%u, this%v, this%w, this%e, this%x, this%y, this%z, this%coordsys, this%dt, this%p)
             end if
             !print *, nrank, 11
             
@@ -868,7 +875,7 @@ contains
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
        
-        call this%mix%get_primitive(this%rho, this%u, this%v, this%w, this%e, this%devstress, this%p, this%sos)                  ! Get primitive variables for individual species
+        call this%mix%get_primitive(this%rho, this%u, this%v, this%w, this%e, this%x, this%y, this%z, this%coordsys, this%devstress, this%p, this%sos)                  ! Get primitive variables for individual species
 
     end subroutine
 
@@ -927,7 +934,7 @@ contains
         divu = dudx + dvdy + dwdz
 
         call this%getPhysicalProperties()
-        call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
+        call this%LAD%get_viscosities(this%rho,this%x,this%y,this%z,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%coordsys)
 
         if (this%PTeqb) then
             ! subtract elastic energies to determine mixture hydrostatic energy. conductivity 
@@ -937,7 +944,7 @@ contains
             do imat = 1, this%mix%ns
                 ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
             enddo
-            call this%LAD%get_conductivity(this%rho,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc)
+            call this%LAD%get_conductivity(this%rho,this%x,this%y,this%z,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%coordsys)
         end if
 
         ! Get tau tensor tensor. Put in off-diagonal components of duidxj (also get the viscous work term for energy equation)

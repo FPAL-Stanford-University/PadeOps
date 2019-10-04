@@ -25,6 +25,8 @@ module GridMod
         logical                                              :: ycentered         ! Centered in Y?
         logical                                              :: zcentered         ! Centered in Z?
 
+        integer                                              :: coordsys          ! Coordinate system; Cart/Cyl/Sph : 0/1/2
+
         type( derivatives ), allocatable                     :: der               ! Derivative object
         character(len=clen)                                  :: derivative_x      ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
         character(len=clen)                                  :: derivative_y      ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"

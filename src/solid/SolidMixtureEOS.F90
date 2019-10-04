@@ -183,9 +183,10 @@ contains
         allocate( this%material(imat)%elastic, source=elastic )
     end subroutine
 
-    subroutine relaxPressure_os(this,rho,u,v,w,mixE,dtsim,mixP)
+    subroutine relaxPressure_os(this,rho,u,v,w,mixE,x,y,z,coordsys,dtsim,mixP)
         class(solid_mixture), intent(inout), target :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,mixE
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,mixE,x,y,z
+        integer,                                            intent(in)  :: coordsys
         real(rkind),                                        intent(in)  :: dtsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP
 
@@ -217,8 +218,8 @@ contains
             mat1%consrv(:,:,:,2) = mat1%consrv(:,:,:,2) - dt*mat1%p*Fsrc
             mat2%consrv(:,:,:,2) = mat2%consrv(:,:,:,2) + dt*mat1%p*Fsrc
 
-            call mat1%get_primitive(rho,u,v,w)
-            call mat2%get_primitive(rho,u,v,w)
+            call mat1%get_primitive(rho,u,v,w,x,y,z,coordsys)
+            call mat2%get_primitive(rho,u,v,w,x,y,z,coordsys)
             call this%get_p_from_ehydro(rho)   ! Get species pressures from species hydrodynamic energy 
             !print *, "p1 after = ", mat1%p(100,1,1)
 
@@ -768,10 +769,11 @@ stop
     end subroutine
 
     ! Subroutine to get species art. conductivities and diffusivities
-    subroutine getLAD(this,rho,e,sos,x_bc,y_bc,z_bc)
+    subroutine getLAD(this,rho,x,y,z,e,sos,x_bc,y_bc,z_bc,coordsys)
         class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,e,sos  ! Mixture density and speed of sound
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,x,y,z,e,sos  ! Mixture density and speed of sound
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
 
         integer :: i
 
@@ -780,10 +782,10 @@ stop
 
             if (.NOT. this%PTeqb) then
                 ! Artificial conductivity
-                !call this%LAD%get_conductivity(rho, this%material(i)%eh, this%material(i)%T, sos, &
-                !                                    this%material(i)%kap, x_bc, y_bc, z_bc)
-                call this%LAD%get_conductivity(rho, this%material(i)%Ys*this%material(i)%eh, e, sos, &     ! --change2
-                                                    this%material(i)%kap, x_bc, y_bc, z_bc)
+                !call this%LAD%get_conductivity(rho, x, y, z, this%material(i)%eh, this%material(i)%T, sos, &
+                !                                             this%material(i)%kap, x_bc, y_bc, z_bc, coordsys)
+                call this%LAD%get_conductivity(rho, x, y, z, this%material(i)%Ys*this%material(i)%eh, e, sos, &     ! --change2
+                                                             this%material(i)%kap, x_bc, y_bc, z_bc, coordsys)
             end if
 
             ! Artificial diffusivity (grad(Ys) is stored in Ji at this stage)
@@ -927,15 +929,16 @@ stop
 
     end subroutine
 
-    subroutine get_primitive(this,rho,u,v,w,e,devstress,p,sos)
+    subroutine get_primitive(this,rho,u,v,w,e,x,y,z,coordsys,devstress,p,sos)
         class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho, u,v,w,e
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho, u,v,w,e,x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(out) :: devstress
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: p, sos
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: p, sos
+        integer,                                              intent(in)  :: coordsys
 
         integer :: imat
         do imat = 1, this%ns
-          call this%material(imat)%get_primitive(rho,u,v,w)
+          call this%material(imat)%get_primitive(rho,u,v,w,x,y,z,coordsys)
         end do
   
         call this%get_eelastic_devstress(devstress)   ! Get species elastic energies, and mixture and species devstress
@@ -1066,12 +1069,13 @@ stop
 
     end subroutine
 
-    subroutine calculate_source(this,rho,divu,u,v,w,p,Fsource,x_bc,y_bc,z_bc)
+    subroutine calculate_source(this,rho,divu,u,v,w,p,x,y,z,Fsource,x_bc,y_bc,z_bc,coordsys)
         use operators, only: divergence,gradient
         class(solid_mixture), intent(in), target :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,divu,u,v,w,p
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,divu,u,v,w,p,x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: Fsource
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
       
         type(solid), pointer :: mat1, mat2
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: tmp1,tmp2,tmp3,rhocsq1,rhocsq2
@@ -1095,7 +1099,7 @@ stop
             call mat1%get_enthalpy(tmp2)
             call mat2%get_enthalpy(tmp3)
 
-            call divergence(this%decomp,this%der,-mat1%Ji(:,:,:,1),-mat1%Ji(:,:,:,2),-mat1%Ji(:,:,:,3),tmp1,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+            call divergence(this%decomp,this%der,x,y,z,-mat1%Ji(:,:,:,1),-mat1%Ji(:,:,:,2),-mat1%Ji(:,:,:,3),tmp1,coordsys,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
 
             Fsource = -(rhocsq1 - rhocsq2)*divu*mat1%VF*mat2%VF + (Fsource + mat1%VF*(mat2%hydro%gam-one)*(tmp2-tmp3))*tmp1
 
@@ -1103,20 +1107,20 @@ stop
 
         elseif(this%pRelax) then
 
-            call divergence(this%decomp,this%der,mat1%Ji(:,:,:,1),mat1%Ji(:,:,:,2),mat1%Ji(:,:,:,3),tmp1,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+            call divergence(this%decomp,this%der,x,y,z,mat1%Ji(:,:,:,1),mat1%Ji(:,:,:,2),mat1%Ji(:,:,:,3),tmp1,coordsys,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
             Fsource = -tmp1*(mat1%eh + mat1%eel + half*(u*u+v*v+w*w))
 
-            call gradient(this%decomp,this%der,mat2%VF,tmp1,tmp2,tmp3)
+            call gradient(this%decomp,this%der,x,y,z,mat2%VF,tmp1,tmp2,tmp3,coordsys)
             Fsource = Fsource - p*(u*tmp1 + v*tmp2 + w*tmp3)
 
-            call gradient(this%decomp,this%der,p,tmp1,tmp2,tmp3)
+            call gradient(this%decomp,this%der,x,y,z,p,tmp1,tmp2,tmp3,coordsys)
             Fsource = Fsource - mat1%VF*mat2%VF/rho*(mat1%rhom-mat2%rhom)*(u*tmp1 + v*tmp2 + w*tmp3)
 
         endif
 
     end subroutine 
 
-    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,coordsys)
         use operators, only: filter3D
         use reductions, only: P_SUM
         class(solid_mixture), intent(inout) :: this
@@ -1125,14 +1129,15 @@ stop
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
 
         integer :: imat
 
         if(this%useOneG) then
             if (this%use_gTg) then
-                call this%material(1)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,this%rho0mix,this%mumix,this%yieldmix,this%solidVF)
+                call this%material(1)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,coordsys,this%rho0mix,this%mumix,this%yieldmix,this%solidVF)
             else
-                call this%material(1)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,this%rho0mix,this%mumix,this%yieldmix,this%solidVF)
+                call this%material(1)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,coordsys,this%rho0mix,this%mumix,this%yieldmix,this%solidVF)
             end if
             do imat = 2, this%ns
                 this%material(imat)%g = this%material(1)%g
@@ -1140,27 +1145,28 @@ stop
         else
             do imat = 1, this%ns
                 if (this%use_gTg) then
-                    call this%material(imat)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+                    call this%material(imat)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,coordsys)
                 else
-                    call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+                    call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,coordsys)
                 end if
             end do
         endif
 
     end subroutine
 
-    subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+    subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc,coordsys)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
 
         integer :: imat
 
         do imat = 1, this%ns
-          call this%material(imat)%update_Ys(isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+          call this%material(imat)%update_Ys(isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc,coordsys)
         end do
 
     end subroutine
@@ -1191,7 +1197,7 @@ stop
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc,coordsys)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
@@ -1199,14 +1205,15 @@ stop
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,u,v,w,divu,viscwork,src
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(in) :: taustar
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
 
         integer :: imat
 
         !do imat = 1, this%ns
-        !  call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc)
+        !  call this%material(imat)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc,coordsys)
         !end do
-        call this%material(1)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork, src,taustar,x_bc,y_bc,z_bc)
-        call this%material(2)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,-src,taustar,x_bc,y_bc,z_bc)
+        call this%material(1)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork, src,taustar,x_bc,y_bc,z_bc,coordsys)
+        call this%material(2)%update_eh(isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,-src,taustar,x_bc,y_bc,z_bc,coordsys)
 
     end subroutine
 
@@ -1249,23 +1256,24 @@ stop
 
     end subroutine
 
-    subroutine update_VF(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc)
+    subroutine update_VF(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc,coordsys)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,divu,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
 
         integer :: imat
 
         if (this%ns > 2) call GracefulExit("Figure out 2 materials first!",4356)
 
         !do imat = 1, this%ns
-        !  call this%material(imat)%update_VF(this%material( 2-mod(imat+1,2) ),isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc)
+        !  call this%material(imat)%update_VF(this%material( 2-mod(imat+1,2) ),isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc,coordsys)
         !end do
-        call this%material(1)%update_VF(this%material(2),isub,dt,rho,u,v,w,x,y,z,tsim,divu, src,x_bc,y_bc,z_bc)
-        !call this%material(2)%update_VF(this%material(1),isub,dt,rho,u,v,w,x,y,z,tsim,divu,-src,x_bc,y_bc,z_bc)
+        call this%material(1)%update_VF(this%material(2),isub,dt,rho,u,v,w,x,y,z,tsim,divu, src,x_bc,y_bc,z_bc,coordsys)
+        !call this%material(2)%update_VF(this%material(1),isub,dt,rho,u,v,w,x,y,z,tsim,divu,-src,x_bc,y_bc,z_bc,coordsys)
 
         this%material(2)%VF = one - this%material(1)%VF
 

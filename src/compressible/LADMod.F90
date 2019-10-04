@@ -76,12 +76,13 @@ contains
 
     end subroutine
 
-    subroutine get_viscosities(this,rho,duidxj,mu,bulk,x_bc,y_bc,z_bc)
+    subroutine get_viscosities(this,rho,x,y,z,duidxj,mu,bulk,x_bc,y_bc,z_bc,coordsys)
         class(ladobject),        intent(in) :: this
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(in)  :: rho
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(in)  :: rho,x,y,z
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),9), target, intent(in)  :: duidxj
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(inout) :: mu, bulk
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
 
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
 
@@ -134,7 +135,7 @@ contains
         func = dudx + dvdy + dwdz      ! dilatation
         
         ! Step 1: Get components of grad(rho) squared individually
-        call gradient(this%decomp,this%der,rho,ytmp1,ytmp2,ytmp3,x_bc,y_bc,z_bc) ! Does not use any Y buffers
+        call gradient(this%decomp,this%der,x,y,z,rho,ytmp1,ytmp2,ytmp3,coordsys,x_bc,y_bc,z_bc) ! Does not use any Y buffers
         ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
@@ -180,11 +181,12 @@ contains
         bulk = bulk + bulkstar
     end subroutine
 
-    subroutine get_conductivity(this,rho,e,T,sos,kap,x_bc,y_bc,z_bc)
+    subroutine get_conductivity(this,rho,x,y,z,e,T,sos,kap,x_bc,y_bc,z_bc,coordsys)
         class(ladobject),  intent(in) :: this
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)  :: rho,e,T,sos
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)  :: rho,x,y,z,e,T,sos
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(inout) :: kap
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
 
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: kapstar
         real(rkind), dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2
@@ -194,7 +196,7 @@ contains
         ! -------- Artificial Conductivity --------
 
         ! Step 1: Get components of grad(e) squared individually
-        call gradient(this%decomp,this%der,e,ytmp1,ytmp2,ytmp3,x_bc,y_bc,z_bc) ! Does not use any Y buffers
+        call gradient(this%decomp,this%der,x,y,z,e,ytmp1,ytmp2,ytmp3,coordsys,x_bc,y_bc,z_bc) ! Does not use any Y buffers
         ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3

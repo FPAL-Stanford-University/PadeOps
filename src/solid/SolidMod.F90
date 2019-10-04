@@ -100,6 +100,7 @@ module SolidMod
         procedure :: checkNaN
         procedure :: filter
         procedure :: sliding_deformation
+        procedure :: sliding_correction
         final     :: destroy
 
     end type
@@ -382,7 +383,7 @@ contains
 
     end subroutine
 
-    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,rho0mix,mumix,yieldmix,solidVF)
+    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,coordsys,rho0mix,mumix,yieldmix,solidVF)
         use constants,  only: eps
         use RKCoeffs,   only: RK45_A,RK45_B
         use reductions, only: P_MAXVAL
@@ -394,6 +395,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in), optional  :: rho0mix, mumix, yieldmix, solidVF
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg   ! RHS for g tensor equation
@@ -421,7 +423,7 @@ contains
         call filter3D(this%decomp, this%gfil, auxVF, 1)
         auxVF = (auxVF**auxVF_exponent) / ( auxVF**auxVF_exponent + (one - auxVF)**auxVF_exponent )
         this%kap = auxVF
-        call gradient(this%decomp, this%der, auxVF, normal(:,:,:,1), normal(:,:,:,2), normal(:,:,:,3), x_bc, y_bc, z_bc)
+        call gradient(this%decomp,this%der,x,y,z,auxVF,normal(:,:,:,1),normal(:,:,:,2),normal(:,:,:,3),coordsys,x_bc,y_bc,z_bc)
         ! Normalize to magnitude 1
         mask = sqrt( normal(:,:,:,1)*normal(:,:,:,1) + normal(:,:,:,2)*normal(:,:,:,2) + normal(:,:,:,3)*normal(:,:,:,3) )
         do l = 1,3
@@ -452,9 +454,9 @@ contains
         end if
 
         if(present(rho0mix)) then
-            call this%getRHS_g(rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
+            call this%getRHS_g(rho,u,v,w,x,y,z,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,coordsys,rho0mix,solidVF)
         else
-            call this%getRHS_g(rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc)
+            call this%getRHS_g(rho,u,v,w,x,y,z,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,coordsys)
         endif
         call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
@@ -509,27 +511,26 @@ contains
 
     end subroutine
 
-    subroutine getRHS_g(this,rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
+    subroutine getRHS_g(this,rho,u,v,w,x,y,z,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,coordsys,rho0mix,solidVF)
         use decomp_2d, only: nrank
         use constants, only: eps, pi
-        use operators, only: gradient, curl
+        use operators, only: gradient, curl, crossprod
         use reductions, only: P_MAXVAL
-        class(solid),                                         intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src,mask
-        real(rkind),                                          intent(in)  :: dt
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in)  :: normal
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
+        class(solid),                                         intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)    :: rho,u,v,w,x,y,z,src,mask
+        real(rkind),                                          intent(in)    :: dt
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in)    :: normal
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out)   :: rhsg
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in), optional :: rho0mix, solidVF
 
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
-        real(rkind), dimension(:,:,:), pointer :: dutdx,dutdy,dutdz,dvtdx,dvtdy,dvtdz,dwtdx,dwtdy,dwtdz
-
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg, ut, vt, wt, rad, theta
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg, cx, cy, cz
+        !real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ttxx,ttxy,ttxz,ttyx,ttyy,ttyz,ttzx,ttzy,ttzz
         real(rkind), parameter :: etafac = one/6._rkind
 
-        real(rkind) :: dx, dy, x, y
+        real(rkind) :: dx, dy!, x, y
         ! real(rkind), parameter :: theta = 45._rkind * pi / 180._rkind
 
         real(rkind) :: pmax
@@ -543,77 +544,6 @@ contains
 
         rhsg = zero
 
-        ! if (this%sliding) then
-        !     mask = this%VF*(one - this%VF)
-        !     mask = mask/P_MAXVAL(mask)
-        !     mask = one - (one - mask)**mask_exponent
-        ! else
-        !     mask = zero
-        ! end if
-        ! mask = zero
-
-        ! Set normal to be aligned with the x direction
-        ! normal(:,:,:,1) = one; normal(:,:,:,2) = zero; normal(:,:,:,3) = zero
-
-        ! Set normal to be normal to the specified oblique interface
-        ! normal(:,:,:,1) = cos(theta); normal(:,:,:,2) =-sin(theta); normal(:,:,:,3) = zero
-
-        ! Set normal to be radially outwards for a cylindrical interface
-        ! dx = one/real(this%decomp%xsz(1)-1,rkind)
-        ! dy = dx
-        ! do k=1,this%decomp%ysz(3)
-        !     do j=1,this%decomp%ysz(2)
-        !         do i=1,this%decomp%ysz(1)
-        !             x = - half + real( this%decomp%yst(1) - 1 + i - 1, rkind ) * dx
-        !             y = - half + real( this%decomp%yst(2) - 1 + j - 1, rkind ) * dy
-        !             rad(i,j,k) = sqrt(x**2 + y**2)
-        !             theta(i,j,k) = atan2(y,x)
-        !         end do
-        !     end do
-        ! end do
-        ! normal(:,:,:,1) = cos(theta); normal(:,:,:,2) = sin(theta); normal(:,:,:,3) = zero
-
-        ! ! Set normal to be the maximal volume fraction gradient direction
-        ! call gradient(this%decomp, this%der, this%VF, normal(:,:,:,1), normal(:,:,:,2), normal(:,:,:,3), x_bc, y_bc, z_bc)
-        ! ! Normalize to magnitude 1
-        ! tmp = sqrt( normal(:,:,:,1)*normal(:,:,:,1) + normal(:,:,:,2)*normal(:,:,:,2) + normal(:,:,:,3)*normal(:,:,:,3) )
-        ! do i = 1,3
-        !     normal(:,:,:,i) = normal(:,:,:,i) / tmp
-        ! end do
-
-        ! print *, "mask = ", mask(39,83,1)
-        ! print *, "normal = ", normal(39,83,1,:)
-
-        ! Magnitude of normal velocity
-        wt = u*normal(:,:,:,1) + v*normal(:,:,:,2) + w*normal(:,:,:,3)
-
-        ! print *, "normal velocity = ", wt(39,83,1)
-
-        ! Get tangential velocity
-        ut = u - normal(:,:,:,1)*wt
-        vt = v - normal(:,:,:,2)*wt
-        wt = w - normal(:,:,:,3)*wt
-
-        ! print *, "tangential velocity = ", sqrt(ut(39,83,1)**2 + vt(39,83,1)**2 + wt(39,83,1)**2)
-
-        dutdx => duidxj(:,:,:,1); dutdy => duidxj(:,:,:,2); dutdz => duidxj(:,:,:,3);
-        dvtdx => duidxj(:,:,:,4); dvtdy => duidxj(:,:,:,5); dvtdz => duidxj(:,:,:,6);
-        dwtdx => duidxj(:,:,:,7); dwtdy => duidxj(:,:,:,8); dwtdz => duidxj(:,:,:,9);
-        
-        call gradient(this%decomp, this%der, ut, dutdx, dutdy, dutdz, -x_bc,  y_bc,  z_bc)
-        call gradient(this%decomp, this%der, vt, dvtdx, dvtdy, dvtdz,  x_bc, -y_bc,  z_bc)
-        call gradient(this%decomp, this%der, wt, dwtdx, dwtdy, dwtdz,  x_bc,  y_bc, -z_bc)
-
-        ! Get the normal derivative of the tangential velocity and recast them in 3D coordinates as a tensor
-        tmp = dutdx*normal(:,:,:,1) + dutdy*normal(:,:,:,2) + dutdz*normal(:,:,:,3)
-        dutdx = tmp*normal(:,:,:,1); dutdy = tmp*normal(:,:,:,2); dutdz = tmp*normal(:,:,:,3); 
-
-        tmp = dvtdx*normal(:,:,:,1) + dvtdy*normal(:,:,:,2) + dvtdz*normal(:,:,:,3)
-        dvtdx = tmp*normal(:,:,:,1); dvtdy = tmp*normal(:,:,:,2); dvtdz = tmp*normal(:,:,:,3); 
-
-        tmp = dwtdx*normal(:,:,:,1) + dwtdy*normal(:,:,:,2) + dwtdz*normal(:,:,:,3)
-        dwtdx = tmp*normal(:,:,:,1); dwtdy = tmp*normal(:,:,:,2); dwtdz = tmp*normal(:,:,:,3); 
-
         detg = this%g11*(this%g22*this%g33-this%g23*this%g32) &
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
              + this%g13*(this%g21*this%g32-this%g31*this%g22)
@@ -622,58 +552,74 @@ contains
         tmp = (rho*this%Ys + this%elastic%rho0*detg*epssmall)/(this%VF + epssmall)   
         ! tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
 
-        if(present(rho0mix)) then
-            penalty = etafac*(rho/rho0mix/detg - one)/dt
+        if (this%elastic%mu < eps) then
+            penalty = zero
         else
-            penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
+            if(present(rho0mix)) then
+                penalty = etafac*(rho/rho0mix/detg - one)/dt
+            else
+                penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
+            endif
+            if(this%pRelax) penalty = this%VF*etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density -- change2
+            if(this%pEqb) then  !--actually, these source terms should be included for PTeqb as well -- NSG
+                ! add Fsource term to penalty 
+                penalty = penalty - src/this%VF
+            endif
         endif
-        if(this%pRelax) penalty = this%VF*etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density -- change2
 
-        if (this%elastic%mu < eps) penalty = zero
+!!!!!!!!--------OLD BLOCK :: OPERATING ON VECTOR-COMPONENTS AT A TIME----!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!--------This worked OK for Cartesian Meshes-----------------------!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!        tmp = -u*this%g11-v*this%g12-w*this%g13
+!!        call gradient(this%decomp,this%der,x,y,z,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),coordsys,-x_bc, y_bc, z_bc)
+!!        
+!!        call curl(this%decomp, this%der, x, y, z, this%g11, this%g12, this%g13, curlg, coordsys, -x_bc, y_bc, z_bc)
+!!        rhsg(:,:,:,1) = rhsg(:,:,:,1) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g11
+!!        rhsg(:,:,:,2) = rhsg(:,:,:,2) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g12
+!!        rhsg(:,:,:,3) = rhsg(:,:,:,3) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g13
+!! 
+!!        tmp = -u*this%g21-v*this%g22-w*this%g23
+!!        call gradient(this%decomp,this%der,x,y,z,tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6),coordsys, x_bc,-y_bc, z_bc)   
+!!        
+!!        call curl(this%decomp, this%der, x, y, z, this%g21, this%g22, this%g23, curlg, coordsys, x_bc, -y_bc, z_bc)
+!!        rhsg(:,:,:,4) = rhsg(:,:,:,4) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g21
+!!        rhsg(:,:,:,5) = rhsg(:,:,:,5) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g22
+!!        rhsg(:,:,:,6) = rhsg(:,:,:,6) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g23
+!! 
+!!        tmp = -u*this%g31-v*this%g32-w*this%g33
+!!        call gradient(this%decomp,this%der,x,y,z,tmp,rhsg(:,:,:,7),rhsg(:,:,:,8),rhsg(:,:,:,9),coordsys, x_bc, y_bc,-z_bc)
+!!
+!!        call curl(this%decomp, this%der, x, y, z, this%g31, this%g32, this%g33, curlg, coordsys, x_bc, y_bc, -z_bc)
+!!        rhsg(:,:,:,7) = rhsg(:,:,:,7) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g31
+!!        rhsg(:,:,:,8) = rhsg(:,:,:,8) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g32
+!!        rhsg(:,:,:,9) = rhsg(:,:,:,9) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g33
+!!!!!!!!--------OLD BLOCK :: OPERATING ON VECTOR-COMPONENTS AT A TIME----!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-        if(this%pEqb) then  !--actually, these source terms should be included for PTeqb as well -- NSG
-            ! add Fsource term to penalty 
-            penalty = penalty - src/this%VF
-        endif
+!!!!!!!!--------NEW BLOCK :: OPERATING ON FULL VECTOR AT A TIME----!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+         ! Evaluate [ Del x g^T ] :: Note that indices of this%g are transposed
+         call curl(this%decomp, this%der, x, y, z, &
+                   this%g11, this%g21, this%g31, this%g12, this%g22, this%g32, this%g13, this%g23, this%g33, &
+                   ttxx, ttxy, ttxz, ttyx, ttyy, ttyz, ttzx, ttzy, ttzz, &
+                   coordsys, x_bc, y_bc, z_bc   )
 
-        tmp = -u*this%g11-v*this%g12-w*this%g13
-        call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-x_bc, y_bc, z_bc)
-        
-        call curl(this%decomp, this%der, this%g11, this%g12, this%g13, curlg, -x_bc, y_bc, z_bc)
-        ! call P_MAXLOC( abs(penalty*this%g11), pmax, imax, jmax, kmax, rmax)
-        ! if (nrank == rmax) then
-        !     print*, "Maximum penalty term = ", pmax
-        !     print*, "        curl    term = ", v(imax,jmax,kmax)*curlg(imax,jmax,kmax,3) - w(imax,jmax,kmax)*curlg(imax,jmax,kmax,2)
-        !     print*, "        g11          = ", this%g11(imax,jmax,kmax)
-        !     print*, "        VF           = ", this%VF(imax,jmax,kmax)
-        ! end if
-        ! call P_MAXLOC( abs(v*curlg(:,:,:,3) - w*curlg(:,:,:,2)), pmax, imax, jmax, kmax, rmax)
-        ! if (nrank == rmax) then
-        !     print*, "Maximum curl    term = ", pmax
-        !     print*, "        penalty term = ", penalty(imax,jmax,kmax)*this%g11(imax,jmax,kmax)
-        !     print*, "        g11          = ", this%g11(imax,jmax,kmax)
-        !     print*, "        VF           = ", this%VF(imax,jmax,kmax)
-        !     print*, ""
-        ! end if
-        rhsg(:,:,:,1) = rhsg(:,:,:,1) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g11 + mask*(this%g11*dutdx + this%g12*dvtdx + this%g13*dwtdx)
-        rhsg(:,:,:,2) = rhsg(:,:,:,2) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g12 + mask*(this%g11*dutdy + this%g12*dvtdy + this%g13*dwtdy)
-        rhsg(:,:,:,3) = rhsg(:,:,:,3) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g13 + mask*(this%g11*dutdz + this%g12*dvtdz + this%g13*dwtdz)
- 
-        tmp = -u*this%g21-v*this%g22-w*this%g23
-        call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6), x_bc,-y_bc, z_bc)   
-        
-        call curl(this%decomp, this%der, this%g21, this%g22, this%g23, curlg, x_bc, -y_bc, z_bc)
-        rhsg(:,:,:,4) = rhsg(:,:,:,4) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g21 + mask*(this%g21*dutdx + this%g22*dvtdx + this%g23*dwtdx)
-        rhsg(:,:,:,5) = rhsg(:,:,:,5) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g22 + mask*(this%g21*dutdy + this%g22*dvtdy + this%g23*dwtdy)
-        rhsg(:,:,:,6) = rhsg(:,:,:,6) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g23 + mask*(this%g21*dutdz + this%g22*dvtdz + this%g23*dwtdz)
- 
-        tmp = -u*this%g31-v*this%g32-w*this%g33
-        call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,7),rhsg(:,:,:,8),rhsg(:,:,:,9), x_bc, y_bc,-z_bc)
+         ! Evaluate [ u x [ Del x g^T ]^T ] :: Note that indices of rhsg are transposed
+         call crossprod(u, v, w, ttxx, ttxy, ttxz, ttyx, ttyy, ttyz, ttzx, ttzy, ttzz, &
+                        rhsg(:,:,:,1), rhsg(:,:,:,4), rhsg(:,:,:,7), &
+                        rhsg(:,:,:,2), rhsg(:,:,:,5), rhsg(:,:,:,8), &
+                        rhsg(:,:,:,3), rhsg(:,:,:,6), rhsg(:,:,:,9) )
 
-        call curl(this%decomp, this%der, this%g31, this%g32, this%g33, curlg, x_bc, y_bc, -z_bc)
-        rhsg(:,:,:,7) = rhsg(:,:,:,7) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g31 + mask*(this%g31*dutdx + this%g32*dvtdx + this%g33*dwtdx)
-        rhsg(:,:,:,8) = rhsg(:,:,:,8) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g32 + mask*(this%g31*dutdy + this%g32*dvtdy + this%g33*dwtdy)
-        rhsg(:,:,:,9) = rhsg(:,:,:,9) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g33 + mask*(this%g31*dutdz + this%g32*dvtdz + this%g33*dwtdz)
+         cx = this%g11*u + this%g12*v + this%g13*w
+         cy = this%g21*u + this%g22*v + this%g23*w
+         cz = this%g31*u + this%g32*v + this%g33*w
+
+         ! Evaluate [ Grad ( g . u ) ]
+         call gradient(this%decomp, this%der, x, y, z, cx, cy, cz, &
+                   ttxx, ttxy, ttxz, ttyx, ttyy, ttyz, ttzx, ttzy, ttzz, &
+                   coordsys,x_bc, y_bc, z_bc )
+
+!!!!!!!!--------NEW BLOCK :: OPERATING ON FULL VECTOR AT A TIME----!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+        if (this%sliding) call this%sliding_correction(x,y,z,u,v,w,normal,mask,rhsg,coordsys,x_bc,y_bc,z_bc)
 
         if (this%plast) then
             if(this%explPlast) then
@@ -689,22 +635,76 @@ contains
 
     end subroutine
 
-    subroutine update_gTg(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,rho0mix,mumix,yieldmix,solidVF)
+    subroutine sliding_correction(this,x,y,z,u,v,w,normal,mask,rhsg,coordsys,x_bc,y_bc,z_bc)
+        use operators, only: gradient
+        class(solid), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp  ), intent(in)  :: x,y,z,u,v,w,mask
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in)  :: normal
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
+        integer,                                              intent(in) :: coordsys
+        integer,     dimension(2),                            intent(in) :: x_bc, y_bc, z_bc
+
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp)           :: tmp, ut, vt, wt
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
+        real(rkind), dimension(:,:,:), pointer :: dutdx,dutdy,dutdz,dvtdx,dvtdy,dvtdz,dwtdx,dwtdy,dwtdz
+
+        ! Magnitude of normal velocity
+        wt = u*normal(:,:,:,1) + v*normal(:,:,:,2) + w*normal(:,:,:,3)
+
+        ! Get tangential velocity
+        ut = u - normal(:,:,:,1)*wt
+        vt = v - normal(:,:,:,2)*wt
+        wt = w - normal(:,:,:,3)*wt
+
+        dutdx => duidxj(:,:,:,1); dutdy => duidxj(:,:,:,2); dutdz => duidxj(:,:,:,3);
+        dvtdx => duidxj(:,:,:,4); dvtdy => duidxj(:,:,:,5); dvtdz => duidxj(:,:,:,6);
+        dwtdx => duidxj(:,:,:,7); dwtdy => duidxj(:,:,:,8); dwtdz => duidxj(:,:,:,9);
+        
+        call gradient(this%decomp, this%der, x, y, z, ut, dutdx, dutdy, dutdz, coordsys, -x_bc,  y_bc,  z_bc)
+        call gradient(this%decomp, this%der, x, y, z, vt, dvtdx, dvtdy, dvtdz, coordsys,  x_bc, -y_bc,  z_bc)
+        call gradient(this%decomp, this%der, x, y, z, wt, dwtdx, dwtdy, dwtdz, coordsys,  x_bc,  y_bc, -z_bc)
+
+        ! Get the normal derivative of the tangential velocity and recast them in 3D coordinates as a tensor
+        tmp = dutdx*normal(:,:,:,1) + dutdy*normal(:,:,:,2) + dutdz*normal(:,:,:,3)
+        dutdx = tmp*normal(:,:,:,1); dutdy = tmp*normal(:,:,:,2); dutdz = tmp*normal(:,:,:,3); 
+
+        tmp = dvtdx*normal(:,:,:,1) + dvtdy*normal(:,:,:,2) + dvtdz*normal(:,:,:,3)
+        dvtdx = tmp*normal(:,:,:,1); dvtdy = tmp*normal(:,:,:,2); dvtdz = tmp*normal(:,:,:,3); 
+
+        tmp = dwtdx*normal(:,:,:,1) + dwtdy*normal(:,:,:,2) + dwtdz*normal(:,:,:,3)
+        dwtdx = tmp*normal(:,:,:,1); dwtdy = tmp*normal(:,:,:,2); dwtdz = tmp*normal(:,:,:,3); 
+
+        rhsg(:,:,:,1) = rhsg(:,:,:,1) + mask*(this%g11*dutdx + this%g12*dvtdx + this%g13*dwtdx)
+        rhsg(:,:,:,2) = rhsg(:,:,:,2) + mask*(this%g11*dutdy + this%g12*dvtdy + this%g13*dwtdy)
+        rhsg(:,:,:,3) = rhsg(:,:,:,3) + mask*(this%g11*dutdz + this%g12*dvtdz + this%g13*dwtdz)
+
+        rhsg(:,:,:,4) = rhsg(:,:,:,4) + mask*(this%g21*dutdx + this%g22*dvtdx + this%g23*dwtdx)
+        rhsg(:,:,:,5) = rhsg(:,:,:,5) + mask*(this%g21*dutdy + this%g22*dvtdy + this%g23*dwtdy)
+        rhsg(:,:,:,6) = rhsg(:,:,:,6) + mask*(this%g21*dutdz + this%g22*dvtdz + this%g23*dwtdz)
+
+
+        rhsg(:,:,:,7) = rhsg(:,:,:,7) + mask*(this%g31*dutdx + this%g32*dvtdx + this%g33*dwtdx)
+        rhsg(:,:,:,8) = rhsg(:,:,:,8) + mask*(this%g31*dutdy + this%g32*dvtdy + this%g33*dwtdy)
+        rhsg(:,:,:,9) = rhsg(:,:,:,9) + mask*(this%g31*dutdz + this%g32*dvtdz + this%g33*dwtdz)
+    end subroutine
+
+    subroutine update_gTg(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,coordsys,rho0mix,mumix,yieldmix,solidVF)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
-        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer, dimension(2),                                intent(in) :: x_bc, y_bc, z_bc
+        integer,                                              intent(in) :: coordsys
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in), optional  :: rho0mix, mumix, yieldmix, solidVF
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for gTg tensor equation
 
         if(present(rho0mix) .and. present(solidVF)) then
-            call this%getRHS_gTg(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
+            call this%getRHS_gTg(rho,u,v,w,x,y,z,dt,src,rhsg,coordsys,x_bc,y_bc,z_bc,rho0mix,solidVF)
         else
-            call this%getRHS_gTg(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
+            call this%getRHS_gTg(rho,u,v,w,x,y,z,dt,src,rhsg,coordsys,x_bc,y_bc,z_bc)
         endif
         call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
@@ -725,13 +725,14 @@ contains
 
     end subroutine
 
-    subroutine getRHS_gTg(this,rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
-        use operators, only: gradient, curl
+    subroutine getRHS_gTg(this,rho,u,v,w,x,y,z,dt,src,rhsg,coordsys,x_bc,y_bc,z_bc,rho0mix,solidVF)
+        use operators, only: gradient
         class(solid),                                         intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,x,y,z,src
         real(rkind),                                          intent(in)  :: dt
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
-        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer, dimension(2),                                intent(in) :: x_bc, y_bc, z_bc
+        integer,                                              intent(in) :: coordsys
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in), optional :: rho0mix, solidVF
 
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
@@ -746,9 +747,9 @@ contains
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
         
-        call gradient(this%decomp, this%der, u, dudx, dudy, dudz, -x_bc,  y_bc,  z_bc)
-        call gradient(this%decomp, this%der, v, dvdx, dvdy, dvdz,  x_bc, -y_bc,  z_bc)
-        call gradient(this%decomp, this%der, w, dwdx, dwdy, dwdz,  x_bc,  y_bc, -z_bc)
+        call gradient(this%decomp, this%der, x, y, z, u, dudx, dudy, dudz, coordsys, -x_bc,  y_bc,  z_bc)
+        call gradient(this%decomp, this%der, x, y, z, v, dvdx, dvdy, dvdz, coordsys,  x_bc, -y_bc,  z_bc)
+        call gradient(this%decomp, this%der, x, y, z, w, dwdx, dwdy, dwdz, coordsys,  x_bc,  y_bc, -z_bc)
 
         ! Symmetry and anti-symmetry properties of gTg are assumed as below (same as g)
         ! In x gTg_{ij}: [S A A; A S S; A S S]
@@ -771,29 +772,29 @@ contains
             penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
         endif
 
-        call gradient(this%decomp, this%der, this%G11, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc, y_bc, z_bc)
+        call gradient(this%decomp,this%der,x,y,z,this%G11,gradG(:,:,:,1),gradG(:,:,:,2),gradG(:,:,:,3),coordsys,x_bc,y_bc,z_bc)
         rhsg(:,:,:,1) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
                         - (dudx*this%G11 + dvdx*this%G21 + dwdx*this%G31) &
                         - (this%G11*dudx + this%G12*dvdx + this%G13*dwdx) + penalty*this%G11
 
-        call gradient(this%decomp, this%der, this%G12, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3),-x_bc,-y_bc, z_bc)
+        call gradient(this%decomp,this%der,x,y,z,this%G12,gradG(:,:,:,1),gradG(:,:,:,2),gradG(:,:,:,3),coordsys,-x_bc,-y_bc,z_bc)
         rhsg(:,:,:,2) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
                         - (dudx*this%G12 + dvdx*this%G22 + dwdx*this%G32) &
                         - (this%G11*dudy + this%G12*dvdy + this%G13*dwdy) + penalty*this%G12
 
-        call gradient(this%decomp, this%der, this%G13, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3),-x_bc, y_bc,-z_bc)
+        call gradient(this%decomp,this%der,x,y,z,this%G13,gradG(:,:,:,1),gradG(:,:,:,2),gradG(:,:,:,3),coordsys,-x_bc,y_bc,-z_bc)
         rhsg(:,:,:,3) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
                         - (dudx*this%G13 + dvdx*this%G23 + dwdx*this%G33) &
                         - (this%G11*dudz + this%G12*dvdz + this%G13*dwdz) + penalty*this%G13
 
         rhsg(:,:,:,4) = rhsg(:,:,:,2)  ! Since symmetric
 
-        call gradient(this%decomp, this%der, this%G22, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc, y_bc, z_bc)
+        call gradient(this%decomp,this%der,x,y,z,this%G22,gradG(:,:,:,1),gradG(:,:,:,2),gradG(:,:,:,3),coordsys,x_bc,y_bc,z_bc)
         rhsg(:,:,:,5) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
                         - (dudy*this%G12 + dvdy*this%G22 + dwdy*this%G32) &
                         - (this%G21*dudy + this%G22*dvdy + this%G23*dwdy) + penalty*this%G22
 
-        call gradient(this%decomp, this%der, this%G23, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc,-y_bc,-z_bc)
+        call gradient(this%decomp,this%der,x,y,z,this%G23,gradG(:,:,:,1),gradG(:,:,:,2),gradG(:,:,:,3),coordsys,x_bc,-y_bc,-z_bc)
         rhsg(:,:,:,6) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
                         - (dudy*this%G13 + dvdy*this%G23 + dwdy*this%G33) &
                         - (this%G21*dudz + this%G22*dvdz + this%G23*dwdz) + penalty*this%G23
@@ -801,7 +802,7 @@ contains
         rhsg(:,:,:,7) = rhsg(:,:,:,3)  ! Since symmetric
         rhsg(:,:,:,8) = rhsg(:,:,:,6)  ! Since symmetric
 
-        call gradient(this%decomp, this%der, this%G33, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc, y_bc, z_bc)
+        call gradient(this%decomp,this%der,x,y,z,this%G33,gradG(:,:,:,1),gradG(:,:,:,2),gradG(:,:,:,3),coordsys,x_bc,y_bc,z_bc)
         rhsg(:,:,:,9) = - (u*gradG(:,:,:,1) + v*gradG(:,:,:,2) + w*gradG(:,:,:,3)) &
                         - (dudz*this%G13 + dvdz*this%G23 + dwdz*this%G33) &
                         - (this%G31*dudz + this%G32*dvdz + this%G33*dwdz) + penalty*this%G33
@@ -858,18 +859,18 @@ contains
 
     end subroutine
 
-    subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+    subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc,coordsys)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z,rho,u,v,w
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsYs  ! RHS for mass fraction equation
 
-        call this%getRHS_Ys(rho,u,v,w,rhsYs,x_bc,y_bc,z_bc)
+        call this%getRHS_Ys(rho,u,v,w,x,y,z,rhsYs,x_bc,y_bc,z_bc,coordsys)
         call hook_material_mass_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsYs)
 
         ! advance sub-step
@@ -878,12 +879,13 @@ contains
         this%consrv(:,:,:,1) = this%consrv(:,:,:,1)  + RK45_B(isub)*this%QtmpYs
     end subroutine
 
-    subroutine getRHS_Ys(this,rho,u,v,w,rhsYs,x_bc,y_bc,z_bc)
+    subroutine getRHS_Ys(this,rho,u,v,w,x,y,z,rhsYs,x_bc,y_bc,z_bc,coordsys)
         use operators, only: divergence
         class(solid),                                         intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: rhsYs
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
@@ -892,19 +894,19 @@ contains
         tmp2 = rhsYs*v - this%Ji(:,:,:,2)
         tmp3 = rhsYs*w - this%Ji(:,:,:,3)
 
-        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+        call divergence(this%decomp,this%der,x,y,z,tmp1,tmp2,tmp3,rhsYs,coordsys,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
 
     end subroutine
 
-    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc)
+    subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc,coordsys)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,viscwork,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,x,y,z,divu,viscwork,src
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(in) :: taustar
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhseh  ! RHS for eh equation
 
@@ -912,7 +914,7 @@ contains
             call GracefulExit("update_eh shouldn't be called without pRelax. Exiting.",4809)
         endif
 
-        call this%getRHS_eh(rho,u,v,w,divu,viscwork,src,taustar,rhseh,x_bc,y_bc,z_bc)
+        call this%getRHS_eh(rho,u,v,w,x,y,z,divu,viscwork,src,taustar,rhseh,x_bc,y_bc,z_bc,coordsys)
         call hook_material_energy_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhseh)
 
         ! advance sub-step
@@ -922,14 +924,15 @@ contains
 
     end subroutine
 
-    subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,src,taustar,rhseh,x_bc,y_bc,z_bc)
-        use operators, only: gradient, divergence
+    subroutine getRHS_eh(this,rho,u,v,w,x,y,z,divu,viscwork,src,taustar,rhseh,x_bc,y_bc,z_bc,coordsys)
+        use operators, only: divergence
         class(solid),                                       intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: divu,viscwork,src
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,6), intent(in) :: taustar
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhseh
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3
 
@@ -955,7 +958,7 @@ contains
         endif
 
         ! Take divergence of fluxes
-        call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh,-x_bc,-y_bc,-z_bc)     ! energy has to be anti-symmetric
+        call divergence(this%decomp,this%der,x,y,z,tmp1,tmp2,tmp3,rhseh,coordsys,-x_bc,-y_bc,-z_bc)     ! energy has to be anti-symmetric
 
         if(this%updateEtot) then
             ! Add source
@@ -967,15 +970,15 @@ contains
 
     end subroutine
 
-    subroutine update_VF(this,other,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc)
+    subroutine update_VF(this,other,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc,coordsys)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         class(solid), intent(in)    :: other
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,x,y,z,divu,src
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
 
@@ -983,7 +986,7 @@ contains
             call GracefulExit("update_VF shouldn't be called with PTeqb. Exiting.",4809)
         endif
 
-        call this%getRHS_VF(other,rho,u,v,w,divu,src,rhsVF,x_bc,y_bc,z_bc)
+        call this%getRHS_VF(other,rho,u,v,w,x,y,z,divu,src,rhsVF,x_bc,y_bc,z_bc,coordsys)
         call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
 
         ! advance sub-step
@@ -993,20 +996,21 @@ contains
 
     end subroutine
 
-    subroutine getRHS_VF(this,other,rho,u,v,w,divu,src,rhsVF,x_bc,y_bc,z_bc)
+    subroutine getRHS_VF(this,other,rho,u,v,w,x,y,z,divu,src,rhsVF,x_bc,y_bc,z_bc,coordsys)
         use operators, only: gradient, divergence
         use constants, only: one
         class(solid),                                       intent(in)  :: this
         class(solid),                                       intent(in)  :: other
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,divu,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,x,y,z,divu,src
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        integer,               intent(in) :: coordsys
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3, rhocsq1, rhocsq2
 
         ! Add C/rhom to Fsource
         !--call this%getSpeciesDensity(rho,tmp1)  !-- use this%rhom
-        call divergence(this%decomp,this%der,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),rhsVF,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+        call divergence(this%decomp,this%der,x,y,z,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),rhsVF,coordsys,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
         if(this%pEqb) then
             rhsVF = src - rhsVF/this%rhom
         else
@@ -1014,7 +1018,7 @@ contains
         endif
         if(.not. this%includeSources) rhsVF = zero
 
-        call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
+        call gradient(this%decomp,this%der,x,y,z,-this%VF,tmp1,tmp2,tmp3,coordsys,x_bc,y_bc,z_bc)
 
         rhsVF = rhsVF + u*tmp1 + v*tmp2 + w*tmp3
 
@@ -1164,11 +1168,12 @@ contains
 
     end subroutine
 
-    subroutine get_primitive(this,rho,u,v,w)
+    subroutine get_primitive(this,rho,u,v,w,x,y,z,coordsys)
         use operators, only : gradient
         class(solid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,u,v,w,x,y,z
+        integer,                                              intent(in) :: coordsys
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)               :: rhom
 
         this%Ys = this%consrv(:,:,:,1) / rho
         if(this%pRelax) then
@@ -1185,7 +1190,7 @@ contains
         endif
 
         ! Get gradients of Ys and put in Ji for subsequent use
-        call gradient(this%decomp,this%der,this%Ys,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3))
+        call gradient(this%decomp,this%der,x,y,z,this%Ys,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),coordsys)
 
     end subroutine
 
