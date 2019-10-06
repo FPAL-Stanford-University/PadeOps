@@ -1,0 +1,5 @@
+Why getSpeciesDensity and getSpeciesDensity_from_g ?
+What is the correct SOS for OneG?
+What is with -x_bc in some cases?
+
+For PTEqb, we use sgp%kap; For .not. PTEqb, we use sgp%mix%material(..)%kap

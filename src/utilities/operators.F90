@@ -13,12 +13,20 @@ module operators
         module procedure crossprod_components, crossprod_arrays, crossprod_vec_tens
     end interface
 
+    interface dotprod
+        module procedure dotprod_components, dotprod_symmtens_vec, dotprod_tens_vec
+    end interface
+
     interface curl
         module procedure curl_vec, curl_tens
     end interface
 
     interface gradient
         module procedure gradient_vec, gradient_scalar
+    end interface
+
+    interface divergence
+        module procedure divergence_vec, divergence_symmtens, divergence_tens
     end interface
 
 contains
@@ -56,18 +64,6 @@ contains
         end select
 
     end subroutine 
-
-    subroutine check_size(decomp, f, flag)
-        type(decomp_info), intent(in) :: decomp
-        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(in)   :: f
-        integer, intent(in) :: flag
-        character(len=clen) :: msg
-
-        write(msg,'(a,i4)') "Size of array inconsistent with Y decomp in operators. Check entry number ", flag
-        if ( (size(f,1) .NE. decomp%ysz(1)) .AND. (size(f,2) .NE. decomp%ysz(2)) .AND. (size(f,3) .NE. decomp%ysz(3)) ) then
-            call GracefulExit(trim(msg), 234)
-        end if
-    end subroutine check_size
 
     subroutine gradient_vec(decomp,der,x,y,z,fx,fy,fz,dfxdx,dfxdy,dfxdz,dfydx,dfydy,dfydz,dfzdx,dfzdy,dfzdz,coordsys,x_bc_,y_bc_,z_bc_)
         type(decomp_info), intent(in) :: decomp
@@ -298,7 +294,7 @@ contains
 
     end subroutine 
 
-    subroutine divergence(decomp, der, x, y, z, u, v, w, div, coordsys, x_bc_, y_bc_, z_bc_)
+    subroutine divergence_vec(decomp, der, x, y, z, u, v, w, div, coordsys, x_bc_, y_bc_, z_bc_)
         type(decomp_info), intent(in) :: decomp
         type(derivatives), intent(in) :: der
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(in)  :: x, y, z, u, v, w
@@ -333,6 +329,132 @@ contains
 
     end subroutine
 
+    subroutine divergence_symmtens(decomp, der, x, y, z, fxx, fxy, fxz, fyy, fyz, fzz, divx, divy, divz, coordsys, x_bc_, y_bc_, z_bc_)
+        type(decomp_info), intent(in) :: decomp
+        type(derivatives), intent(in) :: der
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(in)  :: x,y,z,fxx,fxy,fxz,fyy,fyz,fzz
+        real(rkind), dimension(size(x,1), size(x,2), size(x,3)),             intent(out) :: divx,divy,divz
+        integer,                         intent(in) :: coordsys
+        integer, dimension(2), optional, intent(in) :: x_bc_, y_bc_, z_bc_
+        integer, dimension(2) :: x_bc, y_bc, z_bc
+
+        !real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) :: xtmp,xdum
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: ytmp1,ytmp2
+        !real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) :: ztmp,zdum
+        
+        call check_size(decomp,fxx, 45);   call check_size(decomp,fxy, 46);  call check_size(decomp,fxz, 47);
+        call check_size(decomp,fyy, 48);   call check_size(decomp,fyz, 49);  call check_size(decomp,fzz, 50);
+        call check_size(decomp,divx,51);   call check_size(decomp,divy,51);  call check_size(decomp,divz,51);
+
+        x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
+        y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
+        z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
+
+
+        select case(coordsys)
+        case(0) ! Cartesian
+            ! -------------------Step 1 :: divx------------------------
+            call der_x(decomp, der, fxx, divx,  x_bc(1),x_bc(2))
+            call der_y(decomp, der, fxy, ytmp1, y_bc(1),y_bc(2))
+            call der_z(decomp, der, fxz, ytmp2, z_bc(1),z_bc(2))
+            divx = divx + ytmp1 + ytmp2
+            ! -------------------Step 2 :: divy------------------------
+            call der_x(decomp, der, fxy, divy,  x_bc(1),x_bc(2))
+            call der_y(decomp, der, fyy, ytmp1, y_bc(1),y_bc(2))
+            call der_z(decomp, der, fyz, ytmp2, z_bc(1),z_bc(2))
+            divy = divy + ytmp1 + ytmp2
+            ! -------------------Step 3 :: divz------------------------
+            call der_x(decomp, der, fxz, divz,  x_bc(1),x_bc(2))
+            call der_y(decomp, der, fyz, ytmp1, y_bc(1),y_bc(2))
+            call der_z(decomp, der, fzz, ytmp2, z_bc(1),z_bc(2))
+            divz = divz + ytmp1 + ytmp2
+            ! ---------------------------------------------------------
+        case(1) ! Cylindrical
+            ! -------------------Step 1 :: divx------------------------
+            call der_x(decomp, der, fxx, divx,  x_bc(1),x_bc(2))
+            call der_y(decomp, der, fxy, ytmp1, y_bc(1),y_bc(2))
+            call der_z(decomp, der, fxz, ytmp2, z_bc(1),z_bc(2))
+            divx = divx + (ytmp1 + fxx - fyy)/x + ytmp2
+            ! -------------------Step 2 :: divy------------------------
+            call der_x(decomp, der, fxy, divy,  x_bc(1),x_bc(2))
+            call der_y(decomp, der, fyy, ytmp1, y_bc(1),y_bc(2))
+            call der_z(decomp, der, fyz, ytmp2, z_bc(1),z_bc(2))
+            divy = divy + (ytmp1 + fxy + fxy)/x + ytmp2
+            ! -------------------Step 3 :: divz------------------------
+            call der_x(decomp, der, fxz, divz,  x_bc(1),x_bc(2))
+            call der_y(decomp, der, fyz, ytmp1, y_bc(1),y_bc(2))
+            call der_z(decomp, der, fzz, ytmp2, z_bc(1),z_bc(2))
+            divz = divz + (ytmp1 + fxz)/x + ytmp2
+            ! ---------------------------------------------------------
+        case(2) ! Spherical
+            call GracefulExit("Divergence of a tensor in spherical coordinates not implemented yet", 234)
+        end select
+
+    end subroutine
+
+    subroutine divergence_tens(decomp, der, x, y, z, fxx, fxy, fxz, fyx, fyy, fyz, fzx, fzy, fzz, divx, divy, divz, coordsys, x_bc_, y_bc_, z_bc_)
+        type(decomp_info), intent(in) :: decomp
+        type(derivatives), intent(in) :: der
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(in)  :: x,y,z,fxx,fxy,fxz,fyx,fyy,fyz,fzx,fzy,fzz
+        real(rkind), dimension(size(x,1), size(x,2), size(x,3)),             intent(out) :: divx,divy,divz
+        integer,                         intent(in) :: coordsys
+        integer, dimension(2), optional, intent(in) :: x_bc_, y_bc_, z_bc_
+        integer, dimension(2) :: x_bc, y_bc, z_bc
+
+        !real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) :: xtmp,xdum
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: ytmp1,ytmp2
+        !real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) :: ztmp,zdum
+        
+        call check_size(decomp,fxx, 45);   call check_size(decomp,fxy, 46);  call check_size(decomp,fxz, 47);
+        call check_size(decomp,fyy, 48);   call check_size(decomp,fyz, 49);  call check_size(decomp,fzz, 50);
+        call check_size(decomp,divx,51);   call check_size(decomp,divy,51);  call check_size(decomp,divz,51);
+
+        x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
+        y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
+        z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
+
+
+        select case(coordsys)
+        case(0) ! Cartesian
+            ! -------------------Step 1 :: divx------------------------
+            call der_x(decomp, der, fxx, divx,  x_bc(1),x_bc(2))
+            call der_y(decomp, der, fyx, ytmp1, y_bc(1),y_bc(2))
+            call der_z(decomp, der, fzx, ytmp2, z_bc(1),z_bc(2))
+            divx = divx + ytmp1 + ytmp2
+            ! -------------------Step 2 :: divy------------------------
+            call der_x(decomp, der, fxy, divy,  x_bc(1),x_bc(2))
+            call der_y(decomp, der, fyy, ytmp1, y_bc(1),y_bc(2))
+            call der_z(decomp, der, fzy, ytmp2, z_bc(1),z_bc(2))
+            divy = divy + ytmp1 + ytmp2
+            ! -------------------Step 3 :: divz------------------------
+            call der_x(decomp, der, fzx, divz,  x_bc(1),x_bc(2))
+            call der_y(decomp, der, fzy, ytmp1, y_bc(1),y_bc(2))
+            call der_z(decomp, der, fzz, ytmp2, z_bc(1),z_bc(2))
+            divz = divz + ytmp1 + ytmp2
+            ! ---------------------------------------------------------
+        case(1) ! Cylindrical
+            ! -------------------Step 1 :: divx------------------------
+            call der_x(decomp, der, fxx, divx,  x_bc(1),x_bc(2))
+            call der_y(decomp, der, fyx, ytmp1, y_bc(1),y_bc(2))
+            call der_z(decomp, der, fzx, ytmp2, z_bc(1),z_bc(2))
+            divx = divx + (ytmp1 + fxx - fyy)/x + ytmp2
+            ! -------------------Step 2 :: divy------------------------
+            call der_x(decomp, der, fxy, divy,  x_bc(1),x_bc(2))
+            call der_y(decomp, der, fyy, ytmp1, y_bc(1),y_bc(2))
+            call der_z(decomp, der, fzy, ytmp2, z_bc(1),z_bc(2))
+            divy = divy + (ytmp1 + fxy + fyx)/x + ytmp2
+            ! -------------------Step 3 :: divz------------------------
+            call der_x(decomp, der, fxz, divz,  x_bc(1),x_bc(2))
+            call der_y(decomp, der, fyz, ytmp1, y_bc(1),y_bc(2))
+            call der_z(decomp, der, fzz, ytmp2, z_bc(1),z_bc(2))
+            divz = divz + (ytmp1 + fxz)/x + ytmp2
+            ! ---------------------------------------------------------
+        case(2) ! Spherical
+            call GracefulExit("Divergence of a tensor in spherical coordinates not implemented yet", 234)
+        end select
+
+    end subroutine
+
     subroutine crossprod_vec_tens(ux,uy,uz,fxx,fxy,fxz,fyx,fyy,fyz,fzx,fzy,fzz,ttxx,ttxy,ttxz,ttyx,ttyy,ttyz,ttzx,ttzy,ttzz)
         real(kind=rkind), dimension(:,:,:), intent(in) :: ux,uy,uz,fxx,fxy,fxz,fyx,fyy,fyz,fzx,fzy,fzz
         real(kind=rkind), dimension(:,:,:), intent(out) :: ttxx,ttxy,ttxz,ttyx,ttyy,ttyz,ttzx,ttzy,ttzz
@@ -343,6 +465,34 @@ contains
     
     end subroutine crossprod_vec_tens
     
+    subroutine dotprod_components(ux,uy,uz,vx,vy,vz,r)
+        real(kind=rkind), dimension(:,:,:), intent(in) :: ux,uy,uz,vx,vy,vz
+        real(kind=rkind), dimension(:,:,:), intent(out) :: r
+    
+        r = ux*ux + uy*uy + uz*uz
+    
+    end subroutine dotprod_components
+
+    subroutine dotprod_tens_vec(fxx,fxy,fxz,fyx,fyy,fyz,fzx,fzy,fzz,ux,uy,uz,rx,ry,rz)
+        real(kind=rkind), dimension(:,:,:), intent(in)  :: fxx,fxy,fxz,fyx,fyy,fyz,fzx,fzy,fzz,ux,uy,uz
+        real(kind=rkind), dimension(:,:,:), intent(out) :: rx,ry,rz
+
+        rx = fxx*ux + fxy*uy + fxz*uz 
+        ry = fyx*ux + fyy*uy + fyz*uz 
+        rx = fzx*ux + fzy*uy + fzz*uz 
+
+    end subroutine dotprod_tens_vec
+    
+    subroutine dotprod_symmtens_vec(fxx,fxy,fxz,fyy,fyz,fzz,ux,uy,uz,rx,ry,rz)
+        real(kind=rkind), dimension(:,:,:), intent(in)  :: fxx,fxy,fxz,fyy,fyz,fzz,ux,uy,uz
+        real(kind=rkind), dimension(:,:,:), intent(out) :: rx,ry,rz
+
+        rx = fxx*ux + fxy*uy + fxz*uz 
+        ry = fxy*ux + fyy*uy + fyz*uz 
+        rx = fxz*ux + fyz*uy + fzz*uz 
+
+    end subroutine dotprod_symmtens_vec
+
     subroutine crossprod_components(rx,ry,rz,ux,uy,uz,vx,vy,vz)
         real(kind=rkind), dimension(:,:,:), intent(in) :: ux,uy,uz,vx,vy,vz
         real(kind=rkind), dimension(:,:,:), intent(out) :: rx,ry,rz
@@ -466,5 +616,17 @@ contains
         call transpose_z_to_y(zdum,fout, decomp)
 
     end subroutine der_z
+
+    subroutine check_size(decomp, f, flag)
+        type(decomp_info), intent(in) :: decomp
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(in)   :: f
+        integer, intent(in) :: flag
+        character(len=clen) :: msg
+
+        write(msg,'(a,i4)') "Size of array inconsistent with Y decomp in operators. Check entry number ", flag
+        if ( (size(f,1) .NE. decomp%ysz(1)) .AND. (size(f,2) .NE. decomp%ysz(2)) .AND. (size(f,3) .NE. decomp%ysz(3)) ) then
+            call GracefulExit(trim(msg), 234)
+        end if
+    end subroutine check_size
 
 end module

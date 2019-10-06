@@ -104,8 +104,8 @@ module SolidGrid
         contains
             procedure          :: init
             procedure          :: destroy
-            procedure          :: laplacian
-            procedure          :: gradient 
+            !procedure          :: laplacian
+            !procedure          :: gradient 
             procedure          :: advance_RK45
             procedure          :: simulate
             procedure, private :: get_dt
@@ -113,13 +113,13 @@ module SolidGrid
             procedure, private :: get_conserved
             procedure, private :: post_bc
             procedure, private :: getRHS
-            procedure, private :: getRHS_x
-            procedure, private :: getRHS_y
-            procedure, private :: getRHS_z
-            procedure          :: filter
+            !procedure, private :: getRHS_x
+            !procedure, private :: getRHS_y
+            !procedure, private :: getRHS_z
+            !procedure          :: filter
             procedure          :: getPhysicalProperties
             procedure, private :: get_tau
-            procedure, private :: get_q
+            !procedure, private :: get_q
     end type
 
 contains
@@ -267,9 +267,18 @@ contains
 
         this%coordsys = coordsys
         if( ((this%coordsys==1) .or. (this%coordsys==2)) .and. (.not. this%xcentered) ) then
-            call GracefulExit("xcentered must be true of coordsys is Cylindrical or Spherical",4634)
+            call GracefulExit("xcentered must be true if coordsys is Cylindrical or Spherical",4634)
         endif
         if(this%coordsys==2) call GracefulExit("Spherical coordinates not implemented yet",4634)
+
+        if(this%coordsys==1) then
+            if((this%ny/=1) .and. (this%x_bc(1)==1) ) then
+                call GracefulExit("x_bc(1) must be 0 if problem is cylindrical but not axisymmetric",4634)
+            endif
+            if((this%ny==1) .and. (this%x_bc(2)==1) ) then
+                call GracefulExit("x_bc(2) must not be 1 if problem is cylindrical and axisymmetric",4634)
+            endif
+        endif
 
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
@@ -469,84 +478,85 @@ contains
 
     end subroutine
 
-    subroutine gradient(this, f, dfdx, dfdy, dfdz, x_bc, y_bc, z_bc)
-        class(sgrid),target, intent(inout) :: this
-        real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
-        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdx
-        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdy
-        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdz
-        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+    !subroutine gradient(this, f, dfdx, dfdy, dfdz, x_bc, y_bc, z_bc)
+    !    class(sgrid),target, intent(inout) :: this
+    !    real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
+    !    real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdx
+    !    real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdy
+    !    real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdz
+    !    integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
 
-        type(derivatives), pointer :: der
-        type(decomp_info), pointer :: decomp
-        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum
-        
-        der => this%der
-        decomp => this%decomp
-        xtmp => this%xbuf(:,:,:,1)
-        xdum => this%xbuf(:,:,:,2)
-        ztmp => this%zbuf(:,:,:,1)
-        zdum => this%zbuf(:,:,:,2)
+    !    type(derivatives), pointer :: der
+    !    type(decomp_info), pointer :: decomp
+    !    real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum
+    !    
+    !    der => this%der
+    !    decomp => this%decomp
+    !    xtmp => this%xbuf(:,:,:,1)
+    !    xdum => this%xbuf(:,:,:,2)
+    !    ztmp => this%zbuf(:,:,:,1)
+    !    zdum => this%zbuf(:,:,:,2)
 
-        ! Get Y derivatives
-        call der%ddy(f,dfdy,y_bc(1),y_bc(2))
+    !    ! Get Y derivatives
+    !    call der%ddy(f,dfdy,y_bc(1),y_bc(2))
 
-        ! Get X derivatives
-        call transpose_y_to_x(f,xtmp,decomp)
-        call der%ddx(xtmp,xdum,x_bc(1),x_bc(2))
-        call transpose_x_to_y(xdum,dfdx)
+    !    ! Get X derivatives
+    !    call transpose_y_to_x(f,xtmp,decomp)
+    !    call der%ddx(xtmp,xdum,x_bc(1),x_bc(2))
+    !    call transpose_x_to_y(xdum,dfdx)
 
-        ! Get Z derivatives
-        call transpose_y_to_z(f,ztmp,decomp)
-        call der%ddz(ztmp,zdum,z_bc(1),z_bc(2))
-        call transpose_z_to_y(zdum,dfdz)
+    !    ! Get Z derivatives
+    !    call transpose_y_to_z(f,ztmp,decomp)
+    !    call der%ddz(ztmp,zdum,z_bc(1),z_bc(2))
+    !    call transpose_z_to_y(zdum,dfdz)
 
-    end subroutine 
+    !end subroutine 
 
-    subroutine laplacian(this, f, lapf, x_bc, y_bc, z_bc)
-        use timer
-        class(sgrid),target, intent(inout) :: this
-        real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
-        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
-        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
-        
-        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum, ytmp
-        type(derivatives), pointer :: der
-        type(decomp_info), pointer :: decomp
-        
+    !subroutine laplacian(this, f, lapf, x_bc, y_bc, z_bc)
+    !    use timer
+    !    class(sgrid),target, intent(inout) :: this
+    !    real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
+    !    real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
+    !    integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+    !    
+    !    real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum, ytmp
+    !    type(derivatives), pointer :: der
+    !    type(decomp_info), pointer :: decomp
+    !    
 
-        der => this%der
-        decomp => this%decomp
-        xtmp => this%xbuf(:,:,:,1)
-        xdum => this%xbuf(:,:,:,2)
-        ztmp => this%zbuf(:,:,:,1)
-        zdum => this%zbuf(:,:,:,2)
-        ytmp => this%ybuf(:,:,:,1)
+    !    der => this%der
+    !    decomp => this%decomp
+    !    xtmp => this%xbuf(:,:,:,1)
+    !    xdum => this%xbuf(:,:,:,2)
+    !    ztmp => this%zbuf(:,:,:,1)
+    !    zdum => this%zbuf(:,:,:,2)
+    !    ytmp => this%ybuf(:,:,:,1)
 
-        ! Get Y derivatives
-        call der%d2dy2(f,lapf,y_bc(1),y_bc(2))
-        
-        ! Get X derivatives
-        call transpose_y_to_x(f,xtmp,this%decomp) 
-        call this%der%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
-        call transpose_x_to_y(xdum,ytmp,this%decomp)
+    !    ! Get Y derivatives
+    !    call der%d2dy2(f,lapf,y_bc(1),y_bc(2))
+    !    
+    !    ! Get X derivatives
+    !    call transpose_y_to_x(f,xtmp,this%decomp) 
+    !    call this%der%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
+    !    call transpose_x_to_y(xdum,ytmp,this%decomp)
 
-        lapf = lapf + ytmp
+    !    lapf = lapf + ytmp
 
-        ! Get Z derivatives
-        call transpose_y_to_z(f,ztmp,this%decomp)
-        call this%der%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
-        call transpose_z_to_y(zdum,ytmp,this%decomp)
-        
-        lapf = lapf + ytmp
+    !    ! Get Z derivatives
+    !    call transpose_y_to_z(f,ztmp,this%decomp)
+    !    call this%der%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
+    !    call transpose_z_to_y(zdum,ytmp,this%decomp)
+    !    
+    !    lapf = lapf + ytmp
 
-    end subroutine
+    !end subroutine
 
     subroutine simulate(this)
         use reductions, only: P_MEAN
         use timer,      only: tic, toc
         use exits,      only: GracefulExit, message, check_exit
         use decomp_2d,  only: nrank
+        use operators,  only: gradient
         class(sgrid), target, intent(inout) :: this
 
         logical :: tcond, vizcond, stepcond
@@ -562,10 +572,12 @@ contains
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
-        
-        call this%gradient(this%u, dudx, dudy, dudz, -this%x_bc,  this%y_bc,  this%z_bc)
-        call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,  this%z_bc)
-        call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
+       
+        call gradient(this%decomp,this%der,this%x,this%y,this%z,this%u,this%v,this%w, &
+                      dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz,this%coordsys,this%x_bc,this%y_bc,this%z_bc)
+        !call this%gradient(this%u, dudx, dudy, dudz, -this%x_bc,  this%y_bc,  this%z_bc)
+        !call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,  this%z_bc)
+        !call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
 
         do i=1,this%mix%ns
             if (this%use_gTg) then
@@ -573,8 +585,9 @@ contains
                 call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g)
             end if
             ! Get massfraction gradients in Ji
-            call this%gradient(this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),&
-                               this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3), this%x_bc,  this%y_bc, this%z_bc)
+            call gradient(this%decomp,this%der,this%x,this%y,this%z,this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3),this%coordsys,this%x_bc,this%y_bc,this%z_bc)
+            !call this%gradient(this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),&
+            !                   this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3), this%x_bc,  this%y_bc, this%z_bc)
         end do
 
         ! compute artificial shear and bulk viscosities
@@ -694,6 +707,7 @@ contains
         use exits,      only: message,nancheck,GracefulExit
         use reductions, only: P_MAXVAL, P_MINVAL
         use decomp_2d,  only: nrank
+        use operators,  only: filter3D
         class(sgrid), target, intent(inout) :: this
 
         real(rkind)                                               :: Qtmpt     ! Temporary variable for RK45
@@ -752,10 +766,14 @@ contains
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
             ! Filter the conserved variables
-            call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
-            call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
-            call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
-            call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+            !call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
+            !call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
+            !call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
+            !call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+            call filter3D(this%decomp, this%fil, this%Wcnsrv(:,:,:,mom_index  ), 1,-this%x_bc, this%y_bc, this%z_bc)
+            call filter3D(this%decomp, this%fil, this%Wcnsrv(:,:,:,mom_index+1), 1, this%x_bc,-this%y_bc, this%z_bc)
+            call filter3D(this%decomp, this%fil, this%Wcnsrv(:,:,:,mom_index+2), 1, this%x_bc, this%y_bc,-this%z_bc)
+            call filter3D(this%decomp, this%fil, this%Wcnsrv(:,:,:, TE_index  ), 1, this%x_bc, this%y_bc, this%z_bc)
 
             ! Filter the individual species variables
             call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
@@ -879,8 +897,7 @@ contains
 
     end subroutine
 
-    !pure subroutine get_conserved(this)
-    subroutine get_conserved(this)
+    pure subroutine get_conserved(this)
         class(sgrid), intent(inout) :: this
 
         ! Assume rho is already available
@@ -912,6 +929,7 @@ contains
     end subroutine
 
     subroutine getRHS(this, rhs, divu, viscwork)
+        use operators,  only: gradient, dotprod, divergence
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv), intent(out) :: rhs
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),     intent(out) :: divu
@@ -920,6 +938,7 @@ contains
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
         real(rkind), dimension(:,:,:), pointer :: qx,qy,qz
+        real(rkind), dimension(:,:,:), pointer :: ytmp1,ytmp2,ytmp3
         real(rkind), dimension(:,:,:), pointer :: ehmix
         integer :: imat
 
@@ -927,9 +946,11 @@ contains
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
         
-        call this%gradient(this%u, dudx, dudy, dudz, -this%x_bc,  this%y_bc,  this%z_bc)
-        call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,  this%z_bc)
-        call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
+        call gradient(this%decomp,this%der,this%x,this%y,this%z,this%u,this%v,this%w, &
+                      dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz,this%coordsys,this%x_bc,this%y_bc,this%z_bc)
+        !call this%gradient(this%u, dudx, dudy, dudz, -this%x_bc,  this%y_bc,  this%z_bc)
+        !call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,  this%z_bc)
+        !call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
 
         divu = dudx + dvdy + dwdz
 
@@ -968,221 +989,261 @@ contains
         ! Get heat conduction vector (q). Stored in remaining 3 components of duidxj 
         qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
         call this%mix%get_qmix(qx, qy, qz)                     ! Get only species diffusion fluxes if PTeqb, else, everything
-        if (this%PTeqb) call this%get_q(qx, qy, qz)            ! add artificial thermal conduction fluxes
+        if (this%PTeqb) then
+            !call this%get_q(qx, qy, qz)            ! add artificial thermal conduction fluxes
+            ytmp1 => this%ybuf(:,:,:,1);  ytmp2 => this%ybuf(:,:,:,2);  ytmp3 => this%ybuf(:,:,:,3)
+            call gradient(this%decomp, this%der, this%x, this%y, this%z, this%T, ytmp1, ytmp2, ytmp3, &
+                          this%coordsys, this%x_bc, this%y_bc, this%z_bc)
+            qx = qx - this%kap*ytmp1
+            qy = qy - this%kap*ytmp2
+            qz = qz - this%kap*ytmp3
+            nullify(ytmp1,ytmp2,ytmp3)
+        endif
+
 
         rhs = zero
-        call this%getRHS_x(              rhs,&
-                           tauxx,tauxy,tauxz,&
-                               qx )
+!!---------OLD BLOCK----------------------------
+!        call this%getRHS_x(              rhs,&
+!                           tauxx,tauxy,tauxz,&
+!                               qx )
+!
+!        call this%getRHS_y(              rhs,&
+!                           tauxy,tauyy,tauyz,&
+!                               qy )
+!
+!
+!        call this%getRHS_z(              rhs,&
+!                           tauxz,tauyz,tauzz,&
+!                               qz )
+!!---------OLD BLOCK----------------------------
+!---------NEW BLOCK----------------------------
+        ytmp1 => this%ybuf(:,:,:,1);  ytmp2 => this%ybuf(:,:,:,2);  ytmp3 => this%ybuf(:,:,:,3)
+ 
+        ! Energy equation :: d(rho e_tot)/dt + div (rho e_tot u_ - sig__.u_ + q_) = 0
+        ! Step 1 :: Compute [ -sig . u ]
+        call dotprod(-this%p+tauxx, tauxy, tauxz, -this%p+tauyy, tauyz, -this%p+tauzz, this%u, this%v, this%w, ytmp1, ytmp2, ytmp3)
 
-        call this%getRHS_y(              rhs,&
-                           tauxy,tauyy,tauyz,&
-                               qy )
+        ! Step 2 :: Compute div . [ rho * e_tot * u - sig . u ]
+        ytmp1 = ytmp1 - this%Wcnsrv(:,:,:,TE_index)*this%u - qx
+        ytmp2 = ytmp2 - this%Wcnsrv(:,:,:,TE_index)*this%v - qy
+        ytmp3 = ytmp3 - this%Wcnsrv(:,:,:,TE_index)*this%w - qz
+        call divergence(this%decomp, this%der, this%x, this%y, this%z, ytmp1, ytmp2, ytmp3, &
+                        rhs(:,:,:,TE_index), this%coordsys, this%x_bc, this%y_bc, this%z_bc)
 
+        ! Momentum equations :: d(rho*u_)/dt + div (rho u_ (x) u_ - sig__) = 0_
+        ! Step 1 :: Store -(rho u_ (x) u_ - sig) in tau**
+        tauxx = tauxx - this%p - this%Wcnsrv(:,:,:,mom_index  )*this%u
+        tauxy = tauxy          - this%Wcnsrv(:,:,:,mom_index  )*this%v
+        tauxz = tauxz          - this%Wcnsrv(:,:,:,mom_index  )*this%w
+        tauyy = tauyy - this%p - this%Wcnsrv(:,:,:,mom_index+1)*this%v
+        tauyz = tauyz          - this%Wcnsrv(:,:,:,mom_index+1)*this%w
+        tauzz = tauzz - this%p - this%Wcnsrv(:,:,:,mom_index+2)*this%w
 
-        call this%getRHS_z(              rhs,&
-                           tauxz,tauyz,tauzz,&
-                               qz )
+        ! Step 2 :: Compute divergence
+        call divergence(this%decomp, this%der, this%x, this%y, this%z, tauxx, tauxy, tauxz, tauyy, tauyz, tauzz, &
+               rhs(:,:,:,mom_index), rhs(:,:,:,mom_index+1), rhs(:,:,:,mom_index+2), this%coordsys, this%x_bc, this%y_bc, this%z_bc)
 
+        nullify(ytmp1,ytmp2,ytmp3)
+!---------NEW BLOCK----------------------------
 
         ! Call problem source hook
         call hook_mixture_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
  
     end subroutine
 
-    subroutine getRHS_x(       this,  rhs,&
-                        tauxx,tauxy,tauxz,&
-                            qx )
-        class(sgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
+    !subroutine getRHS_x(       this,  rhs,&
+    !                    tauxx,tauxy,tauxz,&
+    !                        qx )
+    !    class(sgrid), target, intent(inout) :: this
+    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
+    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
+    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
-        real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
-        integer :: i
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
+    !    real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
+    !    integer :: i
 
-        xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
+    !    xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
 
-        flux = this%Wcnsrv(:,:,:,mom_index  )*this%u + this%p - tauxx ! x-momentum
-        call transpose_y_to_x(flux,xtmp1,this%decomp)
-        call this%der%ddx(xtmp1,xtmp2, this%x_bc(1), this%x_bc(2)) ! Symmetric for x-momentum
-        call transpose_x_to_y(xtmp2,flux,this%decomp)
-        rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
+    !    flux = this%Wcnsrv(:,:,:,mom_index  )*this%u + this%p - tauxx ! x-momentum
+    !    call transpose_y_to_x(flux,xtmp1,this%decomp)
+    !    call this%der%ddx(xtmp1,xtmp2, this%x_bc(1), this%x_bc(2)) ! Symmetric for x-momentum
+    !    call transpose_x_to_y(xtmp2,flux,this%decomp)
+    !    rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
 
-        flux = this%Wcnsrv(:,:,:,mom_index  )*this%v          - tauxy ! y-momentum
-        call transpose_y_to_x(flux,xtmp1,this%decomp)
-        call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
-        call transpose_x_to_y(xtmp2,flux,this%decomp)
-        rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
+    !    flux = this%Wcnsrv(:,:,:,mom_index  )*this%v          - tauxy ! y-momentum
+    !    call transpose_y_to_x(flux,xtmp1,this%decomp)
+    !    call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
+    !    call transpose_x_to_y(xtmp2,flux,this%decomp)
+    !    rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
 
-        flux = this%Wcnsrv(:,:,:,mom_index  )*this%w          - tauxz ! z-momentum
-        call transpose_y_to_x(flux,xtmp1,this%decomp)
-        call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
-        call transpose_x_to_y(xtmp2,flux,this%decomp)
-        rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
+    !    flux = this%Wcnsrv(:,:,:,mom_index  )*this%w          - tauxz ! z-momentum
+    !    call transpose_y_to_x(flux,xtmp1,this%decomp)
+    !    call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
+    !    call transpose_x_to_y(xtmp2,flux,this%decomp)
+    !    rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
 
-        flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz + qx ! Total Energy
-        call transpose_y_to_x(flux,xtmp1,this%decomp)
-        call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
-        call transpose_x_to_y(xtmp2,flux,this%decomp)
-        rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
+    !    flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz + qx ! Total Energy
+    !    call transpose_y_to_x(flux,xtmp1,this%decomp)
+    !    call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
+    !    call transpose_x_to_y(xtmp2,flux,this%decomp)
+    !    rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
 
-    end subroutine
+    !end subroutine
 
-    subroutine getRHS_y(       this,  rhs,&
-                        tauxy,tauyy,tauyz,&
-                            qy )
-        class(sgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxy,tauyy,tauyz
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qy
+    !subroutine getRHS_y(       this,  rhs,&
+    !                    tauxy,tauyy,tauyz,&
+    !                        qy )
+    !    class(sgrid), target, intent(inout) :: this
+    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
+    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxy,tauyy,tauyz
+    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qy
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
-        real(rkind), dimension(:,:,:), pointer :: ytmp1
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
+    !    real(rkind), dimension(:,:,:), pointer :: ytmp1
 
-        ytmp1 => this%ybuf(:,:,:,6)
+    !    ytmp1 => this%ybuf(:,:,:,6)
 
-        flux = this%Wcnsrv(:,:,:,mom_index+1)*this%u          - tauxy ! x-momentum
-        call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
-        rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - ytmp1
+    !    flux = this%Wcnsrv(:,:,:,mom_index+1)*this%u          - tauxy ! x-momentum
+    !    call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
+    !    rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - ytmp1
 
-        flux = this%Wcnsrv(:,:,:,mom_index+1)*this%v + this%p - tauyy ! y-momentum
-        call this%der%ddy(flux,ytmp1, this%y_bc(1), this%y_bc(2)) ! Symmetric for y-momentum
-        rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - ytmp1
+    !    flux = this%Wcnsrv(:,:,:,mom_index+1)*this%v + this%p - tauyy ! y-momentum
+    !    call this%der%ddy(flux,ytmp1, this%y_bc(1), this%y_bc(2)) ! Symmetric for y-momentum
+    !    rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - ytmp1
 
-        flux = this%Wcnsrv(:,:,:,mom_index+1)*this%w          - tauyz ! z-momentum
-        call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
-        rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - ytmp1
+    !    flux = this%Wcnsrv(:,:,:,mom_index+1)*this%w          - tauyz ! z-momentum
+    !    call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
+    !    rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - ytmp1
 
-        flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauyy)*this%v - this%u*tauxy - this%w*tauyz + qy ! Total Energy
-        call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
-        rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - ytmp1
-
-
-    end subroutine
-
-    subroutine getRHS_z(       this,  rhs,&
-                        tauxz,tauyz,tauzz,&
-                            qz )
-        class(sgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxz,tauyz,tauzz
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qz
-
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
-        real(rkind), dimension(:,:,:), pointer :: ztmp1,ztmp2
-
-        ztmp1 => this%zbuf(:,:,:,1); ztmp2 => this%zbuf(:,:,:,2)
-
-        flux = this%Wcnsrv(:,:,:,mom_index+2)*this%u          - tauxz ! x-momentum
-        call transpose_y_to_z(flux,ztmp1,this%decomp)
-        call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
-        call transpose_z_to_y(ztmp2,flux,this%decomp)
-        rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
-
-        flux = this%Wcnsrv(:,:,:,mom_index+2)*this%v          - tauyz ! y-momentum
-        call transpose_y_to_z(flux,ztmp1,this%decomp)
-        call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
-        call transpose_z_to_y(ztmp2,flux,this%decomp)
-        rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
-
-        flux = this%Wcnsrv(:,:,:,mom_index+2)*this%w + this%p - tauzz ! z-momentum
-        call transpose_y_to_z(flux,ztmp1,this%decomp)
-        call this%der%ddz(ztmp1,ztmp2, this%z_bc(1), this%z_bc(2)) ! Symmetric for z-momentum
-        call transpose_z_to_y(ztmp2,flux,this%decomp)
-        rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
-
-        flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauzz)*this%w - this%u*tauxz - this%v*tauyz + qz ! Total Energy
-        call transpose_y_to_z(flux,ztmp1,this%decomp)
-        call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
-        call transpose_z_to_y(ztmp2,flux,this%decomp)
-        rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
-
-    end subroutine
-
-    subroutine filter(this,arr,myfil,numtimes,x_bc_,y_bc_,z_bc_)
-        class(sgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
-        type(filters), target, optional, intent(in) :: myfil
-        integer, optional, intent(in) :: numtimes
-        integer, dimension(2), optional, intent(in) :: x_bc_, y_bc_, z_bc_
-        integer, dimension(2) :: x_bc, y_bc, z_bc
-        
-        type(filters), pointer :: fil2use
-        integer :: times2fil
-        real(rkind), dimension(:,:,:), pointer :: tmp_in_y, tmp1_in_x, tmp1_in_z, tmp2_in_x, tmp2_in_z
-        integer :: lastx, lasty, lastz, idx
+    !    flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauyy)*this%v - this%u*tauxy - this%w*tauyz + qy ! Total Energy
+    !    call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
+    !    rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - ytmp1
 
 
-        if (present(myfil)) then
-            fil2use => myfil
-        else
-            fil2use => this%fil
-        end if 
+    !end subroutine
 
-        if (present(numtimes)) then
-            times2fil = numtimes
-        else
-            times2fil = 1
-        end if
+    !subroutine getRHS_z(       this,  rhs,&
+    !                    tauxz,tauyz,tauzz,&
+    !                        qz )
+    !    class(sgrid), target, intent(inout) :: this
+    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
+    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxz,tauyz,tauzz
+    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qz
 
-        ! Allocate pointers for the needed buffers 
-        ! Atleast 2 buffers in x and z are assumed
-        ! Last two buffers are occupied
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
+    !    real(rkind), dimension(:,:,:), pointer :: ztmp1,ztmp2
 
-        lastx = size(this%xbuf,4)
-        lasty = size(this%ybuf,4)
-        lastz = size(this%zbuf,4)
+    !    ztmp1 => this%zbuf(:,:,:,1); ztmp2 => this%zbuf(:,:,:,2)
 
-        tmp1_in_x => this%xbuf(:,:,:,lastx)
-        tmp2_in_x => this%xbuf(:,:,:,lastx-1)
-        tmp_in_y => this%ybuf(:,:,:,lasty)
-        tmp1_in_z => this%zbuf(:,:,:,lastz)
-        tmp2_in_z => this%zbuf(:,:,:,lastz-1)
+    !    flux = this%Wcnsrv(:,:,:,mom_index+2)*this%u          - tauxz ! x-momentum
+    !    call transpose_y_to_z(flux,ztmp1,this%decomp)
+    !    call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
+    !    call transpose_z_to_y(ztmp2,flux,this%decomp)
+    !    rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
 
-        x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
-        y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
-        z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
-        
-        ! First filter in y
-        call fil2use%filtery(arr,tmp_in_y,y_bc(1),y_bc(2))
-        ! Subsequent refilters 
-        do idx = 1,times2fil-1
-            arr = tmp_in_y
-            call fil2use%filtery(arr,tmp_in_y,y_bc(1),y_bc(2))
-        end do
-        
-        ! Then transpose to x
-        call transpose_y_to_x(tmp_in_y,tmp1_in_x,this%decomp)
+    !    flux = this%Wcnsrv(:,:,:,mom_index+2)*this%v          - tauyz ! y-momentum
+    !    call transpose_y_to_z(flux,ztmp1,this%decomp)
+    !    call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
+    !    call transpose_z_to_y(ztmp2,flux,this%decomp)
+    !    rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
 
-        ! First filter in x
-        call fil2use%filterx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
-        ! Subsequent refilters
-        do idx = 1,times2fil-1
-            tmp1_in_x = tmp2_in_x
-            call fil2use%filterx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
-        end do 
+    !    flux = this%Wcnsrv(:,:,:,mom_index+2)*this%w + this%p - tauzz ! z-momentum
+    !    call transpose_y_to_z(flux,ztmp1,this%decomp)
+    !    call this%der%ddz(ztmp1,ztmp2, this%z_bc(1), this%z_bc(2)) ! Symmetric for z-momentum
+    !    call transpose_z_to_y(ztmp2,flux,this%decomp)
+    !    rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
 
-        ! Now transpose back to y
-        call transpose_x_to_y(tmp2_in_x,tmp_in_y,this%decomp)
+    !    flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauzz)*this%w - this%u*tauxz - this%v*tauyz + qz ! Total Energy
+    !    call transpose_y_to_z(flux,ztmp1,this%decomp)
+    !    call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
+    !    call transpose_z_to_y(ztmp2,flux,this%decomp)
+    !    rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
 
-        ! Now transpose to z
-        call transpose_y_to_z(tmp_in_y,tmp1_in_z,this%decomp)
+    !end subroutine
 
-        !First filter in z
-        call fil2use%filterz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
-        ! Subsequent refilters
-        do idx = 1,times2fil-1
-            tmp1_in_z = tmp2_in_z
-            call fil2use%filterz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
-        end do 
+    !subroutine filter(this,arr,myfil,numtimes,x_bc_,y_bc_,z_bc_)
+    !    class(sgrid), target, intent(inout) :: this
+    !    real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
+    !    type(filters), target, optional, intent(in) :: myfil
+    !    integer, optional, intent(in) :: numtimes
+    !    integer, dimension(2), optional, intent(in) :: x_bc_, y_bc_, z_bc_
+    !    integer, dimension(2) :: x_bc, y_bc, z_bc
+    !    
+    !    type(filters), pointer :: fil2use
+    !    integer :: times2fil
+    !    real(rkind), dimension(:,:,:), pointer :: tmp_in_y, tmp1_in_x, tmp1_in_z, tmp2_in_x, tmp2_in_z
+    !    integer :: lastx, lasty, lastz, idx
 
-        ! Now transpose back to y
-        call transpose_z_to_y(tmp2_in_z,arr,this%decomp)
 
-        ! Finished
-    end subroutine
+    !    if (present(myfil)) then
+    !        fil2use => myfil
+    !    else
+    !        fil2use => this%fil
+    !    end if 
+
+    !    if (present(numtimes)) then
+    !        times2fil = numtimes
+    !    else
+    !        times2fil = 1
+    !    end if
+
+    !    ! Allocate pointers for the needed buffers 
+    !    ! Atleast 2 buffers in x and z are assumed
+    !    ! Last two buffers are occupied
+
+    !    lastx = size(this%xbuf,4)
+    !    lasty = size(this%ybuf,4)
+    !    lastz = size(this%zbuf,4)
+
+    !    tmp1_in_x => this%xbuf(:,:,:,lastx)
+    !    tmp2_in_x => this%xbuf(:,:,:,lastx-1)
+    !    tmp_in_y => this%ybuf(:,:,:,lasty)
+    !    tmp1_in_z => this%zbuf(:,:,:,lastz)
+    !    tmp2_in_z => this%zbuf(:,:,:,lastz-1)
+
+    !    x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
+    !    y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
+    !    z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
+    !    
+    !    ! First filter in y
+    !    call fil2use%filtery(arr,tmp_in_y,y_bc(1),y_bc(2))
+    !    ! Subsequent refilters 
+    !    do idx = 1,times2fil-1
+    !        arr = tmp_in_y
+    !        call fil2use%filtery(arr,tmp_in_y,y_bc(1),y_bc(2))
+    !    end do
+    !    
+    !    ! Then transpose to x
+    !    call transpose_y_to_x(tmp_in_y,tmp1_in_x,this%decomp)
+
+    !    ! First filter in x
+    !    call fil2use%filterx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
+    !    ! Subsequent refilters
+    !    do idx = 1,times2fil-1
+    !        tmp1_in_x = tmp2_in_x
+    !        call fil2use%filterx(tmp1_in_x,tmp2_in_x,x_bc(1),x_bc(2))
+    !    end do 
+
+    !    ! Now transpose back to y
+    !    call transpose_x_to_y(tmp2_in_x,tmp_in_y,this%decomp)
+
+    !    ! Now transpose to z
+    !    call transpose_y_to_z(tmp_in_y,tmp1_in_z,this%decomp)
+
+    !    !First filter in z
+    !    call fil2use%filterz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
+    !    ! Subsequent refilters
+    !    do idx = 1,times2fil-1
+    !        tmp1_in_z = tmp2_in_z
+    !        call fil2use%filterz(tmp1_in_z,tmp2_in_z,z_bc(1),z_bc(2))
+    !    end do 
+
+    !    ! Now transpose back to y
+    !    call transpose_z_to_y(tmp2_in_z,arr,this%decomp)
+
+    !    ! Finished
+    !end subroutine
    
     subroutine getPhysicalProperties(this)
         class(sgrid), intent(inout) :: this
@@ -1251,44 +1312,44 @@ contains
         ! Done 
     end subroutine 
 
-    subroutine get_q(this,qx,qy,qz)
-        use exits, only: nancheck
-        class(sgrid), target, intent(inout) :: this
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(inout) :: qx,qy,qz
+    !subroutine get_q(this,qx,qy,qz)
+    !    use exits, only: nancheck
+    !    class(sgrid), target, intent(inout) :: this
+    !    real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(inout) :: qx,qy,qz
 
-        ! integer :: i
-        real(rkind), dimension(:,:,:), pointer :: tmp1_in_x, tmp2_in_x, tmp1_in_y, tmp1_in_z, tmp2_in_z
-        type(derivatives), pointer :: der
+    !    ! integer :: i
+    !    real(rkind), dimension(:,:,:), pointer :: tmp1_in_x, tmp2_in_x, tmp1_in_y, tmp1_in_z, tmp2_in_z
+    !    type(derivatives), pointer :: der
 
-        der => this%der
+    !    der => this%der
 
-        tmp1_in_x => this%xbuf(:,:,:,1)
-        tmp2_in_x => this%xbuf(:,:,:,2)
+    !    tmp1_in_x => this%xbuf(:,:,:,1)
+    !    tmp2_in_x => this%xbuf(:,:,:,2)
 
-        tmp1_in_z => this%zbuf(:,:,:,1)
-        tmp2_in_z => this%zbuf(:,:,:,2)
+    !    tmp1_in_z => this%zbuf(:,:,:,1)
+    !    tmp2_in_z => this%zbuf(:,:,:,2)
 
-        tmp1_in_y => this%ybuf(:,:,:,1)
+    !    tmp1_in_y => this%ybuf(:,:,:,1)
 
-        ! Species enthalpy diffusion is computed earlier in SolidMixture
+    !    ! Species enthalpy diffusion is computed earlier in SolidMixture
 
-        ! Step 1: Get qy (dvdy is destroyed)
-        call der%ddy(this%T,tmp1_in_y,this%y_bc(1),this%y_bc(2))
-        qy = qy - this%kap*tmp1_in_y
+    !    ! Step 1: Get qy (dvdy is destroyed)
+    !    call der%ddy(this%T,tmp1_in_y,this%y_bc(1),this%y_bc(2))
+    !    qy = qy - this%kap*tmp1_in_y
 
-        ! Step 2: Get qx (dudx is destroyed)
-        call transpose_y_to_x(this%T,tmp1_in_x,this%decomp)
-        call der%ddx(tmp1_in_x,tmp2_in_x,this%x_bc(1),this%x_bc(2))
-        call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
-        qx = qx - this%kap*tmp1_in_y
+    !    ! Step 2: Get qx (dudx is destroyed)
+    !    call transpose_y_to_x(this%T,tmp1_in_x,this%decomp)
+    !    call der%ddx(tmp1_in_x,tmp2_in_x,this%x_bc(1),this%x_bc(2))
+    !    call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
+    !    qx = qx - this%kap*tmp1_in_y
 
-        ! Step 3: Get qz (dwdz is destroyed)
-        call transpose_y_to_z(this%T,tmp1_in_z,this%decomp)
-        call der%ddz(tmp1_in_z,tmp2_in_z,this%z_bc(1),this%z_bc(2))
-        call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
-        qz = qz - this%kap*tmp1_in_y
+    !    ! Step 3: Get qz (dwdz is destroyed)
+    !    call transpose_y_to_z(this%T,tmp1_in_z,this%decomp)
+    !    call der%ddz(tmp1_in_z,tmp2_in_z,this%z_bc(1),this%z_bc(2))
+    !    call transpose_z_to_y(tmp2_in_z,tmp1_in_y)
+    !    qz = qz - this%kap*tmp1_in_y
 
-        ! Done
-    end subroutine
+    !    ! Done
+    !end subroutine
 
 end module 
