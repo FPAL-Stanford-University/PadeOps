@@ -111,7 +111,7 @@
        this%wcon = this%w_rhs
 
        ! Step 2: Coriolis Term
-       if (this%useCoriolis) then 
+       if ((this%useCoriolis) .and. associated(this%ucor)) then 
            call this%AddCoriolisTerm(this%ucor, this%vcor, this%wcor)
            this%u_rhs = this%u_rhs + this%ucor
            this%v_rhs = this%v_rhs + this%vcor
@@ -119,7 +119,7 @@
        end if 
 
        ! Step 3b: Wind Turbines
-       if (this%useWindTurbines) then
+       if ((this%useWindTurbines) .and. associated(this%uturb)) then
           if (copyTurbRHS) then
            call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC, this%uturb, this%v_rhs, this%w_rhs, &
                  & this%newTimestep, this%inst_horz_avg_turb, uturb=this%urhs_turbine, vturb=this%vrhs_turbine, wturb=this%wrhs_turbine) 
@@ -131,7 +131,7 @@
        end if 
      
        ! Step 4: Buoyance + Sponge (inside Buoyancy)
-       if (this%isStratified .or. this%initspinup) then
+       if ((this%isStratified .or. this%initspinup) .and. (associated(this%wb))) then
            call this%addBuoyancyTerm(this%u_rhs, this%v_rhs, this%wb)
            this%w_rhs = this%w_rhs + this%wb
        end if 
@@ -163,7 +163,7 @@
            this%w_rhs = this%w_rhs + this%wsgs
            
            ! viscous term evaluate separately  
-           if (.not. this%isInviscid) then
+           if ((.not. this%isInviscid) .and. associated(this%uvisc)) then
                call this%addViscousTerm(this%uvisc, this%vvisc, this%wvisc)
                
                ! Now correct the SGS term 
@@ -175,7 +175,7 @@
        else
            ! IMPORTANT: If SGS model is used, the viscous term is evaluated
            ! as part of the SGS stress tensor. 
-           if (.not. this%isInviscid) then
+           if ((.not. this%isInviscid)) then
                call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs)
            end if
        end if
@@ -215,6 +215,10 @@
                call this%fringe_x1%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
                call this%fringe_x2%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
            end if 
+           if (this%isStratified .or. this%initspinup) then
+               call this%fringe_x1%addFringeRHS_scalar(this%dt, this%T_rhs, this%T)
+               call this%fringe_x2%addFringeRHS_scalar(this%dt, this%T_rhs, this%T)
+           end if
        else
            if (this%useFringe) then
               if (copyFringeRHS) then
@@ -223,6 +227,9 @@
               else
                   call this%fringe_x%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
               end if 
+              if (this%isStratified .or. this%initspinup) then
+                  call this%fringe_x%addFringeRHS_scalar(this%dt, this%T_rhs, this%T)
+              end if
            end if 
        end if 
 

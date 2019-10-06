@@ -90,7 +90,7 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
     ! Read input file for this turbine    
-    write(tempname,"(A13,I3.3,A10)") "ActuatorDisk_", ActuatorDiskID, "_input.inp"
+    write(tempname,"(A13,I4.4,A10)") "ActuatorDisk_", ActuatorDiskID, "_input.inp"
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
 
     ioUnit = 55
@@ -189,11 +189,11 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
         this%xs = xLoc
         this%normfactor = (1.d0/(real(size(this%xs),rkind)))*this%pfactor
         
-        !write(turboutfname,'(a,i3.3,a)') 'TurbineInitLog_', ActuatorDiskID, '.out'
+        !write(turboutfname,'(a,i4.4,a)') 'TurbineInitLog_', ActuatorDiskID, '.out'
         !ioUnit = 100+nrank
         !open(unit=ioUnit, file=trim(turboutfname), form='FORMATTED')
-        !write(ioUnit,'(a,i3.3,1x,2(e19.12,1x),i5.5,1x,e19.12)') '----Turbine No.---', ActuatorDiskID, this%normfactor, this%pfactor, size(this%xs), this%delta
-        !write(ioUnit,'(a,i3.3,1x,2(e19.12,1x),i5.5,1x,e19.12)') 'No. of points across actuator disk = ', ntry
+        !write(ioUnit,'(a,i4.4,1x,2(e19.12,1x),i5.5,1x,e19.12)') '----Turbine No.---', ActuatorDiskID, this%normfactor, this%pfactor, size(this%xs), this%delta
+        !write(ioUnit,'(a,i4.4,1x,2(e19.12,1x),i5.5,1x,e19.12)') 'No. of points across actuator disk = ', ntry
 
         allocate(this%Cloud(this%max_num_clouds))
         allocate(this%xst(this%max_num_clouds),  this%xen(this%max_num_clouds))

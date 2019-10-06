@@ -138,18 +138,13 @@
        call this%wrapup_timestep() 
    
    end subroutine
-
+   
 
    subroutine SSP_RK45(this, dtforced)
+       use RK_coefficients
        class(igrid), intent(inout), target :: this
        real(rkind), intent(in), optional :: dtforced
-       real(rkind), parameter :: b01 = 0.39175222657189d0 , b12 = 0.368410593050371d0, b23 = 0.25189177427169d0, b34 = 0.54497475022852d0
-       real(rkind), parameter :: b35 = 0.06369246866629d0 , b45 = 0.22600748323690d0
        
-       real(rkind), parameter :: a20 = 0.444370493651235d0, a21 = 0.555629506348765d0
-       real(rkind), parameter :: a30 = 0.620101851488403d0, a32 = 0.379898148511597d0
-       real(rkind), parameter :: a40 = 0.17807995439313d0 , a43 = 0.821920045606868d0
-       real(rkind), parameter :: a52 = 0.517231671970585d0, a53 = 0.096059710526147d0, a54 = 0.386708617503269d0
 
        integer :: idx 
 
@@ -401,7 +396,7 @@
                    if (nrank .ne. 0) close(777)
                    call mpi_barrier(mpi_comm_world, ierr2)
                    !if(nrank==0) close(777, status='delete')
-                   if (this%deleteInstructions) then
+                   if (this%deleteInstructions .and. this%Am_I_Primary) then
                       if(nrank==0) close(777, status='delete')
                    else
                       if(nrank==0) close(777)
@@ -420,7 +415,7 @@
                        if (nrank .ne. 0) close(777)
                        call mpi_barrier(mpi_comm_world, ierr2)
                        !if(nrank==0) close(777, status='delete')
-                       if (this%deleteInstructions) then
+                       if (this%deleteInstructions .and. this%Am_I_Primary) then
                           if(nrank==0) close(777, status='delete')
                        else
                           if(nrank==0) close(777)
@@ -438,7 +433,7 @@
                        if (nrank .ne. 0) close(777)
                        call mpi_barrier(mpi_comm_world, ierr2)
                        !if (nrank==0) close(777, status='delete')
-                       if (this%deleteInstructions) then
+                       if (this%deleteInstructions .and. this%Am_I_Primary) then
                           if(nrank==0) close(777, status='delete')
                        else
                           if(nrank==0) close(777)
@@ -456,7 +451,7 @@
                    if (nrank .ne. 0) close(777)
                    call mpi_barrier(mpi_comm_world, ierr2)
                    !if(nrank==0) close(777, status='delete')
-                   if (this%deleteInstructions) then
+                   if (this%deleteInstructions .and. this%Am_I_Primary) then
                       if(nrank==0) close(777, status='delete')
                    else
                       if(nrank==0) close(777)

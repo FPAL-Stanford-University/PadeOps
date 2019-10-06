@@ -75,6 +75,7 @@ module IncompressibleGrid
         character(len=clen) :: filter_y          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
         character(len=clen) :: filter_z          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
         integer      :: step, nsteps = 999999
+        logical :: Am_I_Primary = .true.
 
         type(decomp_info), allocatable :: gpC, gpE
         type(decomp_info), pointer :: Sp_gpC, Sp_gpE
@@ -262,7 +263,7 @@ module IncompressibleGrid
         type(fringe), allocatable, public :: fringe_x, fringe_x1, fringe_x2
 
         ! Control
-        logical                           :: useControl = .false.
+        logical                            :: useControl = .false.
         type(angCont), allocatable, public :: angCont_yaw
         real(rkind) :: angleHubHeight, totalAngle, wFilt, restartPhi, deltaGalpha, angleTrigger
         integer :: zHubIndex = 16
@@ -289,7 +290,7 @@ module IncompressibleGrid
         
         ! budgets on the fly
         logical :: StoreForBudgets = .false. 
-        complex(rkind), dimension(:,:,:), pointer :: ucon, vcon, wcon, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb 
+        complex(rkind), dimension(:,:,:), pointer :: ucon, vcon, wcon, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb, pxdns, pydns, pzdns 
 
         integer :: BuoyancyDirection 
 
@@ -336,7 +337,7 @@ module IncompressibleGrid
             procedure, private :: populate_rhs_for_budgets
             procedure, private :: populate_RHS_extraTerms 
             procedure, private :: project_and_prep
-            procedure, private :: wrapup_timestep
+            procedure          :: wrapup_timestep
             procedure, private :: reset_pointers
             procedure, private :: compute_vorticity
             procedure, private :: finalize_stats3D
@@ -359,9 +360,16 @@ module IncompressibleGrid
             procedure, private :: destroy_hdf5_io
             procedure          :: get_geostrophic_forcing
             procedure          :: InstrumentForBudgets
+            procedure          :: InstrumentForBudgets_TimeAvg
             procedure          :: GetMomentumTerms
             procedure          :: set_budget_rhs_to_zero
-    end type
+            procedure, private :: advance_SSP_RK45_all_stages
+            procedure          :: advance_SSP_RK45_Stage_1 
+            procedure          :: advance_SSP_RK45_Stage_2 
+            procedure          :: advance_SSP_RK45_Stage_3 
+            procedure          :: advance_SSP_RK45_Stage_4 
+            procedure          :: advance_SSP_RK45_Stage_5 
+   end type
 
 contains 
 
@@ -372,6 +380,7 @@ contains
 #include "igrid_files/prep_wrapup_stuff.F90"
 #include "igrid_files/budgets_stuff.F90"
 #include "igrid_files/popRHS_stuff.F90"
+#include "igrid_files/RK45_staging.F90"
 
     subroutine init(this,inputfile, initialize2decomp)
         class(igrid), intent(inout), target :: this        
@@ -932,7 +941,11 @@ contains
            allocate(this%WindTurbineArr)
            call this%WindTurbineArr%init(inputFile, this%gpC, this%gpE, this%spectC, this%spectE, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
            allocate(this%inst_horz_avg_turb(8*this%WindTurbineArr%nTurbines))
+           this%inst_horz_avg_turb = zero
        end if
+       allocate(this%inst_horz_avg(5))
+       this%inst_horz_avg = zero
+
        ! STEP 13: Set visualization planes for io
        call set_planes_io(this%xplanes, this%yplanes, this%zplanes)
 
@@ -1299,7 +1312,15 @@ contains
            else
              call this%SSP_rk45()
            endif
-       end select
+        case(3)
+           ! Does the exact same operations as case 2
+           ! written to debug case 2
+           if(present(dtforced)) then
+             call this%advance_SSP_RK45_all_stages(dtforced)
+           else
+             call this%advance_SSP_RK45_all_stages()
+           end if
+        end select
 
    end subroutine
 

@@ -13,12 +13,14 @@ program HIT_AD_interact
     use constants, only: one, zero
     use HIT_AD_interact_parameters, only: simulationID
     use fof_mod, only: fof
+    use budgets_time_avg_mod, only: budgets_time_avg  
     !use decomp_2d,                only: nrank
     implicit none
 
     type(igrid), allocatable, target :: hit, adsim
     character(len=clen) :: inputfile, HIT_InputFile, AD_InputFile, fof_dir, filoutdir
     integer :: ierr, ioUnit
+    type(budgets_time_avg) :: budg_tavg
     real(rkind), dimension(:,:,:), allocatable :: utarget0, vtarget0, wtarget0
     real(rkind), dimension(:,:,:), allocatable :: utarget1, vtarget1, wtarget1
     real(rkind) :: dt1, dt2, dt, InflowSpeed = 1.d0
@@ -53,7 +55,8 @@ program HIT_AD_interact
     call mpi_barrier(mpi_comm_world, ierr)
 
     simulationID = 2
-    call hit%init(HIT_InputFile, .false.)                                            
+    call hit%init(HIT_InputFile, .false.)                                           
+    hit%Am_I_Primary = .false. 
     call hit%start_io(.true.)                                           
     call hit%printDivergence()
     
@@ -104,6 +107,8 @@ program HIT_AD_interact
       end if 
     end if 
 
+    call budg_tavg%init(AD_Inputfile, adsim)   !<-- Budget class initialization 
+
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
     call tic() 
@@ -116,6 +121,8 @@ program HIT_AD_interact
 
        call hit%timeAdvance(dt)
        
+       call budg_tavg%doBudgets()       !<--- perform budget related operations -----Question::Where should this be placed ??
+
        x_shift = adsim%tsim*InflowSpeed 
        call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
        call hit%interpolate_cellField_to_edgeField(uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:),0,0)
@@ -158,6 +165,8 @@ program HIT_AD_interact
        end if 
 
     end do 
+
+    call budg_tavg%destroy()           !<-- release memory taken by the budget class 
 
     if (applyfilters) then
       do fid = 1,nfilters

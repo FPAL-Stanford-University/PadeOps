@@ -16,10 +16,11 @@ program test_actuatorDisk
     type(actuatorDisk), dimension(:), allocatable :: hawts
     integer, parameter :: nx = 192, ny = 96, nz = 128
     !character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/"
-    character(len=clen) :: inputDir = "/home/nghaisas/runs/PadeOps/concurrent/actDiskTest/turbInfo"
+    character(len=clen) :: inputDir = "/fastscratch/nghaisas/runs/PadeOps/wupa/run3/deb/turbInfo"
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
     real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs1, rhsv, rhsw, rhs2
-    real(rkind), parameter :: Lx = pi, Ly = 0.5d0*pi, Lz = 1.0d0
+    !real(rkind), parameter :: Lx = pi, Ly = 0.5d0*pi, Lz = 1.0d0
+    real(rkind), parameter :: Lx = 28.8d0, Ly = 4.8d0, Lz = 3.0d0
     real(rkind) :: dx, dy, dz, diam, CT
     type(decomp_info) :: gp 
     integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0, num_turbines 

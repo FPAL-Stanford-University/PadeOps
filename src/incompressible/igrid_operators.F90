@@ -76,6 +76,7 @@ module igrid_Operators
          procedure :: alloc_zvec
          procedure :: initFilter
          procedure :: FilterField
+         procedure :: FilterField_inplace
          procedure :: Project_DivergenceFree_BC
          procedure :: create_turbine_array
          procedure :: destroy_turbine_array
@@ -228,6 +229,14 @@ subroutine FilterField(this, f, fout)
 
 end subroutine 
 
+subroutine FilterField_inplace(this, f)
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(inout) :: f
+
+   this%rbuffx = f
+   call this%FilterField(this%rbuffx,f)
+
+end subroutine
 
 subroutine initFilter(this, nx_filt, ny_filt, vfilt_times) 
     use constants, only: pi

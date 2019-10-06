@@ -62,7 +62,7 @@ module sgsmod_igrid
         complex(rkind), dimension(:,:,:), allocatable :: Tfilhat, Tfilhatz1, Tfilhatz2
         logical :: useWallModel = .false.
         integer :: botBC_temp = 1
-        real(rkind), public :: ustar = 1.d0, InvObLength = 0.d0, PsiM = 0.0d0
+        real(rkind), public :: ustar = 1.d0, InvObLength = 0.d0, PsiM = 0.0d0, uw_surf = 0.0d0, vw_surf = 0.0d0
         real(rkind) :: umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0!, wTh_surf = 0.d0
         real(rkind) :: z0, z0t, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr
         real(rkind), pointer :: Tsurf, wTh_surf
@@ -150,10 +150,13 @@ module sgsmod_igrid
             procedure          :: get_uspeedmean 
             procedure          :: get_DynamicProcedureType
             procedure          :: get_wTh_surf
+            procedure          :: get_uw_surf
+            procedure          :: get_vw_surf
             procedure          :: getMax_DynSmagConst
             procedure          :: getMax_DynPrandtl
             procedure          :: usingDynProc
             procedure          :: set_BuoyancyFactor
+            procedure          :: populate_tauij_E_to_C 
     end type 
 
 contains
@@ -168,6 +171,7 @@ contains
 #include "sgs_models/wallmodel.F90"
 #include "sgs_models/accessors.F90"
 #include "sgs_models/scalar_bounding.F90"
+
 
 subroutine setTauBC(this, botwall, topwall)
    class(sgs_igrid), intent(inout) :: this

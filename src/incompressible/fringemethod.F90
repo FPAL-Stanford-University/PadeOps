@@ -17,10 +17,12 @@ module fringeMethod
       type(decomp_info), pointer                    :: gpC, gpE, sp_gpC, sp_gpE
       real(rkind),    dimension(:,:,:,:), pointer   :: rbuffxC, rbuffxE
       complex(rkind), dimension(:,:,:,:), pointer   :: cbuffyC, cbuffyE
-      real(rkind)                                   :: LambdaFact
+      real(rkind)                                   :: LambdaFact, LambdaFactPotTemp
       integer :: myFringeID = 1
       logical :: useTwoFringex = .false. 
-      logical :: useFringeAsSponge_Scalar = .true. 
+      logical, public :: useFringeAsSponge_Scalar = .true. 
+      logical :: firstCallComplete = .false.
+      logical :: firstCallCompleteScalar = .false.
       contains
          procedure :: init
          procedure :: destroy
@@ -116,17 +118,21 @@ contains
       real(rkind),                                                                        intent(in)           :: dt
       real(rkind),    dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)),         intent(in)           :: F 
 
-      if (this%useFringeAsSponge_Scalar) then
-            this%rbuffxC(:,:,:,1) = -(this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(F)
-            call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
-            Frhs = Frhs + this%cbuffyC(:,:,:,1)
+      if (this%firstCallCompleteScalar) then      
+          if (this%useFringeAsSponge_Scalar) then
+                this%rbuffxC(:,:,:,1) = -(this%LambdafactPotTemp/dt)*(this%Fringe_kernel_cells)*(F)
+                call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
+                Frhs = Frhs + this%cbuffyC(:,:,:,1)
+          else
+             if (associated(this%F_target)) then
+                this%rbuffxC(:,:,:,1) = (this%LambdafactPotTemp/dt)*(this%Fringe_kernel_cells)*(this%F_target - F)
+                call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
+                Frhs = Frhs + this%cbuffyC(:,:,:,1)
+             end if 
+          end if 
       else
-         if (associated(this%F_target)) then
-            this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%F_target - F)
-            call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
-            Frhs = Frhs + this%cbuffyC(:,:,:,1)
-         end if 
-      end if 
+          this%firstCallCompleteScalar = .true.
+      end if
    end subroutine
 
    subroutine destroy(this)
@@ -158,6 +164,7 @@ contains
 
       if (present(Ttarget)) then
          this%T_target => Ttarget
+         this%useFringeAsSponge_Scalar = .false. 
       end if
       this%TargetsAssociated = .true.
 
@@ -165,7 +172,9 @@ contains
    end subroutine
 
    subroutine init(this, inputfile, dx, x, dy, y, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE, fringeID)
-      use reductions, only: p_maxval
+      use reductions, only: p_minval, p_maxval
+      use exits, only: message_min_max
+       use decomp_2d_io
       use mpi
       class(fringe), intent(inout) :: this
       character(len=clen), intent(in) :: inputfile 
@@ -178,7 +187,7 @@ contains
       complex(rkind), dimension(:,:,:,:), target, intent(in) :: cbuffyC, cbuffyE
       integer, intent(in), optional :: fringeID
 
-      real(rkind) :: Lx, Ly, LambdaFact = 2.45d0, LambdaFact2 = 2.45d0
+      real(rkind) :: Lx, Ly, LambdaFact = 2.45d0, LambdaFact2 = 2.45d0, LambdaFactPotTemp = 2.45d0
       real(rkind) :: Fringe_yst = 1.d0, Fringe_yen = 1.d0
       real(rkind) :: Fringe_xst = 0.75d0, Fringe_xen = 1.d0
       real(rkind) :: Fringe_delta_st_x = 1.d0, Fringe_delta_st_y = 1.d0, Fringe_delta_en_x = 1.d0, Fringe_delta_en_y = 1.d0
@@ -192,7 +201,7 @@ contains
       real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2
       logical :: Apply_x_fringe = .true., Apply_y_fringe = .false.
       namelist /FRINGE/ Apply_x_fringe, Apply_y_fringe, Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, &
-                        Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, LambdaFact2, Fringe_yen, Fringe_yst, Fringe1_delta_st_x, &
+                        Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, LambdaFactPotTemp, LambdaFact2, Fringe_yen, Fringe_yst, Fringe1_delta_st_x, &
                         Fringe2_delta_st_x, Fringe1_delta_en_x, Fringe2_delta_en_x, Fringe1_xst, Fringe2_xst, Fringe1_xen, Fringe2_xen
     
       if (present(fringeID)) then
@@ -224,7 +233,9 @@ contains
       
       this%Fringe_kernel_cells = 0.d0
       this%Fringe_kernel_edges = 0.d0
-
+      ! Maybe need a flag to ensure that it is define and the problem is
+      ! stratified
+      this%LambdaFactPotTemp = LambdaFactPotTemp
    
       if (this%usetwoFringex) then
          select case (this%myFringeID)
@@ -276,6 +287,9 @@ contains
          end do
          deallocate(x1, x2, S1, S2, Fringe_func)
       end if 
+       
+      call message_min_max(1,"Bounds for Fringe_funcC:", p_minval(minval(this%Fringe_kernel_cells)), p_maxval(maxval(this%Fringe_kernel_cells)))
+      call message_min_max(1,"Bounds for Fringe_funcE:", p_minval(minval(this%Fringe_kernel_edges)), p_maxval(maxval(this%Fringe_kernel_edges)))
 
       if (Apply_y_fringe) then
          Fringe_yst        = Fringe_yst*Ly
@@ -311,7 +325,18 @@ contains
             end do 
          end do
          deallocate(y1, y2, S1, S2, Fringe_func)
+      
+         call message_min_max(1,"Bounds for Fringe_funcC:", p_minval(minval(this%Fringe_kernel_cells)), p_maxval(maxval(this%Fringe_kernel_cells)))
+      
+         call message_min_max(1,"Bounds for Fringe_funcE:", p_minval(minval(this%Fringe_kernel_edges)), p_maxval(maxval(this%Fringe_kernel_edges)))
+
       end if 
+      
+      where (this%Fringe_kernel_cells > 1) this%Fringe_kernel_cells = 1.d0 
+      where (this%Fringe_kernel_edges > 1) this%Fringe_kernel_edges = 1.d0 
+
+      this%firstCallComplete = .false.
+      this%firstCallCompleteScalar = .false.
 
       call message(0, "Fringe initialized successfully.")
 

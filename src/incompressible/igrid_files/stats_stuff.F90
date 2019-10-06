@@ -34,7 +34,7 @@
        endif
 
        allocate(this%debugavg(5),this%debuginst(5))
-       allocate(this%inst_horz_avg(5)) ! [ustar, uw, vw, Linv, wT]
+       !allocate(this%inst_horz_avg(5)) ! [ustar, uw, vw, Linv, wT]
        allocate(this%runningSum_sc(5))
        allocate(this%stats3D(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),nstatsvar))
        allocate(this%horzavgstats(this%nz,nhorzavgvars))

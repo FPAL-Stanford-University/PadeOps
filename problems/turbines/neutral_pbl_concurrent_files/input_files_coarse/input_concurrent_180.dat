@@ -1,0 +1,4 @@
+&concurrent
+primary_InputFile                 = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/input_files_coarse/input_neutral_primary_180.dat"
+precursor_InputFile                  = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/input_files_coarse/input_neutral_precursor_180.dat"
+/
