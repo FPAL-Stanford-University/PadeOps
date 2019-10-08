@@ -17,6 +17,7 @@ module budgets_xy_avg_mod
    ! BUDGET_1: momentum equation terms (Budget0 also computed) 
    ! BUDGET_2: MKE budget (Budget0 and Budget1 also computed) 
    ! BUDGET 3: TKE budget (Budget 0, 1 and 2 also included)
+   ! BUDGET 4: RS budgets (Budget 0, 1, 2, and 4 also included)
 
 
    ! BUDGET_0 term indices:

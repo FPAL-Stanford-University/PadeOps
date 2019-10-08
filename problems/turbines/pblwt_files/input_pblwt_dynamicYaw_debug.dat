@@ -107,7 +107,7 @@ turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/pblwt_f
 ADM_Type              = 4
 powerDumpDir          = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_debug/modelDumps"
 useDynamicYaw         = .TRUE.
-yawUpdateInterval     = 5000
+yawUpdateInterval     = 10000
 /
 /
 &FRINGE

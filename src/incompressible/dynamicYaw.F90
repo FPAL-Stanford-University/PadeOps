@@ -67,19 +67,21 @@ module dynamicYawMod
 
 contains
 
-subroutine init(this, inputfile, xLoc, yLoc)
+subroutine init(this, inputfile, xLoc, yLoc, diam, Nt)
     class(dynamicYaw), intent(inout) :: this
     character(len=*), intent(in) :: inputfile
     integer :: ioUnit, conditionTurb, ierr, i, n_moving_average
     real(rkind) :: beta1 = 0.9d0, beta2 = 0.999d0, learning_rate_yaw = 10D-4
-    integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20, Nt = 2, Nx = 500
+    integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20, Nx = 500
     real(rkind) :: var_p = 0.04d0, var_k = 9D-6, var_sig = 9D-6, D = 0.315
     real(rkind) :: Ct = 0.75, eta = 0.7
     real(rkind), dimension(:), intent(in) :: xLoc, yLoc
+    real(rkind), intent(in) :: diam
+    integer, intent(in) :: Nt
  
     ! Read input file for this turbine    
-    namelist /DYNAMIC_YAW/ Nt, var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
-                           Ne, D, Ct, eta, beta1, beta2, conditionTurb, n_moving_average
+    namelist /DYNAMIC_YAW/ var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
+                           Ne, Ct, eta, beta1, beta2, conditionTurb, n_moving_average
     ioUnit = 534
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=DYNAMIC_YAW)
@@ -90,7 +92,7 @@ subroutine init(this, inputfile, xLoc, yLoc)
     this%Ne = Ne
     this%conditionTurb = conditionTurb
     this%Nx = Nx ! for spatial integration of the spanwise velocity
-    this%D = D
+    this%D = diam
     this%Ct = Ct
     this%eta = eta; this%beta1 = beta1; this%beta2= beta2;
     this%learning_rate_yaw = learning_rate_yaw   
@@ -160,7 +162,6 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     ! Normalize the power production
     this%powerObservation = this%powerObservation(this%indSorted) / this%powerObservation(this%conditionTurb)
     ! Online control update
-    this%yaw = yaw(this%indSorted)
     call this%onlineUpdate()
     yaw = this%yaw
     ! Restore original layout
@@ -209,11 +210,11 @@ subroutine onlineUpdate(this)
         call this%forward(kw, sigma_0, Phat, yaw)
         ! Normalized
         Phat = Phat / Phat(1)
-        error(t) = p_sum(abs(Phat-this%powerObservation)) / real(this%Nt)
+        error(t) = sum(abs(Phat-this%powerObservation)) / real(this%Nt)
         if (error(t)<lowestError) then
             lowestError=error(t); bestStep = t;
             kwBest = kw; sigmaBest = sigma_0
-            this%Ptot_initial = p_sum(Phat)
+            this%Ptot_initial = sum(Phat)
         end if
     end do
 
@@ -273,12 +274,13 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     randArr2 = psi_kp(this%Nt+1:NN, :)
 
     ! Intermediate forcast step
-    call this%forward(kw, sigma_0, Phat_zeroYaw, yaw*0.d0)
+    !call this%forward(kw, sigma_0, Phat_zeroYaw, yaw*0.d0)
     do i=1,this%Ne
         ! Lifting line model
         call this%forward(randArr(:,i), randArr2(:,i), Phat, yaw)
         ! Normalize by first turbine
-        psiHat_kp(:,i) = Phat/Phat_zeroYaw(1)
+        !psiHat_kp(:,i) = Phat/Phat_zeroYaw(1)
+        psiHat_kp(:,i) = Phat/Phat(1)
     end do
 
 
@@ -330,7 +332,7 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     ! Model
     ! Load model inputs
     call this%forward(kw, sigma_0, P, yaw*0.d0)
-    Ptot_baseline = p_sum(P); P_baseline = P; this%Phat = P_baseline;
+    Ptot_baseline = sum(P); P_baseline = P; this%Phat = P_baseline;
  
     ! eps also determines the termination condition
     k=1; check = 0; 
@@ -343,7 +345,7 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
         this%dp_dgamma = 0.d0
         call this%forward(kw, sigma_0, P, yaw)
         yawTime(k+1,:) = yaw;
-        Ptot(k) = p_sum(P);
+        Ptot(k) = sum(P);
         P_time(k,:) = P;
         call this%backward(kw, sigma_0, yaw)    
     

@@ -15,7 +15,7 @@ program test_dynamicYaw
     type(dynamicYaw) :: dyaw
     type(actuatorDisk_yaw), allocatable, dimension(:) :: ad
     character(len=clen) :: inputDir = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw.inp"
-    character(len=clen) :: inputDir_turb = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/2x1array"
+    character(len=clen) :: inputDir_turb = "/home1/05294/mhowland/PadeOps/problems/turbines/AD_Coriolis_files/turbInfo/2x1array"
     integer, parameter :: nx = 192, ny = 96, nz = 128
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
     real(rkind), parameter :: Lx = 2.d0, Ly = 2.d0, Lz = 2.0d0
@@ -76,21 +76,27 @@ program test_dynamicYaw
         xLoc(i) = ad(i)%xLoc
         yLoc(i) = ad(i)%yLoc
     end do
-    call dyaw%init(inputDir, xLoc, yLoc)
+    call dyaw%init(inputDir, xLoc, yLoc, 1.d0, 2)
+    write(*,*) xLoc
+    write(*,*) yLoc
 
     ! Run the full dynamic yaw state estimation and yaw optimize
     yaw = 0.d0 * pi / 180.d0
     ! Input
     write(*,*) yaw*180.d0/pi
-    power = (/1.d0, 0.6d0/)
+    power = (/1.0000, 0.2621/)
     wind_speed = 8.d0
     wind_direction = 270.d0
     call dyaw%update_and_yaw(yaw, wind_speed, wind_direction, power)
 
-    ! Output
+    ! O, t
     write(*,*) dyaw%yaw*180.d0/pi
     call message(2, 'Ptot initial', dyaw%Ptot_initial)
     call message(2, 'Ptot final', dyaw%Ptot_final)
+    write(*,*) 'p'
+    write(*,*) dyaw%powerObservation
+    write(*,*) 'phat'
+    write(*,*) dyaw%Phat/dyaw%Phat(1)
 
     call MPI_Finalize(ierr)
 end program 

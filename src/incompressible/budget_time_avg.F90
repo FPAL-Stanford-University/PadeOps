@@ -47,6 +47,10 @@ module budgets_time_avg_mod
    ! 24: <u_j'tau_2j'>
    ! 25: <u_j'tau_3j'>
    ! 26: <T>
+   ! 27: <uT>
+   ! 28: <vT>
+   ! 29: <wT>
+   ! 30: <TT>
 
    ! BUDGET_1 term indices:  
    ! 1:  X eqn - Advection/convection term
@@ -61,6 +65,12 @@ module budgets_time_avg_mod
    ! 8:  Z eqn - Advection term
    ! 9:  Z eqn - Pressure gradient term 
    ! 10: Z eqn - SGS term 
+   
+   ! Coriolis terms
+   ! 11:  X eqn - Coriolis Term 
+   ! 12:  X eqn - Geostrophic Forcing Term 
+   ! 13:  Y eqn - Coriolis Term 
+   ! 14:  Y eqn - Geostrophic Forcing Term 
 
 
    ! BUDGET_2 term indices: 
@@ -71,6 +81,8 @@ module budgets_time_avg_mod
    ! 5:  SGS + viscous transport   (D+F)
    ! 6:  Loss to SGS TKE + viscous dissipation (H+I)
    ! 7:  Actuator disk sink        (J)
+   ! 8:  Geostrophic              
+   ! 9:  Coriolis                  
 
 
    ! BUDGET_3 term indices:
@@ -91,6 +103,7 @@ module budgets_time_avg_mod
         integer :: budgetType = 1, run_id, nz
 
         complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, px, py, pz, uturb, pxdns, pydns, pzdns 
+        complex(rkind), dimension(:,:,:), allocatable :: uvisc, vvisc, wvisc, ucor, vcor, wcor, wb 
         type(igrid), pointer :: igrid_sim 
         
         real(rkind), dimension(:,:,:,:), allocatable :: budget_0, budget_1, budget_2, budget_3
@@ -181,12 +194,14 @@ contains
  
         if(this%do_budgets) then 
             if (this%isStratified) then
-                allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),26))
+                allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),30))
+                allocate(this%budget_2(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),09))
+                allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),14))
             else
                 allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),25))
+                allocate(this%budget_2(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),07))
+                allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),10))
             end if
-            allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),10))
-            allocate(this%budget_2(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),07))
             allocate(this%budget_3(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),08))
 
             if ((trim(budgets_dir) .eq. "null") .or.(trim(budgets_dir) .eq. "NULL")) then
@@ -213,6 +228,16 @@ contains
             call igrid_sim%spectE%alloc_r2c_out(this%wc)
             call igrid_sim%spectE%alloc_r2c_out(this%wsgs)
             call igrid_sim%spectE%alloc_r2c_out(this%pz)
+            
+            if (this%isStratified) then
+                call igrid_sim%spectC%alloc_r2c_out(this%ucor)
+                call igrid_sim%spectC%alloc_r2c_out(this%vcor)
+                call igrid_sim%spectC%alloc_r2c_out(this%wcor)
+                call igrid_sim%spectC%alloc_r2c_out(this%wb)
+                call igrid_sim%spectC%alloc_r2c_out(this%uvisc)
+                call igrid_sim%spectC%alloc_r2c_out(this%vvisc)
+                call igrid_sim%spectC%alloc_r2c_out(this%wvisc)
+            end if
 
             ! STEP 3: Now instrument igrid 
             if(this%splitPressureDNS) then
@@ -222,10 +247,14 @@ contains
               call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
                        & this%px, this%py, this%pz, this%uturb, this%pxdns, this%pydns, this%pzdns)  
             else
-              call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
+                if (this%isStratified) then
+                    call igrid_sim%instrumentForBudgets(this%uc, this%vc, this%wc, this%usgs, this%vsgs, &  
+                       this%wsgs, this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, this%vcor, this%wcor, this%uturb)
+                else 
+                    call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
                        & this%px, this%py, this%pz, this%uturb)  
-            endif
-
+                end if
+            end if
             ! STEP 4: For horizontally-averaged surface quantities (called
             ! Scalar here), and turbine statistics
             !allocate(this%inst_horz_avg(5)) ! [ustar, uw, vw, Linv, wT]
@@ -356,13 +385,22 @@ contains
         this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) - this%budget_0(:,:,:,13)*this%budget_0(:,:,:,1)
         this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) - this%budget_0(:,:,:,15)*this%budget_0(:,:,:,2)
         this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) - this%budget_0(:,:,:,16)*this%budget_0(:,:,:,3)
+        
+        ! STEP 6: Potential temperature terms for stratified flow
+        if (this%isStratified) then
+            this%budget_0(:,:,:,27) = this%budget_0(:,:,:,27) - this%budget_0(:,:,:,1)*this%budget_0(:,:,:,26)
+            this%budget_0(:,:,:,28) = this%budget_0(:,:,:,28) - this%budget_0(:,:,:,2)*this%budget_0(:,:,:,26)
+            this%budget_0(:,:,:,29) = this%budget_0(:,:,:,29) - this%budget_0(:,:,:,3)*this%budget_0(:,:,:,26)
+            this%budget_0(:,:,:,30) = this%budget_0(:,:,:,30) - this%budget_0(:,:,:,26)*this%budget_0(:,:,:,26)
+        end if 
 
-        ! Step 6: Dump the full budget 
+
+        ! Step 7: Dump the full budget 
         do idx = 1,size(this%budget_0,4)
             call this%dump_budget_field(this%budget_0(:,:,:,idx),idx,0)
         end do 
         
-        ! Step 7: Go back to summing
+        ! Step 8: Go back to summing
         this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%budget_0(:,:,:,13)*this%budget_0(:,:,:,1)
         this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%budget_0(:,:,:,15)*this%budget_0(:,:,:,2)
         this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%budget_0(:,:,:,16)*this%budget_0(:,:,:,3)
@@ -384,7 +422,7 @@ contains
         this%budget_0(:,:,:,18) = this%budget_0(:,:,:,18) + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,10)
         this%budget_0(:,:,:,17) = this%budget_0(:,:,:,17) + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,10)
  
-        ! Step 8: Go back to <ui uj> from <Rij>
+        ! Step 9: Go back to <ui uj> from <Rij>
         this%budget_0(:,:,:,4)  = this%budget_0(:,:,:,4)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,1) ! R11
         this%budget_0(:,:,:,5)  = this%budget_0(:,:,:,5)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,2) ! R12
         this%budget_0(:,:,:,6)  = this%budget_0(:,:,:,6)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,3) ! R13
@@ -392,7 +430,15 @@ contains
         this%budget_0(:,:,:,8)  = this%budget_0(:,:,:,8)  + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,3) ! R23
         this%budget_0(:,:,:,9)  = this%budget_0(:,:,:,9)  + this%budget_0(:,:,:,3)*this%budget_0(:,:,:,3) ! R33
         
-        ! Step 9: Go back to summing instead of averaging
+        ! STEP 6: Potential temperature terms for stratified flow
+        if (this%isStratified) then
+            this%budget_0(:,:,:,27) = this%budget_0(:,:,:,27) + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,26)
+            this%budget_0(:,:,:,28) = this%budget_0(:,:,:,28) + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,26)
+            this%budget_0(:,:,:,29) = this%budget_0(:,:,:,29) + this%budget_0(:,:,:,3)*this%budget_0(:,:,:,26)
+            this%budget_0(:,:,:,30) = this%budget_0(:,:,:,30) + this%budget_0(:,:,:,26)*this%budget_0(:,:,:,26)
+        end if 
+        
+        ! Step 11: Go back to summing instead of averaging
         this%budget_0 = this%budget_0*(real(this%counter,rkind) + 1.d-18)
 
     end subroutine 
@@ -449,11 +495,20 @@ contains
         this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%igrid_sim%tauSGS_ij(:,:,:,5)*this%igrid_sim%v
         this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%igrid_sim%tauSGS_ij(:,:,:,6)*this%igrid_sim%wC
 
+        ! STEP 8: Potential temperature terms for stratified flow
+        if (this%isStratified) then
+            this%budget_0(:,:,:,27) = this%budget_0(:,:,:,27) + this%igrid_sim%u*this%igrid_sim%T
+            this%budget_0(:,:,:,28) = this%budget_0(:,:,:,28) + this%igrid_sim%v*this%igrid_sim%T
+            this%budget_0(:,:,:,29) = this%budget_0(:,:,:,29) + this%igrid_sim%wC*this%igrid_sim%T
+            this%budget_0(:,:,:,30) = this%budget_0(:,:,:,30) + this%igrid_sim%T*this%igrid_sim%T
+        end if 
+
     end subroutine 
 
     ! ---------------------- Budget 1 ------------------------
     subroutine AssembleBudget1(this)
         class(budgets_time_avg), intent(inout) :: this
+        real(rkind) :: tmp1, tmp2
 
         ! STEP 1: Get 4 terms from u-equation 
         call this%igrid_sim%spectC%ifft(this%uc,this%igrid_sim%rbuffxC(:,:,:,1))
@@ -490,7 +545,21 @@ contains
         call this%igrid_sim%spectE%ifft(this%wsgs,this%igrid_sim%rbuffxE(:,:,:,1))
         call this%interp_Edge2Cell(this%igrid_sim%rbuffxE(:,:,:,1), this%igrid_sim%rbuffxC(:,:,:,1))
         this%budget_1(:,:,:,10) = this%budget_1(:,:,:,10) + this%igrid_sim%rbuffxC(:,:,:,1)
-        
+       
+        if (this%isStratified) then
+            ! Get the geostrophic forcing 
+            call this%igrid_sim%get_geostrophic_forcing(tmp1, tmp2)         ! Forcing in x and y directions respectively 
+            ! Coriolis term, X       
+            call this%igrid_sim%spectC%ifft(this%ucor,this%igrid_sim%rbuffxC(:,:,:,1))
+            this%budget_1(:,:,:,11) = this%budget_1(:,:,:,11) + this%igrid_sim%rbuffxC(:,:,:,1) - tmp1 ! Remove the geostrophic forcing term
+            ! Geostrophic term, X
+            this%budget_1(:,:,:,12) = this%budget_1(:,:,:,12) + tmp1
+            ! Coriolis term, Y       
+            call this%igrid_sim%spectC%ifft(this%vcor,this%igrid_sim%rbuffxC(:,:,:,1))
+            this%budget_1(:,:,:,13) = this%budget_1(:,:,:,13) + this%igrid_sim%rbuffxC(:,:,:,1) - tmp2 ! Remove the geostrophic forcing term
+            ! Geostrophic term, Y
+            this%budget_1(:,:,:,14) = this%budget_1(:,:,:,14) + tmp2
+        end if 
         
     end subroutine
 
@@ -592,8 +661,22 @@ contains
             this%budget_2(:,:,:,5) = this%budget_2(:,:,:,5) - this%budget_2(:,:,:,6)
 
             ! 7:  Actuator disk sink        (J)
+            !!!!!!!!!!!!!!!!!!!
+            ! this assumes that the turbine forcing is only in the x direction
+            ! according to the u velocity
+            !!!!!!!!!!!!!!!!!!!
             this%budget_2(:,:,:,7) = Umn*this%budget_1(:,:,:,4)
 
+            ! 8: Coriolis terms
+            if (this%isStratified) then
+                ! Geostrophic forcing term
+                this%budget_2(:,:,:,8) = Umn*this%budget_1(:,:,:,12) &
+                               + Vmn*this%budget_1(:,:,:,14)
+            
+                ! Coriolis forcing term (should be 0)
+                this%budget_2(:,:,:,9) = Umn*this%budget_1(:,:,:,11) &
+                               + Vmn*this%budget_1(:,:,:,13)
+            end if
 
             nullify(Umn,Vmn,Wmn,R11,R12,R13,R22,R23,R33,Pmn,tau11,tau12,tau13,tau22,tau23,tau33,buff,buff2)
 

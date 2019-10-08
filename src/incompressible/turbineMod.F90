@@ -224,7 +224,8 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     endif
 
     if (this%useDynamicYaw) then
-        call this%dyaw%init(inputDirDyaw, xLoc, yLoc)
+        call this%dyaw%init(inputDirDyaw, xLoc, yLoc, &
+                            this%turbArrayADM_Tyaw(1)%diam, this%nTurbines)
     end if
 
     !if(this%dumpTurbField) then
