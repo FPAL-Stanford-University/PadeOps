@@ -11,6 +11,7 @@ module SolidMixtureMod
     use StiffGasEOS,     only: stiffgas
     use Sep1SolidEOS,    only: sep1solid
     use SolidMod,        only: solid
+    use SolidMultMod,    only: solidmult 
 
     implicit none
 

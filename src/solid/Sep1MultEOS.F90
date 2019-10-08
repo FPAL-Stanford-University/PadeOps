@@ -3,6 +3,7 @@ module Sep1MultEOS
     use kind_parameters, only: rkind
     use constants,       only: zero,half,one,two,three,fourth,sixth,third,twothird,fourthird
     use ElasticEOSMod,   only: elasticeos
+    use Sep1SolidEOS,    only: sep1solid
 
     implicit none
 
@@ -37,7 +38,8 @@ contains
 
     !function init(rho0_,mu_,yield_,tau0_) result(this)
     function init() result(this)
-        type(sep1solid) :: this
+        !type(sep1solid) :: this
+        class(sep1solid) :: this
         !real(rkind), intent(in) :: rho0_,mu_, yield_, tau0_
 
         integer :: info, lwork
@@ -138,7 +140,7 @@ contains
 
     end subroutine
 
-    subroutine get_eelastic(this,trG,trG2,detG,rho0mix,mumix,eelastic)
+    subroutine get_eelastic(this,trG,trG2,detG,rho0_mix,mu_mix,eelastic)
         class(sep1solid), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: trG,trG2,detG,rho0_mix,mu_mix
         real(rkind), dimension(:,:,:), intent(out) :: eelastic
