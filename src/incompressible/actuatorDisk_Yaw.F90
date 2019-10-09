@@ -293,14 +293,15 @@ subroutine dumpPower(this, outputfile, tempname)
 end subroutine    
 
 subroutine dumpPowerUpdate(this, outputfile, tempname, & 
-                           powerUpdate, Phat, yaw, yawOld, meanP, kw, sigma, i)
+                           powerUpdate, Phat, yaw, yawOld, & 
+                           meanP, kw, sigma, phat_yaw, i)
     class(actuatordisk_yaw), intent(inout) :: this
     character(len=*),    intent(in)            :: outputfile, tempname
     integer :: fid = 1234
     integer, intent(in) :: i
     character(len=clen) :: fname, tempname2
     real(rkind), dimension(:), intent(in) :: powerUpdate, Phat, yaw, yawOld, meanP
-    real(rkind), dimension(:), intent(in) :: kw, sigma
+    real(rkind), dimension(:), intent(in) :: kw, sigma, phat_yaw
 
     ! Write power
     fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname)
@@ -343,6 +344,12 @@ subroutine dumpPowerUpdate(this, outputfile, tempname, &
     fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
     open(fid,file=trim(fname), form='formatted')
     write(fid, *) sigma
+    close(fid)
+    ! Write phat_yaw in this time interval
+    write(tempname2,"(A8,I3.3,A4)") "phatYaw_",i,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) phat_yaw
     close(fid)
 
 end subroutine    
