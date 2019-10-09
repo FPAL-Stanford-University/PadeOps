@@ -304,11 +304,11 @@ subroutine dumpPowerUpdate(this, outputfile, tempname, &
     real(rkind), dimension(:), intent(in) :: kw, sigma, phat_yaw
 
     ! Write power
-    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname)
+    !fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname)
     !open(fid,file=trim(fname), form='unformatted',action='write',position='append')
-    open(fid,file=trim(fname), form='formatted')
-    write(fid, *) powerUpdate
-    close(fid)
+    !open(fid,file=trim(fname), form='formatted')
+    !write(fid, *) powerUpdate
+    !close(fid)
     ! Write Phat
     write(tempname2,"(A5,I3.3,A4)") "Phat_",i,".txt"
     fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)

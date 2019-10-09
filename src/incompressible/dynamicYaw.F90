@@ -264,8 +264,8 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     allocate(randArr2(this%Nt, this%Ne))
  
     ! Random noise
-    call gaussian_random(randArr,zero,this%var_k**0.5,this%ts)
-    call gaussian_random(randArr2,zero,this%var_sig**0.5,this%ts*5)
+    call gaussian_random(randArr,zero,this%var_k**0.5)!,this%ts)
+    call gaussian_random(randArr2,zero,this%var_sig**0.5)!,this%ts*5)
     chi = 0.d0
     chi(1:this%Nt, :) = randArr
     chi(this%Nt+1:NN, :) = randArr2
@@ -293,7 +293,7 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     
     ! Perturbation matrices
     randArr = 0.d0; randArr2 = 0.d0
-    call gaussian_random(randArr,zero,this%var_p**0.5,this%ts*7)
+    call gaussian_random(randArr,zero,this%var_p**0.5)!,this%ts*7)
     do i = 1, this%Ne
         randArr2(:,i) = P_kp1
     end do

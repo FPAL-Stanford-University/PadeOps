@@ -26,8 +26,8 @@ dealiasFact                   = 0.6667d0
 /
 &IO
 RunID                         = 1          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump                 = 1000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump                    = 1000        ! Data dumping frequency (# of timesteps)
+t_restartDump                 = 10000        ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump                    = 10000        ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump                   = 100         ! Plane dumping frequency (# of timesteps)
@@ -119,7 +119,7 @@ Fringe_yst                    = 0.80d0
 Fringe_yen                    = 1.00d0
 Fringe_delta_st_y             = 0.20d0
 Fringe_delta_en_y             = 0.05d0
-LambdaFact                    = 0.75d0 
+LambdaFact                    = 0.95d0 
 /
 /
 &KSPREPROCESS
