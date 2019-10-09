@@ -10,7 +10,7 @@ dt                            = 0.001D0     ! Fixed time step value (only used i
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile                = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID               = 10000       ! TimeID of the restart file being used
+restartFile_TID               = 20000       ! TimeID of the restart file being used
 restartFile_RID               = 02          ! RunID of the restart file being used
 /
 /

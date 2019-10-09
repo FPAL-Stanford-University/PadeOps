@@ -464,7 +464,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                    ! Update the yaw misalignment for each turbine
                    if (mod(this%timeStep, this%yawUpdateInterval) == 0 .and. this%timeStep /= 1) then
                        call this%dyaw%update_and_yaw(this%gamma, this%meanWs(1), & 
-                                                     270.d0, this%meanP)
+                                                     270.d0, this%meanP, this%step)
                    end if
                    if (mod(this%timeStep, this%yawUpdateInterval) == 0 .and. this%timeStep /= 1) then
                        do i=1,this%nTurbines
@@ -486,6 +486,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                        this%firstStep = .FALSE.
                    end if
                    this%gamma_nm1 = this%gamma
+                   this%step=this%step+1
                end if
            end select 
     end if 
