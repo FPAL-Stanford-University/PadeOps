@@ -1,3 +1,4 @@
 &concurrent
-precInputFile = "/home/nghaisas/PadeOps/concurrentSimulation/input_prec.dat"
-mainInputFile = "/home/nghaisas/PadeOps/concurrentSimulation/input_main.dat"
+precInputFile = "/home1/05294/mhowland/PadeOps/problems/turbines/concurrentSimulation_files/input_prec.dat"
+mainInputFile = "/home1/05294/mhowland/PadeOps/problems/turbines/concurrentSimulation_files/input_main1.dat"
+/

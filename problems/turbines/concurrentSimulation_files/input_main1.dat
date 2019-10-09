@@ -11,7 +11,7 @@ prow                          = 0           ! Number of rows in 2D processor dec
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile                = .TRUE.      ! Set to false if it's a fresh simulation 
 restartFile_TID               = 10000       ! TimeID of the restart file being used
-restartFile_RID               = 02          ! RunID of the restart file being used
+restartFile_RID               = 01          ! RunID of the restart file being used
 /
 /
 &NUMERICS
@@ -25,7 +25,7 @@ InitSpinUp                    = .FALSE.     ! Perform initialization spinup?
 /
 /
 &IO
-RunID                         = 02          ! Run Label (All output files will be tagged with this nubber)
+RunID                         = 01          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump                 = 10000       ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump                    = 10000       ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
@@ -54,7 +54,7 @@ controlDir                    = "null"      ! Check in this directory for comman
 &PHYSICS
 isInviscid                    = .TRUE.      ! Is this an inviscid simulation?
 useCoriolis                   = .FALSE.     ! Activate the coriolis term? 
-useExtraForcing               = .TRUE.      ! Is an extra forcing term being used? (non-Geostrophic forcing only)
+useExtraForcing               = .FALSE.     ! Is an extra forcing term being used? (non-Geostrophic forcing only)
 useGeostrophicForcing         = .FALSE.     ! This is true if forcing is provided using the coriolis term  
 isStratified                  = .FALSE.     ! Use Stratification / active scalar in momentum
 Pr                            = 0.6D0       ! Turbulent Prandtl Number; used when 
@@ -74,6 +74,8 @@ fastCalcPressure              = .TRUE.      ! Compute and store pressure at ever
 storePressure                 = .TRUE.      ! Would you like to compute and store pressure?
 P_dumpFreq                    = 10000       ! How often (timesteps) do you want to dump pressure?
 P_compFreq                    = 40          ! How often (timesteps) do you want to compute pressure? 
+computeTurbinePressure        = .TRUE.      ! Would you like to compute and store turbine pressure?
+computeFringePressure         = .TRUE.      ! Would you like to compute and store fringe pressure?
 /
 /
 &BCs
@@ -82,7 +84,7 @@ topWall                       = 2           ! no_slip = 1, slip = 2
 useSpongeLayer                = .FALSE.     ! Use a sponge layer at the top 
 zstSponge                     = 0.8d0       ! Height above which the sponge layer is active
 SpongeTscale                  = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
-useFringe                     = .false.     ! This is false if simulation is periodic. 
+useFringe                     = .true.      ! This is false if simulation is periodic. 
 /
 /
 &SGS_MODEL
@@ -99,15 +101,18 @@ DynProcFreq                   = 5           ! Frequency of dynamic procedure
 /
 /
 &WINDTURBINES
-useWindTurbines               = .FALSE.     ! Do you want to use Wind turbines ?
-num_turbines                  = 1
-ADM                           = .TRUE.
-turbInfoDir                   = "/scratch/04769/ghaisasn/runs/PadeOps/concurrent/turb1/dom1/4d/g2/turbInfo"
-ADM_Type                      = 2
+useWindTurbines       = .TRUE.
+num_turbines          = 2
+ADM                   = .TRUE.
+turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/pblwt_files/turbInfo_yaw/6x1array_yaw"
+ADM_Type              = 4
+powerDumpDir          = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_debug/modelDumps"
+useDynamicYaw         = .FALSE.
+yawUpdateInterval     = 10000
 /
 /
 &FRINGE
-apply_x_fringe                = .false.
+apply_x_fringe                = .true.
 apply_y_fringe                = .false.
 Fringe_xst                    = 0.75d0         
 Fringe_xen                    = 1.00d0
@@ -118,6 +123,19 @@ Fringe_yen                    = 1.00d0
 Fringe_delta_st_y             = 0.20d0
 Fringe_delta_en_y             = 0.05d0
 LambdaFact                    = 0.75d0 
+/
+/
+&BUDGET_TIME_AVG
+do_budgets            = .TRUE.    ! Perform budget calculations?
+budgetType            = 2         ! See type descriptions in budget_time_avg.F90
+budgets_dir           = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe_debug/budgets"   ! Write in default output directory
+tidx_compute          = 5         ! How often should budgets be computed?
+tidx_dump             = 10      ! How often should budget files be written to disk?
+tidx_budget_start     = 10      ! Start budget computation from this timestep onward
+restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations?
+restart_rid           = 2         ! Restart budget file run index
+restart_tid           = 99999     ! Restart budget file time index
+restart_counter       = 11111     ! Restart budget file counter
 /
 /
 &KSPREPROCESS
