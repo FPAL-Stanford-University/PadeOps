@@ -451,11 +451,12 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                do i = 1, this%nTurbines
                    call this%turbArrayADM_Tyaw(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i))
                    if (this%useDynamicYaw) then
-                       write(tempname,"(A6,I3.3,A4)") "power_",i,".txt"
-                       call this%turbArrayADM_Tyaw(i)%dumpPower(this%powerDumpDir, tempname)
-                       this%powerUpdate(this%timeStep, i) = this%turbArrayADM_Tyaw(i)%power
+                       !write(tempname,"(A6,I3.3,A4)") "power_",i,".txt"
+                       !call this%turbArrayADM_Tyaw(i)%dumpPower(this%powerDumpDir, tempname)
+                       this%powerUpdate(this%timeStep, i) = & 
+                                         this%turbArrayADM_Tyaw(i)%get_power()
                        call this%dyaw%simpleMovingAverage(this%meanP(i), &
-                            this%turbArrayADM_Tyaw(i)%power, this%meanWs(i), & 
+                            this%turbArrayADM_Tyaw(i)%get_power(), this%meanWs(i), & 
                             this%turbArrayADM_Tyaw(i)%ut, this%timeStep, i)
                    end if
                end do    

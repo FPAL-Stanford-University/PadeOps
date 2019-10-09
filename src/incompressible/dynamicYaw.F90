@@ -22,7 +22,7 @@ module dynamicYawMod
         integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20
         real(rkind) :: var_p = 0.04d0, var_k = 9D-6, var_sig = 9D-6
         ! Turbine parameters
-        integer :: Nt = 1
+        integer :: Nt = 1, ts
         real(rkind), dimension(:,:), allocatable :: turbCenter
         real(rkind) :: D=0.315d0
         real(rkind), dimension(:), allocatable :: yaw
@@ -141,12 +141,13 @@ subroutine destroy(this)
 
 end subroutine 
 
-subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservation)
+subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservation, ts)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:,:), allocatable :: X
     real(rkind), dimension(:), intent(inout) :: yaw
     real(rkind), dimension(:), intent(in) :: powerObservation
     real(rkind), intent(in) :: wind_speed, wind_direction
+    integer, intent(in) :: ts
 
     ! allocate
     allocate(X(this%Nt,2))
@@ -155,6 +156,7 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     this%wind_speed = wind_speed ! Get this from the data
     this%wind_direction = wind_direction ! Get this from the data
     this%powerObservation = powerObservation ! Get the power production from ADM code
+    this%ts = ts
     !call this%observeField()
     ! Rotate domain
     X = this%turbCenter
@@ -244,9 +246,6 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     real(rkind), dimension(:,:), allocatable :: randArr, randArr2, chi, rbuff
     real(rkind), dimension(:,:), allocatable :: psi_kp, psi_kp1, psiHat_kp, ones_Ne, psi_kpp, psiHat_kpp
     real(rkind), dimension(:), allocatable :: Phat, Phat_zeroYaw
-    integer :: seedu = 321341
-    integer :: seedv = 423424
-    integer :: seedw = 131344
 
     ! Define relevant parameters
     NN = this%Nt * 2
@@ -264,8 +263,8 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     allocate(randArr2(this%Nt, this%Ne))
  
     ! Random noise
-    call gaussian_random(randArr,zero,this%var_k**0.5)!,seedu + 10*nrank)
-    call gaussian_random(randArr2,zero,this%var_sig**0.5)!,seedv + 10*nrank)
+    call gaussian_random(randArr,zero,this%var_k**0.5)!,this%ts)
+    call gaussian_random(randArr2,zero,this%var_sig**0.5)!,this%ts*5)
     chi = 0.d0
     chi(1:this%Nt, :) = randArr
     chi(this%Nt+1:NN, :) = randArr2
@@ -293,7 +292,7 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     
     ! Perturbation matrices
     randArr = 0.d0; randArr2 = 0.d0
-    call gaussian_random(randArr,zero,this%var_p**0.5)!,seedw + 10*nrank)
+    call gaussian_random(randArr,zero,this%var_p**0.5)!,this%ts*7)
     do i = 1, this%Ne
         randArr2(:,i) = P_kp1
     end do

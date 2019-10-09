@@ -19,7 +19,7 @@ module actuatorDisk_YawMod
     type :: actuatorDisk_yaw
         ! Actuator Disk_T2 Info
         integer :: xLoc_idx, ActutorDisk_T2ID
-        real(rkind) :: yaw, tilt, ut, power
+        real(rkind) :: yaw, tilt, ut
         real(rkind) :: xLoc, yLoc, zLoc, dx, dy, dz
         real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq, Cp
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
@@ -191,17 +191,19 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         rhsxvals = rhsxvals + Ft(1,1) * this%scalarSource 
         rhsyvals = rhsyvals + Ft(2,1) * this%scalarSource
         rhszvals = rhszvals + Ft(3,1) * this%scalarSource 
+        !call this%get_power()
 
     end if 
 
 end subroutine
 
-subroutine get_power(this)
-    class(actuatordisk_yaw), intent(inout) :: this
+pure function get_power(this) result(power)
+    class(actuatordisk_yaw), intent(in) :: this
+    real(rkind) :: power
 
-    this%power = 0.5d0*this%Cp*(pi*(this%diam**2)/4.d0)*(this%ut)**3
+    power = 0.5d0*this%Cp*(pi*(this%diam**2)/4.d0)*(this%ut)**3
 
-end subroutine
+end function
 
 subroutine AD_force_point(this, X, Y, Z, scalarSource)
     class(actuatordisk_yaw), intent(inout) :: this
@@ -281,13 +283,11 @@ subroutine dumpPower(this, outputfile, tempname)
     integer :: fid = 1234
     character(len=clen) :: fname
 
-    ! Get power
-    call this%get_power()
     ! Write power
     fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname)
     !open(fid,file=trim(fname), form='unformatted',action='write',position='append')
     open(fid,file=trim(fname), form='formatted', action='write',position='append')
-    write(fid, *) this%power
+    write(fid, *) this%get_power()
     close(fid)
 
 end subroutine    
