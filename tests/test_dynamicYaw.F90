@@ -87,7 +87,7 @@ program test_dynamicYaw
     power = (/1.0000, 0.2621/)
     wind_speed = 8.d0
     wind_direction = 270.d0
-    call dyaw%update_and_yaw(yaw, wind_speed, wind_direction, power, 1)
+    call dyaw%update_and_yaw(yaw, wind_speed, wind_direction, power, 1, power)
 
     ! O, t
     write(*,*) dyaw%yaw*180.d0/pi

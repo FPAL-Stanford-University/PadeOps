@@ -212,7 +212,7 @@ subroutine onlineUpdate(this)
     end do
     bestStep = 1; kwBest = kw; sigmaBest = sigma_0;
     do t=1, this%stateEstimationEpochs;
-        call this%EnKF_update( psi_kp1, this%powerObservation, kw, sigma_0, yaw)
+        call this%EnKF_update( psi_kp1, this%powerObservation, kw, sigma_0, yaw, t)
         ! Run forward model pass
         call this%forward(kw, sigma_0, Phat, yaw)
         ! Normalized
@@ -243,7 +243,7 @@ subroutine onlineUpdate(this)
  
 end subroutine
 
-subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
+subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw, step)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:,:), intent(in) :: psi_k
     real(rkind), dimension(:), intent(in) :: P_kp1, yaw
@@ -252,6 +252,7 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     real(rkind), dimension(:,:), allocatable :: randArr, randArr2, chi, rbuff
     real(rkind), dimension(:,:), allocatable :: psi_kp, psi_kp1, psiHat_kp, ones_Ne, psi_kpp, psiHat_kpp
     real(rkind), dimension(:), allocatable :: Phat, Phat_zeroYaw
+    integer, intent(in) :: step
 
     ! Define relevant parameters
     NN = this%Nt * 2
@@ -269,8 +270,8 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     allocate(randArr2(this%Nt, this%Ne))
  
     ! Random noise
-    call gaussian_random(randArr,zero,this%var_k**0.5)!,this%ts)
-    call gaussian_random(randArr2,zero,this%var_sig**0.5)!,this%ts*5)
+    call gaussian_random(randArr,zero,this%var_k**0.5,this%ts+step)
+    call gaussian_random(randArr2,zero,this%var_sig**0.5,this%ts*5+step*5)
     chi = 0.d0
     chi(1:this%Nt, :) = randArr
     chi(this%Nt+1:NN, :) = randArr2
@@ -298,7 +299,7 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     
     ! Perturbation matrices
     randArr = 0.d0; randArr2 = 0.d0
-    call gaussian_random(randArr,zero,this%var_p**0.5)!,this%ts*7)
+    call gaussian_random(randArr,zero,this%var_p**0.5,this%ts*7+7*step)
     do i = 1, this%Ne
         randArr2(:,i) = P_kp1
     end do
