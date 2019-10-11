@@ -4,7 +4,7 @@ outputdir                     = "/scratch/05294/mhowland/channel_yaw/two_turbine
 nx                            = 128         ! Number of points in X
 ny                            = 96         ! Number of points in Y
 nz                            = 64         ! Number of points in Z
-tstop                         = 70.D0       ! Physical time to stop the simulation
+tstop                         = 700.D0       ! Physical time to stop the simulation
 CFL                           = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
@@ -108,7 +108,8 @@ turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/pblwt_f
 ADM_Type              = 4
 powerDumpDir          = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe_debug/modelDumps"
 useDynamicYaw         = .TRUE.
-yawUpdateInterval     = 10000
+yawUpdateInterval     = 20000
+inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_channel.inp"
 /
 /
 &FRINGE
@@ -122,7 +123,7 @@ Fringe_yst                    = 0.75d0
 Fringe_yen                    = 1.00d0
 Fringe_delta_st_y             = 0.20d0
 Fringe_delta_en_y             = 0.05d0
-LambdaFact                    = 0.75d0 
+LambdaFact                    = 0.95d0 
 /
 /
 &BUDGET_TIME_AVG

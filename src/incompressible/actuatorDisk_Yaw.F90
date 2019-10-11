@@ -19,7 +19,7 @@ module actuatorDisk_YawMod
     type :: actuatorDisk_yaw
         ! Actuator Disk_T2 Info
         integer :: xLoc_idx, ActutorDisk_T2ID
-        real(rkind) :: yaw, tilt, ut
+        real(rkind) :: yaw, tilt, ut, powerBaseline
         real(rkind) :: xLoc, yLoc, zLoc, dx, dy, dz
         real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq, Cp
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
@@ -47,6 +47,7 @@ module actuatorDisk_YawMod
         procedure :: init
         procedure :: destroy
         procedure :: get_RHS
+        procedure :: get_RHS_withPower
         procedure :: link_memory_buffers
         procedure, private :: AD_force
         procedure, private :: AD_force_point
@@ -117,6 +118,31 @@ subroutine destroy(this)
     nullify(this%rbuff, this%blanks, this%speed, this%scalarSource)
     nullify(this%xG, this%yG, this%zG)
 end subroutine 
+
+subroutine get_RHS_withPower(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta)
+    class(actuatordisk_yaw), intent(inout) :: this
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
+    real(rkind), intent(in) :: gamma_negative, theta
+    real(rkind) :: usp_sq, force, gamma
+    real(rkind), dimension(3,3) :: R, T
+    real(rkind), dimension(3,1) :: xn, Ft, n
+    real(rkind) ::  numPoints, x, y, z, scalarSource, sumVal
+    real(rkind) :: xnew, ynew, znew, cgamma, sgamma, ctheta, stheta, x2, y2, z2
+    integer :: i,j,k
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc) :: rhsxvalsg, rhsyvalsg, rhszvalsg
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc) :: ug, vg, wg
+
+    ! First run the model with no yaw misalignment to get the baseline power
+    ! production 
+    ug = u; vg = v; wg = w; rhsxvalsg = rhsxvals; rhsyvalsg = rhsyvals; rhszvalsg = rhszvals;
+    call this%get_RHS(ug, vg, wg, rhsxvalsg, rhsyvalsg, rhszvalsg, gamma_negative*0.d0, theta*0.d0) 
+    this%powerBaseline = this%get_power()
+    ! Now run the model with the appropriate yaw misalignment to return the
+    ! correct values
+    call this%get_RHS(u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta) 
+
+end subroutine
 
 subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta)
     class(actuatordisk_yaw), intent(inout) :: this
@@ -294,14 +320,14 @@ end subroutine
 
 subroutine dumpPowerUpdate(this, outputfile, tempname, & 
                            powerUpdate, Phat, yaw, yawOld, & 
-                           meanP, kw, sigma, phat_yaw, i)
+                           meanP, kw, sigma, phat_yaw, i, pBaseline)
     class(actuatordisk_yaw), intent(inout) :: this
     character(len=*),    intent(in)            :: outputfile, tempname
     integer :: fid = 1234
     integer, intent(in) :: i
     character(len=clen) :: fname, tempname2
     real(rkind), dimension(:), intent(in) :: powerUpdate, Phat, yaw, yawOld, meanP
-    real(rkind), dimension(:), intent(in) :: kw, sigma, phat_yaw
+    real(rkind), dimension(:), intent(in) :: kw, sigma, phat_yaw, pBaseline
 
     ! Write power
     !fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname)
@@ -331,7 +357,7 @@ subroutine dumpPowerUpdate(this, outputfile, tempname, &
     write(tempname2,"(A6,I3.3,A4)") "MeanP_",i,".txt"
     fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
     open(fid,file=trim(fname), form='formatted')
-    write(fid, *) meanP
+    write(fid, *) meanP / pBaseline(1)
     close(fid)
     ! Write kw in this time interval
     write(tempname2,"(A3,I3.3,A4)") "kw_",i,".txt"

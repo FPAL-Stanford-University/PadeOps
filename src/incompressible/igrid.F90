@@ -385,7 +385,7 @@ contains
     subroutine init(this,inputfile, initialize2decomp)
         class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
-        character(len=clen) :: outputdir, inputdir, scalar_info_dir, turbInfoDir, ksOutputDir, controlDir = "null", moisture_info_dir
+        character(len=clen) :: outputdir, inputdir, scalar_info_dir, turbInfoDir, ksOutputDir, controlDir = "null", moisture_info_dir, inputDirDyaw
         integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = 999999, sponge_type = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
@@ -433,7 +433,7 @@ contains
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle, buoyancyDirection
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, powerDumpDir, useDynamicYaw, &
-                                yawUpdateInterval  
+                                yawUpdateInterval, inputDirDyaw 
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
                             useExhaustiveFFT, dealiasFact, scheme_xy, donot_dealias 

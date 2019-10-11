@@ -4,7 +4,7 @@ outputdir                     = "/scratch/05294/mhowland/AD_Coriolis/Ro_inf_yaw"
 nx                            = 128          ! Number of points in X
 ny                            = 32          ! Number of points in Y
 nz                            = 32          ! Number of points in Z
-tstop                         = 50000.D0       ! Physical time to stop the simulation
+tstop                         = 500000.D0       ! Physical time to stop the simulation
 CFL                           = 1.4D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
@@ -108,6 +108,7 @@ ADM_Type              = 4
 powerDumpDir          = "/scratch/05294/mhowland/AD_Coriolis/Ro_inf_yaw/dataDumps"
 useDynamicYaw         = .TRUE.
 yawUpdateInterval     = 10000
+inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw.inp"
 /
 /
 &FRINGE

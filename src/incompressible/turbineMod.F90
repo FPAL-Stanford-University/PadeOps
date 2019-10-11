@@ -45,8 +45,8 @@ module turbineMod
  
         real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz
         complex(rkind), dimension(:,:,:), pointer :: fChat, fEhat, zbuffC, zbuffE
-        real(rkind), dimension(:), allocatable :: gamma, theta, meanP, gamma_nm1, meanWs
-        real(rkind), dimension(:), allocatable :: power_minus_n, ws_minus_n
+        real(rkind), dimension(:), allocatable :: gamma, theta, meanP, gamma_nm1, meanWs, meanPbaseline
+        real(rkind), dimension(:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n
         integer :: n_moving_average, timeStep, updateCounter 
         real(rkind), dimension(:,:), allocatable :: powerUpdate
 
@@ -121,7 +121,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     integer :: i, ierr, ADM_Type = 2
 
     namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, & 
-                            WriteTurbineForce, powerDumpDir, useDynamicYaw, yawUpdateInterval
+                            WriteTurbineForce, powerDumpDir, useDynamicYaw, yawUpdateInterval, inputDirDyaw
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -188,12 +188,14 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
          allocate (this%scalarSource(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
          if (this%useDynamicYaw) then
              allocate(this%meanP(this%nTurbines))
+             allocate(this%meanPbaseline(this%nTurbines))
              allocate(this%meanWs(this%nTurbines))
              allocate(this%powerUpdate(this%yawUpdateInterval, this%nTurbines))
              this%powerDumpDir = powerDumpDir
              this%timeStep = 1
              this%updateCounter = 1
              this%meanP = 0.d0
+             this%meanPbaseline = 0.d0
              this%meanWs = 0.d0
              this%powerUpdate = 0.d0
              this%firstStep = .TRUE.
@@ -449,7 +451,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                end do
            case (4)
                do i = 1, this%nTurbines
-                   call this%turbArrayADM_Tyaw(i)%get_RHS(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i))
+                   call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i))
                    if (this%useDynamicYaw) then
                        !write(tempname,"(A6,I3.3,A4)") "power_",i,".txt"
                        !call this%turbArrayADM_Tyaw(i)%dumpPower(this%powerDumpDir, tempname)
@@ -457,14 +459,16 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                                          this%turbArrayADM_Tyaw(i)%get_power()
                        call this%dyaw%simpleMovingAverage(this%meanP(i), &
                             this%turbArrayADM_Tyaw(i)%get_power(), this%meanWs(i), & 
-                            this%turbArrayADM_Tyaw(i)%ut, this%timeStep, i)
+                            this%turbArrayADM_Tyaw(i)%ut, &
+                            this%meanPbaseline(i), this%turbArrayADM_Tyaw(i)%powerBaseline, & 
+                            this%timeStep, i)
                    end if
                end do    
                if (this%useDynamicYaw) then
                    ! Update the yaw misalignment for each turbine
                    if (mod(this%timeStep, this%yawUpdateInterval) == 0 .and. this%timeStep /= 1) then
                        call this%dyaw%update_and_yaw(this%gamma, this%meanWs(1), & 
-                                                     270.d0, this%meanP, this%step)
+                                                     270.d0, this%meanP, this%step, this%meanPbaseline)
                    end if
                    if (mod(this%timeStep, this%yawUpdateInterval) == 0 .and. this%timeStep /= 1) then
                        do i=1,this%nTurbines
@@ -473,7 +477,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                                 tempname, this%powerUpdate(:,i), this%dyaw%Phat, & 
                                 this%gamma, this%gamma_nm1, this%meanP, &
                                 this%dyaw%kw, this%dyaw%sigma_0, &
-                                this%dyaw%Phat_yaw, this%updateCounter)
+                                this%dyaw%Phat_yaw, this%updateCounter, this%meanPbaseline)
                        end do
                        this%timeStep = 0
                        this%updateCounter=this%updateCounter+1

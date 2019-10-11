@@ -32,7 +32,7 @@ module dynamicYawMod
         integer :: Nx
         ! Wind conditions
         real(rkind) :: wind_speed, wind_direction
-        real(rkind), dimension(:), allocatable :: powerObservation
+        real(rkind), dimension(:), allocatable :: powerObservation, powerBaseline
         integer :: conditionTurb
         ! Other stuff
         integer, dimension(:), allocatable :: indSorted, unsort
@@ -47,7 +47,7 @@ module dynamicYawMod
         real(rkind), dimension(:), allocatable :: dp_dgamma 
         ! Moving average stuff
         integer :: n_moving_average
-        real(rkind), dimension(:,:), allocatable :: power_minus_n, ws_minus_n
+        real(rkind), dimension(:,:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n
         real(rkind), dimension(:), allocatable :: Phat, Phat_yaw
 
     contains
@@ -106,6 +106,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt)
     allocate(this%a_mom(this%Nt))
     allocate(this%unsort(this%Nt))
     allocate(this%powerObservation(this%Nt))
+    allocate(this%powerBaseline(this%Nt))
     allocate(this%u_eff(this%Nt))
     allocate(this%sigmaEnd(this%Nt, this%Nt))
     allocate(this%ap(this%Nt))
@@ -121,6 +122,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt)
     allocate(this%Phat_yaw(this%Nt))
     allocate(this%power_minus_n(this%n_moving_average,this%Nt))
     allocate(this%ws_minus_n(this%n_moving_average,this%Nt))
+    allocate(this%pb_minus_n(this%n_moving_average,this%Nt))
 
     ! Define
     this%yaw = 0.d0
@@ -128,6 +130,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt)
     this%sigma_0 = 0.25
     this%power_minus_n = 0.d0
     this%ws_minus_n = 0.d0
+    this%pb_minus_n = 0.d0
 
     ! Get the wind turbine locations
     do i=1,this%Nt
@@ -142,11 +145,11 @@ subroutine destroy(this)
 
 end subroutine 
 
-subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservation, ts)
+subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservation, ts, powerBaseline)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:,:), allocatable :: X
     real(rkind), dimension(:), intent(inout) :: yaw
-    real(rkind), dimension(:), intent(in) :: powerObservation
+    real(rkind), dimension(:), intent(in) :: powerObservation, powerBaseline
     real(rkind), intent(in) :: wind_speed, wind_direction
     integer, intent(in) :: ts
 
@@ -157,13 +160,14 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     this%wind_speed = wind_speed ! Get this from the data
     this%wind_direction = wind_direction ! Get this from the data
     this%powerObservation = powerObservation ! Get the power production from ADM code
+    this%powerBaseline = powerBaseline ! Get the power production from ADM code
     this%ts = ts
     !call this%observeField()
     ! Rotate domain
     X = this%turbCenter
     call this%rotate()
     ! Normalize the power production
-    this%powerObservation = this%powerObservation(this%indSorted) / this%powerObservation(this%conditionTurb)
+    this%powerObservation = this%powerObservation(this%indSorted) / this%powerBaseline(this%conditionTurb)
     ! Online control update
     call this%onlineUpdate()
     yaw = this%yaw
@@ -212,7 +216,8 @@ subroutine onlineUpdate(this)
         ! Run forward model pass
         call this%forward(kw, sigma_0, Phat, yaw)
         ! Normalized
-        Phat = Phat / Phat(1)
+        !Phat = Phat / Phat(1)
+        Phat = Phat / Phat_zeroYaw(1)
         error(t) = sum(abs(Phat-this%powerObservation)) / real(this%Nt)
         if (error(t)<lowestError) then
             lowestError=error(t); bestStep = t;
@@ -274,13 +279,13 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     randArr2 = psi_kp(this%Nt+1:NN, :)
 
     ! Intermediate forcast step
-    !call this%forward(kw, sigma_0, Phat_zeroYaw, yaw*0.d0)
+    call this%forward(kw, sigma_0, Phat_zeroYaw, yaw*0.d0)
     do i=1,this%Ne
         ! Lifting line model
         call this%forward(randArr(:,i), randArr2(:,i), Phat, yaw)
         ! Normalize by first turbine
-        !psiHat_kp(:,i) = Phat/Phat_zeroYaw(1)
-        psiHat_kp(:,i) = Phat/Phat(1)
+        psiHat_kp(:,i) = Phat/Phat_zeroYaw(1)
+        !psiHat_kp(:,i) = Phat/Phat(1)
     end do
 
 
@@ -313,7 +318,7 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw)
     
     ! Deallocate
     deallocate(psi_kp1,psi_kpp,chi,psiHat_kp,psiHat_kpp,Phat,ones_Ne)
-    deallocate(rbuff,randArr,randArr2) 
+    deallocate(rbuff,randArr,randArr2, Phat_zeroYaw) 
 
 end subroutine
 
@@ -334,6 +339,7 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     call this%forward(kw, sigma_0, P, yaw*0.d0)
     Ptot_baseline = sum(P); P_baseline = P; this%Phat = P_baseline;
     call this%forward(kw, sigma_0, this%Phat_yaw, yaw)
+    this%Phat_yaw = this%Phat_yaw / this%Phat(1)
  
     ! eps also determines the termination condition
     k=1; check = 0; 
@@ -605,10 +611,10 @@ subroutine backward(this, kw, sigma_0, yaw)
 end subroutine
 
 
-subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, i, t)
+subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, meanPbaseline, powerBaseline, i, t)
     class(dynamicYaw), intent(inout) :: this
-    real(rkind), intent(inout) :: meanP, meanWs
-    real(rkind), intent(in) :: power, ws
+    real(rkind), intent(inout) :: meanP, meanWs, meanPbaseline
+    real(rkind), intent(in) :: power, ws, powerBaseline
     integer, intent(in) :: i, t
 
     if (i>this%n_moving_average) then
@@ -620,6 +626,9 @@ subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, i, t)
         meanWs = meanWs + (1.d0/real(this%n_moving_average)) * (ws - this%ws_minus_n(1,t))
         this%ws_minus_n(1:this%n_moving_average-1,t) = this%ws_minus_n(2:this%n_moving_average,t)
         this%ws_minus_n(this%n_moving_average,t) = ws
+        ! Power baseline
+        meanPbaseline = meanPbaseline + (1.d0/real(this%n_moving_average)) * (powerBaseline - this%pb_minus_n(1,t))
+        this%pb_minus_n(1:this%n_moving_average-1,t) = this%pb_minus_n(2:this%n_moving_average,t)
     else
         ! Power
         this%power_minus_n(i,t) = power
@@ -627,6 +636,9 @@ subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, i, t)
         ! Wind speed
         this%ws_minus_n(i,t) = ws
         meanWs = sum(this%ws_minus_n(1:i,t)) / real(i)
+        ! Power baseline
+        this%pb_minus_n(i,t) = powerBaseline
+        meanPbaseline = sum(this%pb_minus_n(1:i,t)) / real(i)
     end if
 
 
