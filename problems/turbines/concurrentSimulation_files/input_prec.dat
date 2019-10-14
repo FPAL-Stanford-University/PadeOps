@@ -1,8 +1,8 @@
 &INPUT
-inputdir                     = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe_debug"
-outputdir                     = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe_debug"
-nx                            = 128         ! Number of points in X
-ny                            = 96         ! Number of points in Y
+inputdir                     = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe"
+outputdir                     = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe"
+nx                            = 256         ! Number of points in X
+ny                            = 256         ! Number of points in Y
 nz                            = 64         ! Number of points in Z
 tstop                         = 700.D0       ! Physical time to stop the simulation
 CFL                           = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
@@ -10,7 +10,7 @@ dt                            = 0.001D0     ! Fixed time step value (only used i
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile                = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID               = 20000       ! TimeID of the restart file being used
+restartFile_TID               = 22000       ! TimeID of the restart file being used
 restartFile_RID               = 02          ! RunID of the restart file being used
 /
 /
@@ -128,7 +128,7 @@ t_dumpKSprep                  = 10             ! Dumping Frequency for KS files
 /
 /
 &concurrentSimulationINPUT
-Lx                            = 6.28318530717959d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            = 3.14159265358979d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Lx                            = 18.84955592153876d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            = 9.424777960769379d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Lz                            = 1.0d0              ! Domain Height (appropriate dimesnions/non-dimensionalized)
 /
