@@ -102,7 +102,7 @@ module budgets_time_avg_mod
         private
         integer :: budgetType = 1, run_id, nz
 
-        complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, px, py, pz, uturb, pxdns, pydns, pzdns 
+        complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, px, py, pz, uturb, pxdns, pydns, pzdns, vturb, wturb 
         complex(rkind), dimension(:,:,:), allocatable :: uvisc, vvisc, wvisc, ucor, vcor, wcor, wb 
         type(igrid), pointer :: igrid_sim 
         
@@ -220,6 +220,8 @@ contains
             call igrid_sim%spectC%alloc_r2c_out(this%usgs)
             call igrid_sim%spectC%alloc_r2c_out(this%px)
             call igrid_sim%spectC%alloc_r2c_out(this%uturb)
+            call igrid_sim%spectC%alloc_r2c_out(this%vturb)
+            call igrid_sim%spectC%alloc_r2c_out(this%wturb)
 
             call igrid_sim%spectC%alloc_r2c_out(this%vc)
             call igrid_sim%spectC%alloc_r2c_out(this%vsgs)
@@ -228,33 +230,26 @@ contains
             call igrid_sim%spectE%alloc_r2c_out(this%wc)
             call igrid_sim%spectE%alloc_r2c_out(this%wsgs)
             call igrid_sim%spectE%alloc_r2c_out(this%pz)
+              
+            call igrid_sim%spectC%alloc_r2c_out(this%pxdns)
+            call igrid_sim%spectC%alloc_r2c_out(this%pydns)
+            call igrid_sim%spectC%alloc_r2c_out(this%pzdns)
             
-            if (this%isStratified) then
-                call igrid_sim%spectC%alloc_r2c_out(this%ucor)
-                call igrid_sim%spectC%alloc_r2c_out(this%vcor)
-                call igrid_sim%spectC%alloc_r2c_out(this%wcor)
-                call igrid_sim%spectC%alloc_r2c_out(this%wb)
-                call igrid_sim%spectC%alloc_r2c_out(this%uvisc)
-                call igrid_sim%spectC%alloc_r2c_out(this%vvisc)
-                call igrid_sim%spectC%alloc_r2c_out(this%wvisc)
-            end if
+            call igrid_sim%spectC%alloc_r2c_out(this%uvisc)
+            call igrid_sim%spectC%alloc_r2c_out(this%vvisc)
+            call igrid_sim%spectC%alloc_r2c_out(this%wvisc)
+            
+            call igrid_sim%spectC%alloc_r2c_out(this%ucor)
+            call igrid_sim%spectC%alloc_r2c_out(this%vcor)
+            call igrid_sim%spectC%alloc_r2c_out(this%wcor)
+            call igrid_sim%spectC%alloc_r2c_out(this%wb)
 
             ! STEP 3: Now instrument igrid 
-            if(this%splitPressureDNS) then
-              call igrid_sim%spectC%alloc_r2c_out(this%pxdns)
-              call igrid_sim%spectC%alloc_r2c_out(this%pydns)
-              call igrid_sim%spectC%alloc_r2c_out(this%pzdns)
-              call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
-                       & this%px, this%py, this%pz, this%uturb, this%pxdns, this%pydns, this%pzdns)  
-            else
-                if (this%isStratified) then
-                    call igrid_sim%instrumentForBudgets(this%uc, this%vc, this%wc, this%usgs, this%vsgs, &  
-                       this%wsgs, this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, this%vcor, this%wcor, this%uturb)
-                else 
-                    call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
-                       & this%px, this%py, this%pz, this%uturb)  
-                end if
-            end if
+            call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
+                     & this%px, this%py, this%pz, this%uturb, this%vturb, this%wturb, this%pxdns, this%pydns, this%pzdns, & 
+                     & this%uvisc, this%vvisc, this%wvisc, this%ucor, this%vcor, this%wcor, this%wb)  
+            
+                 
             ! STEP 4: For horizontally-averaged surface quantities (called
             ! Scalar here), and turbine statistics
             !allocate(this%inst_horz_avg(5)) ! [ustar, uw, vw, Linv, wT]

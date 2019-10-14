@@ -44,10 +44,10 @@ subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc
     call this%set_budget_rhs_to_zero()
 end subroutine
 
-subroutine instrumentForBudgets_TimeAvg(this, uc, vc, wc, usgs, vsgs, wsgs,  px, py, pz, uturb, pxdns, pydns, pzdns)  
+subroutine instrumentForBudgets_TimeAvg(this, uc, vc, wc, usgs, vsgs, wsgs,  px, py, pz, uturb, vturb, wturb, pxdns, pydns, pzdns, uvisc, vvisc, wvisc, ucor, vcor, wcor, wb)  
     class(igrid), intent(inout) :: this
-    complex(rkind), dimension(:,:,:), intent(in), target :: uc, vc, wc, usgs, vsgs, wsgs, px, py, pz, uturb
-    complex(rkind), dimension(:,:,:), intent(in), target, optional :: pxdns, pydns, pzdns
+    complex(rkind), dimension(:,:,:), intent(in), target :: uc, vc, wc, usgs, vsgs, wsgs, px, py, pz, uturb, vturb, wturb
+    complex(rkind), dimension(:,:,:), intent(in), target :: pxdns, pydns, pzdns, uvisc, vvisc, wvisc, ucor, vcor, wcor, wb
 
     this%ucon => uc
     this%vcon => vc
@@ -61,18 +61,24 @@ subroutine instrumentForBudgets_TimeAvg(this, uc, vc, wc, usgs, vsgs, wsgs,  px,
     this%py => py
     this%pz => pz
 
-    if(present(pxdns) .and. present(pydns) .and. present(pzdns)) then
-        if( .not. this%computeDNSPressure) call GracefulExit("Set computeDNSPressure to true",1234)
-        this%pxdns => pxdns
-        this%pydns => pydns
-        this%pzdns => pzdns
-    else
-       this%pxdns => null()
-       this%pydns => null()
-       this%pzdns => null()
-    endif
+    this%uvisc => uvisc
+    this%vvisc => vvisc
+    this%wvisc => wvisc
+    
+    this%ucor => ucor
+    this%vcor => vcor
+    this%wcor => wcor
+    
+    this%wb => wb
+
+    this%pxdns => pxdns
+    this%pydns => pydns
+    this%pzdns => pzdns
 
     this%uturb => uturb 
+    this%vturb => vturb 
+    this%wturb => wturb 
+
 
     ! Safeguards
     this%StoreForBudgets = .true. 
@@ -112,12 +118,18 @@ subroutine set_budget_rhs_to_zero(this)
     this%py = czero 
     this%pz = czero
 
+    this%uvisc = czero 
+    this%vvisc = czero 
+    this%wvisc = czero 
+
     if (associated(this%ucor)) this%ucor = czero 
     if (associated(this%vcor)) this%vcor = czero 
     if (associated(this%wcor)) this%wcor = czero 
 
     if (associated(this%wb   )) this%wb = czero 
     if (associated(this%uturb)) this%uturb = czero 
+    if (associated(this%vturb)) this%vturb = czero 
+    if (associated(this%wturb)) this%wturb = czero 
 
 end subroutine 
 
