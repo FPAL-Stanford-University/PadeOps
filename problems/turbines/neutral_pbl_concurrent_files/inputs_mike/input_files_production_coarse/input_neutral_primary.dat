@@ -1,18 +1,19 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/neutral_concurrent/3x3_production_shifted_tall_0/"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/3x3_production_shifted_tall_0/"   ! Directory for all output files
-nx                    = 640         ! Number of points in X
-ny                    = 240          ! Number of points in Y
-nz                    = 384          ! Number of points in Z
-tstop                 = 6000.D0    ! Physical time to stop the simulation
+inputdir              = "/scratch/05294/mhowland/neutral_concurrent/8x8_production_coarse_tall_0"   ! Directory for any input files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/8x8_production_coarse_tall_0"   ! Directory for all output files
+nx                    = 320         ! Number of points in X
+ny                    = 120          ! Number of points in Y
+nz                    = 192          ! Number of points in Z
+tstop                 = 3000.D0    ! Physical time to stop the simulation
 CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
 nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 0       ! TimeID of the restart file being used
+restartFile_TID       = 4000       ! TimeID of the restart file being used
 restartFile_RID       = 1            ! RunID of the restart file being used
+CviscDT               = 1.D0
 /
 /
 &NUMERICS
@@ -149,9 +150,9 @@ WM_MatchingIndex              = 1
 /
 &WINDTURBINES
 useWindTurbines       = .TRUE.    ! Do you want to use Wind turbines ?
-num_turbines          = 9
+num_turbines          = 64
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
-turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/3x3array"
+turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/8x8array_small_x"
 ADM_Type              = 2         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
 /
 /
@@ -173,10 +174,10 @@ Fringe_delta_en_y    = 0.05d0
 &BUDGET_TIME_AVG
 do_budgets            = .TRUE.    ! Perform budget calculations? 
 budgetType            = 0         ! See type descriptions in budget_time_avg.F90
-budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/3x3_production_shifted_tall_0/"   ! Write in default output directory
+budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/8x8_production_coarse_tall_0"   ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?  
 tidx_dump             = 1000      ! How often should budget files be written to disk? 
-tidx_budget_start     = 100      ! Start budget computation from this timestep onward
+tidx_budget_start     = 10000      ! Start budget computation from this timestep onward
 restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations? 
 restart_rid           = 2         ! Restart budget file run index
 restart_tid           = 99999     ! Restart budget file time index

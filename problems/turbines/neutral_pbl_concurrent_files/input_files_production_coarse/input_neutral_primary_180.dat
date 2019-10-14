@@ -1,17 +1,17 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x6_coarse_0_debug"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x6_smallFringe_180"   ! Directory for all output files
-nx                    = 160         ! Number of points in X
-ny                    = 80          ! Number of points in Y
+inputdir              = "/scratch/05294/mhowland/neutral_concurrent/3x3_production_coarse_shifted_tall_180"   ! Directory for any input files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/3x3_production_coarse_shifted_tall_180"   ! Directory for all output files
+nx                    = 320         ! Number of points in X
+ny                    = 120          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
-tstop                 = 3000.D0    ! Physical time to stop the simulation
+tstop                 = 4000.D0    ! Physical time to stop the simulation
 CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
 nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .FALSE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 12171       ! TimeID of the restart file being used
+restartFile_TID       = 6000       ! TimeID of the restart file being used
 restartFile_RID       = 1            ! RunID of the restart file being used
 CviscDT               = 1.D0
 /
@@ -32,7 +32,7 @@ donot_dealias         = .FALSE.
 /
 &IO
 RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 10000       ! Restart File Dumping Frequency  (# of timesteps)
+t_restartDump         = 1000       ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump            = 500       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
@@ -159,25 +159,25 @@ ADM_Type              = 2         ! 1 or 2. 2 is optimized and well tested. Use 
 &FRINGE
 apply_x_fringe = .TRUE.
 apply_y_fringe = .TRUE.
-Fringe_xst           = 0.8d0 ! It starts at this point, the fringe is off before this point         
+Fringe_xst           = 0.85d0 ! It starts at this point, the fringe is off before this point         
 Fringe_xen           = 0.95d0 ! This is the end of the fringe, the fringe is zero after
-Fringe_delta_st_x    = 0.1d0 ! How much distance to use to ramp up
+Fringe_delta_st_x    = 0.05d0 ! How much distance to use to ramp up
 Fringe_delta_en_x    = 0.05d0 ! How much distance to ramp down
-LambdaFact           = 2.5d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
-LambdaFactPotTemp    = 100.0d0
-Fringe_yst           = 0.8d0 ! Same but for y        
+LambdaFact           = 0.6d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
+LambdaFactPotTemp    = 10.0d0
+Fringe_yst           = 0.85d0 ! Same but for y        
 Fringe_yen           = 0.95d0
-Fringe_delta_st_y    = 0.1d0
+Fringe_delta_st_y    = 0.05d0
 Fringe_delta_en_y    = 0.05d0
 /
 /
 &BUDGET_TIME_AVG
 do_budgets            = .TRUE.    ! Perform budget calculations? 
 budgetType            = 0         ! See type descriptions in budget_time_avg.F90
-budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/6x6_coarse_0_debug_bigLambda_180"   ! Write in default output directory
+budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/3x3_production_shifted_tall_180"   ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?  
 tidx_dump             = 1000      ! How often should budget files be written to disk? 
-tidx_budget_start     = 10000      ! Start budget computation from this timestep onward
+tidx_budget_start     = 100      ! Start budget computation from this timestep onward
 restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations? 
 restart_rid           = 2         ! Restart budget file run index
 restart_tid           = 99999     ! Restart budget file time index
@@ -223,9 +223,9 @@ moisture_info_dir = "null"
 /
 /
 &PROBLEM_INPUT
-Lx                            =  40.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            =  20.0d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
-Lz                            =  6.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
+Lx                            =  100.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            =  37.50d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
+Lz                            =  12.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
 Tref                          =  263.5d0     ! Reference Temp.
 Tsurf0                        =  265.0d0     ! Surface Temp. (at tsim=0) in K (need to take care of the dimensions)
 dTsurf_dt                     =  0.0D0      ! Surface Temp. decrease rate in K/hr. (need to take care of the dimensions)

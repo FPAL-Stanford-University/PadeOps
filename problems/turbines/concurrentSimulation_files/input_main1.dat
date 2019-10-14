@@ -1,8 +1,8 @@
 &INPUT
-inputdir                     = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe_debug"
-outputdir                     = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe_debug"
-nx                            = 128         ! Number of points in X
-ny                            = 96         ! Number of points in Y
+inputdir                     = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe"
+outputdir                     = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe"
+nx                            = 256         ! Number of points in X
+ny                            = 256         ! Number of points in Y
 nz                            = 64         ! Number of points in Z
 tstop                         = 700.D0       ! Physical time to stop the simulation
 CFL                           = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
@@ -10,7 +10,7 @@ dt                            = 0.001D0     ! Fixed time step value (only used i
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile                = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID               = 20000       ! TimeID of the restart file being used
+restartFile_TID               = 22000       ! TimeID of the restart file being used
 restartFile_RID               = 01          ! RunID of the restart file being used
 /
 /
@@ -84,7 +84,7 @@ topWall                       = 2           ! no_slip = 1, slip = 2
 useSpongeLayer                = .FALSE.     ! Use a sponge layer at the top 
 zstSponge                     = 0.8d0       ! Height above which the sponge layer is active
 SpongeTscale                  = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
-useFringe                     = .true.      ! This is false if simulation is periodic. 
+useFringe                     = .TRUE.      ! This is false if simulation is periodic. 
 /
 /
 &SGS_MODEL
@@ -106,18 +106,18 @@ num_turbines          = 2
 ADM                   = .TRUE.
 turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/pblwt_files/turbInfo_yaw/6x1array_yaw"
 ADM_Type              = 4
-powerDumpDir          = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe_debug/modelDumps"
+powerDumpDir          = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe/modelDumps"
 useDynamicYaw         = .TRUE.
-yawUpdateInterval     = 20000
+yawUpdateInterval     = 50000
 inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_channel.inp"
 /
 /
 &FRINGE
 apply_x_fringe                = .true.
 apply_y_fringe                = .false.
-Fringe_xst                    = 0.75d0         
+Fringe_xst                    = 0.70d0         
 Fringe_xen                    = 1.00d0
-Fringe_delta_st_x             = 0.20d0
+Fringe_delta_st_x             = 0.25d0
 Fringe_delta_en_x             = 0.05d0
 Fringe_yst                    = 0.75d0         
 Fringe_yen                    = 1.00d0
@@ -129,9 +129,9 @@ LambdaFact                    = 0.95d0
 &BUDGET_TIME_AVG
 do_budgets            = .TRUE.    ! Perform budget calculations?
 budgetType            = 2         ! See type descriptions in budget_time_avg.F90
-budgets_dir           = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe_debug/budgets"   ! Write in default output directory
+budgets_dir           = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe/budgets"   ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?
-tidx_dump             = 1000      ! How often should budget files be written to disk?
+tidx_dump             = 10000      ! How often should budget files be written to disk?
 tidx_budget_start     = 10000      ! Start budget computation from this timestep onward
 restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations?
 restart_rid           = 2         ! Restart budget file run index
@@ -147,7 +147,7 @@ t_dumpKSprep                  = 10             ! Dumping Frequency for KS files
 /
 /
 &concurrentSimulationINPUT
-Lx                            = 6.28318530717959d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            = 3.14159265358979d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Lx                            = 18.84955592153876d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            = 9.424777960769379d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Lz                            = 1.0d0              ! Domain Height (appropriate dimesnions/non-dimensionalized)
 /
