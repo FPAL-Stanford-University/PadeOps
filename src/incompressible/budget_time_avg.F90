@@ -242,7 +242,7 @@ contains
             call igrid_sim%spectC%alloc_r2c_out(this%ucor)
             call igrid_sim%spectC%alloc_r2c_out(this%vcor)
             call igrid_sim%spectE%alloc_r2c_out(this%wcor)
-            call igrid_sim%spectC%alloc_r2c_out(this%wb)
+            call igrid_sim%spectE%alloc_r2c_out(this%wb)
 
             ! STEP 3: Now instrument igrid 
             call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
