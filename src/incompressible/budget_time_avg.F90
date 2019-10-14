@@ -221,7 +221,7 @@ contains
             call igrid_sim%spectC%alloc_r2c_out(this%px)
             call igrid_sim%spectC%alloc_r2c_out(this%uturb)
             call igrid_sim%spectC%alloc_r2c_out(this%vturb)
-            call igrid_sim%spectC%alloc_r2c_out(this%wturb)
+            call igrid_sim%spectE%alloc_r2c_out(this%wturb)
 
             call igrid_sim%spectC%alloc_r2c_out(this%vc)
             call igrid_sim%spectC%alloc_r2c_out(this%vsgs)
