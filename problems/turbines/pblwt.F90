@@ -33,7 +33,7 @@ program pblwt
 
     call igp%printDivergence()
   
-    call budg_tavg%init(primary_inputfile, primary)   !<-- Budget class initialization 
+    call budg_tavg%init(inputfile, igp)   !<-- Budget class initialization 
     
     call tic() 
     do while ((igp%tsim < igp%tstop) .and. (igp%step < igp%nsteps))

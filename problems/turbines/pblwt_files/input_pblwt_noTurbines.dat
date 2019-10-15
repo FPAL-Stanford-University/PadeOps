@@ -127,10 +127,10 @@ LambdaFact            = 0.75d0
 &BUDGET_TIME_AVG
 do_budgets            = .TRUE.    ! Perform budget calculations? 
 budgetType            = 0         ! See type descriptions in budget_time_avg.F90
-budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/5x5_coarse_0/budgets"   ! Write in default output directory
+budgets_dir           = "/scratch/05294/mhowland/channel_yaw/no_turbines_dana"   ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?  
-tidx_dump             = 1000      ! How often should budget files be written to disk? 
-tidx_budget_start     = 5000      ! Start budget computation from this timestep onward
+tidx_dump             = 10      ! How often should budget files be written to disk? 
+tidx_budget_start     = 10      ! Start budget computation from this timestep onward
 restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations? 
 restart_rid           = 1         ! Restart budget file run index
 restart_tid           = 10000     ! Restart budget file time index
