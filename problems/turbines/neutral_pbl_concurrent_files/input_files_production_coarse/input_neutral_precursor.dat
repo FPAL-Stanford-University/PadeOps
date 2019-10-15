@@ -10,8 +10,8 @@ dt                    = 5.D-3        ! Fixed time step value (only used if CFL i
 nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .FALSE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 0       ! TimeID of the restart file being used
+useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
+restartFile_TID       = 15000       ! TimeID of the restart file being used
 restartFile_RID       = 2            ! RunID of the restart file being used
 /
 /
@@ -177,9 +177,9 @@ tidx_compute          = 5         ! How often should budgets be computed?
 tidx_dump             = 10000      ! How often should budget files be written to disk? 
 tidx_budget_start     = 30000      ! Start budget computation from this timestep onward
 restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations? 
-restart_rid           = 2         ! Restart budget file run index
-restart_tid           = 99999     ! Restart budget file time index
-restart_counter       = 11111     ! Restart budget file counter 
+restart_rid           = 1         ! Restart budget file run index
+restart_tid           = 19000     ! Restart budget file time index
+restart_counter       = 1800     ! Restart budget file counter 
 /
 /
 /
