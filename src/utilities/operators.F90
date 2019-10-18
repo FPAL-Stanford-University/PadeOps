@@ -91,8 +91,8 @@ contains
 
         ! Get Y derivatives
         call der_y(decomp,der,fx,dfxdy,y_bc(1),y_bc(2))
-        call der_y(decomp,der,fx,dfxdy,y_bc(1),y_bc(2))
-        call der_y(decomp,der,fx,dfxdy,y_bc(1),y_bc(2))
+        call der_y(decomp,der,fy,dfydy,y_bc(1),y_bc(2))
+        call der_y(decomp,der,fz,dfzdy,y_bc(1),y_bc(2))
 
         ! Get X derivatives
         call der_x(decomp,der,fx,dfxdx,x_bc(1),x_bc(2))
@@ -350,7 +350,6 @@ contains
         y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
         z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
 
-
         select case(coordsys)
         case(0) ! Cartesian
             ! -------------------Step 1 :: divx------------------------
@@ -458,10 +457,10 @@ contains
     subroutine crossprod_vec_tens(ux,uy,uz,fxx,fxy,fxz,fyx,fyy,fyz,fzx,fzy,fzz,ttxx,ttxy,ttxz,ttyx,ttyy,ttyz,ttzx,ttzy,ttzz)
         real(kind=rkind), dimension(:,:,:), intent(in) :: ux,uy,uz,fxx,fxy,fxz,fyx,fyy,fyz,fzx,fzy,fzz
         real(kind=rkind), dimension(:,:,:), intent(out) :: ttxx,ttxy,ttxz,ttyx,ttyy,ttyz,ttzx,ttzy,ttzz
-    
-        ttxx = uy*fzx - uz*fyx;        ttxy = uy*fzy - uz*fyy;        ttxx = uy*fzz - uz*fyz;
-        ttyx = uz*fxx - ux*fzx;        ttyy = uz*fxy - ux*fzy;        ttyx = uz*fxz - ux*fzz;
-        ttzx = ux*fyx - uy*fxx;        ttzy = ux*fyy - uy*fxy;        ttzx = ux*fyz - uy*fxz;
+
+        ttxx = uy*fzx - uz*fyx;        ttxy = uy*fzy - uz*fyy;        ttxz = uy*fzz - uz*fyz;
+        ttyx = uz*fxx - ux*fzx;        ttyy = uz*fxy - ux*fzy;        ttyz = uz*fxz - ux*fzz;
+        ttzx = ux*fyx - uy*fxx;        ttzy = ux*fyy - uy*fxy;        ttzz = ux*fyz - uy*fxz;
     
     end subroutine crossprod_vec_tens
     

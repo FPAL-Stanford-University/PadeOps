@@ -1355,6 +1355,9 @@ stop
           else
             write(*,*) 'den very small, please check.', num, num/den
             write(*,*) 'failure at proc ', nrank, ' at index ', iparams(2:4)
+            write(*,*) 'iter no. ', ii
+            write(*,*) 'fparams = ', fparams
+            write(*,*) 'iparams = ', iparams
             stop
           endif
           pf = pf - dpf

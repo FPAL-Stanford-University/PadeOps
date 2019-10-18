@@ -892,7 +892,7 @@ contains
         this%v = rhov * onebyrho
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
-       
+
         call this%mix%get_primitive(this%rho, this%u, this%v, this%w, this%e, this%x, this%y, this%z, this%coordsys, this%devstress, this%p, this%sos)                  ! Get primitive variables for individual species
 
     end subroutine
@@ -978,8 +978,6 @@ contains
         tauxx = tauxx + this%sxx; tauxy = tauxy + this%sxy; tauxz = tauxz + this%sxz
                                   tauyy = tauyy + this%syy; tauyz = tauyz + this%syz
                                                             tauzz = tauzz + this%szz
-!print '(a,9(e21.14,1x))', 'tauxx', tauxx(89,1,1)
-      
         ! store artificial stress tensor in devstress. this should not break anything since devstress will be
         ! overwritten in get_primitive and post_bc. used in update_eh -- NSG
         this%sxx = tauxx - this%sxx; this%sxy = tauxy - this%sxy; this%sxz = tauxz - this%sxz
@@ -1042,6 +1040,7 @@ contains
         ! Step 2 :: Compute divergence
         call divergence(this%decomp, this%der, this%x, this%y, this%z, tauxx, tauxy, tauxz, tauyy, tauyz, tauzz, &
                rhs(:,:,:,mom_index), rhs(:,:,:,mom_index+1), rhs(:,:,:,mom_index+2), this%coordsys, this%x_bc, this%y_bc, this%z_bc)
+ !  print *, 'get_rhs = ', this%Wcnsrv(1,1,1,mom_index), this%u(1,1,1), this%p(1,1,1), tauxx(1,1,1), rhs(1,1,1,mom_index)
 
         nullify(ytmp1,ytmp2,ytmp3)
 !---------NEW BLOCK----------------------------

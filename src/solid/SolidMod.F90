@@ -407,50 +407,56 @@ contains
         character(len=clen) :: charout
         integer, parameter :: mask_exponent = 40
 
-        ! ! Set normal to be radially outwards for a cylindrical interface
-        ! theta = atan2(y,x)
-        ! normal(:,:,:,1) = cos(theta); normal(:,:,:,2) = sin(theta); normal(:,:,:,3) = zero
+        ! Get the normals and mask function to apply sliding treatment
+        if (this%sliding) then
+            ! ! Set normal to be radially outwards for a cylindrical interface
+            ! theta = atan2(y,x)
+            ! normal(:,:,:,1) = cos(theta); normal(:,:,:,2) = sin(theta); normal(:,:,:,3) = zero
 
-        ! Set normal to be the maximal gradient direction of the volume fraction
-        ! Use auxiliary function as in Shukla, Pantano and Freund (JCP 2010)
-        auxVF = this%VF
-        where (auxVF < zero)
-            auxVF = zero
-        end where
-        where (auxVF > one)
-            auxVF = one
-        end where
-        call filter3D(this%decomp, this%gfil, auxVF, 1)
-        auxVF = (auxVF**auxVF_exponent) / ( auxVF**auxVF_exponent + (one - auxVF)**auxVF_exponent )
-        this%kap = auxVF
-        call gradient(this%decomp,this%der,x,y,z,auxVF,normal(:,:,:,1),normal(:,:,:,2),normal(:,:,:,3),coordsys,x_bc,y_bc,z_bc)
-        ! Normalize to magnitude 1
-        mask = sqrt( normal(:,:,:,1)*normal(:,:,:,1) + normal(:,:,:,2)*normal(:,:,:,2) + normal(:,:,:,3)*normal(:,:,:,3) )
-        do l = 1,3
-            do k = 1,this%nzp
-                do j = 1,this%nyp
-                    do i = 1,this%nxp
-                        if (mask(i,j,k) > eps) then
-                            normal(i,j,k,l) = normal(i,j,k,l) / mask(i,j,k)
-                        else
-                            normal(i,j,k,:) = [one, zero, zero] ! This is arbitrary but should not affect anything
-                        end if
+            ! Set normal to be the maximal gradient direction of the volume fraction
+            ! Use auxiliary function as in Shukla, Pantano and Freund (JCP 2010)
+            auxVF = this%VF
+            where (auxVF < zero)
+                auxVF = zero
+            end where
+            where (auxVF > one)
+                auxVF = one
+            end where
+            call filter3D(this%decomp, this%gfil, auxVF, 1)
+            auxVF = (auxVF**auxVF_exponent) / ( auxVF**auxVF_exponent + (one - auxVF)**auxVF_exponent )
+            this%kap = auxVF
+            call gradient(this%decomp,this%der,x,y,z,auxVF,normal(:,:,:,1),normal(:,:,:,2),normal(:,:,:,3),coordsys,x_bc,y_bc,z_bc)
+            ! Normalize to magnitude 1
+            mask = sqrt( normal(:,:,:,1)*normal(:,:,:,1) + normal(:,:,:,2)*normal(:,:,:,2) + normal(:,:,:,3)*normal(:,:,:,3) )
+            do l = 1,3
+                do k = 1,this%nzp
+                    do j = 1,this%nyp
+                        do i = 1,this%nxp
+                            if (mask(i,j,k) > eps) then
+                                normal(i,j,k,l) = normal(i,j,k,l) / mask(i,j,k)
+                            else
+                                normal(i,j,k,:) = [one, zero, zero] ! This is arbitrary but should not affect anything
+                            end if
+                        end do
                     end do
                 end do
             end do
-        end do
-        if ( nancheck(normal,i,j,k,l) ) then
-            write(charout,'(A,4(I0,A))') "NaN encountered in interface normal at (",i,", ",j,", ",k,", ",l,")"
-            call GracefulExit(charout,4809)
-        end if
 
-        ! Get the mask function to apply sliding treatment
-        if (this%sliding) then
+            ! Now get the mask function
             mask = this%VF*(one - this%VF)
             mask = mask/P_MAXVAL(mask)
             mask = one - (one - mask)**mask_exponent
         else
+            ! not really used, so set to dummy values
+            normal(:,:,:,1) = one
+            normal(:,:,:,2) = zero
+            normal(:,:,:,3) = zero
             mask = zero
+        end if
+
+        if ( nancheck(normal,i,j,k,l) ) then
+            write(charout,'(A,4(I0,A))') "NaN encountered in interface normal at (",i,", ",j,", ",k,", ",l,")"
+            call GracefulExit(charout,4809)
         end if
 
         if(present(rho0mix)) then
@@ -615,6 +621,17 @@ contains
          call gradient(this%decomp, this%der, x, y, z, cx, cy, cz, &
                    ttxx, ttxy, ttxz, ttyx, ttyy, ttyz, ttzx, ttzy, ttzz, &
                    coordsys,x_bc, y_bc, z_bc )
+
+         ! Assemble rhsg
+         rhsg(:,:,:,1) = rhsg(:,:,:,1) - ttxx + penalty*this%g11
+         rhsg(:,:,:,2) = rhsg(:,:,:,2) - ttxy + penalty*this%g12
+         rhsg(:,:,:,3) = rhsg(:,:,:,3) - ttxz + penalty*this%g13
+         rhsg(:,:,:,4) = rhsg(:,:,:,4) - ttyx + penalty*this%g21
+         rhsg(:,:,:,5) = rhsg(:,:,:,5) - ttyy + penalty*this%g22
+         rhsg(:,:,:,6) = rhsg(:,:,:,6) - ttyz + penalty*this%g23
+         rhsg(:,:,:,7) = rhsg(:,:,:,7) - ttzx + penalty*this%g31
+         rhsg(:,:,:,8) = rhsg(:,:,:,8) - ttzy + penalty*this%g32
+         rhsg(:,:,:,9) = rhsg(:,:,:,9) - ttzz + penalty*this%g33
 
 !!!!!!!!--------NEW BLOCK :: OPERATING ON FULL VECTOR AT A TIME----!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
