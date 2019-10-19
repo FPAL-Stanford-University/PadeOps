@@ -29,12 +29,24 @@
        !
        ! Step 3b: Wind Turbines
        if (this%useWindTurbines) then
+          ! Added by Mike 10/16/19 to compute the average wind direction in the
+          ! domain which is needed for the yaw misaligned turbines        igp%rbuffxC(:,:,:,1) = atan2(igp%v, igp%u) !* 180.d0 / 3.14d0
+          call transpose_x_to_y(this%u,this%rbuffyC(:,:,:,1),this%gpC)
+          call transpose_y_to_z(this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1),this%gpC)
+          call transpose_x_to_y(this%v,this%rbuffyC(:,:,:,1),this%gpC)
+          call transpose_y_to_z(this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,2),this%gpC)
+          this%umAngle = p_sum(sum(this%rbuffzC(:,:,this%hubIndex,1))) / &
+                (real(this%gpC%xsz(1),rkind) * real(this%gpC%ysz(2),rkind))
+          this%vmAngle = p_sum(sum(this%rbuffzC(:,:,this%hubIndex,2))) / &
+                (real(this%gpC%xsz(1),rkind) * real(this%gpC%ysz(2),rkind))
+          this%windAngle = atan2(this%vmAngle,this%umAngle) * 180.d0 / pi
+
           if (copyTurbRHS) then
            call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC, this%u_rhs, this%v_rhs, this%w_rhs, &
-                 & this%newTimestep, this%inst_horz_avg_turb, uturb=this%urhs_turbine, vturb=this%vrhs_turbine, wturb=this%wrhs_turbine) 
+                 this%newTimestep, this%windAngle, this%inst_horz_avg_turb, uturb=this%urhs_turbine, vturb=this%vrhs_turbine, wturb=this%wrhs_turbine)
           else
                call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
-                                    this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep, this%inst_horz_avg_turb)
+                                    this%u_rhs, this%v_rhs, this%w_rhs, this%newTimestep, this%windAngle, this%inst_horz_avg_turb)
           end if
        end if 
      
@@ -122,11 +134,11 @@
        if ((this%useWindTurbines) .and. associated(this%uturb)) then
           if (copyTurbRHS) then
            call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC, this%uturb, this%vturb, this%wturb, &
-                 & this%newTimestep, this%inst_horz_avg_turb, uturb=this%urhs_turbine, vturb=this%vrhs_turbine, wturb=this%wrhs_turbine) 
+                 & this%newTimestep, this%windAngle, this%inst_horz_avg_turb, uturb=this%urhs_turbine, vturb=this%vrhs_turbine, wturb=this%wrhs_turbine) 
           else
                call this%WindTurbineArr%getForceRHS(this%dt, this%u, this%v, this%wC,&
                                     !this%uturb, this%v_rhs, this%w_rhs, this%newTimestep, this%inst_horz_avg_turb)
-                                    this%uturb, this%vturb, this%wturb, this%newTimestep, this%inst_horz_avg_turb)
+                                    this%uturb, this%vturb, this%wturb, this%newTimestep, this%windAngle, this%inst_horz_avg_turb)
           end if
           this%u_rhs = this%u_rhs + this%uturb
           this%v_rhs = this%v_rhs + this%vturb

@@ -67,7 +67,7 @@ module dynamicYawMod
 
 contains
 
-subroutine init(this, inputfile, xLoc, yLoc, diam, Nt)
+subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart)
     class(dynamicYaw), intent(inout) :: this
     character(len=*), intent(in) :: inputfile
     integer :: ioUnit, conditionTurb, ierr, i, n_moving_average
@@ -78,10 +78,13 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt)
     real(rkind), dimension(:), intent(in) :: xLoc, yLoc
     real(rkind), intent(in) :: diam
     integer, intent(in) :: Nt
+    logical, intent(out) :: fixedYaw
+    integer, intent(out) :: dynamicStart
  
     ! Read input file for this turbine    
     namelist /DYNAMIC_YAW/ var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
-                           Ne, Ct, eta, beta1, beta2, conditionTurb, n_moving_average
+                           Ne, Ct, eta, beta1, beta2, conditionTurb, n_moving_average, &
+                           fixedYaw, dynamicStart
     ioUnit = 534
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=DYNAMIC_YAW)
@@ -158,10 +161,11 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
 
     ! Field data observation
     this%wind_speed = wind_speed ! Get this from the data
-    this%wind_direction = wind_direction ! Get this from the data
+    this%wind_direction = 270.d0-wind_direction ! Get this from the data
     this%powerObservation = powerObservation ! Get the power production from ADM code
     this%powerBaseline = powerBaseline ! Get the power production from ADM code
     this%ts = ts
+    this%yaw = yaw - wind_direction*pi/180.d0
     !call this%observeField()
     ! Rotate domain
     X = this%turbCenter

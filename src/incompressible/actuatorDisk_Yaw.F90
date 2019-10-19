@@ -23,7 +23,7 @@ module actuatorDisk_YawMod
         real(rkind) :: xLoc, yLoc, zLoc, dx, dy, dz
         real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq, Cp
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
-        integer :: totPointsOnFace
+        integer :: totPointsOnFace, hubIndex
         real(rkind), dimension(:,:), allocatable :: xp, yp, zp
         real(rkind), dimension(:), allocatable :: xs, ys, zs
         integer, dimension(:,:), allocatable :: startEnds
@@ -66,7 +66,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     integer, intent(in) :: ActuatorDisk_T2ID
     character(len=*), intent(in) :: inputDir
     character(len=clen) :: tempname, fname
-    integer :: ioUnit
+    integer :: ioUnit, locator(1)
     real(rkind) :: xLoc=1.d0, yLoc=1.d0, zLoc=0.1d0
     real(rkind) :: diam=0.08d0, cT=0.65d0, yaw=0.d0, tilt=0.d0, Cp = 0.3
  
@@ -94,8 +94,8 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
 
     this%xG => xG; this%yG => yG; this%zG => zG
     this%memory_buffers_linked = .false.
+    this%xLine = xG(:,1,1); this%yLine = yG(1,:,1); this%zLine = zG(1,1,:)
    
- 
 end subroutine 
 
 ! Need to create pointers instead of allocating fresh memory for scaling (in
@@ -119,12 +119,12 @@ subroutine destroy(this)
     nullify(this%xG, this%yG, this%zG)
 end subroutine 
 
-subroutine get_RHS_withPower(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta)
+subroutine get_RHS_withPower(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta, wind_dir)
     class(actuatordisk_yaw), intent(inout) :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
-    real(rkind), intent(in) :: gamma_negative, theta
-    real(rkind) :: usp_sq, force, gamma
+    real(rkind), intent(in) :: gamma_negative, theta, wind_dir
+    real(rkind) :: usp_sq, force, gamma, gamma_local
     real(rkind), dimension(3,3) :: R, T
     real(rkind), dimension(3,1) :: xn, Ft, n
     real(rkind) ::  numPoints, x, y, z, scalarSource, sumVal
@@ -136,7 +136,8 @@ subroutine get_RHS_withPower(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_
     ! First run the model with no yaw misalignment to get the baseline power
     ! production 
     ug = u; vg = v; wg = w; rhsxvalsg = rhsxvals; rhsyvalsg = rhsyvals; rhszvalsg = rhszvals;
-    call this%get_RHS(ug, vg, wg, rhsxvalsg, rhsyvalsg, rhszvalsg, gamma_negative*0.d0, theta*0.d0) 
+    gamma_local = wind_dir * pi / 180.d0
+    call this%get_RHS(ug, vg, wg, rhsxvalsg, rhsyvalsg, rhszvalsg, gamma_local, theta*0.d0) 
     this%powerBaseline = this%get_power()
     ! Now run the model with the appropriate yaw misalignment to return the
     ! correct values

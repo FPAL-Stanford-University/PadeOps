@@ -49,7 +49,9 @@ module turbineMod
         real(rkind), dimension(:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n
         integer :: n_moving_average, timeStep, updateCounter 
         real(rkind), dimension(:,:), allocatable :: powerUpdate
-
+        logical :: fixedYaw = .false.
+        integer :: dynamicStart = 1
+ 
         ! variables needed for halo communication
         integer :: neighbour(6), coord(2), dims(2), tag_s, tag_n, tag_b, tag_t
         real(rkind), allocatable, dimension(:,:,:) :: ySendBuf, zSendBuf, yRightHalo, zRightHalo, zLeftHalo
@@ -100,7 +102,7 @@ subroutine reset_turbArray(this)
 end subroutine
 
 
-subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbuffzC, cbuffzE, mesh, dx, dy, dz)
+subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbuffzC, cbuffzE, mesh, dx, dy, dz, hubIndex)
     class(TurbineArray), intent(inout), target :: this
     character(len=*),    intent(in)            :: inputFile
     character(len=clen)                           :: powerDumpDir
@@ -117,6 +119,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     character(len=clen) :: inputDirDyaw = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw.inp"
     real(rkind), dimension(:), allocatable :: xLoc, yLoc
     integer :: yawUpdateInterval = 1000
+    integer, intent(out) :: hubIndex
 
     integer :: i, ierr, ADM_Type = 2
 
@@ -151,6 +154,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     this%powerDumpDir = powerDumpDir
     this%useDynamicYaw = useDynamicYaw
     this%yawUpdateInterval = yawUpdateInterval
+    hubIndex = 1
 
     ! Initialize the yaw and tilf
     allocate(this%gamma(this%nTurbines))
@@ -193,6 +197,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
              allocate(this%powerUpdate(this%yawUpdateInterval, this%nTurbines))
              this%powerDumpDir = powerDumpDir
              this%timeStep = 1
+             this%step = 0
              this%updateCounter = 1
              this%meanP = 0.d0
              this%meanPbaseline = 0.d0
@@ -210,6 +215,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
              yLoc(i) = this%turbArrayADM_Tyaw(i)%yLoc
          end do
          this%gamma_nm1 = this%gamma
+         hubIndex = nint(this%turbArrayADM_Tyaw(1)%zLoc / dz)
          call message(0,"YAWING WIND TURBINE (Type 4) array initialized")
       end select 
     else
@@ -227,7 +233,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
 
     if (this%useDynamicYaw) then
         call this%dyaw%init(inputDirDyaw, xLoc, yLoc, &
-                            this%turbArrayADM_Tyaw(1)%diam, this%nTurbines)
+                            this%turbArrayADM_Tyaw(1)%diam, this%nTurbines, this%fixedYaw, this%dynamicStart)
     end if
 
     !if(this%dumpTurbField) then
@@ -420,9 +426,9 @@ subroutine halo_communication(this, u, v, wC)
 
 end subroutine
 
-subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_horz_avg, uturb, vturb, wturb)
+subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, windAngle, inst_horz_avg, uturb, vturb, wturb)
     class(TurbineArray), intent(inout), target :: this
-    real(rkind),                                                                         intent(in) :: dt
+    real(rkind),                                                                         intent(in) :: dt, windAngle
     real(rkind),    dimension(this%gpC%xsz(1),   this%gpC%xsz(2),   this%gpC%xsz(3)),    intent(in) :: u, v, wC
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs 
@@ -451,7 +457,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                end do
            case (4)
                do i = 1, this%nTurbines
-                   call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i))
+                   call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), windAngle)
                    if (this%useDynamicYaw) then
                        !write(tempname,"(A6,I3.3,A4)") "power_",i,".txt"
                        !call this%turbArrayADM_Tyaw(i)%dumpPower(this%powerDumpDir, tempname)
@@ -465,12 +471,24 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                    end if
                end do    
                if (this%useDynamicYaw) then
+                   ! If it is the first time step, implement the wind direction
+                   ! based yaw alignment
+                   if (this%step==1) then
+                       this%gamma = windAngle*pi/180.d0
+                   end if
                    ! Update the yaw misalignment for each turbine
                    if (mod(this%timeStep, this%yawUpdateInterval) == 0 .and. this%timeStep /= 1) then
                        call this%dyaw%update_and_yaw(this%gamma, this%meanWs(1), & 
-                                                     270.d0, this%meanP, this%step, this%meanPbaseline)
-                   end if
-                   if (mod(this%timeStep, this%yawUpdateInterval) == 0 .and. this%timeStep /= 1) then
+                                                     windAngle, this%meanP, this%step, this%meanPbaseline)
+                       ! Add the hub height wind direction to the yaw
+                       ! misalignments
+                       this%gamma = this%gamma + windAngle*pi/180.d0
+                       if (this%fixedYaw) then
+                           this%gamma = windAngle*pi/180.d0
+                       end if
+                       if (this%dynamicStart>this%step) then
+                           this%gamma = windAngle*pi/180.d0
+                       end if
                        do i=1,this%nTurbines
                            write(tempname,"(A12,I3.3,A8,I3.3,A4)") "powerUpdate_",i,"_update_",this%updateCounter,".txt"
                            call this%turbArrayADM_Tyaw(i)%dumpPowerUpdate(this%powerDumpDir,& 
