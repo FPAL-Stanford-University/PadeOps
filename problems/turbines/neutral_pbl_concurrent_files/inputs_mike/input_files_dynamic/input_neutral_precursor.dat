@@ -1,8 +1,8 @@
 &INPUT
 inputdir              = "/scratch/05294/mhowland/neutral_concurrent/3x3_dynamic"   ! Directory for any input files
 outputdir             = "/scratch/05294/mhowland/neutral_concurrent/3x3_dynamic"   ! Directory for all output files
-nx                    = 160         ! Number of points in X
-ny                    = 120          ! Number of points in Y
+nx                    = 320         ! Number of points in X
+ny                    = 240          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
 tstop                 = 40000.D0    ! Physical time to stop the simulation
 CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
@@ -11,7 +11,7 @@ nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 40000       ! TimeID of the restart file being used
+restartFile_TID       = 5000       ! TimeID of the restart file being used
 restartFile_RID       = 2            ! RunID of the restart file being used
 CviscDT               = 1.D0
 /
@@ -32,7 +32,7 @@ donot_dealias         = .FALSE.
 /
 &IO
 RunID                 = 2          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 5000       ! Restart File Dumping Frequency  (# of timesteps)
+t_restartDump         = 500       ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump            = 5000       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90

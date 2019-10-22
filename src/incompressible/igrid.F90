@@ -203,8 +203,6 @@ module IncompressibleGrid
 
         ! Wind Turbine stuff 
         type(turbineArray), allocatable :: WindTurbineArr
-        real(rkind) :: umAngle, vmAngle, windAngle
-        integer :: hubIndex
 
         ! KS preprocessor 
         type(ksprep), allocatable :: LES2KS
@@ -942,7 +940,7 @@ contains
        
         if (this%useWindTurbines) then
            allocate(this%WindTurbineArr)
-           call this%WindTurbineArr%init(inputFile, this%gpC, this%gpE, this%spectC, this%spectE, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz, this%hubIndex)
+           call this%WindTurbineArr%init(inputFile, this%gpC, this%gpE, this%spectC, this%spectE, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
            allocate(this%inst_horz_avg_turb(8*this%WindTurbineArr%nTurbines))
            this%inst_horz_avg_turb = zero
        end if

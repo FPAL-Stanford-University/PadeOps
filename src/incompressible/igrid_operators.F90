@@ -124,7 +124,7 @@ subroutine create_turbine_array(this, inputfile)
   
     
     call this%turbArray%init(inputFile, this%gp, this%gpE, this%spect, this%spectE, this%cbuffyC, this%cbuffyE, &
-                & this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz, hubIndex)
+                & this%cbuffzC, this%cbuffzE, this%mesh, this%dx, this%dy, this%dz)
 
     allocate(this%urhshat(this%spect%spectdecomp%ysz(1),this%spect%spectdecomp%ysz(2),this%spect%spectdecomp%ysz(3)))
     allocate(this%vrhshat(this%spect%spectdecomp%ysz(1),this%spect%spectdecomp%ysz(2),this%spect%spectdecomp%ysz(3)))
@@ -162,7 +162,7 @@ subroutine get_turbine_RHS(this, u, v, w, urhs, vrhs, wrhs)
     this%urhshat = 0.d0 + imi*0.d0
     this%vrhshat = 0.d0 + imi*0.d0
     this%wrhshat = 0.d0 + imi*0.d0
-    call this%turbArray%getForceRHS(dt, u, v, w, this%urhshat, this%vrhshat, this%wrhshat, .true., 0.d0, inst_horz_avg_turb)
+    call this%turbArray%getForceRHS(dt, u, v, w, this%urhshat, this%vrhshat, this%wrhshat, .true., inst_horz_avg_turb)
 
     call transpose_y_to_z(this%wrhshat,this%cbuffzE(:,:,:,1),this%spectE%spectdecomp)
     call this%derZ%interpZ_E2C(this%cbuffzE(:,:,:,1),this%cbuffzC(:,:,:,1), 0, 0)

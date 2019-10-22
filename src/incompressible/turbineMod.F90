@@ -50,8 +50,9 @@ module turbineMod
         integer :: n_moving_average, timeStep, updateCounter 
         real(rkind), dimension(:,:), allocatable :: powerUpdate
         logical :: fixedYaw = .false.
-        integer :: dynamicStart = 1
- 
+        integer :: dynamicStart = 1, hubIndex
+        real(rkind) :: umAngle, vmAngle, windAngle, windAngle_old
+
         ! variables needed for halo communication
         integer :: neighbour(6), coord(2), dims(2), tag_s, tag_n, tag_b, tag_t
         real(rkind), allocatable, dimension(:,:,:) :: ySendBuf, zSendBuf, yRightHalo, zRightHalo, zLeftHalo
@@ -60,6 +61,11 @@ module turbineMod
         logical :: dumpTurbField = .false., useDynamicYaw, firstStep
         integer :: step = 0, ADM_Type, yawUpdateInterval 
         character(len=clen)                           :: powerDumpDir
+        ! Variables to link domain and control
+        real(rkind), dimension(:,:,:), pointer :: u_ref_sim, v_ref_sim
+        real(rkind), dimension(:,:,:,:), pointer :: rbuffyC_ref_sim, rbuffzC_ref_sim
+        type(decomp_info), pointer :: gpC_ref_sim
+        logical :: ref_domain_link = .false.
     contains
 
         procedure :: init
@@ -71,10 +77,49 @@ module turbineMod
         procedure :: reset_turbArray 
         !procedure :: dumpFullField
         procedure :: link_pointers
+        procedure :: update_wind_angle
+        procedure :: link_reference_domain_for_control
 
     end type
 
 contains
+
+subroutine link_reference_domain_for_control(this, u, v, rbuffyC, rbuffzC, gpC)
+    class(TurbineArray), intent(inout) :: this
+    real(rkind), dimension(:,:,:)  , intent(in), target :: u, v 
+    real(rkind), dimension(:,:,:,:)  , intent(in), target :: rbuffyC, rbuffzC
+    type(decomp_info), intent(in), target :: gpC
+
+    this%u_ref_sim => u
+    this%v_ref_sim => v
+    this%rbuffyC_ref_sim => rbuffyC
+    this%rbuffzC_ref_sim => rbuffzC
+    this%gpC_ref_sim => gpC
+    this%ref_domain_link = .true.
+
+
+end subroutine
+
+subroutine update_wind_angle(this)
+    class(TurbineArray), intent(inout) :: this
+
+    ! Added by Mike 10/16/19 to compute the average wind direction in the
+    ! domain which is needed for the yaw misaligned turbines        igp%rbuffxC(:,:,:,1) = atan2(igp%v, igp%u) !* 180.d0 / 3.14d0
+    if (this%ref_domain_link) then
+        call transpose_x_to_y(this%u_ref_sim,this%rbuffyC_ref_sim(:,:,:,1),this%gpC_ref_sim)
+        call transpose_y_to_z(this%rbuffyC_ref_sim(:,:,:,1),this%rbuffzC_ref_sim(:,:,:,1),this%gpC_ref_sim)
+        call transpose_x_to_y(this%v_ref_sim,this%rbuffyC_ref_sim(:,:,:,1),this%gpC_ref_sim)
+        call transpose_y_to_z(this%rbuffyC_ref_sim(:,:,:,1),this%rbuffzC_ref_sim(:,:,:,2),this%gpC_ref_sim)
+        this%umAngle = p_sum(sum(this%rbuffzC_ref_sim(:,:,this%hubIndex,1))) / &
+              (real(this%gpC_ref_sim%xsz(1),rkind) * real(this%gpC_ref_sim%ysz(2),rkind))
+        this%vmAngle = p_sum(sum(this%rbuffzC_ref_sim(:,:,this%hubIndex,2))) / &
+              (real(this%gpC_ref_sim%xsz(1),rkind) * real(this%gpC_ref_sim%ysz(2),rkind))
+        this%windAngle = atan2(this%vmAngle,this%umAngle) * 180.d0 / pi
+    else
+        this%windAngle = 0.d0
+    end if
+
+end subroutine
 
 subroutine link_pointers(this,fxturb, fyturb, fzturb)
     class(TurbineArray), intent(in), target :: this
@@ -102,7 +147,7 @@ subroutine reset_turbArray(this)
 end subroutine
 
 
-subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbuffzC, cbuffzE, mesh, dx, dy, dz, hubIndex)
+subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbuffzC, cbuffzE, mesh, dx, dy, dz)
     class(TurbineArray), intent(inout), target :: this
     character(len=*),    intent(in)            :: inputFile
     character(len=clen)                           :: powerDumpDir
@@ -119,7 +164,6 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     character(len=clen) :: inputDirDyaw = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw.inp"
     real(rkind), dimension(:), allocatable :: xLoc, yLoc
     integer :: yawUpdateInterval = 1000
-    integer, intent(out) :: hubIndex
 
     integer :: i, ierr, ADM_Type = 2
 
@@ -154,7 +198,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     this%powerDumpDir = powerDumpDir
     this%useDynamicYaw = useDynamicYaw
     this%yawUpdateInterval = yawUpdateInterval
-    hubIndex = 1
+    this%hubIndex = 1
 
     ! Initialize the yaw and tilf
     allocate(this%gamma(this%nTurbines))
@@ -215,7 +259,8 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
              yLoc(i) = this%turbArrayADM_Tyaw(i)%yLoc
          end do
          this%gamma_nm1 = this%gamma
-         hubIndex = nint(this%turbArrayADM_Tyaw(1)%zLoc / dz)
+         this%hubIndex = nint(this%turbArrayADM_Tyaw(1)%zLoc / dz)
+         this%windAngle = 0.d0
          call message(0,"YAWING WIND TURBINE (Type 4) array initialized")
       end select 
     else
@@ -286,6 +331,8 @@ subroutine destroy(this)
     !endif
 
 end subroutine
+
+
 
 subroutine destroy_halo_communication(this)
     class(TurbineArray), intent(inout) :: this
@@ -426,9 +473,9 @@ subroutine halo_communication(this, u, v, wC)
 
 end subroutine
 
-subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, windAngle, inst_horz_avg, uturb, vturb, wturb)
+subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_horz_avg, uturb, vturb, wturb)
     class(TurbineArray), intent(inout), target :: this
-    real(rkind),                                                                         intent(in) :: dt, windAngle
+    real(rkind),                                                                         intent(in) :: dt
     real(rkind),    dimension(this%gpC%xsz(1),   this%gpC%xsz(2),   this%gpC%xsz(3)),    intent(in) :: u, v, wC
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs 
@@ -457,7 +504,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, windAn
                end do
            case (4)
                do i = 1, this%nTurbines
-                   call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), windAngle)
+                   call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), this%windAngle)
                    if (this%useDynamicYaw) then
                        !write(tempname,"(A6,I3.3,A4)") "power_",i,".txt"
                        !call this%turbArrayADM_Tyaw(i)%dumpPower(this%powerDumpDir, tempname)
@@ -474,20 +521,24 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, windAn
                    ! If it is the first time step, implement the wind direction
                    ! based yaw alignment
                    if (this%step==1) then
-                       this%gamma = windAngle*pi/180.d0
+                       call this%update_wind_angle()
+                       this%gamma = this%windAngle*pi/180.d0
                    end if
                    ! Update the yaw misalignment for each turbine
                    if (mod(this%timeStep, this%yawUpdateInterval) == 0 .and. this%timeStep /= 1) then
+                       ! Update the wind angle measurement
+                       this%windAngle_old = this%windAngle
+                       call this%update_wind_angle()
                        call this%dyaw%update_and_yaw(this%gamma, this%meanWs(1), & 
-                                                     windAngle, this%meanP, this%step, this%meanPbaseline)
+                                                     this%windAngle_old, this%meanP, this%step, this%meanPbaseline, this%windAngle)
                        ! Add the hub height wind direction to the yaw
                        ! misalignments
-                       this%gamma = this%gamma + windAngle*pi/180.d0
+                       this%gamma = this%gamma + this%windAngle*pi/180.d0
                        if (this%fixedYaw) then
-                           this%gamma = windAngle*pi/180.d0
+                           this%gamma = this%windAngle*pi/180.d0
                        end if
                        if (this%dynamicStart>this%step) then
-                           this%gamma = windAngle*pi/180.d0
+                           this%gamma = this%windAngle*pi/180.d0
                        end if
                        do i=1,this%nTurbines
                            write(tempname,"(A12,I3.3,A8,I3.3,A4)") "powerUpdate_",i,"_update_",this%updateCounter,".txt"

@@ -137,11 +137,18 @@ subroutine get_RHS_withPower(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_
     ! production 
     ug = u; vg = v; wg = w; rhsxvalsg = rhsxvals; rhsyvalsg = rhsyvals; rhszvalsg = rhszvals;
     gamma_local = wind_dir * pi / 180.d0
+    !gamma_local = 0.d0 * wind_dir * pi / 180.d0
+    !write(*,*) 'aligned'
     call this%get_RHS(ug, vg, wg, rhsxvalsg, rhsyvalsg, rhszvalsg, gamma_local, theta*0.d0) 
     this%powerBaseline = this%get_power()
     ! Now run the model with the appropriate yaw misalignment to return the
     ! correct values
+    !write(*,*) this%get_power()
+    !write(*,*) gamma_local
+    !write(*,*) 'zero'
     call this%get_RHS(u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta) 
+    !write(*,*) this%get_power()
+    !write(*,*) gamma_negative
 
 end subroutine
 
@@ -196,6 +203,10 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         this%scalarSource = this%scalarSource / sumVal
         ! Get the mean velocities at the turbine face
         this%speed = u*n(1,1) + v*n(2,1) + w*n(3,1)
+        !write(*,*) 'n'
+        !write(*,*) n(1,1)
+        !write(*,*) n(2,1)
+        !write(*,*) n(3,1)
         this%blanks = 1.d0
         do k = 1,size(this%xG,3)
             do j = 1, size(this%xG,2)
@@ -209,6 +220,10 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         numPoints = p_sum(this%blanks)
         this%rbuff = this%blanks*this%speed
         this%ut = p_sum(this%rbuff)/numPoints    
+        !write(*,*) 'uvw'
+        !write(*,*) p_sum(this%blanks*u)/numPoints
+        !write(*,*) p_sum(this%blanks*v)/numPoints
+        !write(*,*) p_sum(this%blanks*w)/numPoints
         ! Mean speed at the turbine
         usp_sq = (this%ut)**2
         force = -0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
@@ -236,15 +251,15 @@ subroutine AD_force_point(this, X, Y, Z, scalarSource)
     class(actuatordisk_yaw), intent(inout) :: this
     real(rkind), intent(out) :: scalarSource
     real(rkind), intent(in) :: X,Y,Z
-    real(rkind) :: delta_r = 0.8d0, smear_x = 1.5d0, delta, R, sumVal
-    real(rkind) :: tmp, tmp2, diamFactor = 1.8d0
+    real(rkind) :: delta_r = 0.8d0, smear_x = 1.d0, delta, R, sumVal
+    real(rkind) :: tmp, tmp2, diamFactor = 2.5d0
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Do everything in the i,j,k loop in the rhs call
 
     ! X,Y,Z are shifted to xc, yc, zx zero center as per AD location
     R = this%diam / 2.d0 * diamFactor ! Added to try and smear the forcing out more
-    tmp = sqrt((Y/R)**2 + (Z/R)**2)
+    tmp = sqrt((Y/(R))**2 + (Z/(R))**2)
     tmp = (tmp-1.d0)/delta_r + 1.d0
     call Sfunc_point(tmp, tmp2)
     tmp = 1.d0 - tmp2

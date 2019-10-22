@@ -16,14 +16,14 @@ program test_actuatorDisk
     type(actuatorDisk_T2), dimension(:), allocatable :: hawts_T2
     type(actuatorDisk), dimension(:), allocatable :: hawts
     type(actuatorDisk_yaw), dimension(:), allocatable :: hawts_Tyaw
-    integer, parameter :: nx = 128, ny = 32, nz = 32
+    integer, parameter :: nx = 600, ny = 240, nz = 192
     !character(len=clen) :: inputDir = "/home/aditya90/Codes/PadeOps/data/AD_Coriolis/"
     !character(len=clen) :: inputDir = "/fastscratch/nghaisas/runs/PadeOps/wupa/run3/deb/turbInfo"
-    character(len=clen) :: inputDir = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/1x1array"
+    character(len=clen) :: inputDir = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/5x5array"
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
     real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs1, rhsv, rhsw, rhs2, rhs3
     !real(rkind), parameter :: Lx = pi, Ly = 0.5d0*pi, Lz = 1.0d0
-    real(rkind), parameter :: Lx = 2.d0, Ly = 2.d0, Lz = 2.0d0
+    real(rkind), parameter :: Lx = 75.d0, Ly = 35.d0, Lz = 12.0d0
     real(rkind) :: dx, dy, dz, diam, CT
     type(decomp_info) :: gp 
     integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0, num_turbines 

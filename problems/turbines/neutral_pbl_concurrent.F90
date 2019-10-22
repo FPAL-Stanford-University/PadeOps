@@ -46,6 +46,7 @@ program neutral_pbl_concurrent
     end if 
 
     call budg_tavg%init(primary_inputfile, primary)   !<-- Budget class initialization 
+    call primary%WindTurbineArr%link_reference_domain_for_control(primary%u, primary%v, primary%rbuffyC, primary%rbuffzC, primary%gpC)
 
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
