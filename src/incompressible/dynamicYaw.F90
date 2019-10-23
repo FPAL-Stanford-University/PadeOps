@@ -238,6 +238,7 @@ subroutine onlineUpdate(this)
     ! Store the unsorted parameters
     this%kw = kwBest(this%unsort); this%sigma_0 = sigmaBest(this%unsort)   
     this%yaw = yaw(this%unsort) 
+    this%Phat = this%Phat(this%unsort); this%Phat_yaw = this%Phat_yaw(this%unsort)
 
     ! Deallocate
     deallocate(kw)
