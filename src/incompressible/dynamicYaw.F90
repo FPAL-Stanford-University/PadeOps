@@ -23,7 +23,7 @@ module dynamicYawMod
         real(rkind) :: var_p = 0.04d0, var_k = 9D-6, var_sig = 9D-6
         ! Turbine parameters
         integer :: Nt = 1, ts
-        real(rkind), dimension(:,:), allocatable :: turbCenter
+        real(rkind), dimension(:,:), allocatable :: turbCenter, turbCenterStore
         real(rkind) :: D=0.315d0
         real(rkind), dimension(:), allocatable :: yaw
         ! Wake model parameters
@@ -119,6 +119,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart)
     allocate(this%y_c(this%Nt,this%Nt))
     allocate(this%yCenter(this%Nt,this%Nt))
     allocate(this%turbCenter(this%Nt,2))
+    allocate(this%turbCenterStore(this%Nt,2))
     allocate(this%kw(this%Nt))
     allocate(this%sigma_0(this%Nt))
     allocate(this%Phat(this%Nt))
@@ -140,6 +141,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart)
         this%turbCenter(i,1) = xLoc(i) / this%D
         this%turbCenter(i,2) = yLoc(i) / this%D
     end do
+    this%turbCenterStore = this%turbCenter
 
 end subroutine 
 
@@ -150,14 +152,10 @@ end subroutine
 
 subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservation, ts, powerBaseline, wind_direction_end)
     class(dynamicYaw), intent(inout) :: this
-    real(rkind), dimension(:,:), allocatable :: X
     real(rkind), dimension(:), intent(inout) :: yaw
     real(rkind), dimension(:), intent(in) :: powerObservation, powerBaseline
     real(rkind), intent(in) :: wind_speed, wind_direction, wind_direction_end
     integer, intent(in) :: ts
-
-    ! allocate
-    allocate(X(this%Nt,2))
 
     ! Field data observation
     this%wind_speed = wind_speed ! Get this from the data
@@ -170,7 +168,6 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     this%yaw = yaw - wind_direction*pi/180.d0
     !call this%observeField()
     ! Rotate domain
-    X = this%turbCenter
     call this%rotate()
     ! Normalize the power production
     this%powerObservation = this%powerObservation(this%indSorted) / this%powerBaseline(this%conditionTurb)
@@ -178,9 +175,7 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     call this%onlineUpdate()
     yaw = this%yaw
     ! Restore original layout
-    this%turbCenter = X
-
-    deallocate(X)
+    this%turbCenter = this%turbCenterStore
 
 end subroutine
 
@@ -217,12 +212,12 @@ subroutine onlineUpdate(this)
         end do
     end do
     bestStep = 1; kwBest = kw; sigmaBest = sigma_0;
+    write(*,*) this%powerObservation
     do t=1, this%stateEstimationEpochs;
         call this%EnKF_update( psi_kp1, this%powerObservation, kw, sigma_0, yaw, t)
         ! Run forward model pass
         call this%forward(kw, sigma_0, Phat, yaw)
         ! Normalized
-        !Phat = Phat / Phat(1)
         Phat = Phat / Phat_zeroYaw(1)
         error(t) = sum(abs(Phat-this%powerObservation)) / real(this%Nt)
         if (error(t)<lowestError) then
@@ -246,7 +241,9 @@ subroutine onlineUpdate(this)
     deallocate(sigmaBest)
     deallocate(sigma_0)
     deallocate(Phat)
+    deallocate(Phat_zeroYaw)
     deallocate(yaw)
+    deallocate(psi_kp1)
  
 end subroutine
 
@@ -325,7 +322,7 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw, step)
     !error = p_sum(abs(rbuff(:,1)-P_kp1)) / real(this%Nt)
     
     ! Deallocate
-    deallocate(psi_kp1,psi_kpp,chi,psiHat_kp,psiHat_kpp,Phat,ones_Ne)
+    deallocate(psi_kp,psi_kp1,psi_kpp,chi,psiHat_kp,psiHat_kpp,Phat,ones_Ne)
     deallocate(rbuff,randArr,randArr2, Phat_zeroYaw) 
 
 end subroutine
