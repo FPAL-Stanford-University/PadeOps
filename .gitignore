@@ -6,6 +6,7 @@ build*
 *.F90~
 dependencies/*[^gz]
 data/*
+my_input_files/*
 tags
 pbsfiles
 batch_scripts
