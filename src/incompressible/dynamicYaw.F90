@@ -32,7 +32,7 @@ module dynamicYawMod
         integer :: Nx
         ! Wind conditions
         real(rkind) :: wind_speed, wind_direction
-        real(rkind), dimension(:), allocatable :: powerObservation, powerBaseline
+        real(rkind), dimension(:), allocatable :: powerObservation, powerBaseline, Popti
         integer :: conditionTurb
         ! Other stuff
         integer, dimension(:), allocatable :: indSorted, unsort
@@ -47,7 +47,7 @@ module dynamicYawMod
         real(rkind), dimension(:), allocatable :: dp_dgamma 
         ! Moving average stuff
         integer :: n_moving_average
-        real(rkind), dimension(:,:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n
+        real(rkind), dimension(:,:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n, dir_minus_n
         real(rkind), dimension(:), allocatable :: Phat, Phat_yaw
 
     contains
@@ -67,7 +67,7 @@ module dynamicYawMod
 
 contains
 
-subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart)
+subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, dirType)
     class(dynamicYaw), intent(inout) :: this
     character(len=*), intent(in) :: inputfile
     integer :: ioUnit, conditionTurb, ierr, i, n_moving_average
@@ -79,12 +79,12 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart)
     real(rkind), intent(in) :: diam
     integer, intent(in) :: Nt
     logical, intent(out) :: fixedYaw
-    integer, intent(out) :: dynamicStart
+    integer, intent(out) :: dynamicStart, dirType
  
     ! Read input file for this turbine    
     namelist /DYNAMIC_YAW/ var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
                            Ne, Ct, eta, beta1, beta2, conditionTurb, n_moving_average, &
-                           fixedYaw, dynamicStart
+                           fixedYaw, dynamicStart, dirType
     ioUnit = 534
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=DYNAMIC_YAW)
@@ -124,9 +124,11 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart)
     allocate(this%sigma_0(this%Nt))
     allocate(this%Phat(this%Nt))
     allocate(this%Phat_yaw(this%Nt))
+    allocate(this%Popti(this%Nt))
     allocate(this%power_minus_n(this%n_moving_average,this%Nt))
     allocate(this%ws_minus_n(this%n_moving_average,this%Nt))
     allocate(this%pb_minus_n(this%n_moving_average,this%Nt))
+    allocate(this%dir_minus_n(this%n_moving_average,this%Nt))
 
     ! Define
     this%yaw = 0.d0
@@ -165,7 +167,7 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     this%powerObservation = powerObservation ! Get the power production from ADM code
     this%powerBaseline = powerBaseline ! Get the power production from ADM code
     this%ts = ts
-    this%yaw = yaw - wind_direction*pi/180.d0
+    this%yaw = yaw !- wind_direction*pi/180.d0
     !call this%observeField()
     ! Rotate domain
     call this%rotate()
@@ -212,7 +214,6 @@ subroutine onlineUpdate(this)
         end do
     end do
     bestStep = 1; kwBest = kw; sigmaBest = sigma_0;
-    write(*,*) this%powerObservation
     do t=1, this%stateEstimationEpochs;
         call this%EnKF_update( psi_kp1, this%powerObservation, kw, sigma_0, yaw, t)
         ! Run forward model pass
@@ -338,6 +339,7 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     integer :: k
     logical :: check
     real(rkind), dimension(this%epochsYaw, this%Nt) :: P_time, yawTime
+    real(rkind), dimension(this%Nt) :: bestPowerOut
 
     ! Model
     ! Load model inputs
@@ -351,7 +353,7 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     k=1; check = 0; 
     bestYaw = 0.d0; Ptot = 0.d0; P_time = 0.d0; P_time = 0.d0; yawTime = 0.d0
     m=0.d0; v=0.d0;
-    bestPower = 0.d0; bestYaw = 0.d0;
+    bestPower = 0.d0; bestYaw = 0.d0; bestPowerOut = 0.d0;
     do while (k < this%epochsYaw .and. check == .false.) 
     
         ! Forward prop
@@ -370,6 +372,7 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
                    (sqrt(v) + this%eps)
         if (Ptot(k) > bestPower) then
            bestPower = Ptot(k)
+           bestPowerOut = P
            bestYaw = yaw
         end if
         k = k+1
@@ -383,6 +386,7 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     ! Final results
     yaw = bestYaw
     this%Ptot_final = bestPower / P_baseline(1)
+    this%Popti = bestPowerOut / P_baseline(1)
 
 end subroutine
 
@@ -617,10 +621,10 @@ subroutine backward(this, kw, sigma_0, yaw)
 end subroutine
 
 
-subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, meanPbaseline, powerBaseline, i, t)
+subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, meanPbaseline, powerBaseline, meanDir, windDir, i, t)
     class(dynamicYaw), intent(inout) :: this
-    real(rkind), intent(inout) :: meanP, meanWs, meanPbaseline
-    real(rkind), intent(in) :: power, ws, powerBaseline
+    real(rkind), intent(inout) :: meanP, meanWs, meanPbaseline, meanDir
+    real(rkind), intent(in) :: power, ws, powerBaseline, windDir
     integer, intent(in) :: i, t
 
     if (i>this%n_moving_average) then
@@ -635,6 +639,9 @@ subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, meanPbaseline, po
         ! Power baseline
         meanPbaseline = meanPbaseline + (1.d0/real(this%n_moving_average)) * (powerBaseline - this%pb_minus_n(1,t))
         this%pb_minus_n(1:this%n_moving_average-1,t) = this%pb_minus_n(2:this%n_moving_average,t)
+        ! Wind direction
+        meanDir = meanDir + (1.d0/real(this%n_moving_average)) * (windDir - this%dir_minus_n(1,t))
+        this%dir_minus_n(1:this%n_moving_average-1,t) = this%dir_minus_n(2:this%n_moving_average,t)
     else
         ! Power
         this%power_minus_n(i,t) = power
@@ -645,6 +652,9 @@ subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, meanPbaseline, po
         ! Power baseline
         this%pb_minus_n(i,t) = powerBaseline
         meanPbaseline = sum(this%pb_minus_n(1:i,t)) / real(i)
+        ! Wind direction
+        this%dir_minus_n(i,t) = windDir
+        meanDir = sum(this%dir_minus_n(1:i,t)) / real(i)
     end if
 
 

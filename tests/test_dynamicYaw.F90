@@ -14,7 +14,7 @@ program test_dynamicYaw
 
     type(dynamicYaw) :: dyaw
     type(actuatorDisk_yaw), allocatable, dimension(:) :: ad
-    character(len=clen) :: inputDir = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_neutral.inp"
+    character(len=clen) :: inputDir = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_test.inp"
     character(len=clen) :: inputDir_turb = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/3x3array_offset"
     integer, parameter :: nx = 192, ny = 96, nz = 128
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
@@ -83,12 +83,13 @@ program test_dynamicYaw
 
     ! Run the full dynamic yaw state estimation and yaw optimize
     yaw = 0.d0 * pi / 180.d0
-    yaw(7:9) = 15.d0 * pi / 180.d0
     ! Input
     write(*,*) yaw*180.d0/pi
-    power = (/0.93, 0.947, 0.93, 0.6, 0.65, 0.66, 0.5, 0.57, 0.61/)
+    power = (/ 1.00000000000000, 1.08841520281838, 1.03850347389637, &
+               0.701089994499202, 0.780034567358670, 0.774137255962883, &
+               0.681806165465507, 0.630462168874988, 0.622767305929719/)
     wind_speed = 8.d0
-    wind_direction = 15.d0
+    wind_direction = 0.2d0 * 180.d0 / pi
     call dyaw%update_and_yaw(yaw, wind_speed, wind_direction, power, 1, power*0.d0+1.d0, wind_direction)
 
     ! O, t

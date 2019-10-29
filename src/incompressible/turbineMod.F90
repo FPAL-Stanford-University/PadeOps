@@ -46,11 +46,11 @@ module turbineMod
         real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz
         complex(rkind), dimension(:,:,:), pointer :: fChat, fEhat, zbuffC, zbuffE
         real(rkind), dimension(:), allocatable :: gamma, theta, meanP, gamma_nm1, meanWs, meanPbaseline
-        real(rkind), dimension(:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n
+        real(rkind), dimension(:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n, hubDirection
         integer :: n_moving_average, timeStep, updateCounter 
         real(rkind), dimension(:,:), allocatable :: powerUpdate
         logical :: fixedYaw = .false.
-        integer :: dynamicStart = 1, hubIndex
+        integer :: dynamicStart = 1, hubIndex, dirType
         real(rkind) :: umAngle, vmAngle, windAngle, windAngle_old
 
         ! variables needed for halo communication
@@ -238,6 +238,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
              allocate(this%meanP(this%nTurbines))
              allocate(this%meanPbaseline(this%nTurbines))
              allocate(this%meanWs(this%nTurbines))
+             allocate(this%hubDirection(this%nTurbines))
              allocate(this%powerUpdate(this%yawUpdateInterval, this%nTurbines))
              this%powerDumpDir = powerDumpDir
              this%timeStep = 1
@@ -247,6 +248,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
              this%meanPbaseline = 0.d0
              this%meanWs = 0.d0
              this%powerUpdate = 0.d0
+             this%hubDirection = 0.d0
              this%firstStep = .TRUE.
          end if
          do i = 1, this%nTurbines
@@ -278,7 +280,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
 
     if (this%useDynamicYaw) then
         call this%dyaw%init(inputDirDyaw, xLoc, yLoc, &
-                            this%turbArrayADM_Tyaw(1)%diam, this%nTurbines, this%fixedYaw, this%dynamicStart)
+                            this%turbArrayADM_Tyaw(1)%diam, this%nTurbines, this%fixedYaw, this%dynamicStart, this%dirType)
     end if
 
     !if(this%dumpTurbField) then
@@ -486,6 +488,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
     integer :: i
     character(len=clen) :: tempname
     real(rkind) :: tmp
+    real(rkind), dimension(this%nTurbines) :: angleIn
 
     if (newTimeStep) then
          this%fx = zero; this%fy = zero; this%fz = zero
@@ -504,7 +507,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                end do
            case (4)
                do i = 1, this%nTurbines
-                   call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), this%windAngle)
+                   call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), this%windAngle, this%dirType)
                    if (this%useDynamicYaw) then
                        !write(tempname,"(A6,I3.3,A4)") "power_",i,".txt"
                        !call this%turbArrayADM_Tyaw(i)%dumpPower(this%powerDumpDir, tempname)
@@ -513,7 +516,8 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                        call this%dyaw%simpleMovingAverage(this%meanP(i), &
                             this%turbArrayADM_Tyaw(i)%get_power(), this%meanWs(i), & 
                             this%turbArrayADM_Tyaw(i)%ut, &
-                            this%meanPbaseline(i), this%turbArrayADM_Tyaw(i)%powerBaseline, & 
+                            this%meanPbaseline(i), this%turbArrayADM_Tyaw(i)%powerBaseline, &
+                            this%hubDirection(i), this%turbArrayADM_Tyaw(i)%hubDirection, & 
                             this%timeStep, i)
                    end if
                end do    
@@ -529,16 +533,35 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                        ! Update the wind angle measurement
                        this%windAngle_old = this%windAngle
                        call this%update_wind_angle()
-                       call this%dyaw%update_and_yaw(this%gamma, this%meanWs(1), & 
+                       if (this%dirType==1) then
+                           angleIn = this%gamma - this%windAngle*pi/180.d0
+                           call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
                                                      this%windAngle_old, this%meanP, this%step, this%meanPbaseline, this%windAngle)
+                       elseif (this%dirType==2) then
+                           angleIn = this%gamma - this%hubDirection*pi/180.d0
+                           call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
+                                                     this%windAngle_old, this%meanP, this%step, this%meanPbaseline, this%hubDirection(1))
+                       endif
                        ! Add the hub height wind direction to the yaw
                        ! misalignments
-                       this%gamma = this%gamma + this%windAngle*pi/180.d0
+                       if (this%dirType==1) then
+                           this%gamma = this%gamma + this%windAngle * pi / 180.d0
+                       elseif (this%dirType==2) then
+                           this%gamma = this%gamma + this%hubDirection * pi / 180.d0
+                       endif
                        if (this%fixedYaw) then
-                           this%gamma = this%windAngle*pi/180.d0
+                           if (this%dirType==1) then
+                               this%gamma = this%windAngle * pi / 180.d0
+                           elseif (this%dirType==2) then
+                               this%gamma = this%hubDirection * pi / 180.d0
+                           endif
                        end if
                        if (this%dynamicStart>this%step) then
-                           this%gamma = this%windAngle*pi/180.d0
+                           if (this%dirType==1) then
+                               this%gamma = this%windAngle * pi / 180.d0
+                           elseif (this%dirType==2) then
+                               this%gamma = this%hubDirection * pi / 180.d0
+                           endif
                        end if
                        do i=1,this%nTurbines
                            write(tempname,"(A12,I3.3,A8,I3.3,A4)") "powerUpdate_",i,"_update_",this%updateCounter,".txt"
@@ -546,7 +569,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                                 tempname, this%powerUpdate(:,i), this%dyaw%Phat, & 
                                 this%gamma, this%gamma_nm1, this%meanP, &
                                 this%dyaw%kw, this%dyaw%sigma_0, &
-                                this%dyaw%Phat_yaw, this%updateCounter, this%meanPbaseline)
+                                this%dyaw%Phat_yaw, this%updateCounter, this%meanPbaseline, this%hubDirection, this%dyaw%Popti)
                        end do
                        this%timeStep = 0
                        this%updateCounter=this%updateCounter+1

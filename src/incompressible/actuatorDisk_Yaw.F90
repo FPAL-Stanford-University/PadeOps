@@ -19,7 +19,7 @@ module actuatorDisk_YawMod
     type :: actuatorDisk_yaw
         ! Actuator Disk_T2 Info
         integer :: xLoc_idx, ActutorDisk_T2ID
-        real(rkind) :: yaw, tilt, ut, powerBaseline
+        real(rkind) :: yaw, tilt, ut, powerBaseline, hubDirection
         real(rkind) :: xLoc, yLoc, zLoc, dx, dy, dz
         real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq, Cp
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
@@ -119,7 +119,7 @@ subroutine destroy(this)
     nullify(this%xG, this%yG, this%zG)
 end subroutine 
 
-subroutine get_RHS_withPower(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta, wind_dir)
+subroutine get_RHS_withPower(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta, wind_dir, dirType)
     class(actuatordisk_yaw), intent(inout) :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
@@ -132,11 +132,16 @@ subroutine get_RHS_withPower(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_
     integer :: i,j,k
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc) :: rhsxvalsg, rhsyvalsg, rhszvalsg
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc) :: ug, vg, wg
+    integer, intent(in) :: dirType
 
     ! First run the model with no yaw misalignment to get the baseline power
     ! production 
     ug = u; vg = v; wg = w; rhsxvalsg = rhsxvals; rhsyvalsg = rhsyvals; rhszvalsg = rhszvals;
-    gamma_local = wind_dir * pi / 180.d0
+    if (dirType==1) then
+        gamma_local = wind_dir * pi / 180.d0
+    elseif (dirType==2) then
+        gamma_local = this%hubDirection * pi / 180.d0
+    endif
     !gamma_local = 0.d0 * wind_dir * pi / 180.d0
     !write(*,*) 'aligned'
     call this%get_RHS(ug, vg, wg, rhsxvalsg, rhsyvalsg, rhszvalsg, gamma_local, theta*0.d0) 
@@ -220,6 +225,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         numPoints = p_sum(this%blanks)
         this%rbuff = this%blanks*this%speed
         this%ut = p_sum(this%rbuff)/numPoints    
+        this%hubDirection = atan2(p_sum(this%blanks*v), p_sum(this%blanks*u)) * 180.d0 / pi
         !write(*,*) 'uvw'
         !write(*,*) p_sum(this%blanks*u)/numPoints
         !write(*,*) p_sum(this%blanks*v)/numPoints
@@ -336,14 +342,16 @@ end subroutine
 
 subroutine dumpPowerUpdate(this, outputfile, tempname, & 
                            powerUpdate, Phat, yaw, yawOld, & 
-                           meanP, kw, sigma, phat_yaw, i, pBaseline)
+                           meanP, kw, sigma, phat_yaw, i, pBaseline, &
+                           hubDirection, Popti)
     class(actuatordisk_yaw), intent(inout) :: this
     character(len=*),    intent(in)            :: outputfile, tempname
     integer :: fid = 1234
     integer, intent(in) :: i
     character(len=clen) :: fname, tempname2
     real(rkind), dimension(:), intent(in) :: powerUpdate, Phat, yaw, yawOld, meanP
-    real(rkind), dimension(:), intent(in) :: kw, sigma, phat_yaw, pBaseline
+    real(rkind), dimension(:), intent(in) :: kw, sigma, phat_yaw, pBaseline, hubDirection
+    real(rkind), dimension(:), intent(in) :: Popti
 
     ! Write power
     !fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname)
@@ -392,6 +400,18 @@ subroutine dumpPowerUpdate(this, outputfile, tempname, &
     fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
     open(fid,file=trim(fname), form='formatted')
     write(fid, *) phat_yaw
+    close(fid)
+    ! Write hub direction in this time interval
+    write(tempname2,"(A7,I3.3,A4)") "hubDir_",i,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) hubDirection
+    close(fid)
+    ! Write popti in this time interval
+    write(tempname2,"(A6,I3.3,A4)") "pOpti_",i,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) Popti
     close(fid)
 
 end subroutine    
