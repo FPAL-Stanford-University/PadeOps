@@ -28,7 +28,7 @@ module dynamicYawMod
         real(rkind), dimension(:), allocatable :: yaw
         ! Wake model parameters
         real(rkind), dimension(:), allocatable :: kw, sigma_0
-        real(rkind) :: powerExp=2.d0, eps=1.0D-12, Ct, eta
+        real(rkind) :: powerExp=3.d0, eps=1.0D-12, Ct, eta ! Power exponent is 3 for this AD implementation
         integer :: Nx
         ! Wind conditions
         real(rkind) :: wind_speed, wind_direction

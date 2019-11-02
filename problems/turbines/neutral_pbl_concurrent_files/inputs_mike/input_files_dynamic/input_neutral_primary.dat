@@ -1,12 +1,12 @@
 &INPUT
 inputdir              = "/scratch/05294/mhowland/neutral_concurrent/3x3_aligned_short_horizon"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/3x3_dynamic_short_horizon"   ! Directory for all output files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x1_dynamic_turbineSpecific"   ! Directory for all output files
 nx                    = 320         ! Number of points in X
 ny                    = 240          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
 tstop                 = 40000.D0    ! Physical time to stop the simulation
-CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
-dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
+CFL                   = -1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
+dt                    = 3.8D-2        ! Fixed time step value (only used if CFL is set to negative)
 nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
@@ -154,9 +154,9 @@ num_turbines          = 6
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
 turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/6x1array_offset"
 ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "/scratch/05294/mhowland/neutral_concurrent/3x3_dynamic_short_horizon/modelDumps"
+powerDumpDir          = "/scratch/05294/mhowland/neutral_concurrent/6x1_dynamic_turbineSpecific/modelDumpsDynamic_fixedDt_longerWindow_pp_3"
 useDynamicYaw         = .TRUE.
-yawUpdateInterval     = 100
+yawUpdateInterval     = 500
 inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_neutral.inp"
 /
 /

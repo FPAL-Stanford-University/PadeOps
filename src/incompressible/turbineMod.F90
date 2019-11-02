@@ -50,7 +50,7 @@ module turbineMod
         integer :: n_moving_average, timeStep, updateCounter 
         real(rkind), dimension(:,:), allocatable :: powerUpdate
         logical :: fixedYaw = .false.
-        integer :: dynamicStart = 1, hubIndex, dirType
+        integer :: dynamicStart = 1, hubIndex, dirType, advectionTime
         real(rkind) :: umAngle, vmAngle, windAngle, windAngle_old
 
         ! variables needed for halo communication
@@ -509,16 +509,19 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                do i = 1, this%nTurbines
                    call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), this%windAngle, this%dirType)
                    if (this%useDynamicYaw) then
-                       !write(tempname,"(A6,I3.3,A4)") "power_",i,".txt"
-                       !call this%turbArrayADM_Tyaw(i)%dumpPower(this%powerDumpDir, tempname)
+                       if (this%step==1) then
+                           this%advectionTime = nint(2*(this%turbArrayADM_Tyaw(this%nTurbines)%xLoc - this%turbArrayADM_Tyaw(1)%xLoc) / dt)
+                       end if
                        this%powerUpdate(this%timeStep, i) = & 
                                          this%turbArrayADM_Tyaw(i)%get_power()
-                       call this%dyaw%simpleMovingAverage(this%meanP(i), &
-                            this%turbArrayADM_Tyaw(i)%get_power(), this%meanWs(i), & 
-                            this%turbArrayADM_Tyaw(i)%ut, &
-                            this%meanPbaseline(i), this%turbArrayADM_Tyaw(i)%powerBaseline, &
-                            this%hubDirection(i), this%turbArrayADM_Tyaw(i)%hubDirection, & 
-                            this%timeStep, i)
+                       if (this%timeStep > this%advectionTime) then
+                           call this%dyaw%simpleMovingAverage(this%meanP(i), &
+                                this%turbArrayADM_Tyaw(i)%get_power(), this%meanWs(i), & 
+                                this%turbArrayADM_Tyaw(i)%ut, &
+                                this%meanPbaseline(i), this%turbArrayADM_Tyaw(i)%powerBaseline, &
+                                this%hubDirection(i), this%turbArrayADM_Tyaw(i)%hubDirection, & 
+                                this%timeStep - this%advectionTime, i)
+                       end if
                    end if
                end do    
                if (this%useDynamicYaw) then
@@ -537,10 +540,12 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                            angleIn = this%gamma - this%windAngle*pi/180.d0
                            call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
                                                      this%windAngle_old, this%meanP, this%step, this%meanPbaseline, this%windAngle)
+                           this%gamma = angleIn
                        elseif (this%dirType==2) then
                            angleIn = this%gamma - this%hubDirection*pi/180.d0
                            call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
                                                      this%windAngle_old, this%meanP, this%step, this%meanPbaseline, this%hubDirection(1))
+                           this%gamma = angleIn
                        endif
                        ! Add the hub height wind direction to the yaw
                        ! misalignments
