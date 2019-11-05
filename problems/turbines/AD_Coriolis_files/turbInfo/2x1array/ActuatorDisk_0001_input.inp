@@ -1,7 +1,7 @@
 &ACTUATOR_DISK
 xLoc         =   5.00000000d0
-yLoc         =   2.50000000d0
-zLoc         =   2.50000000d0
+yLoc         =   5.00000000d0
+zLoc         =   5.00000000d0
 diam         =   1.00000000d0
 cT           =   1.33000000d0
 tilt         =   0.00000000d0
