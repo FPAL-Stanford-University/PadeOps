@@ -28,7 +28,7 @@ module scalar_igridMod
       real(rkind), dimension(:,:,:), allocatable :: d2Fdz2, dFdxC, dFdyC, dFdzC
       real(rkind), dimension(:,:,:), allocatable :: dfdzE
       
-      complex(rkind), dimension(:,:,:), allocatable :: source_hat
+      complex(rkind), dimension(:,:,:), allocatable, public :: source_hat
 
       real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffyC, rbuffzC
       real(rkind), dimension(:,:,:,:), pointer :: rbuffxE, rbuffyE, rbuffzE
