@@ -11,6 +11,7 @@ program neutral_pbl_concurrent
     use exits, only: message
     use constants, only: one, zero
     use budgets_time_avg_mod, only: budgets_time_avg  
+    use link_turbine_to_scalar, only: setup_turb_scalar_source
     implicit none
 
     type(igrid), allocatable, target :: primary, precursor 
@@ -36,7 +37,9 @@ program neutral_pbl_concurrent
     call primary%init(primary_inputFile, .true.)                               
     call primary%start_io(.true.)                                          
     call primary%printDivergence()
-   
+    
+    call setup_turb_scalar_source(primary) 
+
     call precursor%init(precursor_inputFile, .false.)                                           
     precursor%Am_I_Primary = .false. 
     call precursor%start_io(.true.)                                           

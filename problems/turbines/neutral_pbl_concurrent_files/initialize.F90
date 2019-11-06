@@ -299,6 +299,56 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 
 end subroutine
 
+
+module link_turbine_to_scalar
+    use kind_parameters, only: rkind, clen 
+    complex(rkind), dimension(:,:,:), allocatable :: rhs_x, rhs_y, rhs_z
+    real(rkind), dimension(:,:,:), allocatable :: utmp, vtmp, wtmp, scalar_source_0
+    character(clen) :: OutputDir 
+    implicit none 
+contains 
+
+    subroutine setup_turb_scalar_source(primary)
+        use decomp_2d_io
+        use IncompressibleGrid, only: igrid
+        class(igrid), intent(inout), target :: primary
+        real(rkind), dimension(:,:,:), allocatable :: scalar_source_0
+        real(rkind), dimension(10000) :: inst_horz_avg
+        character(len=clen) :: fname
+
+        
+        allocate(utmp(primary%gpC%xsz(1),primary%gpC%xsz(2),primary%gpC%xsz(3)))
+        allocate(vtmp(primary%gpC%xsz(1),primary%gpC%xsz(2),primary%gpC%xsz(3)))
+        allocate(wtmp(primary%gpE%xsz(1),primary%gpE%xsz(2),primary%gpE%xsz(3)))
+        
+        allocate(scalar_source_0(primary%gpC%xsz(1),primary%gpC%xsz(2),primary%gpC%xsz(3)))
+        
+        allocate(rhs_y(primary%sp_gpC%ysz(1), primary%sp_gpC%ysz(2), primary%sp_gpC%ysz(3))) 
+        allocate(rhs_z(primary%sp_gpE%ysz(1), primary%sp_gpE%ysz(2), primary%sp_gpE%ysz(3))) 
+       
+        utmp = 1.d0 
+        vtmp = 0.d0 
+        wtmp = 0.d0 
+        call primary%WindTurbineArr%getForceRHS( 1.d0, utmp, vtmp, wtmp, primary%scalars(1)%source_hat, rhs_y, rhs_z, .true., inst_horz_avg)
+        
+        call primary%spectC%ifft(primary%scalars(1)%source_hat,scalar_source_0)
+        fname = primary%OutputDir(:len_trim(this%OutputDir))//"/ScalarSource1.out"
+        call decomp_2d_write_one(1,scalar_source_0,fname,this%gpC)
+        
+        call primary%spectC%ifft(primary%scalars(2)%source_hat,scalar_source_0)
+        fname = primary%OutputDir(:len_trim(this%OutputDir))//"/ScalarSource2.out"
+        call decomp_2d_write_one(1,scalar_source_0,fname,this%gpC)
+        
+        call primary%spectC%ifft(primary%scalars(3)%source_hat,scalar_source_0)
+        fname = primary%OutputDir(:len_trim(this%OutputDir))//"/ScalarSource3.out"
+        call decomp_2d_write_one(1,scalar_source_0,fname,this%gpC)
+
+        call message(0,"SCALAR SOURCES WRITTEN TO DISK.")
+    end subroutine 
+
+end module 
+
+
 subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
     use kind_parameters, only: rkind
     use decomp_2d,        only: decomp_info
@@ -314,11 +364,23 @@ end subroutine
 subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource)
     use kind_parameters, only: rkind
     use decomp_2d,        only: decomp_info
+    use link_turbine_to_scalar, only: scalar_source_0
+
     type(decomp_info),                                          intent(in)    :: decompC
     character(len=*),                intent(in)    :: inpDirectory
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     integer, intent(in)                            :: scalar_id
     real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
+    real(rkind), dimension(:,:,:), pointer :: x, y, z
 
-    scalarSource = 0.d0
+    z => mesh(:,:,:,3); y => mesh(:,:,:,2); x => mesh(:,:,:,1)
+    select case (scalar_id)
+    case (1) ! Turbine case
+        scalarSource = 0.d0 ! Need to handle this case using init_turb2scalar_linker call 
+    case (2) ! Above the turbine rows
+        scalarSource = 0.d0 ! Mike implement this 
+    case (3) ! Below the turbine rows
+        scalarSource = 0.d0 ! Mike implement this 
+    end select
+
 end subroutine 
