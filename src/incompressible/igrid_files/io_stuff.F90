@@ -660,6 +660,9 @@
             call this%dumpFullField(this%vFil4KS,'vFks')
             call this%dumpFullField(this%wFil4KS,'wFks')
        end if
+       if (this%useWindTurbines) then
+           call this%WindTurbineArr%write_turbine_power(this%step, this%outputdir, this%runID)
+       end if
    end subroutine 
    
    subroutine start_io(this, dumpInitField)

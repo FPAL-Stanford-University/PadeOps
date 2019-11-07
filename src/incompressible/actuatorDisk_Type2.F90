@@ -20,15 +20,16 @@ module actuatorDisk_T2mod
         ! Actuator Disk_T2 Info
         integer :: xLoc_idx, ActutorDisk_T2ID
         integer, dimension(:,:), allocatable :: tag_face 
-        real(rkind) :: yaw, tilt
+        real(rkind) :: yaw, tilt, Cp=0.3
         real(rkind) :: xLoc, yLoc, zLoc
         real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
-        integer :: totPointsOnFace
+        integer :: totPointsOnFace, tInd
         real(rkind), dimension(:,:,:), allocatable :: eta_delta, dsq
         real(rkind), dimension(:,:), allocatable :: xp, yp, zp
         real(rkind), dimension(:), allocatable :: xs, ys, zs
         integer, dimension(:,:), allocatable :: startEnds
+        real(rkind), dimension(:,:), allocatable :: powerTime
 
         ! Grid Info
         integer :: nxLoc, nyLoc, nzLoc 
@@ -89,6 +90,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
 
     this%delta = epsFact * (dx*dy*dz)**(1.d0/3.d0)
     this%OneByDelSq = 1.d0/(this%delta**2)
+    this%tInd = 1
 
     allocate(tmp(size(xG,2),size(xG,3)))
     allocate(tmp_tag(size(xG,2),size(xG,3)))
@@ -193,6 +195,9 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     call message(2, "correction factor = ", correction_factor)
     !write(*,'(a,i4,e19.12,1x,e19.12)') '--', nrank, correction_factor, this%normfactor
     this%smearing_base = this%smearing_base/correction_factor
+    if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
+           allocate(this%powerTime(1000000,1))
+    end if
 
     call message(2, "Smearing grid parameter, ntry", ntry)
     call toc(mpi_comm_world, time2initialize)
@@ -264,6 +269,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     call this%getMeanU(u,v,w)
     usp_sq = this%uface**2 + this%vface**2 + this%wface**2
     force = -this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
+   
     !do j = 1,size(this%xs)
     !        call this%smear_this_source(rhsxvals,this%xs(j),this%ys(j),this%zs(j), force, this%startEnds(1,j), &
     !                            this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
@@ -283,6 +289,8 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
         inst_val(6) = this%uface
         inst_val(7) = this%vface
         inst_val(8) = this%wface
+        this%powerTime(this%tInd,1) = force*sqrt(usp_sq)
+        this%tInd = this%tInd + 1
       end if
     !end if 
 
@@ -352,5 +360,7 @@ subroutine sample_on_circle(R,xcen, ycen, xloc,yloc,np)
 
     xloc = xloc + xcen; yloc = yloc + ycen 
 end subroutine
+
+
 
 end module 

@@ -45,6 +45,7 @@ contains
                if (allocated(gp%scalars)) then
                   call message_min_max(1,"Bounds for SCALAR 1:", p_minval(minval(gp%scalars(1)%F)), p_maxval(maxval(gp%scalars(1)%F)))
                   call message_min_max(1,"Bounds for SCALAR 2:", p_minval(minval(gp%scalars(2)%F)), p_maxval(maxval(gp%scalars(2)%F)))
+                  call message_min_max(1,"Bounds for SCALAR 3:", p_minval(minval(gp%scalars(3)%F)), p_maxval(maxval(gp%scalars(3)%F)))
                end if
             elseif (simid == 2) then
                call toc()

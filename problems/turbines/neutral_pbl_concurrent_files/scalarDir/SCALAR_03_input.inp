@@ -1,0 +1,8 @@
+&SCALAR_INFO
+useSource = .TRUE. 
+PrandtlNum = 0.1d0
+bc_bottom = 1
+bc_top = 1
+TurbPrandtlNum = 0.1d0
+Cy = 1.d0 
+/

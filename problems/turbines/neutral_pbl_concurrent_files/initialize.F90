@@ -302,15 +302,16 @@ end subroutine
 
 module link_turbine_to_scalar
     use kind_parameters, only: rkind, clen 
+    implicit none 
     complex(rkind), dimension(:,:,:), allocatable :: rhs_x, rhs_y, rhs_z
     real(rkind), dimension(:,:,:), allocatable :: utmp, vtmp, wtmp, scalar_source_0
     character(clen) :: OutputDir 
-    implicit none 
 contains 
 
     subroutine setup_turb_scalar_source(primary)
         use decomp_2d_io
         use IncompressibleGrid, only: igrid
+        use Exits, only : message
         class(igrid), intent(inout), target :: primary
         real(rkind), dimension(:,:,:), allocatable :: scalar_source_0
         real(rkind), dimension(10000) :: inst_horz_avg
@@ -330,20 +331,24 @@ contains
         vtmp = 0.d0 
         wtmp = 0.d0 
         call primary%WindTurbineArr%getForceRHS( 1.d0, utmp, vtmp, wtmp, primary%scalars(1)%source_hat, rhs_y, rhs_z, .true., inst_horz_avg)
-        
+        primary%scalars(1)%source_hat = -primary%scalars(1)%source_hat      
+  
         call primary%spectC%ifft(primary%scalars(1)%source_hat,scalar_source_0)
-        fname = primary%OutputDir(:len_trim(this%OutputDir))//"/ScalarSource1.out"
-        call decomp_2d_write_one(1,scalar_source_0,fname,this%gpC)
+        fname = primary%OutputDir(:len_trim(primary%OutputDir))//"/ScalarSource1.out"
+        call decomp_2d_write_one(1,scalar_source_0,fname,primary%gpC)
         
         call primary%spectC%ifft(primary%scalars(2)%source_hat,scalar_source_0)
-        fname = primary%OutputDir(:len_trim(this%OutputDir))//"/ScalarSource2.out"
-        call decomp_2d_write_one(1,scalar_source_0,fname,this%gpC)
+        fname = primary%OutputDir(:len_trim(primary%OutputDir))//"/ScalarSource2.out"
+        call decomp_2d_write_one(1,scalar_source_0,fname,primary%gpC)
         
         call primary%spectC%ifft(primary%scalars(3)%source_hat,scalar_source_0)
-        fname = primary%OutputDir(:len_trim(this%OutputDir))//"/ScalarSource3.out"
-        call decomp_2d_write_one(1,scalar_source_0,fname,this%gpC)
+        fname = primary%OutputDir(:len_trim(primary%OutputDir))//"/ScalarSource3.out"
+        call decomp_2d_write_one(1,scalar_source_0,fname,primary%gpC)
 
         call message(0,"SCALAR SOURCES WRITTEN TO DISK.")
+    
+        deallocate(utmp, vtmp, wtmp, scalar_source_0, rhs_y, rhs_z)
+
     end subroutine 
 
 end module 
@@ -368,19 +373,25 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
 
     type(decomp_info),                                          intent(in)    :: decompC
     character(len=*),                intent(in)    :: inpDirectory
-    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     integer, intent(in)                            :: scalar_id
     real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
     real(rkind), dimension(:,:,:), pointer :: x, y, z
+    real(rkind) :: dz
 
     z => mesh(:,:,:,3); y => mesh(:,:,:,2); x => mesh(:,:,:,1)
+    dz = z(1,1,2) - z(1,1,1)
     select case (scalar_id)
     case (1) ! Turbine case
         scalarSource = 0.d0 ! Need to handle this case using init_turb2scalar_linker call 
     case (2) ! Above the turbine rows
-        scalarSource = 0.d0 ! Mike implement this 
+        scalarSource = z*0.d0
+        scalarSource(1,:,:) = exp(-(z(1,:,:)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) ! Mike implement this 
+        scalarSource(:,1,:) = exp(-(z(:,1,:)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) ! Mike implement this 
     case (3) ! Below the turbine rows
-        scalarSource = 0.d0 ! Mike implement this 
+        scalarSource = z*0.d0
+        scalarSource(1,:,:) = exp(-(z(1,:,:)-(dz))**2 / 0.01) ! Mike implement this 
+        scalarSource(:,1,:) = exp(-(z(:,1,:)-(dz))**2 / 0.01) ! Mike implement this 
     end select
 
 end subroutine 

@@ -1,6 +1,6 @@
 &INPUT
-inputdir                      = "/scratch/05294/mhowland/AD_Coriolis/Ro_inf_large"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/AD_Coriolis/Ro_inf_large"   ! Directory for all output files
+inputdir                      = "/scratch/05294/mhowland/AD_Coriolis/Ro_inf_large_diamFactor_2p0"   ! Directory for any input files
+outputdir                     = "/scratch/05294/mhowland/AD_Coriolis/Ro_inf_large_diamFactor_2p0"   ! Directory for all output files
 nx                            = 128          ! Number of points in X
 ny                            = 64          ! Number of points in Y
 nz                            = 64          ! Number of points in Z
@@ -9,7 +9,7 @@ CFL                           = 1.4D0       ! CFL criterion for calculating the 
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
+useRestartFile                = .FALSE.     ! Set to false if it's a fresh simulation 
 restartFile_TID               = 10000        ! TimeID of the restart file being used
 restartFile_RID               = 1          ! RunID of the restart file being used
 /
@@ -105,7 +105,7 @@ num_turbines          = 2
 ADM                   = .TRUE.
 turbInfoDir                   = "/home1/05294/mhowland/PadeOps/problems/turbines/AD_Coriolis_files/turbInfo/2x1array"
 ADM_Type              = 4
-powerDumpDir          = "/scratch/05294/mhowland/AD_Coriolis/Ro_inf_large/dataDumps"
+powerDumpDir          = "/scratch/05294/mhowland/AD_Coriolis/Ro_inf_large_diamFactor_2p0/dataDumps"
 useDynamicYaw         = .TRUE.
 yawUpdateInterval     = 10000
 inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw.inp"
