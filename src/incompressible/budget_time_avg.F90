@@ -51,6 +51,8 @@ module budgets_time_avg_mod
    ! 28: <vT>
    ! 29: <wT>
    ! 30: <TT>
+   ! 31: Scalar means (31-> 31+num_scalars)
+   ! 31+x: Scalar variances(31+num_scalars+1:32+2*num_scalars)
 
    ! BUDGET_1 term indices:  
    ! 1:  X eqn - Advection/convection term
@@ -112,7 +114,7 @@ module budgets_time_avg_mod
 
         logical :: useWindTurbines, isStratified
         real(rkind), allocatable, dimension(:) :: runningSum_sc, runningSum_sc_turb, runningSum_turb
-
+        logical :: HaveScalars
         integer :: tidx_dump 
         integer :: tidx_compute
         integer :: tidx_budget_start 
@@ -191,17 +193,24 @@ contains
         this%budgetType = budgetType
 
         this%splitPressureDNS = this%igrid_sim%computeDNSPressure
- 
+
+        this%HaveScalars = this%igrid_sim%useScalars
         if(this%do_budgets) then 
-            if (this%isStratified) then
-                allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),30))
+            !if (this%isStratified) then
+            ! Always assume that you are stratified
+
+                if (this%HaveScalars) then
+                    allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),30+2*this%igrid_sim%n_scalars))
+                else
+                    allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),30))
+                end if 
                 allocate(this%budget_2(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),09))
                 allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),14))
-            else
-                allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),25))
-                allocate(this%budget_2(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),07))
-                allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),10))
-            end if
+            !else
+            !    allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),25))
+            !    allocate(this%budget_2(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),07))
+            !    allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),10))
+            !end if
             allocate(this%budget_3(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),08))
 
             if ((trim(budgets_dir) .eq. "null") .or.(trim(budgets_dir) .eq. "NULL")) then
@@ -381,7 +390,7 @@ contains
         this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) - this%budget_0(:,:,:,15)*this%budget_0(:,:,:,2)
         this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) - this%budget_0(:,:,:,16)*this%budget_0(:,:,:,3)
         
-        ! STEP 6: Potential temperature terms for stratified flow
+        ! STEP 6a: Potential temperature terms for stratified flow
         if (this%isStratified) then
             this%budget_0(:,:,:,27) = this%budget_0(:,:,:,27) - this%budget_0(:,:,:,1)*this%budget_0(:,:,:,26)
             this%budget_0(:,:,:,28) = this%budget_0(:,:,:,28) - this%budget_0(:,:,:,2)*this%budget_0(:,:,:,26)
@@ -389,6 +398,14 @@ contains
             this%budget_0(:,:,:,30) = this%budget_0(:,:,:,30) - this%budget_0(:,:,:,26)*this%budget_0(:,:,:,26)
         end if 
 
+        ! Step 6b: Scalar variances
+        if (this%HaveScalars) then
+            do idx = 1,this%igrid_sim%n_scalars
+                this%budget_0(:,:,:,30+this%igrid_sim%n_scalars+idx) = &
+                    this%budget_0(:,:,:,30+this%igrid_sim%n_scalars+idx) - & 
+                    this%budget_0(:,:,:,30+idx)*this%budget_0(:,:,:,30+idx)
+            end do 
+        end if
 
         ! Step 7: Dump the full budget 
         do idx = 1,size(this%budget_0,4)
@@ -425,13 +442,22 @@ contains
         this%budget_0(:,:,:,8)  = this%budget_0(:,:,:,8)  + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,3) ! R23
         this%budget_0(:,:,:,9)  = this%budget_0(:,:,:,9)  + this%budget_0(:,:,:,3)*this%budget_0(:,:,:,3) ! R33
         
-        ! STEP 6: Potential temperature terms for stratified flow
+        ! STEP 10a: Potential temperature terms for stratified flow
         if (this%isStratified) then
             this%budget_0(:,:,:,27) = this%budget_0(:,:,:,27) + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,26)
             this%budget_0(:,:,:,28) = this%budget_0(:,:,:,28) + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,26)
             this%budget_0(:,:,:,29) = this%budget_0(:,:,:,29) + this%budget_0(:,:,:,3)*this%budget_0(:,:,:,26)
             this%budget_0(:,:,:,30) = this%budget_0(:,:,:,30) + this%budget_0(:,:,:,26)*this%budget_0(:,:,:,26)
         end if 
+        
+        ! Step 10b: Scalar variances
+        if (this%HaveScalars) then
+            do idx = 1,this%igrid_sim%n_scalars
+                this%budget_0(:,:,:,30+this%igrid_sim%n_scalars+idx) = &
+                    this%budget_0(:,:,:,30+this%igrid_sim%n_scalars+idx) + & 
+                    this%budget_0(:,:,:,30+idx)*this%budget_0(:,:,:,30+idx)
+            end do 
+        end if
         
         ! Step 11: Go back to summing instead of averaging
         this%budget_0 = this%budget_0*(real(this%counter,rkind) + 1.d-18)
@@ -440,6 +466,7 @@ contains
 
     subroutine AssembleBudget0(this)
         class(budgets_time_avg), intent(inout) :: this
+        integer :: idx
 
         ! STEP 1: Compute mean U, V and W
         this%budget_0(:,:,:,1) = this%budget_0(:,:,:,1) + this%igrid_sim%u
@@ -496,6 +523,22 @@ contains
             this%budget_0(:,:,:,28) = this%budget_0(:,:,:,28) + this%igrid_sim%v*this%igrid_sim%T
             this%budget_0(:,:,:,29) = this%budget_0(:,:,:,29) + this%igrid_sim%wC*this%igrid_sim%T
             this%budget_0(:,:,:,30) = this%budget_0(:,:,:,30) + this%igrid_sim%T*this%igrid_sim%T
+        end if
+
+        !STEP 9: Scalar Means
+        if (this%HaveScalars) then
+            do idx = 1,this%igrid_sim%n_scalars
+                this%budget_0(:,:,:,30+idx) = this%budget_0(:,:,:,30+idx) + this%igrid_sim%scalars(idx)%F
+            end do 
+        end if 
+        
+        !STEP 10: Scalar Variances
+        if (this%HaveScalars) then
+            do idx = 1,this%igrid_sim%n_scalars
+                this%budget_0(:,:,:,30+this%igrid_sim%n_scalars+idx) = & 
+                    & this%budget_0(:,:,:,30+this%igrid_sim%n_scalars+idx) + & 
+                    & this%igrid_sim%scalars(idx)%F*this%igrid_sim%scalars(idx)%F
+            end do 
         end if 
 
     end subroutine 
