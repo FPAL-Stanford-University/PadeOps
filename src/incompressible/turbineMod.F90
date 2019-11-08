@@ -49,7 +49,7 @@ module turbineMod
         real(rkind), dimension(:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n, hubDirection
         integer :: n_moving_average, timeStep, updateCounter 
         real(rkind), dimension(:,:), allocatable :: powerUpdate
-        logical :: fixedYaw = .false.
+        logical :: fixedYaw = .false., considerAdvection = .true., lookup = .false.
         integer :: dynamicStart = 1, hubIndex, dirType, advectionTime
         real(rkind) :: umAngle, vmAngle, windAngle, windAngle_old
 
@@ -281,7 +281,8 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
 
     if (this%useDynamicYaw) then
         call this%dyaw%init(inputDirDyaw, xLoc, yLoc, &
-                            this%turbArrayADM_Tyaw(1)%diam, this%nTurbines, this%fixedYaw, this%dynamicStart, this%dirType)
+                            this%turbArrayADM_Tyaw(1)%diam, this%nTurbines, &
+                            this%fixedYaw, this%dynamicStart, this%dirType, this%considerAdvection, this%lookup)
     end if
 
     !if(this%dumpTurbField) then
@@ -511,7 +512,11 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                    call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), this%windAngle, this%dirType)
                    if (this%useDynamicYaw) then
                        if (this%step==1) then
-                           this%advectionTime = nint(2*(this%turbArrayADM_Tyaw(this%nTurbines)%xLoc - this%turbArrayADM_Tyaw(1)%xLoc) / dt)
+                           if (this%considerAdvection) then
+                               this%advectionTime = nint(2*(this%turbArrayADM_Tyaw(this%nTurbines)%xLoc - this%turbArrayADM_Tyaw(1)%xLoc) / dt)
+                           else
+                               this%advectionTime = 1
+                           end if
                        end if
                        this%powerUpdate(this%timeStep, i) = & 
                                          this%turbArrayADM_Tyaw(i)%get_power()
@@ -546,7 +551,15 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                            angleIn = this%gamma - this%hubDirection*pi/180.d0
                            call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
                                                      this%windAngle_old, this%meanP, this%step, this%meanPbaseline, this%hubDirection(1))
-                           this%gamma = angleIn
+                           if (this%lookup==.false.) then
+                               this%gamma = angleIn
+                           else
+                               ! These angles were taken after one step of
+                               ! online yaw, this is meant to simulate the
+                               ! lookup table approach
+                               this%gamma(1) = -0.249; this%gamma(2) = -0.2878; this%gamma(3) = -0.2914;
+                               this%gamma(4) = -0.2996; this%gamma(5) = -0.1353; this%gamma(6) = -0.0003;
+                           end if
                        endif
                        ! Add the hub height wind direction to the yaw
                        ! misalignments
@@ -625,7 +638,8 @@ subroutine write_turbine_power(this, TID, outputdir, runID)
            if (allocated(this%turbArrayADM_T2(i)%powerTime)) then
                write(tempname,"(A3,I2.2,A2,I6.6,A6,I2.2,A4)") "Run",runID,"_t", TID, "_turbP",i,".pow"
                filename = outputDir(:len_trim(outputDir))//"/"//trim(tempname)
-               call write_2d_ascii(this%turbArrayADM_T2(i)%powerTime(1:this%turbArrayADM_T2(i)%tInd,:),filename)  
+               call write_2d_ascii(this%turbArrayADM_T2(i)%powerTime(1:this%turbArrayADM_T2(i)%tInd-1,:),filename)  
+               this%turbArrayADM_T2(i)%tInd = 1
            end if
         end if
     end do

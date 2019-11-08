@@ -289,8 +289,12 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
         inst_val(6) = this%uface
         inst_val(7) = this%vface
         inst_val(8) = this%wface
-        this%powerTime(this%tInd,1) = force*sqrt(usp_sq)
-        this%tInd = this%tInd + 1
+        if (usp_sq /= 0.d0) then ! this was added since this function is called
+                                 ! somewhere besides turbineMod which corrupts
+                                 ! the power measurements!
+            this%powerTime(this%tInd,1) = -force*sqrt(usp_sq)
+            this%tInd = this%tInd + 1
+        end if
       end if
     !end if 
 

@@ -67,7 +67,7 @@ module dynamicYawMod
 
 contains
 
-subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, dirType)
+subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, dirType, considerAdvection, lookup)
     class(dynamicYaw), intent(inout) :: this
     character(len=*), intent(in) :: inputfile
     integer :: ioUnit, conditionTurb, ierr, i, n_moving_average
@@ -78,13 +78,13 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     real(rkind), dimension(:), intent(in) :: xLoc, yLoc
     real(rkind), intent(in) :: diam
     integer, intent(in) :: Nt
-    logical, intent(out) :: fixedYaw
+    logical, intent(out) :: fixedYaw, considerAdvection, lookup
     integer, intent(out) :: dynamicStart, dirType
  
     ! Read input file for this turbine    
     namelist /DYNAMIC_YAW/ var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
                            Ne, Ct, eta, beta1, beta2, conditionTurb, n_moving_average, &
-                           fixedYaw, dynamicStart, dirType
+                           fixedYaw, dynamicStart, dirType, considerAdvection, lookup
     ioUnit = 534
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=DYNAMIC_YAW)

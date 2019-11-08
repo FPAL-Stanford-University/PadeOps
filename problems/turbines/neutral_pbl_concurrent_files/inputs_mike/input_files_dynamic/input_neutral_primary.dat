@@ -92,7 +92,7 @@ assume_fplane         = .FALSE.      ! Assume fplane (ignore horizontal componen
 latitude              = 45.d0       ! Latitude; important if useCoriolis is TRUE && assume_fplane is FALSE
 frameAngle            = 0.D0        ! Mean wind direction; important if assume_fplane is FALSE
 useHITforcing         = .false.     ! Use additional HIT forcing? 
-useScalars            = .false.     ! Do you want to use scalars? --Why was this true for AD????
+useScalars            = .true.     ! Do you want to use scalars? --Why was this true for AD????
 buoyancyDirection     = 3           ! Are 1 and 2 implemented????
 /
 /
@@ -154,7 +154,7 @@ num_turbines          = 6
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
 turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/6x1array_offset"
 ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "/scratch/05294/mhowland/neutral_concurrent/6x1_dynamic_turbineSpecific/modelDumpsDynamic_fixedDt_longerWindow_pp_3"
+powerDumpDir          = "/scratch/05294/mhowland/neutral_concurrent/6x1_dynamic_turbineSpecific/modelDumpsDynamic_newParams_pp_3"
 useDynamicYaw         = .TRUE.
 yawUpdateInterval     = 500
 inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_neutral.inp"
@@ -201,8 +201,8 @@ nKSvertFilt           = 1
 /
 /
 &SCALARS
-num_scalars      = 0    ! was 2; why is scalar used????
-scalar_info_dir  = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1"
+num_scalars      = 3    ! was 2; why is scalar used????
+scalar_info_dir  = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/scalarDir"
 /
 /
 &TURB_PRESSURE

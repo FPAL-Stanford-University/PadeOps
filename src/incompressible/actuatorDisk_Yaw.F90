@@ -257,10 +257,12 @@ subroutine AD_force_point(this, X, Y, Z, scalarSource)
     class(actuatordisk_yaw), intent(inout) :: this
     real(rkind), intent(out) :: scalarSource
     real(rkind), intent(in) :: X,Y,Z
-    real(rkind) :: delta_r = 0.8d0, smear_x = 1.d0, delta, R, sumVal
+    real(rkind) :: delta_r = 0.8d0, delta, R, sumVal
     real(rkind) :: tmp, tmp2
     !real(rkind) :: diamFactor = 1.75d0 ! works well for fine grids
-    real(rkind) :: diamFactor = 2.5d0 ! works well for coarse grids
+    !real(rkind) :: diamFactor = 2.5d0, smear_x = 1.0d0 ! works well for coarse grids
+    ! New parameters, 11/7/19
+    real(rkind) :: diamFactor = 1.75d0, smear_x = 0.5d0
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Do everything in the i,j,k loop in the rhs call
