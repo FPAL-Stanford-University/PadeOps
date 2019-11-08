@@ -313,7 +313,7 @@ contains
         use IncompressibleGrid, only: igrid
         use Exits, only : message
         class(igrid), intent(inout), target :: primary
-        real(rkind), dimension(:,:,:), allocatable :: scalar_source_0
+        real(rkind), dimension(:,:,:), allocatable :: scalar_source_0, scalar_source_1
         real(rkind), dimension(10000) :: inst_horz_avg
         character(len=clen) :: fname
 
@@ -323,13 +323,29 @@ contains
         allocate(wtmp(primary%gpE%xsz(1),primary%gpE%xsz(2),primary%gpE%xsz(3)))
         
         allocate(scalar_source_0(primary%gpC%xsz(1),primary%gpC%xsz(2),primary%gpC%xsz(3)))
+        allocate(scalar_source_1(primary%gpC%xsz(1),primary%gpC%xsz(2),primary%gpC%xsz(3)))
         
         allocate(rhs_y(primary%sp_gpC%ysz(1), primary%sp_gpC%ysz(2), primary%sp_gpC%ysz(3))) 
         allocate(rhs_z(primary%sp_gpE%ysz(1), primary%sp_gpE%ysz(2), primary%sp_gpE%ysz(3))) 
        
         utmp = 1.d0 
         vtmp = 0.d0 
-        wtmp = 0.d0 
+        wtmp = 0.d0
+        ! Scalar 3, primary%scalars(3)%source_hat contains spatial flags for the
+        ! points of interest 
+        call primary%spectC%ifft(primary%scalars(3)%source_hat,scalar_source_0)
+        call primary%WindTurbineArr%getForceRHS( 1.d0, utmp, vtmp, wtmp, primary%scalars(1)%source_hat, rhs_y, rhs_z, .true., inst_horz_avg)
+        call primary%spectC%ifft(primary%scalars(1)%source_hat,scalar_source_1)
+        scalar_source_0 = -scalar_source_0 * scalar_source_1
+        call primary%spectC%fft(scalar_source_0, primary%scalars(3)%source_hat)
+        ! Scalar 4, primary%scalars(4)%source_hat contains spatial flags for the
+        ! points of interest
+        call primary%spectC%ifft(primary%scalars(4)%source_hat,scalar_source_0)
+        call primary%WindTurbineArr%getForceRHS( 1.d0, utmp, vtmp, wtmp, primary%scalars(1)%source_hat, rhs_y, rhs_z, .true., inst_horz_avg)
+        call primary%spectC%ifft(primary%scalars(1)%source_hat,scalar_source_1)
+        scalar_source_0 = -scalar_source_0 * scalar_source_1
+        call primary%spectC%fft(scalar_source_0, primary%scalars(4)%source_hat)
+        ! Scalar 1 
         call primary%WindTurbineArr%getForceRHS( 1.d0, utmp, vtmp, wtmp, primary%scalars(1)%source_hat, rhs_y, rhs_z, .true., inst_horz_avg)
         primary%scalars(1)%source_hat = -primary%scalars(1)%source_hat      
   
@@ -345,9 +361,13 @@ contains
         fname = primary%OutputDir(:len_trim(primary%OutputDir))//"/ScalarSource3.out"
         call decomp_2d_write_one(1,scalar_source_0,fname,primary%gpC)
 
+        call primary%spectC%ifft(primary%scalars(4)%source_hat,scalar_source_0)
+        fname = primary%OutputDir(:len_trim(primary%OutputDir))//"/ScalarSource4.out"
+        call decomp_2d_write_one(1,scalar_source_0,fname,primary%gpC)
+        
         call message(0,"SCALAR SOURCES WRITTEN TO DISK.")
     
-        deallocate(utmp, vtmp, wtmp, scalar_source_0, rhs_y, rhs_z)
+        deallocate(utmp, vtmp, wtmp, scalar_source_0, rhs_y, rhs_z, scalar_source_1)
 
     end subroutine 
 
@@ -388,10 +408,42 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
         scalarSource = z*0.d0
         scalarSource(1,:,:) = exp(-(z(1,:,:)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) ! Mike implement this 
         scalarSource(:,1,:) = exp(-(z(:,1,:)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) ! Mike implement this 
-    case (3) ! Below the turbine rows
+    case (3) ! Center turbinethis%blanks = 1.d0
         scalarSource = z*0.d0
-        scalarSource(1,:,:) = exp(-(z(1,:,:)-(dz))**2 / 0.01) ! Mike implement this 
-        scalarSource(:,1,:) = exp(-(z(:,1,:)-(dz))**2 / 0.01) ! Mike implement this 
+        scalarSource = 1.d0 ! Need to handle this case using init_turb2scalar_linker call 
+        do k = 1,size(z,3)
+            do j = 1, size(y,2)
+                do i = 1,size(x,1)
+                    if ((x(i,j,k) < 18.d0) .or. (x(i,j,k)>19.d0)) then
+                        scalarSource(i,j,k) = 0.d0
+                    end if
+                    if ((y(i,j,k) < 9.d0) .or. (y(i,j,k)>10.d0)) then
+                        scalarSource(i,j,k) = 0.d0
+                    end if
+                end do
+            end do
+        end do
+    case (4) ! Last turbine
+        scalarSource = z*0.d0
+        scalarSource = 1.d0 ! Need to handle this case using init_turb2scalar_linker call 
+        do k = 1,size(z,3)
+            do j = 1, size(y,2)
+                do i = 1,size(x,1)
+                    if (x(i,j,k) < 22.d0) then
+                        scalarSource(i,j,k) = 0.d0
+                    end if
+                    if (y(i,j,k) < 11.d0) then
+                        scalarSource(i,j,k) = 0.d0
+                    end if
+                end do
+            end do
+        end do
+    !case (XXX) ! Turbine case
+    !    scalarSource = 0.d0 ! Need to handle this case using init_turb2scalar_linker call 
+    !    scalarSource = 0.d0 ! Need to handle this case using init_turb2scalar_linker call 
+    !    scalarSource = z*0.d0
+    !    scalarSource(1,:,:) = exp(-(z(1,:,:)-(dz))**2 / 0.01) ! Mike implement this 
+    !    scalarSource(:,1,:) = exp(-(z(:,1,:)-(dz))**2 / 0.01) ! Mike implement this 
     end select
 
 end subroutine 

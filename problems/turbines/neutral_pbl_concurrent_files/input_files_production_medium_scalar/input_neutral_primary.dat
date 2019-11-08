@@ -232,6 +232,6 @@ frameAngle                    =  0.d0      ! Frame angle set to be the same as a
 /
 /
 &SCALARS
-num_scalars                   = 3
+num_scalars                   = 4
 scalar_info_dir               = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/scalarDir"
 /
