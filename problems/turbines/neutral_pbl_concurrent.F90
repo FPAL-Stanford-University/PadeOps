@@ -38,7 +38,9 @@ program neutral_pbl_concurrent
     call primary%start_io(.true.)                                          
     call primary%printDivergence()
     
-    call setup_turb_scalar_source(primary) 
+    if (primary%useScalars) then
+        call setup_turb_scalar_source(primary)
+    end if 
 
     call precursor%init(precursor_inputFile, .false.)                                           
     precursor%Am_I_Primary = .false. 
