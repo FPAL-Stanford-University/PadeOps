@@ -408,17 +408,18 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
         scalarSource = 0.d0 ! Need to handle this case using init_turb2scalar_linker call 
     case (2) ! Above the turbine rows
         scalarSource = 0.d0
+        scalarSource = exp(-(z-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) ! Mike implement this 
         !scalarSource(1,:,:) = exp(-(z(1,:,:)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) ! Mike implement this 
         !scalarSource(:,1,:) = exp(-(z(:,1,:)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) ! Mike implement this 
-        do k = 1,size(z,3)
-            do j = 1, size(z,2)
-                do i = 1, size(z,1)
-                    if ((x(i,j,k)<2*dx) .or. (y(i,j,k)<2*dy)) then
-                        scalarSource(i,j,k) = exp(-(z(i,j,k)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01)
-                    end if
-                end do
-            end do
-        end do
+        !do k = 1,size(z,3)
+        !    do j = 1, size(z,2)
+        !        do i = 1, size(z,1)
+        !            if ((x(i,j,k)<2*dx) .or. (y(i,j,k)<2*dy)) then
+        !                scalarSource(i,j,k) = exp(-(z(i,j,k)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01)
+        !            end if
+        !        end do
+        !    end do
+        !end do
         !do k = 1,size(z,3)
         !    do i = 1, size(z,1)
         !        scalarSource(i,1,k) = exp(-(z(i,1,k)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01)

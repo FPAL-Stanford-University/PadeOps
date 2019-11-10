@@ -1,7 +1,7 @@
 &INPUT
 inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific"   ! Directory for any input files
 outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific"   ! Directory for all output files
-nx                    = 320         ! Number of points in X
+nx                    = 480         ! Number of points in X
 ny                    = 240          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
 tstop                 = 40000.D0    ! Physical time to stop the simulation
@@ -10,7 +10,7 @@ dt                    = 3.8D-2        ! Fixed time step value (only used if CFL 
 nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
+useRestartFile        = .FALSE.      ! Set to false if it's a fresh simulation 
 restartFile_TID       = 29000       ! TimeID of the restart file being used
 restartFile_RID       = 1            ! RunID of the restart file being used
 CviscDT               = 1.D0
@@ -154,9 +154,9 @@ num_turbines          = 6
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
 turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/6x1array_offset"
 ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific/modelDumpsAligned_newParams_pp_3"
+powerDumpDir          = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific/modelDumpsAligned_newParams_pp_3_longWindow"
 useDynamicYaw         = .TRUE.
-yawUpdateInterval     = 500
+yawUpdateInterval     = 1000
 inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_neutral_aligned.inp"
 /
 /

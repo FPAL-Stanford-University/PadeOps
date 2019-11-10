@@ -1,19 +1,18 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific"   ! Directory for all output files
-nx                    = 480         ! Number of points in X
-ny                    = 240          ! Number of points in Y
-nz                    = 192          ! Number of points in Z
-tstop                 = 40000.D0    ! Physical time to stop the simulation
-CFL                   = -1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
-dt                    = 3.8D-2        ! Fixed time step value (only used if CFL is set to negative)
+inputdir              = "/scratch/05294/mhowland/neutral_concurrent/5x5_fine_0"   ! Directory for any input files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/5x5_fine_0"   ! Directory for all output files
+nx                    = 1200         ! Number of points in X
+ny                    = 560          ! Number of points in Y
+nz                    = 384          ! Number of points in Z
+tstop                 = 600000.D0    ! Physical time to stop the simulation
+CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
+dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
 nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .FALSE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 29000       ! TimeID of the restart file being used
+useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
+restartFile_TID       = 0       ! TimeID of the restart file being used
 restartFile_RID       = 2            ! RunID of the restart file being used
-CviscDT               = 1.D0
 /
 /
 &NUMERICS
@@ -32,7 +31,7 @@ donot_dealias         = .FALSE.
 /
 &IO
 RunID                 = 2          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 500       ! Restart File Dumping Frequency  (# of timesteps)
+t_restartDump         = 5000       ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump            = 5000       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
@@ -178,9 +177,9 @@ tidx_compute          = 5         ! How often should budgets be computed?
 tidx_dump             = 10000      ! How often should budget files be written to disk? 
 tidx_budget_start     = 30000      ! Start budget computation from this timestep onward
 restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations? 
-restart_rid           = 2         ! Restart budget file run index
-restart_tid           = 99999     ! Restart budget file time index
-restart_counter       = 11111     ! Restart budget file counter 
+restart_rid           = 1         ! Restart budget file run index
+restart_tid           = 19000     ! Restart budget file time index
+restart_counter       = 1800     ! Restart budget file counter 
 /
 /
 /
@@ -222,9 +221,9 @@ moisture_info_dir = "null"
 /
 /
 &PROBLEM_INPUT
-Lx                            =  30.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            =  15.d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
-Lz                            =  6.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
+Lx                            =  75.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            =  35.0d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
+Lz                            =  12.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
 Tref                          =  263.5d0     ! Reference Temp.
 Tsurf0                        =  265.0d0     ! Surface Temp. (at tsim=0) in K (need to take care of the dimensions)
 dTsurf_dt                     =  0.0D0      ! Surface Temp. decrease rate in K/hr. (need to take care of the dimensions)
