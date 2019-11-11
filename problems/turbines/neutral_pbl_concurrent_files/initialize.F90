@@ -336,18 +336,18 @@ contains
         call primary%spectC%ifft(primary%scalars(3)%source_hat,scalar_source_0)
         call primary%WindTurbineArr%getForceRHS( 1.d0, utmp, vtmp, wtmp, primary%scalars(1)%source_hat, rhs_y, rhs_z, .true., inst_horz_avg)
         call primary%spectC%ifft(primary%scalars(1)%source_hat,scalar_source_1)
-        scalar_source_0 = -scalar_source_0 * scalar_source_1
+        scalar_source_0 = -scalar_source_0 * scalar_source_1 / 1.0d4
         call primary%spectC%fft(scalar_source_0, primary%scalars(3)%source_hat)
         ! Scalar 4, primary%scalars(4)%source_hat contains spatial flags for the
         ! points of interest
         call primary%spectC%ifft(primary%scalars(4)%source_hat,scalar_source_0)
         call primary%WindTurbineArr%getForceRHS( 1.d0, utmp, vtmp, wtmp, primary%scalars(1)%source_hat, rhs_y, rhs_z, .true., inst_horz_avg)
         call primary%spectC%ifft(primary%scalars(1)%source_hat,scalar_source_1)
-        scalar_source_0 = -scalar_source_0 * scalar_source_1
+        scalar_source_0 = -scalar_source_0 * scalar_source_1 / 1.0d4
         call primary%spectC%fft(scalar_source_0, primary%scalars(4)%source_hat)
         ! Scalar 1 
         call primary%WindTurbineArr%getForceRHS( 1.d0, utmp, vtmp, wtmp, primary%scalars(1)%source_hat, rhs_y, rhs_z, .true., inst_horz_avg)
-        primary%scalars(1)%source_hat = -primary%scalars(1)%source_hat      
+        primary%scalars(1)%source_hat = -primary%scalars(1)%source_hat / 1.0d4      
   
         call primary%spectC%ifft(primary%scalars(1)%source_hat,scalar_source_0)
         fname = primary%OutputDir(:len_trim(primary%OutputDir))//"/ScalarSource1.out"
@@ -408,7 +408,7 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
         scalarSource = 0.d0 ! Need to handle this case using init_turb2scalar_linker call 
     case (2) ! Above the turbine rows
         scalarSource = 0.d0
-        scalarSource = exp(-(z-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) ! Mike implement this 
+        scalarSource = exp(-(z-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) / 1.0d4 ! Mike implement this 
         !scalarSource(1,:,:) = exp(-(z(1,:,:)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) ! Mike implement this 
         !scalarSource(:,1,:) = exp(-(z(:,1,:)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) ! Mike implement this 
         !do k = 1,size(z,3)
