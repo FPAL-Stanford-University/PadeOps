@@ -397,35 +397,29 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
     integer, intent(in)                            :: scalar_id
     real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
     real(rkind), dimension(:,:,:), pointer :: x, y, z
-    real(rkind) :: dz, dy, dx
+    real(rkind) :: dz, dy, dx, Lx, Ly
 
     z => mesh(:,:,:,3); y => mesh(:,:,:,2); x => mesh(:,:,:,1)
     dz = z(1,1,2) - z(1,1,1)
     dy = y(1,2,1) - y(1,1,1)
     dx = x(2,1,1) - x(1,1,1)
+    Lx = 75.d0
+    Ly = 35.d0
     select case (scalar_id)
     case (1) ! Turbine case
         scalarSource = 0.d0 ! Need to handle this case using init_turb2scalar_linker call 
     case (2) ! Above the turbine rows
         scalarSource = 0.d0
         scalarSource = exp(-(z-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) / 1.0d4 ! Mike implement this 
-        !scalarSource(1,:,:) = exp(-(z(1,:,:)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) ! Mike implement this 
-        !scalarSource(:,1,:) = exp(-(z(:,1,:)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) ! Mike implement this 
-        !do k = 1,size(z,3)
-        !    do j = 1, size(z,2)
-        !        do i = 1, size(z,1)
-        !            if ((x(i,j,k)<2*dx) .or. (y(i,j,k)<2*dy)) then
-        !                scalarSource(i,j,k) = exp(-(z(i,j,k)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01)
-        !            end if
-        !        end do
-        !    end do
-        !end do
-        !do k = 1,size(z,3)
-        !    do i = 1, size(z,1)
-        !        scalarSource(i,1,k) = exp(-(z(i,1,k)-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01)
-        !    end do
-        !end do
-        !scalarSource(2:size(z,1),2:size(z,2),:) = 0.d0
+        do k = 1,size(z,3)
+            do j = 1, size(z,2)
+                do i = 1, size(z,1)
+                    if ((x(i,j,k)>0.84*Lx) .or. (y(i,j,k)>0.84*Ly)) then
+                        scalarSource(i,j,k) = 0.d0
+                    end if
+                end do
+            end do
+        end do
     case (3) ! Center turbinethis%blanks = 1.d0
         scalarSource = z*0.d0
         scalarSource = 1.d0 ! Need to handle this case using init_turb2scalar_linker call 
