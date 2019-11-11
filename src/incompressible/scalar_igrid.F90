@@ -203,7 +203,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    character(len=*), intent(in) :: inputFile, inputDir, InputDataDir, OutputDataDir
    integer, intent(in) :: scalar_number, RunID, tid_restart 
    integer :: ierr
-   logical :: useSource = .false.. RejectScalarRestart = .false. 
+   logical :: useSource = .false., RejectScalarRestart = .false. 
    real(rkind) :: PrandtlNum = 1.d0, TurbPrandtlNum = 1.d0, Cy = 100.d0 
    integer ::  bc_bottom = 1, bc_top = 1 
    character(len=clen) :: tempname, fname
