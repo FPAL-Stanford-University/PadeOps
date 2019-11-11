@@ -4,7 +4,7 @@ outputdir             = "/scratch/05294/mhowland/neutral_concurrent/5x5_fine_180
 nx                    = 1200         ! Number of points in X
 ny                    = 560          ! Number of points in Y
 nz                    = 384          ! Number of points in Z
-tstop                 = 60000.D0    ! Physical time to stop the simulation
+tstop                 = 600000.D0    ! Physical time to stop the simulation
 CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
 nsteps                = 999999
@@ -91,7 +91,7 @@ assume_fplane         = .FALSE.      ! Assume fplane (ignore horizontal componen
 latitude              = 45.d0       ! Latitude; important if useCoriolis is TRUE && assume_fplane is FALSE
 frameAngle            = 180.D0        ! Mean wind direction; important if assume_fplane is FALSE
 useHITforcing         = .false.     ! Use additional HIT forcing? 
-useScalars            = .false.     ! Do you want to use scalars? --Why was this true for AD????
+useScalars            = .true.     ! Do you want to use scalars? --Why was this true for AD????
 buoyancyDirection     = 3           ! Are 1 and 2 implemented????
 /
 /
@@ -179,7 +179,7 @@ do_budgets            = .TRUE.    ! Perform budget calculations?
 budgetType            = 3         ! See type descriptions in budget_time_avg.F90
 budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/5x5_fine_180/budgets"   ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?  
-tidx_dump             = 1000      ! How often should budget files be written to disk? 
+tidx_dump             = 5000      ! How often should budget files be written to disk? 
 tidx_budget_start     = 5000      ! Start budget computation from this timestep onward
 restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations? 
 restart_rid           = 1         ! Restart budget file run index
@@ -200,8 +200,8 @@ nKSvertFilt           = 1
 /
 /
 &SCALARS
-num_scalars      = 0    ! was 2; why is scalar used????
-scalar_info_dir  = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1"
+num_scalars                   = 4
+scalar_info_dir               = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/scalarDir"
 /
 /
 &TURB_PRESSURE
