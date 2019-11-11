@@ -1,5 +1,5 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/neutral_concurrent/3x3_aligned_short_horizon"   ! Directory for any input files
+inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific"   ! Directory for any input files
 outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x1_noAdvection_turbineSpecific"   ! Directory for all output files
 nx                    = 320         ! Number of points in X
 ny                    = 240          ! Number of points in Y
@@ -11,7 +11,7 @@ nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 28000       ! TimeID of the restart file being used
+restartFile_TID       = 29000       ! TimeID of the restart file being used
 restartFile_RID       = 1            ! RunID of the restart file being used
 CviscDT               = 1.D0
 /
@@ -92,7 +92,7 @@ assume_fplane         = .FALSE.      ! Assume fplane (ignore horizontal componen
 latitude              = 45.d0       ! Latitude; important if useCoriolis is TRUE && assume_fplane is FALSE
 frameAngle            = 0.D0        ! Mean wind direction; important if assume_fplane is FALSE
 useHITforcing         = .false.     ! Use additional HIT forcing? 
-useScalars            = .true.     ! Do you want to use scalars? --Why was this true for AD????
+useScalars            = .false.     ! Do you want to use scalars? --Why was this true for AD????
 buoyancyDirection     = 3           ! Are 1 and 2 implemented????
 /
 /

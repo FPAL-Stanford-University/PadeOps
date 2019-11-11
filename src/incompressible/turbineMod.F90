@@ -509,7 +509,15 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                end do
            case (4)
                do i = 1, this%nTurbines
+                   ! If it is the first time step, implement the wind direction
+                   ! based yaw alignment
+                   if (this%step==1) then
+                      call this%update_wind_angle()
+                      this%gamma = this%windAngle*pi/180.d0
+                   end if
+                   ! Get RHS
                    call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), this%windAngle, this%dirType)
+                   ! Proceed with dynamic yaw operations
                    if (this%useDynamicYaw) then
                        if (this%step==1) then
                            if (this%considerAdvection) then
@@ -520,7 +528,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                        end if
                        this%powerUpdate(this%timeStep, i) = & 
                                          this%turbArrayADM_Tyaw(i)%get_power()
-                       if (this%timeStep > this%advectionTime) then
+                       if (this%timeStep >= this%advectionTime) then
                            call this%dyaw%simpleMovingAverage(this%meanP(i), &
                                 this%turbArrayADM_Tyaw(i)%get_power(), this%meanWs(i), & 
                                 this%turbArrayADM_Tyaw(i)%ut, &
@@ -531,26 +539,20 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                    end if
                end do    
                if (this%useDynamicYaw) then
-                   ! If it is the first time step, implement the wind direction
-                   ! based yaw alignment
-                   if (this%step==1) then
-                       call this%update_wind_angle()
-                       this%gamma = this%windAngle*pi/180.d0
-                   end if
                    ! Update the yaw misalignment for each turbine
                    if (mod(this%timeStep, this%yawUpdateInterval) == 0 .and. this%timeStep /= 1) then
                        ! Update the wind angle measurement
                        this%windAngle_old = this%windAngle
                        call this%update_wind_angle()
-                       if (this%dirType==1) then
+                       if (this%dirType==1 .or. this%updateCounter==1) then
                            angleIn = this%gamma - this%windAngle*pi/180.d0
                            call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
-                                                     this%windAngle_old, this%meanP, this%step, this%meanPbaseline, this%windAngle)
+                                                     this%windAngle, this%meanP, this%step, this%meanPbaseline)
                            this%gamma = angleIn
-                       elseif (this%dirType==2) then
+                       else
                            angleIn = this%gamma - this%hubDirection*pi/180.d0
                            call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
-                                                     this%windAngle_old, this%meanP, this%step, this%meanPbaseline, this%hubDirection(1))
+                                                     this%hubDirection(1), this%meanP, this%step, this%meanPbaseline)
                            if (this%lookup==.false.) then
                                this%gamma = angleIn
                            else
@@ -568,14 +570,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                        elseif (this%dirType==2) then
                            this%gamma = this%gamma + this%hubDirection * pi / 180.d0
                        endif
-                       if (this%fixedYaw) then
-                           if (this%dirType==1) then
-                               this%gamma = this%windAngle * pi / 180.d0
-                           elseif (this%dirType==2) then
-                               this%gamma = this%hubDirection * pi / 180.d0
-                           endif
-                       end if
-                       if (this%dynamicStart>this%step) then
+                       if ((this%fixedYaw) .or. (this%dynamicStart>this%step)) then
                            if (this%dirType==1) then
                                this%gamma = this%windAngle * pi / 180.d0
                            elseif (this%dirType==2) then

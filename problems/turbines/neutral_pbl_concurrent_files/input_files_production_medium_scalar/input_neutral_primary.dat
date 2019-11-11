@@ -32,7 +32,7 @@ donot_dealias         = .FALSE.
 &IO
 RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump         = 5000       ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 10       ! Data dumping frequency (# of timesteps)
+t_dataDump            = 500       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 5         ! Plane dumping frequency (# of timesteps)
@@ -179,7 +179,7 @@ do_budgets            = .TRUE.    ! Perform budget calculations?
 budgetType            = 3         ! See type descriptions in budget_time_avg.F90
 budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/5x5_medium_0_scalar/budgets"   ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?  
-tidx_dump             = 1000      ! How often should budget files be written to disk? 
+tidx_dump             = 100      ! How often should budget files be written to disk? 
 tidx_budget_start     = 5000      ! Start budget computation from this timestep onward
 restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations? 
 restart_rid           = 1         ! Restart budget file run index
@@ -232,6 +232,6 @@ frameAngle                    =  0.d0      ! Frame angle set to be the same as a
 /
 /
 &SCALARS
-num_scalars                   = 3
+num_scalars                   = 4
 scalar_info_dir               = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/scalarDir"
 /

@@ -152,18 +152,18 @@ subroutine destroy(this)
 
 end subroutine 
 
-subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservation, ts, powerBaseline, wind_direction_end)
+subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservation, ts, powerBaseline)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:), intent(inout) :: yaw
     real(rkind), dimension(:), intent(in) :: powerObservation, powerBaseline
-    real(rkind), intent(in) :: wind_speed, wind_direction, wind_direction_end
+    real(rkind), intent(in) :: wind_speed, wind_direction
     integer, intent(in) :: ts
 
     ! Field data observation
     this%wind_speed = wind_speed ! Get this from the data
     ! Use a locally linear interpolation to get the wind direction at the end of
     ! the step
-    this%wind_direction = 270.d0-(wind_direction+wind_direction_end)/2.d0 ! Get this from the data
+    this%wind_direction = 270.d0-wind_direction ! Get this from the data
     this%powerObservation = powerObservation ! Get the power production from ADM code
     this%powerBaseline = powerBaseline ! Get the power production from ADM code
     this%ts = ts
