@@ -95,7 +95,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     logical :: SOSmodel
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rho_ratio, &
-                          p_infty_2, gamma_2, mu_2, rho_0_2, p_amb_2, sigma_0, SOSmodel, thickness, &
+                          p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, p_amb_2, sigma_0, SOSmodel, thickness, &
                           plastic, plastic_2, yield, yield_2, tau0, tau0_2, iprob, &
                           K0, alp, CV, T0, K0_2, alp_2, CV_2, T0_2, interfloc, interfwidth
     ioUnit = 11
@@ -162,7 +162,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         if(thick<zero) then
           tmp = half * ( erf( (x-interfloc)/(thickness) ) - erf( (x-interfloc-interfwidth)/(thickness) ) )
         else
-          tmp = half * ( erf( (x-interfloc)/(thick*dx) ) - erf( (x-interfloc-interfwidth)/(1.0*dx) ) )
+          tmp = half * ( erf( (x-interfloc)/(thick*dx) ) - erf( (x-interfloc-interfwidth)/(thick*dx) ) )
           !tmp = half * ( one + erf( (x-0.5_rkind)/(thick*dx) ) )
         endif
         !write(*,*) 'thickness = ', thickness

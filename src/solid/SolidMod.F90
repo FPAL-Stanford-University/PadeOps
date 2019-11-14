@@ -382,19 +382,19 @@ contains
 
     end subroutine
 
-    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,rho0mix,mumix,yieldmix,solidVF)
+    subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,solidVF,rho0mix,mumix,yieldmix)
         use constants,  only: eps
         use RKCoeffs,   only: RK45_A,RK45_B
-        use reductions, only: P_MAXVAL
+        use reductions, only: P_MAXVAL, P_MINVAL
         use operators,  only: gradient, filter3D
         use exits,      only : nancheck
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src,solidVF
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in), optional  :: rho0mix, mumix, yieldmix, solidVF
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in), optional  :: rho0mix, mumix, yieldmix
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg   ! RHS for g tensor equation
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: normal ! Interface normal for sliding treatment
@@ -452,9 +452,9 @@ contains
         end if
 
         if(present(rho0mix)) then
-            call this%getRHS_g(rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
+            call this%getRHS_g(rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,solidVF,rho0mix)
         else
-            call this%getRHS_g(rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc)
+            call this%getRHS_g(rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,solidVF)
         endif
         call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
@@ -462,6 +462,8 @@ contains
         if(isub==1) this%Qtmpg = zero                   ! not really needed, since RK45_A(1) = 0
         this%Qtmpg  = dt*rhsg + RK45_A(isub)*this%Qtmpg
         this%g = this%g  + RK45_B(isub)*this%Qtmpg
+print '(a,9(e19.12,1x))', 'g11   : ', p_maxval(this%g11), p_minval(this%g11)  !(43,18,1,:)
+print '(a,9(e19.12,1x))', 'rhsg  : ', p_maxval(rhsg(:,:,:,1)), p_minval(rhsg(:,:,:,1)) !rhsg(43,18,1,:)
 
         ! Now project g tensor to SPD space
         call this%elastic%make_tensor_SPD(this%g)
@@ -509,25 +511,25 @@ contains
 
     end subroutine
 
-    subroutine getRHS_g(this,rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
+    subroutine getRHS_g(this,rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,solidVF,rho0mix)
         use decomp_2d, only: nrank
         use constants, only: eps, pi
         use operators, only: gradient, curl
-        use reductions, only: P_MAXVAL
+        use reductions, only: P_MAXVAL, P_MINVAL, P_MAXLOC
         class(solid),                                         intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src,mask
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src,mask, solidVF
         real(rkind),                                          intent(in)  :: dt
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in)  :: normal
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in), optional :: rho0mix, solidVF
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in), optional :: rho0mix
 
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dutdx,dutdy,dutdz,dvtdx,dvtdy,dvtdz,dwtdx,dwtdy,dwtdz
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg, ut, vt, wt, rad, theta
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
-        real(rkind), parameter :: etafac = one/6._rkind
+        real(rkind), parameter :: etafac = 0.0_rkind!one/6._rkind
 
         real(rkind) :: dx, dy, x, y
         ! real(rkind), parameter :: theta = 45._rkind * pi / 180._rkind
@@ -635,18 +637,23 @@ contains
             ! add Fsource term to penalty 
             penalty = penalty - src/this%VF
         endif
+         call P_MAXLOC( abs(penalty*this%g11), pmax, imax, jmax, kmax, rmax)
+         if (nrank == rmax) then
+             print*, "Maximum penalty term = ", pmax
+             !print*, "        curl    term = ", v(imax,jmax,kmax)*curlg(imax,jmax,kmax,3) - w(imax,jmax,kmax)*curlg(imax,jmax,kmax,2)
+             print*, "        g11          = ", this%g11(imax,jmax,kmax)
+             print*, "        VF           = ", this%VF(imax,jmax,kmax)
+             print*, "        Ys           = ", this%Ys(imax,jmax,kmax)
+             print*, "        rho          = ", rho(imax,jmax,kmax)
+             print*, "        tmp          = ", tmp(imax,jmax,kmax)
+             print*, "        detg         = ", detg(imax,jmax,kmax)
+             print*, "        locn         = ", imax, jmax, kmax, rmax
+         end if
 
         tmp = -u*this%g11-v*this%g12-w*this%g13
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-x_bc, y_bc, z_bc)
         
         call curl(this%decomp, this%der, this%g11, this%g12, this%g13, curlg, -x_bc, y_bc, z_bc)
-        ! call P_MAXLOC( abs(penalty*this%g11), pmax, imax, jmax, kmax, rmax)
-        ! if (nrank == rmax) then
-        !     print*, "Maximum penalty term = ", pmax
-        !     print*, "        curl    term = ", v(imax,jmax,kmax)*curlg(imax,jmax,kmax,3) - w(imax,jmax,kmax)*curlg(imax,jmax,kmax,2)
-        !     print*, "        g11          = ", this%g11(imax,jmax,kmax)
-        !     print*, "        VF           = ", this%VF(imax,jmax,kmax)
-        ! end if
         ! call P_MAXLOC( abs(v*curlg(:,:,:,3) - w*curlg(:,:,:,2)), pmax, imax, jmax, kmax, rmax)
         ! if (nrank == rmax) then
         !     print*, "Maximum curl    term = ", pmax
@@ -655,6 +662,11 @@ contains
         !     print*, "        VF           = ", this%VF(imax,jmax,kmax)
         !     print*, ""
         ! end if
+print '(a,9(e19.12,1x))', 'rhsg 1: ', p_maxval(rhsg(:,:,:,1)), p_minval(rhsg(:,:,:,1))
+print '(a,9(e19.12,1x))', 'rhsg 2: ', p_maxval(v*curlg(:,:,:,3)), p_minval(v*curlg(:,:,:,3))
+print '(a,9(e19.12,1x))', 'rhsg 3: ', p_maxval(w*curlg(:,:,:,2)), p_minval(w*curlg(:,:,:,2))
+print '(a,9(e19.12,1x))', 'rhsg 4: ', p_maxval(penalty), p_minval(penalty)
+print '(a,9(e19.12,1x))', 'rhsg 5: ', p_maxval(mask), p_minval(mask)
         rhsg(:,:,:,1) = rhsg(:,:,:,1) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g11 + mask*(this%g11*dutdx + this%g12*dvtdx + this%g13*dwtdx)
         rhsg(:,:,:,2) = rhsg(:,:,:,2) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g12 + mask*(this%g11*dutdy + this%g12*dvtdy + this%g13*dwtdy)
         rhsg(:,:,:,3) = rhsg(:,:,:,3) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g13 + mask*(this%g11*dutdz + this%g12*dvtdz + this%g13*dwtdz)
@@ -681,30 +693,31 @@ contains
             end if
         end if
 
-        if(present(solidVF)) then
+        !if(present(solidVF)) then
            do i = 1, 9
                rhsg(:,:,:,i) = rhsg(:,:,:,i) * solidVF
            enddo
-        endif
+        !endif
 
     end subroutine
 
-    subroutine update_gTg(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,rho0mix,mumix,yieldmix,solidVF)
+    subroutine update_gTg(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,solidVF,rho0mix,mumix,yieldmix)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src,solidVF
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in), optional  :: rho0mix, mumix, yieldmix, solidVF
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in), optional  :: rho0mix, mumix, yieldmix
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9) :: rhsg  ! RHS for gTg tensor equation
 
-        if(present(rho0mix) .and. present(solidVF)) then
-            call this%getRHS_gTg(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
+        if(present(rho0mix)) then
+        !if(present(rho0mix) .and. present(solidVF)) then
+            call this%getRHS_gTg(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc,solidVF,rho0mix)
         else
-            call this%getRHS_gTg(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
+            call this%getRHS_gTg(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc,solidVF)
         endif
         call hook_material_g_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsg)
 
@@ -725,21 +738,21 @@ contains
 
     end subroutine
 
-    subroutine getRHS_gTg(this,rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
+    subroutine getRHS_gTg(this,rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc,solidVF,rho0mix)
         use operators, only: gradient, curl
         class(solid),                                         intent(in)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src,solidVF
         real(rkind),                                          intent(in)  :: dt
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in), optional :: rho0mix, solidVF
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in), optional :: rho0mix
 
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradG
-        real(rkind), parameter :: etafac = one/6._rkind
+        real(rkind), parameter :: etafac = 0.0_rkind!one/6._rkind
         integer :: i
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
@@ -812,11 +825,11 @@ contains
             end if
         end if
 
-        if(present(solidVF)) then
+        !if(present(solidVF)) then
            do i = 1, 9
                rhsg(:,:,:,i) = rhsg(:,:,:,i) * solidVF
            enddo
-        endif
+        !endif
 
     end subroutine
 

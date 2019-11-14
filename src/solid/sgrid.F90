@@ -704,7 +704,7 @@ contains
 
         do isub = 1,RK45_steps
             call this%get_conserved()
-
+print *, '------------', isub, '------------'
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
                 call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
                 write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (Wcnsrv) at &
@@ -721,6 +721,11 @@ contains
 
             ! Update total mixture conserved variables
             call this%getRHS(rhs,divu,viscwork)
+print *, 'TE_index = ', TE_index
+print *, 'rhs u: ', p_maxval(rhs(:,:,:,1)), p_minval(rhs(:,:,:,1))
+print *, 'rhs v: ', p_maxval(rhs(:,:,:,2)), p_minval(rhs(:,:,:,2))
+print *, 'rhs w: ', p_maxval(rhs(:,:,:,3)), p_minval(rhs(:,:,:,3))
+print *, 'rhs e: ', p_maxval(rhs(:,:,:,TE_index)), p_minval(rhs(:,:,:,TE_index))
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
@@ -728,7 +733,9 @@ contains
             if(.not. this%PTeqb) call this%mix%calculate_source(this%rho,divu,this%u,this%v,this%w,this%p,Fsource,this%x_bc,this%y_bc,this%z_bc) ! -- actually, source terms should be included for PTeqb as well --NSG
 
             ! Now update all the individual species variables
+print '(a,4(e19.12,1x))', 'g bef: ', p_maxval(this%mix%material(1)%g11), p_minval(this%mix%material(1)%g11), p_maxval(this%mix%material(2)%g11), p_minval(this%mix%material(2)%g11)
             call this%mix%update_g (isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,Fsource,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
+print '(a,4(e19.12,1x))', 'g aft: ', p_maxval(this%mix%material(1)%g11), p_minval(this%mix%material(1)%g11), p_maxval(this%mix%material(2)%g11), p_minval(this%mix%material(2)%g11)
 
             call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
 
@@ -782,9 +789,14 @@ contains
                 !call this%mix%relaxPressure_os(this%rho, this%u, this%v, this%w, this%e, this%dt, this%p)
             end if
             !print *, nrank, 11
-            
+       !print *, 'Ys before hook_bc: ', this%mix%material(1)%Ys(1,1,1) , this%mix%material(2)%Ys(1,1,1) 
+       !print *, 'Vf before hook_bc: ', this%mix%material(1)%VF(1,1,1) , this%mix%material(2)%VF(1,1,1) 
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
+       !print *, 'Ys after  hook_bc: ', this%mix%material(1)%Ys(1,1,1) , this%mix%material(2)%Ys(1,1,1) 
+       !print *, 'Vf after  hook_bc: ', this%mix%material(1)%VF(1,1,1) , this%mix%material(2)%VF(1,1,1) 
             call this%post_bc()
+       !print *, 'Ys after  post_bc: ', this%mix%material(1)%Ys(1,1,1) , this%mix%material(2)%Ys(1,1,1) 
+       !print *, 'Vf after  post_bc: ', this%mix%material(1)%VF(1,1,1) , this%mix%material(2)%VF(1,1,1) 
         end do
 
         this%step = this%step + 1
@@ -861,6 +873,7 @@ contains
         rhov => this%Wcnsrv(:,:,:,mom_index+1)
         rhow => this%Wcnsrv(:,:,:,mom_index+2)
         TE   => this%Wcnsrv(:,:,:, TE_index  )
+!print *, rhou(1,1,1), rhov(1,1,1), rhow(1,1,1), TE(1,1,1)
 
         onebyrho = one/this%rho
         this%u = rhou * onebyrho
@@ -893,6 +906,7 @@ contains
         if(this%useOneG) then
             call this%mix%get_mixture_properties()
         endif
+        call this%mix%get_solidVF()
         call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
         call this%mix%get_ehydro_from_p(this%rho)              ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
         call this%mix%get_pmix(this%p)                         ! Get mixture pressure
@@ -905,6 +919,7 @@ contains
     end subroutine
 
     subroutine getRHS(this, rhs, divu, viscwork)
+        use reductions, only: P_MAXVAL, P_MINVAL
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv), intent(out) :: rhs
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),     intent(out) :: divu
@@ -920,9 +935,13 @@ contains
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
         
+!print '(a,4(e19.12,1x))', 'uvw: ', this%u(1,1,1), this%v(1,1,1), this%w(1,1,1) 
         call this%gradient(this%u, dudx, dudy, dudz, -this%x_bc,  this%y_bc,  this%z_bc)
         call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,  this%z_bc)
         call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
+!print '(a,4(e19.12,1x))', 'dudx: ', dudx(1,1,1), dudy(1,1,1), dudz(1,1,1) 
+!print '(a,4(e19.12,1x))', 'dvdx: ', dvdx(1,1,1), dvdy(1,1,1), dvdz(1,1,1) 
+!print '(a,4(e19.12,1x))', 'dwdx: ', dwdx(1,1,1), dwdy(1,1,1), dwdz(1,1,1) 
 
         divu = dudx + dvdy + dwdz
 
@@ -946,11 +965,21 @@ contains
         tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
                                          tauyy => duidxj(:,:,:,tauyyidx); tauyz => duidxj(:,:,:,tauyzidx);
                                                                           tauzz => duidxj(:,:,:,tauzzidx);
+!print '(a,9(e21.14,1x))', 'tauxx', tauxx(1,1,1), tauxy(1,1,1), tauxz(1,1,1)
+!print '(a,9(e21.14,1x))', 'tauyy',               tauyy(1,1,1), tauyz(1,1,1)
+!print '(a,9(e21.14,1x))', 'tauzz',                             tauzz(1,1,1)
+      
+!print '(a,9(e21.14,1x))', 'sxx', this%sxx(1,1,1), this%sxy(1,1,1), this%sxz(1,1,1)
+!print '(a,9(e21.14,1x))', 'yy',               this%syy(1,1,1), this%syz(1,1,1)
+!print '(a,9(e21.14,1x))', 'zz',                             this%szz(1,1,1)
+      
         ! Add the deviatoric stress to the tau for use in fluxes 
         tauxx = tauxx + this%sxx; tauxy = tauxy + this%sxy; tauxz = tauxz + this%sxz
                                   tauyy = tauyy + this%syy; tauyz = tauyz + this%syz
                                                             tauzz = tauzz + this%szz
-!print '(a,9(e21.14,1x))', 'tauxx', tauxx(89,1,1)
+!print '(a,9(e21.14,1x))', 'tauxx', tauxx(1,1,1), tauxy(1,1,1), tauxz(1,1,1)
+!print '(a,9(e21.14,1x))', 'tauyy',               tauyy(1,1,1), tauyz(1,1,1)
+!print '(a,9(e21.14,1x))', 'tauzz',                             tauzz(1,1,1)
       
         ! store artificial stress tensor in devstress. this should not break anything since devstress will be
         ! overwritten in get_primitive and post_bc. used in update_eh -- NSG
@@ -980,12 +1009,13 @@ contains
 
         ! Call problem source hook
         call hook_mixture_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
- 
+!print '(a,4(e19.12,1x))', 'rhs: ', rhs(1,1,1,:) 
     end subroutine
 
     subroutine getRHS_x(       this,  rhs,&
                         tauxx,tauxy,tauxz,&
                             qx )
+        use reductions, only: P_MAXVAL, P_MINVAL
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
@@ -1015,12 +1045,13 @@ contains
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
 
+print *, 'rhsex: ', p_maxval(rhs(:,:,:,TE_index)), p_minval(rhs(:,:,:,TE_index))
         flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz + qx ! Total Energy
         call transpose_y_to_x(flux,xtmp1,this%decomp)
         call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
-
+print *, 'rhsex: ', p_maxval(rhs(:,:,:,TE_index)), p_minval(rhs(:,:,:,TE_index))
     end subroutine
 
     subroutine getRHS_y(       this,  rhs,&
@@ -1246,6 +1277,7 @@ contains
 
     subroutine get_q(this,qx,qy,qz)
         use exits, only: nancheck
+        use reductions, only: p_maxval, p_minval
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(inout) :: qx,qy,qz
 
@@ -1273,7 +1305,9 @@ contains
         call transpose_y_to_x(this%T,tmp1_in_x,this%decomp)
         call der%ddx(tmp1_in_x,tmp2_in_x,this%x_bc(1),this%x_bc(2))
         call transpose_x_to_y(tmp2_in_x,tmp1_in_y,this%decomp)
+print *, 'qx: ', p_maxval(qx), p_minval(qx)
         qx = qx - this%kap*tmp1_in_y
+print *, 'qx: ', p_maxval(qx), p_minval(qx)
 
         ! Step 3: Get qz (dwdz is destroyed)
         call transpose_y_to_z(this%T,tmp1_in_z,this%decomp)

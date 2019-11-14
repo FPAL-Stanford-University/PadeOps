@@ -63,6 +63,7 @@ module SolidMixtureMod
         procedure :: get_dt
         procedure :: get_eelastic_devstress
         procedure :: get_mixture_properties
+        procedure :: get_solidVF
         procedure :: checkNaN
         procedure :: fnumden
         !procedure :: get_eh_p_from_rhoT
@@ -520,7 +521,7 @@ stop
         do imat = 1, this%ns
             ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
         enddo
-
+!print *, 'before pteqb: ', mixRho(1,1,1), ehmix(1,1,1)
 !-------------BLOCK FOR SEPARABLE EOS------------------------------------------
         do k=1,this%nzp
          do j=1,this%nyp
@@ -832,6 +833,18 @@ stop
         end do
     end subroutine
 
+    subroutine get_solidVF(this)
+        class(solid_mixture), intent(inout) :: this
+
+        integer :: imat
+
+        this%solidVF = zero
+        do imat = 1, this%ns
+          if(this%material(imat)%elastic%mu > eps) this%solidVF = this%solidVF + this%material(imat)%VF
+        enddo
+
+    end subroutine
+
     subroutine get_mixture_properties(this)
         class(solid_mixture), intent(inout) :: this
 
@@ -849,11 +862,6 @@ stop
             this%yieldmix = this%yieldmix + this%material(imat)%elastic%yield * this%material(imat)%VF
         enddo
         !this%mumix = this%mumix * this%rho0mix
-
-        this%solidVF = zero
-        do imat = 1, this%ns
-          if(this%material(imat)%elastic%mu > eps) this%solidVF = this%solidVF + this%material(imat)%VF
-        enddo
 
     end subroutine
 
@@ -1130,9 +1138,9 @@ stop
 
         if(this%useOneG) then
             if (this%use_gTg) then
-                call this%material(1)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,this%rho0mix,this%mumix,this%yieldmix,this%solidVF)
+                call this%material(1)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,this%solidVF,this%rho0mix,this%mumix,this%yieldmix)
             else
-                call this%material(1)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,this%rho0mix,this%mumix,this%yieldmix,this%solidVF)
+                call this%material(1)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,this%solidVF,this%rho0mix,this%mumix,this%yieldmix)
             end if
             do imat = 2, this%ns
                 this%material(imat)%g = this%material(1)%g
@@ -1140,9 +1148,10 @@ stop
         else
             do imat = 1, this%ns
                 if (this%use_gTg) then
-                    call this%material(imat)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+                    call this%material(imat)%update_gTg(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,this%solidVF)
                 else
-                    call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc)
+!print *, 'Updating g: ', imat
+                    call this%material(imat)%update_g(isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,this%solidVF)
                 end if
             end do
         endif
