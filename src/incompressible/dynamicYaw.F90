@@ -27,7 +27,7 @@ module dynamicYawMod
         real(rkind) :: D=0.315d0
         real(rkind), dimension(:), allocatable :: yaw
         ! Wake model parameters
-        real(rkind), dimension(:), allocatable :: kw, sigma_0
+        real(rkind), dimension(:), allocatable :: kw, sigma_0, kw_initial, sigma_initial
         real(rkind) :: powerExp=3.d0, eps=1.0D-12, Ct, eta ! Power exponent is 3 for this AD implementation
         integer :: Nx
         ! Wind conditions
@@ -49,6 +49,7 @@ module dynamicYawMod
         integer :: n_moving_average
         real(rkind), dimension(:,:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n, dir_minus_n
         real(rkind), dimension(:), allocatable :: Phat, Phat_yaw
+        logical :: check = .true., useInitialParams = .false.
 
     contains
         procedure :: init
@@ -80,11 +81,13 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     integer, intent(in) :: Nt
     logical, intent(out) :: fixedYaw, considerAdvection, lookup
     integer, intent(out) :: dynamicStart, dirType
- 
+    logical :: useInitialParams 
+
     ! Read input file for this turbine    
     namelist /DYNAMIC_YAW/ var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
                            Ne, Ct, eta, beta1, beta2, conditionTurb, n_moving_average, &
-                           fixedYaw, dynamicStart, dirType, considerAdvection, lookup
+                           fixedYaw, dynamicStart, dirType, considerAdvection, lookup, &
+                           useInitialParams
     ioUnit = 534
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=DYNAMIC_YAW)
@@ -99,7 +102,8 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     this%Ct = Ct
     this%eta = eta; this%beta1 = beta1; this%beta2= beta2;
     this%learning_rate_yaw = learning_rate_yaw   
-    this%n_moving_average = n_moving_average 
+    this%n_moving_average = n_moving_average
+    this%useInitialParams = useInitialParams 
 
     ! Allocate
     allocate(this%yaw(this%Nt))
@@ -169,6 +173,11 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     this%ts = ts
     this%yaw = yaw !- wind_direction*pi/180.d0
     !call this%observeField()
+    ! Use initial fit
+    if (this%useInitialParams==.true. .and. this%check==.false.) then
+        this%kw = this%kw_initial
+        this%sigma_0 = this%sigma_initial
+    end if
     ! Rotate domain
     call this%rotate()
     ! Normalize the power production
@@ -178,6 +187,13 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     yaw = this%yaw
     ! Restore original layout
     this%turbCenter = this%turbCenterStore
+
+    ! Save the initial fit for kw and sigma
+    if (this%check==.true.) then
+        this%kw_initial = this%kw
+        this%sigma_initial = this%sigma_0
+        this%check = .false.
+    end if
 
 end subroutine
 
@@ -348,6 +364,9 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     call this%forward(kw, sigma_0, this%Phat_yaw, yaw)
     this%Phat_yaw = this%Phat_yaw / this%Phat(1)
     this%Phat = this%Phat / this%Phat(1)
+
+    ! Initialize the yaw to zero for re-optimization
+    yaw = 0.d0
  
     ! eps also determines the termination condition
     k=1; check = 0; 

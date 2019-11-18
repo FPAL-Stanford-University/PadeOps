@@ -1,6 +1,6 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific"   ! Directory for all output files
+inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific_18"   ! Directory for any input files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific_18"   ! Directory for all output files
 nx                    = 480         ! Number of points in X
 ny                    = 240          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
@@ -10,8 +10,8 @@ dt                    = 3.8D-2        ! Fixed time step value (only used if CFL 
 nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .FALSE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 29000       ! TimeID of the restart file being used
+useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
+restartFile_TID       = 51500       ! TimeID of the restart file being used
 restartFile_RID       = 2            ! RunID of the restart file being used
 CviscDT               = 1.D0
 /

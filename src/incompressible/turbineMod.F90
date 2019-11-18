@@ -559,8 +559,8 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                                ! These angles were taken after one step of
                                ! online yaw, this is meant to simulate the
                                ! lookup table approach
-                               this%gamma(1) = -0.249; this%gamma(2) = -0.2878; this%gamma(3) = -0.2914;
-                               this%gamma(4) = -0.2996; this%gamma(5) = -0.1353; this%gamma(6) = -0.0003;
+                               this%gamma(1) = -0.2797d0; this%gamma(2) = -0.2861d0; this%gamma(3) = -0.2832d0;
+                               this%gamma(4) = -0.2646d0; this%gamma(5) = -0.1104d0; this%gamma(6) = -0.0001d0;
                            end if
                        endif
                        ! Add the hub height wind direction to the yaw
