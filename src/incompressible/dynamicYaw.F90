@@ -28,7 +28,7 @@ module dynamicYawMod
         real(rkind), dimension(:), allocatable :: yaw
         ! Wake model parameters
         real(rkind), dimension(:), allocatable :: kw, sigma_0, kw_initial, sigma_initial
-        real(rkind) :: powerExp=3.d0, eps=1.0D-12, Ct, eta ! Power exponent is 3 for this AD implementation
+        real(rkind) :: powerExp, eps=1.0D-12, Ct, eta ! Power exponent is 3 for this AD implementation
         integer :: Nx
         ! Wind conditions
         real(rkind) :: wind_speed, wind_direction
@@ -75,7 +75,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     real(rkind) :: beta1 = 0.9d0, beta2 = 0.999d0, learning_rate_yaw = 10D-4
     integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20, Nx = 500
     real(rkind) :: var_p = 0.04d0, var_k = 9D-6, var_sig = 9D-6, D = 0.315
-    real(rkind) :: Ct = 0.75, eta = 0.7
+    real(rkind) :: Ct = 0.75, eta = 0.7, powerExp = 3.d0
     real(rkind), dimension(:), intent(in) :: xLoc, yLoc
     real(rkind), intent(in) :: diam
     integer, intent(in) :: Nt
@@ -87,7 +87,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     namelist /DYNAMIC_YAW/ var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
                            Ne, Ct, eta, beta1, beta2, conditionTurb, n_moving_average, &
                            fixedYaw, dynamicStart, dirType, considerAdvection, lookup, &
-                           useInitialParams
+                           useInitialParams, powerExp
     ioUnit = 534
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=DYNAMIC_YAW)
@@ -104,6 +104,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     this%learning_rate_yaw = learning_rate_yaw   
     this%n_moving_average = n_moving_average
     this%useInitialParams = useInitialParams 
+    this%powerExp = powerExp
 
     ! Allocate
     allocate(this%yaw(this%Nt))
@@ -174,7 +175,7 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     this%yaw = yaw !- wind_direction*pi/180.d0
     !call this%observeField()
     ! Use initial fit
-    if (this%useInitialParams==.true. .and. this%check==.false.) then
+    if (this%check==.false.) then
         this%kw = this%kw_initial
         this%sigma_0 = this%sigma_initial
     end if
@@ -246,6 +247,11 @@ subroutine onlineUpdate(this)
 
     ! Generate optimal yaw angles
     this%kw = kwBest; this%sigma_0 = sigmaBest;
+    ! If useInitialParams only use initial fit to optimize model
+    if (this%useInitialParams==.true. .and. this%check==.false.) then
+        kwBest = this%kw_initial(this%indSorted)
+        sigmaBest = this%sigma_initial(this%indSorted)
+    end if
     call this%yawOptimize(kwBest, sigmaBest, yaw)
     ! Store the unsorted parameters
     this%kw = kwBest(this%unsort); this%sigma_0 = sigmaBest(this%unsort)   
@@ -640,9 +646,9 @@ subroutine backward(this, kw, sigma_0, yaw)
 end subroutine
 
 
-subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, meanPbaseline, powerBaseline, meanDir, windDir, i, t)
+subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, meanPbaseline, powerBaseline, meanDir, windDir, stdP, i, t)
     class(dynamicYaw), intent(inout) :: this
-    real(rkind), intent(inout) :: meanP, meanWs, meanPbaseline, meanDir
+    real(rkind), intent(inout) :: meanP, meanWs, meanPbaseline, meanDir, stdP
     real(rkind), intent(in) :: power, ws, powerBaseline, windDir
     integer, intent(in) :: i, t
 
@@ -674,6 +680,8 @@ subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, meanPbaseline, po
         ! Wind direction
         this%dir_minus_n(i,t) = windDir
         meanDir = sum(this%dir_minus_n(1:i,t)) / real(i)
+        ! STD power
+        stdP = sqrt( (1.d0/real(i)) * sum((this%power_minus_n(1:i,t) - meanP) ** 2.d0) )
     end if
 
 

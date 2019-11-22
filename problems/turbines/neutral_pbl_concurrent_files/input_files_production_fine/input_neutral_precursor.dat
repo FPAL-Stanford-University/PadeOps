@@ -11,7 +11,7 @@ nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 7280       ! TimeID of the restart file being used
+restartFile_TID       = 35000       ! TimeID of the restart file being used
 restartFile_RID       = 2            ! RunID of the restart file being used
 /
 /

@@ -1,18 +1,19 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/neutral_concurrent/5x5_fine_0"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/5x5_fine_0"   ! Directory for all output files
-nx                    = 1200         ! Number of points in X
-ny                    = 560          ! Number of points in Y
-nz                    = 384          ! Number of points in Z
-tstop                 = 600000.D0    ! Physical time to stop the simulation
-CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
-dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
+inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific"   ! Directory for any input files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/stable/6x1_dynamic_turbineSpecific_18"   ! Directory for all output files
+nx                    = 480         ! Number of points in X
+ny                    = 240          ! Number of points in Y
+nz                    = 192          ! Number of points in Z
+tstop                 = 40000.D0    ! Physical time to stop the simulation
+CFL                   = -1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
+dt                    = 3.8D-2        ! Fixed time step value (only used if CFL is set to negative)
 nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 35000       ! TimeID of the restart file being used
-restartFile_RID       = 1            ! RunID of the restart file being used
+restartFile_TID       = 27000       ! TimeID of the restart file being used
+restartFile_RID       = 2            ! RunID of the restart file being used
+CviscDT               = 1.D0
 /
 /
 &NUMERICS
@@ -30,8 +31,8 @@ donot_dealias         = .FALSE.
 /
 /
 &IO
-RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 5000       ! Restart File Dumping Frequency  (# of timesteps)
+RunID                 = 2          ! Run Label (All output files will be tagged with this nubber)
+t_restartDump         = 500       ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump            = 5000       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
@@ -91,18 +92,18 @@ assume_fplane         = .FALSE.      ! Assume fplane (ignore horizontal componen
 latitude              = 45.d0       ! Latitude; important if useCoriolis is TRUE && assume_fplane is FALSE
 frameAngle            = 0.D0        ! Mean wind direction; important if assume_fplane is FALSE
 useHITforcing         = .false.     ! Use additional HIT forcing? 
-useScalars            = .true.     ! Do you want to use scalars? --Why was this true for AD????
+useScalars            = .false.     ! Do you want to use scalars? --Why was this true for AD????
 buoyancyDirection     = 3           ! Are 1 and 2 implemented????
 /
 /
 &PRESSURE_CALC
-fastCalcPressure      = .TRUE.      ! Compute and store pressure at every time step using the faster algorithm?
+fastCalcPressure      = .FALSE.      ! Compute and store pressure at every time step using the faster algorithm?
 storePressure         = .FALSE.     ! Would you like to compute and store pressure?
 P_dumpFreq            = 100         ! How often (timesteps) do you want to dump pressure?
 P_compFreq            = 10          ! How often (timesteps) do you want to compute pressure? 
-computeDNSPressure    = .TRUE.
-computeFringePressure = .TRUE.
-computeTurbinePressure    = .TRUE.
+computeDNSPressure    = .FALSE.
+computeFringePressure = .FALSE.
+computeTurbinePressure    = .FALSE.
 computeRapidSlowPressure  = .FALSE.
 /
 /
@@ -117,7 +118,7 @@ sponge_type           = 1           ! 1 or 2; used if useSpongeLayer is TRUE
 botBC_Temp            = 1           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 topBC_temp            = 0           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 useTopAndBottomSymmetricSponge = .FALSE. 
-useFringe             = .TRUE.     ! Use Fringe/Buffer region in x or y directions?
+useFringe             = .FALSE.     ! Use Fringe/Buffer region in x or y directions?
 usedoubleFringex      = .FALSE.      ! Use two fringes (in x)?
 usecontrol            = .FALSE.     ! Use frame angle controller?
 /
@@ -148,43 +149,38 @@ WM_MatchingIndex              = 1
 /
 /
 &WINDTURBINES
-useWindTurbines       = .TRUE.    ! Do you want to use Wind turbines ?
-num_turbines          = 25
+useWindTurbines       = .FALSE.    ! Do you want to use Wind turbines ?
+num_turbines          = 36
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
-turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/5x5array"
+turbInfoDir           = "XXXX"
 ADM_Type              = 2         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "XXX"
-useDynamicYaw         = .FALSE.
-yawUpdateInterval     = 50000
-inputDirDyaw          = "XXX"
 /
 /
 &FRINGE
-apply_x_fringe = .TRUE.
-apply_y_fringe = .TRUE.
-Fringe_xst           = 0.85d0 ! It starts at this point, the fringe is off before this point         
-Fringe_xen           = 0.95d0 ! This is the end of the fringe, the fringe is zero after
-Fringe_delta_st_x    = 0.05d0 ! How much distance to use to ramp up
-Fringe_delta_en_x    = 0.05d0 ! How much distance to ramp down
-LambdaFact           = 0.6d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
-LambdaFactPotTemp    = 10.0d0
-Fringe_yst           = 0.85d0 ! Same but for y        
-Fringe_yen           = 0.95d0
-Fringe_delta_st_y    = 0.05d0
-Fringe_delta_en_y    = 0.05d0
+apply_x_fringe = .FALSE.
+apply_y_fringe = .FALSE.
+Fringe_xst           = 0.5d0 ! It starts at this point, the fringe is off before this point         
+Fringe_xen           = 0.90d0 ! This is the end of the fringe, the fringe is zero after
+Fringe_delta_st_x    = 0.300d0 ! How much distance to use to ramp up
+Fringe_delta_en_x    = 0.1d0 ! How much distance to ramp down
+LambdaFact            = 0.30d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
+Fringe_yst           = 0.5d0 ! Same but for y        
+Fringe_yen           = 0.90d0
+Fringe_delta_st_y    = 0.300d0
+Fringe_delta_en_y    = 0.1d0
 /
 /
 &BUDGET_TIME_AVG
-do_budgets            = .TRUE.    ! Perform budget calculations? 
-budgetType            = 3         ! See type descriptions in budget_time_avg.F90
-budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/5x5_fine_0/budgets"   ! Write in default output directory
+do_budgets            = .FALSE.    ! Perform budget calculations? 
+budgetType            = 0         ! See type descriptions in budget_time_avg.F90
+budgets_dir           = "XXXX"    ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?  
-tidx_dump             = 5000      ! How often should budget files be written to disk? 
-tidx_budget_start     = 5000      ! Start budget computation from this timestep onward
+tidx_dump             = 10000      ! How often should budget files be written to disk? 
+tidx_budget_start     = 30000      ! Start budget computation from this timestep onward
 restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations? 
-restart_rid           = 1         ! Restart budget file run index
-restart_tid           = 35000     ! Restart budget file time index
-restart_counter       = 5544     ! Restart budget file counter 
+restart_rid           = 2         ! Restart budget file run index
+restart_tid           = 99999     ! Restart budget file time index
+restart_counter       = 11111     ! Restart budget file counter 
 /
 /
 /
@@ -200,8 +196,8 @@ nKSvertFilt           = 1
 /
 /
 &SCALARS
-num_scalars                   = 4
-scalar_info_dir               = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/scalarDir"
+num_scalars      = 0    ! was 2; why is scalar used????
+scalar_info_dir  = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1"
 /
 /
 &TURB_PRESSURE
@@ -226,12 +222,12 @@ moisture_info_dir = "null"
 /
 /
 &PROBLEM_INPUT
-Lx                            =  75.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            =  35.0d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
-Lz                            =  12.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
+Lx                            =  30.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            =  15.d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
+Lz                            =  6.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
 Tref                          =  263.5d0     ! Reference Temp.
 Tsurf0                        =  265.0d0     ! Surface Temp. (at tsim=0) in K (need to take care of the dimensions)
-dTsurf_dt                     =  0.0D0      ! Surface Temp. decrease rate in K/hr. (need to take care of the dimensions)
+dTsurf_dt                     =  0.5D0      ! Surface Temp. decrease rate in K/hr. (need to take care of the dimensions)
 z0init                        =  2.5d-4       ! Roughness scale used to initialize the profile
 frameAngle                    =  0.d0      ! Frame angle set to be the same as above, used for initialization
 /

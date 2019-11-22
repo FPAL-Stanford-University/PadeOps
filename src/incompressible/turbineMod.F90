@@ -45,7 +45,7 @@ module turbineMod
  
         real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz
         complex(rkind), dimension(:,:,:), pointer :: fChat, fEhat, zbuffC, zbuffE
-        real(rkind), dimension(:), allocatable :: gamma, theta, meanP, gamma_nm1, meanWs, meanPbaseline
+        real(rkind), dimension(:), allocatable :: gamma, theta, meanP, gamma_nm1, meanWs, meanPbaseline, stdP
         real(rkind), dimension(:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n, hubDirection
         integer :: n_moving_average, timeStep, updateCounter 
         real(rkind), dimension(:,:), allocatable :: powerUpdate
@@ -237,6 +237,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
          allocate (this%scalarSource(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
          if (this%useDynamicYaw) then
              allocate(this%meanP(this%nTurbines))
+             allocate(this%stdP(this%nTurbines))
              allocate(this%meanPbaseline(this%nTurbines))
              allocate(this%meanWs(this%nTurbines))
              allocate(this%hubDirection(this%nTurbines))
@@ -246,6 +247,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
              this%step = 0
              this%updateCounter = 1
              this%meanP = 0.d0
+             this%stdP = 0.d0
              this%meanPbaseline = 0.d0
              this%meanWs = 0.d0
              this%powerUpdate = 0.d0
@@ -533,7 +535,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                                 this%turbArrayADM_Tyaw(i)%get_power(), this%meanWs(i), & 
                                 this%turbArrayADM_Tyaw(i)%ut, &
                                 this%meanPbaseline(i), this%turbArrayADM_Tyaw(i)%powerBaseline, &
-                                this%hubDirection(i), this%turbArrayADM_Tyaw(i)%hubDirection, & 
+                                this%hubDirection(i), this%turbArrayADM_Tyaw(i)%hubDirection, this%stdP(i), & 
                                 this%timeStep - this%advectionTime, i)
                        end if
                    end if
@@ -559,8 +561,8 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                                ! These angles were taken after one step of
                                ! online yaw, this is meant to simulate the
                                ! lookup table approach
-                               this%gamma(1) = -0.2797d0; this%gamma(2) = -0.2861d0; this%gamma(3) = -0.2832d0;
-                               this%gamma(4) = -0.2646d0; this%gamma(5) = -0.1104d0; this%gamma(6) = -0.0001d0;
+                               this%gamma(1) = 0.2935d0; this%gamma(2) = 0.2973d0; this%gamma(3) = 0.2949d0;
+                               this%gamma(4) = 0.2576d0; this%gamma(5) = 0.0490d0; this%gamma(6) = 0.0000d0;
                            end if
                        endif
                        ! Add the hub height wind direction to the yaw
@@ -583,7 +585,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                                 tempname, this%powerUpdate(:,i), this%dyaw%Phat, & 
                                 this%gamma, this%gamma_nm1, this%meanP, &
                                 this%dyaw%kw, this%dyaw%sigma_0, &
-                                this%dyaw%Phat_yaw, this%updateCounter, this%meanPbaseline, this%hubDirection, this%dyaw%Popti)
+                                this%dyaw%Phat_yaw, this%updateCounter, this%meanPbaseline, this%hubDirection, this%dyaw%Popti, this%stdP)
                        end do
                        this%timeStep = 0
                        this%updateCounter=this%updateCounter+1
