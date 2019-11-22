@@ -115,7 +115,7 @@ useSpongeLayer        = .TRUE.     ! Use a sponge layer at the top
 zstSponge             = 0.75d0       ! Height above which the sponge layer is active
 SpongeTscale          = 40.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
 sponge_type           = 1           ! 1 or 2; used if useSpongeLayer is TRUE
-botBC_Temp            = 1           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
+botBC_Temp            = 2           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 topBC_temp            = 0           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 useTopAndBottomSymmetricSponge = .FALSE. 
 useFringe             = .FALSE.     ! Use Fringe/Buffer region in x or y directions?
@@ -230,4 +230,8 @@ Tsurf0                        =  265.0d0     ! Surface Temp. (at tsim=0) in K (n
 dTsurf_dt                     =  0.D0      ! Surface Temp. decrease rate in K/hr. (need to take care of the dimensions)
 z0init                        =  2.5d-4       ! Roughness scale used to initialize the profile
 frameAngle                    =  0.d0      ! Frame angle set to be the same as above, used for initialization
+/
+/
+&BOUNDARY_FLUX
+wt_surface = 0.d0
 /
