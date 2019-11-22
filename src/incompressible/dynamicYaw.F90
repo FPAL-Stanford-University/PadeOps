@@ -237,7 +237,7 @@ subroutine onlineUpdate(this)
         call this%forward(kw, sigma_0, Phat, yaw)
         ! Normalized
         Phat = Phat / Phat_zeroYaw(1)
-        error(t) = sum(abs(Phat-this%powerObservation)) / real(this%Nt)
+        error(t) = sum(abs(Phat-this%powerObservation)) / real(this%Nt,rkind)
         if (error(t)<lowestError) then
             lowestError=error(t); bestStep = t;
             kwBest = kw; sigmaBest = sigma_0
@@ -318,7 +318,7 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw, step)
 
 
     ! Perturbation
-    ones_Ne = 1.d0 / real(this%Ne)
+    ones_Ne = 1.d0 / real(this%Ne,rkind)
     rbuff = matmul(psi_kp, ones_Ne)
     psi_kpp = psi_kp - rbuff
     rbuff = matmul(psiHat_kp, ones_Ne)
@@ -654,34 +654,34 @@ subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, meanPbaseline, po
 
     if (i>this%n_moving_average) then
         ! Power
-        meanP = meanP + (1.d0/real(this%n_moving_average)) * (power - this%power_minus_n(1,t))
+        meanP = meanP + (1.d0/real(this%n_moving_average,rkind)) * (power - this%power_minus_n(1,t))
         this%power_minus_n(1:this%n_moving_average-1,t) = this%power_minus_n(2:this%n_moving_average,t)
         this%power_minus_n(this%n_moving_average,t) = power
         ! Wind speed
-        meanWs = meanWs + (1.d0/real(this%n_moving_average)) * (ws - this%ws_minus_n(1,t))
+        meanWs = meanWs + (1.d0/real(this%n_moving_average,rkind)) * (ws - this%ws_minus_n(1,t))
         this%ws_minus_n(1:this%n_moving_average-1,t) = this%ws_minus_n(2:this%n_moving_average,t)
         this%ws_minus_n(this%n_moving_average,t) = ws
         ! Power baseline
-        meanPbaseline = meanPbaseline + (1.d0/real(this%n_moving_average)) * (powerBaseline - this%pb_minus_n(1,t))
+        meanPbaseline = meanPbaseline + (1.d0/real(this%n_moving_average,rkind)) * (powerBaseline - this%pb_minus_n(1,t))
         this%pb_minus_n(1:this%n_moving_average-1,t) = this%pb_minus_n(2:this%n_moving_average,t)
         ! Wind direction
-        meanDir = meanDir + (1.d0/real(this%n_moving_average)) * (windDir - this%dir_minus_n(1,t))
+        meanDir = meanDir + (1.d0/real(this%n_moving_average,rkind)) * (windDir - this%dir_minus_n(1,t))
         this%dir_minus_n(1:this%n_moving_average-1,t) = this%dir_minus_n(2:this%n_moving_average,t)
     else
         ! Power
         this%power_minus_n(i,t) = power
-        meanP = sum(this%power_minus_n(1:i,t)) / real(i)
+        meanP = sum(this%power_minus_n(1:i,t)) / real(i,rkind)
         ! Wind speed
         this%ws_minus_n(i,t) = ws
-        meanWs = sum(this%ws_minus_n(1:i,t)) / real(i)
+        meanWs = sum(this%ws_minus_n(1:i,t)) / real(i,rkind)
         ! Power baseline
         this%pb_minus_n(i,t) = powerBaseline
-        meanPbaseline = sum(this%pb_minus_n(1:i,t)) / real(i)
+        meanPbaseline = sum(this%pb_minus_n(1:i,t)) / real(i,rkind)
         ! Wind direction
         this%dir_minus_n(i,t) = windDir
-        meanDir = sum(this%dir_minus_n(1:i,t)) / real(i)
+        meanDir = sum(this%dir_minus_n(1:i,t)) / real(i,rkind)
         ! STD power
-        stdP = sqrt( (1.d0/real(i)) * sum((this%power_minus_n(1:i,t) - meanP) ** 2.d0) )
+        stdP = sqrt( (1.d0/real(i,rkind)) * sum((this%power_minus_n(1:i,t) - meanP) ** 2.d0) )
     end if
 
 
