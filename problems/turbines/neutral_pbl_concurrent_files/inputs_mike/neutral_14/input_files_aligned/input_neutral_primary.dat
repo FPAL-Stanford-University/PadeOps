@@ -1,17 +1,17 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x6_coarse_0_debug_noTurbines"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x6_coarse_0_debug_noTurbines"   ! Directory for all output files
-nx                    = 160         ! Number of points in X
-ny                    = 80          ! Number of points in Y
+inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific"   ! Directory for any input files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific_14"   ! Directory for all output files
+nx                    = 480         ! Number of points in X
+ny                    = 240          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
-tstop                 = 3000.D0    ! Physical time to stop the simulation
-CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
-dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
+tstop                 = 40000.D0    ! Physical time to stop the simulation
+CFL                   = -1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
+dt                    = 3.8D-2        ! Fixed time step value (only used if CFL is set to negative)
 nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .FALSE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 11130       ! TimeID of the restart file being used
+useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
+restartFile_TID       = 27000       ! TimeID of the restart file being used
 restartFile_RID       = 1            ! RunID of the restart file being used
 CviscDT               = 1.D0
 /
@@ -32,7 +32,7 @@ donot_dealias         = .FALSE.
 /
 &IO
 RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 10000       ! Restart File Dumping Frequency  (# of timesteps)
+t_restartDump         = 500       ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump            = 500       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
@@ -149,32 +149,36 @@ WM_MatchingIndex              = 1
 /
 /
 &WINDTURBINES
-useWindTurbines       = .FALSE.    ! Do you want to use Wind turbines ?
-num_turbines          = 9
+useWindTurbines       = .TRUE.    ! Do you want to use Wind turbines ?
+num_turbines          = 6
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
-turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/3x3array"
-ADM_Type              = 2         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
+turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/6x1array_offset"
+ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
+powerDumpDir          = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific_14/modelDumpsAligned_newParams_pp_3_longWindow"
+useDynamicYaw         = .TRUE.
+yawUpdateInterval     = 1000
+inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_neutral_14_aligned.inp"
 /
 /
 &FRINGE
 apply_x_fringe = .TRUE.
 apply_y_fringe = .TRUE.
-Fringe_xst           = 0.65d0 ! It starts at this point, the fringe is off before this point         
+Fringe_xst           = 0.85d0 ! It starts at this point, the fringe is off before this point         
 Fringe_xen           = 0.95d0 ! This is the end of the fringe, the fringe is zero after
-Fringe_delta_st_x    = 0.2d0 ! How much distance to use to ramp up
+Fringe_delta_st_x    = 0.05d0 ! How much distance to use to ramp up
 Fringe_delta_en_x    = 0.05d0 ! How much distance to ramp down
-LambdaFact           = 1.5d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
-LambdaFactPotTemp    = 5.0d0
-Fringe_yst           = 0.65d0 ! Same but for y        
+LambdaFact           = 0.6d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
+LambdaFactPotTemp    = 10.0d0
+Fringe_yst           = 0.85d0 ! Same but for y        
 Fringe_yen           = 0.95d0
-Fringe_delta_st_y    = 0.2d0
+Fringe_delta_st_y    = 0.05d0
 Fringe_delta_en_y    = 0.05d0
 /
 /
 &BUDGET_TIME_AVG
-do_budgets            = .TRUE.    ! Perform budget calculations? 
+do_budgets            = .FALSE.    ! Perform budget calculations? 
 budgetType            = 0         ! See type descriptions in budget_time_avg.F90
-budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/6x6_coarse_0_debug_noTurbines"   ! Write in default output directory
+budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/3x3_production_coarse_shifted_tall_0"   ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?  
 tidx_dump             = 1000      ! How often should budget files be written to disk? 
 tidx_budget_start     = 10000      ! Start budget computation from this timestep onward
@@ -197,8 +201,8 @@ nKSvertFilt           = 1
 /
 /
 &SCALARS
-num_scalars      = 0    ! was 2; why is scalar used????
-scalar_info_dir  = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1"
+num_scalars      = 3    ! was 2; why is scalar used????
+scalar_info_dir  = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/scalarDir"
 /
 /
 &TURB_PRESSURE
@@ -223,8 +227,8 @@ moisture_info_dir = "null"
 /
 /
 &PROBLEM_INPUT
-Lx                            =  40.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            =  20.0d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
+Lx                            =  30.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            =  15.d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
 Lz                            =  6.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
 Tref                          =  263.5d0     ! Reference Temp.
 Tsurf0                        =  265.0d0     ! Surface Temp. (at tsim=0) in K (need to take care of the dimensions)

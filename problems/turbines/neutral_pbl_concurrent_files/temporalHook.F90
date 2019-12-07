@@ -75,7 +75,14 @@ contains
         ! -0.003 (K*m/s)/hour * (1 nd speed / G m/s) * (1hour/3600s) * (80s/T
         ! nd) = -1.3333e-05
 
-        surfaceFlux = -1.3333D-5 * time
+        ! Set the surface flux at a constant -0.0003 K*m/s (-0.003 / (5 m/s) =
+        ! 6.d-5 K * nd velocity)
+        ! Normal flux
+        !surfaceFlux = -6.0D-5  !-1.3333D-5 * time
+        ! High flux
+        !surfaceFlux = -6.0D-5 * 5.d0  !-1.3333D-5 * time
+        ! Neutral
+        surfaceFlux = 0.d0
 
     end subroutine
 

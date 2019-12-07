@@ -1,6 +1,6 @@
 &INPUT
 inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/stable/6x1_dynamic_turbineSpecific_18_fixedParams"   ! Directory for all output files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/stable/highFlux/6x1_dynamic_turbineSpecific_18_fixedParams"   ! Directory for all output files
 nx                    = 480         ! Number of points in X
 ny                    = 240          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
