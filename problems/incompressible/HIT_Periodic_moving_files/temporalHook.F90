@@ -50,7 +50,14 @@ contains
             call message_min_max(1,"Bounds for w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
             if (allocated(gp%pressure)) then
                call message_min_max(1,"Bounds for P:", p_minval(minval(gp%pressure)), p_maxval(maxval(gp%pressure)))
-            end if 
+            end if
+            if (gp%useSGS) then
+                call message_min_max(1,"Bounds for nuSGS:", p_minval(minval(gp%nu_sgs)), p_maxval(maxval(gp%nu_sgs)))
+                if (gp%sgsModel%usingDynProc()) then
+                    call message(2,"Model multiplier, (c*delta)^2:",gp%sgsModel%getMax_DynSmagConst())
+                end if 
+            end if
+
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 

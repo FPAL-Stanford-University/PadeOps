@@ -79,6 +79,7 @@ module sgsmod_igrid
         real(rkind), dimension(:), allocatable :: cmodel_allZ
         real(rkind) :: invRe, deltaRat
         integer :: mstep
+        logical :: DomainAveraged_DynProc = .false. 
 
         ! model constant values/properties
         real(rkind) :: camd_x, camd_y, camd_z
@@ -117,6 +118,7 @@ module sgsmod_igrid
             procedure, private :: TestFilter_Real_to_Real
             procedure, private :: TestFilter_Real_to_Real_inplace
             procedure, private :: planarAverage_and_TakeRatio 
+            procedure, private :: DomainAverage_and_TakeRatio 
             procedure, private :: DoStandardDynamicProcedure
             procedure, private :: DoStandardDynamicProcedureScalar
 

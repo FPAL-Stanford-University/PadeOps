@@ -1444,33 +1444,49 @@ contains
     subroutine InitTestFilter(this, filtfact)  
       class(spectral), intent(inout) :: this
       real(rkind), intent(in) :: filtfact  
-      real(rkind) :: kfiltx,kfilty, kdealiasx, kdealiasy
+      real(rkind) :: kfiltx,kfilty, kdealiasx, kdealiasy, kdealiasz, kfiltz
       integer :: i, j, k
 
-      if (this%init_periodicinZ) then
-         call gracefulExit("Test filtering currently not supported for problems & 
-            & with periodic BC in z", 1233)
-      end if 
+      !if (this%init_periodicinZ) then
+      !   call gracefulExit("Test filtering currently not supported for problems & 
+      !      & with periodic BC in z", 1233)
+      !end if 
       kdealiasx = ((two/three)*pi/this%dx)
       kdealiasy = ((two/three)*pi/this%dy)
+      kdealiasy = ((two/three)*pi/this%dz)
 
       kfiltx = kdealiasx/filtfact
       kfilty = kdealiasy/filtfact
+      kfiltz = kdealiasz/filtfact
       
       if (allocated(this%GTestFilt)) deallocate(this%GTestFilt)
       allocate (this%GTestFilt(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-      
-      do k = 1,size(this%k1,3)
-          do j = 1,size(this%k1,2)
-              do i = 1,size(this%k1,1)
-                  if ((abs(this%k1(i,j,k)) < kfiltx) .and. (abs(this%k2(i,j,k))< kfilty)) then
-                      this%GTestFilt(i,j,k) = one
-                  else
-                      this%GTestFilt(i,j,k) = zero
-                  end if
-              end do 
-          end do  
-      end do 
+     
+      if (this%init_periodicinZ) then
+        do k = 1,size(this%k1,3)
+            do j = 1,size(this%k1,2)
+                do i = 1,size(this%k1,1)
+                    if ((abs(this%k1(i,j,k)) < kfiltx) .and. (abs(this%k2(i,j,k))< kfilty) .and. (abs(this%k3(i,j,k))< kfiltz)) then
+                        this%GTestFilt(i,j,k) = one
+                    else
+                        this%GTestFilt(i,j,k) = zero
+                    end if
+                end do 
+            end do  
+        end do 
+      else
+        do k = 1,size(this%k1,3)
+            do j = 1,size(this%k1,2)
+                do i = 1,size(this%k1,1)
+                    if ((abs(this%k1(i,j,k)) < kfiltx) .and. (abs(this%k2(i,j,k))< kfilty)) then
+                        this%GTestFilt(i,j,k) = one
+                    else
+                        this%GTestFilt(i,j,k) = zero
+                    end if
+                end do 
+            end do  
+        end do 
+      end if 
       call message(1, "TestFilter Summary:")
       call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
       
