@@ -80,9 +80,9 @@ contains
         ! Normal flux
         !surfaceFlux = -6.0D-5  !-1.3333D-5 * time
         ! High flux
-        !surfaceFlux = -6.0D-5 * 5.d0  !-1.3333D-5 * time
+        surfaceFlux = -6.0D-5 * 5.d0  !-1.3333D-5 * time
         ! Neutral
-        surfaceFlux = 0.d0
+        !surfaceFlux = 0.d0
 
     end subroutine
 

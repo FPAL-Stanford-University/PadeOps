@@ -14,18 +14,19 @@ program test_dynamicYaw
 
     type(dynamicYaw) :: dyaw
     type(actuatorDisk_yaw), allocatable, dimension(:) :: ad
-    character(len=clen) :: inputDir = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_test.inp"
+    character(len=clen) :: inputDir = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_neutral.inp"
     character(len=clen) :: inputDir_turb = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/3x3array_offset"
     integer, parameter :: nx = 192, ny = 96, nz = 128
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
     real(rkind), parameter :: Lx = 2.d0, Ly = 2.d0, Lz = 2.0d0
     real(rkind) :: dx, dy, dz, diam, CT, wind_speed, wind_direction
-    integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0, num_turbines, dynamicStart
+    integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0, num_turbines, dynamicStart, dirType
     type(decomp_info) :: gp 
     real(rkind), dimension(:,:,:), allocatable :: rbuff, blanks, speed, X
     real(rkind), dimension(:,:,:), allocatable :: Y, Z, scalarSource
     real(rkind), dimension(:), allocatable :: yaw, xLoc, yLoc, power
     logical :: fixedYaw
+    logical :: considerAdvection, lookup
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -77,7 +78,7 @@ program test_dynamicYaw
         xLoc(i) = ad(i)%xLoc
         yLoc(i) = ad(i)%yLoc
     end do
-    call dyaw%init(inputDir, xLoc, yLoc, 0.315d0, num_turbines, fixedYaw, dynamicStart)
+    call dyaw%init(inputDir, xLoc, yLoc, 0.315d0, num_turbines, fixedYaw, dynamicStart, dirType, considerAdvection, lookup)
     write(*,*) dyaw%turbCenter(:,1)
     write(*,*) dyaw%turbCenter(:,2)
 
@@ -90,7 +91,7 @@ program test_dynamicYaw
                0.681806165465507, 0.630462168874988, 0.622767305929719/)
     wind_speed = 8.d0
     wind_direction = 0.2d0 * 180.d0 / pi
-    call dyaw%update_and_yaw(yaw, wind_speed, wind_direction, power, 1, power*0.d0+1.d0, wind_direction)
+    call dyaw%update_and_yaw(yaw, wind_speed, wind_direction, power, 1, power*0.d0+1.d0)
 
     ! O, t
     write(*,*) dyaw%yaw*180.d0/pi

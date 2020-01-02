@@ -1,6 +1,6 @@
 &INPUT
 inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x1_dynamic_turbineSpecific_14"   ! Directory for all output files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x1_dynamic_turbineSpecific_18"   ! Directory for all output files
 nx                    = 480         ! Number of points in X
 ny                    = 240          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
@@ -89,7 +89,7 @@ dPfdx                 = 0.D0        ! Additional Acceleration in X; used if useE
 dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
 assume_fplane         = .FALSE.      ! Assume fplane (ignore horizontal component of Coriolis force)? 
-latitude              = 45.d0       ! Latitude; important if useCoriolis is TRUE && assume_fplane is FALSE
+latitude              = 0.d0       ! Latitude; important if useCoriolis is TRUE && assume_fplane is FALSE
 frameAngle            = 0.D0        ! Mean wind direction; important if assume_fplane is FALSE
 useHITforcing         = .false.     ! Use additional HIT forcing? 
 useScalars            = .false.     ! Do you want to use scalars? --Why was this true for AD????
@@ -152,12 +152,12 @@ WM_MatchingIndex              = 1
 useWindTurbines       = .TRUE.    ! Do you want to use Wind turbines ?
 num_turbines          = 6
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
-turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/6x1array_offset"
+turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/6x1array_offset_18"
 ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "/scratch/05294/mhowland/neutral_concurrent/6x1_dynamic_turbineSpecific_14/modelDumpsDynamic_newParams_pp_3_longWindow_sanity_2"
+powerDumpDir          = "/scratch/05294/mhowland/neutral_concurrent/6x1_dynamic_turbineSpecific_18/modelDumpsDynamic_newParams_pp_3_longWindow_5"
 useDynamicYaw         = .TRUE.
 yawUpdateInterval     = 1000
-inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_neutral_14.inp"
+inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_neutral.inp"
 /
 /
 &FRINGE
