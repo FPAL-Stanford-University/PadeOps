@@ -43,6 +43,7 @@ module spectralMod
         integer, public :: zeroK_i = 123456, zeroK_j = 123456
         real(rkind), dimension(:,:), allocatable :: GsurfaceFilter 
         real(rkind) :: dealiasFact = 2.d0/3.d0
+        integer :: dealiasType = 0
         real(rkind), public :: dx, dy, dz
 
         real(rkind), dimension(:,:,:), allocatable :: G_bandpass
@@ -871,9 +872,14 @@ contains
          kdealiasz = (this%dealiasFact*pi/dz)
 
          call transpose_y_to_z(this%k1, rbuffz, this%spectdecomp)
-         where (abs(rbuffz) >= kdealiasx)    
-            this%Gdealias = zero
-         end where
+         select case (this%dealiasType)
+         case (1)
+            this%Gdealias = this%Gdealias*exp(-36.d0*((abs(rbuffz)/(pi/dx))**36))
+         case default
+            where (abs(rbuffz) >= kdealiasx)    
+               this%Gdealias = zero
+            end where
+         end select 
      
          !allocate(this%k1inZ(size(this%k1,1)))
          !allocate(this%xshiftfact(size(this%k1,1)))
@@ -884,18 +890,34 @@ contains
          this%k1inZ = rbuffz(:,1,1)
 
          call transpose_y_to_z(this%k2, rbuffz, this%spectdecomp)
-         where (abs(rbuffz) >= kdealiasy)    
-            this%Gdealias = zero
-         end where
+         !where (abs(rbuffz) >= kdealiasy)    
+         !   this%Gdealias = zero
+         !end where
+         select case (this%dealiasType)
+         case (1)
+            this%Gdealias = this%Gdealias*exp(-36.d0*((abs(rbuffz)/(pi/dy))**36))
+         case default
+            where (abs(rbuffz) >= kdealiasx)    
+               this%Gdealias = zero
+            end where
+         end select 
 
          allocate(this%k2inZ(size(rbuffz,2)))
          this%k2inZ = rbuffz(1,:,1)
          
          
          call transpose_y_to_z(this%k3, rbuffz, this%spectdecomp)
-         where (abs(rbuffz) >= kdealiasz)
-            this%Gdealias = zero 
-         end where
+         !where (abs(rbuffz) >= kdealiasz)
+         !   this%Gdealias = zero 
+         !end where
+         select case (this%dealiasType)
+         case (1)
+            this%Gdealias = this%Gdealias*exp(-36.d0*((abs(rbuffz)/(pi/dz))**36))
+         case default
+            where (abs(rbuffz) >= kdealiasx)    
+               this%Gdealias = zero
+            end where
+         end select 
          allocate(this%k3inZ(size(rbuffz,3)))
          this%k3inZ = rbuffz(1,1,:)
          
@@ -948,7 +970,7 @@ contains
          deallocate(rbuffz, cbuffz, rbuffz1)
       end subroutine 
 
-    subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK, exhaustiveFFT, init_periodicInZ, dealiasF) 
+    subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK, exhaustiveFFT, init_periodicInZ, dealiasF, dealiasType) 
         class(spectral),  intent(inout)         :: this
         character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction
         integer,          intent(in)            :: nx_g, ny_g, nz_g    ! Global data size
@@ -963,7 +985,7 @@ contains
         logical, intent(in),          optional  :: exhaustiveFFT 
         logical, intent(in),          optional  :: init_periodicInZ 
         real(rkind), intent(in),      optional  :: dealiasF
-
+        integer, intent(in),          optional  :: dealiasType
         if (present(createK)) then
             this%storeK = createK
         end if 
@@ -992,6 +1014,8 @@ contains
         end if 
 
         if (present(dealiasF)) this%dealiasFact = dealiasF
+        if (present(dealiasType)) this%dealiasType = dealiasType
+
         if (present(fixOddball)) this%fixOddball = fixOddball
         if (present(use2decompFFT)) this%use2decompFFT = use2decompFFT 
         if (present(useConsrvD2)) this%useConsrvD2 = useConsrvD2
@@ -1255,6 +1279,12 @@ contains
            ! case default
            !     call GracefulExit("The dealiasing filter specified is incorrect.",104)
            ! end select
+           select case (this%dealiasType)
+           case (1)
+             this%Gdealias = exp(-36.d0*(abs(this%k1)/(pi/this%dx))**36)*exp(-36.d0*(abs(this%k2)/(pi/this%dy))**36) 
+             call message(1, "Dealiasing Summary:")
+             call message(2, "Dealias type:", this%dealiasType)
+           case default
             kdealiasx = ((two/three)*pi/dx)
             kdealiasy = ((two/three)*pi/dy)
             do k = 1,size(this%k1,3)
@@ -1269,8 +1299,9 @@ contains
                 end do  
             end do 
             call message(1, "Dealiasing Summary:")
+            call message(2, "Dealias type:", this%dealiasType)
             call message(2, "Total non zero:", p_sum(sum(this%Gdealias)))
-
+            end select 
 
             !kdealiasx = kdealiasx/3.d0
             !kdealiasy = kdealiasy/3.d0
