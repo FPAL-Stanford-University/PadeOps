@@ -29,12 +29,12 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    real(rkind)  :: Lx = two*pi, Ly = two*pi, Lz = two*pi
     character(len=clen)  :: dir_init_files
     real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0
     character(len=clen)  :: ufname, vfname, wfname
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz
 
     !Lx = two*pi; Ly = two*pi; Lz = one
     ioUnit = 11
@@ -42,7 +42,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     read(unit=ioUnit, NML=HIT_PeriodicINPUT)
     close(ioUnit)    
 
-    Lx = two*pi; Ly = two*pi; Lz = two*pi
+    !Lx = two*pi; Ly = two*pi; Lz = two*pi
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
     ! If base decomposition is in Y
@@ -112,9 +112,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     type(cd06stagg), allocatable :: der
     integer :: nz, nzE, k
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: uadv = 0.d0, kleft = 10.d0, kright = 64.d0
+    real(rkind) :: uadv = 0.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -211,9 +211,9 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     character(len=clen),                intent(in)    :: inputfile
     integer :: ioUnit 
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -233,9 +233,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind) :: ThetaRef
     integer :: iounit 
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -256,9 +256,9 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     real(rkind), intent(out) :: Tref
     integer :: iounit
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
