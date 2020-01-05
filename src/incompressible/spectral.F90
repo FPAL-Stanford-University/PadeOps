@@ -1044,7 +1044,7 @@ contains
         end if
 
         call this%modify_my_xy_wavenumbers()
-
+        where (this%Gdealias < 1.D-11) this%Gdealias = 0.D0
     end subroutine 
 
     subroutine modify_my_xy_wavenumbers(this)
