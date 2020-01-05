@@ -61,7 +61,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   logical, intent(in), optional :: initSpinUp
 
   ! Input file variables
-  logical :: useWallDamping = .false., useSGSDynamicRestart = .false., useVerticalTfilter = .false.
+  logical :: DomainAveraged_DynProc = .false., useWallDamping = .false., useSGSDynamicRestart = .false., useVerticalTfilter = .false.
   integer :: DynamicProcedureType = 0, SGSmodelID = 0, WallModelType = 0, DynProcFreq = 1
   real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0, deltaRatio = 2.d0, turbPrandtl = 0.4d0, Cy = 100.d0 
   real(rkind) :: z0t = 0.001d0
@@ -74,7 +74,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
                  useWallDamping, ncWall, Csgs, WallModelType, usePrSGS, &
                  DynProcFreq, useSGSDynamicRestart, useVerticalTfilter,&
-                 SGSDynamicRestartFile,explicitCalcEdgeEddyViscosity, &
+                 DomainAveraged_DynProc, SGSDynamicRestartFile, &
+                 explicitCalcEdgeEddyViscosity, &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
                  useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex 
 
@@ -104,7 +105,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%dx = dx
   this%dy = dy
   this%dz = dz
-
+  this%DomainAveraged_DynProc = DomainAveraged_DynProc
 
   allocate(this%tau_ij(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),6))
   this%tau_11   => this%tau_ij(:,:,:,1)

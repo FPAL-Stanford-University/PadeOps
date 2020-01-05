@@ -420,7 +420,7 @@ contains
         integer :: MeanTIDX, MeanRID, VizDump_schedule = 0    
         character(len=clen) :: MeanFilesDir, powerDumpDir 
         logical :: WriteTurbineForce = .false., useforcedStratification = .false., useDynamicYaw = .FALSE. 
-        integer :: buoyancyDirection = 3, yawUpdateInterval = 100000
+        integer :: buoyancyDirection = 3, yawUpdateInterval = 100000, dealiasType = 0
 
         real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
@@ -436,7 +436,7 @@ contains
                                 yawUpdateInterval, inputDirDyaw 
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
-                            useExhaustiveFFT, dealiasFact, scheme_xy, donot_dealias 
+                            useExhaustiveFFT, dealiasFact, scheme_xy, donot_dealias, dealiasType 
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, &
                                  KSdoZfilter, nKSvertFilt
         namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq, computeDNSPressure, computeTurbinePressure, computeFringePressure, ComputeRapidSlowPressure            
@@ -590,10 +590,10 @@ contains
        ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
        allocate(this%spectC)
        call this%spectC%init("x", nx, ny, nz  , this%dx, this%dy, this%dz, &
-               scheme_xy, this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=periodicinZ, dealiasF=dealiasfact)
+               scheme_xy, this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=periodicinZ, dealiasF=dealiasfact, dealiasType=dealiasType)
        allocate(this%spectE)
        call this%spectE%init("x", nx, ny, nz+1, this%dx, this%dy, this%dz, &
-               scheme_xy, this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=.false., dealiasF=dealiasfact)
+               scheme_xy, this%filter_x, 2 , fixOddball=.false., exhaustiveFFT=useExhaustiveFFT, init_periodicInZ=.false., dealiasF=dealiasfact, dealiasType=dealiasType)
        this%sp_gpC => this%spectC%spectdecomp
        this%sp_gpE => this%spectE%spectdecomp
 
