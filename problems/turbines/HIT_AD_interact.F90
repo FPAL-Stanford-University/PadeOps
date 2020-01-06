@@ -30,6 +30,7 @@ program HIT_AD_interact
     integer, dimension(:), allocatable :: pid
     integer :: fid, nfilters = 2, tid_FIL_FullField = 75, tid_FIL_Planes = 4
     logical :: applyFilters = .false. 
+    logical, parameter :: synchronize_RK_substeps = .true.
 
     namelist /concurrent/ HIT_InputFile, AD_InputFile, InflowSpeed, k_bandpass_left, k_bandpass_right
     namelist /FILTER_INFO/ applyfilters, nfilters, fof_dir, tid_FIL_FullField, tid_FIL_Planes, filoutdir
@@ -116,11 +117,34 @@ program HIT_AD_interact
        dt1 = adsim%get_dt(recompute=.true.)
        dt2 = hit%get_dt(recompute=.true.)
        dt = min(dt1, dt2)
-       
-       call adsim%timeAdvance(dt)
+      
+       if (synchronize_RK_substeps) then
+           adsim%dt = dt
+           hit%dt = dt
+           ! Stage 1
+           call adsim%advance_SSP_RK45_Stage_1()
+           call hit%advance_SSP_RK45_Stage_1()
+           ! Stage 2
+           call adsim%advance_SSP_RK45_Stage_2()
+           call hit%advance_SSP_RK45_Stage_2()
+           ! Stage 3
+           call adsim%advance_SSP_RK45_Stage_3()
+           call hit%advance_SSP_RK45_Stage_3()
+           ! Stage 4
+           call adsim%advance_SSP_RK45_Stage_4()
+           call hit%advance_SSP_RK45_Stage_4()
+           ! Stage 5
+           call adsim%advance_SSP_RK45_Stage_5()
+           call hit%advance_SSP_RK45_Stage_5()
+           ! Call wrap up 
+           call adsim%wrapup_timestep()
+           call hit%wrapup_timestep() 
 
-       call hit%timeAdvance(dt)
-       
+       else
+          call adsim%timeAdvance(dt)
+          call hit%timeAdvance(dt)
+       end if  
+
        call budg_tavg%doBudgets()       !<--- perform budget related operations -----Question::Where should this be placed ??
 
        x_shift = adsim%tsim*InflowSpeed 
