@@ -10,7 +10,7 @@ module IncompressibleGrid
     use spectralMod, only: spectral  
     !use PoissonMod, only: poisson
     use mpi 
-    use reductions, only: p_maxval, p_sum
+    use reductions, only: p_maxval, p_sum, p_minval
     use timer, only: tic, toc
     use PadePoissonMod, only: Padepoisson 
     use sgsmod_igrid, only: sgs_igrid
@@ -71,6 +71,7 @@ module IncompressibleGrid
         real(rkind) :: dt, tstop, CFL, CviscDT, dx, dy, dz, tsim
         character(len=clen) ::  outputdir
         real(rkind), dimension(:,:,:,:), allocatable :: mesh
+        real(rkind) :: zBot, zTop, zMid
         character(len=clen) :: filter_x          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
         character(len=clen) :: filter_y          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
         character(len=clen) :: filter_z          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
@@ -391,7 +392,7 @@ contains
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1
-        real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,ztop,CviscDT=1.d0,deltaT_dump=1.d0
+        real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,CviscDT=1.d0,deltaT_dump=1.d0
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0, moistureFactor = 0.61_rkind
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
@@ -579,7 +580,10 @@ contains
        allocate(this%mesh(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),3))
        call meshgen_WallM(this%gpC, this%dx, this%dy, &
            this%dz, this%mesh,inputfile) ! <-- this procedure is part of user defined HOOKS
-       Lz = p_maxval(this%mesh(:,:,:,3)) + this%dz/2.d0
+       this%zTop = p_maxval(this%mesh(:,:,:,3)) + this%dz/2.d0
+       this%zBot = p_minval(this%mesh(:,:,:,3)) - this%dz/2.d0
+       this%zMid = half*(this%zTop + this%zBot)
+       Lz = this%zTop - this%zBot
        call message(0,"Mesh generated:")
        call message(1,"dx:", this%dx)
        call message(1,"dy:", this%dy)
@@ -860,7 +864,7 @@ contains
             call transpose_y_to_z(zinY,zinZ,this%gpC)
             call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
             zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
-            ztop = zEinZ(1,1,this%nz+1); 
+            !ztop = zEinZ(1,1,this%nz+1); 
             if (zstSponge >= 1) then
                 call GracefulExit("zstSponge must be less than 1.",245)
             end if
@@ -884,26 +888,61 @@ contains
             deallocate(tmpzE)
             nullify(zEinZ, zinZ)
 
-            zstSponge = zstSponge*ztop       !! <PERCENTAGE OF THE DOMAIN>
+            zstSponge = zstSponge*(this%zTop - this%zBot)     !! <PERCENTAGE OF THE DOMAIN>
+            !zstSponge = zstSponge*this%zTop                   !! <PERCENTAGE OF THE DOMAIN>
             select case(sponge_type)
             case(1)
 
-                this%RdampC = (one/SpongeTscale) * (one - cos(pi*(zinY - zstSponge) /(zTop - zstSponge)))/two
-                this%RdampE = (one/SpongeTscale) * (one - cos(pi*(zEinY - zstSponge)/(zTop - zstSponge)))/two
+                !!!!!!!!!!!!!!! OLD BLOCK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                !this%RdampC = (one/SpongeTscale) * (one - cos(pi*(zinY - zstSponge) /(this%zTop - zstSponge)))/two
+                !this%RdampE = (one/SpongeTscale) * (one - cos(pi*(zEinY - zstSponge)/(this%zTop - zstSponge)))/two
+                !if (useTopAndBottomSymmetricSponge) then
+                !   where (abs(zEinY) < zstSponge) 
+                !       this%RdampE = zero
+                !   end where
+                !   where (abs(zinY) < zstSponge) 
+                !       this%RdampC = zero
+                !   end where
+                !   if ((zEinZ(1,1,1) + zEinZ(1,1,this%nz+1))<1.d-13) then
+                !      call message(0,"WARNING: Computed domain is not symmetric &
+                !         & about z=0. You shouldn't use the symmetric sponge")
+                !      call MPI_BARRIER(mpi_comm_world, ierr)
+                !      call GracefulExit("Failed at sponge initialization",134)
+                !   end if   
+                !else
+                !   where (zEinY < zstSponge) 
+                !       this%RdampE = zero
+                !   end where
+                !   where (zinY < zstSponge) 
+                !       this%RdampC = zero
+                !   end where
+                !end if 
+                !!!!!!!!!!!!!!! OLD BLOCK -- assumes zBot = 0 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                
                 if (useTopAndBottomSymmetricSponge) then
-                   where (abs(zEinY) < zstSponge) 
-                       this%RdampE = zero
-                   end where
-                   where (abs(zinY) < zstSponge) 
-                       this%RdampC = zero
-                   end where
-                   if ((zEinZ(1,1,1) + zEinZ(1,1,this%nz+1))<1.d-13) then
-                      call message(0,"WARNING: Computed domain is not symmetric &
-                         & about z=0. You shouldn't use the symmetric sponge")
-                      call MPI_BARRIER(mpi_comm_world, ierr)
-                      call GracefulExit("Failed at sponge initialization",134)
-                   end if   
+                    ! Ensure zinY and zEinY are centered at 0 irrespective of this%zBot
+                    zinY  = zinY  - this%zMid
+                    zEinY = zEinY - this%zMid
+
+                    this%RdampC = (one/SpongeTscale) * (one - cos(pi*(abs(zinY) - zstSponge + this%zMid) /(this%zTop - zstSponge)))/two
+                    this%RdampE = (one/SpongeTscale) * (one - cos(pi*(abs(zEinY) - zstSponge + this%zMid)/(this%zTop - zstSponge)))/two
+
+                    where (abs(zEinY) < (zstSponge-this%zMid)) 
+                        this%RdampE = zero
+                    end where
+                    where (abs(zinY) < (zstSponge-this%zMid)) 
+                        this%RdampC = zero
+                    end where
+                    !call this%dump(this%RdampC,'spng',this%gpC)
+                    !call this%dump(this%RdampE,'spng',this%gpE)
                 else
+                    ! Ensure zinY and zEinY start at 0 irrespective of this%zBot
+                    zinY  = zinY  - this%zBot
+                    zEinY = zEinY - this%zBot
+
+                    this%RdampC = (one/SpongeTscale) * (one - cos(pi*(zinY - zstSponge) /(this%zTop - zstSponge)))/two
+                    this%RdampE = (one/SpongeTscale) * (one - cos(pi*(zEinY - zstSponge)/(this%zTop - zstSponge)))/two
+
                    where (zEinY < zstSponge) 
                        this%RdampE = zero
                    end where
@@ -912,11 +951,11 @@ contains
                    end where
                 end if 
             case(2)
-                zinY = (zinY - zstSponge)/(2*(zTop - zstSponge))
+                zinY = (zinY - zstSponge)/(2*(this%zTop - zstSponge))
                 call S_sponge_smooth(zinY,this%RdampC)
                 this%RdampC = (2.5d0/SpongeTscale)*this%RdampC
                 
-                zEinY = (zEinY - zstSponge)/(2*(zTop - zstSponge))
+                zEinY = (zEinY - zstSponge)/(2*(this%zTop - zstSponge))
                 call S_sponge_smooth(zEinY,this%RdampE)
                 this%RdampE = (2.5d0/SpongeTscale)*this%RdampE ! consistent noramlization with type 1 sponge
             end select 

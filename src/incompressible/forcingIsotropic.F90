@@ -3,6 +3,7 @@ module forcingmod
    use decomp_2d
    use constants, only: im0, one, zero, two, pi
    use spectralMod, only: spectral 
+   use exits, only: GracefulExit
    use mpi 
 
    implicit none
@@ -20,15 +21,14 @@ module forcingmod
       integer, dimension(:), allocatable :: wave_x, wave_y, wave_z
       complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what
       complex(rkind), dimension(:,:,:), pointer :: fxhat, fyhat, fzhat, cbuffzE, cbuffyE, cbuffyC
-      integer, dimension(:), allocatable :: k1inZ, k2inZ, k3inZ
 
       real(rkind), dimension(:), allocatable :: kabs_sample, zeta_sample, theta_sample
       integer :: seed0, seed1, seed2, seed3
-      integer :: myk1min, myk1max, myk2min, myk2max
       real(rkind) :: Nwaves_rkind
       real(rkind), dimension(:), allocatable :: tmpModes
 
       real(rkind) :: normfact = 1.d0
+      integer     :: DomAspectRatioZ
 
       contains
       procedure          :: init
@@ -50,21 +50,25 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    complex(rkind), dimension(:,:,:  ), intent(inout), target :: cbuffzE, cbuffyE, cbuffyC
    complex(rkind), dimension(:,:,:,:), intent(inout), target :: cbuffzC
    class(spectral), intent(in), target :: spectC
-   real(rkind), dimension(:,:,:), allocatable :: rbuffzC
-   integer :: RandSeedToAdd = 0, ierr
+   integer :: RandSeedToAdd = 0, ierr, DomAspectRatioZ = 1
 
    integer :: Nwaves = 20
    real(rkind) :: kmin = 2.d0, kmax = 10.d0, EpsAmplitude = 0.1d0
-   namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd 
+   namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd, DomAspectRatioZ 
 
    open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
    read(unit=123, NML=HIT_Forcing)
    close(123)
 
+   if(DomAspectRatioZ < 1.0d0) then
+       call GracefulExit("Aspect ratio in z must be greater than 1", 111)
+   endif
+
    this%kmin = kmin
    this%kmax = kmax
    this%EpsAmplitude = EpsAmplitude
    this%Nwaves = Nwaves
+   this%DomAspectRatioZ = DomAspectRatioZ
    this%sp_gpC => sp_gpC
    this%sp_gpE => sp_gpE
    this%spectC => spectC
@@ -93,28 +97,6 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    allocate(this%wave_x(Nwaves))
    allocate(this%wave_y(Nwaves))
    allocate(this%wave_z(Nwaves))
-
-   allocate(rbuffzC(sp_gpC%zsz(1), sp_gpC%zsz(2), sp_gpC%zsz(3)))
-   allocate(this%k1inZ(sp_gpC%zsz(1)))
-   allocate(this%k2inZ(sp_gpC%zsz(2)))
-   allocate(this%k3inZ(sp_gpC%zsz(3)))
-
-   call transpose_y_to_z(spectC%k1, rbuffzC, sp_gpC)
-   this%k1inZ = nint(rbuffzC(:,1,1)) 
-   
-   call transpose_y_to_z(spectC%k2, rbuffzC, sp_gpC)
-   this%k2inZ = nint(rbuffzC(1,:,1)) 
-  
-   call transpose_y_to_z(spectC%k3, rbuffzC, sp_gpC)
-   this%k3inZ = nint(rbuffzC(1,1,:))
-
-   this%myk1min = minval(this%k1inZ)
-   this%myk2min = minval(this%k2inZ)
-   
-   this%myk1max = maxval(this%k1inZ)
-   this%myk2max = maxval(this%k2inZ)
-
-   deallocate(rbuffzC)
 
    this%Nwaves_rkind = real(this%Nwaves, rkind)
 
@@ -159,7 +141,6 @@ subroutine destroy(this)
 
    deallocate(this%uhat, this%vhat, this%what)
    nullify(this%fxhat, this%fyhat, this%fzhat, this%cbuffzE)
-   deallocate(this%k1inZ, this%k2inZ, this%k3inZ)
    if (nrank == 0) then
       deallocate(this%kabs_sample, this%theta_sample, this%zeta_sample)
    end if
@@ -235,8 +216,8 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
    gid_x  = kx + 1
    gid_y  = ky + 1
    gid_yC = this%sp_gpC%ysz(2) - ky + 1 
-   gid_z  = kz + 1
-   gid_zC = this%sp_gpC%zsz(3) - kz + 1 
+   gid_z  = this%DomAspectRatioZ*kz + 1
+   gid_zC = this%sp_gpC%zsz(3) - this%DomAspectRatioZ*kz + 1 
 
    ! Get local ID of the mode and conjugate
    lid_x  = gid_x  - this%sp_gpC%zst(1) + 1

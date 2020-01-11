@@ -9,9 +9,9 @@ program HIT_AD_interact
     use IncompressibleGrid, only: igrid
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
-    use exits, only: message
+    use exits, only: message, GracefulExit
     use constants, only: one, zero
-    use HIT_AD_interact_parameters, only: simulationID
+    use HIT_AD_interact_parameters, only: simulationID, InflowProfileType, InflowProfileAmplit, InflowProfileThick
     use fof_mod, only: fof
     use budgets_time_avg_mod, only: budgets_time_avg  
     !use decomp_2d,                only: nrank
@@ -64,7 +64,13 @@ program HIT_AD_interact
     call adsim%fringe_x1%allocateTargetArray_Cells(utarget0)                
     call adsim%fringe_x1%allocateTargetArray_Cells(vtarget0)                
     call adsim%fringe_x1%allocateTargetArray_Edges(wtarget0)                
-    utarget0 = InflowSpeed                                                     
+    select case(InflowProfileType)
+    case(0)
+        utarget0 = InflowSpeed
+    case(1)
+        !zinY => adsim%mesh(:,:,:,3)
+        utarget0 = InflowSpeed*(one + InflowProfileAmplit*tanh((adsim%mesh(:,:,:,3)-adsim%zMid)/InflowProfileThick))
+    end select
     vtarget0 = 0.d0                                                      
     wtarget0 = 0.d0                                                      
     call adsim%fringe_x1%associateFringeTargets(utarget0, vtarget0, wtarget0) 
@@ -72,7 +78,7 @@ program HIT_AD_interact
     call adsim%fringe_x2%allocateTargetArray_Cells(utarget1)                
     call adsim%fringe_x2%allocateTargetArray_Cells(vtarget1)                
     call adsim%fringe_x2%allocateTargetArray_Edges(wtarget1)                
-    utarget1 = InflowSpeed
+    utarget1 = 0.d0
     vtarget1 = 0.d0
     wtarget1 = 0.d0
     call adsim%fringe_x2%associateFringeTargets(utarget1, vtarget1, wtarget1) 
@@ -91,10 +97,15 @@ program HIT_AD_interact
     
     ! Now scale rhw HIT field appropriately
     ! Note that the bandpass filtered velocity field has zero mean 
-    uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) + InflowSpeed 
+    uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)  + uTarget0(nxADSIM-nxHIT+1:nxADSIM,:,:)
     vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
     wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
    
+
+    ! Graceful exit if apply filter is true and shear type is not 0
+    if((InflowProfileType .ne.0) .and. applyfilters) then
+        call GracefulExit("Scale separation on the fly is not supported for non-periodic in z. Set applyfilter to false", 111)
+    endif
 
     ! Initialize the filters
     if (applyfilters) then
@@ -147,14 +158,14 @@ program HIT_AD_interact
 
        call budg_tavg%doBudgets()       !<--- perform budget related operations -----Question::Where should this be placed ??
 
-       x_shift = adsim%tsim*InflowSpeed 
+       x_shift = adsim%tsim*InflowSpeed
        call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
        call hit%interpolate_cellField_to_edgeField(uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:),0,0)
        call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
        call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
       
        ! Now scale rhw HIT field appropriately
-       uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) + InflowSpeed 
+       uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) + uTarget0(nxADSIM-nxHIT+1:nxADSIM,:,:)
        vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
        wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
      

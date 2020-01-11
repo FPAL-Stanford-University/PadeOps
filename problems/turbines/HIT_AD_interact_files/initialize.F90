@@ -6,6 +6,8 @@ module HIT_AD_interact_parameters
     implicit none
     integer :: simulationID = 0
     integer :: nxSize = 256, nySize = 256, nzSize = 256
+    integer :: InflowProfileType = 0
+    real(rkind) :: InflowProfileAmplit = 0.5d0, InflowProfileThick = 0.01d0
 
 contains
 
@@ -40,7 +42,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: nxg, nyg, nzg
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one, uInflow = one
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, InflowProfileType, InflowProfileAmplit, InflowProfileThick
     
     select case (simulationID) 
     case (1) 
@@ -107,8 +109,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
     real(rkind)  :: Lx = one, Ly = one, Lz = one, uInflow = one
+    real(rkind)  :: zTop_cell, zBot_cell, zMid
     integer :: ioUnit
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, InflowProfileType, InflowProfileAmplit, InflowProfileThick
     
     if (simulationID == 1) then
       
@@ -125,8 +128,17 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
       z => mesh(:,:,:,3)
       y => mesh(:,:,:,2)
       x => mesh(:,:,:,1)
-   
-      u = uInflow 
+ 
+      zTop_cell = p_maxval(mesh(:,:,:,3))
+      zBot_cell = p_minval(mesh(:,:,:,3))
+      zMid = half*(zTop_cell + zBot_cell)
+ 
+      select case(InflowProfileType)
+      case(0)
+          u = uInflow 
+      case(1)
+          u = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
+      end select
       v = zero
       wC= zero  
       w = zero

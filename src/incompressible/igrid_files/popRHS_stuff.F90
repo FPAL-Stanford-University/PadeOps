@@ -243,12 +243,7 @@
            this%totalAngle = this%totalAngle + this%angleHubHeight
        end if 
 
-       ! Step 10: Add sponge
-       if (this%useSponge) then
-           call this%addSponge()
-       end if
-       
-       ! Step 11: Populate RHS for scalars
+       ! Step 10: Populate RHS for scalars
        !if (allocated(this%scalars)) then
        if (this%useScalars) then
            do idx = 1,this%n_scalars
@@ -256,7 +251,7 @@
            end do 
        end if
 
-       ! Step 12: Add statified forcing 
+       ! Step 11: Add statified forcing 
        if (this%isStratified .and. this%useforcedStratification) then
             call this%addForcedStratification()
        end if 
