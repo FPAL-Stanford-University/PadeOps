@@ -169,15 +169,10 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
 
     if (simulationID == 1) then
-         !allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
-         allocate(yplanes(nyplanes))
-         allocate(xplanes(nxplanes))
-         !allocate(zplanes(nzplanes))
-         !xplanes = [300,400,500,600,700]
+         allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
+         xPlanes = [5*nxSize/8]
          yplanes = [nySize/2]
-         xPlanes = [5*nxSize/8] !800
-         !xPlanes = [1, ceiling(nxSize/6.0), ceiling(nxSize/4.85), ceiling(nxSize/4.0), ceiling(nxSize/3.0), ceiling(nxSize/2.0), ceiling(nxSize/1.6)]
-         !zplanes = [128]
+         zplanes = [nzSize/2]
     end if 
 end subroutine
 

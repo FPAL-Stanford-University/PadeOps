@@ -933,8 +933,10 @@ contains
                     where (abs(zinY) < (zstSponge-this%zMid)) 
                         this%RdampC = zero
                     end where
-                    !call this%dump(this%RdampC,'spng',this%gpC)
-                    !call this%dump(this%RdampE,'spng',this%gpE)
+                    call this%dumpFullField(this%RdampC,'spngC',this%gpC)
+                    call this%dumpFullField(this%RdampE,'spngE',this%gpE)
+                    call MPI_Barrier(mpi_comm_world,ierr)
+                    call GracefulExit("Check RdampC, RdampE and proceed",11)
                 else
                     ! Ensure zinY and zEinY start at 0 irrespective of this%zBot
                     zinY  = zinY  - this%zBot
