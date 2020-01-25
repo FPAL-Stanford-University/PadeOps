@@ -8,6 +8,7 @@ module HIT_AD_interact_parameters
     integer :: nxSize = 256, nySize = 256, nzSize = 256
     integer :: InflowProfileType = 0
     real(rkind) :: InflowProfileAmplit = 0.5d0, InflowProfileThick = 0.01d0
+    real(rkind) :: LzDomain
 
 contains
 
@@ -49,11 +50,13 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
       ioUnit = 11
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
       read(unit=ioUnit, NML=AD_CoriolisINPUT)
-      close(ioUnit)    
+      close(ioUnit)
+      LzDomain = Lz    
     case (2)
       Lx = two*pi
       Ly = two*pi
-      Lz = two*pi
+      !Lz = two*pi
+      Lz = LzDomain
     end select
 
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)

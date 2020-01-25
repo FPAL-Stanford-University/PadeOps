@@ -61,6 +61,7 @@ contains
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 
+           call message(1,"Mean TKE for HIT:",gp%getMeanKE())
             call toc()
             call tic()
         end if 
