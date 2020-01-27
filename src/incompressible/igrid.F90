@@ -933,8 +933,8 @@ contains
                     where (abs(zinY) < (zstSponge-this%zMid)) 
                         this%RdampC = zero
                     end where
-                    call this%dumpFullField(this%RdampC,'spngC',this%gpC)
-                    call this%dumpFullField(this%RdampE,'spngE',this%gpE)
+                    call this%dumpFullField(this%RdampC,'spnC',this%sp_gpC)
+                    call this%dumpFullField(this%RdampE,'spnE',this%sp_gpE)
                     call MPI_Barrier(mpi_comm_world,ierr)
                     call GracefulExit("Check RdampC, RdampE and proceed",11)
                 else
