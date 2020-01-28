@@ -423,7 +423,7 @@ contains
         logical :: WriteTurbineForce = .false., useforcedStratification = .false., useDynamicYaw = .FALSE. 
         integer :: buoyancyDirection = 3, yawUpdateInterval = 100000, dealiasType = 0
 
-        real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
+        real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC, tmpxC, tmpxE
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                         useRestartFile, restartFile_TID, restartFile_RID, CviscDT
         namelist /IO/ VizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
@@ -850,6 +850,7 @@ contains
                                     this%botBC_Temp, this%initSpinUp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%kappaSGS)
             call message(0,"SGS model initialized successfully")
+            nullify(zinY, zEinY, zinZ, zEinZ)
         end if 
         this%max_nuSGS = zero
 
@@ -858,18 +859,21 @@ contains
         if (this%useSponge) then
             allocate(this%RdampC(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)))
             allocate(this%RdampE(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)))
-            zinZ => this%rbuffzC(:,:,:,1)
-            zEinZ => this%rbuffzE(:,:,:,1); 
+            zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
+            zEinZ => this%rbuffzE(:,:,:,1); zEinY => this%rbuffyE(:,:,:,1)
             call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
             call transpose_y_to_z(zinY,zinZ,this%gpC)
             call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
             zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
             !ztop = zEinZ(1,1,this%nz+1); 
+            nullify(zinY, zEinY)
             if (zstSponge >= 1) then
                 call GracefulExit("zstSponge must be less than 1.",245)
             end if
             
+            allocate(tmpxC(this%sp_gpC%xsz(1),this%sp_gpC%xsz(2),this%sp_gpC%xsz(3)))
             allocate(tmpyC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+            allocate(tmpxE(this%sp_gpE%xsz(1),this%sp_gpE%xsz(2),this%sp_gpE%xsz(3)))
             allocate(tmpyE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
 
             zinY => tmpyC
@@ -933,10 +937,12 @@ contains
                     where (abs(zinY) < (zstSponge-this%zMid)) 
                         this%RdampC = zero
                     end where
-                    call this%dumpFullField(this%RdampC,'spnC',this%sp_gpC)
-                    call this%dumpFullField(this%RdampE,'spnE',this%sp_gpE)
-                    call MPI_Barrier(mpi_comm_world,ierr)
-                    call GracefulExit("Check RdampC, RdampE and proceed",11)
+                    call transpose_y_to_x(this%RdampC, tmpxC, this%sp_gpC)
+                    call this%dumpFullField(tmpxC, 'spnC', this%sp_gpC)
+                    call transpose_y_to_x(this%RdampE, tmpxE, this%sp_gpE)
+                    call this%dumpFullField(tmpxE, 'spnE', this%sp_gpE)
+                    !call MPI_Barrier(mpi_comm_world,ierr)
+                    !call GracefulExit("Check RdampC, RdampE and proceed",11)
                 else
                     ! Ensure zinY and zEinY start at 0 irrespective of this%zBot
                     zinY  = zinY  - this%zBot
@@ -963,7 +969,7 @@ contains
             end select 
 
             nullify(zinY, zEinY)
-            deallocate(tmpyC, tmpyE)
+            deallocate(tmpyC, tmpyE, tmpxC, tmpxE)
             ! REMOVING THE LINES BELOW TO ENSURE THAT SPONGE ONLY AFFECTS
             ! FLUCTUATIONS
             !call this%spectC%alloc_r2c_out(this%uBase)
