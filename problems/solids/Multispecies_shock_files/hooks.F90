@@ -17,10 +17,10 @@ module Multispecies_shock_data
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
     !real(rkind) :: Ly = one, Lx = six, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
-    real(rkind) :: Ly = one, Lx = two, interface_init = 0.0_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
+    real(rkind) :: Ly = one, Lx = three, interface_init = 0.0_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, kwave_i = 2.0_rkind
     logical     :: sliding = .false.
 
-    logical     :: acc_force_mode = .TRUE.
+    logical     :: acc_force_mode = .FALSE.
     real(rkind) :: time_acc = 5.0D-4
 
     type(filters) :: mygfil
@@ -165,7 +165,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
                     !x(i,j,k) = real( ix1     + i - 1, rkind ) * dx - two  ! x \in (-2,4]
-                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx - Lx/2.0_rkind  ! make it symmetric about x=0
+                    !x(i,j,k) = real( ix1     + i - 1, rkind ) * dx - Lx/2.0_rkind  ! make it symmetric about x=0
+                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx - one
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -207,15 +208,18 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
     logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
     logical :: reflect_bcn = .TRUE.
+    logical :: single_mode_perturb = .FALSE. ! Initialize with single mode perturbation
+    logical :: const_amp_perturb = .FALSE. ! Initialize with constant amplitude if true (if FALSE initialize with constant slope)
 
     real(rkind) :: perturb_phase
     integer, dimension(1) :: seed
+    integer               :: input_seed = 0
     integer :: mpi_ierr;
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
                           plastic2, explPlast2, yield2, interface_init, kwave, sliding, uimpact, theta, eta0k, &
-                          reflect_bcn, acc_force_mode
+                          reflect_bcn, acc_force_mode, single_mode_perturb, const_amp_perturb, input_seed
 
     
     ioUnit = 11
@@ -388,30 +392,42 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         kwave_i = 2.0_rkind
 
         !perturbations = eta0k/(2.0_rkind*pi)*sin(2.0_rkind*6.0*pi*y/Ly)
-        perturbations = eta0k/(2.0_rkind*pi)*sin(2.0_rkind*3.0*pi*y/Ly)
+        !perturbations = eta0k/(2.0_rkind*pi)*sin(2.0_rkind*3.0*pi*y/Ly)
 
-!        perturbations = 0.0_rkind
-!        seed(1) = 20190621
-!        call RANDOM_SEED(PUT=seed)
-!        do while (kwave_i <= kwave)
-!            ! TODO generate random perturb_phase and bcast to all chuncks
-!            call RANDOM_NUMBER(perturb_phase)
-!            perturb_phase = perturb_phase * 2.0_rkind * pi
-!            call MPI_BCAST(perturb_phase, 1, mpirkind, 0, MPI_COMM_WORLD, mpi_ierr)
-!            ! call MPI_BARRIER(MPI_COMM_WORLD, mpi_ierr)
-!            ! constant slope perturbation
-!            !perturbations = perturbations + eta0k/(2.0_rkind*pi*kwave_i/Ly)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
-!            ! constant amplitude perturbation
-!            perturbations = perturbations + eta0k/(2.0_rkind*pi)           *sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
-!            kwave_i = kwave_i + 1.0_rkind
-!        end do
-        tmp = half * ( one - erf( (x-(interface_init*Lx/2.0_rkind + int_shape + perturbations))/(thick*dx) ) )
+        perturbations = 0.0_rkind
+        if (single_mode_perturb) then
+            perturbations = eta0k*sin(2.0_rkind*kwave*pi*y/Ly)
+            if (.NOT. const_amp_perturb) then
+                perturbations = perturbations / (2.0_rkind*pi*kwave/Ly)
+            endif
+        else
+            seed(1) = input_seed
+            call RANDOM_SEED(PUT=seed)
+            do while (kwave_i <= kwave)
+                ! TODO generate random perturb_phase and bcast to all chuncks
+                call RANDOM_NUMBER(perturb_phase)
+                perturb_phase = perturb_phase * 2.0_rkind * pi
+                call MPI_BCAST(perturb_phase, 1, mpirkind, 0, MPI_COMM_WORLD, mpi_ierr)
+                ! call MPI_BARRIER(MPI_COMM_WORLD, mpi_ierr)
+                if (const_amp_perturb) then
+                    ! constant amplitude perturbation
+                    perturbations = perturbations + eta0k * sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
+                else
+                    ! constant slope perturbation
+                    perturbations = perturbations + eta0k/(2.0_rkind*pi*kwave_i/Ly)*sin(2.0_rkind*kwave_i*pi*y/Ly + perturb_phase)
+                endif
+                kwave_i = kwave_i + 1.0_rkind
+            end do
+        endif
+
+        ! Initialize the fields with generated perturbations
+        !tmp = half * ( one - erf( (x-(interface_init*Lx/2.0_rkind + int_shape + perturbations))/(thick*dx) ) )
+        tmp = half * ( one - erf( (x-(interface_init + int_shape + perturbations))/(thick*dx) ) )
         theta = theta * pi / 180._rkind ! Convert angle from degrees to radians
         ! 1 >= tmp >= 0
         if (reflect_bcn) then
             u   =uimpact*cos(theta)*(tmp)
             v   =uimpact*sin(theta)*(tmp)
-           !v   =uimpact*sin(theta)*(tmp-0.5)
         else
             u   =uimpact*cos(theta)*(tmp-0.5)
             v   =uimpact*sin(theta)*(tmp-0.5)
@@ -851,6 +867,9 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     type(solid_mixture),             intent(in)    :: mix
 
     real(rkind) :: acc, acc_x, acc_y
+
+    namelist /PROBINPUT/ acc_force_mode 
+                          
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
