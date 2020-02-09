@@ -589,6 +589,9 @@ contains
        call message(1,"dy:", this%dy)
        call message(1,"dz:", this%dz)
        call message(1,"Lz:", Lz)
+       call message(1,"zTop:", this%zTop)
+       call message(1,"zBot:", this%zBot)
+       call message(1,"zMid:", this%zMid)
 
 
        ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
@@ -864,8 +867,8 @@ contains
             call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
             call transpose_y_to_z(zinY,zinZ,this%gpC)
             call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
+            zEinZ(:,:,        1) = zEinZ(:,:,      2) - this%dz
             zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
-            !ztop = zEinZ(1,1,this%nz+1); 
             nullify(zinY, zEinY)
             if (zstSponge >= 1) then
                 call GracefulExit("zstSponge must be less than 1.",245)
@@ -888,7 +891,7 @@ contains
             do idx = 1,size(zEinZ,3)
                 tmpzE(:,:,idx) = zEinZ(1,1,idx)
             end do 
-            call transpose_z_to_y(tmpzE,zEinY, this%sp_gpC) 
+            call transpose_z_to_y(tmpzE,zEinY, this%sp_gpE) 
             deallocate(tmpzE)
             nullify(zEinZ, zinZ)
 
