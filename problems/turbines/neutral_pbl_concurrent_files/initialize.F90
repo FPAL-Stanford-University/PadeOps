@@ -345,6 +345,27 @@ contains
         call primary%spectC%ifft(primary%scalars(1)%source_hat,scalar_source_1)
         scalar_source_0 = -scalar_source_0 * scalar_source_1 / 1.0d4
         call primary%spectC%fft(scalar_source_0, primary%scalars(4)%source_hat)
+        !! Scalar 5, primary%scalars(4)%source_hat contains spatial flags for the
+        !! points of interest
+        !call primary%spectC%ifft(primary%scalars(5)%source_hat,scalar_source_0)
+        !call primary%WindTurbineArr%getForceRHS( 1.d0, utmp, vtmp, wtmp, primary%scalars(1)%source_hat, rhs_y, rhs_z, .true., inst_horz_avg)
+        !call primary%spectC%ifft(primary%scalars(1)%source_hat,scalar_source_1)
+        !scalar_source_0 = -scalar_source_0 * scalar_source_1
+        !call primary%spectC%fft(scalar_source_0, primary%scalars(5)%source_hat)
+        !! Scalar 6, primary%scalars(4)%source_hat contains spatial flags for the
+        !! points of interest
+        !call primary%spectC%ifft(primary%scalars(6)%source_hat,scalar_source_0)
+        !call primary%WindTurbineArr%getForceRHS( 1.d0, utmp, vtmp, wtmp, primary%scalars(1)%source_hat, rhs_y, rhs_z, .true., inst_horz_avg)
+        !call primary%spectC%ifft(primary%scalars(1)%source_hat,scalar_source_1)
+        !scalar_source_0 = -scalar_source_0 * scalar_source_1
+        !call primary%spectC%fft(scalar_source_0, primary%scalars(6)%source_hat)
+        !! Scalar 7, primary%scalars(4)%source_hat contains spatial flags for the
+        !! points of interest
+        !call primary%spectC%ifft(primary%scalars(7)%source_hat,scalar_source_0)
+        !call primary%WindTurbineArr%getForceRHS( 1.d0, utmp, vtmp, wtmp, primary%scalars(1)%source_hat, rhs_y, rhs_z, .true., inst_horz_avg)
+        !call primary%spectC%ifft(primary%scalars(1)%source_hat,scalar_source_1)
+        !scalar_source_0 = -scalar_source_0 * scalar_source_1
+        !call primary%spectC%fft(scalar_source_0, primary%scalars(7)%source_hat)
         ! Scalar 1 
         call primary%WindTurbineArr%getForceRHS( 1.d0, utmp, vtmp, wtmp, primary%scalars(1)%source_hat, rhs_y, rhs_z, .true., inst_horz_avg)
         primary%scalars(1)%source_hat = -primary%scalars(1)%source_hat / 1.0d4      
@@ -364,7 +385,19 @@ contains
         call primary%spectC%ifft(primary%scalars(4)%source_hat,scalar_source_0)
         fname = primary%OutputDir(:len_trim(primary%OutputDir))//"/ScalarSource4.out"
         call decomp_2d_write_one(1,scalar_source_0,fname,primary%gpC)
-        
+
+        call primary%spectC%ifft(primary%scalars(5)%source_hat,scalar_source_0)
+        fname = primary%OutputDir(:len_trim(primary%OutputDir))//"/ScalarSource5.out"
+        call decomp_2d_write_one(1,scalar_source_0,fname,primary%gpC)
+       
+        call primary%spectC%ifft(primary%scalars(6)%source_hat,scalar_source_0)
+        fname = primary%OutputDir(:len_trim(primary%OutputDir))//"/ScalarSource6.out"
+        call decomp_2d_write_one(1,scalar_source_0,fname,primary%gpC)
+
+        call primary%spectC%ifft(primary%scalars(7)%source_hat,scalar_source_0)
+        fname = primary%OutputDir(:len_trim(primary%OutputDir))//"/ScalarSource7.out"
+        call decomp_2d_write_one(1,scalar_source_0,fname,primary%gpC)
+ 
         call message(0,"SCALAR SOURCES WRITTEN TO DISK.")
     
         deallocate(utmp, vtmp, wtmp, scalar_source_0, rhs_y, rhs_z, scalar_source_1)
@@ -403,8 +436,6 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
     dz = z(1,1,2) - z(1,1,1)
     dy = y(1,2,1) - y(1,1,1)
     dx = x(2,1,1) - x(1,1,1)
-    Lx = 75.d0
-    Ly = 35.d0
     select case (scalar_id)
     case (1) ! Turbine case
         scalarSource = 0.d0 ! Need to handle this case using init_turb2scalar_linker call 
@@ -414,7 +445,7 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
         do k = 1,size(z,3)
             do j = 1, size(z,2)
                 do i = 1, size(z,1)
-                    if ((x(i,j,k)>0.84*Lx) .or. (y(i,j,k)>0.84*Ly)) then
+                    if ((x(i,j,k)>40.d0) .or. (y(i,j,k)>20.d0)) then
                         scalarSource(i,j,k) = 0.d0
                     end if
                 end do
@@ -445,6 +476,42 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
                         scalarSource(i,j,k) = 0.d0
                     end if
                     if (y(i,j,k) < 11.d0) then
+                        scalarSource(i,j,k) = 0.d0
+                    end if
+                end do
+            end do
+        end do
+    case (5) ! Above the turbine rows
+        scalarSource = 0.d0
+        scalarSource = exp(-(z-0.25d0)**2 / 0.01) * exp(-(x-15.d0+3.d0*126.d0/400.d0)**2 / 0.01) ! Mike implement this 
+        do k = 1,size(z,3)
+            do j = 1, size(z,2)
+                do i = 1, size(z,1)
+                    if ((x(i,j,k)>22.56d0) .or. (y(i,j,k)>11.28d0)) then
+                        scalarSource(i,j,k) = 0.d0
+                    end if
+                end do
+            end do
+        end do
+    case (6) ! Above the turbine rows
+        scalarSource = 0.d0
+        scalarSource = exp(-(z-0.25d0)**2 / 0.01) * exp(-(x-15.d0+5.d0*126.d0/400.d0)**2 / 0.01) ! Mike implement this 
+        do k = 1,size(z,3)
+            do j = 1, size(z,2)
+                do i = 1, size(z,1)
+                    if ((x(i,j,k)>22.56d0) .or. (y(i,j,k)>11.28d0)) then
+                        scalarSource(i,j,k) = 0.d0
+                    end if
+                end do
+            end do
+        end do
+     case (7) ! Above the turbine rows
+        scalarSource = 0.d0
+        scalarSource = exp(-(z-0.25d0)**2 / 0.01) * exp(-(y-7.5d0+3.d0*126.d0/400.d0)**2 / 0.01) ! Mike implement this 
+        do k = 1,size(z,3)
+            do j = 1, size(z,2)
+                do i = 1, size(z,1)
+                    if ((x(i,j,k)>22.56d0) .or. (y(i,j,k)>11.28d0)) then
                         scalarSource(i,j,k) = 0.d0
                     end if
                 end do
