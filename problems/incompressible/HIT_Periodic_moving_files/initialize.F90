@@ -35,7 +35,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=clen)  :: ufname, vfname, wfname
     integer :: init_type = 0
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ init_type, ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz
+    integer :: initType = 0
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType
 
     !Lx = two*pi; Ly = two*pi; Lz = one
     ioUnit = 11
@@ -96,10 +97,11 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use random,             only: gaussian_random
     use decomp_2d          
     use decomp_2d_io
-    use reductions,         only: p_maxval, p_minval
+    use reductions,         only: p_maxval, p_minval, p_sum
     use cd06staggstuff,     only: cd06stagg
     use exits,              only: gracefulExit,message_min_max
     use reductions,         only: p_sum
+    use random
 
     implicit none
     type(decomp_info),               intent(in)    :: decompC
@@ -117,8 +119,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     character(len=clen)  :: ufname, vfname, wfname 
     real(rkind) :: uadv = 0.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz
     logical :: BandpassFilterFields = .false. 
-    integer :: init_type = 0, seed = 12345
-    namelist /HIT_PeriodicINPUT/ init_type, ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz
+    integer :: initType = 0, seed = 23455
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -134,55 +136,57 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     z => mesh(:,:,:,3)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
- 
-    dz = z(1,1,2) - z(1,1,1)
-
-   
-    if (init_type == 0) then
-        call decomp_2d_read_one(1,u ,ufname, decompC)
-        call decomp_2d_read_one(1,v ,vfname, decompC)
-        call decomp_2d_read_one(1,wC,wfname, decompC)
-  
-        call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
-        call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
-        call message_min_max(1,"Bounds for w:", p_minval(minval(wC)), p_maxval(maxval(wC)))
+    
+    if (initType == 0) then
         
-        !u = one!1.6d0*z*(2.d0 - z) 
-        !v = zero;
-        !w = zero;
+       dz = z(1,1,2) - z(1,1,1)
 
-        ! Interpolate wC to w
-        allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
-        allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
-
-        allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
-        allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
-   
-        nz = decompC%zsz(3)
-        nzE = nz + 1
-
-        call transpose_x_to_y(wC,ybuffC,decompC)
-        call transpose_y_to_z(ybuffC,zbuffC,decompC)
-        zbuffE = zero
-        allocate(der)
-        call der%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .false., &
-                                 isTopSided = .false., isBotSided = .false.)
-        call der%interpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))                         
-        deallocate(der)
-        call transpose_z_to_y(zbuffE,ybuffE,decompE)
-        call transpose_y_to_x(ybuffE,w,decompE) 
-        deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
-    else
-        call gaussian_random(u,zero,5.d0,seed+1234*nrank+54321)
-        call gaussian_random(v,zero,5.d0,seed+1234*nrank+54321)
-        call gaussian_random(w,zero,5.d0,seed+1234*nrank+54321)
-
-        u = u - p_sum(sum(u))/real(decompC%xsz(1)*decompC%ysz(2)*decompC%zsz(3),rkind)
-        v = v - p_sum(sum(v))/real(decompC%xsz(1)*decompC%ysz(2)*decompC%zsz(3),rkind)
-        w = w - p_sum(sum(w))/real(decompE%xsz(1)*decompE%ysz(2)*decompE%zsz(3),rkind)
-    end if 
-
+       
+       call decomp_2d_read_one(1,u ,ufname, decompC)
+       call decomp_2d_read_one(1,v ,vfname, decompC)
+       call decomp_2d_read_one(1,wC,wfname, decompC)
   
+       call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
+       call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
+       call message_min_max(1,"Bounds for w:", p_minval(minval(wC)), p_maxval(maxval(wC)))
+       
+       !u = one!1.6d0*z*(2.d0 - z) 
+       !v = zero;
+       !w = zero;
+
+       ! Interpolate wC to w
+       allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
+       allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
+
+       allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
+       allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
+      
+       nz = decompC%zsz(3)
+       nzE = nz + 1
+
+       call transpose_x_to_y(wC,ybuffC,decompC)
+       call transpose_y_to_z(ybuffC,zbuffC,decompC)
+       zbuffE = zero
+       allocate(der)
+       call der%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .false., &
+                                isTopSided = .false., isBotSided = .false.)
+       call der%interpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))                         
+       deallocate(der)
+       call transpose_z_to_y(zbuffE,ybuffE,decompE)
+       call transpose_y_to_x(ybuffE,w,decompE) 
+      
+
+       deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
+    else
+
+        call uniform_random(u,-5.d0,5.d0,seed+1234*nrank+54321)
+        call uniform_random(v,-5.d0,5.d0,seed+25634*nrank+54321)
+        call uniform_random(w,-5.d0,5.d0,seed+32454*nrank+54321)
+        
+        u = u - p_sum(u)/(decompC%xsz(1)*decompC%ysz(2)*decompC%zsz(3))
+        v = v - p_sum(v)/(decompC%xsz(1)*decompC%ysz(2)*decompC%zsz(3))
+        w = w - p_sum(w)/(decompE%xsz(1)*decompE%ysz(2)*decompE%zsz(3))
+    end if 
       
     nullify(u,v,w,x,y,z)
    
