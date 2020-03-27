@@ -237,6 +237,9 @@ subroutine compute_surface_stress(this)
     this%wTh_surf = p_sum(sum(this%wTheta_surf))/real(this%gpC%xsz(1)*this%gpC%ysz(2),rkind)
     this%Tsurf = p_sum(sum(this%T_surf))/real(this%gpC%xsz(1)*this%gpC%ysz(2),rkind)
 
+    ! Store horizontally averaged things
+    this%ustar       = p_sum(sum(this%ustar_surf))/real(this%gpC%xsz(1)*this%gpC%ysz(2),rkind)
+    this%InvObLength = p_sum(sum(this%Linv_surf))/real(this%gpC%xsz(1)*this%gpC%ysz(2),rkind)
 end subroutine 
 
 subroutine compute_local_wallmodel(this, ux, uy, Tmn, wTh_surf, ustar, Linv, PsiM, T_surf)
