@@ -114,6 +114,7 @@ module sgsmod_igrid
             procedure, private :: getfilteredMatchingVelocity 
             procedure, private :: compute_surface_stress 
             procedure, private :: compute_local_wallmodel 
+            procedure, private :: getMO_wallfunction 
             
 
             !! ALL DYNAMIC PROCEDURE SUBROUTINES

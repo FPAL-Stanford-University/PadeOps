@@ -267,15 +267,19 @@ subroutine compute_local_wallmodel(this, ux, uy, Tmn, wTh_surf, ustar, Linv, Psi
               ustarNew = u*kappa/(a - PsiM)
               wTh = dTheta*ustarNew*kappa/(at - PsiH) 
               Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
-              if (Linv .ge. zero) then 
-                ! similarity functions if stable stratification is present
-                PsiM = -c*Linv;         PsiH = -b*Linv; 
+              if (this%WallFunctionType == 2) then
+                call this%getMO_wallfunction(hwm, Linv, PsiM, PsiH)
               else
-                ! similarity functions if unstable stratification is present
-                xisq = sqrt(one-15.d0*hwm*Linv); xi = sqrt(xisq)
-                PsiM = two*log(half*(one+xi)) + log(half*(one+xisq)) - two*atan(xi) + piby2; 
-                PsiH = two*log(half*(one+xisq));
-              endif
+                if (Linv .ge. zero) then 
+                  ! similarity functions if stable stratification is present
+                  PsiM = -c*Linv;         PsiH = -b*Linv; 
+                else
+                  ! similarity functions if unstable stratification is present
+                  xisq = sqrt(one-15.d0*hwm*Linv); xi = sqrt(xisq)
+                  PsiM = two*log(half*(one+xi)) + log(half*(one+xisq)) - two*atan(xi) + piby2; 
+                  PsiH = two*log(half*(one+xisq));
+                endif
+              end if 
               ustarDiff = abs((ustarNew - ustar)/ustarNew)
               ustar = ustarNew; idx = idx + 1
           end do 
@@ -297,15 +301,19 @@ subroutine compute_local_wallmodel(this, ux, uy, Tmn, wTh_surf, ustar, Linv, Psi
           do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
               ustarNew = u*kappa/(a - PsiM)
               Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
-              if (Linv .ge. zero) then 
-                ! similarity functions if stable stratification is present
-                PsiM = -c*Linv;         PsiH = -b*Linv; 
+              if (this%WallFunctionType == 2) then
+                call this%getMO_wallfunction(hwm, Linv, PsiM, PsiH)
               else
-                ! similarity functions if unstable stratification is present
-                xisq = sqrt(one-15.d0*hwm*Linv); xi = sqrt(xisq)
-                PsiM = two*log(half*(one+xi)) + log(half*(one+xisq)) - two*atan(xi) + piby2; 
-                PsiH = two*log(half*(one+xisq));
-              endif
+                if (Linv .ge. zero) then 
+                  ! similarity functions if stable stratification is present
+                  PsiM = -c*Linv;         PsiH = -b*Linv; 
+                else
+                  ! similarity functions if unstable stratification is present
+                  xisq = sqrt(one-15.d0*hwm*Linv); xi = sqrt(xisq)
+                  PsiM = two*log(half*(one+xi)) + log(half*(one+xisq)) - two*atan(xi) + piby2; 
+                  PsiH = two*log(half*(one+xisq));
+                endif
+              end if 
               ustarDiff = abs((ustarNew - ustar)/ustarNew)
               ustar = ustarNew; idx = idx + 1
           end do
@@ -319,6 +327,25 @@ subroutine compute_local_wallmodel(this, ux, uy, Tmn, wTh_surf, ustar, Linv, Psi
           PsiM = zero
           T_surf = Tmn 
     end if 
+end subroutine 
+
+subroutine getMO_wallfunction(this, z, Linv, PsiM, PsiH)
+    class(sgs_igrid), intent(inout) :: this
+    real(rkind), intent(in) :: z, Linv
+    real(rkind), intent(out) :: PsiM, PsiH
+    real(rkind) :: zL
+    real(rkind), parameter :: a = 2.5d0, b = 1.1d0  
+
+    zL = z*Linv
+
+    if (Linv < 0.d0) then
+        PsiM = (1.d0 - 15.2d0*zL)**(-0.25d0)
+        PsiH = (1.d0 - 15.2d0*zL)**(-0.5d0)
+    else
+        PsiM = 1.d0 + 6.1d0*(zL + (zL**a) * (1.d0 + zL**a)**(-1.d0 + 1.d0/a) )/(zL + (1.d0 + zL**a)**(1.d0/a))
+        PsiH = 1.d0 + 5.3d0*(zL + (zL**b) * (1.d0 + zL**b)**(-1.d0 + 1.d0/b) )/(zL + (1.d0 + zL**b)**(1.d0/b))
+    end if 
+
 end subroutine 
 
 subroutine getSurfaceQuantities(this)
