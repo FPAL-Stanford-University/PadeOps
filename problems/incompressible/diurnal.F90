@@ -23,13 +23,15 @@ program diurnal
 
     allocate(igp)                     !<-- Initialize hit_grid with defaults
 
+    call setup_diurnalBCs(inputfile) 
+    
     call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
   
     call igp%start_io(.false.)                !<-- Start I/O by creating a header file (see io.F90)
     
     call igp%printDivergence()
-    
-    call setup_diurnalBCs(inputfile) 
+   
+    call diurnalBCs_CorrectnessCheck(igp%tsim, igp%G_geostrophic)
 
     call tic() 
     do while (igp%tsim < igp%tstop) 

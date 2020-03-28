@@ -718,6 +718,7 @@ contains
            else if (botBC_Temp == 1) then
                ! Do nothing 
            else if (botBC_Temp == 2) then
+               this%wTh_surf = this%tsim
                call setInhomogeneousNeumannBC_Temp(inputfile, this%wTh_surf)
            else if (botBC_Temp == 3) then
                if (topBC_Temp .ne. 3) then

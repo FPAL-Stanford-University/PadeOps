@@ -22,7 +22,7 @@ module diurnalBCsmod
     use basic_io, only: read_2d_ascii 
     use interpolation, only: spline, ispline 
     real(rkind), dimension(:), allocatable :: t_geo, G_geo, t_flux, wT_flux, a_geo, b_geo, c_geo, a_flux, b_flux, c_flux
-
+    real(rkind) :: G_tolerance = 0.1d0
 contains
 
     subroutine setup_diurnalBCs(inputfile)
@@ -30,7 +30,7 @@ contains
         real(rkind), dimension(:,:), allocatable :: data2read
         character(len=clen) :: fname_G, fname_wtheta
         integer :: ioUnit
-        namelist /DIURNAL_BCS/ fname_G, fname_wtheta
+        namelist /DIURNAL_BCS/ fname_G, fname_wtheta, G_tolerance
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -62,6 +62,22 @@ contains
 
     end subroutine
 
+    subroutine diurnalBCs_CorrectnessCheck(time, G)
+        use exits, only: GracefulExit
+        real(rkind), intent(in) :: time, G
+        real(rkind) :: Gtrue
+
+        ! Interpolate G: 
+        Gtrue = ispline(time, t_geo, G_geo, a_geo, b_geo, c_geo, size(t_geo))
+
+        if (abs(Gtrue - G) .ge. G_tolerance) then 
+            print*, "time:", time
+            print*, "G entered:", G
+            print*, "G from BC:", Gtrue
+            call gracefulExit("Incorrect Geostrophic inputs",45)
+        end if 
+    end subroutine     
+    
     subroutine get_diurnalBCs(time, G, wTheta)
         real(rkind), intent(in) :: time
         real(rkind), intent(out) :: G, wTheta
@@ -190,11 +206,13 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     use constants, only: one, zero 
     use diurnalBCsmod
     implicit none
-    real(rkind), intent(out) :: wTh_surf
+    real(rkind), intent(inout) :: wTh_surf
     character(len=*),                intent(in)    :: inputfile
-    real(rkind) :: tmp
+    real(rkind) :: tmp, time
 
-    call get_diurnalBCs(0.d0, tmp, wTh_surf)  ! << will be an issue for restarts
+    time = wTh_surf ! temporary workaround
+
+    call get_diurnalBCs(time, tmp, wTh_surf)  ! << will be an issue for restarts
 
 end subroutine
 
