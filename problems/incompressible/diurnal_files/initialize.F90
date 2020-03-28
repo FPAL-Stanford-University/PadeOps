@@ -17,6 +17,65 @@ module convective_igrid_parameters
 
 end module     
 
+module diurnalBCsmod
+    use kind_parameters, only: rkind, clen
+    use basic_io, only: read_2d_ascii 
+    use interpolation, only: spline, ispline 
+    real(rkind), dimension(:), allocatable :: t_geo, G_geo, t_flux, wT_flux, a_geo, b_geo, c_geo, a_flux, b_flux, c_flux
+
+contains
+
+    subroutine setup_diurnalBCs(inputfile)
+        character(len=*),                intent(in)    :: inputfile
+        real(rkind), dimension(:,:), allocatable :: data2read
+        character(len=clen) :: fname_G, fname_wtheta
+        integer :: ioUnit
+        namelist /DIURNAL_BCS/ fname_G, fname_wtheta
+
+        ioUnit = 11
+        open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+        read(unit=ioUnit, NML=DIURNAL_BCS)
+        close(ioUnit)    
+
+        call read_2d_ascii(data2read, fname_G)
+        allocate(t_geo(size(data2read,1)))
+        allocate(G_geo(size(data2read,1)))
+        allocate(a_geo(size(data2read,1)))
+        allocate(b_geo(size(data2read,1)))
+        allocate(c_geo(size(data2read,1)))
+        t_geo = data2read(:,1)
+        G_geo = data2read(:,2)
+        call spline(t_geo, G_geo, a_geo, b_geo, c_geo, size(t_geo))
+        deallocate(data2read)
+
+        call read_2d_ascii(data2read, fname_wtheta)
+        allocate(t_flux(size(data2read,1)))
+        allocate(wT_flux(size(data2read,1)))
+        allocate(a_flux(size(data2read,1)))
+        allocate(b_flux(size(data2read,1)))
+        allocate(c_flux(size(data2read,1)))
+        t_flux = data2read(:,1)
+        wT_flux = data2read(:,2)
+        call spline(t_flux, wT_flux, a_flux, b_flux, c_flux, size(t_flux))
+        deallocate(data2read)
+
+
+    end subroutine
+
+    subroutine get_diurnalBCs(time, G, wTheta)
+        real(rkind), intent(in) :: time
+        real(rkind), intent(out) :: G, wTheta
+
+        ! Convert units for time? 
+
+        ! Interpolate G: 
+        G = ispline(time, t_geo, G_geo, a_geo, b_geo, c_geo, size(t_geo))
+
+        ! Interpolate wTheta: 
+        wTheta = ispline(time, t_flux, wT_flux, a_flux, b_flux, c_flux, size(t_flux))
+
+    end subroutine 
+end module 
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use convective_igrid_parameters
@@ -129,19 +188,14 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     use kind_parameters,    only: rkind
     use convective_igrid_parameters
     use constants, only: one, zero 
+    use diurnalBCsmod
     implicit none
     real(rkind), intent(out) :: wTh_surf
     character(len=*),                intent(in)    :: inputfile
-    integer :: ioUnit 
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, z0init = 1.d-4, Tsurf0 = 290.d0
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init, Tsurf0
-     
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=PROBLEM_INPUT)
-    close(ioUnit)    
+    real(rkind) :: tmp
 
-    wTh_surf = wTh_surf0
+    call get_diurnalBCs(0.d0, tmp, wTh_surf)  ! << will be an issue for restarts
+
 end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)

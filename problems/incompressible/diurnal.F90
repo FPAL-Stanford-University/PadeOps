@@ -7,10 +7,10 @@ program diurnal
     use mpi
     use kind_parameters,  only: clen
     use IncompressibleGrid, only: igrid
-    use temporalhook, only: doTemporalStuff, set_bottomwall_heatflux, set_bottomwall_temperature
+    use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
     use exits, only: message
-
+    use diurnalBCsmod 
     implicit none
 
     type(igrid), allocatable, target :: igp
@@ -28,15 +28,13 @@ program diurnal
     call igp%start_io(.false.)                !<-- Start I/O by creating a header file (see io.F90)
     
     call igp%printDivergence()
-  
+    
+    call setup_diurnalBCs(inputfile) 
+
     call tic() 
     do while (igp%tsim < igp%tstop) 
 
-       if(igp%botBC_Temp==0) then ! Dirichlet
-           call set_bottomwall_temperature(igp)
-       elseif(igp%botBC_Temp==2) then ! Inhomogeneous Neumann
-           call set_bottomwall_heatflux(igp)
-       endif
+       call get_diurnalBCs(igp%tsim, igp%G_geostrophic, igp%wTh_surf)
        call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
        
