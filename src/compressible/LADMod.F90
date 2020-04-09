@@ -229,7 +229,7 @@ contains
         kap = kap + kapstar
     end subroutine
 
-    subroutine get_diffusivity(this,Ys,dYsdx,dYsdy,dYsdz,sos,diff,x_bc,y_bc,z_bc)
+    subroutine get_diffusivity(this,Ys,dYsdx,dYsdy,dYsdz,sos,diff,x_bc,y_bc,z_bc,dt)
         class(ladobject),  intent(in) :: this
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)  :: Ys,dYsdx,dYsdy,dYsdz,sos
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(inout) :: diff
@@ -240,7 +240,16 @@ contains
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2
 
+        !jrwest additions
+        real(rkind),intent(in), optional :: dt
+        real(rkind) :: max_sos, delta
+        integer :: diff_style !(0=Akshay's, 1 = Cook PoF 2007)
+        max_sos = maxval(sos)
+
+        diff_style = 0 
+
         ! -------- Artificial Diffusivity ---------
+!TODO: check if Akshay version of diffstar = is correct, seems different than what's in Akshay's articles and thesis (it's dimensionally fine, but slightly different form)
 
         ! Step 1: Get components of grad(Ys) squared individually
         ytmp1 = dYsdx*dYsdx
@@ -253,7 +262,13 @@ contains
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
         xtmp2 = xtmp1*this%dx**4
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        diffstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
+        select case(diff_style)
+            case (0)
+                diffstar = ytmp4 * sos * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero 
+            case (1)
+                diffstar = ytmp4 * ( this%dx**2 ) / (dt)
+        end select
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(Ys,ztmp1,this%decomp)
@@ -261,25 +276,53 @@ contains
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
         ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        diffstar = diffstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
+        select case(diff_style)
+            case (0)
+                diffstar = diffstar + ytmp4 * sos * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero 
+            case (1)
+                diffstar = diffstar + ytmp4 * ( this%dz**2 ) / (dt)
+        end select
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(Ys,ytmp4,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
         ytmp4 = ytmp5*this%dy**4
-        diffstar = diffstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
-        diffstar = this%Cdiff*sos*abs(diffstar) ! CD part of diff
+        select case(diff_style)
+            case (0)
+                diffstar = diffstar + ytmp4 * sos * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero 
+            case (1)
+                diffstar = diffstar + ytmp4 * ( this%dy**2 ) / (dt)
+        end select
+        
+        !Complete CD part of diffstar
+        diffstar = this%Cdiff*abs(diffstar) ! CD part of diff
 
-        ytmp4 = (sqrt(ytmp1)*this%dx + sqrt(ytmp2)*this%dy + sqrt(ytmp3)*this%dz) &
-                        / ( sqrt(ytmp1+ytmp2+ytmp3) + real(1.0D-32,rkind) ) ! grid scale
-        ytmp5 = this%CY*sos*( half*(abs(Ys)-one + abs(Ys-one)) )*ytmp4 ! CY part of diff
+        !Calculate CY prt of diffstar
+        select case(diff_style)
+            case (0)
+                ytmp4 = (sqrt(ytmp1)*this%dx + sqrt(ytmp2)*this%dy + &
+                         sqrt(ytmp3)*this%dz) / ( sqrt(ytmp1+ytmp2+ytmp3) &
+                                          + real(1.0D-32,rkind) ) ! grid scale
+                ytmp5 = this%CY*sos*( half*(abs(Ys)-one + abs(Ys-one)) )*ytmp4 
+            case (1)
+                delta = (this%dx) !TODO: fix this lazy hack, only valid for 1d
+                ytmp5 = (this%CY/dt*delta**2.0)*( half*(abs(Ys)-one + abs(Ys-one)) ) 
+        end select
 
         ! Filter each part
         call this%filter(diffstar, x_bc, y_bc, z_bc)
         call this%filter(ytmp5, x_bc, y_bc, z_bc)
 
-        diffstar = max(diffstar, ytmp5) ! Take max of both terms instead of add to minimize the dissipation
+        select case(diff_style)
+            case (0)
+                !Akshay's formulation (takes max of 2 terms to minimize dissipation)
+                diffstar = max(diffstar, ytmp5) 
+            case (1)
+                !Andy Cook's formulation (just add: see Cook PoF 2007)
+                diffstar = diffstar + ytmp5 
+        end select
 
         diff = diff + diffstar
     end subroutine
