@@ -30,7 +30,7 @@ module SolidMixtureMod
 
         logical :: SOSmodel = .FALSE.           ! is sound speed given by `equilibrium' model? Alternative is `frozen' model. Check Saurel et al., JCP 2009.
         logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .FALSE.
-        logical :: use_gTg = .FALSE., useOneG = .FALSE.
+        logical :: use_gTg = .FALSE., useOneG = .FALSE., ignore_gij = .false.
 
     contains
 
@@ -448,24 +448,44 @@ stop
           do i=1,this%nxp
             ! set fparams
             fparams(1) = mixRho(i,j,k)*ehmix(i,j,k)
+            !print *, "============================"
+            !print *, "============================"
+            !print *, "i", i
+            !print *, "mixE",                 mixE(i,j,k)
+            !print *, "ehmix",                ehmix(i,j,k)
+            !print *, "this%material(1)%Ys",  this%material(1)%Ys(i,j,k)
+            !print *, "this%material(1)%eel", this%material(1)%eel(i,j,k)
+            !print *, "this%material(2)%Ys",  this%material(2)%Ys(i,j,k)
+            !print *, "this%material(2)%eel", this%material(2)%eel(i,j,k)
+            !print *, "mixRho(i,j,k)", mixRho(i,j,k)
+            !print *, "ehmix(i,j,k)",  ehmix(i,j,k)
 
             ! set iparams
             iparams(1) = 2
             iparams(2) = i; iparams(3) = j; iparams(4) = k;
 
             maxp = zero; peqb = zero
+
             do imat=1,this%ns
               !! determine max over all PInfs
               !maxp = maxval(maxp, this%material(imat)%hydro%PInf)
 
               ! set initial guess
+             !print *, "imat=", imat
+             !print *, this%material(imat)%VF(i,j,k)
+             !print *, this%material(imat)%p(i,j,k)
+
               peqb = peqb + this%material(imat)%VF(i,j,k)*this%material(imat)%p(i,j,k)
             end do
             !pest = peqb
 
             ! solve non-linear equation
+            !print*, "peqb initial", peqb    
+            !print*, "fparams", fparams    
+            !print*, "iparams", iparams    
             call this%rootfind_nr_1d(peqb,fparams,iparams)
             !pdiffmax = max(dabs(pest-peqb),pdiffmax)
+            !print*, "peqb final", peqb    
 
             !! rescale all pressures by maxp
             !fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*maxp
@@ -511,7 +531,7 @@ stop
               dtkap =   min(dtkap,   one / ( (P_MAXVAL( this%material(imat)%kap*this%material(imat)%T/(rho* delta**4)))**(third) + eps))
           end if
           dtDiff =  min(dtDiff,  one / ( (P_MAXVAL( this%material(imat)%diff/delta**2) + eps)) )
-          dtplast = min(dtplast, this%material(imat)%elastic%tau0)
+          dtplast = min(dtplast, 0.5*this%material(imat)%elastic%tau0)  !jrwest: added 0.5* to be stable
         enddo
 
         ! For now disable plastic time step limit by setting a large value
@@ -520,12 +540,14 @@ stop
     end subroutine
 
     ! Subroutine to get species art. conductivities and diffusivities
-    subroutine getLAD(this,rho,e,sos,x_bc,y_bc,z_bc)
+    subroutine getLAD(this,rho,e,sos,x_bc,y_bc,z_bc,dt)
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,e,sos  ! Mixture density and speed of sound
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
-
         integer :: i
+
+        !jrwest additions
+        real(rkind),intent(in), optional :: dt
 
         do i = 1,this%ns
             call this%material(i)%getPhysicalProperties()
@@ -542,7 +564,7 @@ stop
 !print *, 'bef LAD:', this%material(1)%Ji(89,1,1,1), sos(89,1,1), this%material(1)%diff(89,1,1)
             call this%LAD%get_diffusivity(this%material(i)%Ys, this%material(i)%Ji(:,:,:,1), &
                                           this%material(i)%Ji(:,:,:,2), this%material(i)%Ji(:,:,:,3), &
-                                          sos, this%material(i)%diff, x_bc, y_bc, z_bc)
+                                          sos, this%material(i)%diff, x_bc, y_bc, z_bc,dt)
 !print *, 'aft LAD:', this%material(1)%Ji(89,1,1,1), sos(89,1,1), this%material(1)%diff(89,1,1)
         end do
 
@@ -806,6 +828,7 @@ stop
 
             ! If multispecies, add the inter-species enthalpy flux
             if (this%ns .GT. 1) then
+!jrwest: temporarily disabling enthalpy diffusion
                 call this%material(i)%get_enthalpy(tmp1_in_y)
                 this%material(i)%qi(:,:,:,1) = this%material(i)%qi(:,:,:,1) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,1) )
                 this%material(i)%qi(:,:,:,2) = this%material(i)%qi(:,:,:,2) + ( tmp1_in_y * this%material(i)%Ji(:,:,:,2) )
