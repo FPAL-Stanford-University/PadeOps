@@ -571,7 +571,7 @@ contains
         deallocate( duidxj )
 
         ! compute species artificial conductivities and diffusivities
-        call this%mix%getLAD(this%rho,this%e,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
+        call this%mix%getLAD(this%rho,this%e,this%sos,this%x_bc,this%y_bc,this%z_bc,this%dt)  ! Compute species LAD (kap, diff)
         ! ------------------------------------------------
 
         call this%get_dt(stability)
@@ -689,7 +689,7 @@ contains
         Qtmpt = zero
 
         do isub = 1,RK45_steps
-            !print *, '----', nrank, isub
+
             call this%get_conserved()
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
@@ -702,7 +702,7 @@ contains
 
             ! Pre-compute stress, LAD, J, etc.
             ! call this%mix%getSOS(this%rho,this%p,this%sos)
-            call this%mix%getLAD(this%rho,this%e,this%sos,this%x_bc,this%y_bc,this%z_bc)  ! Compute species LAD (kap, diff)
+            call this%mix%getLAD(this%rho,this%e,this%sos,this%x_bc,this%y_bc,this%z_bc,this%dt)  ! Compute species LAD (kap, diff)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
 
