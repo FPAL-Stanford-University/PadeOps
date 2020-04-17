@@ -31,6 +31,7 @@ module fringeMethod
          procedure :: allocateTargetArray_Cells
          procedure :: allocateTargetArray_Edges
          procedure :: addFringeRHS_scalar
+         procedure :: addFringeRHS_scalar_passive
          procedure :: associateFringeTarget_scalar
    end type
     
@@ -134,6 +135,22 @@ contains
           this%firstCallCompleteScalar = .true.
       end if
    end subroutine
+
+   subroutine addFringeRHS_scalar_passive(this, dt, Frhs, F)
+      class(fringe),                                                                      intent(inout)        :: this
+      complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)),intent(inout)        :: Frhs  
+      real(rkind),                                                                        intent(in)           :: dt
+      real(rkind),    dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)),         intent(in)           :: F 
+
+      if (this%firstCallCompleteScalar) then      
+          this%rbuffxC(:,:,:,1) = -(this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(F)
+                call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
+                Frhs = Frhs + this%cbuffyC(:,:,:,1)
+      else
+          this%firstCallCompleteScalar = .true.
+      end if
+   end subroutine
+
 
    subroutine destroy(this)
       class(fringe), intent(inout) :: this

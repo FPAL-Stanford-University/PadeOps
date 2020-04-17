@@ -158,7 +158,7 @@ subroutine populateRHS(this, dt)
       call this%fringe_x2%addFringeRHS_scalar(dt, this%rhs, this%F)
    else
       if (this%useFringe) then
-         call this%fringe_x%addFringeRHS_scalar(dt, this%rhs, this%F)
+         call this%fringe_x%addFringeRHS_scalar_passive(dt, this%rhs, this%F)
       end if
    end if 
 
