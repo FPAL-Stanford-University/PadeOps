@@ -487,7 +487,7 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
         do k = 1,size(z,3)
             do j = 1, size(z,2)
                 do i = 1, size(z,1)
-                    if ((x(i,j,k)>22.56d0) .or. (y(i,j,k)>11.28d0)) then
+                    if ((x(i,j,k)>35.d0) .or. (y(i,j,k)>17.5d0)) then
                         scalarSource(i,j,k) = 0.d0
                     end if
                 end do
@@ -499,7 +499,7 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
         do k = 1,size(z,3)
             do j = 1, size(z,2)
                 do i = 1, size(z,1)
-                    if ((x(i,j,k)>22.56d0) .or. (y(i,j,k)>11.28d0)) then
+                    if ((x(i,j,k)>35.d0) .or. (y(i,j,k)>17.5d0)) then
                         scalarSource(i,j,k) = 0.d0
                     end if
                 end do
@@ -511,7 +511,7 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
         do k = 1,size(z,3)
             do j = 1, size(z,2)
                 do i = 1, size(z,1)
-                    if ((x(i,j,k)>22.56d0) .or. (y(i,j,k)>11.28d0)) then
+                    if ((x(i,j,k)>35.d0) .or. (y(i,j,k)>17.5d0)) then
                         scalarSource(i,j,k) = 0.d0
                     end if
                 end do
