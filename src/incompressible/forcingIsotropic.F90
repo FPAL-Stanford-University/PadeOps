@@ -19,16 +19,17 @@ module forcingmod
       class(spectral), pointer :: spectC
 
       integer, dimension(:), allocatable :: wave_x, wave_y, wave_z
-      complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what
+      complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what, fxhat_old, fyhat_old, fzhat_old
       complex(rkind), dimension(:,:,:), pointer :: fxhat, fyhat, fzhat, cbuffzE, cbuffyE, cbuffyC
 
       real(rkind), dimension(:), allocatable :: kabs_sample, zeta_sample, theta_sample
       integer :: seed0, seed1, seed2, seed3
       real(rkind) :: Nwaves_rkind
       real(rkind), dimension(:), allocatable :: tmpModes
-
-      real(rkind) :: normfact = 1.d0
+      real(rkind) :: alpha_t = 1.d0 
+      real(rkind) :: normfact = 1.d0, A_force = 1.d0 
       integer     :: DomAspectRatioZ
+      logical :: useLinearForcing
 
       contains
       procedure          :: init
@@ -51,10 +52,11 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    complex(rkind), dimension(:,:,:,:), intent(inout), target :: cbuffzC
    class(spectral), intent(in), target :: spectC
    integer :: RandSeedToAdd = 0, ierr, DomAspectRatioZ = 1
-
+   real(rkind) :: alpha_t = 1.d0 
    integer :: Nwaves = 20
-   real(rkind) :: kmin = 2.d0, kmax = 10.d0, EpsAmplitude = 0.1d0
-   namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd, DomAspectRatioZ 
+   real(rkind) :: kmin = 2.d0, kmax = 10.d0, EpsAmplitude = 0.1d0, A_force = 1.d0 
+   logical :: useLinearForcing = .false. 
+   namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd, DomAspectRatioZ, alpha_t, useLinearForcing 
 
    open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
    read(unit=123, NML=HIT_Forcing)
@@ -64,6 +66,7 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
        call GracefulExit("Aspect ratio in z must be greater than 1", 111)
    endif
 
+   this%A_force = A_force
    this%kmin = kmin
    this%kmax = kmax
    this%EpsAmplitude = EpsAmplitude
@@ -76,6 +79,9 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    allocate(this%uhat (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%vhat (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%what (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
+   allocate(this%fxhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
+   allocate(this%fyhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
+   allocate(this%fzhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    
    this%fxhat    => cbuffzC(:,:,:,1)
    this%fyhat    => cbuffzC(:,:,:,2)
@@ -252,45 +258,60 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, 
    logical, intent(in) :: newTimestep
 
 
-   ! STEP 1: Populate wave_x, wave_y, wave_z
-   if (newTimestep) then
-      call this%pick_random_wavenumbers()
-      call this%update_seeds()
-   end if
+   if (this%useLinearForcing) then
+        urhs_xy = urhs_xy + (1.d0/this%A_force)*uhat_xy 
+        vrhs_xy = vrhs_xy + (1.d0/this%A_force)*vhat_xy 
+        wrhs_xy = wrhs_xy + (1.d0/this%A_force)*what_xy 
+   else
+
+        ! STEP 1: Populate wave_x, wave_y, wave_z
+        if (newTimestep) then
+           this%fxhat_old = this%fxhat
+           this%fyhat_old = this%fyhat
+           this%fzhat_old = this%fzhat
+           call this%pick_random_wavenumbers()
+           call this%update_seeds()
+        end if
 
 
-   ! STEP 2: Take FFTz
-   call transpose_y_to_z(uhat_xy, this%uhat, this%sp_gpC)
-   call this%spectC%take_fft1d_z2z_ip(this%uhat)
+        ! STEP 2: Take FFTz
+        call transpose_y_to_z(uhat_xy, this%uhat, this%sp_gpC)
+        call this%spectC%take_fft1d_z2z_ip(this%uhat)
 
-   call transpose_y_to_z(vhat_xy, this%vhat, this%sp_gpC)
-   call this%spectC%take_fft1d_z2z_ip(this%vhat)
+        call transpose_y_to_z(vhat_xy, this%vhat, this%sp_gpC)
+        call this%spectC%take_fft1d_z2z_ip(this%vhat)
 
-   call transpose_y_to_z(what_xy, this%cbuffzE, this%sp_gpE)
-   this%what = this%cbuffzE(:,:,1:this%sp_gpC%zsz(3))
-   call this%spectC%take_fft1d_z2z_ip(this%what)
-   call this%spectC%shiftz_E2C(this%what)
+        call transpose_y_to_z(what_xy, this%cbuffzE, this%sp_gpE)
+        this%what = this%cbuffzE(:,:,1:this%sp_gpC%zsz(3))
+        call this%spectC%take_fft1d_z2z_ip(this%what)
+        call this%spectC%shiftz_E2C(this%what)
 
 
-   ! STEP 3: embed into fhat
-   call this%compute_forcing()
+        ! STEP 3a: embed into fhat
+        call this%compute_forcing()
 
-   ! STEP 4: Take ifft of fx, fy, fz and add to RHS
-   call this%spectC%take_ifft1d_z2z_ip(this%fxhat)
-   call transpose_z_to_y(this%fxhat, this%cbuffyC, this%sp_gpC)
-   urhs_xy = urhs_xy + this%cbuffyC
+        ! STEP 3b: Time filter
+        this%fxhat = this%alpha_t*this%fxhat + (1.d0 - this%alpha_t)*this%fxhat_old
+        this%fyhat = this%alpha_t*this%fyhat + (1.d0 - this%alpha_t)*this%fyhat_old
+        this%fzhat = this%alpha_t*this%fzhat + (1.d0 - this%alpha_t)*this%fzhat_old
 
-   call this%spectC%take_ifft1d_z2z_ip(this%fyhat)
-   call transpose_z_to_y(this%fyhat, this%cbuffyC, this%sp_gpC)
-   vrhs_xy = vrhs_xy + this%cbuffyC
+        ! STEP 4: Take ifft of fx, fy, fz and add to RHS
+        call this%spectC%take_ifft1d_z2z_ip(this%fxhat)
+        call transpose_z_to_y(this%fxhat, this%cbuffyC, this%sp_gpC)
+        urhs_xy = urhs_xy + this%cbuffyC
 
-   call this%spectC%shiftz_C2E(this%fzhat)
-   call this%spectC%take_ifft1d_z2z_ip(this%fzhat)
-   this%cbuffzE(:,:,1:this%sp_gpC%zsz(3)) = this%fzhat
-   this%cbuffzE(:,:,this%sp_gpC%zsz(3)+1) = this%cbuffzE(:,:,1)
-   call transpose_z_to_y(this%cbuffzE, this%cbuffyE, this%sp_gpE)
-   wrhs_xy = wrhs_xy + this%cbuffyE
+        call this%spectC%take_ifft1d_z2z_ip(this%fyhat)
+        call transpose_z_to_y(this%fyhat, this%cbuffyC, this%sp_gpC)
+        vrhs_xy = vrhs_xy + this%cbuffyC
 
+        call this%spectC%shiftz_C2E(this%fzhat)
+        call this%spectC%take_ifft1d_z2z_ip(this%fzhat)
+        this%cbuffzE(:,:,1:this%sp_gpC%zsz(3)) = this%fzhat
+        this%cbuffzE(:,:,this%sp_gpC%zsz(3)+1) = this%cbuffzE(:,:,1)
+        call transpose_z_to_y(this%cbuffzE, this%cbuffyE, this%sp_gpE)
+        wrhs_xy = wrhs_xy + this%cbuffyE
+    
+   end if 
 
 end subroutine
 
