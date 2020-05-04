@@ -23,10 +23,11 @@ module actuatorDisk_YawMod
         real(rkind) :: xLoc, yLoc, zLoc, dx, dy, dz
         real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq, Cp
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
-        integer :: totPointsOnFace, hubIndex
+        integer :: totPointsOnFace, hubIndex, tInd
         real(rkind), dimension(:,:), allocatable :: xp, yp, zp
         real(rkind), dimension(:), allocatable :: xs, ys, zs
         integer, dimension(:,:), allocatable :: startEnds
+        real(rkind), dimension(:,:), allocatable :: powerTime
 
         ! Grid Info
         integer :: nxLoc, nyLoc, nzLoc 
@@ -95,6 +96,12 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     this%xG => xG; this%yG => yG; this%zG => zG
     this%memory_buffers_linked = .false.
     this%xLine = xG(:,1,1); this%yLine = yG(1,:,1); this%zLine = zG(1,1,:)
+    
+    ! Turbine power
+    this%tInd = 1
+    if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
+           allocate(this%powerTime(1000000,1))
+    end if
    
 end subroutine 
 
@@ -240,6 +247,13 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         rhsyvals = rhsyvals + Ft(2,1) * this%scalarSource
         rhszvals = rhszvals + Ft(3,1) * this%scalarSource 
         !call this%get_power()
+        if (usp_sq /= 0.d0) then ! this was added since this function is called
+                                 ! somewhere besides turbineMod which corrupts
+                                 ! the power measurements!
+            this%powerTime(this%tInd,1) = -force*sqrt(usp_sq)
+            this%tInd = this%tInd + 1
+        end if
+
 
     end if 
 

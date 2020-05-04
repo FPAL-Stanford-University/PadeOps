@@ -1,9 +1,9 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_medium_0"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_medium_0"   ! Directory for all output files
-nx                    = 900         ! Number of points in X
-ny                    = 352          ! Number of points in Y
-nz                    = 192          ! Number of points in Z
+inputdir              = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_fine_180"   ! Directory for any input files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_fine_180"   ! Directory for all output files
+nx                    = 1800         ! Number of points in X
+ny                    = 704          ! Number of points in Y
+nz                    = 384          ! Number of points in Z
 tstop                 = 6000.D0    ! Physical time to stop the simulation
 CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
@@ -11,7 +11,7 @@ nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 10000       ! TimeID of the restart file being used
+restartFile_TID       = 0       ! TimeID of the restart file being used
 restartFile_RID       = 1            ! RunID of the restart file being used
 /
 /
@@ -32,7 +32,7 @@ donot_dealias         = .FALSE.
 &IO
 RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump         = 5000       ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 5000       ! Data dumping frequency (# of timesteps)
+t_dataDump            = 1000       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 5         ! Plane dumping frequency (# of timesteps)
@@ -89,7 +89,7 @@ dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useE
 dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
 assume_fplane         = .FALSE.      ! Assume fplane (ignore horizontal component of Coriolis force)? 
 latitude              = 45.d0       ! Latitude; important if useCoriolis is TRUE && assume_fplane is FALSE
-frameAngle            = 0.D0        ! Mean wind direction; important if assume_fplane is FALSE
+frameAngle            = 180.D0        ! Mean wind direction; important if assume_fplane is FALSE
 useHITforcing         = .false.     ! Use additional HIT forcing? 
 useScalars            = .TRUE.     ! Do you want to use scalars? --Why was this true for AD????
 buoyancyDirection     = 3           ! Are 1 and 2 implemented????
@@ -177,7 +177,7 @@ Fringe_delta_en_y    = 0.05d0
 &BUDGET_TIME_AVG
 do_budgets            = .TRUE.    ! Perform budget calculations? 
 budgetType            = 3         ! See type descriptions in budget_time_avg.F90
-budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_medium_0/budgets"   ! Write in default output directory
+budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_fine_180/budgets"   ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?  
 tidx_dump             = 1000      ! How often should budget files be written to disk? 
 tidx_budget_start     = 5000      ! Start budget computation from this timestep onward

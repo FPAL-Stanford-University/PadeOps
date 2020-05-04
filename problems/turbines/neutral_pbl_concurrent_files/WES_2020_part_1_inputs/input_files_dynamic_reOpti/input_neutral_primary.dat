@@ -1,18 +1,19 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_medium_0"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_medium_0"   ! Directory for all output files
-nx                    = 900         ! Number of points in X
-ny                    = 352          ! Number of points in Y
+inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific"   ! Directory for any input files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/6x1_dynamic_freshOpti_turbineSpecific_18"   ! Directory for all output files
+nx                    = 480         ! Number of points in X
+ny                    = 240          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
-tstop                 = 6000.D0    ! Physical time to stop the simulation
-CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
-dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
+tstop                 = 40000.D0    ! Physical time to stop the simulation
+CFL                   = -1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
+dt                    = 3.8D-2        ! Fixed time step value (only used if CFL is set to negative)
 nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 10000       ! TimeID of the restart file being used
+restartFile_TID       = 27000       ! TimeID of the restart file being used
 restartFile_RID       = 1            ! RunID of the restart file being used
+CviscDT               = 1.D0
 /
 /
 &NUMERICS
@@ -31,8 +32,8 @@ donot_dealias         = .FALSE.
 /
 &IO
 RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 5000       ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 5000       ! Data dumping frequency (# of timesteps)
+t_restartDump         = 500       ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump            = 500       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 5         ! Plane dumping frequency (# of timesteps)
@@ -91,7 +92,7 @@ assume_fplane         = .FALSE.      ! Assume fplane (ignore horizontal componen
 latitude              = 45.d0       ! Latitude; important if useCoriolis is TRUE && assume_fplane is FALSE
 frameAngle            = 0.D0        ! Mean wind direction; important if assume_fplane is FALSE
 useHITforcing         = .false.     ! Use additional HIT forcing? 
-useScalars            = .TRUE.     ! Do you want to use scalars? --Why was this true for AD????
+useScalars            = .false.     ! Do you want to use scalars? --Why was this true for AD????
 buoyancyDirection     = 3           ! Are 1 and 2 implemented????
 /
 /
@@ -149,14 +150,14 @@ WM_MatchingIndex              = 1
 /
 &WINDTURBINES
 useWindTurbines       = .TRUE.    ! Do you want to use Wind turbines ?
-num_turbines          = 25
+num_turbines          = 6
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
-turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/5x5array"
-ADM_Type              = 2         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "XXX"
-useDynamicYaw         = .FALSE.
-yawUpdateInterval     = 50000
-inputDirDyaw          = "XXX"
+turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/6x1array_offset_18"
+ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
+powerDumpDir          = "/scratch/05294/mhowland/neutral_concurrent/6x1_dynamic_freshOpti_turbineSpecific_18/modelDumpsDynamicFreshOpti_newParams_pp_3_longWindow"
+useDynamicYaw         = .TRUE.
+yawUpdateInterval     = 1000
+inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_neutral.inp"
 /
 /
 &FRINGE
@@ -175,16 +176,16 @@ Fringe_delta_en_y    = 0.05d0
 /
 /
 &BUDGET_TIME_AVG
-do_budgets            = .TRUE.    ! Perform budget calculations? 
-budgetType            = 3         ! See type descriptions in budget_time_avg.F90
-budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_medium_0/budgets"   ! Write in default output directory
+do_budgets            = .FALSE.    ! Perform budget calculations? 
+budgetType            = 0         ! See type descriptions in budget_time_avg.F90
+budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/3x3_production_coarse_shifted_tall_0"   ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?  
 tidx_dump             = 1000      ! How often should budget files be written to disk? 
-tidx_budget_start     = 5000      ! Start budget computation from this timestep onward
+tidx_budget_start     = 10000      ! Start budget computation from this timestep onward
 restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations? 
-restart_rid           = 1         ! Restart budget file run index
-restart_tid           = 10000     ! Restart budget file time index
-restart_counter       = 1000     ! Restart budget file counter 
+restart_rid           = 2         ! Restart budget file run index
+restart_tid           = 99999     ! Restart budget file time index
+restart_counter       = 11111     ! Restart budget file counter 
 /
 /
 /
@@ -200,7 +201,7 @@ nKSvertFilt           = 1
 /
 /
 &SCALARS
-num_scalars      = 7    ! was 2; why is scalar used????
+num_scalars      = 3    ! was 2; why is scalar used????
 scalar_info_dir  = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/scalarDir"
 /
 /
@@ -226,9 +227,9 @@ moisture_info_dir = "null"
 /
 /
 &PROBLEM_INPUT
-Lx                            =  112.5d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            =  43.75d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
-Lz                            =  12.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
+Lx                            =  30.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            =  15.d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
+Lz                            =  6.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
 Tref                          =  263.5d0     ! Reference Temp.
 Tsurf0                        =  265.0d0     ! Surface Temp. (at tsim=0) in K (need to take care of the dimensions)
 dTsurf_dt                     =  0.0D0      ! Surface Temp. decrease rate in K/hr. (need to take care of the dimensions)

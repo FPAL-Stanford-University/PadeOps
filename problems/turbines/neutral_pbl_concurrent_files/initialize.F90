@@ -483,7 +483,7 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
         end do
     case (5) ! Above the turbine rows
         scalarSource = 0.d0
-        scalarSource = exp(-(z-0.25d0)**2 / 0.01) * exp(-(x-15.d0+3.d0*126.d0/400.d0)**2 / 0.01) ! Mike implement this 
+        scalarSource = exp(-(z-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) * exp(-(x-15.d0+3.d0*126.d0/400.d0)**2 / 0.01) ! Mike implement this 
         do k = 1,size(z,3)
             do j = 1, size(z,2)
                 do i = 1, size(z,1)
@@ -495,7 +495,7 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
         end do
     case (6) ! Above the turbine rows
         scalarSource = 0.d0
-        scalarSource = exp(-(z-0.25d0)**2 / 0.01) * exp(-(x-15.d0+5.d0*126.d0/400.d0)**2 / 0.01) ! Mike implement this 
+        scalarSource = exp(-(z-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) * exp(-(x-15.d0+5.d0*126.d0/400.d0)**2 / 0.01) ! Mike implement this 
         do k = 1,size(z,3)
             do j = 1, size(z,2)
                 do i = 1, size(z,1)
@@ -507,7 +507,7 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
         end do
      case (7) ! Above the turbine rows
         scalarSource = 0.d0
-        scalarSource = exp(-(z-0.25d0)**2 / 0.01) * exp(-(y-7.5d0+3.d0*126.d0/400.d0)**2 / 0.01) ! Mike implement this 
+        scalarSource = exp(-(z-(0.25d0+1.5d0*126.d0/400.d0))**2 / 0.01) * exp(-(y-7.5d0+3.d0*126.d0/400.d0)**2 / 0.01) ! Mike implement this 
         do k = 1,size(z,3)
             do j = 1, size(z,2)
                 do i = 1, size(z,1)

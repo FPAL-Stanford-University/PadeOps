@@ -638,6 +638,14 @@ subroutine write_turbine_power(this, TID, outputdir, runID)
                call write_2d_ascii(this%turbArrayADM_T2(i)%powerTime(1:this%turbArrayADM_T2(i)%tInd-1,:),filename)  
                this%turbArrayADM_T2(i)%tInd = 1
            end if
+       else if (this%ADM_Type==4) then
+           if (allocated(this%turbArrayADM_Tyaw(i)%powerTime)) then
+               write(tempname,"(A3,I2.2,A2,I6.6,A6,I2.2,A4)") "Run",runID,"_t", TID, "_turbP",i,".pow"
+               filename = outputDir(:len_trim(outputDir))//"/"//trim(tempname)
+               call write_2d_ascii(this%turbArrayADM_Tyaw(i)%powerTime(1:this%turbArrayADM_Tyaw(i)%tInd-1,:),filename)  
+               this%turbArrayADM_Tyaw(i)%tInd = 1
+           end if
+
         end if
     end do
     
