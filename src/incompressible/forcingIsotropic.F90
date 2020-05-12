@@ -29,8 +29,8 @@ module forcingmod
       real(rkind) :: alpha_t = 1.d0 
       real(rkind) :: normfact = 1.d0, A_force = 1.d0 
       integer     :: DomAspectRatioZ
-      logical :: useLinearForcing
-
+      logical :: useLinearForcing, firstCall
+    
       contains
       procedure          :: init
       procedure          :: destroy
@@ -82,7 +82,8 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    allocate(this%fxhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%fyhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%fzhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
-   
+  
+   this%firstCall = .true.
    this%fxhat    => cbuffzC(:,:,:,1)
    this%fyhat    => cbuffzC(:,:,:,2)
    this%fzhat    => cbuffzC(:,:,:,3)
@@ -256,7 +257,7 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, 
    complex(rkind), dimension(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)), intent(inout) :: wrhs_xy
    
    logical, intent(in) :: newTimestep
-
+   real(rkind) :: alpha_t
 
    if (this%useLinearForcing) then
         urhs_xy = urhs_xy + (1.d0/this%A_force)*uhat_xy 
@@ -264,7 +265,9 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, 
         wrhs_xy = wrhs_xy + (1.d0/this%A_force)*what_xy 
    else
 
+
         ! STEP 1: Populate wave_x, wave_y, wave_z
+        
         if (newTimestep) then
            this%fxhat_old = this%fxhat
            this%fyhat_old = this%fyhat
@@ -289,6 +292,12 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, 
 
         ! STEP 3a: embed into fhat
         call this%compute_forcing()
+        
+        if (newTimeStep .and. this%firstCall) then
+            this%fxhat_old = this%fxhat
+            this%fyhat_old = this%fyhat
+            this%fzhat_old = this%fzhat
+        end if 
 
         ! STEP 3b: Time filter
         this%fxhat = this%alpha_t*this%fxhat + (1.d0 - this%alpha_t)*this%fxhat_old
