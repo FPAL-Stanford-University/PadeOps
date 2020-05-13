@@ -1,17 +1,17 @@
 &INPUT
-inputdir              = "/home/nghaisas/runs/PadeOps/pblwt/al00/budgetnew/"   ! Directory for any input files
-outputdir             = "/home/nghaisas/runs/PadeOps/pblwt/al00/budgetnew/"   ! Directory for all output files
-nx                    = 96         ! Number of points in X
+inputdir              = "/hpc/home/nghaisas/runs/PadeOps/turb/debug"   ! Directory for any input files
+outputdir             = "/hpc/home/nghaisas/runs/PadeOps/turb/debug"   ! Directory for all output files
+nx                    = 96          ! Number of points in X
 ny                    = 96         ! Number of points in Y
 nz                    = 64         ! Number of points in Z
-tstop                 = 100.D0     ! Physical time to stop the simulation
+tstop                 = 50.D0     ! Physical time to stop the simulation
 dt                    = -0.0001D0   ! Fixed time step value (only used if CFL is set to negative)
 CFL                   = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .TRUE.     ! Set to false if it's a fresh simulation 
-restartFile_TID       = 194069      ! TimeID of the restart file being used
-restartFile_RID       = 10          ! RunID of the restart file being used
+useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
+restartFile_TID       = 20000      ! TimeID of the restart file being used
+restartFile_RID       = 1          ! RunID of the restart file being used
 /
 /
 &NUMERICS
@@ -25,8 +25,8 @@ t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproj
 /
 &IO
 RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 30000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 20000        ! Data dumping frequency (# of timesteps)
+t_restartDump         = 10000        ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump            = 10000        ! Data dumping frequency (# of timesteps)
 ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 12500         ! Plane dumping frequency (# of timesteps)
@@ -86,12 +86,12 @@ useFringe             = .false.     ! This is false if simulation is periodic.
 /
 &SGS_MODEL
 DynamicProcedureType  = 0
-SGSModelID            = 1           ! 0: smagorinsky, 1: sigma, 2: Shear Improved Smagorinsky
+SGSModelID            = 2           ! 0: smagorinsky, 1: sigma, 2: Shear Improved Smagorinsky
 z0                    = 1.d-4       ! Roughness length scale (CAREFUL: This is a non-dimensionalized number)
 useWallDamping        = .FALSE.      ! Use the Wall Damping Function 
 ncWall                = 3.d0      ! Wall Damping Function Exponent
-Csgs                  = 1.3d0      ! Asymptotic model constant (wall damping function)
-wallModelType         = 1           ! 0: Moeng's original model, 1: Bou-Zeid's fully local model
+Csgs                  = 1.0d0      ! Asymptotic model constant (wall damping function)
+wallModelType         = 2           ! 1: Moeng's original model, 2: Bou-Zeid's fully local model
 explicitCalcEdgeEddyViscosity = .true.     ! Explicitely compute eddy viscosity at edges? or interpolate? 
 DynProcFreq           = 10
 useSGSDynamicRestart  = .FALSE.      ! Clip the constant values when they are negative
@@ -100,10 +100,14 @@ SGSDynamicRestartFile = "null"      ! Clip the constant values when they are neg
 /
 /
 &WINDTURBINES
-useWindTurbines       = .TRUE.
-num_turbines          = 32
+useWindTurbines       = .FALSE.
+num_turbines          = 2
 ADM                   = .TRUE.
-turbInfoDir           = "/home/nghaisas/runs/PadeOps/pblwt/al00/budgetnew/turbInfo"
+turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/debug_files/turbInfo_yaw/6x1array_yaw"
+ADM_Type              = 4
+powerDumpDir          = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_debug/modelDumps"
+useDynamicYaw         = .TRUE.
+yawUpdateInterval     = 10000
 /
 /
 &FRINGE
@@ -119,6 +123,19 @@ Fringe_delta_st_y     = 0.20d0
 Fringe_delta_en_y     = 0.05d0
 LambdaFact            = 0.75d0 
 /
+/
+&BUDGET_TIME_AVG
+/
+budgetType          = 2
+budgets_dir         = "null"
+restart_budgets     = .false.
+restart_rid         = 1
+restart_tid         = 100
+restart_counter     = 100
+tidx_dump           = 100
+tidx_compute        = 100
+do_budgets          = .false.
+tidx_budget_start   = 1.0d0
 /
 &KSPREPROCESS
 PreprocessForKS       = .FALSE.        ! Do you want to generate preprocessing files for KS? 
