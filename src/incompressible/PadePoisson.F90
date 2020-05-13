@@ -2,7 +2,7 @@ module PadePoissonMod
     use kind_parameters, only: rkind
     use spectralMod, only: spectral, GetWaveNums, useExhaustiveFFT 
     use constants, only: pi, zero, one, three, five, two, imi
-    use exits, only: message, GracefulExit
+    use exits, only: message, GracefulExit, nancheck
     use decomp_2d
     use cd06staggstuff, only: cd06stagg
     use mpi
@@ -323,6 +323,8 @@ contains
             if (storePressure) then
                 allocate(this%phat_z1(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
                 allocate(this%phat_z2(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+                this%phat_z1 = cmplx(0.0_rkind, 0.0_rkind, rkind)
+                this%phat_z2 = cmplx(0.0_rkind, 0.0_rkind, rkind)
             end if
 
             deallocate(k1, k2, k3, k3mod, tfm, tfp)
@@ -1240,6 +1242,13 @@ contains
                 end do
                 call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
             end if 
+            !print *, "ph1 : ", nancheck(real(this%phat_z1)), nancheck(aimag(this%phat_z1))
+            !print *, "ph2 : ", nancheck(real(this%phat_z2)), nancheck(aimag(this%phat_z2))
+            !print *, "f2d : ", nancheck(real(this%f2d)), nancheck(aimag(this%f2d))
+            !print *, "f2dy: ", nancheck(real(this%f2dy)), nancheck(aimag(this%f2dy))
+            !call message(1, " ++++Calling ifft")
+            !print *, 'size of pressure: ', size(pressure)
+            !call message(1, " ++++Calling ifft")
             call this%sp%ifft(this%f2dy,pressure)
 
          end if 
