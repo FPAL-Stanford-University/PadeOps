@@ -271,7 +271,9 @@ module IncompressibleGrid
 
         ! HIT Forcing
         logical :: useHITForcing = .false., useforcedStratification = .false. 
+        logical :: useHITRealSpaceLinearForcing = .false.
         type(HIT_shell_forcing), allocatable :: hitforce
+        real(rkind) :: HITForceTimeScale 
 
         ! Scalars
         logical :: useScalars = .false. 
@@ -403,8 +405,8 @@ contains
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10, BuoyancyTermType = 1
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false., ComputeRapidSlowPressure = .false.
-        real(rkind) :: tmpmn, Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0
-        logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false., useControl = .false.
+        real(rkind) :: tmpmn, Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0, HITForceTimeScale = 10.d0
+        logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false., useControl = .false., useHITRealSpaceLinearForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
         logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
@@ -431,7 +433,7 @@ contains
                     & t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,useforcedStratification,&
-                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle, buoyancyDirection
+                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle, buoyancyDirection, useHITRealSpaceLinearForcing, HITForceTimeScale
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, powerDumpDir, useDynamicYaw, &
                                 yawUpdateInterval, inputDirDyaw 
@@ -484,8 +486,8 @@ contains
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity 
         this%deleteInstructions = deleteInstructions; this%TopBC_Temp = TopBC_temp
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
-        this%donot_dealias = donot_dealias; this%ioType = ioType
-        this%moistureFactor = moistureFactor
+        this%donot_dealias = donot_dealias; this%ioType = ioType; this%HITForceTimeScale = HITForceTimeScale
+        this%moistureFactor = moistureFactor; this%useHITRealSpaceLinearForcing = useHITRealSpaceLinearForcing
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then

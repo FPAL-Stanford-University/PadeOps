@@ -14,6 +14,7 @@ module HIT_Periodic_parameters
     real(rkind) :: k_bp_left, k_bp_right, uadvect = 10.0, x_shift 
     real(rkind), dimension(:,:,:), allocatable :: uTarget, vTarget, wTarget
 
+    real(rkind) :: useRealSpaceLinearForcing = .false.
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
@@ -36,7 +37,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: init_type = 0
     logical :: BandpassFilterFields = .false. 
     integer :: initType = 0
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
 
     !Lx = two*pi; Ly = two*pi; Lz = one
     ioUnit = 11
@@ -120,7 +121,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind) :: uadv = 0.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz
     logical :: BandpassFilterFields = .false. 
     integer :: initType = 0, seed = 23455
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
