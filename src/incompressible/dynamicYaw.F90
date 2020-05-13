@@ -175,7 +175,7 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     this%yaw = yaw !- wind_direction*pi/180.d0
     !call this%observeField()
     ! Use initial fit
-    if (this%check==.false.) then
+    if ((.not. this%check)) then
         this%kw = this%kw_initial
         this%sigma_0 = this%sigma_initial
     end if
@@ -190,7 +190,7 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     this%turbCenter = this%turbCenterStore
 
     ! Save the initial fit for kw and sigma
-    if (this%check==.true.) then
+    if (this%check) then
         this%kw_initial = this%kw
         this%sigma_initial = this%sigma_0
         this%check = .false.
@@ -248,7 +248,7 @@ subroutine onlineUpdate(this)
     ! Generate optimal yaw angles
     this%kw = kwBest; this%sigma_0 = sigmaBest;
     ! If useInitialParams only use initial fit to optimize model
-    if (this%useInitialParams==.true. .and. this%check==.false.) then
+    if (this%useInitialParams .and. (.not. this%check)) then
         kwBest = this%kw_initial(this%indSorted)
         sigmaBest = this%sigma_initial(this%indSorted)
     end if
@@ -375,11 +375,11 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     yaw = 0.d0
  
     ! eps also determines the termination condition
-    k=1; check = 0; 
+    k=1; check = .false.; 
     bestYaw = 0.d0; Ptot = 0.d0; P_time = 0.d0; P_time = 0.d0; yawTime = 0.d0
     m=0.d0; v=0.d0;
     bestPower = 0.d0; bestYaw = 0.d0; bestPowerOut = 0.d0;
-    do while (k < this%epochsYaw .and. check == .false.) 
+    do while (k < this%epochsYaw .and. (.not. check)) 
     
         ! Forward prop
         this%dp_dgamma = 0.d0
@@ -495,7 +495,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
                if (edgeHigh>=boundLow .and. edgeHigh<=boundHigh) then
                    check = 1
                end if
-               if (check == .TRUE.) then
+               if (check) then
                    turbinesInFront(j,i) = .true.
                end if
             end if
@@ -503,7 +503,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
         ! sum of squared deficits, loop over front turbines
         delta_u_face = 0.d0
         do k = 1, this%Nt
-            if (turbinesInFront(j,k) == .TRUE.) then
+            if (turbinesInFront(j,k)) then
                 ! sum of squared deficits
                 aPrev = 0.5*(1.d0-sqrt(1.d0-this%Ct*cos(yaw(k))**2))
                 dx = this%turbCenter(j, 1) - this%turbCenter(k, 1)
@@ -604,7 +604,7 @@ subroutine backward(this, kw, sigma_0, yaw)
                if (edgeHigh>=boundLow .and. edgeHigh<=boundHigh) then
                    check = .true.
                end if
-               if (check == .true.) then
+               if (check) then
                    turbinesInBack(j) = .true.
                end if
             end if
@@ -613,7 +613,7 @@ subroutine backward(this, kw, sigma_0, yaw)
         ! Flip over whether the turbine sees a wake or not
         du_eff_da = 0;
         do k = 1, this%Nt
-            if (turbinesInBack(k) == .true.) then
+            if (turbinesInBack(k)) then
                 du_eff_da = -this%deltaUIndividual(k,i) / (this%a_mom(i)+this%eps) * & 
                             this%gaussianStore(i,k)
                 this%dp_dgamma(i) = this%dp_dgamma(i) + & 

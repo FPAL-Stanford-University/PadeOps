@@ -555,7 +555,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                            angleIn = this%gamma - this%hubDirection*pi/180.d0
                            call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
                                                      this%hubDirection(1), this%meanP, this%step, this%meanPbaseline)
-                           if (this%lookup==.false.) then
+                           if ((.not. this%lookup)) then
                                this%gamma = angleIn
                            else
                                ! These angles were taken after one step of
@@ -592,7 +592,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                        this%powerUpdate = 0.d0
                    end if
                    ! Update time step
-                   if (this%firstStep == .FALSE.) then
+                   if ((.not. this%firstStep)) then
                        this%timeStep = this%timeStep+1 
                    else
                        ! Don't count the initialization step
