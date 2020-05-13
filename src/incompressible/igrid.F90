@@ -1169,7 +1169,7 @@ contains
               this%wrhs_turbine = dcmplx(0.d0, 0.d0)
            end if
            call message(1, "Done allocating storage for pressure")
-       end if 
+       end if
        if ((.not. this%fastCalcPressure) .and. ((this%computefringePressure) .or. (this%computeDNSPressure))) then
            call gracefulExit("You need to set FASTCALCPRESSURE = .true. in & 
                     & order to use computefringepressure or computeDNSpressure", 313)
@@ -1293,7 +1293,7 @@ contains
        this%useforcedStratification = useforcedStratification
 
 
-       ! STEP 29: Safeguard against user invalid user inputs
+       ! STEP 30: Safeguard against user invalid user inputs
        if ((this%vizDump_Schedule == 1) .and. (.not. this%useCFL)) then
            call GracefulExit("Cannot use vizDump_Schedule=1 if using fixed dt.",123)
        end if 
