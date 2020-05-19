@@ -1,0 +1,4 @@
+&concurrent
+precInputFile = "/hpc/home/nghaisas/runs/PadeOps/turb/wupa/r2/input_prec.dat"
+mainInputFile = "/hpc/home/nghaisas/runs/PadeOps/turb/wupa/r2/input_main.dat"
+/
