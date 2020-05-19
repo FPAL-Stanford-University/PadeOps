@@ -91,7 +91,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE, k
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind) ::  z0init = 1.0d-4, epsnd, yperiods = 3.0d0, zpeak = 0.2d0, xperiods = 3.0d0
+    real(rkind) ::  z0init = 2.0d-4, epsnd, yperiods = 3.0d0, zpeak = 0.2d0, xperiods = 3.0d0
     namelist /concurrentSimulationINPUT/ Lx, Ly, Lz
 
     ioUnit = 11
