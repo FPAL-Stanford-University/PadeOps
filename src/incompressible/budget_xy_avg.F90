@@ -701,8 +701,10 @@ contains
         call this%get_xy_meanC_from_fhatC(this%igrid_sim%vhat, this%tmp_meanC)
         this%budget_0(:,2) = this%budget_0(:,2) + this%tmp_meanC
         
-        call this%get_xy_meanC_from_fhatC(this%igrid_sim%That, this%tmp_meanC)
-        this%budget_0(:,3) = this%budget_0(:,3) + this%tmp_meanC
+        if(this%igrid_sim%isStratified) then
+            call this%get_xy_meanC_from_fhatC(this%igrid_sim%That, this%tmp_meanC)
+            this%budget_0(:,3) = this%budget_0(:,3) + this%tmp_meanC
+        endif
 
         !! STEP 2: Get Reynolds stresses (IMPORTANT: need to correct for fluctuation before dumping)
         this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%u*this%igrid_sim%u
@@ -733,22 +735,24 @@ contains
         this%budget_0(:,9) = this%budget_0(:,9) + this%tmp_meanC
         
         ! STEP 2: Get Temperature fluxes and variances (IMPORTANT: need to correct for fluctuation before dumping)
-        this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%u*this%igrid_sim%T
-        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
-        this%budget_0(:,10) = this%budget_0(:,10) + this%tmp_meanC
-        
-        this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%v*this%igrid_sim%T
-        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
-        this%budget_0(:,11) = this%budget_0(:,11) + this%tmp_meanC
+        if(this%igrid_sim%isStratified) then
+            this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%u*this%igrid_sim%T
+            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
+            this%budget_0(:,10) = this%budget_0(:,10) + this%tmp_meanC
+            
+            this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%v*this%igrid_sim%T
+            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
+            this%budget_0(:,11) = this%budget_0(:,11) + this%tmp_meanC
 
-        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%TE*this%igrid_sim%w
-        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
-        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,-1,-1)
-        this%budget_0(:,12) = this%budget_0(:,12) + this%tmp_meanC
+            this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%TE*this%igrid_sim%w
+            call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
+            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,-1,-1)
+            this%budget_0(:,12) = this%budget_0(:,12) + this%tmp_meanC
 
-        this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%T*this%igrid_sim%T
-        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
-        this%budget_0(:,13) = this%budget_0(:,13) + this%tmp_meanC
+            this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%T*this%igrid_sim%T
+            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
+            this%budget_0(:,13) = this%budget_0(:,13) + this%tmp_meanC
+        endif
 
         ! STEP 3: SGS stress (also viscous stress if finite reynolds number is being used)
         call this%get_xy_meanE_from_fE(this%igrid_sim%tau13, this%tmp_meanE) 

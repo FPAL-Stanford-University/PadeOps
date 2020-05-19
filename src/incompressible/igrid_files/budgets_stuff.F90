@@ -25,6 +25,8 @@ subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc
 
     this%wb => wb
     this%uturb => uturb 
+    this%vturb => null()
+    this%wturb => null()
 
     ! Safeguards
     this%StoreForBudgets = .true. 
@@ -39,9 +41,12 @@ subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc
     if (this%useControl) then
         call message("WARNING: Budget calculations ignore the frame angle controller effects.", 324)
     end if 
+
+    call message(1,"Before set_budget_rhs in instrumentForBudgets")
+    call this%set_budget_rhs_to_zero()
+
     call message(0, "Budget calculations instrumented within igrid!")
 
-    call this%set_budget_rhs_to_zero()
 end subroutine
 
 subroutine instrumentForBudgets_TimeAvg(this, uc, vc, wc, usgs, vsgs, wsgs,  px, py, pz, uturb, vturb, wturb, pxdns, pydns, pzdns, uvisc, vvisc, wvisc, ucor, vcor, wcor, wb)  
@@ -71,9 +76,15 @@ subroutine instrumentForBudgets_TimeAvg(this, uc, vc, wc, usgs, vsgs, wsgs,  px,
     
     this%wb => wb
 
-    this%pxdns => pxdns
-    this%pydns => pydns
-    this%pzdns => pzdns
+    if(this%computeDNSPressure) then
+        this%pxdns => pxdns
+        this%pydns => pydns
+        this%pzdns => pzdns
+    else
+        this%pxdns => null()
+        this%pydns => null()
+        this%pzdns => null()
+    endif
 
     this%uturb => uturb 
     this%vturb => vturb 
@@ -93,9 +104,12 @@ subroutine instrumentForBudgets_TimeAvg(this, uc, vc, wc, usgs, vsgs, wsgs,  px,
     if (this%useControl) then
         call message("WARNING: Budget calculations ignore the frame angle controller effects.", 324)
     end if 
+
+    call message(1,"Before set_budget_rhs in instrumentForBudgets_timeAvg")
+    call this%set_budget_rhs_to_zero()
+
     call message(0, "Time averaging budget calculations instrumented within igrid!")
 
-    call this%set_budget_rhs_to_zero()
 end subroutine
 
 subroutine set_budget_rhs_to_zero(this)
@@ -158,6 +172,11 @@ subroutine getMomentumTerms(this)
         this%cbuffzE(:,:,this%nz+1,1) = -this%cbuffzE(:,:,this%nz+1,2)
         call transpose_z_to_y(this%cbuffzE(:,:,:,1),this%pz, this%sp_gpE)
 
+        !print *, 'pxdns: ', associated(this%pxdns)
+        !print *, 'pydns: ', associated(this%pydns)
+        !print *, 'pzdns: ', associated(this%pzdns)
+        !print *, 'prdns: ', size(this%pressure_dns)
+        !print *, 'cbuff: ', size(this%cbuffyC)
         if(associated(this%pxdns) .and. associated(this%pydns) .and. associated(this%pzdns)) then
             call this%spectC%fft(this%pressure_dns, this%cbuffyC(:,:,:,1))
             this%cbuffyC(:,:,:,1) = -this%cbuffyC(:,:,:,1) ! Pressure terms is -gradP
