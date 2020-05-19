@@ -202,6 +202,20 @@
        if (this%useHITForcing) then
            call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep)
        end if
+
+       if (this%useHITRealSpaceLinearForcing) then
+           this%rbuffxC(:,:,:,1) = this%u/this%HITForceTimeScale
+           call this%spectC%fft(this%rbuffxC(:,:,:,1),this%cbuffyC(:,:,:,1))
+           this%u_rhs = this%u_rhs + this%cbuffyC(:,:,:,1)
+
+           this%rbuffxC(:,:,:,1) = this%v/this%HITForceTimeScale
+           call this%spectC%fft(this%rbuffxC(:,:,:,1),this%cbuffyC(:,:,:,1))
+           this%v_rhs = this%v_rhs + this%cbuffyC(:,:,:,1)
+           
+           this%rbuffxE(:,:,:,1) = this%w/this%HITForceTimeScale
+           call this%spectE%fft(this%rbuffxE(:,:,:,1),this%cbuffyE(:,:,:,1))
+           this%w_rhs = this%w_rhs + this%cbuffyE(:,:,:,1)
+       end if 
        
        ! Step 8: Fringe and sponge source terms
        if (this%useSponge) then
