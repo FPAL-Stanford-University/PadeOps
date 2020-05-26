@@ -28,6 +28,14 @@ subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc
     this%vturb => null()
     this%wturb => null()
 
+    if(this%computeDNSPressure) then
+        ! do nothing so as to not break what budg_tavg might have done
+    else
+        this%pxdns => null()
+        this%pydns => null()
+        this%pzdns => null()
+    endif
+
     ! Safeguards
     this%StoreForBudgets = .true. 
     if (.not. this%fastCalcPressure) then
