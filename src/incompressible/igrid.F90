@@ -295,7 +295,7 @@ module IncompressibleGrid
         logical :: StoreForBudgets = .false. 
         complex(rkind), dimension(:,:,:), pointer :: ucon, vcon, wcon, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb, pxdns, pydns, pzdns, vturb, wturb 
 
-        integer :: BuoyancyDirection 
+        integer :: buoyancyDirection 
 
         contains
             procedure          :: init
@@ -416,11 +416,11 @@ contains
         logical, intent(in), optional :: initialize2decomp
         integer :: num_scalars = 0
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
-        logical :: sgsmod_stratified, Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false., useScalars = .false. 
+        logical :: sgsmod_stratified, dump_NU_SGS = .false., dump_KAPPA_SGS = .false., computeTurbinePressure = .false., useScalars = .false. 
         integer :: zHubIndex = 16
         real(rkind) :: angleTrigger=0.1d0, Ra = 1.d14
         character(len=4) :: scheme_xy = "FOUR"
-        integer :: MeanTIDX, MeanRID, VizDump_schedule = 0    
+        integer :: MeanTIDX, MeanRID, vizDump_schedule = 0    
         character(len=clen) :: MeanFilesDir, powerDumpDir 
         logical :: WriteTurbineForce = .false., useforcedStratification = .false., useDynamicYaw = .FALSE. 
         integer :: buoyancyDirection = 3, yawUpdateInterval = 100000, dealiasType = 0
@@ -428,7 +428,7 @@ contains
         real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                         useRestartFile, restartFile_TID, restartFile_RID, CviscDT
-        namelist /IO/ VizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
+        namelist /IO/ vizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                     & dump_NU_SGS, dump_KAPPA_SGS, t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe,&
                     & t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
@@ -1291,7 +1291,7 @@ contains
       
 
        ! STEP 29: Set the buoyancy direction
-       this%BuoyancyDirection = BuoyancyDirection
+       this%buoyancyDirection = buoyancyDirection
        this%useforcedStratification = useforcedStratification
 
 
