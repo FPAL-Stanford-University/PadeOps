@@ -49,6 +49,10 @@ program pblwt
        
     end do 
  
+    call budg_xyavg%doBudgets(.true.)      !<-- Force dump budget information if active
+
+    call budg_tavg%doBudgets(.true.)       !<-- Force dump budget information if active
+
     call igp%finalize_io()                  !<-- Close the header file (wrap up i/o)
     
     call budg_xyavg%destroy()          !<-- release memory taken by the budget class 

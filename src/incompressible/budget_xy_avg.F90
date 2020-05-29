@@ -3,7 +3,8 @@ module budgets_xy_avg_mod
    use decomp_2d
    use reductions, only: p_sum
    use incompressibleGrid, only: igrid  
-   use exits, only: message
+   use exits, only: message, GracefulExit
+   use constants, only: im0, half,two
    use basic_io, only: read_2d_ascii, write_2d_ascii
    use mpi 
 
@@ -99,7 +100,7 @@ module budgets_xy_avg_mod
         private
         integer :: budgetType = 1, run_id, nz
 
-        complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb 
+        complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb , xspectra_mean
         type(igrid), pointer :: igrid_sim 
         real(rkind), dimension(:), allocatable :: U_mean, V_mean, dUdz, dVdz, uw, vw
         real(rkind), dimension(:), allocatable :: dUdzE, dVdzE
@@ -121,7 +122,7 @@ module budgets_xy_avg_mod
         integer :: tidx_dump 
         integer :: tidx_compute
         integer :: tidx_budget_start 
-        logical :: do_budgets
+        logical :: do_budgets, do_spectra, forceDump
 
     contains
         procedure           :: init
@@ -147,6 +148,8 @@ module budgets_xy_avg_mod
         procedure, private  :: get_xy_meanE_from_fE 
         procedure, private  :: interp_1d_Edge2Cell 
         procedure, private  :: ddz_1d_Cell2Cell
+        procedure, private  :: Assemble_spectra
+        procedure, private  :: dump_spectra
 
    end type 
 
@@ -162,8 +165,8 @@ contains
         integer :: ioUnit, ierr,  budgetType = 1, restart_tid = 0, restart_rid = 0, restart_counter = 0
         logical :: restart_budgets = .false. 
         integer :: tidx_compute = 1000000, tidx_dump = 1000000, tidx_budget_start = 0
-        logical :: do_budgets = .false. 
-        namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start 
+        logical :: do_budgets = .false., do_spectra = .false.
+        namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start, do_spectra 
         
         ! STEP 1: Read in inputs, link pointers and allocate budget vectors
         ioUnit = 534
@@ -175,9 +178,11 @@ contains
         this%run_id = igrid_sim%runid
         this%nz = igrid_sim%nz
         this%do_budgets = do_budgets
+        this%do_spectra = do_spectra
         this%tidx_dump = tidx_dump
         this%tidx_compute = tidx_compute
         this%tidx_budget_start = tidx_budget_start  
+        this%forceDump = .false.
 
         this%budgets_dir = budgets_dir
         this%budgetType = budgetType 
@@ -203,6 +208,9 @@ contains
             end if 
 
             if (restart_budgets) then
+                if(this%do_spectra) then
+                    call GracefulExit("restart budgets not supported with do_spectra. Set one of them to false", 100)
+                endif
                 call this%RestartBudget(restart_rid, restart_tid, restart_counter)
             else
                 call this%resetBudget()
@@ -250,13 +258,25 @@ contains
             call igrid_sim%instrumentForBudgets(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
                        & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
                        & this%vcor, this%wcor, this%uturb) 
+
+            if(this%do_spectra) then
+                ! note :: the number of variables for which spectra are to be calculated
+                ! must be smaller than nyg
+                call igrid_sim%spectC%alloc_r2c_out(this%xspectra_mean)
+            endif
+
         end if 
 
     end subroutine 
 
 
-    subroutine doBudgets(this)
+    subroutine doBudgets(this, forceDump)
         class(budgets_xy_avg), intent(inout) :: this
+        logical, intent(in), optional :: forceDump
+
+        if(present(forceDump)) then
+            this%forceDump = forceDump
+        endif
 
         if (this%do_budgets .and. (this%igrid_sim%step>this%tidx_budget_start)) then
         
@@ -264,12 +284,15 @@ contains
                 call this%updateBudget()
             end if
 
-            if (mod(this%igrid_sim%step,this%tidx_dump) .eq. 0) then
+            if ((mod(this%igrid_sim%step,this%tidx_dump) .eq. 0) .or. this%forceDump) then
                 call this%dumpBudget()
                 call message(0,"Dumped a budget .stt file")
             end if 
 
         end if 
+
+        this%forceDump = .false. ! reset to default value
+
     end subroutine 
 
     subroutine ResetBudget(this)
@@ -285,6 +308,10 @@ contains
         this%budget_4_33 = 0.d0 
         this%budget_4_11 = 0.d0 
 
+        if(this%do_spectra) then
+            this%xspectra_mean = im0
+        endif
+
     end subroutine 
     
     subroutine destroy(this)
@@ -294,8 +321,11 @@ contains
         if(this%do_budgets) then    !---should we ideally check if (allocated(...)) for each array before deallocating ??
             deallocate(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
                        & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
-                       & this%vcor, this%wcor, this%uturb)  
+                       & this%vcor, this%wcor, this%uturb)
             deallocate(this%budget_0, this%budget_1)
+            if(this%do_spectra) then
+                deallocate(this%xspectra_mean)
+            endif
         endif
 
     end subroutine 
@@ -330,6 +360,10 @@ contains
             call this%AssembleBudget4_33()
             call this%AssembleBudget4_11()
         end select
+
+        if(this%do_spectra) then
+            call this%Assemble_spectra()
+        endif
 
         this%counter = this%counter + 1
 
@@ -504,7 +538,153 @@ contains
                 fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
                 call write_2d_ascii(this%budget_4s, fname) 
             end if
+
         end if 
+
+        if(this%do_spectra) then
+            call this%dump_spectra()
+        endif
+
+    end subroutine 
+
+    subroutine Assemble_spectra(this)
+        class(budgets_xy_avg), intent(inout) :: this
+        integer :: k, j, jindx
+
+        ! u velocity
+        jindx = 1
+        call this%igrid_sim%spectC%fft1_x2y(this%igrid_sim%u,this%igrid_sim%cbuffyC(:,:,:,1))
+        do k = 1, size(this%igrid_sim%cbuffyC, 3)
+          do j = 1, size(this%igrid_sim%cbuffyC, 2)
+            this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%igrid_sim%cbuffyC(:,j,k,1))
+          end do
+        end do
+
+        ! v velocity
+        jindx = 2
+        call this%igrid_sim%spectC%fft1_x2y(this%igrid_sim%v,this%igrid_sim%cbuffyC(:,:,:,1))
+        do k = 1, size(this%igrid_sim%cbuffyC, 3)
+          do j = 1, size(this%igrid_sim%cbuffyC, 2)
+            this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%igrid_sim%cbuffyC(:,j,k,1))
+          end do
+        end do
+
+        ! w velocity
+        jindx = 3
+        call this%igrid_sim%spectC%fft1_x2y(this%igrid_sim%wC,this%igrid_sim%cbuffyC(:,:,:,1))
+        do k = 1, size(this%igrid_sim%cbuffyC, 3)
+          do j = 1, size(this%igrid_sim%cbuffyC, 2)
+            this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%igrid_sim%cbuffyC(:,j,k,1))
+          end do
+        end do
+
+        ! TKE
+        jindx = 4
+        this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%u*this%igrid_sim%u
+        this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%rbuffxC(:,:,:,1) + this%igrid_sim%v*this%igrid_sim%v
+        this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%rbuffxC(:,:,:,1) + this%igrid_sim%wC*this%igrid_sim%wC
+        !this%igrid_sim%rbuffxC(:,:,:,1) = half*this%igrid_sim%rbuffxC(:,:,:,1) ! not required because this only changes the mean
+
+        call this%igrid_sim%spectC%fft1_x2y(this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%cbuffyC(:,:,:,1))
+        do k = 1, size(this%igrid_sim%cbuffyC, 3)
+          do j = 1, size(this%igrid_sim%cbuffyC, 2)
+            this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%igrid_sim%cbuffyC(:,j,k,1))
+          end do
+        end do
+
+        ! pressure
+        if(this%igrid_sim%fastCalcPressure .or. this%igrid_sim%storePressure) then
+            jindx = 5
+            call this%igrid_sim%spectC%fft1_x2y(this%igrid_sim%pressure,this%igrid_sim%cbuffyC(:,:,:,1))
+            do k = 1, size(this%igrid_sim%cbuffyC, 3)
+              do j = 1, size(this%igrid_sim%cbuffyC, 2)
+                this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%igrid_sim%cbuffyC(:,j,k,1))
+              end do
+            end do
+        endif
+
+        if(this%igrid_sim%isStratified) then
+            jindx = jindx + 1    ! T
+            call this%igrid_sim%spectC%fft1_x2y(this%igrid_sim%T,this%igrid_sim%cbuffyC(:,:,:,1))
+            do k = 1, size(this%igrid_sim%cbuffyC, 3)
+              do j = 1, size(this%igrid_sim%cbuffyC, 2)
+                this%xspectra_mean(:,jindx,k) = this%xspectra_mean(:,jindx,k) + abs(this%igrid_sim%cbuffyC(:,j,k,1))
+              end do
+            end do
+        endif
+
+    end subroutine 
+
+    subroutine dump_spectra(this)
+        use decomp_2d_io
+        class(budgets_xy_avg), intent(inout) :: this
+        integer :: dirid, decompdir, nspectra, jindx
+        real(rkind) :: normfac
+        character(len=clen) :: fname, tempname 
+        real(rkind), dimension(this%igrid_sim%sp_gpC%ysz(1),this%igrid_sim%sp_gpC%ysz(2),this%igrid_sim%sp_gpC%ysz(3)) :: tmpvar
+
+        ! Dump horizontally averaged x-spectra
+        dirid = 2; decompdir = 2
+
+        ! --- only 4, 5 or 6 planes of xspextra_mean in y-direction are being used
+        nspectra = 4
+        if(this%igrid_sim%fastCalcPressure .or. this%igrid_sim%storePressure) nspectra = nspectra + 1
+        if(this%igrid_sim%isStratified)                                       nspectra = nspectra + 1
+
+        ! --- for k1 = 1, multiplication factor is 1.0,
+        ! --- for k1 = 2:Nx/2+1, multiplication factor is 2.0
+        normfac = two/real(size(this%igrid_sim%cbuffyC(:,:,:,1),2),rkind)/real(this%counter, rkind)
+        tmpvar(1:this%igrid_sim%sp_gpC%ysz(1),1:nspectra,:) = normfac*this%xspectra_mean(1:this%igrid_sim%sp_gpC%ysz(1),1:nspectra,:)
+        !this%igrid_sim%cbuffyC(1:this%igrid_sim%sp_gpC%ysz(1),1:nspectra,:,2) = normfac*this%xspectra_mean(1:this%igrid_sim%sp_gpC%ysz(1),1:nspectra,:)
+        if(this%igrid_sim%sp_gpC%yst(1)==1) then
+            tmpvar(1,1:nspectra,:) = half*tmpvar(1,1:nspectra,:)
+            !this%igrid_sim%cbuffyC(1,1:nspectra,:,2) = half*this%igrid_sim%cbuffyC(1,1:nspectra,:,2)
+        endif
+
+        ! u Velocity
+        jindx = 1 
+        write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%run_id,"_specu_t",this%igrid_sim%step,".out"
+        fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+        !call decomp_2d_write_plane(decompdir, this%igrid_sim%cbuffyC(:,:,:,2), dirid, jindx, fname, this%igrid_sim%sp_gpC)
+        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%igrid_sim%sp_gpC)
+
+        ! v Velocity
+        jindx = 2 
+        write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%run_id,"_specv_t",this%igrid_sim%step,".out"
+        fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+        !call decomp_2d_write_plane(decompdir, this%igrid_sim%cbuffyC(:,:,:,2), dirid, jindx, fname, this%igrid_sim%sp_gpC)
+        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%igrid_sim%sp_gpC)
+
+        ! w Velocity
+        jindx = 3 
+        write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%run_id,"_specw_t",this%igrid_sim%step,".out"
+        fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+        !call decomp_2d_write_plane(decompdir, this%igrid_sim%cbuffyC(:,:,:,2), dirid, jindx, fname, this%igrid_sim%sp_gpC)
+        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%igrid_sim%sp_gpC)
+
+        ! TKE
+        jindx = 4 
+        write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%run_id,"_speck_t",this%igrid_sim%step,".out"
+        fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+        !call decomp_2d_write_plane(decompdir, this%igrid_sim%cbuffyC(:,:,:,2), dirid, jindx, fname, this%igrid_sim%sp_gpC)
+        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%igrid_sim%sp_gpC)
+
+        if(this%igrid_sim%fastCalcPressure .or. this%igrid_sim%storePressure) then
+            jindx = jindx + 1 ! p
+            write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%run_id,"_specp_t",this%igrid_sim%step,".out"
+            fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+            !call decomp_2d_write_plane(decompdir, this%igrid_sim%cbuffyC(:,:,:,2), dirid, jindx, fname, this%igrid_sim%sp_gpC)
+            call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%igrid_sim%sp_gpC)
+        endif
+
+        if(this%igrid_sim%isStratified) then
+            jindx = jindx + 1 ! T
+            write(tempname,"(A3,I2.2,A8,I6.6,A4)") "Run", this%run_id,"_specT_t",this%igrid_sim%step,".out"
+            fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+            !call decomp_2d_write_plane(decompdir, this%igrid_sim%cbuffyC(:,:,:,2), dirid, jindx, fname, this%igrid_sim%sp_gpC)
+            call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%igrid_sim%sp_gpC)
+        endif
+
     end subroutine 
 
     subroutine restartBudget(this, rid, tid, cid)
@@ -569,6 +749,12 @@ contains
             this%budget_4_11 = this%budget_4_11*(real(cid,rkind) + 1.d-18)
 
         end if 
+
+        if(this%do_spectra) then
+            ! Read in previous spectra
+            ! ---- to be done -------
+        endif
+
     end subroutine 
 
 
