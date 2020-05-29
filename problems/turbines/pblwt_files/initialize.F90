@@ -25,12 +25,12 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     type(decomp_info),                                          intent(in)    :: decomp
     real(rkind),                                                intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
-    real(rkind) :: z0init
+    real(rkind) :: z0init = 1.0d-4, ustarinit  = 1.0d0
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -87,13 +87,13 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
     real(rkind), dimension(:,:,:), allocatable :: randArr
-    real(rkind) :: z0init, epsnd = 0.1, sig
+    real(rkind) :: z0init = 1.0d-4, epsnd = 0.1, sig, ustarinit = 1.0d0
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE, ioUnit, k
     real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0
     real(rkind) :: zpeak = 0.2d0
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -112,7 +112,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
  
     epsnd = 5.0d0
 
-    u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     wC= zero  
    
@@ -121,7 +121,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
     call gaussian_random(randArr,zero,one,seedu + 10*nrank)
     do k = 1,size(u,3)
-        sig = randomScaleFact*(one/kappa)*log(z(1,1,k)/z0init)
+        sig = randomScaleFact*(ustarinit/kappa)*log(z(1,1,k)/z0init)
         u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
     end do  
     deallocate(randArr)
