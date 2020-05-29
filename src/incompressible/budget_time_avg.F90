@@ -119,6 +119,7 @@ module budgets_time_avg_mod
         integer :: tidx_compute
         integer :: tidx_budget_start 
         logical :: do_budgets
+        logical :: forceDump
         logical :: splitPressureDNS
 
     contains
@@ -188,6 +189,7 @@ contains
         this%tidx_budget_start = tidx_budget_start  
         this%useWindTurbines = igrid_sim%useWindTurbines
         this%isStratified    = igrid_sim%isStratified
+        this%forceDump = .false.
 
         this%budgets_dir = budgets_dir
         this%budgetType = budgetType
@@ -276,8 +278,13 @@ contains
     end subroutine 
 
 
-    subroutine doBudgets(this)
+    subroutine doBudgets(this, forceDump)
         class(budgets_time_avg), intent(inout) :: this
+        logical, intent(in), optional :: forceDump
+
+        if(present(forceDump)) then
+            this%forceDump = forceDump
+        endif
 
         if (this%do_budgets .and. (this%igrid_sim%step>this%tidx_budget_start)) then
         
@@ -285,12 +292,15 @@ contains
                 call this%updateBudget()
             end if
 
-            if (mod(this%igrid_sim%step,this%tidx_dump) .eq. 0) then
+            if ((mod(this%igrid_sim%step,this%tidx_dump) .eq. 0) .or. this%forceDump) then
                 call this%dumpBudget()
                 call message(0,"Dumped a budget .stt file")
             end if 
 
         end if 
+
+        this%forceDump = .false. ! reset to default value
+
     end subroutine 
 
     subroutine updateBudget(this)
@@ -994,8 +1004,8 @@ contains
         if(this%do_budgets) then
             deallocate(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, this%px, this%py, this%pz, this%uturb)  
             deallocate(this%budget_0, this%budget_1)
+            deallocate(this%runningSum_sc)
         end if
-        deallocate(this%runningSum_sc)
         if(this%useWindTurbines) then
             deallocate(this%runningSum_sc_turb)
             deallocate(this%runningSum_turb)
