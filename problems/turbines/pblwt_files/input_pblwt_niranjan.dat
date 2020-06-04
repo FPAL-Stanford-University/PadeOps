@@ -1,9 +1,9 @@
 &INPUT
-inputdir              = "/hpc/home/nghaisas/runs/PadeOps/turb/debug"   ! Directory for any input files
-outputdir             = "/hpc/home/nghaisas/runs/PadeOps/turb/debug"   ! Directory for all output files
-nx                    = 96          ! Number of points in X
-ny                    = 96         ! Number of points in Y
-nz                    = 64         ! Number of points in Z
+inputdir              = "/scratch/04076/tg833754/HIT_Interact/tall/pbl/r1l5"   ! Directory for any input files
+outputdir             = "/scratch/04076/tg833754/HIT_Interact/tall/pbl/r1l5"   ! Directory for all output files
+nx                    = 384         ! Number of points in X
+ny                    = 192        ! Number of points in Y
+nz                    = 96         ! Number of points in Z
 tstop                 = 50.D0     ! Physical time to stop the simulation
 dt                    = -0.0001D0   ! Fixed time step value (only used if CFL is set to negative)
 CFL                   = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
@@ -55,8 +55,8 @@ tid_StatsDump         = 10000        ! Dumping Frequency for Statistics file (# 
 tid_compStats         = 10           ! Frequency of Computing Statistics
 tSimStartStats        = 20.d0        ! Simulation time for starting stats calculations 
 normStatsByUstar      = .FALSE.      ! Normalize Statistics by ustar at each instant
-computeSpectra        = .TRUE.       ! Do you want to compute y- and time-averaged x-spectra?
-timeAvgFullFields     = .TRUE.       ! Do you want to save time-averaged 3D fields?
+computeSpectra        = .FALSE.      ! Do you want to compute y- and time-averaged x-spectra?
+timeAvgFullFields     = .FALSE.      ! Do you want to save time-averaged 3D fields?
 computeVorticity      = .FALSE.      ! Do you want to compute vorticity stats?
 /
 /
@@ -82,7 +82,7 @@ PrandtlFluid = 1.0d0                    ! Prandtl number of the fluid
 BulkRichardson = 0.0d0                  ! Richardson number used when BuoyancyTermType == 2
 G_geostrophic         = 1.D0            ! Geostrophic wind magnitude; used if useGeostrophicForcing is ON
 G_alpha               = 0.D0            ! Geostrophic wind direction with x axis; used if useGeostrophicForcing is ON
-dpFdx                 = 1.D0            ! Additional Acceleration in X; used if useExtraForcing is ON
+dpFdx                 = 0.444381462D0   ! Additional Acceleration in X; used if useExtraForcing is ON
 dpFdy                 = 0.D0            ! Additional Acceleration in Y; used if useExtraForcing is ON
 dpFdz                 = 0.D0            ! Additional Acceleration in Z; used if useExtraForcing is ON
 useSGS                = .TRUE.          ! Do you want to use the SGS model?  
@@ -129,7 +129,7 @@ useControl            = .false.           ! Do you want to dynamically change th
 &SGS_MODEL
 DynamicProcedureType        = 0           ! 0 :: No dynamic procedure
 SGSModelID                  = 2           ! 0: smagorinsky, 1: sigma, 2: AMD
-z0                          = 1.d-4       ! Roughness length scale (CAREFUL: This is a non-dimensionalized number)
+z0                          = 5.96d-5     ! Roughness length scale (CAREFUL: This is a non-dimensionalized number)
 z0t                         = 1.d-4       ! Roughness length scale (CAREFUL: This is a non-dimensionalized number)
 useWallDamping              = .FALSE.     ! Use the Wall Damping Function 
 ncWall                      = 3.d0        ! Wall Damping Function Exponent
@@ -200,8 +200,10 @@ restart_tid         = 100
 restart_counter     = 100
 tidx_dump           = 10000
 tidx_compute        = 10
-do_budgets          = .false.
-tidx_budget_start   = 24500
+do_budgets          = .true.
+do_spectra          = .true.
+do_autocorrel       = .true.
+time_budget_start   = 20.0d0
 /
 /
 &KSPREPROCESS
@@ -232,9 +234,9 @@ moisture_info_dir     = "NULL"         ! Where is input file for moisture locate
 /
 /
 &PBLINPUT
-Lx                    = 3.141592653589793d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                    = 3.141592653589793d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Lz                    = 1.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
-z0init                = 1.d-4               ! Roughness scale used to initialize the profile
-ustarinit             = 1.0d0               ! Friction velocity used to initialize the profile
+Lx                    = 2.513274122871835d1 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                    = 6.283185307179586d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Lz                    = 1.5d0               ! Domain Height (appropriate dimesnions/non-dimensionalized)
+z0init                = 5.96d-5             ! Roughness scale used to initialize the profile
+ustarinit             = 0.8164387d0         ! Roughness scale used to initialize the profile
 /
