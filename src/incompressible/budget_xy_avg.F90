@@ -4,7 +4,7 @@ module budgets_xy_avg_mod
    use reductions, only: p_sum
    use incompressibleGrid, only: igrid  
    use exits, only: message, GracefulExit
-   use constants, only: im0, half,two
+   use constants, only: half,two,one,zero
    use basic_io, only: read_2d_ascii, write_2d_ascii
    use mpi 
 
@@ -100,19 +100,19 @@ module budgets_xy_avg_mod
         private
         integer :: budgetType = 1, run_id, nz
 
-        complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb , xspectra_mean
+        complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb
         type(igrid), pointer :: igrid_sim 
         real(rkind), dimension(:), allocatable :: U_mean, V_mean, dUdz, dVdz, uw, vw
         real(rkind), dimension(:), allocatable :: dUdzE, dVdzE
         
         real(rkind), dimension(:,:), allocatable :: budget_0, budget_1, budget_2, budget_4s
         real(rkind), dimension(:,:), allocatable :: budget_4_13, budget_4_23, budget_4_12, budget_4_11, budget_4_22, budget_4_33
-        real(rkind), dimension(:,:), allocatable :: budget_3s, budget_3, budget_0s, budget_1s
+        real(rkind), dimension(:,:), allocatable :: budget_3s, budget_3, budget_0s, budget_1s, mean_qty
         integer :: counter
         real(rkind) :: avgFact 
         character(len=clen) :: budgets_dir
         real(rkind), dimension(:), allocatable :: tmp_meanC, tmp_meanE
-        real(rkind), dimension(:,:,:), allocatable :: tmpC_1d, tmpE_1d, ddz_tmpC_1d
+        real(rkind), dimension(:,:,:), allocatable :: tmpC_1d, tmpE_1d, ddz_tmpC_1d, xspectra_mean, ruu
         real(rkind), dimension(:), allocatable :: buoy_hydrostatic
         real(rkind), dimension(:), allocatable :: wTh, P_mean, tau_13_mean, tau_23_mean, tau_33_mean
 
@@ -122,7 +122,8 @@ module budgets_xy_avg_mod
         integer :: tidx_dump 
         integer :: tidx_compute
         integer :: tidx_budget_start 
-        logical :: do_budgets, do_spectra, forceDump
+        real(rkind) :: time_budget_start 
+        logical :: do_budgets, do_spectra, do_autocorrel, forceDump
 
     contains
         procedure           :: init
@@ -150,6 +151,8 @@ module budgets_xy_avg_mod
         procedure, private  :: ddz_1d_Cell2Cell
         procedure, private  :: Assemble_spectra
         procedure, private  :: dump_spectra
+        procedure, private  :: Assemble_autocorrel
+        procedure, private  :: dump_autocorrel
 
    end type 
 
@@ -164,9 +167,10 @@ contains
         character(len=clen) :: budgets_dir = "NULL"
         integer :: ioUnit, ierr,  budgetType = 1, restart_tid = 0, restart_rid = 0, restart_counter = 0
         logical :: restart_budgets = .false. 
-        integer :: tidx_compute = 1000000, tidx_dump = 1000000, tidx_budget_start = 0
-        logical :: do_budgets = .false., do_spectra = .false.
-        namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start, do_spectra 
+        integer :: tidx_compute = 1000000, tidx_dump = 1000000, tidx_budget_start = -100
+        logical :: do_budgets = .false., do_spectra = .false., do_autocorrel = .false.
+        real(rkind) :: time_budget_start = -1.0d0
+        namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start, time_budget_start, do_spectra, do_autocorrel
         
         ! STEP 1: Read in inputs, link pointers and allocate budget vectors
         ioUnit = 534
@@ -179,14 +183,20 @@ contains
         this%nz = igrid_sim%nz
         this%do_budgets = do_budgets
         this%do_spectra = do_spectra
+        this%do_autocorrel = do_autocorrel
         this%tidx_dump = tidx_dump
         this%tidx_compute = tidx_compute
         this%tidx_budget_start = tidx_budget_start  
+        this%time_budget_start = time_budget_start  
         this%forceDump = .false.
 
         this%budgets_dir = budgets_dir
         this%budgetType = budgetType 
         this%avgFact = 1.d0/(real(igrid_sim%nx,rkind)*real(igrid_sim%ny,rkind))
+
+        if((this%tidx_budget_start > 0) .and. (this%time_budget_start > 0.0d0)) then
+            call GracefulExit("Both tidx_budget_start and time_budget_start in budget_xy_avg are positive. Turn one negative", 100)
+        endif
 
         if(this%do_budgets) then
             allocate(this%Budget_0s(this%nz,21))
@@ -207,9 +217,14 @@ contains
                 this%budgets_dir = igrid_sim%outputDir
             end if 
 
+            allocate(this%mean_qty(11,1))
+
             if (restart_budgets) then
                 if(this%do_spectra) then
                     call GracefulExit("restart budgets not supported with do_spectra. Set one of them to false", 100)
+                endif
+                if(this%do_autocorrel) then
+                    call GracefulExit("restart budgets not supported with do_autocorrel. Set one of them to false", 100)
                 endif
                 call this%RestartBudget(restart_rid, restart_tid, restart_counter)
             else
@@ -262,7 +277,11 @@ contains
             if(this%do_spectra) then
                 ! note :: the number of variables for which spectra are to be calculated
                 ! must be smaller than nyg
-                call igrid_sim%spectC%alloc_r2c_out(this%xspectra_mean)
+                allocate(this%xspectra_mean(this%igrid_sim%sp_gpC%ysz(1),this%igrid_sim%sp_gpC%ysz(2),this%igrid_sim%sp_gpC%ysz(3)))   
+            endif
+
+            if(this%do_autocorrel) then
+                allocate(this%ruu(this%igrid_sim%gpC%ysz(1), this%igrid_sim%gpC%ysz(2), this%igrid_sim%gpC%ysz(3)))
             endif
 
         end if 
@@ -278,7 +297,8 @@ contains
             this%forceDump = forceDump
         endif
 
-        if (this%do_budgets .and. (this%igrid_sim%step>this%tidx_budget_start)) then
+        if (this%do_budgets .and. ((this%igrid_sim%step>this%tidx_budget_start) .or. &
+                                   (this%igrid_sim%tsim>this%time_budget_start))) then
         
             if (mod(this%igrid_sim%step,this%tidx_compute) .eq. 0) then
                 call this%updateBudget()
@@ -307,9 +327,15 @@ contains
         this%budget_4_23 = 0.d0 
         this%budget_4_33 = 0.d0 
         this%budget_4_11 = 0.d0 
+        this%mean_qty = 0.d0 
 
         if(this%do_spectra) then
-            this%xspectra_mean = im0
+            this%xspectra_mean = zero
+        endif
+
+        if(this%do_autocorrel) then
+            ! initialize all allocated variables
+            this%ruu = zero
         endif
 
     end subroutine 
@@ -323,8 +349,12 @@ contains
                        & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
                        & this%vcor, this%wcor, this%uturb)
             deallocate(this%budget_0, this%budget_1)
+            deallocate(this%mean_qty)
             if(this%do_spectra) then
                 deallocate(this%xspectra_mean)
+            endif
+            if(this%do_autocorrel) then
+                deallocate(this%ruu)
             endif
         endif
 
@@ -365,6 +395,10 @@ contains
             call this%Assemble_spectra()
         endif
 
+        if(this%do_autocorrel) then
+            call this%Assemble_autocorrel()
+        endif
+
         this%counter = this%counter + 1
 
     end subroutine 
@@ -397,6 +431,13 @@ contains
             this%budget_0(:,11) = this%budget_0(:,11) + this%budget_0(:,2)*this%budget_0(:,3) ! <vT>
             this%budget_0(:,13) = this%budget_0(:,13) + this%budget_0(:,3)*this%budget_0(:,3) ! <TT>
             this%budget_0 = this%budget_0*(real(this%counter,rkind) + 1.d-18)
+
+            ! Mean Quantities:
+            write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_meanqty","_t",this%igrid_sim%step,"_n",this%counter,".stt"
+            fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+            this%mean_qty = this%mean_qty / (real(this%counter,rkind) + 1.d-18)
+            call write_2d_ascii(this%mean_qty, fname)
+            this%mean_qty = this%mean_qty * (real(this%counter,rkind) + 1.d-18)
 
             ! Budget 1: 
             if (this%budgetType>0) then
@@ -543,6 +584,230 @@ contains
 
         if(this%do_spectra) then
             call this%dump_spectra()
+        endif
+
+        if(this%do_autocorrel) then
+            call this%dump_autocorrel()
+        endif
+
+    end subroutine 
+
+    subroutine Assemble_autocorrel(this)
+        class(budgets_xy_avg), intent(inout) :: this
+
+        integer :: i, j, k, i2, ir, jindx
+
+        this%igrid_sim%rbuffxC(:,:,:,1) = zero
+        jindx = 1 ! u velocity
+        do k = 1, this%igrid_sim%gpC%xsz(3)
+          do j = 1, this%igrid_sim%gpC%xsz(2)
+            do ir = 1, this%igrid_sim%gpC%xsz(1)/2 + 1
+              do i = 1, this%igrid_sim%gpC%xsz(1)
+                i2 = mod(i+ir-1, this%igrid_sim%gpC%xsz(1))
+                if(i2==0) i2 = this%igrid_sim%gpC%xsz(1)
+                !this%ruu(ir,j,k) = this%ruu(ir,j,k) + this%igrid_sim%u(i,j,k)*this%igrid_sim%u(i2,j,k)
+                !this%ruu(ir,jindx,k) = this%ruu(ir,jindx,k) + sum(this%igrid_sim%u(i,:,k)*this%igrid_sim%u(i2,:,k))
+                this%igrid_sim%rbuffxC(ir,j,k,1) = this%igrid_sim%rbuffxC(ir,j,k,1) + this%igrid_sim%u(i,j,k)*this%igrid_sim%u(i2,j,k)
+              enddo
+            enddo
+          enddo
+        enddo
+        call transpose_x_to_y(this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+        do k = 1, this%igrid_sim%gpC%ysz(3)
+          do j = 1, this%igrid_sim%gpC%ysz(2)
+              this%ruu(:,jindx,k) = this%ruu(:,jindx,k) + this%igrid_sim%rbuffyC(:,j,k,1)
+          enddo
+        enddo
+
+        this%igrid_sim%rbuffxC(:,:,:,1) = zero
+        jindx = 2 ! v velocity
+        do k = 1, this%igrid_sim%gpC%xsz(3)
+          do j = 1, this%igrid_sim%gpC%xsz(2)
+            do ir = 1, this%igrid_sim%gpC%xsz(1)/2 + 1
+              do i = 1, this%igrid_sim%gpC%xsz(1)
+                i2 = mod(i+ir-1, this%igrid_sim%gpC%xsz(1))
+                if(i2==0) i2 = this%igrid_sim%gpC%xsz(1)
+                this%igrid_sim%rbuffxC(ir,j,k,1) = this%igrid_sim%rbuffxC(ir,j,k,1) + this%igrid_sim%v(i,j,k)*this%igrid_sim%v(i2,j,k)
+              enddo
+            enddo
+          enddo
+        enddo
+        call transpose_x_to_y(this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+        do k = 1, this%igrid_sim%gpC%ysz(3)
+          do j = 1, this%igrid_sim%gpC%ysz(2)
+              this%ruu(:,jindx,k) = this%ruu(:,jindx,k) + this%igrid_sim%rbuffyC(:,j,k,1)
+          enddo
+        enddo
+
+        this%igrid_sim%rbuffxC(:,:,:,1) = zero
+        jindx = 3 ! w velocity
+        do k = 1, this%igrid_sim%gpC%xsz(3)
+          do j = 1, this%igrid_sim%gpC%xsz(2)
+            do ir = 1, this%igrid_sim%gpC%xsz(1)/2 + 1
+              do i = 1, this%igrid_sim%gpC%xsz(1)
+                i2 = mod(i+ir-1, this%igrid_sim%gpC%xsz(1))
+                if(i2==0) i2 = this%igrid_sim%gpC%xsz(1)
+                this%igrid_sim%rbuffxC(ir,j,k,1) = this%igrid_sim%rbuffxC(ir,j,k,1) + this%igrid_sim%wC(i,j,k)*this%igrid_sim%wC(i2,j,k)
+              enddo
+            enddo
+          enddo
+        enddo
+        call transpose_x_to_y(this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+        do k = 1, this%igrid_sim%gpC%ysz(3)
+          do j = 1, this%igrid_sim%gpC%ysz(2)
+              this%ruu(:,jindx,k) = this%ruu(:,jindx,k) + this%igrid_sim%rbuffyC(:,j,k,1)
+          enddo
+        enddo
+
+        this%igrid_sim%rbuffxC(:,:,:,1) = zero
+        jindx = 4 ! TKE
+        this%igrid_sim%rbuffxC(:,:,:,2) = this%igrid_sim%u*this%igrid_sim%u
+        this%igrid_sim%rbuffxC(:,:,:,2) = this%igrid_sim%rbuffxC(:,:,:,2) + this%igrid_sim%v*this%igrid_sim%v
+        this%igrid_sim%rbuffxC(:,:,:,2) = this%igrid_sim%rbuffxC(:,:,:,2) + this%igrid_sim%wC*this%igrid_sim%wC
+        this%igrid_sim%rbuffxC(:,:,:,2) = half*this%igrid_sim%rbuffxC(:,:,:,2) ! not required because this only changes the mean
+        do k = 1, this%igrid_sim%gpC%xsz(3)
+          do j = 1, this%igrid_sim%gpC%xsz(2)
+            do ir = 1, this%igrid_sim%gpC%xsz(1)/2 + 1
+              do i = 1, this%igrid_sim%gpC%xsz(1)
+                i2 = mod(i+ir-1, this%igrid_sim%gpC%xsz(1))
+                if(i2==0) i2 = this%igrid_sim%gpC%xsz(1)
+                this%igrid_sim%rbuffxC(ir,j,k,1) = this%igrid_sim%rbuffxC(ir,j,k,1) + this%igrid_sim%rbuffxC(i,j,k,2)*this%igrid_sim%rbuffxC(i2,j,k,2)
+              enddo
+            enddo
+          enddo
+        enddo
+        call transpose_x_to_y(this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+        do k = 1, this%igrid_sim%gpC%ysz(3)
+          do j = 1, this%igrid_sim%gpC%ysz(2)
+              this%ruu(:,jindx,k) = this%ruu(:,jindx,k) + this%igrid_sim%rbuffyC(:,j,k,1)
+          enddo
+        enddo
+
+        ! pressure
+        if(this%igrid_sim%fastCalcPressure .or. this%igrid_sim%storePressure) then
+          this%igrid_sim%rbuffxC(:,:,:,1) = zero
+          jindx = 5
+          do k = 1, this%igrid_sim%gpC%xsz(3)
+            do j = 1, this%igrid_sim%gpC%xsz(2)
+              do ir = 1, this%igrid_sim%gpC%xsz(1)/2 + 1
+                do i = 1, this%igrid_sim%gpC%xsz(1)
+                  i2 = mod(i+ir-1, this%igrid_sim%gpC%xsz(1))
+                  if(i2==0) i2 = this%igrid_sim%gpC%xsz(1)
+                  this%igrid_sim%rbuffxC(ir,j,k,1) = this%igrid_sim%rbuffxC(ir,j,k,1) + this%igrid_sim%pressure(i,j,k)*this%igrid_sim%pressure(i2,j,k)
+                enddo
+              enddo
+            enddo
+          enddo
+          call transpose_x_to_y(this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+          do k = 1, this%igrid_sim%gpC%ysz(3)
+            do j = 1, this%igrid_sim%gpC%ysz(2)
+                this%ruu(:,jindx,k) = this%ruu(:,jindx,k) + this%igrid_sim%rbuffyC(:,j,k,1)
+            enddo
+          enddo
+        endif
+
+        if(this%igrid_sim%isStratified) then
+          this%igrid_sim%rbuffxC(:,:,:,1) = zero
+          jindx = jindx + 1    ! T
+          do k = 1, this%igrid_sim%gpC%xsz(3)
+            do j = 1, this%igrid_sim%gpC%xsz(2)
+              do ir = 1, this%igrid_sim%gpC%xsz(1)/2 + 1
+                do i = 1, this%igrid_sim%gpC%xsz(1)
+                  i2 = mod(i+ir-1, this%igrid_sim%gpC%xsz(1))
+                  if(i2==0) i2 = this%igrid_sim%gpC%xsz(1)
+                  this%igrid_sim%rbuffxC(ir,j,k,1) = this%igrid_sim%rbuffxC(ir,j,k,1) + this%igrid_sim%T(i,j,k)*this%igrid_sim%T(i2,j,k)
+                enddo
+              enddo
+            enddo
+          enddo
+          call transpose_x_to_y(this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+          do k = 1, this%igrid_sim%gpC%ysz(3)
+            do j = 1, this%igrid_sim%gpC%ysz(2)
+                this%ruu(:,jindx,k) = this%ruu(:,jindx,k) + this%igrid_sim%rbuffyC(:,j,k,1)
+            enddo
+          enddo
+        endif
+
+    end subroutine 
+
+    subroutine dump_autocorrel(this)
+        use decomp_2d_io
+        class(budgets_xy_avg), intent(inout) :: this
+        real(rkind), dimension(this%igrid_sim%gpC%ysz(1),this%igrid_sim%gpC%ysz(2),this%igrid_sim%gpC%ysz(3)) :: tmpvar
+        real(rkind) :: normfac, utmpz
+        integer :: dirid, decompdir, jindx, k
+        character(len=clen) :: fname, tempname 
+
+        ! get the squares of the means
+        do k = 1, size(this%budget_0, 1)
+            jindx = 1 ! u velocity
+            utmpz = this%budget_0(k, jindx)/(real(this%counter,rkind) + 1.d-18)
+            this%igrid_sim%rbuffzC(:,jindx,k,1) = utmpz*utmpz
+
+            jindx = 2 ! v velocity
+            utmpz = this%budget_0(k, jindx)/(real(this%counter,rkind) + 1.d-18)
+            this%igrid_sim%rbuffzC(:,jindx,k,1) = utmpz*utmpz
+
+            jindx = 3 ! w velocity
+            ! mean is zero; do nothing
+
+            jindx = 4 ! KE
+            utmpz = this%budget_0(k, jindx)/(real(this%counter,rkind) + 1.d-18)
+            this%igrid_sim%rbuffzC(:,jindx,k,1) = utmpz**4
+
+            if(this%igrid_sim%fastCalcPressure .or. this%igrid_sim%storePressure) then
+                jindx = 5 ! pressure
+                utmpz = this%budget_0(k, 17)/(real(this%counter,rkind) + 1.d-18) ! note :: the index of pressure in budget_0 is 17
+                this%igrid_sim%rbuffzC(:,jindx,k,1) = utmpz*utmpz
+            endif
+
+            if(this%igrid_sim%isStratified) then
+                jindx = jindx + 1 ! T
+                utmpz = this%budget_0(k, 3)/(real(this%counter,rkind) + 1.d-18) ! note :: the index of Temperature in budget_0 is 3
+                this%igrid_sim%rbuffzC(:,jindx,k,1) = utmpz*utmpz
+            endif
+        enddo
+        call transpose_z_to_y(this%igrid_sim%rbuffzC(:,:,:,1), this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+
+        ! normalize and subtract the squares of the means
+        normfac = one/real(this%igrid_sim%gpC%xsz(1) * this%igrid_sim%gpC%ysz(2) * this%counter, rkind)
+        tmpvar = normfac*this%ruu
+        tmpvar = tmpvar - this%igrid_sim%rbuffyC(:,:,:,1)
+
+        dirid = 2; decompdir = 2
+
+        jindx = 1 ! u
+        write(tempname,"(A3,I2.2,A15,I6.6,A4)") "Run", this%run_id,"_autocorrel_u_t",this%igrid_sim%step,".out"
+        fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%igrid_sim%gpC)
+
+        jindx = 2 ! v
+        write(tempname,"(A3,I2.2,A15,I6.6,A4)") "Run", this%run_id,"_autocorrel_v_t",this%igrid_sim%step,".out"
+        fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%igrid_sim%gpC)
+
+        jindx = 3 ! w
+        write(tempname,"(A3,I2.2,A15,I6.6,A4)") "Run", this%run_id,"_autocorrel_w_t",this%igrid_sim%step,".out"
+        fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%igrid_sim%gpC)
+
+        jindx = 4 ! KE
+        write(tempname,"(A3,I2.2,A15,I6.6,A4)") "Run", this%run_id,"_autocorrel_k_t",this%igrid_sim%step,".out"
+        fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+        call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%igrid_sim%gpC)
+
+        if(this%igrid_sim%fastCalcPressure .or. this%igrid_sim%storePressure) then
+            jindx = 5 ! pressure
+            write(tempname,"(A3,I2.2,A15,I6.6,A4)") "Run", this%run_id,"_autocorrel_p_t",this%igrid_sim%step,".out"
+            fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%igrid_sim%gpC)
+        endif
+
+        if(this%igrid_sim%isStratified) then
+            jindx = jindx + 1    ! T
+            write(tempname,"(A3,I2.2,A15,I6.6,A4)") "Run", this%run_id,"_autocorrel_T_t",this%igrid_sim%step,".out"
+            fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(decompdir, tmpvar, dirid, jindx, fname, this%igrid_sim%gpC)
         endif
 
     end subroutine 
@@ -701,6 +966,13 @@ contains
         call read_2d_ascii(this%budget_0, fname)
         this%budget_0 = this%budget_0*(real(cid,rkind) + 1.d-18)
 
+        ! Mean Quantities: 
+        write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",rid,"_meanqty","_t",tid,"_n",cid,".stt"
+        fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+        if (allocated(this%budget_0)) deallocate(this%budget_0)
+        call read_2d_ascii(this%mean_qty, fname)
+        this%mean_qty = this%mean_qty*(real(cid,rkind) + 1.d-18)
+
         ! Budget 1: 
         if (this%budgetType>0) then
             write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",rid,"_budget1","_t",tid,"_n",cid,".stt"
@@ -751,6 +1023,11 @@ contains
         end if 
 
         if(this%do_spectra) then
+            ! Read in previous spectra
+            ! ---- to be done -------
+        endif
+
+        if(this%do_autocorrel) then
             ! Read in previous spectra
             ! ---- to be done -------
         endif
@@ -919,7 +1196,18 @@ contains
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
         call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
         this%budget_0(:,9) = this%budget_0(:,9) + this%tmp_meanC
-        
+      
+        ! time- and horizontally-averaged surface quantities
+        this%mean_qty(1,1) = this%mean_qty(1,1) + this%igrid_sim%sgsmodel%get_ustar()
+        this%mean_qty(2,1) = this%mean_qty(2,1) + this%igrid_sim%sgsmodel%get_uw_surf()
+        this%mean_qty(3,1) = this%mean_qty(3,1) + this%igrid_sim%sgsmodel%get_vw_surf()
+        this%mean_qty(4,1) = this%mean_qty(4,1) + this%igrid_sim%sgsmodel%get_umean()
+        this%mean_qty(5,1) = this%mean_qty(5,1) + this%igrid_sim%sgsmodel%get_vmean()
+        this%mean_qty(6,1) = this%mean_qty(6,1) + this%igrid_sim%sgsmodel%get_uspeedmean()
+        this%mean_qty(7,1) = this%mean_qty(7,1) + this%igrid_sim%sgsmodel%get_GlobalConstant()
+        this%mean_qty(8,1) = this%mean_qty(8,1) + this%igrid_sim%sgsmodel%getMax_DynSmagConst()
+        this%mean_qty(9,1) = this%mean_qty(9,1) + this%igrid_sim%sgsmodel%getMax_DynPrandtl()
+ 
         ! STEP 2: Get Temperature fluxes and variances (IMPORTANT: need to correct for fluctuation before dumping)
         if(this%igrid_sim%isStratified) then
             this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%u*this%igrid_sim%T
@@ -938,6 +1226,9 @@ contains
             this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%T*this%igrid_sim%T
             call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
             this%budget_0(:,13) = this%budget_0(:,13) + this%tmp_meanC
+
+            this%mean_qty(10,1) = this%mean_qty(10,1) + this%igrid_sim%sgsmodel%get_InvObLength()
+            this%mean_qty(11,1) = this%mean_qty(11,1) + this%igrid_sim%sgsmodel%get_wTh_surf()
         endif
 
         ! STEP 3: SGS stress (also viscous stress if finite reynolds number is being used)
