@@ -223,6 +223,18 @@ contains
 
             allocate(this%mean_qty(11,1))
 
+            if(this%do_spectra) then
+                ! note :: the number of variables for which spectra are to be calculated
+                ! must be smaller than nyg
+                allocate(this%xspectra_mean(this%igrid_sim%sp_gpC%ysz(1),this%igrid_sim%sp_gpC%ysz(2),this%igrid_sim%sp_gpC%ysz(3)))   
+            endif
+
+            if(this%do_autocorrel) then
+                allocate(this%RFx(this%igrid_sim%gpC%ysz(1), this%igrid_sim%gpC%ysz(2), this%igrid_sim%gpC%ysz(3)))
+                allocate(this%RFy(this%igrid_sim%gpC%xsz(1), this%igrid_sim%gpC%xsz(2), this%igrid_sim%gpC%xsz(3)))
+                allocate(this%RFz(this%igrid_sim%gpC%ysz(1), this%igrid_sim%gpC%ysz(2), this%igrid_sim%gpC%ysz(3)))
+            endif
+
             if (restart_budgets) then
                 if(this%do_spectra) then
                     call GracefulExit("restart budgets not supported with do_spectra. Set one of them to false", 100)
@@ -277,18 +289,6 @@ contains
             call igrid_sim%instrumentForBudgets(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
                        & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
                        & this%vcor, this%wcor, this%uturb) 
-
-            if(this%do_spectra) then
-                ! note :: the number of variables for which spectra are to be calculated
-                ! must be smaller than nyg
-                allocate(this%xspectra_mean(this%igrid_sim%sp_gpC%ysz(1),this%igrid_sim%sp_gpC%ysz(2),this%igrid_sim%sp_gpC%ysz(3)))   
-            endif
-
-            if(this%do_autocorrel) then
-                allocate(this%RFx(this%igrid_sim%gpC%ysz(1), this%igrid_sim%gpC%ysz(2), this%igrid_sim%gpC%ysz(3)))
-                allocate(this%RFy(this%igrid_sim%gpC%xsz(1), this%igrid_sim%gpC%xsz(2), this%igrid_sim%gpC%xsz(3)))
-                allocate(this%RFz(this%igrid_sim%gpC%ysz(1), this%igrid_sim%gpC%ysz(2), this%igrid_sim%gpC%ysz(3)))
-            endif
 
         end if 
 
