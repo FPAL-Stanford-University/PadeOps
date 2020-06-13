@@ -303,18 +303,19 @@ contains
             this%forceDump = forceDump
         endif
 
-        if (this%do_budgets .and. ((this%igrid_sim%step>this%tidx_budget_start) .or. &
-                                   (this%igrid_sim%tsim>this%time_budget_start))) then
+        if (this%do_budgets) then
+            if( ( (this%tidx_budget_start>0) .and. (this%igrid_sim%step>this%tidx_budget_start) ) .or. &
+                ( (this%time_budget_start>0) .and. (this%igrid_sim%tsim>this%time_budget_start) ) ) then
         
-            if (mod(this%igrid_sim%step,this%tidx_compute) .eq. 0) then
-                call this%updateBudget()
-            end if
+                if (mod(this%igrid_sim%step,this%tidx_compute) .eq. 0) then
+                    call this%updateBudget()
+                end if
 
-            if ((mod(this%igrid_sim%step,this%tidx_dump) .eq. 0) .or. this%forceDump) then
-                call this%dumpBudget()
-                call message(0,"Dumped a budget .stt file")
+                if ((mod(this%igrid_sim%step,this%tidx_dump) .eq. 0) .or. this%forceDump) then
+                    call this%dumpBudget()
+                    call message(0,"Dumped a budget .stt file")
+                end if 
             end if 
-
         end if 
 
         this%forceDump = .false. ! reset to default value
