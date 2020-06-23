@@ -5,7 +5,9 @@ module velocityDiscontinuity_data
     implicit none
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind
-    real(rkind) :: rho_0 = one, p_0 = 0.1_rkind, g_0 = 1d0, tau_0 = 1d-10, u_0 = 0d0, v_0 = 0d0
+    real(rkind) :: rho_0 = one, tau_0 = 1d-10, u_L = 0d0, u_R = 0d0, v_L = 0d0, v_R =0d0
+    real(rkind) :: rho_L =one, rho_R = one, p_L = one, p_R = one
+    real(rkind) :: ge11_L, ge11_R, ge22_L, ge22_R
     real(rkind) :: interface_init = 0.5, thick=0.01
     real(rkind) :: yield = one 
     logical     :: explPlast = .true.
@@ -188,12 +190,15 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit, ind
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
-    real(rkind) :: a_0, g11, g12, g13, g21, g22, g23, g31, g32, g33, detg
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp_01, dum
+    real(rkind) :: a_L, g11_L, g12_L, g13_L, g21_L, g22_L, g23_L, g31_L, g32_L, g33_L, detg_L
+    real(rkind) :: a_R, g11_R, g12_R, g13_R, g21_R, g22_R, g23_R, g31_R, g32_R, g33_R, detg_R
 
-    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_0, g_0, tau_0, &
+    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, tau_0, &
                           plastic, explPlast, yield, sliding, ignore_gij,   &
-                          u_0, v_0, interface_init, thick
+                          interface_init, thick, &
+                          p_L, p_R, rho_L, rho_R, ge11_L, ge22_L, ge11_R, ge22_R, & 
+                          u_L, U_R, v_L, v_R
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -207,7 +212,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     ! Initialize mygfil
     call mygfil%init(                        decomp, &
-                     .TRUE.,     .TRUE.,    .TRUE., &
+                     .false.,     .TRUE.,    .TRUE., &
                   "gaussian", "gaussian", "gaussian" )
 
     associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
@@ -227,37 +232,55 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%ignore_gij = ignore_gij
 
         ! speed of sound
-        a_0 = sqrt((gamma*(p_0+p_infty) + 4.0d0/3.0d0*mu)/rho_0)
+        a_L = sqrt((gamma*(p_L+p_infty) + 4.0d0/3.0d0*mu)/rho_L)
+        a_R = sqrt((gamma*(p_R+p_infty) + 4.0d0/3.0d0*mu)/rho_R)
         
         ! write material properties
         if (nrank == 0) then
             print *, '---Simulating Impact ---'
-            write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0, ', gam  = ', gamma, ', p_0 = ', p_0
-            write(*,'(3(a,e12.5))') 'mu    = ', mu,    ', Rgas = ', Rgas,  ', a_0 = ', a_0
+            write(*,'(3(a,e12.5))') 'rho_L = ', rho_L, ', gam  = ', gamma, ', p_L = ', p_L
+            write(*,'(3(a,e12.5))') 'rho_R = ', rho_R, ', gam  = ', gamma, ', p_R = ', p_R
+            write(*,'(3(a,e12.5))') 'mu    = ', mu,    ', Rgas = ', Rgas,  ', rho_0 = ', rho_0
+            write(*,'(3(a,e12.5))') 'yield = ', yield, ', tau_0 = ', tau_0,  ', p_infty = ', p_infty
         end if
 
         !Set mixture velocity
-        tmp = - erf( (x-(interface_init))/(thick*dx) )
-        u   = u_0*tmp
-        v   = v_0*tmp
+        tmp_01 = 0.5d0 * (erf( (x-(interface_init))/(thick*dx) ) + 1.0d0) !goes from 0 -> 1
+        u   = ( u_R - u_L ) * tmp_01 + u_L
+        v   = ( v_R - v_L ) * tmp_01 + v_L
         w   = zero
 
         !Set gij tensor
-        g11 = one;     g12 = zero;   g13 = zero
-        g21 = zero;    g22 = one;    g23 = zero
-        g31 = zero;    g32 = zero;   g33 = one
+        g11_L = ge11_L;  g12_L = zero;   g13_L = zero
+        g21_L = zero;    g22_L = ge22_L; g23_L = zero
+        g31_L = zero;    g32_L = zero;   g33_L = ge22_L
+        
+        g11_R = ge11_R;  g12_R = zero;   g13_R = zero
+        g21_R = zero;    g22_R = ge22_R; g23_R = zero
+        g31_R = zero;    g32_R = zero;   g33_R = ge22_R
 
         !set mixture pressure
-        mix%material(1)%p = p_0
+        mix%material(1)%p = ( p_R - p_L ) * tmp_01 + p_L
         
         ! Make rho compatible with det(g) and rho0
-        detg = g11*(g22*g33-g23*g32) - g12*(g21*g33-g31*g23) + g13*(g21*g32-g31*g22)
-        rho = rho_0 * detg
+        detg_L = g11_L*(g22_L*g33_L-g23_L*g32_L) - g12_L*(g21_L*g33_L-g31_L*g23_L) + g13_L*(g21_L*g32_L-g31_L*g22_L)
+        detg_R = g11_R*(g22_R*g33_R-g23_R*g32_R) - g12_R*(g21_R*g33_R-g31_R*g23_R) + g13_R*(g21_R*g32_R-g31_R*g22_R)
+
+        if (abs(rho_0 * detg_L - rho_L) > 1.0d-6 ) then
+            print *, 'rho_L = ', rho_L, ', det_L = ', rho_0*detg_L
+            call GracefulExit("Determinant of ge_L is not compatible with rho_L and rho_0. Please Double-check.",928)
+        endif
+        if (abs(rho_0 * detg_R - rho_R) > 1.0d-6 ) then
+            print *, 'rho_R = ', rho_R, ', det_R = ', rho_0*detg_R
+            call GracefulExit("Determinant of ge_R is not compatible with rho_R and rho_0. Please Double-check.",928)
+        endif
+
+        rho = ( rho_R - rho_L ) * tmp_01 + rho_L
 
         ! Set initial values of g (inverse deformation gradient)
-        mix%material(1)%g11 = g11; mix%material(1)%g12 = g12; mix%material(1)%g13 = g13
-        mix%material(1)%g21 = g21; mix%material(1)%g22 = g22; mix%material(1)%g23 = g23
-        mix%material(1)%g31 = g31; mix%material(1)%g32 = g32; mix%material(1)%g33 = g33
+        mix%material(1)%g11 = ( g11_R - g11_L ) * tmp_01 + g11_L; mix%material(1)%g12 = ( g12_R - g12_L ) * tmp_01 + g12_L; mix%material(1)%g13 = ( g13_R - g13_L ) * tmp_01 + g13_L
+        mix%material(1)%g21 = ( g21_R - g21_L ) * tmp_01 + g21_L; mix%material(1)%g22 = ( g22_R - g22_L ) * tmp_01 + g22_L; mix%material(1)%g23 = ( g23_R - g23_L ) * tmp_01 + g23_L
+        mix%material(1)%g31 = ( g31_R - g31_L ) * tmp_01 + g31_L; mix%material(1)%g32 = ( g32_R - g32_L ) * tmp_01 + g32_L; mix%material(1)%g33 = ( g33_R - g33_L ) * tmp_01 + g33_L
 
         if (mix%use_gTg) then
             mix%material(1)%g11 = mix%material(1)%g11**2
@@ -428,6 +451,82 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 
 end subroutine
 
+!subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
+!    use kind_parameters,  only: rkind
+!    use constants,        only: zero, half, one
+!    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
+!    use decomp_2d,        only: decomp_info
+!    use SolidMixtureMod,  only: solid_mixture
+!    use operators,        only: filter3D
+!
+!    use velocityDiscontinuity_data
+!
+!    implicit none
+!    type(decomp_info),               intent(in)    :: decomp
+!    real(rkind),                     intent(in)    :: tsim
+!    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+!    real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+!    type(solid_mixture),             intent(inout) :: mix
+!    integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
+!    
+!    integer :: nx, i, j
+!    real(rkind) :: dx, xspng, tspng, xspngL, xspngR
+!    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, dumL, dumR
+!    
+!    nx = decomp%ysz(1)
+!    
+!    associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
+!                 v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
+!                 p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
+!                 e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
+!                 bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+!                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+!
+!        !Apply Dirichlet BCs with initial condition 
+!        !(only run sim until waves reach edges of domain)
+!
+!        if(decomp%yst(1)==1) then !left
+!          if(x_bc(1)==0) then 
+!              rho( 1,:,:) = rho_L
+!              u  ( 1,:,:) = u_L
+!              v  ( 1,:,:) = v_L
+!              w  ( 1,:,:) = zero
+!              mix%material(1)%p  (1,:,:) = p_L
+!              
+!              mix%material(1)%g11( 1,:,:) = ge11_L; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:)    = zero
+!              mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:)   = ge22_L;  mix%material(1)%g23( 1,:,:) = zero
+!              mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:)   = zero; mix%material(1)%g33( 1,:,:)    = ge22_L
+!  
+!              mix%material(1)%Ys ( 1,:,:) = one
+!              mix%material(1)%VF ( 1,:,:) = one
+!          end if
+!        endif
+!        
+!        if(decomp%yen(1)==decomp%xsz(1)) then !right
+!          if(x_bc(2)==0) then
+!            rho(nx,:,:) = rho_R
+!            u  (nx,:,:) = u_R 
+!            v  (nx,:,:) = v_R 
+!            w  (nx,:,:) = zero 
+!            mix%material(1)%p  (nx,:,:) = p_R
+!            
+!            mix%material(1)%g11(nx,:,:) = ge11_R;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
+!            mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:)    = ge22_R;  mix%material(1)%g23(nx,:,:) = zero
+!            mix%material(1)%g31(nx,:,:) = zero; mix%material(1)%g32(nx,:,:)    = zero; mix%material(1)%g33(nx,:,:)    = ge22_R
+!  
+!            mix%material(1)%Ys (nx,:,:) = one
+!            mix%material(1)%VF (nx,:,:) = one
+!          endif
+!        endif
+!
+!    end associate
+!end subroutine
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!Adapted from Multispecies_contact/hooks.f90!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero, half, one
@@ -451,7 +550,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, dumL, dumR
     
     nx = decomp%ysz(1)
-    
+
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
@@ -459,45 +558,94 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        !Apply Dirichlet BCs with initial condition 
-        !(only run sim until waves reach edges of domain)
-
         if(decomp%yst(1)==1) then
           if(x_bc(1)==0) then
-              rho( 1,:,:) = rho_0
-              u  ( 1,:,:) = u_0
-              v  ( 1,:,:) = v_0
+              rho( 1,:,:) = rho_L
+              u  ( 1,:,:) = u_L
+              v  ( 1,:,:) = v_L
               w  ( 1,:,:) = zero
-              mix%material(1)%p  (1,:,:) = p_0
+              mix%material(1)%p  (1,:,:) = p_L ! mix%material(1)%p(nx-1,:,:)
               
-              mix%material(1)%g11( 1,:,:) = one; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
-              mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
-              mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = one
+              mix%material(1)%g11( 1,:,:) = ge11_L; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
+              mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = ge22_L;  mix%material(1)%g23( 1,:,:) = zero
+              mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = ge22_L
   
               mix%material(1)%Ys ( 1,:,:) = one
-              mix%material(1)%VF ( 1,:,:) = one
+  
+              mix%material(1)%VF ( 1,:,:) = one       !Dirichlet BC: set left volume fraction to VFL
           end if
         endif
         
         if(decomp%yen(1)==decomp%xsz(1)) then
           if(x_bc(2)==0) then
-            rho(nx,:,:) =  rho_0
-            u  (nx,:,:) = -u_0 
-            v  (nx,:,:) = -v_0 
-            w  (nx,:,:) =  zero 
-            mix%material(1)%p  (nx,:,:) = p_0
+            rho(nx,:,:) = rho_R ! rho(nx-1,:,:)
+            u  (nx,:,:) = u_R ! zero
+            v  (nx,:,:) = v_R ! v(nx-1,:,:)
+            w  (nx,:,:) = zero ! w(nx-1,:,:)
+            mix%material(1)%p  (nx,:,:) = p_R ! mix%material(1)%p(nx-1,:,:)
             
-            mix%material(1)%g11(nx,:,:) = one;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
-            mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:) = one;  mix%material(1)%g23(nx,:,:) = zero
-            mix%material(1)%g31(nx,:,:) = zero; mix%material(1)%g32(nx,:,:) = zero; mix%material(1)%g33(nx,:,:) = one
+            mix%material(1)%g11(nx,:,:) = ge11_R;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
+            mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:) = ge22_R;  mix%material(1)%g23(nx,:,:) = zero
+            mix%material(1)%g31(nx,:,:) = zero; mix%material(1)%g32(nx,:,:) = zero; mix%material(1)%g33(nx,:,:) = ge22_R
   
             mix%material(1)%Ys (nx,:,:) = one
+  
             mix%material(1)%VF (nx,:,:) = one
           endif
         endif
 
+        ! apply sponge at left and right boundaries to damp outgoing waves
+        xspngL = 0.15d0
+        xspngR = 0.85d0
+        tspng = 0.03d0
+        dx = x(2,1,1) - x(1,1,1)
+        dumL = half*(one - tanh( (x-xspngL)/(tspng) ))
+        dumR = half*(one + tanh( (x-xspngR)/(tspng) ))
+        dum  = dumL+dumR
+
+        do i=1,10
+            tmp = u
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            u = u + dum*(tmp - u)
+
+            tmp = v
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            v = v + dum*(tmp - v)
+
+            tmp = w
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            w = w + dum*(tmp - w)
+
+            tmp = e
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            e = e + dum*(tmp - e)
+
+            tmp = rho
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            rho = rho + dum*(tmp - rho)
+
+            tmp = mix%material(1)%p
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
+
+            do j = 1,9
+                tmp = mix%material(1)%g(:,:,:,j)
+                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+                mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dum*(tmp - mix%material(1)%g(:,:,:,j))
+
+            end do
+        end do
+
+
     end associate
 end subroutine
+
+!!!!Adapted from Multispecies_contact/hooks.f90!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+
 
 subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use constants,        only: zero, one
