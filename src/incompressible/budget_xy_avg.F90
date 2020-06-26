@@ -98,7 +98,7 @@ module budgets_xy_avg_mod
 
    type :: budgets_xy_avg
         private
-        integer :: budgetType = 1, run_id, nz
+        integer :: budgetType = 1, run_id, nz, num_vars_rz
 
         complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb
         type(igrid), pointer :: igrid_sim 
@@ -117,6 +117,7 @@ module budgets_xy_avg_mod
         real(rkind), dimension(:), allocatable :: wTh, P_mean, tau_13_mean, tau_23_mean, tau_33_mean
 
         real(rkind), dimension(:), allocatable :: meanZ_bcast
+        real(rkind), dimension(:,:), allocatable :: tmpz1, tmpz2
 
 
         integer :: tidx_dump 
@@ -232,7 +233,9 @@ contains
             if(this%do_autocorrel) then
                 allocate(this%RFx(this%igrid_sim%gpC%ysz(1), this%igrid_sim%gpC%ysz(2), this%igrid_sim%gpC%ysz(3)))
                 allocate(this%RFy(this%igrid_sim%gpC%xsz(1), this%igrid_sim%gpC%xsz(2), this%igrid_sim%gpC%xsz(3)))
-                allocate(this%RFz(this%igrid_sim%gpC%ysz(1), this%igrid_sim%gpC%ysz(2), this%igrid_sim%gpC%ysz(3)))
+                this%num_vars_rz = 1 ! only u for now
+                allocate(this%RFz(this%nz,this%nz,this%num_vars_rz), this%tmpz1(this%nz,this%nz), this%tmpz2(this%nz,this%nz))
+
             endif
 
             if (restart_budgets) then
@@ -363,7 +366,7 @@ contains
                 deallocate(this%xspectra_mean)
             endif
             if(this%do_autocorrel) then
-                deallocate(this%RFx, this%RFy, this%RFz)
+                deallocate(this%RFx, this%RFy, this%RFz, this%tmpz1, this%tmpz2)
             endif
         endif
 
@@ -828,6 +831,34 @@ contains
 
     subroutine Assemble_autocorrel_z(this)
         class(budgets_xy_avg), intent(inout) :: this
+        integer :: iindx, k, kr, k2, nsample, ierr
+
+        iindx = 1 ! u velocity
+        call transpose_x_to_y(this%igrid_sim%u,                this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+        call transpose_y_to_z(this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%rbuffzC(:,:,:,1), this%igrid_sim%gpC)
+        this%tmpz1 = 0.0d0
+        do k = 1, this%igrid_sim%gpC%zsz(3)
+          do kr = 1, this%igrid_sim%gpC%zsz(3)
+            nsample = 0
+
+            k2 = k+(kr-1)
+            if((k2>=1) .and. (k2<=this%igrid_sim%gpC%zsz(3))) then 
+              nsample = nsample + 1
+              this%tmpz1(kr, k) = this%tmpz1(kr, k) + sum(this%igrid_sim%rbuffzC(:,:,k,1)*this%igrid_sim%rbuffzC(:,:,k2,1))
+            endif
+
+            k2 = k-(kr-1)
+            if((k2>=1) .and. (k2<=this%igrid_sim%gpC%zsz(3))) then 
+              nsample = nsample + 1
+              this%tmpz1(kr, k) = this%tmpz1(kr, k) + sum(this%igrid_sim%rbuffzC(:,:,k,1)*this%igrid_sim%rbuffzC(:,:,k2,1))
+            endif
+
+            this%tmpz1(kr, k) = this%tmpz1(kr, k)/(real(nsample, rkind) + 1.0d-18)
+          enddo
+        enddo
+        call mpi_reduce(this%tmpz1, this%tmpz2, this%nz*this%nz, mpirkind, mpi_sum, 0, mpi_comm_world, ierr)
+        this%RFz(:,:,iindx) = this%RFz(:,:,iindx) + this%tmpz2
+        !print *, '--1111--', nrank, maxval(abs(this%tmpz2))
 
     end subroutine 
 
@@ -983,6 +1014,53 @@ contains
     subroutine dump_autocorrel_z(this)
         use decomp_2d_io
         class(budgets_xy_avg), intent(inout) :: this
+        integer :: iindx, k, kr, k2, nsample
+        real(rkind), dimension(this%nz) :: utmpz
+        real(rkind) :: normfac
+        character(len=clen) :: fname, tempname 
+
+        if(nrank==0) then
+
+          iindx = 1 ! u velocity
+          utmpz = this%budget_0(:, 1)/(real(this%counter,rkind) + 1.d-18)
+          this%tmpz1 = 0.0d0
+          do k = 1, this%igrid_sim%gpC%zsz(3)
+            do kr = 1, this%igrid_sim%gpC%zsz(3)
+              nsample = 0
+
+              k2 = k+(kr-1)
+              if((k2>=1) .and. (k2<=this%igrid_sim%gpC%zsz(3))) then 
+                nsample = nsample + 1
+                this%tmpz1(kr, k) = this%tmpz1(kr, k) + utmpz(k)*utmpz(k2)
+              endif
+
+              k2 = k-(kr-1)
+              if((k2>=1) .and. (k2<=this%igrid_sim%gpC%zsz(3))) then 
+                nsample = nsample + 1
+                this%tmpz1(kr, k) = this%tmpz1(kr, k) + utmpz(k)*utmpz(k2)
+              endif
+
+              this%tmpz1(kr, k) = this%tmpz1(kr, k)/(real(nsample, rkind) + 1.0d-18)
+            enddo
+          enddo
+          normfac = one/real(this%igrid_sim%gpC%xsz(1) * this%igrid_sim%gpC%ysz(2) * this%counter, rkind)
+
+          this%tmpz2 = normfac*this%RFz(:,:,iindx) - this%tmpz1
+          !print *, '--2222--', nrank, maxval(abs(this%tmpz2)), maxval(abs(this%RFz(:,:,iindx)))
+          write(tempname,"(A3,I2.2,A17,I6.6,A4)") "Run", this%run_id,"_autocorrel_u_z_t",this%igrid_sim%step,".out"
+          fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+          call write_2d_ascii(this%tmpz2, fname) 
+
+          !write(tempname,"(A3,I2.2,A17,I6.6,A4)") "Run", this%run_id,"_autocorre1_u_z_t",this%igrid_sim%step,".out"
+          !fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+          !call write_2d_ascii(this%tmpz1, fname) 
+
+          !this%tmpz2 = normfac*this%RFz(:,:,iindx) - this%tmpz1
+          !write(tempname,"(A3,I2.2,A17,I6.6,A4)") "Run", this%run_id,"_autocorre3_u_z_t",this%igrid_sim%step,".out"
+          !fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+          !call write_2d_ascii(this%tmpz2, fname) 
+
+        endif
 
     end subroutine 
 
