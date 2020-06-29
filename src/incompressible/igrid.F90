@@ -293,7 +293,7 @@ module IncompressibleGrid
         
         ! budgets on the fly
         logical :: StoreForBudgets = .false. 
-        complex(rkind), dimension(:,:,:), pointer :: ucon, vcon, wcon, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb, pxdns, pydns, pzdns, vturb, wturb 
+        complex(rkind), dimension(:,:,:), pointer :: ucon, vcon, wcon, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb, pxdns, pydns, pzdns, vturb, wturb, HITforcing_x, HITforcing_y, HITforcing_z 
 
         integer :: buoyancyDirection 
 
@@ -362,9 +362,10 @@ module IncompressibleGrid
             procedure, private :: initialize_hdf5_io
             procedure, private :: destroy_hdf5_io
             procedure          :: get_geostrophic_forcing
-            procedure          :: InstrumentForBudgets
-            procedure          :: InstrumentForBudgets_TimeAvg
-            procedure          :: GetMomentumTerms
+            procedure          :: instrumentForBudgets
+            procedure          :: instrumentForBudgets_timeAvg
+            procedure          :: instrumentForBudgets_volAvg
+            procedure          :: getMomentumTerms
             procedure          :: set_budget_rhs_to_zero
             procedure, private :: advance_SSP_RK45_all_stages
             procedure          :: advance_SSP_RK45_Stage_1 

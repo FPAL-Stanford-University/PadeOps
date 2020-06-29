@@ -32,12 +32,12 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = two*pi, Ly = two*pi, Lz = two*pi
     character(len=clen)  :: dir_init_files
-    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0, TI = 0.1d0
     character(len=clen)  :: ufname, vfname, wfname
     integer :: init_type = 0
     logical :: BandpassFilterFields = .false. 
     integer :: initType = 0
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
 
     !Lx = two*pi; Ly = two*pi; Lz = one
     ioUnit = 11
@@ -118,10 +118,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     type(cd06stagg), allocatable :: der
     integer :: nz, nzE, k
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: uadv = 0.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz
-    logical :: BandpassFilterFields = .false. 
+    real(rkind) :: uadv = 0.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz, TI = 0.1d0
+    logical :: BandpassFilterFields = .false.
     integer :: initType = 0, seed = 23455
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -201,12 +201,14 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 0, nyplanes = 0, nzplanes = 1
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
 
+    allocate( xplanes(nxplanes))
+    allocate( yplanes(nyplanes))
     allocate( zplanes(nzplanes))
 
-    !xplanes = [64]
-    !yplanes = [64]
+    xplanes = [1]
+    yplanes = [1]
     zplanes = [1]
 
 end subroutine
@@ -222,6 +224,7 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 end subroutine
 
 subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
+    use HIT_Periodic_parameters    
     use kind_parameters,    only: rkind, clen 
     use constants, only: one, zero
     implicit none
@@ -231,7 +234,8 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     character(len=clen)  :: ufname, vfname, wfname 
     real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz
+    integer :: initType = 0
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -242,6 +246,7 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
 end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
+    use HIT_Periodic_parameters    
     use kind_parameters,    only: rkind, clen 
     use constants,          only: zero, one
     implicit none
@@ -251,9 +256,10 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind) :: ThetaRef
     integer :: iounit 
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz
+    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz, TI = 0.1d0
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz
+    integer :: initType = 0
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -268,15 +274,17 @@ end subroutine
 
 
 subroutine set_Reference_Temperature(inputfile, Tref)
+    use HIT_Periodic_parameters    
     use kind_parameters,    only: rkind, clen 
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
     integer :: iounit
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz
+    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz, TI = 0.1d0
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz
+    integer :: initType = 0
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

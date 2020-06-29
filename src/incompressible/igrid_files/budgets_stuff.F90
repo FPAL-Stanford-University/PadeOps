@@ -120,6 +120,22 @@ subroutine instrumentForBudgets_TimeAvg(this, uc, vc, wc, usgs, vsgs, wsgs,  px,
 
 end subroutine
 
+subroutine instrumentForBudgets_volAvg(this, HITforcing_x, HITforcing_y, HITforcing_z)
+    class(igrid), intent(inout) :: this
+    complex(rkind), dimension(:,:,:), intent(in), target :: HITforcing_x, HITforcing_y, HITforcing_z
+
+    this%HITforcing_x => HITforcing_x
+    this%HITforcing_y => HITforcing_y
+    this%HITforcing_z => HITforcing_z
+
+    ! Safeguards
+    this%StoreForBudgets = .true. 
+
+    call this%set_budget_rhs_to_zero()
+    call message(0, "Budget volAvg calculations instrumented within igrid!")
+
+end subroutine 
+
 subroutine set_budget_rhs_to_zero(this)
     use constants, only: imi
 
@@ -127,31 +143,47 @@ subroutine set_budget_rhs_to_zero(this)
     complex(rkind) :: czero 
 
     czero = 0.d0 + imi*0.d0
-    
-    this%ucon = czero 
-    this%vcon = czero 
-    this%wcon = czero 
+   
+    if(associated(this%ucon)) then
+        this%ucon = czero 
+        this%vcon = czero 
+        this%wcon = czero 
+    endif
 
-    this%usgs = czero 
-    this%vsgs = czero 
-    this%wsgs = czero 
+    if(associated(this%usgs)) then
+        this%usgs = czero 
+        this%vsgs = czero 
+        this%wsgs = czero 
+    endif
 
-    this%px = czero 
-    this%py = czero 
-    this%pz = czero
+    if(associated(this%px)) then
+        this%px = czero 
+        this%py = czero 
+        this%pz = czero
+    endif
 
-    this%uvisc = czero 
-    this%vvisc = czero 
-    this%wvisc = czero 
+    if(associated(this%uvisc)) then
+        this%uvisc = czero 
+        this%vvisc = czero 
+        this%wvisc = czero 
+    endif
 
-    if (associated(this%ucor)) this%ucor = czero 
-    if (associated(this%vcor)) this%vcor = czero 
-    if (associated(this%wcor)) this%wcor = czero 
+    if (associated(this%ucor)) then
+        this%ucor = czero 
+        this%vcor = czero 
+        this%wcor = czero 
+    endif
 
     if (associated(this%wb   )) this%wb = czero 
     if (associated(this%uturb)) this%uturb = czero 
     if (associated(this%vturb)) this%vturb = czero 
     if (associated(this%wturb)) this%wturb = czero 
+
+    if (associated(this%HITforcing_x)) then
+        this%HITforcing_x = czero 
+        this%HITforcing_y = czero 
+        this%HITforcing_z = czero 
+    endif
 
 end subroutine 
 
@@ -166,19 +198,21 @@ subroutine getMomentumTerms(this)
         
         ! Step 2: compute the pressure gradient term 
         call this%spectC%fft(this%Pressure, this%cbuffyC(:,:,:,1))
-        this%cbuffyC(:,:,:,1) = -this%cbuffyC(:,:,:,1) ! Pressure terms is -gradP
-        call this%spectC%mtimes_ik1_oop(this%cbuffyC(:,:,:,1),this%px)
-        call this%spectC%mtimes_ik2_oop(this%cbuffyC(:,:,:,1),this%py)
-        call transpose_y_to_z(this%cbuffyC(:,:,:,1),this%cbuffzC(:,:,:,1),this%sp_gpC)
-        call this%Pade6opZ%ddz_C2E(this%cbuffzC(:,:,:,1),this%cbuffzE(:,:,:,1),0,0)  ! Safest to do 0,0 for BC because it's most general
-        this%cbuffyE(:,:,:,1) = this%wcon + this%wsgs
-        if(associated(this%wb)) this%cbuffyE(:,:,:,1) = this%cbuffyE(:,:,:,1) + this%wb
-        if(associated(this%wcor)) this%cbuffyE(:,:,:,1) = this%cbuffyE(:,:,:,1) + this%wcor
-        ! Set the true BC for dpdz:
-        call transpose_y_to_z(this%cbuffyE(:,:,:,1),this%cbuffzE(:,:,:,2),this%sp_gpE)
-        this%cbuffzE(:,:,1,1) = -this%cbuffzE(:,:,1,2)
-        this%cbuffzE(:,:,this%nz+1,1) = -this%cbuffzE(:,:,this%nz+1,2)
-        call transpose_z_to_y(this%cbuffzE(:,:,:,1),this%pz, this%sp_gpE)
+        if(associated(this%px)) then
+            this%cbuffyC(:,:,:,1) = -this%cbuffyC(:,:,:,1) ! Pressure terms is -gradP
+            call this%spectC%mtimes_ik1_oop(this%cbuffyC(:,:,:,1),this%px)
+            call this%spectC%mtimes_ik2_oop(this%cbuffyC(:,:,:,1),this%py)
+            call transpose_y_to_z(this%cbuffyC(:,:,:,1),this%cbuffzC(:,:,:,1),this%sp_gpC)
+            call this%Pade6opZ%ddz_C2E(this%cbuffzC(:,:,:,1),this%cbuffzE(:,:,:,1),0,0)  ! Safest to do 0,0 for BC because it's most general
+            this%cbuffyE(:,:,:,1) = this%wcon + this%wsgs
+            if(associated(this%wb)) this%cbuffyE(:,:,:,1) = this%cbuffyE(:,:,:,1) + this%wb
+            if(associated(this%wcor)) this%cbuffyE(:,:,:,1) = this%cbuffyE(:,:,:,1) + this%wcor
+            ! Set the true BC for dpdz:
+            call transpose_y_to_z(this%cbuffyE(:,:,:,1),this%cbuffzE(:,:,:,2),this%sp_gpE)
+            this%cbuffzE(:,:,1,1) = -this%cbuffzE(:,:,1,2)
+            this%cbuffzE(:,:,this%nz+1,1) = -this%cbuffzE(:,:,this%nz+1,2)
+            call transpose_z_to_y(this%cbuffzE(:,:,:,1),this%pz, this%sp_gpE)
+        endif
 
         !print *, 'pxdns: ', associated(this%pxdns)
         !print *, 'pydns: ', associated(this%pydns)
@@ -198,3 +232,4 @@ subroutine getMomentumTerms(this)
     end if 
 
 end subroutine 
+
