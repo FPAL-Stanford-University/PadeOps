@@ -303,6 +303,12 @@ module IncompressibleGrid
             procedure          :: printDivergence 
             procedure          :: getMaxKE
             procedure          :: getMeanKE
+            procedure          :: getMeanuu
+            procedure          :: getMeanuv
+            procedure          :: getMeanuw
+            procedure          :: getMeanvv
+            procedure          :: getMeanvw
+            procedure          :: getMeanww
             procedure          :: timeAdvance
             procedure          :: start_io
             procedure          :: finalize_io

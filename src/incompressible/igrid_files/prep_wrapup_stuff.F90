@@ -150,6 +150,60 @@ function getMaxKE(this) result(maxKE)
 
 end function
 
+function getMeanuu(this) result(mean_uu)
+     class(igrid), intent(inout) :: this
+     real(rkind)  :: mean_uu
+
+     this%rbuffxC(:,:,:,1) = this%u**2
+     mean_uu = half*p_sum(sum(this%rbuffxC(:,:,:,1)))/(real(this%nx)*real(this%ny)*real(this%nz))
+
+end function
+
+function getMeanuv(this) result(mean_uv)
+     class(igrid), intent(inout) :: this
+     real(rkind)  :: mean_uv
+
+     this%rbuffxC(:,:,:,1) = this%u*this%v
+     mean_uv = half*p_sum(sum(this%rbuffxC(:,:,:,1)))/(real(this%nx)*real(this%ny)*real(this%nz))
+
+end function
+
+function getMeanuw(this) result(mean_uw)
+     class(igrid), intent(inout) :: this
+     real(rkind)  :: mean_uw
+
+     this%rbuffxC(:,:,:,1) = this%u*this%wC
+     mean_uw = half*p_sum(sum(this%rbuffxC(:,:,:,1)))/(real(this%nx)*real(this%ny)*real(this%nz))
+
+end function
+
+function getMeanvv(this) result(mean_vv)
+     class(igrid), intent(inout) :: this
+     real(rkind)  :: mean_vv
+
+     this%rbuffxC(:,:,:,1) = this%v**2
+     mean_vv = half*p_sum(sum(this%rbuffxC(:,:,:,1)))/(real(this%nx)*real(this%ny)*real(this%nz))
+
+end function
+
+function getMeanvw(this) result(mean_vw)
+     class(igrid), intent(inout) :: this
+     real(rkind)  :: mean_vw
+
+     this%rbuffxC(:,:,:,1) = this%v*this%wC
+     mean_vw = half*p_sum(sum(this%rbuffxC(:,:,:,1)))/(real(this%nx)*real(this%ny)*real(this%nz))
+
+end function
+
+function getMeanww(this) result(mean_ww)
+     class(igrid), intent(inout) :: this
+     real(rkind)  :: mean_ww
+
+     this%rbuffxC(:,:,:,1) = this%wC**2
+     mean_ww = half*p_sum(sum(this%rbuffxC(:,:,:,1)))/(real(this%nx)*real(this%ny)*real(this%nz))
+
+end function
+
 function getMeanKE(this) result(meanTKE)
      class(igrid), intent(inout) :: this
      real(rkind)  :: meanTKE
