@@ -14,6 +14,7 @@ program HIT_AD_interact
     use HIT_AD_interact_parameters, only: simulationID, InflowProfileType, InflowProfileAmplit, InflowProfileThick
     use fof_mod, only: fof
     use budgets_time_avg_mod, only: budgets_time_avg  
+    use budgets_vol_avg_mod, only: budgets_vol_avg  
     !use decomp_2d,                only: nrank
     implicit none
 
@@ -21,6 +22,7 @@ program HIT_AD_interact
     character(len=clen) :: inputfile, HIT_InputFile, AD_InputFile, fof_dir, filoutdir
     integer :: ierr, ioUnit
     type(budgets_time_avg) :: budg_tavg
+    type(budgets_vol_avg)  :: budg_vavg
     real(rkind), dimension(:,:,:), allocatable :: utarget0, vtarget0, wtarget0
     real(rkind), dimension(:,:,:), allocatable :: utarget1, vtarget1, wtarget1
     real(rkind) :: dt1, dt2, dt, InflowSpeed = 1.d0
@@ -120,6 +122,7 @@ program HIT_AD_interact
     end if 
 
     call budg_tavg%init(AD_Inputfile, adsim)   !<-- Budget class initialization 
+    call budg_vavg%init(HIT_Inputfile, hit)    !<-- Budget class initialization 
 
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
@@ -157,6 +160,7 @@ program HIT_AD_interact
        end if  
 
        call budg_tavg%doBudgets()       !<--- perform budget related operations -----Question::Where should this be placed ??
+       call budg_vavg%doBudgets()       !<--- perform budget related operations -----Question::Where should this be placed ??
 
        x_shift = adsim%tsim*InflowSpeed
        call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
@@ -202,6 +206,7 @@ program HIT_AD_interact
     end do 
 
     call budg_tavg%destroy()           !<-- release memory taken by the budget class 
+    call budg_vavg%destroy()           !<-- release memory taken by the budget class 
 
     if (applyfilters) then
       do fid = 1,nfilters

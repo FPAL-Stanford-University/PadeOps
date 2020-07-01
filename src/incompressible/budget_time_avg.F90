@@ -118,6 +118,7 @@ module budgets_time_avg_mod
         integer :: tidx_dump 
         integer :: tidx_compute
         integer :: tidx_budget_start 
+        real(rkind) :: time_budget_start 
         logical :: do_budgets
         logical :: forceDump
         logical :: splitPressureDNS
@@ -170,9 +171,10 @@ contains
         character(len=clen) :: budgets_dir = "NULL"
         integer :: ioUnit, ierr,  budgetType = 1, restart_tid = 0, restart_rid = 0, restart_counter = 0
         logical :: restart_budgets = .false. 
-        integer :: tidx_compute = 1000000, tidx_dump = 1000000, tidx_budget_start = 0
+        integer :: tidx_compute = 1000000, tidx_dump = 1000000, tidx_budget_start = -100
+        real(rkind) :: time_budget_start = -1.0d0
         logical :: do_budgets = .false. 
-        namelist /BUDGET_TIME_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start 
+        namelist /BUDGET_TIME_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start, time_budget_start
         
         ! STEP 1: Read in inputs, link pointers and allocate budget vectors
         ioUnit = 534
@@ -187,6 +189,7 @@ contains
         this%tidx_dump = tidx_dump
         this%tidx_compute = tidx_compute
         this%tidx_budget_start = tidx_budget_start  
+        this%time_budget_start = time_budget_start  
         this%useWindTurbines = igrid_sim%useWindTurbines
         this%isStratified    = igrid_sim%isStratified
         this%forceDump = .false.
@@ -197,6 +200,11 @@ contains
         this%splitPressureDNS = this%igrid_sim%computeDNSPressure
 
         this%HaveScalars = this%igrid_sim%useScalars
+
+        if((this%tidx_budget_start > 0) .and. (this%time_budget_start > 0.0d0)) then
+            call GracefulExit("Both tidx_budget_start and time_budget_start in budget_time_avg are positive. Turn one negative", 100)
+        endif
+
         if(this%do_budgets) then 
             !if (this%isStratified) then
             ! Always assume that you are stratified
@@ -286,17 +294,19 @@ contains
             this%forceDump = forceDump
         endif
 
-        if (this%do_budgets .and. (this%igrid_sim%step>this%tidx_budget_start)) then
+        if (this%do_budgets)  then
+            if( ( (this%tidx_budget_start>0) .and. (this%igrid_sim%step>this%tidx_budget_start) ) .or. &
+                ( (this%time_budget_start>0) .and. (this%igrid_sim%tsim>this%time_budget_start) ) ) then
         
-            if (mod(this%igrid_sim%step,this%tidx_compute) .eq. 0) then
-                call this%updateBudget()
-            end if
+                if (mod(this%igrid_sim%step,this%tidx_compute) .eq. 0) then
+                    call this%updateBudget()
+                end if
 
-            if ((mod(this%igrid_sim%step,this%tidx_dump) .eq. 0) .or. this%forceDump) then
-                call this%dumpBudget()
-                call message(0,"Dumped a budget .stt file")
+                if ((mod(this%igrid_sim%step,this%tidx_dump) .eq. 0) .or. this%forceDump) then
+                    call this%dumpBudget()
+                    call message(0,"Dumped a budget .stt file")
+                end if 
             end if 
-
         end if 
 
         this%forceDump = .false. ! reset to default value
