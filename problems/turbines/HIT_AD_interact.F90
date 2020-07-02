@@ -159,8 +159,8 @@ program HIT_AD_interact
           call hit%timeAdvance(dt)
        end if  
 
-       call budg_tavg%doBudgets()       !<--- perform budget related operations -----Question::Where should this be placed ??
-       call budg_vavg%doBudgets()       !<--- perform budget related operations -----Question::Where should this be placed ??
+       call budg_tavg%doBudgets()       !<--- perform budget related operations
+       call budg_vavg%doBudgets()       !<--- perform budget related operations
 
        x_shift = adsim%tsim*InflowSpeed
        call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
@@ -198,15 +198,18 @@ program HIT_AD_interact
                   if (mod(adsim%step,tid_FIL_FullField) == 0) call filt(fid)%dumpFullField( adsim%rbuffxC(:,:,:,1), "pres",adsim%step)
                   if (mod(adsim%step,tid_FIL_Planes) == 0) call filt(fid)%dumpYplanes( adsim%rbuffxC(:,:,:,1), "pres",pid, adsim%step)
                end if
-            end do 
+            end do
             call message(0,"Just dumped filtered data")
-         end if  
-       end if 
+         end if
+       end if
 
-    end do 
+    end do
 
-    call budg_tavg%destroy()           !<-- release memory taken by the budget class 
-    call budg_vavg%destroy()           !<-- release memory taken by the budget class 
+    call budg_tavg%doBudgets(.true.)   !<--- force dump if budget calculation had started
+    call budg_vavg%doBudgets(.true.)   !<--- force dump if budget calculation had started
+
+    call budg_tavg%destroy()           !<-- release memory taken by the budget class
+    call budg_vavg%destroy()           !<-- release memory taken by the budget class
 
     if (applyfilters) then
       do fid = 1,nfilters
@@ -214,16 +217,16 @@ program HIT_AD_interact
       end do
       if (allocated(pid)) deallocate(pid)
       deallocate(filt)
-    end if 
+    end if
 
-    call hit%finalize_io()          
-    call adsim%finalize_io()         
+    call hit%finalize_io()
+    call adsim%finalize_io()
 
-    call hit%destroy()                
-    call adsim%destroy()               
+    call hit%destroy()
+    call adsim%destroy()
    
-    deallocate(hit, adsim)             
+    deallocate(hit, adsim)
     
-    call MPI_Finalize(ierr)        
+    call MPI_Finalize(ierr)
 
 end program
