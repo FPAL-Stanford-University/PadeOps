@@ -36,6 +36,10 @@ subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc
         this%pzdns => null()
     endif
 
+    this%HITforcing_x => null()
+    this%HITforcing_y => null()
+    this%HITforcing_z => null()
+
     ! Safeguards
     this%StoreForBudgets = .true. 
     if (.not. this%fastCalcPressure) then
@@ -98,6 +102,9 @@ subroutine instrumentForBudgets_TimeAvg(this, uc, vc, wc, usgs, vsgs, wsgs,  px,
     this%vturb => vturb 
     this%wturb => wturb 
 
+    this%HITforcing_x => null()
+    this%HITforcing_y => null()
+    this%HITforcing_z => null()
 
     ! Safeguards
     this%StoreForBudgets = .true. 
@@ -123,6 +130,15 @@ end subroutine
 subroutine instrumentForBudgets_volAvg(this, HITforcing_x, HITforcing_y, HITforcing_z)
     class(igrid), intent(inout) :: this
     complex(rkind), dimension(:,:,:), intent(in), target :: HITforcing_x, HITforcing_y, HITforcing_z
+
+    this%ucon  => null();    this%vcon  => null();    this%wcon  => null()
+    this%usgs  => null();    this%vsgs  => null();    this%wsgs  => null()
+    this%uvisc => null();    this%vvisc => null();    this%wvisc => null()
+    this%ucor  => null();    this%vcor  => null();    this%wcor  => null()
+    this%px    => null();    this%py    => null();    this%pz    => null()
+    this%uturb => null();    this%vturb => null();    this%wturb => null()
+    this%pxdns => null();    this%pydns => null();    this%pzdns => null()
+    this%wb    => null();
 
     this%HITforcing_x => HITforcing_x
     this%HITforcing_y => HITforcing_y
