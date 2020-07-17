@@ -64,6 +64,9 @@ program concurrentSimulation
        
     end do 
 
+    call budg_xyavg%doBudgets(.true.)
+    call budg_tavg%doBudgets(.true.)
+
     call budg_xyavg%destroy()
     call budg_tavg%destroy()
  
