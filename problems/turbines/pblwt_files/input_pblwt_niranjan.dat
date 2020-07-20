@@ -175,7 +175,10 @@ Fringe_yst            = 0.75d0
 Fringe_yen            = 1.00d0
 Fringe_delta_st_y     = 0.20d0
 Fringe_delta_en_y     = 0.05d0
-LambdaFact            = 0.75d0 
+LambdaFact            = 0.75d0
+useShiftedPeriodicBC  = .true.
+shift_distance        = 0.5d0
+Lxeff                 = 0.5d0
 /
 /
 &BUDGET_TIME_AVG

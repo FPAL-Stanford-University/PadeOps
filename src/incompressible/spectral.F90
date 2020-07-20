@@ -5,7 +5,7 @@ module spectralMod
                     transpose_y_to_z, transpose_z_to_y, nrank 
     use decomp_2d_fft, only: decomp_2d_fft_init, decomp_2d_fft_finalize, decomp_2d_fft_get_size
     use exits, only: GracefulExit, message 
-    use constants, only: pi, one, zero, two, three, four, eight 
+    use constants, only: pi, one, zero, two, three, four, eight, imi 
     use fft_3d_stuff, only: fft_3d
     use mpi
     use reductions, only: p_sum 
@@ -58,7 +58,7 @@ module spectralMod
         integer(kind=8) :: plan_c2c_bwd_z_oop
         integer(kind=8) :: plan_c2c_bwd_z_ip
         integer(kind=8) :: plan_r2c_z, plan_c2r_z 
-        complex(rkind), dimension(:), allocatable :: k3_C2Cder, k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact
+        complex(rkind), dimension(:), allocatable :: k3_C2Cder, k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact, yshiftfact
         real(rkind), dimension(:), allocatable, public :: k1inZ, k2inZ, k3inZ
 
         real(rkind), dimension(:), allocatable :: mk3sq
@@ -102,6 +102,7 @@ module spectralMod
             procedure           :: bandpassFilter_and_PhaseShift
             procedure           :: GetModifiedWavenumber_xy_oop
             procedure           :: GetModifiedWavenumber_xy_ip 
+            procedure           :: shift_in_y
 
             procedure           :: InitTestFilter
             procedure           :: take_fft1d_z2z_ip
@@ -319,6 +320,31 @@ contains
                 end do 
             end do 
         end do 
+
+    end subroutine
+
+    subroutine shift_in_y(this, fin, fout, shift_distance)
+        class(spectral),  intent(inout) :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(in) :: fin
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(out) :: fout
+        real(rkind), intent(in) :: shift_distance
+        integer :: i, j, k
+        complex(rkind) :: mult_fac
+        
+        ! initialize for shift_in_y
+        do j = 1, this%fft_size(2)
+          this%yshiftfact(j) = exp(-imi*this%k2(1,j,1)*shift_distance)
+        enddo
+
+        do k = 1,this%fft_size(3)
+            do j = 1,this%fft_size(2)
+                fout(:,j,k) = this%yshiftfact(j)*fin(:,j,k)
+                !!$omp simd
+                !do i = 1,this%fft_size(1)
+                !    fout(i,j,k) = this%yshiftfact(j)*fin(i,j,k)
+                !end do
+            end do
+        end do
 
     end subroutine
 
@@ -1045,6 +1071,7 @@ contains
 
         call this%modify_my_xy_wavenumbers()
         where (this%Gdealias < 1.D-11) this%Gdealias = 0.D0
+
     end subroutine 
 
     subroutine modify_my_xy_wavenumbers(this)
@@ -1465,6 +1492,9 @@ contains
         !call this%FT%alloc_upsampledArr(this%arr1Up)
         !call this%FT%alloc_upsampledArr(this%arr2Up)
 
+        ! STEP 15: Allocate 1d array for shift_in_y
+        allocate(this%yshiftfact(this%fft_size(2)))
+
 
         ! STEP 16: Print completion message 
         call message("SPECTRAL - Derived Type for the problem generated successfully.")
@@ -1553,6 +1583,7 @@ contains
         if (allocated(this%arr1Up)) deallocate(this%arr1Up)
         if (allocated(this%arr2Up)) deallocate(this%arr2Up)
         if (allocated(this%spectdecomp)) deallocate(this%spectdecomp)
+        if (allocated(this%yshiftfact)) deallocate(this%yshiftfact) 
         this%isInitialized = .false. 
    
 

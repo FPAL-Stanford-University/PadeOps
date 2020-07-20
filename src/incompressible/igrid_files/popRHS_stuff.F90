@@ -253,12 +253,12 @@
        if (this%usedoublefringex) then
            if (copyFringeRHS) then
                call this%fringe_x1%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w, &
-                                   this%urhs_fringe, this%vrhs_fringe, this%wrhs_fringe, addF=.false. )
+                        this%uhat, this%vhat, this%what, this%urhs_fringe, this%vrhs_fringe, this%wrhs_fringe, addF=.false. )
                call this%fringe_x2%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w, &
-                                   this%urhs_fringe, this%vrhs_fringe, this%wrhs_fringe, addF=.true. )
+                        this%uhat, this%vhat, this%what, this%urhs_fringe, this%vrhs_fringe, this%wrhs_fringe, addF=.true. )
            else
-               call this%fringe_x1%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
-               call this%fringe_x2%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
+               call this%fringe_x1%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w, this%uhat, this%vhat, this%what)
+               call this%fringe_x2%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w, this%uhat, this%vhat, this%what)
            end if 
            if (this%isStratified .or. this%initspinup) then
                call this%fringe_x1%addFringeRHS_scalar(this%dt, this%T_rhs, this%T)
@@ -268,9 +268,9 @@
            if (this%useFringe) then
               if (copyFringeRHS) then
                   call this%fringe_x%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w, & 
-                                   this%urhs_fringe, this%vrhs_fringe, this%wrhs_fringe, addF=.false. )
+                          this%uhat, this%vhat, this%what, this%urhs_fringe, this%vrhs_fringe, this%wrhs_fringe, addF=.false. )
               else
-                  call this%fringe_x%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w)
+                  call this%fringe_x%addFringeRHS(this%dt, this%u_rhs, this%v_rhs, this%w_rhs, this%u, this%v, this%w, this%uhat, this%vhat, this%what)
               end if 
               if (this%isStratified .or. this%initspinup) then
                   call this%fringe_x%addFringeRHS_scalar(this%dt, this%T_rhs, this%T)

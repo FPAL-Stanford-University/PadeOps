@@ -2,7 +2,7 @@ module fringeMethod
    use kind_parameters, only: rkind, clen
    use decomp_2d
    use spectralMod, only: spectral  
-   use exits, only: message
+   use exits, only: message, GracefulExit
    implicit none
    private
    public :: fringe
@@ -23,6 +23,9 @@ module fringeMethod
       logical, public :: useFringeAsSponge_Scalar = .true. 
       logical :: firstCallComplete = .false.
       logical :: firstCallCompleteScalar = .false.
+      logical :: useShiftedPeriodicBC = .false. 
+      real(rkind) :: shift_distance, Lxeff
+      integer :: ixst_1, ixen_1, ixst_2, ixen_2
       contains
          procedure :: init
          procedure :: destroy
@@ -32,6 +35,7 @@ module fringeMethod
          procedure :: allocateTargetArray_Edges
          procedure :: addFringeRHS_scalar
          procedure :: associateFringeTarget_scalar
+         procedure :: getShiftedFields
    end type
     
 contains
@@ -52,11 +56,13 @@ contains
 
    end subroutine
 
-   subroutine addFringeRHS(this, dt, urhs, vrhs, wrhs, uC, vC, wE, urhsF,vrhsF,wrhsF,addF)
+   subroutine addFringeRHS(this, dt, urhs, vrhs, wrhs, uC, vC, wE, uhat, vhat, what, urhsF,vrhsF,wrhsF,addF)
       class(fringe),                                                                        intent(inout)  :: this
       real(rkind),                                                                         intent(in)     :: dt
       real(rkind),    dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)),          intent(in)     :: uC, vC 
       real(rkind),    dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)),          intent(in)     :: wE
+      complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in)     :: uhat, vhat
+      complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in)     :: what
       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout)  :: urhs, vrhs
       complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout)  :: wrhs
       logical, intent(in), optional :: addF
@@ -71,6 +77,9 @@ contains
          AllOptionalsPresent = .false. 
       end if
 
+      if(this%useShiftedPeriodicBC) then
+          call this%getShiftedFields(uhat, vhat, what) ! in uvw_target 
+      endif
 
       if (this%targetsAssociated) then
          ! u velocity source term 
@@ -157,7 +166,12 @@ contains
       real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in), target           :: utarget, vtarget
       real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in), target           :: wtarget 
       real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in), optional, target :: Ttarget 
-  
+ 
+      if(this%useShiftedPeriodicBC) then
+          call GracefulExit("Fringe targets already associated at setup if &
+            ShiftedPeriodicBC is true. Check input and problem files",999)
+      endif
+ 
       this%u_target => utarget
       this%v_target => vtarget
       this%w_target => wtarget
@@ -200,10 +214,14 @@ contains
       integer :: ioUnit = 10, i, j, k, nx, ierr
       real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2
       logical :: Apply_x_fringe = .true., Apply_y_fringe = .false.
+      logical :: useShiftedPeriodicBC = .false.
+      real(rkind) :: shift_distance = 0.5d0, Lxeff = 0.5d0
+
       namelist /FRINGE/ Apply_x_fringe, Apply_y_fringe, Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, &
                         Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, LambdaFactPotTemp, LambdaFact2, Fringe_yen, Fringe_yst, Fringe1_delta_st_x, &
-                        Fringe2_delta_st_x, Fringe1_delta_en_x, Fringe2_delta_en_x, Fringe1_xst, Fringe2_xst, Fringe1_xen, Fringe2_xen
-    
+                        Fringe2_delta_st_x, Fringe1_delta_en_x, Fringe2_delta_en_x, Fringe1_xst, Fringe2_xst, Fringe1_xen, Fringe2_xen, &
+                        useShiftedPeriodicBC, shift_distance, Lxeff
+ 
       if (present(fringeID)) then
          this%myFringeID = fringeID
          this%useTwoFringex = .true. 
@@ -212,6 +230,14 @@ contains
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
       read(unit=ioUnit, NML=FRINGE)
       close(ioUnit)
+
+      if(useShiftedPeriodicBC .and. (Apply_y_fringe .or. this%useTwoFringex)) then
+          call GracefulExit("Shifted Periodic BC supported only with one fringe in x direction",9999)
+      endif
+
+      if(useShiftedPeriodicBC .and. (.not. Apply_x_fringe)) then
+          call GracefulExit("Shifted Periodic BC requires Apply_x_fringe to be true",9999)
+      endif
 
       Lx = maxval(x) + dx
       Ly = p_maxval(maxval(y)) + dy
@@ -338,7 +364,69 @@ contains
       this%firstCallComplete = .false.
       this%firstCallCompleteScalar = .false.
 
+      if(useShiftedPeriodicBC) then
+          this%useShiftedPeriodicBC = .true.
+          this%shift_distance = shift_distance
+
+          this%u_target => rbuffxC(:,:,:,2)
+          this%v_target => rbuffxC(:,:,:,3)
+          this%w_target => rbuffxE(:,:,:,2)
+          !if (someLogical) then
+          !   this%T_target => rbuffxC(:,:,:,4) !shifted_T
+          !end if
+          this%TargetsAssociated = .true.
+
+          ! set indices so target can be in the interior in the x-direction
+          ! (target ends at Lxeff)
+          Lxeff = Lxeff*Lx
+          this%ixen_1 = minloc(abs(x-Fringe_xen),1);   this%ixen_1 = min(this%ixen_1+1, nx)
+          this%ixst_1 = minloc(abs(x-Fringe_xst),1);   this%ixst_1 = max(this%ixst_1-1, 1)
+
+          this%ixen_2 = minloc(abs(x-Lxeff),1);   this%ixen_2 = min(this%ixen_2+1, nx)
+          this%ixst_2 = this%ixen_2 - (this%ixen_1 - this%ixst_1); this%ixst_2 = max(this%ixst_2, 1)
+
+          call message(1, "ixst_1 = ", this%ixst_1)
+          call message(1, "ixen_1 = ", this%ixen_1)
+          call message(1, "ixst_2 = ", this%ixst_2)
+          call message(1, "ixen_2 = ", this%ixen_2)
+          
+
+          if( (this%ixen_2-this%ixst_2) .ne. (this%ixen_1-this%ixst_1)) then
+              call GracefulExit("Lxeff, Fringe_xst and Fringe_xen incompatible; Check details for Shifted periodic BC to work.", 11)
+          endif 
+
+          call message(0, "Shifted periodic BC successfully set up in fringe init.")
+      endif
+
       call message(0, "Fringe initialized successfully.")
+
+   end subroutine
+
+   subroutine getShiftedFields(this, uhat, vhat, what)
+      !use reductions, only: p_minval, p_maxval
+      !use exits, only: message_min_max
+      !use decomp_2d_io
+      class(fringe), intent(inout) :: this
+      complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in)  :: uhat, vhat
+      complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in)  :: what
+
+      ! ----------Step 1 :: u_target----------------------
+      call this%spectC%shift_in_y(uhat, this%cbuffyC(:,:,:,1), this%shift_distance)
+      call this%spectC%ifft(this%cbuffyC(:,:,:,1), this%u_target)
+      this%u_target(this%ixst_1:this%ixen_1,:,:) = this%u_target(this%ixst_2:this%ixen_2,:,:)
+      this%u_target(1:this%ixst_1-1,:,:) = 0.0_rkind
+
+      ! ----------Step 2 :: v_target----------------------
+      call this%spectC%shift_in_y(vhat, this%cbuffyC(:,:,:,1), this%shift_distance)
+      call this%spectC%ifft(this%cbuffyC(:,:,:,1), this%v_target)
+      this%v_target(this%ixst_1:this%ixen_1,:,:) = this%v_target(this%ixst_2:this%ixen_2,:,:)
+      this%v_target(1:this%ixst_1-1,:,:) = 0.0_rkind
+
+      ! ----------Step 1 :: w_target----------------------
+      call this%spectE%shift_in_y(what, this%cbuffyE(:,:,:,1), this%shift_distance)
+      call this%spectE%ifft(this%cbuffyE(:,:,:,1), this%w_target)
+      this%w_target(this%ixst_1:this%ixen_1,:,:) = this%w_target(this%ixst_2:this%ixen_2,:,:)
+      this%w_target(1:this%ixst_1-1,:,:) = 0.0_rkind
 
    end subroutine
 
