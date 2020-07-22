@@ -23,7 +23,7 @@ module spectralMod
         private
         real(rkind), dimension(:,:,:), allocatable, public :: k1, k2, k3, kabs_sq, k1_der2, k2_der2, k3_der2, one_by_kabs_sq
         integer, dimension(3) :: fft_start, fft_end, fft_size
-        real(rkind), dimension(:,:,:), allocatable, public :: Gdealias, GtestFilt, arr1Up, arr2Up, GksPrep1, GksPrep2
+        real(rkind), dimension(:,:,:), allocatable, public :: Gdealias, GtestFilt, arr1Up, arr2Up, GksPrep1, GksPrep2, GhitForcing
         !real(rkind), dimension(:,:,:), allocatable :: k3inZ
         complex(rkind), dimension(:,:,:), allocatable :: fhatz, ctmpz
         integer :: rPencil ! Pencil dimension for the real input
@@ -139,6 +139,10 @@ module spectralMod
             procedure           :: destroy_bandpass_filter
             procedure           :: spectralFilter_ip
             
+            procedure           :: init_HIT_linearForcing
+            procedure           :: hitForceFilter 
+            procedure           :: hitForceFilter_edgeField 
+
             procedure, private :: getmodK1_d1_coefficients 
             procedure, private :: modify_my_xy_wavenumbers            
             !procedure, private  :: upsample_Fhat
@@ -351,6 +355,43 @@ contains
          
     end subroutine
  
+    subroutine hitForceFilter(this, fhat)
+        class(spectral),  intent(inout)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fhat
+        integer :: i, j, k
+
+        call this%take_fftz(fhat)
+        do k = 1,this%spectdecomp%zsz(3)
+           do j = 1,this%spectdecomp%zsz(2)
+              !$omp simd
+              do i = 1,this%spectdecomp%zsz(1)
+                 this%ctmpz(i,j,k) = this%ctmpz(i,j,k)*this%Ghitforcing(i,j,k)
+              end do 
+           end do 
+        end do 
+        call this%take_ifftz(fhat)
+         
+    end subroutine
+    
+    subroutine hitForceFilter_edgeField(this, fhat)
+        class(spectral),  intent(inout)         :: this
+        complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)+1), intent(inout) :: fhat
+        integer :: i, j, k
+
+        call dfftw_execute_dft(this%plan_c2c_fwd_z_ip, fhat(:,:,1:this%spectdecomp%zsz(3)) , fhat(:,:,1:this%spectdecomp%zsz(3)))  
+        do k = 1,this%spectdecomp%zsz(3)
+           do j = 1,this%spectdecomp%zsz(2)
+              !$omp simd
+              do i = 1,this%spectdecomp%zsz(1)
+                 fhat(i,j,k) = fhat(i,j,k)*this%Ghitforcing(i,j,k)
+              end do 
+           end do 
+        end do 
+        call dfftw_execute_dft(this%plan_c2c_bwd_z_ip, fhat(:,:,1:this%spectdecomp%zsz(3)) , fhat(:,:,1:this%spectdecomp%zsz(3)))  
+        fhat(:,:,1:this%spectdecomp%zsz(3)) = this%normfactz*fhat(:,:,1:this%spectdecomp%zsz(3))
+        fhat(:,:,this%spectdecomp%zsz(3)+1) = fhat(:,:,1)
+
+    end subroutine 
 
     subroutine softdealias(this, fhat)
         class(spectral),  intent(inout)         :: this
@@ -836,6 +877,46 @@ contains
         end if 
          
     end subroutine
+
+    subroutine init_HIT_linearForcing(this, filtfact)
+         use constants, only: imi
+         class(spectral),  intent(inout)         :: this
+         real(rkind), intent(in) :: filtfact
+         real(rkind), dimension(:,:,:),  allocatable :: rbuffz, rbuffz1
+         real(rkind), dimension(:), allocatable :: k3_1d
+         complex(rkind), dimension(:,:,:), allocatable :: cbuffz
+         real(rkind) :: kdealiasx, kdealiasy, kdealiasz
+         integer :: nz, nxT, nyT
+        
+         nxT = this%spectdecomp%zsz(1)
+         nyT = this%spectdecomp%zsz(2)
+         nz = this%spectdecomp%zsz(3)
+         
+         allocate(this%Ghitforcing(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+         allocate(rbuffz(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+    
+         this%Ghitforcing = one 
+
+         kdealiasx = (filtfact*pi/this%dx)
+         kdealiasy = (filtfact*pi/this%dy)
+         kdealiasz = (filtfact*pi/this%dz)
+
+         call transpose_y_to_z(this%k1, rbuffz, this%spectdecomp)
+         where (abs(rbuffz) >= kdealiasx)    
+            this%Ghitforcing = zero
+         end where
+
+         call transpose_y_to_z(this%k2, rbuffz, this%spectdecomp)
+         where (abs(rbuffz) >= kdealiasy)    
+            this%Ghitforcing = zero
+         end where
+         
+         call transpose_y_to_z(this%k3, rbuffz, this%spectdecomp)
+         where (abs(rbuffz) >= kdealiasz)
+            this%Ghitforcing = zero 
+         end where
+     
+     end subroutine        
 
       subroutine init_periodic_inZ_procedures(this, dx, dy, dz)
          use constants, only: imi

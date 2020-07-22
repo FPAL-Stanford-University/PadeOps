@@ -56,7 +56,8 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    integer :: Nwaves = 20
    real(rkind) :: kmin = 2.d0, kmax = 10.d0, EpsAmplitude = 0.1d0, A_force = 1.d0 
    logical :: useLinearForcing = .false. 
-   namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd, DomAspectRatioZ, alpha_t, useLinearForcing 
+   real(rkind) :: filtfact_linForcing = 0.5d0
+   namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd, DomAspectRatioZ, alpha_t, useLinearForcing, filtfact_linForcing  
 
    open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
    read(unit=123, NML=HIT_Forcing)
@@ -107,6 +108,9 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
 
    this%Nwaves_rkind = real(this%Nwaves, rkind)
 
+   if (this%useLinearForcing) then
+      call this%spectC%init_HIT_linearForcing(filtfact_linForcing)
+   end if 
 end subroutine 
 
 subroutine update_seeds(this)
@@ -260,9 +264,18 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, 
    real(rkind) :: alpha_t
 
    if (this%useLinearForcing) then
-        urhs_xy = urhs_xy + (1.d0/this%A_force)*uhat_xy 
-        vrhs_xy = vrhs_xy + (1.d0/this%A_force)*vhat_xy 
-        wrhs_xy = wrhs_xy + (1.d0/this%A_force)*what_xy 
+        this%cbuffyC = uhat_xy
+        call this%spectC%hitForceFilter(this%cbuffyC)
+        urhs_xy = urhs_xy + (1.d0/this%A_force)*this%cbuffyC 
+       
+        this%cbuffyC = vhat_xy
+        call this%spectC%hitForceFilter(this%cbuffyC)
+        vrhs_xy = vrhs_xy + (1.d0/this%A_force)*this%cbuffyC
+        
+        call transpose_y_to_z(what_xy, this%cbuffzE, this%sp_gpE)
+        call this%spectC%hitForceFilter_edgeField(this%cbuffzE)
+        call transpose_z_to_y(this%cbuffzE, this%cbuffyE, this%sp_gpE)
+        wrhs_xy = wrhs_xy + (1.d0/this%A_force)*this%cbuffyE
    else
 
 
